@@ -58,6 +58,9 @@ type Options struct {
 	MaxBackoff   time.Duration // the retry delay's cap (default 1 min)
 	// Match reports whether a path belongs to the workspace (include, not exclude). Nil matches all.
 	Match func(path string) bool
+	// Excluded reports whether a path lies in an excluded directory (.git, say). A directory there
+	// that cannot be read is not the workspace's concern, so it is not retried. Nil excludes nothing.
+	Excluded func(path string) bool
 }
 
 // Follower follows one workspace root.
@@ -235,7 +238,9 @@ func (f *Follower) degraded(ctx context.Context, wait time.Duration) {
 func (f *Follower) handle(ctx context.Context, ev vfs.Event) {
 	switch {
 	case ev.Op == vfs.OpOverflow && ev.Path == "":
-		// the watch is ending (its root went, or a subtree it could not watch): its close follows
+		// events were lost for everything watched: the kernel's queue overflowed on a watch that goes
+		// on, or the watch is ending (a close then follows, and the new watch's scan repeats this one)
+		f.reconcile(ctx, ".")
 	case ev.Op == vfs.OpOverflow:
 		f.reconcile(ctx, ev.Path)
 	case ev.Op == vfs.OpRemove:
@@ -277,6 +282,9 @@ func (f *Follower) reconcile(ctx context.Context, dir string) {
 			}
 			if errors.Is(err, fs.ErrNotExist) {
 				continue // gone before the walk reached it: what was indexed there is missing below
+			}
+			if f.opts.Excluded != nil && f.opts.Excluded(fi.Path) {
+				continue // not the workspace's: nothing indexed is under it
 			}
 			failed[fi.Path] = err
 			continue

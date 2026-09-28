@@ -399,6 +399,47 @@ func TestWatchEndIsSetUpAgain(t *testing.T) {
 	converges(t, m, s, "the reconcile after the watch came back")
 }
 
+// TestQueueOverflowRescansEverything: OpOverflow{""} on a watch that stays open (the kernel's event
+// queue overflowed) means every path may have lost events: the follower rescans the whole root and
+// keeps watching.
+func TestQueueOverflowRescansEverything(t *testing.T) {
+	s := newScripted()
+	memWrite(t, s, "a.md", "a")
+	m := newModel(s)
+	f := start(t, s, m)
+	converges(t, m, s.FS, "the start reconcile")
+	eventually(t, "the watch", func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.events != nil })
+
+	memWrite(t, s, "b.md", "made while the queue overflowed")
+	memWrite(t, s, "a.md", "changed while the queue overflowed")
+	s.send(vfs.Event{Path: "", Op: vfs.OpOverflow}) // and the channel stays open
+	converges(t, m, s.FS, "a queue overflow")
+	s.mu.Lock()
+	watches := s.watches
+	s.mu.Unlock()
+	if st := f.Status(); st.Following != follow.Watching || watches != 1 {
+		t.Errorf("after an overflow on a live watch: %s, %d watches; want the same watch", st.Following, watches)
+	}
+}
+
+// TestUnreadableExcludedDirectoryIsNotRetried: a directory the workspace excludes is nobody's
+// concern, so failing to read it neither puts it in the retry set nor holds anything back.
+func TestUnreadableExcludedDirectoryIsNotRetried(t *testing.T) {
+	s := newScripted()
+	memWrite(t, s, ".git/objects/x", "an object")
+	memWrite(t, s, "a.md", "a")
+	s.setFail(".git", true)
+	m := newModel(s)
+	opts := fast
+	opts.Excluded = workspace.NewMatcher([]string{"**/*.md"}, []string{".git/**"}).Excluded
+	f := startWith(t, s, m, opts)
+	converges(t, m, s.FS, "the start reconcile")
+	time.Sleep(5 * fast.MinBackoff)
+	if st := f.Status(); len(st.Retrying) != 0 {
+		t.Errorf("retrying %v: an excluded directory is not the workspace's", st.Retrying)
+	}
+}
+
 // faultFS is memfs with failures to inject: a Watch that fails at setup, and unreadable directories.
 type faultFS struct {
 	*memfs.FS
