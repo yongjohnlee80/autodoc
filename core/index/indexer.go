@@ -950,3 +950,6 @@ func (x *Indexer) vectorsIn() chan vecBatch {
 	}
 	return x.sem.vectors
 }
+
+// Store is the store the indexer writes: its readers serve listings, the change log and the graph.
+func (x *Indexer) Store() *Store { return x.store }
