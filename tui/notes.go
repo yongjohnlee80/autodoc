@@ -194,9 +194,17 @@ func (h *Host) write(content, want string, after func()) {
 		case a.err == nil, code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
 			h.note.version = a.version
 			// typing during the save leaves the note unsaved: what is on disk is what was written
-			h.setDirty(h.editor.Value() != content)
+			newer := h.editor.Value() != content
+			h.setDirty(newer)
 			h.setStatus("saved " + p)
-			if after != nil {
+			switch {
+			case after == nil:
+			case newer:
+				// what the save guarded (an open, a switch, a quit) would drop the newer edit: ask again
+				h.note.then = after
+				h.set("App.unsavedQuestion", fmt.Sprintf("%s changed again while it was saved. Save the newer changes first?", p))
+				h.open("unsavedNote")
+			default:
 				after()
 			}
 		case code(a.err) == rpc.CodeCommitted && a.readErr != nil:
@@ -217,7 +225,8 @@ func (h *Host) conflict(answer string) {
 	h.closeDialog("noteConflict")
 	switch answer {
 	case "reload":
-		h.setDirty(false)
+		// the note stays unsaved until the disk's version is in the editor: a failed read keeps the
+		// edits guarded
 		h.load(h.note.path)
 	case "overwrite":
 		h.overwrite()
