@@ -1,0 +1,162 @@
+package embed
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+)
+
+// server answers like Ollama or an OpenAI-compatible endpoint, recording each embed request.
+type server struct {
+	mu       sync.Mutex
+	inputs   [][]string
+	auth     []string
+	dims     int
+	status   int // non-zero: every embed answers this
+	wrongLen bool
+}
+
+func (s *server) vec(text string) []float32 {
+	v := make([]float32, s.dims)
+	for i := range v {
+		v[i] = float32(len(text) + i)
+	}
+	return v
+}
+
+func (s *server) handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{
+			{"name": "embedder:latest", "model": "embedder:latest", "digest": "sha256:abc"},
+			{"name": "other", "model": "other", "digest": "sha256:def"},
+		}})
+	})
+	embed := func(w http.ResponseWriter, r *http.Request, openai bool) {
+		var req struct {
+			Model string   `json:"model"`
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		s.mu.Lock()
+		s.inputs = append(s.inputs, req.Input)
+		s.auth = append(s.auth, r.Header.Get("Authorization"))
+		status, wrong := s.status, s.wrongLen
+		s.mu.Unlock()
+		if status != 0 {
+			http.Error(w, "model overloaded", status)
+			return
+		}
+		var vecs [][]float32
+		for i, t := range req.Input {
+			v := s.vec(t)
+			if wrong && i == 1 {
+				v = v[:1]
+			}
+			vecs = append(vecs, v)
+		}
+		if !openai {
+			_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": vecs})
+			return
+		}
+		var data []map[string]any
+		for i := len(vecs) - 1; i >= 0; i-- { // out of order: the client sorts by index
+			data = append(data, map[string]any{"index": i, "embedding": vecs[i]})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+	}
+	mux.HandleFunc("POST /api/embed", func(w http.ResponseWriter, r *http.Request) { embed(w, r, false) })
+	mux.HandleFunc("POST /v1/embeddings", func(w http.ResponseWriter, r *http.Request) { embed(w, r, true) })
+	return mux
+}
+
+func TestOllama(t *testing.T) {
+	s := &server{dims: 4}
+	ts := httptest.NewServer(s.handler())
+	defer ts.Close()
+	ctx := context.Background()
+	o, err := NewOllama(ctx, ts.URL+"/", "embedder", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Model{Provider: "ollama", Name: "embedder", Digest: "sha256:abc", Dims: 4}
+	if o.Model() != want || o.Model().Fingerprint() != "ollama|embedder|sha256:abc|4" {
+		t.Errorf("model %+v, fingerprint %q", o.Model(), o.Model().Fingerprint())
+	}
+	got, err := o.Embed(ctx, []string{"a", "bcd"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, [][]float32{s.vec("a"), s.vec("bcd")}) {
+		t.Errorf("vectors %v", got)
+	}
+	if !reflect.DeepEqual(s.inputs, [][]string{{"probe"}, {"a", "bcd"}}) {
+		t.Errorf("requests %q", s.inputs)
+	}
+	if _, err := NewOllama(ctx, ts.URL, "missing", nil); err == nil || !strings.Contains(err.Error(), `no model "missing"`) {
+		t.Errorf("a model the server lacks: %v", err)
+	}
+	s.wrongLen = true
+	if _, err := o.Embed(ctx, []string{"a", "b"}); !errors.Is(err, ErrDims) {
+		t.Errorf("a short vector: %v", err)
+	}
+	s.wrongLen = false
+	for status, rejected := range map[int]bool{
+		http.StatusServiceUnavailable: false, http.StatusUnauthorized: false, http.StatusTooManyRequests: false,
+		http.StatusBadRequest: true, http.StatusRequestEntityTooLarge: true, http.StatusUnprocessableEntity: true,
+	} {
+		s.mu.Lock()
+		s.status = status
+		s.mu.Unlock()
+		_, err := o.Embed(ctx, []string{"a"})
+		if err == nil || !strings.Contains(err.Error(), strconv.Itoa(status)) || !strings.Contains(err.Error(), "model overloaded") {
+			t.Errorf("a %d: %v", status, err)
+		}
+		if errors.Is(err, ErrRejected) != rejected {
+			t.Errorf("a %d is ErrRejected: %v, want %v", status, errors.Is(err, ErrRejected), rejected)
+		}
+	}
+}
+
+func TestOpenAI(t *testing.T) {
+	s := &server{dims: 3}
+	ts := httptest.NewServer(s.handler())
+	defer ts.Close()
+	ctx := context.Background()
+	o, err := NewOpenAI(ctx, ts.URL, "sk-test", "text-embed", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Model() != (Model{Provider: "openai", Name: "text-embed", Dims: 3}) {
+		t.Errorf("model %+v", o.Model())
+	}
+	got, err := o.Embed(ctx, []string{"x", "yy", "zzz"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, [][]float32{s.vec("x"), s.vec("yy"), s.vec("zzz")}) {
+		t.Errorf("vectors, in input order: %v", got)
+	}
+	for _, a := range s.auth {
+		if a != "Bearer sk-test" {
+			t.Errorf("authorization %q", a)
+		}
+	}
+	anon, err := NewOpenAI(ctx, ts.URL, "", "text-embed", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := anon.Embed(ctx, []string{"x"}); err != nil || s.auth[len(s.auth)-1] != "" {
+		t.Errorf("no key: %v, authorization %q", err, s.auth[len(s.auth)-1])
+	}
+}
