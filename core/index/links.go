@@ -46,7 +46,8 @@ var attachments = map[string]bool{
 // links. Left out: a link to a heading or block of p itself, a URL, a path out of the workspace, and
 // a file that is not a note. A wikilink names a note unless it names an attachment (a page may hold
 // dots: "Meeting 2024.05.01"); a markdown link, which names files of every kind (a KB links to its
-// code), only with ".md" or no extension. Either counts when eligible (nil: nothing) indexes it.
+// code), only with ".md" or no extension. Either counts when eligible (nil: nothing) indexes it,
+// judged on the workspace path for a path, and on the name as written for a wikilink by name.
 func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) []linkT {
 	var out []linkT
 	indexed := func(target string) bool { return eligible != nil && eligible(target) }
@@ -62,17 +63,23 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 			case markdown.KindWikilink, markdown.KindEmbed:
 				t := c.Target
 				page := strings.TrimSpace(string(t.Page))
-				if page == "" || !wikiNote(page) {
+				if page == "" {
 					continue
 				}
-				name := wikiName(page)
-				if strings.HasPrefix(page, "./") || strings.HasPrefix(page, "../") {
-					// a relative path, which Obsidian writes when set to
-					joined := path.Join(path.Dir(p), page)
-					if joined == ".." || strings.HasPrefix(joined, "../") {
+				// a relative path, which Obsidian writes when set to, names one workspace path: that path
+				// is what eligible judges and what the link reaches
+				target, relative := page, strings.HasPrefix(page, "./") || strings.HasPrefix(page, "../")
+				if relative {
+					if target = path.Join(path.Dir(p), page); target == ".." || strings.HasPrefix(target, "../") {
 						continue
 					}
-					name = exactName(wikiName(joined))
+				}
+				if !wikiNote(target) {
+					continue
+				}
+				name := wikiName(target)
+				if relative {
+					name = exactName(name)
 				}
 				anchor := string(t.Heading)
 				if len(t.Block) > 0 {

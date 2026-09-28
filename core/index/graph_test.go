@@ -104,13 +104,15 @@ func TestExtractLinks(t *testing.T) {
 		"markdown dir/my note.md # [enc](my%20note.md)",
 		"markdown dir/plain # [bare](plain)",
 	})
-	// an attachment type the workspace indexes is a note
+	// an attachment type the workspace indexes is a note, judged by the workspace path it reaches
 	var pdf []string
-	for _, l := range extractLinks(markdown.Parse([]byte("![[doc.pdf]] [c](run.sh)"), markdown.Obsidian()), "n.md",
-		func(p string) bool { return strings.HasSuffix(p, ".pdf") || strings.HasSuffix(p, ".sh") }) {
+	for _, l := range extractLinks(markdown.Parse([]byte("![[doc.pdf]] [c](run.sh) ![[../assets/d.pdf]] [e](../assets/e.pdf) ![[../other/f.pdf]]"), markdown.Obsidian()), "notes/n.md",
+		func(p string) bool {
+			return p == "doc.pdf" || strings.HasSuffix(p, ".sh") || strings.HasPrefix(p, "assets/") && strings.HasSuffix(p, ".pdf")
+		}) {
 		pdf = append(pdf, l.name)
 	}
-	eq(t, "indexed attachment types", pdf, []string{"doc.pdf", "run.sh"})
+	eq(t, "indexed attachment types", pdf, []string{"doc.pdf", "notes/run.sh", "/assets/d.pdf", "assets/e.pdf"})
 }
 
 // TestResolutionRules: each rule of ADR 0204 §4.6, and the markdown forms.
