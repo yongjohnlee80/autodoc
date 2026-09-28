@@ -48,8 +48,11 @@ func (h *Host) setWhere(where string) {
 	h.set("App.statusLeft", h.editor.Mode().String()+"  "+where)
 }
 
-// setStatus puts a message on the status line's right.
-func (h *Host) setStatus(msg string) { h.set("App.status", msg) }
+// setStatus puts a message on the status line's right, beside the progress while there is any.
+func (h *Host) setStatus(msg string) {
+	h.message = msg
+	h.publishStatus()
+}
 
 // open opens a dialog the layout declares, by id.
 func (h *Host) open(id string) { h.keep(h.p.Call(id, "open")) }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -57,6 +58,26 @@ func startDaemon(t *testing.T, workspaces map[string][]string) *daemon {
 // startDaemonOn is startDaemon on the socket sock ("" for a new one).
 func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *daemon {
 	t.Helper()
+	return startDaemonWith(t, sock, workspaces, daemonOpts{})
+}
+
+// daemonOpts slow the daemon down: each file read waits slow, with one indexing worker, and the
+// daemon serves without waiting for the first scan.
+type daemonOpts struct{ slow time.Duration }
+
+// slowFS is memfs whose reads wait.
+type slowFS struct {
+	*memfs.FS
+	d time.Duration
+}
+
+func (f slowFS) Open(ctx context.Context, name string, offset int64) (io.ReadCloser, error) {
+	time.Sleep(f.d)
+	return f.FS.Open(ctx, name, offset)
+}
+
+func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, o daemonOpts) *daemon {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{fs: map[string]*memfs.FS{}}
 	var served []*rpc.Workspace
@@ -66,6 +87,10 @@ func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *d
 		wsName := strings.TrimSuffix(name, "!")
 		if wsName != name {
 			fsys = committing{mem}
+		}
+		workers := 0
+		if o.slow > 0 {
+			fsys, workers = slowFS{mem, o.slow}, 1
 		}
 		d.fs[wsName] = mem
 		notes := workspaces[name]
@@ -81,15 +106,15 @@ func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *d
 		if err != nil {
 			t.Fatal(err)
 		}
-		ix := index.NewIndexer(store, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond})
+		ix := index.NewIndexer(store, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond, Workers: workers})
 		f := follow.New(fsys, ix, ix, follow.Options{Match: md, PollInterval: 20 * time.Millisecond})
 		ix.SetRescanner(f)
 		go func() { _ = ix.Run(ctx) }()
 		go func() { _ = f.Run(ctx) }()
 		t.Cleanup(func() { _ = store.Close() })
 		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
-		// wait until the notes are indexed, so the first listing has them
-		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		// wait until the notes are indexed, so the first listing has them (a slow daemon does not)
+		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
 			st, _ := store.Status(ctx)
 			if st.Docs == int64(len(notes)/2) && st.PendingJobs == 0 {
 				break
@@ -622,4 +647,40 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 	}
 	r.openByPicker(t, "b.md")
 	r.s.WaitForText(t, "unsaved note") // still guarded
+}
+
+func TestProgressText(t *testing.T) {
+	for _, c := range []struct {
+		docs, pending, emb int64
+		want               string
+	}{
+		{0, 0, 0, ""},
+		{3, 7, 0, "indexing ███░░░░░░░ 3/10"},
+		{10, 0, 4, "embedding 4 pending"},
+		{0, 5, 2, "indexing ░░░░░░░░░░ 0/5 · embedding 2 pending"},
+	} {
+		if got := progressText(c.docs, c.pending, c.emb); got != c.want {
+			t.Errorf("%d %d %d: %q, want %q", c.docs, c.pending, c.emb, got, c.want)
+		}
+	}
+}
+
+// TestProgressWhileIndexing: while the daemon indexes, the status line shows a bar of the notes
+// done; when it ends it says so once, and the notes pane, listed mid-scan, is listed again whole.
+func TestProgressWhileIndexing(t *testing.T) {
+	var notes []string
+	for i := range 40 {
+		notes = append(notes, fmt.Sprintf("n%02d.md", i), "note\n")
+	}
+	d := startDaemonWith(t, "", map[string][]string{"kb": notes}, daemonOpts{slow: 50 * time.Millisecond})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitFor(t, "the bar", func(sc string) bool { return strings.Contains(sc, "indexing ") && strings.Contains(sc, "/40") })
+	deadline := time.Now().Add(15 * time.Second)
+	for !strings.Contains(r.s.String(), "indexed 40 notes") {
+		if time.Now().After(deadline) {
+			t.Fatalf("indexing never ended on screen:\n%s", r.s.String())
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	r.s.WaitFor(t, "the whole list", func(sc string) bool { return strings.Contains(sc, "notes (40)") && !strings.Contains(sc, "indexing ") })
 }
