@@ -18,8 +18,9 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 )
 
-// The versions an index records. A document indexed under other ones is rebuilt, even when its
-// file has not changed, so a change to the chunker or the schema reaches every document.
+// The versions an index records. Each document records the ones it was indexed under, and one
+// indexed under others is rebuilt, even when its file has not changed, so a chunker change reaches
+// every document. The schema is recorded once: a file of another schema is not opened.
 const (
 	ChunkerVersion = 1
 	SchemaVersion  = 1
@@ -27,6 +28,10 @@ const (
 
 // IndexerVersion is what document.indexer records: "c<chunker>.s<schema>".
 var IndexerVersion = "c" + strconv.Itoa(ChunkerVersion) + ".s" + strconv.Itoa(SchemaVersion)
+
+// ErrSchemaVersion is an index file written under another schema. The index is derived from the
+// files, so deleting it rebuilds it.
+var ErrSchemaVersion = errors.New("index: the index file has another schema version")
 
 // ErrCursorExpired is a change cursor older than the retained log: the client re-lists (0203 §4.5).
 var ErrCursorExpired = errors.New("index: the change cursor is older than the retained log")
@@ -70,9 +75,6 @@ CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
 type Store struct {
 	w dao.DataConn // the one writer: a pool of one, transactions BEGIN IMMEDIATE
 	r dao.DataConn // readers: query_only
-	// rebuild is set when the file was last written by another chunker or schema version: every
-	// document must be re-indexed, though no file changed.
-	rebuild bool
 }
 
 // Open opens (creating and migrating) the index file at path. The caller holds the workspace's
@@ -105,22 +107,38 @@ func (s *Store) migrate(ctx context.Context) error {
 	if _, err := s.w.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("index: creating the schema: %w", err)
 	}
-	var sv, cv string
+	// CREATE … IF NOT EXISTS leaves a table of another schema as it is: such a file is refused, not
+	// read or written with this schema's statements
+	var sv string
 	_ = scanOne(ctx, s.w, &sv, "SELECT v FROM meta WHERE k = 'schema_version'")
-	_ = scanOne(ctx, s.w, &cv, "SELECT v FROM meta WHERE k = 'chunker_version'")
-	if sv != "" && (sv != strconv.Itoa(SchemaVersion) || cv != strconv.Itoa(ChunkerVersion)) {
-		s.rebuild = true
+	if sv != "" && sv != strconv.Itoa(SchemaVersion) {
+		return fmt.Errorf("%w: it has %s, this build %d", ErrSchemaVersion, sv, SchemaVersion)
 	}
-	for k, v := range map[string]string{"schema_version": strconv.Itoa(SchemaVersion),
-		"chunker_version": strconv.Itoa(ChunkerVersion)} {
-		if _, err := s.w.ExecContext(ctx, "INSERT INTO meta(k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v", k, v); err != nil {
-			return fmt.Errorf("index: recording %s: %w", k, err)
-		}
-	}
-	if _, err := s.w.ExecContext(ctx, "INSERT OR IGNORE INTO meta(k, v) VALUES ('commit_seq', '0')"); err != nil {
-		return err
+	// the chunker's version is recorded per document (document.indexer), where a rebuild that stops
+	// part way still finds the documents it has not reached
+	if _, err := s.w.ExecContext(ctx, "INSERT OR IGNORE INTO meta(k, v) VALUES ('schema_version', ?), ('commit_seq', '0')",
+		strconv.Itoa(SchemaVersion)); err != nil {
+		return fmt.Errorf("index: recording the schema version: %w", err)
 	}
 	return nil
+}
+
+// outdated lists the documents indexed under another IndexerVersion.
+func (s *Store) outdated(ctx context.Context) ([]string, error) {
+	rows, err := s.r.QueryContext(ctx, "SELECT path FROM document WHERE indexer != ? ORDER BY path", IndexerVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 // Close closes the file.
