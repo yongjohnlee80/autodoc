@@ -96,6 +96,7 @@ type prepared struct {
 	version    vfs.Version
 	meta       docMeta
 	chunks     []chunkT
+	links      []linkT
 }
 
 // NewIndexer returns the indexer for store over the workspace root fsys.
@@ -404,6 +405,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	p.version = fi.Version
 	p.meta = readMeta(doc, w.path)
 	p.chunks = chunkDoc(doc, p.meta.title)
+	p.links = extractLinks(doc, w.path, x.opts.Match)
 	x.mu.Lock()
 	x.parses++
 	x.mu.Unlock()
@@ -533,8 +535,9 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 	var docID, gen int64
 	var oldTitle string
 	err := scanRow(ctx, tx, []any{&docID, &gen, &oldTitle}, "SELECT id, active_gen, COALESCE(title, '') FROM document WHERE path = ?", p.path)
+	appeared := errors.Is(err, errNoRow)
 	switch {
-	case errors.Is(err, errNoRow):
+	case appeared:
 		res, err := tx.ExecContext(ctx, "INSERT INTO document(path, version, active_gen, indexer, indexed_at) VALUES (?, '', 0, ?, ?)", p.path, IndexerVersion, now.Unix())
 		if err != nil {
 			return err
@@ -610,6 +613,21 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 	if err := replaceSet(ctx, tx, "doc_alias", "alias", docID, p.meta.aliases); err != nil {
 		return err
 	}
+	// the names, the note's own links, then the links elsewhere whose target may have changed: those
+	// under every name the note gained or lost, and, when it appeared, under its path
+	changed, err := writeNames(ctx, tx, docID, namesOf(p.path, p.meta.aliases))
+	if err != nil {
+		return err
+	}
+	if appeared {
+		changed = append(changed, markdownNames(p.path)...)
+	}
+	if err := writeLinks(ctx, tx, docID, next, p.links); err != nil {
+		return err
+	}
+	if err := reresolve(ctx, tx, changed, 0); err != nil {
+		return err
+	}
 	var fmJSON, fmErr any
 	if p.meta.frontmatterJSON != "" {
 		fmJSON = p.meta.frontmatterJSON
@@ -655,11 +673,25 @@ func deleteDoc(ctx context.Context, tx dao.TxConn, path string, now time.Time) e
 			return err
 		}
 	}
+	names, err := storedNames(ctx, tx, docID)
+	if err != nil {
+		return err
+	}
 	for _, q := range []string{"DELETE FROM chunk WHERE doc_id = ?", "DELETE FROM doc_tag WHERE doc_id = ?",
-		"DELETE FROM doc_alias WHERE doc_id = ?", "DELETE FROM link WHERE src_doc = ?", "DELETE FROM document WHERE id = ?"} {
+		"DELETE FROM doc_alias WHERE doc_id = ?", "DELETE FROM doc_name WHERE doc_id = ?",
+		"DELETE FROM link WHERE src_doc = ?", "DELETE FROM document WHERE id = ?"} {
 		if _, err := tx.ExecContext(ctx, q, docID); err != nil {
 			return err
 		}
+	}
+	// the links that reached it, and those under any name it answered to, resolve again: to another
+	// note, or to none
+	affected := markdownNames(path)
+	for n, isPath := range names {
+		affected = append(affected, linkNames(n, isPath)...)
+	}
+	if err := reresolve(ctx, tx, affected, docID); err != nil {
+		return err
 	}
 	_, err = tx.ExecContext(ctx, "INSERT INTO change(path, op, generation, at) VALUES (?, 'delete', ?, ?)", path, gen+1, now.Unix())
 	return err
