@@ -73,7 +73,8 @@ type Follower struct {
 	mu     sync.Mutex
 	status Status
 
-	retry map[string]*retryEntry // unreadable subtrees; touched only by Run's goroutine
+	retry  map[string]*retryEntry // unreadable subtrees; touched only by Run's goroutine
+	rescan chan struct{}
 }
 
 type retryEntry struct {
@@ -97,7 +98,16 @@ func New(fsys vfs.FS, store Store, queue Queue, opts Options) *Follower {
 		opts.MaxBackoff = opts.MinBackoff
 	}
 	return &Follower{fsys: fsys, store: store, queue: queue, opts: opts,
-		status: Status{Following: Starting}, retry: map[string]*retryEntry{}}
+		status: Status{Following: Starting}, retry: map[string]*retryEntry{}, rescan: make(chan struct{}, 1)}
+}
+
+// Rescan asks Run to reconcile the whole root, finding every eligible file the index does not have
+// at its Version. It never blocks; requests made before one is served are served once.
+func (f *Follower) Rescan() {
+	select {
+	case f.rescan <- struct{}{}:
+	default:
+	}
 }
 
 // Status returns a snapshot of how the follower is following.
@@ -212,6 +222,9 @@ func (f *Follower) drain(ctx context.Context, events <-chan vfs.Event) {
 			f.handle(ctx, ev)
 		case <-due:
 			f.rescanDue(ctx)
+		case <-f.rescan:
+			stop()
+			f.reconcile(ctx, ".")
 		}
 	}
 }
@@ -230,6 +243,8 @@ func (f *Follower) degraded(ctx context.Context, wait time.Duration) {
 		case <-retry.C:
 			return
 		case <-tick.C:
+			f.reconcile(ctx, ".")
+		case <-f.rescan:
 			f.reconcile(ctx, ".")
 		}
 	}
