@@ -50,7 +50,12 @@ func (h *Host) poll() {
 		if a.err == nil {
 			h.showProgress(a.docs, a.pending, a.embedding)
 		}
-		h.after(progressEvery, h.poll)
+		// the next poll is this epoch's: a switch or a reconnect in the meantime has started its own
+		h.after(progressEvery, func() {
+			if ep == h.epoch {
+				h.poll()
+			}
+		})
 	})
 }
 

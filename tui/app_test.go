@@ -684,3 +684,30 @@ func TestProgressWhileIndexing(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the whole list", func(sc string) bool { return strings.Contains(sc, "notes (40)") && !strings.Contains(sc, "indexing ") })
 }
+
+// TestOnePollAfterSwitches: switching workspace (as a reconnect does) starts the next workspace's
+// poll, and the old one's pending timer starts nothing: status is asked about once a second.
+func TestOnePollAfterSwitches(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b.md", "b\n"}})
+	sess := NewSession(d.sock, nil)
+	var polls atomic.Int32
+	sess.beforeCall = func(method string, params []any) {
+		if method == "index.status" {
+			polls.Add(1)
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "· alpha")
+	time.Sleep(1500 * time.Millisecond) // a poll's timer is pending now
+	for _, ws := range []string{"beta", "alpha"} {
+		r.h.p.Post(func() { r.h.enter(ws) })
+		r.s.WaitForText(t, "· "+ws)
+		time.Sleep(300 * time.Millisecond)
+	}
+	polls.Store(0)
+	time.Sleep(3200 * time.Millisecond)
+	// one loop polls 3 or 4 times in 3.2 s; each leaked one adds as many
+	if n := polls.Load(); n > 4 {
+		t.Errorf("%d status polls in 3.2 s after two switches: more than one poll loop", n)
+	}
+}
