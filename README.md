@@ -7,7 +7,7 @@ It is one binary with the modes as flags, after [AutoDB](https://github.com/yong
 `autodoc --serve` is the daemon, and the TUI (`--ui`), the Web-UI (`--web-ui`) and later AutoVim and a
 native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 
-**Status: early.** What exists so far is the core the daemon is built on:
+**Status: early.** The daemon serves; the TUI and the Web-UI are next.
 
 | Package | What it does |
 | --- | --- |
@@ -16,8 +16,9 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `core/follow` | keeps a workspace's index following its root |
 | `core/index` | the index store (one SQLite file per workspace), its indexer, the link graph, and search |
 | `core/embed` | the optional embedding provider: Ollama, or any OpenAI-compatible endpoint |
-
-The RPC server, the TUI and the Web-UI follow.
+| `core/docs` | reads and writes notes for AutoDoc's own apps, conditional on the version the writer read |
+| `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
+| `cmd/autodoc` | the binary: `--serve` is the daemon |
 
 ## Configuration
 
@@ -30,6 +31,12 @@ state_dir = ""              # default: $XDG_STATE_HOME/autodoc
 [follow]
 poll_interval = "2s"        # the watch fallback's listing interval
 
+[embedding]                 # optional: without it, search is lexical
+provider = "ollama"         # or "openai", for any OpenAI-compatible endpoint
+model = "snowflake-arctic-embed"  # e.g.; there is no default model
+base_url = ""               # default: http://localhost:11434 (ollama), https://api.openai.com (openai)
+api_key_env = ""            # openai: the environment variable that holds the key
+
 [[workspace]]
 name = "kb"                 # the handle every API call names
 root = "~/notes"            # one root per workspace
@@ -39,6 +46,36 @@ exclude = [".git/**"]       # default
 
 Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and `**`
 matches any number of whole segments. An unknown setting is an error, so a misspelling is reported.
+
+An API key never goes in the file: `api_key_env` names the environment variable that holds it.
+
+## The daemon
+
+```sh
+autodoc --serve             # or: autodoc --serve --config path/to/config.toml
+```
+
+It listens on its unix socket, mode 0600: the file is the access control, so there is no login
+locally. It opens every workspace and takes a lease on its index. A workspace another instance
+already serves is reported `busy`, and the rest are served. A second `--serve` on the same socket
+exits, reporting the instance that answers there.
+
+Every client speaks one API. A session starts with `sys.hello({protocol})`, and until then only
+`sys.hello` answers. Every other verb takes the workspace name first:
+
+| Group | Verbs |
+| --- | --- |
+| `sys` | `hello`, `shutdown` |
+| `workspace` | `list` |
+| `search` | `query(ws, q, {limit, mode, tags, paths})` |
+| `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
+| `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
+| `doc` | `read`, `write(ws, path, content, version)`, `rename`, `remove(ws, path, version)` |
+
+The server only answers: it never sends a notification. A client follows changes by pulling
+`index.changes` from a cursor. When that cursor has expired, it takes `index.status`'s cursor, re-lists
+with `index.list`, and resumes `index.changes` from that cursor. Errors carry a code that says what
+to do next: re-list, merge a conflict, read after a write that landed, and so on.
 
 ## Following the files
 
