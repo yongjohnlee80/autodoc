@@ -75,6 +75,21 @@ func (f *faultFS) openCount(p string) int {
 	return f.opens[p]
 }
 
+// failing checks Status().Failing: only path, with an error saying want; "" for none.
+func (e *env) failing(path, want string) {
+	e.t.Helper()
+	st, err := e.store.Status(context.Background())
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	switch {
+	case path == "" && len(st.Failing) != 0:
+		e.t.Errorf("Status().Failing = %+v, want none", st.Failing)
+	case path != "" && (len(st.Failing) != 1 || st.Failing[0].Path != path || st.Failing[0].Attempts < 1 || !strings.Contains(st.Failing[0].Err, want)):
+		e.t.Errorf("Status().Failing = %+v, want %s failing with %q", st.Failing, path, want)
+	}
+}
+
 // job reads path's job row: whether there is one, its attempts and its last error.
 func (e *env) job(p string) (ok bool, attempts int, lastErr string) {
 	e.t.Helper()
@@ -846,9 +861,11 @@ func TestOversizeFileLeavesAndWaits(t *testing.T) {
 	if ok, attempts, _ := e.job("a.md"); !ok || attempts != 1 {
 		t.Errorf("job after the wait: present %v, attempts %d; want present, 1", ok, attempts)
 	}
+	e.failing("a.md", "over")
 	e.write("a.md", "blueberry\n")
 	e.ix.Touch("a.md")
 	e.indexedAt("a.md")
+	e.failing("", "")
 	if len(e.match("blueberry")) != 1 {
 		t.Error("the note is not indexed once it is small again")
 	}
@@ -874,8 +891,10 @@ func TestUnreadableFileRetriesWithBackoff(t *testing.T) {
 	if ok, attempts, lastErr := e.job("a.md"); !ok || attempts < 3 || !strings.Contains(lastErr, "permission") {
 		t.Errorf("job: present %v, attempts %d, error %q", ok, attempts, lastErr)
 	}
+	e.failing("a.md", "permission")
 	e.fault.failOpen("a.md", nil)
 	e.indexedAt("a.md")
+	e.failing("", "")
 	if len(e.match("apricot")) != 1 {
 		t.Error("the note is not indexed once it can be read")
 	}

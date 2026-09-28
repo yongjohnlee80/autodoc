@@ -321,6 +321,16 @@ type Status struct {
 	// UnparsedFrontmatter lists the documents whose frontmatter did not parse or evaluate; their
 	// bodies are indexed all the same.
 	UnparsedFrontmatter []string
+	// Failing lists the jobs whose last attempt failed: a read being retried, or a note over
+	// MaxFileSize waiting for its file to change. They are counted in PendingJobs too.
+	Failing []JobError
+}
+
+// JobError is a job whose last attempt failed.
+type JobError struct {
+	Path     string
+	Attempts int
+	Err      string
 }
 
 // Status reads the store's counts in one snapshot.
@@ -361,5 +371,20 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 		}
 		st.UnparsedFrontmatter = append(st.UnparsedFrontmatter, p)
 	}
-	return st, rows.Err()
+	if err := rows.Err(); err != nil {
+		return st, err
+	}
+	jobs, err := tx.QueryContext(ctx, "SELECT path, attempts, last_error FROM index_job WHERE last_error IS NOT NULL ORDER BY path")
+	if err != nil {
+		return st, err
+	}
+	defer jobs.Close()
+	for jobs.Next() {
+		var j JobError
+		if err := jobs.Scan(&j.Path, &j.Attempts, &j.Err); err != nil {
+			return st, err
+		}
+		st.Failing = append(st.Failing, j)
+	}
+	return st, jobs.Err()
 }
