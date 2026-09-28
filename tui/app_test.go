@@ -16,6 +16,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
+	"github.com/yongjohnlee80/golib/tui/widget"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
@@ -557,4 +558,68 @@ func TestReconnects(t *testing.T) {
 	r.s.WaitFor(t, "the new daemon's notes", func(sc string) bool {
 		return strings.Contains(sc, "notes (2)") && strings.Contains(sc, "connected — autodoc")
 	})
+}
+
+// TestASaveNeverDropsANewerEdit: an edit made while a guarded save is on its way is not dropped by
+// what the save guarded: the switch asks again.
+func TestASaveNeverDropsANewerEdit(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	sess := NewSession(d.sock, nil)
+	release := make(chan struct{})
+	var holding atomic.Bool
+	sess.beforeCall = func(method string, params []any) {
+		if method == "doc.write" && holding.Load() {
+			<-release
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "notes (2)")
+	r.openByPicker(t, "a.md")
+	r.waitNote(t, "a.md")
+	r.typeInEditor(t, "X")
+	holding.Store(true)
+	r.openByPicker(t, "b.md")
+	r.s.WaitForText(t, "unsaved note")
+	r.keys(t, key('s'))
+	r.s.WaitForText(t, "saving a.md")
+	r.typeInEditor(t, "Y") // while the save is held
+	// the keys are the loop's to process: release the save only once the editor holds the edit and
+	// is back in Normal mode (its own mode: the status line repaints after it)
+	r.s.WaitFor(t, "the newer edit in the editor", func(string) bool {
+		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.editor.Mode() == widget.ModeNormal })
+	})
+	holding.Store(false)
+	close(release)
+	r.s.WaitForText(t, "changed again while it was saved")
+	if n := r.note(); n.path != "a.md" || !n.dirty || !strings.Contains(r.editorText(), "Y") {
+		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
+	}
+	r.keys(t, key('s')) // save the newer edit too; then the open goes ahead
+	r.waitNote(t, "b.md")
+	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
+		t.Errorf("a.md %q", got)
+	}
+}
+
+// TestAFailedReloadKeepsTheEditsUnsaved: Reload from the conflict dialog marks the note clean only
+// once the disk's version is in the editor; a read that fails leaves the edits guarded.
+func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n", "b.md", "b\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitNote(t, "a.md")
+	d.write(t, "kb", "a.md", "theirs\n")
+	r.typeInEditor(t, "mine ")
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "note changed on disk")
+	if err := d.fs["kb"].Remove(context.Background(), "a.md"); err != nil {
+		t.Fatal(err)
+	}
+	r.keys(t, key('r'))
+	r.s.WaitForText(t, "open a.md:")
+	if n := r.note(); !n.dirty || !strings.Contains(r.editorText(), "mine") {
+		t.Fatalf("after the failed reload: dirty %v, text %q", n.dirty, r.editorText())
+	}
+	r.openByPicker(t, "b.md")
+	r.s.WaitForText(t, "unsaved note") // still guarded
 }
