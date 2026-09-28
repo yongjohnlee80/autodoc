@@ -451,3 +451,64 @@ func TestEmbeddingFromConfig(t *testing.T) {
 		t.Errorf("an unreachable provider: %v\n%s", res, d.out)
 	}
 }
+
+// TestMain lets a test run this binary's main: spawnServe starts os.Executable(), which in a test is
+// the test binary, so it runs main when asked to.
+func TestMain(m *testing.M) {
+	if os.Getenv("AUTODOC_TEST_MAIN") == "1" {
+		main() // with the arguments the spawn gave: --serve --config <file>
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
+
+// TestSpawnServeStartsADetachedDaemon: --ui's spawn starts --serve in its own session, logging to
+// serve.log (0600) in the state directory, and the daemon answers on the socket.
+func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	state := filepath.Join(dir, "state")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
+	t.Setenv("AUTODOC_TEST_MAIN", "1")
+	logPath, err := spawnServe(cfg, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if logPath != filepath.Join(state, "serve.log") {
+		t.Errorf("log %q", logPath)
+	}
+	eventually(t, "the spawned daemon answering", func() bool {
+		_, err := rpc.ProbeOn(context.Background(), "unix", sock)
+		if err != nil {
+			if b, _ := os.ReadFile(logPath); strings.Contains(string(b), "autodoc:") {
+				t.Fatalf("the daemon failed: %s", b)
+			}
+		}
+		return err == nil
+	})
+	cli := dial(t, sock)
+	pid := call(t, cli, "sys.hello", map[string]any{"protocol": rpc.Protocol})
+	p, _ := pid.(map[string]any)["pid"].(int64)
+	// /proc/<pid>/stat's sixth field is the session id: Setsid made the daemon its own leader
+	if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", p)); err == nil {
+		rest := string(b)[strings.LastIndexByte(string(b), ')')+2:]
+		if f := strings.Fields(rest); len(f) < 4 || f[3] != fmt.Sprint(p) {
+			t.Errorf("the daemon is not its own session leader: stat %q, pid %d", rest, p)
+		}
+	}
+	fi, err := os.Stat(logPath)
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("serve.log %v, %v", fi, err)
+	}
+	call(t, cli, "sys.shutdown")
+	eventually(t, "the daemon gone", func() bool {
+		_, err := rpc.ProbeOn(context.Background(), "unix", sock)
+		return err != nil
+	})
+	if b, _ := os.ReadFile(logPath); !strings.Contains(string(b), "serving msgpack-RPC on "+sock) {
+		t.Errorf("the log: %q", b)
+	}
+}
