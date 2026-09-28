@@ -23,7 +23,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/yongjohnlee80/golib/parse"
 	gsql "github.com/yongjohnlee80/golib/parse/sql"
 )
 
@@ -75,9 +74,12 @@ var nameRE = regexp.MustCompile(`^(\d{6})_(update|revert)_([a-z0-9_]+)\.sql$`)
 // Scripts are an engine's scripts, updates and reverts, by number then kind
 // (update first). A file not named NNNNNN_(update|revert)_<slug>.sql is an
 // error: a script the runner could not place would silently never run.
-func Scripts(eng Engine) ([]Script, error) {
+func Scripts(eng Engine) ([]Script, error) { return scriptsIn(files, eng) }
+
+// scriptsIn is Scripts over any file tree laid out as the embedded one is.
+func scriptsIn(fsys fs.FS, eng Engine) ([]Script, error) {
 	dir := string(eng)
-	entries, err := fs.ReadDir(files, dir)
+	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
 		return nil, fmt.Errorf("deployments: no scripts for engine %q: %w", dir, err)
 	}
@@ -88,7 +90,7 @@ func Scripts(eng Engine) ([]Script, error) {
 			return nil, fmt.Errorf("deployments: %s/%s is not named NNNNNN_(update|revert)_<slug>.sql", dir, e.Name())
 		}
 		n, _ := strconv.Atoi(m[1])
-		body, err := fs.ReadFile(files, path.Join(dir, e.Name()))
+		body, err := fs.ReadFile(fsys, path.Join(dir, e.Name()))
 		if err != nil {
 			return nil, err
 		}
@@ -106,14 +108,14 @@ func Scripts(eng Engine) ([]Script, error) {
 }
 
 // Updates are an engine's update scripts, in the order they apply.
-func Updates(eng Engine) ([]Script, error) {
-	return ofKind(eng, Update)
-}
+func Updates(eng Engine) ([]Script, error) { return ofKind(files, eng, Update) }
 
 // RevertOf is the revert for update script number n, if it has one; the
 // baseline, 000001, never does.
-func RevertOf(eng Engine, n int) (Script, bool, error) {
-	reverts, err := ofKind(eng, Revert)
+func RevertOf(eng Engine, n int) (Script, bool, error) { return revertIn(files, eng, n) }
+
+func revertIn(fsys fs.FS, eng Engine, n int) (Script, bool, error) {
+	reverts, err := ofKind(fsys, eng, Revert)
 	if err != nil {
 		return Script{}, false, err
 	}
@@ -125,8 +127,8 @@ func RevertOf(eng Engine, n int) (Script, bool, error) {
 	return Script{}, false, nil
 }
 
-func ofKind(eng Engine, k Kind) ([]Script, error) {
-	all, err := Scripts(eng)
+func ofKind(fsys fs.FS, eng Engine, k Kind) ([]Script, error) {
+	all, err := scriptsIn(fsys, eng)
 	if err != nil {
 		return nil, err
 	}
@@ -148,32 +150,11 @@ func (s Script) Statements() ([]Statement, error) {
 	if err != nil {
 		return nil, fmt.Errorf("deployments: %s/%s: %w", s.engine, s.Name, err)
 	}
+	// A comment never begins a statement, so a script that is only comments
+	// (one with no work on this engine, saying why) runs nothing.
 	out := make([]Statement, 0, len(stmts))
 	for _, st := range stmts {
-		if onlyComments(st.Text) {
-			continue // a script with no work on this engine says why, and runs nothing
-		}
 		out = append(out, Statement{Text: st.Text, Line: st.Pos.Line})
 	}
 	return out, nil
-}
-
-// onlyComments reports whether text is nothing but -- comments and space.
-func onlyComments(text string) bool {
-	sc := parse.NewScanner([]byte(text))
-	for !sc.Done() {
-		r, _ := sc.Next()
-		switch {
-		case r == ' ' || r == '\t' || r == '\n' || r == '\r':
-		case r == '-' && sc.Take("-"):
-			for !sc.Done() {
-				if r, _ := sc.Next(); r == '\n' {
-					break
-				}
-			}
-		default:
-			return false
-		}
-	}
-	return true
 }
