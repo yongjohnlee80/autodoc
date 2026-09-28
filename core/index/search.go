@@ -22,6 +22,9 @@ const (
 	SemanticOff = "off"
 )
 
+// ErrUnknownMode is a search mode that is none of ModeAuto, ModeLexical and ModeSemantic.
+var ErrUnknownMode = errs.Sentinel(errs.ErrInvalidArgument, "index: unknown search mode")
+
 // HighlightStart and HighlightEnd mark the matched terms in a Hit's Snippet: control characters,
 // which no note contains, so a client can render them as it likes.
 const (
@@ -88,7 +91,7 @@ func (s *Store) search(ctx context.Context, q string, opts QueryOpts, sem *seman
 		mode = ModeAuto
 	case ModeAuto, ModeLexical, ModeSemantic:
 	default:
-		return Result{}, fmt.Errorf("index: unknown search mode %q", opts.Mode)
+		return Result{}, fmt.Errorf("%w: %q", ErrUnknownMode, opts.Mode)
 	}
 	if mode == ModeSemantic && sem == nil {
 		return Result{}, fmt.Errorf("index: semantic search: no embedding provider: %w", errs.ErrUnsupported)

@@ -16,6 +16,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/errs"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
 )
@@ -28,6 +29,9 @@ const (
 	SemanticError   = "error"
 	ModeHybrid      = "hybrid"
 )
+
+// ErrModelInUse is a model PurgeModel cannot remove: the active one, or the target.
+var ErrModelInUse = errs.Sentinel(errs.ErrPrecondition, "index: the model is in use")
 
 // ErrEmbedFailed is a semantic query whose text the provider could not embed (EmbedFailed,
 // -32067): retry later, or search lexically.
@@ -567,7 +571,7 @@ func unembedded(ctx context.Context, q dao.Querier, fp string, skip map[string]b
 // target cannot be purged.
 func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 	if x.sem != nil && (fp == x.sem.active() || fp == x.sem.target.Model().Fingerprint()) {
-		return fmt.Errorf("index: model %s is in use", fp)
+		return fmt.Errorf("%w: %s", ErrModelInUse, fp)
 	}
 	return x.do(ctx, func(ctx context.Context, tx dao.TxConn) error {
 		var active int
@@ -577,7 +581,7 @@ func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 			return err
 		}
 		if active == 1 {
-			return fmt.Errorf("index: model %s is active", fp)
+			return fmt.Errorf("%w: %s is active", ErrModelInUse, fp)
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM embedding WHERE model_fp = ?", fp); err != nil {
 			return err
