@@ -113,6 +113,22 @@ func (e *env) ready() {
 	})
 }
 
+// atHead waits for the code snapshot of the last commit. The writer commits,
+// then publishes that commit's snapshot, so a reader can see a document ready
+// while the snapshot is still the commit before; a test that reads or replaces
+// the snapshot waits here, or a late publish can land after it.
+func (e *env) atHead() *codeSnap {
+	e.t.Helper()
+	var s *codeSnap
+	e.eventually("the snapshot at the head", func() bool {
+		var seq int64
+		_ = scanOne(context.Background(), e.store.r, &seq, "SELECT CAST(v AS INTEGER) FROM meta WHERE k = 'commit_seq'")
+		s = e.ix.sem.snap.Load()
+		return s != nil && s.watermark == seq
+	})
+	return s
+}
+
 func (e *env) query(q string, opts QueryOpts) Result {
 	e.t.Helper()
 	res, err := e.ix.Search(context.Background(), q, opts)
@@ -195,6 +211,7 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 		return false
 	})
 	time.Sleep(50 * time.Millisecond)
+	e.atHead()
 	var cID int64
 	_ = scanOne(context.Background(), e.store.r, &cID, "SELECT id FROM document WHERE path = 'c.md'")
 	if _, in := e.ix.sem.snap.Load().docs[cID]; in {
@@ -344,10 +361,10 @@ func TestDeadChunkNeverASemanticHit(t *testing.T) {
 	e := newEnv(t, Options{Provider: p, noGC: true})
 	e.put("a.md", "# A\n\nplover marsh\n")
 	e.ready()
-	old := e.ix.sem.snap.Load()
+	old := e.atHead()
 	e.put("a.md", "# A\n\nsandpiper coast\n")
 	e.ready()
-	cur := e.ix.sem.snap.Load()
+	cur := e.atHead()
 	forged := &codeSnap{fp: cur.fp, watermark: cur.watermark, docs: map[int64][]code{}}
 	for d, cs := range cur.docs {
 		forged.docs[d] = append(append([]code(nil), cs...), old.docs[d]...)
@@ -374,12 +391,7 @@ func TestSnapshotAndFallbackAgree(t *testing.T) {
 	e.put("c.md", "lion zebra\n")
 	e.remove("b.md")
 	e.ready()
-	e.eventually("the snapshot at the head", func() bool {
-		var seq int64
-		_ = scanOne(context.Background(), e.store.r, &seq, "SELECT CAST(v AS INTEGER) FROM meta WHERE k = 'commit_seq'")
-		s := e.ix.sem.snap.Load()
-		return s != nil && s.watermark == seq
-	})
+	e.atHead()
 	snaps, falls := e.ix.sem.snapshotScans.Load(), e.ix.sem.fallbackScans.Load()
 	withSnap := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.snapshotScans.Load() != snaps+1 {
@@ -485,6 +497,7 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 		t.Errorf("%d of %d queries across the flip were empty or failed", empty, done)
 	}
 	e.ready()
+	e.atHead()
 	if es := e.embStatus(); es.Model != fpB || es.Target != "" || es.Pending != 0 || es.Semantic != SemanticReady {
 		t.Errorf("status after the flip %+v", es)
 	}
@@ -620,18 +633,9 @@ func TestSemanticRanksByCosine(t *testing.T) {
 func TestEveryCommitPublishes(t *testing.T) {
 	p := newFake("m", "a")
 	e := newEnv(t, Options{Provider: p})
-	atHead := func(what string) {
-		t.Helper()
-		e.eventually("the snapshot at the head "+what, func() bool {
-			var seq int64
-			_ = scanOne(context.Background(), e.store.r, &seq, "SELECT CAST(v AS INTEGER) FROM meta WHERE k = 'commit_seq'")
-			s := e.ix.sem.snap.Load()
-			return s != nil && s.watermark == seq
-		})
-	}
 	e.put("a.md", "zebra\n\n# X\n\nold words\n", "b.md", "lion\n")
 	e.ready()
-	atHead("after indexing")
+	e.atHead()
 	// a.md loses a section: its other chunk keeps its vector, so no vector commit follows the GC
 	e.put("a.md", "zebra\n")
 	e.eventually("the GC", func() bool {
@@ -639,9 +643,9 @@ func TestEveryCommitPublishes(t *testing.T) {
 		_ = scanOne(context.Background(), e.store.r, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
 		return dead == 0
 	})
-	atHead("after the GC")
+	e.atHead()
 	e.remove("b.md")
-	atHead("after a delete")
+	e.atHead()
 	falls := e.ix.sem.fallbackScans.Load()
 	e.query("zebra", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls {
