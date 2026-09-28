@@ -892,3 +892,25 @@ func TestRetryDelayDoublesToTheCap(t *testing.T) {
 		t.Errorf("delays %v, want %v", got, want)
 	}
 }
+
+// TestReferenceDefinitionsAreNotText: a link reference definition, between blocks or inside a list
+// item or a block quote, is in no chunk and no FTS row.
+func TestReferenceDefinitionsAreNotText(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.write("a.md", "alpha words\n\n[secret]: https://hidden.example/needle\n\nbeta words\n\n"+
+		"- [inlist]: https://hidden.example/pinecone\n  gamma words\n\n"+
+		"> [quoted]: https://hidden.example/walnut\n> delta words\n")
+	e.ix.Touch("a.md")
+	e.indexedAt("a.md")
+	for q, want := range map[string]int{"needle": 0, "pinecone": 0, "walnut": 0, "alpha": 1, "beta": 1, "gamma": 1, "delta": 1} {
+		if got := e.match(q); len(got) != want {
+			t.Errorf("%s matches %v, want %d", q, got, want)
+		}
+	}
+	_, chunks := e.alive("a.md")
+	for _, c := range chunks {
+		if strings.Contains(c.body, "hidden.example") {
+			t.Errorf("chunk %d holds a definition: %q", c.ord, c.body)
+		}
+	}
+}
