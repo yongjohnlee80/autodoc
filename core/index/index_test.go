@@ -542,6 +542,8 @@ type snapshot struct {
 	Docs   []string
 	Chunks []string
 	Tags   []string
+	Links  []string
+	Names  []string
 }
 
 func (e *env) snap() snapshot {
@@ -566,27 +568,34 @@ func (e *env) snap() snapshot {
 	collect(&s.Chunks, `SELECT d.path, c.ord || '|' || c.breadcrumb || '|' || c.body || '|' || c.byte_start || '|' || c.byte_end || '|' || hex(c.hash)
 		FROM chunk c JOIN document d ON d.id = c.doc_id WHERE c.gen_to IS NULL ORDER BY d.path, c.ord`)
 	collect(&s.Tags, "SELECT d.path, t.tag FROM doc_tag t JOIN document d ON d.id = t.doc_id ORDER BY d.path, t.tag")
+	collect(&s.Links, `SELECT s.path, l.kind || '|' || l.raw || '|' || l.name || '|' || COALESCE(l.anchor, '') || '|' || COALESCE(d.path, '-')
+		FROM link l JOIN document s ON s.id = l.src_doc LEFT JOIN document d ON d.id = l.dst_doc ORDER BY s.path, l.rowid`)
+	collect(&s.Names, "SELECT d.path, n.key || '|' || n.is_path FROM doc_name n JOIN document d ON d.id = n.doc_id ORDER BY d.path, n.key")
 	return s
 }
 
 // TestRebuildFromScratchIsEqual: deleting index.db and indexing again gives the same documents,
-// chunks and tags.
+// chunks, tags, links and names.
 func TestRebuildFromScratchIsEqual(t *testing.T) {
 	e := newEnv(t, Options{})
-	e.write("notes/a.md", "---\ntitle: A\ntags: [x, y]\n---\n# A\n\nbody #inline\n\n## Sub\n\nmore\n")
-	e.write("b.md", sections(4, -1, ""))
+	e.write("notes/a.md", "---\ntitle: A\ntags: [x, y]\naliases: [Alpha]\n---\n# A\n\nbody #inline [[b]] [[c]]\n\n## Sub\n\nmore\n")
+	e.write("b.md", sections(4, -1, "")+"\n[[alpha]] [a](notes/a.md#Sub) ![[notes/a]]\n")
 	for _, p := range []string{"notes/a.md", "b.md"} {
 		e.ix.Touch(p)
 		e.indexedAt(p)
 	}
 	before := e.snap()
+	if len(before.Links) != 5 || strings.Count(strings.Join(before.Links, "\n"), "|-") != 1 {
+		t.Fatalf("the links to compare are not the ones written: %q", before.Links)
+	}
 	e.stop()
 	for _, f := range []string{"index.db", "index.db-wal", "index.db-shm"} {
 		_ = os.Remove(filepath.Join(e.dir, f))
 	}
 	e.stop = nil
 	e.open(Options{})
-	for _, p := range []string{"notes/a.md", "b.md"} {
+	// the other order: b.md's links resolve only once notes/a.md is back, by re-resolution
+	for _, p := range []string{"b.md", "notes/a.md"} {
 		e.ix.Touch(p)
 		e.indexedAt(p)
 	}

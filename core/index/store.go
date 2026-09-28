@@ -23,7 +23,7 @@ import (
 // every document. The schema is recorded once: a file of another schema is not opened.
 const (
 	ChunkerVersion = 1
-	SchemaVersion  = 1
+	SchemaVersion  = 2
 )
 
 // IndexerVersion is what document.indexer records: "c<chunker>.s<schema>".
@@ -61,6 +61,11 @@ CREATE TABLE IF NOT EXISTS doc_alias (doc_id INTEGER NOT NULL, alias TEXT NOT NU
 CREATE TABLE IF NOT EXISTS link (src_doc INTEGER NOT NULL, gen_from INTEGER NOT NULL, gen_to INTEGER,
   raw TEXT NOT NULL, name TEXT NOT NULL, dst_doc INTEGER, anchor TEXT, kind TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS link_name ON link(name);
+CREATE INDEX IF NOT EXISTS link_src ON link(src_doc);
+CREATE INDEX IF NOT EXISTS link_dst ON link(dst_doc);
+CREATE TABLE IF NOT EXISTS doc_name (key TEXT NOT NULL, doc_id INTEGER NOT NULL, is_path INTEGER NOT NULL,
+  PRIMARY KEY (key, doc_id)) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS doc_name_doc ON doc_name(doc_id);
 CREATE TABLE IF NOT EXISTS model (fp TEXT PRIMARY KEY, provider TEXT, name TEXT, dims INTEGER, active INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS embedding (text_hash BLOB, model_fp TEXT, bits BLOB NOT NULL, f32 BLOB NOT NULL,
   PRIMARY KEY (text_hash, model_fp)) WITHOUT ROWID;
@@ -103,24 +108,59 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	return s, nil
 }
 
+// migrations[v] brings a schema v file to v+1, after the CREATE statements have made what is new.
+// Its documents were indexed under the old IndexerVersion, so Run rebuilds each of them.
+var migrations = map[int]string{
+	1: "", // 2 adds doc_name and the link table's indexes, all made by CREATE
+}
+
+// migrate creates the schema, or brings an older one up to date, in one transaction. A file of an
+// unknown or newer schema is refused before anything in it changes: CREATE … IF NOT EXISTS would
+// leave its tables as they are.
 func (s *Store) migrate(ctx context.Context) error {
-	if _, err := s.w.ExecContext(ctx, schema); err != nil {
+	var sv string
+	var hasMeta int
+	if err := scanOne(ctx, s.w, &hasMeta, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'meta'"); err != nil {
+		return fmt.Errorf("index: reading the schema: %w", err)
+	}
+	if hasMeta == 1 {
+		if err := scanOne(ctx, s.w, &sv, "SELECT v FROM meta WHERE k = 'schema_version'"); err != nil && !errors.Is(err, errNoRow) {
+			return fmt.Errorf("index: reading the schema version: %w", err)
+		}
+	}
+	from := SchemaVersion
+	if sv != "" {
+		v, err := strconv.Atoi(sv)
+		if err != nil || v < 1 || v > SchemaVersion {
+			return fmt.Errorf("%w: it has %s, this build %d", ErrSchemaVersion, sv, SchemaVersion)
+		}
+		from = v
+	}
+	tx, err := s.w.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("index: creating the schema: %w", err)
 	}
-	// CREATE … IF NOT EXISTS leaves a table of another schema as it is: such a file is refused, not
-	// read or written with this schema's statements
-	var sv string
-	_ = scanOne(ctx, s.w, &sv, "SELECT v FROM meta WHERE k = 'schema_version'")
-	if sv != "" && sv != strconv.Itoa(SchemaVersion) {
-		return fmt.Errorf("%w: it has %s, this build %d", ErrSchemaVersion, sv, SchemaVersion)
+	for v := from; v < SchemaVersion; v++ {
+		if q := migrations[v]; q != "" {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("index: migrating schema %d to %d: %w", v, v+1, err)
+			}
+		}
 	}
 	// the chunker's version is recorded per document (document.indexer), where a rebuild that stops
 	// part way still finds the documents it has not reached
-	if _, err := s.w.ExecContext(ctx, "INSERT OR IGNORE INTO meta(k, v) VALUES ('schema_version', ?), ('commit_seq', '0')",
+	if _, err := tx.ExecContext(ctx, "INSERT INTO meta(k, v) VALUES ('schema_version', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
 		strconv.Itoa(SchemaVersion)); err != nil {
 		return fmt.Errorf("index: recording the schema version: %w", err)
 	}
-	return nil
+	if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO meta(k, v) VALUES ('commit_seq', '0')"); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // outdated lists the documents indexed under another IndexerVersion.
