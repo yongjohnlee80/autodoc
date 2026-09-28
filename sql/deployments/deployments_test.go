@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/sqlite"
@@ -377,4 +379,63 @@ func ExampleScripts() {
 	all, _ := deployments.Updates(deployments.SQLite)
 	fmt.Println(all[0].Name)
 	// Output: 000001_update_initialize_tables.sql
+}
+
+// The loader's reading of a tree it is given: the order, the pairing of a
+// revert with its update, and each thing it refuses.
+func TestTheLoaderReadsAndRefuses(t *testing.T) {
+	tree := fstest.MapFS{
+		"sqlite/000001_update_initialize_tables.sql": {Data: []byte("CREATE TABLE a(x);\nCREATE TABLE b(y);")},
+		"sqlite/000002_revert_add_c.sql":             {Data: []byte("DROP TABLE c;")},
+		"sqlite/000002_update_add_c.sql":             {Data: []byte("-- nothing to do on this engine: c is a view elsewhere\n")},
+	}
+	all, err := deployments.ScriptsIn(tree, deployments.SQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, s := range all {
+		order = append(order, s.Name)
+	}
+	if got := fmt.Sprint(order); got != "[000001_update_initialize_tables.sql 000002_update_add_c.sql 000002_revert_add_c.sql]" {
+		t.Errorf("order = %s: by number, the update before its revert", got)
+	}
+	stmts, err := all[0].Statements()
+	if err != nil || len(stmts) != 2 || stmts[1].Line != 2 {
+		t.Errorf("the baseline's statements = %+v, %v: want two, the second on line 2", stmts, err)
+	}
+	if stmts, err := all[1].Statements(); err != nil || len(stmts) != 0 {
+		t.Errorf("a script that is only a comment runs %d statements (%v), want none", len(stmts), err)
+	}
+	if r, ok, err := deployments.RevertIn(tree, deployments.SQLite, 2); err != nil || !ok || r.Name != "000002_revert_add_c.sql" {
+		t.Errorf("RevertIn(2) = %q, %v, %v", r.Name, ok, err)
+	}
+	if _, ok, err := deployments.RevertIn(tree, deployments.SQLite, 1); err != nil || ok {
+		t.Errorf("the baseline has a revert: %v, %v", ok, err)
+	}
+
+	misnamed := fstest.MapFS{"sqlite/2_update_x.sql": {Data: []byte("SELECT 1;")}}
+	if _, err := deployments.ScriptsIn(misnamed, deployments.SQLite); err == nil || !strings.Contains(err.Error(), "2_update_x.sql") {
+		t.Errorf("a misnamed file: %v, want an error naming it", err)
+	}
+	if _, _, err := deployments.RevertIn(misnamed, deployments.SQLite, 1); err == nil {
+		t.Error("RevertIn over a misnamed file: want its error")
+	}
+	if _, ok, err := deployments.RevertOf(deployments.SQLite, 1); err != nil || ok {
+		t.Errorf("RevertOf(1) over the embedded scripts: %v, %v; the baseline has none", ok, err)
+	}
+	if _, err := deployments.Scripts("oracle"); err == nil {
+		t.Error("an engine with no scripts: want an error")
+	}
+	if _, err := deployments.Updates("oracle"); err == nil {
+		t.Error("Updates for an engine with no scripts: want an error")
+	}
+	open := fstest.MapFS{"sqlite/000001_update_initialize_tables.sql": {Data: []byte("SELECT 'unclosed;")}}
+	s, err := deployments.ScriptsIn(open, deployments.SQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s[0].Statements(); err == nil || !strings.Contains(err.Error(), "sqlite/000001_update_initialize_tables.sql") {
+		t.Errorf("an unclosed string: %v, want an error naming the script", err)
+	}
 }
