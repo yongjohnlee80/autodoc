@@ -38,10 +38,10 @@ const SQLite Engine = "sqlite"
 // Engines are the engines the store has scripts for.
 var Engines = []Engine{SQLite}
 
-// lexer is how the engine's SQL splits into statements. SQLite has no
-// dollar-quoted bodies, no nested block comments and no E-strings; an engine
-// that has them sets them here.
-func (e Engine) lexer() gsql.SQL { return gsql.SQL{} }
+// lexer is how the engine's SQL splits into statements: for SQLite, a
+// trigger's BEGIN … END body is part of its CREATE TRIGGER. An engine with
+// other constructs (dollar-quoted bodies, nested comments) sets them here.
+func (e Engine) lexer() gsql.SQL { return gsql.SQL{TriggerBodies: true} }
 
 // Kind is what a script does.
 type Kind string
