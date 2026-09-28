@@ -75,6 +75,12 @@ func TestLoadRejects(t *testing.T) {
 		{"absolute pattern", "[[workspace]]\nname = \"a\"\nroot = \"/x\"\nexclude = [\"/etc/**\"]\n", "pattern"},
 		{"bad duration", "[follow]\npoll_interval = \"soon\"\n", "invalid"},
 		{"not TOML", "[[workspace\n", "invalid"},
+		{"an api key in the file", "[embedding]\nprovider = \"openai\"\nmodel = \"m\"\napi_key = \"sk-x\"\n", "does not belong in the file"},
+		{"an unknown provider", "[embedding]\nprovider = \"cohere\"\nmodel = \"m\"\n", "provider"},
+		{"no model", "[embedding]\nprovider = \"ollama\"\n", "model is required"},
+		{"settings with no provider", "[embedding]\nmodel = \"m\"\n", "no provider"},
+		{"a key variable for ollama", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\napi_key_env = \"K\"\n", "openai"},
+		{"a bad base url", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\nbase_url = \"localhost:11434\"\n", "base_url"},
 	} {
 		_, err := load(t, c.body)
 		if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
@@ -101,5 +107,34 @@ func TestPaths(t *testing.T) {
 	}
 	if _, err := (config.Server{Socket: "/" + strings.Repeat("x", 120)}).SocketPath(); !errors.Is(err, config.ErrInvalid) {
 		t.Errorf("an over-long socket path: %v, want ErrInvalid before bind", err)
+	}
+}
+
+func TestEmbedding(t *testing.T) {
+	c, err := load(t, "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Embedding != (config.Embedding{Provider: "ollama", Model: "m", BaseURL: config.DefaultOllamaURL}) {
+		t.Errorf("ollama: %+v", c.Embedding)
+	}
+	c, err = load(t, "[embedding]\nprovider = \"openai\"\nmodel = \"m\"\napi_key_env = \"AUTODOC_TEST_KEY\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Embedding.BaseURL != config.DefaultOpenAIURL {
+		t.Errorf("openai: %+v", c.Embedding)
+	}
+	t.Setenv("AUTODOC_TEST_KEY", "")
+	if _, err := c.Embedding.APIKey(); !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), "AUTODOC_TEST_KEY") {
+		t.Errorf("an unset key variable: %v", err)
+	}
+	t.Setenv("AUTODOC_TEST_KEY", "sk-test")
+	if k, err := c.Embedding.APIKey(); err != nil || k != "sk-test" {
+		t.Errorf("the key: %v", err)
+	}
+	c, err = load(t, "")
+	if err != nil || c.Embedding != (config.Embedding{}) {
+		t.Errorf("no embedding section: %+v, %v", c.Embedding, err)
 	}
 }
