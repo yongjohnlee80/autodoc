@@ -14,8 +14,10 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `core/config` | reads `$XDG_CONFIG_HOME/autodoc/config.toml`, and resolves the socket and the state directory |
 | `core/workspace` | opens a workspace: its root as a `golib/vfs` filesystem, its include/exclude patterns, and the single-instance lease on its index store |
 | `core/follow` | keeps a workspace's index following its root |
+| `core/index` | the index store (one SQLite file per workspace), its indexer, the link graph, and search |
+| `core/embed` | the optional embedding provider: Ollama, or any OpenAI-compatible endpoint |
 
-The index and search (SQLite, FTS5, embeddings), the RPC server, the TUI and the Web-UI follow.
+The RPC server, the TUI and the Web-UI follow.
 
 ## Configuration
 
@@ -54,6 +56,40 @@ converge on the root's content, and treats every event as a hint that names a pa
 
 The follower never writes the index. It hands paths to the indexer, the store's one writer, which
 decides from each file's current state whether to delete, skip or re-index it.
+
+## The index
+
+Each workspace has one SQLite file in the state directory. One goroutine writes it, and any number
+read it, each from one snapshot:
+
+- **Notes are chunked by heading.** Chunks are about 350 estimated tokens, and each carries its breadcrumb
+  (the title and the headings above it). An edit writes only the chunks it changed: each document has
+  generations, and a reader sees the old one or the new one, never a mix.
+- **Frontmatter is metadata:** the title, tags and aliases. Inline `#tags` count too.
+- **Links are resolved per workspace, as Obsidian does.** A link reaches the note whose path is its name.
+  Failing that, it reaches the one note whose file name, path suffix or alias it is, and of several,
+  the one nearest the root. A tie leaves it unresolved. Links resolve again whenever a note that could
+  be their target appears, goes, or changes its aliases.
+- **A change log feeds clients' incremental sync.** It is kept for at least 7 days and 100 000 changes.
+
+## Search
+
+Search is lexical (SQLite FTS5, BM25) with no model at all. Every word of a query is a word: nothing in
+it is FTS syntax, and a `*` ending the last word is a prefix.
+
+- **Title, breadcrumb and tags weigh more than the body.**
+- **Links and tags lift a note after fusion.** A note linked from other notes, or tagged with a query
+  word, ranks higher.
+- **At most three hits come from one note.**
+
+With an embedding provider, search is hybrid. A 1-bit code scan over the chunks is rescored with the
+float vectors, and its results are fused with BM25 by reciprocal rank.
+
+- **Embedding is asynchronous and per document.** A note half embedded answers lexically until all of
+  its chunks have vectors, and the answer says the semantic side is `partial`.
+- **A new model fills in the background.** The old one keeps answering until the new one covers every
+  chunk.
+- **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
 
 ## Building
 
