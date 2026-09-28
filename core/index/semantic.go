@@ -230,7 +230,9 @@ func setReady(ctx context.Context, tx dao.TxConn, docs []int64) error {
 
 // commitVectors stores a batch of vectors in one transaction. Under the active model it makes the
 // documents they complete ready; under the target it flips the active model once the target covers
-// every alive chunk, and every document's readiness follows the new model.
+// every alive chunk, and every document's readiness follows the new model. Under any other model
+// (the one active before a flip, whose worker was still embedding) it only stores them: the choice
+// of model is the target's to make, never a late batch's.
 func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	m := x.sem
 	tx, err := x.store.w.Begin(ctx)
@@ -258,7 +260,7 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 		if err := setReady(ctx, tx, changed); err != nil {
 			return err
 		}
-	case vb.fp != active:
+	case vb.fp == m.target.Model().Fingerprint():
 		var missing int
 		if err := scanOne(ctx, tx, &missing, `SELECT EXISTS (SELECT 1 FROM chunk c JOIN document d ON d.id = c.doc_id
 			WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
@@ -791,7 +793,11 @@ type EmbeddingStatus struct {
 	Pending  int64  // distinct texts of alive chunks with no vector under the active model
 	Semantic string // SemanticReady, or SemanticPartial while any document is not ready
 	LastErr  string // the embedding workers' last provider failure; "" after a success
-	Refused  int    // texts the provider rejected, set aside for now
+	Refused  int    // texts the provider rejected under the active model, set aside for now
+	// TargetPending and TargetRefused are the same for the target while it fills: a refused text
+	// holds the switch back, since the target flips only when it covers every chunk.
+	TargetPending int64
+	TargetRefused int
 }
 
 // Status is the store's status, with the embedding tier's when the indexer has a provider.
@@ -806,10 +812,19 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 		es.Target = t
 	}
 	var unready int
-	if err := scanOne(ctx, x.store.r, &es.Pending, `SELECT COUNT(DISTINCT c.text_hash) FROM chunk c JOIN document d ON d.id = c.doc_id
-		WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
-		AND NOT EXISTS (SELECT 1 FROM embedding e WHERE e.text_hash = c.text_hash AND e.model_fp = ?)`, es.Model); err != nil {
+	pending := func(fp string, n *int64) error {
+		return scanOne(ctx, x.store.r, n, `SELECT COUNT(DISTINCT c.text_hash) FROM chunk c JOIN document d ON d.id = c.doc_id
+			WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
+			AND NOT EXISTS (SELECT 1 FROM embedding e WHERE e.text_hash = c.text_hash AND e.model_fp = ?)`, fp)
+	}
+	if err := pending(es.Model, &es.Pending); err != nil {
 		return st, err
+	}
+	if es.Target != "" {
+		if err := pending(es.Target, &es.TargetPending); err != nil {
+			return st, err
+		}
+		es.TargetRefused = len(m.skip(es.Target))
 	}
 	if err := scanOne(ctx, x.store.r, &unready, "SELECT EXISTS (SELECT 1 FROM document WHERE semantic_ready = 0)"); err != nil {
 		return st, err
