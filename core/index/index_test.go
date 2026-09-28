@@ -580,9 +580,9 @@ func TestRebuildFromScratchIsEqual(t *testing.T) {
 	}
 }
 
-// TestSchemaBumpRebuildsEveryDocument: a store written by another chunker or schema version
-// re-indexes every document at start, though no file changed.
-func TestSchemaBumpRebuildsEveryDocument(t *testing.T) {
+// TestOutdatedDocumentsRebuild: documents indexed under another IndexerVersion are rebuilt on the
+// next start, even when a start before it opened the store and stopped before indexing anything.
+func TestOutdatedDocumentsRebuild(t *testing.T) {
 	e := newEnv(t, Options{})
 	e.write("a.md", "a\n")
 	e.write("b.md", "b\n")
@@ -591,14 +591,19 @@ func TestSchemaBumpRebuildsEveryDocument(t *testing.T) {
 	e.indexedAt("a.md")
 	e.indexedAt("b.md")
 	e.stop()
-	s, err := Open(context.Background(), filepath.Join(e.dir, "index.db"))
+	path := filepath.Join(e.dir, "index.db")
+	s, err := Open(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, q := range []string{"UPDATE meta SET v = '0' WHERE k = 'schema_version'", "UPDATE document SET indexer = 'c1.s0'"} {
-		if _, err := s.w.ExecContext(context.Background(), q); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := s.w.ExecContext(context.Background(), "UPDATE document SET indexer = 'c0.s1'"); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	// the interrupted start: the store is opened, and the process stops before the indexer runs
+	s, err = Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
 	}
 	_ = s.Close()
 	e.stop = nil
@@ -612,6 +617,28 @@ func TestSchemaBumpRebuildsEveryDocument(t *testing.T) {
 	})
 	if e.ix.Parses() != 2 {
 		t.Errorf("%d parses for two unchanged documents, want 2", e.ix.Parses())
+	}
+}
+
+// TestAnotherSchemaIsRefused: a store written under another schema is not opened, and not marked
+// as this one's.
+func TestAnotherSchemaIsRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "index.db")
+	s, err := Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.w.ExecContext(context.Background(), "UPDATE meta SET v = '0' WHERE k = 'schema_version'"); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	for range 2 {
+		if s, err := Open(context.Background(), path); !errors.Is(err, ErrSchemaVersion) {
+			if s != nil {
+				_ = s.Close()
+			}
+			t.Fatalf("opening a schema 0 store: %v, want ErrSchemaVersion", err)
+		}
 	}
 }
 

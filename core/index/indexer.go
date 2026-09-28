@@ -153,16 +153,18 @@ func (x *Indexer) touch(path string, force bool) {
 func (x *Indexer) Version(path string) (vfs.Version, bool) { return x.store.Version(path) }
 func (x *Indexer) PathsUnder(dir string) []string          { return x.store.PathsUnder(dir) }
 
-// Run writes the store until ctx ends. It first takes up the jobs a previous run left, and, when
-// the store was written by another chunker or schema version, every document.
+// Run writes the store until ctx ends. It first takes up the jobs a previous run left, and every
+// document indexed under another IndexerVersion.
 func (x *Indexer) Run(ctx context.Context) error {
 	if err := x.loadJobs(ctx); err != nil {
 		return err
 	}
-	if x.store.rebuild {
-		for _, p := range x.store.PathsUnder(".") {
-			x.touch(p, false) // the indexer check rebuilds each: no file changed, the chunker did
-		}
+	outdated, err := x.store.outdated(ctx)
+	if err != nil {
+		return fmt.Errorf("index: listing outdated documents: %w", err)
+	}
+	for _, p := range outdated {
+		x.touch(p, false) // the indexer check rebuilds each: no file changed, the chunker did
 	}
 	var wg sync.WaitGroup
 	workCtx, stopWorkers := context.WithCancel(ctx)
