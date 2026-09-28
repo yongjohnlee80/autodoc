@@ -16,7 +16,8 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 )
 
-// MaxFileSize is the largest note the indexer reads; a larger one is recorded as a job error.
+// MaxFileSize is the largest note the indexer reads. A larger one leaves the index, and its job
+// records the error and waits for the file to change: reading it again could only fail again.
 const MaxFileSize = 16 << 20
 
 // The change log's retention (ADR 0204 §4.7): a row goes only when it is BOTH older than
@@ -33,9 +34,10 @@ type Options struct {
 	BatchDelay time.Duration // or every this long (default 200 ms)
 	// Match reports whether a path is eligible (the workspace's include and exclude). Nil: all.
 	Match func(path string) bool
-	// RetryDelay is how long a job whose file could not be read waits before it runs again
-	// (default 1 s).
-	RetryDelay time.Duration
+	// RetryDelay is how long a job whose file could not be read first waits before it runs again
+	// (default 1 s); each failure after that doubles the wait, up to MaxRetryDelay (default 5 min).
+	RetryDelay    time.Duration
+	MaxRetryDelay time.Duration
 	// Now is the clock (default time.Now); tests set it to age the change log.
 	Now func() time.Time
 	// afterRead, when set (tests only), runs in the worker once a path's content is read, before the
@@ -89,6 +91,7 @@ type prepared struct {
 	skip       bool
 	delete     bool
 	err        error
+	tooLarge   bool // err is that the file is over MaxFileSize
 	version    vfs.Version
 	meta       docMeta
 	chunks     []chunkT
@@ -108,6 +111,10 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	if opts.RetryDelay <= 0 {
 		opts.RetryDelay = time.Second
 	}
+	if opts.MaxRetryDelay <= 0 {
+		opts.MaxRetryDelay = 5 * time.Minute
+	}
+	opts.MaxRetryDelay = max(opts.MaxRetryDelay, opts.RetryDelay)
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -343,6 +350,10 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 			return p
 		}
 	}
+	if fi.Size > MaxFileSize {
+		p.err, p.tooLarge = tooLarge(w.path), true
+		return p
+	}
 	r, err := x.fsys.Open(ctx, w.path, 0)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -361,8 +372,8 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	if x.opts.afterRead != nil {
 		x.opts.afterRead(w.path)
 	}
-	if len(src) > MaxFileSize {
-		p.err = fmt.Errorf("index: %s is over %d bytes", w.path, MaxFileSize)
+	if len(src) > MaxFileSize { // it grew after the Stat
+		p.err, p.tooLarge = tooLarge(w.path), true
 		return p
 	}
 	doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
@@ -421,6 +432,12 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 		}
 		switch {
 		case p.err != nil:
+			if p.tooLarge {
+				// its indexed text is no longer the file's
+				if err := deleteDoc(ctx, tx, p.path, now); err != nil {
+					return err
+				}
+			}
 			if _, err := tx.ExecContext(ctx, "UPDATE index_job SET attempts = attempts + 1, last_error = ? WHERE path = ?", p.err.Error(), p.path); err != nil {
 				return err
 			}
@@ -453,13 +470,29 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 		case o.stale:
 			j.inflight = false // touched again while it was read: run it again with the new seq
 			x.enqueue(o.p.path, j)
-		default: // a read error: wait, then again
+		default:
 			j.inflight, j.attempts, j.lastErr = false, j.attempts+1, o.p.err.Error()
-			j.notUntil = time.Now().Add(x.opts.RetryDelay)
+			if o.p.tooLarge {
+				continue // the next touch of the path runs it again
+			}
+			j.notUntil = time.Now().Add(x.retryDelay(j.attempts))
 			x.delayed = append(x.delayed, o.p.path)
 		}
 	}
 	return nil
+}
+
+func tooLarge(path string) error {
+	return fmt.Errorf("index: %s is over %d bytes", path, MaxFileSize)
+}
+
+// retryDelay is the wait after a job's attempts-th failure in a row.
+func (x *Indexer) retryDelay(attempts int) time.Duration {
+	d := x.opts.RetryDelay
+	for i := 1; i < attempts && d < x.opts.MaxRetryDelay; i++ {
+		d *= 2
+	}
+	return min(d, x.opts.MaxRetryDelay)
 }
 
 type oldChunk struct {
