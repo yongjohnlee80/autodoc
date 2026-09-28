@@ -22,7 +22,7 @@ import (
 // indexed under others is rebuilt, even when its file has not changed, so a chunker change reaches
 // every document. The schema is recorded once: a file of another schema is not opened.
 const (
-	ChunkerVersion = 1
+	ChunkerVersion = 2
 	SchemaVersion  = 2
 )
 
