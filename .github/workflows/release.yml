@@ -1,0 +1,90 @@
+# A pushed v* tag builds the binary for each platform and attaches it, with its
+# checksum, to that tag's GitHub release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { goos: linux,  goarch: amd64 }
+          - { goos: linux,  goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: build
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          OUT="autodoc-${VERSION}-${GOOS}-${GOARCH}"
+          # -s -w: no symbol table or DWARF; stack traces keep their function
+          # names. -trimpath keeps the runner's paths out of the binary.
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" ./cmd/autodoc
+          tar czf "${OUT}.tar.gz" "${OUT}"
+          sha256sum "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            *.tar.gz
+            *.tar.gz.sha256
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+      # Create when absent, upload either way: `gh release create` fails when
+      # the release already exists (notes written by hand, a re-run, a retry),
+      # and the binaries are the part a consumer cannot rebuild themselves.
+      # --clobber makes a re-run idempotent.
+      - name: publish the release and attach the artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "release ${GITHUB_REF_NAME} already exists; keeping its notes"
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
+          gh release upload "${GITHUB_REF_NAME}" \
+            dist/*.tar.gz dist/*.tar.gz.sha256 \
+            --clobber
+
+      # An upload of a glob that matched nothing, or a partial upload, exits 0,
+      # so the count is asserted: a tarball and a checksum per platform built.
+      - name: verify every artifact reached the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          want=$(ls -1 dist/*.tar.gz dist/*.tar.gz.sha256 | wc -l)
+          got=$(gh release view "${GITHUB_REF_NAME}" --json assets --jq '.assets | length')
+          echo "artifacts built: ${want}; assets on the release: ${got}"
+          if [ "${got}" -lt "${want}" ]; then
+            echo "::error::${got} assets on ${GITHUB_REF_NAME} but ${want} were built; the release is incomplete"
+            exit 1
+          fi

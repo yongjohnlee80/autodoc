@@ -1,0 +1,195 @@
+# The Go gate: gofmt, vet, build, the race-enabled tests twice, a static
+# cross-build, and on a pull request the coverage policy (golib covercheck).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: build, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt would rewrite these files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go vet ./...
+
+      - run: go build ./...
+
+      # -race because the daemon, the follower, the indexer's writer and the TUI
+      # all run concurrently. -count=2 because a suite run once is a suite whose
+      # flakes are someone else's problem later.
+      - name: test
+        run: go test -race -count=2 -timeout 20m ./...
+
+      # The binary ships without cgo (modernc SQLite), for every platform the
+      # release builds.
+      - name: static cross-build smoke
+        run: |
+          CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
+
+  coverage:
+    name: coverage policy
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: generate head coverage
+        run: >-
+          go test -count=1 -timeout 20m -covermode=atomic
+          -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-head.out" ./...
+
+      - name: generate base coverage
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/coverage-base" "$BASE_SHA"
+          cd "$RUNNER_TEMP/coverage-base"
+          go test -count=1 -timeout 20m -covermode=atomic \
+            -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
+
+      # covercheck is golib's, at the version go.mod requires: no install step
+      # and nothing outside the module graph.
+      - name: enforce coverage policy
+        id: coverage_policy
+        continue-on-error: true
+        run: |
+          set +e
+          go run github.com/yongjohnlee80/golib/cmd/covercheck \
+            --base-profile "$RUNNER_TEMP/coverage-base.out" \
+            --head-profile "$RUNNER_TEMP/coverage-head.out" \
+            --base-ref "$BASE_SHA" \
+            --head-ref "$HEAD_SHA" \
+            --minimum-changed 70 \
+            --maximum-total-regression 1 \
+            --maximum-file-regression 1 \
+            --require-changed-files \
+            --format markdown > "$RUNNER_TEMP/coverage-report.md"
+          status=$?
+          cat "$RUNNER_TEMP/coverage-report.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$RUNNER_TEMP/coverage-report.md"
+          exit "$status"
+
+      - name: upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverage-report.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: preserve coverage policy result
+        if: steps.coverage_policy.outcome == 'failure'
+        run: exit 1
+
+  # A pull request from a fork gets a read-only token, so only this repo's own
+  # branches get the comment; the job summary has the report either way.
+  coverage-comment:
+    name: coverage PR comment
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    needs: coverage
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pull-requests: write
+    steps:
+      - name: download coverage report
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report-${{ github.run_id }}
+          path: ${{ runner.temp }}/coverage-report
+
+      - name: create or update PR comment
+        uses: actions/github-script@v7
+        env:
+          COVERAGE_REPORT_PATH: ${{ runner.temp }}/coverage-report/coverage-report.md
+          COVERAGE_JOB_RESULT: ${{ needs.coverage.result }}
+        with:
+          script: |
+            const fs = require('fs')
+            const marker = '<!-- covercheck-report -->'
+            const reportPath = process.env.COVERAGE_REPORT_PATH
+            const reportAvailable = fs.existsSync(reportPath) && fs.statSync(reportPath).size > 0
+            let report = reportAvailable
+              ? fs.readFileSync(reportPath, 'utf8').trim()
+              : [
+                  '## Coverage check: ERROR',
+                  '',
+                  'The coverage job did not produce a report. Open the workflow run for the generation error.',
+                ].join('\n')
+
+            const maxReportLength = 60000
+            if (report.length > maxReportLength) {
+              report = report.slice(0, maxReportLength) +
+                '\n\n_Report truncated; open the workflow run for the complete output._'
+            }
+
+            const runURL = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const headSHA = context.payload.pull_request.head.sha.slice(0, 7)
+            const body = [
+              marker,
+              report,
+              '',
+              `<sub>Updated for \`${headSHA}\` · [workflow run](${runURL}) · coverage job: ${process.env.COVERAGE_JOB_RESULT}</sub>`,
+            ].join('\n')
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            })
+            const previous = comments.find(comment =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            )
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previous.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              })
+            }
