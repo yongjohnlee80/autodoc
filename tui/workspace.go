@@ -52,7 +52,7 @@ func (h *Host) loadWorkspaces() {
 		h.workspaces.Reset(rows)
 		if pick < 0 {
 			h.setWhere("autodoc · no workspace")
-			h.setStatus("no workspace is served: add one to the daemon's config")
+			h.setStatus("no workspace: add a [[workspace]] to the config (Help › About names it)")
 			return
 		}
 		h.enter(a.list[pick].name)

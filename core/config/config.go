@@ -24,6 +24,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path"
@@ -123,12 +124,24 @@ func DefaultPath() (string, error) {
 	return filepath.Join(base, "autodoc", "config.toml"), nil
 }
 
-// Load reads and validates the configuration file at file. Unknown keys are an error, so a
-// misspelled setting is reported instead of silently ignored.
+// Load reads and validates the configuration file at file. A missing file is not an error: every
+// value is a default (and there is no workspace until one is configured), as AutoDB's is. A file
+// that cannot be read is the machine's problem, not the configuration's; one that does not parse,
+// or names an unknown setting, is invalid, so a misspelled setting is reported instead of ignored.
 func Load(file string) (*Config, error) {
 	var c Config
 	md, err := toml.DecodeFile(file, &c)
-	if err != nil {
+	var pe *fs.PathError
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		c = Config{}
+		if err := c.normalize(); err != nil {
+			return nil, err
+		}
+		return &c, nil
+	case errors.As(err, &pe):
+		return nil, fmt.Errorf("config: %s: %w", file, err)
+	case err != nil:
 		return nil, fmt.Errorf("%w: %s: %v", ErrInvalid, file, err)
 	}
 	if extra := md.Undecoded(); len(extra) > 0 {
