@@ -14,6 +14,8 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/vfs"
+
+	"github.com/yongjohnlee80/autodoc/core/embed"
 )
 
 // MaxFileSize is the largest note the indexer reads. A larger one leaves the index, and its job
@@ -45,6 +47,13 @@ type Options struct {
 	afterRead func(path string)
 	// noGC (tests only) keeps dead chunks, to show they are never alive before GC takes them.
 	noGC bool
+	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
+	// one active, or, while another is active, the one filling to replace it.
+	Provider embed.Provider
+	// ProviderFor makes the provider of a model other than Provider's: the one still active while
+	// the target fills, which queries are embedded with. Nil: that model gets no new vectors, and a
+	// semantic query during the switch reports SemanticError.
+	ProviderFor func(embed.Model) (embed.Provider, error)
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -66,6 +75,8 @@ type Indexer struct {
 	nextSeq     int64
 	results     chan *prepared
 	work        chan workItem
+	ops         chan op   // writes other than documents' (PurgeModel)
+	sem         *semantic // nil without a provider
 
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
 }
@@ -120,10 +131,14 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
-	return &Indexer{store: store, fsys: fsys, opts: opts, touched: map[string]bool{},
+	ix := &Indexer{store: store, fsys: fsys, opts: opts, touched: map[string]bool{},
 		signal: make(chan struct{}, 1), jobs: map[string]*job{}, unpersisted: map[string]bool{},
 		results: make(chan *prepared, 2*opts.Workers),
-		work:    make(chan workItem)}
+		work:    make(chan workItem), ops: make(chan op)}
+	if opts.Provider != nil {
+		ix.sem = newSemantic(opts.Provider, opts.ProviderFor)
+	}
+	return ix
 }
 
 // Touch queues path to be re-read. It never blocks: the writer picks the path up in its next batch.
@@ -189,6 +204,11 @@ func (x *Indexer) Run(ctx context.Context) error {
 	for _, p := range outdated {
 		x.touch(p, false) // the indexer check rebuilds each: no file changed, the chunker did
 	}
+	if x.sem != nil {
+		if err := x.setupModels(ctx); err != nil {
+			return fmt.Errorf("index: recording the embedding model: %w", err)
+		}
+	}
 	var wg sync.WaitGroup
 	workCtx, stopWorkers := context.WithCancel(ctx)
 	for i := 0; i < x.opts.Workers; i++ {
@@ -197,6 +217,15 @@ func (x *Indexer) Run(ctx context.Context) error {
 			defer wg.Done()
 			x.worker(workCtx)
 		}()
+	}
+	if x.sem != nil {
+		for _, role := range []int{roleActive, roleTarget} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				x.embedLoop(workCtx, role)
+			}()
+		}
 	}
 	defer func() { stopWorkers(); wg.Wait() }()
 	return x.writer(ctx)
@@ -253,6 +282,16 @@ func (x *Indexer) writer(ctx context.Context) error {
 			if first.IsZero() {
 				first = time.Now()
 			}
+		case vb := <-x.vectorsIn():
+			err := x.commitVectors(ctx, vb)
+			vb.done <- err
+			if err != nil && ctx.Err() != nil {
+				return ctx.Err()
+			}
+			continue
+		case o := <-x.ops:
+			o.done <- x.runOp(ctx, o.fn)
+			continue
 		case <-ticker.C:
 		}
 		pending := len(batch) > 0 || len(x.unpersisted) > 0
@@ -427,9 +466,10 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 	}
 	defer tx.Rollback()
 	now := x.opts.Now()
-	if _, err := tx.ExecContext(ctx, "UPDATE meta SET v = CAST(v AS INTEGER) + 1 WHERE k = 'commit_seq'"); err != nil {
+	if _, err := bumpSeq(ctx, tx); err != nil {
 		return err
 	}
+	var changed []int64 // the documents written: their codes may differ
 	for p := range x.unpersisted {
 		j := x.jobs[p]
 		if j == nil {
@@ -460,9 +500,11 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 		case p.err != nil:
 			if p.tooLarge {
 				// its indexed text is no longer the file's
-				if err := deleteDoc(ctx, tx, p.path, now); err != nil {
+				id, err := deleteDoc(ctx, tx, p.path, now)
+				if err != nil {
 					return err
 				}
+				changed = append(changed, id)
 			}
 			if _, err := tx.ExecContext(ctx, "UPDATE index_job SET attempts = attempts + 1, last_error = ? WHERE path = ?", p.err.Error(), p.path); err != nil {
 				return err
@@ -470,13 +512,17 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			outcomes = append(outcomes, outcome{p: p})
 			continue
 		case p.delete:
-			if err := deleteDoc(ctx, tx, p.path, now); err != nil {
+			id, err := deleteDoc(ctx, tx, p.path, now)
+			if err != nil {
 				return err
 			}
+			changed = append(changed, id)
 		case !p.skip:
-			if err := upsertDoc(ctx, tx, p, now); err != nil {
+			id, err := upsertDoc(ctx, tx, p, now)
+			if err != nil {
 				return err
 			}
+			changed = append(changed, id)
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM index_job WHERE path = ? AND seq = ?", p.path, p.claimedSeq); err != nil {
 			return err
@@ -485,6 +531,12 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 	}
 	if err := tx.Commit(); err != nil {
 		return err
+	}
+	if err := x.publish(ctx, changed); err != nil {
+		return err
+	}
+	if x.sem != nil && len(changed) > 0 {
+		x.sem.signal() // new chunks may want vectors
 	}
 	clear(x.unpersisted)
 	for _, o := range outcomes {
@@ -531,7 +583,7 @@ type oldChunk struct {
 // generation are reused in place (their position updated, no FTS write), new ones are inserted
 // under the new generation, and the rest die at it. The flip of active_gen is in the same
 // transaction, so a reader sees the old generation or the new one, never a mix.
-func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) error {
+func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) (int64, error) {
 	var docID, gen int64
 	var oldTitle string
 	err := scanRow(ctx, tx, []any{&docID, &gen, &oldTitle}, "SELECT id, active_gen, COALESCE(title, '') FROM document WHERE path = ?", p.path)
@@ -540,22 +592,22 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 	case appeared:
 		res, err := tx.ExecContext(ctx, "INSERT INTO document(path, version, active_gen, indexer, indexed_at) VALUES (?, '', 0, ?, ?)", p.path, IndexerVersion, now.Unix())
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if docID, err = res.LastInsertId(); err != nil {
-			return err
+			return 0, err
 		}
 	case err != nil:
-		return err
+		return 0, err
 	}
 	oldTags, err := docTags(ctx, tx, docID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	next := gen + 1
 	old, err := aliveChunks(ctx, tx, docID, gen)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	title, tags := p.meta.title, strings.Join(p.meta.tags, " ")
 	metaChanged := title != oldTitle || tags != strings.Join(oldTags, " ")
@@ -566,7 +618,7 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 			o := occ[0]
 			old[key] = occ[1:]
 			if _, err := tx.ExecContext(ctx, "UPDATE chunk SET ord = ?, byte_start = ?, byte_end = ? WHERE id = ?", c.ord, c.byteStart, c.byteEnd, o.id); err != nil {
-				return err
+				return 0, err
 			}
 			reused = append(reused, o)
 			continue
@@ -574,21 +626,21 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 		res, err := tx.ExecContext(ctx, `INSERT INTO chunk(doc_id, hash, text_hash, gen_from, ord, breadcrumb, body, title, tags, byte_start, byte_end)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, docID, c.hash, c.textHash, next, c.ord, c.breadcrumb, c.body, title, tags, c.byteStart, c.byteEnd)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if err := ftsInsert(ctx, tx, id, title, c.breadcrumb, tags, c.body); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	for _, occ := range old {
 		for _, o := range occ {
 			// dead from the new generation on; its FTS row goes at GC, which still needs its text
 			if _, err := tx.ExecContext(ctx, "UPDATE chunk SET gen_to = ? WHERE id = ?", next, o.id); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
@@ -597,36 +649,36 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 		// reused chunk's FTS row is replaced, old values out, new values in
 		for _, o := range reused {
 			if err := ftsDelete(ctx, tx, o.id, o.title, o.breadcrumb, o.tags, o.body); err != nil {
-				return err
+				return 0, err
 			}
 			if _, err := tx.ExecContext(ctx, "UPDATE chunk SET title = ?, tags = ? WHERE id = ?", title, tags, o.id); err != nil {
-				return err
+				return 0, err
 			}
 			if err := ftsInsert(ctx, tx, o.id, title, o.breadcrumb, tags, o.body); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
 	if err := replaceSet(ctx, tx, "doc_tag", "tag", docID, p.meta.tags); err != nil {
-		return err
+		return 0, err
 	}
 	if err := replaceSet(ctx, tx, "doc_alias", "alias", docID, p.meta.aliases); err != nil {
-		return err
+		return 0, err
 	}
 	// the names, the note's own links, then the links elsewhere whose target may have changed: those
 	// under every name the note gained or lost, and, when it appeared, under its path
 	changed, err := writeNames(ctx, tx, docID, namesOf(p.path, p.meta.aliases))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if appeared {
 		changed = append(changed, markdownNames(p.path)...)
 	}
 	if err := writeLinks(ctx, tx, docID, next, p.links); err != nil {
-		return err
+		return 0, err
 	}
 	if err := reresolve(ctx, tx, changed, 0); err != nil {
-		return err
+		return 0, err
 	}
 	var fmJSON, fmErr any
 	if p.meta.frontmatterJSON != "" {
@@ -637,51 +689,54 @@ func upsertDoc(ctx context.Context, tx dao.TxConn, p *prepared, now time.Time) e
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE document SET version = ?, active_gen = ?, title = ?, frontmatter_json = ?, frontmatter_error = ?,
 		indexer = ?, indexed_at = ? WHERE id = ?`, string(p.version), next, title, fmJSON, fmErr, IndexerVersion, now.Unix(), docID); err != nil {
-		return err
+		return 0, err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO change(path, op, generation, at) VALUES (?, 'upsert', ?, ?)", p.path, next, now.Unix())
-	return err
+	if _, err := tx.ExecContext(ctx, "INSERT INTO change(path, op, generation, at) VALUES (?, 'upsert', ?, ?)", p.path, next, now.Unix()); err != nil {
+		return 0, err
+	}
+	// a new generation may hold chunks with no vector yet: the document waits for them
+	return docID, setReady(ctx, tx, []int64{docID})
 }
 
 // deleteDoc removes a document, its chunks (FTS rows first: an external-content delete needs the
 // text), tags, aliases and links, and logs the delete.
-func deleteDoc(ctx context.Context, tx dao.TxConn, path string, now time.Time) error {
+func deleteDoc(ctx context.Context, tx dao.TxConn, path string, now time.Time) (int64, error) {
 	var docID, gen int64
 	err := scanRow(ctx, tx, []any{&docID, &gen}, "SELECT id, active_gen FROM document WHERE path = ?", path)
 	if errors.Is(err, errNoRow) {
-		return nil
+		return 0, nil
 	}
 	if err != nil {
-		return err
+		return 0, err
 	}
 	rows, err := tx.QueryContext(ctx, "SELECT id, title, breadcrumb, tags, body FROM chunk WHERE doc_id = ?", docID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var all []oldChunk
 	for rows.Next() {
 		var o oldChunk
 		if err := rows.Scan(&o.id, &o.title, &o.breadcrumb, &o.tags, &o.body); err != nil {
 			rows.Close()
-			return err
+			return 0, err
 		}
 		all = append(all, o)
 	}
 	rows.Close()
 	for _, o := range all {
 		if err := ftsDelete(ctx, tx, o.id, o.title, o.breadcrumb, o.tags, o.body); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	names, err := storedNames(ctx, tx, docID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, q := range []string{"DELETE FROM chunk WHERE doc_id = ?", "DELETE FROM doc_tag WHERE doc_id = ?",
 		"DELETE FROM doc_alias WHERE doc_id = ?", "DELETE FROM doc_name WHERE doc_id = ?",
 		"DELETE FROM link WHERE src_doc = ?", "DELETE FROM document WHERE id = ?"} {
 		if _, err := tx.ExecContext(ctx, q, docID); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	// the links that reached it, and those under any name it answered to, resolve again: to another
@@ -691,10 +746,10 @@ func deleteDoc(ctx context.Context, tx dao.TxConn, path string, now time.Time) e
 		affected = append(affected, linkNames(n, isPath)...)
 	}
 	if err := reresolve(ctx, tx, affected, docID); err != nil {
-		return err
+		return 0, err
 	}
 	_, err = tx.ExecContext(ctx, "INSERT INTO change(path, op, generation, at) VALUES (?, 'delete', ?, ?)", path, gen+1, now.Unix())
-	return err
+	return docID, err
 }
 
 // aliveChunks maps the hashes of a document's chunks alive at gen to their rows, in ord order
@@ -814,11 +869,20 @@ func (x *Indexer) gc(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if len(dead) > 0 {
-		if _, err := tx.ExecContext(ctx, "UPDATE meta SET v = CAST(v AS INTEGER) + 1 WHERE k = 'commit_seq'"); err != nil {
+		if _, err := bumpSeq(ctx, tx); err != nil {
 			return false, err
 		}
 	}
-	return more, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	if len(dead) > 0 {
+		// dead chunks are in no snapshot: the codes stand, under the new commit_seq
+		if err := x.publish(ctx, []int64{}); err != nil {
+			return false, err
+		}
+	}
+	return more, nil
 }
 
 // pruneChanges drops the change rows that are both older than retainAge and more than retainRows
@@ -837,4 +901,52 @@ func (x *Indexer) Parses() int64 {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	return x.parses
+}
+
+// op is a write other than a document's, run by the writer in a transaction of its own.
+type op struct {
+	fn   func(context.Context, dao.TxConn) error
+	done chan error
+}
+
+// do runs fn in the writer, as its own transaction, and waits for it.
+func (x *Indexer) do(ctx context.Context, fn func(context.Context, dao.TxConn) error) error {
+	o := op{fn: fn, done: make(chan error, 1)}
+	select {
+	case x.ops <- o:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	select {
+	case err := <-o.done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (x *Indexer) runOp(ctx context.Context, fn func(context.Context, dao.TxConn) error) error {
+	tx, err := x.store.w.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := bumpSeq(ctx, tx); err != nil {
+		return err
+	}
+	if err := fn(ctx, tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return x.publish(ctx, []int64{})
+}
+
+// vectorsIn is the embedding worker's handoff, or nil (never ready) without a provider.
+func (x *Indexer) vectorsIn() chan vecBatch {
+	if x.sem == nil {
+		return nil
+	}
+	return x.sem.vectors
 }

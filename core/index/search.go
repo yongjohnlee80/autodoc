@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -56,22 +57,41 @@ type Hit struct {
 	Via                       []string // the retrievers that found it
 }
 
-// Result is search.query's answer: the hits, and what the search could use.
+// Result is search.query's answer: the hits, and what the search could use (ADR 0204 §4.4).
 type Result struct {
 	Hits     []Hit
-	ModeUsed string
-	Semantic string
+	ModeUsed string // ModeLexical, ModeSemantic or ModeHybrid
+	Semantic string // SemanticOff, SemanticReady, SemanticPartial or SemanticError
+	// SemanticError is the constant message of SemanticError: a provider's own error text is not
+	// passed to clients.
+	SemanticError string
 }
 
-// Search answers a query from one read transaction, so every hit's text, path and generation come
-// from the same snapshot. With no embedding provider the search is lexical, and Semantic is "off".
+// Search answers a query lexically: the store alone has no embedding provider. Indexer.Search
+// adds the semantic tier.
 func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
-	switch opts.Mode {
-	case "", ModeAuto, ModeLexical:
-	case ModeSemantic:
-		return Result{}, fmt.Errorf("index: semantic search: no embedding provider: %w", errs.ErrUnsupported)
+	return s.search(ctx, q, opts, nil)
+}
+
+// Search answers a query with the semantic tier when the indexer has a provider.
+func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
+	return x.store.search(ctx, q, opts, x.sem)
+}
+
+// search answers a query from one read transaction, so every hit's text, path and generation come
+// from the same snapshot. The query is embedded first, with the model active then; the transaction
+// then reads the active model again, and a flip in between embeds again.
+func (s *Store) search(ctx context.Context, q string, opts QueryOpts, sem *semantic) (Result, error) {
+	mode := opts.Mode
+	switch mode {
+	case "":
+		mode = ModeAuto
+	case ModeAuto, ModeLexical, ModeSemantic:
 	default:
 		return Result{}, fmt.Errorf("index: unknown search mode %q", opts.Mode)
+	}
+	if mode == ModeSemantic && sem == nil {
+		return Result{}, fmt.Errorf("index: semantic search: no embedding provider: %w", errs.ErrUnsupported)
 	}
 	limit := opts.Limit
 	if limit <= 0 {
@@ -79,20 +99,79 @@ func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, e
 	}
 	limit = min(limit, maxLimit)
 	res := Result{Hits: []Hit{}, ModeUsed: ModeLexical, Semantic: SemanticOff}
+	if mode == ModeSemantic {
+		res.ModeUsed = ModeSemantic
+	}
 	match, words := ftsQuery(q)
 	if match == "" {
 		return res, nil
 	}
-	tx, err := s.r.Begin(ctx)
-	if err != nil {
-		return Result{}, err
+	useSem := sem != nil && mode != ModeLexical
+	var fp string
+	var qvec []float32
+	var embedErr error
+	var tx dao.TxConn
+	for attempt := 0; ; attempt++ {
+		if useSem {
+			fp, qvec, embedErr = s.embedQuery(ctx, sem, q)
+		}
+		var err error
+		if tx, err = s.r.Begin(ctx); err != nil {
+			return Result{}, err
+		}
+		if !useSem || embedErr != nil {
+			break
+		}
+		var now string
+		if err := scanOne(ctx, tx, &now, "SELECT fp FROM model WHERE active = 1"); err != nil && !errors.Is(err, errNoRow) {
+			_ = tx.Rollback()
+			return Result{}, err
+		}
+		if now == fp {
+			break
+		}
+		_ = tx.Rollback()
+		if attempt == 2 {
+			embedErr = fmt.Errorf("index: the active model keeps changing")
+			if tx, err = s.r.Begin(ctx); err != nil {
+				return Result{}, err
+			}
+			break
+		}
 	}
 	defer tx.Rollback()
-	lexical, err := lexicalHits(ctx, tx, match, opts)
-	if err != nil {
-		return Result{}, err
+	if useSem && embedErr != nil {
+		if mode == ModeSemantic {
+			return Result{}, fmt.Errorf("%w: %v", ErrEmbedFailed, embedErr)
+		}
+		useSem = false
+		res.Semantic, res.SemanticError = SemanticError, ErrEmbedFailed.Error()
+	} else if sem != nil {
+		var unready int
+		if err := scanOne(ctx, tx, &unready, "SELECT EXISTS (SELECT 1 FROM document WHERE semantic_ready = 0)"); err != nil {
+			return Result{}, err
+		}
+		res.Semantic = SemanticReady
+		if unready == 1 {
+			res.Semantic = SemanticPartial
+		}
 	}
-	fused := fuse(lexical)
+	var lexical, semanticC []candidate
+	var err error
+	if mode != ModeSemantic {
+		if lexical, err = lexicalHits(ctx, tx, match, opts); err != nil {
+			return Result{}, err
+		}
+	}
+	if useSem {
+		if semanticC, err = semanticHits(ctx, tx, sem, fp, qvec, opts); err != nil {
+			return Result{}, err
+		}
+		if mode == ModeAuto {
+			res.ModeUsed = ModeHybrid
+		}
+	}
+	fused := fuse(lexical, semanticC)
 	if err := boost(ctx, tx, fused, words); err != nil {
 		return Result{}, err
 	}
@@ -109,6 +188,29 @@ func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, e
 		}
 	}
 	return res, nil
+}
+
+// embedQuery embeds q with the model active now.
+func (s *Store) embedQuery(ctx context.Context, sem *semantic, q string) (string, []float32, error) {
+	var fp, provider, name string
+	var dims int
+	if err := scanRow(ctx, s.r, []any{&fp, &provider, &name, &dims}, "SELECT fp, provider, name, dims FROM model WHERE active = 1"); err != nil {
+		return "", nil, fmt.Errorf("index: reading the active model: %w", err)
+	}
+	p, err := sem.provider(fp, modelOf(fp, provider, name, dims))
+	if err != nil {
+		return "", nil, err
+	}
+	cctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+	vecs, err := p.Embed(cctx, []string{q})
+	if err != nil {
+		return "", nil, err
+	}
+	if len(vecs) != 1 || len(vecs[0]) != dims {
+		return "", nil, fmt.Errorf("index: the query's vector does not fit model %s", fp)
+	}
+	return fp, normalized(vecs[0]), nil
 }
 
 // ftsQuery makes an FTS5 query of the user's words: each one quoted, so no character of FTS5's
@@ -161,25 +263,9 @@ func lexicalHits(ctx context.Context, tx dao.Querier, match string, opts QueryOp
 			snippet(chunk_fts, 3, ?, ?, '…', 16)
 		FROM chunk_fts JOIN chunk c ON c.id = chunk_fts.rowid JOIN document d ON d.id = c.doc_id
 		WHERE chunk_fts MATCH ? AND c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)`
-	args := []any{HighlightStart, HighlightEnd, match}
-	for _, t := range opts.Tags {
-		q += " AND EXISTS (SELECT 1 FROM doc_tag t WHERE t.doc_id = d.id AND t.tag = ?)"
-		args = append(args, strings.ToLower(strings.TrimPrefix(strings.TrimSpace(t), "#")))
-	}
-	if len(opts.Paths) > 0 {
-		var ors []string
-		for _, p := range opts.Paths {
-			p = strings.Trim(p, "/")
-			if p == "" || p == "." {
-				ors = []string{"1"}
-				break
-			}
-			// p itself, and p/… : the range ["p/", "p0") holds exactly the paths below it
-			ors = append(ors, "(d.path = ? OR (d.path >= ? AND d.path < ?))")
-			args = append(args, p, p+"/", p+"0")
-		}
-		q += " AND (" + strings.Join(ors, " OR ") + ")"
-	}
+	where, fargs := filterSQL(opts)
+	q += where
+	args := append([]any{HighlightStart, HighlightEnd, match}, fargs...)
 	q += " ORDER BY bm25(chunk_fts, 10, 5, 5, 1), d.path, c.ord LIMIT ?"
 	args = append(args, retrieverTop)
 	rows, err := tx.QueryContext(ctx, q, args...)
@@ -198,6 +284,31 @@ func lexicalHits(ctx context.Context, tx dao.Querier, match string, opts QueryOp
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// filterSQL is the query's filters as SQL over document d: every tag, and any of the paths.
+func filterSQL(opts QueryOpts) (string, []any) {
+	var q string
+	var args []any
+	for _, t := range opts.Tags {
+		q += " AND EXISTS (SELECT 1 FROM doc_tag t WHERE t.doc_id = d.id AND t.tag = ?)"
+		args = append(args, strings.ToLower(strings.TrimPrefix(strings.TrimSpace(t), "#")))
+	}
+	if len(opts.Paths) > 0 {
+		var ors []string
+		for _, p := range opts.Paths {
+			p = strings.Trim(p, "/")
+			if p == "" || p == "." {
+				ors = []string{"1"}
+				break
+			}
+			// p itself, and p/… : the range ["p/", "p0") holds exactly the paths below it
+			ors = append(ors, "(d.path = ? OR (d.path >= ? AND d.path < ?))")
+			args = append(args, p, p+"/", p+"0")
+		}
+		q += " AND (" + strings.Join(ors, " OR ") + ")"
+	}
+	return q, args
 }
 
 // fuse scores candidates by reciprocal rank fusion: Σ over the retrievers that found a chunk of

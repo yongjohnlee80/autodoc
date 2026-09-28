@@ -364,6 +364,9 @@ type Status struct {
 	// Failing lists the jobs whose last attempt failed: a read being retried, or a note over
 	// MaxFileSize waiting for its file to change. They are counted in PendingJobs too.
 	Failing []JobError
+	// Embeddings is the embedding tier's status: nil without a provider (Store.Status never has one;
+	// Indexer.Status does when it has a provider).
+	Embeddings *EmbeddingStatus
 }
 
 // JobError is a job whose last attempt failed.
