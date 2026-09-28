@@ -289,3 +289,13 @@ func TestFuse(t *testing.T) {
 		t.Errorf("found by both scores %v, by one %v", s, fuse(a0)[0].hit.Score)
 	}
 }
+
+// TestNoteWithNoTextIsFound: a note that is only its title (a heading, or frontmatter) is found by
+// its title, though it has no body to chunk.
+func TestNoteWithNoTextIsFound(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("a.md", "# Kittiwake\n", "b.md", "---\ntitle: Puffin\n---\n", "c.md", "")
+	eq(t, "heading", paths(e.search("kittiwake", QueryOpts{})), []string{"a.md"})
+	eq(t, "frontmatter", paths(e.search("puffin", QueryOpts{})), []string{"b.md"})
+	eq(t, "empty: by its file name", paths(e.search("c", QueryOpts{})), []string{"c.md"})
+}

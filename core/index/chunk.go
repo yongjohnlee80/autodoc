@@ -72,6 +72,11 @@ func chunkDoc(doc *markdown.Document, title string) []chunkT {
 		units = append(units, unitOf(src, n))
 	}
 	flush()
+	if len(out) == 0 {
+		// a note with no text (a title, frontmatter) is still a note: one chunk of no body carries its
+		// title, so it can be found
+		out = append(out, newChunk(0, title, "", 0, 0))
+	}
 	for i := range out {
 		out[i].ord = i
 	}
