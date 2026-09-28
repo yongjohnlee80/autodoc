@@ -3,7 +3,10 @@ package deployments_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/dao/sqlite"
@@ -203,6 +206,61 @@ func TestUpdatesApplyOnSQLite(t *testing.T) {
 	}
 	if left != 0 {
 		t.Fatalf("deleting the workspace left %d of its rows", left)
+	}
+}
+
+// The schema is written down: docs/ops/schema-scripts.md lists every table the
+// updates create, and no table they do not. FTS5's shadow tables are the
+// engine's, not the schema's.
+func TestTheSchemaDocListsEveryTable(t *testing.T) {
+	ctx := context.Background()
+	db, err := sqlite.Open(ctx, "file:"+filepath.Join(t.TempDir(), "store.db"), sqlite.MaxOpenConns(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	updates, err := deployments.Updates(deployments.SQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range updates {
+		stmts, err := s.Statements()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, st := range stmts {
+			if _, err := db.ExecContext(ctx, st.Text); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'chunk_fts_%'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var store []string
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		store = append(store, n)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := os.ReadFile("../../docs/ops/schema-scripts.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listed []string
+	for _, m := range regexp.MustCompile("(?m)^\\| `([a-z_]+)` \\|").FindAllSubmatch(doc, -1) {
+		listed = append(listed, string(m[1]))
+	}
+	sort.Strings(store)
+	sort.Strings(listed)
+	if fmt.Sprint(store) != fmt.Sprint(listed) {
+		t.Errorf("the schema doc's table list is not the store's tables:\n  store: %v\n  doc:   %v", store, listed)
 	}
 }
 
