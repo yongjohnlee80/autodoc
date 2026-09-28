@@ -15,6 +15,7 @@
 //	notes.go      the note in the editor: opening, saving, conflicts, unsaved changes
 //	search.go     the notes pane: every note, or a search's hits
 //	links.go      the backlinks pane
+//	progress.go   the daemon's work left, on the status line
 //	theme.go      View › Theme: switching the theme import at runtime
 //	help.go       the help and the about text
 package tui
@@ -58,7 +59,9 @@ type Host struct {
 	listSeq  uint64 // numbers the notes pane's loads; the latest wins (search.go)
 	notesAll []string
 
-	note note // the note in the editor (notes.go)
+	note    note     // the note in the editor (notes.go)
+	prog    progress // the daemon's work left (progress.go)
+	message string   // the last message, shown beside the progress
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run

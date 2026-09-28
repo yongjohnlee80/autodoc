@@ -82,5 +82,7 @@ func (h *Host) enter(name string) {
 	h.ws = name
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
 	h.closeNote()
+	h.prog = progress{}
 	h.listNotes()
+	h.poll()
 }

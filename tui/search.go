@@ -46,6 +46,7 @@ func (h *Host) listNotes() {
 			return
 		}
 		h.notesAll = a.paths
+		h.prog.listed = true
 		h.showPaths(a.paths)
 		h.set("App.resultsTitle", fmt.Sprintf("notes (%d)", len(a.paths)))
 	})
@@ -89,6 +90,7 @@ func (h *Host) search(q string) {
 			h.failed("search", a.err)
 			return
 		}
+		h.prog.listed = false
 		h.showPaths(a.paths)
 		h.set("App.resultsTitle", fmt.Sprintf("search: %s (%d)", q, len(a.paths)))
 		h.setStatus(fmt.Sprintf("%d notes · %s search · semantic %s", len(a.paths), a.mode, a.semantic))
