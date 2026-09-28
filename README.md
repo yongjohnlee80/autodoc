@@ -7,7 +7,7 @@ It is one binary with the modes as flags, after [AutoDB](https://github.com/yong
 `autodoc --serve` is the daemon, and the TUI (`--ui`), the Web-UI (`--web-ui`) and later AutoVim and a
 native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 
-**Status: early.** The daemon serves; the TUI and the Web-UI are next.
+**Status: early.** The daemon serves, and the TUI edits; the Web-UI is next.
 
 | Package | What it does |
 | --- | --- |
@@ -18,7 +18,8 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `core/embed` | the optional embedding provider: Ollama, or any OpenAI-compatible endpoint |
 | `core/docs` | reads and writes notes for AutoDoc's own apps, conditional on the version the writer read |
 | `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
-| `cmd/autodoc` | the binary: `--serve` is the daemon |
+| `tui` | the terminal UI: search, the notes, a Vim-keyed editor, backlinks; its screen written in QML |
+| `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI |
 
 ## Configuration
 
@@ -76,6 +77,35 @@ The server only answers: it never sends a notification. A client follows changes
 `index.changes` from a cursor. When that cursor has expired, it takes `index.status`'s cursor, re-lists
 with `index.list`, and resumes `index.changes` from that cursor. Errors carry a code that says what
 to do next: re-list, merge a conflict, read after a write that landed, and so on.
+
+## The TUI
+
+```sh
+autodoc --ui                # attaches to the daemon, and starts it when nothing answers
+```
+
+The screen has four parts:
+
+- **The notes pane (left):** the workspace's notes, or a search's hits.
+- **The note (centre):** a Vim-keyed editor.
+- **Its backlinks (below the note).**
+- **The status line:** the editor's mode, the workspace, and the note, with `[+]` while it has
+  unsaved changes.
+
+| Key | Does |
+| --- | --- |
+| `Ctrl+G`, `/` | search (`/` in Normal mode) |
+| `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
+| `Ctrl+W` | switch workspace |
+| `Alt+1` `Alt+2` `Alt+3` | the notes pane, the editor, the backlinks |
+| `F1`, `F10`, `Ctrl+Q` | help, the menu, quit |
+
+A save writes only over the version the note was opened at. If the note changed on disk since, the
+TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or
+quitting over unsaved changes asks first, too.
+
+The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
+edits to it.
 
 ## Following the files
 
