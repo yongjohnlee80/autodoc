@@ -94,6 +94,9 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 		served = append(served, w)
 		closers = append(closers, closer)
 	}
+	if len(cfg.Workspaces) == 0 {
+		logger.Warning(log, nil, fmt.Sprintf("no workspace is configured: add a [[workspace]] (name, root) to %s", configPath))
+	}
 	srv := rpc.New(served, version, rpc.WithListener(ln), rpc.WithLogger(log))
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", version, sock)
 	return srv.Run(ctx)

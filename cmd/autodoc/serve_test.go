@@ -512,3 +512,19 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 		t.Errorf("the log: %q", b)
 	}
 }
+
+// TestServesWithoutAConfigFile: with no config file the daemon serves on the defaults (the socket
+// in $XDG_RUNTIME_DIR, no workspace) and says how to add one, as AutoDB does.
+func TestServesWithoutAConfigFile(t *testing.T) {
+	dir := short(t)
+	t.Setenv("XDG_RUNTIME_DIR", dir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	missing := filepath.Join(t.TempDir(), "config.toml")
+	d := start(t, missing, filepath.Join(dir, "autodoc.sock"))
+	if got := call(t, dial(t, d.sock), "workspace.list").([]any); len(got) != 0 {
+		t.Errorf("workspaces %v", got)
+	}
+	if !strings.Contains(d.out.String(), "no workspace is configured: add a [[workspace]] (name, root) to "+missing) {
+		t.Errorf("the log says nothing of it:\n%s", d.out)
+	}
+}

@@ -138,3 +138,25 @@ func TestEmbedding(t *testing.T) {
 		t.Errorf("no embedding section: %+v, %v", c.Embedding, err)
 	}
 }
+
+// TestMissingFileIsDefaults: no file is every default and no workspace, as AutoDB's; an unreadable
+// one is an error, but not an invalid configuration.
+func TestMissingFileIsDefaults(t *testing.T) {
+	c, err := config.Load(filepath.Join(t.TempDir(), "none.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Follow.PollInterval.Duration != config.DefaultPollInterval || len(c.Workspaces) != 0 || c.Embedding != (config.Embedding{}) {
+		t.Errorf("defaults %+v", c)
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-000 file")
+	}
+	p := filepath.Join(t.TempDir(), "locked.toml")
+	if err := os.WriteFile(p, []byte("[follow]\n"), 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.Load(p); err == nil || errors.Is(err, config.ErrInvalid) {
+		t.Errorf("an unreadable file: %v", err)
+	}
+}
