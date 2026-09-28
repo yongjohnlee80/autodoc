@@ -1,6 +1,7 @@
 package index
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"strconv"
 	"strings"
@@ -23,8 +24,10 @@ type chunkT struct {
 }
 
 // unit is a block the packer places whole: a code block, a table and a list item are never split.
+// holes are the link reference definitions inside it, which are not text.
 type unit struct {
 	start, end int
+	holes      []markdown.Span
 	tokens     int
 }
 
@@ -61,12 +64,12 @@ func chunkDoc(doc *markdown.Document, title string) []chunkT {
 		case markdown.KindList:
 			if tokensOf(src, n.Span.Start, n.Span.End) > maxTokens {
 				for it := n.FirstChild; it != nil; it = it.Next {
-					units = append(units, unitOf(src, it.Span.Start, it.Span.End))
+					units = append(units, unitOf(src, it))
 				}
 				continue
 			}
 		}
-		units = append(units, unitOf(src, n.Span.Start, n.Span.End))
+		units = append(units, unitOf(src, n))
 	}
 	flush()
 	for i := range out {
@@ -85,8 +88,23 @@ func nonEmpty(ss []string) []string {
 	return out
 }
 
-func unitOf(src []byte, start, end int) unit {
-	return unit{start: start, end: end, tokens: tokensOf(src, start, end)}
+// unitOf is block n as a unit. A definition is a child of the block holding its paragraph (a list
+// item, a block quote), so one can sit anywhere below n.
+func unitOf(src []byte, n *markdown.Node) unit {
+	u := unit{start: n.Span.Start, end: n.Span.End, tokens: tokensOf(src, n.Span.Start, n.Span.End)}
+	var walk func(*markdown.Node)
+	walk = func(n *markdown.Node) {
+		for c := n.FirstChild; c != nil; c = c.Next {
+			if c.Kind == markdown.KindLinkRefDef {
+				u.holes = append(u.holes, c.Span)
+				u.tokens -= tokensOf(src, c.Span.Start, c.Span.End)
+				continue
+			}
+			walk(c)
+		}
+	}
+	walk(n)
+	return u
 }
 
 func tokensOf(src []byte, start, end int) int {
@@ -104,7 +122,7 @@ func pack(src []byte, units []unit, crumb string, base int) []chunkT {
 			return
 		}
 		start, end := cur[0].start, cur[len(cur)-1].end
-		body := strings.TrimSpace(string(src[start:end]))
+		body := strings.TrimSpace(text(src, cur))
 		if body != "" {
 			out = append(out, newChunk(base+len(out), crumb, body, start, end))
 		}
@@ -122,6 +140,28 @@ func pack(src []byte, units []unit, crumb string, base int) []chunkT {
 	}
 	emit()
 	return out
+}
+
+// text is the units' source with their holes cut out. Whitespace between two units is kept; anything
+// else there is a definition (a block of its own), which becomes a blank line.
+func text(src []byte, units []unit) string {
+	var b strings.Builder
+	for i, u := range units {
+		if i > 0 {
+			if gap := src[units[i-1].end:u.start]; len(bytes.TrimSpace(gap)) == 0 {
+				b.Write(gap)
+			} else {
+				b.WriteString("\n\n")
+			}
+		}
+		at := u.start
+		for _, h := range u.holes {
+			b.Write(src[at:h.Start])
+			at = h.End
+		}
+		b.Write(src[at:u.end])
+	}
+	return b.String()
 }
 
 // newChunk hashes a chunk: hash is its identity under this chunker (a chunker bump changes every
