@@ -614,3 +614,35 @@ func TestIneligibleEntriesAreDeleted(t *testing.T) {
 		t.Errorf("index = %v, want only target.md", fmt.Sprint(got))
 	}
 }
+
+// TestRescanReconcilesTheRoot: Rescan finds a file the index lost, watching and degraded alike, where
+// nothing else would look for an hour.
+func TestRescanReconcilesTheRoot(t *testing.T) {
+	for _, degraded := range []bool{false, true} {
+		t.Run(map[bool]string{false: "watching", true: "degraded"}[degraded], func(t *testing.T) {
+			ff := newFault()
+			memWrite(t, ff, "a.md", "a")
+			memWrite(t, ff, "sub/b.md", "b")
+			m := newModel(ff)
+			opts := fast
+			opts.PollInterval, opts.MinBackoff, opts.MaxBackoff = time.Hour, time.Hour, time.Hour
+			want := follow.Watching
+			if degraded {
+				ff.set(errNoWatch, "sub")
+				want = follow.Degraded
+			}
+			f := startWith(t, ff, m, opts)
+			eventually(t, want, func() bool { return f.Status().Following == want })
+			eventually(t, "a.md indexed", func() bool { _, ok := m.Version("a.md"); return ok })
+			m.mu.Lock()
+			delete(m.docs, "a.md")
+			m.mu.Unlock()
+			time.Sleep(100 * time.Millisecond)
+			if _, ok := m.Version("a.md"); ok {
+				t.Fatal("a.md came back without a Rescan: this test would show nothing")
+			}
+			f.Rescan()
+			within(t, 500*time.Millisecond, "a.md found by the rescan", func() bool { _, ok := m.Version("a.md"); return ok })
+		})
+	}
+}

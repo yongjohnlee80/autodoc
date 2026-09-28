@@ -54,9 +54,10 @@ type Indexer struct {
 	fsys  vfs.FS
 	opts  Options
 
-	mu      sync.Mutex
-	touched map[string]bool // path → forced; drained by the writer
-	signal  chan struct{}
+	mu        sync.Mutex
+	touched   map[string]bool // path → forced; drained by the writer
+	signal    chan struct{}
+	rescanner Rescanner
 
 	jobs        map[string]*job // the writer's own state: every path with work outstanding
 	queue       []string        // paths to hand to a worker, oldest first
@@ -127,8 +128,9 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 // Touch queues path to be re-read. It never blocks: the writer picks the path up in its next batch.
 func (x *Indexer) Touch(path string) { x.touch(path, false) }
 
-// Reindex queues path to be re-read and re-parsed even when its file is unchanged ("" for every
-// indexed document): the forced job bypasses the fast path.
+// Reindex queues path to be re-read and re-parsed even when its file is unchanged: the forced job
+// bypasses the fast path. "" is the whole workspace: every indexed document, and, through the
+// Rescanner, the files the index has not seen.
 func (x *Indexer) Reindex(path string) {
 	if path != "" {
 		x.touch(path, true)
@@ -137,6 +139,26 @@ func (x *Indexer) Reindex(path string) {
 	for _, p := range x.store.PathsUnder(".") {
 		x.touch(p, true)
 	}
+	x.mu.Lock()
+	r := x.rescanner
+	x.mu.Unlock()
+	if r != nil {
+		r.Rescan()
+	}
+}
+
+// Rescanner finds the eligible files under the root that the index does not have: core/follow's
+// Follower.
+type Rescanner interface {
+	Rescan()
+}
+
+// SetRescanner sets what Reindex("") scans the root with. The follower is built on the indexer, so
+// it is set once both exist.
+func (x *Indexer) SetRescanner(r Rescanner) {
+	x.mu.Lock()
+	x.rescanner = r
+	x.mu.Unlock()
 }
 
 func (x *Indexer) touch(path string, force bool) {

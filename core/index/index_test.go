@@ -914,3 +914,32 @@ func TestReferenceDefinitionsAreNotText(t *testing.T) {
 		}
 	}
 }
+
+// noWatch hides the FS's Watch, so a follower of it polls.
+type noWatch struct{ vfs.FS }
+
+// TestReindexEverythingFindsNewFiles: Reindex("") re-parses the indexed documents and, through the
+// follower, indexes a file the index has not seen.
+func TestReindexEverythingFindsNewFiles(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.write("a.md", "apricot\n")
+	// an hour between polls: only the start's reconcile and a Rescan look at the root
+	f := follow.New(noWatch{e.fsys}, e.ix, e.ix, follow.Options{PollInterval: time.Hour, Match: testMatch})
+	e.ix.SetRescanner(f)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = f.Run(ctx) }()
+	e.indexedAt("a.md")
+	e.write("new.md", "blueberry\n")
+	time.Sleep(100 * time.Millisecond)
+	if _, ok := e.store.Version("new.md"); ok {
+		t.Fatal("the follower found new.md on its own: this test would show nothing")
+	}
+	parses := e.ix.Parses()
+	e.ix.Reindex("")
+	e.indexedAt("new.md")
+	e.eventually("a.md re-parsed as well", func() bool { return e.ix.Parses() >= parses+2 })
+	if len(e.match("blueberry")) != 1 {
+		t.Error("new.md is not searchable")
+	}
+}
