@@ -1,2 +1,5 @@
 # build output
 /bin/
+
+# coverage profiles (make cover, CI)
+/coverage.out
