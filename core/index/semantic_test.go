@@ -385,7 +385,7 @@ func TestDeadChunkNeverASemanticHit(t *testing.T) {
 // finds none matching its transaction scans SQL instead, with the same answer.
 func TestSnapshotAndFallbackAgree(t *testing.T) {
 	p := newFake("m", "a")
-	e := newEnv(t, Options{Provider: p})
+	e := newEnv(t, Options{Provider: p, noGC: true})
 	e.put("a.md", "zebra giraffe\n", "b.md", "zebra hippo\n", "c.md", "lion\n")
 	e.ready()
 	e.put("c.md", "lion zebra\n")
