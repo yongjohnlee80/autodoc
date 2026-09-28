@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,6 +25,7 @@ var testMatch = func(p string) bool { return strings.HasSuffix(p, ".md") }
 type env struct {
 	t     *testing.T
 	fsys  *memfs.FS
+	fault *faultFS // what the indexer reads through
 	dir   string
 	store *Store
 	ix    *Indexer
@@ -32,8 +35,58 @@ type env struct {
 func newEnv(t *testing.T, opts Options) *env {
 	t.Helper()
 	e := &env{t: t, fsys: memfs.New(), dir: t.TempDir()}
+	e.fault = &faultFS{FS: e.fsys, fail: map[string]error{}, opens: map[string]int{}}
 	e.open(opts)
 	return e
+}
+
+// faultFS counts the indexer's opens of each path and fails the ones it is told to.
+type faultFS struct {
+	*memfs.FS
+	mu    sync.Mutex
+	fail  map[string]error
+	opens map[string]int
+}
+
+func (f *faultFS) Open(ctx context.Context, name string, offset int64) (io.ReadCloser, error) {
+	f.mu.Lock()
+	f.opens[name]++
+	err := f.fail[name]
+	f.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return f.FS.Open(ctx, name, offset)
+}
+
+func (f *faultFS) failOpen(p string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err == nil {
+		delete(f.fail, p)
+	} else {
+		f.fail[p] = err
+	}
+}
+
+func (f *faultFS) openCount(p string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.opens[p]
+}
+
+// job reads path's job row: whether there is one, its attempts and its last error.
+func (e *env) job(p string) (ok bool, attempts int, lastErr string) {
+	e.t.Helper()
+	err := scanRow(context.Background(), e.store.r, []any{&attempts, &lastErr},
+		"SELECT attempts, COALESCE(last_error, '') FROM index_job WHERE path = ?", p)
+	if errors.Is(err, errNoRow) {
+		return false, 0, ""
+	}
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return true, attempts, lastErr
 }
 
 // open opens the store and runs an indexer over it, stopping any previous one.
@@ -52,7 +105,7 @@ func (e *env) open(opts Options) {
 	if opts.Match == nil {
 		opts.Match = testMatch
 	}
-	ix := NewIndexer(s, e.fsys, opts)
+	ix := NewIndexer(s, e.fault, opts)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- ix.Run(ctx) }()
@@ -739,3 +792,76 @@ func TestFollowerIntoIndexer(t *testing.T) {
 }
 
 var _ vfs.FS = (*memfs.FS)(nil)
+
+// TestOversizeFileLeavesAndWaits: a note that grows past MaxFileSize leaves the index, and it is not
+// read again until it changes.
+func TestOversizeFileLeavesAndWaits(t *testing.T) {
+	e := newEnv(t, Options{RetryDelay: 5 * time.Millisecond})
+	e.write("a.md", "apricot\n")
+	e.ix.Touch("a.md")
+	e.indexedAt("a.md")
+	opens := e.fault.openCount("a.md")
+	e.write("a.md", strings.Repeat("x", MaxFileSize+1))
+	e.ix.Touch("a.md")
+	e.eventually("the oversize note to leave", func() bool {
+		_, indexed := e.store.Version("a.md")
+		ok, _, lastErr := e.job("a.md")
+		return !indexed && ok && strings.Contains(lastErr, "over")
+	})
+	if got := e.match("apricot"); len(got) != 0 {
+		t.Errorf("the oversize note's old text still matches: %v", got)
+	}
+	time.Sleep(40 * e.ix.opts.RetryDelay)
+	// its Stat says it is too large: it is never opened, neither on the touch nor after
+	if n := e.fault.openCount("a.md") - opens; n != 0 {
+		t.Errorf("the oversize note was opened %d times", n)
+	}
+	if ok, attempts, _ := e.job("a.md"); !ok || attempts != 1 {
+		t.Errorf("job after the wait: present %v, attempts %d; want present, 1", ok, attempts)
+	}
+	e.write("a.md", "blueberry\n")
+	e.ix.Touch("a.md")
+	e.indexedAt("a.md")
+	if len(e.match("blueberry")) != 1 {
+		t.Error("the note is not indexed once it is small again")
+	}
+}
+
+// TestUnreadableFileRetriesWithBackoff: a failing read runs again after a doubling wait, and the
+// note is indexed once it can be read.
+func TestUnreadableFileRetriesWithBackoff(t *testing.T) {
+	// a short batch cycle, so the retry wait is what spaces the reads
+	e := newEnv(t, Options{BatchDelay: 2 * time.Millisecond, RetryDelay: 20 * time.Millisecond, MaxRetryDelay: 160 * time.Millisecond})
+	e.fault.failOpen("a.md", fs.ErrPermission)
+	e.write("a.md", "apricot\n")
+	e.ix.Touch("a.md")
+	start := time.Now()
+	e.eventually("a few failed reads", func() bool { return e.fault.openCount("a.md") >= 3 })
+	time.Sleep(600*time.Millisecond - time.Since(start))
+	// in 600 ms a fixed 20 ms wait reads it about 27 times; 20, 40, 80, 160, 160 … about 6
+	n := e.fault.openCount("a.md")
+	t.Logf("%d reads in 600 ms", n)
+	if n > 12 {
+		t.Errorf("%d reads in 600 ms: the wait does not grow", n)
+	}
+	if ok, attempts, lastErr := e.job("a.md"); !ok || attempts < 3 || !strings.Contains(lastErr, "permission") {
+		t.Errorf("job: present %v, attempts %d, error %q", ok, attempts, lastErr)
+	}
+	e.fault.failOpen("a.md", nil)
+	e.indexedAt("a.md")
+	if len(e.match("apricot")) != 1 {
+		t.Error("the note is not indexed once it can be read")
+	}
+}
+
+func TestRetryDelayDoublesToTheCap(t *testing.T) {
+	x := NewIndexer(nil, nil, Options{RetryDelay: 10 * time.Millisecond, MaxRetryDelay: 45 * time.Millisecond})
+	var got []time.Duration
+	for a := 1; a <= 5; a++ {
+		got = append(got, x.retryDelay(a))
+	}
+	want := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond, 45 * time.Millisecond, 45 * time.Millisecond}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("delays %v, want %v", got, want)
+	}
+}
