@@ -9,6 +9,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 
 	"github.com/yongjohnlee80/autodoc/sql/deployments"
@@ -206,6 +207,114 @@ func TestUpdatesApplyOnSQLite(t *testing.T) {
 	}
 	if left != 0 {
 		t.Fatalf("deleting the workspace left %d of its rows", left)
+	}
+}
+
+// open is a fresh store with every update applied, on the store's driver, with
+// foreign keys on.
+func open(t *testing.T) dao.DataConn {
+	t.Helper()
+	ctx := context.Background()
+	dsn := "file:" + filepath.Join(t.TempDir(), "store.db") + "?_pragma=foreign_keys(1)"
+	db, err := sqlite.Open(ctx, dsn, sqlite.MaxOpenConns(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	updates, err := deployments.Updates(deployments.SQLite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range updates {
+		stmts, err := s.Statements()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, st := range stmts {
+			if _, err := db.ExecContext(ctx, st.Text); err != nil {
+				t.Fatalf("%s line %d: %v", s.Name, st.Line, err)
+			}
+		}
+	}
+	return db
+}
+
+func exec(t *testing.T, db dao.DataConn, q string, args ...any) {
+	t.Helper()
+	if _, err := db.ExecContext(context.Background(), q, args...); err != nil {
+		t.Fatalf("%s: %v", q, err)
+	}
+}
+
+// matches are the rowids the full-text index returns for q.
+func matches(t *testing.T, db dao.DataConn, q string) []int64 {
+	t.Helper()
+	rows, err := db.QueryContext(context.Background(), "SELECT rowid FROM chunk_fts WHERE chunk_fts MATCH ? ORDER BY rowid", q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// The full-text index follows the chunk table by itself, through every way a
+// chunk changes: written, its text rewritten, deleted, and deleted by a
+// workspace's cascade. The last is the one no caller could do by hand, and a
+// posting it left behind would answer for whatever chunk next reused the
+// rowid, in another workspace.
+func TestTheFullTextIndexFollowsTheChunks(t *testing.T) {
+	db := open(t)
+	chunk := "INSERT INTO chunk(id, workspace_id, doc_id, hash, text_hash, gen_from, ord, breadcrumb, body, title, tags, byte_start, byte_end) VALUES (?, ?, ?, x'00', x'00', 1, 0, '', ?, '', '', 0, 0)"
+	doc := "INSERT INTO document(id, workspace_id, path, version, active_gen, indexer, indexed_at) VALUES (?, ?, 'n.md', 'v', 1, 'i', 0)"
+	exec(t, db, "INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (1, 'a', '/a', 0, 0)")
+	exec(t, db, doc, 10, 1)
+	exec(t, db, chunk, 5, 1, 10, "zebra")
+	if got := fmt.Sprint(matches(t, db, "zebra")); got != "[5]" {
+		t.Fatalf("a written chunk: MATCH zebra = %s, want [5]", got)
+	}
+	exec(t, db, "UPDATE chunk SET body = 'yak' WHERE id = 5")
+	if got := fmt.Sprint(matches(t, db, "zebra"), matches(t, db, "yak")); got != "[] [5]" {
+		t.Fatalf("a rewritten chunk: MATCH zebra, yak = %s, want [] [5]", got)
+	}
+	exec(t, db, chunk, 6, 1, 10, "ibis")
+	exec(t, db, "DELETE FROM chunk WHERE id = 6")
+	if got := fmt.Sprint(matches(t, db, "ibis")); got != "[]" {
+		t.Fatalf("a deleted chunk: MATCH ibis = %s, want []", got)
+	}
+	exec(t, db, "DELETE FROM workspace WHERE id = 1")
+	if got := fmt.Sprint(matches(t, db, "yak")); got != "[]" {
+		t.Fatalf("after the workspace's cascade: MATCH yak = %s, want []", got)
+	}
+	exec(t, db, "INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (2, 'b', '/b', 0, 0)")
+	exec(t, db, doc, 20, 2)
+	exec(t, db, chunk, 5, 2, 20, "otter")
+	if got := fmt.Sprint(matches(t, db, "yak"), matches(t, db, "otter")); got != "[] [5]" {
+		t.Fatalf("rowid 5 reused in another workspace: MATCH yak, otter = %s, want [] [5]", got)
+	}
+	rows, err := db.QueryContext(context.Background(), "SELECT workspace_id FROM chunk_fts WHERE chunk_fts MATCH 'otter'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ws int64
+	for rows.Next() {
+		if err := rows.Scan(&ws); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = rows.Close()
+	if ws != 2 {
+		t.Fatalf("the reused rowid's posting carries workspace %d, want 2", ws)
 	}
 }
 

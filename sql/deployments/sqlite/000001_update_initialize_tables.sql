@@ -88,11 +88,29 @@ CREATE INDEX IF NOT EXISTS chunk_doc ON chunk(workspace_id, doc_id, gen_to);
 CREATE INDEX IF NOT EXISTS chunk_dead ON chunk(workspace_id, gen_to) WHERE gen_to IS NOT NULL;
 
 -- Full-text search over the chunks: SQLite's own FTS5, an external-content
--- table over chunk. Only the SQLite full-text adapter reads or writes it.
+-- table over chunk. The triggers below keep it in step with chunk, and nothing
+-- else writes it: a chunk deleted by a workspace's cascade is unindexed like
+-- any other, and a delete hands FTS5 the exact values it indexed (OLD), which
+-- an external-content delete requires. A rowid SQLite reuses therefore never
+-- inherits a posting.
 CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
   title, breadcrumb, tags, body, workspace_id UNINDEXED,
   content='chunk', content_rowid='id', tokenize='porter unicode61'
 );
+CREATE TRIGGER IF NOT EXISTS chunk_fts_insert AFTER INSERT ON chunk BEGIN
+  INSERT INTO chunk_fts(rowid, title, breadcrumb, tags, body, workspace_id)
+  VALUES (new.id, new.title, new.breadcrumb, new.tags, new.body, new.workspace_id);
+END;
+CREATE TRIGGER IF NOT EXISTS chunk_fts_delete AFTER DELETE ON chunk BEGIN
+  INSERT INTO chunk_fts(chunk_fts, rowid, title, breadcrumb, tags, body, workspace_id)
+  VALUES ('delete', old.id, old.title, old.breadcrumb, old.tags, old.body, old.workspace_id);
+END;
+CREATE TRIGGER IF NOT EXISTS chunk_fts_update AFTER UPDATE OF title, breadcrumb, tags, body, workspace_id ON chunk BEGIN
+  INSERT INTO chunk_fts(chunk_fts, rowid, title, breadcrumb, tags, body, workspace_id)
+  VALUES ('delete', old.id, old.title, old.breadcrumb, old.tags, old.body, old.workspace_id);
+  INSERT INTO chunk_fts(rowid, title, breadcrumb, tags, body, workspace_id)
+  VALUES (new.id, new.title, new.breadcrumb, new.tags, new.body, new.workspace_id);
+END;
 
 -- A document's tags and aliases, from its frontmatter.
 CREATE TABLE IF NOT EXISTS doc_tag (
