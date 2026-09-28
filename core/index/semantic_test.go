@@ -657,3 +657,56 @@ func (e *env) embStatus() EmbeddingStatus {
 	}
 	return *st.Embeddings
 }
+
+// TestLateOldModelBatchKeepsTheFlip: after the target has become active, a batch the old model's
+// worker was still embedding is stored, and changes nothing about which model is active, though the
+// old model covers every chunk.
+func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("x.md", "zebra\n", "y.md", "hippo\n")
+	e.ready()
+	fpA := a.Model().Fingerprint()
+	e.stop()
+	b := newFake("m2", "b")
+	e.stop = nil
+	e.open(Options{Provider: b, ProviderFor: func(embed.Model) (embed.Provider, error) { return a, nil }})
+	fpB := b.Model().Fingerprint()
+	e.eventually("the flip to b", func() bool { return e.activeModel() == fpB })
+	for _, vb := range []vecBatch{{fp: fpA}, {fp: fpA, items: []vecItem{{textHash: []byte("late"), vec: make([]float32, 64)}}}} {
+		if err := e.ix.handVectors(context.Background(), vb); err != nil {
+			t.Fatal(err)
+		}
+		if got := e.activeModel(); got != fpB || e.ix.sem.active() != fpB || e.ix.sem.snap.Load().fp != fpB {
+			t.Fatalf("a late batch of the old model (%d vectors) made %s active (writer %s, snapshot %s)",
+				len(vb.items), got, e.ix.sem.active(), e.ix.sem.snap.Load().fp)
+		}
+	}
+	var stored int
+	_ = scanOne(context.Background(), e.store.r, &stored, "SELECT COUNT(*) FROM embedding WHERE model_fp = ? AND text_hash = ?", fpA, []byte("late"))
+	if stored != 1 {
+		t.Error("the late batch's vector was not stored")
+	}
+}
+
+// TestRefusedTargetTextShowsInStatus: a target text the provider rejects holds the switch back, and
+// the status says so, though the active model has nothing pending.
+func TestRefusedTargetTextShowsInStatus(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("x.md", "zebra\n", "y.md", "oversized hippo\n")
+	e.ready()
+	e.stop()
+	b := newFake("m2", "b")
+	b.refuse = "oversized"
+	e.stop = nil
+	e.open(Options{Provider: b, ProviderFor: func(embed.Model) (embed.Provider, error) { return a, nil }})
+	e.eventually("the refusal in the status", func() bool {
+		es := e.embStatus()
+		return es.TargetRefused == 1 && es.TargetPending == 1
+	})
+	es := e.embStatus()
+	if es.Model != a.Model().Fingerprint() || es.Target != b.Model().Fingerprint() || es.Pending != 0 || es.Refused != 0 {
+		t.Errorf("status %+v", es)
+	}
+}
