@@ -197,6 +197,50 @@ func TestStaleSocketIsReplaced(t *testing.T) {
 	start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir()), sock)
 }
 
+// TestLiveSocketIsNotReplaced: a socket something listens on is never taken over, even when the
+// dial fails for another reason than "no listener" (here, permission denied), nor is a path that is
+// not a socket.
+func TestLiveSocketIsNotReplaced(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root connects through a mode-000 socket")
+	}
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	live, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer live.Close()
+	if err := os.Chmod(sock, 0); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := listen(sock)
+	if err == nil {
+		_ = ln.Close()
+		t.Fatal("listen took over a live socket")
+	}
+	if err := os.Chmod(sock, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, derr := net.Dial("unix", sock)
+	if derr != nil {
+		t.Fatalf("the live listener lost its socket: %v", derr)
+	}
+	_ = c.Close()
+
+	plain := filepath.Join(dir, "plain")
+	if err := os.WriteFile(plain, []byte("not a socket"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if ln, err := listen(plain); err == nil {
+		_ = ln.Close()
+		t.Error("listen replaced a file that is not a socket")
+	}
+	if b, err := os.ReadFile(plain); err != nil || string(b) != "not a socket" {
+		t.Errorf("the file was touched: %q, %v", b, err)
+	}
+}
+
 // TestSuccessorsSocketIsLeft: a daemon shutting down removes the socket only while it is its own.
 func TestSuccessorsSocketIsLeft(t *testing.T) {
 	dir := short(t)
