@@ -29,6 +29,7 @@ type Store struct {
 	wt, rt *tables
 	lease  *os.File
 	status deploy.Status
+	keys   *keyslot // the store's key, <store>.key (keyslot.go)
 }
 
 // Open takes the store's lease, opens it and brings its schema up to date. A
@@ -67,7 +68,8 @@ func open(ctx context.Context, path string) (*Store, error) {
 		_ = w.Close()
 		return nil, fmt.Errorf("store: opening %s for reading: %w", path, err)
 	}
-	return &Store{path: path, w: w, r: r, wt: newTables(w), rt: newTables(r), status: st}, nil
+	return &Store{path: path, w: w, r: r, wt: newTables(w), rt: newTables(r), status: st,
+		keys: &keyslot{path: path + ".key"}}, nil
 }
 
 // Schema is what the schema update at Open found and did: the scripts it

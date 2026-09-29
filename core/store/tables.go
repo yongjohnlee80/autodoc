@@ -46,6 +46,69 @@ const (
 	PrefUpdatedAt PreferenceField = "updated_at"
 )
 
+// Provider is an embedding provider. APIKey is the key as the store keeps it, sealed.
+type Provider struct {
+	ID                   int64
+	Name, Kind           string
+	BaseURL, Model       string
+	APIKey               []byte
+	CreatedAt, UpdatedAt int64
+}
+
+// ProviderField names an embedding_provider column.
+type ProviderField string
+
+const (
+	ProviderID        ProviderField = "id"
+	ProviderName      ProviderField = "name"
+	ProviderKind      ProviderField = "kind"
+	ProviderBaseURL   ProviderField = "base_url"
+	ProviderModel     ProviderField = "model"
+	ProviderAPIKey    ProviderField = "api_key"
+	ProviderCreatedAt ProviderField = "created_at"
+	ProviderUpdatedAt ProviderField = "updated_at"
+)
+
+// Usage is a provider's use on one day (UTC, YYYY-MM-DD).
+type Usage struct {
+	ProviderID                                 int64
+	Day                                        string
+	Requests, Texts, Tokens, Failures, Limited int64
+}
+
+// UsageField names an embedding_usage column.
+type UsageField string
+
+const (
+	UsageProvider UsageField = "provider_id"
+	UsageDay      UsageField = "day"
+	UsageRequests UsageField = "requests"
+	UsageTexts    UsageField = "texts"
+	UsageTokens   UsageField = "tokens"
+	UsageFailures UsageField = "failures"
+	UsageLimited  UsageField = "limited"
+)
+
+// LogEntry is one of a provider's recent calls.
+type LogEntry struct {
+	ID, ProviderID            int64
+	At, Texts, Tokens, Millis int64
+	Outcome                   string
+}
+
+// LogField names an embedding_log column.
+type LogField string
+
+const (
+	LogID       LogField = "id"
+	LogProvider LogField = "provider_id"
+	LogAt       LogField = "at"
+	LogTexts    LogField = "texts"
+	LogTokens   LogField = "tokens"
+	LogMillis   LogField = "millis"
+	LogOutcome  LogField = "outcome"
+)
+
 // Pattern is one include or exclude pattern of a workspace.
 type Pattern struct {
 	WorkspaceID int64
@@ -352,6 +415,9 @@ const (
 type tables struct {
 	workspaces  *dao.Schema[*Workspace, WorkspaceField, noSort, int64]
 	preferences *dao.Schema[*Preference, PreferenceField, noSort, string]
+	providers   *dao.Schema[*Provider, ProviderField, noSort, int64]
+	usage       *dao.Schema[*Usage, UsageField, noSort, int64]
+	calls       *dao.Schema[*LogEntry, LogField, noSort, int64]
 	patterns    *dao.Schema[*Pattern, PatternField, noSort, int64]
 	documents   *dao.Schema[*Document, DocumentField, noSort, int64]
 	chunks      *dao.Schema[*Chunk, ChunkField, ChunkSort, int64]
@@ -399,6 +465,46 @@ func newTables(c dao.DataConn) *tables {
 			}),
 			dao.Conflict[*Preference, PreferenceField, noSort, string](PrefName),
 			dao.SortMap[*Preference, PreferenceField, noSort, string](map[noSort]string{ByKey: `"preference"."name"`})),
+		providers: dao.New[*Provider, ProviderField, noSort, int64](c,
+			dao.Table[*Provider, ProviderField, noSort, int64]("embedding_provider"),
+			dao.ID[*Provider, ProviderField, noSort, int64](ProviderID),
+			dao.Fields[*Provider, ProviderField, noSort, int64](map[ProviderField]dao.Field[*Provider]{
+				ProviderID:        col("embedding_provider", ProviderID, func(p *Provider) any { return &p.ID }),
+				ProviderName:      col("embedding_provider", ProviderName, func(p *Provider) any { return &p.Name }),
+				ProviderKind:      col("embedding_provider", ProviderKind, func(p *Provider) any { return &p.Kind }),
+				ProviderBaseURL:   col("embedding_provider", ProviderBaseURL, func(p *Provider) any { return &p.BaseURL }),
+				ProviderModel:     col("embedding_provider", ProviderModel, func(p *Provider) any { return &p.Model }),
+				ProviderAPIKey:    col("embedding_provider", ProviderAPIKey, func(p *Provider) any { return &p.APIKey }),
+				ProviderCreatedAt: col("embedding_provider", ProviderCreatedAt, func(p *Provider) any { return &p.CreatedAt }),
+				ProviderUpdatedAt: col("embedding_provider", ProviderUpdatedAt, func(p *Provider) any { return &p.UpdatedAt }),
+			}),
+			dao.SortMap[*Provider, ProviderField, noSort, int64](map[noSort]string{ByKey: `"embedding_provider"."name"`})),
+		usage: dao.New[*Usage, UsageField, noSort, int64](c,
+			dao.Table[*Usage, UsageField, noSort, int64]("embedding_usage"),
+			dao.Fields[*Usage, UsageField, noSort, int64](map[UsageField]dao.Field[*Usage]{
+				UsageProvider: col("embedding_usage", UsageProvider, func(u *Usage) any { return &u.ProviderID }),
+				UsageDay:      col("embedding_usage", UsageDay, func(u *Usage) any { return &u.Day }),
+				UsageRequests: col("embedding_usage", UsageRequests, func(u *Usage) any { return &u.Requests }),
+				UsageTexts:    col("embedding_usage", UsageTexts, func(u *Usage) any { return &u.Texts }),
+				UsageTokens:   col("embedding_usage", UsageTokens, func(u *Usage) any { return &u.Tokens }),
+				UsageFailures: col("embedding_usage", UsageFailures, func(u *Usage) any { return &u.Failures }),
+				UsageLimited:  col("embedding_usage", UsageLimited, func(u *Usage) any { return &u.Limited }),
+			}),
+			dao.Conflict[*Usage, UsageField, noSort, int64](UsageProvider, UsageDay),
+			dao.SortMap[*Usage, UsageField, noSort, int64](map[noSort]string{ByKey: `"embedding_usage"."day"`})),
+		calls: dao.New[*LogEntry, LogField, noSort, int64](c,
+			dao.Table[*LogEntry, LogField, noSort, int64]("embedding_log"),
+			dao.ID[*LogEntry, LogField, noSort, int64](LogID),
+			dao.Fields[*LogEntry, LogField, noSort, int64](map[LogField]dao.Field[*LogEntry]{
+				LogID:       col("embedding_log", LogID, func(e *LogEntry) any { return &e.ID }),
+				LogProvider: col("embedding_log", LogProvider, func(e *LogEntry) any { return &e.ProviderID }),
+				LogAt:       col("embedding_log", LogAt, func(e *LogEntry) any { return &e.At }),
+				LogTexts:    col("embedding_log", LogTexts, func(e *LogEntry) any { return &e.Texts }),
+				LogTokens:   col("embedding_log", LogTokens, func(e *LogEntry) any { return &e.Tokens }),
+				LogMillis:   col("embedding_log", LogMillis, func(e *LogEntry) any { return &e.Millis }),
+				LogOutcome:  col("embedding_log", LogOutcome, func(e *LogEntry) any { return &e.Outcome }),
+			}),
+			dao.SortMap[*LogEntry, LogField, noSort, int64](map[noSort]string{ByKey: `"embedding_log"."id"`})),
 		patterns: dao.New[*Pattern, PatternField, noSort, int64](c,
 			dao.Table[*Pattern, PatternField, noSort, int64]("workspace_pattern"),
 			dao.Fields[*Pattern, PatternField, noSort, int64](map[PatternField]dao.Field[*Pattern]{

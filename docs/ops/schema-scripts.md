@@ -59,6 +59,9 @@ A new workspace-owned table follows the same rule.
 | --- | --- | --- |
 | `schema_version` | an applied update script; golib `dao/deploy` creates and keeps it | `script` |
 | `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed | `id` |
+| `embedding_provider` | an embedding provider: kind, base URL, model, and its API key sealed with the keyslot (000002) | `id`, `name` |
+| `embedding_usage` | a provider's requests, texts, tokens and failures by day (000002) | `(provider_id, day)` |
+| `embedding_log` | a provider's recent calls, the last 200 kept (000002) | `id` |
 | `preference` | a client's preference, by name: the store's, not a workspace's (000002) | `name` |
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
