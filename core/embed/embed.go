@@ -41,8 +41,9 @@ type Provider interface {
 
 // The providers' default endpoints: what a client fills in for a new one.
 const (
-	DefaultOllamaURL = "http://localhost:11434"
-	DefaultOpenAIURL = "https://api.openai.com"
+	DefaultOllamaURL      = "http://localhost:11434"
+	DefaultOllamaCloudURL = "https://ollama.com"
+	DefaultOpenAIURL      = "https://api.openai.com"
 )
 
 // bearer is the Authorization header for key: an Ollama Cloud or OpenAI-compatible endpoint's; nil
@@ -292,7 +293,7 @@ func Models(ctx context.Context, kind, base, key string, client *http.Client) ([
 	base = strings.TrimRight(base, "/")
 	var names []string
 	switch kind {
-	case "ollama":
+	case "ollama", "ollama-cloud":
 		var tags struct {
 			Models []struct{ Name string } `json:"models"`
 		}

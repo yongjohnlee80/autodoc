@@ -124,7 +124,7 @@ func (e *Embedding) build(ctx context.Context, name string) (embed.Provider, fun
 		defer cancel()
 		var p embed.Provider
 		var err error
-		if info.Kind == store.KindOllama {
+		if info.Kind == store.KindOllama || info.Kind == store.KindOllamaCloud {
 			p, err = embed.NewOllama(ctx, info.BaseURL, key, model, e.client)
 		} else {
 			p, err = embed.NewOpenAI(ctx, info.BaseURL, key, model, e.client)

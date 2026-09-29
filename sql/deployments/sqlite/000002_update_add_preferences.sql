@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS preference (
   updated_at INTEGER NOT NULL
 );
 
--- An embedding provider: its kind (ollama or openai), where it is, the model
+-- An embedding provider: its kind (a local ollama, ollama-cloud, or any
+-- openai-compatible endpoint), where it is, the model
 -- it embeds with, and its API key, SEALED with the store's key (the keyslot
 -- file beside the store) and bound to this row's id: a key is never stored as
 -- written, and a copied store without the keyslot opens none. The one in use
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS preference (
 CREATE TABLE IF NOT EXISTS embedding_provider (
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL UNIQUE,
-  kind       TEXT NOT NULL CHECK (kind IN ('ollama', 'openai')),
+  kind       TEXT NOT NULL CHECK (kind IN ('ollama', 'ollama-cloud', 'openai')),
   base_url   TEXT NOT NULL,
   model      TEXT NOT NULL,
   api_key    BLOB,
