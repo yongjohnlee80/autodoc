@@ -4,7 +4,7 @@ go 1.25.3
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/yongjohnlee80/golib v0.6.6
+	github.com/yongjohnlee80/golib v0.6.7-0.20260929100213-b9e9ceced5d1
 )
 
 require (
