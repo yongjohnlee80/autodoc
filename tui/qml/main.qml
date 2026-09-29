@@ -125,7 +125,7 @@ Window {
             palette.highlightedText: Theme.document.selectedText
             keyset: App.keyset
             readOnly: App.noNote
-            ruler: App.ruler
+            ruler: App.rulerColumn
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
             SyntaxHighlighter { definition: "Markdown" }

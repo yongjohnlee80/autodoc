@@ -10,11 +10,12 @@ Dialog {
     helpText: App.prefsError
     Flex {
         direction: Tui.Vertical
-        Split {
-            orientation: Tui.Horizontal
-            ratio: 0.5
+        // two columns of choosers, as tall as they are (a Split would take the dialog's height)
+        Flex {
+            direction: Tui.Horizontal
             Flex {
                 direction: Tui.Vertical
+                Layout.fillWidth: true
                 Text { text: "theme" }
                 ComboBox { model: App.themes; textRole: "label"; currentIndex: App.themeIndex; onActivated: App.setThemeIndex(index) }
                 Text { text: "hide the menu bar (F10 or Alt+letter brings it up)" }
@@ -24,6 +25,7 @@ Dialog {
             }
             Flex {
                 direction: Tui.Vertical
+                Layout.fillWidth: true
                 Text { text: "the explorer opens from" }
                 ComboBox { model: App.edges; textRole: "label"; currentIndex: App.explorerEdgeIndex; onActivated: App.setExplorerEdge(index) }
                 Text { text: "the links open from" }

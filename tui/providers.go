@@ -260,7 +260,7 @@ func (h *Host) startEditProvider(i int) {
 }
 
 func (h *Host) fillProviderForm(title string, p providerRow) {
-	h.formKind = kindIndex(p.kind)
+	h.formKind, h.formHasKey = kindIndex(p.kind), p.hasKey
 	h.set("App.providerFormTitle", title)
 	h.set("App.providerFormError", "")
 	h.set("App.providerKindIndex", h.formKind)
@@ -268,7 +268,7 @@ func (h *Host) fillProviderForm(title string, p providerRow) {
 	h.setField("App.providerBase", p.base)
 	h.setField("App.providerModel", p.model)
 	h.setField("App.providerKey", "")
-	h.showKeyField(p.hasKey)
+	h.showKeyField()
 	h.providerModels.Reset(nil)
 	h.set("App.providerModelsStatus", "List models asks the provider what it has")
 	h.open("providerEdit")
@@ -282,13 +282,13 @@ func (h *Host) setField(name, text string) {
 }
 
 // showKeyField shows the key field for a kind that takes one, saying what leaving it empty does.
-func (h *Host) showKeyField(hasKey bool) {
+func (h *Host) showKeyField() {
 	k := providerKinds[h.formKind]
 	h.set("App.providerKeyShown", k.key)
 	switch {
 	case !k.key:
 		h.set("App.providerKeyLabel", "")
-	case h.editingProvider != "" && hasKey:
+	case h.editingProvider != "" && h.formHasKey:
 		h.set("App.providerKeyLabel", "API key (sealed; leave empty to keep it)")
 	case k.kind == "ollama-cloud":
 		h.set("App.providerKeyLabel", "API key (required)")
@@ -310,7 +310,7 @@ func (h *Host) providerKindChosen(i int, base string) {
 			break
 		}
 	}
-	h.showKeyField(false)
+	h.showKeyField()
 }
 
 // listModels asks the provider the form describes what models it has.

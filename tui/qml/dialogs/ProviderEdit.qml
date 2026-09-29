@@ -4,10 +4,11 @@
 // opens it again with the reason on its help line.
 Dialog {
     closeOnQ: false
-    maxWidthPercent: 90
-    maxHeightPercent: 90
+    // inside Preferences, which it opens over: smaller, so its border is not read as that one's
+    maxWidthPercent: 80
+    maxHeightPercent: 80
     title: App.providerFormTitle
-    width: 90
+    width: 80
     dim: false
     helpText: App.providerFormError
     Split {

@@ -77,6 +77,7 @@ type Host struct {
 	activeProvider, editingProvider string
 	removingProvider                string
 	formKind                        int
+	formHasKey                      bool // the provider the form edits has a key sealed
 	modelList                       []string
 	providerSeq                     uint64
 
