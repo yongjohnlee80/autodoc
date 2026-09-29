@@ -47,6 +47,7 @@ type rig struct {
 	notes  atomic.Int64 // notifications any client received
 	cancel context.CancelFunc
 	done   chan error
+	cores  sync.WaitGroup // the indexers and followers, stopped before the store closes
 }
 
 // serve runs a daemon's worth of core over memfs, in one store: workspace kb (followed and
@@ -68,8 +69,8 @@ func serve(t *testing.T) *rig {
 		ix := index.NewIndexer(index.Open(db, row.ID), fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond})
 		f := follow.New(fsys, ix, ix, follow.Options{Match: md, PollInterval: 20 * time.Millisecond})
 		ix.SetRescanner(f)
-		go func() { _ = ix.Run(ctx) }()
-		go func() { _ = f.Run(ctx) }()
+		r.cores.Go(func() { _ = ix.Run(ctx) })
+		r.cores.Go(func() { _ = f.Run(ctx) })
 		return &Workspace{Name: name, Root: "/roots/" + name, Index: ix, Docs: docs.New(fsys, md), Following: f.Status}
 	}
 	ws := []*Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
@@ -88,6 +89,7 @@ func serve(t *testing.T) *rig {
 		case <-time.After(5 * time.Second):
 			t.Error("the server did not stop")
 		}
+		r.cores.Wait() // before the store closes (its cleanup runs after this one)
 	})
 	return r
 }
