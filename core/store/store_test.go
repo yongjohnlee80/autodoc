@@ -307,3 +307,66 @@ func TestEveryAccessorStaysInsideItsWorkspace(t *testing.T) {
 		}
 	}
 }
+
+// Every declared join stays inside the workspace: A and B hold the same rows,
+// the same text hash included, and B's vector has other bytes. Through A's
+// scope, a join returns A's one row, never B's with it. On SQLite a document id
+// is the store's own, so only the vector's join, keyed by text, could reach
+// another workspace; the rest are checked as the same net.
+func TestEveryJoinStaysInsideItsWorkspace(t *testing.T) {
+	ctx := context.Background()
+	s := openStore(t)
+	a, _ := s.AddWorkspace(ctx, "a", "/a", nil, nil)
+	b, _ := s.AddWorkspace(ctx, "b", "/b", nil, nil)
+	A, B := s.Workspace(a.ID), s.Workspace(b.ID)
+	seed(t, s, A)
+	seed(t, s, B)
+	if err := s.Write(ctx, func(tx *Tx) error {
+		return B.Embeddings(tx).Set(EmbBits, []byte{2}).Update()
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := s.Read(ctx, func(tx *Tx) error {
+		vec, err := A.Chunks(tx).Join(JoinEmbedding).Select(ChunkID, ChunkEmbBits)
+		if err != nil {
+			return err
+		}
+		if len(vec) != 1 || fmt.Sprint(vec[0].EmbBits) != "[0]" {
+			var bits []string
+			for _, c := range vec {
+				bits = append(bits, fmt.Sprint(c.EmbBits))
+			}
+			t.Errorf("A's chunk joined to vectors %v, want only A's [0]", bits)
+		}
+		for name, n := range map[string]func() (int, error){
+			"chunk→document": func() (int, error) {
+				r, err := A.Chunks(tx).Join(JoinDocument).Select(ChunkID, ChunkDocPath)
+				return len(r), err
+			},
+			"doc_name→document": func() (int, error) {
+				r, err := A.Names(tx).Join(JoinDocument).Select(NameDoc, NameDocPath)
+				return len(r), err
+			},
+			"link→target": func() (int, error) {
+				r, err := A.LinksOut(tx).Join(JoinOther).Select(LinkID, LinkOtherPath)
+				return len(r), err
+			},
+			"link→source": func() (int, error) {
+				r, err := A.LinksIn(tx).Join(JoinOther).Select(LinkID, LinkOtherPath)
+				return len(r), err
+			},
+		} {
+			got, err := n()
+			if err != nil {
+				return fmt.Errorf("%s: %w", name, err)
+			}
+			if got != 1 {
+				t.Errorf("%s through A's scope: %d rows, want A's 1", name, got)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
