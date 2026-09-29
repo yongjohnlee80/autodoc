@@ -81,13 +81,10 @@ func prefsOf(m map[string]any) prefs {
 	return p
 }
 
-// prefState is what the document reads of the preferences, connected: the status line shows
-// when its preference says, and while the TUI is not connected, whatever it says, so a connection
-// that fails is never silent.
-func prefState(p prefs, connected bool) map[string]any {
+// prefState is what the document reads of the preferences (the status line's is statusShown's).
+func prefState(p prefs) map[string]any {
 	return map[string]any{
 		"App.menuAutoHide": p.menuHidden,
-		"App.statusShown":  p.statusOn || !connected,
 		"App.explorerEdge": p.explorerEdge,
 		"App.linksEdge":    p.linkEdge,
 		// the page: the ruler's columns of text, and its border, whose right edge is the first
@@ -124,19 +121,24 @@ func (h *Host) loadPrefs() {
 
 func (h *Host) applyPrefs(p prefs) {
 	h.prefs = p
-	for k, v := range prefState(p, h.connected) {
+	for k, v := range prefState(p) {
 		h.set(k, v)
 	}
+	h.set("App.statusShown", h.statusShown())
 	h.syncPrefDialog()
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
 	}
 }
 
+// statusShown is whether the status line shows: when its preference says, and while the TUI is
+// not connected, whatever it says, so a connection that fails is never silent.
+func (h *Host) statusShown() bool { return h.prefs.statusOn || !h.connected }
+
 // setConnected says whether the TUI is connected, for the status line to show while it is not.
 func (h *Host) setConnected(v bool) {
 	h.connected = v
-	h.set("App.statusShown", h.prefs.statusOn || !v)
+	h.set("App.statusShown", h.statusShown())
 }
 
 // setPref changes one preference: on screen at once, and in the store.
