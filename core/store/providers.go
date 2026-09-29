@@ -149,9 +149,22 @@ func (s *Store) UpdateProvider(ctx context.Context, name string, sp ProviderSpec
 		if err := s.setKey(tx, p.ID, sp.Key); err != nil {
 			return err
 		}
-		_, err = s.keyed(tx, p.ID)
-		return err
+		if _, err = s.keyed(tx, p.ID); err != nil {
+			return err
+		}
+		return followProvider(tx, name, sp.Name)
 	})
+}
+
+// followProvider makes the preference naming provider from name to instead, in the transaction
+// that renames or removes it ("" for removed: none in use), so the preference never names a
+// provider the store does not have.
+func followProvider(tx *Tx, from, to string) error {
+	if from == to {
+		return nil
+	}
+	return tx.t.preferences.On(tx.tx).With(PrefName, PrefProvider).With(PrefValue, from).
+		Set(PrefValue, to).Set(PrefUpdatedAt, time.Now().Unix()).Update()
 }
 
 // setKey seals key into the provider's row; nil leaves it, "" removes it.
@@ -170,14 +183,18 @@ func (s *Store) setKey(tx *Tx, id int64, key *string) error {
 	return tx.t.providers.On(tx.tx).With(ProviderID, id).Set(ProviderAPIKey, sealed).Update()
 }
 
-// RemoveProvider deletes a provider, and with it its usage and its log.
+// RemoveProvider deletes a provider, and with it its usage and its log; a preference naming it
+// names none.
 func (s *Store) RemoveProvider(ctx context.Context, name string) error {
 	return s.Write(ctx, func(tx *Tx) error {
 		id, err := s.providerID(tx, name)
 		if err != nil {
 			return err
 		}
-		return tx.t.providers.On(tx.tx).With(ProviderID, id).Delete()
+		if err := tx.t.providers.On(tx.tx).With(ProviderID, id).Delete(); err != nil {
+			return err
+		}
+		return followProvider(tx, name, "")
 	})
 }
 
