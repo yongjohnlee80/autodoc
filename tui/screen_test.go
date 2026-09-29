@@ -576,3 +576,26 @@ func TestAListingThatFailsSaysSo(t *testing.T) {
 		t.Errorf("the pickers list %v for a workspace that failed to list", got)
 	}
 }
+
+// TestAHitOpensWhereItIsAfterJoinedCharacters: the cursor opens on the hit's first character,
+// the preview's too, however many runes the characters before it are made of (a combining accent,
+// a family emoji joined by ZWJs, a CRLF line break).
+func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
+	joined := "# A\r\n\r\ncafé \U0001F468‍\U0001F469‍\U0001F467 x\r\n\r\n## Birds\r\n\r\nkestrel notes\r\n"
+	if got, want := cursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
+		t.Errorf("cursorAt before ## Birds = %d, want %d (3, a break, a break, 8 characters, a break, a break)", got, want)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", joined}})
+	r := attached(t, d)
+	r.keys(t, decltest.Ctrl('g'))
+	r.s.WaitForText(t, "words; a * ends a prefix")
+	r.keys(t, decltest.Type("kestrel")...)
+	r.s.WaitForText(t, "hits (1)")
+	r.keys(t, enter())
+	r.waitNote(t, "a.md")
+	at := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} })
+	line := onLoop(r, func() string { return r.h.editor.Lines()[at[0]] })
+	if !strings.HasPrefix(line, "kestrel") && !strings.HasPrefix(line, "## Birds") || at[1] != 0 {
+		t.Errorf("the cursor opened at line %d col %d (%q), not at the hit's start", at[0], at[1], line)
+	}
+}
