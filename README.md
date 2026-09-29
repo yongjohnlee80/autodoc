@@ -85,21 +85,31 @@ autodoc --ui                # attaches to the daemon (starting it when nothing a
 autodoc --ui kb             # in workspace kb; a name the daemon does not have is refused, with the names it has
 ```
 
-The screen has four parts:
+The screen is a page and nothing else: the note, 120 columns wide and centred, the ruler at its
+right edge. Everything else comes when it is asked for:
 
-- **The notes pane (left):** the workspace's notes, or a search's hits.
-- **The note (centre):** a Vim-keyed editor.
-- **Its backlinks (below the note).**
-- **The status line:** the editor's mode, the workspace, and the note, with `[+]` while it has
-  unsaved changes.
+- **The menu bar** hides until `F10` or an `Alt+letter` brings it up.
+- **The explorer** (`SPC e`): every workspace's folders and notes, as a tree. **The links**
+  (`SPC l`): the notes linking to this one. Each opens over the page, which does not move, from
+  the side Preferences names; `Escape` or its key again closes it.
+- **The status line** (`SPC t`): the editor's mode, the workspace, and the note, with `[+]` while
+  it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
+- **The pickers** (search, open, new note, add a workspace) share one layout: the fields over the
+  list on the left, the note under the cursor on the right, the buttons beneath. The search runs
+  as it is typed, and its preview is at the hit, the words marked.
 
 | Key | Does |
 | --- | --- |
+| `Space` | the leader card, in Normal mode: a key runs its command (`e`, `l`, `/`, `o`, `,` …) |
 | `Ctrl+G`, `/` | search (`/` in Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, renames and deletes them |
-| `Alt+1` `Alt+2` `Alt+3` | the notes pane, the editor, the backlinks |
-| `F1`, `F10`, `Ctrl+Q` | help, the menu, quit |
+| `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
+| `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
+
+**Preferences** (`File › Preferences…`, `SPC ,`) are kept in the daemon's store, so they are the
+same whichever workspace is open: the theme, whether the menu bar hides and the status line shows,
+the side each panel opens from, the page's width, and the embedding providers (see below).
 
 A save writes only over the version the note was opened at. If the note changed on disk since, the
 TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or
@@ -181,10 +191,16 @@ whose vectors are closest are the matches.
   covers every section, then it takes over.
 
 **Providers.** Semantic search is off until a provider is chosen in the TUI's Preferences. A
-provider is an Ollama server or any OpenAI-compatible endpoint, with the model it embeds with. The
-store keeps any number of them, and one is in use; switching is a choice in a list, with no
-restart. The model list is the provider's own (Ollama's installed models, or the endpoint's
-`/v1/models`).
+provider is one of three kinds, with the model it embeds with:
+
+- **Ollama (local):** a server on this machine or the network, `http://localhost:11434` by
+  default. It takes no key.
+- **Ollama Cloud:** `https://ollama.com`, with the account's API key, which it requires. Its
+  models are those the cloud serves: many are chat models (GLM, gpt-oss), which cannot embed.
+- **OpenAI-compatible:** any endpoint that serves `/v1/embeddings`, with a key if it takes one.
+
+The store keeps any number of them, and one is in use; switching is a choice in a list, with no
+restart. The model list is the provider's own (Ollama's models, or the endpoint's `/v1/models`).
 
 - **An API key is sealed in the store,** with AES-256-GCM under the store's key: a file beside the
   store, `autodoc.db.key`, made 0600 the first time a key is kept, and refused if others can read

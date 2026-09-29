@@ -170,6 +170,9 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	if x, y := where(); x != x0 || y != y0 {
 		t.Fatalf("the page's text moved from %d,%d to %d,%d under the links", x0, y0, x, y)
 	}
+	r.keys(t, esc()) // Escape in a panel closes it, and the page has the keyboard
+	r.s.WaitFor(t, "the links closed", func(sc string) bool { return !strings.Contains(sc, "backlinks (") })
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
 }
 
 // TestTheExplorerIsATreeOfEveryWorkspace: the explorer's top rows are the workspaces; a workspace
