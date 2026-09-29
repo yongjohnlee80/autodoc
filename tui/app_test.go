@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -94,6 +95,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{fs: map[string]*memfs.FS{}}
 	var served []*rpc.Workspace
+	var cores sync.WaitGroup // the indexers and followers, stopped before the store closes
 	// one store for the daemon's workspaces; closed after the indexers stop (cleanups run last first)
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
 	if err != nil {
@@ -139,8 +141,8 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		ix := index.NewIndexer(ixs, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond, Workers: workers})
 		f := follow.New(fsys, ix, ix, follow.Options{Match: md, PollInterval: 20 * time.Millisecond})
 		ix.SetRescanner(f)
-		go func() { _ = ix.Run(ctx) }()
-		go func() { _ = f.Run(ctx) }()
+		cores.Go(func() { _ = ix.Run(ctx) })
+		cores.Go(func() { _ = f.Run(ctx) })
 		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
 		// wait until the notes are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
@@ -173,8 +175,8 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	srv := rpc.New(rpc.Fixed(served...), "v-test", opts...)
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
-	d.stop = func() { cancel(); <-done }
-	t.Cleanup(func() { cancel(); <-done })
+	d.stop = func() { cancel(); <-done; cores.Wait() }
+	t.Cleanup(func() { cancel(); <-done; cores.Wait() }) // before the store closes (its cleanup runs after)
 	return d
 }
 

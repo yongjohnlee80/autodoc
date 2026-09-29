@@ -813,8 +813,9 @@ func TestFollowerIntoIndexer(t *testing.T) {
 	e.write("a.md", "# A\n\nfirst\n")
 	f := follow.New(e.fsys, e.ix, e.ix, follow.Options{PollInterval: 20 * time.Millisecond, MinBackoff: 10 * time.Millisecond, Match: testMatch})
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = f.Run(ctx) }()
+	ran := make(chan struct{})
+	go func() { _ = f.Run(ctx); close(ran) }()
+	defer func() { cancel(); <-ran }() // stopped before the env's store closes
 	e.indexedAt("a.md")
 	start := time.Now()
 	e.write("b.md", "# B\n\nsecond\n")
@@ -950,8 +951,9 @@ func TestReindexEverythingFindsNewFiles(t *testing.T) {
 	f := follow.New(noWatch{e.fsys}, e.ix, e.ix, follow.Options{PollInterval: time.Hour, Match: testMatch})
 	e.ix.SetRescanner(f)
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = f.Run(ctx) }()
+	ran := make(chan struct{})
+	go func() { _ = f.Run(ctx); close(ran) }()
+	defer func() { cancel(); <-ran }() // stopped before the env's store closes
 	e.indexedAt("a.md")
 	e.write("new.md", "blueberry\n")
 	time.Sleep(100 * time.Millisecond)
