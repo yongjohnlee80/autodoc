@@ -31,7 +31,7 @@ import (
 
 // Protocol is the API's version. A client must declare exactly this one; any change to the verbs,
 // their parameters or their results bumps it (TestVerbsArePinned holds the list).
-const Protocol int64 = 2
+const Protocol int64 = 3
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -102,20 +102,29 @@ func (fixed) Remove(context.Context, string) error {
 	return fmt.Errorf("%w: this set of workspaces is fixed", errs.ErrUnsupported)
 }
 
+// Preferences are what a client keeps between runs, by name: the store's. A server given none
+// answers the preference verbs that it cannot.
+type Preferences interface {
+	Preferences(ctx context.Context) (map[string]string, error)
+	SetPreference(ctx context.Context, name, value string) error
+}
+
 // Server is the API over the daemon's workspaces.
 type Server struct {
-	rpc        *golibrpc.Server
-	workspaces Workspaces
-	version    string
-	instance   string
-	verbs      map[string]bool
-	stop       chan struct{}
-	stopOnce   sync.Once
+	rpc         *golibrpc.Server
+	workspaces  Workspaces
+	preferences Preferences
+	version     string
+	instance    string
+	verbs       map[string]bool
+	stop        chan struct{}
+	stopOnce    sync.Once
 }
 
 type options struct {
-	listener net.Listener
-	log      logger.Logger
+	listener    net.Listener
+	log         logger.Logger
+	preferences Preferences
 }
 
 // Option configures a Server.
@@ -126,6 +135,9 @@ func WithListener(ln net.Listener) Option { return func(o *options) { o.listener
 
 // WithLogger logs to l.
 func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } }
+
+// WithPreferences keeps clients' preferences in p (the daemon's store).
+func WithPreferences(p Preferences) Option { return func(o *options) { o.preferences = p } }
 
 // decodeLimits bound what a peer may send: a document (docs.MaxSize) and little else.
 func decodeLimits() *msgpack.Limits {
@@ -141,7 +153,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	}
 	var id [8]byte
 	_, _ = rand.Read(id[:])
-	s := &Server{workspaces: workspaces, version: version, instance: hex.EncodeToString(id[:]),
+	s := &Server{workspaces: workspaces, preferences: o.preferences, version: version, instance: hex.EncodeToString(id[:]),
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
@@ -252,6 +264,9 @@ func (s *Server) shutdown(_ context.Context, req *golibrpc.Request) (any, error)
 }
 
 var errNoSuchWorkspace = errors.New("rpc: no such workspace")
+
+// errNoPreferences answers the preference verbs of a server given no Preferences.
+var errNoPreferences = errors.New("rpc: this server keeps no preferences")
 
 // workspace resolves a verb's first parameter.
 func (s *Server) workspace(params []any) (*Workspace, error) {

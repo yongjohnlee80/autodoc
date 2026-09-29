@@ -30,6 +30,22 @@ const (
 	WorkspaceUpdatedAt WorkspaceField = "updated_at"
 )
 
+// Preference is one of a client's preferences, by name: the store's, not a
+// workspace's.
+type Preference struct {
+	Name, Value string
+	UpdatedAt   int64
+}
+
+// PreferenceField names a preference column.
+type PreferenceField string
+
+const (
+	PrefName      PreferenceField = "name"
+	PrefValue     PreferenceField = "value"
+	PrefUpdatedAt PreferenceField = "updated_at"
+)
+
 // Pattern is one include or exclude pattern of a workspace.
 type Pattern struct {
 	WorkspaceID int64
@@ -334,19 +350,20 @@ const (
 
 // tables is every declaration, bound to one connection (a dao.Schema is).
 type tables struct {
-	workspaces *dao.Schema[*Workspace, WorkspaceField, noSort, int64]
-	patterns   *dao.Schema[*Pattern, PatternField, noSort, int64]
-	documents  *dao.Schema[*Document, DocumentField, noSort, int64]
-	chunks     *dao.Schema[*Chunk, ChunkField, ChunkSort, int64]
-	tags       *dao.Schema[*DocValue, DocValueField, noSort, int64]
-	aliases    *dao.Schema[*DocValue, DocValueField, noSort, int64]
-	names      *dao.Schema[*DocName, DocNameField, noSort, int64]
-	linksOut   *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the target
-	linksIn    *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the source
-	models     *dao.Schema[*Model, ModelField, noSort, string]
-	embeddings *dao.Schema[*Embedding, EmbeddingField, noSort, string]
-	jobs       *dao.Schema[*Job, JobField, noSort, string]
-	changes    *dao.Schema[*Change, ChangeField, noSort, int64]
+	workspaces  *dao.Schema[*Workspace, WorkspaceField, noSort, int64]
+	preferences *dao.Schema[*Preference, PreferenceField, noSort, string]
+	patterns    *dao.Schema[*Pattern, PatternField, noSort, int64]
+	documents   *dao.Schema[*Document, DocumentField, noSort, int64]
+	chunks      *dao.Schema[*Chunk, ChunkField, ChunkSort, int64]
+	tags        *dao.Schema[*DocValue, DocValueField, noSort, int64]
+	aliases     *dao.Schema[*DocValue, DocValueField, noSort, int64]
+	names       *dao.Schema[*DocName, DocNameField, noSort, int64]
+	linksOut    *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the target
+	linksIn     *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the source
+	models      *dao.Schema[*Model, ModelField, noSort, string]
+	embeddings  *dao.Schema[*Embedding, EmbeddingField, noSort, string]
+	jobs        *dao.Schema[*Job, JobField, noSort, string]
+	changes     *dao.Schema[*Change, ChangeField, noSort, int64]
 }
 
 func col[R any, T ~string](table string, c T, scan func(R) any) dao.Field[R] {
@@ -372,6 +389,16 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceUpdatedAt: col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),
 			dao.SortMap[*Workspace, WorkspaceField, noSort, int64](map[noSort]string{ByKey: `"workspace"."name"`})),
+		preferences: dao.New[*Preference, PreferenceField, noSort, string](c,
+			dao.Table[*Preference, PreferenceField, noSort, string]("preference"),
+			dao.ID[*Preference, PreferenceField, noSort, string](PrefName),
+			dao.Fields[*Preference, PreferenceField, noSort, string](map[PreferenceField]dao.Field[*Preference]{
+				PrefName:      col("preference", PrefName, func(p *Preference) any { return &p.Name }),
+				PrefValue:     col("preference", PrefValue, func(p *Preference) any { return &p.Value }),
+				PrefUpdatedAt: col("preference", PrefUpdatedAt, func(p *Preference) any { return &p.UpdatedAt }),
+			}),
+			dao.Conflict[*Preference, PreferenceField, noSort, string](PrefName),
+			dao.SortMap[*Preference, PreferenceField, noSort, string](map[noSort]string{ByKey: `"preference"."name"`})),
 		patterns: dao.New[*Pattern, PatternField, noSort, int64](c,
 			dao.Table[*Pattern, PatternField, noSort, int64]("workspace_pattern"),
 			dao.Fields[*Pattern, PatternField, noSort, int64](map[PatternField]dao.Field[*Pattern]{
