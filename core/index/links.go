@@ -1,7 +1,6 @@
 package index
 
 import (
-	"context"
 	"errors"
 	"net/url"
 	"path"
@@ -10,6 +9,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/parse/markdown"
+
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // The kinds of link the link table holds.
@@ -191,14 +192,14 @@ func markdownNames(p string) []string {
 // document with that file name, path suffix or alias; of several, the one nearest the root; still
 // tied, none (ReasonAmbiguous). Readers and the writer resolve with this one function, so a reader's
 // reason for an unresolved link is the writer's.
-func resolve(ctx context.Context, q dao.Querier, kind, name string) (dst int64, reason string, err error) {
+func (s *Store) resolve(tx *store.Tx, kind, name string) (dst int64, reason string, err error) {
 	if kind == LinkMarkdown {
 		for _, p := range []string{name, name + ".md"} {
-			err := scanOne(ctx, q, &dst, "SELECT id FROM document WHERE path = ?", p)
+			d, err := s.sc.Documents(tx).With(store.DocPath, p).Get(store.DocID)
 			if err == nil {
-				return dst, "", nil
+				return d.ID, "", nil
 			}
-			if !errors.Is(err, errNoRow) {
+			if !errors.Is(err, dao.ErrNoRows) {
 				return 0, "", err
 			}
 			if strings.HasSuffix(name, ".md") {
@@ -207,11 +208,11 @@ func resolve(ctx context.Context, q dao.Querier, kind, name string) (dst int64, 
 		}
 		return 0, ReasonMissing, nil
 	}
-	query := "SELECT d.id, d.path, n.is_path FROM doc_name n JOIN document d ON d.id = n.doc_id WHERE n.key = ?"
+	q := s.sc.Names(tx)
 	if strings.HasPrefix(name, "/") {
-		query, name = query+" AND n.is_path", name[1:]
+		q, name = q.With(store.NameIsPath, int64(1)), name[1:]
 	}
-	rows, err := q.QueryContext(ctx, query, name)
+	rows, err := q.With(store.NameKey, name).Select(store.NameDoc, store.NameDocPath, store.NameIsPath)
 	if err != nil {
 		return 0, "", err
 	}
@@ -221,20 +222,12 @@ func resolve(ctx context.Context, q dao.Querier, kind, name string) (dst int64, 
 		isPath bool
 	}
 	var all, paths []cand
-	for rows.Next() {
-		var c cand
-		if err := rows.Scan(&c.id, &c.path, &c.isPath); err != nil {
-			rows.Close()
-			return 0, "", err
-		}
+	for _, r := range rows {
+		c := cand{r.DocID, r.DocPath, r.IsPath == 1}
 		all = append(all, c)
 		if c.isPath {
 			paths = append(paths, c)
 		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return 0, "", err
 	}
 	if len(paths) > 0 {
 		all = paths // the exact path wins over every file name and alias
@@ -250,22 +243,16 @@ func resolve(ctx context.Context, q dao.Querier, kind, name string) (dst int64, 
 }
 
 // storedNames reads the wikilink names a document answers to, each with whether it is the path.
-func storedNames(ctx context.Context, tx dao.TxConn, docID int64) (map[string]bool, error) {
-	rows, err := tx.QueryContext(ctx, "SELECT key, is_path FROM doc_name WHERE doc_id = ?", docID)
+func (s *Store) storedNames(tx *store.Tx, docID int64) (map[string]bool, error) {
+	rows, err := s.sc.Names(tx).With(store.NameDoc, docID).Select(store.NameKey, store.NameIsPath)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	out := map[string]bool{}
-	for rows.Next() {
-		var k string
-		var isPath bool
-		if err := rows.Scan(&k, &isPath); err != nil {
-			return nil, err
-		}
-		out[k] = isPath
+	for _, r := range rows {
+		out[r.Key] = r.IsPath == 1
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // linkNames are the link names under which a document's name is looked up: the name, and for its
@@ -279,23 +266,31 @@ func linkNames(key string, isPath bool) []string {
 
 // writeNames replaces a document's names, returning the ones that came or went: the links under
 // those names may now resolve differently.
-func writeNames(ctx context.Context, tx dao.TxConn, docID int64, names []docName) ([]string, error) {
-	old, err := storedNames(ctx, tx, docID)
+func (s *Store) writeNames(tx *store.Tx, docID int64, names []docName) ([]string, error) {
+	old, err := s.storedNames(tx, docID)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx, "DELETE FROM doc_name WHERE doc_id = ?", docID); err != nil {
+	if err := s.sc.Names(tx).With(store.NameDoc, docID).Delete(); err != nil {
 		return nil, err
 	}
 	var changed []string
+	b := s.sc.NameBatch(tx)
 	for _, n := range names {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO doc_name(key, doc_id, is_path) VALUES (?, ?, ?)", n.key, docID, n.isPath); err != nil {
-			return nil, err
+		isPath := int64(0)
+		if n.isPath {
+			isPath = 1
 		}
+		b.Add(map[store.DocNameField]any{store.NameKey: n.key, store.NameDoc: docID, store.NameIsPath: isPath})
 		if wasPath, ok := old[n.key]; !ok || wasPath != n.isPath {
 			changed = append(changed, linkNames(n.key, n.isPath || wasPath)...)
 		}
 		delete(old, n.key)
+	}
+	if len(names) > 0 {
+		if err := b.Flush(); err != nil {
+			return nil, err
+		}
 	}
 	for k, isPath := range old {
 		changed = append(changed, linkNames(k, isPath)...)
@@ -304,12 +299,12 @@ func writeNames(ctx context.Context, tx dao.TxConn, docID int64, names []docName
 }
 
 // writeLinks replaces a document's links with links, each resolved as the index stands.
-func writeLinks(ctx context.Context, tx dao.TxConn, docID, gen int64, links []linkT) error {
-	if _, err := tx.ExecContext(ctx, "DELETE FROM link WHERE src_doc = ?", docID); err != nil {
+func (s *Store) writeLinks(tx *store.Tx, docID, gen int64, links []linkT) error {
+	if err := s.sc.LinksOut(tx).With(store.LinkSrc, docID).Delete(); err != nil {
 		return err
 	}
 	for _, l := range links {
-		dst, _, err := resolve(ctx, tx, l.kind, l.name)
+		dst, _, err := s.resolve(tx, l.kind, l.name)
 		if err != nil {
 			return err
 		}
@@ -320,8 +315,8 @@ func writeLinks(ctx context.Context, tx dao.TxConn, docID, gen int64, links []li
 		if l.anchor != "" {
 			anchor = l.anchor
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO link(src_doc, gen_from, raw, name, dst_doc, anchor, kind) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			docID, gen, l.raw, l.name, d, anchor, l.kind); err != nil {
+		if _, err := s.sc.LinksOut(tx).Set(store.LinkSrc, docID).Set(store.LinkGenFrom, gen).Set(store.LinkRaw, l.raw).
+			Set(store.LinkName, l.name).Set(store.LinkDst, d).Set(store.LinkAnchor, anchor).Set(store.LinkKind, l.kind).Insert(); err != nil {
 			return err
 		}
 	}
@@ -330,52 +325,40 @@ func writeLinks(ctx context.Context, tx dao.TxConn, docID, gen int64, links []li
 
 // reresolve resolves again every link stored under one of names, and every link that reached
 // docID (0: none), in the same transaction as the change that moved them.
-func reresolve(ctx context.Context, tx dao.TxConn, names []string, docID int64) error {
+func (s *Store) reresolve(tx *store.Tx, names []string, docID int64) error {
 	if len(names) == 0 && docID == 0 {
 		return nil
 	}
-	q := "SELECT rowid, kind, name, COALESCE(dst_doc, 0) FROM link WHERE dst_doc = ?"
-	args := []any{docID}
+	reached := dao.Eq(`"link"."dst_doc"`, docID)
+	cond := reached
 	if len(names) > 0 {
-		q += " OR name IN (?" + strings.Repeat(", ?", len(names)-1) + ")"
-		for _, n := range names {
-			args = append(args, n)
+		vs := make([]any, len(names))
+		for i, n := range names {
+			vs[i] = n
 		}
+		cond = dao.Or(reached, dao.In(`"link"."name"`, vs))
 	}
-	rows, err := tx.QueryContext(ctx, q, args...)
+	rows, err := s.sc.LinksOut(tx).WithPredicate(cond).Select(store.LinkID, store.LinkKind, store.LinkName, store.LinkDst)
 	if err != nil {
 		return err
 	}
-	type row struct {
-		id, dst    int64
-		kind, name string
-	}
-	var all []row
-	for rows.Next() {
-		var r row
-		if err := rows.Scan(&r.id, &r.kind, &r.name, &r.dst); err != nil {
-			rows.Close()
-			return err
-		}
-		all = append(all, r)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	for _, r := range all {
-		dst, _, err := resolve(ctx, tx, r.kind, r.name)
+	for _, r := range rows {
+		dst, _, err := s.resolve(tx, r.Kind, r.Name)
 		if err != nil {
 			return err
 		}
-		if dst == r.dst {
+		var was int64
+		if r.DstDoc != nil {
+			was = *r.DstDoc
+		}
+		if dst == was {
 			continue
 		}
 		var d any
 		if dst != 0 {
 			d = dst
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE link SET dst_doc = ? WHERE rowid = ?", d, r.id); err != nil {
+		if err := s.sc.LinksOut(tx).With(store.LinkID, r.ID).Set(store.LinkDst, d).Update(); err != nil {
 			return err
 		}
 	}

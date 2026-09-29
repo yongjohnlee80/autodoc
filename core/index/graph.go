@@ -6,6 +6,8 @@ import (
 	"sort"
 
 	"github.com/yongjohnlee80/golib/dao"
+
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // ErrNoDocument is a path the index does not hold.
@@ -41,118 +43,112 @@ type Unresolved struct {
 
 // Links lists the links of the document at path, in source order.
 func (s *Store) Links(ctx context.Context, path string) ([]Link, error) {
-	return s.links(ctx, path, `SELECT COALESCE(d.path, ''), l.raw, COALESCE(l.anchor, ''), l.kind, l.dst_doc IS NOT NULL
-		FROM link l LEFT JOIN document d ON d.id = l.dst_doc WHERE l.src_doc = ? ORDER BY l.rowid`)
+	out := []Link{}
+	err := s.read(ctx, func(tx *store.Tx) error {
+		id, err := s.docID(tx, path)
+		if err != nil {
+			return err
+		}
+		rows, err := s.sc.LinksOut(tx).With(store.LinkSrc, id).OrderBy(dao.Asc(store.LinkByID)).
+			Select(store.LinkOtherPath, store.LinkRaw, store.LinkAnchor, store.LinkKind, store.LinkDst)
+		for _, r := range rows {
+			out = append(out, Link{Path: r.OtherPath, Raw: r.Raw, Anchor: deref(r.Anchor), Kind: r.Kind, Resolved: r.DstDoc != nil})
+		}
+		return err
+	})
+	return out, err
 }
 
 // Backlinks lists the links that reach the document at path, by source path, then source order.
 func (s *Store) Backlinks(ctx context.Context, path string) ([]Link, error) {
-	return s.links(ctx, path, `SELECT d.path, l.raw, COALESCE(l.anchor, ''), l.kind, 1
-		FROM link l JOIN document d ON d.id = l.src_doc WHERE l.dst_doc = ? ORDER BY d.path, l.rowid`)
-}
-
-func (s *Store) links(ctx context.Context, path, q string) ([]Link, error) {
-	tx, err := s.r.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	id, err := docID(ctx, tx, path)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := tx.QueryContext(ctx, q, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 	out := []Link{}
-	for rows.Next() {
-		var l Link
-		if err := rows.Scan(&l.Path, &l.Raw, &l.Anchor, &l.Kind, &l.Resolved); err != nil {
-			return nil, err
+	err := s.read(ctx, func(tx *store.Tx) error {
+		id, err := s.docID(tx, path)
+		if err != nil {
+			return err
 		}
-		out = append(out, l)
-	}
-	return out, rows.Err()
+		rows, err := s.sc.LinksIn(tx).With(store.LinkDst, id).OrderBy(dao.Asc(store.LinkByOtherPath)).
+			Select(store.LinkOtherPath, store.LinkRaw, store.LinkAnchor, store.LinkKind)
+		for _, r := range rows {
+			out = append(out, Link{Path: r.OtherPath, Raw: r.Raw, Anchor: deref(r.Anchor), Kind: r.Kind, Resolved: true})
+		}
+		return err
+	})
+	return out, err
 }
 
 // Neighborhood gathers the documents within depth (1 or 2; others are clamped) resolved links of
 // the one at path, following links both ways, and the links among them.
 func (s *Store) Neighborhood(ctx context.Context, path string, depth int) (Neighborhood, error) {
 	depth = min(max(depth, 1), 2)
-	tx, err := s.r.Begin(ctx)
-	if err != nil {
-		return Neighborhood{}, err
-	}
-	defer tx.Rollback()
-	start, err := docID(ctx, tx, path)
-	if err != nil {
-		return Neighborhood{}, err
-	}
-	seen := map[int64]bool{start: true}
-	frontier := []int64{start}
-	for d := 0; d < depth && len(frontier) > 0; d++ {
-		var next []int64
-		for _, id := range frontier {
-			rows, err := tx.QueryContext(ctx, `SELECT dst_doc FROM link WHERE src_doc = ? AND dst_doc IS NOT NULL
-				UNION SELECT src_doc FROM link WHERE dst_doc = ?`, id, id)
-			if err != nil {
-				return Neighborhood{}, err
-			}
-			for rows.Next() {
-				var n int64
-				if err := rows.Scan(&n); err != nil {
-					rows.Close()
-					return Neighborhood{}, err
-				}
-				if !seen[n] {
-					seen[n] = true
-					next = append(next, n)
-				}
-			}
-			rows.Close()
-			if err := rows.Err(); err != nil {
-				return Neighborhood{}, err
-			}
-		}
-		frontier = next
-	}
-	paths := map[int64]string{}
 	var nb Neighborhood
-	for id := range seen {
-		var p string
-		if err := scanOne(ctx, tx, &p, "SELECT path FROM document WHERE id = ?", id); err != nil {
-			return Neighborhood{}, err
-		}
-		paths[id] = p
-		nb.Nodes = append(nb.Nodes, p)
-	}
-	sort.Strings(nb.Nodes)
-	edges := map[Edge]bool{}
-	for id := range seen {
-		rows, err := tx.QueryContext(ctx, "SELECT dst_doc, kind FROM link WHERE src_doc = ? AND dst_doc IS NOT NULL", id)
+	err := s.read(ctx, func(tx *store.Tx) error {
+		start, err := s.docID(tx, path)
 		if err != nil {
-			return Neighborhood{}, err
+			return err
 		}
-		for rows.Next() {
-			var dst int64
-			var kind string
-			if err := rows.Scan(&dst, &kind); err != nil {
-				rows.Close()
-				return Neighborhood{}, err
+		seen := map[int64]bool{start: true}
+		frontier := []int64{start}
+		for d := 0; d < depth && len(frontier) > 0; d++ {
+			var next []int64
+			for _, id := range frontier {
+				// the documents it links to, and those linking to it
+				out, err := s.sc.LinksOut(tx).With(store.LinkSrc, id).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).Select(store.LinkDst)
+				if err != nil {
+					return err
+				}
+				in, err := s.sc.LinksOut(tx).With(store.LinkDst, id).Select(store.LinkSrc)
+				if err != nil {
+					return err
+				}
+				var ns []int64
+				for _, l := range out {
+					ns = append(ns, *l.DstDoc)
+				}
+				for _, l := range in {
+					ns = append(ns, l.SrcDoc)
+				}
+				for _, n := range ns {
+					if !seen[n] {
+						seen[n] = true
+						next = append(next, n)
+					}
+				}
 			}
-			if seen[dst] {
-				edges[Edge{paths[id], paths[dst], kind}] = true
+			frontier = next
+		}
+		ids := make([]any, 0, len(seen))
+		for id := range seen {
+			ids = append(ids, id)
+		}
+		docs, err := s.sc.Documents(tx).With(store.DocID, ids...).Select(store.DocID, store.DocPath)
+		if err != nil {
+			return err
+		}
+		paths := map[int64]string{}
+		for _, d := range docs {
+			paths[d.ID] = d.Path
+			nb.Nodes = append(nb.Nodes, d.Path)
+		}
+		sort.Strings(nb.Nodes)
+		links, err := s.sc.LinksOut(tx).With(store.LinkSrc, ids...).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
+			Select(store.LinkSrc, store.LinkDst, store.LinkKind)
+		if err != nil {
+			return err
+		}
+		edges := map[Edge]bool{}
+		for _, l := range links {
+			if seen[*l.DstDoc] {
+				edges[Edge{paths[l.SrcDoc], paths[*l.DstDoc], l.Kind}] = true
 			}
 		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return Neighborhood{}, err
+		for e := range edges {
+			nb.Edges = append(nb.Edges, e)
 		}
-	}
-	for e := range edges {
-		nb.Edges = append(nb.Edges, e)
+		return nil
+	})
+	if err != nil {
+		return Neighborhood{}, err
 	}
 	sort.Slice(nb.Edges, func(i, j int) bool {
 		a, b := nb.Edges[i], nb.Edges[j]
@@ -169,47 +165,33 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int) (Neigh
 
 // Unresolved lists every link that reaches no document, by source path, then source order.
 func (s *Store) Unresolved(ctx context.Context) ([]Unresolved, error) {
-	tx, err := s.r.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `SELECT d.path, l.raw, l.kind, l.name FROM link l JOIN document d ON d.id = l.src_doc
-		WHERE l.dst_doc IS NULL ORDER BY d.path, l.rowid`)
-	if err != nil {
-		return nil, err
-	}
-	type row struct{ src, raw, kind, name string }
-	var all []row
-	for rows.Next() {
-		var r row
-		if err := rows.Scan(&r.src, &r.raw, &r.kind, &r.name); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		all = append(all, r)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
 	out := []Unresolved{}
-	for _, r := range all {
-		// the reason is not stored: resolving again, in this snapshot, gives the writer's answer
-		_, reason, err := resolve(ctx, tx, r.kind, r.name)
+	err := s.read(ctx, func(tx *store.Tx) error {
+		rows, err := s.sc.LinksIn(tx).WithPredicate(dao.IsNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(store.LinkByOtherPath)).
+			Select(store.LinkOtherPath, store.LinkRaw, store.LinkKind, store.LinkName)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		out = append(out, Unresolved{Src: r.src, Raw: r.raw, Reason: reason})
-	}
-	return out, nil
+		for _, r := range rows {
+			// the reason is not stored: resolving again, in this snapshot, gives the writer's answer
+			_, reason, err := s.resolve(tx, r.Kind, r.Name)
+			if err != nil {
+				return err
+			}
+			out = append(out, Unresolved{Src: r.OtherPath, Raw: r.Raw, Reason: reason})
+		}
+		return nil
+	})
+	return out, err
 }
 
-func docID(ctx context.Context, q dao.Querier, path string) (int64, error) {
-	var id int64
-	err := scanOne(ctx, q, &id, "SELECT id FROM document WHERE path = ?", path)
-	if errors.Is(err, errNoRow) {
+func (s *Store) docID(tx *store.Tx, path string) (int64, error) {
+	d, err := s.sc.Documents(tx).With(store.DocPath, path).Get(store.DocID)
+	if errors.Is(err, dao.ErrNoRows) {
 		return 0, ErrNoDocument
 	}
-	return id, err
+	if err != nil {
+		return 0, err
+	}
+	return d.ID, nil
 }

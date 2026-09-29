@@ -4,14 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/yongjohnlee80/golib/dao"
-	"github.com/yongjohnlee80/golib/dao/sqlite"
 	"github.com/yongjohnlee80/golib/parse/markdown"
 )
 
@@ -265,77 +262,6 @@ func TestNeighborhood(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, Neighborhood{Nodes: []string{"f.md"}}) {
 		t.Errorf("a lone note: %+v, %v", got, err)
 	}
-}
-
-// TestSchemaOneGainsLinks: a store written under schema 1, which kept no links or names, is
-// migrated in place, and every document is rebuilt with its links though no file changed.
-func TestSchemaOneGainsLinks(t *testing.T) {
-	e := newEnv(t, Options{})
-	e.put("a.md", "[[b]]", "b.md", "[[a]] [x](a.md)")
-	want := [][]string{e.targets("a.md"), e.targets("b.md")}
-	e.stop()
-	path := filepath.Join(e.dir, "index.db")
-	s, err := Open(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{"UPDATE meta SET v = '1' WHERE k = 'schema_version'", "DELETE FROM link", "DROP TABLE doc_name",
-		"DROP INDEX link_src", "DROP INDEX link_dst", "UPDATE document SET indexer = 'c1.s1'"} {
-		if _, err := s.w.ExecContext(context.Background(), q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	_ = s.Close()
-	e.stop = nil
-	e.open(Options{})
-	e.eventually("both documents rebuilt", func() bool {
-		var stale int
-		_ = scanOne(context.Background(), e.store.r, &stale, "SELECT COUNT(*) FROM document WHERE indexer != ?", IndexerVersion)
-		return stale == 0
-	})
-	eq(t, "a.md", e.targets("a.md"), want[0])
-	eq(t, "b.md", e.targets("b.md"), want[1])
-	var v string
-	_ = scanOne(context.Background(), e.store.r, &v, "SELECT v FROM meta WHERE k = 'schema_version'")
-	if v != "2" {
-		t.Errorf("schema_version %q after the migration, want 2", v)
-	}
-}
-
-// TestNewerSchemaIsLeftAlone: a file of a newer schema is refused before anything in it changes.
-func TestNewerSchemaIsLeftAlone(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "index.db")
-	s, err := Open(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{"UPDATE meta SET v = '3' WHERE k = 'schema_version'", "DROP TABLE doc_name"} {
-		if _, err := s.w.ExecContext(context.Background(), q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	_ = s.Close()
-	if s, err := Open(context.Background(), path); !errors.Is(err, ErrSchemaVersion) {
-		if s != nil {
-			_ = s.Close()
-		}
-		t.Fatalf("opening a schema 3 store: %v, want ErrSchemaVersion", err)
-	}
-	// look at the file without Open: it must not have gained this schema's tables
-	raw, err := openRaw(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer raw.Close()
-	var n int
-	if err := scanOne(context.Background(), raw, &n, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'doc_name'"); err != nil || n != 0 {
-		t.Errorf("the refused file gained doc_name (%d, %v)", n, err)
-	}
-}
-
-// openRaw opens an index file as SQLite alone, with no migration.
-func openRaw(path string) (dao.DataConn, error) {
-	return sqlite.OpenNamed(context.Background(), "raw:"+path, "file:"+path, sqlite.MaxOpenConns(1))
 }
 
 // TestTieBrokenByDelete: of two notes tied for a name, deleting one gives the link to the other,

@@ -107,8 +107,8 @@ func (e *env) ready() {
 	e.t.Helper()
 	e.eventually("every document semantic-ready", func() bool {
 		var unready, docs int
-		_ = scanOne(context.Background(), e.store.r, &docs, "SELECT COUNT(*) FROM document")
-		_ = scanOne(context.Background(), e.store.r, &unready, "SELECT COUNT(*) FROM document WHERE semantic_ready = 0")
+		_ = scanOne(context.Background(), e.raw, &docs, "SELECT COUNT(*) FROM document")
+		_ = scanOne(context.Background(), e.raw, &unready, "SELECT COUNT(*) FROM document WHERE semantic_ready = 0")
 		return docs > 0 && unready == 0
 	})
 }
@@ -122,7 +122,7 @@ func (e *env) atHead() *codeSnap {
 	var s *codeSnap
 	e.eventually("the snapshot at the head", func() bool {
 		var seq int64
-		_ = scanOne(context.Background(), e.store.r, &seq, "SELECT CAST(v AS INTEGER) FROM meta WHERE k = 'commit_seq'")
+		_ = scanOne(context.Background(), e.raw, &seq, "SELECT commit_seq FROM workspace")
 		s = e.ix.sem.snap.Load()
 		return s != nil && s.watermark == seq
 	})
@@ -149,7 +149,7 @@ func via(r Result) []string {
 func (e *env) activeModel() string {
 	e.t.Helper()
 	var fp string
-	_ = scanOne(context.Background(), e.store.r, &fp, "SELECT fp FROM model WHERE active = 1")
+	_ = scanOne(context.Background(), e.raw, &fp, "SELECT fp FROM model WHERE active = 1")
 	return fp
 }
 
@@ -213,7 +213,7 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	e.atHead()
 	var cID int64
-	_ = scanOne(context.Background(), e.store.r, &cID, "SELECT id FROM document WHERE path = 'c.md'")
+	_ = scanOne(context.Background(), e.raw, &cID, "SELECT id FROM document WHERE path = 'c.md'")
 	if _, in := e.ix.sem.snap.Load().docs[cID]; in {
 		t.Error("the half-embedded c.md is in the code snapshot")
 	}
@@ -225,12 +225,12 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 			for d, cs := range cur.docs {
 				forged.docs[d] = cs
 			}
-			codes, err := loadCodes(context.Background(), e.store.r, cur.fp, nil)
+			codes, err := e.codes(cur.fp)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var chunks []code
-			rows, _ := e.store.r.QueryContext(context.Background(), `SELECT c.id, e.bits FROM chunk c JOIN embedding e
+			rows, _ := e.raw.QueryContext(context.Background(), `SELECT c.id, e.bits FROM chunk c JOIN embedding e
 				ON e.text_hash = c.text_hash AND e.model_fp = ? WHERE c.doc_id = ?`, cur.fp, cID)
 			for rows.Next() {
 				var c code
@@ -283,7 +283,7 @@ func TestEditClearsReadiness(t *testing.T) {
 	p.hold("volcano")
 	e.put("a.md", "zebra\n\n# More\n\nvolcano ash\n")
 	var ready int
-	_ = scanOne(context.Background(), e.store.r, &ready, "SELECT semantic_ready FROM document")
+	_ = scanOne(context.Background(), e.raw, &ready, "SELECT semantic_ready FROM document")
 	if ready != 0 {
 		t.Error("an edit adding an unembedded chunk left the document ready")
 	}
@@ -507,7 +507,7 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 	}
 	// the old model's vectors stay until purged; the active one cannot be purged
 	var vecs int
-	_ = scanOne(context.Background(), e.store.r, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
+	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
 	if vecs == 0 {
 		t.Error("the old model's vectors went implicitly")
 	}
@@ -517,9 +517,9 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 	if err := e.ix.PurgeModel(context.Background(), fpA); err != nil {
 		t.Fatal(err)
 	}
-	_ = scanOne(context.Background(), e.store.r, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
+	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
 	var rows int
-	_ = scanOne(context.Background(), e.store.r, &rows, "SELECT COUNT(*) FROM model WHERE fp = ?", fpA)
+	_ = scanOne(context.Background(), e.raw, &rows, "SELECT COUNT(*) FROM model WHERE fp = ?", fpA)
 	if vecs != 0 || rows != 0 {
 		t.Errorf("after the purge: %d vectors, %d rows", vecs, rows)
 	}
@@ -558,17 +558,17 @@ func TestRejectedTextDoesNotBlockOthers(t *testing.T) {
 	e.put("a.md", "zebra\n", "b.md", "giraffe\n", "bad.md", "# Bad\n\noversized list\n\n# Fine\n\nhippo\n", "c.md", "lion\n")
 	e.eventually("the others ready", func() bool {
 		var ready int
-		_ = scanOne(context.Background(), e.store.r, &ready, "SELECT COUNT(*) FROM document WHERE semantic_ready = 1 AND path != 'bad.md'")
+		_ = scanOne(context.Background(), e.raw, &ready, "SELECT COUNT(*) FROM document WHERE semantic_ready = 1 AND path != 'bad.md'")
 		return ready == 3
 	})
 	var badReady int
-	_ = scanOne(context.Background(), e.store.r, &badReady, "SELECT semantic_ready FROM document WHERE path = 'bad.md'")
+	_ = scanOne(context.Background(), e.raw, &badReady, "SELECT semantic_ready FROM document WHERE path = 'bad.md'")
 	if badReady != 0 {
 		t.Error("the document with a rejected chunk is ready")
 	}
 	// its other chunk has its vector: only the rejected text was set aside
 	var vecs int
-	_ = scanOne(context.Background(), e.store.r, &vecs, "SELECT COUNT(*) FROM embedding")
+	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding")
 	if vecs != 4 {
 		t.Errorf("%d vectors, want 4 (every text but the rejected one)", vecs)
 	}
@@ -612,7 +612,7 @@ func (e *env) ready2(path string) {
 	e.t.Helper()
 	e.eventually(path+" semantic-ready", func() bool {
 		var ready int
-		_ = scanOne(context.Background(), e.store.r, &ready, "SELECT semantic_ready FROM document WHERE path = ?", path)
+		_ = scanOne(context.Background(), e.raw, &ready, "SELECT semantic_ready FROM document WHERE path = ?", path)
 		return ready == 1
 	})
 }
@@ -640,7 +640,7 @@ func TestEveryCommitPublishes(t *testing.T) {
 	e.put("a.md", "zebra\n")
 	e.eventually("the GC", func() bool {
 		var dead int
-		_ = scanOne(context.Background(), e.store.r, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
+		_ = scanOne(context.Background(), e.raw, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
 		return dead == 0
 	})
 	e.atHead()
@@ -687,7 +687,7 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 		}
 	}
 	var stored int
-	_ = scanOne(context.Background(), e.store.r, &stored, "SELECT COUNT(*) FROM embedding WHERE model_fp = ? AND text_hash = ?", fpA, []byte("late"))
+	_ = scanOne(context.Background(), e.raw, &stored, "SELECT COUNT(*) FROM embedding WHERE model_fp = ? AND text_hash = ?", fpA, []byte("late"))
 	if stored != 1 {
 		t.Error("the late batch's vector was not stored")
 	}
