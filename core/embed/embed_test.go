@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -66,15 +67,21 @@ func (s *server) handler() http.Handler {
 			vecs = append(vecs, v)
 		}
 		if !openai {
-			_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": vecs})
+			_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": vecs, "prompt_eval_count": 3 * len(req.Input)})
 			return
 		}
 		var data []map[string]any
 		for i := len(vecs) - 1; i >= 0; i-- { // out of order: the client sorts by index
 			data = append(data, map[string]any{"index": i, "embedding": vecs[i]})
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data, "usage": map[string]any{"total_tokens": 5 * len(req.Input)}})
 	}
+	mux.HandleFunc("GET /v1/models", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		s.auth = append(s.auth, r.Header.Get("Authorization"))
+		s.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "text-embedding-3-small"}, {"id": "gpt-x"}}})
+	})
 	mux.HandleFunc("POST /api/embed", func(w http.ResponseWriter, r *http.Request) { embed(w, r, false) })
 	mux.HandleFunc("POST /v1/embeddings", func(w http.ResponseWriter, r *http.Request) { embed(w, r, true) })
 	return mux
@@ -158,5 +165,86 @@ func TestOpenAI(t *testing.T) {
 	}
 	if _, err := anon.Embed(ctx, []string{"x"}); err != nil || s.auth[len(s.auth)-1] != "" {
 		t.Errorf("no key: %v, authorization %q", err, s.auth[len(s.auth)-1])
+	}
+}
+
+// TestModelsListsWhatAProviderOffers: an Ollama server's installed models, an OpenAI-compatible
+// endpoint's /v1/models under the key, sorted; a kind there is none of is refused.
+func TestModelsListsWhatAProviderOffers(t *testing.T) {
+	s := &server{dims: 4}
+	ts := httptest.NewServer(s.handler())
+	defer ts.Close()
+	ctx := context.Background()
+	if got, err := Models(ctx, "ollama", ts.URL, "", nil); err != nil || fmt.Sprint(got) != "[embedder:latest other]" {
+		t.Fatalf("ollama models %v, %v", got, err)
+	}
+	if got, err := Models(ctx, "openai", ts.URL+"/", "k", nil); err != nil || fmt.Sprint(got) != "[gpt-x text-embedding-3-small]" {
+		t.Fatalf("openai models %v, %v", got, err)
+	}
+	if last := s.auth[len(s.auth)-1]; last != "Bearer k" {
+		t.Errorf("/v1/models was asked with %q, want the key", last)
+	}
+	if _, err := Models(ctx, "cohere", ts.URL, "", nil); err == nil {
+		t.Error("a kind there is none of was not refused")
+	}
+}
+
+// TestALimitAndARefusedKeyAreNamed: 429 is the usage limit, 401 and 403 the key, so a client can
+// say which, and switch.
+func TestALimitAndARefusedKeyAreNamed(t *testing.T) {
+	for _, c := range []struct {
+		status int
+		want   error
+	}{{http.StatusTooManyRequests, ErrRateLimited}, {http.StatusUnauthorized, ErrUnauthorized}, {http.StatusForbidden, ErrUnauthorized}} {
+		s := &server{dims: 4}
+		ts := httptest.NewServer(s.handler())
+		p, err := NewOpenAI(context.Background(), ts.URL, "k", "m", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.status = c.status
+		if _, err := p.Embed(context.Background(), []string{"x"}); !errors.Is(err, c.want) {
+			t.Errorf("status %d: %v, want %v", c.status, err, c.want)
+		}
+		ts.Close()
+	}
+}
+
+// TestTheMeterHearsEveryCall: each Embed, after the probe, reports its texts, the tokens the
+// provider counted and its outcome.
+func TestTheMeterHearsEveryCall(t *testing.T) {
+	s := &server{dims: 4}
+	ts := httptest.NewServer(s.handler())
+	defer ts.Close()
+	ctx := context.Background()
+	o, err := NewOllama(ctx, ts.URL, "embedder", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := NewOpenAI(ctx, ts.URL, "k", "m", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		p    Provider
+		want string
+	}{{o, "2 6 <nil>; 1 0 embed:"}, {a, "2 10 <nil>; 1 0 embed:"}} {
+		var calls []string
+		c.p.(Metered).SetMeter(func(call Call) {
+			e := "<nil>"
+			if call.Err != nil {
+				e = "embed:"
+			}
+			calls = append(calls, fmt.Sprintf("%d %d %s", call.Texts, call.Tokens, e))
+		})
+		if _, err := c.p.Embed(ctx, []string{"a", "b"}); err != nil {
+			t.Fatal(err)
+		}
+		s.status = http.StatusTooManyRequests
+		_, _ = c.p.Embed(ctx, []string{"c"})
+		s.status = 0
+		if got := strings.Join(calls, "; "); got != c.want {
+			t.Errorf("%s: the meter heard %q, want %q", c.p.Name(), got, c.want)
+		}
 	}
 }
