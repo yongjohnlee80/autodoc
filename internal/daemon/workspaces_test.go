@@ -29,19 +29,19 @@ func open(t *testing.T) (*Workspaces, *store.Store) {
 	return m, db
 }
 
-// indexed waits until the workspace's one note is in its index.
-func indexed(t *testing.T, m *Workspaces, name string) {
+// indexed waits until the workspace's index holds docs notes and nothing pending.
+func indexed(t *testing.T, m *Workspaces, name string, docs int64) {
 	t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		w, ok := m.Get(name)
 		if !ok || w.Index == nil {
 			t.Fatalf("%s is not served", name)
 		}
-		if st, err := w.Index.Status(context.Background()); err == nil && st.Docs == 1 && st.PendingJobs == 0 {
+		if st, err := w.Index.Status(context.Background()); err == nil && st.Docs == docs && st.PendingJobs == 0 {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s did not index its note", name)
+			t.Fatalf("%s did not index %d notes", name, docs)
 		}
 	}
 }
@@ -67,7 +67,7 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root}); err != nil {
 		t.Fatal(err)
 	}
-	indexed(t, m, "kb")
+	indexed(t, m, "kb", 1)
 
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -80,7 +80,11 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 	if got := m.List(); len(got) != 1 || got[0].Name != "kb" || got[0].Err != nil {
 		t.Fatalf("after the failed remove the daemon lists %+v, want kb, served", got)
 	}
-	indexed(t, m, "kb") // served again: its index answers
+	// served again, not only listed: a note written now is followed and indexed
+	if err := os.WriteFile(filepath.Join(root, "b.md"), []byte("beta\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, m, "kb", 2)
 
 	if err := m.Remove(context.Background(), "kb"); err != nil {
 		t.Fatalf("the retried remove: %v", err)
@@ -90,5 +94,28 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 	}
 	if err := m.Remove(context.Background(), "kb"); !errors.Is(err, store.ErrNoWorkspace) {
 		t.Fatalf("a remove of a removed workspace = %v, want ErrNoWorkspace", err)
+	}
+}
+
+// TestRemoveOfAWorkspaceTheStoreLost: when the store no longer has the row (it went behind the
+// daemon's back), the remove says so, and the daemon drops it too.
+func TestRemoveOfAWorkspaceTheStoreLost(t *testing.T) {
+	m, db := open(t)
+	w, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ws, err := db.Workspaces(context.Background())
+	if err != nil || len(ws) != 1 || ws[0].Name != w.Name {
+		t.Fatalf("stored %+v, %v", ws, err)
+	}
+	if err := db.RemoveWorkspace(context.Background(), ws[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Remove(context.Background(), "kb"); !errors.Is(err, store.ErrNoWorkspace) {
+		t.Fatalf("Remove of a row the store lost = %v, want ErrNoWorkspace", err)
+	}
+	if got := m.List(); len(got) != 0 {
+		t.Fatalf("the daemon still lists %+v", got)
 	}
 }
