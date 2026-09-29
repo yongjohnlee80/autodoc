@@ -15,6 +15,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -498,13 +499,25 @@ func TestBacklinks(t *testing.T) {
 // TestWorkspaces: the picker lists the daemon's workspaces, and switching lists the other's notes.
 func TestWorkspaces(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b1.md", "b\n", "b2.md", "b\n"}})
-	r := attached(t, d)
+	sess := NewSession(d.sock, nil)
+	release := make(chan struct{})
+	sess.beforeCall = func(method string, params []any) {
+		if method == "index.list" && len(params) > 0 && params[0] == "beta" {
+			<-release
+		}
+	}
+	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "· alpha")
 	r.waitListed(t, 1)
 	r.keys(t, decltest.Ctrl('w'))
 	r.s.WaitForText(t, "beta")
 	r.keys(t, key('j'), enter())
 	r.s.WaitForText(t, "· beta")
+	// beta's notes not come yet: the pickers have none, not alpha's
+	if got := r.listed(); len(got) != 0 {
+		t.Fatalf("in beta, before its notes came, the pickers had %v", got)
+	}
+	close(release)
 	r.waitListed(t, 2)
 	if got := r.listed(); got[1] != "b2.md" {
 		t.Errorf("beta's notes: %v", got)
@@ -751,7 +764,8 @@ func TestProgressText(t *testing.T) {
 }
 
 // TestProgressWhileIndexing: while the daemon indexes, the status line shows a bar of the notes
-// done; when it ends it says so once, and the notes, listed mid-scan, are listed again whole.
+// done; when it ends it says so once, and the notes, listed mid-scan, are listed again whole: the
+// pickers' and the explorer's.
 func TestProgressWhileIndexing(t *testing.T) {
 	var notes []string
 	for i := range 40 {
@@ -760,6 +774,19 @@ func TestProgressWhileIndexing(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": notes}, daemonOpts{slow: 50 * time.Millisecond})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "the bar", func(sc string) bool { return strings.Contains(sc, "indexing ") && strings.Contains(sc, "/40") })
+	// the explorer, opened on kb mid-scan: what is indexed so far
+	r.leader(t, 'e')
+	r.s.WaitForText(t, "explorer")
+	r.keys(t, enter())
+	under := func() int {
+		return onLoop(r, func() int { return r.h.explorer.RowCount(&tuidecl.Index{Row: 0}) })
+	}
+	r.s.WaitFor(t, "kb listed", func(string) bool {
+		return onLoop(r, func() bool { _, ok := r.h.explorerPaths["kb"]; return ok })
+	})
+	if n := under(); n >= 40 {
+		t.Fatalf("the explorer had %d notes mid-scan: the cell needs a partial list", n)
+	}
 	deadline := time.Now().Add(15 * time.Second)
 	for !strings.Contains(r.s.String(), "indexed 40 notes") {
 		if time.Now().After(deadline) {
@@ -771,6 +798,7 @@ func TestProgressWhileIndexing(t *testing.T) {
 	if sc := r.s.String(); strings.Contains(sc, "indexing ") {
 		t.Errorf("the bar stayed:\n%s", sc)
 	}
+	r.s.WaitFor(t, "the explorer listed again, whole", func(string) bool { return under() == 40 })
 }
 
 // TestOnePollAfterSwitches: switching workspace (as a reconnect does) starts the next workspace's
