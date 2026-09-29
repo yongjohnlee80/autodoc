@@ -90,10 +90,12 @@ func prefState(p prefs, connected bool) map[string]any {
 		"App.statusShown":  p.statusOn || !connected,
 		"App.explorerEdge": p.explorerEdge,
 		"App.linksEdge":    p.linkEdge,
-		"App.ruler":        p.ruler,
-		// the page: the ruler's columns, and its border
-		"App.pageWidth": p.ruler + 2,
-		"App.rulerText": strconv.Itoa(p.ruler),
+		// the page: the ruler's columns of text, and its border, whose right edge is the first
+		// column past them (vim's colorcolumn at textwidth+1); the editor's guide marks that
+		// column too, so a line scrolled past the page's edge still shows where it is
+		"App.pageWidth":   p.ruler + 2,
+		"App.rulerColumn": p.ruler + 1,
+		"App.rulerText":   strconv.Itoa(p.ruler),
 	}
 }
 

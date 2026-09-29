@@ -20,7 +20,8 @@ import (
 )
 
 // startManaged runs the daemon's own workspaces (internal/daemon) over a store holding roots
-// (name → a directory on disk), as --serve does, so the workspace verbs work.
+// (name → a directory on disk), and its embedding providers, as --serve does, so the workspace
+// and embedding verbs work.
 func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -64,21 +65,27 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db))
+	emb := serving.NewEmbedding(db, ws, nil)
+	emb.Start(ctx)
+	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
 		cancel()
 		<-done
+		emb.Wait()
 		ws.StopAll()
 		_ = db.Close()
 		_ = os.RemoveAll(dir)
 	})
-	return &managedDaemon{sock: sock}
+	return &managedDaemon{sock: sock, db: db}
 }
 
-// managedDaemon is a managed daemon's handle: its socket.
-type managedDaemon struct{ sock string }
+// managedDaemon is a managed daemon's handle: its socket, and its store.
+type managedDaemon struct {
+	sock string
+	db   *store.Store
+}
 
 func sortedNames(m map[string]string) []string {
 	var out []string
