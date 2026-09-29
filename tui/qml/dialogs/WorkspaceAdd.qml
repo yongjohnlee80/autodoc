@@ -1,20 +1,14 @@
-// WorkspaceAdd.qml — a new workspace: its name, and its root, a directory (~/ is the home). It
-// indexes **/*.md there, skipping .git. A refusal opens it again with the reason on its help line
-// (App.workspaceAddError).
-Dialog {
-    closeOnQ: false
-    maxWidthPercent: 80
-    maxHeightPercent: 80
+// WorkspaceAdd.qml — a new workspace: its title, then its folder, chosen in the picker's layout.
+// The folder field follows the listing, and a path typed there lists it; its **/*.md are indexed,
+// .git skipped. Select adds it; a refusal opens it again, the reason on the status line.
+FolderDialog {
     title: "add a workspace"
-    width: 64
-    standardButtons: Dialog.Ok | Dialog.Cancel
-    defaultButton: Dialog.Ok
-    helpText: App.workspaceAddError
+    currentFolder: App.home
+    dim: false
     Flex {
         direction: Tui.Vertical
-        TextField { id: wsName; placeholderText: "name, e.g. kb" }
-        TextField { id: wsRoot; placeholderText: "root directory, e.g. ~/notes" }
+        Text { text: "title" }
+        TextField { id: wsName; text: App.wsTitle }
     }
-    onOpened: { wsName.clear(); wsRoot.clear() }
-    onAccepted: App.addWorkspace(wsName.text, wsRoot.text)
+    onAccepted: App.addWorkspace(wsName.text, selectedFolder)
 }

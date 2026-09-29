@@ -10,6 +10,7 @@ import (
 
 // start connects, then lists the workspaces. It runs on the loop, once the program runs.
 func (h *Host) start() {
+	h.setConnected(false)
 	h.setWhere("autodoc [connecting]")
 	h.setStatus("connecting to " + h.session.addr + "…")
 	do(h, h.session.Connect, func(err error) {
@@ -26,7 +27,9 @@ func (h *Host) start() {
 			return
 		}
 		h.setStatus("connected — autodoc " + h.session.Version())
+		h.setConnected(true)
 		h.entered = false // a new connection enters its workspace again, as the first did
+		h.loadPrefs()
 		h.loadWorkspaces()
 		h.watch()
 	})

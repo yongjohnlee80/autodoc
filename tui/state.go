@@ -1,5 +1,11 @@
 package tui
 
+import (
+	"os"
+
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+)
+
 // THE APP SINGLETON'S STATE — what the document reads.
 //
 // Each is a SOURCE, so changing one repaints exactly the bindings that read it. The host changes
@@ -12,18 +18,67 @@ func (h *Host) state() map[string]any {
 		"App.statusCenter": "",
 		"App.keyset":       "vim",
 
-		"App.results":      h.results,
-		"App.resultsTitle": "notes",
-		"App.noteTitle":    "no note",
-		"App.noNote":       true,
-		"App.backlinks":    h.backlinks,
-		"App.linksTitle":   "backlinks",
+		"App.explorer":   h.explorer,
+		"App.noteTitle":  "no note",
+		"App.noNote":     true,
+		"App.backlinks":  h.backlinks,
+		"App.linksTitle": "backlinks",
 
-		"App.searchHelp":    "Enter searches · the hits replace the notes pane",
-		"App.lastQuery":     "",
-		"App.pickerRows":    h.picker,
-		"App.pickerStatus":  "type to filter · Enter opens",
-		"App.noteNameError": "a path in the workspace; .md is added when it has none",
+		// the search picker
+		"App.hits":               h.hits,
+		"App.hitsTitle":          "hits",
+		"App.searchPreviewTitle": "",
+		"App.searchPreviewText":  "",
+		"App.searchPreviewAt":    0,
+		// the open picker
+		"App.pickerRows":       h.picker,
+		"App.pickerStatus":     "notes",
+		"App.openPreviewTitle": "",
+		"App.openPreviewText":  "",
+		"App.openPreviewAt":    0,
+		// the new-note picker
+		"App.newNotes":        h.newList,
+		"App.newNotePath":     "",
+		"App.noteNameError":   newNoteHelp,
+		"App.newPreviewTitle": "",
+		"App.newPreviewText":  "",
+		"App.newPreviewAt":    0,
+
+		// the leader card
+		"App.leaderText": leaderText,
+
+		// the Preferences dialog
+		"App.themes":            choices(themeNames...),
+		"App.themeIndex":        0,
+		"App.edges":             choices(edges...),
+		"App.explorerEdgeIndex": 0,
+		"App.linksEdgeIndex":    1,
+		"App.yesNo":             choices("yes", "no"),
+		"App.menuHiddenIndex":   0,
+		"App.statusShownIndex":  1,
+		"App.prefsError":        "",
+		"App.providers":         h.providers,
+		"App.providersStatus":   "",
+		"App.providersTitle":    "embedding providers",
+		"App.providerDetail":    "",
+		// the provider form
+		"App.providerKinds":          kindChoices(),
+		"App.providerFormTitle":      "",
+		"App.providerFormError":      "",
+		"App.providerKindIndex":      0,
+		"App.providerName":           "",
+		"App.providerBase":           "",
+		"App.providerModel":          "",
+		"App.providerKey":            "",
+		"App.providerKeyShown":       false,
+		"App.providerKeyLabel":       "",
+		"App.providerModels":         h.providerModels,
+		"App.providerModelsStatus":   "",
+		"App.providerRemoveQuestion": "",
+
+		// the workspace add
+		"App.home":    homeDir(),
+		"App.wsTitle": "untitled",
 
 		"App.unsavedQuestion":  "",
 		"App.conflictQuestion": "",
@@ -32,7 +87,6 @@ func (h *Host) state() map[string]any {
 
 		"App.managed":              h.managed,
 		"App.managerHelp":          managerHelp,
-		"App.workspaceAddError":    addHelp,
 		"App.workspaceRenameError": "",
 		"App.renameFrom":           "",
 		"App.removeQuestion":       "",
@@ -43,7 +97,37 @@ func (h *Host) state() map[string]any {
 	for k, v := range themeState(h.theme) {
 		st[k] = v
 	}
+	for k, v := range prefState(h.prefs, h.connected) {
+		st[k] = v
+	}
 	return st
+}
+
+// choices are a chooser's rows: each a label.
+func choices(labels ...string) *tuidecl.ListModel {
+	m := tuidecl.NewListModel("key", "label")
+	rows := make([]rowOf, len(labels))
+	for i, l := range labels {
+		rows[i] = rowOf{"key": l, "label": l}
+	}
+	m.Reset(rows)
+	return m
+}
+
+func kindChoices() *tuidecl.ListModel {
+	labels := make([]string, len(providerKinds))
+	for i, k := range providerKinds {
+		labels[i] = k.label
+	}
+	return choices(labels...)
+}
+
+// homeDir is where the folder picker starts: the home directory, or the root.
+func homeDir() string {
+	if d, err := os.UserHomeDir(); err == nil {
+		return d
+	}
+	return "/"
 }
 
 // set publishes one source; a failure is kept for Run.

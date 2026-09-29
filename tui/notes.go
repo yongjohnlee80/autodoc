@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -108,6 +109,11 @@ func (h *Host) load(p string) {
 // show puts a note's text in the editor, clean.
 func (h *Host) show(p, content, version string) {
 	h.editor.SetValue(content) // reports no textChanged: only typing does
+	if at := h.openAt; at >= 0 {
+		// opened from a search hit: the cursor at its section
+		h.openAt = -1
+		h.editor.SetCursorPosition(utf8.RuneCountInString(content[:min(at, len(content))]))
+	}
 	h.note.path, h.note.version, h.note.open = p, version, true
 	h.set("App.noNote", false)
 	h.set("App.noteTitle", p)
@@ -267,17 +273,24 @@ func (h *Host) overwrite() {
 	})
 }
 
+// newNoteHelp is the new-note picker's line under its path.
+const newNoteHelp = "a path in the workspace; .md is added when it has none · Enter on a note takes its folder"
+
 // newNote asks for a new note's path, asking first over unsaved changes.
 func (h *Host) newNote() {
 	h.guard("start a new note", func() {
-		h.set("App.noteNameError", "a path in the workspace; .md is added when it has none")
+		h.set("App.noteNameError", newNoteHelp)
+		h.setField("App.newNotePath", "")
+		h.newNoteFilter("")
 		h.open("noteName")
 	})
 }
 
-// createNote creates an empty note at name (".md" added when it has no extension) and opens it. A
-// path that exists, or is not a note, asks again with the reason.
+// createNote creates an empty note at name (".md" added when it has no extension) and opens it,
+// closing the picker (Enter in its path field is not its Create button). A path that exists, or is
+// not a note, asks again with the reason.
 func (h *Host) createNote(name string) {
+	h.closeDialog("noteName")
 	name = strings.TrimSpace(strings.TrimPrefix(name, "/"))
 	if name == "" {
 		h.set("App.noteNameError", "a name is required")
@@ -306,6 +319,7 @@ func (h *Host) createNote(name string) {
 		}
 		h.load(name)
 		h.listNotes()
+		h.loadWorkspaces() // the explorer lists it
 	})
 }
 

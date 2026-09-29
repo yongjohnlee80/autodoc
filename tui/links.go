@@ -7,7 +7,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE BACKLINKS PANE — the notes that link to the note in the editor.
+// THE LINKS PANEL — the notes that link to the note in the editor, in a drawer (panels.go).
 
 func (h *Host) loadBacklinks(path string) {
 	gen, ep, ws := h.note.gen, h.epoch, h.ws
@@ -51,6 +51,7 @@ func (h *Host) loadBacklinks(path string) {
 
 func (h *Host) openBacklink(i int) {
 	if i >= 0 && i < h.backlinks.Len() {
+		h.keep(h.p.Call("links", "close"))
 		h.openPath(h.backlinks.At(i)["label"].(string))
 	}
 }
