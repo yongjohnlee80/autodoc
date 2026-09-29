@@ -53,7 +53,6 @@ func (h *Host) loadWorkspaces() {
 		}
 		h.workspaces.Reset(rows)
 		h.managed.Reset(managed)
-		h.mgrIndex = min(h.mgrIndex, len(a.list)-1)
 		if pick < 0 {
 			h.ws = ""
 			h.closeNote()
@@ -108,16 +107,14 @@ func (h *Host) manageWorkspaces() {
 
 const managerHelp = "Add… a directory · Rename… or Delete… the one under the cursor · deleting keeps its files"
 
-// managerSelect follows the manager's cursor.
-func (h *Host) managerSelect(i int) { h.mgrIndex = i }
-
-// managerRow is the workspace under the manager's cursor.
-func (h *Host) managerRow() (wsInfo, bool) {
-	if h.mgrIndex < 0 || h.mgrIndex >= len(h.wsList) {
+// managerRow is the manager's row i: the one under its cursor when a button was pressed, read
+// from the table then, since a move of the cursor may not have reached the host yet.
+func (h *Host) managerRow(i int) (wsInfo, bool) {
+	if i < 0 || i >= len(h.wsList) {
 		h.set("App.managerHelp", "no workspace under the cursor · Add… makes one")
 		return wsInfo{}, false
 	}
-	return h.wsList[h.mgrIndex], true
+	return h.wsList[i], true
 }
 
 const addHelp = "a name, and a directory: its **/*.md are indexed, .git skipped"
@@ -145,9 +142,9 @@ func (h *Host) addWorkspace(name, root string) {
 	})
 }
 
-// startRenameWorkspace asks for a new name for the manager's row.
-func (h *Host) startRenameWorkspace() {
-	w, ok := h.managerRow()
+// startRenameWorkspace asks for a new name for the manager's row i.
+func (h *Host) startRenameWorkspace(i int) {
+	w, ok := h.managerRow(i)
 	if !ok {
 		return
 	}
@@ -183,9 +180,9 @@ func (h *Host) renameWorkspace(to string) {
 	})
 }
 
-// startRemoveWorkspace asks before deleting the manager's row, naming what goes and what stays.
-func (h *Host) startRemoveWorkspace() {
-	w, ok := h.managerRow()
+// startRemoveWorkspace asks before deleting the manager's row i, naming what goes and what stays.
+func (h *Host) startRemoveWorkspace(i int) {
+	w, ok := h.managerRow(i)
 	if !ok {
 		return
 	}

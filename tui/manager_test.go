@@ -138,7 +138,10 @@ func TestWorkspaceManager(t *testing.T) {
 
 	r.keys(t, key('d'))
 	r.s.WaitForText(t, "delete the workspace?")
-	r.s.WaitForText(t, "stay as they are")
+	// the question wraps where the root's length puts it: read it as running text
+	r.s.WaitFor(t, "the files stay", func(sc string) bool {
+		return strings.Contains(strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " "), "stay as they are")
+	})
 	r.keys(t, key('y'))
 	r.s.WaitForText(t, "deleted workspace notes-2 (its files stay)")
 	r.s.WaitFor(t, "the manager no longer lists it", func(sc string) bool { return !strings.Contains(sc, root) })
