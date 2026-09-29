@@ -7,7 +7,7 @@ Dialog {
     title: "SPC — commands"
     dim: false
     helpText: "a key runs its command · Esc closes"
-    Text { text: App.leaderText }
+    Text { text: App.leaderText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: "/"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "o"; onActivated: { leader.close(); App.openPicker() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newNote() } }
@@ -19,6 +19,8 @@ Dialog {
     Shortcut { sequence: "w"; onActivated: { leader.close(); App.pickWorkspace() } }
     Shortcut { sequence: "Shift+W"; onActivated: { leader.close(); App.manageWorkspaces() } }
     Shortcut { sequence: ","; onActivated: { leader.close(); App.openPrefs() } }
+    Shortcut { sequence: "a"; onActivated: { leader.close(); App.openAIModels() } }
+    Shortcut { sequence: "k"; onActivated: { leader.close(); App.toggleKeymap() } }
     Shortcut { sequence: "?"; onActivated: { leader.close(); help.open() } }
     Shortcut { sequence: "Shift+A"; onActivated: { leader.close(); about.open() } }
     Shortcut { sequence: "Shift+Q"; onActivated: { leader.close(); App.quit() } }

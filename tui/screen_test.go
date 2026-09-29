@@ -341,7 +341,7 @@ func TestTheProviderForm(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.leader(t, ',')
+	r.leader(t, 'a') // Options › AI models
 	r.s.WaitForText(t, "embedding providers")
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "add an embedding provider")
@@ -492,7 +492,7 @@ func TestAProviderInUse(t *testing.T) {
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.leader(t, ',')
+	r.leader(t, 'a') // Options › AI models
 	r.s.WaitForText(t, "semantic search off")
 	r.keys(t, key('u')) // the first row: local
 	r.s.WaitForText(t, "semantic search with local")
@@ -516,7 +516,9 @@ func TestAProviderInUse(t *testing.T) {
 	// a provider that does not set up: refused, and local stays in use
 	r.h.p.Post(func() { r.h.useProvider(1) })
 	r.s.WaitFor(t, "missing refused", func(sc string) bool {
-		return strings.Contains(sc, "missing not used") && strings.Contains(sc, "no-such-model")
+		// the reason, not the model's name in the list, wrapped: read as running text
+		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
+		return strings.Contains(text, "missing not used: the provider has no such model")
 	})
 	if got := onLoop(r, func() string { return r.h.activeProvider }); got != "local" {
 		t.Fatalf("after a refused Use the provider in use is %q", got)
@@ -529,8 +531,9 @@ func TestAProviderInUse(t *testing.T) {
 	r.s.WaitForText(t, "Remove the provider local?")
 	r.keys(t, key('y'))
 	// the list, not the status line: a scan ending ("indexed 3 notes") can replace the message
-	r.s.WaitFor(t, "local gone from the list", func(sc string) bool {
-		return strings.Contains(sc, "no-such-model") && !strings.Contains(sc, "local ")
+	r.s.WaitFor(t, "local gone from the store and the list", func(sc string) bool {
+		ps, err := d.db.Providers(ctx)
+		return err == nil && len(ps) == 1 && !strings.Contains(sc, "local           Ollama")
 	})
 	if ps, err := d.db.Providers(ctx); err != nil || len(ps) != 1 || ps[0].Name != "missing" {
 		t.Fatalf("after the remove: %+v, %v", ps, err)
@@ -684,4 +687,106 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 	d.write(t, "kb", "c.md", "# C\n")
 	r.waitListed(t, 3)
 	r.s.WaitForText(t, "c.md")
+}
+
+// TestTheOptionsMenu: the keymap, the theme, the editor's preferences and the AI models are under
+// Options; File keeps the note's commands.
+func TestTheOptionsMenu(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.keys(t, decltest.Alt('o'))
+	r.s.WaitFor(t, "the Options menu", func(sc string) bool {
+		return strings.Contains(sc, "Keymap") && strings.Contains(sc, "Editor preferences…") && strings.Contains(sc, "AI models…")
+	})
+	r.keys(t, esc(), esc())
+	r.keys(t, decltest.Alt('f'))
+	r.s.WaitForText(t, "Reload from disk")
+	if strings.Contains(r.s.String(), "Preferences…") {
+		t.Fatalf("File still has Preferences:\n%s", r.s)
+	}
+}
+
+// TestTheTextKeymap: in the Text keymap the page types as an ordinary editor does — no i, Space a
+// space — Ctrl+Space opens the leader card, and Ctrl+S saves; the keymap is kept.
+func TestTheTextKeymap(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitNote(t, "a.md")
+	r.leader(t, 'k') // Vim to Text
+	r.s.WaitForText(t, "keymap: Text (modeless)")
+	r.keys(t, decltest.Type("hi there ")...)
+	r.s.WaitFor(t, "typed with no i, the space a space", func(string) bool { return strings.HasPrefix(r.editorText(), "hi there ") })
+	r.keys(t, decltest.Ctrl(' '))
+	r.s.WaitForText(t, "SPC — commands")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "SPC — commands") })
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "saved a.md")
+	if got := d.read(t, "kb", "a.md"); got != "hi there aaa\n" {
+		t.Fatalf("a.md holds %q", got)
+	}
+	r.s.WaitFor(t, "the keymap kept", func(string) bool {
+		m, _ := d.db.Preferences(context.Background())
+		return m["tui.editor.keymap"] == "text"
+	})
+}
+
+// TestTheLeaderCardListsACommandARow: the card's commands are on rows of their own, two columns
+// of them, not run together on one line.
+func TestTheLeaderCardListsACommandARow(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "SPC — commands")
+	search, open, quit := screenRow(r, "search"), screenRow(r, "open a note"), screenRow(r, "quit")
+	if !(search >= 0 && open == search+1 && quit > open) {
+		t.Fatalf("rows: search %d, open a note %d, quit %d; want one command a row\n%s", search, open, quit, r.s)
+	}
+}
+
+// screenRow is the screen row holding text, -1 when none does.
+func screenRow(r *running, text string) int {
+	for i, row := range strings.Split(r.s.String(), "\n") {
+		if strings.Contains(row, text) {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestThePagesWidthAppliesAsTyped: in the editor's preferences, a width typed is the page's at
+// once, with no Enter; a width out of range says so and changes nothing.
+func TestThePagesWidthAppliesAsTyped(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 30)
+	r.ready(t)
+	r.leader(t, ',')
+	r.s.WaitForText(t, "editor preferences")
+	r.keys(t, tab(), decltest.Ctrl('u')) // past the keymap, into the width
+	r.keys(t, decltest.Type("80")...)
+	r.s.WaitFor(t, "the page 82 wide", func(string) bool { return onLoop(r, func() int { return r.h.prefs.ruler }) == 80 })
+	r.keys(t, decltest.Type("0")...) // 800: out of range
+	r.s.WaitForText(t, "40 to 400")
+	if w := onLoop(r, func() int { return r.h.prefs.ruler }); w != 80 {
+		t.Fatalf("an out-of-range width changed the page to %d", w)
+	}
+}
+
+// TestTheAIModelsSideBySide: the providers on the left, the usage and calls on the right, on the
+// same rows.
+func TestTheAIModelsSideBySide(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "a\n")})
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: "http://127.0.0.1:1", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	r.leader(t, 'a')
+	r.s.WaitFor(t, "both panes", func(sc string) bool {
+		return strings.Contains(sc, "embedding providers") && strings.Contains(sc, "usage and calls") && strings.Contains(sc, "no calls yet")
+	})
+	if p, u := screenRow(r, "embedding providers"), screenRow(r, "usage and calls"); p != u {
+		t.Fatalf("the providers (row %d) and the usage (row %d) are not side by side:\n%s", p, u, r.s)
+	}
 }

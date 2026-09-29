@@ -61,6 +61,10 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 
 		// the preferences
 		"App.openPrefs":           none(h.openPrefs),
+		"App.openAIModels":        none(h.openAIModels),
+		"App.setKeymap":           oneString("App.setKeymap", "vim or text", h.setKeymap),
+		"App.setKeymapIndex":      oneNumber("App.setKeymapIndex", "a row", h.setKeymapIndex),
+		"App.toggleKeymap":        none(h.toggleKeymap),
 		"App.useTheme":            oneString("App.useTheme", "a theme's name", h.useTheme),
 		"App.setThemeIndex":       oneNumber("App.setThemeIndex", "a row", h.setThemeIndex),
 		"App.toggleMenuBar":       none(h.toggleMenuBar),

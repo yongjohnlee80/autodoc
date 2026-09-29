@@ -571,6 +571,7 @@ func TestEveryThemeKeepsTextLegible(t *testing.T) {
 			src := themeImport.ReplaceAll(layout, []byte("import autodoc.theme."+name+" 1.0"))
 			r := runTUI(t, NewSession(d.sock, nil), Options{Layout: src})
 			r.s.WaitForText(t, "connected — autodoc v-test")
+			r.waitListed(t, 1) // the picker filters the notes listed: listed first
 			r.openByPicker(t, "a.md")
 			r.waitNote(t, "a.md")
 			legible := func(text string) {

@@ -69,7 +69,6 @@ func (h *Host) loadProviders() {
 		}
 		if a.err != nil {
 			h.set("App.providersStatus", "providers: "+wireMessage(a.err))
-			h.set("App.providersTitle", "embedding providers · "+wireMessage(a.err))
 			return
 		}
 		h.providerList, h.activeProvider = a.rows, a.active
@@ -94,13 +93,20 @@ func (h *Host) loadProviders() {
 			status += " · the last choice was refused: " + a.error
 		}
 		h.set("App.providersStatus", status)
-		h.set("App.providersTitle", "embedding providers · "+status)
 		if len(a.rows) > 0 {
 			h.providerDetail(0)
 		} else {
 			h.set("App.providerDetail", "")
 		}
 	})
+}
+
+// inUseText says which provider semantic search uses, for the status under the list.
+func (h *Host) inUseText() string {
+	if h.activeProvider == "" {
+		return "semantic search off"
+	}
+	return "semantic search with " + h.activeProvider
 }
 
 func (h *Host) providerAt(i int) (providerRow, bool) {
@@ -127,7 +133,7 @@ func (h *Host) providerDetail(i int) {
 			out.err = err
 			return
 		}
-		log, err := h.call(ctx, "embedding.log", p.name, int64(6))
+		log, err := h.call(ctx, "embedding.log", p.name, int64(30))
 		if err != nil {
 			out.err = err
 			return
@@ -186,13 +192,13 @@ func (h *Host) useProvider(i int) {
 	if !ok {
 		return
 	}
-	h.set("App.providersTitle", "embedding providers · setting up "+p.name+"…")
+	h.set("App.providersStatus", "setting up "+p.name+"…")
 	do(h, func(ctx context.Context) error {
 		_, err := h.call(ctx, "embedding.use", p.name)
 		return err
 	}, func(err error) {
 		if err != nil {
-			h.set("App.providersTitle", "embedding providers · "+p.name+" not used: "+wireMessage(err))
+			h.set("App.providersStatus", p.name+" not used: "+wireMessage(err)+" · "+h.inUseText())
 			return
 		}
 		h.setStatus("semantic search with " + p.name + ": the notes are embedded in the background")
