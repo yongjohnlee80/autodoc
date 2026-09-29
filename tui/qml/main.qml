@@ -44,8 +44,10 @@ Window {
     syntax.operator: Theme.syntax.operator
 
     // ---- keys: they fire whichever widget has focus, when it leaves them ----
-    // Space and Ctrl+h/j/k/l reach here from the page only in Normal mode: Insert mode types them
+    // Space and Ctrl+h/j/k/l reach here from the page only in Vim's Normal mode: Insert mode, and
+    // the Text keymap, type them. Ctrl+Space is the leader in every keymap and mode.
     Shortcut { sequence: "Space"; onActivated: leader.open() }
+    Shortcut { sequence: "Ctrl+Space"; onActivated: leader.open() }
     Shortcut { sequence: "Ctrl+H"; onActivated: App.movePane("h") }
     Shortcut { sequence: "Ctrl+J"; onActivated: App.movePane("j") }
     Shortcut { sequence: "Ctrl+K"; onActivated: App.movePane("k") }
@@ -77,7 +79,6 @@ Window {
             MenuItem { text: "&Open note…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
-            MenuItem { text: "&Preferences…"; onTriggered: App.openPrefs() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
@@ -92,6 +93,15 @@ Window {
             title: "&View"
             MenuItem { text: "&Status line"; checkable: true; checked: App.statusShown; onTriggered: App.toggleStatusLine() }
             MenuItem { text: "&Hide the menu bar"; checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
+        }
+        Menu {
+            title: "&Options"
+            Menu {
+                title: "&Keymap"
+                // a shared group makes these a radio set, as editor-qml's are
+                MenuItem { text: "&1. Vim  (modal)";     group: "keymap"; checked: App.keymapVim;  onTriggered: App.setKeymap("vim") }
+                MenuItem { text: "&2. Text (modeless)";  group: "keymap"; checked: App.keymapText; onTriggered: App.setKeymap("text") }
+            }
             Menu {
                 title: "&Theme"
                 MenuItem { text: "&Dark";  group: "theme"; checked: App.themeDark;  onTriggered: App.useTheme("dark") }
@@ -99,6 +109,8 @@ Window {
                 MenuItem { text: "&Mono";  group: "theme"; checked: App.themeMono;  onTriggered: App.useTheme("mono") }
                 MenuItem { text: "&Retro"; group: "theme"; checked: App.themeRetro; onTriggered: App.useTheme("retro") }
             }
+            MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
+            MenuItem { text: "&AI models…"; onTriggered: App.openAIModels() }
         }
         Menu {
             title: "&Help"
@@ -192,6 +204,7 @@ Window {
     WorkspaceRename { id: workspaceRename }
     WorkspaceRemove { id: workspaceRemove }
     Preferences { id: preferences }
+    AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
     ConfirmQuit { id: confirmQuit }

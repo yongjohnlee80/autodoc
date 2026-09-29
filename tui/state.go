@@ -16,7 +16,6 @@ func (h *Host) state() map[string]any {
 		"App.status":       "",
 		"App.statusLeft":   "NORMAL  autodoc [connecting]",
 		"App.statusCenter": "",
-		"App.keyset":       "vim",
 
 		"App.explorer":   h.explorer,
 		"App.noteTitle":  untitled,
@@ -46,7 +45,9 @@ func (h *Host) state() map[string]any {
 		// the leader card
 		"App.leaderText": leaderText,
 
-		// the Preferences dialog
+		// the editor's preferences
+		"App.keymaps":           choices(keymapLabels...),
+		"App.keymapIndex":       0,
 		"App.themes":            choices(themeNames...),
 		"App.themeIndex":        0,
 		"App.edges":             choices(edges...),

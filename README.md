@@ -47,7 +47,7 @@ default). Patterns are root-relative globs: each `/`-separated segment is a `pat
 refused with a message saying so.
 
 **Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
-added and chosen in the TUI's Preferences (see [Semantic search](#semantic-search-and-embedding-models)).
+added and chosen in the TUI's AI models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
 A config file with an `[embedding]` section is refused with a message saying so.
 
 ## The daemon
@@ -92,7 +92,7 @@ names and saves it as a note. Everything else comes when it is asked for:
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up.
 - **The explorer** (`SPC e`): every workspace's folders and notes, as a tree. **The links**
   (`SPC l`): the notes linking to this one. Each opens over the page, which does not move, from
-  the side Preferences names; `Escape` or its key again closes it.
+  the side the editor's preferences name; `Escape` or its key again closes it.
 - **The status line** (`SPC t`): the editor's mode, the workspace, and the note, with `[+]` while
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
 - **The pickers** (search, open, new note, add a workspace) share one layout: the fields over the
@@ -101,16 +101,24 @@ names and saves it as a note. Everything else comes when it is asked for:
 
 | Key | Does |
 | --- | --- |
-| `Space` | the leader card, in Normal mode: a key runs its command (`e`, `l`, `/`, `o`, `,` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any keymap and mode): a key runs its command (`e`, `l`, `/`, `o`, `k`, `,`, `a` …) |
 | `Ctrl+G`, `/` | search (`/` in Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, renames and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
 
-**Preferences** (`File › Preferences…`, `SPC ,`) are kept in the daemon's store, so they are the
-same whichever workspace is open: the theme, whether the menu bar hides and the status line shows,
-the side each panel opens from, the page's width, and the embedding providers (see below).
+**Options** is the menu for the editor and its models:
+
+- **Keymap:** Vim (modal: `i` types, `Esc` goes back to Normal) or Text (modeless, an ordinary
+  text editor's keys). `SPC k` switches between them.
+- **Theme:** Dark, Light, Mono or Retro.
+- **Editor preferences…** (`SPC ,`): the keymap, the page's width (applied as it is typed), the
+  theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
+- **AI models…** (`SPC a`): the embedding providers on the left, and the one under the cursor's
+  usage by day and latest calls on the right (see below).
+
+All of them are kept in the daemon's store, so they are the same whichever workspace is open.
 
 A save writes only over the version the note was opened at. If the note changed on disk since, the
 TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or
@@ -191,7 +199,8 @@ whose vectors are closest are the matches.
 - **Switching models embeds everything once more.** The old model keeps answering until the new one
   covers every section, then it takes over.
 
-**Providers.** Semantic search is off until a provider is chosen in the TUI's Preferences. A
+**Providers.** Semantic search is off until a provider is chosen in the TUI's AI models
+(`Options › AI models…`). A
 provider is one of three kinds, with the model it embeds with:
 
 - **Ollama (local):** a server on this machine or the network, `http://localhost:11434` by

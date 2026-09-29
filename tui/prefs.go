@@ -7,8 +7,10 @@ import (
 )
 
 // PREFERENCES — what the TUI keeps between runs, in the daemon's store (preference.list and
-// preference.set), so they are the same whichever workspace is open: the theme, whether the menu
-// bar hides, whether the status line shows, the edge each panel opens from, and the page's width.
+// preference.set), so they are the same whichever workspace is open: the editor's keymap (Vim, or
+// Text: modeless), the theme, whether the menu bar hides, whether the status line shows, the edge
+// each panel opens from, and the page's width. Options › Editor preferences… sets them; the AI
+// models are their own dialog (providers.go).
 
 // The TUI's preferences, by the names the store keeps them under.
 const (
@@ -18,7 +20,17 @@ const (
 	prefExplorer = "tui.explorer.edge"
 	prefLinks    = "tui.links.edge"
 	prefRuler    = "tui.ruler"
+	prefKeymap   = "tui.editor.keymap"
 )
+
+// The keymaps, by the names the store keeps them under, and the editor's keysets for them: Vim is
+// modal; Text is an ordinary text editor's keys, modeless.
+var keymaps = []string{"vim", "text"}
+
+var keysetOf = map[string]string{"vim": "vim", "text": "standard"}
+
+// keymapLabels are the keymaps as the choosers and the menu offer them.
+var keymapLabels = []string{"Vim (modal)", "Text (modeless)"}
 
 // The defaults: a blank page, the menu hidden until F10 or an Alt+letter, the explorer on the
 // left, the links on the right, a page 120 columns wide.
@@ -35,10 +47,11 @@ type prefs struct {
 	menuHidden, statusOn   bool
 	explorerEdge, linkEdge string
 	ruler                  int
+	keymap                 string
 }
 
 func defaultPrefs() prefs {
-	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler}
+	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim"}
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
@@ -73,6 +86,9 @@ func prefsOf(m map[string]any) prefs {
 	if s, ok := str(prefLinks); ok && isEdge(s) {
 		p.linkEdge = s
 	}
+	if s, ok := str(prefKeymap); ok && keysetOf[s] != "" {
+		p.keymap = s
+	}
 	if s, ok := str(prefRuler); ok {
 		if n, err := strconv.Atoi(s); err == nil && n >= minRuler && n <= maxRuler {
 			p.ruler = n
@@ -85,6 +101,9 @@ func prefsOf(m map[string]any) prefs {
 func prefState(p prefs) map[string]any {
 	return map[string]any{
 		"App.menuAutoHide": p.menuHidden,
+		"App.keyset":       keysetOf[p.keymap],
+		"App.keymapVim":    p.keymap == "vim",
+		"App.keymapText":   p.keymap == "text",
 		"App.explorerEdge": p.explorerEdge,
 		"App.linksEdge":    p.linkEdge,
 		// the page: the ruler's columns of text, and its border, whose right edge is the first
@@ -187,7 +206,8 @@ func (h *Host) setLinksEdge(i int) {
 	}
 }
 
-// setRuler takes the page's width from the Preferences dialog's field: a number of columns.
+// setRuler takes the page's width from the Preferences dialog's field, as it is typed: a number of
+// columns in range applies at once; another says what the field takes, and changes nothing.
 func (h *Host) setRuler(text string) {
 	n, err := strconv.Atoi(strings.TrimSpace(text))
 	if err != nil || n < minRuler || n > maxRuler {
@@ -213,17 +233,49 @@ func (h *Host) setThemeIndex(i int) {
 	}
 }
 
-// openPrefs opens the Preferences dialog on the preferences as they are.
+// setKeymap switches the editor's keymap, and keeps it.
+func (h *Host) setKeymap(name string) {
+	if keysetOf[name] == "" {
+		h.setStatus("no keymap " + strconv.Quote(name))
+		return
+	}
+	h.setPref(prefKeymap, name, func(p *prefs) { p.keymap = name })
+	h.setStatus("keymap: " + keymapLabels[indexOf(keymaps, name)])
+}
+
+func (h *Host) setKeymapIndex(i int) {
+	if i >= 0 && i < len(keymaps) {
+		h.setKeymap(keymaps[i])
+	}
+}
+
+// toggleKeymap is SPC k: Vim, or Text.
+func (h *Host) toggleKeymap() {
+	if h.prefs.keymap == "vim" {
+		h.setKeymap("text")
+	} else {
+		h.setKeymap("vim")
+	}
+}
+
+// openPrefs opens the editor's preferences as they are.
 func (h *Host) openPrefs() {
 	h.set("App.prefsError", "")
 	h.syncPrefDialog()
-	h.loadProviders()
 	h.open("preferences")
+}
+
+// openAIModels opens the AI models: the providers on the left, the one under the cursor's usage
+// and calls on the right.
+func (h *Host) openAIModels() {
+	h.loadProviders()
+	h.open("aiModels")
 }
 
 // syncPrefDialog sets the dialog's choosers to the preferences.
 func (h *Host) syncPrefDialog() {
 	h.set("App.themeIndex", indexOf(themeNames, h.prefs.theme))
+	h.set("App.keymapIndex", indexOf(keymaps, h.prefs.keymap))
 	h.set("App.explorerEdgeIndex", indexOf(edges, h.prefs.explorerEdge))
 	h.set("App.linksEdgeIndex", indexOf(edges, h.prefs.linkEdge))
 	h.set("App.menuHiddenIndex", boolIndex(h.prefs.menuHidden))
