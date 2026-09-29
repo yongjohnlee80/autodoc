@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -265,6 +266,46 @@ func TestTheSchemaDocListsEveryTable(t *testing.T) {
 	sort.Strings(listed)
 	if fmt.Sprint(store) != fmt.Sprint(listed) {
 		t.Errorf("the schema doc's table list is not the store's tables:\n  store: %v\n  doc:   %v", store, listed)
+	}
+}
+
+// The writer's lookups each probe an index on both of what they are given, the
+// workspace and the key: a probe on the workspace alone reads every row the
+// workspace has, once per document indexed. SQLite does this unasked where
+// the index would not cover the lookup and the primary key leads with the
+// workspace, so the plans are checked, on the store with no statistics.
+func TestLookupsProbeTheirKey(t *testing.T) {
+	db := open(t)
+	for _, c := range []struct{ query, probe string }{
+		{`SELECT name_key, is_path FROM doc_name WHERE doc_id = ? AND workspace_id = ?`, "doc_id=?"},
+		{`DELETE FROM doc_name WHERE doc_id = ? AND workspace_id = ?`, "doc_id=?"},
+		{`SELECT doc_id, is_path FROM doc_name WHERE name_key = ? AND workspace_id = ?`, "name_key=?"},
+		{`SELECT tag FROM doc_tag WHERE doc_id = ? AND workspace_id = ? ORDER BY tag`, "doc_id=?"},
+		{`DELETE FROM doc_tag WHERE doc_id = ? AND workspace_id = ?`, "doc_id=?"},
+		{`DELETE FROM doc_alias WHERE doc_id = ? AND workspace_id = ?`, "doc_id=?"},
+		{`SELECT id, kind, name, dst_doc FROM link WHERE dst_doc = ? AND workspace_id = ?`, "dst_doc=?"},
+		{`SELECT id, kind, name, dst_doc FROM link WHERE name IN (?, ?) AND workspace_id = ?`, "name=?"},
+		{`DELETE FROM link WHERE src_doc = ? AND workspace_id = ?`, "src_doc=?"},
+		{`SELECT id, hash FROM chunk WHERE doc_id = ? AND gen_from <= ? AND (gen_to IS NULL OR gen_to > ?) AND workspace_id = ? ORDER BY ord`, "doc_id=?"},
+		{`SELECT version FROM document WHERE path = ? AND workspace_id = ? LIMIT 1`, "path=?"},
+	} {
+		rows, err := db.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+c.query, make([]any, strings.Count(c.query, "?"))...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var plan []string
+		for rows.Next() {
+			var id, parent, unused int
+			var detail string
+			if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+				t.Fatal(err)
+			}
+			plan = append(plan, detail)
+		}
+		_ = rows.Close()
+		if !strings.Contains(strings.Join(plan, "; "), "(workspace_id=? AND "+c.probe) {
+			t.Errorf("%s\n  plan %q probes no index on the workspace and %s", c.query, plan, c.probe)
+		}
 	}
 }
 
