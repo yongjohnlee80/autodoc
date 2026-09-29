@@ -59,6 +59,7 @@ A new workspace-owned table follows the same rule.
 | --- | --- | --- |
 | `schema_version` | an applied update script; golib `dao/deploy` creates and keeps it | `script` |
 | `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed | `id` |
+| `preference` | a client's preference, by name: the store's, not a workspace's (000002) | `name` |
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
 | `chunk` | a section of a document, live from `gen_from` until `gen_to` | `id`, `(workspace_id, id)` |

@@ -57,6 +57,8 @@ var publicErrs = []struct {
 	{errNoSuchWorkspace, CodeNoSuchWorkspace, "no such workspace"},
 	{store.ErrNoWorkspace, CodeNoSuchWorkspace, "no such workspace"},
 	{store.ErrTaken, CodeConflict, "another workspace has this name or root"},
+	{store.ErrNoPreferenceName, golibrpc.CodeInvalidParams, "a preference needs a name"},
+	{errNoPreferences, CodeUnsupported, "this server keeps no preferences"},
 	{workspace.ErrNotADirectory, golibrpc.CodeInvalidParams, "the root is not a directory"},
 	{config.ErrInvalid, golibrpc.CodeInvalidParams, "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
 	{docs.ErrCommitted, CodeCommitted, "the write landed, then a follow-up step failed: read the document and compare"},
@@ -143,6 +145,35 @@ func (s *Server) register() {
 			return nil, err
 		}
 		return nil, s.workspaces.Remove(ctx, name)
+	}, false))
+
+	s.handle("preference.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
+		if s.preferences == nil {
+			return nil, errNoPreferences
+		}
+		prefs, err := s.preferences.Preferences(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := map[string]any{}
+		for k, v := range prefs {
+			out[k] = v
+		}
+		return out, nil
+	}, false))
+	s.handle("preference.set", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		if s.preferences == nil {
+			return nil, errNoPreferences
+		}
+		name, err := argStr(p, 0, "name")
+		if err != nil {
+			return nil, err
+		}
+		value, err := argStr(p, 1, "value")
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.preferences.SetPreference(ctx, name, value)
 	}, false))
 
 	s.handle("search.query", s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {

@@ -97,7 +97,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	if len(ws.List()) == 0 {
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
-	srv := rpc.New(ws, version, rpc.WithListener(ln), rpc.WithLogger(log))
+	srv := rpc.New(ws, version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db))
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", version, sock)
 	return srv.Run(ctx)
 }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -185,14 +186,16 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 2's (1 had no workspace.add, rename or remove).
+// TestVerbsArePinned: the verb surface is Protocol 3's (2 had no preference verbs; 1 had no
+// workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
 	want := []string{"doc.read", "doc.remove", "doc.rename", "doc.write",
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
 		"index.changes", "index.list", "index.purge_model", "index.reindex", "index.status",
+		"preference.list", "preference.set",
 		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.list", "workspace.remove", "workspace.rename"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 2 {
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 3 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }
@@ -416,5 +419,59 @@ func TestProbe(t *testing.T) {
 	}
 	if _, err := ProbeOn(ctx, "unix", filepath.Join(t.TempDir(), "none.sock")); err == nil || errors.Is(err, ErrNotAutodoc) {
 		t.Errorf("probing nothing: %v", err)
+	}
+}
+
+// memPrefs is a Preferences in memory.
+type memPrefs struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+func (p *memPrefs) Preferences(context.Context) (map[string]string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := map[string]string{}
+	for k, v := range p.m {
+		out[k] = v
+	}
+	return out, nil
+}
+
+func (p *memPrefs) SetPreference(_ context.Context, name, value string) error {
+	if name == "" {
+		return store.ErrNoPreferenceName
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.m[name] = value
+	return nil
+}
+
+// TestPreferenceVerbs: a preference set reads back in the listing; a nameless one is invalid; a
+// server given no Preferences says it keeps none.
+func TestPreferenceVerbs(t *testing.T) {
+	sock := filepath.Join(t.TempDir(), "p.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv := New(Fixed(), "v-test", WithListener(ln), WithPreferences(&memPrefs{m: map[string]string{}}))
+	go func() { _ = srv.Run(ctx) }()
+	r := &rig{t: t, sock: sock}
+	cli := r.dial(true)
+	call(t, cli, "preference.set", "tui.theme", "light")
+	call(t, cli, "preference.set", "tui.theme", "retro")
+	if got := fmt.Sprint(call(t, cli, "preference.list")); got != "map[tui.theme:retro]" {
+		t.Fatalf("preference.list = %s", got)
+	}
+	if _, err := cli.Call(ctx, "preference.set", "", "x"); code(err) != golibrpc.CodeInvalidParams {
+		t.Fatalf("a nameless preference: %v, want invalid params", err)
+	}
+	none := serve(t).dial(true)
+	if _, err := none.Call(ctx, "preference.list"); code(err) != CodeUnsupported {
+		t.Fatalf("preference.list without Preferences: %v, want unsupported", err)
 	}
 }

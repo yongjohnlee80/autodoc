@@ -370,3 +370,36 @@ func TestEveryJoinStaysInsideItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Preferences are kept by name, the latest value winning, and read back
+// after the store is opened again; a preference needs a name.
+func TestPreferencesAreKeptByName(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	s, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, kv := range [][2]string{{"tui.theme", "light"}, {"tui.ruler", "120"}, {"tui.theme", "retro"}} {
+		if err := s.SetPreference(ctx, kv[0], kv[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetPreference(ctx, "", "x"); !errors.Is(err, ErrNoPreferenceName) {
+		t.Fatalf("a nameless preference = %v, want ErrNoPreferenceName", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if s, err = Open(ctx, path); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	got, err := s.Preferences(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(got) != "map[tui.ruler:120 tui.theme:retro]" {
+		t.Fatalf("preferences after reopening: %v", got)
+	}
+}
