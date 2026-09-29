@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/parse/qml"
@@ -652,4 +653,35 @@ func TestADraftIsGuardedLikeANote(t *testing.T) {
 	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
 		t.Fatalf("kept.md holds %q, want the draft", got)
 	}
+}
+
+// TestTheExplorerStaysOpenWhenNothingChanged: a scan's end lists the workspace's notes again, and
+// a connect, a create or a manager change lists the workspaces again; with the same notes and the
+// same workspaces, the rows open stay open. A note added is a change, and is listed with nothing
+// asked.
+func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n", "dir/b.md", "# B\n"}})
+	r := attached(t, d)
+	r.leader(t, 'e')
+	r.s.WaitForText(t, "kb")
+	r.keys(t, enter()) // kb
+	r.s.WaitForText(t, "dir/")
+	r.keys(t, key('j'), enter()) // dir/
+	r.s.WaitForText(t, "b.md")
+	settled := func(what string) {
+		t.Helper()
+		time.Sleep(200 * time.Millisecond) // the lists' answers, off the loop, have come
+		if sc := r.s.String(); !strings.Contains(sc, "b.md") {
+			t.Fatalf("after %s the open folder closed:\n%s", what, sc)
+		}
+	}
+	r.h.p.Post(func() { r.h.relistInExplorer("kb") })
+	settled("a scan's end")
+	r.h.p.Post(func() { r.h.loadWorkspaces() })
+	settled("the workspaces listed again")
+	// a note added outside the TUI, indexed between two polls: the change log moved, so the notes
+	// are listed again, the pickers' and the explorer's, with nothing asked
+	d.write(t, "kb", "c.md", "# C\n")
+	r.waitListed(t, 3)
+	r.s.WaitForText(t, "c.md")
 }

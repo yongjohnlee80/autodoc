@@ -58,6 +58,7 @@ type Host struct {
 	hits, newList, providers, providerModels *tuidecl.ListModel
 	explorer                                 *tuidecl.TreeListModel
 	explorerPaths                            map[string][]string // by workspace: its notes, once listed (explorer.go)
+	explorerTop                              []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
 
 	// the pickers (pickers.go): what each lists, the latest answers winning, and the search's words
 	hitList             []hit

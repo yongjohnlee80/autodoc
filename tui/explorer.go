@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -78,14 +79,25 @@ func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 }
 
 // showWorkspacesInExplorer puts the workspaces at the explorer's top level, forgetting what was
-// listed under them.
+// listed under them — only when they changed: the same workspaces in the same states leave the
+// tree as it is, its open rows open (the workspaces are listed again on every connect, create and
+// manager change).
 func (h *Host) showWorkspacesInExplorer(list []wsInfo) {
+	if h.explorerTop != nil && slices.Equal(h.explorerTop, list) {
+		return
+	}
+	h.explorerTop = slices.Clone(list)
 	h.explorerPaths = map[string][]string{}
 	h.explorer.SetChildren(nil, explorerRows(list))
 }
 
 // fetchExplorer loads a row's children when the view first opens it.
-func (h *Host) fetchExplorer(ix tuidecl.Index) {
+func (h *Host) fetchExplorer(ix tuidecl.Index) { h.listUnder(ix, false) }
+
+// listUnder lists the children of row ix; unchanged, when only a change is wanted (a scan's end),
+// it leaves them as they are — the view closes a row whose children are replaced, and the notes of
+// a workspace being edited are listed again after every scan.
+func (h *Host) listUnder(ix tuidecl.Index, onlyChanged bool) {
 	key := h.explorer.Key(ix)
 	kind, ws, dir := splitKey(key)
 	if kind == "dir" {
@@ -116,20 +128,23 @@ func (h *Host) fetchExplorer(ix tuidecl.Index) {
 		if h.explorer.Key(ix) != key {
 			return
 		}
+		if old, listed := h.explorerPaths[ws]; onlyChanged && listed && slices.Equal(old, a.paths) {
+			return
+		}
 		h.explorerPaths[ws] = a.paths
 		h.explorer.SetChildren(&ix, childrenOf(ws, "", a.paths))
 	})
 }
 
 // relistInExplorer lists workspace ws's notes again under its row, when the explorer has listed
-// them: a folder open under it closes.
+// them, and replaces them only when they changed (a folder open under it then closes).
 func (h *Host) relistInExplorer(ws string) {
 	if _, listed := h.explorerPaths[ws]; !listed {
 		return
 	}
 	for i := range h.explorer.RowCount(nil) {
 		if ix := (tuidecl.Index{Row: i}); h.explorer.Key(ix) == wsKey(ws) {
-			h.fetchExplorer(ix)
+			h.listUnder(ix, true)
 			return
 		}
 	}
