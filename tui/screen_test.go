@@ -585,6 +585,10 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 	if got, want := cursorAt(joined, strings.Index(joined, "## Birds")), 3+1+1+8+1+1; got != want {
 		t.Errorf("cursorAt before ## Birds = %d, want %d (3, a break, a break, 8 characters, a break, a break)", got, want)
 	}
+	// a byte inside a character is that character: the one after e starts the accent, which is é's
+	if got := cursorAt("xe\u0301y", strings.Index("xe\u0301y", "\u0301")); got != 1 {
+		t.Errorf("cursorAt inside é = %d, want 1 (é's start)", got)
+	}
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", joined}})
 	r := attached(t, d)
 	r.keys(t, decltest.Ctrl('g'))

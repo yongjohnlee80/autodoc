@@ -157,18 +157,16 @@ func (h *Host) showPreview(picker, title, text string, at int) {
 }
 
 // cursorAt is byte at of text as the editor's cursorPosition counts it: characters (grapheme
-// clusters), each line break one, with the line breaks the editor reads (\r\n, \r, \n) as one.
-// A count of runes lands late after a combining mark or a joined emoji.
+// clusters) before it, a line break (\r\n, \r or \n) one, as the editor splits them. A byte
+// inside a character is that character's start. A count of runes lands late after a combining
+// mark or a joined emoji.
 func cursorAt(text string, at int) int {
-	before := strings.ReplaceAll(strings.ReplaceAll(text[:at], "\r\n", "\n"), "\r", "\n")
-	n := 0
-	for i, line := range strings.Split(before, "\n") {
-		if i > 0 {
-			n++ // the break before this line
+	n, end := 0, 0
+	for c := range tuicore.Graphemes(text) {
+		if end += len(c); end > at {
+			break
 		}
-		for range tuicore.Graphemes(line) {
-			n++
-		}
+		n++
 	}
 	return n
 }
