@@ -4,6 +4,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -65,17 +66,22 @@ func (m *Workspaces) OpenAll() error {
 		return err
 	}
 	for _, w := range ws {
-		c := config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude}
-		s, err := m.start(w.ID, c)
-		if err != nil {
-			logger.Warning(m.opts.Log, err, "workspace not served: "+w.Name)
-			s = &served{id: w.ID, w: &rpc.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude, Err: err}}
-		}
+		s := m.serve(w.ID, config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude})
 		m.mu.Lock()
 		m.served[w.Name] = s
 		m.mu.Unlock()
 	}
 	return nil
+}
+
+// serve starts a stored workspace, or lists it with the error that kept it from starting.
+func (m *Workspaces) serve(id int64, c config.Workspace) *served {
+	s, err := m.start(id, c)
+	if err != nil {
+		logger.Warning(m.opts.Log, err, "workspace not served: "+c.Name)
+		s = &served{id: id, w: &rpc.Workspace{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude, Err: err}}
+	}
+	return s
 }
 
 // start opens a workspace's root and starts its indexer and follower.
@@ -218,7 +224,8 @@ func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 }
 
 // Remove stops serving a workspace, then deletes it and, by the schema's cascade, its index, in
-// one transaction. Its files are not touched.
+// one transaction. Its files are not touched. A delete that fails (the request cancelled, the
+// store's write refused) leaves the workspace as it was: stored, and served again.
 func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -229,8 +236,15 @@ func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	if s.stop != nil {
 		s.stop() // nothing writes its rows while they go
 	}
-	delete(m.served, name)
-	return m.db.RemoveWorkspace(ctx, s.id)
+	err := m.db.RemoveWorkspace(ctx, s.id)
+	switch {
+	case err == nil, errors.Is(err, store.ErrNoWorkspace): // the store no longer has it
+		delete(m.served, name)
+	default:
+		w := s.w
+		m.served[name] = m.serve(s.id, config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude})
+	}
+	return err
 }
 
 var _ rpc.Workspaces = (*Workspaces)(nil)
