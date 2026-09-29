@@ -7,19 +7,15 @@ Dialog {
     title: "workspace"
     dim: false
     helpText: "Enter switches · Manage… adds, renames or deletes one"
-    Flex {
-        direction: Tui.Vertical
-        ListView {
-            palette.highlight: Theme.document.highlight
-            palette.highlightedText: Theme.document.highlightedText
-            model: App.workspaces
-            textRole: "label"
-            Layout.fillHeight: true
-            onActivated: App.useWorkspace(index)
-        }
-        DialogButtonBox {
-            Button { text: "&Manage…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.manageWorkspaces() }
-            Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
-        }
+    ListView {
+        palette.highlight: Theme.document.highlight
+        palette.highlightedText: Theme.document.highlightedText
+        model: App.workspaces
+        textRole: "label"
+        onActivated: App.useWorkspace(index)
+    }
+    DialogButtonBox {
+        Button { text: "&Manage…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.manageWorkspaces() }
+        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

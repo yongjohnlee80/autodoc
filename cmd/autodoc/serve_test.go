@@ -25,6 +25,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // syncBuf is a daemon's output, read while it writes.
@@ -612,5 +613,27 @@ func TestServesWithoutAConfigFile(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(data, "autodoc", config.StoreName)); err != nil {
 		t.Errorf("the store is not in $XDG_DATA_HOME/autodoc: %v", err)
+	}
+}
+
+// TestUINamesAWorkspace: --ui <name> is checked against the daemon before the TUI starts: a name
+// it has is opened, and one it lacks is refused with the names it has.
+func TestUINamesAWorkspace(t *testing.T) {
+	dir := short(t)
+	sock := filepath.Join(dir, "s.sock")
+	start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir(), "notes="+t.TempDir()), sock)
+	ctx := context.Background()
+	if err := checkWorkspace(ctx, tui.NewSession(sock, nil), "notes"); err != nil {
+		t.Errorf("a workspace the daemon has: %v", err)
+	}
+	err := checkWorkspace(ctx, tui.NewSession(sock, nil), "nope")
+	if err == nil || !strings.Contains(err.Error(), `no workspace named "nope"; the workspaces are: kb, notes`) {
+		t.Errorf("a workspace it lacks: %v", err)
+	}
+	dir2 := short(t)
+	sock2 := filepath.Join(dir2, "s.sock")
+	start(t, writeConfig(t, sock2, filepath.Join(dir2, "state"), ""), sock2)
+	if err := checkWorkspace(ctx, tui.NewSession(sock2, nil), "kb"); err == nil || !strings.Contains(err.Error(), "none yet") {
+		t.Errorf("a daemon with none: %v", err)
 	}
 }
