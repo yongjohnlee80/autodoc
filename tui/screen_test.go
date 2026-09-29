@@ -527,7 +527,10 @@ func TestAProviderInUse(t *testing.T) {
 	r.s.WaitForText(t, "remove the provider?")
 	r.s.WaitForText(t, "Remove the provider local?")
 	r.keys(t, key('y'))
-	r.s.WaitForText(t, "removed the provider local")
+	// the list, not the status line: a scan ending ("indexed 3 notes") can replace the message
+	r.s.WaitFor(t, "local gone from the list", func(sc string) bool {
+		return strings.Contains(sc, "no-such-model") && !strings.Contains(sc, "local ")
+	})
 	if ps, err := d.db.Providers(ctx); err != nil || len(ps) != 1 || ps[0].Name != "missing" {
 		t.Fatalf("after the remove: %+v, %v", ps, err)
 	}
