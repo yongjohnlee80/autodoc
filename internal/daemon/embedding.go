@@ -57,22 +57,26 @@ type Embedding struct {
 	active  string // the provider in use, by name; "" for none
 	lastErr string // why the provider named is not in use, "" when it is
 
-	calls chan heard
-	done  chan struct{}
+	// the calls the meters heard and the store has yet to keep, by provider; a write that fails
+	// leaves them here for the next
+	pmu     sync.Mutex
+	pending map[int64][]store.CallRecord
+	unkept  int // calls past maxPending, not kept: reported at the next write
+
+	done chan struct{}
 }
 
-// heard is one call a meter heard, for the provider it was made to.
-type heard struct {
-	provider int64
-	rec      store.CallRecord
-}
+// maxPending bounds a provider's calls held for the store: a store that cannot be written for
+// long holds this many (a few hundred KiB), and the calls past them are counted and reported,
+// not kept.
+const maxPending = 10000
 
 // NewEmbedding is the embedding of the daemon over db, serving ws. Nothing is set up until Start.
 func NewEmbedding(db *store.Store, ws *Workspaces, log logger.Logger) *Embedding {
 	if log == nil {
 		log = logger.New()
 	}
-	return &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, calls: make(chan heard, 1024), done: make(chan struct{})}
+	return &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, pending: map[int64][]store.CallRecord{}, done: make(chan struct{})}
 }
 
 // Start writes the meters' calls to the store until ctx ends, and sets up the provider the
@@ -197,18 +201,22 @@ func (e *Embedding) build(ctx context.Context, info store.ProviderInfo, key stri
 	}, nil
 }
 
-// hear queues a call for the store; a queue full to its brim drops it rather than hold up the
-// embedding worker that made it.
+// hear holds a call for the store. It takes a lock for an append, never waiting on the store, so
+// the embedding worker that made the call is not held up and no call is dropped while the store
+// keeps up.
 func (e *Embedding) hear(provider int64, c embed.Call) {
 	rec := store.CallRecord{At: time.Now(), Texts: c.Texts, Tokens: c.Tokens, Millis: c.Duration.Milliseconds(), Outcome: "ok"}
 	if c.Err != nil {
 		rec.Failed, rec.Outcome = true, outcomeOf(c.Err)
 		rec.Limited = errors.Is(c.Err, embed.ErrRateLimited)
 	}
-	select {
-	case e.calls <- heard{provider, rec}:
-	default:
+	e.pmu.Lock()
+	defer e.pmu.Unlock()
+	if len(e.pending[provider]) >= maxPending {
+		e.unkept++
+		return
 	}
+	e.pending[provider] = append(e.pending[provider], rec)
 }
 
 // outcomeOf is a failed call as its log says it.
@@ -230,39 +238,45 @@ func outcomeOf(err error) string {
 	return "failed: " + msg
 }
 
-// flush writes the calls heard, by provider, every flushEvery, and once more when ctx ends.
+// flush writes the calls heard every flushEvery, and once more when ctx ends.
 func (e *Embedding) flush(ctx context.Context) {
 	defer close(e.done)
 	tick := time.NewTicker(flushEvery)
 	defer tick.Stop()
-	pending := map[int64][]store.CallRecord{}
-	write := func(ctx context.Context) {
-		for id, recs := range pending {
-			if err := e.db.RecordCalls(ctx, id, recs); err != nil && !errors.Is(err, context.Canceled) {
-				logger.Warning(e.log, err, "embedding usage not recorded")
-			}
-		}
-		clear(pending)
-	}
 	for {
 		select {
-		case h := <-e.calls:
-			pending[h.provider] = append(pending[h.provider], h.rec)
 		case <-tick.C:
-			write(ctx)
+			e.writePending(ctx)
 		case <-ctx.Done():
-			for {
-				select {
-				case h := <-e.calls:
-					pending[h.provider] = append(pending[h.provider], h.rec)
-					continue
-				default:
-				}
-				break
-			}
-			write(context.WithoutCancel(ctx))
+			e.writePending(context.WithoutCancel(ctx))
 			return
 		}
+	}
+}
+
+// writePending writes the calls held, a provider's in one transaction. A provider's write that
+// fails puts its calls back, before any heard since, to be written with the next.
+func (e *Embedding) writePending(ctx context.Context) {
+	e.pmu.Lock()
+	batch, unkept := e.pending, e.unkept
+	e.pending, e.unkept = map[int64][]store.CallRecord{}, 0
+	e.pmu.Unlock()
+	if unkept > 0 {
+		logger.Warning(e.log, nil, fmt.Sprintf("embedding usage: %d calls not kept, the store not written for too long", unkept))
+	}
+	for id, recs := range batch {
+		err := e.db.RecordCalls(ctx, id, recs)
+		if err == nil {
+			continue
+		}
+		logger.Warning(e.log, err, "embedding usage not recorded yet: kept for the next write")
+		e.pmu.Lock()
+		back := append(recs, e.pending[id]...)
+		if over := len(back) - maxPending; over > 0 {
+			back, e.unkept = back[over:], e.unkept+over // the oldest go
+		}
+		e.pending[id] = back
+		e.pmu.Unlock()
 	}
 }
 

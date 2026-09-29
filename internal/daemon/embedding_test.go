@@ -175,3 +175,83 @@ func TestARemoveThatFailsChangesNothing(t *testing.T) {
 		t.Errorf("after the remove: in use %q, preference %q", e.current(), preference(t, db))
 	}
 }
+
+// flaky is the store failing its next fails usage writes.
+type flaky struct {
+	*store.Store
+	fails *int
+}
+
+func (f flaky) RecordCalls(ctx context.Context, id int64, calls []store.CallRecord) error {
+	if *f.fails > 0 {
+		*f.fails--
+		return errors.New("store: database is locked")
+	}
+	return f.Store.RecordCalls(ctx, id, calls)
+}
+
+// requests is the calls the store counted for provider a today.
+func requests(t *testing.T, db *store.Store) int64 {
+	t.Helper()
+	us, err := db.ProviderUsage(context.Background(), "a", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int64
+	for _, u := range us {
+		n += u.Requests
+	}
+	return n
+}
+
+// TestEveryCallIsMetered: a burst of calls far past what a queue would hold is counted whole;
+// calls whose write fails are kept and written with the next, none lost and none twice.
+func TestEveryCallIsMetered(t *testing.T) {
+	o := newOllama(t, "embedder")
+	e, _, db := embedding(t, o)
+	ctx := context.Background()
+	info, _, err := db.ProviderWithKey(ctx, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 1500 { // past the 1024 a queue held
+		e.hear(info.ID, embed.Call{Texts: 1, Tokens: 2})
+	}
+	fails := 2
+	e.db = flaky{db, &fails}
+	e.writePending(ctx) // fails: kept
+	e.hear(info.ID, embed.Call{Texts: 1})
+	e.writePending(ctx) // fails again: kept, with the one heard since
+	if n := requests(t, db); n != 0 {
+		t.Fatalf("%d calls written by writes that failed", n)
+	}
+	e.writePending(ctx)
+	if n := requests(t, db); n != 1501 {
+		t.Fatalf("the store counted %d calls, want 1501", n)
+	}
+	e.writePending(ctx) // nothing left: nothing twice
+	if n := requests(t, db); n != 1501 {
+		t.Fatalf("after a second write the store counted %d calls, want 1501", n)
+	}
+}
+
+// TestCallsHeldAreBounded: a store not written for long holds maxPending calls a provider, and
+// counts the rest as not kept, rather than growing without end.
+func TestCallsHeldAreBounded(t *testing.T) {
+	o := newOllama(t, "embedder")
+	e, _, db := embedding(t, o)
+	info, _, err := db.ProviderWithKey(context.Background(), "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range maxPending + 7 {
+		e.hear(info.ID, embed.Call{Texts: 1})
+	}
+	e.pmu.Lock()
+	held, unkept := len(e.pending[info.ID]), e.unkept
+	e.pending, e.unkept = map[int64][]store.CallRecord{}, 0 // not for the cleanup's last write
+	e.pmu.Unlock()
+	if held != maxPending || unkept != 7 {
+		t.Fatalf("held %d, not kept %d; want %d and 7", held, unkept, maxPending)
+	}
+}
