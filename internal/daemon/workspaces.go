@@ -123,6 +123,23 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	return &served{id: id, w: w, stop: stop}, nil
 }
 
+// SetEmbedding gives every workspace the provider p (nil: none, search by words) and pf, the maker
+// of its other models' providers: each served one is stopped and started again with them, its
+// index as it was.
+func (m *Workspaces) SetEmbedding(p embed.Provider, pf func(embed.Model) (embed.Provider, error)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.opts.Provider, m.opts.ProviderFor = p, pf
+	for name, s := range m.served {
+		if s.stop == nil {
+			continue // not served: its root is gone
+		}
+		s.stop()
+		w := s.w
+		m.served[name] = m.serve(s.id, config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude})
+	}
+}
+
 // StopAll stops every workspace, for the daemon's shutdown.
 func (m *Workspaces) StopAll() {
 	m.mu.Lock()

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +14,6 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
-	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -24,8 +22,6 @@ import (
 // errAlreadyServing is a compatible AutoDoc answering on the endpoint: this process serves nothing.
 var errAlreadyServing = errors.New("autodoc is already serving")
 
-// providerTimeout bounds the embedding provider's setup at start (its digest and a probe text).
-const providerTimeout = 30 * time.Second
 
 // runServe is --serve (ADR 0203 §3): bind the endpoint, open the store (its lease makes this the
 // only daemon serving it), open every workspace in it and start its indexer and follower (the
@@ -86,10 +82,14 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	for _, w := range db.Schema().Warnings {
 		logger.Warning(log, nil, w)
 	}
-	provider, providerFor := embedding(ctx, cfg.Embedding, log)
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
+	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: log})
+	// the provider the preferences name, before any workspace starts, so each starts with it; the
+	// last calls its meter heard are written before the store closes
+	emb := serving.NewEmbedding(db, ws, log)
+	emb.Start(wsCtx)
+	defer emb.Wait()
 	defer stopWorkspaces()
-	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Provider: provider, ProviderFor: providerFor, Log: log})
 	defer ws.StopAll()
 	if err := ws.OpenAll(); err != nil {
 		return err
@@ -97,43 +97,9 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	if len(ws.List()) == 0 {
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
-	srv := rpc.New(ws, version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db))
+	srv := rpc.New(ws, version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb))
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", version, sock)
 	return srv.Run(ctx)
-}
-
-// embedding makes the configured provider, and the maker of the providers of other models of the
-// same kind (the one still active while a new model fills). A provider that cannot be set up is
-// logged, and search is lexical: semantic search waits for a restart with a working provider.
-func embedding(ctx context.Context, e config.Embedding, log logger.Logger) (embed.Provider, func(embed.Model) (embed.Provider, error)) {
-	if e.Provider == "" {
-		return nil, nil
-	}
-	key, err := e.APIKey()
-	if err != nil {
-		logger.Warning(log, err, "embedding off")
-		return nil, nil
-	}
-	client := &http.Client{}
-	newProvider := func(ctx context.Context, name string) (embed.Provider, error) {
-		ctx, cancel := context.WithTimeout(ctx, providerTimeout)
-		defer cancel()
-		if e.Provider == config.EmbedOllama {
-			return embed.NewOllama(ctx, e.BaseURL, name, client)
-		}
-		return embed.NewOpenAI(ctx, e.BaseURL, key, name, client)
-	}
-	p, err := newProvider(ctx, e.Model)
-	if err != nil {
-		logger.Warning(log, err, "embedding off: the provider could not be set up")
-		return nil, nil
-	}
-	return p, func(m embed.Model) (embed.Provider, error) {
-		if m.Provider != p.Model().Provider {
-			return nil, fmt.Errorf("model %s is not the configured provider's", m.Fingerprint())
-		}
-		return newProvider(context.Background(), m.Name)
-	}
 }
 
 // noteOldIndexes says once where the index files of the builds before the store are: they are no

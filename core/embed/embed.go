@@ -39,6 +39,12 @@ type Provider interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 }
 
+// The providers' default endpoints: what a client fills in for a new one.
+const (
+	DefaultOllamaURL = "http://localhost:11434"
+	DefaultOpenAIURL = "https://api.openai.com"
+)
+
 // Call is one request to a provider, as its meter hears of it: how many texts, the tokens the
 // provider counted (0 where it reports none), how it went, and how long it took.
 type Call struct {

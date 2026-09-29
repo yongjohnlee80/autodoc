@@ -114,6 +114,7 @@ type Server struct {
 	rpc         *golibrpc.Server
 	workspaces  Workspaces
 	preferences Preferences
+	embeddings  Embeddings
 	version     string
 	instance    string
 	verbs       map[string]bool
@@ -125,6 +126,7 @@ type options struct {
 	listener    net.Listener
 	log         logger.Logger
 	preferences Preferences
+	embeddings  Embeddings
 }
 
 // Option configures a Server.
@@ -153,7 +155,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	}
 	var id [8]byte
 	_, _ = rand.Read(id[:])
-	s := &Server{workspaces: workspaces, preferences: o.preferences, version: version, instance: hex.EncodeToString(id[:]),
+	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, version: version, instance: hex.EncodeToString(id[:]),
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {

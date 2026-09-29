@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -54,8 +55,11 @@ func infoOf(p *Provider) ProviderInfo {
 
 func (sp ProviderSpec) check() error {
 	if strings.TrimSpace(sp.Name) == "" || (sp.Kind != KindOllama && sp.Kind != KindOpenAI) ||
-		strings.TrimSpace(sp.BaseURL) == "" || strings.TrimSpace(sp.Model) == "" {
+		strings.TrimSpace(sp.Model) == "" {
 		return ErrProviderInvalid
+	}
+	if u, err := url.Parse(sp.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fmt.Errorf("%w: base URL %q: want an http or https URL", ErrProviderInvalid, sp.BaseURL)
 	}
 	return nil
 }
