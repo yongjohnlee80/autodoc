@@ -13,9 +13,14 @@
 //	session.go    connecting, and reconnecting when the connection ends
 //	workspace.go  the workspaces, and switching between them
 //	notes.go      the note in the editor: opening, saving, conflicts, unsaved changes
-//	search.go     the notes pane: every note, or a search's hits
-//	links.go      the backlinks pane
+//	search.go     the workspace's notes, as the pickers filter them
+//	pickers.go    the search, open and new-note pickers, and their previews
+//	explorer.go   the explorer: every workspace's folders and notes, as a tree
+//	links.go      the backlinks panel
+//	panels.go     the panels' drawers, and moving between them and the page
 //	progress.go   the daemon's work left, on the status line
+//	prefs.go      the preferences, kept in the daemon's store
+//	providers.go  Preferences › Embedding: the providers, their models and usage
 //	theme.go      View › Theme: switching the theme import at runtime
 //	help.go       the help and the about text
 package tui
@@ -27,6 +32,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -48,7 +54,31 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	results, picker, backlinks, workspaces, managed *tuidecl.ListModel
+	picker, backlinks, workspaces, managed   *tuidecl.ListModel
+	hits, newList, providers, providerModels *tuidecl.ListModel
+	explorer                                 *tuidecl.TreeListModel
+	explorerPaths                            map[string][]string // by workspace: its notes, once listed (explorer.go)
+
+	// the pickers (pickers.go): what each lists, the latest answers winning, and the search's words
+	hitList             []hit
+	pickerRows, newRows []string
+	searchSeq           uint64
+	previewSeq          uint64
+	marks               marks
+	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
+
+	// the preferences (prefs.go), and the panels open now (panels.go)
+	prefs     prefs
+	connected bool // to the daemon: the status line shows while not (prefs.go)
+	panelOpen map[string]bool
+
+	// the embedding providers (providers.go)
+	providerList                    []providerRow
+	activeProvider, editingProvider string
+	removingProvider                string
+	formKind                        int
+	modelList                       []string
+	providerSeq                     uint64
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
@@ -58,7 +88,7 @@ type Host struct {
 	where    string // the status line's "autodoc <version> · <workspace>", or why there is none
 	wsList   []wsInfo
 	epoch    uint64
-	listSeq  uint64 // numbers the notes pane's loads; the latest wins (search.go)
+	listSeq  uint64 // numbers the note list's loads; the latest wins (search.go)
 	notesAll []string
 
 	// the workspace manager: the workspace a rename or a delete was started on
@@ -104,13 +134,23 @@ func New(session *Session, opt Options) (*Host, error) {
 
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
+	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember,
-		results:    tuidecl.NewListModel("key", "path"),
-		picker:     tuidecl.NewListModel("key", "path"),
-		backlinks:  tuidecl.NewListModel("key", "label"),
-		workspaces: tuidecl.NewListModel("key", "label"),
-		managed:    tuidecl.NewListModel("key", "name", "state", "root")}
+		picker:         tuidecl.NewListModel("key", "path"),
+		hits:           tuidecl.NewListModel("key", "path", "section"),
+		newList:        tuidecl.NewListModel("key", "path"),
+		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
+		providerModels: tuidecl.NewListModel("key", "name"),
+		explorer:       tuidecl.NewTreeListModel("key", "label"),
+		explorerPaths:  map[string][]string{},
+		openAt:         -1,
+		prefs:          defaultPrefs(),
+		panelOpen:      map[string]bool{},
+		backlinks:      tuidecl.NewListModel("key", "label"),
+		workspaces:     tuidecl.NewListModel("key", "label"),
+		managed:        tuidecl.NewListModel("key", "name", "state", "root")}
+	h.explorer.OnFetch = h.fetchExplorer
+	return h
 }
 
 // attach binds the host to the program built from its options (by New, or by a test running the
@@ -145,6 +185,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.layoutSrc = src
 	h.theme = themeOf(src)
 	return append(opts,
+		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()}),
 		tuidecl.Sources(h.state()),
 		tuidecl.Handlers(h.commands()),
 		tuidecl.ErrorSink(h.keep),

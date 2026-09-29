@@ -46,6 +46,7 @@ func (c committing) WriteFileIf(ctx context.Context, name string, r io.Reader, w
 type daemon struct {
 	sock string
 	fs   map[string]*memfs.FS
+	db   *store.Store
 	stop func()
 }
 
@@ -62,9 +63,19 @@ func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *d
 	return startDaemonWith(t, sock, workspaces, daemonOpts{})
 }
 
-// daemonOpts slow the daemon down: each file read waits slow, with one indexing worker, and the
-// daemon serves without waiting for the first scan.
-type daemonOpts struct{ slow time.Duration }
+// daemonOpts change the daemon: slow slows it down (each file read waits slow, with one indexing
+// worker, and the daemon serves without waiting for the first scan); prefs are the preferences its
+// store starts with, nil for the tests' own (the status line shown, which most tests read); emb
+// serves embedding providers.
+type daemonOpts struct {
+	slow  time.Duration
+	prefs map[string]string
+	emb   rpc.Embeddings
+}
+
+// testPrefs are the preferences a test's store starts with: the status line shown, since it says
+// what the TUI did.
+var testPrefs = map[string]string{"tui.status.shown": "true"}
 
 // slowFS is memfs whose reads wait.
 type slowFS struct {
@@ -88,6 +99,16 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	d.db = db
+	prefs := o.prefs
+	if prefs == nil {
+		prefs = testPrefs
+	}
+	for k, v := range prefs {
+		if err := db.SetPreference(ctx, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, name := range sortedKeys(workspaces) {
 		mem := memfs.New()
 		var fsys vfs.FS = mem
@@ -144,7 +165,11 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := rpc.New(rpc.Fixed(served...), "v-test", rpc.WithListener(ln))
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db)}
+	if o.emb != nil {
+		opts = append(opts, rpc.WithEmbeddings(o.emb))
+	}
+	srv := rpc.New(rpc.Fixed(served...), "v-test", opts...)
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	d.stop = func() { cancel(); <-done }
@@ -199,13 +224,33 @@ func runTUI(t *testing.T, sess *Session, opt Options) *running {
 	return &running{h: h, s: s}
 }
 
-// attached runs the TUI on d's socket, and waits for the notes pane.
+// attached runs the TUI on d's socket, and waits for the workspace's notes to be listed.
 func attached(t *testing.T, d *daemon) *running {
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "connected — autodoc v-test")
-	r.s.WaitFor(t, "the notes listed", func(sc string) bool { return strings.Contains(sc, "notes (") })
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	return r
+}
+
+// listed is the workspace's notes, as the pickers filter them.
+func (r *running) listed() []string {
+	return onLoop(r, func() []string { return append([]string(nil), r.h.notesAll...) })
+}
+
+// waitListed waits for the workspace's notes to be the n listed.
+func (r *running) waitListed(t *testing.T, n int) {
+	t.Helper()
+	r.s.WaitFor(t, fmt.Sprintf("%d notes listed", n), func(string) bool { return len(r.listed()) == n })
+}
+
+// leader is SPC then k, from the page in Normal mode.
+func (r *running) leader(t *testing.T, k rune) {
+	t.Helper()
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "SPC — commands")
+	r.keys(t, key(k))
+	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "SPC — commands") })
 }
 
 func (r *running) keys(t *testing.T, evs ...tuicore.Event) { t.Helper(); r.s.Keys(t, evs...) }
@@ -254,25 +299,26 @@ func TestEveryQMLFileIsSound(t *testing.T) {
 	decltest.Check(t, newHost(NewSession("unused", nil), Options{}).options(Options{})...)
 }
 
-// TestListsSearchesOpensEditsSaves: the notes pane lists the workspace; a search replaces it with
-// hits, focused, so Enter opens the first in the editor; typed text marks it unsaved; Ctrl+S writes
-// it to the file.
-func TestListsSearchesOpensEditsSaves(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nkestrel notes\n", "b/c.md", "# C\n\nplover\n"}})
+// TestSearchesOpensEditsSaves: the search picker finds as the words are typed, its hits on the
+// left and the note under the cursor on the right; Enter opens the hit in the editor, the cursor
+// at its section; typed text marks it unsaved; Ctrl+S writes it to the file.
+func TestSearchesOpensEditsSaves(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nintro\n\n## Birds\n\nkestrel notes\n", "b/c.md", "# C\n\nplover\n"}})
 	r := attached(t, d)
-	r.s.WaitFor(t, "both notes", func(sc string) bool {
-		return strings.Contains(sc, "notes (2)") && strings.Contains(sc, "a.md") && strings.Contains(sc, "b/c.md")
-	})
+	r.waitListed(t, 2)
 	r.keys(t, decltest.Ctrl('g'))
 	r.s.WaitForText(t, "words; a * ends a prefix")
-	r.keys(t, decltest.Type("kestrel")...)
-	r.keys(t, enter())
-	r.s.WaitFor(t, "the hits", func(sc string) bool {
-		return strings.Contains(sc, "search: kestrel (1)") && !strings.Contains(sc, "b/c.md") && strings.Contains(sc, "semantic off")
+	r.keys(t, decltest.Type("kestrel")...) // no Enter: the search runs as it is typed
+	r.s.WaitFor(t, "the hit, previewed", func(sc string) bool {
+		return strings.Contains(sc, "hits (1)") && strings.Contains(sc, "semantic off") && strings.Contains(sc, "kestrel notes") &&
+			!strings.Contains(sc, "b/c.md")
 	})
 	r.keys(t, enter())
 	r.waitNote(t, "a.md")
-	r.s.WaitForText(t, "kestrel notes")
+	// the hit is the Birds section's text: the cursor opens on it, not on the note's first line
+	if line := onLoop(r, func() string { l, _ := r.h.editor.Line(); return r.h.editor.Lines()[l] }); line != "kestrel notes" {
+		t.Errorf("the cursor opened on %q, not on the hit", line)
+	}
 	r.typeInEditor(t, "EDITED ")
 	r.s.WaitFor(t, "unsaved mark", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
 	r.keys(t, decltest.Ctrl('s'))
@@ -283,17 +329,21 @@ func TestListsSearchesOpensEditsSaves(t *testing.T) {
 	r.s.WaitFor(t, "the mark gone", func(sc string) bool { return !strings.Contains(sc, "[+]") })
 }
 
-// TestTheNotesPaneKeepsTheFileName: a path too long for the notes pane loses its start, not its
-// file name.
-func TestTheNotesPaneKeepsTheFileName(t *testing.T) {
+// TestThePickerKeepsTheFileName: a path too long for the open picker's list loses its start, not
+// its file name.
+func TestThePickerKeepsTheFileName(t *testing.T) {
 	deep := "archive/2026/09/projects/autodoc/reviews/2026-09-29-the-review-of-the-store.md"
 	d := startDaemon(t, map[string][]string{"kb": {deep, "# R\n\nreview\n"}})
 	r := attached(t, d)
+	r.keys(t, decltest.Ctrl('o'))
 	r.s.WaitFor(t, "the note's file name", func(sc string) bool {
-		return strings.Contains(sc, "notes (1)") && strings.Contains(sc, "the-store.md")
+		return strings.Contains(sc, "notes (1 of 1)") && strings.Contains(sc, "the-store.md")
 	})
-	if sc := r.s.String(); strings.Contains(sc, "archive/2026") {
-		t.Fatalf("the pane kept the path's start and not its end:\n%s", sc)
+	// the list's row: the one holding the file name and not the preview's title
+	for _, line := range strings.Split(r.s.String(), "\n") {
+		if strings.Contains(line, "the-store.md") && strings.Contains(line, "archive/2026") && !strings.Contains(line, "┌") {
+			t.Fatalf("the list kept the path's start and not its end:\n%s", r.s)
+		}
 	}
 }
 
@@ -431,28 +481,34 @@ func TestCommittedIsReadBack(t *testing.T) {
 	}
 }
 
-// TestBacklinks: the pane lists the notes linking to the open one, and Enter opens one.
+// TestBacklinks: SPC l opens the links panel over the notes linking to the open one, and Enter
+// opens one, closing the panel.
 func TestBacklinks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "target.md")
 	r.waitNote(t, "target.md")
+	r.leader(t, 'l')
 	r.s.WaitFor(t, "the backlink", func(sc string) bool { return strings.Contains(sc, "backlinks (1)") && strings.Contains(sc, "src.md") })
-	r.keys(t, decltest.Alt('3'), enter())
+	r.keys(t, enter())
 	r.waitNote(t, "src.md")
+	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "backlinks (") })
 }
 
 // TestWorkspaces: the picker lists the daemon's workspaces, and switching lists the other's notes.
 func TestWorkspaces(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b1.md", "b\n", "b2.md", "b\n"}})
 	r := attached(t, d)
-	r.s.WaitFor(t, "alpha's notes", func(sc string) bool { return strings.Contains(sc, "notes (1)") && strings.Contains(sc, "· alpha") })
+	r.s.WaitForText(t, "· alpha")
+	r.waitListed(t, 1)
 	r.keys(t, decltest.Ctrl('w'))
 	r.s.WaitForText(t, "beta")
 	r.keys(t, key('j'), enter())
-	r.s.WaitFor(t, "beta's notes", func(sc string) bool {
-		return strings.Contains(sc, "notes (2)") && strings.Contains(sc, "b2.md") && strings.Contains(sc, "· beta")
-	})
+	r.s.WaitForText(t, "· beta")
+	r.waitListed(t, 2)
+	if got := r.listed(); got[1] != "b2.md" {
+		t.Errorf("beta's notes: %v", got)
+	}
 }
 
 // TestConnectFailedSaysSo: with nothing on the socket and no daemon to start, the TUI says so.
@@ -485,14 +541,14 @@ func TestSpawnsTheDaemonOnce(t *testing.T) {
 	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-test")
-	r.s.WaitForText(t, "notes (1)")
+	r.waitListed(t, 1)
 	if n := spawns.Load(); n != 1 {
 		t.Errorf("spawned %d times", n)
 	}
 }
 
-// TestEveryThemeKeepsTextLegible: under each shipped theme the status line, the pane and the note
-// wear a foreground that differs from their background.
+// TestEveryThemeKeepsTextLegible: under each shipped theme the status line, the explorer and the
+// note wear a foreground that differs from their background.
 func TestEveryThemeKeepsTextLegible(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "legible text\n"}})
 	for _, name := range themes.Names() {
@@ -502,7 +558,8 @@ func TestEveryThemeKeepsTextLegible(t *testing.T) {
 			r.s.WaitForText(t, "connected — autodoc v-test")
 			r.openByPicker(t, "a.md")
 			r.waitNote(t, "a.md")
-			for _, text := range []string{"legible text", "opened a.md", "notes (1)"} {
+			legible := func(text string) {
+				t.Helper()
 				x, y, ok := find(r.s.Backend.Snapshot(), text)
 				if !ok {
 					t.Fatalf("%q is not on screen:\n%s", text, r.s.String())
@@ -515,6 +572,13 @@ func TestEveryThemeKeepsTextLegible(t *testing.T) {
 					t.Errorf("%q: foreground equals background (%+v)", text, c.Attrs)
 				}
 			}
+			legible("legible text")
+			legible("opened a.md")
+			// the explorer, over the page's left
+			r.leader(t, 'e')
+			r.s.WaitForText(t, "explorer")
+			legible("explorer")
+			legible("kb")
 		})
 	}
 }
@@ -552,7 +616,7 @@ func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
 		}
 	}
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "notes (2)")
+	r.waitListed(t, 2)
 	r.h.p.Post(func() { r.h.openPath("slow.md") })
 	r.s.WaitForText(t, "opening slow.md")
 	r.h.p.Post(func() { r.h.openPath("fast.md") })
@@ -580,7 +644,7 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 		}
 	}
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "notes (1)")
+	r.waitListed(t, 1)
 	r.openByPicker(t, "a.md")
 	r.waitNote(t, "a.md")
 	r.typeInEditor(t, "mine ")
@@ -596,15 +660,14 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 func TestReconnects(t *testing.T) {
 	d1 := startDaemonOn(t, "", map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d1.sock, nil), Options{})
-	r.s.WaitForText(t, "notes (1)")
+	r.waitListed(t, 1)
 	d1.stop()
 	r.s.WaitFor(t, "the disconnect", func(sc string) bool {
 		return strings.Contains(sc, "reconnecting") || strings.Contains(sc, "connecting to")
 	})
 	startDaemonOn(t, d1.sock, map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}})
-	r.s.WaitFor(t, "the new daemon's notes", func(sc string) bool {
-		return strings.Contains(sc, "notes (2)") && strings.Contains(sc, "connected — autodoc")
-	})
+	r.s.WaitForText(t, "connected — autodoc")
+	r.waitListed(t, 2)
 }
 
 // TestASaveNeverDropsANewerEdit: an edit made while a guarded save is on its way is not dropped by
@@ -620,7 +683,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 		}
 	}
 	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "notes (2)")
+	r.waitListed(t, 2)
 	r.openByPicker(t, "a.md")
 	r.waitNote(t, "a.md")
 	r.typeInEditor(t, "X")
@@ -688,7 +751,7 @@ func TestProgressText(t *testing.T) {
 }
 
 // TestProgressWhileIndexing: while the daemon indexes, the status line shows a bar of the notes
-// done; when it ends it says so once, and the notes pane, listed mid-scan, is listed again whole.
+// done; when it ends it says so once, and the notes, listed mid-scan, are listed again whole.
 func TestProgressWhileIndexing(t *testing.T) {
 	var notes []string
 	for i := range 40 {
@@ -704,7 +767,10 @@ func TestProgressWhileIndexing(t *testing.T) {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	r.s.WaitFor(t, "the whole list", func(sc string) bool { return strings.Contains(sc, "notes (40)") && !strings.Contains(sc, "indexing ") })
+	r.waitListed(t, 40)
+	if sc := r.s.String(); strings.Contains(sc, "indexing ") {
+		t.Errorf("the bar stayed:\n%s", sc)
+	}
 }
 
 // TestOnePollAfterSwitches: switching workspace (as a reconnect does) starts the next workspace's

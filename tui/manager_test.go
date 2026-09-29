@@ -28,6 +28,11 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for k, v := range testPrefs {
+		if err := db.SetPreference(ctx, k, v); err != nil {
+			t.Fatal(err)
+		}
+	}
 	for _, name := range sortedNames(roots) {
 		if _, err := db.AddWorkspace(ctx, name, roots[name], nil, nil); err != nil {
 			t.Fatal(err)
@@ -59,7 +64,7 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := rpc.New(ws, "v-test", rpc.WithListener(ln))
+	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
@@ -97,12 +102,27 @@ func noteDir(t *testing.T, notes ...string) string {
 
 func tab() tuicore.Event { return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab} }
 
+// addWorkspace fills the add dialog: the title over "untitled", then the folder typed into the
+// path, and Enter selects it.
+func (r *running) addWorkspace(t *testing.T, title, root string) {
+	t.Helper()
+	r.keys(t, key('a'))
+	r.s.WaitForText(t, "add a workspace")
+	r.s.WaitForText(t, "untitled") // the title field, which has the keyboard first
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type(title)...)
+	r.keys(t, decltest.Ctrl('j'), decltest.Ctrl('u')) // the path
+	r.keys(t, decltest.Type(root)...)
+	r.keys(t, enter())
+}
+
 // TestWorkspaceManager: from the picker, the manager adds a workspace (a refused add says why),
 // renames it, and deletes it after asking what goes and what stays; the files stay.
 func TestWorkspaceManager(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitFor(t, "kb's notes", func(sc string) bool { return strings.Contains(sc, "notes (1)") && strings.Contains(sc, "· kb") })
+	r.s.WaitForText(t, "· kb")
+	r.waitListed(t, 1)
 
 	r.keys(t, decltest.Ctrl('w'))
 	r.s.WaitForText(t, "Manage…")
@@ -110,22 +130,15 @@ func TestWorkspaceManager(t *testing.T) {
 	r.s.WaitForText(t, "Rename…")
 
 	root := noteDir(t, "b.md", "beta\n")
-	r.keys(t, key('a'))
-	r.s.WaitForText(t, "add a workspace")
-	r.keys(t, decltest.Type("notes")...)
-	r.keys(t, tab())
-	r.keys(t, decltest.Type(root)...)
-	r.keys(t, enter())
+	r.addWorkspace(t, "notes", root)
 	r.s.WaitForText(t, "added workspace notes")
 	r.s.WaitFor(t, "the manager lists it", func(sc string) bool { return strings.Contains(sc, root) })
 
-	r.keys(t, key('a'))
-	r.s.WaitForText(t, "add a workspace")
-	r.keys(t, decltest.Type("notes")...)
-	r.keys(t, tab())
-	r.keys(t, decltest.Type(t.TempDir())...)
-	r.keys(t, enter())
-	r.s.WaitForText(t, "not added: another workspace has this name or root")
+	// a refusal opens the dialog again, the reason on the status line
+	r.addWorkspace(t, "notes", t.TempDir())
+	r.s.WaitFor(t, "the refusal, the dialog open again", func(sc string) bool {
+		return strings.Contains(sc, "not added: another workspace has this name or root") && strings.Contains(sc, "add a workspace")
+	})
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the add closed", func(sc string) bool { return !strings.Contains(sc, "add a workspace") })
 
@@ -172,7 +185,8 @@ func TestOpensTheNamedWorkspace(t *testing.T) {
 		entered = append(entered, n)
 		mu.Unlock()
 	}})
-	r.s.WaitFor(t, "beta's notes", func(sc string) bool { return strings.Contains(sc, "notes (2)") && strings.Contains(sc, "· beta") })
+	r.s.WaitForText(t, "· beta")
+	r.waitListed(t, 2)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(entered) != 1 || entered[0] != "beta" {

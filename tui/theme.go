@@ -33,9 +33,19 @@ func themeState(theme string) map[string]any {
 		"App.themeMono": theme == "mono", "App.themeRetro": theme == "retro"}
 }
 
-// useTheme switches to the named theme; one golib does not ship is refused.
-func (h *Host) useTheme(name string) {
-	if _, err := fs.Stat(themes.FS(), path.Join(".", name+".qml")); err != nil {
+// themeNames are the themes golib ships, as the menu and the Preferences dialog offer them.
+var themeNames = themes.Names()
+
+// isTheme reports a theme golib ships.
+func isTheme(name string) bool {
+	_, err := fs.Stat(themes.FS(), path.Join(".", name+".qml"))
+	return err == nil
+}
+
+// switchTheme puts the named theme on screen (useTheme also keeps it); one golib does not ship is
+// refused.
+func (h *Host) switchTheme(name string) {
+	if !isTheme(name) {
 		h.setStatus(fmt.Sprintf("no theme %q", name))
 		return
 	}

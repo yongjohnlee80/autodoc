@@ -12,15 +12,14 @@ import (
 // The TUI polls index.status once a second while it is attached: the documents indexed, the jobs
 // pending (a first scan's are every note), and the texts the embedding provider has yet to embed.
 // While any is pending, the right slot shows a bar beside the last message; when indexing ends, it
-// says so once, and a notes pane listing every note is listed again (a listing taken mid-scan was
-// partial).
+// says so once, and the workspace's notes are listed again, the pickers' and the explorer's (a
+// listing taken mid-scan was partial).
 
 const progressEvery = time.Second
 
 type progress struct {
 	docs, pending, embedding int64
 	busy                     bool // pending or embedding work, as last polled
-	listed                   bool // the notes pane shows every note (not a search)
 }
 
 // poll asks for the status, and asks again a second after the answer, while the program runs.
@@ -81,9 +80,9 @@ func (h *Host) showProgress(docs, pending, embedding int64) {
 		if embedding == 0 {
 			h.message = fmt.Sprintf("indexed %d notes", docs)
 		}
-		if h.prog.listed {
-			h.listNotes() // the list taken while indexing was partial
-		}
+		// the lists taken while indexing were partial
+		h.listNotes()
+		h.relistInExplorer(h.ws)
 	}
 	h.publishStatus()
 }

@@ -9,6 +9,10 @@ Dialog {
     standardButtons: Dialog.Ok | Dialog.Cancel
     defaultButton: Dialog.Ok
     helpText: App.workspaceRenameError
-    TextField { id: wsTo; text: App.renameFrom }
+    Flex {
+        direction: Tui.Vertical
+        Text { text: "new name" }
+        TextField { id: wsTo; text: App.renameFrom }
+    }
     onAccepted: App.renameWorkspace(wsTo.text)
 }

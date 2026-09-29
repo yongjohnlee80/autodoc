@@ -38,6 +38,7 @@ func (h *Host) loadWorkspaces() {
 			return
 		}
 		h.wsList = a.list
+		h.showWorkspacesInExplorer(a.list)
 		var rows, managed []rowOf
 		pick := -1
 		for i, w := range a.list {
@@ -54,7 +55,7 @@ func (h *Host) loadWorkspaces() {
 		h.workspaces.Reset(rows)
 		h.managed.Reset(managed)
 		if pick < 0 {
-			h.ws = ""
+			h.ws, h.notesAll = "", nil
 			h.closeNote()
 			h.setWhere("autodoc · no workspace")
 			h.setStatus("no workspace: Go › Manage workspaces… adds one")
@@ -83,10 +84,10 @@ func (h *Host) useWorkspace(i int) {
 	h.guard("switch to "+w.name, func() { h.enter(w.name) })
 }
 
-// enter makes name the workspace in use: the note closes, the notes pane lists its notes.
+// enter makes name the workspace in use: the note closes, and its notes are listed for the pickers.
 func (h *Host) enter(name string) {
 	h.epoch++
-	h.ws, h.entered = name, true
+	h.ws, h.entered, h.notesAll = name, true, nil
 	if h.remember != nil {
 		h.remember(name)
 	}
@@ -117,11 +118,10 @@ func (h *Host) managerRow(i int) (wsInfo, bool) {
 	return h.wsList[i], true
 }
 
-const addHelp = "a name, and a directory: its **/*.md are indexed, .git skipped"
-
-// startAddWorkspace asks for a new workspace's name and root.
+// startAddWorkspace asks for a new workspace: its title (untitled, to begin with), and its folder,
+// chosen from the home directory. Its **/*.md are indexed, .git skipped.
 func (h *Host) startAddWorkspace() {
-	h.set("App.workspaceAddError", addHelp)
+	h.setField("App.wsTitle", "untitled")
 	h.open("workspaceAdd")
 }
 
@@ -132,7 +132,8 @@ func (h *Host) addWorkspace(name, root string) {
 		return err
 	}, func(err error) {
 		if err != nil {
-			h.set("App.workspaceAddError", "not added: "+wireMessage(err))
+			// Select closed the picker: it opens again as it was, the reason on the status line
+			h.setStatus("not added: " + wireMessage(err))
 			h.open("workspaceAdd")
 			return
 		}
