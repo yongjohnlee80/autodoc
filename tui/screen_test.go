@@ -373,6 +373,17 @@ func TestTheProviderForm(t *testing.T) {
 	if err != nil || info.Kind != "ollama-cloud" || info.BaseURL != ollama.URL || info.Model != "nomic-embed-text" || sealed != "sekrit" {
 		t.Fatalf("stored %+v, key kept %v, %v", info, sealed == "sekrit", err)
 	}
+
+	// edited, its key sealed: another kind that takes a key still keeps it when left empty
+	r.s.WaitForText(t, "cloud")
+	r.h.p.Post(func() { r.h.startEditProvider(0) })
+	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
+	r.keys(t, tab(), enter()) // the kind
+	r.s.WaitForText(t, "OpenAI-compatible")
+	r.keys(t, key('j'), enter())
+	r.s.WaitFor(t, "the kind changed, the key still sealed", func(sc string) bool {
+		return strings.Contains(sc, "OpenAI-compatible") && strings.Contains(sc, "API key (sealed; leave empty to keep it)")
+	})
 }
 
 // TestEveryFieldHasALabel: every TextField the QML declares has a Text over it, saying what goes
