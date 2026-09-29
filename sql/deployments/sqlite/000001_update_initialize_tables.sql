@@ -86,7 +86,10 @@ CREATE INDEX IF NOT EXISTS chunk_dead ON chunk(workspace_id, gen_to) WHERE gen_t
 -- else writes it: a chunk deleted by a workspace's cascade is unindexed like
 -- any other, and a delete hands FTS5 the exact values it indexed (OLD), which
 -- an external-content delete requires. A rowid SQLite reuses therefore never
--- inherits a posting.
+-- inherits a posting. An update of a chunk's other columns (its position, the
+-- generation it dies at) touches nothing here: an unchanged chunk costs no
+-- full-text write. A chunk's workspace_id cannot change (the composite keys
+-- hold it to its document's), so it is not a column the update watches.
 CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
   title, breadcrumb, tags, body, workspace_id UNINDEXED,
   content='chunk', content_rowid='id', tokenize='porter unicode61'
@@ -99,7 +102,7 @@ CREATE TRIGGER IF NOT EXISTS chunk_fts_delete AFTER DELETE ON chunk BEGIN
   INSERT INTO chunk_fts(chunk_fts, rowid, title, breadcrumb, tags, body, workspace_id)
   VALUES ('delete', old.id, old.title, old.breadcrumb, old.tags, old.body, old.workspace_id);
 END;
-CREATE TRIGGER IF NOT EXISTS chunk_fts_update AFTER UPDATE OF title, breadcrumb, tags, body, workspace_id ON chunk BEGIN
+CREATE TRIGGER IF NOT EXISTS chunk_fts_update AFTER UPDATE OF title, breadcrumb, tags, body ON chunk BEGIN
   INSERT INTO chunk_fts(chunk_fts, rowid, title, breadcrumb, tags, body, workspace_id)
   VALUES ('delete', old.id, old.title, old.breadcrumb, old.tags, old.body, old.workspace_id);
   INSERT INTO chunk_fts(rowid, title, breadcrumb, tags, body, workspace_id)

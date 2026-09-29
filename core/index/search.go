@@ -11,6 +11,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
+
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // Search modes (QueryOpts.Mode) and semantic states (Result.Semantic).
@@ -28,8 +30,8 @@ var ErrUnknownMode = errs.Sentinel(errs.ErrInvalidArgument, "index: unknown sear
 // HighlightStart and HighlightEnd mark the matched terms in a Hit's Snippet: control characters,
 // which no note contains, so a client can render them as it likes.
 const (
-	HighlightStart = "\x02"
-	HighlightEnd   = "\x03"
+	HighlightStart = store.HighlightStart
+	HighlightEnd   = store.HighlightEnd
 )
 
 // The search's constants (ADR 0204 §4.4).
@@ -110,96 +112,119 @@ func (s *Store) search(ctx context.Context, q string, opts QueryOpts, sem *seman
 		return res, nil
 	}
 	useSem := sem != nil && mode != ModeLexical
-	var fp string
-	var qvec []float32
-	var embedErr error
-	var tx dao.TxConn
 	for attempt := 0; ; attempt++ {
+		var fp string
+		var qvec []float32
+		var embedErr error
 		if useSem {
 			fp, qvec, embedErr = s.embedQuery(ctx, sem, q)
 		}
-		var err error
-		if tx, err = s.r.Begin(ctx); err != nil {
-			return Result{}, err
-		}
-		if !useSem || embedErr != nil {
-			break
-		}
-		var now string
-		if err := scanOne(ctx, tx, &now, "SELECT fp FROM model WHERE active = 1"); err != nil && !errors.Is(err, errNoRow) {
-			_ = tx.Rollback()
-			return Result{}, err
-		}
-		if now == fp {
-			break
-		}
-		_ = tx.Rollback()
-		if attempt == 2 {
-			embedErr = fmt.Errorf("index: the active model keeps changing")
-			if tx, err = s.r.Begin(ctx); err != nil {
-				return Result{}, err
-			}
-			break
-		}
-	}
-	defer tx.Rollback()
-	if useSem && embedErr != nil {
-		if mode == ModeSemantic {
-			return Result{}, fmt.Errorf("%w: %v", ErrEmbedFailed, embedErr)
-		}
-		useSem = false
-		res.Semantic, res.SemanticError = SemanticError, ErrEmbedFailed.Error()
-	} else if sem != nil {
-		var unready int
-		if err := scanOne(ctx, tx, &unready, "SELECT EXISTS (SELECT 1 FROM document WHERE semantic_ready = 0)"); err != nil {
-			return Result{}, err
-		}
-		res.Semantic = SemanticReady
-		if unready == 1 {
-			res.Semantic = SemanticPartial
-		}
-	}
-	var lexical, semanticC []candidate
-	var err error
-	if mode != ModeSemantic {
-		if lexical, err = lexicalHits(ctx, tx, match, opts); err != nil {
-			return Result{}, err
-		}
-	}
-	if useSem {
-		if semanticC, err = semanticHits(ctx, tx, sem, fp, qvec, opts); err != nil {
-			return Result{}, err
-		}
-		if mode == ModeAuto {
-			res.ModeUsed = ModeHybrid
-		}
-	}
-	fused := fuse(lexical, semanticC)
-	if err := boost(ctx, tx, fused, words); err != nil {
-		return Result{}, err
-	}
-	sort.Slice(fused, func(i, j int) bool { return fused[i].before(fused[j]) })
-	perDoc := map[int64]int{}
-	for _, c := range fused {
-		if perDoc[c.docID] == perDocument {
+		out, err := s.searchIn(ctx, res, mode, useSem, match, words, opts, sem, fp, qvec, embedErr, attempt == 2, limit)
+		if errors.Is(err, errModelMoved) {
 			continue
 		}
-		perDoc[c.docID]++
-		res.Hits = append(res.Hits, c.hit)
-		if len(res.Hits) == limit {
-			break
+		return out, err
+	}
+}
+
+// errModelMoved is the active model changing between a query's embedding and its snapshot.
+var errModelMoved = errors.New("index: the active model changed")
+
+// searchIn is one attempt of search, in one read transaction.
+func (s *Store) searchIn(ctx context.Context, res Result, mode string, useSem bool, match string, words []string, opts QueryOpts,
+	sem *semantic, fp string, qvec []float32, embedErr error, last bool, limit int) (Result, error) {
+	err := s.read(ctx, func(tx *store.Tx) error {
+		if useSem && embedErr == nil {
+			now, err := s.activeModel(tx)
+			if err != nil {
+				return err
+			}
+			if now != fp {
+				if !last {
+					return errModelMoved
+				}
+				embedErr = fmt.Errorf("index: the active model keeps changing")
+			}
 		}
+		if useSem && embedErr != nil {
+			if mode == ModeSemantic {
+				return fmt.Errorf("%w: %v", ErrEmbedFailed, embedErr)
+			}
+			useSem = false
+			res.Semantic, res.SemanticError = SemanticError, ErrEmbedFailed.Error()
+		} else if sem != nil {
+			unready, err := s.sc.Documents(tx).With(store.DocSemanticReady, int64(0)).Exists()
+			if err != nil {
+				return err
+			}
+			res.Semantic = SemanticReady
+			if unready {
+				res.Semantic = SemanticPartial
+			}
+		}
+		var lexical, semanticC []candidate
+		var err error
+		if mode != ModeSemantic {
+			if lexical, err = s.lexicalHits(tx, match, opts); err != nil {
+				return err
+			}
+		}
+		if useSem {
+			if semanticC, err = s.semanticHits(tx, sem, fp, qvec, opts); err != nil {
+				return err
+			}
+			if mode == ModeAuto {
+				res.ModeUsed = ModeHybrid
+			}
+		}
+		fused := fuse(lexical, semanticC)
+		if err := s.boost(tx, fused, words); err != nil {
+			return err
+		}
+		sort.Slice(fused, func(i, j int) bool { return fused[i].before(fused[j]) })
+		perDoc := map[int64]int{}
+		for _, c := range fused {
+			if perDoc[c.docID] == perDocument {
+				continue
+			}
+			perDoc[c.docID]++
+			res.Hits = append(res.Hits, c.hit)
+			if len(res.Hits) == limit {
+				break
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Result{}, err
 	}
 	return res, nil
 }
 
+// activeModel is the fingerprint of the active model, "" for none.
+func (s *Store) activeModel(tx *store.Tx) (string, error) {
+	m, err := s.sc.Models(tx).With(store.ModelActive, int64(1)).Get(store.ModelFP)
+	if errors.Is(err, dao.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return m.FP, nil
+}
+
 // embedQuery embeds q with the model active now.
 func (s *Store) embedQuery(ctx context.Context, sem *semantic, q string) (string, []float32, error) {
-	var fp, provider, name string
-	var dims int
-	if err := scanRow(ctx, s.r, []any{&fp, &provider, &name, &dims}, "SELECT fp, provider, name, dims FROM model WHERE active = 1"); err != nil {
+	var m *store.Model
+	err := s.read(ctx, func(tx *store.Tx) error {
+		var err error
+		m, err = s.sc.Models(tx).With(store.ModelActive, int64(1)).Get()
+		return err
+	})
+	if err != nil {
 		return "", nil, fmt.Errorf("index: reading the active model: %w", err)
 	}
+	fp, provider, name, dims := m.FP, deref(m.Provider), deref(m.Name), int(derefInt(m.Dims))
 	p, err := sem.provider(fp, modelOf(fp, provider, name, dims))
 	if err != nil {
 		return "", nil, err
@@ -260,58 +285,71 @@ func (a candidate) before(b candidate) bool {
 }
 
 // lexicalHits runs the FTS query over the alive chunks the filters admit, best first (BM25 weighs
-// title 10, breadcrumb 5, tags 5, body 1), at most retrieverTop.
-func lexicalHits(ctx context.Context, tx dao.Querier, match string, opts QueryOpts) ([]candidate, error) {
-	q := `SELECT c.doc_id, c.ord, d.path, c.breadcrumb, c.byte_start, c.byte_end, d.active_gen,
-			snippet(chunk_fts, 3, ?, ?, '…', 16)
-		FROM chunk_fts JOIN chunk c ON c.id = chunk_fts.rowid JOIN document d ON d.id = c.doc_id
-		WHERE chunk_fts MATCH ? AND c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)`
-	where, fargs := filterSQL(opts)
-	q += where
-	args := append([]any{HighlightStart, HighlightEnd, match}, fargs...)
-	q += " ORDER BY bm25(chunk_fts, 10, 5, 5, 1), d.path, c.ord LIMIT ?"
-	args = append(args, retrieverTop)
-	rows, err := tx.QueryContext(ctx, q, args...)
+// title 10, breadcrumb 5, tags 5, body 1), at most retrieverTop. The workspace and the filters are
+// in the same WHERE as the MATCH, so they apply before the rank and the limit.
+func (s *Store) lexicalHits(tx *store.Tx, match string, opts QueryOpts) ([]candidate, error) {
+	d, ok, err := s.filtered(tx, alive(s.sc.Chunks(tx)), opts)
+	if err != nil || !ok {
+		return nil, err
+	}
+	rows, err := d.Join(store.JoinFTS).WithPredicate(dao.Match(store.ChunkFTS, match)).
+		OrderBy(dao.Asc(store.ChunkByRank), dao.Asc(store.ChunkByPath)).Limit(retrieverTop).
+		Select(store.ChunkDoc, store.ChunkOrd, store.ChunkDocPath, store.ChunkBreadcrumb, store.ChunkByteStart,
+			store.ChunkByteEnd, store.ChunkDocActiveGen, store.ChunkSnippet)
 	if err != nil {
 		return nil, fmt.Errorf("index: lexical search: %w", err)
 	}
-	defer rows.Close()
-	var out []candidate
-	for rows.Next() {
-		var c candidate
-		if err := rows.Scan(&c.docID, &c.ord, &c.hit.Path, &c.hit.Breadcrumb, &c.hit.ByteStart, &c.hit.ByteEnd,
-			&c.hit.Generation, &c.hit.Snippet); err != nil {
-			return nil, err
-		}
-		c.hit.Via = []string{ModeLexical}
-		out = append(out, c)
+	out := make([]candidate, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, candidate{docID: r.DocID, ord: int(r.Ord), hit: Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb,
+			ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd), Generation: r.DocActiveGen, Snippet: r.Snippet, Via: []string{ModeLexical}}})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// filterSQL is the query's filters as SQL over document d: every tag, and any of the paths.
-func filterSQL(opts QueryOpts) (string, []any) {
-	var q string
-	var args []any
+// filtered narrows a chunk query (joined to its document) to the query's filters: every tag, and
+// any of the paths. ok is false when no document has every tag, so nothing can match.
+func (s *Store) filtered(tx *store.Tx, d dao.DAO[*store.Chunk, store.ChunkField, int64], opts QueryOpts) (dao.DAO[*store.Chunk, store.ChunkField, int64], bool, error) {
+	var docs map[int64]bool
 	for _, t := range opts.Tags {
-		q += " AND EXISTS (SELECT 1 FROM doc_tag t WHERE t.doc_id = d.id AND t.tag = ?)"
-		args = append(args, strings.ToLower(strings.TrimPrefix(strings.TrimSpace(t), "#")))
+		tag := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(t), "#"))
+		rows, err := s.sc.Tags(tx).With(store.DocValueValue, tag).Select(store.DocValueDoc)
+		if err != nil {
+			return nil, false, err
+		}
+		have := map[int64]bool{}
+		for _, r := range rows {
+			if docs == nil || docs[r.DocID] {
+				have[r.DocID] = true
+			}
+		}
+		docs = have
+		if len(docs) == 0 {
+			return nil, false, nil
+		}
+	}
+	if docs != nil {
+		ids := make([]any, 0, len(docs))
+		for id := range docs {
+			ids = append(ids, id)
+		}
+		d = d.With(store.ChunkDoc, ids...)
 	}
 	if len(opts.Paths) > 0 {
-		var ors []string
+		var ors []dao.Predicate
 		for _, p := range opts.Paths {
 			p = strings.Trim(p, "/")
 			if p == "" || p == "." {
-				ors = []string{"1"}
+				ors = nil
 				break
 			}
-			// p itself, and p/… : the range ["p/", "p0") holds exactly the paths below it
-			ors = append(ors, "(d.path = ? OR (d.path >= ? AND d.path < ?))")
-			args = append(args, p, p+"/", p+"0")
+			ors = append(ors, under(`"document"."path"`, p))
 		}
-		q += " AND (" + strings.Join(ors, " OR ") + ")"
+		if ors != nil {
+			d = d.WithPredicate(dao.Or(ors...))
+		}
 	}
-	return q, args
+	return d, true, nil
 }
 
 // fuse scores candidates by reciprocal rank fusion: Σ over the retrievers that found a chunk of
@@ -343,7 +381,7 @@ func fuse(lists ...[]candidate) []candidate {
 
 // boost scales the fused scores: × (1 + 0.1·ln(1 + in-links)), counting the documents that link to
 // the hit's document, and × 1.2 when a query word is one of its tags.
-func boost(ctx context.Context, tx dao.Querier, cands []candidate, words []string) error {
+func (s *Store) boost(tx *store.Tx, cands []candidate, words []string) error {
 	memo := map[int64]float64{}
 	query := map[string]bool{}
 	for _, w := range words {
@@ -353,12 +391,12 @@ func boost(ctx context.Context, tx dao.Querier, cands []candidate, words []strin
 		id := cands[i].docID
 		f, ok := memo[id]
 		if !ok {
-			var inLinks int
-			if err := scanOne(ctx, tx, &inLinks, "SELECT COUNT(DISTINCT src_doc) FROM link WHERE dst_doc = ? AND src_doc != ?", id, id); err != nil {
+			inLinks, err := dao.CountDistinct(s.sc.LinksOut(tx).With(store.LinkDst, id).Excluding(store.LinkSrc, id), store.LinkSrc)
+			if err != nil {
 				return err
 			}
 			f = 1 + linkBoost*math.Log(1+float64(inLinks))
-			tags, err := tagsOf(ctx, tx, id)
+			tags, err := s.tagsOf(tx, id)
 			if err != nil {
 				return err
 			}
@@ -375,19 +413,21 @@ func boost(ctx context.Context, tx dao.Querier, cands []candidate, words []strin
 	return nil
 }
 
-func tagsOf(ctx context.Context, q dao.Querier, docID int64) ([]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT tag FROM doc_tag WHERE doc_id = ?", docID)
+func (s *Store) tagsOf(tx *store.Tx, docID int64) ([]string, error) {
+	rows, err := s.sc.Tags(tx).With(store.DocValueDoc, docID).OrderBy(dao.Asc(store.ByKey)).Select(store.DocValueValue)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []string
-	for rows.Next() {
-		var t string
-		if err := rows.Scan(&t); err != nil {
-			return nil, err
-		}
-		out = append(out, t)
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.Value
 	}
-	return out, rows.Err()
+	return out, nil
+}
+
+func derefInt(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }

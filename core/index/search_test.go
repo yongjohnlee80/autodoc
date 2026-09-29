@@ -204,7 +204,7 @@ func TestSearchNeverFindsADeadChunk(t *testing.T) {
 		t.Errorf("the dead chunk was a hit: %v", got)
 	}
 	var entries int
-	_ = scanOne(context.Background(), e.store.r, &entries, "SELECT COUNT(*) FROM chunk_fts WHERE chunk_fts MATCH 'plover'")
+	_ = scanOne(context.Background(), e.raw, &entries, "SELECT COUNT(*) FROM chunk_fts WHERE chunk_fts MATCH 'plover'")
 	if entries != 1 {
 		t.Fatalf("%d FTS entries for the dead text, want 1: this test would show nothing", entries)
 	}
@@ -253,7 +253,7 @@ func TestSearchAcrossCommitsAgrees(t *testing.T) {
 	close(stop)
 	wg.Wait()
 	var gen int64
-	_ = scanOne(context.Background(), e.store.r, &gen, "SELECT active_gen FROM document")
+	_ = scanOne(context.Background(), e.raw, &gen, "SELECT active_gen FROM document")
 	t.Logf("%d hits checked across %d generations", checked, gen)
 	if gen < 5 {
 		t.Errorf("only %d generations: the searches did not run across commits", gen)

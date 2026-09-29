@@ -8,7 +8,6 @@ import (
 	"math"
 	"math/bits"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // Semantic states (Result.Semantic) and the hybrid mode (Result.ModeUsed), beside SemanticOff and
@@ -164,31 +164,31 @@ func modelOf(fp, provider, name string, dims int) embed.Model {
 func (x *Indexer) setupModels(ctx context.Context) error {
 	m := x.sem
 	target := m.target.Model()
-	tx, err := x.store.w.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO model(fp, provider, name, dims, active) VALUES (?, ?, ?, ?, 0)",
-		target.Fingerprint(), target.Provider, target.Name, target.Dims); err != nil {
-		return err
-	}
+	s := x.store
 	var active string
-	if err := scanOne(ctx, tx, &active, "SELECT fp FROM model WHERE active = 1"); errors.Is(err, errNoRow) {
-		active = target.Fingerprint()
-		if _, err := tx.ExecContext(ctx, "UPDATE model SET active = 1 WHERE fp = ?", active); err != nil {
+	err := s.db.Write(ctx, func(tx *store.Tx) error {
+		row := s.sc.Models(tx).Set(store.ModelFP, target.Fingerprint()).Set(store.ModelProvider, target.Provider).
+			Set(store.ModelName, target.Name).Set(store.ModelDims, int64(target.Dims)).Set(store.ModelActive, int64(0))
+		if err := dao.UpsertOnly(row); err != nil { // kept as it is when the model is known
 			return err
 		}
-		if err := setReady(ctx, tx, nil); err != nil {
+		var err error
+		if active, err = s.activeModel(tx); err != nil {
 			return err
 		}
-	} else if err != nil {
+		if active == "" {
+			active = target.Fingerprint()
+			if err := s.sc.Models(tx).With(store.ModelFP, active).Set(store.ModelActive, int64(1)).Update(); err != nil {
+				return err
+			}
+			if err := s.setReady(tx, nil); err != nil {
+				return err
+			}
+		}
+		_, err = s.bumpSeq(tx)
 		return err
-	}
-	if _, err := bumpSeq(ctx, tx); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -198,39 +198,109 @@ func (x *Indexer) setupModels(ctx context.Context) error {
 }
 
 // bumpSeq advances commit_seq, as every writer transaction does, and returns the new value.
-func bumpSeq(ctx context.Context, tx dao.TxConn) (int64, error) {
-	if _, err := tx.ExecContext(ctx, "UPDATE meta SET v = CAST(v AS INTEGER) + 1 WHERE k = 'commit_seq'"); err != nil {
+func (s *Store) bumpSeq(tx *store.Tx) (int64, error) {
+	if err := s.sc.Self(tx).Set(store.WorkspaceCommitSeq, dao.Incr(1)).Update(); err != nil {
 		return 0, err
 	}
-	var v string
-	if err := scanOne(ctx, tx, &v, "SELECT v FROM meta WHERE k = 'commit_seq'"); err != nil {
+	return s.commitSeq(tx)
+}
+
+// commitSeq is the workspace's commit_seq in tx.
+func (s *Store) commitSeq(tx *store.Tx) (int64, error) {
+	w, err := s.sc.Self(tx).Get(store.WorkspaceCommitSeq)
+	if err != nil {
 		return 0, err
 	}
-	return strconv.ParseInt(v, 10, 64)
+	return w.CommitSeq, nil
 }
 
 // setReady recomputes semantic_ready for docs (nil: every document): a document is ready when
-// every chunk alive at its active generation has a vector under the active model.
-func setReady(ctx context.Context, tx dao.TxConn, docs []int64) error {
-	q := `UPDATE document SET semantic_ready = (
-		EXISTS (SELECT 1 FROM model WHERE active = 1) AND NOT EXISTS (
-			SELECT 1 FROM chunk c WHERE c.doc_id = document.id
-			AND c.gen_from <= document.active_gen AND (c.gen_to IS NULL OR c.gen_to > document.active_gen)
-			AND NOT EXISTS (SELECT 1 FROM embedding e WHERE e.text_hash = c.text_hash
-				AND e.model_fp = (SELECT fp FROM model WHERE active = 1))))`
-	var args []any
-	if docs != nil {
-		if len(docs) == 0 {
-			return nil
+// there is an active model and every chunk alive at its active generation has a vector under it.
+func (s *Store) setReady(tx *store.Tx, docs []int64) error {
+	if docs != nil && len(docs) == 0 {
+		return nil
+	}
+	if docs == nil {
+		all, err := s.sc.Documents(tx).Select(store.DocID)
+		if err != nil {
+			return err
 		}
-		q += " WHERE id IN (?" + strings.Repeat(", ?", len(docs)-1) + ")"
-		for _, d := range docs {
-			args = append(args, d)
+		for _, d := range all {
+			docs = append(docs, d.ID)
 		}
 	}
-	_, err := tx.ExecContext(ctx, q, args...)
-	return err
+	fp, err := s.activeModel(tx)
+	if err != nil {
+		return err
+	}
+	var ready, unready []int64
+	if fp == "" {
+		unready = docs
+	} else {
+		have, err := s.embeddedTexts(tx, fp)
+		if err != nil {
+			return err
+		}
+		missing := map[int64]bool{}
+		for part := range inParts(docs) {
+			rows, err := alive(s.sc.Chunks(tx)).With(store.ChunkDoc, part...).Select(store.ChunkDoc, store.ChunkTextHash)
+			if err != nil {
+				return err
+			}
+			for _, r := range rows {
+				if !have[string(r.TextHash)] {
+					missing[r.DocID] = true
+				}
+			}
+		}
+		for _, d := range docs {
+			if missing[d] {
+				unready = append(unready, d)
+			} else {
+				ready = append(ready, d)
+			}
+		}
+	}
+	for v, ids := range map[int64][]int64{1: ready, 0: unready} {
+		for part := range inParts(ids) {
+			if err := s.sc.Documents(tx).With(store.DocID, part...).Set(store.DocSemanticReady, v).Update(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
+
+// embeddedTexts is the set of text hashes with a vector under model fp.
+func (s *Store) embeddedTexts(tx *store.Tx, fp string) (map[string]bool, error) {
+	rows, err := s.sc.Embeddings(tx).With(store.EmbModel, fp).Select(store.EmbTextHash)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		out[string(r.TextHash)] = true
+	}
+	return out, nil
+}
+
+// inParts yields ids in parts small enough for one IN list.
+func inParts(ids []int64) func(yield func([]any) bool) {
+	return func(yield func([]any) bool) {
+		for i := 0; i < len(ids); i += inPart {
+			part := make([]any, 0, min(inPart, len(ids)-i))
+			for _, id := range ids[i:min(i+inPart, len(ids))] {
+				part = append(part, id)
+			}
+			if !yield(part) {
+				return
+			}
+		}
+	}
+}
+
+// inPart bounds an IN list well under SQLite's bind limit.
+const inPart = 500
 
 // commitVectors stores a batch of vectors in one transaction. Under the active model it makes the
 // documents they complete ready; under the target it flips the active model once the target covers
@@ -239,49 +309,52 @@ func setReady(ctx context.Context, tx dao.TxConn, docs []int64) error {
 // of model is the target's to make, never a late batch's.
 func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	m := x.sem
-	tx, err := x.store.w.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if _, err := bumpSeq(ctx, tx); err != nil {
-		return err
-	}
-	for _, it := range vb.items {
-		if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO embedding(text_hash, model_fp, bits, f32) VALUES (?, ?, ?, ?)",
-			it.textHash, vb.fp, codeBytes(signBits(it.vec)), floatBytes(it.vec)); err != nil {
-			return err
-		}
-	}
-	active := m.active()
+	s := x.store
 	var changed []int64
 	flipped := false
-	switch {
-	case vb.fp == active && len(vb.items) > 0:
-		if changed, err = docsWithText(ctx, tx, vb.items); err != nil {
+	err := s.db.Write(ctx, func(tx *store.Tx) error {
+		if _, err := s.bumpSeq(tx); err != nil {
 			return err
 		}
-		if err := setReady(ctx, tx, changed); err != nil {
-			return err
-		}
-	case vb.fp == m.target.Model().Fingerprint():
-		var missing int
-		if err := scanOne(ctx, tx, &missing, `SELECT EXISTS (SELECT 1 FROM chunk c JOIN document d ON d.id = c.doc_id
-			WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
-			AND NOT EXISTS (SELECT 1 FROM embedding e WHERE e.text_hash = c.text_hash AND e.model_fp = ?))`, vb.fp); err != nil {
-			return err
-		}
-		if missing == 0 {
-			if _, err := tx.ExecContext(ctx, "UPDATE model SET active = (fp = ?)", vb.fp); err != nil {
+		if len(vb.items) > 0 {
+			b := s.sc.EmbeddingBatch(tx).SkipConflicts()
+			for _, it := range vb.items {
+				b.Add(map[store.EmbeddingField]any{store.EmbTextHash: it.textHash, store.EmbModel: vb.fp,
+					store.EmbBits: codeBytes(signBits(it.vec)), store.EmbF32: floatBytes(it.vec)})
+			}
+			if err := b.Flush(); err != nil {
 				return err
 			}
-			if err := setReady(ctx, tx, nil); err != nil {
+		}
+		active := m.active()
+		switch {
+		case vb.fp == active && len(vb.items) > 0:
+			var err error
+			if changed, err = s.docsWithText(tx, vb.items); err != nil {
 				return err
 			}
-			flipped = true
+			return s.setReady(tx, changed)
+		case vb.fp == m.target.Model().Fingerprint():
+			missing, err := s.pendingTexts(tx, vb.fp)
+			if err != nil {
+				return err
+			}
+			if missing == 0 {
+				if err := s.sc.Models(tx).With(store.ModelActive, int64(1)).Set(store.ModelActive, int64(0)).Update(); err != nil {
+					return err
+				}
+				if err := s.sc.Models(tx).With(store.ModelFP, vb.fp).Set(store.ModelActive, int64(1)).Update(); err != nil {
+					return err
+				}
+				if err := s.setReady(tx, nil); err != nil {
+					return err
+				}
+				flipped = true
+			}
 		}
-	}
-	if err := tx.Commit(); err != nil {
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	if flipped {
@@ -293,105 +366,114 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	return x.publish(ctx, changed)
 }
 
-func docsWithText(ctx context.Context, tx dao.TxConn, items []vecItem) ([]int64, error) {
-	q := "SELECT DISTINCT doc_id FROM chunk WHERE text_hash IN (?" + strings.Repeat(", ?", len(items)-1) + ")"
-	args := make([]any, len(items))
+func (s *Store) docsWithText(tx *store.Tx, items []vecItem) ([]int64, error) {
+	hashes := make([]any, len(items))
 	for i, it := range items {
-		args[i] = it.textHash
+		hashes[i] = it.textHash
 	}
-	rows, err := tx.QueryContext(ctx, q, args...)
+	rows, err := dao.SelectDistinct(s.sc.Chunks(tx).With(store.ChunkTextHash, hashes...), store.ChunkDoc)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var out []int64
-	for rows.Next() {
-		var d int64
-		if err := rows.Scan(&d); err != nil {
-			return nil, err
-		}
-		out = append(out, d)
+	out := make([]int64, len(rows))
+	for i, r := range rows {
+		out[i] = r.DocID
 	}
-	return out, rows.Err()
+	return out, nil
+}
+
+// pendingTexts counts the distinct texts of alive chunks with no vector under model fp.
+func (s *Store) pendingTexts(tx *store.Tx, fp string) (int64, error) {
+	have, err := s.embeddedTexts(tx, fp)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := alive(s.sc.Chunks(tx)).Select(store.ChunkTextHash)
+	if err != nil {
+		return 0, err
+	}
+	missing := map[string]bool{}
+	for _, r := range rows {
+		if !have[string(r.TextHash)] {
+			missing[string(r.TextHash)] = true
+		}
+	}
+	return int64(len(missing)), nil
 }
 
 // publish swaps in the code snapshot of the commit just made: changed lists the documents whose
 // codes may differ (nil: rebuild them all). A commit that changed none still publishes, a new
 // header over the same codes, so every commit_seq has its snapshot. Only the writer publishes,
-// after each commit and before its next batch.
+// after each commit and before its next batch, so the read transaction here sees that commit.
 func (x *Indexer) publish(ctx context.Context, changed []int64) error {
 	m := x.sem
 	if m == nil {
 		return nil
 	}
-	var seq string
-	if err := scanOne(ctx, x.store.w, &seq, "SELECT v FROM meta WHERE k = 'commit_seq'"); err != nil {
-		return err
-	}
-	watermark, err := strconv.ParseInt(seq, 10, 64)
-	if err != nil {
-		return err
-	}
-	fp := m.active()
-	cur := m.snap.Load()
-	next := &codeSnap{fp: fp, watermark: watermark}
-	switch {
-	case cur == nil || cur.fp != fp || changed == nil:
-		if next.docs, err = loadCodes(ctx, x.store.w, fp, nil); err != nil {
-			return err
-		}
-	case len(changed) == 0:
-		next.docs = cur.docs
-	default:
-		fresh, err := loadCodes(ctx, x.store.w, fp, changed)
+	s := x.store
+	return s.read(ctx, func(tx *store.Tx) error {
+		watermark, err := s.commitSeq(tx)
 		if err != nil {
 			return err
 		}
-		next.docs = make(map[int64][]code, len(cur.docs)+len(fresh))
-		for d, cs := range cur.docs {
-			next.docs[d] = cs
+		fp := m.active()
+		cur := m.snap.Load()
+		next := &codeSnap{fp: fp, watermark: watermark}
+		switch {
+		case cur == nil || cur.fp != fp || changed == nil:
+			if next.docs, err = s.loadCodes(tx, fp, nil); err != nil {
+				return err
+			}
+		case len(changed) == 0:
+			next.docs = cur.docs
+		default:
+			fresh, err := s.loadCodes(tx, fp, changed)
+			if err != nil {
+				return err
+			}
+			next.docs = make(map[int64][]code, len(cur.docs)+len(fresh))
+			for d, cs := range cur.docs {
+				next.docs[d] = cs
+			}
+			for _, d := range changed {
+				delete(next.docs, d)
+			}
+			for d, cs := range fresh {
+				next.docs[d] = cs
+			}
 		}
-		for _, d := range changed {
-			delete(next.docs, d)
-		}
-		for d, cs := range fresh {
-			next.docs[d] = cs
-		}
-	}
-	m.snap.Store(next)
-	return nil
+		m.snap.Store(next)
+		return nil
+	})
+}
+
+// withVectors narrows an alive-chunk query to the chunks of ready documents that have a vector
+// under model fp, joining the vector (inside the workspace).
+func withVectors(d dao.DAO[*store.Chunk, store.ChunkField, int64], fp string) dao.DAO[*store.Chunk, store.ChunkField, int64] {
+	return d.Join(store.JoinEmbedding).WithPredicate(store.EmbeddingOfChunk).
+		WithPredicate(dao.Eq(`"embedding"."model_fp"`, fp)).WithPredicate(dao.Eq(`"document"."semantic_ready"`, 1))
 }
 
 // loadCodes reads the codes of the alive chunks of ready documents under model fp: of docs, or of
 // every document when docs is nil.
-func loadCodes(ctx context.Context, q dao.Querier, fp string, docs []int64) (map[int64][]code, error) {
-	query := `SELECT c.doc_id, c.id, e.bits FROM chunk c JOIN document d ON d.id = c.doc_id
-		JOIN embedding e ON e.text_hash = c.text_hash AND e.model_fp = ?
-		WHERE d.semantic_ready = 1 AND c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)`
-	args := []any{fp}
-	if docs != nil {
-		query += " AND c.doc_id IN (?" + strings.Repeat(", ?", len(docs)-1) + ")"
-		for _, d := range docs {
-			args = append(args, d)
-		}
-	}
-	rows, err := q.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
+func (s *Store) loadCodes(tx *store.Tx, fp string, docs []int64) (map[int64][]code, error) {
 	out := map[int64][]code{}
-	for rows.Next() {
-		var doc int64
-		var c code
-		var b []byte
-		if err := rows.Scan(&doc, &c.chunk, &b); err != nil {
+	add := func(d dao.DAO[*store.Chunk, store.ChunkField, int64]) error {
+		rows, err := withVectors(alive(d), fp).Select(store.ChunkDoc, store.ChunkID, store.ChunkEmbBits)
+		for _, r := range rows {
+			out[r.DocID] = append(out[r.DocID], code{chunk: r.ID, bits: bitsOf(r.EmbBits)})
+		}
+		return err
+	}
+	if docs == nil {
+		return out, add(s.sc.Chunks(tx))
+	}
+	for part := range inParts(docs) {
+		if err := add(s.sc.Chunks(tx).With(store.ChunkDoc, part...)); err != nil {
 			return nil, err
 		}
-		c.bits = bitsOf(b)
-		out[doc] = append(out[doc], c)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 // embedLoop is an embedding worker: it embeds the alive chunks that lack a vector under its model
@@ -438,11 +520,15 @@ func (x *Indexer) embedOnce(ctx context.Context, role int) (bool, error) {
 		}
 		fp = target
 	}
-	var provider, name string
-	var dims int
-	if err := scanRow(ctx, x.store.r, []any{&provider, &name, &dims}, "SELECT provider, name, dims FROM model WHERE fp = ?", fp); err != nil {
+	var mrow *store.Model
+	if err := x.store.read(ctx, func(tx *store.Tx) error {
+		var err error
+		mrow, err = x.store.sc.Models(tx).With(store.ModelFP, fp).Get()
+		return err
+	}); err != nil {
 		return false, err
 	}
+	provider, name, dims := deref(mrow.Provider), deref(mrow.Name), int(derefInt(mrow.Dims))
 	p, err := m.provider(fp, modelOf(fp, provider, name, dims))
 	if err != nil {
 		if fp != target {
@@ -450,7 +536,7 @@ func (x *Indexer) embedOnce(ctx context.Context, role int) (bool, error) {
 		}
 		return false, err
 	}
-	hashes, texts, err := unembedded(ctx, x.store.r, fp, m.skip(fp))
+	hashes, texts, err := x.store.unembedded(ctx, fp, m.skip(fp))
 	if err != nil {
 		return false, err
 	}
@@ -540,31 +626,41 @@ func (x *Indexer) handVectors(ctx context.Context, vb vecBatch) error {
 }
 
 // unembedded lists up to embedBatch distinct texts of alive chunks with no vector under fp, but
-// those set aside: the text is breadcrumb, a line feed and body, exactly what text_hash names.
-func unembedded(ctx context.Context, q dao.Querier, fp string, skip map[string]bool) ([][]byte, []string, error) {
-	rows, err := q.QueryContext(ctx, `SELECT c.text_hash, MIN(c.breadcrumb || char(10) || c.body)
-		FROM chunk c JOIN document d ON d.id = c.doc_id
-		WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
-		AND NOT EXISTS (SELECT 1 FROM embedding e WHERE e.text_hash = c.text_hash AND e.model_fp = ?)
-		GROUP BY c.text_hash ORDER BY MIN(c.id) LIMIT ?`, fp, embedBatch+len(skip))
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
+// those set aside, in the order their first chunks were written: the text is breadcrumb, a line
+// feed and body, exactly what text_hash names, so every chunk of one hash has the same text.
+func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool) ([][]byte, []string, error) {
 	var hashes [][]byte
 	var texts []string
-	for rows.Next() {
-		var h []byte
-		var t string
-		if err := rows.Scan(&h, &t); err != nil {
-			return nil, nil, err
+	err := s.read(ctx, func(tx *store.Tx) error {
+		have, err := s.embeddedTexts(tx, fp)
+		if err != nil {
+			return err
 		}
-		if skip[string(h)] || len(texts) == embedBatch {
-			continue
+		seen := map[string]bool{}
+		var after int64
+		for len(texts) < embedBatch {
+			rows, err := alive(s.sc.Chunks(tx)).WithPredicate(dao.Gt(`"chunk"."id"`, after)).
+				OrderBy(dao.Asc(store.ChunkByID)).Limit(inPart).
+				Select(store.ChunkID, store.ChunkTextHash, store.ChunkBreadcrumb, store.ChunkBody)
+			if err != nil {
+				return err
+			}
+			for _, r := range rows {
+				after = r.ID
+				h := string(r.TextHash)
+				if have[h] || seen[h] || skip[h] || len(texts) == embedBatch {
+					continue
+				}
+				seen[h] = true
+				hashes, texts = append(hashes, r.TextHash), append(texts, r.Breadcrumb+"\n"+r.Body)
+			}
+			if len(rows) < inPart {
+				break
+			}
 		}
-		hashes, texts = append(hashes, h), append(texts, t)
-	}
-	return hashes, texts, rows.Err()
+		return nil
+	})
+	return hashes, texts, err
 }
 
 // PurgeModel removes a model's vectors and its row (index.purge_model). The active model and the
@@ -573,21 +669,22 @@ func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 	if x.sem != nil && (fp == x.sem.active() || fp == x.sem.target.Model().Fingerprint()) {
 		return fmt.Errorf("%w: %s", ErrModelInUse, fp)
 	}
-	return x.do(ctx, func(ctx context.Context, tx dao.TxConn) error {
-		var active int
-		if err := scanOne(ctx, tx, &active, "SELECT active FROM model WHERE fp = ?", fp); errors.Is(err, errNoRow) {
+	sc := x.store.sc
+	return x.do(ctx, func(ctx context.Context, tx *store.Tx) error {
+		m, err := sc.Models(tx).With(store.ModelFP, fp).Get(store.ModelActive)
+		if errors.Is(err, dao.ErrNoRows) {
 			return fmt.Errorf("index: no model %s: %w", fp, ErrNoDocument)
-		} else if err != nil {
+		}
+		if err != nil {
 			return err
 		}
-		if active == 1 {
+		if m.Active == 1 {
 			return fmt.Errorf("%w: %s is active", ErrModelInUse, fp)
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM embedding WHERE model_fp = ?", fp); err != nil {
+		if err := sc.Embeddings(tx).With(store.EmbModel, fp).Delete(); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, "DELETE FROM model WHERE fp = ?", fp)
-		return err
+		return sc.Models(tx).With(store.ModelFP, fp).Delete()
 	})
 }
 
@@ -595,12 +692,8 @@ func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 // snapshot of model fp at the transaction's commit_seq (or, when there is none, the same scan over
 // embedding rows in SQL), then windows of hammingTop candidates validated in the transaction (alive,
 // ready, the filters) and rescored by dot product, until retrieverTop survive.
-func semanticHits(ctx context.Context, tx dao.Querier, m *semantic, fp string, qvec []float32, opts QueryOpts) ([]candidate, error) {
-	var seq string
-	if err := scanOne(ctx, tx, &seq, "SELECT v FROM meta WHERE k = 'commit_seq'"); err != nil {
-		return nil, err
-	}
-	watermark, err := strconv.ParseInt(seq, 10, 64)
+func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float32, opts QueryOpts) ([]candidate, error) {
+	watermark, err := s.commitSeq(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +721,7 @@ func semanticHits(ctx context.Context, tx dao.Querier, m *semantic, fp string, q
 		}
 	} else {
 		m.fallbackScans.Add(1)
-		codes, err := loadCodes(ctx, tx, fp, nil)
+		codes, err := s.loadCodes(tx, fp, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -651,36 +744,26 @@ func semanticHits(ctx context.Context, tx dao.Querier, m *semantic, fp string, q
 	var valid []rescored
 	for start := 0; start < len(all) && len(valid) < retrieverTop; start += hammingTop {
 		window := all[start:min(start+hammingTop, len(all))]
-		where, args := filterSQL(opts)
-		q := `SELECT c.doc_id, c.ord, d.path, c.breadcrumb, c.byte_start, c.byte_end, d.active_gen, c.body, e.f32
-			FROM chunk c JOIN document d ON d.id = c.doc_id JOIN embedding e ON e.text_hash = c.text_hash AND e.model_fp = ?
-			WHERE d.semantic_ready = 1 AND c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
-			AND c.id IN (?` + strings.Repeat(", ?", len(window)-1) + ")" + where
-		qargs := []any{fp}
-		for _, s := range window {
-			qargs = append(qargs, s.chunk)
+		ids := make([]any, len(window))
+		for i, w := range window {
+			ids[i] = w.chunk
 		}
-		rows, err := tx.QueryContext(ctx, q, append(qargs, args...)...)
+		d, ok, err := s.filtered(tx, withVectors(alive(s.sc.Chunks(tx)), fp).With(store.ChunkID, ids...), opts)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			break
+		}
+		rows, err := d.Select(store.ChunkDoc, store.ChunkOrd, store.ChunkDocPath, store.ChunkBreadcrumb, store.ChunkByteStart,
+			store.ChunkByteEnd, store.ChunkDocActiveGen, store.ChunkBody, store.ChunkEmbF32)
 		if err != nil {
 			return nil, fmt.Errorf("index: semantic search: %w", err)
 		}
-		for rows.Next() {
-			var r rescored
-			var body string
-			var f []byte
-			if err := rows.Scan(&r.c.docID, &r.c.ord, &r.c.hit.Path, &r.c.hit.Breadcrumb, &r.c.hit.ByteStart, &r.c.hit.ByteEnd,
-				&r.c.hit.Generation, &body, &f); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			r.dot = dot(qvec, floatsOf(f))
-			r.c.hit.Snippet = snippetOf(body)
-			r.c.hit.Via = []string{ModeSemantic}
-			valid = append(valid, r)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return nil, err
+		for _, r := range rows {
+			valid = append(valid, rescored{dot: dot(qvec, floatsOf(r.EmbF32)), c: candidate{docID: r.DocID, ord: int(r.Ord),
+				hit: Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb, ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd),
+					Generation: r.DocActiveGen, Snippet: snippetOf(r.Body), Via: []string{ModeSemantic}}}})
 		}
 	}
 	sort.Slice(valid, func(i, j int) bool {
@@ -815,26 +898,25 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	if t := m.target.Model().Fingerprint(); t != es.Model {
 		es.Target = t
 	}
-	var unready int
-	pending := func(fp string, n *int64) error {
-		return scanOne(ctx, x.store.r, n, `SELECT COUNT(DISTINCT c.text_hash) FROM chunk c JOIN document d ON d.id = c.doc_id
-			WHERE c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen)
-			AND NOT EXISTS (SELECT 1 FROM embedding e WHERE e.text_hash = c.text_hash AND e.model_fp = ?)`, fp)
-	}
-	if err := pending(es.Model, &es.Pending); err != nil {
-		return st, err
-	}
-	if es.Target != "" {
-		if err := pending(es.Target, &es.TargetPending); err != nil {
-			return st, err
+	s := x.store
+	if err := s.read(ctx, func(tx *store.Tx) error {
+		var err error
+		if es.Pending, err = s.pendingTexts(tx, es.Model); err != nil {
+			return err
 		}
-		es.TargetRefused = len(m.skip(es.Target))
-	}
-	if err := scanOne(ctx, x.store.r, &unready, "SELECT EXISTS (SELECT 1 FROM document WHERE semantic_ready = 0)"); err != nil {
+		if es.Target != "" {
+			if es.TargetPending, err = s.pendingTexts(tx, es.Target); err != nil {
+				return err
+			}
+			es.TargetRefused = len(m.skip(es.Target))
+		}
+		unready, err := s.sc.Documents(tx).With(store.DocSemanticReady, int64(0)).Exists()
+		if unready {
+			es.Semantic = SemanticPartial
+		}
+		return err
+	}); err != nil {
 		return st, err
-	}
-	if unready == 1 {
-		es.Semantic = SemanticPartial
 	}
 	m.mu.Lock()
 	if m.lastErr != nil {

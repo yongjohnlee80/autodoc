@@ -14,10 +14,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/dao/sqlite"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
 	"github.com/yongjohnlee80/autodoc/core/follow"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 var testMatch = func(p string) bool { return strings.HasSuffix(p, ".md") }
@@ -27,9 +30,14 @@ type env struct {
 	fsys  *memfs.FS
 	fault *faultFS // what the indexer reads through
 	dir   string
+	db    *store.Store
+	ws    int64 // the test's workspace
 	store *Store
 	ix    *Indexer
 	stop  func()
+	// raw is the store file as SQLite alone, for the checks of rows the API does not show: tests
+	// only.
+	raw dao.DataConn
 }
 
 func newEnv(t *testing.T, opts Options) *env {
@@ -93,7 +101,7 @@ func (e *env) failing(path, want string) {
 // job reads path's job row: whether there is one, its attempts and its last error.
 func (e *env) job(p string) (ok bool, attempts int, lastErr string) {
 	e.t.Helper()
-	err := scanRow(context.Background(), e.store.r, []any{&attempts, &lastErr},
+	err := scanRow(context.Background(), e.raw, []any{&attempts, &lastErr},
 		"SELECT attempts, COALESCE(last_error, '') FROM index_job WHERE path = ?", p)
 	if errors.Is(err, errNoRow) {
 		return false, 0, ""
@@ -110,10 +118,29 @@ func (e *env) open(opts Options) {
 	if e.stop != nil {
 		e.stop()
 	}
-	s, err := Open(context.Background(), filepath.Join(e.dir, "index.db"))
+	ctx0 := context.Background()
+	path := filepath.Join(e.dir, "autodoc.db")
+	db, err := store.Open(ctx0, path)
 	if err != nil {
 		e.t.Fatal(err)
 	}
+	if e.ws == 0 {
+		w, err := db.AddWorkspace(ctx0, "test", "/test", nil, nil)
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		e.ws = w.ID
+	}
+	if e.raw == nil {
+		// several connections: a test may hold a read transaction open while it reads more
+		raw, err := sqlite.OpenNamed(ctx0, "raw:"+path, "file:"+path+"?_pragma=busy_timeout(5000)", sqlite.MaxOpenConns(4))
+		if err != nil {
+			e.t.Fatal(err)
+		}
+		e.raw = raw
+		e.t.Cleanup(func() { _ = raw.Close() })
+	}
+	s := Open(db, e.ws)
 	if opts.BatchDelay == 0 {
 		opts.BatchDelay = 20 * time.Millisecond
 	}
@@ -124,7 +151,7 @@ func (e *env) open(opts Options) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- ix.Run(ctx) }()
-	e.store, e.ix = s, ix
+	e.db, e.store, e.ix = db, s, ix
 	stopped := false
 	e.stop = func() {
 		if stopped {
@@ -137,7 +164,7 @@ func (e *env) open(opts Options) {
 		case <-time.After(5 * time.Second):
 			e.t.Error("the indexer did not stop")
 		}
-		_ = s.Close()
+		_ = db.Close()
 	}
 	e.t.Cleanup(e.stop)
 }
@@ -200,10 +227,10 @@ type chunkRow struct {
 func (e *env) alive(p string) (gen int64, out []chunkRow) {
 	e.t.Helper()
 	ctx := context.Background()
-	if err := scanOne(ctx, e.store.r, &gen, "SELECT active_gen FROM document WHERE path = ?", p); err != nil {
+	if err := scanOne(ctx, e.raw, &gen, "SELECT active_gen FROM document WHERE path = ?", p); err != nil {
 		e.t.Fatalf("%s: %v", p, err)
 	}
-	rows, err := e.store.r.QueryContext(ctx, `SELECT c.ord, c.breadcrumb, c.body, c.byte_start, c.byte_end, c.gen_from FROM chunk c
+	rows, err := e.raw.QueryContext(ctx, `SELECT c.ord, c.breadcrumb, c.body, c.byte_start, c.byte_end, c.gen_from FROM chunk c
 		JOIN document d ON d.id = c.doc_id WHERE d.path = ? AND c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen) ORDER BY c.ord`, p)
 	if err != nil {
 		e.t.Fatal(err)
@@ -222,7 +249,7 @@ func (e *env) alive(p string) (gen int64, out []chunkRow) {
 // match runs an FTS query over alive chunks and returns the matching documents' paths.
 func (e *env) match(q string) []string {
 	e.t.Helper()
-	rows, err := e.store.r.QueryContext(context.Background(), `SELECT DISTINCT d.path FROM chunk_fts f JOIN chunk c ON c.id = f.rowid
+	rows, err := e.raw.QueryContext(context.Background(), `SELECT DISTINCT d.path FROM chunk_fts f JOIN chunk c ON c.id = f.rowid
 		JOIN document d ON d.id = c.doc_id WHERE chunk_fts MATCH ? AND c.gen_from <= d.active_gen AND (c.gen_to IS NULL OR c.gen_to > d.active_gen) ORDER BY d.path`, q)
 	if err != nil {
 		e.t.Fatalf("MATCH %q: %v", q, err)
@@ -290,7 +317,7 @@ func TestEditOneSectionWritesOnlyThatSection(t *testing.T) {
 		}
 	}
 	var dead int
-	_ = scanOne(context.Background(), e.store.r, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to = ?", gen)
+	_ = scanOne(context.Background(), e.raw, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to = ?", gen)
 	if fresh != 1 || dead != 1 || len(chunks) != 21 {
 		t.Errorf("edit of one section: %d new chunks, %d retired, %d alive; want 1, 1, 21", fresh, dead, len(chunks))
 	}
@@ -384,7 +411,7 @@ func TestReaderSeesOneGeneration(t *testing.T) {
 	e.ix.Touch("a.md")
 	e.indexedAt("a.md")
 	ctx := context.Background()
-	tx, err := e.store.r.Begin(ctx)
+	tx, err := e.raw.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,9 +481,9 @@ func TestDeletedAndIneligibleLeave(t *testing.T) {
 		t.Errorf("changes = %+v, want two deletes", changes)
 	}
 	var rowsLeft, entries int
-	_ = scanOne(ctx, e.store.r, &rowsLeft, "SELECT COUNT(*) FROM chunk")
+	_ = scanOne(ctx, e.raw, &rowsLeft, "SELECT COUNT(*) FROM chunk")
 	// the FTS index itself: an entry left behind never joins a hit, but it skews BM25
-	_ = scanOne(ctx, e.store.r, &entries, "SELECT COUNT(*) FROM chunk_fts WHERE chunk_fts MATCH 'apricot OR blueberry'")
+	_ = scanOne(ctx, e.raw, &entries, "SELECT COUNT(*) FROM chunk_fts WHERE chunk_fts MATCH 'apricot OR blueberry'")
 	if rowsLeft != 0 || entries != 0 {
 		t.Errorf("after both documents went: %d chunk rows, %d FTS entries", rowsLeft, entries)
 	}
@@ -476,7 +503,7 @@ func TestDeadChunkNeverAHitBeforeGC(t *testing.T) {
 		t.Errorf("a dead chunk is a hit: %v", got)
 	}
 	var dead int
-	_ = scanOne(context.Background(), e.store.r, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
+	_ = scanOne(context.Background(), e.raw, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
 	if dead != 1 {
 		t.Fatalf("%d dead rows kept, want 1", dead)
 	}
@@ -484,9 +511,9 @@ func TestDeadChunkNeverAHitBeforeGC(t *testing.T) {
 	if err != nil || more {
 		t.Fatalf("gc: %v %v", more, err)
 	}
-	_ = scanOne(context.Background(), e.store.r, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
+	_ = scanOne(context.Background(), e.raw, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
 	var raw int
-	_ = scanOne(context.Background(), e.store.r, &raw, "SELECT COUNT(*) FROM chunk_fts WHERE chunk_fts MATCH '\"zebra\"'")
+	_ = scanOne(context.Background(), e.raw, &raw, "SELECT COUNT(*) FROM chunk_fts WHERE chunk_fts MATCH '\"zebra\"'")
 	if dead != 0 || raw != 0 {
 		t.Errorf("after GC: %d dead rows, %d FTS entries for the dead text", dead, raw)
 	}
@@ -498,16 +525,9 @@ func TestJobsSurviveARestart(t *testing.T) {
 	e.write("a.md", "a words\n")
 	e.write("b.md", "b words\n")
 	e.stop()
-	s, err := Open(context.Background(), filepath.Join(e.dir, "index.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	for i, p := range []string{"a.md", "b.md"} {
-		if _, err := s.w.ExecContext(context.Background(), "INSERT INTO index_job(path, seq, reason, enqueued_at) VALUES (?, ?, 'touch', 0)", p, i+1); err != nil {
-			t.Fatal(err)
-		}
+		e.exec("INSERT INTO index_job(workspace_id, path, seq, reason, enqueued_at) VALUES (?, ?, ?, 'touch', 0)", e.ws, p, i+1)
 	}
-	_ = s.Close()
 	e.stop = nil
 	e.open(Options{})
 	e.indexedAt("a.md")
@@ -532,7 +552,7 @@ func TestStaleResultIsDiscarded(t *testing.T) {
 		t.Errorf("chunks = %+v, want the newer content", chunks)
 	}
 	var changes int
-	_ = scanOne(context.Background(), e.store.r, &changes, "SELECT COUNT(*) FROM change")
+	_ = scanOne(context.Background(), e.raw, &changes, "SELECT COUNT(*) FROM change")
 	if changes != 1 {
 		t.Errorf("%d changes: the stale result was committed too", changes)
 	}
@@ -551,7 +571,7 @@ func (e *env) snap() snapshot {
 	var s snapshot
 	ctx := context.Background()
 	collect := func(dst *[]string, q string) {
-		rows, err := e.store.r.QueryContext(ctx, q)
+		rows, err := e.raw.QueryContext(ctx, q)
 		if err != nil {
 			e.t.Fatal(err)
 		}
@@ -570,11 +590,11 @@ func (e *env) snap() snapshot {
 	collect(&s.Tags, "SELECT d.path, t.tag FROM doc_tag t JOIN document d ON d.id = t.doc_id ORDER BY d.path, t.tag")
 	collect(&s.Links, `SELECT s.path, l.kind || '|' || l.raw || '|' || l.name || '|' || COALESCE(l.anchor, '') || '|' || COALESCE(d.path, '-')
 		FROM link l JOIN document s ON s.id = l.src_doc LEFT JOIN document d ON d.id = l.dst_doc ORDER BY s.path, l.rowid`)
-	collect(&s.Names, "SELECT d.path, n.key || '|' || n.is_path FROM doc_name n JOIN document d ON d.id = n.doc_id ORDER BY d.path, n.key")
+	collect(&s.Names, "SELECT d.path, n.name_key || '|' || n.is_path FROM doc_name n JOIN document d ON d.id = n.doc_id ORDER BY d.path, n.name_key")
 	return s
 }
 
-// TestRebuildFromScratchIsEqual: deleting index.db and indexing again gives the same documents,
+// TestRebuildFromScratchIsEqual: deleting the store and indexing again gives the same documents,
 // chunks, tags, links and names.
 func TestRebuildFromScratchIsEqual(t *testing.T) {
 	e := newEnv(t, Options{})
@@ -589,10 +609,11 @@ func TestRebuildFromScratchIsEqual(t *testing.T) {
 		t.Fatalf("the links to compare are not the ones written: %q", before.Links)
 	}
 	e.stop()
-	for _, f := range []string{"index.db", "index.db-wal", "index.db-shm"} {
+	_ = e.raw.Close()
+	for _, f := range []string{"autodoc.db", "autodoc.db-wal", "autodoc.db-shm"} {
 		_ = os.Remove(filepath.Join(e.dir, f))
 	}
-	e.stop = nil
+	e.raw, e.ws, e.stop = nil, 0, nil // a new store: a new workspace, and a raw connection to it
 	e.open(Options{})
 	// the other order: b.md's links resolve only once notes/a.md is back, by re-resolution
 	for _, p := range []string{"b.md", "notes/a.md"} {
@@ -615,54 +636,24 @@ func TestOutdatedDocumentsRebuild(t *testing.T) {
 	e.indexedAt("a.md")
 	e.indexedAt("b.md")
 	e.stop()
-	path := filepath.Join(e.dir, "index.db")
-	s, err := Open(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.w.ExecContext(context.Background(), "UPDATE document SET indexer = 'c0.s1'"); err != nil {
-		t.Fatal(err)
-	}
-	_ = s.Close()
+	e.exec("UPDATE document SET indexer = 'c0.s1'")
 	// the interrupted start: the store is opened, and the process stops before the indexer runs
-	s, err = Open(context.Background(), path)
+	db, err := store.Open(context.Background(), filepath.Join(e.dir, "autodoc.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = s.Close()
+	_ = db.Close()
 	e.stop = nil
 	e.open(Options{})
 	// "no pending jobs" is already true before the rebuild's jobs are written, so wait for the end
 	// state itself: every document carrying this version's indexer
 	e.eventually("both documents rebuilt", func() bool {
 		var stale int
-		_ = scanOne(context.Background(), e.store.r, &stale, "SELECT COUNT(*) FROM document WHERE indexer != ?", IndexerVersion)
+		_ = scanOne(context.Background(), e.raw, &stale, "SELECT COUNT(*) FROM document WHERE indexer != ?", IndexerVersion)
 		return stale == 0
 	})
 	if e.ix.Parses() != 2 {
 		t.Errorf("%d parses for two unchanged documents, want 2", e.ix.Parses())
-	}
-}
-
-// TestAnotherSchemaIsRefused: a store written under another schema is not opened, and not marked
-// as this one's.
-func TestAnotherSchemaIsRefused(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "index.db")
-	s, err := Open(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.w.ExecContext(context.Background(), "UPDATE meta SET v = '0' WHERE k = 'schema_version'"); err != nil {
-		t.Fatal(err)
-	}
-	_ = s.Close()
-	for range 2 {
-		if s, err := Open(context.Background(), path); !errors.Is(err, ErrSchemaVersion) {
-			if s != nil {
-				_ = s.Close()
-			}
-			t.Fatalf("opening a schema 0 store: %v, want ErrSchemaVersion", err)
-		}
 	}
 }
 
@@ -679,7 +670,7 @@ func TestFrontmatter(t *testing.T) {
 	}
 	ctx := context.Background()
 	var title, fm string
-	if err := scanRow(ctx, e.store.r, []any{&title, &fm}, "SELECT title, frontmatter_json FROM document WHERE path = 'good.md'"); err != nil {
+	if err := scanRow(ctx, e.raw, []any{&title, &fm}, "SELECT title, frontmatter_json FROM document WHERE path = 'good.md'"); err != nil {
 		t.Fatal(err)
 	}
 	if title != "The Plan" || !strings.HasPrefix(fm, `{"title":"The Plan"`) {
@@ -691,7 +682,7 @@ func TestFrontmatter(t *testing.T) {
 		t.Errorf("tags = %v, want %v", snap.Tags, wantTags)
 	}
 	var aliases int
-	_ = scanOne(ctx, e.store.r, &aliases, "SELECT COUNT(*) FROM doc_alias")
+	_ = scanOne(ctx, e.raw, &aliases, "SELECT COUNT(*) FROM doc_alias")
 	if aliases != 2 {
 		t.Errorf("%d aliases, want 2", aliases)
 	}
@@ -702,7 +693,7 @@ func TestFrontmatter(t *testing.T) {
 	if got := e.match(`"still counts"`); !reflect.DeepEqual(got, []string{"bad.md"}) {
 		t.Errorf("the body under bad frontmatter: %v", got)
 	}
-	_ = scanOne(ctx, e.store.r, &title, "SELECT title FROM document WHERE path = 'h1.md'")
+	_ = scanOne(ctx, e.raw, &title, "SELECT title FROM document WHERE path = 'h1.md'")
 	if title != "From The Heading" {
 		t.Errorf("h1.md title %q", title)
 	}
@@ -743,7 +734,7 @@ func TestChangeCursor(t *testing.T) {
 			t.Fatalf("not monotonic: %+v", all)
 		}
 	}
-	if _, err := e.store.w.ExecContext(ctx, "DELETE FROM change WHERE seq <= 2"); err != nil {
+	if _, err := e.raw.ExecContext(ctx, "DELETE FROM change WHERE seq <= 2"); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, err := e.store.Changes(ctx, 1, 10); !errors.Is(err, ErrCursorExpired) {
@@ -763,33 +754,41 @@ func TestChangeCursor(t *testing.T) {
 func TestChangeRetention(t *testing.T) {
 	e := newEnv(t, Options{})
 	e.stop()
-	s, err := Open(context.Background(), filepath.Join(e.dir, "index.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer s.Close()
 	ctx := context.Background()
 	now := time.Now()
-	tx, err := s.w.Begin(ctx)
+	const n = retainRows + 10
+	tx, err := e.raw.Begin(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const n = retainRows + 10
 	for i := 1; i <= n; i++ {
 		at := now.Unix()
 		if i <= 10 {
 			at = now.Add(-8 * 24 * time.Hour).Unix() // the first ten are old
 		}
-		if _, err := tx.ExecContext(ctx, "INSERT INTO change(path, op, generation, at) VALUES ('p', 'upsert', 1, ?)", at); err != nil {
+		if _, err := tx.ExecContext(ctx, "INSERT INTO change(workspace_id, seq, path, op, generation, at) VALUES (?, ?, 'p', 'upsert', 1, ?)", e.ws, i, at); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := pruneChanges(ctx, tx, now); err != nil {
+	if _, err := tx.ExecContext(ctx, "UPDATE workspace SET change_seq = ? WHERE id = ?", n, e.ws); err != nil {
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
 		t.Fatal(err)
 	}
+	db, err := store.Open(ctx, filepath.Join(e.dir, "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	s := Open(db, e.ws)
+	prune := func() {
+		t.Helper()
+		if err := db.Write(ctx, func(tx *store.Tx) error { return s.pruneChanges(tx, now) }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	prune()
 	st, err := s.Status(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -798,12 +797,8 @@ func TestChangeRetention(t *testing.T) {
 	if st.OldestRetained != 11 || st.Cursor != n {
 		t.Errorf("oldest retained %d (want 11), cursor %d (want %d)", st.OldestRetained, st.Cursor, n)
 	}
-	tx, _ = s.w.Begin(ctx)
-	if _, err := tx.ExecContext(ctx, "UPDATE change SET at = ? WHERE seq <= 20", now.Add(-8*24*time.Hour).Unix()); err != nil {
-		t.Fatal(err)
-	}
-	_ = pruneChanges(ctx, tx, now)
-	_ = tx.Commit()
+	e.exec("UPDATE change SET at = ? WHERE seq <= 20", now.Add(-8*24*time.Hour).Unix())
+	prune()
 	st, _ = s.Status(ctx)
 	// 11..20 are now old, but within 100 000 of the head: they stay
 	if st.OldestRetained != 11 {
