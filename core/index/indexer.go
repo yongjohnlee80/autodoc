@@ -48,6 +48,8 @@ type Options struct {
 	afterRead func(path string)
 	// noGC (tests only) keeps dead chunks, to show they are never alive before GC takes them.
 	noGC bool
+	// onCommit, when set (tests only), is told how long each batch's transaction held the writer.
+	onCommit func(time.Duration)
 	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
 	// one active, or, while another is active, the one filling to replace it.
 	Provider embed.Provider
@@ -473,6 +475,7 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 	}
 	var outcomes []outcome
 	var changed []int64 // the documents written: their codes may differ
+	began := time.Now()
 	err := s.db.Write(ctx, func(tx *store.Tx) error {
 		if _, err := s.bumpSeq(tx); err != nil {
 			return err
@@ -535,6 +538,9 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 		}
 		return nil
 	})
+	if x.opts.onCommit != nil {
+		x.opts.onCommit(time.Since(began))
+	}
 	if err != nil {
 		return err
 	}
