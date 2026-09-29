@@ -1,9 +1,11 @@
 // Package config reads AutoDoc's configuration file and resolves the places AutoDoc keeps things:
-// the endpoint the daemon listens on, the state directory, and each workspace's root.
+// the endpoint the daemon listens on, the state directory, and the store. Workspaces are not
+// configured here: they are rows of the store, added in the TUI or with workspace.add.
 //
 //	[server]
 //	socket = ""                 # default: $XDG_RUNTIME_DIR/autodoc.sock
 //	state_dir = ""              # default: $XDG_STATE_HOME/autodoc
+//	data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store: autodoc.db)
 //
 //	[follow]
 //	poll_interval = "2s"        # the watch fallback's listing interval
@@ -13,12 +15,6 @@
 //	model = "snowflake-arctic-embed" # e.g.: the model the provider serves (no default)
 //	base_url = ""               # default: http://localhost:11434 (ollama), https://api.openai.com (openai)
 //	api_key_env = ""            # openai: the environment variable holding the key (never the key itself)
-//
-//	[[workspace]]
-//	name = "kb"                 # the handle every API call names
-//	root = "~/notes"            # one root per workspace
-//	include = ["**/*.md"]       # default
-//	exclude = [".git/**"]       # default
 package config
 
 import (
@@ -41,10 +37,9 @@ var ErrInvalid = errors.New("config: invalid")
 
 // Config is the whole file, with defaults filled in.
 type Config struct {
-	Server     Server      `toml:"server"`
-	Follow     Follow      `toml:"follow"`
-	Embedding  Embedding   `toml:"embedding"`
-	Workspaces []Workspace `toml:"workspace"`
+	Server    Server    `toml:"server"`
+	Follow    Follow    `toml:"follow"`
+	Embedding Embedding `toml:"embedding"`
 }
 
 // Embedding names the embedding provider semantic search uses. The zero value is none.
@@ -73,6 +68,7 @@ const (
 type Server struct {
 	Socket   string `toml:"socket"`    // the unix socket; "" resolves to the default
 	StateDir string `toml:"state_dir"` // the state directory; "" resolves to the default
+	DataDir  string `toml:"data_dir"`  // the store's directory; "" resolves to the default
 }
 
 // Follow configures how workspaces follow their roots.
@@ -93,12 +89,10 @@ func (d *Duration) UnmarshalText(b []byte) error {
 	return nil
 }
 
-// Workspace is one root AutoDoc indexes.
+// Workspace is one root AutoDoc indexes, as it is added: a row of the store (core/store).
 type Workspace struct {
-	Name    string   `toml:"name"`
-	Root    string   `toml:"root"`
-	Include []string `toml:"include"`
-	Exclude []string `toml:"exclude"`
+	Name, Root       string
+	Include, Exclude []string
 }
 
 // The defaults a workspace gets when it names no patterns of its own.
@@ -151,6 +145,9 @@ func Load(file string) (*Config, error) {
 			if keys[i] == "embedding.api_key" {
 				return nil, fmt.Errorf("%w: %s: embedding.api_key: a key does not belong in the file; name the environment variable holding it with api_key_env", ErrInvalid, file)
 			}
+			if keys[i] == "workspace" || strings.HasPrefix(keys[i], "workspace.") {
+				return nil, fmt.Errorf("%w: %s: [[workspace]]: workspaces are kept in the store now; add them in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add, and remove the section", ErrInvalid, file)
+			}
 		}
 		return nil, fmt.Errorf("%w: %s: unknown settings %s", ErrInvalid, file, strings.Join(keys, ", "))
 	}
@@ -168,40 +165,36 @@ func (c *Config) normalize() error {
 	if c.Follow.PollInterval.Duration < 0 {
 		return fmt.Errorf("%w: follow.poll_interval must be positive", ErrInvalid)
 	}
-	if err := c.Embedding.normalize(); err != nil {
-		return err
+	return c.Embedding.normalize()
+}
+
+// NormalizeWorkspace checks a workspace before it is added, and fills its defaults: a name that
+// is not empty and holds no path separator; a root that is absolute after "~/" is expanded; and
+// patterns that are valid (none: the defaults).
+func NormalizeWorkspace(w Workspace) (Workspace, error) {
+	if w.Name == "" || strings.ContainsAny(w.Name, `/\`) || w.Name == "." || w.Name == ".." || strings.TrimSpace(w.Name) != w.Name {
+		return w, fmt.Errorf("%w: workspace name %q: a name is required, without a path separator or surrounding space", ErrInvalid, w.Name)
 	}
-	seen := map[string]bool{}
-	for i := range c.Workspaces {
-		w := &c.Workspaces[i]
-		if w.Name == "" || strings.ContainsAny(w.Name, `/\`) || w.Name == "." || w.Name == ".." {
-			return fmt.Errorf("%w: workspace %d: a name is required, and may not hold a path separator", ErrInvalid, i+1)
-		}
-		if seen[w.Name] {
-			return fmt.Errorf("%w: workspace %q is defined twice", ErrInvalid, w.Name)
-		}
-		seen[w.Name] = true
-		root, err := expandHome(w.Root)
-		if err != nil {
-			return err
-		}
-		if !filepath.IsAbs(root) {
-			return fmt.Errorf("%w: workspace %q: root %q must be absolute (or start with ~/)", ErrInvalid, w.Name, w.Root)
-		}
-		w.Root = filepath.Clean(root)
-		if w.Include == nil {
-			w.Include = DefaultInclude
-		}
-		if w.Exclude == nil {
-			w.Exclude = DefaultExclude
-		}
-		for _, p := range append(append([]string{}, w.Include...), w.Exclude...) {
-			if err := ValidPattern(p); err != nil {
-				return fmt.Errorf("%w: workspace %q: pattern %q: %v", ErrInvalid, w.Name, p, err)
-			}
+	root, err := expandHome(w.Root)
+	if err != nil {
+		return w, err
+	}
+	if !filepath.IsAbs(root) {
+		return w, fmt.Errorf("%w: workspace %q: root %q must be absolute (or start with ~/)", ErrInvalid, w.Name, w.Root)
+	}
+	w.Root = filepath.Clean(root)
+	if w.Include == nil {
+		w.Include = DefaultInclude
+	}
+	if w.Exclude == nil {
+		w.Exclude = DefaultExclude
+	}
+	for _, p := range append(append([]string{}, w.Include...), w.Exclude...) {
+		if err := ValidPattern(p); err != nil {
+			return w, fmt.Errorf("%w: workspace %q: pattern %q: %v", ErrInvalid, w.Name, p, err)
 		}
 	}
-	return nil
+	return w, nil
 }
 
 func expandHome(p string) (string, error) {
@@ -270,17 +263,36 @@ func runtimeDir() (string, error) {
 }
 
 // StateDirPath resolves the state directory, creating it 0700: server.state_dir, else
-// $XDG_STATE_HOME/autodoc, else ~/.local/state/autodoc. Indexes live here, never in a root.
+// $XDG_STATE_HOME/autodoc, else ~/.local/state/autodoc. The daemon's log lives here.
 func (s Server) StateDirPath() (string, error) {
-	dir := s.StateDir
+	return xdgDir(s.StateDir, "XDG_STATE_HOME", filepath.Join(".local", "state"))
+}
+
+// StoreName is the store's file name in the data directory.
+const StoreName = "autodoc.db"
+
+// StorePath resolves the store, creating its directory 0700: server.data_dir, else
+// $XDG_DATA_HOME/autodoc, else ~/.local/share/autodoc, and autodoc.db in it. The store holds the
+// workspaces, which nothing rebuilds, so it is data rather than state; it is never in a root.
+func (s Server) StorePath() (string, error) {
+	dir, err := xdgDir(s.DataDir, "XDG_DATA_HOME", filepath.Join(".local", "share"))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, StoreName), nil
+}
+
+// xdgDir is a configured directory, else $env/autodoc, else ~/fallback/autodoc, created 0700.
+func xdgDir(configured, env, fallback string) (string, error) {
+	dir := configured
 	if dir == "" {
-		base := os.Getenv("XDG_STATE_HOME")
+		base := os.Getenv(env)
 		if base == "" {
 			home, err := os.UserHomeDir()
 			if err != nil {
-				return "", fmt.Errorf("%w: no XDG_STATE_HOME and no home directory for the state", ErrInvalid)
+				return "", fmt.Errorf("%w: no %s and no home directory", ErrInvalid, env)
 			}
-			base = filepath.Join(home, ".local", "state")
+			base = filepath.Join(home, fallback)
 		}
 		dir = filepath.Join(base, "autodoc")
 	} else {

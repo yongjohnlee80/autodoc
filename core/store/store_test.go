@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -72,6 +73,25 @@ func TestLease_AcquiresOverAnOpenStore(t *testing.T) {
 	_ = f.Close()
 	if _, err := db.ExecContext(ctx, "INSERT INTO x VALUES (1)"); err != nil {
 		t.Errorf("releasing the lease disturbed the store: %v", err)
+	}
+}
+
+// A store reached through a symlinked directory is the same store, so its lease is the same
+// lease: the sidecar names the store's device and inode, not the path.
+func TestLease_NamesTheStoreNotThePath(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, err := Open(ctx, filepath.Join(dir, "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(dir, alias); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(ctx, filepath.Join(alias, "autodoc.db")); !errors.Is(err, ErrBusy) {
+		t.Fatalf("Open through a symlinked directory = %v, want ErrBusy", err)
 	}
 }
 

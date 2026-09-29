@@ -24,6 +24,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -81,6 +82,12 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{fs: map[string]*memfs.FS{}}
 	var served []*rpc.Workspace
+	// one store for the daemon's workspaces; closed after the indexers stop (cleanups run last first)
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	for _, name := range sortedKeys(workspaces) {
 		mem := memfs.New()
 		var fsys vfs.FS = mem
@@ -102,20 +109,20 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 				t.Fatal(err)
 			}
 		}
-		store, err := index.Open(ctx, filepath.Join(t.TempDir(), wsName+".db"))
+		row, err := db.AddWorkspace(ctx, wsName, "/"+wsName, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		ix := index.NewIndexer(store, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond, Workers: workers})
+		ixs := index.Open(db, row.ID)
+		ix := index.NewIndexer(ixs, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond, Workers: workers})
 		f := follow.New(fsys, ix, ix, follow.Options{Match: md, PollInterval: 20 * time.Millisecond})
 		ix.SetRescanner(f)
 		go func() { _ = ix.Run(ctx) }()
 		go func() { _ = f.Run(ctx) }()
-		t.Cleanup(func() { _ = store.Close() })
 		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
 		// wait until the notes are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
-			st, _ := store.Status(ctx)
+			st, _ := ixs.Status(ctx)
 			if st.Docs == int64(len(notes)/2) && st.PendingJobs == 0 {
 				break
 			}
@@ -137,7 +144,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := rpc.New(served, "v-test", rpc.WithListener(ln))
+	srv := rpc.New(rpc.Fixed(served...), "v-test", rpc.WithListener(ln))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	d.stop = func() { cancel(); <-done }

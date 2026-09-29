@@ -22,18 +22,9 @@ func load(t *testing.T, body string) (*config.Config, error) {
 }
 
 func TestLoadFillsDefaults(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	c, err := load(t, "[[workspace]]\nname = \"kb\"\nroot = \"~/notes\"\n")
+	c, err := load(t, "[server]\n")
 	if err != nil {
 		t.Fatal(err)
-	}
-	w := c.Workspaces[0]
-	if w.Root != filepath.Join(home, "notes") {
-		t.Errorf("root = %q, want ~ expanded", w.Root)
-	}
-	if !reflect.DeepEqual(w.Include, config.DefaultInclude) || !reflect.DeepEqual(w.Exclude, config.DefaultExclude) {
-		t.Errorf("patterns = %v / %v, want the defaults", w.Include, w.Exclude)
 	}
 	if c.Follow.PollInterval.Duration != config.DefaultPollInterval {
 		t.Errorf("poll interval = %v", c.Follow.PollInterval.Duration)
@@ -45,36 +36,25 @@ func TestLoadReadsEverySetting(t *testing.T) {
 [server]
 socket = "/tmp/a.sock"
 state_dir = "/tmp/autodoc-state"
+data_dir = "/tmp/autodoc-data"
 [follow]
 poll_interval = "500ms"
-[[workspace]]
-name = "kb"
-root = "/srv/kb"
-include = ["docs/**/*.md", "*.markdown"]
-exclude = []
 `)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Server.Socket != "/tmp/a.sock" || c.Server.StateDir != "/tmp/autodoc-state" || c.Follow.PollInterval.Duration != 500*time.Millisecond {
+	if c.Server.Socket != "/tmp/a.sock" || c.Server.StateDir != "/tmp/autodoc-state" || c.Server.DataDir != "/tmp/autodoc-data" ||
+		c.Follow.PollInterval.Duration != 500*time.Millisecond {
 		t.Errorf("server/follow = %+v %+v", c.Server, c.Follow)
-	}
-	if w := c.Workspaces[0]; len(w.Include) != 2 || len(w.Exclude) != 0 {
-		t.Errorf("an explicit empty exclude must stay empty: %+v", w)
 	}
 }
 
 func TestLoadRejects(t *testing.T) {
 	for _, c := range []struct{ name, body, want string }{
-		{"unknown key", "[[workspace]]\nname = \"kb\"\nroot = \"/x\"\nroots = \"/y\"\n", "unknown settings"},
-		{"duplicate name", "[[workspace]]\nname = \"a\"\nroot = \"/x\"\n[[workspace]]\nname = \"a\"\nroot = \"/y\"\n", "twice"},
-		{"relative root", "[[workspace]]\nname = \"a\"\nroot = \"notes\"\n", "absolute"},
-		{"no name", "[[workspace]]\nroot = \"/x\"\n", "name is required"},
-		{"a name with a separator", "[[workspace]]\nname = \"a/b\"\nroot = \"/x\"\n", "path separator"},
-		{"bad pattern", "[[workspace]]\nname = \"a\"\nroot = \"/x\"\ninclude = [\"[\"]\n", "pattern"},
-		{"absolute pattern", "[[workspace]]\nname = \"a\"\nroot = \"/x\"\nexclude = [\"/etc/**\"]\n", "pattern"},
+		{"unknown key", "[server]\nsockets = \"/y\"\n", "unknown settings"},
+		{"a [[workspace]] section", "[[workspace]]\nname = \"kb\"\nroot = \"/x\"\n", "kept in the store"},
 		{"bad duration", "[follow]\npoll_interval = \"soon\"\n", "invalid"},
-		{"not TOML", "[[workspace\n", "invalid"},
+		{"not TOML", "[[server\n", "invalid"},
 		{"an api key in the file", "[embedding]\nprovider = \"openai\"\nmodel = \"m\"\napi_key = \"sk-x\"\n", "does not belong in the file"},
 		{"an unknown provider", "[embedding]\nprovider = \"cohere\"\nmodel = \"m\"\n", "provider"},
 		{"no model", "[embedding]\nprovider = \"ollama\"\n", "model is required"},
@@ -84,6 +64,42 @@ func TestLoadRejects(t *testing.T) {
 	} {
 		_, err := load(t, c.body)
 		if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want ErrInvalid mentioning %q", c.name, err, c.want)
+		}
+	}
+}
+
+// NormalizeWorkspace is what workspace.add checks: the rules [[workspace]] had.
+func TestNormalizeWorkspace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	w, err := config.NormalizeWorkspace(config.Workspace{Name: "kb", Root: "~/notes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Root != filepath.Join(home, "notes") {
+		t.Errorf("root = %q, want ~ expanded", w.Root)
+	}
+	if !reflect.DeepEqual(w.Include, config.DefaultInclude) || !reflect.DeepEqual(w.Exclude, config.DefaultExclude) {
+		t.Errorf("patterns = %v / %v, want the defaults", w.Include, w.Exclude)
+	}
+	w, err = config.NormalizeWorkspace(config.Workspace{Name: "kb", Root: "/srv/kb", Include: []string{"docs/**/*.md", "*.markdown"}, Exclude: []string{}})
+	if err != nil || len(w.Include) != 2 || len(w.Exclude) != 0 {
+		t.Errorf("an explicit empty exclude must stay empty: %+v, %v", w, err)
+	}
+	for _, c := range []struct {
+		name string
+		w    config.Workspace
+		want string
+	}{
+		{"relative root", config.Workspace{Name: "a", Root: "notes"}, "absolute"},
+		{"no name", config.Workspace{Root: "/x"}, "name is required"},
+		{"a name with a separator", config.Workspace{Name: "a/b", Root: "/x"}, "path separator"},
+		{"a name with surrounding space", config.Workspace{Name: " a", Root: "/x"}, "surrounding space"},
+		{"bad pattern", config.Workspace{Name: "a", Root: "/x", Include: []string{"["}}, "pattern"},
+		{"absolute pattern", config.Workspace{Name: "a", Root: "/x", Exclude: []string{"/etc/**"}}, "pattern"},
+	} {
+		if _, err := config.NormalizeWorkspace(c.w); !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want ErrInvalid mentioning %q", c.name, err, c.want)
 		}
 	}
@@ -100,6 +116,13 @@ func TestPaths(t *testing.T) {
 		t.Errorf("StateDirPath = %q, %v", d, err)
 	} else if fi, _ := os.Stat(d); fi.Mode().Perm() != 0o700 {
 		t.Errorf("the state directory is %v, want 0700", fi.Mode().Perm())
+	}
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	if p, err := (config.Server{}).StorePath(); err != nil || p != filepath.Join(data, "autodoc", "autodoc.db") {
+		t.Errorf("StorePath = %q, %v", p, err)
+	} else if fi, _ := os.Stat(filepath.Dir(p)); fi.Mode().Perm() != 0o700 {
+		t.Errorf("the store's directory is %v, want 0700", fi.Mode().Perm())
 	}
 	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
 	if s, _ := (config.Server{}).SocketPath(); s != "/run/user/1000/autodoc.sock" {
@@ -139,14 +162,14 @@ func TestEmbedding(t *testing.T) {
 	}
 }
 
-// TestMissingFileIsDefaults: no file is every default and no workspace, as AutoDB's; an unreadable
+// TestMissingFileIsDefaults: no file is every default, as AutoDB's; an unreadable
 // one is an error, but not an invalid configuration.
 func TestMissingFileIsDefaults(t *testing.T) {
 	c, err := config.Load(filepath.Join(t.TempDir(), "none.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Follow.PollInterval.Duration != config.DefaultPollInterval || len(c.Workspaces) != 0 || c.Embedding != (config.Embedding{}) {
+	if c.Follow.PollInterval.Duration != config.DefaultPollInterval || c.Embedding != (config.Embedding{}) {
 		t.Errorf("defaults %+v", c)
 	}
 	if os.Geteuid() == 0 {

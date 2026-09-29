@@ -13,7 +13,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -23,6 +22,8 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -63,19 +64,33 @@ func short(t *testing.T) string {
 	return d
 }
 
-// writeConfig writes a configuration: a socket, a state directory and the workspaces (name=root),
-// plus extra TOML.
+// writeConfig writes a configuration (a socket, and state as both the state and the data
+// directory, so the store is state/autodoc.db) plus extra TOML, and puts the workspaces
+// (name=root) in the store before the daemon opens it.
 func writeConfig(t *testing.T, sock, state, extra string, workspaces ...string) string {
 	t.Helper()
-	var b strings.Builder
-	fmt.Fprintf(&b, "[server]\nsocket = %q\nstate_dir = %q\n[follow]\npoll_interval = \"50ms\"\n%s\n", sock, state, extra)
-	for _, w := range workspaces {
-		name, root, _ := strings.Cut(w, "=")
-		fmt.Fprintf(&b, "[[workspace]]\nname = %q\nroot = %q\n", name, root)
-	}
+	body := fmt.Sprintf("[server]\nsocket = %q\nstate_dir = %q\ndata_dir = %q\n[follow]\npoll_interval = \"50ms\"\n%s\n", sock, state, state, extra)
 	p := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(p, []byte(b.String()), 0o600); err != nil {
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
+	}
+	if len(workspaces) > 0 {
+		if err := os.MkdirAll(state, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		db, err := store.Open(context.Background(), filepath.Join(state, config.StoreName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range workspaces {
+			name, root, _ := strings.Cut(w, "=")
+			if _, err := db.AddWorkspace(context.Background(), name, root, nil, nil); err != nil && !errors.Is(err, store.ErrTaken) {
+				t.Fatal(err)
+			}
+		}
+		if err := db.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return p
 }
@@ -261,30 +276,95 @@ func TestSuccessorsSocketIsLeft(t *testing.T) {
 	}
 }
 
-// TestWorkspaceBusy: a second daemon on another endpoint that names a served workspace serves that
-// one as busy, and its others.
-func TestWorkspaceBusy(t *testing.T) {
+// TestSecondDaemonOnTheStoreIsRefused: a second daemon on another endpoint over the same store
+// does not start: the store's lease is the daemon's, for every workspace in it.
+func TestSecondDaemonOnTheStoreIsRefused(t *testing.T) {
 	dir := short(t)
 	state := filepath.Join(dir, "state")
-	shared, own := t.TempDir(), t.TempDir()
 	a := filepath.Join(dir, "a.sock")
-	start(t, writeConfig(t, a, state, "", "kb="+shared), a)
+	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
 	b := filepath.Join(dir, "b.sock")
-	start(t, writeConfig(t, b, state, "", "kb="+shared, "mine="+own), b)
-	cli := dial(t, b)
-	var states []string
-	for _, w := range call(t, cli, "workspace.list").([]any) {
-		m := w.(map[string]any)
-		states = append(states, m["name"].(string)+"="+m["state"].(string))
+	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard)
+	if !errors.Is(err, store.ErrBusy) {
+		t.Fatalf("a second daemon over the store: %v, want store.ErrBusy", err)
 	}
-	if !reflect.DeepEqual(states, []string{"kb=busy", "mine=ready"}) {
-		t.Errorf("workspaces %q", states)
+	if _, err := os.Stat(b); !os.IsNotExist(err) {
+		t.Errorf("the refused daemon left its socket: %v", err)
 	}
+}
+
+// TestWorkspaceVerbs: workspaces are added, renamed and removed while the daemon runs, and the
+// store keeps them across a restart; the files of a removed workspace stay.
+func TestWorkspaceVerbs(t *testing.T) {
+	dir := short(t)
+	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	cfg := writeConfig(t, sock, state, "")
+	d := start(t, cfg, sock)
+	cli := dial(t, sock)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "kestrel.md"), []byte("# Kestrel\n\nhovering\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	added := call(t, cli, "workspace.add", "kb", root).(map[string]any)
+	if added["name"] != "kb" || added["state"] != "ready" || fmt.Sprint(added["include"]) != "[**/*.md]" {
+		t.Errorf("workspace.add = %+v", added)
+	}
+	eventually(t, "the added workspace indexed", func() bool {
+		st := call(t, cli, "index.status", "kb").(map[string]any)
+		return st["docs"] == int64(1) && st["pending_jobs"] == int64(0)
+	})
 	var re *golibrpc.Error
-	if _, err := cli.Call(context.Background(), "index.status", "kb"); !errors.As(err, &re) || re.Code != rpc.CodeWorkspaceBusy {
-		t.Errorf("the busy workspace: %v", err)
+	for name, c := range map[string]struct {
+		params []any
+		code   int64
+	}{
+		"a taken name":           {[]any{"kb", t.TempDir()}, rpc.CodeConflict},
+		"a taken root":           {[]any{"other", root}, rpc.CodeConflict},
+		"a root that is no dir":  {[]any{"f", filepath.Join(root, "kestrel.md")}, golibrpc.CodeInvalidParams},
+		"a root that is missing": {[]any{"m", filepath.Join(root, "missing")}, golibrpc.CodeInvalidParams},
+		"a relative root":        {[]any{"r", "notes"}, golibrpc.CodeInvalidParams},
+		"a name with a slash":    {[]any{"a/b", t.TempDir()}, golibrpc.CodeInvalidParams},
+	} {
+		if _, err := cli.Call(context.Background(), "workspace.add", c.params...); !errors.As(err, &re) || re.Code != c.code {
+			t.Errorf("%s: %v, want code %d", name, err, c.code)
+		}
 	}
-	call(t, cli, "index.status", "mine")
+	call(t, cli, "workspace.rename", "kb", "knowledge")
+	if _, err := cli.Call(context.Background(), "index.status", "kb"); !errors.As(err, &re) || re.Code != rpc.CodeNoSuchWorkspace {
+		t.Errorf("the old name after a rename: %v, want NoSuchWorkspace", err)
+	}
+	res := call(t, cli, "search.query", "knowledge", "kestrel").(map[string]any)
+	if hits := res["hits"].([]any); len(hits) != 1 {
+		t.Errorf("the renamed workspace's index: %d hits, want 1", len(hits))
+	}
+	if _, err := cli.Call(context.Background(), "workspace.rename", "nope", "x"); !errors.As(err, &re) || re.Code != rpc.CodeNoSuchWorkspace {
+		t.Errorf("renaming no workspace: %v", err)
+	}
+	second := t.TempDir()
+	call(t, cli, "workspace.add", "notes", second)
+	d.stop()
+	d = start(t, cfg, sock)
+	cli = dial(t, sock)
+	var names []string
+	for _, w := range call(t, cli, "workspace.list").([]any) {
+		names = append(names, w.(map[string]any)["name"].(string))
+	}
+	if fmt.Sprint(names) != "[knowledge notes]" {
+		t.Errorf("after a restart: %v, want [knowledge notes]", names)
+	}
+	call(t, cli, "workspace.remove", "knowledge")
+	if _, err := cli.Call(context.Background(), "search.query", "knowledge", "kestrel"); !errors.As(err, &re) || re.Code != rpc.CodeNoSuchWorkspace {
+		t.Errorf("a removed workspace: %v, want NoSuchWorkspace", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "kestrel.md")); err != nil {
+		t.Errorf("removing the workspace touched its files: %v", err)
+	}
+	d.stop()
+	start(t, cfg, sock)
+	cli = dial(t, sock)
+	if ws := call(t, cli, "workspace.list").([]any); len(ws) != 1 || ws[0].(map[string]any)["name"] != "notes" {
+		t.Errorf("after the remove and a restart: %+v", ws)
+	}
 }
 
 // changed polls index.changes from since until want (op path, in any order) have all been seen.
@@ -514,17 +594,23 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 }
 
 // TestServesWithoutAConfigFile: with no config file the daemon serves on the defaults (the socket
-// in $XDG_RUNTIME_DIR, no workspace) and says how to add one, as AutoDB does.
+// in $XDG_RUNTIME_DIR, the store in $XDG_DATA_HOME, no workspace) and says how to add one, as
+// AutoDB does.
 func TestServesWithoutAConfigFile(t *testing.T) {
 	dir := short(t)
+	data := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", dir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", data)
 	missing := filepath.Join(t.TempDir(), "config.toml")
 	d := start(t, missing, filepath.Join(dir, "autodoc.sock"))
 	if got := call(t, dial(t, d.sock), "workspace.list").([]any); len(got) != 0 {
 		t.Errorf("workspaces %v", got)
 	}
-	if !strings.Contains(d.out.String(), "no workspace is configured: add a [[workspace]] (name, root) to "+missing) {
+	if !strings.Contains(d.out.String(), "no workspace yet: add one in the TUI's workspace manager") {
 		t.Errorf("the log says nothing of it:\n%s", d.out)
+	}
+	if _, err := os.Stat(filepath.Join(data, "autodoc", config.StoreName)); err != nil {
+		t.Errorf("the store is not in $XDG_DATA_HOME/autodoc: %v", err)
 	}
 }

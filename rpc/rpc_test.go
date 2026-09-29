@@ -21,6 +21,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
@@ -47,19 +48,23 @@ type rig struct {
 	done   chan error
 }
 
-// serve runs a daemon's worth of core over memfs: workspace kb (followed and indexed), flaky (its
-// writes land and then fail), and busy (another instance holds it).
+// serve runs a daemon's worth of core over memfs, in one store: workspace kb (followed and
+// indexed), flaky (its writes land and then fail), and broken (its root could not be opened).
 func serve(t *testing.T) *rig {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &rig{t: t, fsys: memfs.New(), cancel: cancel, done: make(chan error, 1)}
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
 	open := func(name string, fsys vfs.FS) *Workspace {
-		store, err := index.Open(ctx, filepath.Join(t.TempDir(), name+".db"))
+		row, err := db.AddWorkspace(ctx, name, "/roots/"+name, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Cleanup(func() { _ = store.Close() })
-		ix := index.NewIndexer(store, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond})
+		ix := index.NewIndexer(index.Open(db, row.ID), fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond})
 		f := follow.New(fsys, ix, ix, follow.Options{Match: md, PollInterval: 20 * time.Millisecond})
 		ix.SetRescanner(f)
 		go func() { _ = ix.Run(ctx) }()
@@ -67,13 +72,13 @@ func serve(t *testing.T) *rig {
 		return &Workspace{Name: name, Root: "/roots/" + name, Index: ix, Docs: docs.New(fsys, md), Following: f.Status}
 	}
 	ws := []*Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
-		{Name: "busy", Root: "/roots/busy", Err: fmt.Errorf("workspace %q: %w", "busy", workspace.ErrWorkspaceBusy)}}
+		{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)}}
 	r.sock = filepath.Join(t.TempDir(), "s.sock")
 	ln, err := net.Listen("unix", r.sock)
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.srv = New(ws, "v-test", WithListener(ln))
+	r.srv = New(Fixed(ws...), "v-test", WithListener(ln))
 	go func() { r.done <- r.srv.Run(ctx) }()
 	t.Cleanup(func() {
 		cancel()
@@ -180,14 +185,14 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 1's. Changing it means bumping Protocol and this
-// list together.
+// TestVerbsArePinned: the verb surface is Protocol 2's (1 had no workspace.add, rename or remove).
+// Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
 	want := []string{"doc.read", "doc.remove", "doc.rename", "doc.write",
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
 		"index.changes", "index.list", "index.purge_model", "index.reindex", "index.status",
-		"search.query", "sys.hello", "sys.shutdown", "workspace.list"}
-	if got := New(nil, "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 1 {
+		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.list", "workspace.remove", "workspace.rename"}
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 2 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }
@@ -203,7 +208,7 @@ func TestSession(t *testing.T) {
 		m := w.(map[string]any)
 		states = append(states, m["name"].(string)+"="+m["state"].(string))
 	}
-	if !reflect.DeepEqual(states, []string{"kb=ready", "flaky=ready", "busy=busy"}) {
+	if !reflect.DeepEqual(states, []string{"broken=error", "flaky=ready", "kb=ready"}) {
 		t.Errorf("workspaces %q", states)
 	}
 	c0 := call(t, cli, "index.status", "kb").(map[string]any)["cursor"].(int64)
@@ -282,7 +287,12 @@ func TestErrorCodes(t *testing.T) {
 		code   int64
 	}{
 		{"no such workspace", "search.query", []any{"nope", "x"}, CodeNoSuchWorkspace},
-		{"busy", "index.status", []any{"busy"}, CodeWorkspaceBusy},
+		{"a workspace whose root could not be opened", "index.status", []any{"broken"}, golibrpc.CodeInvalidParams},
+		{"adding to a fixed set", "workspace.add", []any{"new", "/roots/new"}, CodeUnsupported},
+		{"renaming in a fixed set", "workspace.rename", []any{"kb", "k2"}, CodeUnsupported},
+		{"removing from a fixed set", "workspace.remove", []any{"kb"}, CodeUnsupported},
+		{"an add without a root", "workspace.add", []any{"new"}, golibrpc.CodeInvalidParams},
+		{"an add with a non-list include", "workspace.add", []any{"new", "/r", "x"}, golibrpc.CodeInvalidParams},
 		{"stale write", "doc.write", []any{"kb", "a.md", []byte("x"), v}, CodeConflict},
 		{"create over a note", "doc.write", []any{"kb", "a.md", []byte("x"), ""}, CodeConflict},
 		{"stale remove", "doc.remove", []any{"kb", "a.md", v}, CodeConflict},
