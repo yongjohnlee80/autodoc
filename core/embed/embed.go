@@ -45,6 +45,15 @@ const (
 	DefaultOpenAIURL = "https://api.openai.com"
 )
 
+// bearer is the Authorization header for key: an Ollama Cloud or OpenAI-compatible endpoint's; nil
+// for none (a local Ollama needs none).
+func bearer(key string) http.Header {
+	if key == "" {
+		return nil
+	}
+	return http.Header{"Authorization": {"Bearer " + key}}
+}
+
 // Call is one request to a provider, as its meter hears of it: how many texts, the tokens the
 // provider counted (0 where it reports none), how it went, and how long it took.
 type Call struct {
@@ -90,6 +99,7 @@ const maxErrorBody = 512
 type Ollama struct {
 	meter
 	base   string
+	auth   http.Header // Ollama Cloud's key; nil for a local server
 	client *http.Client
 	model  Model
 }
@@ -97,7 +107,7 @@ type Ollama struct {
 // NewOllama returns the client of model name at base (http://localhost:11434, say). It asks the
 // server for the model's digest and embeds one probe text to learn its size, so a model the server
 // lacks fails here rather than at the first document.
-func NewOllama(ctx context.Context, base, name string, client *http.Client) (*Ollama, error) {
+func NewOllama(ctx context.Context, base, key, name string, client *http.Client) (*Ollama, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -105,7 +115,8 @@ func NewOllama(ctx context.Context, base, name string, client *http.Client) (*Ol
 	var tags struct {
 		Models []struct{ Name, Model, Digest string } `json:"models"`
 	}
-	if err := call(ctx, client, http.MethodGet, o.base+"/api/tags", nil, nil, &tags); err != nil {
+	o.auth = bearer(key)
+	if err := call(ctx, client, http.MethodGet, o.base+"/api/tags", o.auth, nil, &tags); err != nil {
 		return nil, err
 	}
 	for _, m := range tags.Models {
@@ -135,7 +146,7 @@ func (o *Ollama) Embed(ctx context.Context, texts []string) (vecs [][]float32, e
 	}
 	defer func() { o.report(len(texts), out.Tokens, err, start) }()
 	req := map[string]any{"model": o.model.Name, "input": texts}
-	if err := call(ctx, o.client, http.MethodPost, o.base+"/api/embed", nil, req, &out); err != nil {
+	if err := call(ctx, o.client, http.MethodPost, o.base+"/api/embed", o.auth, req, &out); err != nil {
 		return nil, err
 	}
 	return checked(out.Embeddings, len(texts), o.model.Dims)
@@ -285,7 +296,7 @@ func Models(ctx context.Context, kind, base, key string, client *http.Client) ([
 		var tags struct {
 			Models []struct{ Name string } `json:"models"`
 		}
-		if err := call(ctx, client, http.MethodGet, base+"/api/tags", nil, nil, &tags); err != nil {
+		if err := call(ctx, client, http.MethodGet, base+"/api/tags", bearer(key), nil, &tags); err != nil {
 			return nil, err
 		}
 		for _, m := range tags.Models {
