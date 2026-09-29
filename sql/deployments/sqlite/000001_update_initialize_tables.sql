@@ -138,7 +138,9 @@ CREATE TABLE IF NOT EXISTS doc_name (
   PRIMARY KEY (workspace_id, name_key, doc_id),
   FOREIGN KEY (workspace_id, doc_id) REFERENCES document(workspace_id, id) ON DELETE CASCADE
 ) WITHOUT ROWID;
-CREATE INDEX IF NOT EXISTS doc_name_doc ON doc_name(workspace_id, doc_id);
+-- is_path makes it cover the lookup by document: SQLite prefers a scan of the
+-- primary key's workspace prefix to an index it must leave for the row.
+CREATE INDEX IF NOT EXISTS doc_name_doc ON doc_name(workspace_id, doc_id, is_path);
 
 -- A link from one document, live from gen_from until gen_to. dst_doc is the
 -- document it resolved to, NULL while it resolves to none. dst_doc has no

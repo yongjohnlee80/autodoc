@@ -624,6 +624,10 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	title, tags := p.meta.title, strings.Join(p.meta.tags, " ")
 	metaChanged := title != oldTitle || tags != strings.Join(oldTags, " ")
 	var reused []int64
+	// the new chunks go in as one statement: the full-text trigger makes each insert a statement of
+	// its own savepoint, and FTS5 writes what it holds to disk at every savepoint
+	fresh := s.sc.ChunkBatch(tx)
+	added := false
 	for _, c := range p.chunks {
 		key := string(c.hash)
 		if occ := old[key]; len(occ) > 0 {
@@ -636,10 +640,14 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 			reused = append(reused, id)
 			continue
 		}
-		if _, err := s.sc.Chunks(tx).Set(store.ChunkDoc, docID).Set(store.ChunkHash, c.hash).Set(store.ChunkTextHash, c.textHash).
-			Set(store.ChunkGenFrom, next).Set(store.ChunkOrd, int64(c.ord)).Set(store.ChunkBreadcrumb, c.breadcrumb).
-			Set(store.ChunkBody, c.body).Set(store.ChunkTitle, title).Set(store.ChunkTags, tags).
-			Set(store.ChunkByteStart, int64(c.byteStart)).Set(store.ChunkByteEnd, int64(c.byteEnd)).Insert(); err != nil {
+		fresh.Add(map[store.ChunkField]any{store.ChunkDoc: docID, store.ChunkHash: c.hash, store.ChunkTextHash: c.textHash,
+			store.ChunkGenFrom: next, store.ChunkOrd: int64(c.ord), store.ChunkBreadcrumb: c.breadcrumb,
+			store.ChunkBody: c.body, store.ChunkTitle: title, store.ChunkTags: tags,
+			store.ChunkByteStart: int64(c.byteStart), store.ChunkByteEnd: int64(c.byteEnd)})
+		added = true
+	}
+	if added {
+		if err := fresh.Flush(); err != nil {
 			return 0, err
 		}
 	}

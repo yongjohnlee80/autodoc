@@ -329,18 +329,32 @@ func (s *Store) reresolve(tx *store.Tx, names []string, docID int64) error {
 	if len(names) == 0 && docID == 0 {
 		return nil
 	}
-	reached := dao.Eq(`"link"."dst_doc"`, docID)
-	cond := reached
+	// two probes, not one OR: each is one of the link table's indexes, which lead with the workspace
+	var rows []*store.Link
+	seen := map[int64]bool{}
+	probe := func(cond dao.Predicate) error {
+		got, err := s.sc.LinksOut(tx).WithPredicate(cond).Select(store.LinkID, store.LinkKind, store.LinkName, store.LinkDst)
+		for _, r := range got {
+			if !seen[r.ID] {
+				seen[r.ID] = true
+				rows = append(rows, r)
+			}
+		}
+		return err
+	}
+	if docID != 0 {
+		if err := probe(dao.Eq(`"link"."dst_doc"`, docID)); err != nil {
+			return err
+		}
+	}
 	if len(names) > 0 {
 		vs := make([]any, len(names))
 		for i, n := range names {
 			vs[i] = n
 		}
-		cond = dao.Or(reached, dao.In(`"link"."name"`, vs))
-	}
-	rows, err := s.sc.LinksOut(tx).WithPredicate(cond).Select(store.LinkID, store.LinkKind, store.LinkName, store.LinkDst)
-	if err != nil {
-		return err
+		if err := probe(dao.In(`"link"."name"`, vs)); err != nil {
+			return err
+		}
 	}
 	for _, r := range rows {
 		dst, _, err := s.resolve(tx, r.Kind, r.Name)

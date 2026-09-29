@@ -122,6 +122,7 @@ func batch[R any, C ~string, K ~string, ID any](sc *Scope, s *dao.Schema[R, C, K
 	return Batch[R, C]{b: s.On(tx.tx).Batch(), ws: sc.id}
 }
 
+func (sc *Scope) ChunkBatch(tx *Tx) Batch[*Chunk, ChunkField]     { return batch(sc, tx.t.chunks, tx) }
 func (sc *Scope) TagBatch(tx *Tx) Batch[*DocValue, DocValueField] { return batch(sc, tx.t.tags, tx) }
 func (sc *Scope) AliasBatch(tx *Tx) Batch[*DocValue, DocValueField] {
 	return batch(sc, tx.t.aliases, tx)
