@@ -394,7 +394,9 @@ func TestTheProviderForm(t *testing.T) {
 	})
 	// back to Ollama Cloud, and List models with no key typed: the stored key is the one used
 	r.keys(t, enter(), key('k'), enter())
-	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool { return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible") })
+	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool {
+		return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible")
+	})
 	r.h.p.Post(func() { r.h.listModels(ollama.URL, "") })
 	r.s.WaitForText(t, "2 models")
 	mu.Lock()
