@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/parse/markdown"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // THE PICKERS — search, open and new note: the picker's layout (the fields over the list on the
@@ -152,7 +153,24 @@ func (h *Host) showPreview(picker, title, text string, at int) {
 	h.set("App."+picker+"PreviewTitle", title)
 	h.set("App."+picker+"PreviewAt", -1)
 	h.set("App."+picker+"PreviewText", text)
-	h.set("App."+picker+"PreviewAt", utf8.RuneCountInString(text[:at]))
+	h.set("App."+picker+"PreviewAt", cursorAt(text, at))
+}
+
+// cursorAt is byte at of text as the editor's cursorPosition counts it: characters (grapheme
+// clusters), each line break one, with the line breaks the editor reads (\r\n, \r, \n) as one.
+// A count of runes lands late after a combining mark or a joined emoji.
+func cursorAt(text string, at int) int {
+	before := strings.ReplaceAll(strings.ReplaceAll(text[:at], "\r\n", "\n"), "\r", "\n")
+	n := 0
+	for i, line := range strings.Split(before, "\n") {
+		if i > 0 {
+			n++ // the break before this line
+		}
+		for range tuicore.Graphemes(line) {
+			n++
+		}
+	}
+	return n
 }
 
 // The open picker: a filter over the workspace's notes.

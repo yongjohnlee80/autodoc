@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -112,7 +111,7 @@ func (h *Host) show(p, content, version string) {
 	if at := h.openAt; at >= 0 {
 		// opened from a search hit: the cursor at its section
 		h.openAt = -1
-		h.editor.SetCursorPosition(utf8.RuneCountInString(content[:min(at, len(content))]))
+		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.note.path, h.note.version, h.note.open = p, version, true
 	h.set("App.noNote", false)
