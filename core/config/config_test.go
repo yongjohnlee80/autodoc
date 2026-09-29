@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -54,6 +55,7 @@ func TestLoadRejects(t *testing.T) {
 		{"unknown key", "[server]\nsockets = \"/y\"\n", "unknown settings"},
 		{"a [[workspace]] section", "[[workspace]]\nname = \"kb\"\nroot = \"/x\"\n", "kept in the store"},
 		{"bad duration", "[follow]\npoll_interval = \"soon\"\n", "invalid"},
+		{"a negative poll", "[follow]\npoll_interval = \"-1s\"\n", "must be positive"},
 		{"not TOML", "[[server\n", "invalid"},
 		{"an [embedding] section", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\n", "kept in the store"},
 	} {
@@ -125,6 +127,35 @@ func TestPaths(t *testing.T) {
 	}
 	if _, err := (config.Server{Socket: "/" + strings.Repeat("x", 120)}).SocketPath(); !errors.Is(err, config.ErrInvalid) {
 		t.Errorf("an over-long socket path: %v, want ErrInvalid before bind", err)
+	}
+}
+
+// TestPathsFallBackToTheHome: with no XDG variable, each path is under the home directory, as
+// the XDG spec's defaults; a configured directory's "~/" is the home too.
+func TestPathsFallBackToTheHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, v := range []string{"XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR"} {
+		t.Setenv(v, "")
+	}
+	if p, err := config.DefaultPath(); err != nil || p != filepath.Join(home, ".config", "autodoc", "config.toml") {
+		t.Errorf("DefaultPath = %q, %v", p, err)
+	}
+	state := filepath.Join(home, ".local", "state", "autodoc")
+	if d, err := (config.Server{}).StateDirPath(); err != nil || d != state {
+		t.Errorf("StateDirPath = %q, %v", d, err)
+	}
+	if p, err := (config.Server{}).StorePath(); err != nil || p != filepath.Join(home, ".local", "share", "autodoc", "autodoc.db") {
+		t.Errorf("StorePath = %q, %v", p, err)
+	}
+	if p, err := (config.Server{DataDir: "~/data"}).StorePath(); err != nil || p != filepath.Join(home, "data", "autodoc.db") {
+		t.Errorf("StorePath under a configured ~/data = %q, %v", p, err)
+	}
+	// no runtime directory: the socket goes in the state directory (on Linux; Darwin's is $TMPDIR)
+	if runtime.GOOS != "darwin" {
+		if s, err := (config.Server{}).SocketPath(); err != nil || s != filepath.Join(state, "autodoc.sock") {
+			t.Errorf("SocketPath = %q, %v", s, err)
+		}
 	}
 }
 

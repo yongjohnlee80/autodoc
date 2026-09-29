@@ -6,6 +6,8 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +16,8 @@ import (
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // THE WRITING SCREEN — the page alone until asked for more, centred at the ruler; the panels as
@@ -422,5 +426,150 @@ func TestEveryFieldHasALabel(t *testing.T) {
 	}
 	if n < 8 {
 		t.Fatalf("only %d TextFields found: the walk missed the dialogs", n)
+	}
+}
+
+// fakeOllama answers as an Ollama server with the models named: its tags, and three-number
+// embeddings. down makes every embed call fail, as a server at its usage limit.
+type fakeOllama struct {
+	*httptest.Server
+	mu   sync.Mutex
+	down bool
+}
+
+func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
+	f := &fakeOllama{}
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			var list []map[string]string
+			for _, m := range models {
+				list = append(list, map[string]string{"name": m, "model": m, "digest": "sha256:" + m})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"models": list})
+		case "/api/embed":
+			f.mu.Lock()
+			down := f.down
+			f.mu.Unlock()
+			if down {
+				http.Error(w, "usage limit", http.StatusTooManyRequests)
+				return
+			}
+			var req struct{ Input []string }
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			vecs := make([][]float32, len(req.Input))
+			for i := range vecs {
+				vecs[i] = []float32{1, 0, 0}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"embeddings": vecs, "prompt_eval_count": 2 * len(req.Input)})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(f.Close)
+	return f
+}
+
+// TestAProviderInUse: Use sets a provider up and semantic search runs with it, its usage and
+// calls shown under the list; one that does not set up is refused, the one in use staying; Words
+// only turns it off; Remove asks, then removes it.
+func TestAProviderInUse(t *testing.T) {
+	ollama := newFakeOllama(t, "embedder")
+	root := noteDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	d := startManaged(t, map[string]string{"kb": root})
+	ctx := context.Background()
+	for _, sp := range []store.ProviderSpec{
+		{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"},
+		{Name: "missing", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "no-such-model"},
+	} {
+		if _, err := d.db.AddProvider(ctx, sp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	r.leader(t, ',')
+	r.s.WaitForText(t, "semantic search off")
+	r.keys(t, key('u')) // the first row: local
+	r.s.WaitForText(t, "semantic search with local")
+	// its calls, metered and written every couple of seconds, under the list
+	r.s.WaitFor(t, "local's usage", func(sc string) bool {
+		r.h.p.Post(func() { r.h.providerDetail(0) })
+		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
+	})
+	// at its usage limit: a new note's embedding is refused, and the log says why
+	ollama.mu.Lock()
+	ollama.down = true
+	ollama.mu.Unlock()
+	if err := os.WriteFile(filepath.Join(root, "c.md"), []byte("# C\n\ngamma\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the refused call", func(sc string) bool {
+		r.h.p.Post(func() { r.h.providerDetail(0) })
+		return strings.Contains(sc, "at the usage limit") && strings.Contains(sc, "rate limited")
+	})
+
+	// a provider that does not set up: refused, and local stays in use
+	r.h.p.Post(func() { r.h.useProvider(1) })
+	r.s.WaitFor(t, "missing refused", func(sc string) bool {
+		return strings.Contains(sc, "missing not used") && strings.Contains(sc, "no-such-model")
+	})
+	if got := onLoop(r, func() string { return r.h.activeProvider }); got != "local" {
+		t.Fatalf("after a refused Use the provider in use is %q", got)
+	}
+
+	r.keys(t, key('w')) // Words only
+	r.s.WaitForText(t, "semantic search off")
+	r.keys(t, key('r')) // Remove…, the first row
+	r.s.WaitForText(t, "remove the provider?")
+	r.s.WaitForText(t, "Remove the provider local?")
+	r.keys(t, key('y'))
+	r.s.WaitForText(t, "removed the provider local")
+	if ps, err := d.db.Providers(ctx); err != nil || len(ps) != 1 || ps[0].Name != "missing" {
+		t.Fatalf("after the remove: %+v, %v", ps, err)
+	}
+}
+
+// TestEveryCommandRefusesArgumentsNotItsOwn: a command the document calls with the wrong arguments
+// (a QML edit that got a call wrong) is refused, saying what it takes, and runs nothing.
+func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	b := qml.SpecValue{Kind: qml.SpecValueBool, Raw: "true"}
+	frac := qml.SpecValue{Kind: qml.SpecValueNumber, Raw: "1.5"}
+	s := qml.SpecValue{Kind: qml.SpecValueString, Raw: "x"}
+	// each list is one no command takes: a Host with no program would panic running any
+	bad := [][]qml.SpecValue{{b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}}
+	for name, fn := range h.commands() {
+		for _, args := range bad {
+			if err := fn(args); err == nil {
+				t.Errorf("%s accepted %v", name, args)
+			}
+		}
+	}
+}
+
+// TestTheFolderPickerStartsAtHome: adding a workspace starts in the home directory, or at the root
+// when there is none.
+func TestTheFolderPickerStartsAtHome(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got := homeDir(); got != home {
+		t.Errorf("with a home: %q", got)
+	}
+	t.Setenv("HOME", "")
+	if got := homeDir(); got != "/" {
+		t.Errorf("with none: %q, want /", got)
+	}
+}
+
+// TestAListingThatFailsSaysSo: the workspace's notes not listed (a workspace gone from the daemon)
+// is on the status line, and the pickers list nothing.
+func TestAListingThatFailsSaysSo(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.h.p.Post(func() { r.h.enter("gone") })
+	r.s.WaitForText(t, "notes: ")
+	if got := r.listed(); len(got) != 0 {
+		t.Errorf("the pickers list %v for a workspace that failed to list", got)
 	}
 }
