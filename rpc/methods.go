@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
@@ -45,6 +46,7 @@ const (
 	CodeUnsupported       int64 = -32065 // the workspace's driver cannot
 	CodeCommitted         int64 = -32066 // the write landed: doc.read and compare, never re-send
 	CodeEmbedFailed       int64 = -32067 // search lexically, or retry later
+	CodeProviderRefused   int64 = -32068 // the provider refused: switch provider, or fix its key
 )
 
 // publicErrs maps core's errors to codes, first match wins. Only the message here crosses the
@@ -59,6 +61,14 @@ var publicErrs = []struct {
 	{store.ErrTaken, CodeConflict, "another workspace has this name or root"},
 	{store.ErrNoPreferenceName, golibrpc.CodeInvalidParams, "a preference needs a name"},
 	{errNoPreferences, CodeUnsupported, "this server keeps no preferences"},
+	{errNoEmbeddings, CodeUnsupported, "this server keeps no embedding providers"},
+	{store.ErrNoProvider, CodeNotFound, "no such embedding provider"},
+	{store.ErrProviderTaken, CodeConflict, "another embedding provider has this name"},
+	{store.ErrProviderInvalid, golibrpc.CodeInvalidParams, "a provider needs a name, a kind (ollama or openai), a base URL and a model"},
+	{store.ErrSealed, CodeProviderRefused, "the store's keyslot does not open this provider's key"},
+	{store.ErrKeyslotExposed, CodeProviderRefused, "the store's keyslot file is readable by others: make it 0600"},
+	{embed.ErrRateLimited, CodeProviderRefused, "the provider's usage limit is reached: switch provider, or wait"},
+	{embed.ErrUnauthorized, CodeProviderRefused, "the provider refused the key"},
 	{workspace.ErrNotADirectory, golibrpc.CodeInvalidParams, "the root is not a directory"},
 	{config.ErrInvalid, golibrpc.CodeInvalidParams, "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
 	{docs.ErrCommitted, CodeCommitted, "the write landed, then a follow-up step failed: read the document and compare"},
@@ -94,6 +104,7 @@ func wireErr(err error) error {
 }
 
 func (s *Server) register() {
+	s.registerEmbeddings()
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {

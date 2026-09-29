@@ -10,18 +10,14 @@
 //	[follow]
 //	poll_interval = "2s"        # the watch fallback's listing interval
 //
-//	[embedding]                 # optional: without it, search is lexical
-//	provider = "ollama"         # "ollama", or "openai" for any OpenAI-compatible endpoint
-//	model = "snowflake-arctic-embed" # e.g.: the model the provider serves (no default)
-//	base_url = ""               # default: http://localhost:11434 (ollama), https://api.openai.com (openai)
-//	api_key_env = ""            # openai: the environment variable holding the key (never the key itself)
+// Nor are the embedding providers: they are the store's too, with their keys sealed, added and
+// chosen in the TUI's Preferences.
 package config
 
 import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,32 +33,9 @@ var ErrInvalid = errors.New("config: invalid")
 
 // Config is the whole file, with defaults filled in.
 type Config struct {
-	Server    Server    `toml:"server"`
-	Follow    Follow    `toml:"follow"`
-	Embedding Embedding `toml:"embedding"`
+	Server Server `toml:"server"`
+	Follow Follow `toml:"follow"`
 }
-
-// Embedding names the embedding provider semantic search uses. The zero value is none.
-type Embedding struct {
-	Provider string `toml:"provider"` // "" (none), EmbedOllama or EmbedOpenAI
-	Model    string `toml:"model"`
-	BaseURL  string `toml:"base_url"`
-	// APIKeyEnv names the environment variable holding an OpenAI-compatible endpoint's key. The key
-	// itself is never in the file, which is often shared or kept in git.
-	APIKeyEnv string `toml:"api_key_env"`
-}
-
-// The embedding providers.
-const (
-	EmbedOllama = "ollama"
-	EmbedOpenAI = "openai"
-)
-
-// The providers' default endpoints.
-const (
-	DefaultOllamaURL = "http://localhost:11434"
-	DefaultOpenAIURL = "https://api.openai.com"
-)
 
 // Server is where the daemon listens and keeps its state.
 type Server struct {
@@ -142,8 +115,8 @@ func Load(file string) (*Config, error) {
 		keys := make([]string, len(extra))
 		for i, k := range extra {
 			keys[i] = k.String()
-			if keys[i] == "embedding.api_key" {
-				return nil, fmt.Errorf("%w: %s: embedding.api_key: a key does not belong in the file; name the environment variable holding it with api_key_env", ErrInvalid, file)
+			if keys[i] == "embedding" || strings.HasPrefix(keys[i], "embedding.") {
+				return nil, fmt.Errorf("%w: %s: [embedding]: embedding providers are kept in the store now, their keys sealed; add them in the TUI's Preferences (autodoc --ui, then SPC ,), and remove the section", ErrInvalid, file)
 			}
 			if keys[i] == "workspace" || strings.HasPrefix(keys[i], "workspace.") {
 				return nil, fmt.Errorf("%w: %s: [[workspace]]: workspaces are kept in the store now; add them in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add, and remove the section", ErrInvalid, file)
@@ -165,7 +138,7 @@ func (c *Config) normalize() error {
 	if c.Follow.PollInterval.Duration < 0 {
 		return fmt.Errorf("%w: follow.poll_interval must be positive", ErrInvalid)
 	}
-	return c.Embedding.normalize()
+	return nil
 }
 
 // NormalizeWorkspace checks a workspace before it is added, and fills its defaults: a name that
@@ -305,48 +278,4 @@ func xdgDir(configured, env, fallback string) (string, error) {
 		return "", fmt.Errorf("%w: creating %s: %v", ErrInvalid, dir, err)
 	}
 	return dir, nil
-}
-
-func (e *Embedding) normalize() error {
-	switch e.Provider {
-	case "":
-		if *e != (Embedding{}) {
-			return fmt.Errorf("%w: embedding: settings with no provider", ErrInvalid)
-		}
-		return nil
-	case EmbedOllama:
-		if e.BaseURL == "" {
-			e.BaseURL = DefaultOllamaURL
-		}
-		if e.APIKeyEnv != "" {
-			return fmt.Errorf("%w: embedding.api_key_env is for the openai provider", ErrInvalid)
-		}
-	case EmbedOpenAI:
-		if e.BaseURL == "" {
-			e.BaseURL = DefaultOpenAIURL
-		}
-	default:
-		return fmt.Errorf("%w: embedding.provider %q: want %q or %q", ErrInvalid, e.Provider, EmbedOllama, EmbedOpenAI)
-	}
-	if e.Model == "" {
-		return fmt.Errorf("%w: embedding.model is required with a provider", ErrInvalid)
-	}
-	if u, err := url.Parse(e.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return fmt.Errorf("%w: embedding.base_url %q: want an http or https URL", ErrInvalid, e.BaseURL)
-	}
-	return nil
-}
-
-// APIKey is the provider's key, read from the environment variable APIKeyEnv names: "" when it
-// names none. A named variable that is unset or empty is an error, so a missing key is reported at
-// start rather than as every request failing.
-func (e Embedding) APIKey() (string, error) {
-	if e.APIKeyEnv == "" {
-		return "", nil
-	}
-	k := os.Getenv(e.APIKeyEnv)
-	if k == "" {
-		return "", fmt.Errorf("%w: embedding.api_key_env: $%s is not set", ErrInvalid, e.APIKeyEnv)
-	}
-	return k, nil
 }

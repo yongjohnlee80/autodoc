@@ -186,11 +186,13 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 3's (2 had no preference verbs; 1 had no
+// TestVerbsArePinned: the verb surface is Protocol 3's (2 had no preference or embedding verbs; 1 had no
 // workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
 	want := []string{"doc.read", "doc.remove", "doc.rename", "doc.write",
+		"embedding.add", "embedding.log", "embedding.models", "embedding.providers", "embedding.remove",
+		"embedding.update", "embedding.usage", "embedding.use",
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
 		"index.changes", "index.list", "index.purge_model", "index.reindex", "index.status",
 		"preference.list", "preference.set",

@@ -77,7 +77,7 @@ func TestASealedKeyOpensOnlyInItsRow(t *testing.T) {
 	dir := t.TempDir()
 	s := openAt(t, filepath.Join(dir, "autodoc.db"))
 	for _, n := range []string{"a", "b"} {
-		if _, err := s.AddProvider(ctx, ProviderSpec{Name: n, Kind: KindOpenAI, BaseURL: "u", Model: "m", Key: strp("key-" + n)}); err != nil {
+		if _, err := s.AddProvider(ctx, ProviderSpec{Name: n, Kind: KindOpenAI, BaseURL: "https://x.example", Model: "m", Key: strp("key-" + n)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -181,4 +181,19 @@ func one(t *testing.T, db dao.DataConn, q string, dst ...any) error {
 		return errors.New("no row")
 	}
 	return rows.Scan(dst...)
+}
+
+// TestAProviderIsCheckedAtTheDoor: a name, a known kind, a model, and an http or https URL.
+func TestAProviderIsCheckedAtTheDoor(t *testing.T) {
+	s := openAt(t, filepath.Join(t.TempDir(), "autodoc.db"))
+	for _, sp := range []ProviderSpec{
+		{Kind: KindOllama, BaseURL: "http://x", Model: "m"},
+		{Name: "n", Kind: "cohere", BaseURL: "http://x", Model: "m"},
+		{Name: "n", Kind: KindOllama, BaseURL: "http://x"},
+		{Name: "n", Kind: KindOllama, BaseURL: "localhost:11434", Model: "m"},
+	} {
+		if _, err := s.AddProvider(context.Background(), sp); !errors.Is(err, ErrProviderInvalid) {
+			t.Errorf("%+v: %v, want ErrProviderInvalid", sp, err)
+		}
+	}
 }

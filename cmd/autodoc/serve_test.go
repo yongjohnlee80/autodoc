@@ -502,7 +502,10 @@ func ollama(t *testing.T) *httptest.Server {
 
 // TestEmbeddingFromConfig: [embedding] names the provider, the daemon embeds with it, and search
 // goes hybrid; a provider that cannot be set up leaves search lexical and says so in the log.
-func TestEmbeddingFromConfig(t *testing.T) {
+// TestEmbeddingProvidersFromTheStore: a provider added and chosen over the API is the one search
+// embeds with, its key never read back and its calls counted; one that cannot be set up is
+// refused and the one in use stays; the choice outlives the daemon.
+func TestEmbeddingProvidersFromTheStore(t *testing.T) {
 	dir := short(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "z.md"), []byte("zebra giraffe\n"), 0o644); err != nil {
@@ -510,10 +513,18 @@ func TestEmbeddingFromConfig(t *testing.T) {
 	}
 	srv := ollama(t)
 	sock := filepath.Join(dir, "a.sock")
-	start(t, writeConfig(t, sock, filepath.Join(dir, "state"), fmt.Sprintf("[embedding]\nprovider = \"ollama\"\nmodel = \"tiny\"\nbase_url = %q\n", srv.URL), "kb="+root), sock)
+	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
+	d := start(t, cfg, sock)
 	cli := dial(t, sock)
-	// with no document yet, none is unready: wait for the note first
-	eventually(t, "the note indexed and semantic-ready", func() bool {
+	if res := call(t, cli, "search.query", "kb", "zebra", nil).(map[string]any); res["semantic"] != "off" {
+		t.Fatalf("with no provider chosen, search is %v", res["semantic"])
+	}
+	added := call(t, cli, "embedding.add", map[string]any{"name": "local", "kind": "ollama", "base_url": srv.URL, "model": "tiny", "key": "unused-but-sealed"}).(map[string]any)
+	if added["has_key"] != true || added["key"] != nil {
+		t.Fatalf("embedding.add answered %v: want has_key, and no key", added)
+	}
+	call(t, cli, "embedding.use", "local")
+	eventually(t, "the note semantic-ready under the chosen provider", func() bool {
 		st := call(t, cli, "index.status", "kb").(map[string]any)
 		e, ok := st["embeddings"].(map[string]any)
 		return st["docs"] == int64(1) && ok && e["semantic"] == "ready" && e["pending"] == int64(0) &&
@@ -523,13 +534,28 @@ func TestEmbeddingFromConfig(t *testing.T) {
 	if res["mode_used"] != "hybrid" || len(res["hits"].([]any)) != 1 {
 		t.Errorf("search %v", res)
 	}
-
-	dir2 := short(t)
-	sock2 := filepath.Join(dir2, "a.sock")
-	d := start(t, writeConfig(t, sock2, filepath.Join(dir2, "state"), "[embedding]\nprovider = \"ollama\"\nmodel = \"tiny\"\nbase_url = \"http://127.0.0.1:1\"\n", "kb="+t.TempDir()), sock2)
-	res = call(t, dial(t, sock2), "search.query", "kb", "zebra", nil).(map[string]any)
-	if res["semantic"] != "off" || !strings.Contains(d.out.String(), "embedding off") {
-		t.Errorf("an unreachable provider: %v\n%s", res, d.out)
+	eventually(t, "the calls counted in the provider's usage", func() bool {
+		us := call(t, cli, "embedding.usage", "local", int64(7)).([]any)
+		return len(us) == 1 && us[0].(map[string]any)["requests"].(int64) >= 1
+	})
+	if log := call(t, cli, "embedding.log", "local", int64(10)).([]any); len(log) == 0 || log[0].(map[string]any)["outcome"] != "ok" {
+		t.Errorf("the provider's log: %v", log)
+	}
+	// one that cannot be set up is refused, and the one in use stays
+	call(t, cli, "embedding.add", map[string]any{"name": "gone", "kind": "ollama", "base_url": "http://127.0.0.1:1", "model": "tiny"})
+	if _, err := cli.Call(context.Background(), "embedding.use", "gone"); err == nil {
+		t.Fatal("an unreachable provider was chosen")
+	}
+	ps := call(t, cli, "embedding.providers").(map[string]any)
+	if ps["active"] != "local" || ps["error"] == "" || len(ps["providers"].([]any)) != 2 {
+		t.Fatalf("after the refused choice: %v", ps)
+	}
+	// the choice outlives the daemon
+	d.stop()
+	start(t, cfg, sock)
+	cli = dial(t, sock)
+	if ps := call(t, cli, "embedding.providers").(map[string]any); ps["active"] != "local" {
+		t.Fatalf("after a restart the provider in use is %v, want local", ps["active"])
 	}
 }
 
