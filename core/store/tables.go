@@ -90,7 +90,9 @@ type Chunk struct {
 	ByteStart, ByteEnd     int64
 	DocPath                string // joined: the document's path
 	DocActiveGen           int64  // joined: the document's active generation
+	DocReady               int64  // joined: the document's semantic_ready
 	Snippet                string // joined: the full-text excerpt
+	EmbBits, EmbF32        []byte // joined: the vector of the chunk's text under a model
 }
 
 // ChunkField names a chunk column.
@@ -113,7 +115,10 @@ const (
 	ChunkByteEnd      ChunkField = "byte_end"
 	ChunkDocPath      ChunkField = "doc_path"       // joined
 	ChunkDocActiveGen ChunkField = "doc_active_gen" // joined
+	ChunkDocReady     ChunkField = "doc_ready"      // joined
 	ChunkSnippet      ChunkField = "snippet"        // joined, full text
+	ChunkEmbBits      ChunkField = "emb_bits"       // joined, embedding
+	ChunkEmbF32       ChunkField = "emb_f32"        // joined, embedding
 )
 
 // ChunkSort names a chunk order.
@@ -126,10 +131,23 @@ const (
 	ChunkByRank ChunkSort = "rank" // full-text rank, best first
 )
 
-// The chunk declaration's joins.
+// The chunk declaration's joins. JoinEmbedding joins on the text alone: a
+// query using it also compares the embedding's workspace with the chunk's
+// (EmbeddingOfChunk), since vectors are kept per workspace.
 const (
-	JoinDocument dao.JoinKey = "document"
-	JoinFTS      dao.JoinKey = "fts"
+	JoinDocument  dao.JoinKey = "document"
+	JoinFTS       dao.JoinKey = "fts"
+	JoinEmbedding dao.JoinKey = "embedding"
+)
+
+// EmbeddingOfChunk keeps a JoinEmbedding inside the chunk's workspace.
+var EmbeddingOfChunk = dao.Cmp(dao.T("embedding", wsCol), dao.OpEq, dao.T("chunk", wsCol))
+
+// The markers a chunk's full-text Snippet puts around each match: control
+// characters, which no note's text holds.
+const (
+	HighlightStart = "\x02"
+	HighlightEnd   = "\x03"
 )
 
 // ChunkFTS is the full-text index over chunk (the baseline's chunk_fts).
@@ -157,6 +175,7 @@ type DocName struct {
 	Key         string
 	DocID       int64
 	IsPath      int64
+	DocPath     string // joined
 }
 
 // DocNameField names a doc_name column.
@@ -391,12 +410,17 @@ func newTables(c dao.DataConn) *tables {
 				ChunkByteEnd:      col("chunk", ChunkByteEnd, func(x *Chunk) any { return &x.ByteEnd }),
 				ChunkDocPath:      joined("document", "path", JoinDocument, func(x *Chunk) any { return &x.DocPath }),
 				ChunkDocActiveGen: joined("document", "active_gen", JoinDocument, func(x *Chunk) any { return &x.DocActiveGen }),
-				ChunkSnippet: {Expr: dao.Snippet(ChunkFTS, "body", dao.SnippetMarks{Open: "\x02", Close: "\x03", Ellipsis: "…", Tokens: 16}),
+				ChunkDocReady:     joined("document", "semantic_ready", JoinDocument, func(x *Chunk) any { return &x.DocReady }),
+				ChunkSnippet: {Expr: dao.Snippet(ChunkFTS, "body", dao.SnippetMarks{Open: HighlightStart, Close: HighlightEnd, Ellipsis: "…", Tokens: 16}),
 					Join: JoinFTS, ReadOnly: true, Scan: func(x *Chunk) any { return &x.Snippet }},
+				ChunkEmbBits: joined("embedding", "bits", JoinEmbedding, func(x *Chunk) any { return &x.EmbBits }),
+				ChunkEmbF32:  joined("embedding", "f32", JoinEmbedding, func(x *Chunk) any { return &x.EmbF32 }),
 			}),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinDocument,
 				dao.InnerJoin("document", dao.T("document", "id"), dao.T("chunk", "doc_id"))),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinFTS, dao.FullTextJoin(ChunkFTS)),
+			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinEmbedding,
+				dao.InnerJoin("embedding", dao.T("embedding", "text_hash"), dao.T("chunk", "text_hash"))),
 			dao.SortMap[*Chunk, ChunkField, ChunkSort, int64](map[ChunkSort]string{
 				ChunkByID:   `"chunk"."id"`,
 				ChunkByOrd:  `"chunk"."ord"`,
@@ -414,7 +438,10 @@ func newTables(c dao.DataConn) *tables {
 				NameKey:       col("doc_name", NameKey, func(n *DocName) any { return &n.Key }),
 				NameDoc:       col("doc_name", NameDoc, func(n *DocName) any { return &n.DocID }),
 				NameIsPath:    col("doc_name", NameIsPath, func(n *DocName) any { return &n.IsPath }),
-			})),
+				NameDocPath:   joined("document", "path", JoinDocument, func(n *DocName) any { return &n.DocPath }),
+			}),
+			dao.OptionalJoinExpr[*DocName, DocNameField, noSort, int64](JoinDocument,
+				dao.InnerJoin("document", dao.T("document", "id"), dao.T("doc_name", "doc_id")))),
 		linksOut: links(c, "dst_doc", true),
 		linksIn:  links(c, "src_doc", false),
 		models: dao.New[*Model, ModelField, noSort, string](c,
