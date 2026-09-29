@@ -97,9 +97,10 @@ func (h *Host) state() map[string]any {
 	for k, v := range themeState(h.theme) {
 		st[k] = v
 	}
-	for k, v := range prefState(h.prefs, h.connected) {
+	for k, v := range prefState(h.prefs) {
 		st[k] = v
 	}
+	st["App.statusShown"] = h.statusShown()
 	return st
 }
 
