@@ -131,17 +131,25 @@ const (
 	ChunkByRank ChunkSort = "rank" // full-text rank, best first
 )
 
-// The chunk declaration's joins. JoinEmbedding joins on the text alone: a
-// query using it also compares the embedding's workspace with the chunk's
-// (EmbeddingOfChunk), since vectors are kept per workspace.
+// The chunk declaration's joins. Each is on the composite key, the workspace
+// with the row's own key (innerJoin): a joined row is always the chunk's
+// workspace's, as the chunk is.
 const (
 	JoinDocument  dao.JoinKey = "document"
 	JoinFTS       dao.JoinKey = "fts"
 	JoinEmbedding dao.JoinKey = "embedding"
 )
 
-// EmbeddingOfChunk keeps a JoinEmbedding inside the chunk's workspace.
-var EmbeddingOfChunk = dao.Cmp(dao.T("embedding", wsCol), dao.OpEq, dao.T("chunk", wsCol))
+// innerJoin joins table to from on the workspace, then table's col equal to
+// from's key: a join between two workspace-owned tables is on both. leftJoin
+// keeps a from row that joins none.
+func innerJoin(table, col, from, key string) dao.Expr {
+	return dao.InnerJoinOn(table, dao.On(dao.T(table, wsCol), dao.T(from, wsCol)), dao.On(dao.T(table, col), dao.T(from, key)))
+}
+
+func leftJoin(table, col, from, key string) dao.Expr {
+	return dao.LeftJoinOn(table, dao.On(dao.T(table, wsCol), dao.T(from, wsCol)), dao.On(dao.T(table, col), dao.T(from, key)))
+}
 
 // The markers a chunk's full-text Snippet puts around each match: control
 // characters, which no note's text holds.
@@ -417,10 +425,10 @@ func newTables(c dao.DataConn) *tables {
 				ChunkEmbF32:  joined("embedding", "f32", JoinEmbedding, func(x *Chunk) any { return &x.EmbF32 }),
 			}),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinDocument,
-				dao.InnerJoin("document", dao.T("document", "id"), dao.T("chunk", "doc_id"))),
+				innerJoin("document", "id", "chunk", "doc_id")),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinFTS, dao.FullTextJoin(ChunkFTS)),
 			dao.OptionalJoinExpr[*Chunk, ChunkField, ChunkSort, int64](JoinEmbedding,
-				dao.InnerJoin("embedding", dao.T("embedding", "text_hash"), dao.T("chunk", "text_hash"))),
+				innerJoin("embedding", "text_hash", "chunk", "text_hash")),
 			dao.SortMap[*Chunk, ChunkField, ChunkSort, int64](map[ChunkSort]string{
 				ChunkByID:   `"chunk"."id"`,
 				ChunkByOrd:  `"chunk"."ord"`,
@@ -441,7 +449,7 @@ func newTables(c dao.DataConn) *tables {
 				NameDocPath:   joined("document", "path", JoinDocument, func(n *DocName) any { return &n.DocPath }),
 			}),
 			dao.OptionalJoinExpr[*DocName, DocNameField, noSort, int64](JoinDocument,
-				dao.InnerJoin("document", dao.T("document", "id"), dao.T("doc_name", "doc_id")))),
+				innerJoin("document", "id", "doc_name", "doc_id"))),
 		linksOut: links(c, "dst_doc", true),
 		linksIn:  links(c, "src_doc", false),
 		models: dao.New[*Model, ModelField, noSort, string](c,
@@ -509,9 +517,9 @@ func docValues(c dao.DataConn, table, valueCol string) *dao.Schema[*DocValue, Do
 // targets of a document's links (a LEFT JOIN, since a link may resolve to
 // none), src_doc for the sources of its backlinks.
 func links(c dao.DataConn, end string, left bool) *dao.Schema[*Link, LinkField, LinkSort, int64] {
-	join := dao.InnerJoin("document", dao.T("document", "id"), dao.T("link", end))
+	join := innerJoin("document", "id", "link", end)
 	if left {
-		join = dao.LeftJoin("document", dao.T("document", "id"), dao.T("link", end))
+		join = leftJoin("document", "id", "link", end)
 	}
 	return dao.New[*Link, LinkField, LinkSort, int64](c,
 		dao.Table[*Link, LinkField, LinkSort, int64]("link"),

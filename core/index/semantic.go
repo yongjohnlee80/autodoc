@@ -448,10 +448,9 @@ func (x *Indexer) publish(ctx context.Context, changed []int64) error {
 }
 
 // withVectors narrows an alive-chunk query to the chunks of ready documents that have a vector
-// under model fp, joining the vector (inside the workspace).
+// under model fp, joining the vector.
 func withVectors(d dao.DAO[*store.Chunk, store.ChunkField, int64], fp string) dao.DAO[*store.Chunk, store.ChunkField, int64] {
-	return d.Join(store.JoinEmbedding).WithPredicate(store.EmbeddingOfChunk).
-		WithPredicate(dao.Eq(`"embedding"."model_fp"`, fp)).WithPredicate(dao.Eq(`"document"."semantic_ready"`, 1))
+	return d.Join(store.JoinEmbedding).WithPredicate(dao.Eq(`"embedding"."model_fp"`, fp)).WithPredicate(dao.Eq(`"document"."semantic_ready"`, 1))
 }
 
 // loadCodes reads the codes of the alive chunks of ready documents under model fp: of docs, or of
