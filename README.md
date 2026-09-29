@@ -11,14 +11,17 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 
 | Package | What it does |
 | --- | --- |
-| `core/config` | reads `$XDG_CONFIG_HOME/autodoc/config.toml`, and resolves the socket and the state directory |
-| `core/workspace` | opens a workspace: its root as a `golib/vfs` filesystem, its include/exclude patterns, and the single-instance lease on its index store |
+| `core/config` | reads `$XDG_CONFIG_HOME/autodoc/config.toml`, and resolves the socket, the state directory and the store |
+| `core/store` | the one store: every workspace and its index, in one SQLite file, read and written through golib `dao` (one declaration per table), with the lease that makes one daemon its only server |
+| `sql/deployments` | the store's schema as numbered SQL scripts, applied by golib `dao/deploy` (see `docs/ops/schema-scripts.md`) |
+| `core/workspace` | opens a workspace's root as a `golib/vfs` filesystem, with its include/exclude patterns |
 | `core/follow` | keeps a workspace's index following its root |
-| `core/index` | the index store (one SQLite file per workspace), its indexer, the link graph, and search |
+| `core/index` | one workspace's index in the store, its indexer, the link graph, and search |
 | `core/embed` | the optional embedding provider: Ollama, or any OpenAI-compatible endpoint |
 | `core/docs` | reads and writes notes for AutoDoc's own apps, conditional on the version the writer read |
 | `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
 | `tui` | the terminal UI: search, the notes, a Vim-keyed editor, backlinks; its screen written in QML |
+| `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
 | `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI |
 
 ## Configuration
@@ -27,7 +30,8 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 # $XDG_CONFIG_HOME/autodoc/config.toml
 [server]
 socket = ""                 # default: $XDG_RUNTIME_DIR/autodoc.sock
-state_dir = ""              # default: $XDG_STATE_HOME/autodoc
+state_dir = ""              # default: $XDG_STATE_HOME/autodoc (the daemon's log)
+data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store, autodoc.db)
 
 [follow]
 poll_interval = "2s"        # the watch fallback's listing interval
@@ -37,16 +41,16 @@ provider = "ollama"         # or "openai", for any OpenAI-compatible endpoint
 model = "snowflake-arctic-embed"  # e.g.; there is no default model
 base_url = ""               # default: http://localhost:11434 (ollama), https://api.openai.com (openai)
 api_key_env = ""            # openai: the environment variable that holds the key
-
-[[workspace]]
-name = "kb"                 # the handle every API call names
-root = "~/notes"            # one root per workspace
-include = ["**/*.md"]       # default
-exclude = [".git/**"]       # default
 ```
 
-Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and `**`
-matches any number of whole segments. An unknown setting is an error, so a misspelling is reported.
+A missing file is every default. An unknown setting is an error, so a misspelling is reported.
+
+**Workspaces are not configured here.** They are kept in the store: add, rename and delete them in
+the TUI (`Go › Manage workspaces…`) or with `workspace.add`. A workspace has a name (what `--ui` and
+every API call take), a root directory, and include and exclude patterns (`**/*.md` and `.git/**` by
+default). Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
+`**` matches any number of whole segments. A config file that still has a `[[workspace]]` section is
+refused with a message saying so.
 
 An API key never goes in the file: `api_key_env` names the environment variable that holds it.
 
@@ -57,9 +61,9 @@ autodoc --serve             # or: autodoc --serve --config path/to/config.toml
 ```
 
 It listens on its unix socket, mode 0600: the file is the access control, so there is no login
-locally. It opens every workspace and takes a lease on its index. A workspace another instance
-already serves is reported `busy`, and the rest are served. A second `--serve` on the same socket
-exits, reporting the instance that answers there.
+locally. It opens the store, takes its lease, and serves every workspace in it. A second `--serve`
+on the same socket exits, reporting the instance that answers there; one on another socket over the
+same store is refused, since the lease is taken.
 
 Every client speaks one API. A session starts with `sys.hello({protocol})`, and until then only
 `sys.hello` answers. Every other verb takes the workspace name first:
@@ -67,7 +71,7 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 | Group | Verbs |
 | --- | --- |
 | `sys` | `hello`, `shutdown` |
-| `workspace` | `list` |
+| `workspace` | `list`, `add(name, root, include?, exclude?)`, `rename(name, to)`, `remove(name)` (the index goes; the files stay) |
 | `search` | `query(ws, q, {limit, mode, tags, paths})` |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
@@ -81,7 +85,8 @@ to do next: re-list, merge a conflict, read after a write that landed, and so on
 ## The TUI
 
 ```sh
-autodoc --ui                # attaches to the daemon, and starts it when nothing answers
+autodoc --ui                # attaches to the daemon (starting it when nothing answers), in the last workspace used
+autodoc --ui kb             # in workspace kb; a name the daemon does not have is refused, with the names it has
 ```
 
 The screen has four parts:
@@ -96,7 +101,7 @@ The screen has four parts:
 | --- | --- |
 | `Ctrl+G`, `/` | search (`/` in Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
-| `Ctrl+W` | switch workspace |
+| `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, renames and deletes them |
 | `Alt+1` `Alt+2` `Alt+3` | the notes pane, the editor, the backlinks |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu, quit |
 
@@ -126,8 +131,8 @@ decides from each file's current state whether to delete, skip or re-index it.
 
 ## The index
 
-Each workspace has one SQLite file in the state directory. One goroutine writes it, and any number
-read it, each from one snapshot:
+The index is in the store, one SQLite file for every workspace, with each workspace's rows keyed by
+it. One connection writes, and any number read, each from one snapshot:
 
 - **Notes are chunked by heading.** Chunks are about 350 estimated tokens, and each carries its breadcrumb
   (the title and the headings above it). An edit writes only the chunks it changed: each document has

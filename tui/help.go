@@ -7,7 +7,7 @@ const helpText = `KEYS
   Ctrl+O      open a note by path (a filter over the workspace's notes)
   Ctrl+N      new note: a path in the workspace, .md added when it has none
   Ctrl+S      save the note
-  Ctrl+W      switch workspace
+  Ctrl+W      switch workspace; Manage… adds, renames and deletes them
   Alt+1/2/3   focus the notes pane, the editor, the backlinks pane
   Enter       in a pane: open the note under the cursor
   F1          this help;  F10 the menu;  Ctrl+Q quit
@@ -25,7 +25,11 @@ WHAT A KEY NEEDS
   are refused.
   Semantic search needs an [embedding] provider in the daemon's config; without one, search is
   by words, and the status line says "semantic off".
-  A workspace marked busy is served by another autodoc: point --ui at that one.
+  Adding a workspace needs a directory: its **/*.md are indexed, .git skipped. A name or root
+  another workspace has is refused. Deleting one removes its index only; its files stay.
+  A workspace marked error has a root that is gone: bring the directory back and restart the
+  daemon, or delete the workspace.
+  autodoc --ui <name> opens that workspace; without a name, the one used last.
   Opening, switching or quitting over unsaved changes asks first: Save, Discard or Stay.`
 
 // aboutText is the build and location detail.
