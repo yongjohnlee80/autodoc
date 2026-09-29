@@ -94,6 +94,7 @@ func (h *Host) search(q string) {
 		h.showPaths(a.paths)
 		h.set("App.resultsTitle", fmt.Sprintf("search: %s (%d)", q, len(a.paths)))
 		h.setStatus(fmt.Sprintf("%d notes · %s search · semantic %s", len(a.paths), a.mode, a.semantic))
+		h.keep(h.p.Call("notes", "forceActiveFocus")) // the hits are what a search was for: Enter opens the first
 	})
 }
 
