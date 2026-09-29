@@ -86,7 +86,8 @@ autodoc --ui kb             # in workspace kb; a name the daemon does not have i
 ```
 
 The screen is a page and nothing else: the note, 120 columns wide and centred, the ruler at its
-right edge. Everything else comes when it is asked for:
+right edge. With no note open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
+names and saves it as a note. Everything else comes when it is asked for:
 
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up.
 - **The explorer** (`SPC e`): every workspace's folders and notes, as a tree. **The links**

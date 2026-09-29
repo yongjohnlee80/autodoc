@@ -124,7 +124,6 @@ Window {
             palette.highlight: Theme.document.selection
             palette.highlightedText: Theme.document.selectedText
             keyset: App.keyset
-            readOnly: App.noNote
             ruler: App.rulerColumn
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()

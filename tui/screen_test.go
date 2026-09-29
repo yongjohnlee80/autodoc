@@ -63,7 +63,7 @@ func TestTheScreenIsThePageAlone(t *testing.T) {
 			t.Fatalf("%q is on the blank screen:\n%s", absent, sc)
 		}
 	}
-	if !strings.HasPrefix(sc, "┌ no note") {
+	if !strings.HasPrefix(sc, "┌ untitled") {
 		t.Fatalf("the page is not the screen's first row:\n%s", sc)
 	}
 	r.keys(t, f10())
@@ -604,5 +604,52 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 	line := onLoop(r, func() string { return r.h.editor.Lines()[at[0]] })
 	if !strings.HasPrefix(line, "kestrel") && !strings.HasPrefix(line, "## Birds") || at[1] != 0 {
 		t.Errorf("the cursor opened at line %d col %d (%q), not at the hit's start", at[0], at[1], line)
+	}
+}
+
+// TestTheBlankPageIsADraft: with no note open the page takes typing, as an untitled draft marked
+// unsaved; Ctrl+S names it in the new-note picker and creates the note with its text, open, the
+// cursor where it was. Closing the picker keeps the draft.
+func TestTheBlankPageIsADraft(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.typeInEditor(t, "first thoughts\nsecond line")
+	r.s.WaitFor(t, "the draft unsaved", func(sc string) bool { return strings.Contains(sc, "untitled [+]") })
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	r.keys(t, esc()) // closed without a name: the draft stays, unsaved
+	r.s.WaitFor(t, "the picker closed", func(sc string) bool { return !strings.Contains(sc, "save the draft") })
+	if got := r.editorText(); got != "first thoughts\nsecond line" || !r.note().dirty {
+		t.Fatalf("after closing the picker: %q, dirty %v", got, r.note().dirty)
+	}
+	before := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} })
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	r.keys(t, decltest.Type("ideas/draft")...)
+	r.keys(t, enter())
+	r.waitNote(t, "ideas/draft.md")
+	if got := d.read(t, "kb", "ideas/draft.md"); got != "first thoughts\nsecond line" {
+		t.Fatalf("the note holds %q, want the draft", got)
+	}
+	if after := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} }); after != before {
+		t.Errorf("the cursor moved from %v to %v when the draft became a note", before, after)
+	}
+}
+
+// TestADraftIsGuardedLikeANote: opening a note over an unsaved draft asks; Save names the draft,
+// creates it, and then opens the note asked for.
+func TestADraftIsGuardedLikeANote(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	r := attached(t, d)
+	r.typeInEditor(t, "draft text")
+	r.openByPicker(t, "a.md")
+	r.s.WaitForText(t, "untitled has unsaved changes")
+	r.keys(t, key('s'))
+	r.s.WaitForText(t, "save the draft")
+	r.keys(t, decltest.Type("kept")...)
+	r.keys(t, enter())
+	r.waitNote(t, "a.md") // the open it guarded, after the save
+	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
+		t.Fatalf("kept.md holds %q, want the draft", got)
 	}
 }
