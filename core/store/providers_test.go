@@ -226,3 +226,44 @@ func TestAnOllamaCloudProviderNeedsItsKey(t *testing.T) {
 		t.Fatalf("a local provider needs no key: %v", err)
 	}
 }
+
+// TestThePreferenceFollowsItsProvider: renaming the provider the preference names renames it in
+// the preference, and removing it leaves none named; another provider's rename or remove leaves
+// the preference as it was.
+func TestThePreferenceFollowsItsProvider(t *testing.T) {
+	s := openAt(t, filepath.Join(t.TempDir(), "autodoc.db"))
+	ctx := context.Background()
+	for _, n := range []string{"a", "b"} {
+		if _, err := s.AddProvider(ctx, ProviderSpec{Name: n, Kind: KindOllama, BaseURL: "http://x", Model: "m"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SetPreference(ctx, PrefProvider, "a"); err != nil {
+		t.Fatal(err)
+	}
+	named := func() string {
+		t.Helper()
+		p, err := s.Preferences(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p[PrefProvider]
+	}
+	step := func(what string, do func() error, want string) {
+		t.Helper()
+		if err := do(); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		if got := named(); got != want {
+			t.Fatalf("after %s the preference names %q, want %q", what, got, want)
+		}
+	}
+	step("renaming b", func() error {
+		return s.UpdateProvider(ctx, "b", ProviderSpec{Name: "b2", Kind: KindOllama, BaseURL: "http://x", Model: "m"})
+	}, "a")
+	step("renaming a", func() error {
+		return s.UpdateProvider(ctx, "a", ProviderSpec{Name: "a2", Kind: KindOllama, BaseURL: "http://x", Model: "m"})
+	}, "a2")
+	step("removing b2", func() error { return s.RemoveProvider(ctx, "b2") }, "a2")
+	step("removing a2", func() error { return s.RemoveProvider(ctx, "a2") }, "")
+}

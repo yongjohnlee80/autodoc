@@ -26,12 +26,32 @@ const setupTimeout = 30 * time.Second
 // would take the store's one writer from the indexers as often as they embed.
 const flushEvery = 2 * time.Second
 
+// providerStore is what the Embedding keeps in the store: the preference naming the provider in
+// use, the providers, and their usage and log.
+type providerStore interface {
+	Preferences(ctx context.Context) (map[string]string, error)
+	SetPreference(ctx context.Context, name, value string) error
+	Providers(ctx context.Context) ([]store.ProviderInfo, error)
+	AddProvider(ctx context.Context, sp store.ProviderSpec) (store.ProviderInfo, error)
+	UpdateProvider(ctx context.Context, name string, sp store.ProviderSpec) error
+	RemoveProvider(ctx context.Context, name string) error
+	ProviderWithKey(ctx context.Context, name string) (store.ProviderInfo, string, error)
+	RecordCalls(ctx context.Context, providerID int64, calls []store.CallRecord) error
+	ProviderUsage(ctx context.Context, name string, days int) ([]store.Usage, error)
+	ProviderLog(ctx context.Context, name string, limit int) ([]store.LogEntry, error)
+}
+
 // Embedding is the daemon's embedding provider, and the store's providers behind it.
 type Embedding struct {
-	db     *store.Store
+	db     providerStore
 	ws     *Workspaces
 	log    logger.Logger
 	client *http.Client
+
+	// switching serialises the changes to the provider in use (Use, UpdateProvider,
+	// RemoveProvider): each sets up, then writes the store, then swaps, and two interleaved could
+	// leave the store naming one provider and the workspaces embedding with another
+	switching sync.Mutex
 
 	mu      sync.Mutex
 	active  string // the provider in use, by name; "" for none
@@ -75,29 +95,60 @@ func (e *Embedding) Start(ctx context.Context) {
 func (e *Embedding) Wait() { <-e.done }
 
 // Use makes the provider named name the one semantic search uses, and remembers it; "" turns
-// semantic search off. A provider that does not set up is refused, and the one in use stays.
+// semantic search off. In that order: the provider is set up, the preference written, and only
+// then do the workspaces take it, so a provider that does not set up, or a preference that is not
+// written, leaves the one in use in use, and the store naming it.
 func (e *Embedding) Use(ctx context.Context, name string) error {
-	if err := e.apply(ctx, name); err != nil {
-		return err
-	}
-	return e.db.SetPreference(ctx, store.PrefProvider, name)
-}
-
-// apply sets up the provider named name (none for "") and gives it to every workspace.
-func (e *Embedding) apply(ctx context.Context, name string) error {
+	e.switching.Lock()
+	defer e.switching.Unlock()
 	if name == "" {
-		e.ws.SetEmbedding(nil, nil)
-		e.set("", "")
+		if err := e.db.SetPreference(ctx, store.PrefProvider, ""); err != nil {
+			return err
+		}
+		e.swap("", nil, nil)
 		return nil
 	}
-	p, pf, err := e.build(ctx, name)
+	p, pf, err := e.setUp(ctx, name)
 	if err != nil {
-		e.set(e.current(), err.Error())
 		return err
 	}
+	if err := e.db.SetPreference(ctx, store.PrefProvider, name); err != nil {
+		return err
+	}
+	e.swap(name, p, pf)
+	return nil
+}
+
+// apply is Start's: the provider the preference already names, set up and given to the
+// workspaces.
+func (e *Embedding) apply(ctx context.Context, name string) error {
+	p, pf, err := e.setUp(ctx, name)
+	if err != nil {
+		return err
+	}
+	e.swap(name, p, pf)
+	return nil
+}
+
+// setUp sets up the stored provider named name; one that does not is the reason kept for
+// Providers, the one in use staying.
+func (e *Embedding) setUp(ctx context.Context, name string) (embed.Provider, func(embed.Model) (embed.Provider, error), error) {
+	info, key, err := e.db.ProviderWithKey(ctx, name)
+	if err == nil {
+		var p embed.Provider
+		var pf func(embed.Model) (embed.Provider, error)
+		if p, pf, err = e.build(ctx, info, key); err == nil {
+			return p, pf, nil
+		}
+	}
+	e.set(e.current(), err.Error())
+	return nil, nil, err
+}
+
+// swap gives every workspace provider p (nil: none) as the one named name.
+func (e *Embedding) swap(name string, p embed.Provider, pf func(embed.Model) (embed.Provider, error)) {
 	e.ws.SetEmbedding(p, pf)
 	e.set(name, "")
-	return nil
 }
 
 func (e *Embedding) set(active, lastErr string) {
@@ -112,13 +163,10 @@ func (e *Embedding) current() string {
 	return e.active
 }
 
-// build sets up the provider named name, metered, and the maker of its other models' providers
+// build sets up provider info with its key, metered, and the maker of its other models' providers
 // (the model still active while a new one fills).
-func (e *Embedding) build(ctx context.Context, name string) (embed.Provider, func(embed.Model) (embed.Provider, error), error) {
-	info, key, err := e.db.ProviderWithKey(ctx, name)
-	if err != nil {
-		return nil, nil, err
-	}
+func (e *Embedding) build(ctx context.Context, info store.ProviderInfo, key string) (embed.Provider, func(embed.Model) (embed.Provider, error), error) {
+	name := info.Name
 	newProvider := func(ctx context.Context, model string) (embed.Provider, error) {
 		ctx, cancel := context.WithTimeout(ctx, setupTimeout)
 		defer cancel()
@@ -231,26 +279,46 @@ func (e *Embedding) AddProvider(ctx context.Context, sp store.ProviderSpec) (sto
 	return e.db.AddProvider(ctx, sp)
 }
 
-// UpdateProvider rewrites a provider; the one in use is set up again with what it now says, a
-// model switch among them.
+// UpdateProvider rewrites a provider. The one in use is set up with what it will say BEFORE it is
+// rewritten, so an edit that does not set up is refused with nothing changed; then the store is
+// written (a rename renaming the preference with it) and the workspaces take it, a model switch
+// among them.
 func (e *Embedding) UpdateProvider(ctx context.Context, name string, sp store.ProviderSpec) error {
+	e.switching.Lock()
+	defer e.switching.Unlock()
+	if e.current() != name {
+		return e.db.UpdateProvider(ctx, name, sp)
+	}
+	old, key, err := e.db.ProviderWithKey(ctx, name)
+	if err != nil {
+		return err
+	}
+	if sp.Key != nil {
+		key = *sp.Key
+	}
+	p, pf, err := e.build(ctx, store.ProviderInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model}, key)
+	if err != nil {
+		return err
+	}
 	if err := e.db.UpdateProvider(ctx, name, sp); err != nil {
 		return err
 	}
-	if e.current() != name {
-		return nil
-	}
-	return e.Use(ctx, sp.Name) // a rename renames the preference too
+	e.swap(sp.Name, p, pf)
+	return nil
 }
 
-// RemoveProvider deletes a provider; the one in use goes out of use first.
+// RemoveProvider deletes a provider, the preference naming none with it when it names this one;
+// only once it is gone does the one in use go out of use, so a remove that fails changes nothing.
 func (e *Embedding) RemoveProvider(ctx context.Context, name string) error {
-	if e.current() == name {
-		if err := e.Use(ctx, ""); err != nil {
-			return err
-		}
+	e.switching.Lock()
+	defer e.switching.Unlock()
+	if err := e.db.RemoveProvider(ctx, name); err != nil {
+		return err
 	}
-	return e.db.RemoveProvider(ctx, name)
+	if e.current() == name {
+		e.swap("", nil, nil)
+	}
+	return nil
 }
 
 // Models are what a provider offers: a stored one's, by name (its key opened here), or those of
