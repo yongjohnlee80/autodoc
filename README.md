@@ -17,7 +17,7 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `core/workspace` | opens a workspace's root as a `golib/vfs` filesystem, with its include/exclude patterns |
 | `core/follow` | keeps a workspace's index following its root |
 | `core/index` | one workspace's index in the store, its indexer, the link graph, and search |
-| `core/embed` | the optional embedding provider: Ollama, or any OpenAI-compatible endpoint |
+| `core/embed` | the embedding providers' clients: Ollama, or any OpenAI-compatible endpoint, metered |
 | `core/docs` | reads and writes notes for AutoDoc's own apps, conditional on the version the writer read |
 | `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
 | `tui` | the terminal UI: search, the notes, a Vim-keyed editor, backlinks; its screen written in QML |
@@ -35,12 +35,6 @@ data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store, autodo
 
 [follow]
 poll_interval = "2s"        # the watch fallback's listing interval
-
-[embedding]                 # optional: without it, search is lexical
-provider = "ollama"         # or "openai", for any OpenAI-compatible endpoint
-model = "snowflake-arctic-embed"  # e.g.; there is no default model
-base_url = ""               # default: http://localhost:11434 (ollama), https://api.openai.com (openai)
-api_key_env = ""            # openai: the environment variable that holds the key
 ```
 
 A missing file is every default. An unknown setting is an error, so a misspelling is reported.
@@ -52,7 +46,9 @@ default). Patterns are root-relative globs: each `/`-separated segment is a `pat
 `**` matches any number of whole segments. A config file that still has a `[[workspace]]` section is
 refused with a message saying so.
 
-An API key never goes in the file: `api_key_env` names the environment variable that holds it.
+**Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
+added and chosen in the TUI's Preferences (see [Semantic search](#semantic-search-and-embedding-models)).
+A config file with an `[embedding]` section is refused with a message saying so.
 
 ## The daemon
 
@@ -162,6 +158,66 @@ float vectors, and its results are fused with BM25 by reciprocal rank.
 - **A new model fills in the background.** The old one keeps answering until the new one covers every
   chunk.
 - **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
+
+## Semantic search and embedding models
+
+Semantic search finds a note by what it means, not only by the words it shares with the query. A
+search for "why did we pick SQLite" also finds the note that says "we chose an embedded database",
+and "login bug" finds "authentication fails". Exact words still count: the two are fused, and a
+note that matches both the words and the meaning ranks highest.
+
+**How it works.** An embedding model turns each section of a note into a vector, a list of numbers
+that places the text by meaning. A query is turned into a vector the same way, and the sections
+whose vectors are closest are the matches.
+
+**Vectors are made once, and kept.**
+
+- **A note is parsed only when its file changes,** never at search time. On a restart, an unchanged
+  file is skipped by its version (size, modification time, inode).
+- **A section's vector is kept in the store,** keyed by its text's hash: an edit re-embeds only the
+  sections it changed, and two identical passages share one vector. Each workspace keeps its own.
+- **A search reads what is stored.** The only model call it makes is for the query itself.
+- **Switching models embeds everything once more.** The old model keeps answering until the new one
+  covers every section, then it takes over.
+
+**Providers.** Semantic search is off until a provider is chosen in the TUI's Preferences. A
+provider is an Ollama server or any OpenAI-compatible endpoint, with the model it embeds with. The
+store keeps any number of them, and one is in use; switching is a choice in a list, with no
+restart. The model list is the provider's own (Ollama's installed models, or the endpoint's
+`/v1/models`).
+
+- **An API key is sealed in the store,** with AES-256-GCM under the store's key: a file beside the
+  store, `autodoc.db.key`, made 0600 the first time a key is kept, and refused if others can read
+  it. A copied store without that file opens no key. A key is never shown again, only whether a
+  provider has one.
+- **Each provider keeps its usage and a log:** requests, texts, the tokens it counted, failures and
+  usage-limit refusals by day, and its last 200 calls. A provider at its limit (HTTP 429) or
+  refusing its key (401, 403) is named as such, so you can switch to another.
+
+**A model's input limit.** Each section is its own request, with no conversation and no memory
+between requests, so nothing builds up and nothing needs flushing. What matters is the length of
+one section against the model's input limit (8,192 tokens for `nomic-embed-text`, 512 for
+`mxbai-embed-large`):
+
+- **Ollama truncates a text that is too long,** by default: the section is embedded from its start,
+  and its tail does not count toward its meaning. Nothing fails.
+- **A provider that refuses the text instead** (HTTP 400, 413 or 422) has it set aside: the indexer
+  narrows the batch to the one text refused and embeds the rest. The status shows it as refused,
+  and the section is still found by its words.
+- **Sections are split at headings,** so most are well under any limit.
+
+**Which model.** An embedding model, not a chat model. A chat model such as `gpt-oss-20b` produces
+text, not vectors: it appears in Ollama's model list, but AutoDoc embeds a probe text before it
+switches, and a model that cannot embed is refused, the one in use staying. For a local provider,
+pull one of these:
+
+| model | input limit | |
+| --- | --- | --- |
+| `nomic-embed-text` | 8,192 tokens | small and fast; a good default |
+| `mxbai-embed-large` | 512 tokens | stronger, on shorter sections |
+| `snowflake-arctic-embed2` | 8,192 tokens | multilingual |
+
+They are small beside a chat model and run alongside one.
 
 ## Building
 

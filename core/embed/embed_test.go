@@ -35,6 +35,9 @@ func (s *server) vec(text string) []float32 {
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		s.auth = append(s.auth, r.Header.Get("Authorization"))
+		s.mu.Unlock()
 		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{
 			{"name": "embedder:latest", "model": "embedder:latest", "digest": "sha256:abc"},
 			{"name": "other", "model": "other", "digest": "sha256:def"},
@@ -92,7 +95,7 @@ func TestOllama(t *testing.T) {
 	ts := httptest.NewServer(s.handler())
 	defer ts.Close()
 	ctx := context.Background()
-	o, err := NewOllama(ctx, ts.URL+"/", "embedder", nil)
+	o, err := NewOllama(ctx, ts.URL+"/", "", "embedder", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +113,7 @@ func TestOllama(t *testing.T) {
 	if !reflect.DeepEqual(s.inputs, [][]string{{"probe"}, {"a", "bcd"}}) {
 		t.Errorf("requests %q", s.inputs)
 	}
-	if _, err := NewOllama(ctx, ts.URL, "missing", nil); err == nil || !strings.Contains(err.Error(), `no model "missing"`) {
+	if _, err := NewOllama(ctx, ts.URL, "", "missing", nil); err == nil || !strings.Contains(err.Error(), `no model "missing"`) {
 		t.Errorf("a model the server lacks: %v", err)
 	}
 	s.wrongLen = true
@@ -217,7 +220,7 @@ func TestTheMeterHearsEveryCall(t *testing.T) {
 	ts := httptest.NewServer(s.handler())
 	defer ts.Close()
 	ctx := context.Background()
-	o, err := NewOllama(ctx, ts.URL, "embedder", nil)
+	o, err := NewOllama(ctx, ts.URL, "", "embedder", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,6 +248,39 @@ func TestTheMeterHearsEveryCall(t *testing.T) {
 		s.status = 0
 		if got := strings.Join(calls, "; "); got != c.want {
 			t.Errorf("%s: the meter heard %q, want %q", c.p.Name(), got, c.want)
+		}
+	}
+}
+
+// TestAnOllamaWithAKeySendsIt: Ollama Cloud takes its key as a bearer token, on the model list and
+// every embed; a local server, given none, is sent none.
+func TestAnOllamaWithAKeySendsIt(t *testing.T) {
+	s := &server{dims: 4}
+	ts := httptest.NewServer(s.handler())
+	defer ts.Close()
+	ctx := context.Background()
+	o, err := NewOllama(ctx, ts.URL, "cloud-key", "embedder", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Embed(ctx, []string{"x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Models(ctx, "ollama", ts.URL, "cloud-key", nil); err != nil {
+		t.Fatal(err)
+	}
+	for i, a := range s.auth {
+		if a != "Bearer cloud-key" {
+			t.Fatalf("request %d went with %q, want the key", i, a)
+		}
+	}
+	s.auth = nil
+	if _, err := NewOllama(ctx, ts.URL, "", "embedder", nil); err != nil {
+		t.Fatal(err)
+	}
+	for i, a := range s.auth {
+		if a != "" {
+			t.Fatalf("a local server's request %d went with %q, want none", i, a)
 		}
 	}
 }
