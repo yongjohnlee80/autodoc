@@ -19,8 +19,7 @@ func (h *Host) state() map[string]any {
 		"App.keyset":       "vim",
 
 		"App.explorer":   h.explorer,
-		"App.noteTitle":  "no note",
-		"App.noNote":     true,
+		"App.noteTitle":  untitled,
 		"App.backlinks":  h.backlinks,
 		"App.linksTitle": "backlinks",
 

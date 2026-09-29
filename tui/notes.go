@@ -6,6 +6,8 @@ import (
 	"path"
 	"strings"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
+
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -19,6 +21,10 @@ import (
 //
 // A load is off the loop, and applied only if it is still the latest open under the same workspace
 // and connection: a slow load cannot replace a later one.
+//
+// THE PAGE IS ALWAYS WRITABLE. With no note open, what is typed is an untitled draft: unsaved work
+// like a note's, guarded the same way; saving it asks for its path in the new-note picker, creates
+// the note with the draft's text, and opens it there, the cursor where it was.
 
 type note struct {
 	path    string
@@ -30,6 +36,17 @@ type note struct {
 	then func()
 }
 
+// untitled is the draft's name wherever a note's path would show.
+const untitled = "untitled"
+
+// name is the note's path, or untitled for the draft.
+func (n note) name() string {
+	if n.open {
+		return n.path
+	}
+	return untitled
+}
+
 // guard runs then, asking first when the note has unsaved changes.
 func (h *Host) guard(action string, then func()) {
 	if !h.note.dirty {
@@ -37,7 +54,7 @@ func (h *Host) guard(action string, then func()) {
 		return
 	}
 	h.note.then = then
-	h.set("App.unsavedQuestion", fmt.Sprintf("%s has unsaved changes. Save them before you %s?", h.note.path, action))
+	h.set("App.unsavedQuestion", fmt.Sprintf("%s has unsaved changes. Save them before you %s?", h.note.name(), action))
 	h.open("unsavedNote")
 }
 
@@ -48,6 +65,10 @@ func (h *Host) unsaved(answer string) {
 	h.closeDialog("unsavedNote")
 	switch answer {
 	case "save":
+		if !h.note.open {
+			h.nameDraft(then) // the draft has no path yet: name it, then go on
+			return
+		}
 		h.write(h.editor.Value(), h.note.version, then)
 	case "discard":
 		h.setDirty(false)
@@ -114,31 +135,25 @@ func (h *Host) show(p, content, version string) {
 		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.note.path, h.note.version, h.note.open = p, version, true
-	h.set("App.noNote", false)
 	h.set("App.noteTitle", p)
 	h.setDirty(false)
 	h.backlinks.Reset(nil)
 	h.loadBacklinks(p)
 }
 
-// closeNote empties the editor: no note is open.
+// closeNote empties the editor: no note is open, and the page is a new draft.
 func (h *Host) closeNote() {
 	h.note.gen++
 	h.editor.SetValue("")
 	h.note = note{gen: h.note.gen}
-	h.set("App.noNote", true)
-	h.set("App.noteTitle", "no note")
+	h.set("App.noteTitle", untitled)
 	h.set("App.statusCenter", "")
 	h.backlinks.Reset(nil)
 	h.set("App.linksTitle", "backlinks")
 }
 
-// edited is the editor's text changing: typed, so the note has unsaved changes.
-func (h *Host) edited() {
-	if h.note.open {
-		h.setDirty(true)
-	}
-}
+// edited is the editor's text changing: typed, so the note (or the draft) has unsaved changes.
+func (h *Host) edited() { h.setDirty(true) }
 
 func (h *Host) setDirty(v bool) {
 	h.note.dirty = v
@@ -146,21 +161,60 @@ func (h *Host) setDirty(v bool) {
 	if v {
 		mark = " [+]"
 	}
-	if h.note.open {
-		h.set("App.statusCenter", h.note.path+mark)
+	if h.note.open || v {
+		h.set("App.statusCenter", h.note.name()+mark)
+	} else {
+		h.set("App.statusCenter", "")
 	}
 }
 
 // syncMode brings the status line's mode up to date with the editor's.
 func (h *Host) syncMode() { h.setWhere(h.where) }
 
-// save writes the note at the version it was read at; with no note open it asks for a name.
+// save writes the note at the version it was read at; the draft is named first.
 func (h *Host) save() {
 	if !h.note.open {
-		h.newNote()
+		h.nameDraft(nil)
 		return
 	}
 	h.write(h.editor.Value(), h.note.version, nil)
+}
+
+// nameDraft opens the new-note picker to save the draft under a path; then runs once it is saved
+// (a guarded open or switch), and is dropped when the picker is closed without one.
+func (h *Host) nameDraft(then func()) {
+	h.draft = &draftSave{then: then}
+	h.set("App.noteNameError", draftHelp)
+	h.setField("App.newNotePath", "")
+	h.newNoteFilter("")
+	h.open("noteName")
+}
+
+// draftSave is a draft being named: what runs once it is saved.
+type draftSave struct{ then func() }
+
+// draftHelp is the new-note picker's line when it names the draft.
+const draftHelp = "save the draft: a path in the workspace; .md is added when it has none · Enter on a note takes its folder"
+
+// cursorBytes is the editor's cursor as a byte offset of its text, for the note the draft becomes.
+func (h *Host) cursorBytes() int {
+	row, col := h.editor.Line()
+	lines := h.editor.Lines()
+	at := 0
+	for i := 0; i < row && i < len(lines); i++ {
+		at += len(lines[i]) + 1
+	}
+	if row < len(lines) {
+		n := 0
+		for c := range tuicore.Graphemes(lines[row]) {
+			if n == col {
+				break
+			}
+			at += len(c)
+			n++
+		}
+	}
+	return at
 }
 
 // write writes content over the version want, then runs after. A stale version opens the conflict
@@ -278,6 +332,7 @@ const newNoteHelp = "a path in the workspace; .md is added when it has none · E
 // newNote asks for a new note's path, asking first over unsaved changes.
 func (h *Host) newNote() {
 	h.guard("start a new note", func() {
+		h.draft = nil
 		h.set("App.noteNameError", newNoteHelp)
 		h.setField("App.newNotePath", "")
 		h.newNoteFilter("")
@@ -285,9 +340,9 @@ func (h *Host) newNote() {
 	})
 }
 
-// createNote creates an empty note at name (".md" added when it has no extension) and opens it,
-// closing the picker (Enter in its path field is not its Create button). A path that exists, or is
-// not a note, asks again with the reason.
+// createNote creates a note at name (".md" added when it has no extension) and opens it, closing
+// the picker (Enter in its path field is not its Create button): empty, or holding the draft when it
+// is the draft being named. A path that exists, or is not a note, asks again with the reason.
 func (h *Host) createNote(name string) {
 	h.closeDialog("noteName")
 	name = strings.TrimSpace(strings.TrimPrefix(name, "/"))
@@ -299,9 +354,14 @@ func (h *Host) createNote(name string) {
 	if path.Ext(name) == "" {
 		name += ".md"
 	}
-	ep, ws := h.epoch, h.ws
+	draft := h.draft
+	content := []byte{}
+	if draft != nil {
+		content = []byte(h.editor.Value())
+	}
+	ep, ws, gen := h.epoch, h.ws, h.note.gen
 	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "doc.write", ws, name, []byte{}, "")
+		_, err := h.call(ctx, "doc.write", ws, name, content, "")
 		return err
 	}, func(err error) {
 		if ep != h.epoch {
@@ -316,9 +376,23 @@ func (h *Host) createNote(name string) {
 			h.open("noteName")
 			return
 		}
+		h.draft = nil
+		if draft != nil {
+			if gen != h.note.gen || h.note.open {
+				// the page moved on while the draft was written: the note is on disk; open it only
+				// when asked
+				h.setStatus("saved the draft as " + name)
+				return
+			}
+			h.openAt = h.cursorBytes()
+			h.setDirty(false) // written: the load below finds it saved
+		}
 		h.load(name)
 		h.listNotes()
 		h.loadWorkspaces() // the explorer lists it
+		if draft != nil && draft.then != nil {
+			draft.then()
+		}
 	})
 }
 

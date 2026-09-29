@@ -15,8 +15,9 @@ const helpText = `KEYS
 
 THE PAGE
   The note is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the
-  width). Vim keys: i to type, Esc back to Normal. The status line (SPC t) shows the mode, the
-  note, and [+] while it has unsaved changes.
+  width). Vim keys: i to type, Esc back to Normal. With no note open, the page is an untitled
+  draft: type, and Ctrl+S names and saves it. The status line (SPC t) shows the mode, the note,
+  and [+] while it has unsaved changes.
 
 THE PANELS
   The explorer (SPC e) is every workspace's folders and notes; the links (SPC l) are the notes

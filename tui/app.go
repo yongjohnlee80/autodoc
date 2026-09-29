@@ -95,9 +95,10 @@ type Host struct {
 	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
 
-	note    note     // the note in the editor (notes.go)
-	prog    progress // the daemon's work left (progress.go)
-	message string   // the last message, shown beside the progress
+	note    note       // the note in the editor (notes.go)
+	draft   *draftSave // the draft being named in the new-note picker, nil when none is (notes.go)
+	prog    progress   // the daemon's work left (progress.go)
+	message string     // the last message, shown beside the progress
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
