@@ -1,22 +1,55 @@
 package store
 
-import "github.com/yongjohnlee80/golib/dao"
+import (
+	"context"
 
-// Scope is one workspace's tables. Every accessor returns a DAO already
-// filtered to the workspace (reads, updates, deletes) and with its workspace
-// staged (inserts): code outside this package cannot name a workspace-owned
-// table any other way. A join from one of them to another stays inside the
-// workspace by the schema's composite foreign keys, (workspace_id, id).
-type Scope struct{ id int64 }
+	"github.com/yongjohnlee80/golib/dao"
+)
+
+// Scope is one workspace's tables. Every accessor returns a DAO that carries
+// the workspace by a dao hook, per statement: an insert or upsert has its
+// workspace_id staged, and every other statement (a read, an update, a
+// delete) has workspace_id = the workspace added to its WHERE. Code outside
+// this package cannot name a workspace-owned table any other way. A join from
+// one of them to another stays inside the workspace by the schema's composite
+// foreign keys, (workspace_id, id).
+//
+// An update never sets workspace_id: the column is part of the key other
+// tables reference, and setting it, even to its own value, makes SQLite check
+// every one of them.
+type Scope struct {
+	id   int64
+	hook dao.QueryOption
+}
+
+// scopeHook puts the workspace on each statement, by what the statement is.
+type scopeHook struct {
+	dao.NopHook
+	ws int64
+}
+
+func (h scopeHook) BeforeBuild(_ context.Context, q *dao.QueryInfo, s dao.Stager) error {
+	switch q.Op {
+	case dao.OpInsert, dao.OpUpsert:
+		s.SetColumn(wsCol, h.ws)
+	case dao.OpBatch, dao.OpBatchCopy:
+		// a Batch stamps each row it adds
+	default:
+		s.Where(dao.Eq(`"`+q.Table+`"."`+wsCol+`"`, h.ws))
+	}
+	return nil
+}
 
 // Workspace is the scope of the workspace id.
-func (s *Store) Workspace(id int64) *Scope { return &Scope{id: id} }
+func (s *Store) Workspace(id int64) *Scope {
+	return &Scope{id: id, hook: dao.WithHooks(scopeHook{ws: id})}
+}
 
 // ID is the scope's workspace.
 func (sc *Scope) ID() int64 { return sc.id }
 
 func scoped[R any, C ~string, K ~string, ID any](sc *Scope, s *dao.Schema[R, C, K, ID], tx *Tx) dao.DAO[R, C, ID] {
-	return s.On(tx.tx).With(C(wsCol), sc.id).Set(C(wsCol), sc.id)
+	return s.On(tx.tx, sc.hook)
 }
 
 // Self is the workspace's own row, for its counters.
