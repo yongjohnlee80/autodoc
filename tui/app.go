@@ -61,8 +61,7 @@ type Host struct {
 	listSeq  uint64 // numbers the notes pane's loads; the latest wins (search.go)
 	notesAll []string
 
-	// the workspace manager: its cursor, and the workspace a rename or a delete was started on
-	mgrIndex           int
+	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
 
 	note    note     // the note in the editor (notes.go)
