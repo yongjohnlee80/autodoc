@@ -4,14 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // ollama is a fake Ollama server with the models named.
@@ -253,5 +259,90 @@ func TestCallsHeldAreBounded(t *testing.T) {
 	e.pmu.Unlock()
 	if held != maxPending || unkept != 7 {
 		t.Fatalf("held %d, not kept %d; want %d and 7", held, unkept, maxPending)
+	}
+}
+
+// faulty is the store failing, while a switch is on, its preference writes or its removes.
+type faulty struct {
+	*store.Store
+	prefs, removes *atomic.Bool
+}
+
+func (f faulty) SetPreference(ctx context.Context, name, value string) error {
+	if f.prefs.Load() {
+		return errors.New("store: disk full")
+	}
+	return f.Store.SetPreference(ctx, name, value)
+}
+
+func (f faulty) RemoveProvider(ctx context.Context, name string) error {
+	if f.removes.Load() {
+		return errors.New("store: disk full")
+	}
+	return f.Store.RemoveProvider(ctx, name)
+}
+
+// TestTheProviderVerbsChangeNothingWhenTheyFail: over the API, as a client asks, a use whose
+// choice is not written, an edit that does not set up, and a remove that fails each answer an
+// error, and embedding.providers still names the provider in use, its model as it was.
+func TestTheProviderVerbsChangeNothingWhenTheyFail(t *testing.T) {
+	o := newOllama(t, "embedder")
+	e, m, db := embedding(t, o)
+	var prefs, removes atomic.Bool
+	e.db = faulty{db, &prefs, &removes} // before the server runs: its handlers read it
+	ctx, cancel := context.WithCancel(context.Background())
+	sock := filepath.Join(t.TempDir(), "s.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := rpc.New(m, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(e))
+	done := make(chan struct{})
+	go func() { _ = srv.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done })
+	cli, err := golibrpc.Dial(ctx, sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	if _, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": "test"}); err != nil {
+		t.Fatal(err)
+	}
+	inUse := func() (string, string) {
+		t.Helper()
+		res, err := cli.Call(ctx, "embedding.providers")
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, _ := res.(map[string]any)
+		active, _ := m["active"].(string)
+		model := ""
+		for _, p := range m["providers"].([]any) {
+			if p := p.(map[string]any); p["name"] == active {
+				model, _ = p["model"].(string)
+			}
+		}
+		return active, model
+	}
+	if _, err := cli.Call(ctx, "embedding.use", "a"); err != nil {
+		t.Fatal(err)
+	}
+	prefs.Store(true)
+	if _, err := cli.Call(ctx, "embedding.use", "b"); err == nil {
+		t.Error("embedding.use b answered ok with its choice unwritten")
+	}
+	prefs.Store(false)
+	if _, err := cli.Call(ctx, "embedding.update", "a", map[string]any{"name": "a", "kind": "ollama", "base_url": o.URL, "model": "missing"}); err == nil {
+		t.Error("embedding.update to a model the server lacks answered ok")
+	}
+	removes.Store(true)
+	if _, err := cli.Call(ctx, "embedding.remove", "a"); err == nil {
+		t.Error("embedding.remove answered ok with the delete failed")
+	}
+	if active, model := inUse(); active != "a" || model != "embedder" {
+		t.Fatalf("after three failed changes: in use %q with model %q, want a with embedder", active, model)
+	}
+	if got := preference(t, db); got != "a" {
+		t.Fatalf("the store names %q, want a", got)
 	}
 }
