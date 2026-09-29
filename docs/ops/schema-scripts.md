@@ -30,8 +30,9 @@ schema_version (script TEXT PRIMARY KEY, sha256 TEXT, applied_at INTEGER)
 ```
 
 The store's schema is the set of rows: each applied update script, by file
-name, with its digest. A revert deletes its script's row. The baseline
-creates the ledger, so a store with no ledger has applied nothing.
+name, with its digest. A revert deletes its script's row. golib `dao/deploy`
+creates the ledger and writes it, in the transaction that applies the
+scripts; no script names it.
 
 ## The baseline: 000001
 
@@ -56,7 +57,7 @@ A new workspace-owned table follows the same rule.
 
 | table | what a row is | key |
 | --- | --- | --- |
-| `schema_version` | an applied update script | `script` |
+| `schema_version` | an applied update script; golib `dao/deploy` creates and keeps it | `script` |
 | `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed | `id` |
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
@@ -75,10 +76,12 @@ Each script says, in its comments, what every table and column is for.
 
 ## Who applies the scripts
 
-The daemon, at every start: pending scripts run in number order, the whole set
-in one transaction. A failure leaves the store as it was and the daemon does
-not start. A store that records a script this binary does not have is
-refused, so an older binary never writes a newer store.
+The daemon, at every start, through golib `dao/deploy`: pending scripts run in
+number order, the whole set in one transaction. A failure leaves the store as
+it was and the daemon does not start. A store that records a script this
+binary does not have is refused, so an older binary never writes a newer
+store. A set with a gap or two scripts under one number is refused before
+anything runs.
 
 ## The rule every update script keeps
 

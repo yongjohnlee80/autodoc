@@ -12,14 +12,8 @@
 -- The index is derived from the workspace's files and can always be rebuilt;
 -- the workspace table and its patterns are the only rows that are not.
 --
--- The baseline has no revert: undoing it would drop the store.
-
--- The ledger: each applied update script by file name, with its digest.
-CREATE TABLE IF NOT EXISTS schema_version (
-  script     TEXT PRIMARY KEY,
-  sha256     TEXT NOT NULL,
-  applied_at INTEGER NOT NULL
-);
+-- The baseline has no revert: undoing it would drop the store. The ledger of
+-- applied scripts (schema_version) is golib dao/deploy's, created by it.
 
 -- A workspace: a root directory AutoDoc indexes. The id is the identity; the
 -- name is what a person types (autodoc --ui <name>) and can be renamed.

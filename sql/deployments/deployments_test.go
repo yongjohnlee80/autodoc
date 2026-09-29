@@ -7,11 +7,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
-	"testing/fstest"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/dao/deploy"
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 
 	"github.com/yongjohnlee80/autodoc/sql/deployments"
@@ -22,21 +21,45 @@ import (
 // digest it was applied with, and an edit under the same name is a schema no
 // store agrees with. A script adds its line here when it ships in a tagged
 // release; an existing line never changes.
-var released = map[deployments.Engine]map[string]string{
-	deployments.SQLite: {},
+var released = map[string]map[string]string{
+	dao.DialectSQLite: {},
 }
 
-func names(t *testing.T, eng deployments.Engine) map[string]deployments.Script {
+func names(t *testing.T, eng string) map[string]deploy.Script {
 	t.Helper()
-	all, err := deployments.Scripts(eng)
+	all, err := deploy.Load(deployments.FS(), eng)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := map[string]deployments.Script{}
+	out := map[string]deploy.Script{}
 	for _, s := range all {
 		out[s.Name] = s
 	}
 	return out
+}
+
+// Every engine's set loads: dao/deploy refuses one that is not dense from
+// 000001 and paired, or a file it cannot place. Each script splits into
+// statements, and the baseline has some.
+func TestEveryEngineLoads(t *testing.T) {
+	for _, eng := range deployments.Engines {
+		all, err := deploy.Load(deployments.FS(), eng)
+		if err != nil {
+			t.Fatalf("%s: %v", eng, err)
+		}
+		if len(all) == 0 || all[0].Name != "000001_update_initialize_tables.sql" {
+			t.Fatalf("%s: the baseline is not first: %v", eng, all)
+		}
+		for _, s := range all {
+			stmts, err := s.Statements()
+			if err != nil {
+				t.Errorf("%s/%s: %v", eng, s.Name, err)
+			}
+			if s.Number == 1 && len(stmts) == 0 {
+				t.Errorf("%s/%s: no statements", eng, s.Name)
+			}
+		}
+	}
 }
 
 // Every engine names the same scripts: the ledgers must always agree on what
@@ -54,77 +77,6 @@ func TestEveryEngineNamesTheSameScripts(t *testing.T) {
 		for n := range got {
 			if _, ok := want[n]; !ok {
 				t.Errorf("%s has %s; %s does not", eng, n, first)
-			}
-		}
-	}
-}
-
-// Numbers are dense from 1; the baseline has no revert; every later update
-// has exactly one revert, of the same slug, and no revert is without its
-// update.
-func TestNumbersAreDenseAndEveryChangeHasItsUndo(t *testing.T) {
-	for _, eng := range deployments.Engines {
-		all, err := deployments.Scripts(eng)
-		if err != nil {
-			t.Fatal(err)
-		}
-		updates := map[int]string{}
-		reverts := map[int]string{}
-		for _, s := range all {
-			m := updates
-			if s.Kind == deployments.Revert {
-				m = reverts
-			}
-			if _, dup := m[s.Number]; dup {
-				t.Errorf("%s: two %s scripts numbered %06d", eng, s.Kind, s.Number)
-			}
-			m[s.Number] = s.Slug
-		}
-		for n := 1; n <= len(updates); n++ {
-			if _, ok := updates[n]; !ok {
-				t.Errorf("%s: no update numbered %06d; numbers are dense", eng, n)
-			}
-		}
-		if _, ok := reverts[1]; ok {
-			t.Errorf("%s: 000001 has a revert; the baseline has none", eng)
-		}
-		for n, slug := range updates {
-			if n == 1 {
-				continue
-			}
-			if rs, ok := reverts[n]; !ok || rs != slug {
-				t.Errorf("%s: update %06d_%s has no revert of the same slug (have %q)", eng, n, slug, rs)
-			}
-		}
-		for n := range reverts {
-			if _, ok := updates[n]; !ok {
-				t.Errorf("%s: revert %06d has no update", eng, n)
-			}
-		}
-	}
-}
-
-// Every script splits into statements with its engine's rules, and the
-// baseline has at least one: an empty baseline would record work it never did.
-func TestEveryScriptSplitsIntoStatements(t *testing.T) {
-	for _, eng := range deployments.Engines {
-		all, err := deployments.Scripts(eng)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, s := range all {
-			stmts, err := s.Statements()
-			if err != nil {
-				t.Errorf("%s/%s: %v", eng, s.Name, err)
-				continue
-			}
-			if len(stmts) == 0 && s.Number == 1 {
-				t.Errorf("%s/%s: no statements", eng, s.Name)
-			}
-			for _, st := range stmts {
-				if st.Line < 1 {
-					t.Errorf("%s/%s: a statement with no line: %q", eng, s.Name, st.Text)
-				}
 			}
 		}
 	}
@@ -148,52 +100,24 @@ func TestReleasedScriptsAreUnchanged(t *testing.T) {
 	}
 }
 
-// The updates run, in order, on the driver the store uses, with foreign keys
-// on; run again they change nothing, since every statement is IF NOT EXISTS.
-// A row pointing into another workspace is refused: the composite keys hold.
-func TestUpdatesApplyOnSQLite(t *testing.T) {
+// The scripts apply on the driver the store uses, with foreign keys on, and a
+// second apply has nothing to do. A row pointing into another workspace is
+// refused, and a workspace's delete leaves none of its rows.
+func TestTheScriptsApplyOnSQLite(t *testing.T) {
 	ctx := context.Background()
-	dsn := "file:" + filepath.Join(t.TempDir(), "store.db") + "?_pragma=foreign_keys(1)"
-	db, err := sqlite.Open(ctx, dsn, sqlite.MaxOpenConns(1))
-	if err != nil {
-		t.Fatal(err)
+	db := open(t)
+	st, err := deployments.Runner().Apply(ctx, db)
+	if err != nil || len(st.Pending) != 0 || len(st.Applied) == 0 {
+		t.Fatalf("a second Apply = %+v, %v; want nothing pending", st, err)
 	}
-	defer func() { _ = db.Close() }()
-	updates, err := deployments.Updates(deployments.SQLite)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for pass := 1; pass <= 2; pass++ {
-		for _, s := range updates {
-			stmts, err := s.Statements()
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, st := range stmts {
-				if _, err := db.ExecContext(ctx, st.Text); err != nil {
-					t.Fatalf("pass %d: %s line %d: %v", pass, s.Name, st.Line, err)
-				}
-			}
-		}
-	}
-	for _, q := range []string{
-		"INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (1, 'a', '/a', 0, 0), (2, 'b', '/b', 0, 0)",
-		"INSERT INTO document(id, workspace_id, path, version, active_gen, indexer, indexed_at) VALUES (10, 1, 'n.md', 'v', 1, 'i', 0)",
-	} {
-		if _, err := db.ExecContext(ctx, q); err != nil {
-			t.Fatal(err)
-		}
-	}
+	exec(t, db, "INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (1, 'a', '/a', 0, 0), (2, 'b', '/b', 0, 0)")
+	exec(t, db, "INSERT INTO document(id, workspace_id, path, version, active_gen, indexer, indexed_at) VALUES (10, 1, 'n.md', 'v', 1, 'i', 0)")
 	chunk := "INSERT INTO chunk(workspace_id, doc_id, hash, text_hash, gen_from, ord, breadcrumb, body, title, tags, byte_start, byte_end) VALUES (?, 10, x'00', x'00', 1, 0, '', '', '', '', 0, 0)"
-	if _, err := db.ExecContext(ctx, chunk, 1); err != nil {
-		t.Fatalf("a chunk of its own workspace's document: %v", err)
-	}
+	exec(t, db, chunk, 1)
 	if _, err := db.ExecContext(ctx, chunk, 2); err == nil {
 		t.Fatal("a chunk of workspace 2 was stored against workspace 1's document")
 	}
-	if _, err := db.ExecContext(ctx, "DELETE FROM workspace WHERE id = 1"); err != nil {
-		t.Fatal(err)
-	}
+	exec(t, db, "DELETE FROM workspace WHERE id = 1")
 	rows, err := db.QueryContext(ctx, "SELECT (SELECT COUNT(*) FROM document) + (SELECT COUNT(*) FROM chunk)")
 	if err != nil {
 		t.Fatal(err)
@@ -223,20 +147,8 @@ func open(t *testing.T) dao.DataConn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	updates, err := deployments.Updates(deployments.SQLite)
-	if err != nil {
+	if _, err := deployments.Runner().Apply(ctx, db); err != nil {
 		t.Fatal(err)
-	}
-	for _, s := range updates {
-		stmts, err := s.Statements()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, st := range stmts {
-			if _, err := db.ExecContext(ctx, st.Text); err != nil {
-				t.Fatalf("%s line %d: %v", s.Name, st.Line, err)
-			}
-		}
 	}
 	return db
 }
@@ -325,26 +237,7 @@ func TestTheFullTextIndexFollowsTheChunks(t *testing.T) {
 // engine's, not the schema's.
 func TestTheSchemaDocListsEveryTable(t *testing.T) {
 	ctx := context.Background()
-	db, err := sqlite.Open(ctx, "file:"+filepath.Join(t.TempDir(), "store.db"), sqlite.MaxOpenConns(1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	updates, err := deployments.Updates(deployments.SQLite)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range updates {
-		stmts, err := s.Statements()
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, st := range stmts {
-			if _, err := db.ExecContext(ctx, st.Text); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
+	db := open(t)
 	rows, err := db.QueryContext(ctx, "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'chunk_fts_%'")
 	if err != nil {
 		t.Fatal(err)
@@ -375,67 +268,8 @@ func TestTheSchemaDocListsEveryTable(t *testing.T) {
 	}
 }
 
-func ExampleScripts() {
-	all, _ := deployments.Updates(deployments.SQLite)
+func ExampleFS() {
+	all, _ := deploy.Load(deployments.FS(), dao.DialectSQLite)
 	fmt.Println(all[0].Name)
 	// Output: 000001_update_initialize_tables.sql
-}
-
-// The loader's reading of a tree it is given: the order, the pairing of a
-// revert with its update, and each thing it refuses.
-func TestTheLoaderReadsAndRefuses(t *testing.T) {
-	tree := fstest.MapFS{
-		"sqlite/000001_update_initialize_tables.sql": {Data: []byte("CREATE TABLE a(x);\nCREATE TABLE b(y);")},
-		"sqlite/000002_revert_add_c.sql":             {Data: []byte("DROP TABLE c;")},
-		"sqlite/000002_update_add_c.sql":             {Data: []byte("-- nothing to do on this engine: c is a view elsewhere\n")},
-	}
-	all, err := deployments.ScriptsIn(tree, deployments.SQLite)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var order []string
-	for _, s := range all {
-		order = append(order, s.Name)
-	}
-	if got := fmt.Sprint(order); got != "[000001_update_initialize_tables.sql 000002_update_add_c.sql 000002_revert_add_c.sql]" {
-		t.Errorf("order = %s: by number, the update before its revert", got)
-	}
-	stmts, err := all[0].Statements()
-	if err != nil || len(stmts) != 2 || stmts[1].Line != 2 {
-		t.Errorf("the baseline's statements = %+v, %v: want two, the second on line 2", stmts, err)
-	}
-	if stmts, err := all[1].Statements(); err != nil || len(stmts) != 0 {
-		t.Errorf("a script that is only a comment runs %d statements (%v), want none", len(stmts), err)
-	}
-	if r, ok, err := deployments.RevertIn(tree, deployments.SQLite, 2); err != nil || !ok || r.Name != "000002_revert_add_c.sql" {
-		t.Errorf("RevertIn(2) = %q, %v, %v", r.Name, ok, err)
-	}
-	if _, ok, err := deployments.RevertIn(tree, deployments.SQLite, 1); err != nil || ok {
-		t.Errorf("the baseline has a revert: %v, %v", ok, err)
-	}
-
-	misnamed := fstest.MapFS{"sqlite/2_update_x.sql": {Data: []byte("SELECT 1;")}}
-	if _, err := deployments.ScriptsIn(misnamed, deployments.SQLite); err == nil || !strings.Contains(err.Error(), "2_update_x.sql") {
-		t.Errorf("a misnamed file: %v, want an error naming it", err)
-	}
-	if _, _, err := deployments.RevertIn(misnamed, deployments.SQLite, 1); err == nil {
-		t.Error("RevertIn over a misnamed file: want its error")
-	}
-	if _, ok, err := deployments.RevertOf(deployments.SQLite, 1); err != nil || ok {
-		t.Errorf("RevertOf(1) over the embedded scripts: %v, %v; the baseline has none", ok, err)
-	}
-	if _, err := deployments.Scripts("oracle"); err == nil {
-		t.Error("an engine with no scripts: want an error")
-	}
-	if _, err := deployments.Updates("oracle"); err == nil {
-		t.Error("Updates for an engine with no scripts: want an error")
-	}
-	open := fstest.MapFS{"sqlite/000001_update_initialize_tables.sql": {Data: []byte("SELECT 'unclosed;")}}
-	s, err := deployments.ScriptsIn(open, deployments.SQLite)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s[0].Statements(); err == nil || !strings.Contains(err.Error(), "sqlite/000001_update_initialize_tables.sql") {
-		t.Errorf("an unclosed string: %v, want an error naming the script", err)
-	}
 }
