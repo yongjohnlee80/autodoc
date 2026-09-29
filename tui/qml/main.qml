@@ -97,7 +97,8 @@ Window {
                 palette.highlightedText: Theme.document.highlightedText
                 model: App.results
                 onActivated: App.openResult(index)
-                TableViewColumn { role: "path"; title: "NOTE"; width: 0 }
+                // a path too long for the pane keeps its file name
+                TableViewColumn { role: "path"; title: "NOTE"; width: 0; elideMode: Tui.ElideLeft }
             }
         }
         Split {

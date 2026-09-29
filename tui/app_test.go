@@ -283,6 +283,20 @@ func TestListsSearchesOpensEditsSaves(t *testing.T) {
 	r.s.WaitFor(t, "the mark gone", func(sc string) bool { return !strings.Contains(sc, "[+]") })
 }
 
+// TestTheNotesPaneKeepsTheFileName: a path too long for the notes pane loses its start, not its
+// file name.
+func TestTheNotesPaneKeepsTheFileName(t *testing.T) {
+	deep := "archive/2026/09/projects/autodoc/reviews/2026-09-29-the-review-of-the-store.md"
+	d := startDaemon(t, map[string][]string{"kb": {deep, "# R\n\nreview\n"}})
+	r := attached(t, d)
+	r.s.WaitFor(t, "the note's file name", func(sc string) bool {
+		return strings.Contains(sc, "notes (1)") && strings.Contains(sc, "the-store.md")
+	})
+	if sc := r.s.String(); strings.Contains(sc, "archive/2026") {
+		t.Fatalf("the pane kept the path's start and not its end:\n%s", sc)
+	}
+}
+
 // TestAConflictAsks: a note changed on disk since it was opened is not overwritten: the save asks,
 // and keep, reload and overwrite each do what they say.
 func TestAConflictAsks(t *testing.T) {
