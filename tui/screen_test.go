@@ -392,6 +392,16 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "the kind changed, the key still sealed", func(sc string) bool {
 		return strings.Contains(sc, "OpenAI-compatible") && strings.Contains(sc, "API key (sealed; leave empty to keep it)")
 	})
+	// back to Ollama Cloud, and List models with no key typed: the stored key is the one used
+	r.keys(t, enter(), key('k'), enter())
+	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool { return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible") })
+	r.h.p.Post(func() { r.h.listModels(ollama.URL, "") })
+	r.s.WaitForText(t, "2 models")
+	mu.Lock()
+	defer mu.Unlock()
+	if last := auth[len(auth)-1]; last != "Bearer sekrit" {
+		t.Errorf("an edited provider's models were asked for with %q, not its stored key", last)
+	}
 }
 
 // TestEveryFieldHasALabel: every TextField the QML declares has a Text over it, saying what goes
@@ -788,5 +798,46 @@ func TestTheAIModelsSideBySide(t *testing.T) {
 	})
 	if p, u := screenRow(r, "embedding providers"), screenRow(r, "usage and calls"); p != u {
 		t.Fatalf("the providers (row %d) and the usage (row %d) are not side by side:\n%s", p, u, r.s)
+	}
+}
+
+// TestEveryPreferenceIsKept: each preference command changes the screen's preference and the
+// store's; a name the TUI does not know changes nothing and says so.
+func TestEveryPreferenceIsKept(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	stored := func(name, want string) {
+		t.Helper()
+		r.s.WaitFor(t, name+" = "+want, func(string) bool {
+			m, err := d.db.Preferences(context.Background())
+			return err == nil && m[name] == want
+		})
+	}
+	post := func(fn func()) { r.h.p.Post(fn) }
+	post(func() { r.h.setMenuHiddenIndex(1) }) // no: shown
+	stored("tui.menu.autohide", "false")
+	r.s.WaitForText(t, "the menu bar shows")
+	post(func() { r.h.toggleMenuBar() })
+	stored("tui.menu.autohide", "true")
+	post(func() { r.h.setStatusShownIndex(1) }) // no: hidden
+	stored("tui.status.shown", "false")
+	post(func() { r.h.setExplorerEdge(2) })
+	stored("tui.explorer.edge", "top")
+	post(func() { r.h.setLinksEdge(3) })
+	stored("tui.links.edge", "bottom")
+	post(func() { r.h.setThemeIndex(1) })
+	stored("tui.theme", "light")
+	post(func() { r.h.setKeymapIndex(1) })
+	stored("tui.editor.keymap", "text")
+	post(func() { r.h.toggleKeymap() })
+	stored("tui.editor.keymap", "vim")
+	post(func() { r.h.setStatusShownIndex(0) }) // yes: shown, to read what follows
+	stored("tui.status.shown", "true")
+	post(func() { r.h.useTheme("paisley") })
+	r.s.WaitForText(t, `no theme "paisley"`)
+	post(func() { r.h.setKeymap("emacs") })
+	r.s.WaitForText(t, `no keymap "emacs"`)
+	if p := onLoop(r, func() prefs { return r.h.prefs }); p.theme != "light" || p.keymap != "vim" {
+		t.Fatalf("an unknown theme or keymap changed the preferences: %+v", p)
 	}
 }
