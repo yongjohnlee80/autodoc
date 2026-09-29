@@ -197,3 +197,32 @@ func TestAProviderIsCheckedAtTheDoor(t *testing.T) {
 		}
 	}
 }
+
+// TestAnOllamaCloudProviderNeedsItsKey: added without one it is refused, and nothing is kept;
+// with one it is kept; an update removing the key is refused and the key stays.
+func TestAnOllamaCloudProviderNeedsItsKey(t *testing.T) {
+	ctx := context.Background()
+	s := openAt(t, filepath.Join(t.TempDir(), "autodoc.db"))
+	cloud := ProviderSpec{Name: "cloud", Kind: KindOllamaCloud, BaseURL: "https://ollama.com", Model: "m"}
+	if _, err := s.AddProvider(ctx, cloud); !errors.Is(err, ErrProviderNeedsKey) {
+		t.Fatalf("a keyless cloud provider: %v, want ErrProviderNeedsKey", err)
+	}
+	if ps, _ := s.Providers(ctx); len(ps) != 0 {
+		t.Fatalf("the refused provider was kept: %+v", ps)
+	}
+	cloud.Key = strp("ck-1")
+	if _, err := s.AddProvider(ctx, cloud); err != nil {
+		t.Fatal(err)
+	}
+	cloud.Key = strp("")
+	if err := s.UpdateProvider(ctx, "cloud", cloud); !errors.Is(err, ErrProviderNeedsKey) {
+		t.Fatalf("removing a cloud provider's key: %v, want ErrProviderNeedsKey", err)
+	}
+	if _, key, _ := s.ProviderWithKey(ctx, "cloud"); key != "ck-1" {
+		t.Fatalf("the refused update changed the key: %q", key)
+	}
+	local := ProviderSpec{Name: "local", Kind: KindOllama, BaseURL: "http://localhost:11434", Model: "m"}
+	if _, err := s.AddProvider(ctx, local); err != nil {
+		t.Fatalf("a local provider needs no key: %v", err)
+	}
+}

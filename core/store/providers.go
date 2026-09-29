@@ -16,11 +16,16 @@ import (
 // embedding.provider), each with its API key sealed by the keyslot, its usage by day and its
 // recent calls.
 
-// The provider kinds.
+// The provider kinds: a local Ollama (no key), Ollama Cloud (a key, always), and any
+// OpenAI-compatible endpoint (a key where it takes one).
 const (
-	KindOllama = "ollama"
-	KindOpenAI = "openai"
+	KindOllama      = "ollama"
+	KindOllamaCloud = "ollama-cloud"
+	KindOpenAI      = "openai"
 )
+
+// knownKind reports one of the three.
+func knownKind(k string) bool { return k == KindOllama || k == KindOllamaCloud || k == KindOpenAI }
 
 // PrefProvider is the preference naming the provider in use; "" or absent: none, words alone.
 const PrefProvider = "embedding.provider"
@@ -30,9 +35,10 @@ const logKept = 200
 
 // The refusals of the provider table.
 var (
-	ErrNoProvider      = errors.New("store: no such embedding provider")
-	ErrProviderTaken   = errors.New("store: another embedding provider has this name")
-	ErrProviderInvalid = errors.New("store: an embedding provider needs a name, a kind (ollama or openai), a base URL and a model")
+	ErrNoProvider       = errors.New("store: no such embedding provider")
+	ErrProviderTaken    = errors.New("store: another embedding provider has this name")
+	ErrProviderInvalid  = errors.New("store: an embedding provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model")
+	ErrProviderNeedsKey = errors.New("store: an ollama-cloud provider needs its API key")
 )
 
 // ProviderSpec is a provider as a client writes it. Key nil keeps the key the store holds; a
@@ -54,7 +60,7 @@ func infoOf(p *Provider) ProviderInfo {
 }
 
 func (sp ProviderSpec) check() error {
-	if strings.TrimSpace(sp.Name) == "" || (sp.Kind != KindOllama && sp.Kind != KindOpenAI) ||
+	if strings.TrimSpace(sp.Name) == "" || !knownKind(sp.Kind) ||
 		strings.TrimSpace(sp.Model) == "" {
 		return ErrProviderInvalid
 	}
@@ -99,11 +105,27 @@ func (s *Store) AddProvider(ctx context.Context, sp ProviderSpec) (ProviderInfo,
 		if err := s.setKey(tx, id, sp.Key); err != nil {
 			return err
 		}
-		p, err := tx.t.providers.On(tx.tx).With(ProviderID, id).Get()
+		p, err := s.keyed(tx, id)
+		if err != nil {
+			return err
+		}
 		info = infoOf(p)
-		return err
+		return nil
 	})
 	return info, err
+}
+
+// keyed is the provider's row once its key is set: an ollama-cloud provider left without one is
+// refused, and the write it is in rolls back.
+func (s *Store) keyed(tx *Tx, id int64) (*Provider, error) {
+	p, err := tx.t.providers.On(tx.tx).With(ProviderID, id).Get()
+	if err != nil {
+		return nil, err
+	}
+	if p.Kind == KindOllamaCloud && len(p.APIKey) == 0 {
+		return nil, ErrProviderNeedsKey
+	}
+	return p, nil
 }
 
 // UpdateProvider rewrites the provider named name as sp: sp.Name renames it.
@@ -124,7 +146,11 @@ func (s *Store) UpdateProvider(ctx context.Context, name string, sp ProviderSpec
 			Set(ProviderUpdatedAt, time.Now().Unix()).Update(); err != nil {
 			return providerTaken(err)
 		}
-		return s.setKey(tx, p.ID, sp.Key)
+		if err := s.setKey(tx, p.ID, sp.Key); err != nil {
+			return err
+		}
+		_, err = s.keyed(tx, p.ID)
+		return err
 	})
 }
 
