@@ -1,6 +1,8 @@
 package workspace_test
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -41,4 +43,21 @@ func TestOpenReportsAMissingRoot(t *testing.T) {
 		t.Errorf("Open = %+v", w)
 	}
 	_ = w.Close()
+}
+
+// TestOpenReportsARootItCannotRead: a directory that cannot be opened is not a missing root; the
+// error says it could not be opened, and why.
+func TestOpenReportsARootItCannotRead(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every directory")
+	}
+	dir := filepath.Join(t.TempDir(), "sealed")
+	if err := os.Mkdir(dir, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	_, err := workspace.Open(config.Workspace{Name: "kb", Root: dir})
+	if err == nil || errors.Is(err, workspace.ErrNotADirectory) || !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("Open of an unreadable root = %v; want the permission error, not ErrNotADirectory", err)
+	}
 }
