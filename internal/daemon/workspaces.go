@@ -1,4 +1,6 @@
-package main
+// Package daemon is what --serve runs over the store: the workspaces it holds, each served by an
+// indexer and a follower of its own, and changed while the daemon runs by the workspace verbs.
+package daemon
 
 import (
 	"context"
@@ -19,15 +21,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// workspaces is the daemon's rpc.Workspaces: the store's workspaces, each served by an indexer
+// Workspaces is the daemon's rpc.Workspaces: the store's workspaces, each served by an indexer
 // and a follower of its own while it is open.
-type workspaces struct {
-	db          *store.Store
-	ctx         context.Context
-	poll        time.Duration
-	provider    embed.Provider
-	providerFor func(embed.Model) (embed.Provider, error)
-	log         logger.Logger
+type Workspaces struct {
+	db   *store.Store
+	ctx  context.Context
+	opts Options
 
 	mu     sync.Mutex
 	served map[string]*served // by name
@@ -40,15 +39,27 @@ type served struct {
 	stop func() // stops its indexer and follower, and closes its root; nil for one not opened
 }
 
-func newWorkspaces(ctx context.Context, db *store.Store, poll time.Duration, provider embed.Provider,
-	providerFor func(embed.Model) (embed.Provider, error), log logger.Logger) *workspaces {
-	return &workspaces{db: db, ctx: ctx, poll: poll, provider: provider, providerFor: providerFor, log: log,
-		served: map[string]*served{}}
+// Options are how the daemon serves a workspace.
+type Options struct {
+	Poll        time.Duration // the follower's listing interval
+	Provider    embed.Provider
+	ProviderFor func(embed.Model) (embed.Provider, error)
+	Log         logger.Logger
+	// BatchDelay is the indexer's (0: its default); tests shorten it.
+	BatchDelay time.Duration
 }
 
-// openAll serves every workspace the store has. One whose root cannot be opened is listed with its
+// New is the workspaces of db, served until ctx ends. Nothing is served until OpenAll.
+func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
+	if o.Log == nil {
+		o.Log = logger.New()
+	}
+	return &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}}
+}
+
+// OpenAll serves every workspace the store has. One whose root cannot be opened is listed with its
 // error, and served once it is added again.
-func (m *workspaces) openAll() error {
+func (m *Workspaces) OpenAll() error {
 	ws, err := m.db.Workspaces(m.ctx)
 	if err != nil {
 		return err
@@ -57,7 +68,7 @@ func (m *workspaces) openAll() error {
 		c := config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude}
 		s, err := m.start(w.ID, c)
 		if err != nil {
-			logger.Warning(m.log, err, "workspace not served: "+w.Name)
+			logger.Warning(m.opts.Log, err, "workspace not served: "+w.Name)
 			s = &served{id: w.ID, w: &rpc.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude, Err: err}}
 		}
 		m.mu.Lock()
@@ -68,7 +79,7 @@ func (m *workspaces) openAll() error {
 }
 
 // start opens a workspace's root and starts its indexer and follower.
-func (m *workspaces) start(id int64, c config.Workspace) (*served, error) {
+func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	if c.Include == nil {
 		c.Include = config.DefaultInclude
 	}
@@ -79,8 +90,9 @@ func (m *workspaces) start(id int64, c config.Workspace) (*served, error) {
 	if err != nil {
 		return nil, err
 	}
-	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.provider, ProviderFor: m.providerFor})
-	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
+	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
+		ProviderFor: m.opts.ProviderFor, BatchDelay: m.opts.BatchDelay})
+	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
 	ctx, cancel := context.WithCancel(m.ctx)
 	var wg sync.WaitGroup
@@ -88,7 +100,7 @@ func (m *workspaces) start(id int64, c config.Workspace) (*served, error) {
 	go func() {
 		defer wg.Done()
 		if err := ix.Run(ctx); err != nil && ctx.Err() == nil {
-			logger.Error(m.log, err, "indexer stopped: "+c.Name)
+			logger.Error(m.opts.Log, err, "indexer stopped: "+c.Name)
 		}
 	}()
 	go func() {
@@ -105,8 +117,8 @@ func (m *workspaces) start(id int64, c config.Workspace) (*served, error) {
 	return &served{id: id, w: w, stop: stop}, nil
 }
 
-// stopAll stops every workspace, for the daemon's shutdown.
-func (m *workspaces) stopAll() {
+// StopAll stops every workspace, for the daemon's shutdown.
+func (m *Workspaces) StopAll() {
 	m.mu.Lock()
 	all := m.served
 	m.served = map[string]*served{}
@@ -118,7 +130,7 @@ func (m *workspaces) stopAll() {
 	}
 }
 
-func (m *workspaces) List() []*rpc.Workspace {
+func (m *Workspaces) List() []*rpc.Workspace {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]*rpc.Workspace, 0, len(m.served))
@@ -129,7 +141,7 @@ func (m *workspaces) List() []*rpc.Workspace {
 	return out
 }
 
-func (m *workspaces) Get(name string) (*rpc.Workspace, bool) {
+func (m *Workspaces) Get(name string) (*rpc.Workspace, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.served[name]
@@ -141,7 +153,7 @@ func (m *workspaces) Get(name string) (*rpc.Workspace, bool) {
 
 // Add checks the workspace, records it, and serves it. The root must be a directory; the name and
 // the root must be the store's only ones.
-func (m *workspaces) Add(ctx context.Context, c config.Workspace) (*rpc.Workspace, error) {
+func (m *Workspaces) Add(ctx context.Context, c config.Workspace) (*rpc.Workspace, error) {
 	c, err := config.NormalizeWorkspace(c)
 	if err != nil {
 		return nil, err
@@ -178,7 +190,7 @@ func checkRoot(c config.Workspace) error {
 }
 
 // Rename gives a workspace a new name: one row. Its indexer keeps running.
-func (m *workspaces) Rename(ctx context.Context, name, to string) error {
+func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 	if _, err := config.NormalizeWorkspace(config.Workspace{Name: to, Root: "/"}); err != nil {
 		return err
 	}
@@ -207,7 +219,7 @@ func (m *workspaces) Rename(ctx context.Context, name, to string) error {
 
 // Remove stops serving a workspace, then deletes it and, by the schema's cascade, its index, in
 // one transaction. Its files are not touched.
-func (m *workspaces) Remove(ctx context.Context, name string) error {
+func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.served[name]
@@ -220,3 +232,5 @@ func (m *workspaces) Remove(ctx context.Context, name string) error {
 	delete(m.served, name)
 	return m.db.RemoveWorkspace(ctx, s.id)
 }
+
+var _ rpc.Workspaces = (*Workspaces)(nil)

@@ -26,6 +26,7 @@ func (h *Host) start() {
 			return
 		}
 		h.setStatus("connected — autodoc " + h.session.Version())
+		h.entered = false // a new connection enters its workspace again, as the first did
 		h.loadWorkspaces()
 		h.watch()
 	})

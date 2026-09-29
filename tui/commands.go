@@ -27,13 +27,22 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.listNotes":     none(h.listNotes),
 		"App.pickWorkspace": none(h.pickWorkspace),
 		"App.useWorkspace":  oneNumber("App.useWorkspace", "a row", h.useWorkspace),
-		"App.unsaved":       oneString("App.unsaved", "save, discard or stay", h.unsaved),
-		"App.conflict":      oneString("App.conflict", "keep, reload or overwrite", h.conflict),
-		"App.edited":        none(h.edited),
-		"App.syncMode":      none(h.syncMode),
-		"App.quit":          none(h.quit),
-		"App.quitConfirmed": none(func() { h.p.Quit() }),
-		"App.useTheme":      oneString("App.useTheme", "a theme's name", h.useTheme),
+
+		"App.manageWorkspaces":         none(h.manageWorkspaces),
+		"App.managerSelect":            oneNumber("App.managerSelect", "a row", h.managerSelect),
+		"App.startAddWorkspace":        none(h.startAddWorkspace),
+		"App.addWorkspace":             twoStrings("App.addWorkspace", "a name and a root", h.addWorkspace),
+		"App.startRenameWorkspace":     none(h.startRenameWorkspace),
+		"App.renameWorkspace":          oneString("App.renameWorkspace", "a name", h.renameWorkspace),
+		"App.startRemoveWorkspace":     none(h.startRemoveWorkspace),
+		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
+		"App.unsaved":                  oneString("App.unsaved", "save, discard or stay", h.unsaved),
+		"App.conflict":                 oneString("App.conflict", "keep, reload or overwrite", h.conflict),
+		"App.edited":                   none(h.edited),
+		"App.syncMode":                 none(h.syncMode),
+		"App.quit":                     none(h.quit),
+		"App.quitConfirmed":            none(func() { h.p.Quit() }),
+		"App.useTheme":                 oneString("App.useTheme", "a theme's name", h.useTheme),
 	}
 }
 
@@ -54,6 +63,16 @@ func oneString(name, what string, fn func(string)) decl.HandlerFunc {
 			return fmt.Errorf("%s takes %s", name, what)
 		}
 		fn(args[0].Raw)
+		return nil
+	}
+}
+
+func twoStrings(name, what string, fn func(string, string)) decl.HandlerFunc {
+	return func(args []qml.SpecValue) error {
+		if len(args) != 2 || args[0].Kind != qml.SpecValueString || args[1].Kind != qml.SpecValueString {
+			return fmt.Errorf("%s takes %s", name, what)
+		}
+		fn(args[0].Raw, args[1].Raw)
 		return nil
 	}
 }

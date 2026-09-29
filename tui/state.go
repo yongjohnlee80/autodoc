@@ -30,6 +30,13 @@ func (h *Host) state() map[string]any {
 		"App.quitQuestion":     "The note has unsaved changes. Quit, and lose them?",
 		"App.workspaces":       h.workspaces,
 
+		"App.managed":              h.managed,
+		"App.managerHelp":          managerHelp,
+		"App.workspaceAddError":    addHelp,
+		"App.workspaceRenameError": "",
+		"App.renameFrom":           "",
+		"App.removeQuestion":       "",
+
 		"App.helpText":  helpText,
 		"App.aboutText": h.aboutText(),
 	}
