@@ -6,18 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sync"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
-	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/embed"
-	"github.com/yongjohnlee80/autodoc/core/follow"
-	"github.com/yongjohnlee80/autodoc/core/index"
-	"github.com/yongjohnlee80/autodoc/core/workspace"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -27,11 +24,11 @@ var errAlreadyServing = errors.New("autodoc is already serving")
 // providerTimeout bounds the embedding provider's setup at start (its digest and a probe text).
 const providerTimeout = 30 * time.Second
 
-// runServe is --serve (ADR 0203 §3): bind the endpoint, open every workspace (its root, its store
-// and the lease on it; a workspace another instance holds is served as busy), start its indexer
-// and follower (the follower watches, then reconciles), and serve the API until ctx ends or a
-// client says sys.shutdown. Then it drains, stops every workspace, and removes the socket if it is
-// still this process's.
+// runServe is --serve (ADR 0203 §3): bind the endpoint, open the store (its lease makes this the
+// only daemon serving it), open every workspace in it and start its indexer and follower (the
+// follower watches, then reconciles), and serve the API until ctx ends or a client says
+// sys.shutdown. Then it drains, stops every workspace, closes the store, and removes the socket if
+// it is still this process's.
 func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	log := logger.New(logger.WithWriter(out))
 	if configPath == "" {
@@ -41,10 +38,6 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 		}
 	}
 	cfg, err := config.Load(configPath)
-	if err != nil {
-		return err
-	}
-	stateDir, err := cfg.Server.StateDirPath()
 	if err != nil {
 		return err
 	}
@@ -72,68 +65,35 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	}
 	defer removeIfStillOurs(sock, id)
 
+	storePath, err := cfg.Server.StorePath()
+	if err != nil {
+		return err
+	}
+	db, err := store.Open(ctx, storePath)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if st := db.Schema(); len(st.Pending) > 0 {
+		fmt.Fprintf(out, "store %s: schema scripts applied: %s\n", storePath, strings.Join(st.Pending, ", "))
+	}
+	for _, w := range db.Schema().Warnings {
+		logger.Warning(log, nil, w)
+	}
 	provider, providerFor := embedding(ctx, cfg.Embedding, log)
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
-	var wg sync.WaitGroup
-	var served []*rpc.Workspace
-	var closers []func()
-	defer func() {
-		stopWorkspaces()
-		wg.Wait()
-		for i := len(closers) - 1; i >= 0; i-- {
-			closers[i]()
-		}
-	}()
-	for _, wc := range cfg.Workspaces {
-		w, closer, err := openWorkspace(wsCtx, &wg, wc, stateDir, cfg.Follow.PollInterval.Duration, provider, providerFor, log)
-		if err != nil {
-			logger.Warning(log, err, "workspace not served: "+wc.Name)
-			served = append(served, &rpc.Workspace{Name: wc.Name, Root: wc.Root, Err: err})
-			continue
-		}
-		served = append(served, w)
-		closers = append(closers, closer)
+	defer stopWorkspaces()
+	ws := newWorkspaces(wsCtx, db, cfg.Follow.PollInterval.Duration, provider, providerFor, log)
+	defer ws.stopAll()
+	if err := ws.openAll(); err != nil {
+		return err
 	}
-	if len(cfg.Workspaces) == 0 {
-		logger.Warning(log, nil, fmt.Sprintf("no workspace is configured: add a [[workspace]] (name, root) to %s", configPath))
+	if len(ws.List()) == 0 {
+		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
-	srv := rpc.New(served, version, rpc.WithListener(ln), rpc.WithLogger(log))
+	srv := rpc.New(ws, version, rpc.WithListener(ln), rpc.WithLogger(log))
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", version, sock)
 	return srv.Run(ctx)
-}
-
-// openWorkspace opens one workspace and starts its indexer and follower on wg; the closer releases
-// its store and lease once they have stopped.
-func openWorkspace(ctx context.Context, wg *sync.WaitGroup, wc config.Workspace, stateDir string, poll time.Duration,
-	provider embed.Provider, providerFor func(embed.Model) (embed.Provider, error), log logger.Logger) (*rpc.Workspace, func(), error) {
-	ws, err := workspace.Open(wc, stateDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	store, err := index.Open(ctx, ws.IndexPath())
-	if err != nil {
-		_ = ws.Close()
-		return nil, nil, fmt.Errorf("workspace %q: %w", wc.Name, err)
-	}
-	ix := index.NewIndexer(store, ws.FS, index.Options{Match: ws.Matcher.Match, Provider: provider, ProviderFor: providerFor})
-	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
-	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		if err := ix.Run(ctx); err != nil && ctx.Err() == nil {
-			logger.Error(log, err, "indexer stopped: "+wc.Name)
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		_ = f.Run(ctx)
-	}()
-	closer := func() {
-		_ = store.Close()
-		_ = ws.Close()
-	}
-	return &rpc.Workspace{Name: wc.Name, Root: wc.Root, Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status}, closer, nil
 }
 
 // embedding makes the configured provider, and the maker of the providers of other models of the

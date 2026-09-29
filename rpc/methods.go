@@ -8,10 +8,30 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs"
 
+	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
+
+// workspaceMap is a workspace as workspace.list and workspace.add report it.
+func workspaceMap(w *Workspace) map[string]any {
+	state := "ready"
+	if w.Err != nil {
+		state = "error"
+	}
+	return map[string]any{"name": w.Name, "root": w.Root, "state": state,
+		"include": anyList(w.Include), "exclude": anyList(w.Exclude)}
+}
+
+func anyList(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
+	}
+	return out
+}
 
 // The error codes, chosen by what the client does next (ADR 0203 §4.4). The protocol codes keep
 // AutoDB's numbers.
@@ -22,7 +42,6 @@ const (
 	CodeNotFound          int64 = -32061 // refresh the listing
 	CodeConflict          int64 = -32062 // doc.read, then merge or retry
 	CodeCursorExpired     int64 = -32063 // re-list, and restart index.changes from the status cursor
-	CodeWorkspaceBusy     int64 = -32064 // another instance serves it
 	CodeUnsupported       int64 = -32065 // the workspace's driver cannot
 	CodeCommitted         int64 = -32066 // the write landed: doc.read and compare, never re-send
 	CodeEmbedFailed       int64 = -32067 // search lexically, or retry later
@@ -36,7 +55,10 @@ var publicErrs = []struct {
 	message string
 }{
 	{errNoSuchWorkspace, CodeNoSuchWorkspace, "no such workspace"},
-	{workspace.ErrWorkspaceBusy, CodeWorkspaceBusy, "another instance serves this workspace"},
+	{store.ErrNoWorkspace, CodeNoSuchWorkspace, "no such workspace"},
+	{store.ErrTaken, CodeConflict, "another workspace has this name or root"},
+	{workspace.ErrNotADirectory, golibrpc.CodeInvalidParams, "the root is not a directory"},
+	{config.ErrInvalid, golibrpc.CodeInvalidParams, "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
 	{docs.ErrCommitted, CodeCommitted, "the write landed, then a follow-up step failed: read the document and compare"},
 	{vfs.ErrConflict, CodeConflict, "the document is not at that version"},
 	{index.ErrCursorExpired, CodeCursorExpired, "the change cursor is older than the retained log"},
@@ -74,18 +96,53 @@ func (s *Server) register() {
 	s.handle("sys.shutdown", s.shutdown)
 	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
 		out := []any{}
-		for _, name := range s.order {
-			w := s.workspaces[name]
-			state := "ready"
-			switch {
-			case errors.Is(w.Err, workspace.ErrWorkspaceBusy):
-				state = "busy"
-			case w.Err != nil:
-				state = "error"
-			}
-			out = append(out, map[string]any{"name": w.Name, "root": w.Root, "state": state})
+		for _, w := range s.workspaces.List() {
+			out = append(out, workspaceMap(w))
 		}
 		return out, nil
+	}, false))
+	s.handle("workspace.add", s.verb(2, 4, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		var c config.Workspace
+		var err error
+		if c.Name, err = argStr(p, 0, "name"); err != nil {
+			return nil, err
+		}
+		if c.Root, err = argStr(p, 1, "root"); err != nil {
+			return nil, err
+		}
+		if len(p) > 2 && p[2] != nil {
+			if c.Include, err = strList(p[2], "include"); err != nil {
+				return nil, err
+			}
+		}
+		if len(p) > 3 && p[3] != nil {
+			if c.Exclude, err = strList(p[3], "exclude"); err != nil {
+				return nil, err
+			}
+		}
+		w, err := s.workspaces.Add(ctx, c)
+		if err != nil {
+			return nil, err
+		}
+		return workspaceMap(w), nil
+	}, false))
+	s.handle("workspace.rename", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "name")
+		if err != nil {
+			return nil, err
+		}
+		to, err := argStr(p, 1, "new name")
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.workspaces.Rename(ctx, name, to)
+	}, false))
+	s.handle("workspace.remove", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "name")
+		if err != nil {
+			return nil, err
+		}
+		return nil, s.workspaces.Remove(ctx, name)
 	}, false))
 
 	s.handle("search.query", s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
