@@ -22,7 +22,6 @@ import (
 // errAlreadyServing is a compatible AutoDoc answering on the endpoint: this process serves nothing.
 var errAlreadyServing = errors.New("autodoc is already serving")
 
-
 // runServe is --serve (ADR 0203 §3): bind the endpoint, open the store (its lease makes this the
 // only daemon serving it), open every workspace in it and start its indexer and follower (the
 // follower watches, then reconciles), and serve the API until ctx ends or a client says
