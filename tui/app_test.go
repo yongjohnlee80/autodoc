@@ -255,7 +255,8 @@ func TestEveryQMLFileIsSound(t *testing.T) {
 }
 
 // TestListsSearchesOpensEditsSaves: the notes pane lists the workspace; a search replaces it with
-// hits; Enter opens one in the editor; typed text marks it unsaved; Ctrl+S writes it to the file.
+// hits, focused, so Enter opens the first in the editor; typed text marks it unsaved; Ctrl+S writes
+// it to the file.
 func TestListsSearchesOpensEditsSaves(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nkestrel notes\n", "b/c.md", "# C\n\nplover\n"}})
 	r := attached(t, d)
@@ -269,7 +270,7 @@ func TestListsSearchesOpensEditsSaves(t *testing.T) {
 	r.s.WaitFor(t, "the hits", func(sc string) bool {
 		return strings.Contains(sc, "search: kestrel (1)") && !strings.Contains(sc, "b/c.md") && strings.Contains(sc, "semantic off")
 	})
-	r.keys(t, decltest.Alt('1'), enter())
+	r.keys(t, enter())
 	r.waitNote(t, "a.md")
 	r.s.WaitForText(t, "kestrel notes")
 	r.typeInEditor(t, "EDITED ")
