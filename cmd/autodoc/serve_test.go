@@ -637,3 +637,28 @@ func TestUINamesAWorkspace(t *testing.T) {
 		t.Errorf("a daemon with none: %v", err)
 	}
 }
+
+// TestOldIndexesAreNotedOnce: the per-workspace index files of earlier builds are named once, and
+// left where they are.
+func TestOldIndexesAreNotedOnce(t *testing.T) {
+	state := t.TempDir()
+	old := filepath.Join(state, "workspaces", "kb", "index.db")
+	if err := os.MkdirAll(filepath.Dir(old), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(old, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var first, second strings.Builder
+	noteOldIndexes(state, "/data/autodoc.db", &first)
+	noteOldIndexes(state, "/data/autodoc.db", &second)
+	if !strings.Contains(first.String(), old) || !strings.Contains(first.String(), "no longer used") {
+		t.Errorf("the first start: %q", first.String())
+	}
+	if second.String() != "" {
+		t.Errorf("the second start says it again: %q", second.String())
+	}
+	if _, err := os.Stat(old); err != nil {
+		t.Errorf("the old file is gone: %v", err)
+	}
+}

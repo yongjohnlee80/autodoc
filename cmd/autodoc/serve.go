@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -70,6 +72,9 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if stateDir, err := cfg.Server.StateDirPath(); err == nil {
+		noteOldIndexes(stateDir, storePath, out)
+	}
 	db, err := store.Open(ctx, storePath)
 	if err != nil {
 		return err
@@ -129,4 +134,24 @@ func embedding(ctx context.Context, e config.Embedding, log logger.Logger) (embe
 		}
 		return newProvider(context.Background(), m.Name)
 	}
+}
+
+// noteOldIndexes says once where the index files of the builds before the store are: they are no
+// longer read, and nothing deletes them, since a person may want them. A marker beside them keeps
+// it to once.
+func noteOldIndexes(stateDir, storePath string, out io.Writer) {
+	dir := filepath.Join(stateDir, "workspaces")
+	old, _ := filepath.Glob(filepath.Join(dir, "*", "index.db"))
+	marker := filepath.Join(dir, ".noted")
+	if len(old) == 0 {
+		return
+	}
+	if _, err := os.Stat(marker); err == nil {
+		return
+	}
+	fmt.Fprintf(out, "the per-workspace index files of earlier builds are no longer used (the index is in %s now); delete them when you like:\n", storePath)
+	for _, f := range old {
+		fmt.Fprintln(out, "  "+f)
+	}
+	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
 }
