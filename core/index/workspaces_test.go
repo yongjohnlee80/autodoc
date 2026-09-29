@@ -144,10 +144,14 @@ func TestSemanticReadsTheWorkspacesVectors(t *testing.T) {
 		}
 		return hits
 	}
-	for path, query := range map[string]func(served) []Hit{"snapshot": bySnapshot, "sql": bySQL} {
-		got, want := query(ws[0]), query(alone[0])
+	// in this order: the SQL path leaves a stale snapshot behind it
+	for _, c := range []struct {
+		path  string
+		query func(served) []Hit
+	}{{"snapshot", bySnapshot}, {"sql", bySQL}} {
+		got, want := c.query(ws[0]), c.query(alone[0])
 		if len(got) != 1 || len(want) != 1 || got[0].Path != "n.md" || got[0].Score != want[0].Score {
-			t.Errorf("%s: a's semantic hits %+v, want one, scored as a alone scores it: %+v", path, got, want)
+			t.Errorf("%s: a's semantic hits %+v, want one, scored as a alone scores it: %+v", c.path, got, want)
 		}
 	}
 }
