@@ -90,6 +90,13 @@ var ErrRateLimited = errors.New("embed: the provider's usage limit is reached")
 // ErrUnauthorized is a provider refusing the key (HTTP 401 or 403).
 var ErrUnauthorized = errors.New("embed: the provider refused the key")
 
+// ErrNoModel is a provider that does not have the model asked for.
+var ErrNoModel = errors.New("embed: the provider has no such model")
+
+// ErrUnreachable is a provider that did not answer: nothing listening at its base URL, a name that
+// does not resolve, a connection cut, or the setup's time running out.
+var ErrUnreachable = errors.New("embed: the provider did not answer")
+
 // ErrDims is a provider answering with vectors of another size than its model's, or none.
 var ErrDims = errors.New("embed: the provider answered with vectors of the wrong size")
 
@@ -126,7 +133,7 @@ func NewOllama(ctx context.Context, base, key, name string, client *http.Client)
 		}
 	}
 	if o.model.Digest == "" {
-		return nil, fmt.Errorf("embed: ollama at %s has no model %q", o.base, name)
+		return nil, fmt.Errorf("%w: ollama at %s has no model %q", ErrNoModel, o.base, name)
 	}
 	dims, err := probe(ctx, o)
 	if err != nil {
@@ -258,7 +265,10 @@ func call(ctx context.Context, client *http.Client, method, url string, header h
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("embed: %s %s: %w", method, url, err)
+		if ctx.Err() == context.Canceled {
+			return fmt.Errorf("embed: %s %s: %w", method, url, err) // the caller gave up: not the provider
+		}
+		return fmt.Errorf("%w: %s %s: %w", ErrUnreachable, method, url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
