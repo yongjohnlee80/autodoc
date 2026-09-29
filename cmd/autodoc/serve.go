@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -83,9 +84,9 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	provider, providerFor := embedding(ctx, cfg.Embedding, log)
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
 	defer stopWorkspaces()
-	ws := newWorkspaces(wsCtx, db, cfg.Follow.PollInterval.Duration, provider, providerFor, log)
-	defer ws.stopAll()
-	if err := ws.openAll(); err != nil {
+	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Provider: provider, ProviderFor: providerFor, Log: log})
+	defer ws.StopAll()
+	if err := ws.OpenAll(); err != nil {
 		return err
 	}
 	if len(ws.List()) == 0 {

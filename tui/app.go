@@ -48,16 +48,22 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	results, picker, backlinks, workspaces *tuidecl.ListModel
+	results, picker, backlinks, workspaces, managed *tuidecl.ListModel
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
 	ws       string
+	entered  bool // ws was entered on this connection's listing
+	remember func(name string)
 	where    string // the status line's "autodoc <version> · <workspace>", or why there is none
 	wsList   []wsInfo
 	epoch    uint64
 	listSeq  uint64 // numbers the notes pane's loads; the latest wins (search.go)
 	notesAll []string
+
+	// the workspace manager: its cursor, and the workspace a rename or a delete was started on
+	mgrIndex           int
+	renaming, removing string
 
 	note    note     // the note in the editor (notes.go)
 	prog    progress // the daemon's work left (progress.go)
@@ -78,6 +84,10 @@ type Options struct {
 	Dev string
 	// Layout replaces main.qml; nil means the embedded one. A test runs another theme's import.
 	Layout []byte
+	// Workspace is the one to open (autodoc --ui <name>); "" opens the first served.
+	Workspace string
+	// Remember, when set, is told each workspace the TUI enters, so the next start can open it.
+	Remember func(name string)
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -96,10 +106,12 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
+		ws: opt.Workspace, remember: opt.Remember,
 		results:    tuidecl.NewListModel("key", "path"),
 		picker:     tuidecl.NewListModel("key", "path"),
 		backlinks:  tuidecl.NewListModel("key", "label"),
-		workspaces: tuidecl.NewListModel("key", "label")}
+		workspaces: tuidecl.NewListModel("key", "label"),
+		managed:    tuidecl.NewListModel("key", "name", "state", "root")}
 }
 
 // attach binds the host to the program built from its options (by New, or by a test running the

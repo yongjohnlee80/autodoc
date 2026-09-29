@@ -11,7 +11,7 @@
 import tui 1.0
 import autodoc 1.0                // App: this program's state and commands
 import autodoc.theme.dark 1.0     // the Theme singleton; View › Theme switches it
-import autodoc.dialogs 1.0        // the note, search, workspace and quit dialogs
+import autodoc.dialogs 1.0        // the note, search, workspace, workspace manager and quit dialogs
 import autodoc.views 1.0          // Help, About
 
 Window {
@@ -65,6 +65,7 @@ Window {
             MenuItem { text: "&Search…"; onTriggered: searchDialog.open() }
             MenuItem { text: "All &notes"; onTriggered: App.listNotes() }
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
+            MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
         Menu {
             title: "&View"
@@ -150,6 +151,10 @@ Window {
     UnsavedNote { id: unsavedNote }
     NoteConflict { id: noteConflict }
     WorkspacePicker { id: workspacePicker }
+    WorkspaceManager { id: workspaceManager }
+    WorkspaceAdd { id: workspaceAdd }
+    WorkspaceRename { id: workspaceRename }
+    WorkspaceRemove { id: workspaceRemove }
     ConfirmQuit { id: confirmQuit }
     Help { id: help }
     About { id: about }
