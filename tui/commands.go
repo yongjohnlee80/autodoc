@@ -40,7 +40,15 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.newNoteFolder": oneNumber("App.newNoteFolder", "a row", h.newNoteFolder),
 
 		// the plugins
-		"App.openPlugin": oneString("App.openPlugin", "a plugin", h.openPlugin),
+		"App.openPlugin":            oneString("App.openPlugin", "a plugin", h.openPlugin),
+		"App.startAddPlugin":        none(h.startAddPlugin),
+		"App.addPlugin":             oneString("App.addPlugin", "a git URL", h.addPlugin),
+		"App.pluginConfirmed":       none(h.pluginConfirmed),
+		"App.pluginDeclined":        none(h.pluginDeclined),
+		"App.managePlugins":         none(h.managePlugins),
+		"App.startUpdatePlugin":     oneNumber("App.startUpdatePlugin", "a row", h.startUpdatePlugin),
+		"App.startRemovePlugin":     oneNumber("App.startRemovePlugin", "a row", h.startRemovePlugin),
+		"App.removePluginConfirmed": none(h.removePluginConfirmed),
 
 		// the panels
 		"App.toggleExplorer":    none(func() { h.togglePanel("explorer") }),

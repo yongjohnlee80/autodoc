@@ -26,11 +26,17 @@ func (h *Host) state() map[string]any {
 
 		"App.explorer": h.explorer,
 		// the Plugins menu (plugins.go)
-		"App.plugins":    h.pluginRows,
-		"App.hasPlugins": len(h.pluginList) > 0,
-		"App.noteTitle":  untitled,
-		"App.backlinks":  h.backlinks,
-		"App.linksTitle": "backlinks",
+		"App.plugins":              h.pluginRows,
+		"App.pluginUrl":            "",
+		"App.pluginRisk":           pluginRisk,
+		"App.pluginConfirmTitle":   "",
+		"App.pluginQuestion":       "",
+		"App.managedPlugins":       h.managedPlugins,
+		"App.pluginsHelp":          pluginsHelp,
+		"App.removePluginQuestion": "",
+		"App.noteTitle":            untitled,
+		"App.backlinks":            h.backlinks,
+		"App.linksTitle":           "backlinks",
 
 		// the search picker
 		"App.hits":               h.hits,

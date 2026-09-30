@@ -73,6 +73,11 @@ type manifest struct {
 		Width  int `toml:"width"`
 		Height int `toml:"height"`
 	} `toml:"dialog"`
+	// Install is what adding it from a git URL runs in its directory before it is started: a build,
+	// as argv (plugininstall.go).
+	Install struct {
+		Build []string `toml:"build"`
+	} `toml:"install"`
 }
 
 // pluginEntry is a plugin found in the folder: its directory, its manifest, and why it cannot run
@@ -118,7 +123,7 @@ func discoverPlugins(dir string) []pluginEntry {
 	var out []pluginEntry
 	seen := map[string]string{}
 	for _, d := range ds {
-		if !d.IsDir() {
+		if !d.IsDir() || strings.HasPrefix(d.Name(), ".") { // a clone being added is not a plugin yet
 			continue
 		}
 		e := readPlugin(filepath.Join(dir, d.Name()))
@@ -182,11 +187,17 @@ func (h *Host) loadPlugins() {
 	for i, e := range h.pluginList {
 		rows[i] = tuidecl.Row{"key": e.key(), "label": e.label(), "enabled": e.reason == ""}
 	}
+	if len(rows) == 0 {
+		rows = []tuidecl.Row{{"key": "", "label": "no plugins yet", "enabled": false}}
+	}
 	h.pluginRows.Reset(rows)
 }
 
 // openPlugin is a Plugins menu entry: the plugin's dialog, started, or brought forward when open.
 func (h *Host) openPlugin(key string) {
+	if key == "" {
+		return // "no plugins yet"
+	}
 	if r := h.running[key]; r != nil {
 		r.float.Show()
 		return
@@ -372,6 +383,10 @@ func (r *pluginRun) onNote(method string, params []any) {
 	switch method {
 	case plugin.MethodReady:
 		p, err := plugin.ReadReady(params)
+		if err == nil && p == plugin.Protocol {
+			// here, not on the loop: the plugin's first frame follows at once, on this goroutine
+			r.readyIn.Store(true)
+		}
 		r.h.p.Post(func() { r.readied(p, err) })
 	case plugin.MethodFrame:
 		if !r.readyIn.Load() {
@@ -414,7 +429,6 @@ func (r *pluginRun) readied(p int, err error) {
 		r.close(fmt.Sprintf("speaks protocol %d; this AutoDoc speaks %d", p, plugin.Protocol))
 	default:
 		r.ready = true
-		r.readyIn.Store(true)
 	}
 }
 

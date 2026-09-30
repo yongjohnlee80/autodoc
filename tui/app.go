@@ -24,6 +24,7 @@
 //	theme.go      View › Theme: switching the theme import at runtime
 //	help.go       the help and the about text
 //	plugins.go    the Plugins menu: the plugins folder, and a plugin's dialog
+//	plugininstall.go  adding a plugin from a git URL, and managing the installed ones
 package tui
 
 import (
@@ -130,7 +131,13 @@ type Host struct {
 	pluginList []pluginEntry
 	pluginRows *tuidecl.ListModel
 	running    map[string]*pluginRun
-	pageWidth  int // the page's width as last set: the ruler, the border, the gutter
+	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, the manager's
+	// rows, and the directory PluginRemove asks about
+	pendingPlugin  *pluginChange
+	managedList    []managedPlugin
+	managedPlugins *tuidecl.ListModel
+	removingPlugin string
+	pageWidth      int // the page's width as last set: the ruler, the border, the gutter
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -193,6 +200,7 @@ func newHost(session *Session, opt Options) *Host {
 		managed:        tuidecl.NewListModel("key", "name", "state", "root"),
 		pluginOpt:      opt.Plugins,
 		pluginRows:     tuidecl.NewListModel("key", "label", "enabled"),
+		managedPlugins: tuidecl.NewListModel("key", "name", "commit", "source"),
 		running:        map[string]*pluginRun{}}
 	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
