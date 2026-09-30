@@ -21,6 +21,7 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `core/docs` | reads and writes notes for AutoDoc's own apps, conditional on the version the writer read |
 | `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
 | `tui` | the terminal UI: search, the notes, a Vim-keyed editor, backlinks; its screen written in QML |
+| `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
 | `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON |
 
@@ -167,6 +168,36 @@ quitting over unsaved changes asks first, too.
 
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
+
+## Plugins
+
+A plugin is a program AutoDoc runs in a dialog over the page, from the **Plugins** menu. It draws
+into the dialog, and it gets every key but Esc, which closes it. The first one is
+[autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris).
+
+**Adding one.** **Plugins › Add from a git URL…** takes the plugin's repository, which holds a
+`plugin.toml` at its top. There is no hub: the URL is the source.
+- AutoDoc clones it and runs nothing yet. It asks first, showing:
+  - the plugin and where it came from, at which commit;
+  - the build its manifest asks for, and the command it starts.
+- **A plugin is a program that runs as you, with your files and your notes.** AutoDoc does not check
+  what a plugin does. Add only plugins you trust: adding one is at your own risk.
+- **Yes, at my own risk** builds it and lists it in the Plugins menu. **No** throws the clone away.
+- It needs git, and whatever the plugin's build uses (Go, for autodoc-tetris).
+
+**Managing them.** **Plugins › Manage plugins…** lists each plugin with its source and commit.
+- **Update…** fetches the source and asks the same question about the new commit's build.
+- **Remove…** deletes the plugin's directory.
+- A plugin put in the folder by hand is listed as local.
+
+**Where they are.**
+- The folder is `plugins/`, beside the config: `$XDG_CONFIG_HOME/autodoc/plugins/<name>/`.
+- Each plugin's stderr is kept in `$XDG_STATE_HOME/autodoc/plugins/<name>.log`, and its build's output
+  in `<name>-install.log`.
+- A plugin that exits, stops answering, or speaks another protocol closes its dialog, and a toast
+  says why.
+
+Writing one: `docs/plugins.md` covers the manifest, the protocol, and the SDK in package `plugin`.
 
 ## Following the files
 
