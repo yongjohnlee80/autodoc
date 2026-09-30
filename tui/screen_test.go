@@ -284,19 +284,12 @@ func TestPreferencesAreKept(t *testing.T) {
 	r := attached(t, d)
 	r.leader(t, 't') // the status line, shown by the tests' preferences: hidden
 	r.s.WaitFor(t, "the status line hidden", func(sc string) bool { return !strings.Contains(sc, "NORMAL") })
-	pref := func(name string) string {
-		t.Helper()
-		var v string
-		r.s.WaitFor(t, name+" stored", func(string) bool {
-			m, err := d.db.Preferences(context.Background())
-			v = m[name]
-			return err == nil && v != ""
-		})
-		return v
-	}
-	if v := pref("tui.status.shown"); v != "false" {
-		t.Fatalf("tui.status.shown = %q", v)
-	}
+	// the store holds the tests' "true" before the toggle's write lands: wait for the value
+	// written, not any value
+	r.s.WaitFor(t, "tui.status.shown = false stored", func(string) bool {
+		m, err := d.db.Preferences(context.Background())
+		return err == nil && m["tui.status.shown"] == "false"
+	})
 
 	r.leader(t, ',')
 	r.s.WaitForText(t, "preferences")
