@@ -129,6 +129,7 @@ func (h *Host) load(p string) {
 // show puts a note's text in the editor, clean.
 func (h *Host) show(p, content, version string) {
 	h.editor.SetValue(content) // reports no textChanged: only typing does
+	h.syncPageWidth()
 	if at := h.openAt; at >= 0 {
 		// opened from a search hit: the cursor at its section
 		h.openAt = -1
@@ -153,7 +154,10 @@ func (h *Host) closeNote() {
 }
 
 // edited is the editor's text changing: typed, so the note (or the draft) has unsaved changes.
-func (h *Host) edited() { h.setDirty(true) }
+func (h *Host) edited() {
+	h.setDirty(true)
+	h.syncPageWidth() // a line count with another number of digits widens the gutter
+}
 
 func (h *Host) setDirty(v bool) {
 	h.note.dirty = v

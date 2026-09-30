@@ -1489,7 +1489,12 @@ func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
 	r.h.p.Post(r.h.toggleWrap)
 	r.s.WaitFor(t, "wrapped again", func(sc string) bool { return words(sc) == 40 })
 	r.h.p.Post(r.h.toggleLineNumbers)
-	r.s.WaitFor(t, "numbered", func(sc string) bool { return strings.Contains(sc, "   1 short") && strings.Contains(sc, "   2 word") })
+	r.s.WaitFor(t, "numbered", func(sc string) bool { return strings.Contains(sc, "   1  short") && strings.Contains(sc, "   2  word") })
+	// the cursor wears the theme's accent: dark's amber, sent to the terminal
+	r.s.WaitFor(t, "the cursor's accent", func(string) bool {
+		c, ok := r.s.Backend.CursorColor()
+		return ok && c == tuicore.CellColor{Kind: tuicore.CellColorRGB, R: 0xff, G: 0xaf, B: 0x00}
+	})
 	r.s.WaitFor(t, "kept", func(string) bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.editor.linenumbers"] == "true" && m["tui.editor.wrap"] == "true"
@@ -1522,4 +1527,32 @@ func TestTheVimKeysCard(t *testing.T) {
 	if got := onLoop(r, r.h.aboutText); !strings.Contains(got, "By Yong Sung John Lee") || !strings.Contains(got, "Apache License, Version 2.0") {
 		t.Errorf("About says %q", got)
 	}
+}
+
+// TestThePageHoldsTheRulersColumnsWithTheLineNumbers: the ruler is the page's editable columns;
+// the line numbers' gutter is added to the page, so a line as long as the ruler still fits.
+func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
+	line := strings.Repeat("y", 60)
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", line + "z\n"}},
+		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.toast.seconds": "1", "tui.ruler": "60", "tui.editor.linenumbers": "true"}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
+	r.ready(t)
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.s.WaitFor(t, "the note", func(string) bool { n := r.note(); return n.open && n.path == "a.md" })
+	r.s.WaitForText(t, "   1  "+line)
+	rows := strings.Split(r.s.String(), "\n")
+	// 60 columns of text, a 6-column gutter and the border: 68 wide
+	if l, rt := col(rows[0], "┌"), col(rows[0], "┐"); rt-l+1 != 68 {
+		t.Fatalf("the page is %d wide, want 68 (60 of text, the gutter, the border):\n%s", rt-l+1, r.s)
+	}
+	// the 60 y's fill the text's columns; the 61st column's z wraps to the next row
+	if !strings.Contains(rows[1], "   1  "+line+"│") || !strings.Contains(rows[2], "z") {
+		t.Fatalf("the ruler's 60 columns are not the text's:\n%s", r.s)
+	}
+	// hidden, the page is the ruler and its border again
+	r.h.p.Post(r.h.toggleLineNumbers)
+	r.s.WaitFor(t, "narrower", func(sc string) bool {
+		top := strings.Split(sc, "\n")[0]
+		return col(top, "┐")-col(top, "┌")+1 == 62
+	})
 }
