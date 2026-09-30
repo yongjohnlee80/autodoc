@@ -62,11 +62,20 @@ func (h *Host) state() map[string]any {
 		"App.yesNo":             choices("yes", "no"),
 		"App.menuHiddenIndex":   0,
 		"App.statusShownIndex":  1,
+		"App.wrapIndex":         0,
+		"App.lineNumbersIndex":  1,
+		"App.corners":           choices(cornerLabels...),
+		"App.toastCornerIndex":  0,
+		"App.toastSeconds":      choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
+		"App.toastSecondsIndex": defaultToastSeconds - 1,
 		"App.prefsError":        "",
-		"App.providers":         h.providers,
-		"App.providersStatus":   "",
-		"App.providersTitle":    "embedding providers",
-		"App.providerDetail":    "",
+		// the notifications' history (notify.go), and the Vim keys' card
+		"App.notices":         h.noticeList,
+		"App.noticesTitle":    "notifications (0)",
+		"App.providers":       h.providers,
+		"App.providersStatus": "",
+		"App.providersTitle":  "embedding providers",
+		"App.providerDetail":  "",
 		// the provider form
 		"App.providerKinds":          kindChoices(),
 		"App.providerFormTitle":      "",
@@ -157,12 +166,6 @@ func (h *Host) set(name string, v any) { h.keep(h.p.Set(name, v)) }
 func (h *Host) setWhere(where string) {
 	h.where = where
 	h.set("App.statusLeft", h.editor.Mode().String()+"  "+where)
-}
-
-// setStatus puts a message on the status line's right, beside the progress while there is any.
-func (h *Host) setStatus(msg string) {
-	h.message = msg
-	h.publishStatus()
 }
 
 // open opens a dialog the layout declares, by id.

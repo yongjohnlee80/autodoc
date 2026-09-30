@@ -128,6 +128,19 @@ names and saves it as a note. Everything else comes when it is asked for:
 The preferences and the AI models are kept in the daemon's store, so they are the same whichever
 workspace is open.
 
+**Notifications.** What happens — a save, a workspace added, the connection, indexing — shows in
+a corner as a toast, saying how long ago it came ("now", "15s ago"). Up to three show at once, the
+newest nearest the corner; the rest wait and show in turn. A finished one stays 3 seconds (1 to 10
+in Preferences), a task's progress stays until the task ends, and Preferences moves them to any
+corner. View › Notifications… (`SPC h`) lists every one, with its time. What the page says — a
+find's result, the editor mode — is the status line's, not a notification.
+
+**The page** wraps long lines at its width, and can number its lines in a dimmed gutter: View ›
+Wrap long lines and Line numbers, or Preferences. `?` in Normal mode shows the Vim keys in a card
+at the bottom right; the page keeps the keyboard, and `?` again closes it.
+
+About names the author, Yong Sung John Lee, and the license, Apache 2.0 (NOTICE).
+
 The status line ends with semantic search's state: a green dot and "semantic search" while a
 provider answers, a red one and "lexical search" while it doesn't (none in use, a model switch
 under way, or the provider not answering). While the provider embeds, a spinner turns beside a bar

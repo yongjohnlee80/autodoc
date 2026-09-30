@@ -9,13 +9,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/embed"
 )
 
-// PROGRESS — what the daemon still has to do, on the status line's right while there is any.
+// PROGRESS — what the daemon still has to do, in a toast while there is any (notify.go).
 //
 // The TUI polls index.status once a second while it is attached: the documents indexed, the jobs
 // pending (a first scan's are every note), and the texts the embedding provider has yet to embed
-// (a new model's, while it fills to replace the active one). While any is pending, the right slot
-// shows a bar beside the last message, a spinner turning while the model embeds; when indexing ends, it
-// says so once, and the workspace's notes are listed again, the pickers' and the explorer's (a
+// (a new model's, while it fills to replace the active one). While any is pending, a toast shows a
+// bar, a spinner turning while the model embeds; when indexing ends, the toast says so, and goes, and the workspace's notes are listed again, the pickers' and the explorer's (a
 // listing taken mid-scan was partial). They are listed again, too, whenever the index's change log
 // has moved while nothing is pending: a note added, removed or renamed outside the TUI is indexed
 // between two polls, faster than any poll sees it busy.
@@ -128,7 +127,7 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	h.prog.cursor, h.prog.polled = cursor, true
 	h.prog.busy = pending > 0 || emb.working() > 0
 	if was && !h.prog.busy {
-		h.message = fmt.Sprintf("indexed %d notes", docs)
+		h.notifyDone(toastProgress, fmt.Sprintf("indexed %d notes", docs))
 	}
 	if pending == 0 && (was || moved) {
 		// the lists taken while indexing were partial, or the notes changed since
@@ -213,13 +212,12 @@ func progressText(p progress) string {
 	return strings.Join(parts, " · ")
 }
 
-// publishStatus is the right slot: the progress, while there is any, then the last message.
+// publishStatus is the progress's toast, updated in place while there is work left; it ends when
+// the work does (showProgress).
 func (h *Host) publishStatus() {
-	right := h.message
 	if h.prog.busy {
 		if p := progressText(h.prog); p != "" {
-			right = p + "  " + h.message
+			h.notifyOngoing(toastProgress, p)
 		}
 	}
-	h.set("App.status", strings.TrimSpace(right))
 }

@@ -18,14 +18,14 @@ const restartWait = 15 * time.Second
 // startRestart asks first, saying which version runs and which one a restart starts.
 func (h *Host) startRestart() {
 	if !h.session.CanSpawn() {
-		h.setStatus("restart: this TUI starts no daemon, so nothing would bring one back")
+		h.notify("restart: this TUI starts no daemon, so nothing would bring one back")
 		return
 	}
 	running := h.session.Version()
 	if old := h.session.Stale(); old != nil && !h.connected {
 		running = old.Version // older than this TUI, refusing its protocol
 	} else if h.session.PID() == 0 || !h.connected {
-		h.setStatus("restart: not connected to a backend")
+		h.notify("restart: not connected to a backend")
 		return
 	}
 	do(h, func(context.Context) string {
@@ -59,7 +59,7 @@ func (h *Host) startRestart() {
 // connection to end, so the wait and the start follow here.
 func (h *Host) restartConfirmed() {
 	if old := h.session.Stale(); old != nil && !h.connected {
-		h.setStatus(fmt.Sprintf("asking the older backend (autodoc %s) to stop…", old.Version))
+		h.notify(fmt.Sprintf("asking the older backend (autodoc %s) to stop…", old.Version))
 		do(h, func(ctx context.Context) error {
 			if err := h.session.StopStale(ctx); err != nil {
 				return err
@@ -80,7 +80,7 @@ func (h *Host) restartConfirmed() {
 	}
 	pid, from, gen := h.session.PID(), h.session.Version(), h.session.Gen()
 	h.restartPID, h.restartFrom = pid, from
-	h.setStatus("asking the backend to stop…")
+	h.notify("asking the backend to stop…")
 	do(h, func(ctx context.Context) error {
 		_, err := h.call(ctx, "sys.shutdown")
 		return err

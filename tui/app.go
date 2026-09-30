@@ -112,10 +112,17 @@ type Host struct {
 	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
 
-	note    note       // the note in the editor (notes.go)
-	draft   *draftSave // the draft being named in the new-note picker, nil when none is (notes.go)
-	prog    progress   // the daemon's work left (progress.go)
-	message string     // the last message, shown beside the progress
+	note  note       // the note in the editor (notes.go)
+	draft *draftSave // the draft being named in the new-note picker, nil when none is (notes.go)
+	prog  progress   // the daemon's work left (progress.go)
+	// the notifications (notify.go): the toasts over the page, what was posted before they were,
+	// and the history
+	toasts      *widget.Toasts
+	early       []widget.Toast
+	notices     []notice
+	noticeList  *tuidecl.ListModel
+	historyOpen bool
+	vimKeys     *widget.Float // the Vim keys' card (vimkeys.go)
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -171,6 +178,7 @@ func newHost(session *Session, opt Options) *Host {
 		prefs:          defaultPrefs(),
 		panelOpen:      map[string]bool{},
 		backlinks:      tuidecl.NewListModel("key", "label"),
+		noticeList:     tuidecl.NewListModel("key", "when", "text"),
 		workspaces:     tuidecl.NewListModel("key", "label"),
 		managed:        tuidecl.NewListModel("key", "name", "state", "root")}
 	h.explorer.OnFetch = h.fetchExplorer
@@ -185,6 +193,8 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	if h.editor, ok = tuidecl.FindAs[*widget.Editor](p, "editor"); !ok {
 		return errors.New("main.qml declares no Editor with id: editor")
 	}
+	p.Post(h.attachToasts)
+	p.Post(h.attachVimKeys)
 	p.Post(h.start)
 	return nil
 }
@@ -198,7 +208,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
 		files := os.DirFS(opt.Dev)
 		opts = append(modulesFrom(files), tuidecl.Layout(files, "main.qml"),
-			tuidecl.HotReload(tuidecl.OnReloadError(func(err error) { h.setStatus(err.Error()) })))
+			tuidecl.HotReload(tuidecl.OnReloadError(func(err error) { h.notify(err.Error()) })))
 	} else {
 		src = opt.Layout
 		if src == nil {

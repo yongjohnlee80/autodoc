@@ -58,7 +58,7 @@ func (h *Host) loadWorkspaces() {
 			h.ws, h.notesAll = "", nil
 			h.closeNote()
 			h.setWhere("autodoc · no workspace")
-			h.setStatus("no workspace: Go › Manage workspaces… adds one")
+			h.notify("no workspace: Go › Manage workspaces… adds one")
 			return
 		}
 		if a.list[pick].name != h.ws || !h.entered {
@@ -77,7 +77,7 @@ func (h *Host) useWorkspace(i int) {
 	}
 	w := h.wsList[i]
 	if w.state != "ready" {
-		h.setStatus(fmt.Sprintf("%s cannot be served: its root is gone (Go › Manage workspaces…)", w.name))
+		h.notify(fmt.Sprintf("%s cannot be served: its root is gone (Go › Manage workspaces…)", w.name))
 		return
 	}
 	h.closeDialog("workspacePicker")
@@ -133,11 +133,11 @@ func (h *Host) addWorkspace(name, root string) {
 	}, func(err error) {
 		if err != nil {
 			// Select closed the picker: it opens again as it was, the reason on the status line
-			h.setStatus("not added: " + wireMessage(err))
+			h.notify("not added: " + wireMessage(err))
 			h.open("workspaceAdd")
 			return
 		}
-		h.setStatus("added workspace " + name)
+		h.notify("added workspace " + name)
 		h.set("App.managerHelp", managerHelp)
 		h.loadWorkspaces()
 	})
@@ -176,7 +176,7 @@ func (h *Host) renameWorkspace(to string) {
 				h.remember(to)
 			}
 		}
-		h.setStatus(fmt.Sprintf("renamed %s to %s", from, to))
+		h.notify(fmt.Sprintf("renamed %s to %s", from, to))
 		h.loadWorkspaces()
 	})
 }
@@ -210,7 +210,7 @@ func (h *Host) removeWorkspaceConfirmed() {
 				h.ws, h.entered = "", false
 				h.closeNote()
 			}
-			h.setStatus("deleted workspace " + name + " (its files stay)")
+			h.notify("deleted workspace " + name + " (its files stay)")
 			h.loadWorkspaces()
 		})
 	}

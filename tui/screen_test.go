@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -63,9 +64,13 @@ func f10() tuicore.Event { return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code:
 // TestTheScreenIsThePageAlone: by default, nothing but the page: no menu bar until F10 brings it
 // up, no status line; Escape puts the menu bar away again.
 func TestTheScreenIsThePageAlone(t *testing.T) {
-	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "1"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
+	// the notifications of the start (connected, indexed) go once they have lingered
+	r.s.WaitFor(t, "the start's toasts gone", func(string) bool {
+		return onLoop(r, func() bool { s, w := r.h.toasts.Len(); return s == 0 && w == 0 })
+	})
 	sc := r.s.String()
 	for _, absent := range []string{"File", "NORMAL", "autodoc v-test", "explorer"} {
 		if strings.Contains(sc, absent) {
@@ -111,7 +116,7 @@ func col(line, sub string) int {
 func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	long := strings.Repeat("x", 80)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}},
-		daemonOpts{prefs: map[string]string{"tui.ruler": "60"}})
+		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.wrap": "false"}}) // scrolled, not wrapped
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
@@ -1172,7 +1177,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 		return "", nil
 	})
 	r := runTUI(t, sess, Options{Installed: func() (string, error) { return "v2", nil }})
-	r.s.WaitForText(t, fmt.Sprintf("the backend is autodoc v-p%d (protocol %d), older than this TUI", rpc.Protocol-1, rpc.Protocol-1))
+	r.waitNoticed(t, fmt.Sprintf("the backend is autodoc v-p%d (protocol %d), older than this TUI", rpc.Protocol-1, rpc.Protocol-1))
 	onLoop(r, func() bool {
 		r.h.awaitExit = func(ctx context.Context, _ int64) bool {
 			select {
@@ -1342,4 +1347,139 @@ func TestFindInThePanes(t *testing.T) {
 	r.s.WaitForText(t, "SPC — commands")
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "words; a * ends a prefix")
+}
+
+// waitNoticed waits for a toast holding text. A toast wraps a long message, so the screen's words
+// are read as one line, the toast's borders dropped. Only for a screen whose page beside the toast
+// is blank: a page's words there would come between the toast's rows.
+func (r *running) waitNoticed(t *testing.T, text string) {
+	t.Helper()
+	r.s.WaitFor(t, "the notification "+text, func(sc string) bool {
+		flat := strings.Join(strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ").Replace(sc)), " ")
+		return strings.Contains(flat, text)
+	})
+}
+
+// TestNotificationsAndTheStatusLine: what happened is a toast, over the status line at the bottom
+// right, kept in the history (SPC h). A find's result is the status line's alone: no toast, not
+// kept. The corner and the time a toast stays are preferences.
+func TestNotificationsAndTheStatusLine(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel one\nkestrel two\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitNote(t, "a.md")
+	r.h.p.Post(func() { r.h.notify("the index is ready") })
+	r.s.WaitFor(t, "the toast at the bottom right", func(sc string) bool {
+		rows := strings.Split(sc, "\n")
+		n := len(rows)
+		return strings.Contains(rows[n-3], "the index is ready") && strings.HasSuffix(strings.TrimRight(rows[n-3], " "), "│") &&
+			strings.HasPrefix(rows[n-1], "NORMAL")
+	})
+	// a find: the status line says it, and nothing else does
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the page")
+	r.keys(t, decltest.Type("kestrel")...)
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the find on the status line", func(sc string) bool {
+		rows := strings.Split(sc, "\n")
+		return strings.Contains(rows[len(rows)-1], `find "kestrel": 1 of 2 in the page`)
+	})
+	kept := onLoop(r, func() []string {
+		var out []string
+		for _, n := range r.h.notices {
+			out = append(out, n.text)
+		}
+		return out
+	})
+	for _, k := range kept {
+		if strings.Contains(k, "find") {
+			t.Fatalf("a find's result was kept as a notification: %q", kept)
+		}
+	}
+	if !slices.Contains(kept, "the index is ready") {
+		t.Fatalf("the notification was not kept: %q", kept)
+	}
+	// the history, newest first
+	r.leader(t, 'h')
+	r.s.WaitFor(t, "the history", func(sc string) bool {
+		return strings.Contains(sc, "notifications (") && strings.Contains(sc, "the index is ready") && strings.Contains(sc, "NOTIFICATION")
+	})
+	r.keys(t, key('l')) // Clear
+	r.s.WaitForText(t, "notifications (0)")
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "the history closed", func(sc string) bool { return !strings.Contains(sc, "NOTIFICATION") })
+	// the top left, staying 5 seconds: kept, and applied
+	r.h.p.Post(func() {
+		r.h.setToastCorner(indexOf(corners, "top-left"))
+		r.h.setToastSeconds(4)
+	})
+	stored := func(name, want string) {
+		t.Helper()
+		r.s.WaitFor(t, name+" = "+want, func(string) bool {
+			m, err := d.db.Preferences(context.Background())
+			return err == nil && m[name] == want
+		})
+	}
+	stored("tui.toast.corner", "top-left")
+	stored("tui.toast.seconds", "5")
+	r.h.p.Post(func() { r.h.notify("up here") })
+	r.s.WaitFor(t, "the toast at the top left", func(sc string) bool {
+		rows := strings.Split(sc, "\n")
+		for _, row := range rows[:5] {
+			if strings.HasPrefix(row, "│ up here") {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// TestThePageWrapsAndNumbersItsLines: long lines wrap by default; View › Wrap long lines turns it
+// off and on; line numbers show in a gutter when asked, the preference kept.
+func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
+	long := strings.Repeat("word ", 40)
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitNote(t, "a.md")
+	words := func(sc string) int { return strings.Count(sc, "word") }
+	r.s.WaitFor(t, "the long line wrapped", func(sc string) bool { return words(sc) == 40 })
+	r.h.p.Post(r.h.toggleWrap)
+	r.s.WaitFor(t, "the long line cut at the page", func(sc string) bool { return words(sc) < 40 })
+	r.h.p.Post(r.h.toggleWrap)
+	r.s.WaitFor(t, "wrapped again", func(sc string) bool { return words(sc) == 40 })
+	r.h.p.Post(r.h.toggleLineNumbers)
+	r.s.WaitFor(t, "numbered", func(sc string) bool { return strings.Contains(sc, "   1 short") && strings.Contains(sc, "   2 word") })
+	r.s.WaitFor(t, "kept", func(string) bool {
+		m, err := d.db.Preferences(context.Background())
+		return err == nil && m["tui.editor.linenumbers"] == "true" && m["tui.editor.wrap"] == "true"
+	})
+}
+
+// TestTheVimKeysCard: ? shows the Vim keys at the bottom right, the page keeping the keyboard;
+// ? again hides it. About names the author and the license.
+func TestTheVimKeysCard(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.keys(t, key('?'))
+	r.s.WaitFor(t, "the card", func(sc string) bool {
+		return strings.Contains(sc, "Vim keys · Normal mode") && strings.Contains(sc, "dd yy  delete, copy the line")
+	})
+	rows := strings.Split(r.s.String(), "\n")
+	for i, row := range rows {
+		if strings.Contains(row, "n N      again, forward, back") && i != len(rows)-3 {
+			t.Fatalf("the card's last line is at row %d of %d, want just over the status line's border:\n%s", i, len(rows), r.s)
+		}
+		if c := col(row, "╭ Vim keys"); c >= 0 && c < 20 {
+			t.Fatalf("the card starts at column %d, want the right:\n%s", c, r.s)
+		}
+	}
+	if !r.focused("editor") {
+		t.Fatal("the card took the keyboard from the page")
+	}
+	r.keys(t, key('?'))
+	r.s.WaitFor(t, "the card hidden", func(sc string) bool { return !strings.Contains(sc, "Vim keys") })
+	if got := onLoop(r, r.h.aboutText); !strings.Contains(got, "By Yong Sung John Lee") || !strings.Contains(got, "Apache License, Version 2.0") {
+		t.Errorf("About says %q", got)
+	}
 }

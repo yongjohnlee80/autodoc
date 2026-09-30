@@ -46,20 +46,20 @@ func isTheme(name string) bool {
 // refused.
 func (h *Host) switchTheme(name string) {
 	if !isTheme(name) {
-		h.setStatus(fmt.Sprintf("no theme %q", name))
+		h.say(fmt.Sprintf("no theme %q", name))
 		return
 	}
 	src := h.layoutSrc
 	if h.dev != "" {
 		b, err := os.ReadFile(path.Join(h.dev, "main.qml"))
 		if err != nil {
-			h.setStatus("theme: " + err.Error())
+			h.notify("theme: " + err.Error())
 			return
 		}
 		src = b
 	}
 	if themeOf(src) == "" {
-		h.setStatus("main.qml imports no theme to switch")
+		h.notify("main.qml imports no theme to switch")
 		return
 	}
 	next := themeImport.ReplaceAll(src, []byte("import autodoc.theme."+name+" "+moduleVersion))
@@ -67,13 +67,13 @@ func (h *Host) switchTheme(name string) {
 	// between emissions
 	h.p.Post(func() {
 		if _, err := h.p.Reload(next); err != nil {
-			h.setStatus("theme: " + err.Error())
+			h.notify("theme: " + err.Error())
 			return
 		}
 		h.layoutSrc, h.theme = next, name
 		for k, v := range themeState(name) {
 			h.set(k, v)
 		}
-		h.setStatus("theme: " + name)
+		h.say("theme: " + name)
 	})
 }

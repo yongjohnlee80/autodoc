@@ -103,7 +103,7 @@ func (h *Host) load(p string) {
 		content, version string
 		err              error
 	}
-	h.setStatus("opening " + p + "…")
+	h.say("opening " + p + "…")
 	do(h, func(ctx context.Context) answer {
 		res, err := h.call(ctx, "doc.read", ws, p)
 		if err != nil {
@@ -121,7 +121,7 @@ func (h *Host) load(p string) {
 			return
 		}
 		h.show(p, a.content, a.version)
-		h.setStatus("opened " + p)
+		h.say("opened " + p)
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	})
 }
@@ -229,7 +229,7 @@ func (h *Host) write(content, want string, after func()) {
 		readErr error // the read-back after Committed
 		same    bool  // the read-back holds what was written
 	}
-	h.setStatus("saving " + p + "…")
+	h.say("saving " + p + "…")
 	do(h, func(ctx context.Context) answer {
 		res, err := h.call(ctx, "doc.write", ws, p, []byte(content), want)
 		if err == nil {
@@ -255,7 +255,7 @@ func (h *Host) write(content, want string, after func()) {
 			// typing during the save leaves the note unsaved: what is on disk is what was written
 			newer := h.editor.Value() != content
 			h.setDirty(newer)
-			h.setStatus("saved " + p)
+			h.notify("saved " + p)
 			switch {
 			case after == nil:
 			case newer:
@@ -267,12 +267,12 @@ func (h *Host) write(content, want string, after func()) {
 				after()
 			}
 		case code(a.err) == rpc.CodeCommitted && a.readErr != nil:
-			h.setStatus("saved " + p + ", but it could not be read back: " + wireMessage(a.readErr) + " — reload before saving again")
+			h.notify("saved " + p + ", but it could not be read back: " + wireMessage(a.readErr) + " — reload before saving again")
 		case code(a.err) == rpc.CodeConflict, code(a.err) == rpc.CodeCommitted:
 			h.set("App.conflictQuestion", fmt.Sprintf("%s changed on disk since you opened it. Keep editing, reload the disk's version (your changes are lost), or overwrite it with yours?", p))
 			h.open("noteConflict")
 		case code(a.err) == rpc.CodeNotFound:
-			h.setStatus(p + " is gone from disk: File › New note to write it again")
+			h.notify(p + " is gone from disk: File › New note to write it again")
 		default:
 			h.failed("save "+p, a.err)
 		}
@@ -290,7 +290,7 @@ func (h *Host) conflict(answer string) {
 	case "overwrite":
 		h.overwrite()
 	default:
-		h.setStatus("kept your changes; the disk's version is newer")
+		h.notify("kept your changes; the disk's version is newer")
 	}
 }
 
@@ -381,7 +381,7 @@ func (h *Host) createNote(name string) {
 			if gen != h.note.gen || h.note.open {
 				// the page moved on while the draft was written: the note is on disk; open it only
 				// when asked
-				h.setStatus("saved the draft as " + name)
+				h.notify("saved the draft as " + name)
 				return
 			}
 			h.openAt = h.cursorBytes()

@@ -65,6 +65,8 @@ Window {
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
+    // ? is the Vim keys' card, in Normal mode (the Text mode types it); ? again closes it
+    Shortcut { sequence: "?"; onActivated: App.toggleVimKeys() }
 
     MenuBar {
         Dock.edge: Tui.Top
@@ -96,6 +98,9 @@ Window {
             title: "&View"
             MenuItem { text: "&Status line"; checkable: true; checked: App.statusShown; onTriggered: App.toggleStatusLine() }
             MenuItem { text: "&Hide the menu bar"; checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
+            MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
+            MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
+            MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
             title: "&Options"
@@ -144,6 +149,8 @@ Window {
             palette.highlightedText: Theme.document.selectedText
             keyset: App.keyset
             ruler: App.rulerColumn
+            wrap: App.editorWrap
+            lineNumbers: App.lineNumbers
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
             SyntaxHighlighter { definition: "Markdown" }
@@ -231,4 +238,5 @@ Window {
     Leader { id: leader }
     Help { id: help }
     About { id: about }
+    Notifications { id: notifications }
 }

@@ -31,6 +31,12 @@ Dialog {
                     Text { text: "" }
                     Text { text: "theme" }
                     ComboBox { model: App.themes; textRole: "label"; currentIndex: App.themeIndex; onActivated: App.setThemeIndex(index) }
+                    Text { text: "" }
+                    Text { text: "wrap long lines" }
+                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.wrapIndex; onActivated: App.setWrapIndex(index) }
+                    Text { text: "" }
+                    Text { text: "line numbers" }
+                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.lineNumbersIndex; onActivated: App.setLineNumbersIndex(index) }
                 }
                 Text { text: " " }
             }
@@ -56,6 +62,12 @@ Dialog {
                     Text { text: "" }
                     Text { text: "the links open from" }
                     ComboBox { model: App.edges; textRole: "label"; currentIndex: App.linksEdgeIndex; onActivated: App.setLinksEdge(index) }
+                    Text { text: "" }
+                    Text { text: "notifications in the" }
+                    ComboBox { model: App.corners; textRole: "label"; currentIndex: App.toastCornerIndex; onActivated: App.setToastCorner(index) }
+                    Text { text: "" }
+                    Text { text: "a notification stays" }
+                    ComboBox { model: App.toastSeconds; textRole: "label"; currentIndex: App.toastSecondsIndex; onActivated: App.setToastSeconds(index) }
                 }
                 Text { text: " " }
             }

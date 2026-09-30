@@ -1,4 +1,4 @@
-// About.qml — the version, and where the daemon and its log are.
+// About.qml — the version, the author and the license, and where the daemon and its log are.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80
