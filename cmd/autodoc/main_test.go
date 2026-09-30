@@ -42,6 +42,8 @@ func TestArguments(t *testing.T) {
 		{[]string{"kb"}, 2, "unexpected arguments: [kb]"},
 		{[]string{"--serve", "kb"}, 2, "only --ui and --call take one"},
 		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --ui and --call take one"},
+		// refused before anything is dialled: exit 1, saying why
+		{[]string{"--config", "/nonexistent/autodoc.toml", "--call", "workspace.list", "{"}, 1, "--call: the parameters are not JSON"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
 		{nil, 2, "-serve"},
 	} {
