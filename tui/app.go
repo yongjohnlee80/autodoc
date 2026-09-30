@@ -153,7 +153,7 @@ func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed,
-		awaitExit:      func(ctx context.Context, pid int64) bool { return waitGone(ctx, pid, restartWait) },
+		awaitExit:      awaitExit,
 		picker:         tuidecl.NewListModel("key", "path"),
 		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:        tuidecl.NewListModel("key", "path"),

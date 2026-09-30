@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -490,6 +491,16 @@ type fakeOllama struct {
 	*httptest.Server
 	mu   sync.Mutex
 	down bool
+	held chan struct{} // set: an embed of anything but the probe waits until it closes
+}
+
+// hold makes the embeds wait (the probe answers) until the returned release.
+func (f *fakeOllama) hold() (release func()) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	ch := make(chan struct{})
+	f.held = ch
+	return sync.OnceFunc(func() { close(ch) })
 }
 
 func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
@@ -504,7 +515,7 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": list})
 		case "/api/embed":
 			f.mu.Lock()
-			down := f.down
+			down, held := f.down, f.held
 			f.mu.Unlock()
 			if down {
 				http.Error(w, "usage limit", http.StatusTooManyRequests)
@@ -512,6 +523,13 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 			}
 			var req struct{ Input []string }
 			_ = json.NewDecoder(r.Body).Decode(&req)
+			if held != nil && !(len(req.Input) == 1 && req.Input[0] == "probe") {
+				select {
+				case <-held:
+				case <-r.Context().Done():
+					return
+				}
+			}
 			vecs := make([][]float32, len(req.Input))
 			for i := range vecs {
 				vecs[i] = []float32{1, 0, 0}
@@ -617,7 +635,7 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 	frac := qml.SpecValue{Kind: qml.SpecValueNumber, Raw: "1.5"}
 	s := qml.SpecValue{Kind: qml.SpecValueString, Raw: "x"}
 	// each list is one no command takes: a Host with no program would panic running any
-	bad := [][]qml.SpecValue{{b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}}
+	bad := [][]qml.SpecValue{{b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}, {s, s, s, s, b}}
 	for name, fn := range h.commands() {
 		for _, args := range bad {
 			if err := fn(args); err == nil {
@@ -1073,9 +1091,9 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 	})
 }
 
-// olderDaemon is a daemon of protocol 3 at sock: its hello refuses 4, admits 3, and answers a
-// probe with its number; sys.shutdown, admitted, stops it.
-func olderDaemon(t *testing.T, sock string) (stopped chan struct{}) {
+// otherDaemon is a daemon of protocol proto at sock: its hello refuses any other, admits proto, and
+// answers a probe with its number; sys.shutdown, admitted, stops it.
+func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{}) {
 	t.Helper()
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
@@ -1084,13 +1102,13 @@ func olderDaemon(t *testing.T, sock string) (stopped chan struct{}) {
 	ctx, cancel := context.WithCancel(context.Background())
 	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
 	srv.Handle("sys.hello", func(_ context.Context, req *golibrpc.Request) (any, error) {
-		reply := map[string]any{"protocol": int64(3), "version": "v-old", "pid": int64(os.Getpid())}
+		reply := map[string]any{"protocol": proto, "version": fmt.Sprintf("v-p%d", proto), "pid": int64(os.Getpid())}
 		m, _ := req.Params[0].(map[string]any)
 		switch p, declared := m["protocol"]; {
 		case !declared:
 			return reply, nil
-		case p != int64(3):
-			return nil, &golibrpc.Error{Code: rpc.CodeProtocolMismatch, Message: "protocol mismatch: client 4, server 3"}
+		case p != proto:
+			return nil, &golibrpc.Error{Code: rpc.CodeProtocolMismatch, Message: fmt.Sprintf("protocol mismatch: client %v, server %d", p, proto)}
 		}
 		req.Session.SetValue("hello", true)
 		return reply, nil
@@ -1118,7 +1136,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 	sock := filepath.Join(dir, "s.sock")
-	old := olderDaemon(t, sock)
+	old := otherDaemon(t, sock, rpc.Protocol-1)
 	var spawns atomic.Int32
 	sess := NewSession(sock, func() (string, error) {
 		if spawns.Add(1) > 1 {
@@ -1128,7 +1146,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 		return "", nil
 	})
 	r := runTUI(t, sess, Options{Installed: func() (string, error) { return "v2", nil }})
-	r.s.WaitForText(t, "the backend is autodoc v-old (protocol 3), older than this TUI")
+	r.s.WaitForText(t, fmt.Sprintf("the backend is autodoc v-p%d (protocol %d), older than this TUI", rpc.Protocol-1, rpc.Protocol-1))
 	onLoop(r, func() bool {
 		r.h.awaitExit = func(ctx context.Context, _ int64) bool {
 			select {
@@ -1143,11 +1161,76 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 	r.h.p.Post(r.h.startRestart)
 	r.s.WaitFor(t, "the question", func(sc string) bool {
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
-		return strings.Contains(text, "Restart the backend (autodoc v-old)?") && strings.Contains(text, "as autodoc v2")
+		return strings.Contains(text, fmt.Sprintf("Restart the backend (autodoc v-p%d)?", rpc.Protocol-1)) && strings.Contains(text, "as autodoc v2")
 	})
 	r.keys(t, key('y'))
-	r.s.WaitForText(t, "backend restarted: autodoc v-old → v2")
+	r.s.WaitForText(t, fmt.Sprintf("backend restarted: autodoc v-p%d → v2", rpc.Protocol-1))
 	if n := spawns.Load(); n != 1 {
 		t.Fatalf("%d daemons spawned, want the one", n)
+	}
+}
+
+// TestTheSpinnerTurnsWhileTheModelEmbeds: while the provider embeds, the status line's bar has a
+// spinner beside it that turns; a model switch shows the new model's fill and a red mark saying
+// the search is by words meanwhile; once the fill is done, the mark is green again.
+func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
+	ollama := newFakeOllama(t, "embedder", "other")
+	root := noteDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	d := startManaged(t, map[string]string{"kb": root})
+	ctx := context.Background()
+	if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	release := ollama.hold()
+	if _, err := r.h.session.Call(ctx, "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	frame := regexp.MustCompile(`embedding ([-\\|/]) ░+ 0/2`)
+	seen := map[string]bool{}
+	r.s.WaitFor(t, "the spinner turning", func(sc string) bool {
+		if m := frame.FindStringSubmatch(sc); m != nil {
+			seen[m[1]] = true
+		}
+		return len(seen) >= 2
+	})
+	release()
+	r.s.WaitFor(t, "embedder done", func(string) bool {
+		return r.semanticMark() == "green semantic search" && !strings.Contains(r.s.String(), "embedding ")
+	})
+	release = ollama.hold()
+	defer release()
+	if _, err := r.h.session.Call(ctx, "embedding.update", "local",
+		map[string]any{"name": "local", "kind": "ollama", "base_url": ollama.URL, "model": "other"}); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the switch on the status line", func(sc string) bool {
+		return r.semanticMark() == "red lexical search · switching models" && regexp.MustCompile(`switching to other [-\\|/] ░+ 0/2`).MatchString(sc)
+	})
+	release()
+	r.s.WaitFor(t, "other answering", func(sc string) bool {
+		return r.semanticMark() == "green semantic search" && !strings.Contains(sc, "switching to")
+	})
+}
+
+// TestANewerBackendSaysTheTUIIsOlder: a daemon of a newer protocol refuses this TUI, which says it
+// is the older one and offers no restart (it would start this, older, build).
+func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
+	dir, err := os.MkdirTemp("", "adn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	sock := filepath.Join(dir, "s.sock")
+	newer := otherDaemon(t, sock, rpc.Protocol+1)
+	r := runTUI(t, NewSession(sock, func() (string, error) { return "", errors.New("not in this test") }), Options{})
+	r.s.WaitForText(t, fmt.Sprintf("this TUI (protocol %d) is older than the backend", rpc.Protocol))
+	r.h.p.Post(r.h.startRestart)
+	r.s.WaitForText(t, "restart: not connected to a backend")
+	select {
+	case <-newer:
+		t.Fatal("the newer daemon was stopped")
+	default:
 	}
 }

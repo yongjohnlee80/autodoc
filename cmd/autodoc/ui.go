@@ -131,6 +131,11 @@ func installedVersion() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return versionOf(exe)
+}
+
+// versionOf is what the autodoc at exe says its version is.
+func versionOf(exe string) (string, error) {
 	out, err := exec.Command(exe, "--version").Output()
 	if err != nil {
 		return "", err
