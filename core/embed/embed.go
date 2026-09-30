@@ -106,20 +106,34 @@ const maxErrorBody = 512
 // Ollama embeds with an Ollama server's model.
 type Ollama struct {
 	meter
-	base   string
-	auth   http.Header // Ollama Cloud's key; nil for a local server
-	client *http.Client
-	model  Model
+	base    string
+	auth    http.Header // Ollama Cloud's key; nil for a local server
+	client  *http.Client
+	model   Model
+	context int // num_ctx sent with every request; 0 leaves the server's own
 }
+
+// OllamaOption configures an Ollama client.
+type OllamaOption func(*Ollama)
+
+// WithContext sends num_ctx with every request: the model's context window, in tokens. The
+// server loads the model at that size, so it decides the model's memory: left to the server's
+// default (OLLAMA_CONTEXT_LENGTH, or the model's own), an embedding model can take gigabytes more
+// than a section needs. It must be the same on every request, or the server reloads the model at
+// each change. A text longer than it is rejected (ErrRejected).
+func WithContext(tokens int) OllamaOption { return func(o *Ollama) { o.context = tokens } }
 
 // NewOllama returns the client of model name at base (http://localhost:11434, say). It asks the
 // server for the model's digest and embeds one probe text to learn its size, so a model the server
 // lacks fails here rather than at the first document.
-func NewOllama(ctx context.Context, base, key, name string, client *http.Client) (*Ollama, error) {
+func NewOllama(ctx context.Context, base, key, name string, client *http.Client, opts ...OllamaOption) (*Ollama, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	o := &Ollama{base: strings.TrimRight(base, "/"), client: client, model: Model{Provider: "ollama", Name: name}}
+	for _, opt := range opts {
+		opt(o)
+	}
 	var tags struct {
 		Models []struct{ Name, Model, Digest string } `json:"models"`
 	}
@@ -154,6 +168,9 @@ func (o *Ollama) Embed(ctx context.Context, texts []string) (vecs [][]float32, e
 	}
 	defer func() { o.report(len(texts), out.Tokens, err, start) }()
 	req := map[string]any{"model": o.model.Name, "input": texts}
+	if o.context > 0 {
+		req["options"] = map[string]any{"num_ctx": o.context}
+	}
 	if err := call(ctx, o.client, http.MethodPost, o.base+"/api/embed", o.auth, req, &out); err != nil {
 		return nil, err
 	}

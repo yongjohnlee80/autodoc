@@ -65,6 +65,7 @@ var publicErrs = []struct {
 	{store.ErrNoProvider, CodeNotFound, "no such embedding provider"},
 	{store.ErrProviderTaken, CodeConflict, "another embedding provider has this name"},
 	{store.ErrProviderInvalid, golibrpc.CodeInvalidParams, "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"},
+	{store.ErrContextRange, golibrpc.CodeInvalidParams, store.ErrContextRange.Error()[len("store: "):]},
 	{store.ErrProviderNeedsKey, golibrpc.CodeInvalidParams, "an Ollama Cloud provider needs its API key"},
 	{store.ErrSealed, CodeProviderRefused, "the store's keyslot does not open this provider's key"},
 	{store.ErrKeyslotExposed, CodeProviderRefused, "the store's keyslot file is readable by others: make it 0600"},

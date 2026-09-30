@@ -86,7 +86,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.providerKindChosen":      numberAndString("App.providerKindChosen", "a row and the base URL", h.providerKindChosen),
 		"App.listModels":              twoStrings("App.listModels", "the base URL and the key", h.listModels),
 		"App.pickModel":               oneNumber("App.pickModel", "a row", h.pickModel),
-		"App.saveProvider":            fourStrings("App.saveProvider", "a name, the base URL, the model and the key", h.saveProvider),
+		"App.saveProvider":            fiveStrings("App.saveProvider", "a name, the base URL, the model, the key and the context window", h.saveProvider),
 	}
 }
 
@@ -135,9 +135,9 @@ func oneNumber(name, what string, fn func(int)) decl.HandlerFunc {
 	}
 }
 
-func fourStrings(name, what string, fn func(a, b, c, d string)) decl.HandlerFunc {
+func fiveStrings(name, what string, fn func(a, b, c, d, e string)) decl.HandlerFunc {
 	return func(args []qml.SpecValue) error {
-		if len(args) != 4 {
+		if len(args) != 5 {
 			return fmt.Errorf("%s takes %s", name, what)
 		}
 		for _, a := range args {
@@ -145,7 +145,7 @@ func fourStrings(name, what string, fn func(a, b, c, d string)) decl.HandlerFunc
 				return fmt.Errorf("%s takes %s", name, what)
 			}
 		}
-		fn(args[0].Raw, args[1].Raw, args[2].Raw, args[3].Raw)
+		fn(args[0].Raw, args[1].Raw, args[2].Raw, args[3].Raw, args[4].Raw)
 		return nil
 	}
 }

@@ -3,10 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // THE EMBEDDING PROVIDERS — the Preferences dialog's list of them, the one in use, each one's
@@ -14,16 +16,16 @@ import (
 // is never shown again; the list says only whether a provider has one.
 
 // providerKind is one of the form's kinds: the store's name, how the form offers it, where it
-// usually is, and whether it takes a key.
+// usually is, whether it takes a key, and whether it is sent a context window (Ollama's num_ctx).
 type providerKind struct {
 	kind, label, base string
-	key               bool
+	key, window       bool
 }
 
 var providerKinds = []providerKind{
-	{"ollama", "Ollama (local)", embed.DefaultOllamaURL, false},
-	{"ollama-cloud", "Ollama Cloud", embed.DefaultOllamaCloudURL, true},
-	{"openai", "OpenAI-compatible", embed.DefaultOpenAIURL, true},
+	{"ollama", "Ollama (local)", embed.DefaultOllamaURL, false, true},
+	{"ollama-cloud", "Ollama Cloud", embed.DefaultOllamaCloudURL, true, true},
+	{"openai", "OpenAI-compatible", embed.DefaultOpenAIURL, true, false},
 }
 
 func kindIndex(kind string) int {
@@ -38,6 +40,7 @@ func kindIndex(kind string) int {
 // providerRow is a provider as the list and the form know it.
 type providerRow struct {
 	name, kind, base, model string
+	context                 int64 // the context window, in tokens
 	hasKey                  bool
 }
 
@@ -60,7 +63,7 @@ func (h *Host) loadProviders() {
 		for _, x := range asList(m["providers"]) {
 			p := asMap(x)
 			has, _ := p["has_key"].(bool)
-			rows = append(rows, providerRow{name: str(p, "name"), kind: str(p, "kind"), base: str(p, "base_url"), model: str(p, "model"), hasKey: has})
+			rows = append(rows, providerRow{name: str(p, "name"), kind: str(p, "kind"), base: str(p, "base_url"), model: str(p, "model"), context: num(p, "context"), hasKey: has})
 		}
 		return answer{rows: rows, active: str(m, "active"), error: str(m, "error")}
 	}, func(a answer) {
@@ -82,7 +85,12 @@ func (h *Host) loadProviders() {
 			if p.hasKey {
 				key = "sealed"
 			}
-			rows[i] = rowOf{"key": p.name, "use": use, "name": p.name, "kind": providerKinds[kindIndex(p.kind)].label, "model": p.model, "apiKey": key}
+			k := providerKinds[kindIndex(p.kind)]
+			window := "—"
+			if k.window {
+				window = strconv.FormatInt(p.context, 10)
+			}
+			rows[i] = rowOf{"key": p.name, "use": use, "name": p.name, "kind": k.label, "model": p.model, "context": window, "apiKey": key}
 		}
 		h.providers.Reset(rows)
 		status := "semantic search off: Add… a provider, then Use it"
@@ -252,7 +260,7 @@ func (h *Host) removeProviderConfirmed() {
 // startAddProvider opens the form for a new provider: a local Ollama, to begin with.
 func (h *Host) startAddProvider() {
 	h.editingProvider = ""
-	h.fillProviderForm("add an embedding provider", providerRow{kind: "ollama", base: embed.DefaultOllamaURL})
+	h.fillProviderForm("add an embedding provider", providerRow{kind: "ollama", base: embed.DefaultOllamaURL, context: store.DefaultContext})
 }
 
 // startEditProvider opens the form on provider i; its key is kept unless one is typed.
@@ -274,6 +282,11 @@ func (h *Host) fillProviderForm(title string, p providerRow) {
 	h.setField("App.providerBase", p.base)
 	h.setField("App.providerModel", p.model)
 	h.setField("App.providerKey", "")
+	window := p.context
+	if window <= 0 {
+		window = store.DefaultContext
+	}
+	h.setField("App.providerContext", strconv.FormatInt(window, 10))
 	h.showKeyField()
 	h.providerModels.Reset(nil)
 	h.set("App.providerModelsStatus", "List models asks the provider what it has")
@@ -290,6 +303,7 @@ func (h *Host) setField(name, text string) {
 // showKeyField shows the key field for a kind that takes one, saying what leaving it empty does.
 func (h *Host) showKeyField() {
 	k := providerKinds[h.formKind]
+	h.set("App.providerContextShown", k.window)
 	h.set("App.providerKeyShown", k.key)
 	switch {
 	case !k.key:
@@ -374,10 +388,20 @@ func (h *Host) pickModel(i int) {
 }
 
 // saveProvider adds the provider the form describes, or rewrites the one it edits. A refusal opens
-// the form again, saying why.
-func (h *Host) saveProvider(name, base, model, key string) {
+// the form again, saying why. The context window, for a kind sent one, is a number of tokens; left
+// empty it is the default.
+func (h *Host) saveProvider(name, base, model, key, window string) {
 	k := providerKinds[h.formKind]
 	spec := map[string]any{"name": strings.TrimSpace(name), "kind": k.kind, "base_url": strings.TrimSpace(base), "model": strings.TrimSpace(model)}
+	if w := strings.TrimSpace(window); k.window && w != "" {
+		n, err := strconv.ParseInt(w, 10, 64)
+		if err != nil {
+			h.set("App.providerFormError", fmt.Sprintf("not saved: the context window is a number of tokens (%d to %d), not %q", store.MinContext, store.MaxContext, w))
+			h.open("providerEdit")
+			return
+		}
+		spec["context"] = n
+	}
 	switch {
 	case !k.key:
 		spec["key"] = "" // a local Ollama keeps none

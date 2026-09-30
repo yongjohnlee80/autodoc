@@ -72,6 +72,8 @@ func (h *Host) state() map[string]any {
 		"App.providerKey":            "",
 		"App.providerKeyShown":       false,
 		"App.providerKeyLabel":       "",
+		"App.providerContext":        "",
+		"App.providerContextShown":   false,
 		"App.providerModels":         h.providerModels,
 		"App.providerModelsStatus":   "",
 		"App.providerRemoveQuestion": "",

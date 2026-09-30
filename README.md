@@ -225,11 +225,16 @@ between requests, so nothing builds up and nothing needs flushing. What matters 
 one section against the model's input limit (8,192 tokens for `nomic-embed-text`, 512 for
 `mxbai-embed-large`):
 
-- **Ollama truncates a text that is too long,** by default: the section is embedded from its start,
-  and its tail does not count toward its meaning. Nothing fails.
-- **A provider that refuses the text instead** (HTTP 400, 413 or 422) has it set aside: the indexer
-  narrows the batch to the one text refused and embeds the rest. The status shows it as refused,
-  and the section is still found by its words.
+- **A text longer than the model's context is refused** (HTTP 400, 413 or 422). Ollama refuses it
+  too, even when asked to truncate. The indexer narrows the batch to the one text refused, sets it
+  aside for an hour, and embeds the rest. The status shows it as refused, and the section is still
+  found by its words.
+- **An Ollama provider has a context window,** 8,192 tokens unless you change it in the provider's
+  form, and sent as `num_ctx` with every request. The server loads the model at that size, and the
+  size decides its memory: left to the server's own default (`OLLAMA_CONTEXT_LENGTH`, or the
+  model's full context), `qwen3-embedding:4b` took 12.4 GB of GPU memory at 40,960 tokens against
+  4.6 GB at 8,192. During a model switch the old and new model are loaded together, so both must
+  fit. A larger window admits longer sections, at that cost.
 - **Sections are split at headings,** so most are well under any limit.
 
 **Which model.** An embedding model, not a chat model. A chat model such as `gpt-oss-20b` produces
@@ -242,6 +247,7 @@ pull one of these:
 | `nomic-embed-text` | 8,192 tokens | small and fast; a good default |
 | `mxbai-embed-large` | 512 tokens | stronger, on shorter sections |
 | `snowflake-arctic-embed2` | 8,192 tokens | multilingual |
+| `qwen3-embedding:4b` | 40,960 tokens | strong; 2,560 dimensions, about 3× snowflake's time |
 
 They are small beside a chat model and run alongside one.
 

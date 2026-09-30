@@ -177,7 +177,7 @@ func (e *Embedding) build(ctx context.Context, info store.ProviderInfo, key stri
 		var p embed.Provider
 		var err error
 		if info.Kind == store.KindOllama || info.Kind == store.KindOllamaCloud {
-			p, err = embed.NewOllama(ctx, info.BaseURL, key, model, e.client)
+			p, err = embed.NewOllama(ctx, info.BaseURL, key, model, e.client, embed.WithContext(info.Context))
 		} else {
 			p, err = embed.NewOpenAI(ctx, info.BaseURL, key, model, e.client)
 		}
@@ -310,7 +310,7 @@ func (e *Embedding) UpdateProvider(ctx context.Context, name string, sp store.Pr
 	if sp.Key != nil {
 		key = *sp.Key
 	}
-	p, pf, err := e.build(ctx, store.ProviderInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model}, key)
+	p, pf, err := e.build(ctx, store.ProviderInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model, Context: sp.ContextWindow()}, key)
 	if err != nil {
 		return err
 	}

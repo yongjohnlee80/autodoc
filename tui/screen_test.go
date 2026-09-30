@@ -323,7 +323,8 @@ func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
 
 // TestTheProviderForm: Preferences › Add… offers the kinds; a local Ollama takes no key, Ollama
 // Cloud one (required); List models asks the provider, with the key typed, and Enter on one
-// writes it; Save keeps the provider, its key sealed and never on screen.
+// writes it; the context window starts at the default and takes a number; Save keeps the
+// provider, its key sealed and never on screen.
 func TestTheProviderForm(t *testing.T) {
 	var mu sync.Mutex
 	var auth []string
@@ -357,7 +358,14 @@ func TestTheProviderForm(t *testing.T) {
 	})
 	r.keys(t, tab(), decltest.Ctrl('u'))
 	r.keys(t, decltest.Type(ollama.URL)...)
-	r.keys(t, tab(), tab()) // past the model, to the key
+	r.keys(t, tab(), tab()) // past the model, to the context window: the default, to begin with
+	r.s.WaitForText(t, "context window")
+	if !strings.Contains(r.s.String(), "8192") {
+		t.Fatalf("the context window does not start at the default:\n%s", r.s)
+	}
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type("4096")...)
+	r.keys(t, tab()) // to the key
 	r.keys(t, decltest.Type("sekrit")...)
 	r.s.WaitForText(t, "••••••")
 	// a button's letter works where no field takes it: in the models' list
@@ -378,7 +386,7 @@ func TestTheProviderForm(t *testing.T) {
 		t.Fatalf("the key is on screen:\n%s", r.s)
 	}
 	info, sealed, err := d.db.ProviderWithKey(context.Background(), "cloud")
-	if err != nil || info.Kind != "ollama-cloud" || info.BaseURL != ollama.URL || info.Model != "nomic-embed-text" || sealed != "sekrit" {
+	if err != nil || info.Kind != "ollama-cloud" || info.BaseURL != ollama.URL || info.Model != "nomic-embed-text" || info.Context != 4096 || sealed != "sekrit" {
 		t.Fatalf("stored %+v, key kept %v, %v", info, sealed == "sekrit", err)
 	}
 
@@ -400,9 +408,16 @@ func TestTheProviderForm(t *testing.T) {
 	r.h.p.Post(func() { r.h.listModels(ollama.URL, "") })
 	r.s.WaitForText(t, "2 models")
 	mu.Lock()
-	defer mu.Unlock()
-	if last := auth[len(auth)-1]; last != "Bearer sekrit" {
+	last := auth[len(auth)-1]
+	mu.Unlock()
+	if last != "Bearer sekrit" {
 		t.Errorf("an edited provider's models were asked for with %q, not its stored key", last)
+	}
+	// a context window that is not a number is refused in the form, the store unchanged
+	r.h.p.Post(func() { r.h.saveProvider("cloud", ollama.URL, "nomic-embed-text", "", "lots") })
+	r.s.WaitForText(t, "the context window is a number of tokens")
+	if info, _, err := d.db.ProviderWithKey(context.Background(), "cloud"); err != nil || info.Context != 4096 {
+		t.Errorf("after the refused window: %+v, %v", info, err)
 	}
 }
 

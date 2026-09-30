@@ -51,6 +51,7 @@ type Provider struct {
 	ID                   int64
 	Name, Kind           string
 	BaseURL, Model       string
+	Context              int64 // the context window, in tokens (000003)
 	APIKey               []byte
 	CreatedAt, UpdatedAt int64
 }
@@ -64,6 +65,7 @@ const (
 	ProviderKind      ProviderField = "kind"
 	ProviderBaseURL   ProviderField = "base_url"
 	ProviderModel     ProviderField = "model"
+	ProviderContext   ProviderField = "context"
 	ProviderAPIKey    ProviderField = "api_key"
 	ProviderCreatedAt ProviderField = "created_at"
 	ProviderUpdatedAt ProviderField = "updated_at"
@@ -474,6 +476,7 @@ func newTables(c dao.DataConn) *tables {
 				ProviderKind:      col("embedding_provider", ProviderKind, func(p *Provider) any { return &p.Kind }),
 				ProviderBaseURL:   col("embedding_provider", ProviderBaseURL, func(p *Provider) any { return &p.BaseURL }),
 				ProviderModel:     col("embedding_provider", ProviderModel, func(p *Provider) any { return &p.Model }),
+				ProviderContext:   col("embedding_provider", ProviderContext, func(p *Provider) any { return &p.Context }),
 				ProviderAPIKey:    col("embedding_provider", ProviderAPIKey, func(p *Provider) any { return &p.APIKey }),
 				ProviderCreatedAt: col("embedding_provider", ProviderCreatedAt, func(p *Provider) any { return &p.CreatedAt }),
 				ProviderUpdatedAt: col("embedding_provider", ProviderUpdatedAt, func(p *Provider) any { return &p.UpdatedAt }),

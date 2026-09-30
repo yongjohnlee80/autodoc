@@ -41,10 +41,22 @@ var (
 	ErrProviderNeedsKey = errors.New("store: an ollama-cloud provider needs its API key")
 )
 
+// A provider's context window, in tokens: what one text sent to it may hold. An Ollama server
+// loads the model at this size (num_ctx), so it also decides the model's memory.
+const (
+	DefaultContext = 8192
+	MinContext     = 256
+	MaxContext     = 262144
+)
+
+// ErrContextRange is a context window outside MinContext and MaxContext.
+var ErrContextRange = fmt.Errorf("store: a provider's context window is %d to %d tokens", MinContext, MaxContext)
+
 // ProviderSpec is a provider as a client writes it. Key nil keeps the key the store holds; a
-// pointer to "" removes it.
+// pointer to "" removes it. Context 0 is DefaultContext.
 type ProviderSpec struct {
 	Name, Kind, BaseURL, Model string
+	Context                    int
 	Key                        *string
 }
 
@@ -52,17 +64,30 @@ type ProviderSpec struct {
 type ProviderInfo struct {
 	ID                         int64
 	Name, Kind, BaseURL, Model string
+	Context                    int
 	HasKey                     bool
 }
 
 func infoOf(p *Provider) ProviderInfo {
-	return ProviderInfo{ID: p.ID, Name: p.Name, Kind: p.Kind, BaseURL: p.BaseURL, Model: p.Model, HasKey: len(p.APIKey) > 0}
+	return ProviderInfo{ID: p.ID, Name: p.Name, Kind: p.Kind, BaseURL: p.BaseURL, Model: p.Model, Context: int(p.Context),
+		HasKey: len(p.APIKey) > 0}
+}
+
+// ContextWindow is the spec's context window in tokens, DefaultContext for none.
+func (sp ProviderSpec) ContextWindow() int {
+	if sp.Context == 0 {
+		return DefaultContext
+	}
+	return sp.Context
 }
 
 func (sp ProviderSpec) check() error {
 	if strings.TrimSpace(sp.Name) == "" || !knownKind(sp.Kind) ||
 		strings.TrimSpace(sp.Model) == "" {
 		return ErrProviderInvalid
+	}
+	if c := sp.ContextWindow(); c < MinContext || c > MaxContext {
+		return ErrContextRange
 	}
 	if u, err := url.Parse(sp.BaseURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return fmt.Errorf("%w: base URL %q: want an http or https URL", ErrProviderInvalid, sp.BaseURL)
@@ -97,7 +122,7 @@ func (s *Store) AddProvider(ctx context.Context, sp ProviderSpec) (ProviderInfo,
 	err := s.Write(ctx, func(tx *Tx) error {
 		now := time.Now().Unix()
 		id, err := tx.t.providers.On(tx.tx).Set(ProviderName, sp.Name).Set(ProviderKind, sp.Kind).
-			Set(ProviderBaseURL, sp.BaseURL).Set(ProviderModel, sp.Model).
+			Set(ProviderBaseURL, sp.BaseURL).Set(ProviderModel, sp.Model).Set(ProviderContext, int64(sp.ContextWindow())).
 			Set(ProviderCreatedAt, now).Set(ProviderUpdatedAt, now).Insert()
 		if err != nil {
 			return providerTaken(err)
@@ -142,7 +167,7 @@ func (s *Store) UpdateProvider(ctx context.Context, name string, sp ProviderSpec
 			return err
 		}
 		if err := tx.t.providers.On(tx.tx).With(ProviderID, p.ID).Set(ProviderName, sp.Name).Set(ProviderKind, sp.Kind).
-			Set(ProviderBaseURL, sp.BaseURL).Set(ProviderModel, sp.Model).
+			Set(ProviderBaseURL, sp.BaseURL).Set(ProviderModel, sp.Model).Set(ProviderContext, int64(sp.ContextWindow())).
 			Set(ProviderUpdatedAt, time.Now().Unix()).Update(); err != nil {
 			return providerTaken(err)
 		}
