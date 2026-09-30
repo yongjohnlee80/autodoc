@@ -941,6 +941,46 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	if p := onLoop(r, func() prefs { return r.h.prefs }); p.theme != "light" || p.keymap != "vim" {
 		t.Fatalf("an unknown theme or keymap changed the preferences: %+v", p)
 	}
+	// the page and the notifications, from the dialog's choosers
+	post(func() { r.h.setWrapIndex(1) }) // no
+	stored("tui.editor.wrap", "false")
+	post(func() { r.h.setLineNumbersIndex(0) }) // yes
+	stored("tui.editor.linenumbers", "true")
+	post(func() { r.h.setLineNumbersIndex(5) }) // no such row: nothing
+	post(func() { r.h.setToastCorner(indexOf(corners, "top-right")) })
+	stored("tui.toast.corner", "top-right")
+	post(func() { r.h.setToastSeconds(9) }) // row 9: ten seconds
+	stored("tui.toast.seconds", "10")
+	post(func() { r.h.setToastSeconds(10) }) // eleven: out of range, nothing
+	if p := onLoop(r, func() prefs { return r.h.prefs }); p.toastSeconds != 10 || !p.lineNumbers || p.wrap {
+		t.Fatalf("after the choosers: %+v", p)
+	}
+	// the menu bar shown, the toasts at the top keep its row clear; hidden, they take it
+	if m := onLoop(r, r.h.toastMargin); m != 0 {
+		t.Errorf("the menu bar hidden, the top margin is %d, want 0", m)
+	}
+	post(func() { r.h.toggleMenuBar() })
+	stored("tui.menu.autohide", "false")
+	if m := onLoop(r, r.h.toastMargin); m != 1 {
+		t.Errorf("the menu bar shown, the top margin is %d, want 1", m)
+	}
+}
+
+// TestThePreferencesAreReadWithTheirDefaults: what the store keeps is read over the defaults; a
+// value the TUI cannot use is the default's.
+func TestThePreferencesAreReadWithTheirDefaults(t *testing.T) {
+	p := prefsOf(map[string]any{"tui.editor.wrap": "false", "tui.editor.linenumbers": "true",
+		"tui.toast.corner": "top-left", "tui.toast.seconds": "7"})
+	if p.wrap || !p.lineNumbers || p.toastCorner != "top-left" || p.toastSeconds != 7 {
+		t.Fatalf("read %+v", p)
+	}
+	d := prefsOf(map[string]any{"tui.toast.corner": "middle", "tui.toast.seconds": "11"})
+	if !d.wrap || d.lineNumbers || d.toastCorner != "bottom-right" || d.toastSeconds != defaultToastSeconds {
+		t.Fatalf("unusable values: %+v, want the defaults", d)
+	}
+	if z := prefsOf(map[string]any{"tui.toast.seconds": "0"}); z.toastSeconds != defaultToastSeconds {
+		t.Errorf("zero seconds: %d", z.toastSeconds)
+	}
 }
 
 // semanticMark is the status line's semantic-search mark: the dot's colour, then the words after

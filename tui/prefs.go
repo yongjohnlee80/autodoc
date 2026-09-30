@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -114,7 +115,7 @@ func prefsOf(m map[string]any) prefs {
 	if s, ok := str(prefNumbers); ok {
 		p.lineNumbers = s == "true"
 	}
-	if s, ok := str(prefCorner); ok && indexOf(corners, s) >= 0 {
+	if s, ok := str(prefCorner); ok && slices.Contains(corners, s) {
 		p.toastCorner = s
 	}
 	if s, ok := str(prefSeconds); ok {
