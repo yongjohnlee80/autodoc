@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -316,6 +317,10 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 		return strings.Contains(sc, "hits (1)") && strings.Contains(sc, "semantic off") && strings.Contains(sc, "kestrel notes") &&
 			!strings.Contains(sc, "b/c.md")
 	})
+	// its relevance on the left of its row: first in the one retriever run
+	if !regexp.MustCompile(`100% +a\.md`).MatchString(r.s.String()) {
+		t.Errorf("the hit's relevance is not on its left:\n%s", r.s)
+	}
 	r.keys(t, enter())
 	r.waitNote(t, "a.md")
 	// the hit is the Birds section's text: the cursor opens on it, not on the note's first line

@@ -542,6 +542,15 @@ func TestAProviderInUse(t *testing.T) {
 	r.keys(t, key('u')) // the first row: local
 	r.s.WaitForText(t, "semantic search with local")
 	r.s.WaitFor(t, "the status line's green mark", func(string) bool { return r.semanticMark() == "green semantic search" })
+	// each Ollama provider's context window, in its column
+	r.s.WaitFor(t, "the context column", func(sc string) bool {
+		for _, row := range strings.Split(sc, "\n") {
+			if strings.Contains(row, "local") && strings.Contains(row, "embedder") && strings.Contains(row, "8192") {
+				return true
+			}
+		}
+		return false
+	})
 	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search" })
 	// its calls, metered and written every couple of seconds, under the list
 	r.s.WaitFor(t, "local's usage", func(sc string) bool {
@@ -557,7 +566,8 @@ func TestAProviderInUse(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the refused call", func(sc string) bool {
 		r.h.p.Post(func() { r.h.providerDetail(0) })
-		return strings.Contains(sc, "at the usage limit") && strings.Contains(sc, "rate limited")
+		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ") // wrapped: running text
+		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
 	r.s.WaitFor(t, "the mark red while the provider fails", func(string) bool {
 		return r.semanticMark() == "red lexical search · the provider is not answering"
@@ -836,7 +846,8 @@ func TestTheAIModelsSideBySide(t *testing.T) {
 	r.ready(t)
 	r.leader(t, 'a')
 	r.s.WaitFor(t, "both panes", func(sc string) bool {
-		return strings.Contains(sc, "embedding providers") && strings.Contains(sc, "usage and calls") && strings.Contains(sc, "no calls yet")
+		// "no calls" alone: the pane wraps the rest, and the panes' rows interleave
+		return strings.Contains(sc, "embedding providers") && strings.Contains(sc, "usage and calls") && strings.Contains(sc, "no calls")
 	})
 	if p, u := screenRow(r, "embedding providers"), screenRow(r, "usage and calls"); p != u {
 		t.Fatalf("the providers (row %d) and the usage (row %d) are not side by side:\n%s", p, u, r.s)

@@ -140,9 +140,16 @@ func TestSearchBoostsAfterFusion(t *testing.T) {
 	if base.Hits[0].Score != 1.0/61 || base.Hits[1].Score != 1.0/62 {
 		t.Errorf("base scores %v, %v; want 1/61, 1/62", base.Hits[0].Score, base.Hits[1].Score)
 	}
+	// relevance: first in the one retriever run is 1, second 61/62
+	if base.Hits[0].Relevance != 1 || math.Abs(base.Hits[1].Relevance-61.0/62) > 1e-12 {
+		t.Errorf("base relevance %v, %v; want 1, 61/62", base.Hits[0].Relevance, base.Hits[1].Relevance)
+	}
 	e.put("x.md", "[[b]]", "y.md", "[[b]] [[b]]", "z.md", "[[b]]") // three documents, four links
 	linked := e.search("heron", QueryOpts{})
 	eq(t, "linked first", paths(linked), []string{"b.md", "a.md"})
+	if linked.Hits[0].Relevance != 1 {
+		t.Errorf("a boost past first place: relevance %v, want 1 (capped)", linked.Hits[0].Relevance)
+	}
 	want := base.Hits[1].Score * (1 + 0.1*math.Log(4))
 	if got := linked.Hits[0].Score; math.Abs(got-want) > 1e-12 {
 		t.Errorf("linked score %v, want %v (three linking documents)", got, want)

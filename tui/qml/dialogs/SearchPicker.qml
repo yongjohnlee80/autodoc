@@ -1,5 +1,5 @@
 // SearchPicker.qml — Go › Search (Ctrl+G, /): the picker's layout. On the left the search, then its
-// hits, a section a row; on the right the note under the cursor, at that section, the search's
+// hits, a section a row, each with its relevance on the left; on the right the note under the cursor, at that section, the search's
 // words marked. Enter opens the hit, the cursor at its section; q closes, outside the field.
 // Ctrl+h/j/k/l move between the parts.
 Dialog {
@@ -29,6 +29,7 @@ Dialog {
                     model: App.hits
                     onCurrentIndexChanged: App.previewHit(index)
                     onActivated: App.openHit(index)
+                    TableViewColumn { role: "hit"; title: "HIT"; width: 4 }
                     TableViewColumn { role: "path"; title: "NOTE"; width: 0; elideMode: Tui.ElidePath }
                     TableViewColumn { role: "section"; title: "SECTION"; width: 22 }
                 }
