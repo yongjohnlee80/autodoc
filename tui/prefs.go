@@ -97,15 +97,27 @@ func prefsOf(m map[string]any) prefs {
 	return p
 }
 
+// panelLength is a side panel's share of the Window along its edge, centred: a panel at the left
+// or right takes 85% of the rows, one at the top or bottom 80% of the columns, so the page shows
+// around it rather than the panel filling the edge end to end.
+func panelLength(edge string) int {
+	if edge == "top" || edge == "bottom" {
+		return 80
+	}
+	return 85
+}
+
 // prefState is what the document reads of the preferences (the status line's is statusShown's).
 func prefState(p prefs) map[string]any {
 	return map[string]any{
-		"App.menuAutoHide": p.menuHidden,
-		"App.keyset":       keysetOf[p.keymap],
-		"App.keymapVim":    p.keymap == "vim",
-		"App.keymapText":   p.keymap == "text",
-		"App.explorerEdge": p.explorerEdge,
-		"App.linksEdge":    p.linkEdge,
+		"App.menuAutoHide":   p.menuHidden,
+		"App.keyset":         keysetOf[p.keymap],
+		"App.keymapVim":      p.keymap == "vim",
+		"App.keymapText":     p.keymap == "text",
+		"App.explorerEdge":   p.explorerEdge,
+		"App.linksEdge":      p.linkEdge,
+		"App.explorerLength": panelLength(p.explorerEdge),
+		"App.linksLength":    panelLength(p.linkEdge),
 		// the page: the ruler's columns of text, and its border, whose right edge is the first
 		// column past them (vim's colorcolumn at textwidth+1); the editor's guide marks that
 		// column too, so a line scrolled past the page's edge still shows where it is
@@ -158,6 +170,11 @@ func (h *Host) statusShown() bool { return h.prefs.statusOn || !h.connected }
 func (h *Host) setConnected(v bool) {
 	h.connected = v
 	h.set("App.statusShown", h.statusShown())
+	if !v {
+		// no daemon, no search: the mark returns with the first status after connecting
+		h.set("App.semanticMark", "")
+		h.set("App.semanticLabel", "")
+	}
 }
 
 // setPref changes one preference: on screen at once, and in the store.
