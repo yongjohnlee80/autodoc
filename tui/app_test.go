@@ -320,7 +320,7 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 	r.keys(t, decltest.Ctrl('g'))
 	r.s.WaitForText(t, "words; a * ends a prefix")
 	r.s.WaitForText(t, "search · lexical search") // no provider: its title says the search is by words
-	r.keys(t, decltest.Type("kestrel")...) // no Enter: the search runs as it is typed
+	r.keys(t, decltest.Type("kestrel")...)        // no Enter: the search runs as it is typed
 	r.s.WaitFor(t, "the hit, previewed", func(sc string) bool {
 		return strings.Contains(sc, "hits (1)") && strings.Contains(sc, "semantic off") && strings.Contains(sc, "kestrel notes") &&
 			!strings.Contains(sc, "b/c.md")
