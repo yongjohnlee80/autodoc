@@ -10,7 +10,11 @@ Dialog {
     standardButtons: Dialog.Ok | Dialog.Cancel
     defaultButton: Dialog.Ok
     helpText: App.findError
-    TextField { id: pattern; text: App.lastFind; placeholderText: "a word or phrase" }
+    Flex {
+        direction: Tui.Vertical
+        Text { text: "a word or phrase, case-blind" }
+        TextField { id: pattern; text: App.lastFind }
+    }
     onAccepted: App.find(pattern.text)
     onRejected: App.findCancelled()
 }
