@@ -101,7 +101,7 @@ names and saves it as a note. Everything else comes when it is asked for:
 
 | Key | Does |
 | --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any keymap and mode): a key runs its command (`e`, `l`, `/`, `o`, `k`, `,`, `a` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `k`, `,`, `a` …) |
 | `Ctrl+G`, `/` | search (`/` in Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, renames and deletes them |
@@ -110,10 +110,10 @@ names and saves it as a note. Everything else comes when it is asked for:
 
 **Options** is the menu for the editor:
 
-- **Keymap:** Vim (modal: `i` types, `Esc` goes back to Normal) or Text (modeless, an ordinary
+- **Editor mode:** Vim (modal: `i` types, `Esc` goes back to Normal) or Text (modeless, an ordinary
   text editor's keys). `SPC k` switches between them.
 - **Theme:** Dark, Light, Mono or Retro.
-- **Editor preferences…** (`SPC ,`): the keymap, the page's width (applied as it is typed), the
+- **Editor preferences…** (`SPC ,`): the editor mode, the page's width (applied as it is typed), the
   theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
 
 **System**, right of Options, is the menu for the backend:

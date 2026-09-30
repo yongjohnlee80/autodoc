@@ -174,6 +174,8 @@ func (h *Host) setConnected(v bool) {
 		// no daemon, no search: the mark returns with the first status after connecting
 		h.set("App.semanticMark", "")
 		h.set("App.semanticLabel", "")
+		h.set("App.semanticDetail", "")
+		h.set("App.searchTitle", "search")
 	}
 }
 
@@ -253,11 +255,11 @@ func (h *Host) setThemeIndex(i int) {
 // setKeymap switches the editor's keymap, and keeps it.
 func (h *Host) setKeymap(name string) {
 	if keysetOf[name] == "" {
-		h.setStatus("no keymap " + strconv.Quote(name))
+		h.setStatus("no editor mode " + strconv.Quote(name))
 		return
 	}
 	h.setPref(prefKeymap, name, func(p *prefs) { p.keymap = name })
-	h.setStatus("keymap: " + keymapLabels[indexOf(keymaps, name)])
+	h.setStatus("editor mode: " + keymapLabels[indexOf(keymaps, name)])
 }
 
 func (h *Host) setKeymapIndex(i int) {

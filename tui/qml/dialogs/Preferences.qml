@@ -10,30 +10,55 @@ Dialog {
     width: 90
     dim: false
     helpText: App.prefsError
-    // two columns: the editor on the left, the screen around it on the right
+    // two sections, each framed and titled: the editor on the left, the screen around it on the
+    // right; a column apart, a column inside each border, and a row between the settings
     Flex {
         direction: Tui.Horizontal
-        Flex {
-            direction: Tui.Vertical
+        Frame {
+            title: "editor"
             Layout.fillWidth: true
-            Text { text: "keymap" }
-            ComboBox { model: App.keymaps; textRole: "label"; currentIndex: App.keymapIndex; onActivated: App.setKeymapIndex(index) }
-            Text { text: "the page's width, in columns (40 to 400)" }
-            TextField { id: ruler; text: App.rulerText; onTextEdited: App.setRuler(text); onAccepted: App.setRuler(text) }
-            Text { text: "theme" }
-            ComboBox { model: App.themes; textRole: "label"; currentIndex: App.themeIndex; onActivated: App.setThemeIndex(index) }
+            Flex {
+                direction: Tui.Horizontal
+                Text { text: " " }
+                Flex {
+                    direction: Tui.Vertical
+                    Layout.fillWidth: true
+                    Text { text: "editor mode" }
+                    ComboBox { model: App.keymaps; textRole: "label"; currentIndex: App.keymapIndex; onActivated: App.setKeymapIndex(index) }
+                    Text { text: "" }
+                    Text { text: "page width, in columns (40–400)" }
+                    TextField { id: ruler; text: App.rulerText; onTextEdited: App.setRuler(text); onAccepted: App.setRuler(text) }
+                    Text { text: "" }
+                    Text { text: "theme" }
+                    ComboBox { model: App.themes; textRole: "label"; currentIndex: App.themeIndex; onActivated: App.setThemeIndex(index) }
+                }
+                Text { text: " " }
+            }
         }
-        Flex {
-            direction: Tui.Vertical
+        Text { text: " " }
+        Frame {
+            title: "screen"
             Layout.fillWidth: true
-            Text { text: "hide the menu bar (F10 or Alt+letter brings it up)" }
-            ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.menuHiddenIndex; onActivated: App.setMenuHiddenIndex(index) }
-            Text { text: "show the status line" }
-            ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.statusShownIndex; onActivated: App.setStatusShownIndex(index) }
-            Text { text: "the explorer opens from" }
-            ComboBox { model: App.edges; textRole: "label"; currentIndex: App.explorerEdgeIndex; onActivated: App.setExplorerEdge(index) }
-            Text { text: "the links open from" }
-            ComboBox { model: App.edges; textRole: "label"; currentIndex: App.linksEdgeIndex; onActivated: App.setLinksEdge(index) }
+            Flex {
+                direction: Tui.Horizontal
+                Text { text: " " }
+                Flex {
+                    direction: Tui.Vertical
+                    Layout.fillWidth: true
+                    Text { text: "hide the menu bar (F10 shows it)" }
+                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.menuHiddenIndex; onActivated: App.setMenuHiddenIndex(index) }
+                    Text { text: "" }
+                    Text { text: "show the status line" }
+                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.statusShownIndex; onActivated: App.setStatusShownIndex(index) }
+                    Text { text: "" }
+                    Text { text: "the explorer opens from" }
+                    ComboBox { model: App.edges; textRole: "label"; currentIndex: App.explorerEdgeIndex; onActivated: App.setExplorerEdge(index) }
+                    Text { text: "" }
+                    Text { text: "the links open from" }
+                    ComboBox { model: App.edges; textRole: "label"; currentIndex: App.linksEdgeIndex; onActivated: App.setLinksEdge(index) }
+                }
+                Text { text: " " }
+            }
         }
     }
     DialogButtonBox {

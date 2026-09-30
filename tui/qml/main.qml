@@ -45,7 +45,7 @@ Window {
 
     // ---- keys: they fire whichever widget has focus, when it leaves them ----
     // Space and Ctrl+h/j/k/l reach here from the page only in Vim's Normal mode: Insert mode, and
-    // the Text keymap, type them. Ctrl+Space is the leader in every keymap and mode.
+    // the Text editor mode, type them. Ctrl+Space is the leader in every editor mode.
     Shortcut { sequence: "Space"; onActivated: leader.open() }
     Shortcut { sequence: "Ctrl+Space"; onActivated: leader.open() }
     Shortcut { sequence: "Ctrl+H"; onActivated: App.movePane("h") }
@@ -97,7 +97,7 @@ Window {
         Menu {
             title: "&Options"
             Menu {
-                title: "&Keymap"
+                title: "Editor &mode"
                 // a shared group makes these a radio set, as editor-qml's are
                 MenuItem { text: "&1. Vim  (modal)";     group: "keymap"; checked: App.keymapVim;  onTriggered: App.setKeymap("vim") }
                 MenuItem { text: "&2. Text (modeless)";  group: "keymap"; checked: App.keymapText; onTriggered: App.setKeymap("text") }
@@ -155,9 +155,10 @@ Window {
         left: App.statusLeft
         center: App.statusCenter
         right: App.status
-        // semantic search: a green dot while it answers, a red one while the search is by words
-        Text { text: App.semanticMark; color: App.semanticDot }
-        Text { text: App.semanticLabel }
+        // semantic search, at the left end: a green dot while it answers, a red one while the
+        // search is by words
+        Text { text: App.semanticMark; color: App.semanticDot; StatusBar.permanent: false }
+        Text { text: App.semanticLabel; StatusBar.permanent: false }
     }
 
     // ---- the panels: drawers over the page, each from the edge its preference names ----

@@ -594,9 +594,12 @@ func TestAProviderInUse(t *testing.T) {
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
-	r.s.WaitFor(t, "the mark red while the provider fails", func(string) bool {
-		return r.semanticMark() == "red lexical search · the provider is not answering"
+	r.s.WaitFor(t, "the mark red while the provider fails, the dialog saying why", func(string) bool {
+		return r.semanticMark() == "red lexical search" && r.markAbove(1) == "red lexical search · the provider is not answering"
 	})
+	if snap := strings.Split(r.s.String(), "\n"); strings.Contains(snap[len(snap)-1], "not answering") {
+		t.Fatalf("the status line carries the reason, which the left segment needs the room for:\n%s", r.s)
+	}
 
 	// a provider that does not set up: refused, and local stays in use
 	r.h.p.Post(func() { r.h.useProvider(1) })
@@ -776,14 +779,14 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 	r.s.WaitForText(t, "c.md")
 }
 
-// TestTheOptionsMenu: the keymap, the theme and the editor's preferences are under Options; the AI
+// TestTheOptionsMenu: the editor mode, the theme and the editor's preferences are under Options; the AI
 // models and the backend's restart under System, right of Options; File keeps the note's commands.
 func TestTheOptionsMenu(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('o'))
 	r.s.WaitFor(t, "the Options menu", func(sc string) bool {
-		return strings.Contains(sc, "Keymap") && strings.Contains(sc, "Editor preferences…")
+		return strings.Contains(sc, "Editor mode") && strings.Contains(sc, "Editor preferences…")
 	})
 	if sc := r.s.String(); strings.Contains(sc, "AI models…") || strings.Contains(sc, "Restart backend…") {
 		t.Fatalf("Options still has the system's items:\n%s", sc)
@@ -795,7 +798,7 @@ func TestTheOptionsMenu(t *testing.T) {
 	r.keys(t, esc(), esc())
 	r.keys(t, decltest.Alt('s'))
 	r.s.WaitFor(t, "the System menu", func(sc string) bool {
-		return strings.Contains(sc, "AI models…") && strings.Contains(sc, "Restart backend…") && !strings.Contains(sc, "Keymap")
+		return strings.Contains(sc, "AI models…") && strings.Contains(sc, "Restart backend…") && !strings.Contains(sc, "Editor mode")
 	})
 	r.keys(t, key('a')) // AI models
 	r.s.WaitForText(t, "embedding providers")
@@ -816,7 +819,7 @@ func TestTheTextKeymap(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitNote(t, "a.md")
 	r.leader(t, 'k') // Vim to Text
-	r.s.WaitForText(t, "keymap: Text (modeless)")
+	r.s.WaitForText(t, "editor mode: Text (modeless)")
 	r.keys(t, decltest.Type("hi there ")...)
 	r.s.WaitFor(t, "typed with no i, the space a space", func(string) bool { return strings.HasPrefix(r.editorText(), "hi there ") })
 	r.keys(t, decltest.Ctrl(' '))
@@ -929,7 +932,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	post(func() { r.h.useTheme("paisley") })
 	r.s.WaitForText(t, `no theme "paisley"`)
 	post(func() { r.h.setKeymap("emacs") })
-	r.s.WaitForText(t, `no keymap "emacs"`)
+	r.s.WaitForText(t, `no editor mode "emacs"`)
 	if p := onLoop(r, func() prefs { return r.h.prefs }); p.theme != "light" || p.keymap != "vim" {
 		t.Fatalf("an unknown theme or keymap changed the preferences: %+v", p)
 	}
@@ -939,7 +942,15 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 // it ("green semantic search"); "" when the bottom row has no dot.
 func (r *running) semanticMark() string {
 	snap := r.s.Backend.Snapshot()
-	return markIn(snap[len(snap)-1], "")
+	m := markIn(snap[len(snap)-1], "")
+	// the mark sits at the left end, the segments after it: its words are one of the two labels
+	colour, rest, _ := strings.Cut(m, " ")
+	for _, label := range []string{"semantic search", "lexical search"} {
+		if rest == label || strings.HasPrefix(rest, label+" ") {
+			return colour + " " + label
+		}
+	}
+	return m
 }
 
 // markAbove is the AI models dialog's mark: the first row above the status line with a dot
@@ -1221,7 +1232,7 @@ func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "the switch on the status line", func(sc string) bool {
-		return r.semanticMark() == "red lexical search · switching models" && regexp.MustCompile(`switching to other [-\\|/] ░+ 0/2`).MatchString(sc)
+		return r.semanticMark() == "red lexical search" && regexp.MustCompile(`switching to other [-\\|/] ░+ 0/2`).MatchString(sc)
 	})
 	release()
 	r.s.WaitFor(t, "other answering", func(sc string) bool {
