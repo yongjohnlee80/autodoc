@@ -730,3 +730,68 @@ func TestInstalledVersionAsksTheBinary(t *testing.T) {
 		t.Error("an absent binary gave a version")
 	}
 }
+
+// TestCallPrintsTheResultAsJSON: --call dials the daemon, says hello, calls the verb with its JSON
+// parameters (integers as integers, an options map), and prints the result as JSON, a note's
+// content as text. A refusal is the daemon's code and message; parameters that are not a JSON
+// array are refused before anything is dialled.
+func TestCallPrintsTheResultAsJSON(t *testing.T) {
+	dir := short(t)
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "birds"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for p, body := range map[string]string{"birds/kestrel.md": "---\ntags: [raptor]\n---\n# Kestrel\n\nA small falcon that hovers.\n", "plan.md": "# Plan\n\nhover over the plan\n"} {
+		if err := os.WriteFile(filepath.Join(root, p), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sock := filepath.Join(dir, "a.sock")
+	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+root)
+	start(t, cfg, sock)
+	cli := dial(t, sock)
+	eventually(t, "both notes indexed", func() bool {
+		return call(t, cli, "index.status", "kb").(map[string]any)["docs"] == int64(2)
+	})
+	run := func(method, params string) (any, error) {
+		t.Helper()
+		var out bytes.Buffer
+		if err := runCall(context.Background(), cfg, method, params, &out); err != nil {
+			return nil, err
+		}
+		var v any
+		if err := json.Unmarshal(out.Bytes(), &v); err != nil {
+			t.Fatalf("%s printed no JSON: %v\n%s", method, err, out.String())
+		}
+		return v, nil
+	}
+	ws, err := run("workspace.list", "")
+	if err != nil || len(ws.([]any)) != 1 || ws.([]any)[0].(map[string]any)["name"] != "kb" {
+		t.Fatalf("workspace.list: %v, %v", ws, err)
+	}
+	// a path filter and a limit: the integer reaches the verb as one
+	res, err := run("search.query", `["kb", "hover*", {"limit": 5, "paths": ["birds"]}]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hits := res.(map[string]any)["hits"].([]any)
+	if len(hits) != 1 || hits[0].(map[string]any)["path"] != "birds/kestrel.md" {
+		t.Fatalf("search under birds/: %v", res)
+	}
+	if res, err = run("search.query", `["kb", "hover*", {"tags": ["raptor"]}]`); err != nil || len(res.(map[string]any)["hits"].([]any)) != 1 {
+		t.Fatalf("search tagged raptor: %v, %v", res, err)
+	}
+	doc, err := run("doc.read", `["kb", "plan.md"]`)
+	if err != nil || doc.(map[string]any)["content"] != "# Plan\n\nhover over the plan\n" {
+		t.Fatalf("doc.read: %v, %v", doc, err)
+	}
+	var ce *CallError
+	if _, err := run("search.query", `["nowhere", "x"]`); !errors.As(err, &ce) || ce.Code != rpc.CodeNoSuchWorkspace {
+		t.Errorf("a workspace the daemon lacks: %v, want its code", err)
+	}
+	for _, bad := range []string{`{"kb": 1}`, `["kb"`, `["kb"] ["x"]`} {
+		if _, err := run("workspace.list", bad); err == nil || !strings.Contains(err.Error(), "--call") {
+			t.Errorf("parameters %s: %v, want refused", bad, err)
+		}
+	}
+}

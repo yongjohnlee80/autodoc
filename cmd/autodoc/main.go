@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -25,9 +26,10 @@ func main() {
 	dev := flag.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
 	configPath := flag.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	showVersion := flag.Bool("version", false, "print the version")
+	call := flag.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
 	flag.Parse()
-	if flag.NArg() > 0 && !(*ui && flag.NArg() == 1) {
-		fmt.Fprintln(os.Stderr, "autodoc: unexpected arguments:", flag.Args(), "(only --ui takes one: a workspace's name, after the flags)")
+	if flag.NArg() > 0 && !((*ui || *call != "") && flag.NArg() == 1) {
+		fmt.Fprintln(os.Stderr, "autodoc: unexpected arguments:", flag.Args(), "(only --ui and --call take one: a workspace's name; the call's parameters)")
 		os.Exit(2)
 	}
 	switch {
@@ -38,6 +40,20 @@ func main() {
 		defer stop()
 		if err := runServe(ctx, *configPath, os.Stderr); err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintln(os.Stderr, "autodoc:", err)
+			stop()
+			os.Exit(1)
+		}
+	case *call != "":
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		if err := runCall(ctx, *configPath, *call, flag.Arg(0), os.Stdout); err != nil {
+			var ce *CallError
+			if errors.As(err, &ce) {
+				b, _ := json.Marshal(map[string]any{"error": ce})
+				fmt.Fprintln(os.Stderr, string(b))
+			} else {
+				fmt.Fprintln(os.Stderr, "autodoc:", err)
+			}
 			stop()
 			os.Exit(1)
 		}
