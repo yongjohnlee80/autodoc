@@ -87,6 +87,23 @@ func TestTheScreenIsThePageAlone(t *testing.T) {
 	r.s.WaitFor(t, "the menu bar away", func(sc string) bool { return !strings.Contains(sc, "File") })
 }
 
+// TestAMenuTitleIsClickedUnderTheToasts: a click on a menu bar title opens its menu while the
+// toasts are up. The toasts are an always-shown float over the whole screen, and its empty layer
+// took every click (Johno: "the autodoc mouse button on the menu not working anymore"); golib's
+// hit-testing now lets the pointer through a non-modal float wherever its content is not.
+func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}},
+		daemonOpts{prefs: map[string]string{"tui.menu.autohide": "false", "tui.status.shown": "true"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "connected — autodoc v-test") // a toast is up
+	r.s.WaitFor(t, "the menu bar", func(sc string) bool { return strings.Contains(strings.Split(sc, "\n")[0], "File") })
+	row := strings.Split(r.s.String(), "\n")[0]
+	x := len([]rune(row[:strings.Index(row, "File")])) + 1
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: 0},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: 0})
+	r.s.WaitForText(t, "New note")
+}
+
 // TestTheStatusLineShowsWhileDisconnected: the status line hidden by preference still shows while
 // the TUI is not connected, so a lost connection is never silent.
 func TestTheStatusLineShowsWhileDisconnected(t *testing.T) {
