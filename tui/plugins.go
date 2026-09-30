@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -62,6 +63,32 @@ const (
 
 var pluginName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
+// pluginAnchors are where a dialog may sit, as a manifest names them.
+var pluginAnchors = map[string]widget.Anchor{
+	"center": widget.Center, "top": widget.Top, "bottom": widget.Bottom, "left": widget.Left,
+	"right": widget.Right, "top-left": widget.TopLeft, "top-right": widget.TopRight,
+	"bottom-left": widget.BottomLeft, "bottom-right": widget.BottomRight,
+}
+
+const pluginAnchorNames = "center, top, bottom, left, right, top-left, top-right, bottom-left or bottom-right"
+
+// dialogSize is a manifest's height: a number of rows, or a percentage of the screen's ("80%").
+type dialogSize struct{ rows, pct int }
+
+func (d *dialogSize) UnmarshalTOML(v any) error {
+	switch x := v.(type) {
+	case int64:
+		d.rows = int(x)
+		return nil
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSuffix(x, "%")); err == nil && strings.HasSuffix(x, "%") && n >= 10 && n <= 100 {
+			d.pct = n
+			return nil
+		}
+	}
+	return fmt.Errorf("height %v: want rows, or a percentage from \"10%%\" to \"100%%\"", v)
+}
+
 // manifest is a plugin.toml.
 type manifest struct {
 	Name     string   `toml:"name"`
@@ -70,8 +97,14 @@ type manifest struct {
 	Protocol int      `toml:"protocol"`
 	Command  []string `toml:"command"`
 	Dialog   struct {
-		Width  int `toml:"width"`
-		Height int `toml:"height"`
+		Width  int        `toml:"width"`
+		Height dialogSize `toml:"height"` // rows, or "80%" of the screen's
+		// Placements are where it is designed to sit (pluginAnchors' names), the first its
+		// default; the user picks among them in Manage plugins…. ["center"] when unset.
+		Placements []string `toml:"placements"`
+		// Esc is what Esc does: "close" (the default), or "hide" for a plugin with its own quit —
+		// the dialog hides, the plugin is told (plugin.hide) and keeps running.
+		Esc string `toml:"esc"`
 	} `toml:"dialog"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv (plugininstall.go).
@@ -167,11 +200,27 @@ func readPlugin(dir string) *pluginEntry {
 	if m.Dialog.Width == 0 {
 		m.Dialog.Width = pluginWidth
 	}
-	if m.Dialog.Height == 0 {
-		m.Dialog.Height = pluginHeight
+	if m.Dialog.Height.rows == 0 && m.Dialog.Height.pct == 0 {
+		m.Dialog.Height.rows = pluginHeight
 	}
 	m.Dialog.Width = min(max(m.Dialog.Width, pluginMinW), pluginMaxW)
-	m.Dialog.Height = min(max(m.Dialog.Height, pluginMinH), pluginMaxH)
+	if m.Dialog.Height.pct == 0 {
+		m.Dialog.Height.rows = min(max(m.Dialog.Height.rows, pluginMinH), pluginMaxH)
+	}
+	if len(m.Dialog.Placements) == 0 {
+		m.Dialog.Placements = []string{"center"}
+	}
+	for _, p := range m.Dialog.Placements {
+		if _, ok := pluginAnchors[p]; !ok && e.reason == "" {
+			e.reason = fmt.Sprintf("placement %q: want %s", p, pluginAnchorNames)
+		}
+	}
+	if m.Dialog.Esc == "" {
+		m.Dialog.Esc = "close"
+	}
+	if m.Dialog.Esc != "close" && m.Dialog.Esc != "hide" && e.reason == "" {
+		e.reason = fmt.Sprintf("esc %q: want close or hide", m.Dialog.Esc)
+	}
 	return e
 }
 
@@ -199,7 +248,7 @@ func (h *Host) openPlugin(key string) {
 		return // "no plugins yet"
 	}
 	if r := h.running[key]; r != nil {
-		r.float.Show()
+		r.show()
 		return
 	}
 	i := slices.IndexFunc(h.pluginList, func(e pluginEntry) bool { return e.key() == key })
@@ -254,6 +303,8 @@ type pluginRun struct {
 	view  *pluginView
 
 	ready, closing bool
+	hidden         bool // Esc hid it (esc = "hide"): the plugin runs, told plugin.hide
+	opened         bool // plugin.open sent, at the dialog's first layout
 	// the deadlines, as they were when it started
 	handshake, grace, termGrace time.Duration
 
@@ -330,23 +381,67 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 	}
 	go r.sender()
 
-	r.view = &pluginView{run: r, w: e.m.Dialog.Width, h: e.m.Dialog.Height, sentW: e.m.Dialog.Width, sentH: e.m.Dialog.Height}
-	r.box = widget.NewBox(r.view, widget.WithTitle(e.label()+" · Esc closes"), widget.WithBorder(style.BorderRounded),
+	r.view = &pluginView{run: r, w: e.m.Dialog.Width, h: e.m.Dialog.Height.rows, fill: e.m.Dialog.Height.pct > 0}
+	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
 		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	r.float = widget.NewFloat(r.box, widget.WithModal(true), widget.WithAnchor(widget.Center))
+	opts := []widget.FloatOption{widget.WithModal(true), widget.WithAnchor(pluginAnchors[h.placement(e)])}
+	if pct := e.m.Dialog.Height.pct; pct > 0 {
+		opts = append(opts, widget.WithSizeFraction(0, pct))
+	}
+	r.float = widget.NewFloat(r.box, opts...)
 	host.Attach(r.float)
 	r.float.Show()
+	return r, nil
+}
 
+// opened is the dialog's first layout: plugin.open, with the size it was laid out at, and the
+// handshake's deadline from then.
+func (r *pluginRun) openAt(w, h int) {
+	r.opened = true
 	r.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: plugin.Protocol,
-		Width: e.m.Dialog.Width, Height: e.m.Dialog.Height, Theme: h.pluginTheme()}))
+		Width: w, Height: h, Theme: r.h.pluginTheme()}))
 	time.AfterFunc(r.handshake, func() {
-		h.p.Post(func() {
+		r.h.p.Post(func() {
 			if !r.ready && !r.closing {
 				r.close(fmt.Sprintf("did not answer in %s", r.handshake))
 			}
 		})
 	})
-	return r, nil
+}
+
+// title is the dialog's title, saying what Esc does.
+func (r *pluginRun) title(t string) string {
+	if r.e.m.Dialog.Esc == "hide" {
+		return t + " · Esc hides"
+	}
+	return t + " · Esc closes"
+}
+
+// hide is Esc under esc = "hide": the dialog goes, the plugin runs on, told so.
+func (r *pluginRun) hide() {
+	if r.hidden || r.closing {
+		return
+	}
+	r.hidden = true
+	r.float.Hide()
+	r.send(plugin.MethodHide, plugin.EmptyParams())
+}
+
+// show brings the dialog back: its Plugins menu entry, chosen again.
+func (r *pluginRun) show() {
+	r.float.Show()
+	if r.hidden {
+		r.hidden = false
+		r.send(plugin.MethodShow, plugin.EmptyParams())
+	}
+}
+
+// placement is where e's dialog sits: the user's choice among its placements, or its first.
+func (h *Host) placement(e pluginEntry) string {
+	if p := h.prefs.pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
+		return p
+	}
+	return e.m.Dialog.Placements[0]
 }
 
 // send queues a notification for the plugin. A plugin that has not read pluginQueue of them is not
@@ -412,7 +507,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 		}
 	case plugin.MethodTitle:
 		if t, err := plugin.ReadTitle(params); err == nil {
-			r.h.p.Post(func() { r.box.SetTitle(t + " · Esc closes") })
+			r.h.p.Post(func() { r.box.SetTitle(r.title(t)) })
 		}
 	case plugin.MethodHostClose:
 		r.h.p.Post(func() { r.close("") })
@@ -558,8 +653,9 @@ func runStyle(s plugin.Style) (style.Style, int) {
 type pluginView struct {
 	widget.Base
 	run          *pluginRun
-	w, h         int // the size the manifest asks for
-	sentW, sentH int // the size last told to the plugin: plugin.open's, then each resize's
+	w, h         int  // the size the manifest asks for
+	fill         bool // the height is the float's share of the screen ("80%"): take all of it
+	sentW, sentH int  // the size last told to the plugin: plugin.open's, then each resize's
 	laidW, laidH int
 }
 
@@ -571,14 +667,24 @@ func (v *pluginView) AcceptsFocus() bool { return true }
 func (v *pluginView) Layout(c tuicore.Constraints) tuicore.Size {
 	w := min(max(v.w, c.MinW), c.MaxW)
 	h := min(max(v.h, c.MinH), c.MaxH)
+	if v.fill {
+		h = c.MaxH
+	}
 	v.laidW, v.laidH = w, h
-	if ctx := v.Context(); ctx != nil && (w != v.sentW || h != v.sentH) {
+	if ctx := v.Context(); ctx != nil && (!v.run.opened || w != v.sentW || h != v.sentH) {
 		ctx.AfterLayout("plugin-resize", v.resized) // Layout itself sends nothing
 	}
 	return tuicore.Size{W: w, H: h}
 }
 
+// resized follows a layout: the first opens the plugin at the laid size, a later one that changed
+// it is plugin.resize.
 func (v *pluginView) resized() {
+	if !v.run.opened {
+		v.sentW, v.sentH = v.laidW, v.laidH
+		v.run.openAt(v.laidW, v.laidH)
+		return
+	}
 	if v.laidW == v.sentW && v.laidH == v.sentH {
 		return
 	}
@@ -618,7 +724,11 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		return false
 	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
-		v.run.close("")
+		if v.run.e.m.Dialog.Esc == "hide" {
+			v.run.hide()
+		} else {
+			v.run.close("")
+		}
 		return true
 	}
 	if k, ok := pluginKey(e); ok {

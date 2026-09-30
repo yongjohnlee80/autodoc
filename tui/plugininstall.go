@@ -11,6 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"maps"
+	"slices"
+
 	"github.com/BurntSushi/toml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -305,7 +308,7 @@ func (h *Host) loadManaged() {
 			if source == "" {
 				source = "local: put in the folder by hand"
 			}
-			rows[i] = tuidecl.Row{"key": m.e.dir, "name": m.e.label(), "commit": m.commit, "source": source}
+			rows[i] = tuidecl.Row{"key": m.e.dir, "name": m.e.label(), "place": h.placement(m.e), "commit": m.commit, "source": source}
 		}
 		h.managedPlugins.Reset(rows)
 	})
@@ -374,6 +377,35 @@ func fetchUpdate(ctx context.Context, m managedPlugin) (pluginChange, error) {
 		return pluginChange{}, fmt.Errorf("the fetched plugin is %q, not %q", next.Name, m.e.m.Name)
 	}
 	return pluginChange{update: true, dir: m.e.dir, m: next, url: m.source, commit: commit}, nil
+}
+
+// placePlugin is the manager's Place: the plugin under the cursor to the next placement its
+// manifest offers, kept as a preference, and moved at once when it is open.
+func (h *Host) placePlugin(i int) {
+	m, ok := h.managedRow(i)
+	if !ok {
+		return
+	}
+	places := m.e.m.Dialog.Placements
+	if len(places) < 2 {
+		h.set("App.pluginsHelp", fmt.Sprintf("%s is designed for %s only", m.e.label(), strings.Join(places, ", ")))
+		return
+	}
+	next := places[(slices.Index(places, h.placement(m.e))+1)%len(places)]
+	name := m.e.m.Name
+	h.setPref(prefPluginPrefix+name+prefPluginPlace, next, func(p *prefs) {
+		place := maps.Clone(p.pluginPlace)
+		if place == nil {
+			place = map[string]string{}
+		}
+		place[name] = next
+		p.pluginPlace = place
+	})
+	if r := h.running[name]; r != nil {
+		r.float.SetAnchor(pluginAnchors[next])
+	}
+	h.set("App.pluginsHelp", fmt.Sprintf("%s: %s", m.e.label(), next))
+	h.loadManaged()
 }
 
 // startRemovePlugin is the manager's Remove….

@@ -10,6 +10,7 @@
 //	                plugin.key {key, text, ctrl, alt, shift}
 //	                plugin.resize {width, height}
 //	                plugin.theme {theme}
+//	                plugin.hide {}, plugin.show {}                  esc = "hide": hidden, shown again
 //	                plugin.close {}                                 the last
 //	plugin → host   host.ready {protocol}                           the answer to plugin.open
 //	                host.frame {rows}                               the whole dialog, any time
@@ -37,6 +38,10 @@ const (
 	MethodResize = "plugin.resize"
 	MethodTheme  = "plugin.theme"
 	MethodClose  = "plugin.close"
+	// MethodHide and MethodShow are a dialog whose manifest says esc = "hide": Esc hid it, and
+	// its Plugins menu entry showed it again. A plugin may ignore them; it keeps running either way.
+	MethodHide = "plugin.hide"
+	MethodShow = "plugin.show"
 )
 
 // The notifications the plugin sends.

@@ -185,7 +185,10 @@ into the dialog, and it gets every key but Esc, which closes it. The first one i
 - **Yes, at my own risk** builds it and lists it in the Plugins menu. **No** throws the clone away.
 - It needs git, and whatever the plugin's build uses (Go, for autodoc-tetris).
 
-**Managing them.** **Plugins › Manage plugins…** lists each plugin with its source and commit.
+**Managing them.** **Plugins › Manage plugins…** lists each plugin with its source, commit and
+placement.
+- **Place** moves the plugin's dialog to the next placement it is designed for (Tetris: right or
+  left), and keeps the choice.
 - **Update…** fetches the source and asks the same question about the new commit's build.
 - **Remove…** deletes the plugin's directory.
 - A plugin put in the folder by hand is listed as local.

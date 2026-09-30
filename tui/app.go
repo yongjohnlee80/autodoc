@@ -200,7 +200,7 @@ func newHost(session *Session, opt Options) *Host {
 		managed:        tuidecl.NewListModel("key", "name", "state", "root"),
 		pluginOpt:      opt.Plugins,
 		pluginRows:     tuidecl.NewListModel("key", "label", "enabled"),
-		managedPlugins: tuidecl.NewListModel("key", "name", "commit", "source"),
+		managedPlugins: tuidecl.NewListModel("key", "name", "place", "commit", "source"),
 		running:        map[string]*pluginRun{}}
 	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
