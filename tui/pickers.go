@@ -22,7 +22,11 @@ import (
 type hit struct {
 	path, breadcrumb string
 	byteStart        int
+	relevance        float64 // 0 to 1: 1 is first in every retriever the search ran
 }
+
+// relevanceText is a hit's relevance as the list shows it, a percentage.
+func relevanceText(r float64) string { return fmt.Sprintf("%3.0f%%", 100*min(max(r, 0), 1)) }
 
 // searchLive runs the search as it is typed: the latest answers, an older one dropped.
 func (h *Host) searchLive(q string) {
@@ -52,7 +56,8 @@ func (h *Host) searchLive(q string) {
 		for _, x := range asList(m["hits"]) {
 			hm := asMap(x)
 			start, _ := hm["byte_start"].(int64)
-			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start)})
+			rel, _ := hm["relevance"].(float64)
+			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start), relevance: rel})
 		}
 		return answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic")}
 	}, func(a answer) {
@@ -66,7 +71,7 @@ func (h *Host) searchLive(q string) {
 		h.hitList = a.hits
 		rows := make([]rowOf, len(a.hits))
 		for i, x := range a.hits {
-			rows[i] = rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "path": x.path, "section": x.breadcrumb}
+			rows[i] = rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": x.breadcrumb}
 		}
 		h.hits.Reset(rows)
 		h.set("App.hitsTitle", fmt.Sprintf("hits (%d) · %s · semantic %s", len(a.hits), a.mode, a.semantic))

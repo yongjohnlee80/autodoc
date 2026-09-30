@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -175,7 +176,15 @@ func TestSemanticFindsWhatLexicalCannot(t *testing.T) {
 			t.Errorf("%s: used %q, semantic %q", c.mode, res.ModeUsed, res.Semantic)
 		}
 	}
-	eq(t, "both", via(e.query("zebra", QueryOpts{})), []string{"z.md lexical+semantic", "b.md semantic"})
+	both := e.query("zebra", QueryOpts{})
+	eq(t, "both", via(both), []string{"z.md lexical+semantic", "b.md semantic"})
+	// relevance over the two retrievers run: first in both is 1; second in one alone, (61/62)/2
+	if both.Hits[0].Relevance != 1 || math.Abs(both.Hits[1].Relevance-61.0/62/2) > 1e-12 {
+		t.Errorf("hybrid relevance %v, %v; want 1, %v", both.Hits[0].Relevance, both.Hits[1].Relevance, 61.0/62/2)
+	}
+	if got := e.query("zebra lion", QueryOpts{Mode: ModeSemantic}).Hits[0].Relevance; got != 1 {
+		t.Errorf("first in the one retriever a semantic search runs: relevance %v, want 1", got)
+	}
 	if e.activeModel() != p.Model().Fingerprint() {
 		t.Errorf("active model %q", e.activeModel())
 	}

@@ -58,8 +58,11 @@ type Hit struct {
 	Path, Breadcrumb, Snippet string
 	Generation                int64 // the document's, as index.changes reports it
 	ByteStart, ByteEnd        int
-	Score                     float64  // fused and boosted; comparable only within one Result
-	Via                       []string // the retrievers that found it
+	Score                     float64 // fused and boosted; comparable only within one Result
+	// Relevance is Score on a fixed scale, 0 to 1: 1 is first in every retriever the search ran
+	// (1/(rrfK+1) each), before boosts; boosts past it stay at 1.
+	Relevance float64
+	Via       []string // the retrievers that found it
 }
 
 // Result is search.query's answer: the hits, and what the search could use (ADR 0204 §4.4).
@@ -190,6 +193,16 @@ func (s *Store) searchIn(ctx context.Context, res Result, mode string, useSem bo
 		fused := fuse(lexical, semanticC)
 		if err := s.boost(tx, fused, words); err != nil {
 			return err
+		}
+		ran := 0
+		if mode != ModeSemantic {
+			ran++
+		}
+		if useSem {
+			ran++
+		}
+		for i := range fused {
+			fused[i].hit.Relevance = min(1, fused[i].hit.Score*float64(rrfK+1)/float64(max(ran, 1)))
 		}
 		sort.Slice(fused, func(i, j int) bool { return fused[i].before(fused[j]) })
 		perDoc := map[int64]int{}

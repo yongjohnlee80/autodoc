@@ -445,7 +445,7 @@ func resultMap(r index.Result) map[string]any {
 	for i, h := range r.Hits {
 		hits[i] = map[string]any{"path": h.Path, "breadcrumb": h.Breadcrumb, "snippet": h.Snippet,
 			"generation": h.Generation, "byte_start": int64(h.ByteStart), "byte_end": int64(h.ByteEnd),
-			"score": h.Score, "via": strs(h.Via)}
+			"score": h.Score, "relevance": h.Relevance, "via": strs(h.Via)}
 	}
 	out := map[string]any{"hits": hits, "mode_used": r.ModeUsed, "semantic": r.Semantic}
 	if r.SemanticError != "" {

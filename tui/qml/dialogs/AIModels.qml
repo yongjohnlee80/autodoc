@@ -9,7 +9,7 @@ Dialog {
     dim: false
     Split {
         orientation: Tui.Horizontal
-        ratio: 0.5
+        ratio: 0.6
         Frame {
             title: App.providersTitle
             Flex {
@@ -23,11 +23,11 @@ Dialog {
                     onCurrentIndexChanged: App.showProvider(index)
                     onActivated: App.startEditProvider(index)
                     TableViewColumn { role: "use"; title: ""; width: 2 }
-                    TableViewColumn { role: "name"; title: "NAME"; width: 14 }
-                    TableViewColumn { role: "kind"; title: "KIND"; width: 17 }
+                    TableViewColumn { role: "name"; title: "NAME"; width: 12 }
+                    TableViewColumn { role: "kind"; title: "KIND"; width: 15 }
                     TableViewColumn { role: "model"; title: "MODEL"; width: 0 }
-                    TableViewColumn { role: "context"; title: "CONTEXT"; width: 8 }
-                    TableViewColumn { role: "apiKey"; title: "KEY"; width: 7 }
+                    TableViewColumn { role: "context"; title: "CONTEXT"; width: 7 }
+                    TableViewColumn { role: "apiKey"; title: "KEY"; width: 6 }
                 }
                 // semantic search's state, as the status line shows it
                 Flex {
