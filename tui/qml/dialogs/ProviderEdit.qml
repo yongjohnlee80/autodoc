@@ -1,6 +1,6 @@
 // ProviderEdit.qml — an embedding provider, added or edited: its name, its kind (which fills in
-// where it usually is), its base URL, its model — one the provider lists, or typed — and its API
-// key, for a kind that takes one. A key is sealed in the store and never shown again. A refusal
+// where it usually is), its base URL, its model — one the provider lists, or typed — its context
+// window, for an Ollama kind, and its API key, for a kind that takes one. A key is sealed in the store and never shown again. A refusal
 // opens it again with the reason on its help line.
 Dialog {
     closeOnQ: false
@@ -24,6 +24,8 @@ Dialog {
             TextField { id: pBase; text: App.providerBase }
             Text { text: "model" }
             TextField { id: pModel; text: App.providerModel; placeholderText: "an embedding model: nomic-embed-text, say" }
+            Text { text: "context window (tokens; the model's memory grows with it)"; visible: App.providerContextShown }
+            TextField { id: pContext; text: App.providerContext; visible: App.providerContextShown }
             Text { text: App.providerKeyLabel; visible: App.providerKeyShown }
             TextField { id: pKey; text: App.providerKey; echoMode: TextInput.Password; visible: App.providerKeyShown }
         }
@@ -49,5 +51,5 @@ Dialog {
         Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
         Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
-    onAccepted: App.saveProvider(pName.text, pBase.text, pModel.text, pKey.text)
+    onAccepted: App.saveProvider(pName.text, pBase.text, pModel.text, pKey.text, pContext.text)
 }

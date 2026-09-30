@@ -198,6 +198,39 @@ func TestAProviderIsCheckedAtTheDoor(t *testing.T) {
 	}
 }
 
+// TestAProviderKeepsItsContextWindow: a provider given no context window has the default, one
+// given a window keeps it through a listing and an update, and a window out of range is refused
+// with nothing written.
+func TestAProviderKeepsItsContextWindow(t *testing.T) {
+	ctx := context.Background()
+	s := openAt(t, filepath.Join(t.TempDir(), "autodoc.db"))
+	sp := ProviderSpec{Name: "local", Kind: KindOllama, BaseURL: "http://localhost:11434", Model: "m"}
+	if info, err := s.AddProvider(ctx, sp); err != nil || info.Context != DefaultContext {
+		t.Fatalf("added with none: %+v, %v, want the default %d", info, err, DefaultContext)
+	}
+	sp.Context = 32768
+	if err := s.UpdateProvider(ctx, "local", sp); err != nil {
+		t.Fatal(err)
+	}
+	if info, _, err := s.ProviderWithKey(ctx, "local"); err != nil || info.Context != 32768 {
+		t.Fatalf("after the update: %+v, %v, want 32768", info, err)
+	}
+	for _, n := range []int{-1, MinContext - 1, MaxContext + 1} {
+		sp.Context = n
+		if err := s.UpdateProvider(ctx, "local", sp); !errors.Is(err, ErrContextRange) {
+			t.Errorf("window %d: %v, want ErrContextRange", n, err)
+		}
+		other := ProviderSpec{Name: "other", Kind: KindOllama, BaseURL: "http://x", Model: "m", Context: n}
+		if _, err := s.AddProvider(ctx, other); !errors.Is(err, ErrContextRange) {
+			t.Errorf("added with window %d: %v, want ErrContextRange", n, err)
+		}
+	}
+	ps, err := s.Providers(ctx)
+	if err != nil || len(ps) != 1 || ps[0].Context != 32768 {
+		t.Errorf("after the refusals: %+v, %v, want local alone at 32768", ps, err)
+	}
+}
+
 // TestAnOllamaCloudProviderNeedsItsKey: added without one it is refused, and nothing is kept;
 // with one it is kept; an update removing the key is refused and the key stays.
 func TestAnOllamaCloudProviderNeedsItsKey(t *testing.T) {

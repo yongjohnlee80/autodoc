@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,8 +21,18 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// ollama is a fake Ollama server with the models named.
-type ollama struct{ *httptest.Server }
+// ollama is a fake Ollama server with the models named, recording each embed request's num_ctx.
+type ollama struct {
+	*httptest.Server
+	mu     sync.Mutex
+	numCtx []int
+}
+
+func (o *ollama) contexts() []int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]int(nil), o.numCtx...)
+}
 
 func newOllama(t *testing.T, models ...string) *ollama {
 	o := &ollama{}
@@ -34,8 +45,16 @@ func newOllama(t *testing.T, models ...string) *ollama {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": list})
 		case "/api/embed":
-			var req struct{ Input []string }
+			var req struct {
+				Input   []string
+				Options struct {
+					NumCtx int `json:"num_ctx"`
+				}
+			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
+			o.mu.Lock()
+			o.numCtx = append(o.numCtx, req.Options.NumCtx)
+			o.mu.Unlock()
 			vecs := make([][]float32, len(req.Input))
 			for i := range vecs {
 				vecs[i] = []float32{1, 0, 0}
@@ -154,6 +173,35 @@ func TestAnEditThatDoesNotSetUpChangesNothing(t *testing.T) {
 	}
 	if e.current() != "a2" || live(m) == was || preference(t, db) != "a2" {
 		t.Errorf("after the rename: in use %q, preference %q", e.current(), preference(t, db))
+	}
+}
+
+// TestTheProviderSendsItsContextWindow: a provider set up asks its server for the context window
+// stored with it (the default for one given none), and an edit to the window in use sets up at the
+// new size, so the server loads the model small enough to share the GPU during a switch.
+func TestTheProviderSendsItsContextWindow(t *testing.T) {
+	o := newOllama(t, "embedder")
+	e, _, _ := embedding(t, o)
+	ctx := context.Background()
+	if err := e.Use(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if got := o.contexts(); len(got) == 0 || got[len(got)-1] != store.DefaultContext {
+		t.Fatalf("num_ctx sent %v, want the default %d", got, store.DefaultContext)
+	}
+	n := len(o.contexts())
+	if err := e.UpdateProvider(ctx, "a", store.ProviderSpec{Name: "a", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder", Context: 2048}); err != nil {
+		t.Fatal(err)
+	}
+	got := o.contexts()[n:]
+	if len(got) == 0 {
+		t.Fatal("the edit set nothing up")
+	}
+	for _, c := range got {
+		if c != 2048 {
+			t.Errorf("num_ctx after the edit %v, want 2048 on each", got)
+			break
+		}
 	}
 }
 

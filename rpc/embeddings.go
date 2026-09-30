@@ -31,11 +31,12 @@ func WithEmbeddings(e Embeddings) Option { return func(o *options) { o.embedding
 var errNoEmbeddings = errors.New("rpc: this server keeps no embedding providers")
 
 func providerMap(p store.ProviderInfo) map[string]any {
-	return map[string]any{"name": p.Name, "kind": p.Kind, "base_url": p.BaseURL, "model": p.Model, "has_key": p.HasKey}
+	return map[string]any{"name": p.Name, "kind": p.Kind, "base_url": p.BaseURL, "model": p.Model, "context": int64(p.Context), "has_key": p.HasKey}
 }
 
-// specOf reads a provider as a client writes it: name, kind, base_url and model, and key, which
-// absent keeps the key the store holds, and "" removes it.
+// specOf reads a provider as a client writes it: name, kind, base_url and model; context, the
+// context window in tokens, which absent is the default; and key, which absent keeps the key the
+// store holds, and "" removes it.
 func specOf(v any) (store.ProviderSpec, error) {
 	m, ok := v.(map[string]any)
 	if !ok {
@@ -50,6 +51,16 @@ func specOf(v any) (store.ProviderSpec, error) {
 			}
 			*dst = s
 		}
+	}
+	if _, ok := m["context"]; ok {
+		n, err := argInt([]any{m["context"]}, 0, "context")
+		if err != nil {
+			return sp, err
+		}
+		if n < 0 || n > store.MaxContext { // the store checks the range; this keeps int() exact
+			return sp, store.ErrContextRange
+		}
+		sp.Context = int(n)
 	}
 	if x, ok := m["key"]; ok {
 		s, ok := x.(string)

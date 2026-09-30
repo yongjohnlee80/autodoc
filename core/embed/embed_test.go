@@ -18,6 +18,7 @@ import (
 type server struct {
 	mu       sync.Mutex
 	inputs   [][]string
+	numCtx   []int // each embed request's options.num_ctx; 0 for none
 	auth     []string
 	dims     int
 	status   int // non-zero: every embed answers this
@@ -45,8 +46,11 @@ func (s *server) handler() http.Handler {
 	})
 	embed := func(w http.ResponseWriter, r *http.Request, openai bool) {
 		var req struct {
-			Model string   `json:"model"`
-			Input []string `json:"input"`
+			Model   string   `json:"model"`
+			Input   []string `json:"input"`
+			Options struct {
+				NumCtx int `json:"num_ctx"`
+			} `json:"options"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -54,6 +58,7 @@ func (s *server) handler() http.Handler {
 		}
 		s.mu.Lock()
 		s.inputs = append(s.inputs, req.Input)
+		s.numCtx = append(s.numCtx, req.Options.NumCtx)
 		s.auth = append(s.auth, r.Header.Get("Authorization"))
 		status, wrong := s.status, s.wrongLen
 		s.mu.Unlock()
@@ -112,6 +117,9 @@ func TestOllama(t *testing.T) {
 	}
 	if !reflect.DeepEqual(s.inputs, [][]string{{"probe"}, {"a", "bcd"}}) {
 		t.Errorf("requests %q", s.inputs)
+	}
+	if !reflect.DeepEqual(s.numCtx, []int{0, 0}) {
+		t.Errorf("num_ctx without WithContext: %v, want none sent", s.numCtx)
 	}
 	if _, err := NewOllama(ctx, ts.URL, "", "missing", nil); err == nil || !strings.Contains(err.Error(), `no model "missing"`) {
 		t.Errorf("a model the server lacks: %v", err)
@@ -282,5 +290,24 @@ func TestAnOllamaWithAKeySendsIt(t *testing.T) {
 		if a != "" {
 			t.Fatalf("a local server's request %d went with %q, want none", i, a)
 		}
+	}
+}
+
+// TestOllamaSendsItsContextWindow: WithContext's num_ctx rides every request, the probe with the
+// rest, so the server loads the model once, at that size.
+func TestOllamaSendsItsContextWindow(t *testing.T) {
+	s := &server{dims: 4}
+	ts := httptest.NewServer(s.handler())
+	defer ts.Close()
+	ctx := context.Background()
+	o, err := NewOllama(ctx, ts.URL, "", "embedder", nil, WithContext(8192))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Embed(ctx, []string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(s.numCtx, []int{8192, 8192}) {
+		t.Errorf("num_ctx per request %v, want 8192 on the probe and the embed", s.numCtx)
 	}
 }

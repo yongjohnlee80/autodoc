@@ -26,6 +26,7 @@ Dialog {
                     TableViewColumn { role: "name"; title: "NAME"; width: 14 }
                     TableViewColumn { role: "kind"; title: "KIND"; width: 17 }
                     TableViewColumn { role: "model"; title: "MODEL"; width: 0 }
+                    TableViewColumn { role: "context"; title: "CONTEXT"; width: 8 }
                     TableViewColumn { role: "apiKey"; title: "KEY"; width: 7 }
                 }
                 Text { text: App.providersStatus; wrapMode: Tui.WordWrap }
