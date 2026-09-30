@@ -53,6 +53,7 @@ type Session struct {
 	client  *golibrpc.Client
 	gen     uint64
 	version string
+	pid     int64 // the daemon's process, as its hello said
 }
 
 // NewSession is the session to the daemon on the unix socket addr. spawn, when not nil, starts the
@@ -109,8 +110,9 @@ func (s *Session) Connect(ctx context.Context) error {
 	}
 	m, _ := res.(map[string]any)
 	v, _ := m["version"].(string)
+	pid, _ := m["pid"].(int64)
 	s.mu.Lock()
-	s.client, s.version = cli, v
+	s.client, s.version, s.pid = cli, v, pid
 	s.mu.Unlock()
 	return nil
 }
@@ -135,6 +137,17 @@ func (s *Session) Gen() uint64 {
 	defer s.mu.Unlock()
 	return s.gen
 }
+
+// PID is the daemon's process, as its hello said; 0 before one answered.
+func (s *Session) PID() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pid
+}
+
+// CanSpawn is whether this session starts a daemon when none answers: what a restart needs to
+// bring one back.
+func (s *Session) CanSpawn() bool { return s.spawn != nil }
 
 // Version is the daemon's, as its hello said.
 func (s *Session) Version() string {

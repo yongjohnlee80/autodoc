@@ -59,7 +59,8 @@ func runUI(ctx context.Context, configPath, dev, workspace string) error {
 		Dev:       dev,
 		Workspace: workspace,
 		// a convenience for the next start: nothing depends on it being written
-		Remember: func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
+		Remember:  func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
+		Installed: installedVersion,
 	})
 	if err != nil {
 		return err
@@ -121,4 +122,22 @@ func spawnServe(configPath, stateDir string) (string, error) {
 		_ = f.Close()
 	}()
 	return logPath, nil
+}
+
+// installedVersion is the version of the autodoc a restart starts: the binary at this one's path,
+// asked afresh, since an update replaces it while the TUI runs.
+func installedVersion() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	out, err := exec.Command(exe, "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	v, ok := strings.CutPrefix(strings.TrimSpace(string(out)), "autodoc ")
+	if !ok {
+		return "", fmt.Errorf("autodoc --version said %q", out)
+	}
+	return v, nil
 }

@@ -79,6 +79,7 @@ Window {
             MenuItem { text: "&Open note…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
+            MenuItem { text: "Restart &backend…"; onTriggered: App.startRestart() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
@@ -212,6 +213,7 @@ Window {
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
+    RestartBackend { id: restartBackend }
     ConfirmQuit { id: confirmQuit }
     Leader { id: leader }
     Help { id: help }
