@@ -14,44 +14,53 @@ import (
 // next GC — the pipe the host reads frames from, which ended every plugin some seconds in.
 var keptStdout *os.File
 
-// stdio is the plugin's end of the link: duplicates of its stdin and stdout, close-on-exec, made
-// non-blocking so the runtime's poller takes them (the link's writes carry deadlines), and owned by
-// the link alone — no other *os.File holds these descriptors, so nothing else closes them. After
-// it, os.Stdout is os.Stderr: stdout is the protocol's, and a stray print would break it.
+// stdio is the plugin's end of the link, over its stdin and stdout (stdioOf). After it, os.Stdout
+// is os.Stderr: stdout is the protocol's, and a stray print would break it.
 func stdio() (net.Conn, error) {
-	if fi, err := os.Stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
-		return nil, errors.New("plugin: stdin is a terminal; a plugin runs under AutoDoc, from its Plugins menu")
-	}
-	in, err := dupCloexec(0)
+	conn, err := stdioOf(os.Stdin, 0, 1)
 	if err != nil {
 		return nil, err
-	}
-	out, err := dupCloexec(1)
-	if err != nil {
-		syscall.Close(in)
-		return nil, err
-	}
-	for _, fd := range []int{in, out} {
-		if err := syscall.SetNonblock(fd, true); err != nil {
-			syscall.Close(in)
-			syscall.Close(out)
-			return nil, err
-		}
 	}
 	keptStdout = os.Stdout
 	os.Stdout = os.Stderr
-	return FileConn(os.NewFile(uintptr(in), "plugin-in"), os.NewFile(uintptr(out), "plugin-out")), nil
+	return conn, nil
 }
 
-// dupCloexec duplicates fd, close-on-exec, under the fork lock: a process the plugin starts does
-// not inherit the protocol's pipes.
-func dupCloexec(fd int) (int, error) {
-	syscall.ForkLock.RLock()
-	defer syscall.ForkLock.RUnlock()
-	nfd, err := syscall.Dup(fd)
-	if err != nil {
-		return -1, err
+// stdioOf is a link over duplicates of the descriptors in and out, close-on-exec, made
+// non-blocking so the runtime's poller takes them (the link's writes carry deadlines), and owned by
+// the link alone: no other *os.File holds them, so nothing else closes them. stdin, a terminal, is
+// refused: a plugin runs under AutoDoc.
+func stdioOf(stdin *os.File, in, out int) (net.Conn, error) {
+	if fi, err := stdin.Stat(); err == nil && fi.Mode()&os.ModeCharDevice != 0 {
+		return nil, errors.New("plugin: stdin is a terminal; a plugin runs under AutoDoc, from its Plugins menu")
 	}
-	syscall.CloseOnExec(nfd)
-	return nfd, nil
+	r, err := dupPollable(in, "plugin-in")
+	if err != nil {
+		return nil, err
+	}
+	w, err := dupPollable(out, "plugin-out")
+	if err != nil {
+		r.Close()
+		return nil, err
+	}
+	return FileConn(r, w), nil
+}
+
+// dupPollable duplicates fd, close-on-exec under the fork lock (a process the plugin starts does
+// not inherit the protocol's pipes), non-blocking, as a file of its own.
+func dupPollable(fd int, name string) (*os.File, error) {
+	syscall.ForkLock.RLock()
+	nfd, err := syscall.Dup(fd)
+	if err == nil {
+		syscall.CloseOnExec(nfd)
+	}
+	syscall.ForkLock.RUnlock()
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.SetNonblock(nfd, true); err != nil {
+		syscall.Close(nfd)
+		return nil, err
+	}
+	return os.NewFile(uintptr(nfd), name), nil
 }

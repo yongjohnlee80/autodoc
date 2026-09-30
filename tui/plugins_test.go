@@ -528,6 +528,45 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	}
 }
 
+// TestAStoredPlacementIsReadAtStart: the placement kept in the store is the dialog's from the
+// start; one the manifest does not offer is ignored, and the first it offers is used.
+func TestAStoredPlacementIsReadAtStart(t *testing.T) {
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "side", "echo", 30, 6)
+	appendManifest(t, dir, "side", "placements = [\"right\", \"left\"]\n")
+	installTestPlugin(t, dir, "odd", "echo", 30, 6)
+	appendManifest(t, dir, "odd", "placements = [\"right\", \"left\"]\n")
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
+		"tui.status.shown": "true", "tui.plugin.side.placement": "left", "tui.plugin.odd.placement": "bottom"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: t.TempDir(), Socket: d.sock}})
+	r.s.WaitFor(t, "the stored placement read", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prefs.pluginPlace["side"] == "left" })
+	})
+	t.Cleanup(func() {
+		for _, p := range onLoop(r, func() []*pluginRun {
+			var out []*pluginRun
+			for _, p := range r.h.running {
+				out = append(out, p)
+			}
+			return out
+		}) {
+			p.shutdown()
+		}
+	})
+	r.openPlugin("side")
+	r.waitShown(t, "╭ Side")
+	if l, _ := r.dialogEdges("Side"); l != 0 {
+		t.Fatalf("the stored left placement: the dialog starts at column %d:\n%s", l, r.s)
+	}
+	r.keys(t, esc())
+	r.s.WaitFor(t, "side closed", func(string) bool { return onLoop(r, func() bool { return r.h.running["side"] == nil }) })
+	r.openPlugin("odd")
+	r.waitShown(t, "╭ Odd")
+	if _, rt := r.dialogEdges("Odd"); rt != 99 {
+		t.Fatalf("a stored placement the manifest does not offer is used (ends at %d):\n%s", rt, r.s)
+	}
+}
+
 // TestEscHidesAPluginWithItsOwnQuit: esc = "hide" hides the dialog and tells the plugin, which
 // runs on; its menu entry shows it again and tells it so; its own close ends it.
 func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
