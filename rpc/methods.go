@@ -47,6 +47,7 @@ const (
 	CodeCommitted         int64 = -32066 // the write landed: doc.read and compare, never re-send
 	CodeEmbedFailed       int64 = -32067 // search lexically, or retry later
 	CodeProviderRefused   int64 = -32068 // the provider refused: switch provider, or fix its key
+	CodeSwitching         int64 = -32069 // a new model is filling: search lexically until it is ready
 )
 
 // publicErrs maps core's errors to codes, first match wins. Only the message here crosses the
@@ -83,6 +84,7 @@ var publicErrs = []struct {
 	{index.ErrNoDocument, CodeNotFound, "not found"},
 	{vfs.ErrNotExist, CodeNotFound, "not found"},
 	{index.ErrEmbedFailed, CodeEmbedFailed, "the query could not be embedded"},
+	{index.ErrSwitching, CodeSwitching, "a new model is filling: search by words until it is ready"},
 	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},
 	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a note of this workspace"},
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
@@ -466,7 +468,7 @@ func statusMap(st index.Status, w *Workspace) map[string]any {
 	}
 	if e := st.Embeddings; e != nil {
 		out["embeddings"] = map[string]any{"provider": e.Provider, "model": e.Model, "target": e.Target,
-			"pending": e.Pending, "semantic": e.Semantic, "last_error": e.LastErr, "refused": int64(e.Refused),
+			"texts": e.Texts, "pending": e.Pending, "semantic": e.Semantic, "last_error": e.LastErr, "refused": int64(e.Refused),
 			"target_pending": e.TargetPending, "target_refused": int64(e.TargetRefused)}
 	}
 	return out

@@ -174,8 +174,9 @@ float vectors, and its results are fused with BM25 by reciprocal rank.
 
 - **Embedding is asynchronous and per document.** A note half embedded answers lexically until all of
   its chunks have vectors, and the answer says the semantic side is `partial`.
-- **A new model fills in the background.** The old one keeps answering until the new one covers every
-  chunk.
+- **A new model fills in the background, and search is by words meanwhile.** The old model goes
+  offline when the new one is chosen: its server is told to unload it, so the two are never loaded
+  together. The answer says the semantic side is `switching` until the new model covers every chunk.
 - **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
 
 ## Semantic search and embedding models
@@ -196,8 +197,9 @@ whose vectors are closest are the matches.
 - **A section's vector is kept in the store,** keyed by its text's hash: an edit re-embeds only the
   sections it changed, and two identical passages share one vector. Each workspace keeps its own.
 - **A search reads what is stored.** The only model call it makes is for the query itself.
-- **Switching models embeds everything once more.** The old model keeps answering until the new one
-  covers every section, then it takes over.
+- **Switching models embeds everything once more.** The old model goes offline at once, unloaded
+  from its server, and search is by words until the new one covers every section; then it takes
+  over. The old model's vectors stay until purged, so switching back is instant.
 
 **Providers.** Semantic search is off until a provider is chosen in the TUI's AI models
 (`Options › AI models…`). A
@@ -233,8 +235,7 @@ one section against the model's input limit (8,192 tokens for `nomic-embed-text`
   form, and sent as `num_ctx` with every request. The server loads the model at that size, and the
   size decides its memory: left to the server's own default (`OLLAMA_CONTEXT_LENGTH`, or the
   model's full context), `qwen3-embedding:4b` took 12.4 GB of GPU memory at 40,960 tokens against
-  4.6 GB at 8,192. During a model switch the old and new model are loaded together, so both must
-  fit. A larger window admits longer sections, at that cost.
+  4.6 GB at 8,192. A larger window admits longer sections, at that cost.
 - **Sections are split at headings,** so most are well under any limit.
 
 **Which model.** An embedding model, not a chat model. A chat model such as `gpt-oss-20b` produces

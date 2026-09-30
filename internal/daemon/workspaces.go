@@ -42,10 +42,9 @@ type served struct {
 
 // Options are how the daemon serves a workspace.
 type Options struct {
-	Poll        time.Duration // the follower's listing interval
-	Provider    embed.Provider
-	ProviderFor func(embed.Model) (embed.Provider, error)
-	Log         logger.Logger
+	Poll     time.Duration // the follower's listing interval
+	Provider embed.Provider
+	Log      logger.Logger
 	// BatchDelay is the indexer's (0: its default); tests shorten it.
 	BatchDelay time.Duration
 }
@@ -97,7 +96,7 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		return nil, err
 	}
 	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
-		ProviderFor: m.opts.ProviderFor, BatchDelay: m.opts.BatchDelay})
+		BatchDelay: m.opts.BatchDelay})
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
 	ctx, cancel := context.WithCancel(m.ctx)
@@ -123,13 +122,12 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	return &served{id: id, w: w, stop: stop}, nil
 }
 
-// SetEmbedding gives every workspace the provider p (nil: none, search by words) and pf, the maker
-// of its other models' providers: each served one is stopped and started again with them, its
-// index as it was.
-func (m *Workspaces) SetEmbedding(p embed.Provider, pf func(embed.Model) (embed.Provider, error)) {
+// SetEmbedding gives every workspace the provider p (nil: none, search by words): each served one
+// is stopped and started again with it, its index as it was.
+func (m *Workspaces) SetEmbedding(p embed.Provider) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.opts.Provider, m.opts.ProviderFor = p, pf
+	m.opts.Provider = p
 	for name, s := range m.served {
 		if s.stop == nil {
 			continue // not served: its root is gone

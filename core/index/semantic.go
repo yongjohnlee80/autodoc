@@ -27,7 +27,10 @@ const (
 	SemanticReady   = "ready"
 	SemanticPartial = "partial"
 	SemanticError   = "error"
-	ModeHybrid      = "hybrid"
+	// SemanticSwitching is a new model filling to replace the active one: the old model is
+	// offline, so the query is answered by words until the new one covers every chunk.
+	SemanticSwitching = "switching"
+	ModeHybrid        = "hybrid"
 )
 
 // ErrModelInUse is a model PurgeModel cannot remove: the active one, or the target.
@@ -36,6 +39,14 @@ var ErrModelInUse = errs.Sentinel(errs.ErrPrecondition, "index: the model is in 
 // ErrEmbedFailed is a semantic query whose text the provider could not embed (EmbedFailed,
 // -32067): retry later, or search lexically.
 var ErrEmbedFailed = errors.New("index: the query could not be embedded")
+
+// ErrSwitching is a semantic query while a new model fills: the old model is offline, and the new
+// one does not cover every chunk yet (Switching, -32069). Search lexically until it does.
+var ErrSwitching = errors.New("index: a new model is filling; search by words until it is ready")
+
+// errOffline is embedding with a model other than the target's: the one a filling target
+// replaces, offline for the switch.
+var errOffline = errors.New("index: the model is offline while a new one fills")
 
 // The semantic tier's constants (ADR 0204 §4.4, §4.5).
 const (
@@ -78,16 +89,14 @@ type vecBatch struct {
 
 // semantic is the Indexer's embedding tier: nil without a provider.
 type semantic struct {
-	target      embed.Provider
-	providerFor func(embed.Model) (embed.Provider, error)
-	snap        atomic.Pointer[codeSnap]
-	vectors     chan vecBatch
-	wake        [2]chan struct{} // one per worker (roleActive, roleTarget)
+	target  embed.Provider
+	snap    atomic.Pointer[codeSnap]
+	vectors chan vecBatch
+	wake    chan struct{}
 
-	mu        sync.Mutex
-	activeFP  string                    // the writer's view: set at start and at the flip
-	providers map[string]embed.Provider // by fingerprint
-	lastErr   error                     // the worker's last provider failure, nil after a success
+	mu       sync.Mutex
+	activeFP string // the writer's view: set at start and at the flip
+	lastErr  error  // the worker's last provider failure, nil after a success
 	// refused holds the texts a provider rejected (fingerprint, then text hash), and until when they
 	// are set aside: their documents answer lexically, and the other texts go on. The worker's own.
 	refused map[string]time.Time
@@ -95,11 +104,9 @@ type semantic struct {
 	snapshotScans, fallbackScans atomic.Int64 // for tests: which path queries took
 }
 
-func newSemantic(target embed.Provider, providerFor func(embed.Model) (embed.Provider, error)) *semantic {
-	return &semantic{target: target, providerFor: providerFor, vectors: make(chan vecBatch),
-		wake:      [2]chan struct{}{make(chan struct{}, 1), make(chan struct{}, 1)},
-		providers: map[string]embed.Provider{target.Model().Fingerprint(): target},
-		refused:   map[string]time.Time{}}
+func newSemantic(target embed.Provider) *semantic {
+	return &semantic{target: target, vectors: make(chan vecBatch), wake: make(chan struct{}, 1),
+		refused: map[string]time.Time{}}
 }
 
 func (m *semantic) active() string {
@@ -108,54 +115,23 @@ func (m *semantic) active() string {
 	return m.activeFP
 }
 
-// provider is the one that embeds with model fp: the target, or one made for a model still active
-// while the target fills.
-func (m *semantic) provider(fp string, model embed.Model) (embed.Provider, error) {
-	m.mu.Lock()
-	p, ok := m.providers[fp]
-	m.mu.Unlock()
-	if ok {
-		return p, nil
+// switching is a target filling to replace another active model, which is offline meanwhile.
+func (m *semantic) switching() bool { return m.active() != m.target.Model().Fingerprint() }
+
+// provider is the one that embeds with model fp: only the target's, since the model a filling
+// target replaces is offline.
+func (m *semantic) provider(fp string) (embed.Provider, error) {
+	if fp != m.target.Model().Fingerprint() {
+		return nil, errOffline
 	}
-	if m.providerFor == nil {
-		return nil, fmt.Errorf("index: no provider for model %s", fp)
-	}
-	p, err := m.providerFor(model)
-	if err != nil {
-		return nil, err
-	}
-	if p.Model().Fingerprint() != fp {
-		return nil, fmt.Errorf("index: the provider made for %s embeds with %s", fp, p.Model().Fingerprint())
-	}
-	m.mu.Lock()
-	m.providers[fp] = p
-	m.mu.Unlock()
-	return p, nil
+	return m.target, nil
 }
 
 func (m *semantic) signal() {
-	for _, w := range m.wake {
-		select {
-		case w <- struct{}{}:
-		default:
-		}
+	select {
+	case m.wake <- struct{}{}:
+	default:
 	}
-}
-
-// The embedding workers: one keeps the active model's vectors current, one fills the target while
-// another model is active, so a long fill never holds back the vectors of new edits.
-const (
-	roleActive = iota
-	roleTarget
-)
-
-// modelOf reads a model row back into an embed.Model; the digest lives in the fingerprint.
-func modelOf(fp, provider, name string, dims int) embed.Model {
-	m := embed.Model{Provider: provider, Name: name, Dims: dims}
-	if parts := strings.Split(fp, "|"); len(parts) >= 4 {
-		m.Digest = strings.Join(parts[2:len(parts)-1], "|")
-	}
-	return m
 }
 
 // setupModels records the target model and, when none is active yet, makes it active: the first
@@ -305,8 +281,8 @@ const inPart = 500
 // commitVectors stores a batch of vectors in one transaction. Under the active model it makes the
 // documents they complete ready; under the target it flips the active model once the target covers
 // every alive chunk, and every document's readiness follows the new model. Under any other model
-// (the one active before a flip, whose worker was still embedding) it only stores them: the choice
-// of model is the target's to make, never a late batch's.
+// (none embeds with one, but a batch is the writer's to check, not to trust) it only stores them:
+// the choice of model is the target's to make, never a late batch's.
 func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	m := x.sem
 	s := x.store
@@ -384,21 +360,39 @@ func (s *Store) docsWithText(tx *store.Tx, items []vecItem) ([]int64, error) {
 
 // pendingTexts counts the distinct texts of alive chunks with no vector under model fp.
 func (s *Store) pendingTexts(tx *store.Tx, fp string) (int64, error) {
-	have, err := s.embeddedTexts(tx, fp)
+	_, missing, err := s.textCoverage(tx, fp)
 	if err != nil {
 		return 0, err
+	}
+	return missing[0], nil
+}
+
+// textCoverage is the distinct texts of the alive chunks, and how many of them each model fps
+// has no vector for, from one listing of the chunks.
+func (s *Store) textCoverage(tx *store.Tx, fps ...string) (total int64, missing []int64, err error) {
+	have := make([]map[string]bool, len(fps))
+	for i, fp := range fps {
+		if have[i], err = s.embeddedTexts(tx, fp); err != nil {
+			return 0, nil, err
+		}
 	}
 	rows, err := alive(s.sc.Chunks(tx)).Select(store.ChunkTextHash)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	missing := map[string]bool{}
+	texts := map[string]bool{}
 	for _, r := range rows {
-		if !have[string(r.TextHash)] {
-			missing[string(r.TextHash)] = true
+		texts[string(r.TextHash)] = true
+	}
+	missing = make([]int64, len(fps))
+	for h := range texts {
+		for i := range fps {
+			if !have[i][h] {
+				missing[i]++
+			}
 		}
 	}
-	return int64(len(missing)), nil
+	return int64(len(texts)), missing, nil
 }
 
 // publish swaps in the code snapshot of the commit just made: changed lists the documents whose
@@ -475,16 +469,17 @@ func (s *Store) loadCodes(tx *store.Tx, fp string, docs []int64) (map[int64][]co
 	return out, nil
 }
 
-// embedLoop is an embedding worker: it embeds the alive chunks that lack a vector under its model
-// (the active one, or the target), 64 distinct texts at a time, and hands the vectors to the writer.
-// A provider failure waits and tries again, doubling the wait up to a minute.
-func (x *Indexer) embedLoop(ctx context.Context, role int) {
+// embedLoop is the embedding worker: it embeds the alive chunks that lack a vector under the
+// target (the active model, or the one filling to replace it), 64 distinct texts at a time, and
+// hands the vectors to the writer. A provider failure waits and tries again, doubling the wait up
+// to a minute.
+func (x *Indexer) embedLoop(ctx context.Context) {
 	m := x.sem
 	wait := x.opts.RetryDelay
 	poll := time.NewTicker(5 * time.Second)
 	defer poll.Stop()
 	for ctx.Err() == nil {
-		worked, err := x.embedOnce(ctx, role)
+		worked, err := x.embedOnce(ctx)
 		m.mu.Lock()
 		m.lastErr = err
 		m.mu.Unlock()
@@ -502,45 +497,23 @@ func (x *Indexer) embedLoop(ctx context.Context, role int) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-m.wake[role]:
+		case <-m.wake:
 		case <-poll.C:
 		}
 	}
 }
 
-// embedOnce embeds one batch for the worker's model, reporting whether there was one.
-func (x *Indexer) embedOnce(ctx context.Context, role int) (bool, error) {
+// embedOnce embeds one batch for the target, reporting whether there was one.
+func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 	m := x.sem
-	target, active := m.target.Model().Fingerprint(), m.active()
-	fp := active
-	if role == roleTarget {
-		if target == active {
-			return false, nil // nothing to fill: the target is the active model
-		}
-		fp = target
-	}
-	var mrow *store.Model
-	if err := x.store.read(ctx, func(tx *store.Tx) error {
-		var err error
-		mrow, err = x.store.sc.Models(tx).With(store.ModelFP, fp).Get()
-		return err
-	}); err != nil {
-		return false, err
-	}
-	provider, name, dims := deref(mrow.Provider), deref(mrow.Name), int(derefInt(mrow.Dims))
-	p, err := m.provider(fp, modelOf(fp, provider, name, dims))
-	if err != nil {
-		if fp != target {
-			return false, nil // an old model answers only while the target fills: it gets no new vectors
-		}
-		return false, err
-	}
+	p := m.target
+	fp, dims := p.Model().Fingerprint(), p.Model().Dims
 	hashes, texts, err := x.store.unembedded(ctx, fp, m.skip(fp))
 	if err != nil {
 		return false, err
 	}
 	if len(texts) == 0 {
-		if role == roleTarget {
+		if m.switching() {
 			// nothing left for the target: the writer checks coverage, and flips
 			return false, x.handVectors(ctx, vecBatch{fp: fp})
 		}
@@ -876,8 +849,9 @@ type EmbeddingStatus struct {
 	Provider string // the target's provider
 	Model    string // the active model's fingerprint
 	Target   string // the model being filled to replace it; "" when it is the active one
-	Pending  int64  // distinct texts of alive chunks with no vector under the active model
-	Semantic string // SemanticReady, or SemanticPartial while any document is not ready
+	Texts    int64  // distinct texts of the alive chunks: what a model embeds to cover them all
+	Pending  int64  // those with no vector under the active model
+	Semantic string // SemanticSwitching while Target fills; else SemanticReady, or SemanticPartial while any document is not ready
 	LastErr  string // the embedding workers' last provider failure; "" after a success
 	Refused  int    // texts the provider rejected under the active model, set aside for now
 	// TargetPending and TargetRefused are the same for the target while it fills: a refused text
@@ -899,18 +873,23 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	}
 	s := x.store
 	if err := s.read(ctx, func(tx *store.Tx) error {
-		var err error
-		if es.Pending, err = s.pendingTexts(tx, es.Model); err != nil {
+		fps := []string{es.Model}
+		if es.Target != "" {
+			fps = append(fps, es.Target)
+		}
+		texts, missing, err := s.textCoverage(tx, fps...)
+		if err != nil {
 			return err
 		}
+		es.Texts, es.Pending = texts, missing[0]
 		if es.Target != "" {
-			if es.TargetPending, err = s.pendingTexts(tx, es.Target); err != nil {
-				return err
-			}
-			es.TargetRefused = len(m.skip(es.Target))
+			es.TargetPending, es.TargetRefused = missing[1], len(m.skip(es.Target))
 		}
 		unready, err := s.sc.Documents(tx).With(store.DocSemanticReady, int64(0)).Exists()
-		if unready {
+		switch {
+		case es.Target != "":
+			es.Semantic = SemanticSwitching
+		case unready:
 			es.Semantic = SemanticPartial
 		}
 		return err
