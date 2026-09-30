@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -56,6 +57,26 @@ func runTestPlugin(mode string) int {
 			}
 		})
 		<-done
+		return 0
+	case "gc": // collects garbage all the time, drawing a count: the SDK's pipes must survive it
+		e := &echo{mode: mode}
+		go func() {
+			for i := 0; ; i++ {
+				runtime.GC()
+				e.mu.Lock()
+				if e.peer != nil {
+					f := plugin.NewFrame(e.w, e.h)
+					f.Text(0, 0, fmt.Sprintf("tick %d", i), plugin.Style{})
+					_ = e.peer.Frame(f)
+				}
+				e.mu.Unlock()
+				time.Sleep(20 * time.Millisecond)
+			}
+		}()
+		if err := plugin.Serve(context.Background(), e); err != nil {
+			fmt.Fprintln(os.Stderr, "serve:", err)
+			return 1
+		}
 		return 0
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
@@ -412,6 +433,23 @@ func zombie(p int) bool {
 	}
 	f := strings.Fields(string(b))
 	return len(f) > 2 && f[2] == "Z"
+}
+
+// TestAPluginOutlivesGarbageCollection: a plugin that collects garbage keeps its pipes. The SDK
+// once re-opened fd 1 and left the original os.Stdout unreferenced, so its finalizer closed the
+// pipe at the next GC and the plugin ended some seconds in, cleanly and without a word (Johno:
+// "exiting in around 10 seconds for no reason").
+func TestAPluginOutlivesGarbageCollection(t *testing.T) {
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "gc", "gc", 30, 6)
+	r, _ := pluginTUI(t, dir)
+	run := r.openPlugin("gc")
+	r.waitShown(t, "tick 60") // dozens of collections in
+	select {
+	case <-run.exited:
+		t.Fatalf("the plugin exited under garbage collection: %v", run.exitErr)
+	default:
+	}
 }
 
 // TestAPluginIsToldTheThemeAndTheSizeItGot: a theme switch reaches the open plugin, and a dialog
