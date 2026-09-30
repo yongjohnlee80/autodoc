@@ -541,6 +541,23 @@ func TestEmbeddingProvidersFromTheStore(t *testing.T) {
 	if log := call(t, cli, "embedding.log", "local", int64(10)).([]any); len(log) == 0 || log[0].(map[string]any)["outcome"] != "ok" {
 		t.Errorf("the provider's log: %v", log)
 	}
+	// the workspace's models: tiny, active, with the room its vectors take
+	ms := call(t, cli, "index.models", "kb").([]any)
+	if len(ms) != 1 || ms[0].(map[string]any)["name"] != "tiny" || ms[0].(map[string]any)["state"] != "active" ||
+		ms[0].(map[string]any)["f32_bytes"] != int64(32*4) {
+		t.Errorf("index.models: %v", ms)
+	}
+	// nothing is switching: nothing to cancel
+	if _, err := cli.Call(context.Background(), "embedding.cancel_switch"); !isCode(err, golibrpc.CodeInvalidParams) {
+		t.Errorf("cancel with no switch: %v, want invalid params", err)
+	}
+	// a context window: a number of tokens, in range
+	for _, bad := range []any{"big", int64(1) << 40, int64(100)} {
+		spec := map[string]any{"name": "wide", "kind": "ollama", "base_url": srv.URL, "model": "tiny", "context": bad}
+		if _, err := cli.Call(context.Background(), "embedding.add", spec); !isCode(err, golibrpc.CodeInvalidParams) {
+			t.Errorf("context %v: %v, want invalid params", bad, err)
+		}
+	}
 	// one that cannot be set up is refused, and the one in use stays
 	call(t, cli, "embedding.add", map[string]any{"name": "gone", "kind": "ollama", "base_url": "http://127.0.0.1:1", "model": "tiny"})
 	if _, err := cli.Call(context.Background(), "embedding.use", "gone"); err == nil {
@@ -686,5 +703,30 @@ func TestOldIndexesAreNotedOnce(t *testing.T) {
 	}
 	if _, err := os.Stat(old); err != nil {
 		t.Errorf("the old file is gone: %v", err)
+	}
+}
+
+// isCode is err an rpc error of code.
+func isCode(err error, code int64) bool {
+	var re *golibrpc.Error
+	return errors.As(err, &re) && re.Code == code
+}
+
+// TestInstalledVersionAsksTheBinary: the version a restart would start is the binary's own answer
+// to --version (here the test binary, running main); a binary that answers otherwise is refused.
+func TestInstalledVersionAsksTheBinary(t *testing.T) {
+	t.Setenv("AUTODOC_TEST_MAIN", "1")
+	if v, err := installedVersion(); err != nil || v != version {
+		t.Fatalf("installed %q, %v; want %q", v, err, version)
+	}
+	sh := filepath.Join(t.TempDir(), "not-autodoc")
+	if err := os.WriteFile(sh, []byte("#!/bin/sh\necho something else\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := versionOf(sh); err == nil {
+		t.Errorf("a binary that is not autodoc gave %q", v)
+	}
+	if _, err := versionOf(filepath.Join(t.TempDir(), "absent")); err == nil {
+		t.Error("an absent binary gave a version")
 	}
 }

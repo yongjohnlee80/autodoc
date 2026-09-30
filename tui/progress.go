@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/embed"
 )
 
 // PROGRESS — what the daemon still has to do, on the status line's right while there is any.
@@ -186,14 +188,6 @@ func bar(done, total int64) string {
 	return fmt.Sprintf("%s%s %d/%d", strings.Repeat("█", filled), strings.Repeat("░", width-filled), done, total)
 }
 
-// modelName is a fingerprint's model name (provider|name|digest|dims).
-func modelName(fp string) string {
-	if parts := strings.Split(fp, "|"); len(parts) >= 2 {
-		return parts[1]
-	}
-	return fp
-}
-
 // progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
 func progressText(p progress) string {
@@ -205,7 +199,7 @@ func progressText(p progress) string {
 	if left := e.working(); left > 0 {
 		what := "embedding"
 		if e.target != "" {
-			what = "switching to " + modelName(e.target)
+			what = "switching to " + embed.ModelName(e.target)
 		}
 		mark := spinFrames[p.spin%len(spinFrames)]
 		if e.failing {

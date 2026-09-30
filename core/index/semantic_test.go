@@ -468,6 +468,9 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	if _, err := e.ix.Search(context.Background(), "zebra", QueryOpts{Mode: ModeSemantic}); !errors.Is(err, ErrSwitching) {
 		t.Errorf("a semantic query while b fills: %v, want ErrSwitching", err)
 	}
+	if res := e.query("zebra", QueryOpts{Mode: ModeLexical}); res.Semantic != SemanticSwitching || len(res.Hits) != 1 {
+		t.Errorf("a words-only query while b fills: %+v, want its hit, switching", res)
+	}
 	// an edit during the switch is found by its words now, and embedded by b alone
 	e.put("w.md", "zebra foal\n")
 	if got := via(e.query("foal", QueryOpts{})); !reflect.DeepEqual(got, []string{"w.md lexical"}) {

@@ -92,6 +92,9 @@ func (h *Host) restartConfirmed() {
 	})
 }
 
+// awaitExit is the Host's wait for a stopped daemon: until its process has gone, restartWait at most.
+func awaitExit(ctx context.Context, pid int64) bool { return waitGone(ctx, pid, restartWait) }
+
 // waitGone waits until process pid has exited, or d has passed (false).
 func waitGone(ctx context.Context, pid int64, d time.Duration) bool {
 	deadline := time.Now().Add(d)

@@ -306,6 +306,7 @@ func TestErrorCodes(t *testing.T) {
 		{"read a missing note", "doc.read", []any{"kb", "none.md"}, CodeNotFound},
 		{"links of a missing note", "graph.links", []any{"kb", "none.md"}, CodeNotFound},
 		{"an expired cursor", "index.changes", []any{"kb", int64(-5), int64(10)}, CodeCursorExpired},
+		{"a cancel with no embeddings", "embedding.cancel_switch", []any{}, CodeUnsupported},
 		{"semantic with no provider", "search.query", []any{"kb", "x", map[string]any{"mode": "semantic"}}, CodeUnsupported},
 		{"an unknown mode", "search.query", []any{"kb", "x", map[string]any{"mode": "fuzzy"}}, golibrpc.CodeInvalidParams},
 		{"an unknown option", "search.query", []any{"kb", "x", map[string]any{"fuzz": true}}, golibrpc.CodeInvalidParams},

@@ -30,4 +30,10 @@ func TestWaitGoneWaitsForTheProcess(t *testing.T) {
 	if waitGone(context.Background(), int64(long.Process.Pid), 200*time.Millisecond) {
 		t.Fatal("a running process was seen gone")
 	}
+	// the Host's wait gives up with its context, the process running on
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	if awaitExit(ctx, int64(long.Process.Pid)) {
+		t.Fatal("the Host's wait saw a running process gone")
+	}
 }

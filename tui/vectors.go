@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+
+	"github.com/yongjohnlee80/autodoc/core/embed"
 )
 
 // VECTORS — AI models › Vectors…: the workspace's models, each with the room its vectors take (the
@@ -125,7 +127,7 @@ func (h *Host) cancelIndexing() {
 	e := h.prog.emb
 	switch {
 	case e.target != "":
-		target := modelName(e.target)
+		target := embed.ModelName(e.target)
 		do(h, func(ctx context.Context) (out struct {
 			model string
 			err   error
