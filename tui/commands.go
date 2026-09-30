@@ -39,6 +39,9 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.previewNew":    oneNumber("App.previewNew", "a row", h.previewNew),
 		"App.newNoteFolder": oneNumber("App.newNoteFolder", "a row", h.newNoteFolder),
 
+		// the plugins
+		"App.openPlugin": oneString("App.openPlugin", "a plugin", h.openPlugin),
+
 		// the panels
 		"App.toggleExplorer":    none(func() { h.togglePanel("explorer") }),
 		"App.toggleLinks":       none(func() { h.togglePanel("links") }),

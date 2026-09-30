@@ -24,7 +24,10 @@ func (h *Host) state() map[string]any {
 		"App.semanticDetail": "",
 		"App.searchTitle":    "search", // with semantic search's state once a poll answers
 
-		"App.explorer":   h.explorer,
+		"App.explorer": h.explorer,
+		// the Plugins menu (plugins.go)
+		"App.plugins":    h.pluginRows,
+		"App.hasPlugins": len(h.pluginList) > 0,
 		"App.noteTitle":  untitled,
 		"App.backlinks":  h.backlinks,
 		"App.linksTitle": "backlinks",

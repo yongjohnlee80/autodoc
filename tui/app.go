@@ -23,6 +23,7 @@
 //	providers.go  Preferences › Embedding: the providers, their models and usage
 //	theme.go      View › Theme: switching the theme import at runtime
 //	help.go       the help and the about text
+//	plugins.go    the Plugins menu: the plugins folder, and a plugin's dialog
 package tui
 
 import (
@@ -123,7 +124,13 @@ type Host struct {
 	noticeList  *tuidecl.ListModel
 	historyOpen bool
 	vimKeys     *widget.Float // the Vim keys' card (vimkeys.go)
-	pageWidth   int           // the page's width as last set: the ruler, the border, the gutter
+	// the plugins (plugins.go): where they are, the folder's as found, the menu's rows, and the open
+	// ones by key
+	pluginOpt  Plugins
+	pluginList []pluginEntry
+	pluginRows *tuidecl.ListModel
+	running    map[string]*pluginRun
+	pageWidth  int // the page's width as last set: the ruler, the border, the gutter
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -147,6 +154,8 @@ type Options struct {
 	// Installed, when set, is the version of the autodoc a restart would start (the binary on
 	// disk, which an update replaces while the daemon runs).
 	Installed func() (string, error)
+	// Plugins is where the Plugins menu finds plugins (plugins.go); its zero value finds none.
+	Plugins Plugins
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -181,8 +190,12 @@ func newHost(session *Session, opt Options) *Host {
 		backlinks:      tuidecl.NewListModel("key", "label"),
 		noticeList:     tuidecl.NewListModel("key", "when", "text"),
 		workspaces:     tuidecl.NewListModel("key", "label"),
-		managed:        tuidecl.NewListModel("key", "name", "state", "root")}
+		managed:        tuidecl.NewListModel("key", "name", "state", "root"),
+		pluginOpt:      opt.Plugins,
+		pluginRows:     tuidecl.NewListModel("key", "label", "enabled"),
+		running:        map[string]*pluginRun{}}
 	h.explorer.OnFetch = h.fetchExplorer
+	h.loadPlugins()
 	return h
 }
 
@@ -231,6 +244,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 func (h *Host) Run(ctx context.Context) error {
 	defer h.cancel()
 	defer h.session.Close()
+	defer h.stopPlugins() // after the loop: each stopped, bounded, before the session ends
 	err := h.p.Run(ctx)
 	h.mu.Lock()
 	defer h.mu.Unlock()
