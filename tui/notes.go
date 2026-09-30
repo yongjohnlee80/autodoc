@@ -146,6 +146,7 @@ func (h *Host) show(p, content, version string) {
 func (h *Host) closeNote() {
 	h.note.gen++
 	h.editor.SetValue("")
+	h.syncPageWidth()
 	h.note = note{gen: h.note.gen}
 	h.set("App.noteTitle", untitled)
 	h.set("App.statusCenter", "")

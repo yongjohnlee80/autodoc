@@ -1556,3 +1556,22 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 		return col(top, "┐")-col(top, "┌")+1 == 62
 	})
 }
+
+func TestClosingANoteGivesThePageItsDraftWidth(t *testing.T) {
+	long := strings.Repeat("y\n", 10000) // five digits: a gutter one column wider
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"long.md", long}},
+		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.linenumbers": "true"}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
+	r.ready(t)
+	width := func(want int) func(string) bool {
+		return func(sc string) bool {
+			top := strings.Split(sc, "\n")[0]
+			return col(top, "┐")-col(top, "┌")+1 == want
+		}
+	}
+	r.h.p.Post(func() { r.h.openPath("long.md") })
+	r.s.WaitFor(t, "the long note's page", width(69))
+	// closed, the page is an empty draft's again
+	r.h.p.Post(r.h.closeNote)
+	r.s.WaitFor(t, "the draft's page", width(68))
+}
