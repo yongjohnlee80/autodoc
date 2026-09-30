@@ -1043,9 +1043,11 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 		map[string]any{"name": "local", "kind": "ollama", "base_url": ollama.URL, "model": "other"}); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the switch", func(string) bool {
-		return onLoop(r, func() string { return r.h.prog.emb.target }) == "" && r.semanticMark() == "green semantic search" &&
-			func() bool { v, _ := r.h.session.Call(ctx, "index.models", "kb"); return len(asList(v)) == 2 }()
+	// the switch done: other the active model, the one listed first
+	r.s.WaitFor(t, "other active", func(string) bool {
+		v, _ := r.h.session.Call(ctx, "index.models", "kb")
+		ms := asList(v)
+		return len(ms) == 2 && str(asMap(ms[0]), "name") == "other" && str(asMap(ms[0]), "state") == "active"
 	})
 	settled("other covering the notes")
 	r.h.p.Post(r.h.cancelIndexing)
