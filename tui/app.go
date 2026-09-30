@@ -56,6 +56,7 @@ type Host struct {
 	// the models the document binds
 	picker, backlinks, workspaces, managed   *tuidecl.ListModel
 	hits, newList, providers, providerModels *tuidecl.ListModel
+	vectors                                  *tuidecl.ListModel // the workspace's models (vectors.go)
 	explorer                                 *tuidecl.TreeListModel
 	explorerPaths                            map[string][]string // by workspace: its notes, once listed (explorer.go)
 	explorerTop                              []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
@@ -80,6 +81,8 @@ type Host struct {
 	formKind                        int
 	formHasKey                      bool // the provider the form edits has a key sealed
 	modelList                       []string
+	vectorList                      []vectorRow // the workspace's models, as listed (vectors.go)
+	purging                         vectorRow   // the model the purge question asks about
 	providerSeq                     uint64
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
@@ -156,6 +159,7 @@ func newHost(session *Session, opt Options) *Host {
 		newList:        tuidecl.NewListModel("key", "path"),
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
 		providerModels: tuidecl.NewListModel("key", "name"),
+		vectors:        tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
 		explorer:       tuidecl.NewTreeListModel("key", "label"),
 		explorerPaths:  map[string][]string{},
 		openAt:         -1,

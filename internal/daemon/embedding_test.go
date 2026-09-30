@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/index"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
@@ -28,6 +31,18 @@ type ollama struct {
 	mu       sync.Mutex
 	numCtx   []int
 	unloaded []string // the models asked to be let go (keep_alive 0, no input)
+	// held, when set, is a model whose embeds of anything but the probe wait for release
+	held    string
+	release chan struct{}
+}
+
+// hold makes model's embeds wait (its probe answers), until the returned release.
+func (o *ollama) hold(model string) (release func()) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.held, o.release = model, make(chan struct{})
+	ch := o.release
+	return sync.OnceFunc(func() { close(ch) })
 }
 
 func (o *ollama) unloads() []string {
@@ -68,7 +83,15 @@ func newOllama(t *testing.T, models ...string) *ollama {
 			} else {
 				o.numCtx = append(o.numCtx, req.Options.NumCtx)
 			}
+			held, release := o.held, o.release
 			o.mu.Unlock()
+			if held != "" && req.Model == held && !(len(req.Input) == 1 && req.Input[0] == "probe") {
+				select {
+				case <-release:
+				case <-r.Context().Done():
+					return
+				}
+			}
 			vecs := make([][]float32, len(req.Input))
 			for i := range vecs {
 				vecs[i] = []float32{1, 0, 0}
@@ -445,5 +468,69 @@ func TestTheProviderVerbsChangeNothingWhenTheyFail(t *testing.T) {
 	}
 	if got := preference(t, db); got != "a" {
 		t.Fatalf("the store names %q, want a", got)
+	}
+}
+
+// TestCancelSwitchGoesBackToTheActiveModel: mid-switch, the provider in use goes back to the model
+// still active: the switch ends, the store names that model again, and semantic search answers.
+// With no switch under way there is nothing to cancel.
+func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
+	o := newOllama(t, "embedder", "bigger")
+	e, m, db := embedding(t, o)
+	ctx := context.Background()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("# A\n\nalpha\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Add(ctx, config.Workspace{Name: "kb", Root: root}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Use(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	status := func() *index.EmbeddingStatus {
+		w, _ := m.Get("kb")
+		st, err := w.Index.Status(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st.Embeddings
+	}
+	waitFor := func(what string, ok func(*index.EmbeddingStatus) bool) {
+		t.Helper()
+		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+			if es := status(); es != nil && ok(es) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s never came: %+v", what, status())
+			}
+		}
+	}
+	waitFor("embedder covering the note", func(es *index.EmbeddingStatus) bool { return es.Texts > 0 && es.Pending == 0 })
+	if _, err := e.CancelSwitch(ctx); !errors.Is(err, rpc.ErrNoSwitch) {
+		t.Fatalf("cancel with no switch: %v, want ErrNoSwitch", err)
+	}
+	release := o.hold("bigger")
+	defer release()
+	if err := e.UpdateProvider(ctx, "a", store.ProviderSpec{Name: "a", Kind: store.KindOllama, BaseURL: o.URL, Model: "bigger"}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor("the switch to bigger", func(es *index.EmbeddingStatus) bool { return es.Target != "" })
+	if got := embed.ModelName(m.Replacing(ctx)); got != "embedder" {
+		t.Fatalf("replacing %q, want embedder", got)
+	}
+	model, err := e.CancelSwitch(ctx)
+	if err != nil || model != "embedder" {
+		t.Fatalf("cancel: %q, %v; want back to embedder", model, err)
+	}
+	waitFor("embedder answering again", func(es *index.EmbeddingStatus) bool {
+		return es.Model != "" && es.Target == "" && es.Semantic == index.SemanticReady
+	})
+	if info, _, err := db.ProviderWithKey(ctx, "a"); err != nil || info.Model != "embedder" {
+		t.Errorf("stored after the cancel: %+v, %v", info, err)
+	}
+	if m.Replacing(ctx) != "" {
+		t.Error("still replacing after the cancel")
 	}
 }

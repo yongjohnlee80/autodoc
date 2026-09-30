@@ -18,9 +18,19 @@ func (h *Host) start() {
 			h.setWhere("autodoc [disconnected]")
 			// the status line has room for the reason; About has room for the paths
 			var ce *ConnectError
-			if errors.As(err, &ce) {
+			var me *MismatchError
+			switch {
+			case errors.As(err, &me) && me.Server < me.Client:
+				h.setWhere("autodoc [older backend]")
+				h.setStatus(fmt.Sprintf("the backend is autodoc %s (protocol %d), older than this TUI (%d): File › Restart backend… starts the installed one",
+					me.Version, me.Server, me.Client))
+			case errors.As(err, &me):
+				h.setWhere("autodoc [newer backend]")
+				h.setStatus(fmt.Sprintf("this TUI (protocol %d) is older than the backend, autodoc %s (%d): quit and start the installed autodoc",
+					me.Client, me.Version, me.Server))
+			case errors.As(err, &ce):
 				h.setStatus(fmt.Sprintf("connect failed: no daemon answered in %s (Help › About)", ce.Window))
-			} else {
+			default:
 				h.setStatus("connect failed (Help › About)")
 			}
 			h.set("App.aboutText", h.aboutText()+"\n\nThe last connect failed:\n"+err.Error())

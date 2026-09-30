@@ -113,6 +113,14 @@ type Ollama struct {
 	context int // num_ctx sent with every request; 0 leaves the server's own
 }
 
+// ModelName is a fingerprint's model name (provider|name|digest|dims).
+func ModelName(fp string) string {
+	if parts := strings.Split(fp, "|"); len(parts) >= 2 {
+		return parts[1]
+	}
+	return fp
+}
+
 // Unloader is a provider whose server keeps its model loaded between requests, in memory it holds
 // from other models, and can be told to let it go.
 type Unloader interface {

@@ -49,6 +49,8 @@ Dialog {
         Button { text: "&Edit…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEditProvider(providerTable.currentIndex) }
         Button { text: "&Use"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.useProvider(providerTable.currentIndex) }
         Button { text: "&Words only"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopSemantic() }
+        Button { text: "Cancel &indexing"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.cancelIndexing() }
+        Button { text: "&Vectors…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openVectors() }
         Button { text: "&Remove…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemoveProvider(providerTable.currentIndex) }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }

@@ -22,10 +22,14 @@ type Embeddings interface {
 	Models(ctx context.Context, name string, sp store.ProviderSpec) ([]string, error)
 	Usage(ctx context.Context, name string, days int) ([]store.Usage, error)
 	Log(ctx context.Context, name string, limit int) ([]store.LogEntry, error)
+	CancelSwitch(ctx context.Context) (model string, err error)
 }
 
 // WithEmbeddings serves the daemon's embedding providers.
 func WithEmbeddings(e Embeddings) Option { return func(o *options) { o.embeddings = e } }
+
+// ErrNoSwitch is embedding.cancel_switch with no model filling to replace the active one.
+var ErrNoSwitch = errors.New("rpc: no model switch is under way")
 
 // errNoEmbeddings answers the embedding verbs of a server given no Embeddings.
 var errNoEmbeddings = errors.New("rpc: this server keeps no embedding providers")
@@ -140,6 +144,17 @@ func (s *Server) registerEmbeddings() {
 			return nil, err
 		}
 		return nil, s.embeddings.Use(ctx, name)
+	}, false))
+	// the model switch under way ends: the provider in use goes back to the model still active
+	s.handle("embedding.cancel_switch", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
+		if err := need(); err != nil {
+			return nil, err
+		}
+		model, err := s.embeddings.CancelSwitch(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"model": model}, nil
 	}, false))
 	// a stored provider's models by its name, or an unsaved one's by its kind, base_url and key
 	s.handle("embedding.models", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {

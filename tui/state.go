@@ -82,6 +82,11 @@ func (h *Host) state() map[string]any {
 		"App.providerModelsStatus":   "",
 		"App.providerRemoveQuestion": "",
 		"App.restartQuestion":        "",
+		// the workspace's models and their vectors (vectors.go)
+		"App.vectors":       h.vectors,
+		"App.vectorsTitle":  "vectors",
+		"App.vectorsStatus": "",
+		"App.purgeQuestion": "",
 
 		// the workspace add
 		"App.home":    homeDir(),

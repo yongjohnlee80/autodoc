@@ -63,6 +63,7 @@ var publicErrs = []struct {
 	{store.ErrNoPreferenceName, golibrpc.CodeInvalidParams, "a preference needs a name"},
 	{errNoPreferences, CodeUnsupported, "this server keeps no preferences"},
 	{errNoEmbeddings, CodeUnsupported, "this server keeps no embedding providers"},
+	{ErrNoSwitch, golibrpc.CodeInvalidParams, "no model switch is under way"},
 	{store.ErrNoProvider, CodeNotFound, "no such embedding provider"},
 	{store.ErrProviderTaken, CodeConflict, "another embedding provider has this name"},
 	{store.ErrProviderInvalid, golibrpc.CodeInvalidParams, "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"},
@@ -263,6 +264,19 @@ func (s *Server) register() {
 		}
 		w.Index.Reindex(path)
 		return nil, nil
+	}, true))
+	// the workspace's models and the room their vectors take
+	s.handle("index.models", s.verb(1, 1, func(ctx context.Context, w *Workspace, _ []any) (any, error) {
+		ms, err := w.Index.Models(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]any, len(ms))
+		for i, m := range ms {
+			out[i] = map[string]any{"fp": m.FP, "provider": m.Provider, "name": m.Name, "dims": int64(m.Dims),
+				"state": m.State, "vectors": m.Vectors, "f32_bytes": m.F32Bytes, "bits_bytes": m.BitsBytes, "key_bytes": m.KeyBytes}
+		}
+		return out, nil
 	}, true))
 	s.handle("index.purge_model", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		fp, err := argStr(p, 1, "model")

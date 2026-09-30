@@ -214,6 +214,8 @@ Window {
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
     RestartBackend { id: restartBackend }
+    Vectors { id: vectorsDialog }
+    PurgeModel { id: purgeModel }
     ConfirmQuit { id: confirmQuit }
     Leader { id: leader }
     Help { id: help }
