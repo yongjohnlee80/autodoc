@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -28,6 +29,22 @@ func runMain(t *testing.T, env []string, args ...string) (int, string) {
 		t.Fatal(err)
 	}
 	return 0, string(out)
+}
+
+// TestTheVersionIsTheModulesWhenNothingStampedIt: go install records the module's version and
+// stamps nothing; a stamp wins; a build with no module version keeps "dev".
+func TestTheVersionIsTheModulesWhenNothingStampedIt(t *testing.T) {
+	for _, c := range []struct{ stamped, module, want string }{
+		{"dev", "v0.1.0", "v0.1.0"},
+		{"v0.1.0-3-gabc1234", "v0.1.0", "v0.1.0-3-gabc1234"},
+		{"dev", "(devel)", "dev"},
+		{"dev", "", "dev"},
+	} {
+		info := &debug.BuildInfo{Main: debug.Module{Path: "github.com/yongjohnlee80/autodoc", Version: c.module}}
+		if got := moduleVersion(c.stamped, info); got != c.want {
+			t.Errorf("stamped %q, module %q: %q, want %q", c.stamped, c.module, got, c.want)
+		}
+	}
 }
 
 // TestArguments: a workspace's name is --ui's alone, and one at most; no mode is the usage; and

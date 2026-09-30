@@ -24,6 +24,21 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
 | `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON |
 
+## Install
+
+| Platform | Install |
+| --- | --- |
+| macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
+| Linux, macOS | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` |
+| Any, with Go 1.25+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
+| Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
+
+Each installs the one `autodoc` binary. Homebrew and mise install the release's binaries, and Homebrew
+pins each to the SHA-256 the release published. `go install` builds from the tagged source, with no
+cgo needed, and `autodoc --version` then reports the module's version, as a release binary does. Start
+it with `autodoc --ui`: the TUI starts the daemon when nothing answers.
+
 ## Configuration
 
 ```toml
@@ -293,6 +308,12 @@ They are small beside a chat model and run alongside one.
 
 Go 1.25, `CGO_ENABLED=0`: the daemon, the TUI and the Web-UI link no cgo. The later native GUI is a
 separate binary.
+
+```sh
+git clone https://github.com/yongjohnlee80/autodoc && cd autodoc && make build   # → bin/autodoc
+```
+
+`make build` stamps the version from `git describe`.
 
 Tests run through `autodoc-test.sh` (beside the repository, as golib's and AutoDB's harnesses are):
 
