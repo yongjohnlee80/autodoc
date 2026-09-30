@@ -13,9 +13,13 @@ import (
 
 func (h *Host) state() map[string]any {
 	st := map[string]any{
-		"App.status":       "",
-		"App.statusLeft":   "NORMAL  autodoc [connecting]",
-		"App.statusCenter": "",
+		"App.status":        "",
+		"App.statusLeft":    "NORMAL  autodoc [connecting]",
+		"App.statusCenter":  "",
+		// semantic search's mark: shown once a status poll answers (progress.go)
+		"App.semanticMark":  "",
+		"App.semanticDot":   "default",
+		"App.semanticLabel": "",
 
 		"App.explorer":   h.explorer,
 		"App.noteTitle":  untitled,

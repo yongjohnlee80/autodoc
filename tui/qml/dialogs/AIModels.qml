@@ -29,6 +29,13 @@ Dialog {
                     TableViewColumn { role: "context"; title: "CONTEXT"; width: 8 }
                     TableViewColumn { role: "apiKey"; title: "KEY"; width: 7 }
                 }
+                // semantic search's state, as the status line shows it
+                Flex {
+                    direction: Tui.Horizontal
+                    Text { text: App.semanticMark; color: App.semanticDot }
+                    Text { text: " " }
+                    Text { text: App.semanticLabel }
+                }
                 Text { text: App.providersStatus; wrapMode: Tui.WordWrap }
             }
         }

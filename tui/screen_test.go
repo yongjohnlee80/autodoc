@@ -132,7 +132,8 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 
 // TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer and the links over the
 // page, from the edges their preferences name, and the page's text does not move; SPC e again
-// closes it.
+// closes it. A side panel takes the middle 85% of the rows, one at the top or bottom the middle
+// 80% of the columns: the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right", "tui.links.edge": "bottom"}})
@@ -150,10 +151,18 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.leader(t, 'e')
 	r.s.WaitForText(t, "explorer")
 	rows := strings.Split(r.s.String(), "\n")
-	for _, row := range rows {
-		if c := col(row, "┌ explorer"); c >= 0 && c < 50 {
-			t.Fatalf("the explorer is not on the right:\n%s", r.s)
+	top := -1
+	for i, row := range rows {
+		if c := col(row, "┌ explorer"); c >= 0 {
+			if c < 50 {
+				t.Fatalf("the explorer is not on the right:\n%s", r.s)
+			}
+			top = i
 		}
+	}
+	// 85% of the rows, centred: rows free above it and below it
+	if want := (len(rows) - len(rows)*85/100) / 2; top < want-1 || top > want+1 || top < 1 {
+		t.Fatalf("the explorer starts at row %d of %d, want about %d:\n%s", top, len(rows), want, r.s)
 	}
 	if x, y := where(); x != x0 || y != y0 {
 		t.Fatalf("the page's text moved from %d,%d to %d,%d under the explorer", x0, y0, x, y)
@@ -164,8 +173,16 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "backlinks (1)")
 	for i, row := range strings.Split(r.s.String(), "\n") {
-		if strings.Contains(row, "backlinks (1)") && i < 15 {
+		if !strings.Contains(row, "backlinks (1)") {
+			continue
+		}
+		if i < 15 {
 			t.Fatalf("the links are not at the bottom (row %d):\n%s", i, r.s)
+		}
+		// 80% of the columns, centred: its border a tenth in
+		w := len([]rune(row))
+		if c := col(row, "┌"); c < w/10-1 || c > w/10+1 {
+			t.Fatalf("the links start at column %d of %d, want about %d:\n%s", c, w, w/10, r.s)
 		}
 	}
 	if x, y := where(); x != x0 || y != y0 {
@@ -519,10 +536,13 @@ func TestAProviderInUse(t *testing.T) {
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
+	r.s.WaitFor(t, "the status line's red mark", func(string) bool { return r.semanticMark() == "red lexical search" })
 	r.leader(t, 'a') // Options › AI models
 	r.s.WaitForText(t, "semantic search off")
 	r.keys(t, key('u')) // the first row: local
 	r.s.WaitForText(t, "semantic search with local")
+	r.s.WaitFor(t, "the status line's green mark", func(string) bool { return r.semanticMark() == "green semantic search" })
+	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search" })
 	// its calls, metered and written every couple of seconds, under the list
 	r.s.WaitFor(t, "local's usage", func(sc string) bool {
 		r.h.p.Post(func() { r.h.providerDetail(0) })
@@ -539,6 +559,9 @@ func TestAProviderInUse(t *testing.T) {
 		r.h.p.Post(func() { r.h.providerDetail(0) })
 		return strings.Contains(sc, "at the usage limit") && strings.Contains(sc, "rate limited")
 	})
+	r.s.WaitFor(t, "the mark red while the provider fails", func(string) bool {
+		return r.semanticMark() == "red lexical search · the provider is not answering"
+	})
 
 	// a provider that does not set up: refused, and local stays in use
 	r.h.p.Post(func() { r.h.useProvider(1) })
@@ -553,6 +576,8 @@ func TestAProviderInUse(t *testing.T) {
 
 	r.keys(t, key('w')) // Words only
 	r.s.WaitForText(t, "semantic search off")
+	r.s.WaitFor(t, "the mark red with none in use", func(string) bool { return r.semanticMark() == "red lexical search" })
+	r.s.WaitFor(t, "the dialog's red mark", func(string) bool { return r.markAbove(1) == "red lexical search" })
 	r.keys(t, key('r')) // Remove…, the first row
 	r.s.WaitForText(t, "remove the provider?")
 	r.s.WaitForText(t, "Remove the provider local?")
@@ -857,4 +882,44 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	if p := onLoop(r, func() prefs { return r.h.prefs }); p.theme != "light" || p.keymap != "vim" {
 		t.Fatalf("an unknown theme or keymap changed the preferences: %+v", p)
 	}
+}
+
+// semanticMark is the status line's semantic-search mark: the dot's colour, then the words after
+// it ("green semantic search"); "" when the bottom row has no dot.
+func (r *running) semanticMark() string {
+	snap := r.s.Backend.Snapshot()
+	return markIn(snap[len(snap)-1], "")
+}
+
+// markAbove is the AI models dialog's mark: the first row above the status line with a dot
+// followed by "semantic search" or "lexical search", read up to the frame's border.
+func (r *running) markAbove(skip int) string {
+	snap := r.s.Backend.Snapshot()
+	for _, row := range snap[:len(snap)-skip] {
+		if m := markIn(row, "│"); strings.HasSuffix(m, " search") || strings.Contains(m, " search ·") {
+			return m
+		}
+	}
+	return ""
+}
+
+// markIn is row's first dot's colour and the words after it, up to stop ("" for the row's end).
+func markIn(row []tuicore.Cell, stop string) string {
+	for x, c := range row {
+		if c.Content != "●" {
+			continue
+		}
+		colour := map[tuicore.CellColor]string{{Kind: tuicore.CellColorANSI, Index: 1}: "red", {Kind: tuicore.CellColorANSI, Index: 2}: "green"}[c.Attrs.FG]
+		var rest strings.Builder
+		for _, c := range row[x+1:] {
+			if stop != "" && c.Content == stop {
+				break
+			}
+			rest.WriteString(c.Content)
+		}
+		if m := strings.TrimSpace(rest.String()); colour != "" && m != "" {
+			return colour + " " + m
+		}
+	}
+	return ""
 }

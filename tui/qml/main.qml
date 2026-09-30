@@ -151,6 +151,9 @@ Window {
         left: App.statusLeft
         center: App.statusCenter
         right: App.status
+        // semantic search: a green dot while it answers, a red one while the search is by words
+        Text { text: App.semanticMark; color: App.semanticDot }
+        Text { text: App.semanticLabel }
     }
 
     // ---- the panels: drawers over the page, each from the edge its preference names ----
@@ -159,6 +162,7 @@ Window {
         modal: false
         edge: App.explorerEdge
         size: 30
+        length: App.explorerLength
         onOpened: App.panelOpened("explorer")
         onClosed: App.panelClosed("explorer")
         Frame {
@@ -178,6 +182,7 @@ Window {
         modal: false
         edge: App.linksEdge
         size: 30
+        length: App.linksLength
         onOpened: App.panelOpened("links")
         onClosed: App.panelClosed("links")
         Frame {

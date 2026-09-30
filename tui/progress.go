@@ -10,8 +10,9 @@ import (
 // PROGRESS — what the daemon still has to do, on the status line's right while there is any.
 //
 // The TUI polls index.status once a second while it is attached: the documents indexed, the jobs
-// pending (a first scan's are every note), and the texts the embedding provider has yet to embed.
-// While any is pending, the right slot shows a bar beside the last message; when indexing ends, it
+// pending (a first scan's are every note), and the texts the embedding provider has yet to embed
+// (a new model's, while it fills to replace the active one). While any is pending, the right slot
+// shows a bar beside the last message, a spinner turning while the model embeds; when indexing ends, it
 // says so once, and the workspace's notes are listed again, the pickers' and the explorer's (a
 // listing taken mid-scan was partial). They are listed again, too, whenever the index's change log
 // has moved while nothing is pending: a note added, removed or renamed outside the TUI is indexed
@@ -19,19 +20,63 @@ import (
 
 const progressEvery = time.Second
 
+// spinEvery is how often the spinner turns while the provider embeds.
+const spinEvery = 150 * time.Millisecond
+
+// spinFrames are the spinner's: a model is making vectors.
+var spinFrames = []string{"-", "\\", "|", "/"}
+
 type progress struct {
-	docs, pending, embedding int64
-	busy                     bool  // pending or embedding work, as last polled
-	cursor                   int64 // the change log's head, as last polled
-	polled                   bool  // a poll has answered in this workspace
+	docs, pending int64
+	emb           embedProgress
+	busy          bool  // pending or embedding work, as last polled
+	cursor        int64 // the change log's head, as last polled
+	polled        bool  // a poll has answered in this workspace
+	spin          int   // the spinner's frame
+	spinning      bool  // the spinner's timer is running
 }
+
+// embedProgress is index.status's embeddings: nil there is off.
+type embedProgress struct {
+	on            bool   // a provider is in use
+	texts         int64  // the distinct texts every model covers once done
+	pending       int64  // those the active model has no vector for
+	target        string // the model filling to replace the active one; "" for none
+	targetPending int64
+	failing       bool // the provider's last call failed
+}
+
+// embedOf reads index.status's embeddings.
+func embedOf(m map[string]any) embedProgress {
+	if m == nil {
+		return embedProgress{}
+	}
+	e := embedProgress{on: true, target: str(m, "target"), failing: str(m, "last_error") != ""}
+	e.texts, _ = m["texts"].(int64)
+	e.pending, _ = m["pending"].(int64)
+	e.targetPending, _ = m["target_pending"].(int64)
+	return e
+}
+
+// working is the embedding left: the target's while one fills, else the active model's.
+func (e embedProgress) working() int64 {
+	if e.target != "" {
+		return e.targetPending
+	}
+	return e.pending
+}
+
+// online is semantic search answering: a provider in use, its model not replaced mid-switch, its
+// last call answered. Offline, a search is by words.
+func (e embedProgress) online() bool { return e.on && e.target == "" && !e.failing }
 
 // poll asks for the status, and asks again a second after the answer, while the program runs.
 func (h *Host) poll() {
 	ep, ws := h.epoch, h.ws
 	type answer struct {
-		docs, pending, embedding, cursor int64
-		err                              error
+		docs, pending, cursor int64
+		emb                   embedProgress
+		err                   error
 	}
 	do(h, func(ctx context.Context) answer {
 		res, err := h.call(ctx, "index.status", ws)
@@ -39,20 +84,17 @@ func (h *Host) poll() {
 			return answer{err: err}
 		}
 		m := asMap(res)
-		a := answer{}
+		a := answer{emb: embedOf(asMap(m["embeddings"]))}
 		a.docs, _ = m["docs"].(int64)
 		a.pending, _ = m["pending_jobs"].(int64)
 		a.cursor, _ = m["cursor"].(int64)
-		if e := asMap(m["embeddings"]); e != nil {
-			a.embedding, _ = e["pending"].(int64)
-		}
 		return a
 	}, func(a answer) {
 		if ep != h.epoch {
 			return // another workspace or connection: its own poll is running
 		}
 		if a.err == nil {
-			h.showProgress(a.docs, a.pending, a.embedding, a.cursor)
+			h.showProgress(a.docs, a.pending, a.emb, a.cursor)
 		}
 		// the next poll is this epoch's: a switch or a reconnect in the meantime has started its own
 		h.after(progressEvery, func() {
@@ -77,13 +119,13 @@ func (h *Host) after(d time.Duration, fn func()) {
 	}()
 }
 
-func (h *Host) showProgress(docs, pending, embedding, cursor int64) {
+func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64) {
 	was := h.prog.busy
 	moved := h.prog.polled && cursor != h.prog.cursor
-	h.prog.docs, h.prog.pending, h.prog.embedding = docs, pending, embedding
+	h.prog.docs, h.prog.pending, h.prog.emb = docs, pending, emb
 	h.prog.cursor, h.prog.polled = cursor, true
-	h.prog.busy = pending > 0 || embedding > 0
-	if was && pending == 0 && embedding == 0 {
+	h.prog.busy = pending > 0 || emb.working() > 0
+	if was && !h.prog.busy {
 		h.message = fmt.Sprintf("indexed %d notes", docs)
 	}
 	if pending == 0 && (was || moved) {
@@ -91,20 +133,85 @@ func (h *Host) showProgress(docs, pending, embedding, cursor int64) {
 		h.listNotes()
 		h.relistInExplorer(h.ws)
 	}
+	h.showSemantic()
 	h.publishStatus()
+	h.spinWhileEmbedding()
 }
 
-// progressText is the bar: indexing as done of done+pending, then what embedding has left.
-func progressText(docs, pending, embedding int64) string {
-	var parts []string
-	if pending > 0 {
-		total := docs + pending
-		const width = 10
-		filled := int(docs * width / max(total, 1))
-		parts = append(parts, fmt.Sprintf("indexing %s%s %d/%d", strings.Repeat("█", filled), strings.Repeat("░", width-filled), docs, total))
+// showSemantic is the status line's mark: a green dot while semantic search answers, a red one
+// and "lexical search" while it does not.
+func (h *Host) showSemantic() {
+	e := h.prog.emb
+	dot, label := "red", "lexical search"
+	switch {
+	case e.online():
+		dot, label = "green", "semantic search"
+	case e.target != "":
+		label = "lexical search · switching models"
+	case e.failing:
+		label = "lexical search · the provider is not answering"
 	}
-	if embedding > 0 {
-		parts = append(parts, fmt.Sprintf("embedding %d pending", embedding))
+	h.set("App.semanticMark", "●")
+	h.set("App.semanticDot", dot)
+	h.set("App.semanticLabel", label)
+}
+
+// spinWhileEmbedding turns the spinner while the provider has texts to embed, and stops it after.
+func (h *Host) spinWhileEmbedding() {
+	if h.prog.spinning || h.prog.emb.working() == 0 || h.prog.emb.failing {
+		return
+	}
+	h.prog.spinning = true
+	ep := h.epoch
+	var turn func()
+	turn = func() {
+		if ep != h.epoch || h.prog.emb.working() == 0 || h.prog.emb.failing {
+			if ep == h.epoch {
+				h.prog.spinning = false
+			}
+			return
+		}
+		h.prog.spin = (h.prog.spin + 1) % len(spinFrames)
+		h.publishStatus()
+		h.after(spinEvery, turn)
+	}
+	h.after(spinEvery, turn)
+}
+
+// bar is done of total as ten cells, then the numbers.
+func bar(done, total int64) string {
+	const width = 10
+	done = min(max(done, 0), total)
+	filled := int(done * width / max(total, 1))
+	return fmt.Sprintf("%s%s %d/%d", strings.Repeat("█", filled), strings.Repeat("░", width-filled), done, total)
+}
+
+// modelName is a fingerprint's model name (provider|name|digest|dims).
+func modelName(fp string) string {
+	if parts := strings.Split(fp, "|"); len(parts) >= 2 {
+		return parts[1]
+	}
+	return fp
+}
+
+// progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
+// switch's fill) as the texts covered of all of them, the spinner turning while the model works.
+func progressText(p progress) string {
+	var parts []string
+	if p.pending > 0 {
+		parts = append(parts, "indexing "+bar(p.docs, p.docs+p.pending))
+	}
+	e := p.emb
+	if left := e.working(); left > 0 {
+		what := "embedding"
+		if e.target != "" {
+			what = "switching to " + modelName(e.target)
+		}
+		mark := spinFrames[p.spin%len(spinFrames)]
+		if e.failing {
+			mark = "!" // waiting on the provider, not working
+		}
+		parts = append(parts, what+" "+mark+" "+bar(e.texts-left, e.texts))
 	}
 	return strings.Join(parts, " · ")
 }
@@ -113,7 +220,7 @@ func progressText(docs, pending, embedding int64) string {
 func (h *Host) publishStatus() {
 	right := h.message
 	if h.prog.busy {
-		if p := progressText(h.prog.docs, h.prog.pending, h.prog.embedding); p != "" {
+		if p := progressText(h.prog); p != "" {
 			right = p + "  " + h.message
 		}
 	}
