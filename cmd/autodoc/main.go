@@ -18,11 +18,28 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 )
 
-// version is stamped at build time (-ldflags "-X main.version=…").
+// version is stamped at build time (-ldflags "-X main.version=…"). Unstamped, as
+// `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@v0.1.0` builds it, it is the module's
+// version the build recorded. The TUI compares it with the installed binary's, so it must be real.
 var version = "dev"
+
+func init() {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		version = moduleVersion(version, info)
+	}
+}
+
+// moduleVersion is stamped, unless the build stamped nothing and recorded the module's version.
+func moduleVersion(stamped string, info *debug.BuildInfo) string {
+	if v := info.Main.Version; stamped == "dev" && v != "" && v != "(devel)" {
+		return v
+	}
+	return stamped
+}
 
 func main() {
 	serve := flag.Bool("serve", false, "run the daemon")
