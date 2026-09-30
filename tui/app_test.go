@@ -47,10 +47,11 @@ func (c committing) WriteFileIf(ctx context.Context, name string, r io.Reader, w
 // daemon is a real autodoc daemon for the TUI to talk to: the RPC server over the core, on a unix
 // socket, with its workspaces on memfs so a test can change the files underneath.
 type daemon struct {
-	sock string
-	fs   map[string]*memfs.FS
-	db   *store.Store
-	stop func()
+	sock    string
+	fs      map[string]*memfs.FS
+	db      *store.Store
+	stop    func()
+	stopped chan struct{} // closed once its server has stopped, by stop or by sys.shutdown
 }
 
 // startDaemon serves the workspaces named (each with its notes, path then content). A name ending
@@ -71,9 +72,10 @@ func startDaemonOn(t *testing.T, sock string, workspaces map[string][]string) *d
 // store starts with, nil for the tests' own (the status line shown, which most tests read); emb
 // serves embedding providers.
 type daemonOpts struct {
-	slow  time.Duration
-	prefs map[string]string
-	emb   rpc.Embeddings
+	slow    time.Duration
+	prefs   map[string]string
+	emb     rpc.Embeddings
+	version string // its hello's; "" is v-test
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -173,8 +175,13 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if o.emb != nil {
 		opts = append(opts, rpc.WithEmbeddings(o.emb))
 	}
-	srv := rpc.New(rpc.Fixed(served...), "v-test", opts...)
+	version := o.version
+	if version == "" {
+		version = "v-test"
+	}
+	srv := rpc.New(rpc.Fixed(served...), version, opts...)
 	done := make(chan struct{})
+	d.stopped = done
 	go func() { _ = srv.Run(ctx); close(done) }()
 	d.stop = func() { cancel(); <-done; cores.Wait() }
 	t.Cleanup(func() { cancel(); <-done; cores.Wait() }) // before the store closes (its cleanup runs after)

@@ -59,6 +59,10 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.startRemoveWorkspace":     oneNumber("App.startRemoveWorkspace", "a row", h.startRemoveWorkspace),
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
 
+		// the backend
+		"App.startRestart":     none(h.startRestart),
+		"App.restartConfirmed": none(h.restartConfirmed),
+
 		// the preferences
 		"App.openPrefs":           none(h.openPrefs),
 		"App.openAIModels":        none(h.openAIModels),

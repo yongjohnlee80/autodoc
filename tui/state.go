@@ -13,9 +13,9 @@ import (
 
 func (h *Host) state() map[string]any {
 	st := map[string]any{
-		"App.status":        "",
-		"App.statusLeft":    "NORMAL  autodoc [connecting]",
-		"App.statusCenter":  "",
+		"App.status":       "",
+		"App.statusLeft":   "NORMAL  autodoc [connecting]",
+		"App.statusCenter": "",
 		// semantic search's mark: shown once a status poll answers (progress.go)
 		"App.semanticMark":  "",
 		"App.semanticDot":   "default",
@@ -81,6 +81,7 @@ func (h *Host) state() map[string]any {
 		"App.providerModels":         h.providerModels,
 		"App.providerModelsStatus":   "",
 		"App.providerRemoveQuestion": "",
+		"App.restartQuestion":        "",
 
 		// the workspace add
 		"App.home":    homeDir(),

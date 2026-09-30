@@ -84,14 +84,22 @@ type Host struct {
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
-	ws       string
-	entered  bool // ws was entered on this connection's listing
-	remember func(name string)
-	where    string // the status line's "autodoc <version> · <workspace>", or why there is none
-	wsList   []wsInfo
-	epoch    uint64
-	listSeq  uint64 // numbers the note list's loads; the latest wins (search.go)
-	notesAll []string
+	ws      string
+	entered bool // ws was entered on this connection's listing
+	// a restart under way: the version it stops, and its daemon's process, which the reconnect
+	// waits out (restart.go)
+	restartFrom string
+	restartPID  int64
+	remember    func(name string)
+	installed   func() (string, error) // Options.Installed
+	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
+	// test's process, so its test waits on the daemon instead
+	awaitExit func(ctx context.Context, pid int64) bool
+	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
+	wsList    []wsInfo
+	epoch     uint64
+	listSeq   uint64 // numbers the note list's loads; the latest wins (search.go)
+	notesAll  []string
 
 	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
@@ -120,6 +128,9 @@ type Options struct {
 	Workspace string
 	// Remember, when set, is told each workspace the TUI enters, so the next start can open it.
 	Remember func(name string)
+	// Installed, when set, is the version of the autodoc a restart would start (the binary on
+	// disk, which an update replaces while the daemon runs).
+	Installed func() (string, error)
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -138,7 +149,8 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed,
+		awaitExit:      func(ctx context.Context, pid int64) bool { return waitGone(ctx, pid, restartWait) },
 		picker:         tuidecl.NewListModel("key", "path"),
 		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:        tuidecl.NewListModel("key", "path"),

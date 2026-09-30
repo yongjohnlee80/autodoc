@@ -26,7 +26,12 @@ func (h *Host) start() {
 			h.set("App.aboutText", h.aboutText()+"\n\nThe last connect failed:\n"+err.Error())
 			return
 		}
-		h.setStatus("connected — autodoc " + h.session.Version())
+		if h.restartFrom != "" {
+			h.setStatus(fmt.Sprintf("backend restarted: autodoc %s → %s", h.restartFrom, h.session.Version()))
+			h.restartFrom, h.restartPID = "", 0
+		} else {
+			h.setStatus("connected — autodoc " + h.session.Version())
+		}
 		h.setConnected(true)
 		h.entered = false // a new connection enters its workspace again, as the first did
 		h.loadPrefs()
@@ -52,6 +57,18 @@ func (h *Host) watch() {
 		}
 		h.epoch++
 		h.setWhere("autodoc [disconnected]")
+		if pid := h.restartPID; pid != 0 {
+			// a restart: the old daemon lets go of its workspaces after its socket, so the new one
+			// starts once the old process is gone, or it would find them busy
+			h.setStatus("restarting the backend: waiting for the old one to stop…")
+			do(h, func(ctx context.Context) bool { return h.awaitExit(ctx, pid) }, func(gone bool) {
+				if !gone {
+					h.setStatus(fmt.Sprintf("the old backend (pid %d) has not stopped after %s: reconnecting anyway", pid, restartWait))
+				}
+				h.start()
+			})
+			return
+		}
 		h.setStatus("disconnected — reconnecting…")
 		h.start()
 	})

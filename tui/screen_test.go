@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -933,4 +935,76 @@ func markIn(row []tuicore.Cell, stop string) string {
 		}
 	}
 	return ""
+}
+
+// TestRestartBringsUpTheInstalledBackend: File › Restart backend… asks, saying the version running
+// and the one installed; yes stops the daemon, the reconnect waits for it to go, starts the
+// installed one, and says so.
+func TestRestartBringsUpTheInstalledBackend(t *testing.T) {
+	dir, err := os.MkdirTemp("", "adr")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	sock := filepath.Join(dir, "s.sock")
+	notes := map[string][]string{"kb": {"a.md", "a\n"}}
+	old := startDaemonWith(t, sock, notes, daemonOpts{version: "v1"})
+	var spawns atomic.Int32
+	sess := NewSession(sock, func() (string, error) {
+		// once: the new daemon's cleanup runs before the TUI's, whose reconnect must not start
+		// another after the test
+		if spawns.Add(1) > 1 {
+			return "", errors.New("spawned already")
+		}
+		startDaemonWith(t, sock, notes, daemonOpts{version: "v2"})
+		return "", nil
+	})
+	r := runTUI(t, sess, Options{Installed: func() (string, error) { return "v2", nil }})
+	r.ready(t)
+	onLoop(r, func() bool {
+		r.h.awaitExit = func(ctx context.Context, _ int64) bool {
+			select {
+			case <-old.stopped:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		return true
+	})
+	if spawns.Load() != 0 {
+		t.Fatal("a daemon was spawned with one answering")
+	}
+	r.h.p.Post(r.h.startRestart)
+	r.s.WaitFor(t, "the question", func(sc string) bool {
+		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
+		return strings.Contains(text, "Restart the backend (autodoc v1)?") && strings.Contains(text, "as autodoc v2, the one installed")
+	})
+	r.keys(t, key('y'))
+	r.s.WaitForText(t, "backend restarted: autodoc v1 → v2")
+	select {
+	case <-old.stopped:
+	default:
+		t.Fatal("the old daemon still runs")
+	}
+	if n := spawns.Load(); n != 1 {
+		t.Fatalf("%d daemons spawned, want the one", n)
+	}
+	if v := onLoop(r, func() string { return r.h.session.Version() }); v != "v2" {
+		t.Errorf("connected to %q, want the installed v2", v)
+	}
+}
+
+// TestRestartNeedsASpawner: a TUI that starts no daemon offers no restart, since nothing would
+// bring one back.
+func TestRestartNeedsASpawner(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.h.p.Post(r.h.startRestart)
+	r.s.WaitForText(t, "this TUI starts no daemon")
+	select {
+	case <-d.stopped:
+		t.Fatal("the daemon stopped")
+	default:
+	}
 }

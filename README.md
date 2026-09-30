@@ -120,6 +120,15 @@ names and saves it as a note. Everything else comes when it is asked for:
 
 All of them are kept in the daemon's store, so they are the same whichever workspace is open.
 
+**File › Restart backend…** stops the daemon, and the TUI starts the autodoc installed in its
+place, so an update takes effect without quitting. The question says which version runs and which
+one starts. Indexing and embedding carry on where they stopped.
+
+The status line ends with semantic search's state: a green dot and "semantic search" while a
+provider answers, a red one and "lexical search" while it doesn't (none in use, a model switch
+under way, or the provider not answering). While the provider embeds, a spinner turns beside a bar
+of the sections covered.
+
 A save writes only over the version the note was opened at. If the note changed on disk since, the
 TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or
 quitting over unsaved changes asks first, too.
