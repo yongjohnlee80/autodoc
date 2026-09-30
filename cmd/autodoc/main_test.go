@@ -40,7 +40,8 @@ func TestArguments(t *testing.T) {
 	}{
 		{[]string{"--version"}, 0, "autodoc " + version},
 		{[]string{"kb"}, 2, "unexpected arguments: [kb]"},
-		{[]string{"--serve", "kb"}, 2, "only --ui takes one"},
+		{[]string{"--serve", "kb"}, 2, "only --ui and --call take one"},
+		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --ui and --call take one"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
 		{nil, 2, "-serve"},
 	} {

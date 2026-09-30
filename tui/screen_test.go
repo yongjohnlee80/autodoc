@@ -1337,7 +1337,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.keys(t, enter()) // Enter on the row found opens it: the view's own cursor is there
 	r.waitNote(t, "x.md")
 
-		// SPC SPC is the workspace's search
+	// SPC SPC is the workspace's search
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "SPC — commands")
 	r.keys(t, key(' '))
