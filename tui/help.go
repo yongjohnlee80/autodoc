@@ -5,7 +5,10 @@ package tui
 const helpText = `KEYS
   Space       the leader card, in Normal mode: a key runs its command (its list is the card);
               Ctrl+Space opens it in every editor mode
-  Ctrl+G, /   search the workspace: the hits on the left, the note on the right at the hit
+  Ctrl+G, SPC /, SPC SPC  search the workspace, by words and meaning: the hits on the left,
+              the note on the right at the hit
+  /           find a word in the pane with the keyboard (the page, the explorer, the links);
+              n and N find it again, forward and back
   Ctrl+O      open a note: a filter over the workspace's notes, with a preview
   Ctrl+N      new note: a path in the workspace, .md added when it has none
   Ctrl+S      save the note
@@ -45,7 +48,7 @@ WHAT A KEY NEEDS
   Opening, switching or quitting over unsaved changes asks first: Save, Discard or Stay.`
 
 // leaderText is the leader card's body, a key a line, as its Shortcuts are (views/Leader.qml).
-const leaderText = `/  search                 e  the explorer
+const leaderText = `/  search (or SPC again)   e  the explorer
 o  open a note            l  the links
 n  new note               t  the status line
 s  save                   m  the menu bar

@@ -84,6 +84,11 @@ func (h *Host) state() map[string]any {
 		"App.providerModelsStatus":   "",
 		"App.providerRemoveQuestion": "",
 		"App.restartQuestion":        "",
+		// find in a pane (find.go)
+		"App.findTitle":  "find",
+		"App.findError":  "",
+		"App.lastFind":   "",
+		"App.linksIndex": 0,
 		// the workspace's models and their vectors (vectors.go)
 		"App.vectors":       h.vectors,
 		"App.vectorsTitle":  "vectors",

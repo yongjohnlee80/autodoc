@@ -58,7 +58,10 @@ Window {
     // Ctrl+G, and / where the editor leaves it (Normal mode), as vim's search: the Vim keyset takes
     // Ctrl+F and Ctrl+B to page
     Shortcut { sequence: "Ctrl+G"; onActivated: App.openSearch() }
-    Shortcut { sequence: "/"; onActivated: App.openSearch() }
+    // / finds in the pane with the keyboard; n and N find again (find.go)
+    Shortcut { sequence: "/"; onActivated: App.openFind() }
+    Shortcut { sequence: "n"; onActivated: App.findNext() }
+    Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
@@ -155,10 +158,10 @@ Window {
         left: App.statusLeft
         center: App.statusCenter
         right: App.status
-        // semantic search, at the left end: a green dot while it answers, a red one while the
-        // search is by words
-        Text { text: App.semanticMark; color: App.semanticDot; StatusBar.permanent: false }
-        Text { text: App.semanticLabel; StatusBar.permanent: false }
+        // semantic search, at the right end after the status: a green dot while it answers, a red
+        // one while the search is by words
+        Text { text: App.semanticMark; color: App.semanticDot }
+        Text { text: App.semanticLabel }
     }
 
     // ---- the panels: drawers over the page, each from the edge its preference names ----
@@ -178,6 +181,7 @@ Window {
                 palette.highlightedText: Theme.document.highlightedText
                 model: App.explorer
                 textRole: "label"
+                onCurrentIndexChanged: App.explorerMoved(index)
                 onActivated: App.explorerActivated(index)
             }
         }
@@ -198,12 +202,15 @@ Window {
                 palette.highlightedText: Theme.document.highlightedText
                 model: App.backlinks
                 textRole: "label"
+                currentIndex: App.linksIndex
+                onCurrentIndexChanged: App.linksMoved(index)
                 onActivated: App.openBacklink(index)
             }
         }
     }
 
     SearchPicker { id: searchPicker }
+    Find { id: findDialog }
     NoteOpen { id: noteOpen }
     NoteName { id: noteName }
     UnsavedNote { id: unsavedNote }

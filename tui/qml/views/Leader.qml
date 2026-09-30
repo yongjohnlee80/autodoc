@@ -9,6 +9,7 @@ Dialog {
     helpText: "a key runs its command · Esc closes"
     Text { text: App.leaderText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: "/"; onActivated: { leader.close(); App.openSearch() } }
+    Shortcut { sequence: "Space"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "o"; onActivated: { leader.close(); App.openPicker() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newNote() } }
     Shortcut { sequence: "s"; onActivated: { leader.close(); App.save() } }

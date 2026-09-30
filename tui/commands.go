@@ -46,6 +46,13 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.panelClosed":       oneString("App.panelClosed", "a panel", h.panelClosed),
 		"App.movePane":          oneString("App.movePane", "h, j, k or l", h.movePane),
 		"App.explorerActivated": oneIndex("App.explorerActivated", h.explorerActivated),
+		"App.explorerMoved":     oneIndex("App.explorerMoved", h.explorerMoved),
+		"App.linksMoved":        oneNumber("App.linksMoved", "a row", h.linksMoved),
+		"App.openFind":          none(h.openFind),
+		"App.find":              oneString("App.find", "a word or phrase", h.startFind),
+		"App.findCancelled":     none(h.findCancelled),
+		"App.findNext":          none(h.findNext),
+		"App.findPrevious":      none(h.findPrevious),
 		"App.openBacklink":      oneNumber("App.openBacklink", "a row", h.openBacklink),
 
 		// the workspaces
