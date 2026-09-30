@@ -79,7 +79,12 @@ func (h *Host) applyToastPrefs() {
 	h.toasts.SetMargin(h.toastMargin())
 }
 
+// post shows a toast. A click on it opens the notifications' history (Johno: "toast click opens
+// the notification history"), unless the toast says otherwise.
 func (h *Host) post(t widget.Toast) {
+	if t.OnClick == nil {
+		t.OnClick = h.openNotices
+	}
 	if h.toasts == nil {
 		h.early = append(h.early, t) // before the Window mounted: shown once it is
 		return

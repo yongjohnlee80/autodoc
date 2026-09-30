@@ -104,6 +104,24 @@ func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 	r.s.WaitForText(t, "New note")
 }
 
+// TestAToastClickedOpensTheNotificationsHistory: a click on a toast's card opens the history of the
+// notifications, where it and the ones before it are kept.
+func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "10"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	var x, y = -1, -1
+	for i, row := range strings.Split(r.s.String(), "\n") {
+		if j := strings.Index(row, "connected — autodoc v-test"); j >= 0 {
+			x, y = len([]rune(row[:j])), i
+		}
+	}
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
+	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.historyOpen }) })
+	r.s.WaitForText(t, "TIME")
+}
+
 // TestTheStatusLineShowsWhileDisconnected: the status line hidden by preference still shows while
 // the TUI is not connected, so a lost connection is never silent.
 func TestTheStatusLineShowsWhileDisconnected(t *testing.T) {
