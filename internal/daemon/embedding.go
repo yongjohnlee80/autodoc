@@ -54,8 +54,10 @@ type Embedding struct {
 	switching sync.Mutex
 
 	mu      sync.Mutex
-	active  string // the provider in use, by name; "" for none
-	lastErr string // why the provider named is not in use, "" when it is
+	active  string         // the provider in use, by name; "" for none
+	live    embed.Provider // the provider in use; nil for none
+	lastErr string         // why the provider named is not in use, "" when it is
+	unloads sync.WaitGroup // the unloads of providers gone out of use, still asking their servers
 
 	// the calls the meters heard and the store has yet to keep, by provider; a write that fails
 	// leaves them here for the next
@@ -95,8 +97,12 @@ func (e *Embedding) Start(ctx context.Context) {
 	}
 }
 
-// Wait returns once the last calls heard are written, after Start's ctx ended.
-func (e *Embedding) Wait() { <-e.done }
+// Wait returns once the last calls heard are written, after Start's ctx ended, and the unloads
+// asked for have answered.
+func (e *Embedding) Wait() {
+	<-e.done
+	e.unloads.Wait()
+}
 
 // Use makes the provider named name the one semantic search uses, and remembers it; "" turns
 // semantic search off. In that order: the provider is set up, the preference written, and only
@@ -109,50 +115,72 @@ func (e *Embedding) Use(ctx context.Context, name string) error {
 		if err := e.db.SetPreference(ctx, store.PrefProvider, ""); err != nil {
 			return err
 		}
-		e.swap("", nil, nil)
+		e.swap("", nil)
 		return nil
 	}
-	p, pf, err := e.setUp(ctx, name)
+	p, err := e.setUp(ctx, name)
 	if err != nil {
 		return err
 	}
 	if err := e.db.SetPreference(ctx, store.PrefProvider, name); err != nil {
 		return err
 	}
-	e.swap(name, p, pf)
+	e.swap(name, p)
 	return nil
 }
 
 // apply is Start's: the provider the preference already names, set up and given to the
 // workspaces.
 func (e *Embedding) apply(ctx context.Context, name string) error {
-	p, pf, err := e.setUp(ctx, name)
+	p, err := e.setUp(ctx, name)
 	if err != nil {
 		return err
 	}
-	e.swap(name, p, pf)
+	e.swap(name, p)
 	return nil
 }
 
 // setUp sets up the stored provider named name; one that does not is the reason kept for
 // Providers, the one in use staying.
-func (e *Embedding) setUp(ctx context.Context, name string) (embed.Provider, func(embed.Model) (embed.Provider, error), error) {
+func (e *Embedding) setUp(ctx context.Context, name string) (embed.Provider, error) {
 	info, key, err := e.db.ProviderWithKey(ctx, name)
 	if err == nil {
 		var p embed.Provider
-		var pf func(embed.Model) (embed.Provider, error)
-		if p, pf, err = e.build(ctx, info, key); err == nil {
-			return p, pf, nil
+		if p, err = e.build(ctx, info, key); err == nil {
+			return p, nil
 		}
 	}
 	e.set(e.current(), err.Error())
-	return nil, nil, err
+	return nil, err
 }
 
-// swap gives every workspace provider p (nil: none) as the one named name.
-func (e *Embedding) swap(name string, p embed.Provider, pf func(embed.Model) (embed.Provider, error)) {
-	e.ws.SetEmbedding(p, pf)
+// unloadTimeout bounds asking a server to let a model go.
+const unloadTimeout = 10 * time.Second
+
+// swap gives every workspace provider p (nil: none) as the one named name. The provider it
+// replaces goes offline: its server is told to let its model go, unless p is the same model on the
+// same server, so a switch never holds two models at once. The workspaces are stopped first, so
+// nothing embeds with it after.
+func (e *Embedding) swap(name string, p embed.Provider) {
+	e.ws.SetEmbedding(p)
+	e.mu.Lock()
+	old := e.live
+	e.live = p
+	e.mu.Unlock()
 	e.set(name, "")
+	u, ok := old.(embed.Unloader)
+	if !ok || (p != nil && u.Shares(p)) {
+		return
+	}
+	e.unloads.Add(1)
+	go func() {
+		defer e.unloads.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), unloadTimeout)
+		defer cancel()
+		if err := u.Unload(ctx); err != nil {
+			logger.Warning(e.log, err, "the model gone out of use could not be unloaded: its server lets it go when idle")
+		}
+	}()
 }
 
 func (e *Embedding) set(active, lastErr string) {
@@ -167,38 +195,24 @@ func (e *Embedding) current() string {
 	return e.active
 }
 
-// build sets up provider info with its key, metered, and the maker of its other models' providers
-// (the model still active while a new one fills).
-func (e *Embedding) build(ctx context.Context, info store.ProviderInfo, key string) (embed.Provider, func(embed.Model) (embed.Provider, error), error) {
-	name := info.Name
-	newProvider := func(ctx context.Context, model string) (embed.Provider, error) {
-		ctx, cancel := context.WithTimeout(ctx, setupTimeout)
-		defer cancel()
-		var p embed.Provider
-		var err error
-		if info.Kind == store.KindOllama || info.Kind == store.KindOllamaCloud {
-			p, err = embed.NewOllama(ctx, info.BaseURL, key, model, e.client, embed.WithContext(info.Context))
-		} else {
-			p, err = embed.NewOpenAI(ctx, info.BaseURL, key, model, e.client)
-		}
-		if err != nil {
-			return nil, err
-		}
-		if m, ok := p.(embed.Metered); ok {
-			m.SetMeter(func(c embed.Call) { e.hear(info.ID, c) })
-		}
-		return p, nil
+// build sets up provider info with its key, metered.
+func (e *Embedding) build(ctx context.Context, info store.ProviderInfo, key string) (embed.Provider, error) {
+	ctx, cancel := context.WithTimeout(ctx, setupTimeout)
+	defer cancel()
+	var p embed.Provider
+	var err error
+	if info.Kind == store.KindOllama || info.Kind == store.KindOllamaCloud {
+		p, err = embed.NewOllama(ctx, info.BaseURL, key, info.Model, e.client, embed.WithContext(info.Context))
+	} else {
+		p, err = embed.NewOpenAI(ctx, info.BaseURL, key, info.Model, e.client)
 	}
-	p, err := newProvider(ctx, info.Model)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return p, func(m embed.Model) (embed.Provider, error) {
-		if m.Provider != p.Model().Provider {
-			return nil, fmt.Errorf("model %s is not %s's", m.Fingerprint(), name)
-		}
-		return newProvider(context.Background(), m.Name)
-	}, nil
+	if m, ok := p.(embed.Metered); ok {
+		m.SetMeter(func(c embed.Call) { e.hear(info.ID, c) })
+	}
+	return p, nil
 }
 
 // hear holds a call for the store. It takes a lock for an append, never waiting on the store, so
@@ -310,14 +324,14 @@ func (e *Embedding) UpdateProvider(ctx context.Context, name string, sp store.Pr
 	if sp.Key != nil {
 		key = *sp.Key
 	}
-	p, pf, err := e.build(ctx, store.ProviderInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model, Context: sp.ContextWindow()}, key)
+	p, err := e.build(ctx, store.ProviderInfo{ID: old.ID, Name: sp.Name, Kind: sp.Kind, BaseURL: sp.BaseURL, Model: sp.Model, Context: sp.ContextWindow()}, key)
 	if err != nil {
 		return err
 	}
 	if err := e.db.UpdateProvider(ctx, name, sp); err != nil {
 		return err
 	}
-	e.swap(sp.Name, p, pf)
+	e.swap(sp.Name, p)
 	return nil
 }
 
@@ -330,7 +344,7 @@ func (e *Embedding) RemoveProvider(ctx context.Context, name string) error {
 		return err
 	}
 	if e.current() == name {
-		e.swap("", nil, nil)
+		e.swap("", nil)
 	}
 	return nil
 }

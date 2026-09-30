@@ -66,7 +66,7 @@ type Hit struct {
 type Result struct {
 	Hits     []Hit
 	ModeUsed string // ModeLexical, ModeSemantic or ModeHybrid
-	Semantic string // SemanticOff, SemanticReady, SemanticPartial or SemanticError
+	Semantic string // SemanticOff, SemanticReady, SemanticPartial, SemanticSwitching or SemanticError
 	// SemanticError is the constant message of SemanticError: a provider's own error text is not
 	// passed to clients.
 	SemanticError string
@@ -146,13 +146,23 @@ func (s *Store) searchIn(ctx context.Context, res Result, mode string, useSem bo
 				embedErr = fmt.Errorf("index: the active model keeps changing")
 			}
 		}
-		if useSem && embedErr != nil {
+		switch {
+		case useSem && errors.Is(embedErr, errOffline):
+			// the active model is offline while a new one fills: by words, and saying so
+			if mode == ModeSemantic {
+				return ErrSwitching
+			}
+			useSem = false
+			res.Semantic = SemanticSwitching
+		case useSem && embedErr != nil:
 			if mode == ModeSemantic {
 				return fmt.Errorf("%w: %v", ErrEmbedFailed, embedErr)
 			}
 			useSem = false
 			res.Semantic, res.SemanticError = SemanticError, ErrEmbedFailed.Error()
-		} else if sem != nil {
+		case sem != nil && sem.switching():
+			res.Semantic = SemanticSwitching // a lexical query while a new model fills
+		case sem != nil:
 			unready, err := s.sc.Documents(tx).With(store.DocSemanticReady, int64(0)).Exists()
 			if err != nil {
 				return err
@@ -224,8 +234,8 @@ func (s *Store) embedQuery(ctx context.Context, sem *semantic, q string) (string
 	if err != nil {
 		return "", nil, fmt.Errorf("index: reading the active model: %w", err)
 	}
-	fp, provider, name, dims := m.FP, deref(m.Provider), deref(m.Name), int(derefInt(m.Dims))
-	p, err := sem.provider(fp, modelOf(fp, provider, name, dims))
+	fp, dims := m.FP, int(derefInt(m.Dims))
+	p, err := sem.provider(fp)
 	if err != nil {
 		return "", nil, err
 	}

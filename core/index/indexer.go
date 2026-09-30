@@ -51,12 +51,10 @@ type Options struct {
 	// onCommit, when set (tests only), is told how long each batch's transaction held the writer.
 	onCommit func(time.Duration)
 	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
-	// one active, or, while another is active, the one filling to replace it.
+	// one active, or, while another is active, the one filling to replace it. The model it replaces
+	// is offline while it fills: nothing embeds with it, so the server holds one model at a time,
+	// and a query is answered by words (SemanticSwitching) until the target covers every chunk.
 	Provider embed.Provider
-	// ProviderFor makes the provider of a model other than Provider's: the one still active while
-	// the target fills, which queries are embedded with. Nil: that model gets no new vectors, and a
-	// semantic query during the switch reports SemanticError.
-	ProviderFor func(embed.Model) (embed.Provider, error)
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -139,7 +137,7 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 		results: make(chan *prepared, 2*opts.Workers),
 		work:    make(chan workItem), ops: make(chan op)}
 	if opts.Provider != nil {
-		ix.sem = newSemantic(opts.Provider, opts.ProviderFor)
+		ix.sem = newSemantic(opts.Provider)
 	}
 	return ix
 }
@@ -222,13 +220,11 @@ func (x *Indexer) Run(ctx context.Context) error {
 		}()
 	}
 	if x.sem != nil {
-		for _, role := range []int{roleActive, roleTarget} {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				x.embedLoop(workCtx, role)
-			}()
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			x.embedLoop(workCtx)
+		}()
 	}
 	defer func() { stopWorkers(); wg.Wait() }()
 	return x.writer(ctx)

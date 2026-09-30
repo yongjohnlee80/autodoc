@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,8 +25,15 @@ import (
 // ollama is a fake Ollama server with the models named, recording each embed request's num_ctx.
 type ollama struct {
 	*httptest.Server
-	mu     sync.Mutex
-	numCtx []int
+	mu       sync.Mutex
+	numCtx   []int
+	unloaded []string // the models asked to be let go (keep_alive 0, no input)
+}
+
+func (o *ollama) unloads() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.unloaded...)
 }
 
 func (o *ollama) contexts() []int {
@@ -46,14 +54,20 @@ func newOllama(t *testing.T, models ...string) *ollama {
 			_ = json.NewEncoder(w).Encode(map[string]any{"models": list})
 		case "/api/embed":
 			var req struct {
-				Input   []string
-				Options struct {
+				Model     string
+				Input     []string
+				KeepAlive *int `json:"keep_alive"`
+				Options   struct {
 					NumCtx int `json:"num_ctx"`
 				}
 			}
 			_ = json.NewDecoder(r.Body).Decode(&req)
 			o.mu.Lock()
-			o.numCtx = append(o.numCtx, req.Options.NumCtx)
+			if req.KeepAlive != nil && *req.KeepAlive == 0 && len(req.Input) == 0 {
+				o.unloaded = append(o.unloaded, req.Model)
+			} else {
+				o.numCtx = append(o.numCtx, req.Options.NumCtx)
+			}
 			o.mu.Unlock()
 			vecs := make([][]float32, len(req.Input))
 			for i := range vecs {
@@ -202,6 +216,45 @@ func TestTheProviderSendsItsContextWindow(t *testing.T) {
 			t.Errorf("num_ctx after the edit %v, want 2048 on each", got)
 			break
 		}
+	}
+}
+
+// TestTheModelReplacedGoesOffline: the provider in use, edited to another model, has its server
+// told to let the old model go, so the two are never loaded together for the switch; an edit to
+// the same model (its context window, say) unloads nothing; turning semantic search off unloads
+// the model in use.
+func TestTheModelReplacedGoesOffline(t *testing.T) {
+	o := newOllama(t, "embedder", "bigger")
+	e, _, _ := embedding(t, o)
+	ctx := context.Background()
+	if err := e.Use(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if got := o.unloads(); len(got) != 0 {
+		t.Fatalf("unloaded %q with nothing replaced", got)
+	}
+	sp := store.ProviderSpec{Name: "a", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder", Context: 4096}
+	if err := e.UpdateProvider(ctx, "a", sp); err != nil {
+		t.Fatal(err)
+	}
+	e.unloads.Wait()
+	if got := o.unloads(); len(got) != 0 {
+		t.Fatalf("an edit keeping the model unloaded %q: the model in use", got)
+	}
+	sp.Model = "bigger"
+	if err := e.UpdateProvider(ctx, "a", sp); err != nil {
+		t.Fatal(err)
+	}
+	e.unloads.Wait()
+	if got := o.unloads(); !reflect.DeepEqual(got, []string{"embedder"}) {
+		t.Fatalf("after the edit to another model: unloaded %q, want the old model", got)
+	}
+	if err := e.Use(ctx, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.unloads.Wait()
+	if got := o.unloads(); !reflect.DeepEqual(got, []string{"embedder", "bigger"}) {
+		t.Errorf("after Words only: unloaded %q, want the model in use too", got)
 	}
 }
 

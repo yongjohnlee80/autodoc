@@ -419,25 +419,27 @@ func TestSnapshotAndFallbackAgree(t *testing.T) {
 	}
 }
 
-// TestModelSwitchKeepsTheOldModel: a new target model fills in the background while the old one
-// answers; the switch happens once the new model covers every chunk, and queries racing it are
-// never empty.
-func TestModelSwitchKeepsTheOldModel(t *testing.T) {
+// TestAModelSwitchAnswersByWords: a new target model fills in the background, the old one
+// offline meanwhile: nothing embeds with it, a query is answered by words and says the switch is
+// under way, and a semantic query is refused with ErrSwitching. The switch happens once the new
+// model covers every chunk, and queries racing it never fail.
+func TestAModelSwitchAnswersByWords(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, Options{Provider: a})
 	e.put("x.md", "zebra giraffe\n", "y.md", "hippo river\n", "z.md", "glacier ice\n")
 	e.ready()
 	fpA := a.Model().Fingerprint()
 	e.stop()
+	calls := func(f *fakeProvider) int {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return len(f.calls)
+	}
+	aCalls := calls(a)
 	b := newFake("m2", "b")
 	b.hold("glacier")
 	e.stop = nil
-	e.open(Options{Provider: b, ProviderFor: func(m embed.Model) (embed.Provider, error) {
-		if m.Fingerprint() == fpA {
-			return a, nil
-		}
-		return nil, fmt.Errorf("no provider for %s", m.Fingerprint())
-	}})
+	e.open(Options{Provider: b})
 	e.eventually("b filling", func() bool { return len(b.texts()) > 0 })
 	time.Sleep(50 * time.Millisecond)
 	// asking the writer whether b covers every chunk, while it covers none, flips nothing
@@ -447,18 +449,23 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 	if got := e.activeModel(); got != fpA {
 		t.Fatalf("active %q while b fills, want a", got)
 	}
-	if es := e.embStatus(); es.Model != fpA || es.Target != b.Model().Fingerprint() {
+	if es := e.embStatus(); es.Model != fpA || es.Target != b.Model().Fingerprint() || es.Semantic != SemanticSwitching {
 		t.Errorf("status while b fills %+v", es)
 	}
-	before := e.query("zebra", QueryOpts{Mode: ModeSemantic})
-	if len(before.Hits) == 0 || before.Semantic != SemanticReady {
-		t.Fatalf("the old model does not answer while the new one fills: %+v", before)
+	before := e.query("zebra", QueryOpts{})
+	if before.Semantic != SemanticSwitching || before.ModeUsed != ModeLexical || !reflect.DeepEqual(via(before), []string{"x.md lexical"}) {
+		t.Fatalf("a query while b fills: %+v, want x.md by words, switching", before)
 	}
-	// an edit during the switch gets the old model's vector, so it answers now, not after the flip
+	if _, err := e.ix.Search(context.Background(), "zebra", QueryOpts{Mode: ModeSemantic}); !errors.Is(err, ErrSwitching) {
+		t.Errorf("a semantic query while b fills: %v, want ErrSwitching", err)
+	}
+	// an edit during the switch is found by its words now, and embedded by b alone
 	e.put("w.md", "zebra foal\n")
-	e.ready2("w.md")
-	if got := via(e.query("foal", QueryOpts{Mode: ModeSemantic})); len(got) == 0 || got[0] != "w.md semantic" {
+	if got := via(e.query("foal", QueryOpts{})); !reflect.DeepEqual(got, []string{"w.md lexical"}) {
 		t.Errorf("a note written during the switch: %q", got)
+	}
+	if n := calls(a); n != aCalls {
+		t.Errorf("the offline model was asked %d more times during the switch", n-aCalls)
 	}
 	// queries race the flip: none is empty
 	stop := make(chan struct{})
@@ -475,7 +482,7 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 					return
 				default:
 				}
-				res, err := e.ix.Search(context.Background(), "zebra", QueryOpts{Mode: ModeSemantic})
+				res, err := e.ix.Search(context.Background(), "zebra", QueryOpts{})
 				mu.Lock()
 				done++
 				if err != nil || len(res.Hits) == 0 {
@@ -502,7 +509,7 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 		t.Errorf("status after the flip %+v", es)
 	}
 	after := e.query("zebra", QueryOpts{Mode: ModeSemantic})
-	if len(after.Hits) == 0 || e.ix.sem.snap.Load().fp != fpB {
+	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().fp != fpB {
 		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().fp)
 	}
 	// the old model's vectors stay until purged; the active one cannot be purged
@@ -522,29 +529,6 @@ func TestModelSwitchKeepsTheOldModel(t *testing.T) {
 	_ = scanOne(context.Background(), e.raw, &rows, "SELECT COUNT(*) FROM model WHERE fp = ?", fpA)
 	if vecs != 0 || rows != 0 {
 		t.Errorf("after the purge: %d vectors, %d rows", vecs, rows)
-	}
-}
-
-// TestSwitchWithoutTheOldProvider: while a new model fills and nothing can embed with the active
-// one, a query reports SemanticError (auto) or fails with ErrEmbedFailed (semantic).
-func TestSwitchWithoutTheOldProvider(t *testing.T) {
-	a := newFake("m", "a")
-	e := newEnv(t, Options{Provider: a})
-	e.put("x.md", "zebra\n", "y.md", "glacier\n")
-	e.ready()
-	e.stop()
-	b := newFake("m2", "b")
-	b.hold("glacier")
-	defer b.unhold()
-	e.stop = nil
-	e.open(Options{Provider: b})
-	e.eventually("b filling", func() bool { return len(b.texts()) > 0 })
-	res := e.query("zebra", QueryOpts{})
-	if res.Semantic != SemanticError || !reflect.DeepEqual(via(res), []string{"x.md lexical"}) {
-		t.Errorf("auto: %+v", res)
-	}
-	if _, err := e.ix.Search(context.Background(), "zebra", QueryOpts{Mode: ModeSemantic}); !errors.Is(err, ErrEmbedFailed) {
-		t.Errorf("semantic: %v", err)
 	}
 }
 
@@ -662,9 +646,9 @@ func (e *env) embStatus() EmbeddingStatus {
 	return *st.Embeddings
 }
 
-// TestLateOldModelBatchKeepsTheFlip: after the target has become active, a batch the old model's
-// worker was still embedding is stored, and changes nothing about which model is active, though the
-// old model covers every chunk.
+// TestLateOldModelBatchKeepsTheFlip: after the target has become active, a batch of the old model
+// handed to the writer is stored, and changes nothing about which model is active, though the old
+// model covers every chunk.
 func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, Options{Provider: a})
@@ -674,7 +658,7 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	e.stop()
 	b := newFake("m2", "b")
 	e.stop = nil
-	e.open(Options{Provider: b, ProviderFor: func(embed.Model) (embed.Provider, error) { return a, nil }})
+	e.open(Options{Provider: b})
 	fpB := b.Model().Fingerprint()
 	e.eventually("the flip to b", func() bool { return e.activeModel() == fpB })
 	for _, vb := range []vecBatch{{fp: fpA}, {fp: fpA, items: []vecItem{{textHash: []byte("late"), vec: make([]float32, 64)}}}} {
@@ -704,7 +688,7 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 	b := newFake("m2", "b")
 	b.refuse = "oversized"
 	e.stop = nil
-	e.open(Options{Provider: b, ProviderFor: func(embed.Model) (embed.Provider, error) { return a, nil }})
+	e.open(Options{Provider: b})
 	e.eventually("the refusal in the status", func() bool {
 		es := e.embStatus()
 		return es.TargetRefused == 1 && es.TargetPending == 1

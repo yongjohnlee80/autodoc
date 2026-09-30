@@ -113,6 +113,16 @@ type Ollama struct {
 	context int // num_ctx sent with every request; 0 leaves the server's own
 }
 
+// Unloader is a provider whose server keeps its model loaded between requests, in memory it holds
+// from other models, and can be told to let it go.
+type Unloader interface {
+	// Unload asks the server to let the model go now.
+	Unload(ctx context.Context) error
+	// Shares reports whether other embeds with the same model on the same server: unloading one
+	// unloads the other.
+	Shares(other Provider) bool
+}
+
 // OllamaOption configures an Ollama client.
 type OllamaOption func(*Ollama)
 
@@ -349,4 +359,19 @@ func Models(ctx context.Context, kind, base, key string, client *http.Client) ([
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// Unload asks the server to let the model go now: an embed request with no input and keep_alive 0.
+// Otherwise it stays loaded until it has been idle for the server's keep-alive (5 minutes by
+// default).
+func (o *Ollama) Unload(ctx context.Context) error {
+	var out struct{}
+	req := map[string]any{"model": o.model.Name, "keep_alive": 0}
+	return call(ctx, o.client, http.MethodPost, o.base+"/api/embed", o.auth, req, &out)
+}
+
+// Shares is other being an Ollama client of the same model at the same server.
+func (o *Ollama) Shares(other Provider) bool {
+	p, ok := other.(*Ollama)
+	return ok && p.base == o.base && p.model.Name == o.model.Name
 }
