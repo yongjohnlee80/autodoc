@@ -154,10 +154,10 @@ func prefState(p prefs) map[string]any {
 		"App.editorWrap":     p.wrap,
 		"App.lineNumbers":    p.lineNumbers,
 		"App.linksLength":    panelLength(p.linkEdge),
-		// the page: the ruler's columns of text, and its border, whose right edge is the first
-		// column past them (vim's colorcolumn at textwidth+1); the editor's guide marks that
-		// column too, so a line scrolled past the page's edge still shows where it is
-		"App.pageWidth":   p.ruler + 2,
+		// the page: the ruler's columns of text (editable columns: the line numbers' gutter is added
+		// to them, syncPageWidth), and its border, whose right edge is the first column past them
+		// (vim's colorcolumn at textwidth+1); the editor's guide marks that column too, so a line
+		// scrolled past the page's edge still shows where it is
 		"App.rulerColumn": p.ruler + 1,
 		"App.rulerText":   strconv.Itoa(p.ruler),
 	}
@@ -192,10 +192,21 @@ func (h *Host) applyPrefs(p prefs) {
 		h.set(k, v)
 	}
 	h.set("App.statusShown", h.statusShown())
+	h.syncPageWidth()
 	h.syncPrefDialog()
 	h.applyToastPrefs()
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
+	}
+}
+
+// syncPageWidth sizes the page to hold the ruler's columns of text: its border, and the line
+// numbers' gutter when they show, whose width the editor says (it grows with the note's lines).
+func (h *Host) syncPageWidth() {
+	w := h.prefs.ruler + 2 + h.editor.GutterWidth()
+	if w != h.pageWidth {
+		h.pageWidth = w
+		h.set("App.pageWidth", w)
 	}
 }
 

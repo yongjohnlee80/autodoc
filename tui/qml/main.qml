@@ -151,6 +151,9 @@ Window {
             ruler: App.rulerColumn
             wrap: App.editorWrap
             lineNumbers: App.lineNumbers
+            // the theme's accent for the cursor, and its dim tone for the line numbers
+            cursorColor: Theme.document.cursor
+            lineNumberColor: Theme.document.lineNumber
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
             SyntaxHighlighter { definition: "Markdown" }

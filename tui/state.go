@@ -16,6 +16,7 @@ func (h *Host) state() map[string]any {
 		"App.status":       "",
 		"App.statusLeft":   "NORMAL  autodoc [connecting]",
 		"App.statusCenter": "",
+		"App.pageWidth":    defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
 		// semantic search's mark: shown once a status poll answers (progress.go)
 		"App.semanticMark":   "",
 		"App.semanticDot":    "default",

@@ -123,6 +123,7 @@ type Host struct {
 	noticeList  *tuidecl.ListModel
 	historyOpen bool
 	vimKeys     *widget.Float // the Vim keys' card (vimkeys.go)
+	pageWidth   int           // the page's width as last set: the ruler, the border, the gutter
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
