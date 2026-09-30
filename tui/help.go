@@ -4,7 +4,7 @@ package tui
 
 const helpText = `KEYS
   Space       the leader card, in Normal mode: a key runs its command (its list is the card);
-              Ctrl+Space opens it in every keymap and mode
+              Ctrl+Space opens it in every editor mode
   Ctrl+G, /   search the workspace: the hits on the left, the note on the right at the hit
   Ctrl+O      open a note: a filter over the workspace's notes, with a preview
   Ctrl+N      new note: a path in the workspace, .md added when it has none
@@ -12,12 +12,12 @@ const helpText = `KEYS
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it)
-  SPC k       the keymap: Vim (modal) or Text (modeless, an ordinary text editor's keys)
+  SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   F1          this help;  Ctrl+Q quit
 
 THE PAGE
   The note is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the
-  width). In the Vim keymap, i types and Esc goes back to Normal; in the Text keymap, typing
+  width). In the Vim editor mode, i types and Esc goes back to Normal; in the Text mode, typing
   types. With no note open, the page is an untitled
   draft: type, and Ctrl+S names and saves it. The status line (SPC t) shows the mode, the note,
   and [+] while it has unsaved changes.
@@ -49,7 +49,7 @@ const leaderText = `/  search                 e  the explorer
 o  open a note            l  the links
 n  new note               t  the status line
 s  save                   m  the menu bar
-w  switch workspace       k  the keymap (Vim, Text)
+w  switch workspace       k  the editor mode (Vim, Text)
 W  manage workspaces      ,  editor preferences
 ?  help                   a  AI models
 A  about                  Q  quit`

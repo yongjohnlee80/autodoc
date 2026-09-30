@@ -34,7 +34,7 @@ Dialog {
                     direction: Tui.Horizontal
                     Text { text: App.semanticMark; color: App.semanticDot }
                     Text { text: " " }
-                    Text { text: App.semanticLabel }
+                    Text { text: App.semanticDetail }
                 }
                 Text { text: App.providersStatus; wrapMode: Tui.WordWrap }
             }

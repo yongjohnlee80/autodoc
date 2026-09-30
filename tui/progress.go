@@ -140,22 +140,25 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	h.spinWhileEmbedding()
 }
 
-// showSemantic is the status line's mark: a green dot while semantic search answers, a red one
-// and "lexical search" while it does not.
+// showSemantic is semantic search's mark: a green dot while it answers, a red one and "lexical
+// search" while it does not. The status line has room for the words alone; the AI models dialog
+// and the search's title say why, too.
 func (h *Host) showSemantic() {
 	e := h.prog.emb
-	dot, label := "red", "lexical search"
+	dot, label, why := "red", "lexical search", ""
 	switch {
 	case e.online():
 		dot, label = "green", "semantic search"
 	case e.target != "":
-		label = "lexical search · switching models"
+		why = " · switching models"
 	case e.failing:
-		label = "lexical search · the provider is not answering"
+		why = " · the provider is not answering"
 	}
 	h.set("App.semanticMark", "●")
 	h.set("App.semanticDot", dot)
 	h.set("App.semanticLabel", label)
+	h.set("App.semanticDetail", label+why)
+	h.set("App.searchTitle", "search · "+label+why)
 }
 
 // spinWhileEmbedding turns the spinner while the provider has texts to embed, and stops it after.

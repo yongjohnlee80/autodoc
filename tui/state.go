@@ -17,9 +17,11 @@ func (h *Host) state() map[string]any {
 		"App.statusLeft":   "NORMAL  autodoc [connecting]",
 		"App.statusCenter": "",
 		// semantic search's mark: shown once a status poll answers (progress.go)
-		"App.semanticMark":  "",
-		"App.semanticDot":   "default",
-		"App.semanticLabel": "",
+		"App.semanticMark":   "",
+		"App.semanticDot":    "default",
+		"App.semanticLabel":  "",
+		"App.semanticDetail": "",
+		"App.searchTitle":    "search", // with semantic search's state once a poll answers
 
 		"App.explorer":   h.explorer,
 		"App.noteTitle":  untitled,

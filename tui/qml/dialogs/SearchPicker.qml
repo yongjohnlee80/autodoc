@@ -6,7 +6,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 92
     maxHeightPercent: 90
-    title: "search"
+    title: App.searchTitle
     dim: false
     Split {
         orientation: Tui.Horizontal
