@@ -22,7 +22,7 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
 | `tui` | the terminal UI: search, the notes, a Vim-keyed editor, backlinks; its screen written in QML |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
-| `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI |
+| `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON |
 
 ## Configuration
 
@@ -191,6 +191,17 @@ float vectors, and its results are fused with BM25 by reciprocal rank.
   offline when the new one is chosen: its server is told to unload it, so the two are never loaded
   together. The answer says the semantic side is `switching` until the new model covers every chunk.
 - **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
+
+**From a shell, or an AI agent.** `autodoc --call <verb> '<JSON array of parameters>'` calls any
+verb of the daemon (starting it when nothing answers) and prints the result as JSON:
+
+```sh
+autodoc --call workspace.list
+autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
+```
+
+[AGENTS.md](AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the
+filters (`paths`, `tags`, `mode`, `limit`) and the errors.
 
 ## Semantic search and embedding models
 
