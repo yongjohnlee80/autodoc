@@ -108,21 +108,24 @@ names and saves it as a note. Everything else comes when it is asked for:
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
 
-**Options** is the menu for the editor and its models:
+**Options** is the menu for the editor:
 
 - **Keymap:** Vim (modal: `i` types, `Esc` goes back to Normal) or Text (modeless, an ordinary
   text editor's keys). `SPC k` switches between them.
 - **Theme:** Dark, Light, Mono or Retro.
 - **Editor preferences…** (`SPC ,`): the keymap, the page's width (applied as it is typed), the
   theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
+
+**System**, right of Options, is the menu for the backend:
+
 - **AI models…** (`SPC a`): the embedding providers on the left, and the one under the cursor's
   usage by day and latest calls on the right (see below).
+- **Restart backend…** stops the daemon, and the TUI starts the autodoc installed in its place, so
+  an update takes effect without quitting. The question says which version runs and which one
+  starts. Indexing and embedding carry on where they stopped.
 
-All of them are kept in the daemon's store, so they are the same whichever workspace is open.
-
-**File › Restart backend…** stops the daemon, and the TUI starts the autodoc installed in its
-place, so an update takes effect without quitting. The question says which version runs and which
-one starts. Indexing and embedding carry on where they stopped.
+The preferences and the AI models are kept in the daemon's store, so they are the same whichever
+workspace is open.
 
 The status line ends with semantic search's state: a green dot and "semantic search" while a
 provider answers, a red one and "lexical search" while it doesn't (none in use, a model switch
@@ -211,7 +214,7 @@ whose vectors are closest are the matches.
   over. The old model's vectors stay until purged, so switching back is instant.
 
 **Providers.** Semantic search is off until a provider is chosen in the TUI's AI models
-(`Options › AI models…`). A
+(`System › AI models…`). A
 provider is one of three kinds, with the model it embeds with:
 
 - **Ollama (local):** a server on this machine or the network, `http://localhost:11434` by

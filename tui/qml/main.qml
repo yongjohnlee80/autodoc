@@ -79,7 +79,6 @@ Window {
             MenuItem { text: "&Open note…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
-            MenuItem { text: "Restart &backend…"; onTriggered: App.startRestart() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
@@ -111,7 +110,11 @@ Window {
                 MenuItem { text: "&Retro"; group: "theme"; checked: App.themeRetro; onTriggered: App.useTheme("retro") }
             }
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
+        }
+        Menu {
+            title: "&System"
             MenuItem { text: "&AI models…"; onTriggered: App.openAIModels() }
+            MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
         }
         Menu {
             title: "&Help"

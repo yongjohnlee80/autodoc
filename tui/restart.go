@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// RESTART — File › Restart backend…: the daemon stops, and the TUI's reconnect starts the autodoc
+// RESTART — System › Restart backend…: the daemon stops, and the TUI's reconnect starts the autodoc
 // installed now, so an update takes effect without quitting (AutoDB's SPC X). Indexing and
 // embedding pick up where they stopped: their work is kept in the store.
 

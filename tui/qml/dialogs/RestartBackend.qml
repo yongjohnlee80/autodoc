@@ -1,4 +1,4 @@
-// RestartBackend.qml — File › Restart backend…: asks before the daemon stops and the installed
+// RestartBackend.qml — System › Restart backend…: asks before the daemon stops and the installed
 // autodoc starts in its place. No is the default, so Enter cannot restart it by accident.
 Dialog {
     closeOnQ: true

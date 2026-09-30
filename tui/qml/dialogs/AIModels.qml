@@ -1,4 +1,4 @@
-// AIModels.qml — Options › AI models… (SPC a): the embedding providers semantic search can use.
+// AIModels.qml — System › AI models… (SPC a): the embedding providers semantic search can use.
 // On the left, the providers and which is in use; on the right, the one under the cursor's usage
 // by day and its latest calls. Add… and Edit… open the provider form over it.
 Dialog {

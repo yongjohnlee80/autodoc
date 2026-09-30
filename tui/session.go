@@ -22,7 +22,7 @@ func (h *Host) start() {
 			switch {
 			case errors.As(err, &me) && me.Server < me.Client:
 				h.setWhere("autodoc [older backend]")
-				h.setStatus(fmt.Sprintf("the backend is autodoc %s (protocol %d), older than this TUI (%d): File › Restart backend… starts the installed one",
+				h.setStatus(fmt.Sprintf("the backend is autodoc %s (protocol %d), older than this TUI (%d): System › Restart backend… starts the installed one",
 					me.Version, me.Server, me.Client))
 			case errors.As(err, &me):
 				h.setWhere("autodoc [newer backend]")
