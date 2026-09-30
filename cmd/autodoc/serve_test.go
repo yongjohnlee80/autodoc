@@ -789,6 +789,20 @@ func TestCallPrintsTheResultAsJSON(t *testing.T) {
 	if _, err := run("search.query", `["nowhere", "x"]`); !errors.As(err, &ce) || ce.Code != rpc.CodeNoSuchWorkspace {
 		t.Errorf("a workspace the daemon lacks: %v, want its code", err)
 	}
+	// as the binary exits: 0 with the result, 1 with the refusal as JSON on stderr, or the reason
+	var stdout, stderr bytes.Buffer
+	if code := callMain(context.Background(), cfg, "workspace.list", "", &stdout, &stderr); code != 0 || !strings.Contains(stdout.String(), `"name": "kb"`) {
+		t.Errorf("callMain workspace.list: %d, %q, %q", code, stdout.String(), stderr.String())
+	}
+	stderr.Reset()
+	if code := callMain(context.Background(), cfg, "search.query", `["nowhere", "x"]`, &stdout, &stderr); code != 1 ||
+		strings.TrimSpace(stderr.String()) != `{"error":{"code":-32060,"message":"no such workspace"}}` {
+		t.Errorf("callMain refused: %d, %q", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := callMain(context.Background(), cfg, "workspace.list", "{", &stdout, &stderr); code != 1 || !strings.HasPrefix(stderr.String(), "autodoc: --call") {
+		t.Errorf("callMain bad parameters: %d, %q", code, stderr.String())
+	}
 	for _, bad := range []string{`{"kb": 1}`, `["kb"`, `["kb"] ["x"]`} {
 		if _, err := run("workspace.list", bad); err == nil || !strings.Contains(err.Error(), "--call") {
 			t.Errorf("parameters %s: %v, want refused", bad, err)
