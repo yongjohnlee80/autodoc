@@ -48,6 +48,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.managePlugins":         none(h.managePlugins),
 		"App.startUpdatePlugin":     oneNumber("App.startUpdatePlugin", "a row", h.startUpdatePlugin),
 		"App.startRemovePlugin":     oneNumber("App.startRemovePlugin", "a row", h.startRemovePlugin),
+		"App.placePlugin":           oneNumber("App.placePlugin", "a row", h.placePlugin),
 		"App.removePluginConfirmed": none(h.removePluginConfirmed),
 
 		// the panels

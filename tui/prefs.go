@@ -26,6 +26,9 @@ const (
 	prefNumbers  = "tui.editor.linenumbers"
 	prefCorner   = "tui.toast.corner"
 	prefSeconds  = "tui.toast.seconds"
+	// a plugin's placement: tui.plugin.<name>.placement
+	prefPluginPrefix = "tui.plugin."
+	prefPluginPlace  = ".placement"
 )
 
 // corners are where the toasts can stack, in the order the Preferences dialog offers them.
@@ -67,6 +70,9 @@ type prefs struct {
 	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
 	toastCorner            string // where the notifications stack
 	toastSeconds           int    // how long a finished one stays
+	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
+	// one its manifest does not offer is ignored where it is read (plugins.go placement)
+	pluginPlace map[string]string
 }
 
 func defaultPrefs() prefs {
@@ -121,6 +127,18 @@ func prefsOf(m map[string]any) prefs {
 	if s, ok := str(prefSeconds); ok {
 		if n, err := strconv.Atoi(s); err == nil && n >= 1 && n <= maxToastSeconds {
 			p.toastSeconds = n
+		}
+	}
+	for k, v := range m {
+		if name, ok := strings.CutPrefix(k, prefPluginPrefix); ok {
+			if name, ok = strings.CutSuffix(name, prefPluginPlace); ok {
+				if s, _ := v.(string); s != "" {
+					if p.pluginPlace == nil {
+						p.pluginPlace = map[string]string{}
+					}
+					p.pluginPlace[name] = s
+				}
+			}
 		}
 	}
 	if s, ok := str(prefRuler); ok {

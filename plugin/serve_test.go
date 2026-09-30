@@ -104,6 +104,43 @@ func (r *recorder) Resize(w, h int) { r.add(fmt.Sprintf("resize %dx%d", w, h)) }
 func (r *recorder) Theme(t Theme)   { r.add("theme " + t.Name) }
 func (r *recorder) Close()          { r.add("close") }
 
+// hider is a recorder that is told of hiding and showing.
+type hider struct{ recorder }
+
+func (h *hider) Hide() { h.add("hide") }
+func (h *hider) Show() { h.add("show") }
+
+// TestAHiderIsToldOfHidingAndOthersKeepRunning: plugin.hide and plugin.show reach a Handler that is
+// a Hider, in order; one that is not ignores them and runs on.
+func TestAHiderIsToldOfHidingAndOthersKeepRunning(t *testing.T) {
+	h := &hider{}
+	hs := start(t, h)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: Protocol, Width: 10, Height: 5}))
+	hs.next(t)
+	hs.send(t, MethodHide, EmptyParams())
+	hs.send(t, MethodShow, EmptyParams())
+	hs.send(t, MethodClose, EmptyParams())
+	if err := hs.served(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.all(); !reflect.DeepEqual(got, []string{"open 10x5  ", "hide", "show", "close"}) {
+		t.Fatalf("a Hider's calls = %q", got)
+	}
+	r := &recorder{}
+	hs = start(t, r)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: Protocol, Width: 10, Height: 5}))
+	hs.next(t)
+	hs.send(t, MethodHide, EmptyParams())
+	hs.send(t, MethodKey, KeyParams(Key{Key: "a"}))
+	hs.send(t, MethodClose, EmptyParams())
+	if err := hs.served(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.all(); !reflect.DeepEqual(got, []string{"open 10x5  ", `key a "" ctrl=false`, "close"}) {
+		t.Fatalf("a Handler that is not a Hider: %q", got)
+	}
+}
+
 var dark = Theme{Name: "dark", Colors: map[string]string{"app.window": "#1c1c1c"}}
 
 // TestServeAnswersTheHandshakeAndCallsTheHandlerInOrder: plugin.open is answered with host.ready and

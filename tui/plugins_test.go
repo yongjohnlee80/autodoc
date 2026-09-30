@@ -142,6 +142,8 @@ func (e *echo) Resize(w, h int) {
 }
 
 func (e *echo) Theme(t plugin.Theme) { e.say("theme " + t.Name) }
+func (e *echo) Hide()                { e.say("hide") }
+func (e *echo) Show()                { e.say("show") }
 
 func (e *echo) Close() {
 	fmt.Fprintln(os.Stderr, "echo: closing")
@@ -256,12 +258,15 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
-		"broken":  "name = \n",
-		"future":  "name = \"future\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n",
-		"panel":   "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
-		"nocmd":   "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
-		"Upper":   "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
-		"z-echo2": "name = \"echo\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
+		"broken":   "name = \n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n",
+		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
+		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
+		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
+		"z-echo2":  "name = \"echo\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
+		"sideways": "name = \"sideways\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n[dialog]\nplacements = [\"middle\"]\n",
+		"escaper":  "name = \"escaper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n[dialog]\nesc = \"quit\"\n",
+		"huge":     "name = \"huge\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n[dialog]\nheight = \"150%\"\n",
 	} {
 		_ = os.MkdirAll(filepath.Join(dir, name), 0o755)
 		_ = os.WriteFile(filepath.Join(dir, name, "plugin.toml"), []byte(toml), 0o644)
@@ -273,7 +278,9 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	sc := r.s.String()
 	for _, want := range []string{"broken — plugin.toml:", "future — protocol 2; this AutoDoc speaks 1",
 		`panel — kind "panel": this AutoDoc runs dialog plugins`, "nocmd — no command",
-		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`} {
+		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
+		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
+		`huge — plugin.toml:`} {
 		if !strings.Contains(sc, want) {
 			t.Errorf("the menu lacks %q:\n%s", want, sc)
 		}
@@ -282,8 +289,8 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 		t.Errorf("a directory with no plugin.toml is listed:\n%s", sc)
 	}
 	rows := onLoop(r, func() int { return len(r.h.pluginList) })
-	if rows != 7 {
-		t.Errorf("%d plugins listed, want 7", rows)
+	if rows != 10 {
+		t.Errorf("%d plugins listed, want 10", rows)
 	}
 	r.keys(t, esc())
 
@@ -435,6 +442,144 @@ func zombie(p int) bool {
 	return len(f) > 2 && f[2] == "Z"
 }
 
+// appendManifest adds lines to a test plugin's manifest's [dialog] table, which it ends with.
+func appendManifest(t *testing.T, dir, name, lines string) {
+	t.Helper()
+	path := filepath.Join(dir, name, "plugin.toml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, append(b, []byte(lines)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// dialogEdges are the columns of the dialog titled title: its left and right corners, -1 when it
+// is not on the screen.
+func (r *running) dialogEdges(title string) (left, right int) {
+	for _, row := range strings.Split(r.s.String(), "\n") {
+		if i := strings.Index(row, "╭ "+title); i >= 0 {
+			rs := []rune(row)
+			l := len([]rune(row[:i]))
+			for j := l; j < len(rs); j++ {
+				if rs[j] == '╮' {
+					return l, j
+				}
+			}
+		}
+	}
+	return -1, -1
+}
+
+// TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt: a plugin designed for the right and the
+// left opens on the right, its first; Place moves it to the left at once and keeps the choice in the
+// store; with no placements it is centred.
+func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "echo", "echo", 30, 6)
+	installTestPlugin(t, dir, "side", "echo", 30, 6)
+	appendManifest(t, dir, "side", "placements = [\"right\", \"left\"]\n")
+	logs := t.TempDir()
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	t.Cleanup(func() {
+		for _, p := range onLoop(r, func() []*pluginRun {
+			var out []*pluginRun
+			for _, p := range r.h.running {
+				out = append(out, p)
+			}
+			return out
+		}) {
+			p.shutdown()
+		}
+	})
+
+	r.openPlugin("side")
+	r.waitShown(t, "╭ Side")
+	if _, right := r.dialogEdges("Side"); right != 99 {
+		t.Fatalf("a right-first dialog ends at column %d, want 99 (the edge):\n%s", right, r.s)
+	}
+	r.h.p.Post(r.h.managePlugins)
+	r.s.WaitFor(t, "the manager listed", func(string) bool { return onLoop(r, func() int { return len(r.h.managedList) }) == 2 })
+	i := onLoop(r, func() int {
+		for i, m := range r.h.managedList {
+			if m.e.m.Name == "side" {
+				return i
+			}
+		}
+		return -1
+	})
+	r.h.p.Post(func() { r.h.placePlugin(i) })
+	r.s.WaitFor(t, "the choice stored", func(string) bool {
+		m, err := d.db.Preferences(context.Background())
+		return err == nil && m["tui.plugin.side.placement"] == "left"
+	})
+	r.h.p.Post(func() { r.h.closeDialog("pluginManager") })
+	r.s.WaitFor(t, "moved to the left", func(string) bool { l, _ := r.dialogEdges("Side"); return l == 0 })
+
+	r.keys(t, esc())
+	r.s.WaitFor(t, "side closed", func(string) bool { return onLoop(r, func() bool { return r.h.running["side"] == nil }) })
+	r.openPlugin("echo")
+	r.waitShown(t, "╭ Echo")
+	if left, right := r.dialogEdges("Echo"); left < 30 || right > 69 {
+		t.Fatalf("an unplaced dialog spans %d–%d, want centred:\n%s", left, right, r.s)
+	}
+}
+
+// TestEscHidesAPluginWithItsOwnQuit: esc = "hide" hides the dialog and tells the plugin, which
+// runs on; its menu entry shows it again and tells it so; its own close ends it.
+func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "game", "echo", 30, 6)
+	appendManifest(t, dir, "game", "esc = \"hide\"\n")
+	r, _ := pluginTUI(t, dir)
+	run := r.openPlugin("game")
+	r.waitShown(t, "Game · Esc hides")
+	r.waitShown(t, "open 30x6")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "Esc hides") })
+	select {
+	case <-run.exited:
+		t.Fatal("Esc ended a plugin that hides")
+	case <-time.After(300 * time.Millisecond):
+	}
+	if onLoop(r, func() *pluginRun { return r.h.running["game"] }) != run {
+		t.Fatal("the hidden plugin is not kept")
+	}
+	r.openPlugin("game")
+	r.waitShown(t, "show") // the plugin was told it was hidden, then shown
+	if !strings.Contains(r.s.String(), "hide") {
+		t.Fatalf("the plugin was not told it was hidden:\n%s", r.s)
+	}
+	r.keys(t, key('q')) // its own quit: host.close
+	select {
+	case <-run.exited:
+	case <-time.After(10 * time.Second):
+		t.Fatal("its own quit did not end it")
+	}
+}
+
+// TestAHeightInPercentIsTheScreensShare: height = "80%" lays the dialog out at 80% of the rows it
+// may use, and the plugin is opened at that size.
+func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "tall", "echo", 30, 6)
+	b, _ := os.ReadFile(filepath.Join(dir, "tall", "plugin.toml"))
+	_ = os.WriteFile(filepath.Join(dir, "tall", "plugin.toml"), []byte(strings.Replace(string(b), "height = 6", "height = \"80%\"", 1)), 0o644)
+	r, _ := pluginTUI(t, dir) // 30 rows
+	r.openPlugin("tall")
+	r.waitShown(t, "open 30x")
+	h := onLoop(r, func() int { return r.h.running["tall"].view.laidH })
+	if h < 20 || h > 24 {
+		t.Fatalf("an 80%% dialog is %d rows inside its border on a 30-row screen", h)
+	}
+	if !strings.Contains(r.s.String(), fmt.Sprintf("open 30x%d", h)) {
+		t.Fatalf("the plugin was opened at another size than laid (%d):\n%s", h, r.s)
+	}
+}
+
 // TestAPluginOutlivesGarbageCollection: a plugin that collects garbage keeps its pipes. The SDK
 // once re-opened fd 1 and left the original os.Stdout unreferenced, so its finalizer closed the
 // pipe at the next GC and the plugin ended some seconds in, cleanly and without a word (Johno:
@@ -453,15 +598,16 @@ func TestAPluginOutlivesGarbageCollection(t *testing.T) {
 }
 
 // TestAPluginIsToldTheThemeAndTheSizeItGot: a theme switch reaches the open plugin, and a dialog
-// larger than the screen is laid out smaller, and the plugin told so.
+// larger than the screen is laid out smaller, and the plugin is opened at that size.
 func TestAPluginIsToldTheThemeAndTheSizeItGot(t *testing.T) {
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 200, 60)
 	r, _ := pluginTUI(t, dir) // 100×30
 	r.openPlugin("echo")
-	r.waitShown(t, "resize ")
+	r.waitShown(t, "open ")
 	w, h := onLoop(r, func() int { return r.h.running["echo"].view.laidW }), onLoop(r, func() int { return r.h.running["echo"].view.laidH })
-	if w >= 200 || h >= 60 || !strings.Contains(r.s.String(), fmt.Sprintf("resize %dx%d", w, h)) {
+	// plugin.open waits for the first layout: the plugin is opened at the size it got, not asked
+	if w >= 200 || h >= 60 || !strings.Contains(r.s.String(), fmt.Sprintf("open %dx%d", w, h)) {
 		t.Fatalf("laid %dx%d; the screen:\n%s", w, h, r.s)
 	}
 	r.h.p.Post(func() { r.h.switchTheme("retro") })

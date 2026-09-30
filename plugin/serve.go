@@ -27,6 +27,13 @@ type Handler interface {
 	Close()
 }
 
+// Hider is a Handler that wants to know its dialog was hidden (Esc, when its manifest says
+// esc = "hide") and shown again: a game pauses. A Handler that is not one keeps running, unseen.
+type Hider interface {
+	Hide()
+	Show()
+}
+
 // Peer is the host, as a plugin sends to it.
 type Peer struct {
 	ctx  context.Context
@@ -110,6 +117,14 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 		case MethodTheme:
 			if t, err := ReadTheme(n.params); err == nil && opened {
 				h.Theme(t)
+			}
+		case MethodHide, MethodShow:
+			if hd, ok := h.(Hider); ok && opened {
+				if n.method == MethodHide {
+					hd.Hide()
+				} else {
+					hd.Show()
+				}
 			}
 		case MethodClose:
 			return nil

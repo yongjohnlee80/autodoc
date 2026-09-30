@@ -19,15 +19,21 @@ protocol = 1                          # the plugin protocol it speaks
 command  = ["./bin/autodoc-tetris"]   # argv: a bare name on PATH, or a path from this directory
 
 [dialog]
-width  = 44                           # the columns inside the border (10 to 300; 40 when unset)
-height = 21                           # the rows inside the border (4 to 100; 20 when unset)
+width      = 44                       # the columns inside the border (10 to 300; 40 when unset)
+height     = "80%"                    # the rows inside the border (4 to 100; 20 when unset),
+                                      # or a share of the screen's height ("10%" to "100%")
+placements = ["right", "left"]        # where it is designed to sit, the first its default:
+                                      # center, top, bottom, left, right, or a corner
+                                      # (top-left …); the user picks among them (Manage › Place)
+esc        = "hide"                   # "close" (the default), or "hide" for a plugin with its
+                                      # own quit: Esc hides the dialog, the plugin runs on
 
 [install]
 build = ["go", "build", "-o", "bin/autodoc-tetris", "."]   # run here when it is added or updated
 ```
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why: an unknown kind or
-protocol, a name taken, no command.
+protocol, a name taken, no command, a placement, `esc` or height it does not know.
 
 ## The run
 
@@ -54,6 +60,7 @@ Each notification carries one map.
 | AutoDoc | `plugin.key` | `{key, text, ctrl, alt, shift}` |
 | AutoDoc | `plugin.resize` | `{width, height}`: the dialog laid out at another size |
 | AutoDoc | `plugin.theme` | `{theme}`: the theme switched |
+| AutoDoc | `plugin.hide`, `plugin.show` | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again |
 | AutoDoc | `plugin.close` | `{}`: the last |
 | plugin | `host.ready` | `{protocol}`: the answer to `plugin.open` |
 | plugin | `host.frame` | `{rows}`: the whole dialog, at any time |
@@ -113,3 +120,7 @@ func main() {
 - A plugin with a clock of its own (a game's gravity) sends from another goroutine. The `Peer` is safe
   for concurrent use.
 - `Close` is called once, after `Open`, when the dialog closes or AutoDoc goes.
+- A Handler that is also a `plugin.Hider` (`Hide()`, `Show()`) is told of hiding. A game pauses.
+  A Handler that is not one keeps running while it is hidden.
+- `plugin.open` comes after the dialog's first layout, with the size it was given; `plugin.resize`
+  follows when the screen changes it.
