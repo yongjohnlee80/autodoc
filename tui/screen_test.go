@@ -67,9 +67,10 @@ func TestTheScreenIsThePageAlone(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{"tui.toast.seconds": "1"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	// the notifications of the start (connected, indexed) go once they have lingered
-	r.s.WaitFor(t, "the start's toasts gone", func(string) bool {
-		return onLoop(r, func() bool { s, w := r.h.toasts.Len(); return s == 0 && w == 0 })
+	// the notifications of the start (connected, indexed) go once they have lingered: gone from
+	// the model AND from the painted screen, which repaints a frame after the model empties
+	r.s.WaitFor(t, "the start's toasts gone", func(sc string) bool {
+		return !strings.Contains(sc, "╭") && onLoop(r, func() bool { s, w := r.h.toasts.Len(); return s == 0 && w == 0 })
 	})
 	sc := r.s.String()
 	for _, absent := range []string{"File", "NORMAL", "autodoc v-test", "explorer"} {
