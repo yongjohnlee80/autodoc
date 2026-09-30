@@ -102,7 +102,8 @@ names and saves it as a note. Everything else comes when it is asked for:
 | Key | Does |
 | --- | --- |
 | `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `k`, `,`, `a` …) |
-| `Ctrl+G`, `/` | search (`/` in Normal mode) |
+| `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
+| `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, renames and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |

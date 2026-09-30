@@ -69,6 +69,11 @@ type Host struct {
 	marks               marks
 	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
 
+	// find in a pane (find.go): the last find, and the cursors of the panes it moves
+	find       findState
+	explorerAt []string // the explorer's row under its cursor, by its keys
+	linksAt    int
+
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs     prefs
 	connected bool // to the daemon: the status line shows while not (prefs.go)

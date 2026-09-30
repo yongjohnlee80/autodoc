@@ -943,7 +943,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 func (r *running) semanticMark() string {
 	snap := r.s.Backend.Snapshot()
 	m := markIn(snap[len(snap)-1], "")
-	// the mark sits at the left end, the segments after it: its words are one of the two labels
+	// the mark sits at the right end, after the status: its words are one of the two labels
 	colour, rest, _ := strings.Cut(m, " ")
 	for _, label := range []string{"semantic search", "lexical search"} {
 		if rest == label || strings.HasPrefix(rest, label+" ") {
@@ -1259,4 +1259,87 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 		t.Fatal("the newer daemon was stopped")
 	default:
 	}
+}
+
+// TestFindInThePanes: / asks for a word and finds it in the pane with the keyboard. In the page
+// the cursor goes to it, n to the next, N back, wrapping. In the explorer the cursor goes to the
+// row holding it. The workspace's search is SPC SPC (and SPC /, Ctrl+G), not /.
+func TestFindInThePanes(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n", "b.md", "see [[a]]\n",
+		"kestrels/c.md", "c\n", "x.md", "also [[a]]\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitNote(t, "a.md")
+	line := func() int { return onLoop(r, func() int { l, _ := r.h.editor.Line(); return l }) }
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the page — n next, N previous")
+	r.keys(t, decltest.Type("KESTREL")...) // case-blind
+	r.keys(t, enter())
+	r.s.WaitForText(t, `find "KESTREL": 1 of 2 in the page`)
+	if l := line(); l != 0 {
+		t.Fatalf("the first find put the cursor on line %d, want 0", l)
+	}
+	if c := onLoop(r, func() int { _, c := r.h.editor.Line(); return c }); c != 4 {
+		t.Errorf("the cursor at column %d, want 4 (the word's start)", c)
+	}
+	r.keys(t, key('n'))
+	r.s.WaitForText(t, `find "KESTREL": 2 of 2 in the page`)
+	if l := line(); l != 2 {
+		t.Fatalf("n put the cursor on line %d, want 2", l)
+	}
+	r.keys(t, key('n')) // wraps
+	r.s.WaitForText(t, `find "KESTREL": 1 of 2 in the page`)
+	r.keys(t, key('N')) // back, wrapping
+	r.s.WaitForText(t, `find "KESTREL": 2 of 2 in the page`)
+	if l := line(); l != 2 {
+		t.Fatalf("N put the cursor on line %d, want 2", l)
+	}
+	// not there: said, the cursor where it was
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the page")
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type("osprey")...)
+	r.keys(t, enter())
+	r.s.WaitForText(t, `find: no "osprey" in the page`)
+	if l := line(); l != 2 {
+		t.Fatalf("a find with no match moved the cursor to line %d", l)
+	}
+
+	// the explorer: the row holding it
+	r.leader(t, 'e')
+	r.s.WaitForText(t, "explorer")
+	r.keys(t, enter()) // kb opens: its folder and its notes load
+	r.s.WaitForText(t, "kestrels/")
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the explorer")
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type("b.md")...)
+	r.keys(t, enter())
+	r.s.WaitForText(t, `find "b.md": 1 of 1 in the explorer`)
+	if at := onLoop(r, func() []string { return r.h.explorerAt }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+		t.Fatalf("the explorer's cursor is on %q, want b.md", at)
+	}
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
+
+	// the links: the row holding it, the view's cursor moved there
+	r.leader(t, 'l')
+	r.s.WaitForText(t, "backlinks (2)")
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the links")
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type("x.md")...)
+	r.keys(t, enter())
+	r.s.WaitForText(t, `find "x.md": 1 of 1 in the links`)
+	if at := onLoop(r, func() int { return r.h.linksAt }); at != 1 {
+		t.Fatalf("the links' cursor is on row %d, want 1 (x.md)", at)
+	}
+	r.keys(t, enter()) // Enter on the row found opens it: the view's own cursor is there
+	r.waitNote(t, "x.md")
+
+		// SPC SPC is the workspace's search
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "SPC — commands")
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "words; a * ends a prefix")
 }
