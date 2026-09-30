@@ -188,18 +188,18 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 3's (2 had no preference or embedding verbs; 1 had no
-// workspace.add, rename or remove).
+// TestVerbsArePinned: the verb surface is Protocol 4's (3 had no embedding.cancel_switch or
+// index.models; 2 had no preference or embedding verbs; 1 had no workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
 	want := []string{"doc.read", "doc.remove", "doc.rename", "doc.write",
-		"embedding.add", "embedding.log", "embedding.models", "embedding.providers", "embedding.remove",
+		"embedding.add", "embedding.cancel_switch", "embedding.log", "embedding.models", "embedding.providers", "embedding.remove",
 		"embedding.update", "embedding.usage", "embedding.use",
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
-		"index.changes", "index.list", "index.purge_model", "index.reindex", "index.status",
+		"index.changes", "index.list", "index.models", "index.purge_model", "index.reindex", "index.status",
 		"preference.list", "preference.set",
 		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.list", "workspace.remove", "workspace.rename"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 3 {
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 4 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }

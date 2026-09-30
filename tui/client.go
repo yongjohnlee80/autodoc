@@ -53,7 +53,26 @@ type Session struct {
 	client  *golibrpc.Client
 	gen     uint64
 	version string
-	pid     int64 // the daemon's process, as its hello said
+	pid     int64        // the daemon's process, as its hello said
+	stale   *OlderServer // the daemon refused this build's protocol, and is older: what it said
+}
+
+// OlderServer is a daemon of an older protocol than this build's, as its probe said: a restart
+// stops it and starts the installed autodoc.
+type OlderServer struct {
+	Protocol int64
+	Version  string
+	PID      int64
+}
+
+// MismatchError is a daemon speaking another protocol than this build's.
+type MismatchError struct {
+	Client, Server int64
+	Version        string // the daemon's
+}
+
+func (e *MismatchError) Error() string {
+	return fmt.Sprintf("protocol mismatch: this TUI speaks %d, the backend (autodoc %s) %d", e.Client, e.Version, e.Server)
 }
 
 // NewSession is the session to the daemon on the unix socket addr. spawn, when not nil, starts the
@@ -106,15 +125,78 @@ func (s *Session) Connect(ctx context.Context) error {
 	res, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": "autodoc-tui"})
 	if err != nil {
 		_ = cli.Close()
+		var re *golibrpc.Error
+		if errors.As(err, &re) && re.Code == rpc.CodeProtocolMismatch {
+			return s.mismatch(ctx)
+		}
 		return fmt.Errorf("hello: %w", err)
 	}
 	m, _ := res.(map[string]any)
 	v, _ := m["version"].(string)
 	pid, _ := m["pid"].(int64)
 	s.mu.Lock()
-	s.client, s.version, s.pid = cli, v, pid
+	s.client, s.version, s.pid, s.stale = cli, v, pid, nil
 	s.mu.Unlock()
 	return nil
+}
+
+// mismatch probes a daemon that refused this build's protocol: a hello declaring none is answered
+// with its number, version and process. An older one is kept as Stale, for a restart.
+func (s *Session) mismatch(ctx context.Context) error {
+	info, err := s.probe(ctx)
+	if err != nil {
+		return fmt.Errorf("hello: protocol mismatch, and the probe failed: %w", err)
+	}
+	if info.Protocol < rpc.Protocol {
+		s.mu.Lock()
+		s.stale = &info
+		s.mu.Unlock()
+	}
+	return &MismatchError{Client: rpc.Protocol, Server: info.Protocol, Version: info.Version}
+}
+
+func (s *Session) probe(ctx context.Context) (OlderServer, error) {
+	cli, err := golibrpc.Dial(ctx, s.addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		return OlderServer{}, err
+	}
+	defer cli.Close()
+	res, err := cli.Call(ctx, "sys.hello", map[string]any{"name": "autodoc-tui"})
+	if err != nil {
+		return OlderServer{}, err
+	}
+	m, _ := res.(map[string]any)
+	var info OlderServer
+	info.Protocol, _ = m["protocol"].(int64)
+	info.Version, _ = m["version"].(string)
+	info.PID, _ = m["pid"].(int64)
+	return info, nil
+}
+
+// Stale is the older daemon this build's hello was refused by; nil when there is none.
+func (s *Session) Stale() *OlderServer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stale
+}
+
+// StopStale stops the older daemon: a connection declaring its protocol, for sys.hello and
+// sys.shutdown alone (frozen across protocols).
+func (s *Session) StopStale(ctx context.Context) error {
+	old := s.Stale()
+	if old == nil {
+		return errors.New("tui: no older backend to stop")
+	}
+	cli, err := golibrpc.Dial(ctx, s.addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		return err
+	}
+	defer cli.Close()
+	if _, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": old.Protocol, "name": "autodoc-tui"}); err != nil {
+		return fmt.Errorf("hello at protocol %d: %w", old.Protocol, err)
+	}
+	_, err = cli.Call(ctx, "sys.shutdown")
+	return err
 }
 
 // Call calls method on the connection there is now.

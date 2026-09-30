@@ -90,6 +90,10 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.providerKindChosen":      numberAndString("App.providerKindChosen", "a row and the base URL", h.providerKindChosen),
 		"App.listModels":              twoStrings("App.listModels", "the base URL and the key", h.listModels),
 		"App.pickModel":               oneNumber("App.pickModel", "a row", h.pickModel),
+		"App.cancelIndexing":          none(h.cancelIndexing),
+		"App.openVectors":             none(h.openVectors),
+		"App.startPurge":              oneNumber("App.startPurge", "a row", h.startPurge),
+		"App.purgeConfirmed":          none(h.purgeConfirmed),
 		"App.saveProvider":            fiveStrings("App.saveProvider", "a name, the base URL, the model, the key and the context window", h.saveProvider),
 	}
 }

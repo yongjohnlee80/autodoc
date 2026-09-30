@@ -476,6 +476,18 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	if n := calls(a); n != aCalls {
 		t.Errorf("the offline model was asked %d more times during the switch", n-aCalls)
 	}
+	// the models while b fills: a active, b the target
+	models := func() []ModelInfo {
+		t.Helper()
+		ms, err := e.ix.Models(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ms
+	}
+	if ms := models(); len(ms) != 2 || ms[0].FP != fpA || ms[0].State != ModelActive || ms[1].State != ModelTarget {
+		t.Fatalf("models while b fills: %+v", ms)
+	}
 	// queries race the flip: none is empty
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -521,6 +533,19 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().fp != fpB {
 		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().fp)
 	}
+	// after the flip: b active, a unused, each with the room its vectors take
+	ms := models()
+	if len(ms) != 2 || ms[0].FP != fpB || ms[0].State != ModelActive || ms[1].FP != fpA || ms[1].State != ModelUnused {
+		t.Fatalf("models after the flip: %+v", ms)
+	}
+	var texts int64
+	_ = scanOne(context.Background(), e.raw, &texts, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
+	var f32, bits int64
+	_ = scanOne(context.Background(), e.raw, &f32, "SELECT SUM(LENGTH(f32)) FROM embedding WHERE model_fp = ?", fpA)
+	_ = scanOne(context.Background(), e.raw, &bits, "SELECT SUM(LENGTH(bits)) FROM embedding WHERE model_fp = ?", fpA)
+	if u := ms[1]; u.Vectors != texts || u.F32Bytes != f32 || u.BitsBytes != bits || u.KeyBytes != texts*int64(32+len(fpA)+1) {
+		t.Errorf("a's room %+v, want %d vectors, %d float32 bytes, %d code bytes", u, texts, f32, bits)
+	}
 	// the old model's vectors stay until purged; the active one cannot be purged
 	var vecs int
 	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
@@ -538,6 +563,9 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	_ = scanOne(context.Background(), e.raw, &rows, "SELECT COUNT(*) FROM model WHERE fp = ?", fpA)
 	if vecs != 0 || rows != 0 {
 		t.Errorf("after the purge: %d vectors, %d rows", vecs, rows)
+	}
+	if ms := models(); len(ms) != 1 || ms[0].FP != fpB {
+		t.Errorf("models after the purge: %+v, want b alone", ms)
 	}
 }
 

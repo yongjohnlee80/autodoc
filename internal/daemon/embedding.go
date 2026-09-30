@@ -12,6 +12,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // EMBEDDING — the provider semantic search uses: one of the store's providers, the one the
@@ -314,6 +315,35 @@ func (e *Embedding) AddProvider(ctx context.Context, sp store.ProviderSpec) (sto
 func (e *Embedding) UpdateProvider(ctx context.Context, name string, sp store.ProviderSpec) error {
 	e.switching.Lock()
 	defer e.switching.Unlock()
+	return e.update(ctx, name, sp)
+}
+
+// CancelSwitch ends a model switch: the provider in use goes back to the model still active,
+// which covers every section, so semantic search is online again at once. The filling model's
+// vectors are kept, and a switch to it later carries on from them. It answers the model gone back
+// to.
+func (e *Embedding) CancelSwitch(ctx context.Context) (string, error) {
+	e.switching.Lock()
+	defer e.switching.Unlock()
+	name := e.current()
+	fp := e.ws.Replacing(ctx)
+	if name == "" || fp == "" {
+		return "", rpc.ErrNoSwitch
+	}
+	info, _, err := e.db.ProviderWithKey(ctx, name)
+	if err != nil {
+		return "", err
+	}
+	model := embed.ModelName(fp)
+	sp := store.ProviderSpec{Name: info.Name, Kind: info.Kind, BaseURL: info.BaseURL, Model: model, Context: info.Context}
+	if err := e.update(ctx, name, sp); err != nil {
+		return "", fmt.Errorf("going back to %s: %w", model, err)
+	}
+	return model, nil
+}
+
+// update is UpdateProvider's, under the switching lock.
+func (e *Embedding) update(ctx context.Context, name string, sp store.ProviderSpec) error {
 	if e.current() != name {
 		return e.db.UpdateProvider(ctx, name, sp)
 	}

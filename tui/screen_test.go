@@ -4,11 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/yongjohnlee80/autodoc/rpc"
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1006,5 +1011,141 @@ func TestRestartNeedsASpawner(t *testing.T) {
 	case <-d.stopped:
 		t.Fatal("the daemon stopped")
 	default:
+	}
+}
+
+// TestVectorsListsTheModelsAndPurgesAnUnusedOne: after a switch, AI models › Vectors… lists the new
+// model active and the old one unused, each with the room its vectors take; Purge… on the active
+// one is refused, on the unused one asks, then removes it. Cancel indexing with nothing embedding
+// says so.
+func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
+	ollama := newFakeOllama(t, "embedder", "other")
+	root := noteDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	d := startManaged(t, map[string]string{"kb": root})
+	ctx := context.Background()
+	if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	settled := func(what string) {
+		t.Helper()
+		r.s.WaitFor(t, what, func(string) bool {
+			e := onLoop(r, func() embedProgress { return r.h.prog.emb })
+			return e.online() && e.texts > 0 && e.working() == 0
+		})
+	}
+	if _, err := r.h.session.Call(ctx, "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	settled("embedder covering the notes")
+	if _, err := r.h.session.Call(ctx, "embedding.update", "local",
+		map[string]any{"name": "local", "kind": "ollama", "base_url": ollama.URL, "model": "other"}); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the switch", func(string) bool {
+		return onLoop(r, func() string { return r.h.prog.emb.target }) == "" && r.semanticMark() == "green semantic search" &&
+			func() bool { v, _ := r.h.session.Call(ctx, "index.models", "kb"); return len(asList(v)) == 2 }()
+	})
+	settled("other covering the notes")
+	r.h.p.Post(r.h.cancelIndexing)
+	r.s.WaitForText(t, "nothing is being embedded")
+
+	r.h.p.Post(r.h.openVectors)
+	r.s.WaitFor(t, "both models listed", func(sc string) bool {
+		return regexp.MustCompile(`active +other +3 +2 `).MatchString(sc) && regexp.MustCompile(`unused +embedder +3 +2 `).MatchString(sc) &&
+			strings.Contains(sc, "in models no longer used")
+	})
+	// two 3-dimension vectors: 24 bytes of float32, 16 of codes
+	if sc := r.s.String(); !regexp.MustCompile(`unused +embedder +3 +2 +24 B +16 B `).MatchString(sc) {
+		t.Fatalf("embedder's room:\n%s", sc)
+	}
+	r.h.p.Post(func() { r.h.startPurge(0) })
+	r.s.WaitForText(t, "only one no longer used can be purged")
+	r.h.p.Post(func() { r.h.startPurge(1) })
+	r.s.WaitForText(t, "purge the model?")
+	r.keys(t, key('y'))
+	r.s.WaitForText(t, "purged embedder's 2 vectors from kb")
+	r.s.WaitFor(t, "embedder gone from the list", func(sc string) bool {
+		return !strings.Contains(sc, "unused") && strings.Contains(sc, "1 models")
+	})
+}
+
+// olderDaemon is a daemon of protocol 3 at sock: its hello refuses 4, admits 3, and answers a
+// probe with its number; sys.shutdown, admitted, stops it.
+func olderDaemon(t *testing.T, sock string) (stopped chan struct{}) {
+	t.Helper()
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
+	srv.Handle("sys.hello", func(_ context.Context, req *golibrpc.Request) (any, error) {
+		reply := map[string]any{"protocol": int64(3), "version": "v-old", "pid": int64(os.Getpid())}
+		m, _ := req.Params[0].(map[string]any)
+		switch p, declared := m["protocol"]; {
+		case !declared:
+			return reply, nil
+		case p != int64(3):
+			return nil, &golibrpc.Error{Code: rpc.CodeProtocolMismatch, Message: "protocol mismatch: client 4, server 3"}
+		}
+		req.Session.SetValue("hello", true)
+		return reply, nil
+	})
+	srv.Handle("sys.shutdown", func(_ context.Context, req *golibrpc.Request) (any, error) {
+		if ok, _ := req.Session.Value("hello").(bool); !ok {
+			return nil, &golibrpc.Error{Code: rpc.CodeHandshakeRequired, Message: "handshake required"}
+		}
+		go cancel()
+		return nil, nil
+	})
+	stopped = make(chan struct{})
+	go func() { _ = srv.Run(ctx); close(stopped) }()
+	t.Cleanup(func() { cancel(); <-stopped })
+	return stopped
+}
+
+// TestRestartReplacesAnOlderBackend: a daemon of an older protocol refuses this TUI's hello; the
+// status line says it is older and how to replace it, and Restart backend… stops it over its own
+// protocol and starts the installed one.
+func TestRestartReplacesAnOlderBackend(t *testing.T) {
+	dir, err := os.MkdirTemp("", "ado")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	sock := filepath.Join(dir, "s.sock")
+	old := olderDaemon(t, sock)
+	var spawns atomic.Int32
+	sess := NewSession(sock, func() (string, error) {
+		if spawns.Add(1) > 1 {
+			return "", errors.New("spawned already")
+		}
+		startDaemonWith(t, sock, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{version: "v2"})
+		return "", nil
+	})
+	r := runTUI(t, sess, Options{Installed: func() (string, error) { return "v2", nil }})
+	r.s.WaitForText(t, "the backend is autodoc v-old (protocol 3), older than this TUI")
+	onLoop(r, func() bool {
+		r.h.awaitExit = func(ctx context.Context, _ int64) bool {
+			select {
+			case <-old:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		return true
+	})
+	r.h.p.Post(r.h.startRestart)
+	r.s.WaitFor(t, "the question", func(sc string) bool {
+		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
+		return strings.Contains(text, "Restart the backend (autodoc v-old)?") && strings.Contains(text, "as autodoc v2")
+	})
+	r.keys(t, key('y'))
+	r.s.WaitForText(t, "backend restarted: autodoc v-old → v2")
+	if n := spawns.Load(); n != 1 {
+		t.Fatalf("%d daemons spawned, want the one", n)
 	}
 }

@@ -30,8 +30,12 @@ import (
 )
 
 // Protocol is the API's version. A client must declare exactly this one; any change to the verbs,
-// their parameters or their results bumps it (TestVerbsArePinned holds the list).
-const Protocol int64 = 3
+// their parameters or their results bumps it (TestVerbsArePinned holds the list). sys.hello and
+// sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
+// declaring the daemon's number, to start the installed one in its place.
+//
+// Protocol 4 added embedding.cancel_switch and index.models.
+const Protocol int64 = 4
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"

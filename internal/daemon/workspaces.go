@@ -138,6 +138,25 @@ func (m *Workspaces) SetEmbedding(p embed.Provider) {
 	}
 }
 
+// Replacing is the model a switch is replacing: the active model of a served workspace whose
+// target is another; "" when none is switching.
+func (m *Workspaces) Replacing(ctx context.Context) string {
+	m.mu.Lock()
+	var ixs []*index.Indexer
+	for _, s := range m.served {
+		if s.stop != nil {
+			ixs = append(ixs, s.w.Index)
+		}
+	}
+	m.mu.Unlock()
+	for _, ix := range ixs {
+		if st, err := ix.Status(ctx); err == nil && st.Embeddings != nil && st.Embeddings.Target != "" {
+			return st.Embeddings.Model
+		}
+	}
+	return ""
+}
+
 // StopAll stops every workspace, for the daemon's shutdown.
 func (m *Workspaces) StopAll() {
 	m.mu.Lock()

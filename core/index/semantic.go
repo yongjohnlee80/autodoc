@@ -115,8 +115,12 @@ func (m *semantic) active() string {
 	return m.activeFP
 }
 
-// switching is a target filling to replace another active model, which is offline meanwhile.
-func (m *semantic) switching() bool { return m.active() != m.target.Model().Fingerprint() }
+// switching is a target filling to replace another active model, which is offline meanwhile. An
+// active model not yet read (the indexer starting) is no switch.
+func (m *semantic) switching() bool {
+	a := m.active()
+	return a != "" && a != m.target.Model().Fingerprint()
+}
 
 // provider is the one that embeds with model fp: only the target's, since the model a filling
 // target replaces is offline.
@@ -635,6 +639,65 @@ func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool)
 	return hashes, texts, err
 }
 
+// The states of a workspace's models (ModelInfo.State).
+const (
+	ModelActive = "active" // its vectors answer queries
+	ModelTarget = "target" // filling to replace the active one
+	ModelUnused = "unused" // neither: its vectors are kept until purged
+)
+
+// ModelInfo is one of a workspace's models and the room its vectors take (index.models). The sizes
+// are of what each row holds: F32Bytes the float32 vectors (dims × 4 each), BitsBytes the 1-bit
+// codes (one bit a dimension, in 64-bit words), KeyBytes the row's key (the 32-byte text hash, the
+// fingerprint, and the workspace's id, a byte for any short of 128), before SQLite's own overhead.
+type ModelInfo struct {
+	FP, Provider, Name string
+	Dims               int
+	State              string
+	Vectors            int64
+	F32Bytes           int64
+	BitsBytes          int64
+	KeyBytes           int64
+}
+
+// Models are the workspace's models: the active one first, then the target, then the unused.
+func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
+	target := ""
+	if x.sem != nil {
+		target = x.sem.target.Model().Fingerprint()
+	}
+	var out []ModelInfo
+	s := x.store
+	err := s.read(ctx, func(tx *store.Tx) error {
+		rows, err := s.sc.Models(tx).Select(store.ModelFP, store.ModelProvider, store.ModelName, store.ModelDims, store.ModelActive)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			count, err := s.sc.Embeddings(tx).With(store.EmbModel, r.FP).Count()
+			if err != nil {
+				return err
+			}
+			n := int64(count)
+			dims := int(derefInt(r.Dims))
+			m := ModelInfo{FP: r.FP, Provider: deref(r.Provider), Name: deref(r.Name), Dims: dims, State: ModelUnused,
+				Vectors: n, F32Bytes: n * int64(dims) * 4, BitsBytes: n * int64((dims+63)/64) * 8,
+				KeyBytes: n * int64(32+len(r.FP)+1)}
+			switch {
+			case r.Active == 1:
+				m.State = ModelActive
+			case r.FP == target:
+				m.State = ModelTarget
+			}
+			out = append(out, m)
+		}
+		return nil
+	})
+	rank := map[string]int{ModelActive: 0, ModelTarget: 1, ModelUnused: 2}
+	sort.SliceStable(out, func(i, j int) bool { return rank[out[i].State] < rank[out[j].State] })
+	return out, err
+}
+
 // PurgeModel removes a model's vectors and its row (index.purge_model). The active model and the
 // target cannot be purged.
 func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
@@ -868,8 +931,8 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	}
 	m := x.sem
 	es := EmbeddingStatus{Provider: m.target.Name(), Model: m.active(), Semantic: SemanticReady}
-	if t := m.target.Model().Fingerprint(); t != es.Model {
-		es.Target = t
+	if m.switching() {
+		es.Target = m.target.Model().Fingerprint()
 	}
 	s := x.store
 	if err := s.read(ctx, func(tx *store.Tx) error {
