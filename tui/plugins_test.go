@@ -230,7 +230,7 @@ func (r *running) waitNotice(t *testing.T, text string) {
 func pidAlive(pid int) bool { return syscall.Kill(pid, 0) == nil }
 
 // TestThePluginsMenuListsThePluginsFolder: each plugin is an entry, one that cannot run is listed
-// disabled with why, and with no plugins there is no Plugins menu.
+// disabled with why, and a directory with no plugin.toml, or a clone being added, is not listed.
 func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
@@ -266,11 +266,15 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	}
 	r.keys(t, esc())
 
+	// with none, the menu is its Add and Manage entries
 	none, _ := pluginTUI(t, t.TempDir())
-	none.keys(t, f10())
-	none.s.WaitForText(t, "System")
-	if strings.Contains(none.s.String(), "Plugins") {
-		t.Errorf("a Plugins menu with no plugins:\n%s", none.s.String())
+	none.keys(t, decltest.Alt('p'))
+	none.s.WaitForText(t, "Manage plugins…")
+	if !strings.Contains(none.s.String(), "no plugins yet") {
+		t.Errorf("an empty folder's menu:\n%s", none.s)
+	}
+	if n := onLoop(none, func() int { return len(none.h.pluginList) }); n != 0 {
+		t.Errorf("%d plugins in an empty folder", n)
 	}
 }
 
@@ -424,4 +428,239 @@ func TestAPluginIsToldTheThemeAndTheSizeItGot(t *testing.T) {
 	}
 	r.h.p.Post(func() { r.h.switchTheme("retro") })
 	r.s.WaitForText(t, "theme retro")
+}
+
+// ---------------------------------------------------------------- adding and managing
+
+// pluginRepo is a git repository holding the test plugin: its plugin.toml, whose build writes
+// built.txt, and whose command is this test binary in echo mode.
+func pluginRepo(t *testing.T, title, build string) string {
+	t.Helper()
+	repo := t.TempDir()
+	runGit(t, repo, "init", "-q", "-b", "main")
+	commitPlugin(t, repo, title, build)
+	return repo
+}
+
+// commitPlugin commits the test plugin's manifest into repo.
+func commitPlugin(t *testing.T, repo, title, build string) {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	toml := fmt.Sprintf("name = \"echo\"\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, \"echo\"]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
+		title, exe, testPluginArg, build)
+	if err := os.WriteFile(filepath.Join(repo, "plugin.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "add", "plugin.toml")
+	runGit(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", title)
+}
+
+func runGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// question waits for PluginConfirm, and is what it asks.
+func (r *running) question(t *testing.T) string {
+	t.Helper()
+	read := func() string {
+		return onLoop(r, func() string {
+			if r.h.pendingPlugin == nil {
+				return ""
+			}
+			v, _ := r.h.p.Tree().Source("App.pluginQuestion")
+			return v.Raw
+		})
+	}
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		if q := read(); q != "" && strings.Contains(r.s.String(), "Yes, at my own risk") {
+			return q
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []notice { return r.h.notices }))
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func entries(t *testing.T, dir string) []string {
+	t.Helper()
+	ds, _ := os.ReadDir(dir)
+	var out []string
+	for _, d := range ds {
+		out = append(out, d.Name())
+	}
+	return out
+}
+
+// TestAddingAPluginFromAGitURLAsksFirst: the clone runs nothing; the question names the source, the
+// commit, the build and the command, with the warning; No throws the clone away; Yes builds it, puts
+// it in the folder and in the Plugins menu, and it runs.
+func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
+	repo := pluginRepo(t, "Echo", "echo built > built.txt")
+	commit := runGit(t, repo, "rev-parse", "--short", "HEAD")
+	dir := t.TempDir()
+	r, _ := pluginTUI(t, dir)
+	url := "file://" + repo
+
+	r.keys(t, decltest.Alt('p'))
+	r.s.WaitForText(t, "Add from a git URL…")
+	r.keys(t, key('a'))
+	r.s.WaitForText(t, "the plugin's git repository")
+	r.keys(t, decltest.Type(url)...)
+	r.keys(t, enter())
+	q := r.question(t)
+	for _, want := range []string{"Echo (echo)", "from  " + url, "at    " + commit,
+		"Its build runs:  sh -c echo built > built.txt", "It then starts:  ", "at your own risk"} {
+		if !strings.Contains(q, want) {
+			t.Errorf("the question lacks %q:\n%s", want, q)
+		}
+	}
+	if got := entries(t, dir); len(got) != 1 || !strings.HasPrefix(got[0], stagePrefix) {
+		t.Fatalf("before the answer the folder holds %v, want one staged clone", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, entries(t, dir)[0], "built.txt")); err == nil {
+		t.Fatal("the build ran before the question was answered")
+	}
+	if n := onLoop(r, func() int { return len(r.h.pluginList) }); n != 0 {
+		t.Fatalf("a staged clone is listed as a plugin (%d)", n)
+	}
+
+	r.keys(t, key('n'))
+	r.waitNotice(t, "echo not added")
+	if got := entries(t, dir); len(got) != 0 {
+		t.Fatalf("No left %v in the folder", got)
+	}
+
+	r.h.p.Post(func() { r.h.addPlugin(url) })
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "added echo at "+commit+": Plugins › Echo")
+	if b, err := os.ReadFile(filepath.Join(dir, "echo", "built.txt")); err != nil || string(b) != "built\n" {
+		t.Fatalf("the build did not run in the plugin's directory: %q, %v", b, err)
+	}
+	r.openPlugin("echo")
+	r.waitShown(t, "open 30x6")
+}
+
+// TestWhatIsNotAPluginIsNotAdded: a URL git cannot clone, a repository with no plugin.toml, one that
+// cannot run, one already installed and a build that fails are each refused, saying why, and leave
+// nothing in the folder.
+func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
+	dir := t.TempDir()
+	r, logs := pluginTUI(t, dir)
+	add := func(url string) { r.h.p.Post(func() { r.h.addPlugin(url) }) }
+
+	add("file:///no/such/repository")
+	r.waitNotice(t, "not added: git clone:")
+
+	empty := t.TempDir()
+	runGit(t, empty, "init", "-q")
+	_ = os.WriteFile(filepath.Join(empty, "README"), []byte("x"), 0o644)
+	runGit(t, empty, "add", "README")
+	runGit(t, empty, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
+	add("file://" + empty)
+	r.waitNotice(t, "not added: the repository has no plugin.toml at its top")
+
+	future := t.TempDir()
+	runGit(t, future, "init", "-q")
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n"), 0o644)
+	runGit(t, future, "add", "plugin.toml")
+	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
+	add("file://" + future)
+	r.waitNotice(t, "not added: protocol 2; this AutoDoc speaks 1")
+
+	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
+	add("file://" + failing)
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "echo not installed: its build failed (exit status 4): nope")
+	if got := entries(t, dir); len(got) != 0 {
+		t.Fatalf("a refused plugin left %v in the folder", got)
+	}
+	if log, _ := os.ReadFile(filepath.Join(logs, "echo-install.log")); !strings.Contains(string(log), "nope") {
+		t.Errorf("the install log: %q", log)
+	}
+
+	installTestPlugin(t, dir, "echo", "echo", 30, 6)
+	add("file://" + pluginRepo(t, "Echo", "true"))
+	r.waitNotice(t, "not added: echo is installed already: Manage plugins… updates it")
+}
+
+// TestAPluginIsUpdatedAndRemovedFromTheManager: the manager lists the plugin with its source and
+// commit; Update… fetches, asks about the new commit's build, and moves to it; it says when there is
+// nothing new; Remove… asks, then takes the directory away and the menu entry with it.
+func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
+	repo := pluginRepo(t, "Echo", "echo one > built.txt")
+	dir := t.TempDir()
+	installTestPlugin(t, dir, "local", "echo", 30, 6)
+	r, _ := pluginTUI(t, dir)
+	r.h.p.Post(func() { r.h.addPlugin("file://" + repo) })
+	r.question(t)
+	r.keys(t, key('y'))
+	r.waitNotice(t, "added echo at")
+
+	r.h.p.Post(r.h.managePlugins)
+	r.s.WaitForText(t, "local: put in the folder by hand")
+	r.s.WaitFor(t, "the clone's source listed", func(string) bool { // the column elides it on screen
+		return onLoop(r, func() bool {
+			for _, m := range r.h.managedList {
+				if m.e.m.Name == "echo" && m.source == "file://"+repo && m.commit != "" {
+					return true
+				}
+			}
+			return false
+		})
+	})
+
+	commitPlugin(t, repo, "Echo two", "echo two > built.txt")
+	next := runGit(t, repo, "rev-parse", "--short", "HEAD")
+	i := onLoop(r, func() int {
+		for i, m := range r.h.managedList {
+			if m.e.m.Name == "echo" {
+				return i
+			}
+		}
+		return -1
+	})
+	r.h.p.Post(func() { r.h.startUpdatePlugin(i) })
+	if q := r.question(t); !strings.Contains(q, "at    "+next) || !strings.Contains(q, "echo two > built.txt") {
+		t.Fatalf("the update's question is not the new commit's:\n%s", q)
+	}
+	r.keys(t, key('y'))
+	r.waitNotice(t, "updated echo at "+next)
+	if b, _ := os.ReadFile(filepath.Join(dir, "echo", "built.txt")); string(b) != "two\n" {
+		t.Errorf("the update's build: %q", b)
+	}
+	r.s.WaitFor(t, "the new title listed", func(string) bool {
+		return onLoop(r, func() bool {
+			for _, e := range r.h.pluginList {
+				if e.m.Title == "Echo two" {
+					return true
+				}
+			}
+			return false
+		})
+	})
+	r.h.p.Post(func() { r.h.startUpdatePlugin(i) })
+	r.waitNotice(t, "echo is up to date at "+next)
+
+	r.h.p.Post(func() { r.h.startRemovePlugin(i) })
+	r.s.WaitForText(t, "remove the plugin?")
+	r.keys(t, key('y'))
+	r.waitNotice(t, "removed echo")
+	if _, err := os.Stat(filepath.Join(dir, "echo")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the plugin's directory is still there: %v", err)
+	}
+	if got := entries(t, dir); len(got) != 1 || got[0] != "local" {
+		t.Fatalf("the folder holds %v, want the local plugin only", got)
+	}
 }

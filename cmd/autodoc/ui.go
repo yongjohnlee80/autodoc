@@ -52,15 +52,20 @@ func runUI(ctx context.Context, configPath, dev, workspace string) error {
 	if err != nil {
 		return fmt.Errorf("cannot open the terminal: %w", err)
 	}
+	// the plugins sit beside the config (ADR 0209: $XDG_CONFIG_HOME/autodoc/plugins), their logs in
+	// the state directory beside the daemon's
+	plugins := tui.Plugins{Dir: filepath.Join(filepath.Dir(configPath), "plugins"),
+		LogDir: filepath.Join(stateDir, "plugins"), Socket: sock}
 	host, err := tui.New(session, tui.Options{
-		About: fmt.Sprintf("AutoDoc %s\n\nThe config: %s\nThe daemon's log, when --ui started it: %s",
-			version, configPath, filepath.Join(stateDir, "serve.log")),
+		About: fmt.Sprintf("AutoDoc %s\n\nThe config: %s\nThe daemon's log, when --ui started it: %s\nThe plugins: %s (their logs: %s)",
+			version, configPath, filepath.Join(stateDir, "serve.log"), plugins.Dir, plugins.LogDir),
 		App:       []tuicore.AppOption{tuicore.WithBackend(backend)},
 		Dev:       dev,
 		Workspace: workspace,
 		// a convenience for the next start: nothing depends on it being written
 		Remember:  func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
 		Installed: installedVersion,
+		Plugins:   plugins,
 	})
 	if err != nil {
 		return err

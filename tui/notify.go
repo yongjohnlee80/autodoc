@@ -29,6 +29,7 @@ const maxNotices = 500
 const (
 	toastProgress   = "progress"   // indexing and embedding
 	toastConnection = "connection" // connecting, and a connection that failed
+	toastPlugin     = "plugin"     // a plugin cloned, fetched and built
 )
 
 type notice struct {

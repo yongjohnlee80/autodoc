@@ -121,11 +121,13 @@ Window {
         }
         Menu {
             title: "&Plugins"
-            visible: App.hasPlugins
             Instantiator {
                 model: App.plugins
                 MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.openPlugin(model.key) }
             }
+            MenuSeparator {}
+            MenuItem { text: "&Add from a git URL…"; onTriggered: App.startAddPlugin() }
+            MenuItem { text: "&Manage plugins…"; onTriggered: App.managePlugins() }
         }
         Menu {
             title: "&System"
@@ -238,6 +240,10 @@ Window {
     WorkspaceAdd { id: workspaceAdd }
     WorkspaceRename { id: workspaceRename }
     WorkspaceRemove { id: workspaceRemove }
+    PluginAdd { id: pluginAdd }
+    PluginConfirm { id: pluginConfirm }
+    PluginManager { id: pluginManager }
+    PluginRemove { id: pluginRemove }
     Preferences { id: preferences }
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
