@@ -367,7 +367,7 @@ func TestTheProviderForm(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.leader(t, 'a') // Options › AI models
+	r.leader(t, 'a') // System › AI models
 	r.s.WaitForText(t, "embedding providers")
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "add an embedding provider")
@@ -562,7 +562,7 @@ func TestAProviderInUse(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
 	r.s.WaitFor(t, "the status line's red mark", func(string) bool { return r.semanticMark() == "red lexical search" })
-	r.leader(t, 'a') // Options › AI models
+	r.leader(t, 'a') // System › AI models
 	r.s.WaitForText(t, "semantic search off")
 	r.keys(t, key('u')) // the first row: local
 	r.s.WaitForText(t, "semantic search with local")
@@ -776,20 +776,35 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 	r.s.WaitForText(t, "c.md")
 }
 
-// TestTheOptionsMenu: the keymap, the theme, the editor's preferences and the AI models are under
-// Options; File keeps the note's commands.
+// TestTheOptionsMenu: the keymap, the theme and the editor's preferences are under Options; the AI
+// models and the backend's restart under System, right of Options; File keeps the note's commands.
 func TestTheOptionsMenu(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Alt('o'))
 	r.s.WaitFor(t, "the Options menu", func(sc string) bool {
-		return strings.Contains(sc, "Keymap") && strings.Contains(sc, "Editor preferences…") && strings.Contains(sc, "AI models…")
+		return strings.Contains(sc, "Keymap") && strings.Contains(sc, "Editor preferences…")
 	})
+	if sc := r.s.String(); strings.Contains(sc, "AI models…") || strings.Contains(sc, "Restart backend…") {
+		t.Fatalf("Options still has the system's items:\n%s", sc)
+	}
+	bar := strings.Split(r.s.String(), "\n")[0]
+	if o, s := strings.Index(bar, "Options"), strings.Index(bar, "System"); o < 0 || s < o {
+		t.Fatalf("System is not right of Options on the menu bar: %q", bar)
+	}
 	r.keys(t, esc(), esc())
+	r.keys(t, decltest.Alt('s'))
+	r.s.WaitFor(t, "the System menu", func(sc string) bool {
+		return strings.Contains(sc, "AI models…") && strings.Contains(sc, "Restart backend…") && !strings.Contains(sc, "Keymap")
+	})
+	r.keys(t, key('a')) // AI models
+	r.s.WaitForText(t, "embedding providers")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "AI models closed", func(sc string) bool { return !strings.Contains(sc, "embedding providers") })
 	r.keys(t, decltest.Alt('f'))
 	r.s.WaitForText(t, "Reload from disk")
-	if strings.Contains(r.s.String(), "Preferences…") {
-		t.Fatalf("File still has Preferences:\n%s", r.s)
+	if sc := r.s.String(); strings.Contains(sc, "Preferences…") || strings.Contains(sc, "Restart backend…") {
+		t.Fatalf("File still has Preferences or the restart:\n%s", sc)
 	}
 }
 
@@ -960,7 +975,7 @@ func markIn(row []tuicore.Cell, stop string) string {
 	return ""
 }
 
-// TestRestartBringsUpTheInstalledBackend: File › Restart backend… asks, saying the version running
+// TestRestartBringsUpTheInstalledBackend: System › Restart backend… asks, saying the version running
 // and the one installed; yes stops the daemon, the reconnect waits for it to go, starts the
 // installed one, and says so.
 func TestRestartBringsUpTheInstalledBackend(t *testing.T) {

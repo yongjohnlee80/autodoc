@@ -10,7 +10,7 @@ import (
 // preference.set), so they are the same whichever workspace is open: the editor's keymap (Vim, or
 // Text: modeless), the theme, whether the menu bar hides, whether the status line shows, the edge
 // each panel opens from, and the page's width. Options › Editor preferences… sets them; the AI
-// models are their own dialog (providers.go).
+// models are their own dialog, under System (providers.go).
 
 // The TUI's preferences, by the names the store keeps them under.
 const (

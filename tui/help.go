@@ -34,7 +34,7 @@ WHAT A KEY NEEDS
   keep editing, reload the disk's version, or overwrite it with yours.
   A path must be one the workspace indexes (its include patterns, **/*.md by default); others
   are refused.
-  Semantic search needs an embedding provider, chosen in Options › AI models (SPC a): a local Ollama with
+  Semantic search needs an embedding provider, chosen in System › AI models (SPC a): a local Ollama with
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off".
   Adding a workspace needs a directory: its **/*.md are indexed, .git skipped. A name or root
