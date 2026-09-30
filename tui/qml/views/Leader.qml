@@ -23,6 +23,7 @@ Dialog {
     Shortcut { sequence: "a"; onActivated: { leader.close(); App.openAIModels() } }
     Shortcut { sequence: "k"; onActivated: { leader.close(); App.toggleKeymap() } }
     Shortcut { sequence: "?"; onActivated: { leader.close(); help.open() } }
+    Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }
     Shortcut { sequence: "Shift+A"; onActivated: { leader.close(); about.open() } }
     Shortcut { sequence: "Shift+Q"; onActivated: { leader.close(); App.quit() } }
 }

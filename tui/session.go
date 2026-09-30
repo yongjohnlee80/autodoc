@@ -12,7 +12,7 @@ import (
 func (h *Host) start() {
 	h.setConnected(false)
 	h.setWhere("autodoc [connecting]")
-	h.setStatus("connecting to " + h.session.addr + "…")
+	h.notifyOngoing(toastConnection, "connecting to "+h.session.addr+"…")
 	do(h, h.session.Connect, func(err error) {
 		if err != nil {
 			h.setWhere("autodoc [disconnected]")
@@ -22,25 +22,25 @@ func (h *Host) start() {
 			switch {
 			case errors.As(err, &me) && me.Server < me.Client:
 				h.setWhere("autodoc [older backend]")
-				h.setStatus(fmt.Sprintf("the backend is autodoc %s (protocol %d), older than this TUI (%d): System › Restart backend… starts the installed one",
+				h.notifyOngoing(toastConnection, fmt.Sprintf("the backend is autodoc %s (protocol %d), older than this TUI (%d): System › Restart backend… starts the installed one",
 					me.Version, me.Server, me.Client))
 			case errors.As(err, &me):
 				h.setWhere("autodoc [newer backend]")
-				h.setStatus(fmt.Sprintf("this TUI (protocol %d) is older than the backend, autodoc %s (%d): quit and start the installed autodoc",
+				h.notifyOngoing(toastConnection, fmt.Sprintf("this TUI (protocol %d) is older than the backend, autodoc %s (%d): quit and start the installed autodoc",
 					me.Client, me.Version, me.Server))
 			case errors.As(err, &ce):
-				h.setStatus(fmt.Sprintf("connect failed: no daemon answered in %s (Help › About)", ce.Window))
+				h.notifyOngoing(toastConnection, fmt.Sprintf("connect failed: no daemon answered in %s (Help › About)", ce.Window))
 			default:
-				h.setStatus("connect failed (Help › About)")
+				h.notifyOngoing(toastConnection, "connect failed (Help › About)")
 			}
 			h.set("App.aboutText", h.aboutText()+"\n\nThe last connect failed:\n"+err.Error())
 			return
 		}
 		if h.restartFrom != "" {
-			h.setStatus(fmt.Sprintf("backend restarted: autodoc %s → %s", h.restartFrom, h.session.Version()))
+			h.notifyDone(toastConnection, fmt.Sprintf("backend restarted: autodoc %s → %s", h.restartFrom, h.session.Version()))
 			h.restartFrom, h.restartPID = "", 0
 		} else {
-			h.setStatus("connected — autodoc " + h.session.Version())
+			h.notifyDone(toastConnection, "connected — autodoc "+h.session.Version())
 		}
 		h.setConnected(true)
 		h.entered = false // a new connection enters its workspace again, as the first did
@@ -70,16 +70,16 @@ func (h *Host) watch() {
 		if pid := h.restartPID; pid != 0 {
 			// a restart: the old daemon lets go of its workspaces after its socket, so the new one
 			// starts once the old process is gone, or it would find them busy
-			h.setStatus("restarting the backend: waiting for the old one to stop…")
+			h.notifyOngoing(toastConnection, "restarting the backend: waiting for the old one to stop…")
 			do(h, func(ctx context.Context) bool { return h.awaitExit(ctx, pid) }, func(gone bool) {
 				if !gone {
-					h.setStatus(fmt.Sprintf("the old backend (pid %d) has not stopped after %s: reconnecting anyway", pid, restartWait))
+					h.notify(fmt.Sprintf("the old backend (pid %d) has not stopped after %s: reconnecting anyway", pid, restartWait))
 				}
 				h.start()
 			})
 			return
 		}
-		h.setStatus("disconnected — reconnecting…")
+		h.notifyOngoing(toastConnection, "disconnected — reconnecting…")
 		h.start()
 	})
 }
@@ -91,5 +91,5 @@ func (h *Host) call(ctx context.Context, method string, params ...any) (any, err
 
 // failed shows a failed call on the status line.
 func (h *Host) failed(what string, err error) {
-	h.setStatus(fmt.Sprintf("%s: %s", what, wireMessage(err)))
+	h.notify(fmt.Sprintf("%s: %s", what, wireMessage(err)))
 }

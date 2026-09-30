@@ -115,7 +115,7 @@ func (h *Host) purgeConfirmed() {
 			h.set("App.vectorsStatus", "not purged: "+wireMessage(err))
 			return
 		}
-		h.setStatus(fmt.Sprintf("purged %s's %d vectors from %s", r.name, r.vectors, ws))
+		h.notify(fmt.Sprintf("purged %s's %d vectors from %s", r.name, r.vectors, ws))
 		h.loadVectors()
 	})
 }
@@ -143,7 +143,7 @@ func (h *Host) cancelIndexing() {
 				h.failed("cancel the switch", a.err)
 				return
 			}
-			h.setStatus(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are kept", a.model, target))
+			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are kept", a.model, target))
 			h.loadProviders()
 		})
 	case e.working() > 0:
@@ -155,10 +155,10 @@ func (h *Host) cancelIndexing() {
 				h.failed("stop embedding", err)
 				return
 			}
-			h.setStatus("embedding stopped, the vectors made kept: Use carries on from them")
+			h.notify("embedding stopped, the vectors made kept: Use carries on from them")
 			h.loadProviders()
 		})
 	default:
-		h.setStatus("nothing is being embedded")
+		h.say("nothing is being embedded")
 	}
 }

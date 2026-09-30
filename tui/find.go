@@ -46,7 +46,7 @@ func (h *Host) findTarget() string {
 func (h *Host) openFind() {
 	target := h.findTarget()
 	if target == "" {
-		h.setStatus("find: put the keyboard in the page, the explorer or the links first")
+		h.say("find: put the keyboard in the page, the explorer or the links first")
 		return
 	}
 	h.find.pending = target
@@ -81,11 +81,11 @@ func (h *Host) findPrevious() { h.findJump(-1, false) }
 func (h *Host) findJump(dir int, includeCurrent bool) {
 	f := &h.find
 	if f.query == "" || f.target == "" {
-		h.setStatus("nothing to find again: / asks what to find")
+		h.say("nothing to find again: / asks what to find")
 		return
 	}
 	if !includeCurrent && h.findTarget() != f.target {
-		h.setStatus("n and N find again in the " + f.target + ": put the keyboard there, or / for a new find")
+		h.say("n and N find again in the " + f.target + ": put the keyboard there, or / for a new find")
 		return
 	}
 	var rows []string
@@ -118,7 +118,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		}
 	}
 	if len(hits) == 0 {
-		h.setStatus(fmt.Sprintf("find: no %q in the %s", f.query, f.target))
+		h.say(fmt.Sprintf("find: no %q in the %s", f.query, f.target))
 		return
 	}
 	selected := 0
@@ -151,7 +151,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		h.set("App.linksIndex", row)
 		h.linksAt = row
 	}
-	h.setStatus(fmt.Sprintf("find %q: %d of %d in the %s", f.query, selected+1, len(hits), f.target))
+	h.say(fmt.Sprintf("find %q: %d of %d in the %s", f.query, selected+1, len(hits), f.target))
 }
 
 // clusterMatch is where pattern first appears in line, case-blind, in grapheme columns (what

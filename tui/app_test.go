@@ -80,7 +80,7 @@ type daemonOpts struct {
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
 // what the TUI did.
-var testPrefs = map[string]string{"tui.status.shown": "true"}
+var testPrefs = map[string]string{"tui.status.shown": "true", "tui.toast.seconds": "1"}
 
 // slowFS is memfs whose reads wait.
 type slowFS struct {

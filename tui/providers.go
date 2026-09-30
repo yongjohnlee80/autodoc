@@ -209,7 +209,7 @@ func (h *Host) useProvider(i int) {
 			h.set("App.providersStatus", p.name+" not used: "+wireMessage(err)+" · "+h.inUseText())
 			return
 		}
-		h.setStatus("semantic search with " + p.name + ": the notes are embedded in the background")
+		h.notify("semantic search with " + p.name + ": the notes are embedded in the background")
 		h.loadProviders()
 	})
 }
@@ -250,7 +250,7 @@ func (h *Host) removeProviderConfirmed() {
 			h.failed("remove "+name, err)
 			return
 		}
-		h.setStatus("removed the provider " + name)
+		h.notify("removed the provider " + name)
 		h.loadProviders()
 	})
 }
@@ -426,7 +426,7 @@ func (h *Host) saveProvider(name, base, model, key, window string) {
 			h.open("providerEdit")
 			return
 		}
-		h.setStatus("saved the provider " + spec["name"].(string))
+		h.notify("saved the provider " + spec["name"].(string))
 		h.loadProviders()
 	})
 }

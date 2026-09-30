@@ -21,6 +21,21 @@ const (
 	prefLinks    = "tui.links.edge"
 	prefRuler    = "tui.ruler"
 	prefKeymap   = "tui.editor.keymap"
+	prefWrap     = "tui.editor.wrap"
+	prefNumbers  = "tui.editor.linenumbers"
+	prefCorner   = "tui.toast.corner"
+	prefSeconds  = "tui.toast.seconds"
+)
+
+// corners are where the toasts can stack, in the order the Preferences dialog offers them.
+var corners = []string{"bottom-right", "bottom-left", "top-right", "top-left"}
+
+var cornerLabels = []string{"bottom right", "bottom left", "top right", "top left"}
+
+// How long a finished toast stays, in seconds: the default, and the range the dialog offers.
+const (
+	defaultToastSeconds = 3
+	maxToastSeconds     = 10
 )
 
 // The keymaps, by the names the store keeps them under, and the editor's keysets for them: Vim is
@@ -48,10 +63,14 @@ type prefs struct {
 	explorerEdge, linkEdge string
 	ruler                  int
 	keymap                 string
+	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
+	toastCorner            string // where the notifications stack
+	toastSeconds           int    // how long a finished one stays
 }
 
 func defaultPrefs() prefs {
-	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim"}
+	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
+		wrap: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds}
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
@@ -89,6 +108,20 @@ func prefsOf(m map[string]any) prefs {
 	if s, ok := str(prefKeymap); ok && keysetOf[s] != "" {
 		p.keymap = s
 	}
+	if s, ok := str(prefWrap); ok {
+		p.wrap = s != "false"
+	}
+	if s, ok := str(prefNumbers); ok {
+		p.lineNumbers = s == "true"
+	}
+	if s, ok := str(prefCorner); ok && indexOf(corners, s) >= 0 {
+		p.toastCorner = s
+	}
+	if s, ok := str(prefSeconds); ok {
+		if n, err := strconv.Atoi(s); err == nil && n >= 1 && n <= maxToastSeconds {
+			p.toastSeconds = n
+		}
+	}
 	if s, ok := str(prefRuler); ok {
 		if n, err := strconv.Atoi(s); err == nil && n >= minRuler && n <= maxRuler {
 			p.ruler = n
@@ -117,6 +150,8 @@ func prefState(p prefs) map[string]any {
 		"App.explorerEdge":   p.explorerEdge,
 		"App.linksEdge":      p.linkEdge,
 		"App.explorerLength": panelLength(p.explorerEdge),
+		"App.editorWrap":     p.wrap,
+		"App.lineNumbers":    p.lineNumbers,
 		"App.linksLength":    panelLength(p.linkEdge),
 		// the page: the ruler's columns of text, and its border, whose right edge is the first
 		// column past them (vim's colorcolumn at textwidth+1); the editor's guide marks that
@@ -157,6 +192,7 @@ func (h *Host) applyPrefs(p prefs) {
 	}
 	h.set("App.statusShown", h.statusShown())
 	h.syncPrefDialog()
+	h.applyToastPrefs()
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
 	}
@@ -170,6 +206,7 @@ func (h *Host) statusShown() bool { return h.prefs.statusOn || !h.connected }
 func (h *Host) setConnected(v bool) {
 	h.connected = v
 	h.set("App.statusShown", h.statusShown())
+	h.applyToastPrefs() // the status line shows or hides: the toasts' margin follows
 	if !v {
 		// no daemon, no search: the mark returns with the first status after connecting
 		h.set("App.semanticMark", "")
@@ -200,9 +237,50 @@ func (h *Host) toggleMenuBar() {
 	v := !h.prefs.menuHidden
 	h.setPref(prefMenuHide, strconv.FormatBool(v), func(p *prefs) { p.menuHidden = v })
 	if v {
-		h.setStatus("the menu bar hides: F10 or Alt+letter brings it up")
+		h.say("the menu bar hides: F10 or Alt+letter brings it up")
 	} else {
-		h.setStatus("the menu bar shows")
+		h.say("the menu bar shows")
+	}
+}
+
+// toggleWrap is View › Wrap long lines: the page's long lines wrapped at its width, or scrolled.
+func (h *Host) toggleWrap() {
+	v := !h.prefs.wrap
+	h.setPref(prefWrap, strconv.FormatBool(v), func(p *prefs) { p.wrap = v })
+}
+
+// toggleLineNumbers is View › Line numbers.
+func (h *Host) toggleLineNumbers() {
+	v := !h.prefs.lineNumbers
+	h.setPref(prefNumbers, strconv.FormatBool(v), func(p *prefs) { p.lineNumbers = v })
+}
+
+func (h *Host) setWrapIndex(i int) {
+	if i == 0 || i == 1 {
+		v := i == 0
+		h.setPref(prefWrap, strconv.FormatBool(v), func(p *prefs) { p.wrap = v })
+	}
+}
+
+func (h *Host) setLineNumbersIndex(i int) {
+	if i == 0 || i == 1 {
+		v := i == 0
+		h.setPref(prefNumbers, strconv.FormatBool(v), func(p *prefs) { p.lineNumbers = v })
+	}
+}
+
+// setToastCorner is the Preferences dialog's corner for the notifications.
+func (h *Host) setToastCorner(i int) {
+	if i >= 0 && i < len(corners) {
+		c := corners[i]
+		h.setPref(prefCorner, c, func(p *prefs) { p.toastCorner = c })
+	}
+}
+
+// setToastSeconds is how long a finished notification stays: row i is i+1 seconds.
+func (h *Host) setToastSeconds(i int) {
+	if n := i + 1; n >= 1 && n <= maxToastSeconds {
+		h.setPref(prefSeconds, strconv.Itoa(n), func(p *prefs) { p.toastSeconds = n })
 	}
 }
 
@@ -240,7 +318,7 @@ func (h *Host) setRuler(text string) {
 // useTheme is View › Theme and the Preferences dialog: the theme on screen, and kept.
 func (h *Host) useTheme(name string) {
 	if !isTheme(name) {
-		h.setStatus("no theme " + strconv.Quote(name))
+		h.say("no theme " + strconv.Quote(name))
 		return
 	}
 	h.setPref(prefTheme, name, func(p *prefs) { p.theme = name })
@@ -255,11 +333,11 @@ func (h *Host) setThemeIndex(i int) {
 // setKeymap switches the editor's keymap, and keeps it.
 func (h *Host) setKeymap(name string) {
 	if keysetOf[name] == "" {
-		h.setStatus("no editor mode " + strconv.Quote(name))
+		h.say("no editor mode " + strconv.Quote(name))
 		return
 	}
 	h.setPref(prefKeymap, name, func(p *prefs) { p.keymap = name })
-	h.setStatus("editor mode: " + keymapLabels[indexOf(keymaps, name)])
+	h.say("editor mode: " + keymapLabels[indexOf(keymaps, name)])
 }
 
 func (h *Host) setKeymapIndex(i int) {
@@ -298,6 +376,10 @@ func (h *Host) syncPrefDialog() {
 	h.set("App.explorerEdgeIndex", indexOf(edges, h.prefs.explorerEdge))
 	h.set("App.linksEdgeIndex", indexOf(edges, h.prefs.linkEdge))
 	h.set("App.menuHiddenIndex", boolIndex(h.prefs.menuHidden))
+	h.set("App.wrapIndex", boolIndex(h.prefs.wrap))
+	h.set("App.lineNumbersIndex", boolIndex(h.prefs.lineNumbers))
+	h.set("App.toastCornerIndex", indexOf(corners, h.prefs.toastCorner))
+	h.set("App.toastSecondsIndex", h.prefs.toastSeconds-1)
 	h.set("App.statusShownIndex", boolIndex(h.prefs.statusOn))
 }
 
