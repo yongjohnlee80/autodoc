@@ -60,6 +60,23 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	return enc.Encode(jsonOf(res))
 }
 
+// callMain is --call's exit code: 0 with the result on stdout; 1 with the daemon's refusal as
+// {"error": {code, message}} on stderr, or any other failure as text.
+func callMain(ctx context.Context, configPath, method, params string, stdout, stderr io.Writer) int {
+	err := runCall(ctx, configPath, method, params, stdout)
+	if err == nil {
+		return 0
+	}
+	var ce *CallError
+	if errors.As(err, &ce) {
+		b, _ := json.Marshal(map[string]any{"error": ce})
+		fmt.Fprintln(stderr, string(b))
+	} else {
+		fmt.Fprintln(stderr, "autodoc:", err)
+	}
+	return 1
+}
+
 // CallError is the daemon refusing a call: its code and message, as --call prints them.
 type CallError struct {
 	Code    int64  `json:"code"`

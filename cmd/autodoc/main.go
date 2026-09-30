@@ -3,12 +3,16 @@
 //
 //	autodoc --ui [--dev dir] [workspace]
 //
-// opens the named workspace, or the one the TUI last used. The Web-UI (--web-ui) follows.
+// opens the named workspace, or the one the TUI last used. --call is one verb, as JSON, for a shell
+// or an AI agent (AGENTS.md):
+//
+//	autodoc --call search.query '["kb", "a query", {"limit": 5}]'
+//
+// The Web-UI (--web-ui) follows.
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -45,18 +49,9 @@ func main() {
 		}
 	case *call != "":
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-		if err := runCall(ctx, *configPath, *call, flag.Arg(0), os.Stdout); err != nil {
-			var ce *CallError
-			if errors.As(err, &ce) {
-				b, _ := json.Marshal(map[string]any{"error": ce})
-				fmt.Fprintln(os.Stderr, string(b))
-			} else {
-				fmt.Fprintln(os.Stderr, "autodoc:", err)
-			}
-			stop()
-			os.Exit(1)
-		}
+		code := callMain(ctx, *configPath, *call, flag.Arg(0), os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
 	case *ui:
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 		defer stop()
