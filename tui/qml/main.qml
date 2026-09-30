@@ -120,6 +120,14 @@ Window {
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
         }
         Menu {
+            title: "&Plugins"
+            visible: App.hasPlugins
+            Instantiator {
+                model: App.plugins
+                MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.openPlugin(model.key) }
+            }
+        }
+        Menu {
             title: "&System"
             MenuItem { text: "&AI models…"; onTriggered: App.openAIModels() }
             MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
