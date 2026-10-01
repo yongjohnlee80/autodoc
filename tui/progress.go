@@ -55,12 +55,13 @@ func warmingReasons(m map[string]any) []string {
 
 // embedProgress is index.status's embeddings: nil there is off.
 type embedProgress struct {
-	on            bool   // a provider is in use
-	texts         int64  // the distinct texts every model covers once done
-	pending       int64  // those the active model has no vector for
-	target        string // the model filling to replace the active one; "" for none
-	targetPending int64
-	failing       bool // the provider's last call failed
+	on                     bool   // a provider is in use
+	texts                  int64  // the distinct texts every model covers once done
+	pending                int64  // those the active model has no vector for
+	target                 string // the model filling to replace the active one; "" for none
+	targetPending          int64
+	refused, targetRefused int64
+	failing                bool // the provider's last call failed
 }
 
 // embedOf reads index.status's embeddings.
@@ -72,15 +73,17 @@ func embedOf(m map[string]any) embedProgress {
 	e.texts, _ = m["texts"].(int64)
 	e.pending, _ = m["pending"].(int64)
 	e.targetPending, _ = m["target_pending"].(int64)
+	e.refused, _ = m["refused"].(int64)
+	e.targetRefused, _ = m["target_refused"].(int64)
 	return e
 }
 
 // working is the embedding left: the target's while one fills, else the active model's.
 func (e embedProgress) working() int64 {
 	if e.target != "" {
-		return e.targetPending
+		return max(0, e.targetPending-e.targetRefused)
 	}
-	return e.pending
+	return max(0, e.pending-e.refused)
 }
 
 // online is semantic search answering: a provider in use, its model not replaced mid-switch, its
@@ -183,6 +186,9 @@ func (h *Host) showSemantic() {
 	switch {
 	case e.online():
 		dot, label = "green", "semantic search"
+		if e.refused > 0 {
+			why = fmt.Sprintf(" · %d refused texts (see Vectors…)", e.refused)
+		}
 	case len(h.prog.warming) > 0:
 		why = " · warming up"
 	case e.target != "":

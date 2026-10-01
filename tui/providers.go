@@ -274,6 +274,7 @@ func (h *Host) startEditProvider(i int) {
 }
 
 func (h *Host) fillProviderForm(title string, p providerRow) {
+	h.formBase, h.formModel = p.base, p.model
 	h.formKind, h.formHasKey = kindIndex(p.kind), p.hasKey
 	h.set("App.providerFormTitle", title)
 	h.set("App.providerFormError", "")
@@ -287,10 +288,22 @@ func (h *Host) fillProviderForm(title string, p providerRow) {
 		window = store.DefaultContext
 	}
 	h.setField("App.providerContext", strconv.FormatInt(window, 10))
+	h.formMax = 0
+	h.set("App.providerContextHint", "List models shows max · more uses GPU memory")
+	section := int64(store.SectionTokensDefault)
+	for _, w := range h.wsList {
+		if w.name == h.ws && w.sectionTokens > 0 {
+			section = w.sectionTokens
+		}
+	}
+	h.set("App.providerSectionHint", fmt.Sprintf("%s: %d tokens · edit in Workspaces…", h.ws, section))
 	h.showKeyField()
 	h.providerModels.Reset(nil)
 	h.set("App.providerModelsStatus", "List models asks the provider what it has")
 	h.open("providerEdit")
+	if p.model != "" {
+		h.checkModelContext(p.base, "", p.model)
+	}
 }
 
 // setField writes a form field bound to name, moving it away first so the same text written twice
@@ -335,6 +348,7 @@ func (h *Host) providerKindChosen(i int, base string) {
 
 // listModels asks the provider the form describes what models it has.
 func (h *Host) listModels(base, key string) {
+	h.formBase, h.formKey = base, key
 	spec := map[string]any{"kind": providerKinds[h.formKind].kind, "base_url": strings.TrimSpace(base)}
 	var arg any = spec
 	if key != "" {
@@ -377,6 +391,9 @@ func (h *Host) listModels(base, key string) {
 		}
 		h.providerModels.Reset(rows)
 		h.set("App.providerModelsStatus", fmt.Sprintf("%d models: Enter on one writes it above; an embedding model, not a chat model", len(a.models)))
+		if h.formModel != "" {
+			h.checkModelContext(base, key, h.formModel)
+		}
 	})
 }
 
@@ -384,7 +401,50 @@ func (h *Host) listModels(base, key string) {
 func (h *Host) pickModel(i int) {
 	if i >= 0 && i < len(h.modelList) {
 		h.setField("App.providerModel", h.modelList[i])
+		h.formModel = h.modelList[i]
+		h.checkModelContext(h.formBase, h.formKey, h.modelList[i])
 	}
+}
+
+// checkModelContext updates the hint from Ollama /api/show without blocking the UI.
+func (h *Host) checkModelContext(base, key, model string) {
+	if model == "" || !providerKinds[h.formKind].window {
+		return
+	}
+	h.formMax = 0
+	h.formModel = model
+	spec := map[string]any{"kind": providerKinds[h.formKind].kind, "base_url": strings.TrimSpace(base), "model": strings.TrimSpace(model)}
+	if key != "" {
+		spec["key"] = key
+	}
+	stored := ""
+	if key == "" && h.editingProvider != "" {
+		stored = h.editingProvider
+	}
+	gen := h.session.Gen()
+	type answer struct {
+		maximum int64
+		err     error
+	}
+	do(h, func(ctx context.Context) answer {
+		v, err := h.call(ctx, "embedding.model_context", stored, spec)
+		return answer{num(asMap(v), "maximum"), err}
+	}, func(a answer) {
+		if gen != h.session.Gen() || h.formModel != model {
+			return
+		}
+		maximum := a.maximum
+		if a.err != nil || maximum <= 0 {
+			h.formMax = 0
+			h.set("App.providerContextHint", "max unknown · more uses GPU memory")
+			return
+		}
+		h.formMax = maximum
+		h.set("App.providerContextHint", fmt.Sprintf("model max %d · more uses GPU memory", maximum))
+		if h.editingProvider == "" {
+			h.setField("App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), maximum)))
+		}
+	})
 }
 
 // saveProvider adds the provider the form describes, or rewrites the one it edits. A refusal opens
@@ -401,6 +461,11 @@ func (h *Host) saveProvider(name, base, model, key, window string) {
 			return
 		}
 		spec["context"] = n
+		if h.formMax > 0 && n > h.formMax {
+			h.set("App.providerFormError", fmt.Sprintf("not saved: context window exceeds this model's maximum of %d tokens", h.formMax))
+			h.open("providerEdit")
+			return
+		}
 	}
 	switch {
 	case !k.key:

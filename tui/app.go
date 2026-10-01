@@ -87,6 +87,8 @@ type Host struct {
 	activeProvider, editingProvider string
 	removingProvider                string
 	formKind                        int
+	formBase, formKey, formModel    string
+	formMax                         int64
 	formHasKey                      bool // the provider the form edits has a key sealed
 	modelList                       []string
 	vectorList                      []vectorRow // the workspace's models, as listed (vectors.go)
@@ -115,6 +117,7 @@ type Host struct {
 
 	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
+	sectionWorkspace   string
 
 	note  note       // the note in the editor (notes.go)
 	draft *draftSave // the draft being named in the new-note picker, nil when none is (notes.go)

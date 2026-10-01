@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -103,6 +104,26 @@ func newOllama(t *testing.T, models ...string) *ollama {
 	}))
 	t.Cleanup(o.Close)
 	return o
+}
+
+func TestProviderContextClampsDefaultAndRejectsExcess(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/show" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"model_info": map[string]any{"gemma.context_length": 2048}})
+	}))
+	defer srv.Close()
+	e := &Embedding{client: srv.Client()}
+	sp := store.ProviderSpec{Name: "g", Kind: store.KindOllama, BaseURL: srv.URL, Model: "embeddinggemma"}
+	if err := e.checkContext(context.Background(), &sp, ""); err != nil || sp.Context != 2048 {
+		t.Fatalf("default context = %d, %v; want 2048", sp.Context, err)
+	}
+	sp.Context = 8192
+	if err := e.checkContext(context.Background(), &sp, ""); err == nil || !strings.Contains(err.Error(), "2048") {
+		t.Fatalf("oversized context not rejected with maximum: %v", err)
+	}
 }
 
 // embedding is a daemon's Embedding over a fresh store holding providers a and b (model

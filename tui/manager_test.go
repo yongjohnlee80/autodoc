@@ -181,6 +181,25 @@ func TestWorkspaceManager(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSectionSizeIsEditedAtTheWorkspace(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n\n"+strings.Repeat("many words here in a paragraph.\n\n", 70))})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.manageWorkspaces() })
+	r.s.WaitForText(t, "SECTION")
+	r.h.p.Post(func() { r.h.startSectionSize(0) })
+	r.s.WaitForText(t, "section size · kb")
+	r.h.p.Post(func() { r.h.saveSectionSize("256") })
+	r.s.WaitForText(t, "section size 256; re-chunking")
+	ws, err := d.db.Workspaces(context.Background())
+	if err != nil || len(ws) != 1 {
+		t.Fatalf("workspace listing: %v, %v", ws, err)
+	}
+	if got, err := d.db.SectionTokens(context.Background(), ws[0].ID); err != nil || got != 256 {
+		t.Fatalf("section size = %d, %v; want 256", got, err)
+	}
+}
+
 // TestOpensTheNamedWorkspace: Options.Workspace (autodoc --ui <name>) opens that one, not the
 // first, and Remember is told each workspace the TUI enters.
 func TestOpensTheNamedWorkspace(t *testing.T) {

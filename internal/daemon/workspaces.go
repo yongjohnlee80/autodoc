@@ -161,6 +161,10 @@ func (m *Workspaces) serve(id int64, c config.Workspace) *served {
 
 // start opens a workspace's root and starts its indexer and follower.
 func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
+	sectionTokens, err := m.db.SectionTokens(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if c.Include == nil {
 		c.Include = config.DefaultInclude
 	}
@@ -172,7 +176,7 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		return nil, err
 	}
 	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
-		BatchDelay: m.opts.BatchDelay})
+		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log})
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
 	ctx, cancel := context.WithCancel(m.ctx)
@@ -196,7 +200,14 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		halt()
 		_ = ws.Close()
 	}
-	w := &rpc.Workspace{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude,
+	w := &rpc.Workspace{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude, SectionTokens: sectionTokens,
+		SectionSize: func() int {
+			n, err := m.db.SectionTokens(context.Background(), id)
+			if err != nil {
+				return sectionTokens
+			}
+			return n
+		},
 		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status, Warming: m.warmingOf(c.Name)}
 	return &served{id: id, w: w, halt: halt, stop: stop}, nil
 }
@@ -238,6 +249,25 @@ func (m *Workspaces) SetEmbedding(p embed.Provider) {
 		m.mu.Unlock()
 		s.stop() // the halt is done; this closes the old root
 	}
+}
+
+// SetSectionTokens changes one workspace's chunk budget and reindexes that workspace.
+func (m *Workspaces) SetSectionTokens(ctx context.Context, name string, tokens int) error {
+	m.chg.Lock()
+	defer m.chg.Unlock()
+	m.mu.Lock()
+	s, ok := m.served[name]
+	m.mu.Unlock()
+	if !ok {
+		return store.ErrNoWorkspace
+	}
+	if err := m.db.SetWorkspaceSectionTokens(ctx, s.id, tokens); err != nil {
+		return err
+	}
+	if s.w.Index != nil {
+		s.w.Index.Reindex("")
+	}
+	return nil
 }
 
 // Replacing is the model a switch is replacing: the active model of a served workspace whose

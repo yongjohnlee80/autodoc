@@ -182,6 +182,30 @@ func (s *Server) registerEmbeddings() {
 		}
 		return out, nil
 	}, false))
+	s.handle("embedding.model_context", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		if err := need(); err != nil {
+			return nil, err
+		}
+		info, ok := s.embeddings.(interface {
+			ModelContext(context.Context, string, store.ProviderSpec) (int, error)
+		})
+		if !ok {
+			return nil, errNoEmbeddings
+		}
+		stored, err := argStr(p, 0, "stored provider")
+		if err != nil {
+			return nil, err
+		}
+		sp, err := specOf(p[1])
+		if err != nil {
+			return nil, err
+		}
+		maximum, err := info.ModelContext(ctx, stored, sp)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"maximum": int64(maximum)}, nil
+	}, false))
 	s.handle("embedding.usage", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		if err := need(); err != nil {
 			return nil, err

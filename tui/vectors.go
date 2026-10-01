@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
 )
@@ -23,6 +25,7 @@ type vectorRow struct {
 func (h *Host) openVectors() {
 	h.set("App.vectorsTitle", "vectors in "+h.ws)
 	h.set("App.vectorsStatus", "listing…")
+	h.set("App.vectorsRefusals", "")
 	h.loadVectors()
 	h.open("vectorsDialog")
 }
@@ -30,8 +33,9 @@ func (h *Host) openVectors() {
 func (h *Host) loadVectors() {
 	ep, ws := h.epoch, h.ws
 	type answer struct {
-		rows []vectorRow
-		err  error
+		rows     []vectorRow
+		refusals string
+		err      error
 	}
 	do(h, func(ctx context.Context) answer {
 		res, err := h.call(ctx, "index.models", ws)
@@ -44,7 +48,19 @@ func (h *Host) loadVectors() {
 			rows = append(rows, vectorRow{fp: str(m, "fp"), name: str(m, "name"), state: str(m, "state"), dims: num(m, "dims"),
 				vectors: num(m, "vectors"), f32: num(m, "f32_bytes"), bits: num(m, "bits_bytes"), keys: num(m, "key_bytes")})
 		}
-		return answer{rows: rows}
+		st, err := h.call(ctx, "index.status", ws)
+		if err != nil {
+			return answer{err: err}
+		}
+		emb := asMap(asMap(st)["embeddings"])
+		var details []string
+		for _, item := range asList(emb["refused_texts"]) {
+			r := asMap(item)
+			details = append(details, fmt.Sprintf("%s › %s · %s (%d bytes, %d estimated tokens; retry %s)",
+				str(r, "path"), str(r, "breadcrumb"), str(r, "error"), num(r, "bytes"), num(r, "estimated_tokens"),
+				time.Unix(num(r, "retry_at"), 0).Format("15:04")))
+		}
+		return answer{rows: rows, refusals: strings.Join(details, "\n")}
 	}, func(a answer) {
 		if ep != h.epoch {
 			return
@@ -72,6 +88,7 @@ func (h *Host) loadVectors() {
 			status += fmt.Sprintf(" · %s in models no longer used: Purge… removes one", bytesText(unused))
 		}
 		h.set("App.vectorsStatus", status)
+		h.set("App.vectorsRefusals", a.refusals)
 	})
 }
 

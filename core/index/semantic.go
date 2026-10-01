@@ -16,6 +16,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -87,6 +88,20 @@ type vecBatch struct {
 	done  chan error
 }
 
+type refusalEntry struct {
+	err           error
+	retryAt       time.Time
+	bytes, tokens int
+}
+
+// RefusedText is an alive text a provider rejected; one hash may appear in several paths.
+type RefusedText struct {
+	Path, Breadcrumb, Error string
+	Hash                    string // internal correlation; never sent over RPC
+	Bytes, Tokens           int
+	RetryAt                 time.Time
+}
+
 // semantic is the Indexer's embedding tier: nil without a provider.
 type semantic struct {
 	target  embed.Provider
@@ -99,14 +114,19 @@ type semantic struct {
 	lastErr  error  // the worker's last provider failure, nil after a success
 	// refused holds the texts a provider rejected (fingerprint, then text hash), and until when they
 	// are set aside: their documents answer lexically, and the other texts go on. The worker's own.
-	refused map[string]time.Time
+	refused     map[string]refusalEntry
+	fillStart   time.Time
+	fillTexts   int64
+	fillTotal   int64
+	fillBatches int64
+	fillDone    bool
 
 	snapshotScans, fallbackScans atomic.Int64 // for tests: which path queries took
 }
 
 func newSemantic(target embed.Provider) *semantic {
 	return &semantic{target: target, vectors: make(chan vecBatch), wake: make(chan struct{}, 1),
-		refused: map[string]time.Time{}}
+		refused: map[string]refusalEntry{}}
 }
 
 func (m *semantic) active() string {
@@ -290,7 +310,8 @@ const inPart = 500
 func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	m := x.sem
 	s := x.store
-	var changed []int64
+	started := time.Now()
+	changed := []int64{} // target batches change no active-model codes
 	flipped := false
 	err := s.db.Write(ctx, func(tx *store.Tx) error {
 		if _, err := s.bumpSeq(tx); err != nil {
@@ -315,7 +336,7 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 			}
 			return s.setReady(tx, changed)
 		case vb.fp == m.target.Model().Fingerprint():
-			missing, err := s.pendingTexts(tx, vb.fp)
+			missing, err := s.pendingUnrefused(tx, vb.fp, m.skip(vb.fp))
 			if err != nil {
 				return err
 			}
@@ -337,13 +358,40 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	if err != nil {
 		return err
 	}
+	committed := time.Since(started)
 	if flipped {
 		m.mu.Lock()
 		m.activeFP = vb.fp
+		fillStart, fillTexts, fillTotal := m.fillStart, m.fillTexts+int64(len(vb.items)), m.fillTotal
 		m.mu.Unlock()
-		return x.publish(ctx, nil)
+		if fillStart.IsZero() {
+			fillStart = time.Now()
+		}
+		err := x.publishTimed(ctx, vb.fp, nil)
+		if err == nil {
+			m.mu.Lock()
+			m.fillDone = true
+			m.mu.Unlock()
+			duration := time.Since(fillStart)
+			logger.Info(x.opts.Logger, logger.Fields{"event": "embedding.fill.complete", "model": vb.fp,
+				"texts": fillTexts, "sections": fillTotal, "refused": len(m.skip(vb.fp)),
+				"duration_ms": duration.Milliseconds(), "texts_per_sec": float64(fillTexts) / max(duration.Seconds(), 0.001)})
+		}
+		return err
 	}
-	return x.publish(ctx, changed)
+	pubStart := time.Now()
+	err = x.publishTimed(ctx, vb.fp, changed)
+	logger.Debug(x.opts.Logger, logger.Fields{"event": "embedding.batch.write", "model": vb.fp, "commit_ms": committed.Milliseconds(), "publish_ms": time.Since(pubStart).Milliseconds()})
+	return err
+}
+
+func (x *Indexer) publishTimed(ctx context.Context, fp string, changed []int64) error {
+	start := time.Now()
+	err := x.publish(ctx, changed)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		logger.Warning(x.opts.Logger, err, logger.Fields{"event": "embedding.publish.slow", "model": fp, "duration_ms": elapsed.Milliseconds()})
+	}
+	return err
 }
 
 func (s *Store) docsWithText(tx *store.Tx, items []vecItem) ([]int64, error) {
@@ -369,6 +417,28 @@ func (s *Store) pendingTexts(tx *store.Tx, fp string) (int64, error) {
 		return 0, err
 	}
 	return missing[0], nil
+}
+
+// pendingUnrefused counts target hashes with neither a vector nor a current refusal.
+func (s *Store) pendingUnrefused(tx *store.Tx, fp string, skip map[string]bool) (int64, error) {
+	have, err := s.embeddedTexts(tx, fp)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := alive(s.sc.Chunks(tx)).Select(store.ChunkTextHash)
+	if err != nil {
+		return 0, err
+	}
+	seen := map[string]bool{}
+	var missing int64
+	for _, r := range rows {
+		h := string(r.TextHash)
+		if !seen[h] && !have[h] && !skip[h] {
+			missing++
+		}
+		seen[h] = true
+	}
+	return missing, nil
 }
 
 // textCoverage is the distinct texts of the alive chunks, and how many of them each model fps
@@ -489,6 +559,9 @@ func (x *Indexer) embedLoop(ctx context.Context) {
 		m.mu.Unlock()
 		switch {
 		case err != nil:
+			if ctx.Err() == nil {
+				logger.Warning(x.opts.Logger, err, logger.Fields{"event": "embedding.batch.failed", "model": m.target.Model().Fingerprint(), "retry_after_ms": wait.Milliseconds()})
+			}
 			if !sleepCtx(ctx, wait) {
 				return
 			}
@@ -512,7 +585,9 @@ func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 	m := x.sem
 	p := m.target
 	fp, dims := p.Model().Fingerprint(), p.Model().Dims
+	started := time.Now()
 	hashes, texts, err := x.store.unembedded(ctx, fp, m.skip(fp))
+	scanned := time.Since(started)
 	if err != nil {
 		return false, err
 	}
@@ -521,18 +596,87 @@ func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 			// nothing left for the target: the writer checks coverage, and flips
 			return false, x.handVectors(ctx, vecBatch{fp: fp})
 		}
+		m.mu.Lock()
+		start, count, total, done := m.fillStart, m.fillTexts, m.fillTotal, m.fillDone
+		m.fillDone = true
+		m.mu.Unlock()
+		if !done && !start.IsZero() {
+			duration := time.Since(start)
+			logger.Info(x.opts.Logger, logger.Fields{"event": "embedding.fill.complete", "model": fp,
+				"texts": count, "sections": total, "refused": len(m.skip(fp)),
+				"duration_ms": duration.Milliseconds(), "texts_per_sec": float64(count) / max(duration.Seconds(), 0.001)})
+		}
 		return false, nil
 	}
+	m.mu.Lock()
+	first := m.fillStart.IsZero() || m.fillDone
+	m.mu.Unlock()
+	if first {
+		var total int64
+		_ = x.store.read(ctx, func(tx *store.Tx) error {
+			var err error
+			total, _, err = x.store.textCoverage(tx, fp)
+			return err
+		})
+		m.mu.Lock()
+		m.fillStart = time.Now()
+		m.fillTotal = total
+		m.fillTexts, m.fillBatches, m.fillDone = 0, 0, false
+		m.mu.Unlock()
+		logger.Info(x.opts.Logger, logger.Fields{"event": "embedding.fill.start", "model": fp, "sections": total})
+	}
+	before := m.skip(fp)
 	vb := vecBatch{fp: fp}
+	called := time.Now()
 	if err := m.embedSome(ctx, p, fp, dims, hashes, texts, &vb); err != nil {
 		return false, err
 	}
+	providerTime := time.Since(called)
+	for hash := range m.skip(fp) {
+		if before[hash] {
+			continue
+		}
+		refused, lookupErr := x.refusedTexts(ctx, fp, hash)
+		if lookupErr != nil {
+			logger.Warning(x.opts.Logger, lookupErr, logger.Fields{"event": "embedding.refusal.paths.failed", "model": fp})
+		}
+		for _, r := range refused {
+			if r.Hash != hash {
+				continue
+			}
+			logger.Warning(x.opts.Logger, nil, logger.Fields{"event": "embedding.text.refused", "model": fp,
+				"path": r.Path, "breadcrumb": r.Breadcrumb, "error": r.Error, "bytes": r.Bytes,
+				"estimated_tokens": r.Tokens, "retry_at": r.RetryAt.Format(time.RFC3339)})
+		}
+	}
+	committed := time.Now()
 	if len(vb.items) > 0 {
 		if err := x.handVectors(ctx, vb); err != nil {
 			return false, err
 		}
 	}
+	logger.Debug(x.opts.Logger, logger.Fields{"event": "embedding.batch", "model": fp, "texts": len(vb.items),
+		"estimated_tokens": estimatedTokens(texts), "scan_ms": scanned.Milliseconds(), "provider_ms": providerTime.Milliseconds(), "commit_publish_ms": time.Since(committed).Milliseconds()})
+	m.mu.Lock()
+	if !m.fillDone {
+		m.fillTexts += int64(len(vb.items))
+	}
+	m.fillBatches++
+	fillTexts, fillBatches, fillStart := m.fillTexts, m.fillBatches, m.fillStart
+	m.mu.Unlock()
+	if fillBatches%10 == 0 {
+		logger.Info(x.opts.Logger, logger.Fields{"event": "embedding.fill.rate", "model": fp,
+			"texts": fillTexts, "texts_per_sec": float64(fillTexts) / max(time.Since(fillStart).Seconds(), 0.001)})
+	}
 	return true, nil
+}
+
+func estimatedTokens(texts []string) int {
+	total := 0
+	for _, text := range texts {
+		total += tokensOf([]byte(text), 0, len(text))
+	}
+	return total
 }
 
 // embedSome embeds texts into vb. A provider rejecting the input (not failing as a whole) is
@@ -545,7 +689,7 @@ func (m *semantic) embedSome(ctx context.Context, p embed.Provider, fp string, d
 	switch {
 	case errors.Is(err, embed.ErrRejected) && len(texts) == 1:
 		m.mu.Lock()
-		m.refused[fp+"\x00"+string(hashes[0])] = time.Now().Add(refusedFor)
+		m.refused[fp+"\x00"+string(hashes[0])] = refusalEntry{err: err, retryAt: time.Now().Add(refusedFor), bytes: len(texts[0]), tokens: tokensOf([]byte(texts[0]), 0, len(texts[0]))}
 		m.mu.Unlock()
 		return nil
 	case errors.Is(err, embed.ErrRejected):
@@ -564,6 +708,9 @@ func (m *semantic) embedSome(ctx context.Context, p embed.Provider, fp string, d
 			return fmt.Errorf("%w: %d dimensions, the model has %d", embed.ErrDims, len(v), dims)
 		}
 		vb.items = append(vb.items, vecItem{textHash: hashes[i], vec: normalized(v)})
+		m.mu.Lock()
+		delete(m.refused, fp+"\x00"+string(hashes[i]))
+		m.mu.Unlock()
 	}
 	return nil
 }
@@ -574,8 +721,8 @@ func (m *semantic) skip(fp string) map[string]bool {
 	defer m.mu.Unlock()
 	now := time.Now()
 	out := map[string]bool{}
-	for k, until := range m.refused {
-		if now.After(until) {
+	for k, entry := range m.refused {
+		if now.After(entry.retryAt) {
 			delete(m.refused, k)
 			continue
 		}
@@ -917,14 +1064,21 @@ type EmbeddingStatus struct {
 	Semantic string // SemanticSwitching while Target fills; else SemanticReady, or SemanticPartial while any document is not ready
 	LastErr  string // the embedding workers' last provider failure; "" after a success
 	Refused  int    // texts the provider rejected under the active model, set aside for now
-	// TargetPending and TargetRefused are the same for the target while it fills: a refused text
-	// holds the switch back, since the target flips only when it covers every chunk.
+	// TargetPending counts missing vectors including refusals; TargetRefused is the
+	// subset set aside now. A refusal does not hold the switch back.
 	TargetPending int64
 	TargetRefused int
+	RefusedTexts  []RefusedText
 }
 
 // Status is the store's status, with the embedding tier's when the indexer has a provider.
 func (x *Indexer) Status(ctx context.Context) (Status, error) {
+	start := time.Now()
+	defer func() {
+		if elapsed := time.Since(start); elapsed > 250*time.Millisecond && x.opts.Logger != nil {
+			logger.Warning(x.opts.Logger, nil, logger.Fields{"event": "embedding.status.slow", "duration_ms": elapsed.Milliseconds()})
+		}
+	}()
 	st, err := x.store.Status(ctx)
 	if err != nil || x.sem == nil {
 		return st, err
@@ -934,19 +1088,21 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	if m.switching() {
 		es.Target = m.target.Model().Fingerprint()
 	}
+	refusedFP := es.Model
+	if es.Target != "" {
+		refusedFP = es.Target
+	}
 	s := x.store
 	if err := s.read(ctx, func(tx *store.Tx) error {
-		fps := []string{es.Model}
-		if es.Target != "" {
-			fps = append(fps, es.Target)
-		}
-		texts, missing, err := s.textCoverage(tx, fps...)
+		texts, missing, err := s.textCoverage(tx, refusedFP)
 		if err != nil {
 			return err
 		}
-		es.Texts, es.Pending = texts, missing[0]
+		es.Texts = texts
 		if es.Target != "" {
-			es.TargetPending, es.TargetRefused = missing[1], len(m.skip(es.Target))
+			es.TargetPending, es.TargetRefused = missing[0], len(m.skip(es.Target))
+		} else {
+			es.Pending = missing[0]
 		}
 		unready, err := s.sc.Documents(tx).With(store.DocSemanticReady, int64(0)).Exists()
 		switch {
@@ -965,6 +1121,47 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	}
 	m.mu.Unlock()
 	es.Refused = len(m.skip(es.Model))
+	es.RefusedTexts, err = x.refusedTexts(ctx, refusedFP, "")
+	if err != nil {
+		return st, err
+	}
 	st.Embeddings = &es
 	return st, nil
+}
+
+// refusedTexts resolves only the first twenty refused hashes to alive source paths.
+func (x *Indexer) refusedTexts(ctx context.Context, fp, onlyHash string) ([]RefusedText, error) {
+	m := x.sem
+	m.mu.Lock()
+	entries := make(map[string]refusalEntry)
+	for key, entry := range m.refused {
+		if f, hash, ok := strings.Cut(key, "\x00"); ok && f == fp && (onlyHash == "" || onlyHash == hash) && time.Now().Before(entry.retryAt) {
+			entries[hash] = entry
+		}
+	}
+	m.mu.Unlock()
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	var out []RefusedText
+	err := x.store.read(ctx, func(tx *store.Tx) error {
+		checked := 0
+		for hash, entry := range entries {
+			if len(out) == 20 || checked == 20 {
+				break
+			}
+			checked++
+			rows, err := alive(x.store.sc.Chunks(tx)).Join(store.JoinDocument).With(store.ChunkTextHash, []byte(hash)).
+				Limit(20-uint64(len(out))).Select(store.ChunkDocPath, store.ChunkBreadcrumb)
+			if err != nil {
+				return err
+			}
+			for _, r := range rows {
+				out = append(out, RefusedText{Path: r.DocPath, Breadcrumb: r.Breadcrumb, Hash: hash, Error: entry.err.Error(),
+					Bytes: entry.bytes, Tokens: entry.tokens, RetryAt: entry.retryAt})
+			}
+		}
+		return nil
+	})
+	return out, err
 }

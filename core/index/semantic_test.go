@@ -631,6 +631,35 @@ func TestRejectedTextDoesNotBlockOthers(t *testing.T) {
 	}
 }
 
+func TestTargetBatchPreservesOfflineSnapshot(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("a.md", "zebra\n", "b.md", "hippo\n")
+	e.ready()
+	e.stop()
+	b := newFake("m2", "b")
+	b.hold("zebra")
+	defer func() {
+		b.mu.Lock()
+		held := b.held
+		b.mu.Unlock()
+		if held != "" {
+			b.unhold()
+		}
+	}()
+	e.stop = nil
+	e.open(Options{Provider: b})
+	before := e.atHead()
+	if err := e.ix.handVectors(context.Background(), vecBatch{fp: b.Model().Fingerprint(),
+		items: []vecItem{{textHash: []byte("not-an-alive-text"), vec: make([]float32, 64)}}}); err != nil {
+		t.Fatal(err)
+	}
+	after := e.atHead()
+	if after.fp != before.fp || reflect.ValueOf(after.docs).Pointer() != reflect.ValueOf(before.docs).Pointer() || after.watermark <= before.watermark {
+		t.Errorf("target batch rebuilt or did not advance offline snapshot: before %+v after %+v", before, after)
+	}
+}
+
 // ready2 waits until the document at path is semantic-ready.
 func (e *env) ready2(path string) {
 	e.t.Helper()
@@ -717,8 +746,8 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	}
 }
 
-// TestRefusedTargetTextShowsInStatus: a target text the provider rejects holds the switch back, and
-// the status says so, though the active model has nothing pending.
+// TestRefusedTargetTextShowsInStatus: one refused target text cannot hold every other document's
+// semantic search offline. After the flip, the incomplete document stays lexical and is reported.
 func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, Options{Provider: a})
@@ -729,12 +758,24 @@ func TestRefusedTargetTextShowsInStatus(t *testing.T) {
 	b.refuse = "oversized"
 	e.stop = nil
 	e.open(Options{Provider: b})
-	e.eventually("the refusal in the status", func() bool {
-		es := e.embStatus()
-		return es.TargetRefused == 1 && es.TargetPending == 1
-	})
+	e.eventually("the flip despite refusal", func() bool { return e.activeModel() == b.Model().Fingerprint() })
 	es := e.embStatus()
-	if es.Model != a.Model().Fingerprint() || es.Target != b.Model().Fingerprint() || es.Pending != 0 || es.Refused != 0 {
+	if es.Model != b.Model().Fingerprint() || es.Target != "" || es.Pending != 1 || es.Refused != 1 ||
+		es.Semantic != SemanticPartial || len(es.RefusedTexts) != 1 || es.RefusedTexts[0].Path != "y.md" {
 		t.Errorf("status %+v", es)
+	}
+	b.mu.Lock()
+	b.refuse = ""
+	b.mu.Unlock()
+	e.ix.sem.mu.Lock()
+	for key, entry := range e.ix.sem.refused {
+		entry.retryAt = time.Now().Add(-time.Second)
+		e.ix.sem.refused[key] = entry
+	}
+	e.ix.sem.mu.Unlock()
+	e.ix.sem.signal()
+	e.ready2("y.md")
+	if es := e.embStatus(); es.Refused != 0 || es.Pending != 0 {
+		t.Errorf("successful retry left refusal behind: %+v", es)
 	}
 }

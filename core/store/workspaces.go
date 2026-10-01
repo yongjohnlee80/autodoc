@@ -17,6 +17,51 @@ var (
 	ErrNoWorkspace = errors.New("store: no such workspace")
 )
 
+// SectionTokensDefault is the default section limit for existing workspaces.
+const SectionTokensDefault = 512
+
+// SectionTokens returns the workspace's effective chunk limit.
+func (s *Store) SectionTokens(ctx context.Context, id int64) (int, error) {
+	var tokens int
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceSectionTokens)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil {
+			return err
+		}
+		tokens = SectionTokensDefault
+		if w.SectionTokens != nil {
+			tokens = int(*w.SectionTokens)
+		}
+		return nil
+	})
+	return tokens, err
+}
+
+// SetWorkspaceSectionTokens sets the chunk limit. Zero selects the default.
+func (s *Store) SetWorkspaceSectionTokens(ctx context.Context, id int64, tokens int) error {
+	if tokens != 0 && (tokens < 128 || tokens > 2048) {
+		return fmt.Errorf("store: section size must be 128 to 2048 tokens")
+	}
+	var value any
+	if tokens > 0 {
+		value = int64(tokens)
+	}
+	return s.Write(ctx, func(tx *Tx) error {
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceSectionTokens, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNoWorkspace
+		}
+		return nil
+	})
+}
+
 // WorkspaceInfo is a workspace with its patterns.
 type WorkspaceInfo struct {
 	Workspace

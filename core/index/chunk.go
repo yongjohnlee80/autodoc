@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
 )
@@ -29,6 +30,8 @@ type unit struct {
 	start, end int
 	holes      []markdown.Span
 	tokens     int
+	body       string // nonempty for a split block with synthetic table header or code fence
+	kind       markdown.Kind
 }
 
 // chunkDoc splits a parsed document into heading-aware chunks (ADR 0204 §4.3). Sections split at
@@ -37,6 +40,13 @@ type unit struct {
 // breadcrumb names the document's title and the headings above; chunks do not overlap, since the
 // breadcrumb carries the context. Definitions and frontmatter are not text.
 func chunkDoc(doc *markdown.Document, title string) []chunkT {
+	return chunkDocWithLimit(doc, title, maxTokens)
+}
+
+func chunkDocWithLimit(doc *markdown.Document, title string, limit int) []chunkT {
+	if limit <= 0 {
+		limit = maxTokens
+	}
 	src := doc.Source
 	var out []chunkT
 	var stack []string // the heading texts above, by level
@@ -47,7 +57,13 @@ func chunkDoc(doc *markdown.Document, title string) []chunkT {
 			heads = heads[1:] // the title came from this heading: say it once
 		}
 		crumb := strings.Join(append([]string{title}, heads...), " > ")
-		out = append(out, pack(src, units, crumb, len(out))...)
+		crumb = boundedCrumb(crumb, limit)
+		budget := max(1, limit-tokensOf([]byte(crumb+"\n"), 0, len(crumb)+1)-2)
+		var parts []unit
+		for _, u := range units {
+			parts = append(parts, splitOversized(src, u, u.kind, budget)...)
+		}
+		out = append(out, packLimited(src, parts, crumb, len(out), limit)...)
 		units = units[:0]
 	}
 	for n := doc.Root.FirstChild; n != nil; n = n.Next {
@@ -62,7 +78,7 @@ func chunkDoc(doc *markdown.Document, title string) []chunkT {
 			stack = append(stack[:n.Level-1], plainText(n, src))
 			continue
 		case markdown.KindList:
-			if tokensOf(src, n.Span.Start, n.Span.End) > maxTokens {
+			if tokensOf(src, n.Span.Start, n.Span.End) > limit {
 				for it := n.FirstChild; it != nil; it = it.Next {
 					units = append(units, unitOf(src, it))
 				}
@@ -75,7 +91,7 @@ func chunkDoc(doc *markdown.Document, title string) []chunkT {
 	if len(out) == 0 {
 		// a note with no text (a title, frontmatter) is still a note: one chunk of no body carries its
 		// title, so it can be found
-		out = append(out, newChunk(0, title, "", 0, 0))
+		out = append(out, newChunk(0, boundedCrumb(title, limit), "", 0, 0))
 	}
 	for i := range out {
 		out[i].ord = i
@@ -96,7 +112,7 @@ func nonEmpty(ss []string) []string {
 // unitOf is block n as a unit. A definition is a child of the block holding its paragraph (a list
 // item, a block quote), so one can sit anywhere below n.
 func unitOf(src []byte, n *markdown.Node) unit {
-	u := unit{start: n.Span.Start, end: n.Span.End, tokens: tokensOf(src, n.Span.Start, n.Span.End)}
+	u := unit{start: n.Span.Start, end: n.Span.End, tokens: tokensOf(src, n.Span.Start, n.Span.End), kind: n.Kind}
 	var walk func(*markdown.Node)
 	walk = func(n *markdown.Node) {
 		for c := n.FirstChild; c != nil; c = c.Next {
@@ -113,12 +129,19 @@ func unitOf(src []byte, n *markdown.Node) unit {
 }
 
 func tokensOf(src []byte, start, end int) int {
-	return len(strings.Fields(string(src[start:end]))) * 13 / 10
+	b := src[start:end]
+	return max(len(strings.Fields(string(b)))*13/10, (len(b)+3)/4)
 }
 
 // pack places units in order: a chunk closes once it reaches targetTokens, or before a unit that
 // would take it past maxTokens.
 func pack(src []byte, units []unit, crumb string, base int) []chunkT {
+	return packLimited(src, units, crumb, base, maxTokens)
+}
+
+func packLimited(src []byte, units []unit, crumb string, base, limit int) []chunkT {
+	crumb = boundedCrumb(crumb, limit)
+	budget := max(1, limit-tokensOf([]byte(crumb+"\n"), 0, len(crumb)+1))
 	var out []chunkT
 	var cur []unit
 	tokens := 0
@@ -134,17 +157,25 @@ func pack(src []byte, units []unit, crumb string, base int) []chunkT {
 		cur, tokens = cur[:0], 0
 	}
 	for _, u := range units {
-		if len(cur) > 0 && tokens+u.tokens > maxTokens {
+		if len(cur) > 0 && tokens+u.tokens > budget {
 			emit()
 		}
 		cur = append(cur, u)
 		tokens += u.tokens
-		if tokens >= targetTokens {
+		if tokens >= min(limit*targetTokens/maxTokens, budget) {
 			emit()
 		}
 	}
 	emit()
 	return out
+}
+
+func boundedCrumb(crumb string, limit int) string {
+	for tokensOf([]byte(crumb), 0, len(crumb)) >= limit && len(crumb) > 0 {
+		_, size := utf8.DecodeLastRuneInString(crumb)
+		crumb = crumb[:len(crumb)-size]
+	}
+	return crumb
 }
 
 // text is the units' source with their holes cut out. Whitespace between two units is kept; anything
@@ -160,6 +191,10 @@ func text(src []byte, units []unit) string {
 			}
 		}
 		at := u.start
+		if u.body != "" {
+			b.WriteString(u.body)
+			continue
+		}
 		for _, h := range u.holes {
 			b.Write(src[at:h.Start])
 			at = h.End
@@ -167,6 +202,103 @@ func text(src []byte, units []unit) string {
 		b.Write(src[at:u.end])
 	}
 	return b.String()
+}
+
+// splitOversized retains source offsets for each fragment. Synthetic markdown syntax
+// belongs in the embedded body, never in the fragment's source span.
+func splitOversized(src []byte, u unit, kind markdown.Kind, limit int) []unit {
+	if u.tokens <= limit {
+		return []unit{u}
+	}
+	bodyText := text(src, []unit{u})
+	prefix, suffix := "", ""
+	if kind == markdown.KindTable {
+		lines := strings.SplitAfter(bodyText, "\n")
+		if len(lines) >= 3 {
+			prefix = lines[0] + lines[1]
+			if tokensOf([]byte(prefix), 0, len(prefix)) > limit/3 {
+				// A header larger than the budget cannot be repeated in full.
+				// Retain a short column-name excerpt; the original remains in its source span.
+				header := strings.TrimSpace(lines[0])
+				for len(header) > 0 && tokensOf([]byte(header), 0, len(header)) > limit/4 {
+					_, n := utf8.DecodeLastRuneInString(header)
+					header = header[:len(header)-n]
+				}
+				prefix = header + "… |\n|---|\n"
+			}
+		}
+	} else if kind == markdown.KindCodeBlock {
+		line, _, ok := strings.Cut(bodyText, "\n")
+		if ok && (strings.HasPrefix(strings.TrimSpace(line), "```") || strings.HasPrefix(strings.TrimSpace(line), "~~~")) {
+			prefix, suffix = line+"\n", "\n"+strings.TrimSpace(line)[:3]
+		}
+	}
+	// A table's first fragment already contains its header; subsequent fragments repeat it.
+	var out []unit
+	at := u.start
+	for at < u.end {
+		p := ""
+		if len(out) > 0 {
+			p = prefix
+		}
+		remaining := limit - tokensOf([]byte(p+suffix), 0, len(p+suffix))
+		if remaining < 1 {
+			remaining = 1
+		}
+		end := at
+		for end < u.end {
+			next := end
+			if i := bytes.IndexByte(src[next:u.end], '\n'); i >= 0 {
+				next += i + 1
+			} else {
+				next = u.end
+			}
+			if tokensOf(src, at, next) > remaining {
+				break
+			}
+			end = next
+		}
+		if end == at { // An indivisible row/line: split at a UTF-8 boundary.
+			for end < u.end {
+				_, n := utf8.DecodeRune(src[end:u.end])
+				if tokensOf(src, at, end+n) > remaining && end > at {
+					break
+				}
+				end += n
+				if tokensOf(src, at, end) >= remaining {
+					break
+				}
+			}
+		}
+		if end <= at {
+			end = min(at+1, u.end)
+		}
+		part := text(src, []unit{{start: at, end: end, holes: clippedHoles(u.holes, at, end)}})
+		if kind == markdown.KindCodeBlock && prefix != "" {
+			if len(out) > 0 {
+				part = prefix + part
+			}
+			if !strings.HasSuffix(strings.TrimSpace(part), strings.TrimSpace(suffix)) {
+				part += suffix
+			}
+		} else {
+			part = p + part
+		}
+		out = append(out, unit{start: at, end: end, body: part, tokens: tokensOf([]byte(part), 0, len(part))})
+		at = end
+	}
+	return out
+}
+
+func clippedHoles(holes []markdown.Span, start, end int) []markdown.Span {
+	var out []markdown.Span
+	for _, h := range holes {
+		if h.End <= start || h.Start >= end {
+			continue
+		}
+		out = append(out, markdown.Span{Start: max(h.Start, start), End: min(h.End, end)})
+	}
+	return out
 }
 
 // newChunk hashes a chunk: hash is its identity under this chunker (a chunker bump changes every

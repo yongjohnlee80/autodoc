@@ -10,6 +10,7 @@ package index
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -23,12 +24,23 @@ import (
 // the layout of the rows the indexer writes; the store's own schema is its scripts
 // (sql/deployments).
 const (
-	ChunkerVersion = 2
+	ChunkerVersion = 3
 	SchemaVersion  = 3
 )
 
 // IndexerVersion is what document.indexer records: "c<chunker>.s<schema>".
-var IndexerVersion = "c" + strconv.Itoa(ChunkerVersion) + ".s" + strconv.Itoa(SchemaVersion)
+var IndexerVersion = "c" + strconv.Itoa(ChunkerVersion) + ".s" + strconv.Itoa(SchemaVersion) + ".t512"
+
+func indexerVersion(tokens int) string {
+	if tokens <= 0 {
+		tokens = store.SectionTokensDefault
+	}
+	return fmt.Sprintf("c%d.s%d.t%d", ChunkerVersion, SchemaVersion, tokens)
+}
+
+func (s *Store) sectionTokens(ctx context.Context) (int, error) {
+	return s.db.SectionTokens(ctx, s.sc.ID())
+}
 
 // ErrCursorExpired is a change cursor older than the retained log: the client re-lists (0203 §4.5).
 var ErrCursorExpired = errors.New("index: the change cursor is older than the retained log")
@@ -56,8 +68,12 @@ func (s *Store) read(ctx context.Context, fn func(tx *store.Tx) error) error {
 // outdated lists the documents indexed under another IndexerVersion.
 func (s *Store) outdated(ctx context.Context) ([]string, error) {
 	var out []string
-	err := s.read(ctx, func(tx *store.Tx) error {
-		docs, err := s.sc.Documents(tx).Excluding(store.DocIndexer, IndexerVersion).OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath)
+	tokens, err := s.sectionTokens(ctx)
+	if err != nil {
+		return nil, err
+	}
+	err = s.read(ctx, func(tx *store.Tx) error {
+		docs, err := s.sc.Documents(tx).Excluding(store.DocIndexer, indexerVersion(tokens)).OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath)
 		for _, d := range docs {
 			out = append(out, d.Path)
 		}

@@ -79,6 +79,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.addWorkspace":             twoStrings("App.addWorkspace", "a name and a root", h.addWorkspace),
 		"App.startRenameWorkspace":     oneNumber("App.startRenameWorkspace", "a row", h.startRenameWorkspace),
 		"App.renameWorkspace":          oneString("App.renameWorkspace", "a name", h.renameWorkspace),
+		"App.startSectionSize":         oneNumber("App.startSectionSize", "a row", h.startSectionSize),
+		"App.saveSectionSize":          oneString("App.saveSectionSize", "a size", h.saveSectionSize),
 		"App.startRemoveWorkspace":     oneNumber("App.startRemoveWorkspace", "a row", h.startRemoveWorkspace),
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
 

@@ -25,6 +25,29 @@ type server struct {
 	wrongLen bool
 }
 
+func TestOllamaContextReadsModelMaximum(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/show" || r.Method != http.MethodPost {
+			t.Errorf("unexpected route: %s %s", r.Method, r.URL.Path)
+		}
+		var req struct {
+			Model string `json:"model"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Error(err)
+		}
+		if req.Model != "embeddinggemma" {
+			t.Errorf("model %q", req.Model)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"model_info": map[string]any{"gemma3.context_length": 2048}})
+	}))
+	defer srv.Close()
+	got, err := OllamaContext(context.Background(), srv.URL, "", "embeddinggemma", srv.Client())
+	if err != nil || got != 2048 {
+		t.Fatalf("maximum = %d, %v; want 2048", got, err)
+	}
+}
+
 func (s *server) vec(text string) []float32 {
 	v := make([]float32, s.dims)
 	for i := range v {

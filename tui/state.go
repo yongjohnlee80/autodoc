@@ -98,6 +98,8 @@ func (h *Host) state() map[string]any {
 		"App.providerKeyShown":       false,
 		"App.providerKeyLabel":       "",
 		"App.providerContext":        "",
+		"App.providerContextHint":    "",
+		"App.providerSectionHint":    "",
 		"App.providerContextShown":   false,
 		"App.providerModels":         h.providerModels,
 		"App.providerModelsStatus":   "",
@@ -109,10 +111,11 @@ func (h *Host) state() map[string]any {
 		"App.lastFind":   "",
 		"App.linksIndex": 0,
 		// the workspace's models and their vectors (vectors.go)
-		"App.vectors":       h.vectors,
-		"App.vectorsTitle":  "vectors",
-		"App.vectorsStatus": "",
-		"App.purgeQuestion": "",
+		"App.vectors":         h.vectors,
+		"App.vectorsTitle":    "vectors",
+		"App.vectorsStatus":   "",
+		"App.vectorsRefusals": "",
+		"App.purgeQuestion":   "",
 
 		// the workspace add
 		"App.home":    homeDir(),
@@ -127,6 +130,9 @@ func (h *Host) state() map[string]any {
 		"App.managerHelp":          managerHelp,
 		"App.workspaceRenameError": "",
 		"App.renameFrom":           "",
+		"App.sectionTitle":         "section size",
+		"App.sectionSize":          "512",
+		"App.sectionError":         "",
 		"App.removeQuestion":       "",
 
 		"App.helpText":  helpText,

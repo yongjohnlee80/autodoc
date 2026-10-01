@@ -241,6 +241,7 @@ Window {
     WorkspaceManager { id: workspaceManager }
     WorkspaceAdd { id: workspaceAdd }
     WorkspaceRename { id: workspaceRename }
+    WorkspaceSection { id: workspaceSection }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }
     PluginConfirm { id: pluginConfirm }

@@ -108,6 +108,29 @@ func TestLimitIsTheWorkspacesBest(t *testing.T) {
 	}
 }
 
+func TestSectionSizeRechunksOnlyItsWorkspace(t *testing.T) {
+	text := "# Big\n\n" + strings.Repeat("paragraph with many words for chunking.\n\n", 130)
+	ws := shareAStore(t, []Options{{}, {}}, []string{"a", "n.md", text}, []string{"b", "n.md", text})
+	ctx := context.Background()
+	a, b := ws[0].ix, ws[1].ix
+	beforeA, beforeB := a.store.indexer("n.md"), b.store.indexer("n.md")
+	if beforeA != beforeB {
+		t.Fatalf("initial versions differ: %s / %s", beforeA, beforeB)
+	}
+	if err := a.store.db.SetWorkspaceSectionTokens(ctx, a.store.sc.ID(), 256); err != nil {
+		t.Fatal(err)
+	}
+	a.Reindex("")
+	for deadline := time.Now().Add(10 * time.Second); a.store.indexer("n.md") != indexerVersion(256); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("section-size change did not reindex workspace a")
+		}
+	}
+	if got := b.store.indexer("n.md"); got != beforeB {
+		t.Errorf("workspace b re-chunked: %s -> %s", beforeB, got)
+	}
+}
+
 // TestSemanticReadsTheWorkspacesVectors: the same text in two workspaces has a vector in each,
 // under one model fingerprint, and here they differ. A's semantic search scores A's note by A's
 // vector alone: one hit, the one its own vector ranks, as if B were not in the store.

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/vfs"
 
@@ -55,6 +56,7 @@ type Options struct {
 	// is offline while it fills: nothing embeds with it, so the server holds one model at a time,
 	// and a query is answered by words (SemanticSwitching) until the target covers every chunk.
 	Provider embed.Provider
+	Logger   logger.Logger
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -100,6 +102,7 @@ type workItem struct {
 
 type prepared struct {
 	path       string
+	indexer    string
 	claimedSeq int64
 	skip       bool
 	delete     bool
@@ -131,6 +134,9 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	opts.MaxRetryDelay = max(opts.MaxRetryDelay, opts.RetryDelay)
 	if opts.Now == nil {
 		opts.Now = time.Now
+	}
+	if opts.Logger == nil {
+		opts.Logger = logger.Nop{}
 	}
 	ix := &Indexer{store: store, fsys: fsys, opts: opts, touched: map[string]bool{},
 		signal: make(chan struct{}, 1), jobs: map[string]*job{}, unpersisted: map[string]bool{},
@@ -392,6 +398,12 @@ func (x *Indexer) worker(ctx context.Context) {
 // prepare reads, parses and chunks one path. It writes nothing.
 func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	p := &prepared{path: w.path, claimedSeq: w.seq}
+	tokens, err := x.store.sectionTokens(ctx)
+	if err != nil {
+		p.err = err
+		return p
+	}
+	p.indexer = indexerVersion(tokens)
 	fi, err := x.fsys.Stat(ctx, w.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -405,7 +417,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		return p
 	}
 	if !w.force {
-		if v, ok := x.store.Version(w.path); ok && v == fi.Version && x.store.indexer(w.path) == IndexerVersion {
+		if v, ok := x.store.Version(w.path); ok && v == fi.Version && x.store.indexer(w.path) == p.indexer {
 			p.skip = true
 			return p
 		}
@@ -439,7 +451,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 	p.version = fi.Version
 	p.meta = readMeta(doc, w.path)
-	p.chunks = chunkDoc(doc, p.meta.title)
+	p.chunks = chunkDocWithLimit(doc, p.meta.title, tokens)
 	p.links = extractLinks(doc, w.path, x.opts.Match)
 	x.mu.Lock()
 	x.parses++
@@ -600,7 +612,7 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	switch {
 	case appeared:
 		if docID, err = s.sc.Documents(tx).Set(store.DocPath, p.path).Set(store.DocVersion, "").Set(store.DocActiveGen, int64(0)).
-			Set(store.DocIndexer, IndexerVersion).Set(store.DocIndexedAt, now.Unix()).Insert(); err != nil {
+			Set(store.DocIndexer, p.indexer).Set(store.DocIndexedAt, now.Unix()).Insert(); err != nil {
 			return 0, err
 		}
 	case err != nil:
@@ -696,7 +708,7 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	}
 	if err := s.sc.Documents(tx).With(store.DocID, docID).Set(store.DocVersion, string(p.version)).Set(store.DocActiveGen, next).
 		Set(store.DocTitle, title).Set(store.DocFrontmatterJSON, fmJSON).Set(store.DocFrontmatterError, fmErr).
-		Set(store.DocIndexer, IndexerVersion).Set(store.DocIndexedAt, now.Unix()).Update(); err != nil {
+		Set(store.DocIndexer, p.indexer).Set(store.DocIndexedAt, now.Unix()).Update(); err != nil {
 		return 0, err
 	}
 	if err := s.logChange(tx, p.path, "upsert", next, now.Unix()); err != nil {
