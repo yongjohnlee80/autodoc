@@ -74,3 +74,16 @@ func TestLongTableHeaderCannotMakeAnOversizedChunk(t *testing.T) {
 		}
 	}
 }
+
+func TestTitleOnlyAndHeaderOnlyTableStayBounded(t *testing.T) {
+	title := strings.Repeat("long title with many words ", 80)
+	cs := chunkDocWithLimit(markdown.Parse(nil, markdown.GFM()), title, 128)
+	if len(cs) != 1 || cs[0].body != "" || tokensOf([]byte(cs[0].breadcrumb), 0, len(cs[0].breadcrumb)) > 128 {
+		t.Fatalf("empty note with long title: %+v", cs)
+	}
+	table := "# Title\n\n| First | Second |\n|---|---|\n"
+	cs = chunkDocWithLimit(markdown.Parse([]byte(table), markdown.GFM()), "Title", 128)
+	if len(cs) != 1 || !strings.Contains(cs[0].body, "| First | Second |") {
+		t.Fatalf("header-only table: %+v", cs)
+	}
+}
