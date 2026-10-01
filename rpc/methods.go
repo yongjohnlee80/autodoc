@@ -22,8 +22,12 @@ func workspaceMap(w *Workspace) map[string]any {
 	if w.Err != nil {
 		state = "error"
 	}
+	tokens := w.SectionTokens
+	if w.SectionSize != nil {
+		tokens = w.SectionSize()
+	}
 	return map[string]any{"name": w.Name, "root": w.Root, "state": state,
-		"include": anyList(w.Include), "exclude": anyList(w.Exclude)}
+		"include": anyList(w.Include), "exclude": anyList(w.Exclude), "section_tokens": int64(tokens)}
 }
 
 func anyList(ss []string) []any {
@@ -106,6 +110,10 @@ func wireErr(err error) error {
 	if errors.As(err, &re) {
 		return re
 	}
+	var maxErr *store.ContextMaximumError
+	if errors.As(err, &maxErr) {
+		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: maxErr.Error()}
+	}
 	for _, pe := range publicErrs {
 		if errors.Is(err, pe.err) {
 			return &golibrpc.Error{Code: pe.code, Message: pe.message}
@@ -160,6 +168,23 @@ func (s *Server) register() {
 			return nil, err
 		}
 		return nil, s.workspaces.Rename(ctx, name, to)
+	}, false))
+	s.handle("workspace.section_size", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "name")
+		if err != nil {
+			return nil, err
+		}
+		tokens, err := argInt(p, 1, "section size")
+		if err != nil {
+			return nil, err
+		}
+		manager, ok := s.workspaces.(interface {
+			SetSectionTokens(context.Context, string, int) error
+		})
+		if !ok {
+			return nil, errs.ErrUnsupported
+		}
+		return nil, manager.SetSectionTokens(ctx, name, int(tokens))
 	}, false))
 	s.handle("workspace.remove", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		name, err := argStr(p, 0, "name")
@@ -509,9 +534,14 @@ func statusMap(st index.Status, w *Workspace) map[string]any {
 		}
 	}
 	if e := st.Embeddings; e != nil {
+		refused := make([]any, len(e.RefusedTexts))
+		for i, r := range e.RefusedTexts {
+			refused[i] = map[string]any{"path": r.Path, "breadcrumb": r.Breadcrumb, "error": r.Error,
+				"bytes": int64(r.Bytes), "estimated_tokens": int64(r.Tokens), "retry_at": r.RetryAt.Unix()}
+		}
 		out["embeddings"] = map[string]any{"provider": e.Provider, "model": e.Model, "target": e.Target,
 			"texts": e.Texts, "pending": e.Pending, "semantic": e.Semantic, "last_error": e.LastErr, "refused": int64(e.Refused),
-			"target_pending": e.TargetPending, "target_refused": int64(e.TargetRefused)}
+			"target_pending": e.TargetPending, "target_refused": int64(e.TargetRefused), "refused_texts": refused}
 	}
 	return out
 }

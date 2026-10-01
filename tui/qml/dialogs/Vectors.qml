@@ -23,7 +23,8 @@ Dialog {
             TableViewColumn { role: "keys"; title: "KEYS"; width: 10 }
             TableViewColumn { role: "total"; title: "TOTAL"; width: 10 }
         }
-        Text { text: App.vectorsStatus; wrapMode: Tui.WordWrap }
+		Text { text: App.vectorsStatus; wrapMode: Tui.WordWrap }
+        Text { text: App.vectorsRefusals; wrapMode: Tui.WordWrap }
     }
     DialogButtonBox {
         Button { text: "&Purge…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startPurge(vectorTable.currentIndex) }

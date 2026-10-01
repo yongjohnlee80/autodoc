@@ -49,6 +49,40 @@ func TestOpen_AppliesTheSchemaAndHoldsTheLease(t *testing.T) {
 	}
 }
 
+func TestSectionSizeBelongsToOneWorkspace(t *testing.T) {
+	ctx := context.Background()
+	s := openStore(t)
+	a, err := s.AddWorkspace(ctx, "a", "/a", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.AddWorkspace(ctx, "b", "/b", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, err := s.SectionTokens(ctx, a.ID); err != nil || n != SectionTokensDefault {
+		t.Fatalf("new workspace: %d, %v", n, err)
+	}
+	if err := s.SetWorkspaceSectionTokens(ctx, a.ID, 256); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		id   int64
+		want int
+	}{{a.ID, 256}, {b.ID, SectionTokensDefault}} {
+		got, err := s.SectionTokens(ctx, tc.id)
+		if err != nil || got != tc.want {
+			t.Errorf("workspace %d: %d, %v; want %d", tc.id, got, err, tc.want)
+		}
+	}
+	if err := s.SetWorkspaceSectionTokens(ctx, a.ID, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.SectionTokens(ctx, a.ID); got != SectionTokensDefault {
+		t.Errorf("reset to default = %d", got)
+	}
+}
+
 // The order the daemon runs on darwin: SQLite already holds its fcntl locks on
 // the store when the lease is taken. A lease on the store file itself is
 // refused there; the sidecar is not.

@@ -369,6 +369,29 @@ func Models(ctx context.Context, kind, base, key string, client *http.Client) ([
 	return names, nil
 }
 
+// OllamaContext asks /api/show for the model architecture's maximum context.
+// A zero answer means the server did not advertise a context length.
+func OllamaContext(ctx context.Context, base, key, name string, client *http.Client) (int, error) {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	var show struct {
+		ModelInfo map[string]any `json:"model_info"`
+	}
+	if err := call(ctx, client, http.MethodPost, strings.TrimRight(base, "/")+"/api/show", bearer(key),
+		map[string]any{"model": name}, &show); err != nil {
+		return 0, err
+	}
+	for k, v := range show.ModelInfo {
+		if strings.HasSuffix(k, ".context_length") {
+			if n, ok := v.(float64); ok && n > 0 {
+				return int(n), nil
+			}
+		}
+	}
+	return 0, nil
+}
+
 // Unload asks the server to let the model go now: an embed request with no input and keep_alive 0.
 // Otherwise it stays loaded until it has been idle for the server's keep-alive (5 minutes by
 // default).

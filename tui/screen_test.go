@@ -388,6 +388,10 @@ func TestTheProviderForm(t *testing.T) {
 	var mu sync.Mutex
 	var auth []string
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/show" {
+			_ = json.NewEncoder(w).Encode(map[string]any{"model_info": map[string]any{"nomic.context_length": 4096}})
+			return
+		}
 		if r.URL.Path != "/api/tags" {
 			http.NotFound(w, r)
 			return
@@ -439,6 +443,9 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "the model written", func(sc string) bool {
 		return strings.Contains(sc, "nomic-embed-text") && !strings.Contains(sc, "nomic-embed-text, say")
 	})
+	r.s.WaitForText(t, "model max 4096")
+	r.h.p.Post(func() { r.h.saveProvider("cloud", ollama.URL, "nomic-embed-text", "", "8192") })
+	r.s.WaitForText(t, "exceeds this model's maximum of 4096")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saved the provider cloud")
 	if strings.Contains(r.s.String(), "sekrit") {

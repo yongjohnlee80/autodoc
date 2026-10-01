@@ -34,8 +34,8 @@ import (
 // sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
 // declaring the daemon's number, to start the installed one in its place.
 //
-// Protocol 4 added embedding.cancel_switch and index.models.
-const Protocol int64 = 4
+// Protocol 5 added workspace.section_size and embedding.model_context.
+const Protocol int64 = 5
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -53,6 +53,8 @@ const (
 // root is gone); every verb naming it fails with Err, and workspace.list reports it.
 type Workspace struct {
 	Name, Root       string
+	SectionTokens    int
+	SectionSize      func() int // live workspace preference, when managed by the daemon
 	Include, Exclude []string
 	Err              error
 	Index            *index.Indexer

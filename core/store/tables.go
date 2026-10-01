@@ -14,6 +14,7 @@ type Workspace struct {
 	ID                   int64
 	Name, Root           string
 	CommitSeq, ChangeSeq int64
+	SectionTokens        *int64
 	CreatedAt, UpdatedAt int64
 }
 
@@ -21,13 +22,14 @@ type Workspace struct {
 type WorkspaceField string
 
 const (
-	WorkspaceID        WorkspaceField = "id"
-	WorkspaceName      WorkspaceField = "name"
-	WorkspaceRoot      WorkspaceField = "root"
-	WorkspaceCommitSeq WorkspaceField = "commit_seq"
-	WorkspaceChangeSeq WorkspaceField = "change_seq"
-	WorkspaceCreatedAt WorkspaceField = "created_at"
-	WorkspaceUpdatedAt WorkspaceField = "updated_at"
+	WorkspaceID            WorkspaceField = "id"
+	WorkspaceName          WorkspaceField = "name"
+	WorkspaceRoot          WorkspaceField = "root"
+	WorkspaceCommitSeq     WorkspaceField = "commit_seq"
+	WorkspaceChangeSeq     WorkspaceField = "change_seq"
+	WorkspaceSectionTokens WorkspaceField = "section_tokens"
+	WorkspaceCreatedAt     WorkspaceField = "created_at"
+	WorkspaceUpdatedAt     WorkspaceField = "updated_at"
 )
 
 // Preference is one of a client's preferences, by name: the store's, not a
@@ -448,13 +450,14 @@ func newTables(c dao.DataConn) *tables {
 			dao.Table[*Workspace, WorkspaceField, noSort, int64]("workspace"),
 			dao.ID[*Workspace, WorkspaceField, noSort, int64](WorkspaceID),
 			dao.Fields[*Workspace, WorkspaceField, noSort, int64](map[WorkspaceField]dao.Field[*Workspace]{
-				WorkspaceID:        col("workspace", WorkspaceID, func(w *Workspace) any { return &w.ID }),
-				WorkspaceName:      col("workspace", WorkspaceName, func(w *Workspace) any { return &w.Name }),
-				WorkspaceRoot:      col("workspace", WorkspaceRoot, func(w *Workspace) any { return &w.Root }),
-				WorkspaceCommitSeq: col("workspace", WorkspaceCommitSeq, func(w *Workspace) any { return &w.CommitSeq }),
-				WorkspaceChangeSeq: col("workspace", WorkspaceChangeSeq, func(w *Workspace) any { return &w.ChangeSeq }),
-				WorkspaceCreatedAt: col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
-				WorkspaceUpdatedAt: col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
+				WorkspaceID:            col("workspace", WorkspaceID, func(w *Workspace) any { return &w.ID }),
+				WorkspaceName:          col("workspace", WorkspaceName, func(w *Workspace) any { return &w.Name }),
+				WorkspaceRoot:          col("workspace", WorkspaceRoot, func(w *Workspace) any { return &w.Root }),
+				WorkspaceCommitSeq:     col("workspace", WorkspaceCommitSeq, func(w *Workspace) any { return &w.CommitSeq }),
+				WorkspaceChangeSeq:     col("workspace", WorkspaceChangeSeq, func(w *Workspace) any { return &w.ChangeSeq }),
+				WorkspaceSectionTokens: col("workspace", WorkspaceSectionTokens, func(w *Workspace) any { return &w.SectionTokens }),
+				WorkspaceCreatedAt:     col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
+				WorkspaceUpdatedAt:     col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),
 			dao.SortMap[*Workspace, WorkspaceField, noSort, int64](map[noSort]string{ByKey: `"workspace"."name"`})),
 		preferences: dao.New[*Preference, PreferenceField, noSort, string](c,

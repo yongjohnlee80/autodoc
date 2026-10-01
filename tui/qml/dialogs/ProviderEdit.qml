@@ -5,15 +5,15 @@
 Dialog {
     closeOnQ: false
     // inside Preferences, which it opens over: smaller, so its border is not read as that one's
-    maxWidthPercent: 80
-    maxHeightPercent: 80
+    maxWidthPercent: 95
+    maxHeightPercent: 95
     title: App.providerFormTitle
-    width: 80
+    width: 116
     dim: false
     helpText: App.providerFormError
     Split {
         orientation: Tui.Horizontal
-        ratio: 0.55
+        ratio: 0.6
         Flex {
             direction: Tui.Vertical
             Text { text: "name" }
@@ -24,8 +24,11 @@ Dialog {
             TextField { id: pBase; text: App.providerBase }
             Text { text: "model" }
             TextField { id: pModel; text: App.providerModel; placeholderText: "an embedding model: nomic-embed-text, say" }
-            Text { text: "context window (tokens; the model's memory grows with it)"; visible: App.providerContextShown }
+            Text { text: "context window"; visible: App.providerContextShown }
             TextField { id: pContext; text: App.providerContext; visible: App.providerContextShown }
+            Text { text: App.providerContextHint; wrapMode: Tui.WordWrap; visible: App.providerContextShown }
+            Text { text: "section size" }
+            Text { text: App.providerSectionHint; wrapMode: Tui.WordWrap }
             Text { text: App.providerKeyLabel; visible: App.providerKeyShown }
             TextField { id: pKey; text: App.providerKey; echoMode: TextInput.Password; visible: App.providerKeyShown }
         }

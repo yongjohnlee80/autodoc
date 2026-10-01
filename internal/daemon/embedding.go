@@ -310,6 +310,9 @@ func (e *Embedding) Providers(ctx context.Context) ([]store.ProviderInfo, string
 
 // AddProvider records a provider; it is used once chosen.
 func (e *Embedding) AddProvider(ctx context.Context, sp store.ProviderSpec) (store.ProviderInfo, error) {
+	if err := e.checkContext(ctx, &sp, ""); err != nil {
+		return store.ProviderInfo{}, err
+	}
 	return e.db.AddProvider(ctx, sp)
 }
 
@@ -320,7 +323,40 @@ func (e *Embedding) AddProvider(ctx context.Context, sp store.ProviderSpec) (sto
 func (e *Embedding) UpdateProvider(ctx context.Context, name string, sp store.ProviderSpec) error {
 	e.switching.Lock()
 	defer e.switching.Unlock()
+	if err := e.checkContext(ctx, &sp, name); err != nil {
+		return err
+	}
 	return e.update(ctx, name, sp)
+}
+
+// checkContext limits Ollama num_ctx where /api/show advertises a maximum.
+func (e *Embedding) checkContext(ctx context.Context, sp *store.ProviderSpec, stored string) error {
+	if sp.Kind != store.KindOllama && sp.Kind != store.KindOllamaCloud {
+		return nil
+	}
+	key := ""
+	if sp.Key != nil {
+		key = *sp.Key
+	} else if stored != "" {
+		_, k, err := e.db.ProviderWithKey(ctx, stored)
+		if err != nil {
+			return err
+		}
+		key = k
+	}
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	maximum, err := embed.OllamaContext(cctx, sp.BaseURL, key, sp.Model, e.client)
+	if err != nil {
+		return nil
+	} // a server without /api/show retains the existing add/edit contract
+	if maximum > 0 && sp.Context == 0 {
+		sp.Context = min(store.DefaultContext, maximum)
+	}
+	if maximum > 0 && sp.ContextWindow() > maximum {
+		return &store.ContextMaximumError{Maximum: maximum}
+	}
+	return nil
 }
 
 // CancelSwitch ends a model switch: the provider in use goes back to the model still active,
@@ -401,6 +437,27 @@ func (e *Embedding) Models(ctx context.Context, name string, sp store.ProviderSp
 	ctx, cancel := context.WithTimeout(ctx, setupTimeout)
 	defer cancel()
 	return embed.Models(ctx, kind, base, key, e.client)
+}
+
+// ModelContext is the Ollama model's advertised context ceiling, or zero if unknown.
+func (e *Embedding) ModelContext(ctx context.Context, stored string, sp store.ProviderSpec) (int, error) {
+	key := ""
+	if sp.Key != nil {
+		key = *sp.Key
+	}
+	if stored != "" {
+		info, k, err := e.db.ProviderWithKey(ctx, stored)
+		if err != nil {
+			return 0, err
+		}
+		sp.Kind, sp.BaseURL, key = info.Kind, info.BaseURL, k
+	}
+	if sp.Kind != store.KindOllama && sp.Kind != store.KindOllamaCloud {
+		return 0, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, setupTimeout)
+	defer cancel()
+	return embed.OllamaContext(ctx, sp.BaseURL, key, sp.Model, e.client)
 }
 
 // Usage and Log are a provider's, from the store.

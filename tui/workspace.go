@@ -3,12 +3,17 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // THE WORKSPACES — the daemon's, the one in use, and the manager that adds, renames and deletes
 // them (the store keeps them; the daemon serves each while it exists).
 
-type wsInfo struct{ name, root, state string }
+type wsInfo struct {
+	name, root, state string
+	sectionTokens     int64
+}
 
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
 // else the first that is.
@@ -26,7 +31,7 @@ func (h *Host) loadWorkspaces() {
 		var out []wsInfo
 		for _, w := range asList(res) {
 			m := asMap(w)
-			out = append(out, wsInfo{str(m, "name"), str(m, "root"), str(m, "state")})
+			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens")})
 		}
 		return answer{list: out}
 	}, func(a answer) {
@@ -47,7 +52,7 @@ func (h *Host) loadWorkspaces() {
 				label += "  (" + w.state + ")"
 			}
 			rows = append(rows, rowOf{"key": w.name, "label": label})
-			managed = append(managed, rowOf{"key": w.name, "name": w.name, "state": w.state, "root": w.root})
+			managed = append(managed, rowOf{"key": w.name, "name": w.name, "state": w.state, "root": w.root, "section": fmt.Sprint(w.sectionTokens)})
 			if w.state == "ready" && (pick < 0 || w.name == h.ws) {
 				pick = i
 			}
@@ -153,6 +158,41 @@ func (h *Host) startRenameWorkspace(i int) {
 	h.set("App.renameFrom", w.name)
 	h.set("App.workspaceRenameError", "the index is kept: only the name changes")
 	h.open("workspaceRename")
+}
+
+// startSectionSize edits the workspace's shared chunk limit, not a provider setting.
+func (h *Host) startSectionSize(i int) {
+	w, ok := h.managerRow(i)
+	if !ok {
+		return
+	}
+	h.sectionWorkspace = w.name
+	h.set("App.sectionTitle", "section size · "+w.name)
+	h.setField("App.sectionSize", strconv.FormatInt(w.sectionTokens, 10))
+	h.set("App.sectionError", "128–2048 estimated tokens; changing this re-chunks the workspace")
+	h.open("workspaceSection")
+}
+
+func (h *Host) saveSectionSize(text string) {
+	n, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
+	if err != nil || n < 128 || n > 2048 {
+		h.set("App.sectionError", "section size must be 128–2048 estimated tokens")
+		h.open("workspaceSection")
+		return
+	}
+	name := h.sectionWorkspace
+	do(h, func(ctx context.Context) error {
+		_, err := h.call(ctx, "workspace.section_size", name, n)
+		return err
+	}, func(err error) {
+		if err != nil {
+			h.set("App.sectionError", "not saved: "+wireMessage(err))
+			h.open("workspaceSection")
+			return
+		}
+		h.notify(fmt.Sprintf("%s: section size %d; re-chunking", name, n))
+		h.loadWorkspaces()
+	})
 }
 
 // renameWorkspace renames the workspace the rename was started on.

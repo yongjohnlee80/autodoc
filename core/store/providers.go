@@ -52,6 +52,13 @@ const (
 // ErrContextRange is a context window outside MinContext and MaxContext.
 var ErrContextRange = fmt.Errorf("store: a provider's context window is %d to %d tokens", MinContext, MaxContext)
 
+// ContextMaximumError is a window above the chosen Ollama model's advertised maximum.
+type ContextMaximumError struct{ Maximum int }
+
+func (e *ContextMaximumError) Error() string {
+	return fmt.Sprintf("context window exceeds this model's maximum of %d tokens", e.Maximum)
+}
+
 // ProviderSpec is a provider as a client writes it. Key nil keeps the key the store holds; a
 // pointer to "" removes it. Context 0 is DefaultContext.
 type ProviderSpec struct {

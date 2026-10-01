@@ -137,6 +137,65 @@ func TestTheScriptsApplyOnSQLite(t *testing.T) {
 	}
 }
 
+func TestEmbeddingModelLookupIndexIsUsed(t *testing.T) {
+	db := open(t)
+	rows, err := db.QueryContext(context.Background(), "EXPLAIN QUERY PLAN SELECT text_hash FROM embedding WHERE workspace_id = ? AND model_fp = ?", 1, "model")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	found := false
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(detail, "embedding_workspace_model_text") {
+			found = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("model lookup did not use embedding_workspace_model_text")
+	}
+}
+
+func TestSectionMigrationRevertsWithoutDroppingVectors(t *testing.T) {
+	db := open(t)
+	exec(t, db, "INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (1, 'a', '/a', 0, 0)")
+	exec(t, db, "INSERT INTO model(workspace_id, fp, active) VALUES (1, 'm', 1)")
+	exec(t, db, "INSERT INTO embedding(workspace_id, text_hash, model_fp, bits, f32) VALUES (1, x'01', 'm', x'02', x'03')")
+	exec(t, db, "UPDATE workspace SET section_tokens = 256 WHERE id = 1")
+	name, err := deployments.Runner().Revert(context.Background(), db, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(name, "000004") {
+		t.Fatalf("reverted %s, want 000004", name)
+	}
+	rows, err := db.QueryContext(context.Background(), "SELECT hex(bits), hex(f32) FROM embedding WHERE model_fp = 'm'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rows.Next() {
+		t.Fatal("revert dropped the vector")
+	}
+	var bits, f32 string
+	if err := rows.Scan(&bits, &f32); err != nil {
+		t.Fatal(err)
+	}
+	_ = rows.Close()
+	if bits != "02" || f32 != "03" {
+		t.Fatalf("vector after revert = %s/%s", bits, f32)
+	}
+	if _, err := deployments.Runner().Apply(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // open is a fresh store with every update applied, on the store's driver, with
 // foreign keys on.
 func open(t *testing.T) dao.DataConn {
