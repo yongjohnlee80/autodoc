@@ -85,22 +85,19 @@ func (s *Store) writePatterns(tx *Tx, id int64, include, exclude []string) error
 // patterns and its index are untouched (the follower drops what the new patterns exclude).
 func (s *Store) SetWorkspaceExclude(ctx context.Context, id int64, exclude []string) error {
 	return s.Write(ctx, func(tx *Tx) error {
-		ok, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Exists()
-		if err != nil {
-			return err
-		}
-		if !ok {
+		// the row's update finds the workspace; then its excludes go, and the new ones are written
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err == nil && n == 0 {
 			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
 		}
-		sc := s.Workspace(id)
-		if err := sc.Patterns(tx).With(PatternKind, "exclude").Delete(); err != nil {
-			return err
+		if err == nil {
+			err = s.Workspace(id).Patterns(tx).With(PatternKind, "exclude").Delete()
 		}
-		if _, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
-			Set(WorkspaceUpdatedAt, time.Now().Unix())); err != nil {
-			return err
+		if err == nil {
+			err = s.writePatterns(tx, id, nil, exclude)
 		}
-		return s.writePatterns(tx, id, nil, exclude)
+		return err
 	})
 }
 
