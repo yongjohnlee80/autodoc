@@ -10,15 +10,17 @@ permissions:
   contents: write
 
 jobs:
+  # Linux builds static, from Ubuntu. macOS builds with cgo, on a Mac: golib watches the workspace
+  # roots with FSEvents there, which needs cgo and the SDK; the binary needs only macOS itself to run.
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - { goos: linux,  goarch: amd64 }
-          - { goos: linux,  goarch: arm64 }
-          - { goos: darwin, goarch: amd64 }
-          - { goos: darwin, goarch: arm64 }
+          - { goos: linux,  goarch: amd64, runner: ubuntu-latest, cgo: "0" }
+          - { goos: linux,  goarch: arm64, runner: ubuntu-latest, cgo: "0" }
+          - { goos: darwin, goarch: amd64, runner: macos-latest,  cgo: "1" }
+          - { goos: darwin, goarch: arm64, runner: macos-latest,  cgo: "1" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -27,7 +29,7 @@ jobs:
           cache: true
       - name: build
         env:
-          CGO_ENABLED: "0"
+          CGO_ENABLED: ${{ matrix.cgo }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: |
@@ -37,7 +39,7 @@ jobs:
           # names. -trimpath keeps the runner's paths out of the binary.
           go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" ./cmd/autodoc
           tar czf "${OUT}.tar.gz" "${OUT}"
-          sha256sum "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256"
+          shasum -a 256 "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256" # on Ubuntu and macOS alike
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}

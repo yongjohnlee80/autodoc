@@ -368,6 +368,7 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
+		touch(w, path) // indexed now, not when a watch or a poll gets to it
 		return map[string]any{"version": string(v)}, nil
 	}, true))
 	s.handle("doc.rename", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
@@ -379,7 +380,11 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, w.Docs.Rename(ctx, from, to)
+		if err := w.Docs.Rename(ctx, from, to); err != nil {
+			return nil, err
+		}
+		touch(w, from, to)
+		return nil, nil
 	}, true))
 	s.handle("doc.remove", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		path, err := argStr(p, 1, "path")
@@ -390,8 +395,24 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
-		return nil, w.Docs.Remove(ctx, path, vfs.Version(want))
+		if err := w.Docs.Remove(ctx, path, vfs.Version(want)); err != nil {
+			return nil, err
+		}
+		touch(w, path)
+		return nil, nil
 	}, true))
+}
+
+// touch tells the workspace's indexer that paths changed through the API, so a note saved in a client
+// is indexed at once, whatever the follower is doing — watching, polling, or still scanning. The
+// indexer re-reads each path and decides for itself (eligible, unchanged, gone).
+func touch(w *Workspace, paths ...string) {
+	if w.Index == nil {
+		return
+	}
+	for _, p := range paths {
+		w.Index.Touch(p)
+	}
 }
 
 // verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named

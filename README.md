@@ -36,9 +36,17 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
 
 Each installs the one `autodoc` binary. Homebrew and mise install the release's binaries, and Homebrew
-pins each to the SHA-256 the release published. `go install` builds from the tagged source, with no
-cgo needed, and `autodoc --version` then reports the module's version, as a release binary does. Start
-it with `autodoc --ui`: the TUI starts the daemon when nothing answers.
+pins each to the SHA-256 the release published: nothing is compiled on your machine, so neither needs
+Xcode. `go install` builds from the tagged source, and `autodoc --version` then reports the module's
+version, as a release binary does. Start it with `autodoc --ui`: the TUI starts the daemon when
+nothing answers.
+
+**`go install` on macOS** compiles with cgo, because the daemon watches workspace roots with the
+system's FSEvents: it needs the Command Line Tools (`xcode-select --install`; not the whole of Xcode).
+Without them the build stops at `xcrun: error: invalid active developer path`. Either install them,
+or build without cgo — `CGO_ENABLED=0 go install …` — and the daemon polls the roots instead of
+watching them: it works, but a change is noticed only after a scan of the root. On Linux,
+`go install` needs no C compiler (the daemon uses inotify, and the store is pure Go).
 
 ## Configuration
 
@@ -50,15 +58,17 @@ state_dir = ""              # default: $XDG_STATE_HOME/autodoc (the daemon's log
 data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store, autodoc.db)
 
 [follow]
-poll_interval = "2s"        # the watch fallback's listing interval
+poll_interval = "2s"        # the listing interval when a root cannot be watched
 ```
 
 A missing file is every default. An unknown setting is an error, so a misspelling is reported.
 
 **Workspaces are not configured here.** They are kept in the store: add, rename and delete them in
 the TUI (`Go › Manage workspaces…`) or with `workspace.add`. A workspace has a name (what `--ui` and
-every API call take), a root directory, and include and exclude patterns (`**/*.md` and `.git/**` by
-default). Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
+every API call take), a root directory, and include and exclude patterns (`**/*.md`, and `.git/**`
+and `**/node_modules/**`, by default). An excluded directory is never walked or watched. A workspace
+added before node_modules joined the defaults keeps the patterns it was added with; add
+`**/node_modules/**` to its exclude in `Go › Manage workspaces…`. Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
 `**` matches any number of whole segments. A config file that still has a `[[workspace]]` section is
 refused with a message saying so.
 

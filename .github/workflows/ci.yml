@@ -41,12 +41,34 @@ jobs:
       - name: test
         run: go test -race -count=2 -timeout 20m ./...
 
-      # The binary ships without cgo (modernc SQLite), for every platform the
-      # release builds.
+      # Linux ships without cgo (modernc SQLite). A macOS build without cgo still
+      # builds and polls its roots instead of watching them; the release builds
+      # macOS with cgo, on a Mac (the macos job below).
       - name: static cross-build smoke
         run: |
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
+
+  # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
+  # the follower's native watch, and the whole suite, on a Mac.
+  macos:
+    name: macOS (cgo)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: build both arches with cgo
+        run: |
+          CGO_ENABLED=1 GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
+          CGO_ENABLED=1 GOARCH=amd64 go build -o /dev/null ./cmd/autodoc
+
+      - name: test the follower and the daemon (FSEvents)
+        run: CGO_ENABLED=1 go test -race -count=2 -timeout 20m ./core/... ./rpc/...
 
   coverage:
     name: coverage policy
