@@ -67,8 +67,8 @@ A missing file is every default. An unknown setting is an error, so a misspellin
 the TUI (`Go › Manage workspaces…`) or with `workspace.add`. A workspace has a name (what `--ui` and
 every API call take), a root directory, and include and exclude patterns (`**/*.md`, and `.git/**`
 and `**/node_modules/**`, by default). An excluded directory is never walked or watched. A workspace
-added before node_modules joined the defaults keeps the patterns it was added with; add
-`**/node_modules/**` to its exclude in `Go › Manage workspaces…`. Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
+added before node_modules joined the defaults, still with `.git/**` alone, moves to the current
+default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
 `**` matches any number of whole segments. A config file that still has a `[[workspace]]` section is
 refused with a message saying so.
 

@@ -58,6 +58,9 @@ type Workspace struct {
 	Index            *index.Indexer
 	Docs             *docs.Docs
 	Following        func() follow.Status
+	// Warming is what the workspace waits on before it answers fully — a provider being set up, a
+	// restart to take one — for index.status; nil or empty when it is ready.
+	Warming func() []string
 }
 
 // Workspaces is the daemon's set of workspaces: what the API serves, and what the workspace verbs

@@ -30,11 +30,27 @@ var spinFrames = []string{"-", "\\", "|", "/"}
 type progress struct {
 	docs, pending int64
 	emb           embedProgress
-	busy          bool  // pending or embedding work, as last polled
-	cursor        int64 // the change log's head, as last polled
-	polled        bool  // a poll has answered in this workspace
-	spin          int   // the spinner's frame
-	spinning      bool  // the spinner's timer is running
+	busy          bool     // pending or embedding work, as last polled
+	cursor        int64    // the change log's head, as last polled
+	polled        bool     // a poll has answered in this workspace
+	spin          int      // the spinner's frame
+	spinning      bool     // the spinner's timer is running
+	warming       []string // what the workspace waits on before it answers fully, as last polled
+}
+
+// warmingReasons is what index.status says the workspace is warming up for: its own list, and a
+// follower still on its first scan of the root (searches and listings answer, but are not complete).
+func warmingReasons(m map[string]any) []string {
+	var out []string
+	if f := asMap(m["following"]); str(f, "mode") == "starting" {
+		out = append(out, "scanning the workspace's files")
+	}
+	for _, r := range asList(m["warming"]) {
+		if s, ok := r.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // embedProgress is index.status's embeddings: nil there is off.
@@ -77,6 +93,7 @@ func (h *Host) poll() {
 	type answer struct {
 		docs, pending, cursor int64
 		emb                   embedProgress
+		warming               []string
 		err                   error
 	}
 	do(h, func(ctx context.Context) answer {
@@ -85,7 +102,7 @@ func (h *Host) poll() {
 			return answer{err: err}
 		}
 		m := asMap(res)
-		a := answer{emb: embedOf(asMap(m["embeddings"]))}
+		a := answer{emb: embedOf(asMap(m["embeddings"])), warming: warmingReasons(m)}
 		a.docs, _ = m["docs"].(int64)
 		a.pending, _ = m["pending_jobs"].(int64)
 		a.cursor, _ = m["cursor"].(int64)
@@ -95,6 +112,7 @@ func (h *Host) poll() {
 			return // another workspace or connection: its own poll is running
 		}
 		if a.err == nil {
+			h.showWarming(a.warming)
 			h.showProgress(a.docs, a.pending, a.emb, a.cursor)
 		}
 		// the next poll is this epoch's: a switch or a reconnect in the meantime has started its own
@@ -118,6 +136,23 @@ func (h *Host) after(d time.Duration, fn func()) {
 			h.p.Post(fn)
 		}
 	}()
+}
+
+// showWarming says, in a toast that stays while it lasts, that the daemon is warming up — its first
+// scan of the root, a provider being set up, a restart to take one — so a search or a listing that
+// comes back short reads as "not yet", not as "nothing". When it ends, the toast says so and the
+// notes are listed again: a listing taken while it lasted may have failed or been partial.
+func (h *Host) showWarming(reasons []string) {
+	was := len(h.prog.warming) > 0
+	h.prog.warming = reasons
+	switch {
+	case len(reasons) > 0:
+		h.notifyOngoing(toastWarming, "warming up: "+strings.Join(reasons, "; ")+"…")
+	case was:
+		h.notifyDone(toastWarming, "ready: search and the notes are up to date")
+		h.listNotes()
+		h.relistInExplorer(h.ws)
+	}
 }
 
 func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64) {
@@ -148,6 +183,8 @@ func (h *Host) showSemantic() {
 	switch {
 	case e.online():
 		dot, label = "green", "semantic search"
+	case len(h.prog.warming) > 0:
+		why = " · warming up"
 	case e.target != "":
 		why = " · switching models"
 	case e.failing:

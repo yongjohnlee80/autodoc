@@ -321,6 +321,9 @@ func TestErrorCodes(t *testing.T) {
 			t.Errorf("%s: %v, want code %d", c.name, err, c.code)
 			continue
 		}
+		if c.name == "semantic with no provider" && !strings.Contains(err.Error(), "semantic search is not ready") {
+			t.Errorf("%s: the message %q does not say semantic search is not ready", c.name, err.Error())
+		}
 		for _, leak := range []string{"/secret", "a.md", "none.md", "passwd", "fsync", "vfs:", "index:", "docs:"} {
 			if strings.Contains(err.Error(), leak) {
 				t.Errorf("%s: the message %q carries %q", c.name, err.Error(), leak)

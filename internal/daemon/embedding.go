@@ -200,6 +200,11 @@ func (e *Embedding) current() string {
 func (e *Embedding) build(ctx context.Context, info store.ProviderInfo, key string) (embed.Provider, error) {
 	ctx, cancel := context.WithTimeout(ctx, setupTimeout)
 	defer cancel()
+	if e.ws != nil {
+		// the probe loads the model, which takes a while cold: index.status says what it waits on
+		e.ws.SetWarming("setting up the embedding provider " + info.Name)
+		defer e.ws.SetWarming("")
+	}
 	var p embed.Provider
 	var err error
 	if info.Kind == store.KindOllama || info.Kind == store.KindOllamaCloud {
