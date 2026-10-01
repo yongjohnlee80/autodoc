@@ -3,8 +3,10 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -117,5 +119,58 @@ func TestRemoveOfAWorkspaceTheStoreLost(t *testing.T) {
 	}
 	if got := m.List(); len(got) != 0 {
 		t.Fatalf("the daemon still lists %+v", got)
+	}
+}
+
+func TestWorkspaceSectionSizeReindexesOnlyTheNamedWorkspace(t *testing.T) {
+	m, db := open(t)
+	for _, name := range []string{"a", "b"} {
+		root := t.TempDir()
+		if err := os.WriteFile(filepath.Join(root, "n.md"), []byte("# Note\n\n"+strings.Repeat("many words and details.\n\n", 100)), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.Add(context.Background(), config.Workspace{Name: name, Root: root}); err != nil {
+			t.Fatal(err)
+		}
+		indexed(t, m, name, 1)
+	}
+	if err := m.SetSectionTokens(context.Background(), "absent", 256); !errors.Is(err, store.ErrNoWorkspace) {
+		t.Fatalf("missing workspace: %v", err)
+	}
+	if err := m.SetSectionTokens(context.Background(), "a", 12); err == nil {
+		t.Fatal("out-of-range section size accepted")
+	}
+	if err := m.SetSectionTokens(context.Background(), "a", 256); err != nil {
+		t.Fatal(err)
+	}
+	ws, err := db.Workspaces(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range ws {
+		size, err := db.SectionTokens(context.Background(), w.ID)
+		want := 512
+		if w.Name == "a" {
+			want = 256
+		}
+		if err != nil || size != want {
+			t.Errorf("%s section size = %d, %v; want %d", w.Name, size, err, want)
+		}
+		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+			var version string
+			err := db.Read(context.Background(), func(tx *store.Tx) error {
+				d, err := db.Workspace(w.ID).Documents(tx).With(store.DocPath, "n.md").Get(store.DocIndexer)
+				if err == nil {
+					version = d.Indexer
+				}
+				return err
+			})
+			if err == nil && strings.HasSuffix(version, fmt.Sprintf(".t%d", want)) {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s did not index under section size %d: %q, %v", w.Name, want, version, err)
+			}
+		}
 	}
 }

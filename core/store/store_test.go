@@ -81,6 +81,17 @@ func TestSectionSizeBelongsToOneWorkspace(t *testing.T) {
 	if got, _ := s.SectionTokens(ctx, a.ID); got != SectionTokensDefault {
 		t.Errorf("reset to default = %d", got)
 	}
+	for _, size := range []int{-1, 127, 2049} {
+		if err := s.SetWorkspaceSectionTokens(ctx, a.ID, size); err == nil {
+			t.Errorf("section size %d was accepted", size)
+		}
+	}
+	if err := s.SetWorkspaceSectionTokens(ctx, 99999, 256); !errors.Is(err, ErrNoWorkspace) {
+		t.Errorf("unknown workspace update: %v", err)
+	}
+	if _, err := s.SectionTokens(ctx, 99999); !errors.Is(err, ErrNoWorkspace) {
+		t.Errorf("unknown workspace lookup: %v", err)
+	}
 }
 
 // The order the daemon runs on darwin: SQLite already holds its fcntl locks on
