@@ -86,6 +86,8 @@ var publicErrs = []struct {
 	{vfs.ErrNotExist, CodeNotFound, "not found"},
 	{index.ErrEmbedFailed, CodeEmbedFailed, "the query could not be embedded"},
 	{index.ErrSwitching, CodeSwitching, "a new model is filling: search by words until it is ready"},
+	// before ErrUnsupported, which it is: the same code, but a message that says what is missing
+	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › AI models"},
 	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},
 	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a note of this workspace"},
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
@@ -500,6 +502,11 @@ func statusMap(st index.Status, w *Workspace) map[string]any {
 	if w.Following != nil {
 		f := w.Following()
 		out["following"] = map[string]any{"mode": f.Following, "error": f.Err, "retrying": strs(f.Retrying)}
+	}
+	if w.Warming != nil {
+		if reasons := w.Warming(); len(reasons) > 0 {
+			out["warming"] = strs(reasons)
+		}
 	}
 	if e := st.Embeddings; e != nil {
 		out["embeddings"] = map[string]any{"provider": e.Provider, "model": e.Model, "target": e.Target,

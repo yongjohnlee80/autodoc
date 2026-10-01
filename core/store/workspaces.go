@@ -81,6 +81,29 @@ func (s *Store) writePatterns(tx *Tx, id int64, include, exclude []string) error
 	return b.Flush()
 }
 
+// SetWorkspaceExclude replaces workspace id's exclude patterns, in one transaction; its include
+// patterns and its index are untouched (the follower drops what the new patterns exclude).
+func (s *Store) SetWorkspaceExclude(ctx context.Context, id int64, exclude []string) error {
+	return s.Write(ctx, func(tx *Tx) error {
+		ok, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Exists()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		sc := s.Workspace(id)
+		if err := sc.Patterns(tx).With(PatternKind, "exclude").Delete(); err != nil {
+			return err
+		}
+		if _, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceUpdatedAt, time.Now().Unix())); err != nil {
+			return err
+		}
+		return s.writePatterns(tx, id, nil, exclude)
+	})
+}
+
 // RenameWorkspace gives workspace id a new name: one row, the index untouched.
 func (s *Store) RenameWorkspace(ctx context.Context, id int64, name string) error {
 	return s.Write(ctx, func(tx *Tx) error {

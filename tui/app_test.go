@@ -76,6 +76,11 @@ type daemonOpts struct {
 	prefs   map[string]string
 	emb     rpc.Embeddings
 	version string // its hello's; "" is v-test
+	// warming is each workspace's index.status warming reasons; nil is ready
+	warming func() []string
+	// notReady fails this many workspace lookups first (every verb on a workspace), as a daemon
+	// still starting up can
+	notReady int32
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -146,7 +151,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
-		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
+		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Index: ix, Docs: docs.New(fsys, md), Following: f.Status, Warming: o.warming})
 		// wait until the notes are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
@@ -179,7 +184,13 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if version == "" {
 		version = "v-test"
 	}
-	srv := rpc.New(rpc.Fixed(served...), version, opts...)
+	var set rpc.Workspaces = rpc.Fixed(served...)
+	if o.notReady > 0 {
+		nr := &notReadyWorkspaces{Workspaces: set}
+		nr.left.Store(o.notReady)
+		set = nr
+	}
+	srv := rpc.New(set, version, opts...)
 	done := make(chan struct{})
 	d.stopped = done
 	go func() { _ = srv.Run(ctx); close(done) }()
@@ -866,4 +877,17 @@ func TestOnePollAfterSwitches(t *testing.T) {
 	if n := polls.Load(); n > 4 {
 		t.Errorf("%d status polls in 3.2 s after two switches: more than one poll loop", n)
 	}
+}
+
+// notReadyWorkspaces answers its first lookups with a workspace that cannot serve yet.
+type notReadyWorkspaces struct {
+	rpc.Workspaces
+	left atomic.Int32
+}
+
+func (n *notReadyWorkspaces) Get(name string) (*rpc.Workspace, bool) {
+	if n.left.Add(-1) >= 0 {
+		return &rpc.Workspace{Name: name, Err: errors.New("not ready yet")}, true
+	}
+	return n.Workspaces.Get(name)
 }

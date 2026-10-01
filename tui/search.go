@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"time"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -27,12 +28,29 @@ func (h *Host) listNotes() {
 			return
 		}
 		if a.err != nil {
-			h.failed("notes", a.err)
+			// a daemon still warming up can fail a listing; an empty list would stay empty until a
+			// note changed, so try again, a little later each time, while nothing newer has asked
+			if h.listRetry == 0 {
+				h.failed("notes", a.err)
+			}
+			h.listRetry = min(max(2*h.listRetry, listRetryFirst), listRetryMax)
+			h.after(h.listRetry, func() {
+				if seq == h.listSeq && ep == h.epoch {
+					h.listNotes()
+				}
+			})
 			return
 		}
+		h.listRetry = 0
 		h.notesAll = a.paths
 	})
 }
+
+// The notes' listing retries after a failure: first after listRetryFirst, doubling to listRetryMax.
+const (
+	listRetryFirst = 500 * time.Millisecond
+	listRetryMax   = 10 * time.Second
+)
 
 // the msgpack vocabulary, read
 

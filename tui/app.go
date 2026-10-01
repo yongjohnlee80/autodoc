@@ -33,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -108,7 +109,8 @@ type Host struct {
 	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
 	wsList    []wsInfo
 	epoch     uint64
-	listSeq   uint64 // numbers the note list's loads; the latest wins (search.go)
+	listSeq   uint64        // numbers the note list's loads; the latest wins (search.go)
+	listRetry time.Duration // the delay before the note list's next retry after a failure; 0 after a success
 	notesAll  []string
 
 	// the workspace manager: the workspace a rename or a delete was started on

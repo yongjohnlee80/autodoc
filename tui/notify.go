@@ -30,6 +30,7 @@ const (
 	toastProgress   = "progress"   // indexing and embedding
 	toastConnection = "connection" // connecting, and a connection that failed
 	toastPlugin     = "plugin"     // a plugin cloned, fetched and built
+	toastWarming    = "warming"    // the daemon starting up: a first scan, a provider being set up
 )
 
 type notice struct {
