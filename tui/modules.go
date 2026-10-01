@@ -12,7 +12,7 @@ import (
 // THE QML THIS PROGRAM SHIPS, and the modules a document imports it through.
 //
 //	import autodoc 1.0               the App singleton          (declared)
-//	import autodoc.theme.dark 1.0    a Theme singleton          (offered: golib's four)
+//	import autodoc.theme.dark 1.0    a Theme singleton          (offered: golib's five)
 //	import autodoc.dialogs 1.0       the dialogs, one per file  (offered)
 //	import autodoc.views 1.0         Help, About                (offered)
 
@@ -47,7 +47,7 @@ func modulesFrom(files fs.FS) []tuidecl.ProgramOption {
 	return []tuidecl.ProgramOption{
 		// everything the document can reach of this program is under App
 		tuidecl.Singleton("autodoc", moduleVersion, "App"),
-		// golib's four themes, as autodoc.theme.<name>: the program keeps no colours of its own
+		// golib's five themes, as autodoc.theme.<name>: the program keeps no colours of its own
 		tuidecl.Themes(themes.FS(), ".", "autodoc.theme", moduleVersion),
 		tuidecl.Components(files, "dialogs", "autodoc.dialogs", moduleVersion),
 		tuidecl.Components(files, "views", "autodoc.views", moduleVersion),

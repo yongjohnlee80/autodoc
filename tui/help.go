@@ -14,7 +14,9 @@ const helpText = `KEYS
   Ctrl+S      save the note
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
-  F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it)
+  F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
+              On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
+              keys there), and F10 may need Fn
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (View › Notifications…)

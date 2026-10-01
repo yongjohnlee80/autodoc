@@ -16,6 +16,7 @@ import autodoc.dialogs 1.0        // the pickers, the note, workspace, preferenc
 import autodoc.views 1.0          // Help, About, the leader card
 
 Window {
+    color: Theme.app.backdrop       // the screen around the page: a dimmed tone of the page's own
     palette.window: Theme.app.window
     palette.windowText: Theme.app.windowText
     palette.button: Theme.app.button
@@ -116,6 +117,7 @@ Window {
                 MenuItem { text: "&Light"; group: "theme"; checked: App.themeLight; onTriggered: App.useTheme("light") }
                 MenuItem { text: "&Mono";  group: "theme"; checked: App.themeMono;  onTriggered: App.useTheme("mono") }
                 MenuItem { text: "&Retro"; group: "theme"; checked: App.themeRetro; onTriggered: App.useTheme("retro") }
+                MenuItem { text: "&Sepia"; group: "theme"; checked: App.themeSepia; onTriggered: App.useTheme("sepia") }
             }
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
         }
