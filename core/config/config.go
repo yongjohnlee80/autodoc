@@ -71,7 +71,9 @@ type Workspace struct {
 // The defaults a workspace gets when it names no patterns of its own.
 var (
 	DefaultInclude = []string{"**/*.md"}
-	DefaultExclude = []string{".git/**"}
+	// node_modules anywhere: a JavaScript project's dependencies are hundreds of thousands of files,
+	// their READMEs are not the workspace's notes, and walking them is most of a scan's cost
+	DefaultExclude = []string{".git/**", "**/node_modules/**"}
 )
 
 // DefaultPollInterval is the watch fallback's listing interval when none is configured.

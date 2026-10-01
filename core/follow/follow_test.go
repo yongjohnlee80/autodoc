@@ -289,6 +289,7 @@ type scriptedFS struct {
 	mu      sync.Mutex
 	reads   map[string]int
 	watches int
+	skip    func(string) bool // the SkipDirs the last Watch was given
 	events  chan vfs.Event
 	fail    map[string]bool // directories whose ReadDir fails with permission denied
 }
@@ -312,8 +313,15 @@ func (s *scriptedFS) Watch(ctx context.Context, dir string, opts ...vfs.WatchOpt
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.watches++
+	s.skip = vfs.ResolveWatch(opts).Skip
 	s.events = make(chan vfs.Event, 16)
 	return s.events, nil
+}
+
+func (s *scriptedFS) watchSkip() func(string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.skip
 }
 
 func (s *scriptedFS) send(ev vfs.Event) {
@@ -644,5 +652,50 @@ func TestRescanReconcilesTheRoot(t *testing.T) {
 			f.Rescan()
 			within(t, 500*time.Millisecond, "a.md found by the rescan", func() bool { _, ok := m.Version("a.md"); return ok })
 		})
+	}
+}
+
+// TestExcludedDirectoriesAreNeitherReadNorWatched: an excluded directory — node_modules, nested or
+// not — is never read by a scan, the watch is told to leave it out, and nothing inside it reaches the
+// queue. On a JavaScript-heavy root those directories are most of the files.
+func TestExcludedDirectoriesAreNeitherReadNorWatched(t *testing.T) {
+	s := newScripted()
+	memWrite(t, s.FS, "a.md", "a")
+	memWrite(t, s.FS, "node_modules/pkg/README.md", "dependency")
+	memWrite(t, s.FS, "app/node_modules/dep/README.md", "dependency")
+	memWrite(t, s.FS, "app/notes.md", "n")
+	excluded := func(p string) bool {
+		for _, seg := range strings.Split(p, "/") {
+			if seg == "node_modules" {
+				return true
+			}
+		}
+		return false
+	}
+	m := newModel(s)
+	opts := fast
+	opts.Excluded = excluded
+	f := startWith(t, s, m, opts)
+	eventually(t, "the watch", func() bool { return f.Status().Following == follow.Watching })
+	eventually(t, "the notes indexed", func() bool {
+		snap := m.snapshot()
+		_, a := snap["a.md"]
+		_, n := snap["app/notes.md"]
+		return a && n
+	})
+	for dir, n := range s.readCounts() {
+		if excluded(dir) {
+			t.Errorf("the scan read the excluded %s (%d times)", dir, n)
+		}
+	}
+	if skip := s.watchSkip(); skip == nil || !skip("node_modules") || !skip("app/node_modules") || skip("app") {
+		t.Errorf("the watch was not told to skip the excluded directories")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for p := range m.touched {
+		if excluded(p) {
+			t.Errorf("the follower touched %s, inside an excluded directory", p)
+		}
 	}
 }

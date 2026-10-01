@@ -58,8 +58,10 @@ type Options struct {
 	MaxBackoff   time.Duration // the retry delay's cap (default 1 min)
 	// Match reports whether a path belongs to the workspace (include, not exclude). Nil matches all.
 	Match func(path string) bool
-	// Excluded reports whether a path lies in an excluded directory (.git, say). A directory there
-	// that cannot be read is not the workspace's concern, so it is not retried. Nil excludes nothing.
+	// Excluded reports whether a path lies in an excluded directory (.git, node_modules). Such a
+	// directory is never walked, watched or polled — its contents are not the workspace's, and on a
+	// large root they are most of it — and one that cannot be read is not retried. Nil excludes
+	// nothing.
 	Excluded func(path string) bool
 }
 
@@ -176,17 +178,19 @@ func (f *Follower) Run(ctx context.Context) error {
 	return ctx.Err()
 }
 
-// watch sets up a native watch when the driver has one and it succeeds, else a poll.
+// watch sets up a native watch when the driver has one and it succeeds, else a poll. Neither looks
+// inside an excluded directory.
 func (f *Follower) watch(ctx context.Context) (<-chan vfs.Event, string, error) {
+	opts := []vfs.WatchOption{vfs.Recursive(), vfs.SkipDirs(f.opts.Excluded)}
 	var werr error
 	if w, ok := f.fsys.(vfs.Watcher); ok {
-		events, err := w.Watch(ctx, ".", vfs.Recursive())
+		events, err := w.Watch(ctx, ".", opts...)
 		if err == nil {
 			return events, Watching, nil
 		}
 		werr = err
 	}
-	events, err := vfs.Poll(ctx, f.fsys, ".", f.opts.PollInterval, vfs.Recursive())
+	events, err := vfs.Poll(ctx, f.fsys, ".", f.opts.PollInterval, opts...)
 	if err == nil {
 		return events, Polling, nil
 	}
@@ -284,13 +288,14 @@ func (f *Follower) touch(p string) {
 func (f *Follower) match(p string) bool { return f.opts.Match == nil || f.opts.Match(p) }
 
 // reconcile queues every eligible file under dir whose Version differs from the index, and every
-// indexed path under dir that is gone. vfs.Walk never enters a symlink, and an unreadable directory
+// indexed path under dir that is gone — which includes what is indexed inside a directory excluded
+// since, as the walk does not enter it. vfs.Walk never enters a symlink, and an unreadable directory
 // is yielded as an error while the walk continues with its siblings: that subtree goes into the retry
 // set, and its indexed documents are UNKNOWN, not gone, so none is touched as missing.
 func (f *Follower) reconcile(ctx context.Context, dir string) {
 	seen := map[string]bool{}
 	failed := map[string]error{}
-	for fi, err := range vfs.Walk(ctx, f.fsys, dir) {
+	for fi, err := range vfs.Walk(ctx, f.fsys, dir, vfs.WalkSkipDirs(f.opts.Excluded)) {
 		if err != nil {
 			if ctx.Err() != nil {
 				return

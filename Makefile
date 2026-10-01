@@ -8,8 +8,12 @@ export GOFLAGS := -buildvcs=false
 
 .PHONY: build test race vet fmt cover clean
 
+# cgo on macOS only: golib watches the workspace roots with FSEvents there, which needs it (the
+# Command Line Tools). Elsewhere the binary stays static; modernc SQLite needs no cgo.
+CGO := $(if $(filter Darwin,$(shell uname -s)),1,0)
+
 build:
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
+	CGO_ENABLED=$(CGO) go build -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
 
 test:
 	go test ./...
