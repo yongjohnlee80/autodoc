@@ -105,7 +105,9 @@ The screen is a page and nothing else: the note, 120 columns wide and centred, t
 right edge. With no note open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
 names and saves it as a note. Everything else comes when it is asked for:
 
-- **The menu bar** hides until `F10` or an `Alt+letter` brings it up.
+- **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
+  is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
+  and `U` are dead keys there, so their menus need `F10`), and `F10` may need `Fn`.
 - **The explorer** (`SPC e`): every workspace's folders and notes, as a tree. **The links**
   (`SPC l`): the notes linking to this one. Each opens over the page, which does not move, from
   the side the editor's preferences name; `Escape` or its key again closes it.
@@ -129,7 +131,7 @@ names and saves it as a note. Everything else comes when it is asked for:
 
 - **Editor mode:** Vim (modal: `i` types, `Esc` goes back to Normal) or Text (modeless, an ordinary
   text editor's keys). `SPC k` switches between them.
-- **Theme:** Dark, Light, Mono or Retro.
+- **Theme:** Dark, Light, Mono, Retro or Sepia (a reader's warm paper and brown ink).
 - **Editor preferences…** (`SPC ,`): the editor mode, the page's width (applied as it is typed), the
   theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
 

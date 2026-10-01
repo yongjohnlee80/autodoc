@@ -30,7 +30,7 @@ func themeOf(src []byte) string {
 // themeState is which theme the menu shows checked: the one the layout imports.
 func themeState(theme string) map[string]any {
 	return map[string]any{"App.themeDark": theme == "dark", "App.themeLight": theme == "light",
-		"App.themeMono": theme == "mono", "App.themeRetro": theme == "retro"}
+		"App.themeMono": theme == "mono", "App.themeRetro": theme == "retro", "App.themeSepia": theme == "sepia"}
 }
 
 // themeNames are the themes golib ships, as the menu and the Preferences dialog offer them.

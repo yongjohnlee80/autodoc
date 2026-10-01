@@ -48,7 +48,7 @@ func runUI(ctx context.Context, configPath, dev, workspace string) error {
 	} else if b, err := os.ReadFile(last); err == nil {
 		workspace = strings.TrimSpace(string(b))
 	}
-	backend, err := term.Open()
+	backend, err := term.Open(termOptions()...)
 	if err != nil {
 		return fmt.Errorf("cannot open the terminal: %w", err)
 	}
