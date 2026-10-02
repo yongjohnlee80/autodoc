@@ -28,6 +28,7 @@ const spinEvery = 150 * time.Millisecond
 var spinFrames = []string{"-", "\\", "|", "/"}
 
 type progress struct {
+	ws            string // the workspace polled, which the progress names
 	docs, pending int64
 	emb           embedProgress
 	busy          bool     // pending or embedding work, as last polled
@@ -174,8 +175,14 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	prev := h.prog.emb
 	polled := h.prog.polled
 	moved := h.prog.polled && cursor != h.prog.cursor
-	h.prog.docs, h.prog.pending, h.prog.emb = docs, pending, emb
+	h.prog.ws, h.prog.docs, h.prog.pending, h.prog.emb = h.ws, docs, pending, emb
 	h.prog.cursor, h.prog.polled = cursor, true
+	// a new embedding model (a switch starting, the new one taking over, or words only) makes the
+	// search's hits answers to another model: the search starts afresh rather than refresh them
+	modelChanged := polled && (prev.model != emb.model || prev.target != emb.target || prev.on != emb.on)
+	if modelChanged {
+		h.clearSearch("the embedding model changed")
+	}
 	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on || prev.pending != emb.pending || prev.targetPending != emb.targetPending {
 		switch {
 		case emb.target != "" || emb.semantic == "switching":
@@ -187,7 +194,9 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 		case polled && prev.pending > 0 && emb.pending == 0 && emb.semantic == "ready":
 			h.notifyDone(toastSemantic, "semantic search is ready in "+h.ws)
 		}
-		h.refreshSearch()
+		if !modelChanged {
+			h.refreshSearch()
+		}
 	}
 	h.prog.busy = pending > 0 || emb.working() > 0 || (emb.queueState == "paused" && emb.pending > 0)
 	if h.searchWaitToast && emb.working() == 0 {
@@ -207,8 +216,8 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	h.spinWhileEmbedding()
 }
 
-// showSemantic is semantic search's mark: a green dot while it answers, a red one and "lexical
-// search" while it does not. The status line has room for the words alone; the AI models dialog
+// showSemantic is semantic search's mark: a green dot and the model while it answers, a red one
+// and "lexical search" while it does not, with the model it is switching to. The AI models dialog
 // and the search's title say why, too.
 func (h *Host) showSemantic() {
 	e := h.prog.emb
@@ -216,13 +225,16 @@ func (h *Host) showSemantic() {
 	switch {
 	case e.online():
 		dot, label = "green", "semantic search"
+		if e.model != "" {
+			label += " · " + embed.ModelName(e.model)
+		}
 		if e.refused > 0 {
 			why = fmt.Sprintf(" · %d refused texts (see Vectors…)", e.refused)
 		}
 	case len(h.prog.warming) > 0:
 		why = " · warming up"
 	case e.target != "":
-		why = " · switching models"
+		label += " · switching to " + embed.ModelName(e.target)
 	case e.queueState == "paused":
 		why = " · embedding paused by workspace setting"
 	case e.failing:
@@ -267,10 +279,16 @@ func bar(done, total int64) string {
 
 // progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
+// Each names the workspace it is for; while the daemon's one embedding queue serves another
+// workspace, the text names that one, the workspace being processed.
 func progressText(p progress) string {
 	var parts []string
+	ws := ""
+	if p.ws != "" {
+		ws = " " + p.ws
+	}
 	if p.pending > 0 {
-		parts = append(parts, "indexing "+bar(p.docs, p.docs+p.pending))
+		parts = append(parts, "indexing"+ws+" "+bar(p.docs, p.docs+p.pending))
 	}
 	e := p.emb
 	if e.queueState == "paused" && (e.pending > 0 || e.working() > 0) {
@@ -279,12 +297,16 @@ func progressText(p progress) string {
 	}
 	if left := e.working(); left > 0 {
 		if e.queueState == "waiting" && e.waitingFor != "" {
-			parts = append(parts, "embedding waiting for "+e.waitingFor)
+			waits := "embedding waiting for " + e.waitingFor
+			if p.ws != "" {
+				waits = "embedding " + e.waitingFor + " · " + p.ws + " waits"
+			}
+			parts = append(parts, waits)
 			return strings.Join(parts, " · ")
 		}
-		what := "embedding"
+		what := "embedding" + ws
 		if e.target != "" {
-			what = "switching to " + embed.ModelName(e.target)
+			what = "switching" + ws + " to " + embed.ModelName(e.target)
 		}
 		mark := spinFrames[p.spin%len(spinFrames)]
 		if e.failing {
