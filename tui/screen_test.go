@@ -540,6 +540,17 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndRefreshesSearch(t *testing.T) {
 	})
 }
 
+func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "alpha\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() {
+		r.h.showProgress(1, 0, embedProgress{on: true, model: "old", target: "new", semantic: "switching", texts: 2, targetPending: 1}, 1)
+		r.h.showProgress(1, 0, embedProgress{}, 1)
+	})
+	r.s.WaitForText(t, "model switch ended; search in kb remains words-only")
+}
+
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 	d := startManaged(t, map[string]string{
 		"alpha": noteDir(t, "a.md", "# A\n\nzebra plains\n"),
@@ -555,6 +566,21 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 	r.s.WaitFor(t, "the other workspace's query result", func(sc string) bool {
 		return strings.Contains(sc, "zebra") && strings.Contains(sc, "hits (0) · lexical") && !strings.Contains(sc, "a.md")
 	})
+}
+
+func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n\nzebra plains\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("zebra")...)
+	r.s.WaitForText(t, "hits (1) · lexical")
+	r.h.p.Post(func() { r.h.ws = "missing"; r.h.searchLive("zebra") })
+	r.s.WaitForText(t, "search in missing is unavailable")
+	if count := onLoop(r, func() int { return len(r.h.hitList) }); count != 0 {
+		t.Fatalf("%d hits survived a failed search", count)
+	}
 }
 
 // TestEveryFieldHasALabel: every TextField the QML declares has a Text over it, saying what goes
