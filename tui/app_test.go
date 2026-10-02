@@ -788,6 +788,9 @@ func TestProgressText(t *testing.T) {
 		{progress{docs: 10, spin: 1, emb: embedProgress{on: true, texts: 40, target: qwen, targetPending: 30}}, "switching to qwen3-embedding:4b \\ ██░░░░░░░░ 10/40"},
 		// the provider failing: no spinner, it is waiting
 		{progress{docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, failing: true}}, "embedding ! █████░░░░░ 5/10"},
+		{progress{docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, queueState: "waiting", waitingFor: "GlobalKB"}}, "embedding waiting for GlobalKB"},
+		{progress{docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, queueState: "paused"}}, "embedding paused by workspace setting"},
+		{progress{docs: 10, emb: embedProgress{on: true, texts: 10, target: qwen, targetPending: 5, queueState: "paused"}}, "embedding paused by workspace setting"},
 	} {
 		if got := progressText(c.p); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.p, got, c.want)
@@ -807,6 +810,8 @@ func TestSemanticOnline(t *testing.T) {
 		{embedProgress{on: true, pending: 3}, true}, // still embedding, but answering
 		{embedProgress{on: true, target: "ollama|b||4"}, false},
 		{embedProgress{on: true, failing: true}, false},
+		{embedProgress{on: true, semantic: "off"}, false},
+		{embedProgress{on: true, queueState: "paused"}, false},
 	} {
 		if got := c.e.online(); got != c.want {
 			t.Errorf("%+v: online %v, want %v", c.e, got, c.want)

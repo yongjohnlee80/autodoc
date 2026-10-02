@@ -125,6 +125,9 @@ func TestWorkspaceEmbeddingPolicyDefaultsAndIsScoped(t *testing.T) {
 	if err := s.SetWorkspaceEmbeddingPolicy(ctx, 99999, EmbeddingNever); !errors.Is(err, ErrNoWorkspace) {
 		t.Errorf("unknown workspace: %v", err)
 	}
+	if _, err := s.EmbeddingPolicy(ctx, 99999); !errors.Is(err, ErrNoWorkspace) {
+		t.Errorf("unknown workspace policy lookup: %v", err)
+	}
 }
 
 // The order the daemon runs on darwin: SQLite already holds its fcntl locks on
