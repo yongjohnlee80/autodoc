@@ -128,6 +128,17 @@ func TestWorkspaceEmbeddingPolicyDefaultsAndIsScoped(t *testing.T) {
 	if _, err := s.EmbeddingPolicy(ctx, 99999); !errors.Is(err, ErrNoWorkspace) {
 		t.Errorf("unknown workspace policy lookup: %v", err)
 	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := s.EmbeddingPolicy(cancelled, a.ID); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled policy lookup: %v", err)
+	}
+	if err := s.SetWorkspaceEmbeddingPolicy(cancelled, a.ID, EmbeddingNever); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled policy update: %v", err)
+	}
+	if got, err := s.EmbeddingPolicy(ctx, a.ID); err != nil || got != EmbeddingWhenOpened {
+		t.Errorf("cancelled update changed policy to %q: %v", got, err)
+	}
 }
 
 // The order the daemon runs on darwin: SQLite already holds its fcntl locks on
