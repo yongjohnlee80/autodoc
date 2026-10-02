@@ -34,8 +34,8 @@ import (
 // sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
 // declaring the daemon's number, to start the installed one in its place.
 //
-// Protocol 5 added workspace.section_size and embedding.model_context.
-const Protocol int64 = 5
+// Protocol 6 added workspace.focus for daemon-wide embedding priority.
+const Protocol int64 = 6
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -53,6 +53,8 @@ const (
 // root is gone); every verb naming it fails with Err, and workspace.list reports it.
 type Workspace struct {
 	Name, Root       string
+	EmbeddingPolicy  string
+	EmbeddingMode    func() string
 	SectionTokens    int
 	SectionSize      func() int // live workspace preference, when managed by the daemon
 	Include, Exclude []string
@@ -62,7 +64,9 @@ type Workspace struct {
 	Following        func() follow.Status
 	// Warming is what the workspace waits on before it answers fully — a provider being set up, a
 	// restart to take one — for index.status; nil or empty when it is ready.
-	Warming func() []string
+	Warming        func() []string
+	Searched       func() // any client searched this workspace
+	EmbeddingQueue func() (state, behind string)
 }
 
 // Workspaces is the daemon's set of workspaces: what the API serves, and what the workspace verbs

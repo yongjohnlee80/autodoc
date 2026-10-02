@@ -188,7 +188,7 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 5's (4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
+// TestVerbsArePinned: the verb surface is Protocol 6's (5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
 // index.models; 2 had no preference or embedding verbs; 1 had no workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
@@ -198,8 +198,8 @@ func TestVerbsArePinned(t *testing.T) {
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
 		"index.changes", "index.list", "index.models", "index.purge_model", "index.reindex", "index.status",
 		"preference.list", "preference.set",
-		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 5 {
+		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size"}
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 6 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }
@@ -299,6 +299,9 @@ func TestErrorCodes(t *testing.T) {
 		{"renaming in a fixed set", "workspace.rename", []any{"kb", "k2"}, CodeUnsupported},
 		{"removing from a fixed set", "workspace.remove", []any{"kb"}, CodeUnsupported},
 		{"section size on a fixed set", "workspace.section_size", []any{"kb", int64(256)}, CodeUnsupported},
+		{"focus on a fixed set", "workspace.focus", []any{"kb"}, CodeUnsupported},
+		{"policy on a fixed set", "workspace.embedding_policy", []any{"kb", "never"}, CodeUnsupported},
+		{"focus needs a name", "workspace.focus", []any{int64(1)}, golibrpc.CodeInvalidParams},
 		{"section size needs a number", "workspace.section_size", []any{"kb", "bad"}, golibrpc.CodeInvalidParams},
 		{"an add without a root", "workspace.add", []any{"new"}, golibrpc.CodeInvalidParams},
 		{"an add with a non-list include", "workspace.add", []any{"new", "/r", "x"}, golibrpc.CodeInvalidParams},

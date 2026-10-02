@@ -30,6 +30,9 @@ func TestLoadFillsDefaults(t *testing.T) {
 	if c.Follow.PollInterval.Duration != config.DefaultPollInterval {
 		t.Errorf("poll interval = %v", c.Follow.PollInterval.Duration)
 	}
+	if c.EmbeddingQueue.MaxInflight != 1 {
+		t.Errorf("embedding concurrency = %d, want 1", c.EmbeddingQueue.MaxInflight)
+	}
 }
 
 func TestLoadReadsEverySetting(t *testing.T) {
@@ -40,12 +43,14 @@ state_dir = "/tmp/autodoc-state"
 data_dir = "/tmp/autodoc-data"
 [follow]
 poll_interval = "500ms"
+[embedding_queue]
+max_inflight = 2
 `)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.Server.Socket != "/tmp/a.sock" || c.Server.StateDir != "/tmp/autodoc-state" || c.Server.DataDir != "/tmp/autodoc-data" ||
-		c.Follow.PollInterval.Duration != 500*time.Millisecond {
+		c.Follow.PollInterval.Duration != 500*time.Millisecond || c.EmbeddingQueue.MaxInflight != 2 {
 		t.Errorf("server/follow = %+v %+v", c.Server, c.Follow)
 	}
 }
@@ -56,6 +61,7 @@ func TestLoadRejects(t *testing.T) {
 		{"a [[workspace]] section", "[[workspace]]\nname = \"kb\"\nroot = \"/x\"\n", "kept in the store"},
 		{"bad duration", "[follow]\npoll_interval = \"soon\"\n", "invalid"},
 		{"a negative poll", "[follow]\npoll_interval = \"-1s\"\n", "must be positive"},
+		{"too many embedding calls", "[embedding_queue]\nmax_inflight = 3\n", "must be 1 or 2"},
 		{"not TOML", "[[server\n", "invalid"},
 		{"an [embedding] section", "[embedding]\nprovider = \"ollama\"\nmodel = \"m\"\n", "kept in the store"},
 	} {

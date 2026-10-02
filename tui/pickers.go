@@ -31,6 +31,7 @@ func relevanceText(r float64) string { return fmt.Sprintf("%3.0f%%", 100*min(max
 // searchLive runs the search as it is typed: the latest answers, an older one dropped.
 func (h *Host) searchLive(q string) {
 	q = strings.TrimSpace(q)
+	h.searchQuery = q
 	h.searchSeq++
 	seq, ep, ws := h.searchSeq, h.epoch, h.ws
 	h.marks.Store(termsOf(q))
@@ -65,9 +66,18 @@ func (h *Host) searchLive(q string) {
 			return
 		}
 		if a.err != nil {
+			h.hitList = nil
+			h.hits.Reset(nil)
+			h.showPreview("search", "", "", 0)
 			h.set("App.hitsTitle", "hits · "+wireMessage(a.err))
+			msg := "search in " + ws + " is unavailable: " + wireMessage(a.err)
+			if msg != h.lastSearchError {
+				h.notify(msg)
+				h.lastSearchError = msg
+			}
 			return
 		}
+		h.lastSearchError = ""
 		h.hitList = a.hits
 		rows := make([]rowOf, len(a.hits))
 		for i, x := range a.hits {
@@ -97,7 +107,20 @@ func termsOf(q string) []string {
 }
 
 // openSearch opens the search picker, the last query still in it.
-func (h *Host) openSearch() { h.open("searchPicker") }
+func (h *Host) openSearch() {
+	h.searchOpen = true
+	h.open("searchPicker")
+	h.refreshSearch()
+}
+
+func (h *Host) searchClosed() { h.searchOpen = false }
+
+// refreshSearch replaces results produced under an earlier workspace or model.
+func (h *Host) refreshSearch() {
+	if h.searchOpen && h.searchQuery != "" {
+		h.searchLive(h.searchQuery)
+	}
+}
 
 // previewHit shows the note of hit i, at its section.
 func (h *Host) previewHit(i int) {
@@ -115,6 +138,7 @@ func (h *Host) openHit(i int) {
 	}
 	x := h.hitList[i]
 	h.closeDialog("searchPicker")
+	h.searchClosed()
 	h.openAt = x.byteStart
 	h.openPath(x.path)
 }

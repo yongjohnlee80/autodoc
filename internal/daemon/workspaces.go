@@ -43,6 +43,7 @@ type Workspaces struct {
 	// workspace, and the workspaces restarting to take one
 	setup      string
 	restarting map[string]bool
+	queue      *embeddingQueue
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -76,25 +77,33 @@ func (m *Workspaces) warming(name string) []string {
 type served struct {
 	id   int64
 	w    *rpc.Workspace
+	ctx  context.Context
 	halt func() // stops its indexer and follower; its root stays open; nil for one not opened
 	stop func() // halts it and closes its root; nil for one not opened
 }
 
 // Options are how the daemon serves a workspace.
 type Options struct {
-	Poll     time.Duration // the follower's listing interval
-	Provider embed.Provider
-	Log      logger.Logger
+	Poll             time.Duration // the follower's listing interval
+	Provider         embed.Provider
+	Log              logger.Logger
+	MaxEmbedRequests int // across the daemon, 1 by default, 2 maximum
 	// BatchDelay is the indexer's (0: its default); tests shorten it.
 	BatchDelay time.Duration
 }
 
 // New is the workspaces of db, served until ctx ends. Nothing is served until OpenAll.
 func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
+	if o.MaxEmbedRequests <= 0 {
+		o.MaxEmbedRequests = 1
+	}
+	o.MaxEmbedRequests = min(o.MaxEmbedRequests, 2)
 	if o.Log == nil {
 		o.Log = logger.New()
 	}
-	return &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{}}
+	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{}}
+	m.queue = newEmbeddingQueue(m)
+	return m
 }
 
 // pastDefaultExcludes are the exclude patterns a workspace was given by default before the
@@ -133,6 +142,7 @@ func (m *Workspaces) OpenAll() error {
 		m.served[w.Name] = s
 		m.mu.Unlock()
 	}
+	m.queue.start()
 	return nil
 }
 
@@ -165,6 +175,10 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	if err != nil {
 		return nil, err
 	}
+	policy, err := m.db.EmbeddingPolicy(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	if c.Include == nil {
 		c.Include = config.DefaultInclude
 	}
@@ -176,7 +190,9 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		return nil, err
 	}
 	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
-		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log})
+		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log, Workspace: c.Name, ExternalEmbedding: true,
+		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }})
+	ix.SetSemanticPaused(!m.queue.setPolicy(c.Name, policy))
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
 	ctx, cancel := context.WithCancel(m.ctx)
@@ -201,6 +217,14 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		_ = ws.Close()
 	}
 	w := &rpc.Workspace{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude, SectionTokens: sectionTokens,
+		EmbeddingPolicy: policy,
+		EmbeddingMode: func() string {
+			p, err := m.db.EmbeddingPolicy(context.Background(), id)
+			if err != nil {
+				return policy
+			}
+			return p
+		},
 		SectionSize: func() int {
 			n, err := m.db.SectionTokens(context.Background(), id)
 			if err != nil {
@@ -208,8 +232,10 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 			}
 			return n
 		},
-		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status, Warming: m.warmingOf(c.Name)}
-	return &served{id: id, w: w, halt: halt, stop: stop}, nil
+		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status, Warming: m.warmingOf(c.Name),
+		Searched:       func() { m.queue.searchWorkspace(c.Name) },
+		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) }}
+	return &served{id: id, w: w, ctx: ctx, halt: halt, stop: stop}, nil
 }
 
 // restartHook, when set by this package's tests, runs in SetEmbedding after a workspace's indexer
@@ -223,6 +249,8 @@ var restartHook func(name string)
 func (m *Workspaces) SetEmbedding(p embed.Provider) {
 	m.chg.Lock()
 	defer m.chg.Unlock()
+	m.queue.stop()
+	defer m.queue.start()
 	m.opts.Provider = p
 	m.mu.Lock()
 	running := make(map[string]*served, len(m.served))
@@ -270,6 +298,41 @@ func (m *Workspaces) SetSectionTokens(ctx context.Context, name string, tokens i
 	return nil
 }
 
+// Focus gives the workspace the queue's next available batch. Calls from the
+// TUI refresh a short lease; other clients keep using their search priority.
+func (m *Workspaces) Focus(name string) error {
+	m.mu.Lock()
+	s, ok := m.served[name]
+	m.mu.Unlock()
+	if !ok || s.w.Index == nil {
+		return store.ErrNoWorkspace
+	}
+	if m.queue.focusWorkspace(name) {
+		s.w.Index.SetSemanticPaused(false)
+	}
+	return nil
+}
+
+// SetEmbeddingPolicy changes a workspace's queue admission and lexical gating.
+func (m *Workspaces) SetEmbeddingPolicy(ctx context.Context, name, policy string) error {
+	m.chg.Lock()
+	defer m.chg.Unlock()
+	m.mu.Lock()
+	s, ok := m.served[name]
+	m.mu.Unlock()
+	if !ok {
+		return store.ErrNoWorkspace
+	}
+	if err := m.db.SetWorkspaceEmbeddingPolicy(ctx, s.id, policy); err != nil {
+		return err
+	}
+	active := m.queue.setPolicy(name, policy)
+	if s.w.Index != nil {
+		s.w.Index.SetSemanticPaused(!active)
+	}
+	return nil
+}
+
 // Replacing is the model a switch is replacing: the active model of a served workspace whose
 // target is another; "" when none is switching.
 func (m *Workspaces) Replacing(ctx context.Context) string {
@@ -291,6 +354,7 @@ func (m *Workspaces) Replacing(ctx context.Context) string {
 
 // StopAll stops every workspace, for the daemon's shutdown.
 func (m *Workspaces) StopAll() {
+	m.queue.stop()
 	m.mu.Lock()
 	all := m.served
 	m.served = map[string]*served{}
@@ -355,6 +419,8 @@ func (m *Workspaces) Add(ctx context.Context, c config.Workspace) (*rpc.Workspac
 	m.mu.Lock()
 	m.served[c.Name] = s
 	m.mu.Unlock()
+	m.queue.start()
+	m.queue.wakeWorkspace(c.Name)
 	return s.w, nil
 }
 
@@ -391,6 +457,9 @@ func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 	w := *s.w
 	w.Name = to
 	w.Warming = m.warmingOf(to)
+	w.Searched = func() { m.queue.searchWorkspace(to) }
+	w.EmbeddingQueue = func() (string, string) { return m.queue.queueState(to) }
+	m.queue.rename(name, to)
 	s.w = &w
 	delete(m.served, name)
 	m.served[to] = s
@@ -403,6 +472,8 @@ func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	m.chg.Lock()
 	defer m.chg.Unlock()
+	m.queue.stop()
+	defer m.queue.start()
 	m.mu.Lock()
 	s, ok := m.served[name]
 	m.mu.Unlock()
@@ -424,6 +495,7 @@ func (m *Workspaces) Remove(ctx context.Context, name string) error {
 		m.served[name] = back
 	} else { // the store no longer has it
 		delete(m.served, name)
+		m.queue.forget(name)
 	}
 	return err
 }

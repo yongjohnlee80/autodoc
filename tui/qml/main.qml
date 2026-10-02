@@ -242,6 +242,7 @@ Window {
     WorkspaceAdd { id: workspaceAdd }
     WorkspaceRename { id: workspaceRename }
     WorkspaceSection { id: workspaceSection }
+    WorkspacePolicy { id: workspacePolicy }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }
     PluginConfirm { id: pluginConfirm }

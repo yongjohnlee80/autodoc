@@ -29,6 +29,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		// the pickers
 		"App.openSearch":    none(h.openSearch),
 		"App.searchLive":    oneString("App.searchLive", "a query", h.searchLive),
+		"App.searchClosed":  none(h.searchClosed),
 		"App.previewHit":    oneNumber("App.previewHit", "a row", h.previewHit),
 		"App.openHit":       oneNumber("App.openHit", "a row", h.openHit),
 		"App.openPicker":    none(h.openPicker),
@@ -81,6 +82,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.renameWorkspace":          oneString("App.renameWorkspace", "a name", h.renameWorkspace),
 		"App.startSectionSize":         oneNumber("App.startSectionSize", "a row", h.startSectionSize),
 		"App.saveSectionSize":          oneString("App.saveSectionSize", "a size", h.saveSectionSize),
+		"App.startEmbeddingPolicy":     oneNumber("App.startEmbeddingPolicy", "a row", h.startEmbeddingPolicy),
+		"App.saveEmbeddingPolicy":      oneString("App.saveEmbeddingPolicy", "a policy", h.saveEmbeddingPolicy),
 		"App.startRemoveWorkspace":     oneNumber("App.startRemoveWorkspace", "a row", h.startRemoveWorkspace),
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
 

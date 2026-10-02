@@ -68,6 +68,9 @@ type Host struct {
 	hitList             []hit
 	pickerRows, newRows []string
 	searchSeq           uint64
+	searchQuery         string
+	searchOpen          bool
+	lastSearchError     string
 	previewSeq          uint64
 	marks               marks
 	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
@@ -97,8 +100,9 @@ type Host struct {
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
-	ws      string
-	entered bool // ws was entered on this connection's listing
+	ws        string
+	focusSent time.Time
+	entered   bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
@@ -118,6 +122,7 @@ type Host struct {
 	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
 	sectionWorkspace   string
+	policyWorkspace    string
 
 	note  note       // the note in the editor (notes.go)
 	draft *draftSave // the draft being named in the new-note picker, nil when none is (notes.go)

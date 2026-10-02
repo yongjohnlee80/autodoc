@@ -169,6 +169,9 @@ func TestSectionMigrationRevertsWithoutDroppingVectors(t *testing.T) {
 	exec(t, db, "INSERT INTO model(workspace_id, fp, active) VALUES (1, 'm', 1)")
 	exec(t, db, "INSERT INTO embedding(workspace_id, text_hash, model_fp, bits, f32) VALUES (1, x'01', 'm', x'02', x'03')")
 	exec(t, db, "UPDATE workspace SET section_tokens = 256 WHERE id = 1")
+	if _, err := deployments.Runner().Revert(context.Background(), db, 5); err != nil {
+		t.Fatal(err)
+	}
 	name, err := deployments.Runner().Revert(context.Background(), db, 4)
 	if err != nil {
 		t.Fatal(err)

@@ -82,7 +82,8 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 		logger.Warning(log, nil, w)
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
-	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: log})
+	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: log,
+		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight})
 	// the provider the preferences name, before any workspace starts, so each starts with it; the
 	// last calls its meter heard are written before the store closes
 	emb := serving.NewEmbedding(db, ws, log)

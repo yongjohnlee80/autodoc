@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 5, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 6, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step

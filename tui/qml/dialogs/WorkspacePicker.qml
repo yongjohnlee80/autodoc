@@ -11,6 +11,7 @@ Dialog {
         palette.highlight: Theme.document.highlight
         palette.highlightedText: Theme.document.highlightedText
         model: App.workspaces
+        currentIndex: App.workspaceIndex
         textRole: "label"
         onActivated: App.useWorkspace(index)
     }

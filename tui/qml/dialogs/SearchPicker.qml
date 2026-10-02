@@ -55,4 +55,5 @@ Dialog {
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.openHit(hits.currentIndex)
+    onRejected: App.searchClosed()
 }

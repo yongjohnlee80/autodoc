@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -57,6 +58,10 @@ type Options struct {
 	// and a query is answered by words (SemanticSwitching) until the target covers every chunk.
 	Provider embed.Provider
 	Logger   logger.Logger
+	// ExternalEmbedding lets the daemon own the embedding worker. Standalone indexers keep their own.
+	ExternalEmbedding bool
+	OnEmbeddingWork   func() // non-blocking notification after a document commit
+	Workspace         string
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -71,15 +76,18 @@ type Indexer struct {
 	signal    chan struct{}
 	rescanner Rescanner
 
-	jobs        map[string]*job // the writer's own state: every path with work outstanding
-	queue       []string        // paths to hand to a worker, oldest first
-	delayed     []string        // paths waiting out a retry delay
-	unpersisted map[string]bool // paths whose job row must be (re)written
-	nextSeq     int64
-	results     chan *prepared
-	work        chan workItem
-	ops         chan op   // writes other than documents' (PurgeModel)
-	sem         *semantic // nil without a provider
+	jobs           map[string]*job // the writer's own state: every path with work outstanding
+	queue          []string        // paths to hand to a worker, oldest first
+	delayed        []string        // paths waiting out a retry delay
+	unpersisted    map[string]bool // paths whose job row must be (re)written
+	nextSeq        int64
+	results        chan *prepared
+	work           chan workItem
+	ops            chan op   // writes other than documents' (PurgeModel)
+	sem            *semantic // nil without a provider
+	embedPosition  atomic.Int64
+	semanticPaused atomic.Bool
+	ready          chan struct{} // model row committed before the queue embeds
 
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
 }
@@ -141,7 +149,7 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	ix := &Indexer{store: store, fsys: fsys, opts: opts, touched: map[string]bool{},
 		signal: make(chan struct{}, 1), jobs: map[string]*job{}, unpersisted: map[string]bool{},
 		results: make(chan *prepared, 2*opts.Workers),
-		work:    make(chan workItem), ops: make(chan op)}
+		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{})}
 	if opts.Provider != nil {
 		ix.sem = newSemantic(opts.Provider)
 	}
@@ -150,6 +158,22 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 
 // Touch queues path to be re-read. It never blocks: the writer picks the path up in its next batch.
 func (x *Indexer) Touch(path string) { x.touch(path, false) }
+
+// HasEmbeddings reports whether this indexer has a provider to fill its vectors.
+func (x *Indexer) HasEmbeddings() bool { return x.sem != nil }
+
+// SetSemanticPaused keeps a policy-paused workspace lexical even if it has old vectors.
+func (x *Indexer) SetSemanticPaused(paused bool) { x.semanticPaused.Store(paused) }
+
+// EmbeddingReady reports that setupModels installed the model row needed by the writer.
+func (x *Indexer) EmbeddingReady() bool {
+	select {
+	case <-x.ready:
+		return true
+	default:
+		return false
+	}
+}
 
 // Reindex queues path to be re-read and re-parsed even when its file is unchanged: the forced job
 // bypasses the fast path. "" is the whole workspace: every indexed document, and, through the
@@ -216,6 +240,10 @@ func (x *Indexer) Run(ctx context.Context) error {
 			return fmt.Errorf("index: recording the embedding model: %w", err)
 		}
 	}
+	close(x.ready)
+	if x.opts.ExternalEmbedding && x.opts.OnEmbeddingWork != nil {
+		x.opts.OnEmbeddingWork()
+	}
 	var wg sync.WaitGroup
 	workCtx, stopWorkers := context.WithCancel(ctx)
 	for i := 0; i < x.opts.Workers; i++ {
@@ -225,7 +253,7 @@ func (x *Indexer) Run(ctx context.Context) error {
 			x.worker(workCtx)
 		}()
 	}
-	if x.sem != nil {
+	if x.sem != nil && !x.opts.ExternalEmbedding {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -557,6 +585,9 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 	}
 	if x.sem != nil && len(changed) > 0 {
 		x.sem.signal() // new chunks may want vectors
+		if x.opts.OnEmbeddingWork != nil {
+			x.opts.OnEmbeddingWork()
+		}
 	}
 	clear(x.unpersisted)
 	for _, o := range outcomes {
