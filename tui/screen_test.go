@@ -534,6 +534,67 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 	r.s.WaitFor(t, "the same query gains a semantic result", func(sc string) bool { return strings.Contains(sc, "hits (1) · hybrid") })
 }
 
+func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
+	o := newFakeOllama(t, "embedder")
+	release := o.hold()
+	defer release()
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() {
+		r.h.showProgress(1, 0, embedProgress{on: true, semantic: "partial", texts: 1, pending: 1}, 1)
+		r.h.searchLive("unrelatedquery")
+	})
+	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
+	r.h.p.Post(func() { r.h.searchLive("") })
+	r.s.WaitForText(t, "search cleared")
+	if count := onLoop(r, func() int { return len(r.h.hitList) }); count != 0 {
+		t.Errorf("clearing search left %d hits", count)
+	}
+	r.h.p.Post(func() { r.h.searchLive("unrelatedquery") })
+	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
+	r.h.p.Post(r.h.searchClosed)
+	r.s.WaitForText(t, "search closed")
+	if active := onLoop(r, func() bool { return r.h.searchCancel != nil || r.h.searchWaitToast }); active {
+		t.Error("a closed search still holds a request or ongoing toast")
+	}
+	release()
+}
+
+func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
+	o := newFakeOllama(t, "embedder")
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "● semantic search")
+	o.mu.Lock()
+	o.down = true
+	o.mu.Unlock()
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("zebra")...)
+	r.s.WaitFor(t, "words-only fallback announced", func(_ string) bool {
+		return onLoop(r, func() string { return r.h.lastSearchError }) == "semantic search could not answer in kb; results are by words only"
+	})
+	if hits := onLoop(r, func() int { return len(r.h.hitList) }); hits == 0 {
+		t.Error("query error dropped lexical results")
+	}
+}
+
 func TestModelSwitchExplainsTemporaryWordsOnlyAndRefreshesSearch(t *testing.T) {
 	o := newFakeOllama(t, "first", "second")
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
