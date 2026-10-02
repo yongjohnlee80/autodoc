@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 	"sync/atomic"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -39,6 +40,7 @@ func (h *Host) searchLive(q string) {
 	h.searchSeq++
 	seq, ep, ws := h.searchSeq, h.epoch, h.ws
 	h.marks.Store(termsOf(q))
+	h.set("App.searchStatus", "")
 	if q == "" {
 		h.searchWaiting = false
 		if h.searchWaitToast {
@@ -54,6 +56,7 @@ func (h *Host) searchLive(q string) {
 	queryCtx, cancel := context.WithCancel(h.ctx)
 	h.searchCancel = cancel
 	h.set("App.hitsTitle", "hits · searching "+ws)
+	h.searchWaitLine(seq)
 	if remaining := h.prog.emb.working(); remaining > 0 {
 		h.notifyOngoing(toastSearchWait, fmt.Sprintf("search in %s is waiting: %d texts still embedding", ws, remaining))
 		h.searchWaitToast = true
@@ -83,6 +86,7 @@ func (h *Host) searchLive(q string) {
 		}
 		cancel()
 		h.searchCancel = nil
+		h.set("App.searchStatus", "")
 		if a.err != nil {
 			if h.searchWaitToast {
 				h.notifyDone(toastSearchWait, "search did not complete")
@@ -136,6 +140,50 @@ func (h *Host) searchLive(q string) {
 	})
 }
 
+// searchWaits are what the search's waiting line says, one at a time, while a search has not
+// answered: the provider is embedding the query, or the notes, or loading its model.
+var searchWaits = []string{
+	"warming up the engine",
+	"prepping the vectors",
+	"crates are being fetched",
+	"asking the GPU nicely",
+	"herding the tokens",
+	"polishing the cosines",
+	"consulting the embeddings",
+	"untangling the meanings",
+}
+
+// searchWaitDelay is how long a search may take before its waiting line turns: an answer sooner
+// shows nothing at all.
+const searchWaitDelay = 300 * time.Millisecond
+
+// searchWaitFrames is how many spinner frames one of searchWaits stays before the next.
+const searchWaitFrames = 16
+
+// searchWaitLine turns the line under the search's field while search seq has not answered: a
+// spinner and one of searchWaits, changing every few seconds. It starts after searchWaitDelay and
+// stops when the search answers, is replaced, cleared or closed (each blanks the line).
+func (h *Host) searchWaitLine(seq uint64) {
+	ep := h.epoch
+	frame := int(seq) * searchWaitFrames // a different message first, search to search
+	waiting := func() bool { return seq == h.searchSeq && ep == h.epoch && h.searchCancel != nil }
+	var turn func()
+	turn = func() {
+		if !waiting() {
+			return
+		}
+		msg := searchWaits[(frame/searchWaitFrames)%len(searchWaits)]
+		h.set("App.searchStatus", spinFrames[frame%len(spinFrames)]+" "+msg+"…")
+		frame++
+		h.after(spinEvery, turn)
+	}
+	h.after(searchWaitDelay, func() {
+		if waiting() {
+			turn()
+		}
+	})
+}
+
 // termsOf are the query's words as the preview marks them: lower case, the prefix star and the
 // quotes gone.
 func termsOf(q string) []string {
@@ -159,6 +207,7 @@ func (h *Host) openSearch() {
 func (h *Host) searchClosed() {
 	h.searchOpen = false
 	h.searchSeq++
+	h.set("App.searchStatus", "")
 	if h.searchCancel != nil {
 		h.searchCancel()
 		h.searchCancel = nil
@@ -166,6 +215,18 @@ func (h *Host) searchClosed() {
 	if h.searchWaitToast {
 		h.notifyDone(toastSearchWait, "search closed")
 		h.searchWaitToast = false
+	}
+}
+
+// clearSearch empties the search: its words, in the picker's field too, and its hits, so the next
+// search starts afresh. why is said when there was a search to clear.
+func (h *Host) clearSearch(why string) {
+	had := h.searchQuery != ""
+	h.searchLive("")
+	h.set("App.searchText", "\x00") // moved away first, so an empty field twice still clears it
+	h.set("App.searchText", "")
+	if had {
+		h.notify("search cleared: " + why)
 	}
 }
 

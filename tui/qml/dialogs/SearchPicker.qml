@@ -16,9 +16,13 @@ Dialog {
             Text { text: "search: words; a * ends a prefix" }
             TextField {
                 id: query
+                text: App.searchText
                 onTextEdited: App.searchLive(text)
                 onAccepted: App.openHit(hits.currentIndex)
             }
+            // a row between the field and the hits: blank, or a turning spinner and what an
+            // unanswered search is waiting on
+            Text { text: App.searchStatus; color: Theme.document.lineNumber }
             Frame {
                 title: App.hitsTitle
                 Layout.fillHeight: true

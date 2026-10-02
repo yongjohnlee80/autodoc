@@ -487,9 +487,10 @@ func TestTheProviderForm(t *testing.T) {
 	}
 }
 
-// The picker keeps a query while the daemon changes provider. The status poll
-// must rerun it when semantic answers become available, without another keystroke.
-func TestAWaitingSearchRefreshesWhenEmbeddingFinishes(t *testing.T) {
+// A provider coming into use is a new embedding model: the picker's query and hits answered by
+// words alone are cleared, the field emptied, and the clearing said (Johno, 2026-10-02: "When the
+// embedding model changes, it should clear the search query, and start afresh").
+func TestAModelChangeClearsTheSearch(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -504,9 +505,14 @@ func TestAWaitingSearchRefreshesWhenEmbeddingFinishes(t *testing.T) {
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the unchanged query gains its semantic hit", func(sc string) bool {
-		return strings.Contains(sc, "hits (1) · hybrid") && strings.Contains(sc, "● semantic search")
+	r.s.WaitForText(t, "search cleared: the embedding model changed")
+	r.s.WaitFor(t, "the field and the hits emptied", func(sc string) bool {
+		return !strings.Contains(sc, "unrelatedquery") && !strings.Contains(sc, "hits (")
 	})
+	if q := onLoop(r, func() string { return r.h.searchQuery }); q != "" {
+		t.Fatalf("the query after a model change is %q, want none", q)
+	}
+	r.s.WaitFor(t, "the mark naming the model", func(string) bool { return r.markOf() == "green semantic search · embedder" })
 }
 
 func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
@@ -519,15 +525,23 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
-	r.keys(t, decltest.Type("unrelatedquery")...)
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
+	// the provider in use before the query, so the poll's partial state below is the same model's
+	// and refreshes the query rather than clearing it (a model change clears it)
+	r.s.WaitFor(t, "the TUI polled the provider in use", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prog.emb.on && r.h.prog.emb.model != "" })
+	})
+	model := onLoop(r, func() string { return r.h.prog.emb.model })
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("unrelatedquery")...)
 	// Hold the provider request, then deliver the poll's partial state. The
 	// notification must precede the blocked search RPC's answer.
-	r.h.p.Post(func() { r.h.showProgress(1, 0, embedProgress{on: true, semantic: "partial", texts: 1, pending: 1}, 1) })
+	r.h.p.Post(func() {
+		r.h.showProgress(1, 0, embedProgress{on: true, model: model, semantic: "partial", texts: 1, pending: 1}, 1)
+	})
 	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
 	release()
 	r.h.p.Post(r.h.poll)
@@ -595,7 +609,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 	}
 }
 
-func TestModelSwitchExplainsTemporaryWordsOnlyAndRefreshesSearch(t *testing.T) {
+func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 	o := newFakeOllama(t, "first", "second")
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	for _, model := range []string{"first", "second"} {
@@ -617,13 +631,15 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndRefreshesSearch(t *testing.T) {
 	if _, err := r.h.session.Call(context.Background(), "embedding.use", "second"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "switching shown with lexical results", func(sc string) bool {
-		return strings.Contains(sc, "temporarily words-only") && strings.Contains(sc, "hits (0) · lexical")
+	r.s.WaitFor(t, "switching said, the search cleared", func(sc string) bool {
+		return strings.Contains(sc, "temporarily words-only") && strings.Contains(sc, "search cleared: the embedding model changed")
 	})
+	if q := onLoop(r, func() string { return r.h.searchQuery }); q != "" {
+		t.Fatalf("the query after a switch began is %q, want none", q)
+	}
+	r.s.WaitFor(t, "the mark naming the model it switches to", func(string) bool { return r.markOf() == "red lexical search · switching to second" })
 	release()
-	r.s.WaitFor(t, "the new model restores unchanged query", func(sc string) bool {
-		return strings.Contains(sc, "hits (1) · hybrid") && strings.Contains(sc, "semantic search")
-	})
+	r.s.WaitFor(t, "the mark naming the new model", func(string) bool { return r.markOf() == "green semantic search · second" })
 }
 
 func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
@@ -799,7 +815,7 @@ func TestAProviderInUse(t *testing.T) {
 		}
 		return false
 	})
-	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search" })
+	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search · embedder" })
 	// its calls, metered and written every couple of seconds, under the list
 	r.s.WaitFor(t, "local's usage", func(sc string) bool {
 		r.h.p.Post(func() { r.h.providerDetail(0) })
@@ -1216,6 +1232,13 @@ func (r *running) semanticMark() string {
 	return m
 }
 
+// markOf is the status line's whole mark: the dot's colour and every word after it, the model
+// included ("green semantic search · embedder").
+func (r *running) markOf() string {
+	snap := r.s.Backend.Snapshot()
+	return markIn(snap[len(snap)-1], "")
+}
+
 // markAbove is the AI models dialog's mark: the first row above the status line with a dot
 // followed by "semantic search" or "lexical search", read up to the frame's border.
 func (r *running) markAbove(skip int) string {
@@ -1476,7 +1499,7 @@ func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
 	if _, err := r.h.session.Call(ctx, "embedding.use", "local"); err != nil {
 		t.Fatal(err)
 	}
-	frame := regexp.MustCompile(`embedding ([-\\|/]) ░+ 0/2`)
+	frame := regexp.MustCompile(`embedding kb ([-\\|/]) ░+ 0/2`)
 	seen := map[string]bool{}
 	r.s.WaitFor(t, "the spinner turning", func(sc string) bool {
 		if m := frame.FindStringSubmatch(sc); m != nil {
@@ -1495,11 +1518,11 @@ func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "the switch on the status line", func(sc string) bool {
-		return r.semanticMark() == "red lexical search" && regexp.MustCompile(`switching to other [-\\|/] ░+ 0/2`).MatchString(sc)
+		return r.semanticMark() == "red lexical search" && regexp.MustCompile(`switching kb to other [-\\|/] ░+ 0/2`).MatchString(sc)
 	})
 	release()
 	r.s.WaitFor(t, "other answering", func(sc string) bool {
-		return r.semanticMark() == "green semantic search" && !strings.Contains(sc, "switching to")
+		return r.semanticMark() == "green semantic search" && !strings.Contains(sc, "switching kb to")
 	})
 }
 

@@ -23,6 +23,8 @@ func (h *Host) state() map[string]any {
 		"App.semanticLabel":  "",
 		"App.semanticDetail": "",
 		"App.searchTitle":    "search", // with semantic search's state once a poll answers
+		"App.searchText":     "",       // the search field's words: set to clear them (clearSearch)
+		"App.searchStatus":   "",       // the line under the field: blank, or what a search is waiting on (pickers.go)
 
 		"App.explorer": h.explorer,
 		// the Plugins menu (plugins.go)
