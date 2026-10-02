@@ -419,11 +419,15 @@ func (m *marks) load() []string {
 }
 
 // searchHighlighter is Markdown's, with the search's words marked over it (the Alert style).
-func (h *Host) searchHighlighter() highlight.Highlighter {
+func (h *Host) searchHighlighter() highlight.Highlighter { return markedHighlighter(&h.marks) }
+
+// markedHighlighter is Markdown's, with the words in m marked over it (the Alert style), read
+// afresh on every line: the preview's for the search's words, the page's for the find's.
+func markedHighlighter(m *marks) highlight.Highlighter {
 	md := markdown.Highlighter()
 	return highlight.HighlighterFunc(func(line string, prev highlight.State) ([]highlight.Span, highlight.State) {
 		spans, next := md.HighlightBlock(line, prev)
-		terms := h.marks.load()
+		terms := m.load()
 		if len(terms) == 0 || line == "" {
 			return spans, next
 		}

@@ -5,14 +5,22 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/style"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // FIND — / in the page, the explorer or the links, as AutoDB's: a word or phrase in the pane that
 // has the keyboard. The cursor moves to the next row holding it; n and N go to the next and the
 // previous. It is a literal, case-blind match, read afresh from the pane at every jump. The
 // workspace's search (by words and meaning, across every note) is Ctrl+G, SPC / or SPC SPC.
+//
+// WHILE A FIND IS ON in the page, the page marks its words wherever they are (the Alert style, as
+// the search's preview marks its words), and "finding …" shows under the menu at the top right,
+// with a ✕ that clears it, except while a drawer at the right edge is open over that corner. Search › Clear find clears it too. Search › Find in page, next and previous reach the
+// page's find from the Text mode, where / types a slash.
 //
 // THE EXPLORER is searched over the rows it has loaded, in the order the tree shows them, a closed
 // folder's loaded rows included: a hit there is revealed, its folders opened.
@@ -49,6 +57,13 @@ func (h *Host) openFind() {
 		h.say("find: put the keyboard in the page, the explorer or the links first")
 		return
 	}
+	h.askFind(target)
+}
+
+// openFindInPage is Search › Find in page: the page's find, wherever the keyboard is.
+func (h *Host) openFindInPage() { h.askFind(findPage) }
+
+func (h *Host) askFind(target string) {
 	h.find.pending = target
 	h.set("App.findTitle", "find in the "+target+" — n next, N previous")
 	h.set("App.findError", "")
@@ -68,7 +83,86 @@ func (h *Host) startFind(pattern string) {
 	h.find.target, h.find.pending = h.find.pending, ""
 	h.find.query = pattern
 	h.set("App.lastFind", pattern)
+	h.showFind()
 	h.p.Post(func() { h.findJump(+1, true) }) // once the question has closed
+}
+
+// findAgain is Search › Find next and previous. The menu bar hands the keyboard back to the page
+// before it runs an item, so n's check that the keyboard is in the find's pane holds for the page.
+func (h *Host) findAgain(dir int) {
+	if h.find.query == "" || h.find.target == "" {
+		h.say("nothing to find again: Search › Find in page asks what to find")
+		return
+	}
+	h.findJump(dir, false)
+}
+
+// clearFind ends the find: its words unmarked, "finding …" gone; n and N have nothing to find.
+func (h *Host) clearFind() {
+	if h.find.query == "" {
+		return
+	}
+	h.find.query, h.find.target = "", ""
+	h.showFind()
+	h.say("find cleared")
+}
+
+// pageHighlighter is the page's highlighter: Markdown, the find's words marked over it.
+func (h *Host) pageHighlighter() highlight.Highlighter {
+	if h.findHL == nil {
+		h.findHL = markedHighlighter(&h.findMarks)
+	}
+	return h.findHL
+}
+
+// showFind brings the page's marks and "finding …" up to date with the find: marked and shown while
+// one is on, in the page; gone when it ends.
+func (h *Host) showFind() {
+	var terms []string
+	if h.find.query != "" && h.find.target == findPage {
+		terms = []string{strings.ToLower(h.find.query)}
+	}
+	if !slices.Equal(terms, h.findMarks.load()) {
+		h.findMarks.Store(terms)
+		// set again so the page highlights every line afresh: it keeps a line's colours until its
+		// text changes, and the find's words are not its text
+		h.editor.SetHighlighter(h.pageHighlighter())
+	}
+	if h.findChip == nil {
+		return
+	}
+	// the page's find only (a find in a panel moves its cursor and marks nothing), and not over a
+	// drawer open at the right edge, whose title row the chip would cover
+	if len(terms) == 0 || h.rightDrawerOpen() {
+		h.findChip.Hide()
+		return
+	}
+	h.findLabel.SetText(fmt.Sprintf(" finding %q ", h.find.query))
+	h.findChip.Show()
+}
+
+// rightDrawerOpen is whether a panel open now is docked at the right edge.
+func (h *Host) rightDrawerOpen() bool {
+	return (h.panelOpen["explorer"] && h.prefs.explorerEdge == "right") || (h.panelOpen["links"] && h.prefs.linkEdge == "right")
+}
+
+// attachFindChip puts "finding …" over the page, hidden until a find starts: at the top right, a row
+// down so the menu bar stays clear, its ✕ clearing the find.
+func (h *Host) attachFindChip() {
+	host, ok := h.p.Overlay()
+	if !ok || h.findChip != nil {
+		return
+	}
+	// one row, no border: the panel's colour sets it apart from the page under it
+	h.findLabel = widget.NewText("", widget.WithTextStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
+	clear := widget.NewButton("✕", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
+	chip := tuicore.NewFlex(tuicore.Horizontal)
+	chip.Add(h.findLabel, clear)
+	col := tuicore.NewFlex(tuicore.Vertical)
+	col.Add(widget.NewText(""), chip) // the empty row keeps the menu bar clear above the chip
+	h.findChip = widget.NewFloat(col, widget.WithAnchor(widget.TopRight))
+	host.Attach(h.findChip)
+	h.showFind()
 }
 
 func (h *Host) findCancelled() { h.find.pending = "" }

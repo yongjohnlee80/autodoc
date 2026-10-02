@@ -95,6 +95,15 @@ Window {
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
+        // Search: the page's find for the Text mode too, where / types a slash, and the workspace's
+        Menu {
+            title: "Sea&rch"
+            MenuItem { text: "&Find in page…"; onTriggered: App.openFindInPage() }
+            MenuItem { text: "Find &next"; onTriggered: App.findAgainNext() }
+            MenuItem { text: "Find &previous"; onTriggered: App.findAgainPrevious() }
+            MenuItem { text: "&Clear find"; onTriggered: App.clearFind() }
+            MenuItem { text: "&Search notes…"; onTriggered: App.openSearch() }
+        }
         Menu {
             title: "&View"
             MenuItem { text: "&Status line"; checkable: true; checked: App.statusShown; onTriggered: App.toggleStatusLine() }
@@ -168,7 +177,8 @@ Window {
             lineNumberColor: Theme.document.lineNumber
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
-            SyntaxHighlighter { definition: "Markdown" }
+            // Markdown, with the find's words (/) marked over it (find.go)
+            SyntaxHighlighter { definition: "Markdown (find)" }
         }
     }
 

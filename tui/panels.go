@@ -25,10 +25,14 @@ func (h *Host) togglePanel(name string) {
 
 // panelOpened and panelClosed follow the drawers, however they were opened or closed (Escape
 // inside one closes it).
-func (h *Host) panelOpened(name string) { h.panelOpen[name] = true }
+func (h *Host) panelOpened(name string) {
+	h.panelOpen[name] = true
+	h.showFind() // a drawer at the right edge hides "finding …"
+}
 
 func (h *Host) panelClosed(name string) {
 	h.panelOpen[name] = false
+	h.showFind()
 	h.keep(h.p.Call("editor", "forceActiveFocus"))
 }
 

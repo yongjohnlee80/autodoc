@@ -76,7 +76,9 @@ type Host struct {
 	searchWaitToast     bool
 	previewSeq          uint64
 	marks               marks
-	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
+	findMarks           marks                 // the page find's words, as the page's highlighter marks them (find.go)
+	findHL              highlight.Highlighter // the page's: Markdown, the find's words marked over it
+	openAt              int                   // where the next note opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find       findState
@@ -138,6 +140,8 @@ type Host struct {
 	noticeList  *tuidecl.ListModel
 	historyOpen bool
 	vimKeys     *widget.Float // the Vim keys' card (vimkeys.go)
+	findChip    *widget.Float // "finding …" and its ✕, under the menu at the top right (find.go)
+	findLabel   *widget.Text
 	// the plugins (plugins.go): where they are, the folder's as found, the menu's rows, and the open
 	// ones by key
 	pluginOpt  Plugins
@@ -230,6 +234,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	}
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
+	p.Post(h.attachFindChip)
 	p.Post(h.start)
 	return nil
 }
@@ -254,7 +259,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.layoutSrc = src
 	h.theme = themeOf(src)
 	return append(opts,
-		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()}),
+		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()},
+			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()}),
 		tuidecl.Sources(h.state()),
 		tuidecl.Handlers(h.commands()),
 		tuidecl.ErrorSink(h.keep),
