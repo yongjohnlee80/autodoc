@@ -68,9 +68,12 @@ type Host struct {
 	hitList             []hit
 	pickerRows, newRows []string
 	searchSeq           uint64
+	searchCancel        context.CancelFunc
 	searchQuery         string
 	searchOpen          bool
 	lastSearchError     string
+	searchWaiting       bool
+	searchWaitToast     bool
 	previewSeq          uint64
 	marks               marks
 	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
