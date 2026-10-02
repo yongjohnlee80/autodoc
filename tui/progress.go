@@ -55,10 +55,13 @@ func warmingReasons(m map[string]any) []string {
 
 // embedProgress is index.status's embeddings: nil there is off.
 type embedProgress struct {
-	on                     bool   // a provider is in use
+	on                     bool // a provider is in use
+	model                  string
 	texts                  int64  // the distinct texts every model covers once done
 	pending                int64  // those the active model has no vector for
 	target                 string // the model filling to replace the active one; "" for none
+	queueState, waitingFor string
+	semantic               string
 	targetPending          int64
 	refused, targetRefused int64
 	failing                bool // the provider's last call failed
@@ -69,12 +72,14 @@ func embedOf(m map[string]any) embedProgress {
 	if m == nil {
 		return embedProgress{}
 	}
-	e := embedProgress{on: true, target: str(m, "target"), failing: str(m, "last_error") != ""}
+	e := embedProgress{on: true, model: str(m, "model"), target: str(m, "target"), failing: str(m, "last_error") != ""}
 	e.texts, _ = m["texts"].(int64)
 	e.pending, _ = m["pending"].(int64)
 	e.targetPending, _ = m["target_pending"].(int64)
 	e.refused, _ = m["refused"].(int64)
 	e.targetRefused, _ = m["target_refused"].(int64)
+	e.queueState, e.waitingFor = str(m, "queue_state"), str(m, "waiting_for")
+	e.semantic = str(m, "semantic")
 	return e
 }
 
@@ -88,11 +93,17 @@ func (e embedProgress) working() int64 {
 
 // online is semantic search answering: a provider in use, its model not replaced mid-switch, its
 // last call answered. Offline, a search is by words.
-func (e embedProgress) online() bool { return e.on && e.target == "" && !e.failing }
+func (e embedProgress) online() bool {
+	return e.on && e.target == "" && !e.failing && e.queueState != "paused" && e.semantic != "off"
+}
 
 // poll asks for the status, and asks again a second after the answer, while the program runs.
 func (h *Host) poll() {
 	ep, ws := h.epoch, h.ws
+	if ws != "" && time.Since(h.focusSent) >= 10*time.Second {
+		h.focusSent = time.Now()
+		do(h, func(ctx context.Context) error { _, err := h.call(ctx, "workspace.focus", ws); return err }, func(error) {})
+	}
 	type answer struct {
 		docs, pending, cursor int64
 		emb                   embedProgress
@@ -160,10 +171,23 @@ func (h *Host) showWarming(reasons []string) {
 
 func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64) {
 	was := h.prog.busy
+	prev := h.prog.emb
+	polled := h.prog.polled
 	moved := h.prog.polled && cursor != h.prog.cursor
 	h.prog.docs, h.prog.pending, h.prog.emb = docs, pending, emb
 	h.prog.cursor, h.prog.polled = cursor, true
-	h.prog.busy = pending > 0 || emb.working() > 0
+	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on {
+		switch {
+		case emb.target != "" || emb.semantic == "switching":
+			h.notifyOngoing(toastSemantic, "semantic search is temporarily words-only while the new model fills in "+h.ws)
+		case polled && prev.target != "" && emb.target == "" && emb.on && emb.semantic != "off":
+			h.notifyDone(toastSemantic, "semantic search is available again in "+h.ws+" ("+emb.semantic+")")
+		case polled && prev.target != "" && emb.target == "":
+			h.notifyDone(toastSemantic, "model switch ended; search in "+h.ws+" remains words-only")
+		}
+		h.refreshSearch()
+	}
+	h.prog.busy = pending > 0 || emb.working() > 0 || (emb.queueState == "paused" && emb.pending > 0)
 	if was && !h.prog.busy {
 		h.notifyDone(toastProgress, fmt.Sprintf("indexed %d notes", docs))
 	}
@@ -193,6 +217,8 @@ func (h *Host) showSemantic() {
 		why = " · warming up"
 	case e.target != "":
 		why = " · switching models"
+	case e.queueState == "paused":
+		why = " · embedding paused by workspace setting"
 	case e.failing:
 		why = " · the provider is not answering"
 	}
@@ -205,14 +231,14 @@ func (h *Host) showSemantic() {
 
 // spinWhileEmbedding turns the spinner while the provider has texts to embed, and stops it after.
 func (h *Host) spinWhileEmbedding() {
-	if h.prog.spinning || h.prog.emb.working() == 0 || h.prog.emb.failing {
+	if h.prog.spinning || h.prog.emb.working() == 0 || h.prog.emb.failing || h.prog.emb.queueState == "paused" || (h.prog.emb.queueState == "waiting" && h.prog.emb.waitingFor != "") {
 		return
 	}
 	h.prog.spinning = true
 	ep := h.epoch
 	var turn func()
 	turn = func() {
-		if ep != h.epoch || h.prog.emb.working() == 0 || h.prog.emb.failing {
+		if ep != h.epoch || h.prog.emb.working() == 0 || h.prog.emb.failing || h.prog.emb.queueState == "paused" || (h.prog.emb.queueState == "waiting" && h.prog.emb.waitingFor != "") {
 			if ep == h.epoch {
 				h.prog.spinning = false
 			}
@@ -241,7 +267,15 @@ func progressText(p progress) string {
 		parts = append(parts, "indexing "+bar(p.docs, p.docs+p.pending))
 	}
 	e := p.emb
+	if e.queueState == "paused" && (e.pending > 0 || e.working() > 0) {
+		parts = append(parts, "embedding paused by workspace setting")
+		return strings.Join(parts, " · ")
+	}
 	if left := e.working(); left > 0 {
+		if e.queueState == "waiting" && e.waitingFor != "" {
+			parts = append(parts, "embedding waiting for "+e.waitingFor)
+			return strings.Join(parts, " · ")
+		}
 		what := "embedding"
 		if e.target != "" {
 			what = "switching to " + embed.ModelName(e.target)

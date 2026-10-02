@@ -580,6 +580,20 @@ func (x *Indexer) embedLoop(ctx context.Context) {
 	}
 }
 
+// EmbedBatch is the daemon queue's one unit of work. It uses the same writer
+// handoff as the standalone worker, and keeps provider failures in status.
+func (x *Indexer) EmbedBatch(ctx context.Context, position int) (bool, error) {
+	if x.sem == nil {
+		return false, nil
+	}
+	x.embedPosition.Store(int64(position))
+	worked, err := x.embedOnce(ctx)
+	x.sem.mu.Lock()
+	x.sem.lastErr = err
+	x.sem.mu.Unlock()
+	return worked, err
+}
+
 // embedOnce embeds one batch for the target, reporting whether there was one.
 func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 	m := x.sem
@@ -655,7 +669,8 @@ func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 			return false, err
 		}
 	}
-	logger.Debug(x.opts.Logger, logger.Fields{"event": "embedding.batch", "model": fp, "texts": len(vb.items),
+	logger.Debug(x.opts.Logger, logger.Fields{"event": "embedding.batch", "workspace": x.opts.Workspace,
+		"queue_position": x.embedPosition.Load(), "model": fp, "texts": len(vb.items),
 		"estimated_tokens": estimatedTokens(texts), "scan_ms": scanned.Milliseconds(), "provider_ms": providerTime.Milliseconds(), "commit_publish_ms": time.Since(committed).Milliseconds()})
 	m.mu.Lock()
 	if !m.fillDone {
@@ -1124,6 +1139,9 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	es.RefusedTexts, err = x.refusedTexts(ctx, refusedFP, "")
 	if err != nil {
 		return st, err
+	}
+	if x.semanticPaused.Load() {
+		es.Semantic = SemanticOff
 	}
 	st.Embeddings = &es
 	return st, nil

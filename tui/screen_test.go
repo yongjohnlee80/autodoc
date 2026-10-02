@@ -487,6 +487,76 @@ func TestTheProviderForm(t *testing.T) {
 	}
 }
 
+// The picker keeps a query while the daemon changes provider. The status poll
+// must rerun it when semantic answers become available, without another keystroke.
+func TestAWaitingSearchRefreshesWhenEmbeddingFinishes(t *testing.T) {
+	o := newFakeOllama(t, "embedder")
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("unrelatedquery")...)
+	r.s.WaitForText(t, "hits (0) · lexical · semantic off")
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the unchanged query gains its semantic hit", func(sc string) bool {
+		return strings.Contains(sc, "hits (1) · hybrid") && strings.Contains(sc, "● semantic search")
+	})
+}
+
+func TestModelSwitchExplainsTemporaryWordsOnlyAndRefreshesSearch(t *testing.T) {
+	o := newFakeOllama(t, "first", "second")
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	for _, model := range []string{"first", "second"} {
+		if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: model, Kind: store.KindOllama, BaseURL: o.URL, Model: model}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	if _, err := r.h.session.Call(context.Background(), "embedding.use", "first"); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("unrelatedquery")...)
+	r.s.WaitFor(t, "semantic hit before switch", func(sc string) bool { return strings.Contains(sc, "hits (1) · hybrid") })
+	release := o.hold()
+	defer release()
+	if _, err := r.h.session.Call(context.Background(), "embedding.use", "second"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "switching shown with lexical results", func(sc string) bool {
+		return strings.Contains(sc, "temporarily words-only") && strings.Contains(sc, "hits (0) · lexical")
+	})
+	release()
+	r.s.WaitFor(t, "the new model restores unchanged query", func(sc string) bool {
+		return strings.Contains(sc, "hits (1) · hybrid") && strings.Contains(sc, "semantic search")
+	})
+}
+
+func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
+	d := startManaged(t, map[string]string{
+		"alpha": noteDir(t, "a.md", "# A\n\nzebra plains\n"),
+		"bravo": noteDir(t, "b.md", "# B\n\nriver mud\n"),
+	})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
+	r.s.WaitForText(t, "· alpha")
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("zebra")...)
+	r.s.WaitForText(t, "hits (1) · lexical")
+	r.h.p.Post(func() { r.h.enter("bravo") })
+	r.s.WaitFor(t, "the other workspace's query result", func(sc string) bool {
+		return strings.Contains(sc, "zebra") && strings.Contains(sc, "hits (0) · lexical") && !strings.Contains(sc, "a.md")
+	})
+}
+
 // TestEveryFieldHasALabel: every TextField the QML declares has a Text over it, saying what goes
 // in it (the folder dialog's path field is its own, and labelled).
 func TestEveryFieldHasALabel(t *testing.T) {

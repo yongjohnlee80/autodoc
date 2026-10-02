@@ -87,6 +87,9 @@ func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, e
 
 // Search answers a query with the semantic tier when the indexer has a provider.
 func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
+	if x.semanticPaused.Load() {
+		return x.store.search(ctx, q, opts, nil)
+	}
 	return x.store.search(ctx, q, opts, x.sem)
 }
 

@@ -94,6 +94,39 @@ func TestSectionSizeBelongsToOneWorkspace(t *testing.T) {
 	}
 }
 
+func TestWorkspaceEmbeddingPolicyDefaultsAndIsScoped(t *testing.T) {
+	ctx := context.Background()
+	s := openStore(t)
+	a, err := s.AddWorkspace(ctx, "a", "/a", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := s.AddWorkspace(ctx, "b", "/b", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.EmbeddingPolicy(ctx, a.ID); err != nil || got != EmbeddingAlways {
+		t.Fatalf("default = %q, %v", got, err)
+	}
+	if err := s.SetWorkspaceEmbeddingPolicy(ctx, a.ID, EmbeddingWhenOpened); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		id   int64
+		want string
+	}{{a.ID, EmbeddingWhenOpened}, {b.ID, EmbeddingAlways}} {
+		if got, err := s.EmbeddingPolicy(ctx, c.id); err != nil || got != c.want {
+			t.Errorf("workspace %d: %q, %v; want %q", c.id, got, err, c.want)
+		}
+	}
+	if err := s.SetWorkspaceEmbeddingPolicy(ctx, a.ID, "sometimes"); !errors.Is(err, ErrEmbeddingPolicy) {
+		t.Errorf("invalid policy: %v", err)
+	}
+	if err := s.SetWorkspaceEmbeddingPolicy(ctx, 99999, EmbeddingNever); !errors.Is(err, ErrNoWorkspace) {
+		t.Errorf("unknown workspace: %v", err)
+	}
+}
+
 // The order the daemon runs on darwin: SQLite already holds its fcntl locks on
 // the store when the lease is taken. A lease on the store file itself is
 // refused there; the sidecar is not.

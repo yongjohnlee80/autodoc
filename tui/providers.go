@@ -211,6 +211,7 @@ func (h *Host) useProvider(i int) {
 		}
 		h.notify("semantic search with " + p.name + ": the notes are embedded in the background")
 		h.loadProviders()
+		h.refreshSearch()
 	})
 }
 
@@ -225,6 +226,7 @@ func (h *Host) stopSemantic() {
 			return
 		}
 		h.loadProviders()
+		h.refreshSearch()
 	})
 }
 
@@ -493,5 +495,6 @@ func (h *Host) saveProvider(name, base, model, key, window string) {
 		}
 		h.notify("saved the provider " + spec["name"].(string))
 		h.loadProviders()
+		h.refreshSearch()
 	})
 }

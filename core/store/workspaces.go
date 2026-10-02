@@ -20,6 +20,50 @@ var (
 // SectionTokensDefault is the default section limit for existing workspaces.
 const SectionTokensDefault = 512
 
+const (
+	EmbeddingAlways     = "always"
+	EmbeddingWhenOpened = "when opened"
+	EmbeddingNever      = "never"
+)
+
+// ErrEmbeddingPolicy is a workspace's unrecognized embedding scheduling policy.
+var ErrEmbeddingPolicy = errors.New("store: embedding policy must be always, when opened, or never")
+
+// EmbeddingPolicy returns the workspace's scheduling preference.
+func (s *Store) EmbeddingPolicy(ctx context.Context, id int64) (string, error) {
+	var policy string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceEmbeddingPolicy)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil {
+			return err
+		}
+		policy = w.EmbeddingPolicy
+		return nil
+	})
+	return policy, err
+}
+
+// SetWorkspaceEmbeddingPolicy sets whether the shared daemon queue fills a workspace.
+func (s *Store) SetWorkspaceEmbeddingPolicy(ctx context.Context, id int64, policy string) error {
+	if policy != EmbeddingAlways && policy != EmbeddingWhenOpened && policy != EmbeddingNever {
+		return ErrEmbeddingPolicy
+	}
+	return s.Write(ctx, func(tx *Tx) error {
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceEmbeddingPolicy, policy).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNoWorkspace
+		}
+		return nil
+	})
+}
+
 // SectionTokens returns the workspace's effective chunk limit.
 func (s *Store) SectionTokens(ctx context.Context, id int64) (int, error) {
 	var tokens int

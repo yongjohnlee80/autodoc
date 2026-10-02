@@ -93,7 +93,7 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 | Group | Verbs |
 | --- | --- |
 | `sys` | `hello`, `shutdown` |
-| `workspace` | `list`, `add(name, root, include?, exclude?)`, `rename(name, to)`, `remove(name)` (the index goes; the files stay) |
+| `workspace` | `list`, `add(name, root, include?, exclude?)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)` |
 | `search` | `query(ws, q, {limit, mode, tags, paths})` |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
@@ -125,7 +125,8 @@ names and saves it as a note. Everything else comes when it is asked for:
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
 - **The pickers** (search, open, new note, add a workspace) share one layout: the fields over the
   list on the left, the note under the cursor on the right, the buttons beneath. The search runs
-  as it is typed, and its preview is at the hit, the words marked.
+  as it is typed and refreshes its open query after a model or workspace transition; its preview
+  is at the hit, the words marked.
 
 | Key | Does |
 | --- | --- |
@@ -154,7 +155,12 @@ names and saves it as a note. Everything else comes when it is asked for:
   starts. Indexing and embedding carry on where they stopped.
 
 The preferences and the AI models are kept in the daemon's store, so they are the same whichever
-workspace is open.
+workspace is open. **Embedding is scheduled across the daemon**: the open TUI workspace has first
+turn, then recently searched workspaces, while background work gets regular turns. A workspace's
+Embedding… setting in Manage workspaces chooses `always` (default), `when opened` (continues
+after first opening), or `never` (words-only). The progress line says which workspace a pending
+one waits for, or that its setting paused embedding. An optional `[embedding_queue]`
+`max_inflight = 1` in `config.toml` bounds concurrent provider calls to 1 (or 2 if set to 2).
 
 **Notifications.** What happens — a save, a workspace added, the connection, indexing — shows in
 a corner as a toast, saying how long ago it came ("now", "15s ago"). Up to three show at once, the
@@ -172,7 +178,8 @@ About names the author, Yong Sung John Lee, and the license, Apache 2.0 (NOTICE)
 The status line ends with semantic search's state: a green dot and "semantic search" while a
 provider answers, a red one and "lexical search" while it doesn't (none in use, a model switch
 under way, or the provider not answering). While the provider embeds, a spinner turns beside a bar
-of the sections covered.
+of the sections covered. A model switch notifies when search is temporarily words-only and when
+semantic search returns; a search already open refreshes its hits without another keystroke.
 
 A save writes only over the version the note was opened at. If the note changed on disk since, the
 TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or

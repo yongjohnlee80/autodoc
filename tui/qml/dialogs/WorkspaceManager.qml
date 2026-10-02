@@ -21,6 +21,7 @@ Dialog {
         Button { text: "&Add…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddWorkspace() }
         Button { text: "&Rename…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRenameWorkspace(managerTable.currentIndex) }
         Button { text: "&Section…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startSectionSize(managerTable.currentIndex) }
+        Button { text: "&Embedding…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEmbeddingPolicy(managerTable.currentIndex) }
         Button { text: "&Delete…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemoveWorkspace(managerTable.currentIndex) }
         Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }

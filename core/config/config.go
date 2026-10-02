@@ -9,6 +9,8 @@
 //
 //	[follow]
 //	poll_interval = "2s"        # the watch fallback's listing interval
+//	[embedding_queue]
+//	max_inflight = 1           # requests to the shared provider, 1 or 2
 //
 // Nor are the embedding providers: they are the store's too, with their keys sealed, added and
 // chosen in the TUI's Preferences.
@@ -33,8 +35,14 @@ var ErrInvalid = errors.New("config: invalid")
 
 // Config is the whole file, with defaults filled in.
 type Config struct {
-	Server Server `toml:"server"`
-	Follow Follow `toml:"follow"`
+	Server         Server         `toml:"server"`
+	Follow         Follow         `toml:"follow"`
+	EmbeddingQueue EmbeddingQueue `toml:"embedding_queue"`
+}
+
+// EmbeddingQueue bounds concurrent provider calls across every workspace.
+type EmbeddingQueue struct {
+	MaxInflight int `toml:"max_inflight"`
 }
 
 // Server is where the daemon listens and keeps its state.
@@ -134,6 +142,12 @@ func Load(file string) (*Config, error) {
 
 // normalize fills defaults, expands roots, and checks what can be checked without the filesystem.
 func (c *Config) normalize() error {
+	if c.EmbeddingQueue.MaxInflight == 0 {
+		c.EmbeddingQueue.MaxInflight = 1
+	}
+	if c.EmbeddingQueue.MaxInflight < 1 || c.EmbeddingQueue.MaxInflight > 2 {
+		return fmt.Errorf("%w: embedding_queue.max_inflight must be 1 or 2", ErrInvalid)
+	}
 	if c.Follow.PollInterval.Duration == 0 {
 		c.Follow.PollInterval.Duration = DefaultPollInterval
 	}

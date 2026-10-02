@@ -133,6 +133,10 @@ func (h *Host) state() map[string]any {
 		"App.sectionTitle":         "section size",
 		"App.sectionSize":          "512",
 		"App.sectionError":         "",
+		"App.policyTitle":          "embedding",
+		"App.embeddingPolicy":      "always",
+		"App.policyError":          "",
+		"App.workspaceIndex":       0,
 		"App.removeQuestion":       "",
 
 		"App.helpText":  helpText,

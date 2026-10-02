@@ -223,3 +223,36 @@ func TestOpensTheNamedWorkspace(t *testing.T) {
 		t.Errorf("Remember was told %v, want [beta]", entered)
 	}
 }
+
+func TestWorkspacePickerStartsAtTheCurrentWorkspace(t *testing.T) {
+	d := startManaged(t, map[string]string{"alpha": noteDir(t, "a.md", "alpha\n"), "beta": noteDir(t, "b.md", "beta\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta"})
+	r.s.WaitForText(t, "· beta")
+	r.h.p.Post(r.h.pickWorkspace)
+	r.s.WaitForText(t, "workspace")
+	r.keys(t, enter())
+	if selected := onLoop(r, func() string { return r.h.ws }); selected != "beta" {
+		t.Fatalf("Enter on the highlighted workspace switched to %q; want current beta", selected)
+	}
+}
+
+func TestWorkspaceEmbeddingPolicyIsSetInManager(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "alpha\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(r.h.manageWorkspaces)
+	r.s.WaitForText(t, "Embedding…")
+	r.h.p.Post(func() { r.h.startEmbeddingPolicy(0) })
+	r.s.WaitForText(t, "embedding · kb")
+	r.h.p.Post(func() { r.h.saveEmbeddingPolicy("not-a-policy") })
+	r.s.WaitForText(t, "embedding policy must be always, when opened, or never")
+	r.h.p.Post(func() { r.h.saveEmbeddingPolicy("never") })
+	r.s.WaitForText(t, "kb: embedding never")
+	ws, err := d.db.Workspaces(context.Background())
+	if err != nil || len(ws) != 1 {
+		t.Fatalf("workspaces: %+v, %v", ws, err)
+	}
+	if policy, err := d.db.EmbeddingPolicy(context.Background(), ws[0].ID); err != nil || policy != store.EmbeddingNever {
+		t.Fatalf("stored policy = %q, %v; want never", policy, err)
+	}
+}

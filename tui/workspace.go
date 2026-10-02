@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // THE WORKSPACES — the daemon's, the one in use, and the manager that adds, renames and deletes
 // them (the store keeps them; the daemon serves each while it exists).
 
 type wsInfo struct {
-	name, root, state string
-	sectionTokens     int64
+	name, root, state, embeddingPolicy string
+	sectionTokens                      int64
 }
 
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
@@ -31,7 +32,7 @@ func (h *Host) loadWorkspaces() {
 		var out []wsInfo
 		for _, w := range asList(res) {
 			m := asMap(w)
-			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens")})
+			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"), embeddingPolicy: str(m, "embedding_policy")})
 		}
 		return answer{list: out}
 	}, func(a answer) {
@@ -52,7 +53,7 @@ func (h *Host) loadWorkspaces() {
 				label += "  (" + w.state + ")"
 			}
 			rows = append(rows, rowOf{"key": w.name, "label": label})
-			managed = append(managed, rowOf{"key": w.name, "name": w.name, "state": w.state, "root": w.root, "section": fmt.Sprint(w.sectionTokens)})
+			managed = append(managed, rowOf{"key": w.name, "name": w.name, "state": w.state, "root": w.root, "section": fmt.Sprint(w.sectionTokens), "policy": w.embeddingPolicy})
 			if w.state == "ready" && (pick < 0 || w.name == h.ws) {
 				pick = i
 			}
@@ -73,7 +74,17 @@ func (h *Host) loadWorkspaces() {
 }
 
 // pickWorkspace opens the picker.
-func (h *Host) pickWorkspace() { h.open("workspacePicker") }
+func (h *Host) pickWorkspace() {
+	current := 0
+	for i, w := range h.wsList {
+		if w.name == h.ws {
+			current = i
+			break
+		}
+	}
+	h.set("App.workspaceIndex", current)
+	h.open("workspacePicker")
+}
 
 // useWorkspace switches to the picker's row, asking first over unsaved changes.
 func (h *Host) useWorkspace(i int) {
@@ -81,6 +92,10 @@ func (h *Host) useWorkspace(i int) {
 		return
 	}
 	w := h.wsList[i]
+	if w.name == h.ws {
+		h.closeDialog("workspacePicker")
+		return
+	}
 	if w.state != "ready" {
 		h.notify(fmt.Sprintf("%s cannot be served: its root is gone (Go › Manage workspaces…)", w.name))
 		return
@@ -93,12 +108,19 @@ func (h *Host) useWorkspace(i int) {
 func (h *Host) enter(name string) {
 	h.epoch++
 	h.ws, h.entered, h.notesAll = name, true, nil
+	h.focusSent = time.Time{}
 	if h.remember != nil {
 		h.remember(name)
 	}
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
 	h.closeNote()
 	h.prog = progress{}
+	h.searchSeq++
+	h.hitList = nil
+	h.hits.Reset(nil)
+	h.set("App.hitsTitle", "hits · searching "+name)
+	h.showPreview("search", "", "", 0)
+	h.refreshSearch()
 	h.listNotes()
 	h.poll()
 }
@@ -171,6 +193,34 @@ func (h *Host) startSectionSize(i int) {
 	h.setField("App.sectionSize", strconv.FormatInt(w.sectionTokens, 10))
 	h.set("App.sectionError", "128–2048 estimated tokens; changing this re-chunks the workspace")
 	h.open("workspaceSection")
+}
+
+func (h *Host) startEmbeddingPolicy(i int) {
+	w, ok := h.managerRow(i)
+	if !ok {
+		return
+	}
+	h.policyWorkspace = w.name
+	h.set("App.policyTitle", "embedding · "+w.name)
+	h.setField("App.embeddingPolicy", w.embeddingPolicy)
+	h.set("App.policyError", "always · when opened · never (words only)")
+	h.open("workspacePolicy")
+}
+
+func (h *Host) saveEmbeddingPolicy(policy string) {
+	name := h.policyWorkspace
+	do(h, func(ctx context.Context) error {
+		_, err := h.call(ctx, "workspace.embedding_policy", name, strings.TrimSpace(policy))
+		return err
+	}, func(err error) {
+		if err != nil {
+			h.set("App.policyError", "not saved: "+wireMessage(err))
+			h.open("workspacePolicy")
+			return
+		}
+		h.notify(fmt.Sprintf("%s: embedding %s", name, strings.TrimSpace(policy)))
+		h.loadWorkspaces()
+	})
 }
 
 func (h *Host) saveSectionSize(text string) {
