@@ -8,7 +8,9 @@ const helpText = `KEYS
   Ctrl+G, SPC /, SPC SPC  search the workspace, by words and meaning: the hits on the left,
               the note on the right at the hit
   /           find a word in the pane with the keyboard (the page, the explorer, the links);
-              n and N find it again, forward and back
+              n and N find it again, forward and back. In the page its words are marked, and
+              "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
+              In the Text mode / types a slash: Search › Find in page, Find next, Find previous
   Ctrl+O      open a note: a filter over the workspace's notes, with a preview
   Ctrl+N      new note: a path in the workspace, .md added when it has none
   Ctrl+S      save the note
@@ -50,7 +52,8 @@ WHAT A KEY NEEDS
   are refused.
   Semantic search needs an embedding provider, chosen in System › AI models (SPC a): a local Ollama with
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
-  words, and the hits say "semantic off".
+  words, and the hits say "semantic off". The status line's mark names the model searching, and
+  a change of model clears the search, its words and hits, to start afresh.
   Adding a workspace needs a directory: its **/*.md are indexed, .git skipped. A name or root
   another workspace has is refused. Deleting one removes its index only; its files stay.
   A workspace marked error has a root that is gone: bring the directory back and restart the
