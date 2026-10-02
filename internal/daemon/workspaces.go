@@ -98,6 +98,7 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 		o.MaxEmbedRequests = 1
 	}
 	o.MaxEmbedRequests = min(o.MaxEmbedRequests, 2)
+	o.Provider = withProviderSlots(o.Provider, o.MaxEmbedRequests)
 	if o.Log == nil {
 		o.Log = logger.New()
 	}
@@ -251,7 +252,7 @@ func (m *Workspaces) SetEmbedding(p embed.Provider) {
 	defer m.chg.Unlock()
 	m.queue.stop()
 	defer m.queue.start()
-	m.opts.Provider = p
+	m.opts.Provider = withProviderSlots(p, m.opts.MaxEmbedRequests)
 	m.mu.Lock()
 	running := make(map[string]*served, len(m.served))
 	for name, s := range m.served {

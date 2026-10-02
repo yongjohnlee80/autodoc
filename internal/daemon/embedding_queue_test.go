@@ -193,6 +193,30 @@ func TestTwoSlotsNeverEmbedTheSameWorkspaceTwice(t *testing.T) {
 	queueReady(t, m, "alpha")
 }
 
+func TestProviderLimitIncludesAQueryWaitingBehindABatch(t *testing.T) {
+	p := &queueProvider{entered: make(chan struct{}), release: make(chan struct{})}
+	shared := withProviderSlots(p, 1)
+	first := make(chan error, 1)
+	go func() { _, err := shared.Embed(context.Background(), []string{"document batch"}); first <- err }()
+	select {
+	case <-p.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("batch never entered provider")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := shared.Embed(ctx, []string{"query"}); err != context.Canceled {
+		t.Fatalf("canceled query waited on the batch: %v", err)
+	}
+	if calls, maximum := p.snapshot(); len(calls) != 1 || maximum != 1 {
+		t.Errorf("query reached busy provider: %d calls, maximum %d", len(calls), maximum)
+	}
+	close(p.release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestFocusSwitchTakesTheNextBatch(t *testing.T) {
 	m, _ := open(t)
 	m.opts.Log = logger.Nop{}

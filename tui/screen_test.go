@@ -509,6 +509,31 @@ func TestAWaitingSearchRefreshesWhenEmbeddingFinishes(t *testing.T) {
 	})
 }
 
+func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
+	o := newFakeOllama(t, "embedder")
+	release := o.hold()
+	defer release()
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "search: words")
+	r.keys(t, decltest.Type("unrelatedquery")...)
+	if _, err := r.h.session.Call(context.Background(), "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	// Hold the provider request, then deliver the poll's partial state. The
+	// notification must precede the blocked search RPC's answer.
+	r.h.p.Post(func() { r.h.showProgress(1, 0, embedProgress{on: true, semantic: "partial", texts: 1, pending: 1}, 1) })
+	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
+	release()
+	r.h.p.Post(r.h.poll)
+	r.s.WaitFor(t, "the same query gains a semantic result", func(sc string) bool { return strings.Contains(sc, "hits (1) · hybrid") })
+}
+
 func TestModelSwitchExplainsTemporaryWordsOnlyAndRefreshesSearch(t *testing.T) {
 	o := newFakeOllama(t, "first", "second")
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})

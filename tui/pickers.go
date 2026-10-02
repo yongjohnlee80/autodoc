@@ -32,15 +32,31 @@ func relevanceText(r float64) string { return fmt.Sprintf("%3.0f%%", 100*min(max
 func (h *Host) searchLive(q string) {
 	q = strings.TrimSpace(q)
 	h.searchQuery = q
+	if h.searchCancel != nil {
+		h.searchCancel()
+		h.searchCancel = nil
+	}
 	h.searchSeq++
 	seq, ep, ws := h.searchSeq, h.epoch, h.ws
 	h.marks.Store(termsOf(q))
 	if q == "" {
+		h.searchWaiting = false
+		if h.searchWaitToast {
+			h.notifyDone(toastSearchWait, "search cleared")
+			h.searchWaitToast = false
+		}
 		h.hitList = nil
 		h.hits.Reset(nil)
 		h.set("App.hitsTitle", "hits")
 		h.showPreview("search", "", "", 0)
 		return
+	}
+	queryCtx, cancel := context.WithCancel(h.ctx)
+	h.searchCancel = cancel
+	h.set("App.hitsTitle", "hits · searching "+ws)
+	if remaining := h.prog.emb.working(); remaining > 0 {
+		h.notifyOngoing(toastSearchWait, fmt.Sprintf("search in %s is waiting: %d texts still embedding", ws, remaining))
+		h.searchWaitToast = true
 	}
 	type answer struct {
 		hits           []hit
@@ -48,7 +64,7 @@ func (h *Host) searchLive(q string) {
 		err            error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "search.query", ws, q, map[string]any{"limit": int64(100)})
+		res, err := h.call(queryCtx, "search.query", ws, q, map[string]any{"limit": int64(100)})
 		if err != nil {
 			return answer{err: err}
 		}
@@ -65,7 +81,13 @@ func (h *Host) searchLive(q string) {
 		if seq != h.searchSeq || ep != h.epoch {
 			return
 		}
+		cancel()
+		h.searchCancel = nil
 		if a.err != nil {
+			if h.searchWaitToast {
+				h.notifyDone(toastSearchWait, "search did not complete")
+				h.searchWaitToast = false
+			}
 			h.hitList = nil
 			h.hits.Reset(nil)
 			h.showPreview("search", "", "", 0)
@@ -77,7 +99,28 @@ func (h *Host) searchLive(q string) {
 			}
 			return
 		}
-		h.lastSearchError = ""
+		if a.semantic != "error" {
+			h.lastSearchError = ""
+		}
+		if len(a.hits) == 0 && a.semantic == "partial" && h.prog.emb.working() > 0 {
+			if !h.searchWaiting {
+				h.notify(fmt.Sprintf("no hits yet in %s: %d texts still embedding; search will refresh", ws, h.prog.emb.working()))
+				h.searchWaiting = true
+			}
+		} else {
+			h.searchWaiting = false
+		}
+		if a.semantic == "error" {
+			msg := "semantic search could not answer in " + ws + "; results are by words only"
+			if msg != h.lastSearchError {
+				h.notify(msg)
+				h.lastSearchError = msg
+			}
+		}
+		if len(a.hits) > 0 && h.searchWaitToast {
+			h.notifyDone(toastSearchWait, "search has results in "+ws)
+			h.searchWaitToast = false
+		}
 		h.hitList = a.hits
 		rows := make([]rowOf, len(a.hits))
 		for i, x := range a.hits {
@@ -113,7 +156,18 @@ func (h *Host) openSearch() {
 	h.refreshSearch()
 }
 
-func (h *Host) searchClosed() { h.searchOpen = false }
+func (h *Host) searchClosed() {
+	h.searchOpen = false
+	h.searchSeq++
+	if h.searchCancel != nil {
+		h.searchCancel()
+		h.searchCancel = nil
+	}
+	if h.searchWaitToast {
+		h.notifyDone(toastSearchWait, "search closed")
+		h.searchWaitToast = false
+	}
+}
 
 // refreshSearch replaces results produced under an earlier workspace or model.
 func (h *Host) refreshSearch() {

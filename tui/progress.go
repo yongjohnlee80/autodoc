@@ -176,7 +176,7 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	moved := h.prog.polled && cursor != h.prog.cursor
 	h.prog.docs, h.prog.pending, h.prog.emb = docs, pending, emb
 	h.prog.cursor, h.prog.polled = cursor, true
-	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on {
+	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on || prev.pending != emb.pending || prev.targetPending != emb.targetPending {
 		switch {
 		case emb.target != "" || emb.semantic == "switching":
 			h.notifyOngoing(toastSemantic, "semantic search is temporarily words-only while the new model fills in "+h.ws)
@@ -184,10 +184,16 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 			h.notifyDone(toastSemantic, "semantic search is available again in "+h.ws+" ("+emb.semantic+")")
 		case polled && prev.target != "" && emb.target == "":
 			h.notifyDone(toastSemantic, "model switch ended; search in "+h.ws+" remains words-only")
+		case polled && prev.pending > 0 && emb.pending == 0 && emb.semantic == "ready":
+			h.notifyDone(toastSemantic, "semantic search is ready in "+h.ws)
 		}
 		h.refreshSearch()
 	}
 	h.prog.busy = pending > 0 || emb.working() > 0 || (emb.queueState == "paused" && emb.pending > 0)
+	if h.searchWaitToast && emb.working() == 0 {
+		h.notifyDone(toastSearchWait, "embedding finished; search is refreshing in "+h.ws)
+		h.searchWaitToast = false
+	}
 	if was && !h.prog.busy {
 		h.notifyDone(toastProgress, fmt.Sprintf("indexed %d notes", docs))
 	}

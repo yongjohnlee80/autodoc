@@ -27,11 +27,12 @@ const maxNotices = 500
 
 // The toasts' IDs for the ongoing ones, each updated in place.
 const (
-	toastProgress   = "progress"   // indexing and embedding
-	toastConnection = "connection" // connecting, and a connection that failed
-	toastPlugin     = "plugin"     // a plugin cloned, fetched and built
-	toastWarming    = "warming"    // the daemon starting up: a first scan, a provider being set up
-	toastSemantic   = "semantic"   // model switch: lexical until the new model fills
+	toastProgress   = "progress"    // indexing and embedding
+	toastConnection = "connection"  // connecting, and a connection that failed
+	toastPlugin     = "plugin"      // a plugin cloned, fetched and built
+	toastWarming    = "warming"     // the daemon starting up: a first scan, a provider being set up
+	toastSemantic   = "semantic"    // model switch: lexical until the new model fills
+	toastSearchWait = "search-wait" // an open search waiting on embedding work
 )
 
 type notice struct {

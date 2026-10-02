@@ -115,6 +115,10 @@ func (h *Host) enter(name string) {
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
 	h.closeNote()
 	h.prog = progress{}
+	if h.searchCancel != nil {
+		h.searchCancel()
+		h.searchCancel = nil
+	}
 	h.searchSeq++
 	h.hitList = nil
 	h.hits.Reset(nil)
