@@ -69,6 +69,10 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.find":              oneString("App.find", "a word or phrase", h.startFind),
 		"App.findCancelled":     none(h.findCancelled),
 		"App.findNext":          none(h.findNext),
+		"App.openFindInPage":    none(h.openFindInPage),
+		"App.findAgainNext":     none(func() { h.findAgain(+1) }),
+		"App.findAgainPrevious": none(func() { h.findAgain(-1) }),
+		"App.clearFind":         none(h.clearFind),
 		"App.findPrevious":      none(h.findPrevious),
 		"App.openBacklink":      oneNumber("App.openBacklink", "a row", h.openBacklink),
 
