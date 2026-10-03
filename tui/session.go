@@ -24,10 +24,12 @@ func (h *Host) start() {
 				h.setWhere("autodoc [older backend]")
 				h.notifyOngoing(toastConnection, fmt.Sprintf("the backend is autodoc %s (protocol %d), older than this TUI (%d): System › Restart backend… starts the installed one",
 					me.Version, me.Server, me.Client))
+				h.showMismatch(me)
 			case errors.As(err, &me):
 				h.setWhere("autodoc [newer backend]")
 				h.notifyOngoing(toastConnection, fmt.Sprintf("this TUI (protocol %d) is older than the backend, autodoc %s (%d): quit and start the installed autodoc",
 					me.Client, me.Version, me.Server))
+				h.showMismatch(me)
 			case errors.As(err, &ce):
 				h.notifyOngoing(toastConnection, fmt.Sprintf("connect failed: no daemon answered in %s (Help › About)", ce.Window))
 			default:
@@ -36,6 +38,8 @@ func (h *Host) start() {
 			h.set("App.aboutText", h.aboutText()+"\n\nThe last connect failed:\n"+err.Error())
 			return
 		}
+		h.closeMismatch()
+		h.mismatchRecovery = false
 		if h.restartFrom != "" {
 			h.notifyDone(toastConnection, fmt.Sprintf("backend restarted: autodoc %s → %s", h.restartFrom, h.session.Version()))
 			h.restartFrom, h.restartPID = "", 0

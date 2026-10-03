@@ -151,7 +151,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
-		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Index: ix, Docs: docs.New(fsys, md), Following: f.Status, Warming: o.warming})
+		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, md), Following: f.Status, Warming: o.warming})
 		// wait until the notes are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)

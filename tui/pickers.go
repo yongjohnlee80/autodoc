@@ -424,9 +424,12 @@ func (h *Host) searchHighlighter() highlight.Highlighter { return markedHighligh
 // markedHighlighter is Markdown's, with the words in m marked over it (the Alert style), read
 // afresh on every line: the preview's for the search's words, the page's for the find's.
 func markedHighlighter(m *marks) highlight.Highlighter {
-	md := markdown.Highlighter()
+	return markedHighlighterWith(m, markdown.Highlighter())
+}
+
+func markedHighlighterWith(m *marks, base highlight.Highlighter) highlight.Highlighter {
 	return highlight.HighlighterFunc(func(line string, prev highlight.State) ([]highlight.Span, highlight.State) {
-		spans, next := md.HighlightBlock(line, prev)
+		spans, next := base.HighlightBlock(line, prev)
 		terms := m.load()
 		if len(terms) == 0 || line == "" {
 			return spans, next

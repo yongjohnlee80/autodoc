@@ -78,7 +78,9 @@ type Host struct {
 	marks               marks
 	findMarks           marks                 // the page find's words, as the page's highlighter marks them (find.go)
 	findHL              highlight.Highlighter // the page's: Markdown, the find's words marked over it
-	openAt              int                   // where the next note opened puts the cursor, a byte offset; -1 for its start
+	textFindHL          highlight.Highlighter
+	yamlFindHL          highlight.Highlighter
+	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find       findState
@@ -86,9 +88,10 @@ type Host struct {
 	linksAt    int
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
-	prefs     prefs
-	connected bool // to the daemon: the status line shows while not (prefs.go)
-	panelOpen map[string]bool
+	prefs                          prefs
+	connected                      bool // to the daemon: the status line shows while not (prefs.go)
+	mismatchOpen, mismatchRecovery bool
+	panelOpen                      map[string]bool
 
 	// the embedding providers (providers.go)
 	providerList                    []providerRow
@@ -105,15 +108,18 @@ type Host struct {
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
-	ws        string
-	focusSent time.Time
-	entered   bool // ws was entered on this connection's listing
+	ws               string
+	fileTypesPending bool
+	patternWorkspace string
+	focusSent        time.Time
+	entered          bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
 	restartPID  int64
 	remember    func(name string)
 	installed   func() (string, error) // Options.Installed
+	browser     func(context.Context, string) error
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
 	// test's process, so its test waits on the daemon instead
 	awaitExit func(ctx context.Context, pid int64) bool
@@ -200,6 +206,7 @@ func newHost(session *Session, opt Options) *Host {
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed,
 		awaitExit:      awaitExit,
+		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),
 		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:        tuidecl.NewListModel("key", "path"),
@@ -260,7 +267,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.theme = themeOf(src)
 	return append(opts,
 		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()},
-			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()}),
+			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()},
+			highlight.Definition{Name: "Plain text (find)", Highlighter: h.textHighlighter()},
+			highlight.Definition{Name: "YAML (find)", Highlighter: h.yamlHighlighter()}),
 		tuidecl.Sources(h.state()),
 		tuidecl.Handlers(h.commands()),
 		tuidecl.ErrorSink(h.keep),

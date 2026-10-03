@@ -1,16 +1,19 @@
 package index
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/logger"
@@ -444,6 +447,11 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.delete = true // a directory now, a symlink, or outside include / inside exclude
 		return p
 	}
+	switch strings.ToLower(path.Ext(w.path)) {
+	case ".doc", ".docx", ".odt", ".pdf":
+		p.delete = true
+		return p
+	}
 	if !w.force {
 		if v, ok := x.store.Version(w.path); ok && v == fi.Version && x.store.indexer(w.path) == p.indexer {
 			p.skip = true
@@ -476,11 +484,26 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.err, p.tooLarge = tooLarge(w.path), true
 		return p
 	}
-	doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 	p.version = fi.Version
-	p.meta = readMeta(doc, w.path)
-	p.chunks = chunkDocWithLimit(doc, p.meta.title, tokens)
-	p.links = extractLinks(doc, w.path, x.opts.Match)
+	extension := strings.ToLower(path.Ext(w.path))
+	if extension == ".txt" || extension == ".yaml" || extension == ".yml" {
+		if !utf8.Valid(src) || bytes.IndexByte(src, 0) >= 0 {
+			p.err = fmt.Errorf("%s: not UTF-8 text", w.path)
+			return p
+		}
+	}
+	switch extension {
+	case ".txt":
+		p.meta.title = strings.TrimSuffix(path.Base(w.path), path.Ext(w.path))
+		p.chunks = chunkPlainText(src, p.meta.title, tokens)
+	case ".yaml", ".yml":
+		p.meta, p.chunks = prepareYAML(src, w.path, tokens)
+	default:
+		doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
+		p.meta = readMeta(doc, w.path)
+		p.chunks = chunkDocWithLimit(doc, p.meta.title, tokens)
+		p.links = extractLinks(doc, w.path, x.opts.Match)
+	}
 	x.mu.Lock()
 	x.parses++
 	x.mu.Unlock()

@@ -24,7 +24,7 @@ import (
 // the layout of the rows the indexer writes; the store's own schema is its scripts
 // (sql/deployments).
 const (
-	ChunkerVersion = 3
+	ChunkerVersion = 5
 	SchemaVersion  = 3
 )
 

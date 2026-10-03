@@ -15,16 +15,18 @@ import (
 // by these names, and nothing else of the program.
 func (h *Host) commands() map[string]decl.HandlerFunc {
 	return map[string]decl.HandlerFunc{
-		"App.save":          none(h.save),
-		"App.reload":        none(h.reload),
-		"App.newNote":       none(h.newNote),
-		"App.createNote":    oneString("App.createNote", "a path", h.createNote),
-		"App.quit":          none(h.quit),
-		"App.quitConfirmed": none(func() { h.p.Quit() }),
-		"App.edited":        none(h.edited),
-		"App.syncMode":      none(h.syncMode),
-		"App.unsaved":       oneString("App.unsaved", "save, discard or stay", h.unsaved),
-		"App.conflict":      oneString("App.conflict", "keep, reload or overwrite", h.conflict),
+		"App.save":           none(h.save),
+		"App.reload":         none(h.reload),
+		"App.previewHTML":    none(h.previewHTML),
+		"App.previewDiagram": none(h.previewDiagram),
+		"App.newNote":        none(h.newNote),
+		"App.createNote":     oneString("App.createNote", "a path", h.createNote),
+		"App.quit":           none(h.quit),
+		"App.quitConfirmed":  none(func() { h.p.Quit() }),
+		"App.edited":         none(h.edited),
+		"App.syncMode":       none(h.syncMode),
+		"App.unsaved":        oneString("App.unsaved", "save, discard or stay", h.unsaved),
+		"App.conflict":       oneString("App.conflict", "keep, reload or overwrite", h.conflict),
 
 		// the pickers
 		"App.openSearch":    none(h.openSearch),
@@ -87,6 +89,9 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.startSectionSize":         oneNumber("App.startSectionSize", "a row", h.startSectionSize),
 		"App.saveSectionSize":          oneString("App.saveSectionSize", "a size", h.saveSectionSize),
 		"App.startEmbeddingPolicy":     oneNumber("App.startEmbeddingPolicy", "a row", h.startEmbeddingPolicy),
+		"App.startPatterns":            oneNumber("App.startPatterns", "a row", h.startPatterns),
+		"App.editActivePatterns":       none(h.editActivePatterns),
+		"App.savePatterns":             twoStrings("App.savePatterns", "include and exclude rules", h.savePatterns),
 		"App.saveEmbeddingPolicy":      oneString("App.saveEmbeddingPolicy", "a policy", h.saveEmbeddingPolicy),
 		"App.startRemoveWorkspace":     oneNumber("App.startRemoveWorkspace", "a row", h.startRemoveWorkspace),
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
@@ -94,9 +99,13 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		// the backend
 		"App.startRestart":     none(h.startRestart),
 		"App.restartConfirmed": none(h.restartConfirmed),
+		"App.restartMismatch":  none(h.restartMismatch),
+		"App.quitMismatch":     none(h.quitMismatch),
 
 		// the preferences
 		"App.openPrefs":           none(h.openPrefs),
+		"App.openFileTypes":       none(h.openFileTypes),
+		"App.setFileType":         numberAndString("App.setFileType", "an enabled choice and extension", h.setFileType),
 		"App.openAIModels":        none(h.openAIModels),
 		"App.setKeymap":           oneString("App.setKeymap", "vim or text", h.setKeymap),
 		"App.setKeymapIndex":      oneNumber("App.setKeymapIndex", "a row", h.setKeymapIndex),
@@ -104,6 +113,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.useTheme":            oneString("App.useTheme", "a theme's name", h.useTheme),
 		"App.setThemeIndex":       oneNumber("App.setThemeIndex", "a row", h.setThemeIndex),
 		"App.toggleMenuBar":       none(h.toggleMenuBar),
+		"App.leaderMenuBar":       none(h.leaderMenuBar),
 		"App.toggleStatusLine":    none(h.toggleStatusLine),
 		"App.toggleWrap":          none(h.toggleWrap),
 		"App.toggleLineNumbers":   none(h.toggleLineNumbers),

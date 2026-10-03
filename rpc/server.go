@@ -34,8 +34,8 @@ import (
 // sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
 // declaring the daemon's number, to start the installed one in its place.
 //
-// Protocol 6 added workspace.focus for daemon-wide embedding priority.
-const Protocol int64 = 6
+// Protocol 7 adds workspace.set_patterns for workspace admission changes.
+const Protocol int64 = 7
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"

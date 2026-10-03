@@ -83,7 +83,11 @@ func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 // tree as it is, its open rows open (the workspaces are listed again on every connect, create and
 // manager change).
 func (h *Host) showWorkspacesInExplorer(list []wsInfo) {
-	if h.explorerTop != nil && slices.Equal(h.explorerTop, list) {
+	if h.explorerTop != nil && slices.EqualFunc(h.explorerTop, list, func(a, b wsInfo) bool {
+		return a.name == b.name && a.root == b.root && a.state == b.state &&
+			a.sectionTokens == b.sectionTokens && a.embeddingPolicy == b.embeddingPolicy &&
+			slices.Equal(a.include, b.include) && slices.Equal(a.exclude, b.exclude)
+	}) {
 		return
 	}
 	h.explorerTop = slices.Clone(list)

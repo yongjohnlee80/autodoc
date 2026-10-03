@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"io"
 	pathpkg "path"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/vfs"
@@ -52,10 +54,22 @@ type Doc struct {
 }
 
 func (d *Docs) check(path string) error {
+	switch strings.ToLower(pathpkg.Ext(path)) {
+	case ".doc", ".docx", ".odt", ".pdf":
+		return fmt.Errorf("%w: %s", ErrNotEligible, path)
+	}
 	if d.eligible != nil && !d.eligible(path) {
 		return fmt.Errorf("%w: %s", ErrNotEligible, path)
 	}
 	return nil
+}
+
+func structuredText(path string) bool {
+	switch strings.ToLower(pathpkg.Ext(path)) {
+	case ".txt", ".yaml", ".yml":
+		return true
+	}
+	return false
 }
 
 // Read returns the document at path with the version its content was read at. The file is stat'ed
@@ -90,6 +104,9 @@ func (d *Docs) Read(ctx context.Context, path string) (Doc, error) {
 			return Doc{}, err
 		}
 		if after.Version == before.Version && len(content) <= MaxSize {
+			if structuredText(path) && (!utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0) {
+				return Doc{}, fmt.Errorf("%w: %s is not UTF-8 text", ErrNotEligible, path)
+			}
 			return Doc{Content: content, Version: after.Version}, nil
 		}
 		if attempt == 4 {
@@ -107,6 +124,9 @@ func (d *Docs) Write(ctx context.Context, path string, content []byte, want vfs.
 	}
 	if len(content) > MaxSize {
 		return "", fmt.Errorf("%w: %d bytes", ErrTooLarge, len(content))
+	}
+	if structuredText(path) && (!utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0) {
+		return "", fmt.Errorf("%w: %s is not UTF-8 text", ErrNotEligible, path)
 	}
 	var fi vfs.FileInfo
 	var err error

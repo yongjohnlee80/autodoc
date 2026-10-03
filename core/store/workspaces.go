@@ -122,6 +122,9 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 		}
 		for _, w := range ws {
 			info := WorkspaceInfo{Workspace: *w}
+			if w.IncludeEmpty != 0 {
+				info.Include = []string{}
+			}
 			ps, err := s.Workspace(w.ID).Patterns(tx).OrderBy(dao.Asc(ByKey)).Select()
 			if err != nil {
 				return err
@@ -145,7 +148,11 @@ func (s *Store) AddWorkspace(ctx context.Context, name, root string, include, ex
 	now := time.Now().Unix()
 	w := Workspace{Name: name, Root: root, CreatedAt: now, UpdatedAt: now}
 	err := s.Write(ctx, func(tx *Tx) error {
-		id, err := tx.t.workspaces.On(tx.tx).Set(WorkspaceName, name).Set(WorkspaceRoot, root).
+		includeEmpty := int64(0)
+		if include != nil && len(include) == 0 {
+			includeEmpty = 1
+		}
+		id, err := tx.t.workspaces.On(tx.tx).Set(WorkspaceName, name).Set(WorkspaceRoot, root).Set(WorkspaceIncludeEmpty, includeEmpty).
 			Set(WorkspaceCreatedAt, now).Set(WorkspaceUpdatedAt, now).Insert()
 		if err != nil {
 			return taken(err)
@@ -168,6 +175,28 @@ func (s *Store) writePatterns(tx *Tx, id int64, include, exclude []string) error
 		}
 	}
 	return b.Flush()
+}
+
+// SetWorkspacePatterns replaces both pattern lists in one transaction.
+func (s *Store) SetWorkspacePatterns(ctx context.Context, id int64, include, exclude []string) error {
+	return s.Write(ctx, func(tx *Tx) error {
+		includeEmpty := int64(0)
+		if len(include) == 0 {
+			includeEmpty = 1
+		}
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceIncludeEmpty, includeEmpty).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		if err := s.Workspace(id).Patterns(tx).Delete(); err != nil {
+			return err
+		}
+		return s.writePatterns(tx, id, include, exclude)
+	})
 }
 
 // SetWorkspaceExclude replaces workspace id's exclude patterns, in one transaction; its include

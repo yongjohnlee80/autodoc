@@ -65,12 +65,26 @@ A missing file is every default. An unknown setting is an error, so a misspellin
 
 **Workspaces are not configured here.** They are kept in the store: add, rename and delete them in
 the TUI (`Go › Manage workspaces…`) or with `workspace.add`. A workspace has a name (what `--ui` and
-every API call take), a root directory, and include and exclude patterns (`**/*.md`, and `.git/**`
-and `**/node_modules/**`, by default). An excluded directory is never walked or watched. A workspace
+every API call take), a root directory, and include and exclude patterns. New workspaces include
+`**/*.md`, `**/*.txt`, `**/*.yaml`, and `**/*.yml`, and exclude `.git/**` and `**/node_modules/**`
+by default. An excluded directory is never walked or watched. A workspace
 added before node_modules joined the defaults, still with `.git/**` alone, moves to the current
-default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
-`**` matches any number of whole segments. A config file that still has a `[[workspace]]` section is
+default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are
+root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
+`**` matches any number of whole segments. Bounded brace alternatives such as `**/*.{md,txt}` are
+expanded before matching. Existing workspaces keep their stored include patterns. A config file
+that still has a `[[workspace]]` section is
 refused with a message saying so.
+
+`Go › Manage workspaces… › Globs…` edits the selected workspace's include and exclude lists.
+Enter semicolon-separated root-relative patterns; a blank include list matches no files. Invalid
+rules leave the stored patterns and running watcher unchanged. Use another workspace for a separate
+directory root rather than trying to combine roots in one rule.
+
+`Options › Editor preferences… › File types…` shows the active workspace's text-format choices.
+Markdown, plain text and YAML can be toggled there; the daemon validates the new patterns and reconciles
+the index before the change is shown. `.doc`, `.docx`, `.odt`, and `.pdf` are Pro-only and unavailable
+in Community, even if a broad include glob names them.
 
 **Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
 added and chosen in the TUI's AI models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
@@ -93,7 +107,7 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 | Group | Verbs |
 | --- | --- |
 | `sys` | `hello`, `shutdown` |
-| `workspace` | `list`, `add(name, root, include?, exclude?)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)` |
+| `workspace` | `list`, `add(name, root, include?, exclude?)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)` |
 | `search` | `query(ws, q, {limit, mode, tags, paths})` |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
@@ -114,6 +128,20 @@ autodoc --ui kb             # in workspace kb; a name the daemon does not have i
 The screen is a page and nothing else: the note, 120 columns wide and centred, the ruler at its
 right edge. With no note open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
 names and saves it as a note. Everything else comes when it is asked for:
+
+`File › Preview HTML in browser` renders the current Markdown editor buffer (including unsaved
+edits) into an offline, light/dark themed cache file and opens it with the system browser. A
+browser-launch error is reported in the TUI. Export a Markdown file without the daemon with
+`autodoc --export=html --theme=light --output=/path/page.html /path/note.md` or use
+`--export=text` for stripped text. Export requires an explicit destination and refuses to
+overwrite its source. Remote images are represented by their alt text in HTML exports; scripts
+and remote resources are not loaded.
+
+`File › Preview Mermaid diagram…` shows a terminal graph for a Mermaid fenced block. The block
+under the cursor wins; otherwise the first is used. Basic flowcharts and sequences are supported;
+unsupported constructs show a diagnostic alongside their unchanged source. The preview text uses
+the active document theme, including light and dark. Supported diagrams render as offline SVG
+in HTML exports; unsupported constructs remain visible as source with a diagnostic.
 
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`

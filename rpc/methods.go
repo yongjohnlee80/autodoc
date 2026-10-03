@@ -177,6 +177,27 @@ func (s *Server) register() {
 		}
 		return nil, s.workspaces.Rename(ctx, name, to)
 	}, false))
+	s.handle("workspace.set_patterns", s.verb(3, 3, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "workspace name")
+		if err != nil {
+			return nil, err
+		}
+		include, err := strList(p[1], "include")
+		if err != nil {
+			return nil, err
+		}
+		exclude, err := strList(p[2], "exclude")
+		if err != nil {
+			return nil, err
+		}
+		manager, ok := s.workspaces.(interface {
+			SetPatterns(context.Context, string, []string, []string) error
+		})
+		if !ok {
+			return nil, errs.ErrUnsupported
+		}
+		return nil, manager.SetPatterns(ctx, name, include, exclude)
+	}, false))
 	s.handle("workspace.section_size", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		name, err := argStr(p, 0, "name")
 		if err != nil {

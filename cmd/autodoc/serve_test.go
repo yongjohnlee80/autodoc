@@ -307,7 +307,7 @@ func TestWorkspaceVerbs(t *testing.T) {
 		t.Fatal(err)
 	}
 	added := call(t, cli, "workspace.add", "kb", root).(map[string]any)
-	if added["name"] != "kb" || added["state"] != "ready" || fmt.Sprint(added["include"]) != "[**/*.md]" {
+	if added["name"] != "kb" || added["state"] != "ready" || fmt.Sprint(added["include"]) != "[**/*.md **/*.txt **/*.yaml **/*.yml]" {
 		t.Errorf("workspace.add = %+v", added)
 	}
 	eventually(t, "the added workspace indexed", func() bool {

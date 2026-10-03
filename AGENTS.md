@@ -1,6 +1,6 @@
 # AutoDoc for AI agents
 
-AutoDoc indexes folders of Markdown notes, called **workspaces**, and answers searches over them,
+AutoDoc indexes Markdown, plain-text and YAML files in folders called **workspaces**, and answers searches over them,
 by words and by meaning. This file tells an AI agent how to find documents through it. Prefer it
 to grepping the tree: it ranks by relevance, finds a note by what it means as well as the words it
 shares with the question, follows links between notes, and narrows by folder or tag.
@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 6, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 7, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step
@@ -118,6 +118,7 @@ first.
 | verb | parameters | answers |
 | --- | --- | --- |
 | `workspace.list` | — | `[{name, root, state, include, exclude}]` |
+| `workspace.set_patterns` | workspace, include list, exclude list | replace validated globs and reconcile that workspace; an empty include matches no files |
 | `search.query` | workspace, query, options? | see above |
 | `doc.read` | workspace, path | `{content, version}`: the note's text, and its version |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every note in path order, after `after` (`""` from the start) |
