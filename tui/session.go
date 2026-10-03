@@ -36,6 +36,17 @@ func (h *Host) start() {
 				h.notifyOngoing(toastConnection, "connect failed (Help › About)")
 			}
 			h.set("App.aboutText", h.aboutText()+"\n\nThe last connect failed:\n"+err.Error())
+			if h.mismatchRecovery && !errors.As(err, &me) {
+				// the older backend stopped, and the installed one did not come up: the recovery stays
+				// in its dialog, with the reason, and Restart Now tries the start again (ADR 0212 §8)
+				h.set("App.mismatchQuestion", "The installed backend did not start: "+wireMessage(err)+
+					". Restart Now tries again; Help › About names the daemon's log.")
+				h.set("App.canRestartMismatch", h.session.CanSpawn())
+				if !h.mismatchOpen {
+					h.open("mismatch")
+					h.mismatchOpen = true
+				}
+			}
 			return
 		}
 		h.closeMismatch()
