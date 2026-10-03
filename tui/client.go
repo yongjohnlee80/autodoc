@@ -177,6 +177,13 @@ func (s *Session) probe(ctx context.Context) (OlderServer, error) {
 	return info, nil
 }
 
+// forgetStale drops the older daemon once it has stopped.
+func (s *Session) forgetStale() {
+	s.mu.Lock()
+	s.stale = nil
+	s.mu.Unlock()
+}
+
 // Stale is the older daemon this build's hello was refused by; nil when there is none.
 func (s *Session) Stale() *OlderServer {
 	s.mu.Lock()

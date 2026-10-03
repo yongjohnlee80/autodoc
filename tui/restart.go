@@ -32,7 +32,16 @@ func (h *Host) closeMismatch() {
 }
 
 func (h *Host) restartMismatch() {
-	if !h.session.CanSpawn() || h.session.Stale() == nil {
+	if !h.session.CanSpawn() {
+		return
+	}
+	if h.session.Stale() == nil && !h.connected {
+		// the older backend is gone and the installed one did not start: start it again
+		h.closeMismatch()
+		h.start()
+		return
+	}
+	if h.session.Stale() == nil {
 		return
 	}
 	h.closeMismatch()
@@ -116,6 +125,7 @@ func (h *Host) restartConfirmed() {
 				return
 			}
 			h.restartFrom = old.Version
+			h.session.forgetStale() // it has stopped: a retry starts the installed one, not stops this again
 			h.start()
 		})
 		return

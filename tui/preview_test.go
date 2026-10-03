@@ -3,13 +3,19 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image/png"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 const flowNote = "# Flow\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
@@ -128,5 +134,51 @@ func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("Open in browser opened nothing")
+	}
+}
+
+// A recovery restart whose installed backend does not come up stays in its dialog, saying why, and
+// Restart Now tries the start again (ADR 0212 §8: a failed restart remains actionable).
+func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
+	dir, err := os.MkdirTemp("", "adf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	sock := filepath.Join(dir, "s.sock")
+	old := otherDaemon(t, sock, rpc.Protocol-1)
+	var spawns atomic.Int32
+	sess := NewSession(sock, func() (string, error) {
+		switch spawns.Add(1) {
+		case 1:
+			return "", errors.New("the binary is missing")
+		case 2:
+			startDaemonWith(t, sock, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{version: "v2"})
+			return "", nil
+		}
+		return "", errors.New("spawned already") // the test's end drops the connection
+	})
+	r := runTUI(t, sess, Options{})
+	r.s.WaitFor(t, "the mismatch dialog", func(sc string) bool { return strings.Contains(sc, "Restart Now") })
+	onLoop(r, func() bool {
+		r.h.awaitExit = func(ctx context.Context, _ int64) bool {
+			select {
+			case <-old:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		return true
+	})
+	r.h.p.Post(r.h.restartMismatch)
+	r.s.WaitFor(t, "the failure in the dialog", func(sc string) bool {
+		flat := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
+		return strings.Contains(flat, "The installed backend did not start") && strings.Contains(sc, "Restart Now")
+	})
+	r.h.p.Post(r.h.restartMismatch)
+	r.s.WaitForText(t, "autodoc v2 · kb")
+	if n := spawns.Load(); n != 2 {
+		t.Fatalf("%d spawns, want the failed one and the retry", n)
 	}
 }
