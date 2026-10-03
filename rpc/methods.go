@@ -101,6 +101,8 @@ var publicErrs = []struct {
 	{store.ErrNoPreferenceName, golibrpc.CodeInvalidParams, "a preference needs a name"},
 	{errNoPreferences, CodeUnsupported, "this server keeps no preferences"},
 	{errNoEmbeddings, CodeUnsupported, "this server keeps no embedding providers"},
+	{errNoEvents, CodeUnsupported, "this server keeps no event log"},
+	{store.ErrEventsExpired, CodeCursorExpired, "the event cursor is outside the retained log: take a snapshot and resume from the head"},
 	{ErrNoSwitch, golibrpc.CodeInvalidParams, "no model switch is under way"},
 	{store.ErrNoProvider, CodeNotFound, "no such embedding provider"},
 	{store.ErrProviderTaken, CodeConflict, "another embedding provider has this name"},
@@ -164,6 +166,7 @@ func wireErr(err error) error {
 
 func (s *Server) register() {
 	s.registerEmbeddings()
+	s.registerEvents()
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {

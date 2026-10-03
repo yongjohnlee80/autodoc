@@ -458,6 +458,26 @@ const (
 	ChangeAt         ChangeField = "at"
 )
 
+// Event is one configuration or lifecycle change, in the daemon-wide log (000009).
+type Event struct {
+	Seq                     int64
+	Kind, Workspace, Client string
+	Detail                  string
+	At                      int64
+}
+
+// EventField names an event column.
+type EventField string
+
+const (
+	EventSeq       EventField = "seq"
+	EventKind      EventField = "kind"
+	EventWorkspace EventField = "workspace"
+	EventClient    EventField = "client"
+	EventDetail    EventField = "detail"
+	EventAt        EventField = "at"
+)
+
 // The sort a table without its own order uses.
 type noSort string
 
@@ -489,6 +509,7 @@ type tables struct {
 	embeddings  *dao.Schema[*Embedding, EmbeddingField, noSort, string]
 	jobs        *dao.Schema[*Job, JobField, noSort, string]
 	changes     *dao.Schema[*Change, ChangeField, noSort, int64]
+	events      *dao.Schema[*Event, EventField, noSort, int64]
 }
 
 func col[R any, T ~string](table string, c T, scan func(R) any) dao.Field[R] {
@@ -723,6 +744,18 @@ func newTables(c dao.DataConn) *tables {
 				ChangeAt:         col("change", ChangeAt, func(x *Change) any { return &x.At }),
 			}),
 			dao.SortMap[*Change, ChangeField, noSort, int64](map[noSort]string{BySeq: `"change"."seq"`})),
+		events: dao.New[*Event, EventField, noSort, int64](c,
+			dao.Table[*Event, EventField, noSort, int64]("event"),
+			dao.ID[*Event, EventField, noSort, int64](EventSeq),
+			dao.Fields[*Event, EventField, noSort, int64](map[EventField]dao.Field[*Event]{
+				EventSeq:       col("event", EventSeq, func(e *Event) any { return &e.Seq }),
+				EventKind:      col("event", EventKind, func(e *Event) any { return &e.Kind }),
+				EventWorkspace: col("event", EventWorkspace, func(e *Event) any { return &e.Workspace }),
+				EventClient:    col("event", EventClient, func(e *Event) any { return &e.Client }),
+				EventDetail:    col("event", EventDetail, func(e *Event) any { return &e.Detail }),
+				EventAt:        col("event", EventAt, func(e *Event) any { return &e.At }),
+			}),
+			dao.SortMap[*Event, EventField, noSort, int64](map[noSort]string{BySeq: `"event"."seq"`})),
 	}
 }
 

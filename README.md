@@ -345,6 +345,12 @@ autodoc --call workspace.list
 autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
 ```
 
+**Several clients share one daemon.** Each TUI keeps its own workspace, open note and search; a
+change one makes to the shared configuration (a model switch, a workspace's rules, schema or
+name) is logged, and the others say so in a notification without moving focus or touching an
+unsaved note. A workspace another client renames is followed; one it deletes leaves your unsaved
+text as an untitled draft.
+
 [AGENTS.md](AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the
 filters (`paths`, `tags`, `facets`, `mode`, `limit`) and the errors.
 

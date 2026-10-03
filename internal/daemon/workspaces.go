@@ -272,9 +272,25 @@ func (m *Workspaces) schemaHolder(id int64, root string) *schemaHolder {
 	h, ok := m.schemas[id]
 	if !ok {
 		h = newSchemaHolder(root, func() { m.revalidate(id) })
+		h.onFileChange = func() { m.event(id, "workspace.schema", "file changed") }
 		m.schemas[id] = h
 	}
 	return h
+}
+
+// event logs a change the daemon itself saw (no client caused it) about workspace id.
+func (m *Workspaces) event(id int64, kind, detail string) {
+	m.mu.Lock()
+	name := ""
+	for n, s := range m.served {
+		if s.id == id {
+			name = n
+		}
+	}
+	m.mu.Unlock()
+	if _, err := m.db.AppendEvent(m.ctx, store.Event{Kind: kind, Workspace: name, Detail: detail}); err != nil {
+		logger.Warning(m.opts.Log, err, "logging event "+kind)
+	}
 }
 
 // revalidate queues the notes of workspace id that its new schema applies to.

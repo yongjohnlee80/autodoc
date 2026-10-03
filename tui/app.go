@@ -118,6 +118,10 @@ type Host struct {
 	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic
+	// the event log's cursor (events.go), and whether the next workspace entered keeps the draft
+	// a peer's removal of this one left
+	evCursor  int64
+	keepDraft bool
 	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
 	outline     *outline.Doc
 	outlineGen  uint64

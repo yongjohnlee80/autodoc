@@ -68,7 +68,7 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	}
 	emb := serving.NewEmbedding(db, ws, nil)
 	emb.Start(ctx)
-	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb))
+	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {

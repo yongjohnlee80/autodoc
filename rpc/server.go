@@ -37,8 +37,8 @@ import (
 //
 // Protocol 7 adds workspace.set_patterns for workspace admission changes. Protocol 8 adds frontmatter
 // schemas (workspace.set_schema, doc.validate, search.query's facets, workspace.list's schema and
-// index.status's diagnosed), doc.outline, and workspace.set_text_extensions with workspace.list's
-// text_extensions.
+// index.status's diagnosed), doc.outline, workspace.set_text_extensions with workspace.list's
+// text_extensions, and sys.events (sys.hello answers the client's token and the log's head).
 const Protocol int64 = 8
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
@@ -148,6 +148,8 @@ type Server struct {
 	workspaces  Workspaces
 	preferences Preferences
 	embeddings  Embeddings
+	events      Events
+	log         logger.Logger
 	version     string
 	instance    string
 	verbs       map[string]bool
@@ -160,6 +162,7 @@ type options struct {
 	log         logger.Logger
 	preferences Preferences
 	embeddings  Embeddings
+	events      Events
 }
 
 // Option configures a Server.
@@ -188,7 +191,8 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	}
 	var id [8]byte
 	_, _ = rand.Read(id[:])
-	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, version: version, instance: hex.EncodeToString(id[:]),
+	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, events: o.events, log: o.log,
+		version: version, instance: hex.EncodeToString(id[:]),
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
@@ -206,6 +210,9 @@ func (s *Server) handle(method string, h golibrpc.Handler) {
 		panic("rpc: duplicate method registration: " + method)
 	}
 	s.verbs[method] = true
+	if spec, ok := eventsOf[method]; ok {
+		h = s.logged(spec, h)
+	}
 	s.rpc.Handle(method, h)
 }
 
@@ -255,7 +262,7 @@ func (s *Server) gate(sess *golibrpc.Session, method string) error {
 
 // hello answers sys.hello({protocol, name}). No protocol is a probe: it is answered, and admits
 // nothing. This build's protocol admits the session; another refuses it for good.
-func (s *Server) hello(_ context.Context, req *golibrpc.Request) (any, error) {
+func (s *Server) hello(ctx context.Context, req *golibrpc.Request) (any, error) {
 	if len(req.Params) > 1 {
 		return nil, invalid("sys.hello takes one map")
 	}
@@ -282,6 +289,16 @@ func (s *Server) hello(_ context.Context, req *golibrpc.Request) (any, error) {
 		return nil, &golibrpc.Error{Code: CodeProtocolMismatch, Message: fmt.Sprintf("protocol mismatch: client %d, server %d", proto, Protocol)}
 	}
 	req.Session.SetValue(sessHello, true)
+	name, _ := info["name"].(string)
+	token := newClientToken(name)
+	req.Session.SetValue(sessClient, token)
+	reply["client"] = token
+	if s.events != nil {
+		// where this client's sys.events begins: what happened before it connected is in its snapshot
+		if _, head, _, err := s.events.Events(ctx, -1, 1); err == nil {
+			reply["events"] = head
+		}
+	}
 	return reply, nil
 }
 
@@ -302,6 +319,8 @@ var errNoSuchWorkspace = errors.New("rpc: no such workspace")
 
 // errNoPreferences answers the preference verbs of a server given no Preferences.
 var errNoPreferences = errors.New("rpc: this server keeps no preferences")
+
+var errNoEvents = errors.New("rpc: this server keeps no event log")
 
 // workspace resolves a verb's first parameter.
 func (s *Server) workspace(params []any) (*Workspace, error) {
