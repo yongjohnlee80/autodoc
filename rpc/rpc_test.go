@@ -188,18 +188,18 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 7's (6 had no workspace.set_patterns; 5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
+// TestVerbsArePinned: the verb surface is Protocol 8's (7 had no workspace.set_schema or doc.validate; 6 had no workspace.set_patterns; 5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
 // index.models; 2 had no preference or embedding verbs; 1 had no workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
-	want := []string{"doc.read", "doc.remove", "doc.rename", "doc.write",
+	want := []string{"doc.read", "doc.remove", "doc.rename", "doc.validate", "doc.write",
 		"embedding.add", "embedding.cancel_switch", "embedding.log", "embedding.model_context", "embedding.models", "embedding.providers", "embedding.remove",
 		"embedding.update", "embedding.usage", "embedding.use",
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
 		"index.changes", "index.list", "index.models", "index.purge_model", "index.reindex", "index.status",
 		"preference.list", "preference.set",
-		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size", "workspace.set_patterns"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 7 {
+		"search.query", "sys.hello", "sys.shutdown", "workspace.add", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size", "workspace.set_patterns", "workspace.set_schema"}
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 8 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }

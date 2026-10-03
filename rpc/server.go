@@ -27,6 +27,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 )
 
 // Protocol is the API's version. A client must declare exactly this one; any change to the verbs,
@@ -34,8 +35,10 @@ import (
 // sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
 // declaring the daemon's number, to start the installed one in its place.
 //
-// Protocol 7 adds workspace.set_patterns for workspace admission changes.
-const Protocol int64 = 7
+// Protocol 7 adds workspace.set_patterns for workspace admission changes. Protocol 8 adds frontmatter
+// schemas (workspace.set_schema, doc.validate, search.query's facets, workspace.list's schema and
+// index.status's diagnosed).
+const Protocol int64 = 8
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -67,6 +70,20 @@ type Workspace struct {
 	Warming        func() []string
 	Searched       func() // any client searched this workspace
 	EmbeddingQueue func() (state, behind string)
+	// FrontmatterSchema is the workspace's frontmatter schema (ADR 0212 §5): the active one, nil for
+	// none, and how its file stands. nil when the server keeps no schemas.
+	FrontmatterSchema func() (*schema.Schema, SchemaStatus)
+}
+
+// SchemaStatus is how a workspace's schema file stands: the stored path ("" for none), whether a
+// valid schema is active and how many fields it declares, and why the file is not valid now (Err,
+// on Line when it is one line's). An invalid edit leaves the last valid schema active.
+type SchemaStatus struct {
+	Path   string
+	Active bool
+	Fields int
+	Err    string
+	Line   int
 }
 
 // Workspaces is the daemon's set of workspaces: what the API serves, and what the workspace verbs

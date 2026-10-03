@@ -55,6 +55,9 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
+  field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
+  names a note's frontmatter problems, only once the workspace has a schema: Manage… › Schema…
+  names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.
   Adding a workspace needs a directory: Markdown, text and YAML are indexed, .git skipped. A name or root
   another workspace has is refused. Deleting one removes its index only; its files stay.
   A workspace marked error has a root that is gone: bring the directory back and restart the

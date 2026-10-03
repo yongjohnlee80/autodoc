@@ -166,8 +166,14 @@ Window {
         palette.highlightedText: Theme.document.highlightedText
         palette.base: Theme.document.base
         palette.text: Theme.document.text
+        Flex {
+        direction: Tui.Vertical
+        // the open note's frontmatter, checked against its workspace's schema as it is typed:
+        // shown only while something is wrong, and never in the way of a save
+        Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
         Editor {
             id: editor
+            Layout.fillHeight: true
             focus: true
             palette.highlight: Theme.document.selection
             palette.highlightedText: Theme.document.selectedText
@@ -181,6 +187,7 @@ Window {
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
             SyntaxHighlighter { definition: App.syntaxDefinition }
+        }
         }
     }
 
@@ -255,6 +262,7 @@ Window {
     WorkspaceRename { id: workspaceRename }
     WorkspaceSection { id: workspaceSection }
     WorkspacePatterns { id: workspacePatterns }
+    WorkspaceSchema { id: workspaceSchema }
     WorkspacePolicy { id: workspacePolicy }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }

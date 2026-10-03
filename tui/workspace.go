@@ -18,6 +18,8 @@ type wsInfo struct {
 	name, root, state, embeddingPolicy string
 	sectionTokens                      int64
 	include, exclude                   []string
+	schema                             schemaInfo
+	textExtensions                     []string // the workspace's own plain-text extensions
 }
 
 func workspacePatterns(value any) []string {
@@ -54,7 +56,9 @@ func (h *Host) loadWorkspaces() {
 		var out []wsInfo
 		for _, w := range asList(res) {
 			m := asMap(w)
-			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"), embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"])})
+			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
+				embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
+				schema: readSchemaInfo(m["schema"])})
 		}
 		return answer{list: out}
 	}, func(a answer) {

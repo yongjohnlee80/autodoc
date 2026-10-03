@@ -237,6 +237,7 @@ func accessors(sc *Scope, tx *Tx) map[string]dao.Named {
 	return map[string]dao.Named{
 		"workspace_pattern": sc.Patterns(tx), "document": sc.Documents(tx), "chunk": sc.Chunks(tx),
 		"doc_tag": sc.Tags(tx), "doc_alias": sc.Aliases(tx), "doc_name": sc.Names(tx),
+		"doc_facet": sc.Facets(tx), "doc_diagnostic": sc.Diagnostics(tx),
 		"link": sc.LinksOut(tx), "model": sc.Models(tx), "embedding": sc.Embeddings(tx),
 		"index_job": sc.Jobs(tx), "change": sc.Changes(tx),
 	}
@@ -311,6 +312,13 @@ func seed(t *testing.T, s *Store, sc *Scope) {
 		}
 		if err := sc.NameBatch(tx).Add(map[DocNameField]any{NameKey: "n", NameDoc: doc, NameIsPath: int64(1)}).Flush(); err != nil {
 			return fmt.Errorf("name: %w", err)
+		}
+		if err := sc.FacetBatch(tx).Add(map[FacetField]any{FacetDoc: doc, FacetName: "status", FacetValue: "active"}).Flush(); err != nil {
+			return fmt.Errorf("facet: %w", err)
+		}
+		if err := sc.DiagnosticBatch(tx).Add(map[DiagnosticField]any{DiagDoc: doc, DiagOrd: int64(0), DiagField: "type",
+			DiagLine: int64(1), DiagRule: "required", DiagMessage: "type is required"}).Flush(); err != nil {
+			return fmt.Errorf("diagnostic: %w", err)
 		}
 		if _, err := sc.LinksOut(tx).Set(LinkSrc, doc).Set(LinkGenFrom, int64(1)).Set(LinkRaw, "[[x]]").
 			Set(LinkName, "x").Set(LinkKind, "wikilink").Insert(); err != nil {

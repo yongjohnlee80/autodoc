@@ -275,6 +275,28 @@ it. One connection writes, and any number read, each from one snapshot:
   (the title and the headings above it). An edit writes only the chunks it changed: each document has
   generations, and a reader sees the old one or the new one, never a mix.
 - **Frontmatter is metadata:** the title, tags and aliases. Inline `#tags` count too.
+- **A frontmatter schema types it.** A workspace may name a YAML schema file
+  (`Go › Manage workspaces… › Schema…`, suggested at `<root>/.autodoc/schema.yaml`). Each Markdown note's
+  frontmatter is checked against it when it is indexed, and in the editor as it is typed. A field
+  the schema admits becomes a facet that search can filter by exactly. A field it does not admit is
+  a diagnostic: shown over the page, counted in `index.status`, and never a reason to refuse a save or
+  to take the note's text out of search. A default is what the facet answers for a missing field;
+  the note is never rewritten. Editing the schema re-checks the notes, keeping their vectors; an
+  invalid edit is reported with its line, and the last valid schema stays in use until it is fixed.
+
+  ```yaml
+  version: 1
+  strict: false          # true: report fields the schema does not declare
+  frontmatter:
+    type:    {type: string, enum: [note, adr, review], required: true}
+    status:  {type: string, enum: [draft, active, archived], default: active}
+    tags:    {type: list, item_type: string}
+    created: {type: date}          # YYYY-MM-DD, or an RFC 3339 time (its date is the facet)
+    count:   {type: integer}
+  ```
+
+  The types are `string`, `integer`, `number`, `boolean`, `date` and `list` (of `item_type`, strings
+  by default; a lone value is a list of one). A required field has no default.
 - **Links are resolved per workspace, as Obsidian does.** A link reaches the note whose path is its name.
   Failing that, it reaches the one note whose file name, path suffix or alias it is, and of several,
   the one nearest the root. A tie leaves it unresolved. Links resolve again whenever a note that could
@@ -290,6 +312,11 @@ it is FTS syntax, and a `*` ending the last word is a prefix.
 - **Links and tags lift a note after fusion.** A note linked from other notes, or tagged with a query
   word, ranks higher.
 - **At most three hits come from one note.**
+- **`field:value` filters by a schema field.** With a schema declaring `type` and `status`,
+  `migration type:adr status:active` finds the words among notes with both values, before any
+  ranking limit; the value is read as the field's type (`count:0x10` is 16). A `field:value` for a
+  field the schema does not declare is searched as words. Filters alone (`type:adr`) list the notes
+  they admit, in path order.
 
 With an embedding provider, search is hybrid. A 1-bit code scan over the chunks is rescored with the
 float vectors, and its results are fused with BM25 by reciprocal rank.
@@ -310,7 +337,7 @@ autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "lim
 ```
 
 [AGENTS.md](AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the
-filters (`paths`, `tags`, `mode`, `limit`) and the errors.
+filters (`paths`, `tags`, `facets`, `mode`, `limit`) and the errors.
 
 ## Semantic search and embedding models
 

@@ -111,8 +111,12 @@ type Host struct {
 	ws               string
 	fileTypesPending bool
 	patternWorkspace string
-	focusSent        time.Time
-	entered          bool // ws was entered on this connection's listing
+	schemaWorkspace  string
+	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
+	fmGen         uint64
+	fmDiagnostics []fmDiagnostic
+	focusSent     time.Time
+	entered       bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
