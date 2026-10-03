@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/diagram"
@@ -24,11 +25,52 @@ const (
 
 type palette struct {
 	background, foreground, accent, muted, surface, border string
+	scheme                                                 string // the color-scheme it declares: light or dark
 }
 
+// palettes are the shipped themes' document colours (golib's tui/decl/themes), so an export and a
+// preview look as the page does; light and dark are required, the others are their own.
 var palettes = map[string]palette{
-	"dark":  {"#1c1c1c", "#d0d0d0", "#87afd7", "#8a8a8a", "#303030", "#585858"},
-	"light": {"#f6f2e7", "#2e2a24", "#2f5f8f", "#7a7163", "#ebe6d9", "#b3aa96"},
+	"dark":  {"#1c1c1c", "#d0d0d0", "#87afd7", "#8a8a8a", "#303030", "#585858", "dark"},
+	"light": {"#f6f2e7", "#2e2a24", "#2f5f8f", "#7a7163", "#ebe6d9", "#b3aa96", "light"},
+	"sepia": {"#f4ecd8", "#5b4636", "#8a5a2b", "#8c7656", "#e6d9b9", "#b5a380", "light"},
+	"retro": {"#0000aa", "#ffff55", "#ffffff", "#aaaaaa", "#00007a", "#555555", "dark"},
+	"mono":  {"#ffffff", "#000000", "#000000", "#555555", "#eeeeee", "#888888", "light"},
+}
+
+// Background is a theme's page colour; dark's for a theme it does not have.
+func Background(theme string) string { return palettes[ThemeOf(theme)].background }
+
+// Themes are the themes an export takes, sorted.
+func Themes() []string {
+	out := make([]string, 0, len(palettes))
+	for name := range palettes {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ThemeOf is the export theme for a TUI theme: its own where it has one, else dark.
+func ThemeOf(tuiTheme string) string {
+	if _, ok := palettes[tuiTheme]; ok {
+		return tuiTheme
+	}
+	return "dark"
+}
+
+// DiagramSVG is a diagram as a standalone SVG in a theme's colours, its own background and font
+// included, for a rasterizer: what a page's CSS gives an inline one.
+func DiagramSVG(model diagram.Model, theme string) (string, error) {
+	colors, ok := palettes[theme]
+	if !ok {
+		return "", fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
+	}
+	svg := diagramSVG(model, colors)
+	// the inline SVG's background and font come from the page; standalone, it carries them
+	open := strings.Index(svg, ">") + 1
+	return svg[:open] + fmt.Sprintf(`<rect width="100%%" height="100%%" fill="%s"/><g font-family="sans-serif" font-size="15">`, colors.background) +
+		svg[open:len(svg)-len("</svg>")] + "</g></svg>", nil
 }
 
 var mermaidBlock = regexp.MustCompile(`(?s)<pre><code class="language-mermaid">(.*?)</code></pre>`)
@@ -39,7 +81,7 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 	case HTML:
 		colors, ok := palettes[theme]
 		if !ok {
-			return nil, fmt.Errorf("export: theme %q must be light or dark", theme)
+			return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 		}
 		forEach(document.Root, func(node *markdown.Node) {
 			if node.Kind == markdown.KindImage {
@@ -62,9 +104,9 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 		var output bytes.Buffer
 		output.WriteString("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n")
 		output.WriteString("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:\">\n")
-		output.WriteString("<meta name=\"color-scheme\" content=\"" + theme + "\">\n")
+		output.WriteString("<meta name=\"color-scheme\" content=\"" + colors.scheme + "\">\n")
 		fmt.Fprintf(&output, "<style>:root{color-scheme:%s;--background:%s;--foreground:%s;--accent:%s;--muted:%s;--surface:%s;--border:%s}",
-			theme, colors.background, colors.foreground, colors.accent, colors.muted, colors.surface, colors.border)
+			colors.scheme, colors.background, colors.foreground, colors.accent, colors.muted, colors.surface, colors.border)
 		output.WriteString("body{max-width:76ch;margin:3rem auto;padding:0 1.5rem;background:var(--background);color:var(--foreground);font:1rem/1.6 system-ui,sans-serif}")
 		output.WriteString("a{color:var(--accent)}pre,code{background:var(--surface)}pre{padding:1rem;overflow:auto;border:1px solid var(--border)}")
 		output.WriteString("blockquote{border-left:.2rem solid var(--accent);padding-left:1rem;color:var(--muted)}table{border-collapse:collapse}th,td{border:1px solid var(--border);padding:.3rem .6rem}")

@@ -57,6 +57,11 @@ WHAT A KEY NEEDS
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
+  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
+  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
+  allow-passthrough on); and rsvg-convert (diagrams) or a headless Chromium or Chrome (HTML).
+  Otherwise a diagram is a terminal graph and HTML opens in the browser, and the preview says
+  which was missing. View › Image previews off compares the two on the same note.
   field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
   names a note's frontmatter problems, only once the workspace has a schema: Manage… › Schema…
   names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.

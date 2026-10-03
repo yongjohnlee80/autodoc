@@ -50,7 +50,7 @@ func main() {
 	call := flag.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
 	exportFormat := flag.String("export", "", "export a Markdown file as html or text")
 	exportOutput := flag.String("output", "", "--export: destination file (required)")
-	exportTheme := flag.String("theme", "light", "--export html: light or dark")
+	exportTheme := flag.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
 	flag.Parse()
 	if flag.NArg() > 0 && !((*ui || *call != "" || *exportFormat != "") && flag.NArg() == 1) {
 		fmt.Fprintln(os.Stderr, "autodoc: unexpected arguments:", flag.Args(), "(only --ui, --call and --export take one argument)")

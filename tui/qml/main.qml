@@ -114,6 +114,7 @@ Window {
             MenuItem { text: "&Hide the menu bar"; checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
             MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
+            MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
             MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
@@ -276,6 +277,7 @@ Window {
     Preferences { id: preferences }
     FileTypes { id: fileTypes }
     Diagram { id: diagram }
+    HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }

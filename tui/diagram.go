@@ -41,11 +41,9 @@ func (h *Host) previewDiagram() {
 	}
 	model, err := diagram.Parse(source)
 	if err != nil {
-		h.set("App.diagramText", fmt.Sprintf("Unsupported Mermaid construct: %v\n\nSource:\n%s", err, source))
-		h.set("App.diagramHelp", "The source remains editable; this terminal renderer supports basic flowcharts and sequences.")
-	} else {
-		h.set("App.diagramText", model.Terminal())
-		h.set("App.diagramHelp", "Terminal graph · colors follow the active document theme")
+		h.showDiagramText(fmt.Sprintf("Unsupported Mermaid construct: %v\n\nSource:\n%s", err, source),
+			"The source remains editable; the renderer supports basic flowcharts and sequences.")
+		return
 	}
-	h.open("diagram")
+	h.showDiagram(model) // an image where it can be, else the terminal graph (preview.go)
 }
