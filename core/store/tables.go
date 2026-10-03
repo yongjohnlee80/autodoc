@@ -18,6 +18,7 @@ type Workspace struct {
 	CommitSeq, ChangeSeq int64
 	SectionTokens        *int64
 	SchemaPath           *string // the frontmatter schema file: absolute, or under Root; nil: none (000007)
+	TextExtensions       *string // a JSON array of the workspace's own plain-text extensions; nil: none (000008)
 	CreatedAt, UpdatedAt int64
 }
 
@@ -34,6 +35,7 @@ const (
 	WorkspaceEmbeddingPolicy WorkspaceField = "embedding_policy"
 	WorkspaceIncludeEmpty    WorkspaceField = "include_empty"
 	WorkspaceSchemaPath      WorkspaceField = "schema_path"
+	WorkspaceTextExtensions  WorkspaceField = "text_extensions"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
 )
@@ -512,6 +514,7 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceEmbeddingPolicy: col("workspace", WorkspaceEmbeddingPolicy, func(w *Workspace) any { return &w.EmbeddingPolicy }),
 				WorkspaceIncludeEmpty:    col("workspace", WorkspaceIncludeEmpty, func(w *Workspace) any { return &w.IncludeEmpty }),
 				WorkspaceSchemaPath:      col("workspace", WorkspaceSchemaPath, func(w *Workspace) any { return &w.SchemaPath }),
+				WorkspaceTextExtensions:  col("workspace", WorkspaceTextExtensions, func(w *Workspace) any { return &w.TextExtensions }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),

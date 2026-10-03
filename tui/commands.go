@@ -112,6 +112,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		// the preferences
 		"App.openPrefs":           none(h.openPrefs),
 		"App.openFileTypes":       none(h.openFileTypes),
+		"App.setCustomTypes":      oneString("App.setCustomTypes", "extensions", h.setCustomTypes),
 		"App.setFileType":         numberAndString("App.setFileType", "an enabled choice and extension", h.setFileType),
 		"App.openAIModels":        none(h.openAIModels),
 		"App.setKeymap":           oneString("App.setKeymap", "vim or text", h.setKeymap),

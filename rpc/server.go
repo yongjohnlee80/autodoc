@@ -37,7 +37,8 @@ import (
 //
 // Protocol 7 adds workspace.set_patterns for workspace admission changes. Protocol 8 adds frontmatter
 // schemas (workspace.set_schema, doc.validate, search.query's facets, workspace.list's schema and
-// index.status's diagnosed) and doc.outline.
+// index.status's diagnosed), doc.outline, and workspace.set_text_extensions with workspace.list's
+// text_extensions.
 const Protocol int64 = 8
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
@@ -73,6 +74,8 @@ type Workspace struct {
 	// FrontmatterSchema is the workspace's frontmatter schema (ADR 0212 §5): the active one, nil for
 	// none, and how its file stands. nil when the server keeps no schemas.
 	FrontmatterSchema func() (*schema.Schema, SchemaStatus)
+	// TextExtensions are the workspace's own plain-text extensions (ADR 0212 §3); nil for none.
+	TextExtensions func() []string
 }
 
 // SchemaStatus is how a workspace's schema file stands: the stored path ("" for none), whether a

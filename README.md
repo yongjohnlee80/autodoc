@@ -83,8 +83,11 @@ directory root rather than trying to combine roots in one rule.
 
 `Options › Editor preferences… › File types…` shows the active workspace's text-format choices.
 Markdown, plain text and YAML can be toggled there; the daemon validates the new patterns and reconciles
-the index before the change is shown. `.doc`, `.docx`, `.odt`, and `.pdf` are Pro-only and unavailable
-in Community, even if a broad include glob names them.
+the index before the change is shown. Your own text types (`.log`, `.rst`, …) are entered there too:
+each is read as UTF-8 plain text by declaration (never sniffed), admitted with an include unless the
+rules already admit it, and previewed as indexed or not by the current rules. `.doc`, `.docx`, `.odt`,
+and `.pdf` are Pro-only and unavailable in Community, even if a broad include glob names them, and
+cannot be declared as text.
 
 **Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
 added and chosen in the TUI's AI models dialog (see [Semantic search](#semantic-search-and-embedding-models)).

@@ -4,6 +4,7 @@
 package kind
 
 import (
+	"fmt"
 	"path"
 	"slices"
 	"strings"
@@ -58,3 +59,47 @@ func Of(p string, text []string) Kind {
 
 // IsText reports whether the kind is read as UTF-8 text that must validate as such.
 func (k Kind) IsText() bool { return k == Text || k == YAML }
+
+// ErrExtension is a custom text extension that cannot be one: malformed, a built-in kind's, or a
+// Pro document format's (which stays unavailable whatever a workspace says).
+type ErrExtension struct{ Ext, Why string }
+
+func (e *ErrExtension) Error() string { return fmt.Sprintf("kind: %q: %s", e.Ext, e.Why) }
+
+// builtIn are the extensions whose kind is fixed.
+var builtIn = []string{".md", ".txt", ".yaml", ".yml"}
+
+// TextExtensions normalizes a workspace's own plain-text extensions: each lowercased with its dot,
+// 1 to 16 letters, digits, '_', '+' or '-' after it, none a built-in kind's or a Pro format's, in
+// the order given without repeats. They are plain text by declaration: nothing is sniffed.
+func TextExtensions(in []string) ([]string, error) {
+	out := []string{}
+	for _, raw := range in {
+		e := strings.ToLower(strings.TrimSpace(raw))
+		if e == "" {
+			continue
+		}
+		if !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		name := e[1:]
+		ok := len(name) >= 1 && len(name) <= 16
+		for _, r := range name {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '+' || r == '-') {
+				ok = false
+			}
+		}
+		switch {
+		case !ok:
+			return nil, &ErrExtension{raw, "an extension is a dot and 1 to 16 letters, digits, _, + or -"}
+		case slices.Contains(ProExtensions, e):
+			return nil, &ErrExtension{raw, "a Pro document format, unavailable in Community"}
+		case slices.Contains(builtIn, e):
+			return nil, &ErrExtension{raw, "already a built-in kind"}
+		}
+		if !slices.Contains(out, e) {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}

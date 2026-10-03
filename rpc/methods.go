@@ -42,6 +42,11 @@ func workspaceMap(w *Workspace) map[string]any {
 		_, st := w.FrontmatterSchema()
 		out["schema"] = schemaMap(st)
 	}
+	var text []string
+	if w.TextExtensions != nil {
+		text = w.TextExtensions()
+	}
+	out["text_extensions"] = anyList(text)
 	return out
 }
 
@@ -145,6 +150,10 @@ func wireErr(err error) error {
 	if errors.As(err, &maxErr) {
 		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: maxErr.Error()}
 	}
+	var extErr *kind.ErrExtension
+	if errors.As(err, &extErr) {
+		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: extErr.Error()[len("kind: "):]}
+	}
 	for _, pe := range publicErrs {
 		if errors.Is(err, pe.err) {
 			return &golibrpc.Error{Code: pe.code, Message: pe.message}
@@ -220,6 +229,27 @@ func (s *Server) register() {
 			return nil, errs.ErrUnsupported
 		}
 		return nil, manager.SetPatterns(ctx, name, include, exclude)
+	}, false))
+	s.handle("workspace.set_text_extensions", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "workspace name")
+		if err != nil {
+			return nil, err
+		}
+		exts, err := strList(p[1], "text extensions")
+		if err != nil {
+			return nil, err
+		}
+		manager, ok := s.workspaces.(interface {
+			SetTextExtensions(context.Context, string, []string) ([]string, error)
+		})
+		if !ok {
+			return nil, errs.ErrUnsupported
+		}
+		norm, err := manager.SetTextExtensions(ctx, name, exts)
+		if err != nil {
+			return nil, err
+		}
+		return anyList(norm), nil
 	}, false))
 	s.handle("workspace.set_schema", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		name, err := argStr(p, 0, "workspace name")
