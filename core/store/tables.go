@@ -14,6 +14,7 @@ type Workspace struct {
 	ID                   int64
 	Name, Root           string
 	EmbeddingPolicy      string
+	IncludeEmpty         int64
 	CommitSeq, ChangeSeq int64
 	SectionTokens        *int64
 	CreatedAt, UpdatedAt int64
@@ -30,6 +31,7 @@ const (
 	WorkspaceChangeSeq       WorkspaceField = "change_seq"
 	WorkspaceSectionTokens   WorkspaceField = "section_tokens"
 	WorkspaceEmbeddingPolicy WorkspaceField = "embedding_policy"
+	WorkspaceIncludeEmpty    WorkspaceField = "include_empty"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
 )
@@ -459,6 +461,7 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceChangeSeq:       col("workspace", WorkspaceChangeSeq, func(w *Workspace) any { return &w.ChangeSeq }),
 				WorkspaceSectionTokens:   col("workspace", WorkspaceSectionTokens, func(w *Workspace) any { return &w.SectionTokens }),
 				WorkspaceEmbeddingPolicy: col("workspace", WorkspaceEmbeddingPolicy, func(w *Workspace) any { return &w.EmbeddingPolicy }),
+				WorkspaceIncludeEmpty:    col("workspace", WorkspaceIncludeEmpty, func(w *Workspace) any { return &w.IncludeEmpty }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),

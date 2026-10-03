@@ -70,6 +70,7 @@ Window {
     Shortcut { sequence: "?"; onActivated: App.toggleVimKeys() }
 
     MenuBar {
+        id: menuBar
         Dock.edge: Tui.Top
         autoHide: App.menuAutoHide
         vimNavigation: true
@@ -85,6 +86,8 @@ Window {
             MenuItem { text: "&Open note…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
+            MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
+            MenuItem { text: "Preview Mermaid &diagram…"; onTriggered: App.previewDiagram() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
@@ -177,8 +180,7 @@ Window {
             lineNumberColor: Theme.document.lineNumber
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
-            // Markdown, with the find's words (/) marked over it (find.go)
-            SyntaxHighlighter { definition: "Markdown (find)" }
+            SyntaxHighlighter { definition: App.syntaxDefinition }
         }
     }
 
@@ -252,6 +254,7 @@ Window {
     WorkspaceAdd { id: workspaceAdd }
     WorkspaceRename { id: workspaceRename }
     WorkspaceSection { id: workspaceSection }
+    WorkspacePatterns { id: workspacePatterns }
     WorkspacePolicy { id: workspacePolicy }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }
@@ -259,10 +262,13 @@ Window {
     PluginManager { id: pluginManager }
     PluginRemove { id: pluginRemove }
     Preferences { id: preferences }
+    FileTypes { id: fileTypes }
+    Diagram { id: diagram }
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
     RestartBackend { id: restartBackend }
+    Mismatch { id: mismatch }
     Vectors { id: vectorsDialog }
     PurgeModel { id: purgeModel }
     ConfirmQuit { id: confirmQuit }

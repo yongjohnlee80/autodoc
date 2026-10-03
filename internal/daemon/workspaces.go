@@ -299,6 +299,51 @@ func (m *Workspaces) SetSectionTokens(ctx context.Context, name string, tokens i
 	return nil
 }
 
+// SetPatterns validates and swaps a workspace's matcher, follower and indexer together.
+func (m *Workspaces) SetPatterns(ctx context.Context, name string, include, exclude []string) error {
+	if include == nil {
+		include = []string{}
+	}
+	for _, pattern := range append(append([]string(nil), include...), exclude...) {
+		if err := config.ValidPattern(pattern); err != nil {
+			return fmt.Errorf("%w: pattern %q: %v", config.ErrInvalid, pattern, err)
+		}
+	}
+	m.chg.Lock()
+	defer m.chg.Unlock()
+	m.mu.Lock()
+	old, ok := m.served[name]
+	m.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("%w: %s", store.ErrNoWorkspace, name)
+	}
+	candidate := config.Workspace{Name: name, Root: old.w.Root, Include: include, Exclude: exclude}
+	if err := checkRoot(candidate); err != nil {
+		return err
+	}
+	if err := m.db.SetWorkspacePatterns(ctx, old.id, include, exclude); err != nil {
+		return err
+	}
+	m.queue.stop()
+	defer m.queue.start()
+	if old.stop != nil {
+		old.stop()
+	}
+	next, err := m.start(old.id, candidate)
+	if err != nil {
+		rollbackErr := m.db.SetWorkspacePatterns(context.WithoutCancel(ctx), old.id, old.w.Include, old.w.Exclude)
+		restored := m.serve(old.id, config.Workspace{Name: name, Root: old.w.Root, Include: old.w.Include, Exclude: old.w.Exclude})
+		m.mu.Lock()
+		m.served[name] = restored
+		m.mu.Unlock()
+		return errors.Join(err, rollbackErr)
+	}
+	m.mu.Lock()
+	m.served[name] = next
+	m.mu.Unlock()
+	return nil
+}
+
 // Focus gives the workspace the queue's next available batch. Calls from the
 // TUI refresh a short lease; other clients keep using their search priority.
 func (m *Workspaces) Focus(name string) error {

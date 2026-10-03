@@ -3,9 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // THE WORKSPACES — the daemon's, the one in use, and the manager that adds, renames and deletes
@@ -14,6 +17,25 @@ import (
 type wsInfo struct {
 	name, root, state, embeddingPolicy string
 	sectionTokens                      int64
+	include, exclude                   []string
+}
+
+func workspacePatterns(value any) []string {
+	var patterns []string
+	for _, item := range asList(value) {
+		if pattern, ok := item.(string); ok {
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns
+}
+
+func patternArgs(patterns []string) []any {
+	args := make([]any, len(patterns))
+	for index, pattern := range patterns {
+		args[index] = pattern
+	}
+	return args
 }
 
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
@@ -32,7 +54,7 @@ func (h *Host) loadWorkspaces() {
 		var out []wsInfo
 		for _, w := range asList(res) {
 			m := asMap(w)
-			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"), embeddingPolicy: str(m, "embedding_policy")})
+			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"), embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"])})
 		}
 		return answer{list: out}
 	}, func(a answer) {
@@ -60,6 +82,7 @@ func (h *Host) loadWorkspaces() {
 		}
 		h.workspaces.Reset(rows)
 		h.managed.Reset(managed)
+		h.syncFileTypes()
 		if pick < 0 {
 			h.ws, h.notesAll = "", nil
 			h.closeNote()
@@ -70,6 +93,85 @@ func (h *Host) loadWorkspaces() {
 		if a.list[pick].name != h.ws || !h.entered {
 			h.enter(a.list[pick].name)
 		}
+	})
+}
+
+func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
+	for _, workspace := range h.wsList {
+		if workspace.name == h.ws {
+			return workspace, true
+		}
+	}
+	return wsInfo{}, false
+}
+
+func (h *Host) syncFileTypes() {
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok {
+		return
+	}
+	matcher := wsfilter.NewMatcher(workspace.include, workspace.exclude)
+	h.set("App.fileTypesTitle", "file types · "+workspace.name)
+	h.set("App.fileTypesRoot", "workspace root: "+workspace.root)
+	h.set("App.markdownTypeIndex", boolIndex(matcher.Match("sample.md")))
+	h.set("App.textTypeIndex", boolIndex(matcher.Match("sample.txt")))
+	h.set("App.yamlTypeIndex", boolIndex(matcher.Match("sample.yaml") && matcher.Match("sample.yml")))
+	patterns := "include: " + strings.Join(workspace.include, ", ") + " · exclude: " + strings.Join(workspace.exclude, ", ")
+	h.set("App.fileTypesPatterns", patterns)
+}
+
+func (h *Host) openFileTypes() {
+	if _, ok := h.activeWorkspaceInfo(); !ok {
+		h.notify("choose a workspace before changing file types")
+		return
+	}
+	h.syncFileTypes()
+	h.set("App.fileTypesHelp", "Text types are editable; Pro document types are unavailable in Community")
+	h.open("fileTypes")
+}
+
+func (h *Host) setFileType(index int, extension string) {
+	if index < 0 || index > 1 || (extension != "md" && extension != "txt" && extension != "yaml") || h.fileTypesPending {
+		return
+	}
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok {
+		return
+	}
+	include := slices.Clone(workspace.include)
+	exclude := slices.Clone(workspace.exclude)
+	extensions := []string{extension}
+	if extension == "yaml" {
+		extensions = []string{"yaml", "yml"}
+	}
+	for _, ext := range extensions {
+		pattern := "**/*." + ext
+		if index == 0 {
+			exclude = slices.DeleteFunc(exclude, func(item string) bool { return item == pattern })
+			if !slices.Contains(include, pattern) {
+				include = append(include, pattern)
+			}
+		} else {
+			include = slices.DeleteFunc(include, func(item string) bool { return item == pattern })
+			if !slices.Contains(exclude, pattern) {
+				exclude = append(exclude, pattern)
+			}
+		}
+	}
+	h.fileTypesPending = true
+	h.set("App.fileTypesHelp", "updating the workspace…")
+	do(h, func(ctx context.Context) error {
+		_, err := h.call(ctx, "workspace.set_patterns", workspace.name, patternArgs(include), patternArgs(exclude))
+		return err
+	}, func(err error) {
+		h.fileTypesPending = false
+		if err != nil {
+			h.set("App.fileTypesHelp", "not changed: "+wireMessage(err))
+			h.syncFileTypes()
+			return
+		}
+		h.set("App.fileTypesHelp", "updated; the workspace is reconciling")
+		h.loadWorkspaces()
 	})
 }
 
@@ -150,7 +252,7 @@ func (h *Host) managerRow(i int) (wsInfo, bool) {
 }
 
 // startAddWorkspace asks for a new workspace: its title (untitled, to begin with), and its folder,
-// chosen from the home directory. Its **/*.md are indexed, .git skipped.
+// chosen from the home directory. The default text formats are indexed; .git is skipped.
 func (h *Host) startAddWorkspace() {
 	h.setField("App.wsTitle", "untitled")
 	h.open("workspaceAdd")
@@ -197,6 +299,72 @@ func (h *Host) startSectionSize(i int) {
 	h.setField("App.sectionSize", strconv.FormatInt(w.sectionTokens, 10))
 	h.set("App.sectionError", "128–2048 estimated tokens; changing this re-chunks the workspace")
 	h.open("workspaceSection")
+}
+
+func (h *Host) startPatterns(i int) {
+	workspace, ok := h.managerRow(i)
+	if !ok {
+		return
+	}
+	h.showPatterns(workspace)
+}
+
+func (h *Host) editActivePatterns() {
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok {
+		return
+	}
+	h.showPatterns(workspace)
+}
+
+func (h *Host) showPatterns(workspace wsInfo) {
+	h.patternWorkspace = workspace.name
+	h.set("App.patternTitle", "rules · "+workspace.name)
+	h.set("App.patternRoot", "one root: "+workspace.root)
+	h.setField("App.patternInclude", strings.Join(workspace.include, "; "))
+	h.setField("App.patternExclude", strings.Join(workspace.exclude, "; "))
+	h.set("App.patternHelp", "Patterns are relative to this root; ** spans folders. Saving reconciles the index.")
+	h.open("workspacePatterns")
+}
+
+func splitPatternRules(value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return []string{}, nil
+	}
+	parts := strings.Split(value, ";")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+		if parts[i] == "" {
+			return nil, fmt.Errorf("remove the empty rule between semicolons")
+		}
+	}
+	return parts, nil
+}
+
+func (h *Host) savePatterns(includeText, excludeText string) {
+	include, err := splitPatternRules(includeText)
+	if err == nil {
+		var exclude []string
+		exclude, err = splitPatternRules(excludeText)
+		if err == nil {
+			name := h.patternWorkspace
+			do(h, func(ctx context.Context) error {
+				_, err := h.call(ctx, "workspace.set_patterns", name, patternArgs(include), patternArgs(exclude))
+				return err
+			}, func(err error) {
+				if err != nil {
+					h.set("App.patternHelp", "not saved: "+wireMessage(err))
+					h.open("workspacePatterns")
+					return
+				}
+				h.notify("rules saved for " + name + "; reconciling")
+				h.loadWorkspaces()
+			})
+			return
+		}
+	}
+	h.set("App.patternHelp", "not saved: "+err.Error())
+	h.open("workspacePatterns")
 }
 
 func (h *Host) startEmbeddingPolicy(i int) {

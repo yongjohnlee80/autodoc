@@ -137,6 +137,14 @@ func (h *Host) show(p, content, version string) {
 	}
 	h.note.path, h.note.version, h.note.open = p, version, true
 	h.set("App.noteTitle", p)
+	switch strings.ToLower(path.Ext(p)) {
+	case ".txt":
+		h.set("App.syntaxDefinition", "Plain text (find)")
+	case ".yaml", ".yml":
+		h.set("App.syntaxDefinition", "YAML (find)")
+	default:
+		h.set("App.syntaxDefinition", "Markdown (find)")
+	}
 	h.setDirty(false)
 	h.backlinks.Reset(nil)
 	h.loadBacklinks(p)
@@ -149,6 +157,7 @@ func (h *Host) closeNote() {
 	h.syncPageWidth()
 	h.note = note{gen: h.note.gen}
 	h.set("App.noteTitle", untitled)
+	h.set("App.syntaxDefinition", "Markdown (find)")
 	h.set("App.statusCenter", "")
 	h.backlinks.Reset(nil)
 	h.set("App.linksTitle", "backlinks")

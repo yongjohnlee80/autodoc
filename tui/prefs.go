@@ -273,6 +273,17 @@ func (h *Host) toggleMenuBar() {
 	}
 }
 
+func (h *Host) leaderMenuBar() {
+	h.toggleMenuBar()
+	if !h.prefs.menuHidden {
+		h.p.Post(func() {
+			h.p.Post(func() { h.keep(h.p.Call("menuBar", "forceActiveFocus")) })
+		})
+	} else {
+		h.p.Post(func() { h.keep(h.p.Call("editor", "forceActiveFocus")) })
+	}
+}
+
 // toggleWrap is View › Wrap long lines: the page's long lines wrapped at its width, or scrolled.
 func (h *Host) toggleWrap() {
 	v := !h.prefs.wrap

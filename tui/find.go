@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 
@@ -115,6 +116,22 @@ func (h *Host) pageHighlighter() highlight.Highlighter {
 	return h.findHL
 }
 
+func (h *Host) textHighlighter() highlight.Highlighter {
+	if h.textFindHL == nil {
+		h.textFindHL = markedHighlighterWith(&h.findMarks, highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) {
+			return nil, 0
+		}))
+	}
+	return h.textFindHL
+}
+
+func (h *Host) yamlHighlighter() highlight.Highlighter {
+	if h.yamlFindHL == nil {
+		h.yamlFindHL = markedHighlighterWith(&h.findMarks, yamlSyntaxHighlighter())
+	}
+	return h.yamlFindHL
+}
+
 // showFind brings the page's marks and "finding …" up to date with the find: marked and shown while
 // one is on, in the page; gone when it ends.
 func (h *Host) showFind() {
@@ -126,7 +143,18 @@ func (h *Host) showFind() {
 		h.findMarks.Store(terms)
 		// set again so the page highlights every line afresh: it keeps a line's colours until its
 		// text changes, and the find's words are not its text
-		h.editor.SetHighlighter(h.pageHighlighter())
+		if h.note.open {
+			switch strings.ToLower(path.Ext(h.note.path)) {
+			case ".txt":
+				h.editor.SetHighlighter(h.textHighlighter())
+			case ".yaml", ".yml":
+				h.editor.SetHighlighter(h.yamlHighlighter())
+			default:
+				h.editor.SetHighlighter(h.pageHighlighter())
+			}
+		} else {
+			h.editor.SetHighlighter(h.pageHighlighter())
+		}
 	}
 	if h.findChip == nil {
 		return

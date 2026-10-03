@@ -52,3 +52,44 @@ func TestSetWorkspaceExcludeReplacesOnlyTheExcludes(t *testing.T) {
 		t.Errorf("an unknown workspace: %v, want ErrNoWorkspace", err)
 	}
 }
+
+func TestSetWorkspacePatternsReplacesBothLists(t *testing.T) {
+	store := openStore(t)
+	ctx := context.Background()
+	workspace, err := store.AddWorkspace(ctx, "a", "/roots/a", []string{"**/*.md"}, []string{".git/**"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWorkspacePatterns(ctx, workspace.ID, []string{"**/*.{md,txt}"}, []string{"drafts/**"}); err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := store.Workspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workspaces) != 1 || !slices.Equal(workspaces[0].Include, []string{"**/*.{md,txt}"}) || !slices.Equal(workspaces[0].Exclude, []string{"drafts/**"}) {
+		t.Fatalf("patterns after replacement: %+v", workspaces)
+	}
+	if err := store.SetWorkspacePatterns(ctx, 9999, []string{"**/*.txt"}, nil); !errors.Is(err, ErrNoWorkspace) {
+		t.Errorf("unknown workspace: %v", err)
+	}
+}
+
+func TestEmptyIncludeSurvivesStoreReload(t *testing.T) {
+	store := openStore(t)
+	ctx := context.Background()
+	workspace, err := store.AddWorkspace(ctx, "empty", "/roots/empty", []string{"**/*.md"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetWorkspacePatterns(ctx, workspace.ID, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	workspaces, err := store.Workspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workspaces) != 1 || workspaces[0].Include == nil || len(workspaces[0].Include) != 0 {
+		t.Fatalf("explicit empty include lost: %+v", workspaces)
+	}
+}

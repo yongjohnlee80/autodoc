@@ -174,3 +174,42 @@ func TestWorkspaceSectionSizeReindexesOnlyTheNamedWorkspace(t *testing.T) {
 		}
 	}
 }
+
+func TestSetPatternsReconcilesAndRejectsMalformedEdits(t *testing.T) {
+	manager, db := open(t)
+	root := t.TempDir()
+	for path, content := range map[string]string{"note.md": "# Note\n", "readme.txt": "plain text\n"} {
+		if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := manager.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, manager, "kb", 1)
+	if err := manager.SetPatterns(context.Background(), "kb", []string{"**/*.{md,txt"}, nil); err == nil {
+		t.Fatal("accepted malformed brace pattern")
+	}
+	if got := manager.List()[0].Include; len(got) != 1 || got[0] != "**/*.md" {
+		t.Fatalf("invalid pattern changed the running matcher: %v", got)
+	}
+	if err := manager.SetPatterns(context.Background(), "kb", []string{"**/*.{md,txt}"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, manager, "kb", 2)
+	if err := manager.SetPatterns(context.Background(), "kb", []string{"**/*.txt"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, manager, "kb", 1)
+	if err := manager.SetPatterns(context.Background(), "kb", []string{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, manager, "kb", 0)
+	if got := manager.List()[0].Include; got == nil || len(got) != 0 {
+		t.Fatalf("running blank include = %v", got)
+	}
+	workspaces, err := db.Workspaces(context.Background())
+	if err != nil || len(workspaces) != 1 || workspaces[0].Include == nil || len(workspaces[0].Include) != 0 {
+		t.Fatalf("stored patterns = %+v, %v", workspaces, err)
+	}
+}

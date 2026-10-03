@@ -13,10 +13,12 @@ import (
 
 func (h *Host) state() map[string]any {
 	st := map[string]any{
-		"App.status":       "",
-		"App.statusLeft":   "NORMAL  autodoc [connecting]",
-		"App.statusCenter": "",
-		"App.pageWidth":    defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
+		"App.status":             "",
+		"App.statusLeft":         "NORMAL  autodoc [connecting]",
+		"App.statusCenter":       "",
+		"App.mismatchQuestion":   "",
+		"App.canRestartMismatch": false,
+		"App.pageWidth":          defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
 		// semantic search's mark: shown once a status poll answers (progress.go)
 		"App.semanticMark":   "",
 		"App.semanticDot":    "default",
@@ -37,6 +39,22 @@ func (h *Host) state() map[string]any {
 		"App.pluginsHelp":          pluginsHelp,
 		"App.removePluginQuestion": "",
 		"App.noteTitle":            untitled,
+		"App.fileTypesTitle":       "file types",
+		"App.fileTypesRoot":        "",
+		"App.fileTypesPatterns":    "",
+		"App.fileTypesHelp":        "",
+		"App.diagramTitle":         "Mermaid preview",
+		"App.diagramText":          "",
+		"App.diagramHelp":          "",
+		"App.patternTitle":         "workspace rules",
+		"App.patternRoot":          "",
+		"App.patternInclude":       "",
+		"App.patternExclude":       "",
+		"App.patternHelp":          "",
+		"App.markdownTypeIndex":    0,
+		"App.textTypeIndex":        0,
+		"App.yamlTypeIndex":        0,
+		"App.syntaxDefinition":     "Markdown (find)",
 		"App.backlinks":            h.backlinks,
 		"App.linksTitle":           "backlinks",
 
