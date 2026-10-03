@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/outline"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
@@ -500,6 +501,28 @@ func (s *Server) register() {
 		}
 		touch(w, path) // indexed now, not when a watch or a poll gets to it
 		return map[string]any{"version": string(v)}, nil
+	}, true))
+	// doc.outline is a saved note's headings, with the version they were read at, for a client to
+	// navigate by (ADR 0212 §6). A document of another kind has none.
+	s.handle("doc.outline", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+		path, err := argStr(p, 1, "path")
+		if err != nil {
+			return nil, err
+		}
+		d, err := w.Docs.Read(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		k := kind.Markdown
+		if w.Index != nil {
+			k = w.Index.Kind(path)
+		}
+		hs := outline.Read(d.Content, k, "").Headings()
+		out := make([]any, len(hs))
+		for i, h := range hs {
+			out[i] = map[string]any{"id": h.ID, "level": int64(h.Level), "text": h.Text, "line": int64(h.Line), "byte": int64(h.Byte)}
+		}
+		return map[string]any{"version": string(d.Version), "headings": out}, nil
 	}, true))
 	// doc.validate checks a note's text, saved or not, against the workspace's frontmatter schema
 	// with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.

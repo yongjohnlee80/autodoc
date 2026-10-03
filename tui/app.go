@@ -39,6 +39,8 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/outline"
 )
 
 // Host is the program behind qml/main.qml.
@@ -58,6 +60,7 @@ type Host struct {
 
 	// the models the document binds
 	picker, backlinks, workspaces, managed   *tuidecl.ListModel
+	outlineList                              *tuidecl.ListModel
 	hits, newList, providers, providerModels *tuidecl.ListModel
 	vectors                                  *tuidecl.ListModel // the workspace's models (vectors.go)
 	explorer                                 *tuidecl.TreeListModel
@@ -115,8 +118,12 @@ type Host struct {
 	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic
-	focusSent     time.Time
-	entered       bool // ws was entered on this connection's listing
+	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
+	outline     *outline.Doc
+	outlineGen  uint64
+	outlineRows []outline.Heading
+	focusSent   time.Time
+	entered     bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
@@ -212,6 +219,7 @@ func newHost(session *Session, opt Options) *Host {
 		awaitExit:      awaitExit,
 		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),
+		outlineList:    tuidecl.NewListModel("key", "heading", "line"),
 		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:        tuidecl.NewListModel("key", "path"),
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),

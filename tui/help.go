@@ -31,6 +31,8 @@ THE PAGE
   types. With no note open, the page is an untitled
   draft: type, and Ctrl+S names and saves it. The status line (SPC t) shows the mode, the note,
   and [+] while it has unsaved changes, and on its right what the page says (a find's result).
+  The page's frame shows where the cursor is: the headings above it in Markdown, the key path in
+  YAML. SPC c (Go › Outline…) lists the note's headings, unsaved ones too; Enter jumps there.
   Long lines wrap at the page's width, and line numbers can show: View › Wrap long lines, Line
   numbers, or Preferences.
 
@@ -74,7 +76,7 @@ w  switch workspace       k  the editor mode (Vim, Text)
 W  manage workspaces      ,  editor preferences
 ?  help                   a  AI models
 h  notifications          A  about
-Q  quit`
+c  the note's outline     Q  quit`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

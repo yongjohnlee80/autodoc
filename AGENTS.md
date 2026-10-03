@@ -129,6 +129,7 @@ first.
 | `workspace.set_schema` | workspace, path | name the frontmatter schema file (under the root, or absolute; `""` for none); answers the `schema` status |
 | `search.query` | workspace, query, options? | see above |
 | `doc.read` | workspace, path | `{content, version}`: the note's text, and its version |
+| `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown note's headings in order, with the version they were read at; other kinds have none |
 | `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema; only Markdown has frontmatter |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every note in path order, after `after` (`""` from the start) |
 | `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts notes whose frontmatter has a problem |
