@@ -15,10 +15,16 @@ type providerSlots struct {
 }
 
 func withProviderSlots(p embed.Provider, limit int) embed.Provider {
+	return withSharedSlots(p, make(chan struct{}, limit))
+}
+
+// withSharedSlots wraps p in the daemon's one set of slots: a workspace's own provider and the
+// daemon's draw from the same limit, so a second model never doubles the requests in flight.
+func withSharedSlots(p embed.Provider, slots chan struct{}) embed.Provider {
 	if p == nil {
 		return nil
 	}
-	return &providerSlots{provider: p, slots: make(chan struct{}, limit)}
+	return &providerSlots{provider: p, slots: slots}
 }
 
 func (p *providerSlots) Name() string       { return p.provider.Name() }

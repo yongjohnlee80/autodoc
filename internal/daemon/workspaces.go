@@ -50,6 +50,13 @@ type Workspaces struct {
 	// workspace's restarts, so the last valid schema survives a pattern or provider change.
 	schemas map[int64]*schemaHolder
 	texts   map[int64]*textExtensions // the workspaces' own plain-text extensions, by id, under mu
+
+	// slots is the one limit on embedding requests in flight, across every provider (override.go)
+	slots chan struct{}
+	// overrides are the providers workspaces use instead of the daemon's, built once each, by the
+	// provider's name, under mu; build makes one (the Embedding's, with its key and meter)
+	overrides map[string]embed.Provider
+	build     func(ctx context.Context, name string) (embed.Provider, error)
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -81,11 +88,12 @@ func (m *Workspaces) warming(name string) []string {
 
 // served is one workspace as it runs: what the API sees, and how to stop it.
 type served struct {
-	id   int64
-	w    *rpc.Workspace
-	ctx  context.Context
-	halt func() // stops its indexer and follower; its root stays open; nil for one not opened
-	stop func() // halts it and closes its root; nil for one not opened
+	id       int64
+	override string // the provider it uses instead of the daemon's, by name; "" for the daemon's
+	w        *rpc.Workspace
+	ctx      context.Context
+	halt     func() // stops its indexer and follower; its root stays open; nil for one not opened
+	stop     func() // halts it and closes its root; nil for one not opened
 }
 
 // Options are how the daemon serves a workspace.
@@ -104,12 +112,13 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 		o.MaxEmbedRequests = 1
 	}
 	o.MaxEmbedRequests = min(o.MaxEmbedRequests, 2)
-	o.Provider = withProviderSlots(o.Provider, o.MaxEmbedRequests)
+	slots := make(chan struct{}, o.MaxEmbedRequests)
+	o.Provider = withSharedSlots(o.Provider, slots)
 	if o.Log == nil {
 		o.Log = logger.New()
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
-		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}}
+		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, slots: slots, overrides: map[string]embed.Provider{}}
 	m.queue = newEmbeddingQueue(m)
 	return m
 }
@@ -211,7 +220,8 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	sh := m.schemaHolder(id, c.Root)
 	sh.setPath(schemaPath)
 	sh.watch(m.ctx, schemaPoll)
-	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
+	override, provider, providerErr := m.providerOf(id)
+	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: provider,
 		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log, Workspace: c.Name, ExternalEmbedding: true,
 		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get, TextExtensions: text.load})
 	ix.SetSemanticPaused(!m.queue.setPolicy(c.Name, policy))
@@ -261,8 +271,9 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		FrontmatterSchema: func() (*schema.Schema, rpc.SchemaStatus) {
 			s, _ := sh.get()
 			return s, sh.status()
-		}}
-	return &served{id: id, w: w, ctx: ctx, halt: halt, stop: stop}, nil
+		},
+		Provider: rpc.ProviderChoice{Override: override, Err: errText(providerErr)}}
+	return &served{id: id, override: override, w: w, ctx: ctx, halt: halt, stop: stop}, nil
 }
 
 // schemaHolder is workspace id's schema holder, made on its first start.
@@ -351,10 +362,16 @@ func (m *Workspaces) SetEmbedding(p embed.Provider) {
 	defer m.chg.Unlock()
 	m.queue.stop()
 	defer m.queue.start()
-	m.opts.Provider = withProviderSlots(p, m.opts.MaxEmbedRequests)
+	if cap(m.slots) != m.opts.MaxEmbedRequests {
+		m.slots = make(chan struct{}, m.opts.MaxEmbedRequests) // the limit was configured since
+	}
+	m.opts.Provider = withSharedSlots(p, m.slots)
 	m.mu.Lock()
 	running := make(map[string]*served, len(m.served))
 	for name, s := range m.served {
+		if s.override != "" {
+			continue // it embeds with its own provider, which this does not change
+		}
 		running[name] = s
 		if s.halt != nil {
 			m.restarting[name] = true // until its replacement is in: index.status says so

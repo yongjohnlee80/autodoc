@@ -55,3 +55,44 @@ func TestEventLogPrunes(t *testing.T) {
 		t.Fatalf("seq after pruning = %d", seq)
 	}
 }
+
+func TestWorkspaceProviderOverride(t *testing.T) {
+	ctx := context.Background()
+	s := openStore(t)
+	w, err := s.AddWorkspace(ctx, "kb", "/kb", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name, err := s.WorkspaceProvider(ctx, w.ID); err != nil || name != "" {
+		t.Fatalf("a new workspace's override = %q, %v", name, err)
+	}
+	if err := s.SetWorkspaceProvider(ctx, w.ID, "nope"); !errors.Is(err, ErrNoProvider) {
+		t.Fatalf("an unknown provider: %v", err)
+	}
+	if _, err := s.AddProvider(ctx, ProviderSpec{Name: "local", Kind: KindOllama, BaseURL: "http://127.0.0.1:11434", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetWorkspaceProvider(ctx, w.ID, "local"); err != nil {
+		t.Fatal(err)
+	}
+	if name, _ := s.WorkspaceProvider(ctx, w.ID); name != "local" {
+		t.Fatalf("override = %q", name)
+	}
+	// a rename keeps the override (it is by id); a delete returns the workspace to the daemon's
+	if err := s.UpdateProvider(ctx, "local", ProviderSpec{Name: "near", Kind: KindOllama, BaseURL: "http://127.0.0.1:11434", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if name, _ := s.WorkspaceProvider(ctx, w.ID); name != "near" {
+		t.Fatalf("after the rename = %q", name)
+	}
+	if err := s.RemoveProvider(ctx, "near"); err != nil {
+		t.Fatal(err)
+	}
+	if name, err := s.WorkspaceProvider(ctx, w.ID); err != nil || name != "" {
+		t.Fatalf("after the delete = %q, %v", name, err)
+	}
+	ws, _ := s.Workspaces(ctx)
+	if ws[0].ProviderID != nil {
+		t.Fatalf("provider_id after the delete = %d, want NULL (ON DELETE SET NULL)", *ws[0].ProviderID)
+	}
+}

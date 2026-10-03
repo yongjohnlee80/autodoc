@@ -60,7 +60,7 @@ type Host struct {
 
 	// the models the document binds
 	picker, backlinks, workspaces, managed   *tuidecl.ListModel
-	outlineList                              *tuidecl.ListModel
+	outlineList, wsProviders                 *tuidecl.ListModel
 	hits, newList, providers, providerModels *tuidecl.ListModel
 	vectors                                  *tuidecl.ListModel // the workspace's models (vectors.go)
 	explorer                                 *tuidecl.TreeListModel
@@ -115,6 +115,9 @@ type Host struct {
 	fileTypesPending bool
 	patternWorkspace string
 	schemaWorkspace  string
+	// the provider dialog's workspace and its choices, "" first for the daemon's (wsprovider.go)
+	providerWorkspace string
+	providerChoices   []string
 	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic
@@ -224,6 +227,7 @@ func newHost(session *Session, opt Options) *Host {
 		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),
 		outlineList:    tuidecl.NewListModel("key", "heading", "line"),
+		wsProviders:    tuidecl.NewListModel("key", "label"),
 		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:        tuidecl.NewListModel("key", "path"),
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
