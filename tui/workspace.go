@@ -20,6 +20,7 @@ type wsInfo struct {
 	include, exclude                   []string
 	schema                             schemaInfo
 	textExtensions                     []string // the workspace's own plain-text extensions
+	provider, providerErr              string   // its own embedding provider ("" the daemon's), and why it is not set up
 }
 
 func workspacePatterns(value any) []string {
@@ -58,7 +59,8 @@ func (h *Host) loadWorkspaces() {
 			m := asMap(w)
 			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
 				embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
-				schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"])})
+				schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
+				provider: str(m, "provider"), providerErr: str(m, "provider_error")})
 		}
 		return answer{list: out}
 	}, func(a answer) {

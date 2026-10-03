@@ -266,6 +266,7 @@ Window {
     WorkspaceSection { id: workspaceSection }
     WorkspacePatterns { id: workspacePatterns }
     WorkspaceSchema { id: workspaceSchema }
+    WorkspaceProvider { id: workspaceProvider }
     WorkspacePolicy { id: workspacePolicy }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }

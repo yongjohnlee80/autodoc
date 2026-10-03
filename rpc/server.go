@@ -38,7 +38,8 @@ import (
 // Protocol 7 adds workspace.set_patterns for workspace admission changes. Protocol 8 adds frontmatter
 // schemas (workspace.set_schema, doc.validate, search.query's facets, workspace.list's schema and
 // index.status's diagnosed), doc.outline, workspace.set_text_extensions with workspace.list's
-// text_extensions, and sys.events (sys.hello answers the client's token and the log's head).
+// text_extensions, sys.events (sys.hello answers the client's token and the log's head), and
+// workspace.set_provider with workspace.list's provider.
 const Protocol int64 = 8
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
@@ -76,6 +77,15 @@ type Workspace struct {
 	FrontmatterSchema func() (*schema.Schema, SchemaStatus)
 	// TextExtensions are the workspace's own plain-text extensions (ADR 0212 §3); nil for none.
 	TextExtensions func() []string
+	// Provider is the workspace's own embedding provider, when it has one (ADR 0212 §7).
+	Provider ProviderChoice
+}
+
+// ProviderChoice is which embedding provider a workspace uses: its own (Override, by name), or the
+// daemon's when Override is "". Err says why its own is not set up, so it searches by words.
+type ProviderChoice struct {
+	Override string
+	Err      string
 }
 
 // SchemaStatus is how a workspace's schema file stands: the stored path ("" for none), whether a

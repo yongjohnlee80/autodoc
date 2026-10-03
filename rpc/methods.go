@@ -47,6 +47,10 @@ func workspaceMap(w *Workspace) map[string]any {
 		text = w.TextExtensions()
 	}
 	out["text_extensions"] = anyList(text)
+	out["provider"] = w.Provider.Override
+	if w.Provider.Err != "" {
+		out["provider_error"] = w.Provider.Err
+	}
 	return out
 }
 
@@ -232,6 +236,25 @@ func (s *Server) register() {
 			return nil, errs.ErrUnsupported
 		}
 		return nil, manager.SetPatterns(ctx, name, include, exclude)
+	}, false))
+	// workspace.set_provider makes a workspace embed with a stored provider of its own ("" for the
+	// daemon's): set up first, and only that workspace restarts (ADR 0212 §7).
+	s.handle("workspace.set_provider", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "workspace name")
+		if err != nil {
+			return nil, err
+		}
+		provider, ok := p[1].(string)
+		if !ok {
+			return nil, invalid("provider must be a string (\"\" for the daemon's)")
+		}
+		manager, ok := s.workspaces.(interface {
+			SetProvider(context.Context, string, string) error
+		})
+		if !ok {
+			return nil, errs.ErrUnsupported
+		}
+		return nil, manager.SetProvider(ctx, name, provider)
 	}, false))
 	s.handle("workspace.set_text_extensions", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		name, err := argStr(p, 0, "workspace name")

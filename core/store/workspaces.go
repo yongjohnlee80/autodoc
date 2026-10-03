@@ -166,6 +166,57 @@ func (s *Store) SetWorkspaceTextExtensions(ctx context.Context, id int64, exts [
 	})
 }
 
+// WorkspaceProvider is the stored provider workspace id embeds with instead of the daemon's, by
+// name; "" when it uses the daemon's.
+func (s *Store) WorkspaceProvider(ctx context.Context, id int64) (string, error) {
+	var name string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceProviderID)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil || w.ProviderID == nil {
+			return err
+		}
+		p, err := tx.t.providers.On(tx.tx).With(ProviderID, *w.ProviderID).Get(ProviderName)
+		if errors.Is(err, dao.ErrNoRows) {
+			return nil // deleted under it: ON DELETE SET NULL is about to say so
+		}
+		if err == nil {
+			name = p.Name
+		}
+		return err
+	})
+	return name, err
+}
+
+// SetWorkspaceProvider makes workspace id embed with the stored provider named provider, or with
+// the daemon's again when provider is "".
+func (s *Store) SetWorkspaceProvider(ctx context.Context, id int64, provider string) error {
+	return s.Write(ctx, func(tx *Tx) error {
+		var value any
+		if provider != "" {
+			p, err := tx.t.providers.On(tx.tx).With(ProviderName, provider).Get(ProviderID)
+			if errors.Is(err, dao.ErrNoRows) {
+				return fmt.Errorf("%w: %s", ErrNoProvider, provider)
+			}
+			if err != nil {
+				return err
+			}
+			value = p.ID
+		}
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceProviderID, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		return nil
+	})
+}
+
 // SetWorkspaceSchema names workspace id's frontmatter schema file; "" removes it.
 func (s *Store) SetWorkspaceSchema(ctx context.Context, id int64, path string) error {
 	var value any

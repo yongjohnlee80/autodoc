@@ -93,6 +93,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.editActivePatterns":       none(h.editActivePatterns),
 		"App.savePatterns":             twoStrings("App.savePatterns", "include and exclude rules", h.savePatterns),
 		"App.startSchema":              oneNumber("App.startSchema", "a row", h.startSchema),
+		"App.startWorkspaceProvider":   oneNumber("App.startWorkspaceProvider", "a row", h.startWorkspaceProvider),
+		"App.saveWorkspaceProvider":    oneNumber("App.saveWorkspaceProvider", "a choice", h.saveWorkspaceProvider),
 		"App.openOutline":              none(h.openOutline),
 		"App.outlineFilter":            oneString("App.outlineFilter", "a filter", h.outlineFilter),
 		"App.previewHeading":           oneNumber("App.previewHeading", "a row", h.previewHeading),

@@ -345,6 +345,14 @@ autodoc --call workspace.list
 autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
 ```
 
+**A workspace may embed with its own provider** (`Manage workspaces… › Provider…`): one of the stored
+providers instead of the daemon's. Choosing it sets it up first, and only that workspace's vectors
+fill again; a switch of the daemon's provider leaves it as it is, and deleting the provider returns
+it to the daemon's. Every provider shares the daemon's limit on requests in flight, and the queue
+keeps consecutive background batches on one model (up to 16 in a row) so a local server is not
+made to swap models every batch. A workspace whose provider cannot be set up searches by words
+and says why; it is never given another model.
+
 **Several clients share one daemon.** Each TUI keeps its own workspace, open note and search; a
 change one makes to the shared configuration (a model switch, a workspace's rules, schema or
 name) is logged, and the others say so in a notification without moving focus or touching an
