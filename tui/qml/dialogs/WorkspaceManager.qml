@@ -23,6 +23,7 @@ Dialog {
         Button { text: "&Section…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startSectionSize(managerTable.currentIndex) }
         Button { text: "&Embedding…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEmbeddingPolicy(managerTable.currentIndex) }
         Button { text: "&Globs…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startPatterns(managerTable.currentIndex) }
+        Button { text: "Sc&hema…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startSchema(managerTable.currentIndex) }
         Button { text: "&Delete…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemoveWorkspace(managerTable.currentIndex) }
         Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }

@@ -106,6 +106,44 @@ func (s *Store) SetWorkspaceSectionTokens(ctx context.Context, id int64, tokens 
 	})
 }
 
+// SchemaPath is workspace id's frontmatter schema file as stored, "" for none.
+func (s *Store) SchemaPath(ctx context.Context, id int64) (string, error) {
+	var path string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceSchemaPath)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil {
+			return err
+		}
+		if w.SchemaPath != nil {
+			path = *w.SchemaPath
+		}
+		return nil
+	})
+	return path, err
+}
+
+// SetWorkspaceSchema names workspace id's frontmatter schema file; "" removes it.
+func (s *Store) SetWorkspaceSchema(ctx context.Context, id int64, path string) error {
+	var value any
+	if path != "" {
+		value = path
+	}
+	return s.Write(ctx, func(tx *Tx) error {
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceSchemaPath, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		return nil
+	})
+}
+
 // WorkspaceInfo is a workspace with its patterns.
 type WorkspaceInfo struct {
 	Workspace

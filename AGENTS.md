@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 7, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 8, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step
@@ -56,6 +56,12 @@ sections that mean the same thing in other words.
 FTS operators (`AND`, `OR`, `NOT`, `NEAR`, `-`, column filters) are **not** operators here: they are
 searched as words.
 
+When the workspace has a frontmatter schema, `field:value` for a field it declares is an exact
+filter, not a word: `migration type:adr` finds *migration* among notes whose `type` is `adr`. The
+value is read as the field's type. A query of filters alone (`type:adr status:active`) lists the
+notes they admit, in path order, with `mode_used` `"facet"`. For a field the schema does not
+declare, `field:value` is searched as words.
+
 Options, a map, all optional:
 
 | option | value | effect |
@@ -64,6 +70,7 @@ Options, a map, all optional:
 | `mode` | `"auto"` (default), `"lexical"`, `"semantic"` | auto fuses words and meaning when a model is in use, else words alone; `"semantic"` fails when no model answers |
 | `paths` | list of strings | only under these: a folder (`"adrs"` covers `adrs/…`) or one file |
 | `tags` | list of strings | only notes that have **every** one of these tags (front matter `tags:` or `#tag`) |
+| `facets` | map of field to a string or a list of strings | only notes whose frontmatter field has one of the values; every field must match. The field must be one the workspace's schema declares (`workspace.list` shows its `schema`) |
 
 The answer:
 
@@ -117,12 +124,14 @@ first.
 
 | verb | parameters | answers |
 | --- | --- | --- |
-| `workspace.list` | — | `[{name, root, state, include, exclude}]` |
+| `workspace.list` | — | `[{name, root, state, include, exclude, schema}]`; `schema` is `{path, active, fields, error, line}` |
 | `workspace.set_patterns` | workspace, include list, exclude list | replace validated globs and reconcile that workspace; an empty include matches no files |
+| `workspace.set_schema` | workspace, path | name the frontmatter schema file (under the root, or absolute; `""` for none); answers the `schema` status |
 | `search.query` | workspace, query, options? | see above |
 | `doc.read` | workspace, path | `{content, version}`: the note's text, and its version |
+| `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema; only Markdown has frontmatter |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every note in path order, after `after` (`""` from the start) |
-| `index.status` | workspace | `{docs, pending_jobs, cursor, embeddings: {model, pending, semantic, …}, …}` |
+| `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts notes whose frontmatter has a problem |
 | `index.changes` | workspace, since, limit | `{cursor, changes: [{path, op, generation}], more}`: what changed after cursor `since` |
 | `graph.links` | workspace, path | `[{path, raw, anchor, kind, resolved}]`: the links the note makes |
 | `graph.backlinks` | workspace, path | the same shape: the notes that link to it |

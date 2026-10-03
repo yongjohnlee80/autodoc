@@ -12,6 +12,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
@@ -33,8 +35,26 @@ func workspaceMap(w *Workspace) map[string]any {
 	if policy == "" {
 		policy = store.EmbeddingAlways
 	}
-	return map[string]any{"name": w.Name, "root": w.Root, "state": state,
+	out := map[string]any{"name": w.Name, "root": w.Root, "state": state,
 		"include": anyList(w.Include), "exclude": anyList(w.Exclude), "section_tokens": int64(tokens), "embedding_policy": policy}
+	if w.FrontmatterSchema != nil {
+		_, st := w.FrontmatterSchema()
+		out["schema"] = schemaMap(st)
+	}
+	return out
+}
+
+// schemaMap is a workspace's schema status as workspace.list and workspace.set_schema report it.
+func schemaMap(st SchemaStatus) map[string]any {
+	return map[string]any{"path": st.Path, "active": st.Active, "fields": int64(st.Fields), "error": st.Err, "line": int64(st.Line)}
+}
+
+func diagnosticsList(ds []schema.Diagnostic) []any {
+	out := make([]any, len(ds))
+	for i, d := range ds {
+		out[i] = map[string]any{"field": d.Field, "line": int64(d.Line), "rule": d.Rule, "message": d.Message}
+	}
+	return out
 }
 
 func anyList(ss []string) []any {
@@ -105,6 +125,8 @@ var publicErrs = []struct {
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
 	{vfs.ErrInvalidName, golibrpc.CodeInvalidParams, "not a valid path in the workspace"},
 	{index.ErrUnknownMode, golibrpc.CodeInvalidParams, "unknown search mode"},
+	{index.ErrUnknownFacet, golibrpc.CodeInvalidParams, "a facet filter names a field the workspace's schema does not declare"},
+	{index.ErrFacetValue, golibrpc.CodeInvalidParams, "a facet filter's value is not of its field's type"},
 	{index.ErrModelInUse, golibrpc.CodeInvalidParams, "the model is in use"},
 }
 
@@ -197,6 +219,27 @@ func (s *Server) register() {
 			return nil, errs.ErrUnsupported
 		}
 		return nil, manager.SetPatterns(ctx, name, include, exclude)
+	}, false))
+	s.handle("workspace.set_schema", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+		name, err := argStr(p, 0, "workspace name")
+		if err != nil {
+			return nil, err
+		}
+		path, ok := p[1].(string)
+		if !ok {
+			return nil, invalid("schema path must be a string (\"\" for none)")
+		}
+		manager, ok := s.workspaces.(interface {
+			SetSchema(context.Context, string, string) (SchemaStatus, error)
+		})
+		if !ok {
+			return nil, errs.ErrUnsupported
+		}
+		st, err := manager.SetSchema(ctx, name, path)
+		if err != nil {
+			return nil, err
+		}
+		return schemaMap(st), nil
 	}, false))
 	s.handle("workspace.section_size", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		name, err := argStr(p, 0, "name")
@@ -458,6 +501,30 @@ func (s *Server) register() {
 		touch(w, path) // indexed now, not when a watch or a poll gets to it
 		return map[string]any{"version": string(v)}, nil
 	}, true))
+	// doc.validate checks a note's text, saved or not, against the workspace's frontmatter schema
+	// with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.
+	s.handle("doc.validate", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+		path, err := argStr(p, 1, "path")
+		if err != nil {
+			return nil, err
+		}
+		content, err := argBytes(p, 2, "content")
+		if err != nil {
+			return nil, err
+		}
+		if len(content) > docs.MaxSize {
+			return nil, docs.ErrTooLarge
+		}
+		var sch *schema.Schema
+		if w.FrontmatterSchema != nil {
+			sch, _ = w.FrontmatterSchema()
+		}
+		var ds []schema.Diagnostic
+		if w.Index == nil || w.Index.Kind(path) == kind.Markdown {
+			ds = sch.ValidateNote(content).Diagnostics
+		}
+		return map[string]any{"diagnostics": diagnosticsList(ds)}, nil
+	}, true))
 	s.handle("doc.rename", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		from, err := argStr(p, 1, "from")
 		if err != nil {
@@ -521,7 +588,7 @@ func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (an
 	}
 }
 
-// queryOpts reads search.query's optional third parameter: {limit, mode, tags, paths}.
+// queryOpts reads search.query's optional third parameter: {limit, mode, tags, paths, facets}.
 func queryOpts(p []any) (index.QueryOpts, error) {
 	var o index.QueryOpts
 	if len(p) < 3 || p[2] == nil {
@@ -545,6 +612,23 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 				return o, invalid("search.query: opts.mode must be a string")
 			}
 			o.Mode = s
+		case "facets":
+			fm, ok := v.(map[string]any)
+			if !ok {
+				return o, invalid("search.query: opts.facets must be a map of field to a value or a list of values")
+			}
+			o.Facets = map[string][]string{}
+			for field, fv := range fm {
+				if s, ok := fv.(string); ok {
+					o.Facets[field] = []string{s}
+					continue
+				}
+				l, err := strList(fv, "search.query: opts.facets."+field)
+				if err != nil {
+					return o, err
+				}
+				o.Facets[field] = l
+			}
 		case "tags", "paths":
 			l, err := strList(v, "search.query: opts."+k)
 			if err != nil {
@@ -583,7 +667,7 @@ func statusMap(st index.Status, w *Workspace) map[string]any {
 	}
 	out := map[string]any{"cursor": st.Cursor, "oldest_retained": st.OldestRetained, "docs": st.Docs,
 		"chunks": st.Chunks, "pending_jobs": st.PendingJobs, "unparsed_frontmatter": strs(st.UnparsedFrontmatter),
-		"failing": failing}
+		"diagnosed": st.Diagnosed, "failing": failing}
 	if w.Following != nil {
 		f := w.Following()
 		out["following"] = map[string]any{"mode": f.Following, "error": f.Err, "retrying": strs(f.Retrying)}

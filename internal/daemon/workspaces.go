@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -44,6 +46,9 @@ type Workspaces struct {
 	setup      string
 	restarting map[string]bool
 	queue      *embeddingQueue
+	// schemas are the workspaces' frontmatter schemas, by workspace id, under mu: each outlives its
+	// workspace's restarts, so the last valid schema survives a pattern or provider change.
+	schemas map[int64]*schemaHolder
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -102,7 +107,8 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 	if o.Log == nil {
 		o.Log = logger.New()
 	}
-	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{}}
+	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
+		schemas: map[int64]*schemaHolder{}}
 	m.queue = newEmbeddingQueue(m)
 	return m
 }
@@ -186,13 +192,21 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	if c.Exclude == nil {
 		c.Exclude = config.DefaultExclude
 	}
+	schemaPath, err := m.db.SchemaPath(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
 	ws, err := workspace.Open(c)
 	if err != nil {
 		return nil, err
 	}
+	// the schema is read before the indexer runs, so its first pass compares the right fingerprint
+	sh := m.schemaHolder(id, c.Root)
+	sh.setPath(schemaPath)
+	sh.watch(m.ctx, schemaPoll)
 	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
 		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log, Workspace: c.Name, ExternalEmbedding: true,
-		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }})
+		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get})
 	ix.SetSemanticPaused(!m.queue.setPolicy(c.Name, policy))
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
@@ -235,8 +249,69 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		},
 		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status, Warming: m.warmingOf(c.Name),
 		Searched:       func() { m.queue.searchWorkspace(c.Name) },
-		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) }}
+		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) },
+		FrontmatterSchema: func() (*schema.Schema, rpc.SchemaStatus) {
+			s, _ := sh.get()
+			return s, sh.status()
+		}}
 	return &served{id: id, w: w, ctx: ctx, halt: halt, stop: stop}, nil
+}
+
+// schemaHolder is workspace id's schema holder, made on its first start.
+func (m *Workspaces) schemaHolder(id int64, root string) *schemaHolder {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	h, ok := m.schemas[id]
+	if !ok {
+		h = newSchemaHolder(root, func() { m.revalidate(id) })
+		m.schemas[id] = h
+	}
+	return h
+}
+
+// revalidate queues the notes of workspace id that its new schema applies to.
+func (m *Workspaces) revalidate(id int64) {
+	m.mu.Lock()
+	var ix *index.Indexer
+	for _, s := range m.served {
+		if s.id == id && s.stop != nil {
+			ix = s.w.Index
+		}
+	}
+	m.mu.Unlock()
+	if ix == nil {
+		return // not started yet: its first pass compares the new fingerprint itself
+	}
+	if err := ix.Revalidate(m.ctx); err != nil {
+		logger.Warning(m.opts.Log, err, "revalidating notes after a schema change")
+	}
+}
+
+// SetSchema names a workspace's frontmatter schema file ("" for none) and reads it at once: a valid
+// one becomes active and revalidates the notes; an invalid one is reported, and the last valid
+// schema stays active until the file is fixed.
+func (m *Workspaces) SetSchema(ctx context.Context, name, path string) (rpc.SchemaStatus, error) {
+	path = strings.TrimSpace(path)
+	m.chg.Lock()
+	defer m.chg.Unlock()
+	m.mu.Lock()
+	s, ok := m.served[name]
+	var h *schemaHolder
+	if ok {
+		h = m.schemas[s.id]
+	}
+	m.mu.Unlock()
+	if !ok {
+		return rpc.SchemaStatus{}, fmt.Errorf("%w: %s", store.ErrNoWorkspace, name)
+	}
+	if err := m.db.SetWorkspaceSchema(ctx, s.id, path); err != nil {
+		return rpc.SchemaStatus{}, err
+	}
+	if h == nil {
+		return rpc.SchemaStatus{Path: path}, nil // not served (its root is gone): read when it is
+	}
+	h.setPath(path)
+	return h.status(), nil
 }
 
 // restartHook, when set by this package's tests, runs in SetEmbedding after a workspace's indexer
@@ -542,6 +617,10 @@ func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	} else { // the store no longer has it
 		delete(m.served, name)
 		m.queue.forget(name)
+		if h := m.schemas[s.id]; h != nil {
+			h.stop()
+			delete(m.schemas, s.id)
+		}
 	}
 	return err
 }

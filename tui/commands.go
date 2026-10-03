@@ -92,6 +92,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.startPatterns":            oneNumber("App.startPatterns", "a row", h.startPatterns),
 		"App.editActivePatterns":       none(h.editActivePatterns),
 		"App.savePatterns":             twoStrings("App.savePatterns", "include and exclude rules", h.savePatterns),
+		"App.startSchema":              oneNumber("App.startSchema", "a row", h.startSchema),
+		"App.saveSchema":               oneString("App.saveSchema", "a schema path", h.saveSchema),
 		"App.saveEmbeddingPolicy":      oneString("App.saveEmbeddingPolicy", "a policy", h.saveEmbeddingPolicy),
 		"App.startRemoveWorkspace":     oneNumber("App.startRemoveWorkspace", "a row", h.startRemoveWorkspace),
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),

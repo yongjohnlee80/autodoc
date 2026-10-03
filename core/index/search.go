@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
 
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -55,6 +56,10 @@ type QueryOpts struct {
 	Mode  string   // ModeAuto (default), ModeLexical or ModeSemantic
 	Tags  []string // every hit's document has all of these
 	Paths []string // hits under these paths: a directory and what is below it, or one file
+	// Facets are exact filters on the workspace schema's fields: a hit's document has, for every
+	// field, one of its values. A field the schema does not declare is refused (ErrUnknownFacet).
+	// The query's own field:value words for declared fields join them.
+	Facets map[string][]string
 }
 
 // Hit is one chunk a search found.
@@ -79,24 +84,25 @@ type Result struct {
 	SemanticError string
 }
 
-// Search answers a query lexically: the store alone has no embedding provider. Indexer.Search
-// adds the semantic tier.
+// Search answers a query lexically: the store alone has no embedding provider, and no schema, so
+// it refuses facets. Indexer.Search adds the semantic tier and the workspace's schema.
 func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
-	return s.search(ctx, q, opts, nil)
+	return s.search(ctx, q, opts, nil, nil)
 }
 
 // Search answers a query with the semantic tier when the indexer has a provider.
 func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
+	sch, _ := x.schema()
 	if x.semanticPaused.Load() {
-		return x.store.search(ctx, q, opts, nil)
+		return x.store.search(ctx, q, opts, nil, sch)
 	}
-	return x.store.search(ctx, q, opts, x.sem)
+	return x.store.search(ctx, q, opts, x.sem, sch)
 }
 
 // search answers a query from one read transaction, so every hit's text, path and generation come
 // from the same snapshot. The query is embedded first, with the model active then; the transaction
 // then reads the active model again, and a flip in between embeds again.
-func (s *Store) search(ctx context.Context, q string, opts QueryOpts, sem *semantic) (Result, error) {
+func (s *Store) search(ctx context.Context, q string, opts QueryOpts, sem *semantic, sch *schema.Schema) (Result, error) {
 	mode := opts.Mode
 	switch mode {
 	case "":
@@ -117,8 +123,16 @@ func (s *Store) search(ctx context.Context, q string, opts QueryOpts, sem *seman
 	if mode == ModeSemantic {
 		res.ModeUsed = ModeSemantic
 	}
+	q, facets, err := splitFacets(q, opts.Facets, sch)
+	if err != nil {
+		return Result{}, err
+	}
+	opts.Facets = facets
 	match, words := ftsQuery(q)
 	if match == "" {
+		if len(facets) > 0 {
+			return s.facetOnly(ctx, res, opts, limit)
+		}
 		return res, nil
 	}
 	useSem := sem != nil && mode != ModeLexical
@@ -337,10 +351,31 @@ func (s *Store) lexicalHits(tx *store.Tx, match string, opts QueryOpts) ([]candi
 	return out, nil
 }
 
-// filtered narrows a chunk query (joined to its document) to the query's filters: every tag, and
-// any of the paths. ok is false when no document has every tag, so nothing can match.
+// filtered narrows a chunk query (joined to its document) to the query's filters: every facet
+// field and every tag, and any of the paths. ok is false when no document has them all, so nothing
+// can match. Every retriever filters here, before its rank and its limit.
 func (s *Store) filtered(tx *store.Tx, d dao.DAO[*store.Chunk, store.ChunkField, int64], opts QueryOpts) (dao.DAO[*store.Chunk, store.ChunkField, int64], bool, error) {
 	var docs map[int64]bool
+	for field, values := range opts.Facets {
+		vals := make([]any, len(values))
+		for i, v := range values {
+			vals[i] = v
+		}
+		rows, err := s.sc.Facets(tx).With(store.FacetName, field).With(store.FacetValue, vals...).Select(store.FacetDoc)
+		if err != nil {
+			return nil, false, err
+		}
+		have := map[int64]bool{}
+		for _, r := range rows {
+			if docs == nil || docs[r.DocID] {
+				have[r.DocID] = true
+			}
+		}
+		docs = have
+		if len(docs) == 0 {
+			return nil, false, nil
+		}
+	}
 	for _, t := range opts.Tags {
 		tag := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(t), "#"))
 		rows, err := s.sc.Tags(tx).With(store.DocValueValue, tag).Select(store.DocValueDoc)

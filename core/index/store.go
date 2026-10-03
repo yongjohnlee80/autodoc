@@ -38,6 +38,16 @@ func indexerVersion(tokens int) string {
 	return fmt.Sprintf("c%d.s%d.t%d", ChunkerVersion, SchemaVersion, tokens)
 }
 
+// docVersion is what document.indexer records for one path: Markdown notes add the fingerprint of
+// the workspace's frontmatter schema, so a schema change rebuilds exactly the notes it applies to
+// (their unchanged chunks keep their vectors, which are keyed by text).
+func docVersion(base string, markdown bool, schemaFP string) string {
+	if schemaFP != "" && markdown {
+		return base + ".f" + schemaFP
+	}
+	return base
+}
+
 func (s *Store) sectionTokens(ctx context.Context) (int, error) {
 	return s.db.SectionTokens(ctx, s.sc.ID())
 }
@@ -65,17 +75,21 @@ func (s *Store) read(ctx context.Context, fn func(tx *store.Tx) error) error {
 	return s.db.Read(ctx, fn)
 }
 
-// outdated lists the documents indexed under another IndexerVersion.
-func (s *Store) outdated(ctx context.Context) ([]string, error) {
+// outdated lists the documents indexed under another version than the one they would get now: a
+// chunker or section-size change reaches every document, a schema change every Markdown note.
+func (s *Store) outdated(ctx context.Context, schemaFP string, markdown func(string) bool) ([]string, error) {
 	var out []string
 	tokens, err := s.sectionTokens(ctx)
 	if err != nil {
 		return nil, err
 	}
+	base := indexerVersion(tokens)
 	err = s.read(ctx, func(tx *store.Tx) error {
-		docs, err := s.sc.Documents(tx).Excluding(store.DocIndexer, indexerVersion(tokens)).OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath)
+		docs, err := s.sc.Documents(tx).OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath, store.DocIndexer)
 		for _, d := range docs {
-			out = append(out, d.Path)
+			if d.Indexer != docVersion(base, markdown(d.Path), schemaFP) {
+				out = append(out, d.Path)
+			}
 		}
 		return err
 	})
@@ -240,6 +254,9 @@ type Status struct {
 	// UnparsedFrontmatter lists the documents whose frontmatter did not parse or evaluate; their
 	// bodies are indexed all the same.
 	UnparsedFrontmatter []string
+	// Diagnosed counts the documents whose frontmatter has a diagnostic: malformed YAML, or a field
+	// its workspace's schema does not admit. Their bodies are indexed all the same.
+	Diagnosed int64
 	// Failing lists the jobs whose last attempt failed: a read being retried, or a note over
 	// MaxFileSize waiting for its file to change. They are counted in PendingJobs too.
 	Failing []JobError
@@ -286,6 +303,9 @@ func (s *Store) Status(ctx context.Context) (Status, error) {
 		}
 		for _, d := range docs {
 			st.UnparsedFrontmatter = append(st.UnparsedFrontmatter, d.Path)
+		}
+		if st.Diagnosed, err = countDiagnosed(s.sc.Diagnostics(tx)); err != nil {
+			return err
 		}
 		jobs, err := s.sc.Jobs(tx).WithPredicate(dao.IsNotNull(`"index_job"."last_error"`)).
 			OrderBy(dao.Asc(store.ByPath)).Select(store.JobPath, store.JobAttempts, store.JobLastError)
