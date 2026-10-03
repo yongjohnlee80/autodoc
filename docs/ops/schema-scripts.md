@@ -77,6 +77,7 @@ A new workspace-owned table follows the same rule.
 | `embedding` | a text's vector under a model | `(workspace_id, text_hash, model_fp)` |
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
+| `event` | a configuration or lifecycle change, daemon-wide, with the client that made it; the last 1000 kept (000009) | `seq` |
 
 Each script says, in its comments, what every table and column is for.
 

@@ -89,7 +89,11 @@ func (h *Host) loadWorkspaces() {
 		h.syncFileTypes()
 		if pick < 0 {
 			h.ws, h.notesAll = "", nil
-			h.closeNote()
+			if h.keepDraft {
+				h.keepDraft = false
+			} else {
+				h.closeNote()
+			}
 			h.setWhere("autodoc · no workspace")
 			h.notify("no workspace: Go › Manage workspaces… adds one")
 			return
@@ -295,7 +299,11 @@ func (h *Host) enter(name string) {
 		h.remember(name)
 	}
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
-	h.closeNote()
+	if h.keepDraft {
+		h.keepDraft = false // the draft a removed workspace left stays on the page (events.go)
+	} else {
+		h.closeNote()
+	}
 	h.prog = progress{}
 	if h.searchCancel != nil {
 		h.searchCancel()

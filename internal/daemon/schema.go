@@ -27,6 +27,9 @@ const schemaPoll = 2 * time.Second
 type schemaHolder struct {
 	root     string
 	onChange func() // the active schema changed: revalidate the workspace's notes
+	// onFileChange is told the file changed on disk (a poll saw it), valid or not: an event no
+	// client caused, which every client is told about
+	onFileChange func()
 
 	mu      sync.Mutex
 	path    string // as stored: absolute, or under root; "" for none
@@ -113,6 +116,9 @@ func (h *schemaHolder) reload(force bool) {
 	if !force && stamp == h.stamp {
 		h.mu.Unlock()
 		return
+	}
+	if !force && h.onFileChange != nil {
+		defer h.onFileChange()
 	}
 	h.stamp = stamp
 	var parsed *schema.Schema

@@ -139,7 +139,8 @@ first.
 | `graph.backlinks` | workspace, path | the same shape: the notes that link to it |
 | `graph.neighborhood` | workspace, path, depth | `{nodes, edges: [{src, dst, kind}]}`: the notes within `depth` links |
 | `graph.unresolved` | workspace | `[{src, raw, reason}]`: links that name no note |
-| `sys.hello` | `{protocol, name}` | `{protocol, server, version, pid, addr}` |
+| `sys.hello` | `{protocol, name}` | `{protocol, server, version, pid, addr, client, events}`: `client` is this connection's token, `events` the event log's head |
+| `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
 
 Writing notes (`doc.write`, `doc.rename`, `doc.remove`), changing workspaces and choosing the
 embedding model are for the user's tools, not an agent's search. Do not call them unless the user

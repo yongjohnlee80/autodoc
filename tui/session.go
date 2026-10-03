@@ -50,6 +50,7 @@ func (h *Host) start() {
 		h.entered = false // a new connection enters its workspace again, as the first did
 		h.loadPrefs()
 		h.loadWorkspaces()
+		h.followEvents()
 		h.watch()
 	})
 }
