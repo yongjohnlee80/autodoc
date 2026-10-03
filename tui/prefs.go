@@ -24,6 +24,7 @@ const (
 	prefKeymap   = "tui.editor.keymap"
 	prefWrap     = "tui.editor.wrap"
 	prefNumbers  = "tui.editor.linenumbers"
+	prefImages   = "tui.preview.images"
 	prefCorner   = "tui.toast.corner"
 	prefSeconds  = "tui.toast.seconds"
 	// a plugin's placement: tui.plugin.<name>.placement
@@ -68,6 +69,7 @@ type prefs struct {
 	ruler                  int
 	keymap                 string
 	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
+	images                 bool   // previews as images where the terminal draws them (preview.go)
 	toastCorner            string // where the notifications stack
 	toastSeconds           int    // how long a finished one stays
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
@@ -77,7 +79,7 @@ type prefs struct {
 
 func defaultPrefs() prefs {
 	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
-		wrap: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds}
+		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds}
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
@@ -120,6 +122,9 @@ func prefsOf(m map[string]any) prefs {
 	}
 	if s, ok := str(prefNumbers); ok {
 		p.lineNumbers = s == "true"
+	}
+	if s, ok := str(prefImages); ok {
+		p.images = s != "false"
 	}
 	if s, ok := str(prefCorner); ok && slices.Contains(corners, s) {
 		p.toastCorner = s
@@ -171,6 +176,7 @@ func prefState(p prefs) map[string]any {
 		"App.explorerLength": panelLength(p.explorerEdge),
 		"App.editorWrap":     p.wrap,
 		"App.lineNumbers":    p.lineNumbers,
+		"App.imagePreviews":  p.images,
 		"App.linksLength":    panelLength(p.linkEdge),
 		// the page: the ruler's columns of text (editable columns: the line numbers' gutter is added
 		// to them, syncPageWidth), and its border, whose right edge is the first column past them
@@ -419,6 +425,7 @@ func (h *Host) syncPrefDialog() {
 	h.set("App.menuHiddenIndex", boolIndex(h.prefs.menuHidden))
 	h.set("App.wrapIndex", boolIndex(h.prefs.wrap))
 	h.set("App.lineNumbersIndex", boolIndex(h.prefs.lineNumbers))
+	h.set("App.imagesIndex", boolIndex(h.prefs.images))
 	h.set("App.toastCornerIndex", indexOf(corners, h.prefs.toastCorner))
 	h.set("App.toastSecondsIndex", h.prefs.toastSeconds-1)
 	h.set("App.statusShownIndex", boolIndex(h.prefs.statusOn))

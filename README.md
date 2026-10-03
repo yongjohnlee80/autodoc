@@ -158,6 +158,13 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
   (`guide.md › Setup › Linux`), the key path in YAML (`conf.yaml › server › database`). Plain text
   has none. **The outline** (`SPC c`, `Go › Outline…`) lists a Markdown note's headings, as the
   editor's text has them, saved or not; Enter jumps to the one under the cursor.
+- **Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
+  they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
+  (inside tmux, `set -g allow-passthrough on`), and `rsvg-convert` for a diagram or a headless
+  Chromium or Chrome for HTML, each run offline. Elsewhere a diagram is drawn as a terminal graph
+  and HTML opens in the default browser, and the preview says which was missing; turning
+  `Image previews` off compares the two on the same note. Both follow the active theme's colours
+  (light, dark, sepia, retro, mono), as `autodoc --export html --theme …` does.
 - **Frontmatter problems** show on a line over the page as the note is typed, once the workspace
   has a schema (`Manage… › Schema…`); they never block a save.
 - **The pickers** (search, open, new note, add a workspace) share one layout: the fields over the

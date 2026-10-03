@@ -125,6 +125,12 @@ type Host struct {
 	// a peer's removal of this one left
 	evCursor  int64
 	keepDraft bool
+	// the image previews (preview.go): previewGen numbers them, the latest wins; htmlPreviewPath is
+	// the file the HTML preview's image was made from; graphicsOverride replaces the terminal's
+	// kitty graphics answer in tests
+	previewGen       uint64
+	htmlPreviewPath  string
+	graphicsOverride func() tuicore.Tri
 	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
 	outline     *outline.Doc
 	outlineGen  uint64

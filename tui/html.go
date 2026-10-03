@@ -44,26 +44,37 @@ func (h *Host) previewHTML() {
 		h.notify("HTML preview currently accepts Markdown notes")
 		return
 	}
-	source, theme := []byte(h.editor.Value()), h.theme
-	if theme != "light" {
-		theme = "dark"
-	}
+	source, theme := []byte(h.editor.Value()), h.exportTheme()
+	image, why := h.imageMode(true)
 	h.say("opening HTML preview…")
-	do(h, func(ctx context.Context) error {
+	type answer struct {
+		content []byte
+		path    string
+		err     error
+	}
+	do(h, func(ctx context.Context) answer {
 		content, err := export.Render(source, export.HTML, theme)
 		if err != nil {
-			return err
+			return answer{err: err}
 		}
 		path, err := htmlPreviewFile(content)
 		if err != nil {
-			return err
+			return answer{err: err}
 		}
-		return h.browser(ctx, path)
-	}, func(err error) {
-		if err != nil {
-			h.notify("HTML preview: " + err.Error())
+		if !image {
+			err = h.browser(ctx, path)
+		}
+		return answer{content: content, path: path, err: err}
+	}, func(a answer) {
+		if a.err != nil {
+			h.notify("HTML preview: " + a.err.Error())
 			return
 		}
-		h.say("HTML preview opened in browser")
+		if image {
+			h.previewHTMLImage(a.content, a.path) // in the terminal (preview.go)
+			return
+		}
+		h.htmlPreviewPath = a.path
+		h.say("HTML preview opened in browser · " + why)
 	})
 }
