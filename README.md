@@ -151,6 +151,12 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
   the side the editor's preferences name; `Escape` or its key again closes it.
 - **The status line** (`SPC t`): the editor's mode, the workspace, and the note, with `[+]` while
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
+- **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
+  (`guide.md › Setup › Linux`), the key path in YAML (`conf.yaml › server › database`). Plain text
+  has none. **The outline** (`SPC c`, `Go › Outline…`) lists a Markdown note's headings, as the
+  editor's text has them, saved or not; Enter jumps to the one under the cursor.
+- **Frontmatter problems** show on a line over the page as the note is typed, once the workspace
+  has a schema (`Manage… › Schema…`); they never block a save.
 - **The pickers** (search, open, new note, add a workspace) share one layout: the fields over the
   list on the left, the note under the cursor on the right, the buttons beneath. The search runs
   as it is typed and refreshes its open query after a model or workspace transition; its preview
@@ -158,7 +164,7 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
 
 | Key | Does |
 | --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `k`, `,`, `a` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `c`, `k`, `,`, `a` …) |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |

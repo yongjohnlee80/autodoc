@@ -148,6 +148,7 @@ func (h *Host) show(p, content, version string) {
 	}
 	h.setDirty(false)
 	h.validateSoon()
+	h.refreshOutline()
 	h.backlinks.Reset(nil)
 	h.loadBacklinks(p)
 }
@@ -158,6 +159,8 @@ func (h *Host) closeNote() {
 	h.editor.SetValue("")
 	h.syncPageWidth()
 	h.note = note{gen: h.note.gen}
+	h.outline, h.outlineRows = nil, nil
+	h.outlineGen++
 	h.set("App.noteTitle", untitled)
 	h.set("App.syntaxDefinition", "Markdown (find)")
 	h.set("App.statusCenter", "")
@@ -170,6 +173,7 @@ func (h *Host) closeNote() {
 func (h *Host) edited() {
 	h.setDirty(true)
 	h.validateSoon()
+	h.outlineSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
 }
 

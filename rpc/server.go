@@ -37,7 +37,7 @@ import (
 //
 // Protocol 7 adds workspace.set_patterns for workspace admission changes. Protocol 8 adds frontmatter
 // schemas (workspace.set_schema, doc.validate, search.query's facets, workspace.list's schema and
-// index.status's diagnosed).
+// index.status's diagnosed) and doc.outline.
 const Protocol int64 = 8
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.

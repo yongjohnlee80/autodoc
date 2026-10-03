@@ -5,6 +5,7 @@ import (
 	"net"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -144,5 +145,28 @@ func TestSchemaVerbsOverTheWire(t *testing.T) {
 	// the fixed server keeps no schemas to set
 	if _, err := cli.Call(ctx, "workspace.set_schema", "kb", "s.yaml"); code(err) != CodeUnsupported {
 		t.Errorf("workspace.set_schema on a fixed set: %v", err)
+	}
+}
+
+func TestDocOutlineOverTheWire(t *testing.T) {
+	cli, fsys := schemaServer(t, "version: 1\nfrontmatter:\n")
+	ctx := context.Background()
+	if _, err := fsys.WriteFile(ctx, "g.md", strings.NewReader("---\na: 1\n---\n# Guide\n\n## Setup\n\ntext\n")); err != nil {
+		t.Fatal(err)
+	}
+	res := call(t, cli, "doc.outline", "kb", "g.md").(map[string]any)
+	if res["version"] == "" {
+		t.Fatal("no version")
+	}
+	var got []string
+	for _, h := range res["headings"].([]any) {
+		m := h.(map[string]any)
+		got = append(got, m["id"].(string)+"@"+strconv.FormatInt(m["line"].(int64), 10))
+	}
+	if !reflect.DeepEqual(got, []string{"guide@4", "setup@6"}) {
+		t.Errorf("headings = %v", got)
+	}
+	if _, err := cli.Call(ctx, "doc.outline", "kb", "missing.md"); code(err) != CodeNotFound {
+		t.Errorf("a missing note: %v", err)
 	}
 }

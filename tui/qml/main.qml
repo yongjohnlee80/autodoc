@@ -95,6 +95,7 @@ Window {
             MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "&Links"; onTriggered: App.toggleLinks() }
+            MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
@@ -186,6 +187,7 @@ Window {
             lineNumberColor: Theme.document.lineNumber
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
+            onCursorPositionChanged: App.cursorMoved()
             SyntaxHighlighter { definition: App.syntaxDefinition }
         }
         }
@@ -253,6 +255,7 @@ Window {
     SearchPicker { id: searchPicker }
     Find { id: findDialog }
     NoteOpen { id: noteOpen }
+    OutlinePicker { id: outlinePicker }
     NoteName { id: noteName }
     UnsavedNote { id: unsavedNote }
     NoteConflict { id: noteConflict }
