@@ -1,0 +1,37 @@
+package kind
+
+import (
+	"errors"
+	"reflect"
+	"testing"
+)
+
+func TestOf(t *testing.T) {
+	text := []string{".log", ".rst"}
+	for p, want := range map[string]Kind{
+		"a.md": Markdown, "a.MD": Markdown, "README": Markdown, "x.adoc": Markdown,
+		"n.txt": Text, "n.TXT": Text, "app.log": Text, "doc.rst": Text,
+		"c.yaml": YAML, "c.YML": YAML,
+		"r.pdf": Pro, "r.DOCX": Pro, "r.doc": Pro, "r.odt": Pro,
+	} {
+		if got := Of(p, text); got != want {
+			t.Errorf("Of(%s) = %v, want %v", p, got, want)
+		}
+	}
+	if Of("app.log", nil) != Markdown {
+		t.Error("an undeclared extension is Markdown, the default")
+	}
+}
+
+func TestTextExtensions(t *testing.T) {
+	got, err := TextExtensions([]string{"log", " .RST ", ".log", "", "c++"})
+	if err != nil || !reflect.DeepEqual(got, []string{".log", ".rst", ".c++"}) {
+		t.Fatalf("TextExtensions = %v, %v", got, err)
+	}
+	for _, bad := range []string{".pdf", "DOCX", ".md", "txt", ".yml", "a b", ".", ".toolongextension17", "../x"} {
+		var e *ErrExtension
+		if _, err := TextExtensions([]string{bad}); !errors.As(err, &e) {
+			t.Errorf("%q was accepted (%v)", bad, err)
+		}
+	}
+}

@@ -49,6 +49,7 @@ type Workspaces struct {
 	// schemas are the workspaces' frontmatter schemas, by workspace id, under mu: each outlives its
 	// workspace's restarts, so the last valid schema survives a pattern or provider change.
 	schemas map[int64]*schemaHolder
+	texts   map[int64]*textExtensions // the workspaces' own plain-text extensions, by id, under mu
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -108,7 +109,7 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 		o.Log = logger.New()
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
-		schemas: map[int64]*schemaHolder{}}
+		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}}
 	m.queue = newEmbeddingQueue(m)
 	return m
 }
@@ -196,6 +197,12 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	if err != nil {
 		return nil, err
 	}
+	stored, err := m.db.TextExtensions(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	text := m.textExtensionsFor(id)
+	text.store(stored)
 	ws, err := workspace.Open(c)
 	if err != nil {
 		return nil, err
@@ -206,7 +213,7 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	sh.watch(m.ctx, schemaPoll)
 	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
 		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log, Workspace: c.Name, ExternalEmbedding: true,
-		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get})
+		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get, TextExtensions: text.load})
 	ix.SetSemanticPaused(!m.queue.setPolicy(c.Name, policy))
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
@@ -247,7 +254,8 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 			}
 			return n
 		},
-		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status, Warming: m.warmingOf(c.Name),
+		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load)), Following: f.Status, Warming: m.warmingOf(c.Name),
+		TextExtensions: text.load,
 		Searched:       func() { m.queue.searchWorkspace(c.Name) },
 		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) },
 		FrontmatterSchema: func() (*schema.Schema, rpc.SchemaStatus) {
@@ -621,6 +629,7 @@ func (m *Workspaces) Remove(ctx context.Context, name string) error {
 			h.stop()
 			delete(m.schemas, s.id)
 		}
+		delete(m.texts, s.id)
 	}
 	return err
 }

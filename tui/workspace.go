@@ -58,7 +58,7 @@ func (h *Host) loadWorkspaces() {
 			m := asMap(w)
 			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
 				embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
-				schema: readSchemaInfo(m["schema"])})
+				schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"])})
 		}
 		return answer{list: out}
 	}, func(a answer) {
@@ -122,6 +122,82 @@ func (h *Host) syncFileTypes() {
 	h.set("App.yamlTypeIndex", boolIndex(matcher.Match("sample.yaml") && matcher.Match("sample.yml")))
 	patterns := "include: " + strings.Join(workspace.include, ", ") + " · exclude: " + strings.Join(workspace.exclude, ", ")
 	h.set("App.fileTypesPatterns", patterns)
+	h.setField("App.customTypes", strings.Join(workspace.textExtensions, ", "))
+	h.set("App.customTypesPreview", customTypesPreview(matcher, workspace.textExtensions))
+}
+
+// customTypesPreview says, for each of the workspace's own text types, whether a file of it at the
+// root would be indexed: the patterns decide, and a narrower glob or an exclude can say no.
+func customTypesPreview(m wsfilter.Matcher, exts []string) string {
+	if len(exts) == 0 {
+		return "none: e.g. .log, .rst (read as UTF-8 plain text, never sniffed)"
+	}
+	var parts []string
+	for _, e := range exts {
+		state := "indexed"
+		if !m.Match("sample" + e) {
+			state = "not indexed by the rules"
+		}
+		parts = append(parts, "sample"+e+": "+state)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// setCustomTypes declares the workspace's own plain-text extensions, then admits each new one with
+// an include (unless the rules already admit it) and drops the include of each one removed. The
+// extensions are validated by the daemon before any rule changes.
+func (h *Host) setCustomTypes(text string) {
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok || h.fileTypesPending {
+		return
+	}
+	var exts []string
+	for _, f := range strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
+		exts = append(exts, f)
+	}
+	h.fileTypesPending = true
+	h.set("App.fileTypesHelp", "updating the workspace…")
+	do(h, func(ctx context.Context) error {
+		res, err := h.call(ctx, "workspace.set_text_extensions", workspace.name, patternArgs(exts))
+		if err != nil {
+			return err
+		}
+		norm := workspacePatterns(res)
+		matcher := wsfilter.NewMatcher(workspace.include, workspace.exclude)
+		include, exclude := slices.Clone(workspace.include), slices.Clone(workspace.exclude)
+		changed := false
+		for _, e := range norm {
+			pattern := "**/*" + e
+			if slices.Contains(exclude, pattern) {
+				exclude = slices.DeleteFunc(exclude, func(p string) bool { return p == pattern })
+				changed = true
+			}
+			if !matcher.Match("sample"+e) && !slices.Contains(include, pattern) {
+				include = append(include, pattern)
+				changed = true
+			}
+		}
+		for _, e := range workspace.textExtensions {
+			if pattern := "**/*" + e; !slices.Contains(norm, e) && slices.Contains(include, pattern) {
+				include = slices.DeleteFunc(include, func(p string) bool { return p == pattern })
+				changed = true
+			}
+		}
+		if !changed {
+			return nil
+		}
+		_, err = h.call(ctx, "workspace.set_patterns", workspace.name, patternArgs(include), patternArgs(exclude))
+		return err
+	}, func(err error) {
+		h.fileTypesPending = false
+		if err != nil {
+			h.set("App.fileTypesHelp", "not changed: "+wireMessage(err))
+			h.loadWorkspaces()
+			return
+		}
+		h.set("App.fileTypesHelp", "updated; the workspace is reconciling")
+		h.loadWorkspaces()
+	})
 }
 
 func (h *Host) openFileTypes() {

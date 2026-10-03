@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"path"
 	"slices"
 	"strings"
 
@@ -11,6 +10,8 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // FIND — / in the page, the explorer or the links, as AutoDB's: a word or phrase in the pane that
@@ -143,16 +144,12 @@ func (h *Host) showFind() {
 		h.findMarks.Store(terms)
 		// set again so the page highlights every line afresh: it keeps a line's colours until its
 		// text changes, and the find's words are not its text
-		if h.note.open {
-			switch strings.ToLower(path.Ext(h.note.path)) {
-			case ".txt":
-				h.editor.SetHighlighter(h.textHighlighter())
-			case ".yaml", ".yml":
-				h.editor.SetHighlighter(h.yamlHighlighter())
-			default:
-				h.editor.SetHighlighter(h.pageHighlighter())
-			}
-		} else {
+		switch h.outlineKind() {
+		case kind.Text:
+			h.editor.SetHighlighter(h.textHighlighter())
+		case kind.YAML:
+			h.editor.SetHighlighter(h.yamlHighlighter())
+		default:
 			h.editor.SetHighlighter(h.pageHighlighter())
 		}
 	}

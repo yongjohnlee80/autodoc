@@ -124,8 +124,9 @@ first.
 
 | verb | parameters | answers |
 | --- | --- | --- |
-| `workspace.list` | — | `[{name, root, state, include, exclude, schema}]`; `schema` is `{path, active, fields, error, line}` |
+| `workspace.list` | — | `[{name, root, state, include, exclude, schema, text_extensions}]`; `schema` is `{path, active, fields, error, line}`; `text_extensions` are the extensions read as plain text besides `.txt` |
 | `workspace.set_patterns` | workspace, include list, exclude list | replace validated globs and reconcile that workspace; an empty include matches no files |
+| `workspace.set_text_extensions` | workspace, list of extensions | declare the workspace's own plain-text extensions (`.log`); answers them normalized. Which files are indexed is still the patterns' |
 | `workspace.set_schema` | workspace, path | name the frontmatter schema file (under the root, or absolute; `""` for none); answers the `schema` status |
 | `search.query` | workspace, query, options? | see above |
 | `doc.read` | workspace, path | `{content, version}`: the note's text, and its version |

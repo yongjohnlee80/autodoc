@@ -43,6 +43,8 @@ func (h *Host) state() map[string]any {
 		"App.fileTypesRoot":        "",
 		"App.fileTypesPatterns":    "",
 		"App.fileTypesHelp":        "",
+		"App.customTypes":          "",
+		"App.customTypesPreview":   "",
 		"App.diagramTitle":         "Mermaid preview",
 		"App.diagramText":          "",
 		"App.diagramHelp":          "",

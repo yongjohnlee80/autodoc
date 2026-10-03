@@ -11,11 +11,12 @@ import (
 	"fmt"
 	"io"
 	pathpkg "path"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/vfs"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // MaxSize is the largest document read or written: the RPC message limit (4 MiB), less room for
@@ -40,11 +41,31 @@ var (
 type Docs struct {
 	fsys     vfs.FS
 	eligible func(path string) bool // the workspace's include and exclude; nil: every path
+	text     func() []string        // the workspace's own plain-text extensions; nil: none
 }
 
+// Option configures Docs.
+type Option func(*Docs)
+
+// WithTextExtensions reads the workspace's own plain-text extensions (core/kind) from text, asked
+// at each read and write, so a change applies without a restart.
+func WithTextExtensions(text func() []string) Option { return func(d *Docs) { d.text = text } }
+
 // New returns the documents of fsys that eligible admits.
-func New(fsys vfs.FS, eligible func(path string) bool) *Docs {
-	return &Docs{fsys: fsys, eligible: eligible}
+func New(fsys vfs.FS, eligible func(path string) bool, opts ...Option) *Docs {
+	d := &Docs{fsys: fsys, eligible: eligible}
+	for _, o := range opts {
+		o(d)
+	}
+	return d
+}
+
+func (d *Docs) kindOf(path string) kind.Kind {
+	var text []string
+	if d.text != nil {
+		text = d.text()
+	}
+	return kind.Of(path, text)
 }
 
 // Doc is a document's content at a version.
@@ -54,22 +75,13 @@ type Doc struct {
 }
 
 func (d *Docs) check(path string) error {
-	switch strings.ToLower(pathpkg.Ext(path)) {
-	case ".doc", ".docx", ".odt", ".pdf":
+	if d.kindOf(path) == kind.Pro {
 		return fmt.Errorf("%w: %s", ErrNotEligible, path)
 	}
 	if d.eligible != nil && !d.eligible(path) {
 		return fmt.Errorf("%w: %s", ErrNotEligible, path)
 	}
 	return nil
-}
-
-func structuredText(path string) bool {
-	switch strings.ToLower(pathpkg.Ext(path)) {
-	case ".txt", ".yaml", ".yml":
-		return true
-	}
-	return false
 }
 
 // Read returns the document at path with the version its content was read at. The file is stat'ed
@@ -104,7 +116,7 @@ func (d *Docs) Read(ctx context.Context, path string) (Doc, error) {
 			return Doc{}, err
 		}
 		if after.Version == before.Version && len(content) <= MaxSize {
-			if structuredText(path) && (!utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0) {
+			if d.kindOf(path).IsText() && (!utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0) {
 				return Doc{}, fmt.Errorf("%w: %s is not UTF-8 text", ErrNotEligible, path)
 			}
 			return Doc{Content: content, Version: after.Version}, nil
@@ -125,7 +137,7 @@ func (d *Docs) Write(ctx context.Context, path string, content []byte, want vfs.
 	if len(content) > MaxSize {
 		return "", fmt.Errorf("%w: %d bytes", ErrTooLarge, len(content))
 	}
-	if structuredText(path) && (!utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0) {
+	if d.kindOf(path).IsText() && (!utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0) {
 		return "", fmt.Errorf("%w: %s is not UTF-8 text", ErrNotEligible, path)
 	}
 	var fi vfs.FileInfo

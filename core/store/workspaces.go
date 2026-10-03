@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -123,6 +124,46 @@ func (s *Store) SchemaPath(ctx context.Context, id int64) (string, error) {
 		return nil
 	})
 	return path, err
+}
+
+// TextExtensions is workspace id's own plain-text extensions, as stored; none when it has none.
+func (s *Store) TextExtensions(ctx context.Context, id int64) ([]string, error) {
+	var out []string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceTextExtensions)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil || w.TextExtensions == nil {
+			return err
+		}
+		return json.Unmarshal([]byte(*w.TextExtensions), &out)
+	})
+	return out, err
+}
+
+// SetWorkspaceTextExtensions replaces workspace id's own plain-text extensions; none clears them.
+// The caller normalizes them (core/kind.TextExtensions).
+func (s *Store) SetWorkspaceTextExtensions(ctx context.Context, id int64, exts []string) error {
+	var value any
+	if len(exts) > 0 {
+		b, err := json.Marshal(exts)
+		if err != nil {
+			return err
+		}
+		value = string(b)
+	}
+	return s.Write(ctx, func(tx *Tx) error {
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceTextExtensions, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		return nil
+	})
 }
 
 // SetWorkspaceSchema names workspace id's frontmatter schema file; "" removes it.

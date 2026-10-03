@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -88,4 +89,31 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 		return string(b) == "---\ntype: memo\n---\nbody\n" && !r.note().dirty
 	})
 	r.s.WaitForText(t, "⚠ frontmatter line 2")
+}
+
+// Your own text types: declared and admitted in one action, previewed as indexed, refused for a
+// Pro format, and their include dropped when removed.
+func TestCustomTextTypes(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.openFileTypes() })
+	r.s.WaitForText(t, "none: e.g. .log, .rst")
+	r.h.p.Post(func() { r.h.setCustomTypes("log") })
+	r.s.WaitFor(t, ".log declared and admitted", func(string) bool {
+		ws, err := d.db.Workspaces(context.Background())
+		return err == nil && len(ws) == 1 && ws[0].TextExtensions != nil && *ws[0].TextExtensions == `[".log"]` &&
+			slices.Contains(ws[0].Include, "**/*.log")
+	})
+	r.s.WaitForText(t, "sample.log: indexed")
+
+	r.h.p.Post(func() { r.h.setCustomTypes(".log, .pdf") })
+	r.s.WaitForText(t, "not changed:")
+	r.s.WaitForText(t, "Pro document format")
+
+	r.h.p.Post(func() { r.h.setCustomTypes("") })
+	r.s.WaitFor(t, ".log removed with its include", func(string) bool {
+		ws, err := d.db.Workspaces(context.Background())
+		return err == nil && len(ws) == 1 && ws[0].TextExtensions == nil && !slices.Contains(ws[0].Include, "**/*.log")
+	})
 }
