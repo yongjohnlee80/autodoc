@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -101,7 +102,7 @@ func (c *configurer) Configure(_ context.Context, name string, ch store.Changes)
 func dialServer(t *testing.T, ws Workspaces) *golibrpc.Client {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	sock := filepath.Join(t.TempDir(), "s.sock")
+	sock := shortSocket(t)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +236,7 @@ func TestConfigureVerbs_LogAnEventForEachChange(t *testing.T) {
 	m := &configurer{Workspaces: Fixed()}
 	ev := &recordedEvents{}
 	ctx, cancel := context.WithCancel(context.Background())
-	sock := filepath.Join(t.TempDir(), "s.sock")
+	sock := shortSocket(t)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -281,4 +282,16 @@ func TestConfigureVerbs_LogAnEventForEachChange(t *testing.T) {
 	if n := len(ev.all()); n != before {
 		t.Errorf("a refused save logged %d events", n-before)
 	}
+}
+
+// shortSocket is a socket path short enough for macOS (104 bytes): a test's TempDir, named after
+// the test, is too long there.
+func shortSocket(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "rpc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return filepath.Join(dir, "s.sock")
 }

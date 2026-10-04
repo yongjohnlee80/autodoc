@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/tui/widget"
+
 	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 )
@@ -86,15 +88,17 @@ func digest(s string) string {
 // diagram. The page as the browser leaves it holds each one's SVG, in the page's theme, and no
 // error.
 func TestMermaidDrawsInABrowser(t *testing.T) {
-	browser := ""
-	for _, name := range []string{"chromium", "chromium-browser", "google-chrome", "google-chrome-stable"} {
-		if p, err := exec.LookPath(name); err == nil {
-			browser = p
-			break
-		}
-	}
-	if browser == "" {
+	browser, ok := widget.HTMLRasterizer()
+	if !ok {
 		t.Skip("no headless Chromium or Chrome")
+	}
+	// the browser's own sandbox must run here: a runner that forbids user namespaces refuses it,
+	// and says so; any other failure of the probe is a failure
+	if _, err := widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32); err != nil {
+		if strings.Contains(err.Error(), "No usable sandbox") {
+			t.Skip("the installed browser has no usable sandbox here")
+		}
+		t.Fatalf("the browser probe failed: %v", err)
 	}
 	source := []byte("# Diagrams\n\n```mermaid\nflowchart TD\n  A[\"event arrives<br/>at node N\"] --> B{\"pointer<br/>disabled?\"}\n  B -- yes --> P[\"skip N\"]\n  B -- no --> C[resolve]\n```\n\n" +
 		"```mermaid\nstateDiagram-v2\n  [*] --> Idle\n  Idle --> Armed: press<br/>MenuArm\n  Armed --> Idle: release\n```\n")
@@ -113,10 +117,11 @@ func TestMermaidDrawsInABrowser(t *testing.T) {
 		"--proxy-server=127.0.0.1:9", "--host-resolver-rules=MAP * ~NOTFOUND", "--user-data-dir="+filepath.Join(dir, "profile"),
 		"--virtual-time-budget=10000", "--dump-dom", "file://"+path).Output()
 	if err != nil {
-		if strings.Contains(err.Error(), "sandbox") {
-			t.Skip("the installed browser has no usable sandbox here")
+		var stderr []byte
+		if ee, ok := err.(*exec.ExitError); ok {
+			stderr = ee.Stderr
 		}
-		t.Fatal(err)
+		t.Fatalf("the browser: %v: %s", err, stderr)
 	}
 	// the page as drawn, without its scripts, whose own text names mermaid's errors
 	dom := regexp.MustCompile(`(?s)<script>.*?</script>`).ReplaceAllString(string(out), "")
