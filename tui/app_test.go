@@ -84,6 +84,8 @@ type daemonOpts struct {
 	notReady int32
 	// reg are the registrations its sys.capabilities reports (ADR 0216); zero: the community build's
 	reg registrations.Tables
+	// deriver, when set, is its build's deriver: it indexes and reads PDFs with it, and reports it
+	deriver registrations.Deriver
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -114,6 +116,17 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	d.db = db
+	match := md
+	var derives *registrations.Table
+	var docOpts []docs.Option
+	if o.deriver != nil {
+		if derives, err = registrations.New(nil, o.deriver); err != nil {
+			t.Fatal(err)
+		}
+		match = func(p string) bool { return md(p) || strings.HasSuffix(p, ".pdf") }
+		docOpts = []docs.Option{docs.WithRegistrations(derives.Kinds()), docs.WithDeriver(derives)}
+		o.reg = derives.Tables()
+	}
 	prefs := o.prefs
 	if prefs == nil {
 		prefs = testPrefs
@@ -149,12 +162,12 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 			t.Fatal(err)
 		}
 		ixs := index.Open(db, row.ID)
-		ix := index.NewIndexer(ixs, fsys, index.Options{Match: md, BatchDelay: 5 * time.Millisecond, Workers: workers})
-		f := follow.New(fsys, ix, ix, follow.Options{Match: md, PollInterval: 20 * time.Millisecond})
+		ix := index.NewIndexer(ixs, fsys, index.Options{Match: match, BatchDelay: 5 * time.Millisecond, Workers: workers, Registrations: derives})
+		f := follow.New(fsys, ix, ix, follow.Options{Match: match, PollInterval: 20 * time.Millisecond})
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
-		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, md), Following: f.Status, Warming: o.warming})
+		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming})
 		// wait until the files are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)

@@ -23,6 +23,11 @@ import (
 // A load is off the loop, and applied only if it is still the latest open under the same workspace
 // and connection: a slow load cannot replace a later one.
 //
+// A DERIVED DOCUMENT IS READ, NEVER WRITTEN. A PDF or a DOCX the daemon's build derives opens as
+// its derived text in a read-only editor, badged with its kind ("[PDF · read-only]"): motions,
+// find, copy and the outline work, edits and saves do not. SPC O (File › Open in System Viewer)
+// opens the original in the desktop's own viewer.
+//
 // THE PAGE IS ALWAYS WRITABLE. With no file open, what is typed is an untitled draft: unsaved work
 // like a file's, guarded the same way; saving it asks for its path in the new-file picker, creates
 // the file with the draft's text, and opens it there, the cursor where it was.
@@ -33,6 +38,8 @@ type openedFile struct {
 	open    bool
 	dirty   bool
 	gen     uint64 // numbers the opens; the latest wins
+	// derived is the kind of a derived document ("PDF"), open read-only; "" for a file of text
+	derived string
 	// then is what the unsaved question guards: run after save or discard, dropped by stay.
 	then func()
 }
@@ -46,6 +53,15 @@ func (n openedFile) name() string {
 		return n.path
 	}
 	return untitled
+}
+
+// title is the file's name as the page and the status line show it: a derived document's carries
+// its read-only badge.
+func (n openedFile) title() string {
+	if n.open && n.derived != "" {
+		return n.path + "  [" + n.derived + " · read-only]"
+	}
+	return n.name()
 }
 
 // guard runs then, asking first when the file has unsaved changes.
@@ -137,7 +153,12 @@ func (h *Host) show(p, content, version string) {
 		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.file.path, h.file.version, h.file.open = p, version, true
-	h.set("App.fileTitle", p)
+	h.file.derived = ""
+	if h.kinds.Readable(p) { // the daemon's registrations: it is the one deriving
+		h.file.derived = kind.Label(p)
+	}
+	h.editor.SetReadOnly(h.file.derived != "")
+	h.set("App.fileTitle", h.file.title())
 	switch h.kinds.Of(p, h.textExtensions()) { // the daemon's registrations: it is the one indexing
 	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
@@ -159,6 +180,7 @@ func (h *Host) closeFile() {
 	h.editor.SetValue("")
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
+	h.editor.SetReadOnly(false)
 	h.outline, h.outlineRows = nil, nil
 	h.outlineGen++
 	h.set("App.fileTitle", untitled)
@@ -184,7 +206,7 @@ func (h *Host) setDirty(v bool) {
 		mark = " [+]"
 	}
 	if h.file.open || v {
-		h.set("App.statusCenter", h.file.name()+mark)
+		h.set("App.statusCenter", h.file.title()+mark)
 	} else {
 		h.set("App.statusCenter", "")
 	}
@@ -197,6 +219,10 @@ func (h *Host) syncMode() { h.setWhere(h.where) }
 func (h *Host) save() {
 	if !h.file.open {
 		h.nameDraft(nil)
+		return
+	}
+	if h.file.derived != "" {
+		h.notify(h.file.path + " is read-only: its text is derived from the " + h.file.derived + "; SPC O opens the original")
 		return
 	}
 	h.write(h.editor.Value(), h.file.version, nil)

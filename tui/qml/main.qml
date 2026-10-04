@@ -88,6 +88,7 @@ Window {
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
             MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
             MenuItem { text: "Preview Mermaid &diagram…"; onTriggered: App.previewDiagram() }
+            MenuItem { text: "Open in System &Viewer"; onTriggered: App.openSystemViewer() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {

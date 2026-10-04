@@ -27,5 +27,6 @@ Dialog {
     Shortcut { sequence: "?"; onActivated: { leader.close(); help.open() } }
     Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }
     Shortcut { sequence: "Shift+A"; onActivated: { leader.close(); about.open() } }
+    Shortcut { sequence: "Shift+O"; onActivated: { leader.close(); App.openSystemViewer() } }
     Shortcut { sequence: "Shift+Q"; onActivated: { leader.close(); App.quit() } }
 }
