@@ -1,16 +1,19 @@
 package index
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"path"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/logger"
@@ -18,6 +21,8 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -62,6 +67,11 @@ type Options struct {
 	ExternalEmbedding bool
 	OnEmbeddingWork   func() // non-blocking notification after a document commit
 	Workspace         string
+	// Schema is the workspace's frontmatter schema now, and its fingerprint ("" and nil: none). It
+	// is asked once per document, so a schema swapped while the indexer runs applies from the next.
+	Schema func() (*schema.Schema, string)
+	// TextExtensions are the workspace's own plain-text extensions (kind.Of); nil: none.
+	TextExtensions func() []string
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -109,17 +119,18 @@ type workItem struct {
 }
 
 type prepared struct {
-	path       string
-	indexer    string
-	claimedSeq int64
-	skip       bool
-	delete     bool
-	err        error
-	tooLarge   bool // err is that the file is over MaxFileSize
-	version    vfs.Version
-	meta       docMeta
-	chunks     []chunkT
-	links      []linkT
+	path        string
+	indexer     string
+	claimedSeq  int64
+	skip        bool
+	delete      bool
+	err         error
+	tooLarge    bool // err is that the file is over MaxFileSize
+	version     vfs.Version
+	meta        docMeta
+	chunks      []chunkT
+	links       []linkT
+	frontmatter schema.Result // a Markdown note's facets and diagnostics under the schema
 }
 
 // NewIndexer returns the indexer for store over the workspace root fsys.
@@ -228,12 +239,8 @@ func (x *Indexer) Run(ctx context.Context) error {
 	if err := x.loadJobs(ctx); err != nil {
 		return err
 	}
-	outdated, err := x.store.outdated(ctx)
-	if err != nil {
-		return fmt.Errorf("index: listing outdated documents: %w", err)
-	}
-	for _, p := range outdated {
-		x.touch(p, false) // the indexer check rebuilds each: no file changed, the chunker did
+	if err := x.Revalidate(ctx); err != nil {
+		return err
 	}
 	if x.sem != nil {
 		if err := x.setupModels(ctx); err != nil {
@@ -431,7 +438,9 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.err = err
 		return p
 	}
-	p.indexer = indexerVersion(tokens)
+	sch, schemaFP := x.schema()
+	k := x.kindOf(w.path)
+	p.indexer = docVersion(indexerVersion(tokens), k == kind.Markdown, schemaFP)
 	fi, err := x.fsys.Stat(ctx, w.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -442,6 +451,10 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		return p
 	case !fi.IsRegular() || (x.opts.Match != nil && !x.opts.Match(w.path)):
 		p.delete = true // a directory now, a symlink, or outside include / inside exclude
+		return p
+	}
+	if k == kind.Pro {
+		p.delete = true // Community never reads a Pro document format, whatever a glob admits
 		return p
 	}
 	if !w.force {
@@ -476,11 +489,31 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.err, p.tooLarge = tooLarge(w.path), true
 		return p
 	}
-	doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 	p.version = fi.Version
-	p.meta = readMeta(doc, w.path)
-	p.chunks = chunkDocWithLimit(doc, p.meta.title, tokens)
-	p.links = extractLinks(doc, w.path, x.opts.Match)
+	if k.IsText() {
+		if !utf8.Valid(src) || bytes.IndexByte(src, 0) >= 0 {
+			p.err = fmt.Errorf("%s: not UTF-8 text", w.path)
+			return p
+		}
+	}
+	switch k {
+	case kind.Text:
+		p.meta.title = strings.TrimSuffix(path.Base(w.path), path.Ext(w.path))
+		p.chunks = chunkPlainText(src, p.meta.title, tokens)
+	case kind.YAML:
+		p.meta, p.chunks = prepareYAML(src, w.path, tokens)
+	default:
+		doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
+		p.meta = readMeta(doc, w.path)
+		p.chunks = chunkDocWithLimit(doc, p.meta.title, tokens)
+		p.links = extractLinks(doc, w.path, x.opts.Match)
+		// the frontmatter is validated from the parse the note already had (ADR 0212 §5)
+		if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
+			p.frontmatter = sch.Validate(fm.Literal, true)
+		} else {
+			p.frontmatter = sch.Validate(nil, false)
+		}
+	}
 	x.mu.Lock()
 	x.parses++
 	x.mu.Unlock()
@@ -713,6 +746,9 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 		return 0, err
 	}
 	if err := s.replaceValues(tx, s.sc.Aliases(tx), s.sc.AliasBatch(tx), docID, p.meta.aliases); err != nil {
+		return 0, err
+	}
+	if err := s.replaceFrontmatter(tx, docID, p.frontmatter); err != nil {
 		return 0, err
 	}
 	// the names, the note's own links, then the links elsewhere whose target may have changed: those

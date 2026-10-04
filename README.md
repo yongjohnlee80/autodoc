@@ -65,12 +65,29 @@ A missing file is every default. An unknown setting is an error, so a misspellin
 
 **Workspaces are not configured here.** They are kept in the store: add, rename and delete them in
 the TUI (`Go › Manage workspaces…`) or with `workspace.add`. A workspace has a name (what `--ui` and
-every API call take), a root directory, and include and exclude patterns (`**/*.md`, and `.git/**`
-and `**/node_modules/**`, by default). An excluded directory is never walked or watched. A workspace
+every API call take), a root directory, and include and exclude patterns. New workspaces include
+`**/*.md`, `**/*.txt`, `**/*.yaml`, and `**/*.yml`, and exclude `.git/**` and `**/node_modules/**`
+by default. An excluded directory is never walked or watched. A workspace
 added before node_modules joined the defaults, still with `.git/**` alone, moves to the current
-default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
-`**` matches any number of whole segments. A config file that still has a `[[workspace]]` section is
+default when the daemon starts; a workspace whose patterns were chosen keeps them. Patterns are
+root-relative globs: each `/`-separated segment is a `path.Match` pattern, and
+`**` matches any number of whole segments. Bounded brace alternatives such as `**/*.{md,txt}` are
+expanded before matching. Existing workspaces keep their stored include patterns. A config file
+that still has a `[[workspace]]` section is
 refused with a message saying so.
+
+`Go › Manage workspaces… › Globs…` edits the selected workspace's include and exclude lists.
+Enter semicolon-separated root-relative patterns; a blank include list matches no files. Invalid
+rules leave the stored patterns and running watcher unchanged. Use another workspace for a separate
+directory root rather than trying to combine roots in one rule.
+
+`Options › Editor preferences… › File types…` shows the active workspace's text-format choices.
+Markdown, plain text and YAML can be toggled there; the daemon validates the new patterns and reconciles
+the index before the change is shown. Your own text types (`.log`, `.rst`, …) are entered there too:
+each is read as UTF-8 plain text by declaration (never sniffed), admitted with an include unless the
+rules already admit it, and previewed as indexed or not by the current rules. `.doc`, `.docx`, `.odt`,
+and `.pdf` are Pro-only and unavailable in Community, even if a broad include glob names them, and
+cannot be declared as text.
 
 **Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
 added and chosen in the TUI's AI models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
@@ -93,7 +110,7 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 | Group | Verbs |
 | --- | --- |
 | `sys` | `hello`, `shutdown` |
-| `workspace` | `list`, `add(name, root, include?, exclude?)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)` |
+| `workspace` | `list`, `add(name, root, include?, exclude?)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)` |
 | `search` | `query(ws, q, {limit, mode, tags, paths})` |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
@@ -115,6 +132,20 @@ The screen is a page and nothing else: the note, 120 columns wide and centred, t
 right edge. With no note open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
 names and saves it as a note. Everything else comes when it is asked for:
 
+`File › Preview HTML in browser` renders the current Markdown editor buffer (including unsaved
+edits) into an offline, light/dark themed cache file and opens it with the system browser. A
+browser-launch error is reported in the TUI. Export a Markdown file without the daemon with
+`autodoc --export=html --theme=light --output=/path/page.html /path/note.md` or use
+`--export=text` for stripped text. Export requires an explicit destination and refuses to
+overwrite its source. Remote images are represented by their alt text in HTML exports; scripts
+and remote resources are not loaded.
+
+`File › Preview Mermaid diagram…` shows a terminal graph for a Mermaid fenced block. The block
+under the cursor wins; otherwise the first is used. Basic flowcharts and sequences are supported;
+unsupported constructs show a diagnostic alongside their unchanged source. The preview text uses
+the active document theme, including light and dark. Supported diagrams render as offline SVG
+in HTML exports; unsupported constructs remain visible as source with a diagnostic.
+
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
   and `U` are dead keys there, so their menus need `F10`), and `F10` may need `Fn`.
@@ -123,6 +154,19 @@ names and saves it as a note. Everything else comes when it is asked for:
   the side the editor's preferences name; `Escape` or its key again closes it.
 - **The status line** (`SPC t`): the editor's mode, the workspace, and the note, with `[+]` while
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
+- **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
+  (`guide.md › Setup › Linux`), the key path in YAML (`conf.yaml › server › database`). Plain text
+  has none. **The outline** (`SPC c`, `Go › Outline…`) lists a Markdown note's headings, as the
+  editor's text has them, saved or not; Enter jumps to the one under the cursor.
+- **Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
+  they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
+  (inside tmux, `set -g allow-passthrough on`), and `rsvg-convert` for a diagram or a headless
+  Chromium or Chrome for HTML, each run offline. Elsewhere a diagram is drawn as a terminal graph
+  and HTML opens in the default browser, and the preview says which was missing; turning
+  `Image previews` off compares the two on the same note. Both follow the active theme's colours
+  (light, dark, sepia, retro, mono), as `autodoc --export html --theme …` does.
+- **Frontmatter problems** show on a line over the page as the note is typed, once the workspace
+  has a schema (`Manage… › Schema…`); they never block a save.
 - **The pickers** (search, open, new note, add a workspace) share one layout: the fields over the
   list on the left, the note under the cursor on the right, the buttons beneath. The search runs
   as it is typed and refreshes its open query after a model or workspace transition; its preview
@@ -130,7 +174,7 @@ names and saves it as a note. Everything else comes when it is asked for:
 
 | Key | Does |
 | --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `k`, `,`, `a` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `c`, `k`, `,`, `a` …) |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a note, new note, save |
@@ -247,6 +291,28 @@ it. One connection writes, and any number read, each from one snapshot:
   (the title and the headings above it). An edit writes only the chunks it changed: each document has
   generations, and a reader sees the old one or the new one, never a mix.
 - **Frontmatter is metadata:** the title, tags and aliases. Inline `#tags` count too.
+- **A frontmatter schema types it.** A workspace may name a YAML schema file
+  (`Go › Manage workspaces… › Schema…`, suggested at `<root>/.autodoc/schema.yaml`). Each Markdown note's
+  frontmatter is checked against it when it is indexed, and in the editor as it is typed. A field
+  the schema admits becomes a facet that search can filter by exactly. A field it does not admit is
+  a diagnostic: shown over the page, counted in `index.status`, and never a reason to refuse a save or
+  to take the note's text out of search. A default is what the facet answers for a missing field;
+  the note is never rewritten. Editing the schema re-checks the notes, keeping their vectors; an
+  invalid edit is reported with its line, and the last valid schema stays in use until it is fixed.
+
+  ```yaml
+  version: 1
+  strict: false          # true: report fields the schema does not declare
+  frontmatter:
+    type:    {type: string, enum: [note, adr, review], required: true}
+    status:  {type: string, enum: [draft, active, archived], default: active}
+    tags:    {type: list, item_type: string}
+    created: {type: date}          # YYYY-MM-DD, or an RFC 3339 time (its date is the facet)
+    count:   {type: integer}
+  ```
+
+  The types are `string`, `integer`, `number`, `boolean`, `date` and `list` (of `item_type`, strings
+  by default; a lone value is a list of one). A required field has no default.
 - **Links are resolved per workspace, as Obsidian does.** A link reaches the note whose path is its name.
   Failing that, it reaches the one note whose file name, path suffix or alias it is, and of several,
   the one nearest the root. A tie leaves it unresolved. Links resolve again whenever a note that could
@@ -262,6 +328,11 @@ it is FTS syntax, and a `*` ending the last word is a prefix.
 - **Links and tags lift a note after fusion.** A note linked from other notes, or tagged with a query
   word, ranks higher.
 - **At most three hits come from one note.**
+- **`field:value` filters by a schema field.** With a schema declaring `type` and `status`,
+  `migration type:adr status:active` finds the words among notes with both values, before any
+  ranking limit; the value is read as the field's type (`count:0x10` is 16). A `field:value` for a
+  field the schema does not declare is searched as words. Filters alone (`type:adr`) list the notes
+  they admit, in path order.
 
 With an embedding provider, search is hybrid. A 1-bit code scan over the chunks is rescored with the
 float vectors, and its results are fused with BM25 by reciprocal rank.
@@ -281,8 +352,22 @@ autodoc --call workspace.list
 autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
 ```
 
+**A workspace may embed with its own provider** (`Manage workspaces… › Provider…`): one of the stored
+providers instead of the daemon's. Choosing it sets it up first, and only that workspace's vectors
+fill again; a switch of the daemon's provider leaves it as it is, and deleting the provider returns
+it to the daemon's. Every provider shares the daemon's limit on requests in flight, and the queue
+keeps consecutive background batches on one model (up to 16 in a row) so a local server is not
+made to swap models every batch. A workspace whose provider cannot be set up searches by words
+and says why; it is never given another model.
+
+**Several clients share one daemon.** Each TUI keeps its own workspace, open note and search; a
+change one makes to the shared configuration (a model switch, a workspace's rules, schema or
+name) is logged, and the others say so in a notification without moving focus or touching an
+unsaved note. A workspace another client renames is followed; one it deletes leaves your unsaved
+text as an untitled draft.
+
 [AGENTS.md](AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the
-filters (`paths`, `tags`, `mode`, `limit`) and the errors.
+filters (`paths`, `tags`, `facets`, `mode`, `limit`) and the errors.
 
 ## Semantic search and embedding models
 

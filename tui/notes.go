@@ -8,6 +8,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -137,7 +138,17 @@ func (h *Host) show(p, content, version string) {
 	}
 	h.note.path, h.note.version, h.note.open = p, version, true
 	h.set("App.noteTitle", p)
+	switch kind.Of(p, h.textExtensions()) {
+	case kind.Text:
+		h.set("App.syntaxDefinition", "Plain text (find)")
+	case kind.YAML:
+		h.set("App.syntaxDefinition", "YAML (find)")
+	default:
+		h.set("App.syntaxDefinition", "Markdown (find)")
+	}
 	h.setDirty(false)
+	h.validateSoon()
+	h.refreshOutline()
 	h.backlinks.Reset(nil)
 	h.loadBacklinks(p)
 }
@@ -148,15 +159,21 @@ func (h *Host) closeNote() {
 	h.editor.SetValue("")
 	h.syncPageWidth()
 	h.note = note{gen: h.note.gen}
+	h.outline, h.outlineRows = nil, nil
+	h.outlineGen++
 	h.set("App.noteTitle", untitled)
+	h.set("App.syntaxDefinition", "Markdown (find)")
 	h.set("App.statusCenter", "")
 	h.backlinks.Reset(nil)
 	h.set("App.linksTitle", "backlinks")
+	h.clearDiagnostics()
 }
 
 // edited is the editor's text changing: typed, so the note (or the draft) has unsaved changes.
 func (h *Host) edited() {
 	h.setDirty(true)
+	h.validateSoon()
+	h.outlineSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
 }
 

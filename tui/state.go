@@ -13,10 +13,12 @@ import (
 
 func (h *Host) state() map[string]any {
 	st := map[string]any{
-		"App.status":       "",
-		"App.statusLeft":   "NORMAL  autodoc [connecting]",
-		"App.statusCenter": "",
-		"App.pageWidth":    defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
+		"App.status":             "",
+		"App.statusLeft":         "NORMAL  autodoc [connecting]",
+		"App.statusCenter":       "",
+		"App.mismatchQuestion":   "",
+		"App.canRestartMismatch": false,
+		"App.pageWidth":          defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
 		// semantic search's mark: shown once a status poll answers (progress.go)
 		"App.semanticMark":   "",
 		"App.semanticDot":    "default",
@@ -37,6 +39,41 @@ func (h *Host) state() map[string]any {
 		"App.pluginsHelp":          pluginsHelp,
 		"App.removePluginQuestion": "",
 		"App.noteTitle":            untitled,
+		"App.fileTypesTitle":       "file types",
+		"App.fileTypesRoot":        "",
+		"App.fileTypesPatterns":    "",
+		"App.fileTypesHelp":        "",
+		"App.customTypes":          "",
+		"App.customTypesPreview":   "",
+		"App.diagramTitle":         "Mermaid preview",
+		"App.diagramTextShown":     true,
+		"App.diagramImageShown":    false,
+		"App.htmlPreviewTitle":     "HTML preview",
+		"App.htmlPreviewHelp":      "",
+		"App.imagesIndex":          0,
+		"App.diagramText":          "",
+		"App.diagramHelp":          "",
+		"App.wsProviderTitle":      "embedding provider",
+		"App.wsProviderHelp":       "",
+		"App.wsProviderState":      "",
+		"App.wsProviders":          h.wsProviders,
+		"App.wsProviderIndex":      0,
+		"App.schemaTitle":          "frontmatter schema",
+		"App.schemaRoot":           "",
+		"App.schemaPath":           "",
+		"App.schemaState":          "",
+		"App.schemaHelp":           "",
+		"App.diagnosticsShown":     false,
+		"App.diagnosticsLine":      "",
+		"App.patternTitle":         "workspace rules",
+		"App.patternRoot":          "",
+		"App.patternInclude":       "",
+		"App.patternExclude":       "",
+		"App.patternHelp":          "",
+		"App.markdownTypeIndex":    0,
+		"App.textTypeIndex":        0,
+		"App.yamlTypeIndex":        0,
+		"App.syntaxDefinition":     "Markdown (find)",
 		"App.backlinks":            h.backlinks,
 		"App.linksTitle":           "backlinks",
 
@@ -46,6 +83,12 @@ func (h *Host) state() map[string]any {
 		"App.searchPreviewTitle": "",
 		"App.searchPreviewText":  "",
 		"App.searchPreviewAt":    0,
+		// the outline picker (outline.go)
+		"App.outlineRows":         h.outlineList,
+		"App.outlineStatus":       "headings",
+		"App.outlinePreviewTitle": "",
+		"App.outlinePreviewText":  "",
+		"App.outlinePreviewAt":    0,
 		// the open picker
 		"App.pickerRows":       h.picker,
 		"App.pickerStatus":     "notes",
@@ -191,7 +234,19 @@ func (h *Host) setWhere(where string) {
 }
 
 // open opens a dialog the layout declares, by id.
-func (h *Host) open(id string) { h.keep(h.p.Call(id, "open")) }
+// Every dialog opened or closed here supersedes a manager dialog whose fresh read is still on its
+// way (withCurrent): the user has gone elsewhere, and the late answer must not pull them back.
+func (h *Host) open(id string) {
+	h.dialogSeq++
+	h.keep(h.p.Call(id, "open"))
+}
 
 // closeDialog closes a dialog the layout declares, by id.
-func (h *Host) closeDialog(id string) { h.keep(h.p.Call(id, "close")) }
+func (h *Host) closeDialog(id string) {
+	h.dialogSeq++
+	h.keep(h.p.Call(id, "close"))
+}
+
+// managerClosed is the workspace manager dismissed by its own Close or Esc: a dialog it asked for,
+// still reading, does not open over whatever is beneath.
+func (h *Host) managerClosed() { h.dialogSeq++ }

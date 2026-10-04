@@ -55,6 +55,8 @@ type Session struct {
 	version string
 	pid     int64        // the daemon's process, as its hello said
 	stale   *OlderServer // the daemon refused this build's protocol, and is older: what it said
+	token   string       // this connection's client token, as its hello said (events.go)
+	head    int64        // the event log's head when this connection said hello
 }
 
 // OlderServer is a daemon of an older protocol than this build's, as its probe said: a restart
@@ -134,8 +136,10 @@ func (s *Session) Connect(ctx context.Context) error {
 	m, _ := res.(map[string]any)
 	v, _ := m["version"].(string)
 	pid, _ := m["pid"].(int64)
+	token, _ := m["client"].(string)
+	head, _ := m["events"].(int64)
 	s.mu.Lock()
-	s.client, s.version, s.pid, s.stale = cli, v, pid, nil
+	s.client, s.version, s.pid, s.stale, s.token, s.head = cli, v, pid, nil, token, head
 	s.mu.Unlock()
 	return nil
 }
@@ -171,6 +175,13 @@ func (s *Session) probe(ctx context.Context) (OlderServer, error) {
 	info.Version, _ = m["version"].(string)
 	info.PID, _ = m["pid"].(int64)
 	return info, nil
+}
+
+// forgetStale drops the older daemon once it has stopped.
+func (s *Session) forgetStale() {
+	s.mu.Lock()
+	s.stale = nil
+	s.mu.Unlock()
 }
 
 // Stale is the older daemon this build's hello was refused by; nil when there is none.
@@ -230,6 +241,20 @@ func (s *Session) PID() int64 {
 // CanSpawn is whether this session starts a daemon when none answers: what a restart needs to
 // bring one back.
 func (s *Session) CanSpawn() bool { return s.spawn != nil }
+
+// Client is this connection's client token, as its hello said: the events this TUI caused carry it.
+func (s *Session) Client() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.token
+}
+
+// EventsHead is the event log's head when this connection said hello: where following it begins.
+func (s *Session) EventsHead() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.head
+}
 
 // Version is the daemon's, as its hello said.
 func (s *Session) Version() string {

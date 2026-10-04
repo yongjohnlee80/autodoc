@@ -14,6 +14,9 @@ func TestTheDefaultsLeaveDependenciesOut(t *testing.T) {
 	m := workspace.NewMatcher(config.DefaultInclude, config.DefaultExclude)
 	for p, want := range map[string]bool{
 		"notes/a.md":                         true,
+		"notes/a.txt":                        true,
+		"notes/a.yaml":                       true,
+		"notes/a.yml":                        true,
 		"README.md":                          true,
 		"node_modules/pkg/README.md":         false,
 		"app/web/node_modules/dep/README.md": false,

@@ -79,7 +79,28 @@ func NewEmbedding(db *store.Store, ws *Workspaces, log logger.Logger) *Embedding
 	if log == nil {
 		log = logger.New()
 	}
-	return &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, pending: map[int64][]store.CallRecord{}, done: make(chan struct{})}
+	e := &Embedding{db: db, ws: ws, log: log, client: &http.Client{}, pending: map[int64][]store.CallRecord{}, done: make(chan struct{})}
+	if ws != nil {
+		ws.SetProviderBuilder(e.buildByName) // a workspace's own provider is set up as the daemon's is
+	}
+	return e
+}
+
+// buildByName sets up the stored provider named name, metered, without making it the daemon's.
+func (e *Embedding) buildByName(ctx context.Context, name string) (embed.Provider, error) {
+	info, key, err := e.db.ProviderWithKey(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return e.build(ctx, info, key)
+}
+
+// overridesChanged tells the workspaces that use provider name as their own that it changed or
+// went, so they take it as it is now.
+func (e *Embedding) overridesChanged(name string) {
+	if e.ws != nil {
+		e.ws.providerChanged(name)
+	}
 }
 
 // Start writes the meters' calls to the store until ctx ends, and sets up the provider the
@@ -386,7 +407,11 @@ func (e *Embedding) CancelSwitch(ctx context.Context) (string, error) {
 // update is UpdateProvider's, under the switching lock.
 func (e *Embedding) update(ctx context.Context, name string, sp store.ProviderSpec) error {
 	if e.current() != name {
-		return e.db.UpdateProvider(ctx, name, sp)
+		if err := e.db.UpdateProvider(ctx, name, sp); err != nil {
+			return err
+		}
+		e.overridesChanged(name)
+		return nil
 	}
 	old, key, err := e.db.ProviderWithKey(ctx, name)
 	if err != nil {
@@ -403,6 +428,7 @@ func (e *Embedding) update(ctx context.Context, name string, sp store.ProviderSp
 		return err
 	}
 	e.swap(sp.Name, p)
+	e.overridesChanged(name)
 	return nil
 }
 
@@ -417,6 +443,7 @@ func (e *Embedding) RemoveProvider(ctx context.Context, name string) error {
 	if e.current() == name {
 		e.swap("", nil)
 	}
+	e.overridesChanged(name)
 	return nil
 }
 

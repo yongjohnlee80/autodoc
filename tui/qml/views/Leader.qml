@@ -11,12 +11,13 @@ Dialog {
     Shortcut { sequence: "/"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "Space"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "o"; onActivated: { leader.close(); App.openPicker() } }
+    Shortcut { sequence: "c"; onActivated: { leader.close(); App.openOutline() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newNote() } }
     Shortcut { sequence: "s"; onActivated: { leader.close(); App.save() } }
     Shortcut { sequence: "e"; onActivated: { leader.close(); App.toggleExplorer() } }
     Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleLinks() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
-    Shortcut { sequence: "m"; onActivated: { leader.close(); App.toggleMenuBar() } }
+    Shortcut { sequence: "m"; onActivated: { leader.close(); App.leaderMenuBar() } }
     Shortcut { sequence: "w"; onActivated: { leader.close(); App.pickWorkspace() } }
     Shortcut { sequence: "Shift+W"; onActivated: { leader.close(); App.manageWorkspaces() } }
     Shortcut { sequence: ","; onActivated: { leader.close(); App.openPrefs() } }

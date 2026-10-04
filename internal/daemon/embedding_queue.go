@@ -35,6 +35,11 @@ type embeddingQueue struct {
 	running   map[string]bool
 	last      string // round-robin cursor, by workspace name
 	streak    int
+	// lastProvider is the provider of the last background turn ("" the daemon's), and sameRun how
+	// many background turns in a row it had: the next prefers a workspace on the same provider, so
+	// a server holding one model is not made to swap models every batch, up to focusBurst turns
+	lastProvider string
+	sameRun      int
 }
 
 func newEmbeddingQueue(host *Workspaces) *embeddingQueue {
@@ -238,13 +243,38 @@ func (q *embeddingQueue) choose(candidates map[string]*served) (string, int) {
 			other = append(other, name)
 		}
 	}
-	chooseNext := func(list []string) string {
+	roundRobin := func(list []string) string {
 		for _, name := range list {
 			if name > q.last {
 				return name
 			}
 		}
 		return list[0]
+	}
+	// a background turn stays on the last turn's provider while one of its workspaces has work,
+	// for at most focusBurst turns in a row, then moves on: affinity without starvation
+	chooseNext := func(list []string) string {
+		if q.sameRun < focusBurst {
+			var same []string
+			for _, n := range list {
+				if candidates[n].override == q.lastProvider {
+					same = append(same, n)
+				}
+			}
+			if len(same) > 0 {
+				return roundRobin(same)
+			}
+		}
+		var others []string
+		for _, n := range list {
+			if candidates[n].override != q.lastProvider {
+				others = append(others, n)
+			}
+		}
+		if len(others) > 0 {
+			return roundRobin(others)
+		}
+		return roundRobin(list)
 	}
 	name := ""
 	if focusedAvailable && (q.streak < focusBurst || len(other) == 0) {
@@ -268,6 +298,11 @@ func (q *embeddingQueue) choose(candidates map[string]*served) (string, int) {
 			}
 		}
 		q.last, q.streak = name, 0
+		if p := candidates[name].override; p == q.lastProvider {
+			q.sameRun++
+		} else {
+			q.lastProvider, q.sameRun = p, 1
+		}
 	} else if focusedAvailable {
 		name = focused
 	}

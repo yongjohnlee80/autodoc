@@ -10,6 +10,8 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // FIND — / in the page, the explorer or the links, as AutoDB's: a word or phrase in the pane that
@@ -115,6 +117,22 @@ func (h *Host) pageHighlighter() highlight.Highlighter {
 	return h.findHL
 }
 
+func (h *Host) textHighlighter() highlight.Highlighter {
+	if h.textFindHL == nil {
+		h.textFindHL = markedHighlighterWith(&h.findMarks, highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) {
+			return nil, 0
+		}))
+	}
+	return h.textFindHL
+}
+
+func (h *Host) yamlHighlighter() highlight.Highlighter {
+	if h.yamlFindHL == nil {
+		h.yamlFindHL = markedHighlighterWith(&h.findMarks, yamlSyntaxHighlighter())
+	}
+	return h.yamlFindHL
+}
+
 // showFind brings the page's marks and "finding …" up to date with the find: marked and shown while
 // one is on, in the page; gone when it ends.
 func (h *Host) showFind() {
@@ -126,7 +144,14 @@ func (h *Host) showFind() {
 		h.findMarks.Store(terms)
 		// set again so the page highlights every line afresh: it keeps a line's colours until its
 		// text changes, and the find's words are not its text
-		h.editor.SetHighlighter(h.pageHighlighter())
+		switch h.outlineKind() {
+		case kind.Text:
+			h.editor.SetHighlighter(h.textHighlighter())
+		case kind.YAML:
+			h.editor.SetHighlighter(h.yamlHighlighter())
+		default:
+			h.editor.SetHighlighter(h.pageHighlighter())
+		}
 	}
 	if h.findChip == nil {
 		return

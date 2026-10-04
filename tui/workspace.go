@@ -2,10 +2,14 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // THE WORKSPACES — the daemon's, the one in use, and the manager that adds, renames and deletes
@@ -14,6 +18,28 @@ import (
 type wsInfo struct {
 	name, root, state, embeddingPolicy string
 	sectionTokens                      int64
+	include, exclude                   []string
+	schema                             schemaInfo
+	textExtensions                     []string // the workspace's own plain-text extensions
+	provider, providerErr              string   // its own embedding provider ("" the daemon's), and why it is not set up
+}
+
+func workspacePatterns(value any) []string {
+	var patterns []string
+	for _, item := range asList(value) {
+		if pattern, ok := item.(string); ok {
+			patterns = append(patterns, pattern)
+		}
+	}
+	return patterns
+}
+
+func patternArgs(patterns []string) []any {
+	args := make([]any, len(patterns))
+	for index, pattern := range patterns {
+		args[index] = pattern
+	}
+	return args
 }
 
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
@@ -25,16 +51,8 @@ func (h *Host) loadWorkspaces() {
 		err  error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "workspace.list")
-		if err != nil {
-			return answer{err: err}
-		}
-		var out []wsInfo
-		for _, w := range asList(res) {
-			m := asMap(w)
-			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"), embeddingPolicy: str(m, "embedding_policy")})
-		}
-		return answer{list: out}
+		list, err := h.listWorkspaces(ctx)
+		return answer{list: list, err: err}
 	}, func(a answer) {
 		if ep != h.epoch {
 			return
@@ -60,9 +78,14 @@ func (h *Host) loadWorkspaces() {
 		}
 		h.workspaces.Reset(rows)
 		h.managed.Reset(managed)
+		h.syncFileTypes()
 		if pick < 0 {
 			h.ws, h.notesAll = "", nil
-			h.closeNote()
+			if h.keepDraft {
+				h.keepDraft = false
+			} else {
+				h.closeNote()
+			}
 			h.setWhere("autodoc · no workspace")
 			h.notify("no workspace: Go › Manage workspaces… adds one")
 			return
@@ -70,6 +93,174 @@ func (h *Host) loadWorkspaces() {
 		if a.list[pick].name != h.ws || !h.entered {
 			h.enter(a.list[pick].name)
 		}
+	})
+}
+
+func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
+	for _, workspace := range h.wsList {
+		if workspace.name == h.ws {
+			return workspace, true
+		}
+	}
+	return wsInfo{}, false
+}
+
+func (h *Host) syncFileTypes() {
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok {
+		return
+	}
+	matcher := wsfilter.NewMatcher(workspace.include, workspace.exclude)
+	h.set("App.fileTypesTitle", "file types · "+workspace.name)
+	h.set("App.fileTypesRoot", "workspace root: "+workspace.root)
+	h.set("App.markdownTypeIndex", boolIndex(matcher.Match("sample.md")))
+	h.set("App.textTypeIndex", boolIndex(matcher.Match("sample.txt")))
+	h.set("App.yamlTypeIndex", boolIndex(matcher.Match("sample.yaml") && matcher.Match("sample.yml")))
+	patterns := "include: " + strings.Join(workspace.include, ", ") + " · exclude: " + strings.Join(workspace.exclude, ", ")
+	h.set("App.fileTypesPatterns", patterns)
+	h.setField("App.customTypes", strings.Join(workspace.textExtensions, ", "))
+	h.set("App.customTypesPreview", customTypesPreview(matcher, workspace.textExtensions))
+}
+
+// customTypesPreview says, for each of the workspace's own text types, whether a file of it at the
+// root would be indexed: the patterns decide, and a narrower glob or an exclude can say no.
+func customTypesPreview(m wsfilter.Matcher, exts []string) string {
+	if len(exts) == 0 {
+		return "none: e.g. .log, .rst (read as UTF-8 plain text, never sniffed)"
+	}
+	var parts []string
+	for _, e := range exts {
+		state := "indexed"
+		if !m.Match("sample" + e) {
+			state = "not indexed by the rules"
+		}
+		parts = append(parts, "sample"+e+": "+state)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// setCustomTypes declares the workspace's own plain-text extensions, then admits each new one with
+// an include (unless the rules already admit it) and drops the include of each one removed. The
+// extensions are validated by the daemon before any rule changes. The two are separate verbs, so a
+// rules change that fails takes the extensions back to what they were, and "not changed" is true;
+// if even that fails, the dialog says what was kept.
+func (h *Host) setCustomTypes(text string) {
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok || h.fileTypesPending {
+		return
+	}
+	var exts []string
+	for _, f := range strings.FieldsFunc(text, func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
+		exts = append(exts, f)
+	}
+	h.fileTypesPending = true
+	h.set("App.fileTypesHelp", "updating the workspace…")
+	do(h, func(ctx context.Context) error {
+		res, err := h.call(ctx, "workspace.set_text_extensions", workspace.name, patternArgs(exts))
+		if err != nil {
+			return err
+		}
+		norm := workspacePatterns(res)
+		matcher := wsfilter.NewMatcher(workspace.include, workspace.exclude)
+		include, exclude := slices.Clone(workspace.include), slices.Clone(workspace.exclude)
+		changed := false
+		for _, e := range norm {
+			pattern := "**/*" + e
+			if slices.Contains(exclude, pattern) {
+				exclude = slices.DeleteFunc(exclude, func(p string) bool { return p == pattern })
+				changed = true
+			}
+			if !matcher.Match("sample"+e) && !slices.Contains(include, pattern) {
+				include = append(include, pattern)
+				changed = true
+			}
+		}
+		for _, e := range workspace.textExtensions {
+			if pattern := "**/*" + e; !slices.Contains(norm, e) && slices.Contains(include, pattern) {
+				include = slices.DeleteFunc(include, func(p string) bool { return p == pattern })
+				changed = true
+			}
+		}
+		if !changed {
+			return nil
+		}
+		if _, err = h.call(ctx, "workspace.set_patterns", workspace.name, patternArgs(include), patternArgs(exclude)); err == nil {
+			return nil
+		}
+		if _, back := h.call(ctx, "workspace.set_text_extensions", workspace.name, patternArgs(workspace.textExtensions)); back != nil {
+			return &partialTypesError{rules: err, kept: norm}
+		}
+		return err
+	}, func(err error) {
+		h.fileTypesPending = false
+		var partial *partialTypesError
+		switch {
+		case errors.As(err, &partial):
+			h.set("App.fileTypesHelp", "partly changed: "+partial.Error())
+			h.loadWorkspaces()
+			return
+		case err != nil:
+			h.set("App.fileTypesHelp", "not changed: "+wireMessage(err))
+			h.loadWorkspaces()
+			return
+		}
+		h.set("App.fileTypesHelp", "updated; the workspace is reconciling")
+		h.loadWorkspaces()
+	})
+}
+
+func (h *Host) openFileTypes() {
+	if _, ok := h.activeWorkspaceInfo(); !ok {
+		h.notify("choose a workspace before changing file types")
+		return
+	}
+	h.syncFileTypes()
+	h.set("App.fileTypesHelp", "Text types are editable; Pro document types are unavailable in Community")
+	h.open("fileTypes")
+}
+
+func (h *Host) setFileType(index int, extension string) {
+	if index < 0 || index > 1 || (extension != "md" && extension != "txt" && extension != "yaml") || h.fileTypesPending {
+		return
+	}
+	workspace, ok := h.activeWorkspaceInfo()
+	if !ok {
+		return
+	}
+	include := slices.Clone(workspace.include)
+	exclude := slices.Clone(workspace.exclude)
+	extensions := []string{extension}
+	if extension == "yaml" {
+		extensions = []string{"yaml", "yml"}
+	}
+	for _, ext := range extensions {
+		pattern := "**/*." + ext
+		if index == 0 {
+			exclude = slices.DeleteFunc(exclude, func(item string) bool { return item == pattern })
+			if !slices.Contains(include, pattern) {
+				include = append(include, pattern)
+			}
+		} else {
+			include = slices.DeleteFunc(include, func(item string) bool { return item == pattern })
+			if !slices.Contains(exclude, pattern) {
+				exclude = append(exclude, pattern)
+			}
+		}
+	}
+	h.fileTypesPending = true
+	h.set("App.fileTypesHelp", "updating the workspace…")
+	do(h, func(ctx context.Context) error {
+		_, err := h.call(ctx, "workspace.set_patterns", workspace.name, patternArgs(include), patternArgs(exclude))
+		return err
+	}, func(err error) {
+		h.fileTypesPending = false
+		if err != nil {
+			h.set("App.fileTypesHelp", "not changed: "+wireMessage(err))
+			h.syncFileTypes()
+			return
+		}
+		h.set("App.fileTypesHelp", "updated; the workspace is reconciling")
+		h.loadWorkspaces()
 	})
 }
 
@@ -113,7 +304,11 @@ func (h *Host) enter(name string) {
 		h.remember(name)
 	}
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
-	h.closeNote()
+	if h.keepDraft {
+		h.keepDraft = false // the draft a removed workspace left stays on the page (events.go)
+	} else {
+		h.closeNote()
+	}
 	h.prog = progress{}
 	if h.searchCancel != nil {
 		h.searchCancel()
@@ -141,6 +336,76 @@ const managerHelp = "Add… a directory · Rename… or Delete… the one under 
 
 // managerRow is the manager's row i: the one under its cursor when a button was pressed, read
 // from the table then, since a move of the cursor may not have reached the host yet.
+// listWorkspaces is workspace.list, read into wsInfo; from a worker.
+func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
+	res, err := h.call(ctx, "workspace.list")
+	if err != nil {
+		return nil, err
+	}
+	var out []wsInfo
+	for _, w := range asList(res) {
+		m := asMap(w)
+		out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
+			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
+			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
+			provider: str(m, "provider"), providerErr: str(m, "provider_error")})
+	}
+	return out, nil
+}
+
+// withCurrent runs fn on the loop with the workspace named name as the daemon has it NOW, not as
+// the last listing had it: a dialog opened right after its own save (whose relisting is still on
+// its way) must show what was saved (Lector's review of #30). extra, when set, runs in the same
+// worker, for a dialog that needs more from the daemon. A workspace gone meanwhile says so. Any
+// dialog opened or closed after it (open, closeDialog, the manager's own dismissal) supersedes it:
+// an answer arriving late never replaces what the user went to since.
+func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, error), fn func(w wsInfo, more any)) {
+	ep := h.epoch
+	h.dialogSeq++
+	seq := h.dialogSeq
+	type answer struct {
+		w     wsInfo
+		found bool
+		more  any
+		err   error
+	}
+	do(h, func(ctx context.Context) answer {
+		list, err := h.listWorkspaces(ctx)
+		if err != nil {
+			return answer{err: err}
+		}
+		var a answer
+		for _, w := range list {
+			if w.name == name {
+				a.w, a.found = w, true
+			}
+		}
+		if a.found && extra != nil {
+			a.more, a.err = extra(ctx)
+		}
+		return a
+	}, func(a answer) {
+		switch {
+		case ep != h.epoch, seq != h.dialogSeq:
+			// another connection, or a later dialog asked for since: this answer is nobody's
+		case a.err != nil:
+			h.failed(name, a.err)
+		case !a.found:
+			h.set("App.managerHelp", "the workspace "+name+" is gone")
+			h.loadWorkspaces()
+		default:
+			fn(a.w, a.more)
+		}
+	})
+}
+
+// withCurrentRow is withCurrent for the manager's row i.
+func (h *Host) withCurrentRow(i int, fn func(w wsInfo)) {
+	if w, ok := h.managerRow(i); ok {
+		h.withCurrent(w.name, nil, func(w wsInfo, _ any) { fn(w) })
+	}
+}
+
 func (h *Host) managerRow(i int) (wsInfo, bool) {
 	if i < 0 || i >= len(h.wsList) {
 		h.set("App.managerHelp", "no workspace under the cursor · Add… makes one")
@@ -150,7 +415,7 @@ func (h *Host) managerRow(i int) (wsInfo, bool) {
 }
 
 // startAddWorkspace asks for a new workspace: its title (untitled, to begin with), and its folder,
-// chosen from the home directory. Its **/*.md are indexed, .git skipped.
+// chosen from the home directory. The default text formats are indexed; .git is skipped.
 func (h *Host) startAddWorkspace() {
 	h.setField("App.wsTitle", "untitled")
 	h.open("workspaceAdd")
@@ -187,11 +452,9 @@ func (h *Host) startRenameWorkspace(i int) {
 }
 
 // startSectionSize edits the workspace's shared chunk limit, not a provider setting.
-func (h *Host) startSectionSize(i int) {
-	w, ok := h.managerRow(i)
-	if !ok {
-		return
-	}
+func (h *Host) startSectionSize(i int) { h.withCurrentRow(i, h.showSectionSize) }
+
+func (h *Host) showSectionSize(w wsInfo) {
 	h.sectionWorkspace = w.name
 	h.set("App.sectionTitle", "section size · "+w.name)
 	h.setField("App.sectionSize", strconv.FormatInt(w.sectionTokens, 10))
@@ -199,11 +462,67 @@ func (h *Host) startSectionSize(i int) {
 	h.open("workspaceSection")
 }
 
-func (h *Host) startEmbeddingPolicy(i int) {
-	w, ok := h.managerRow(i)
-	if !ok {
-		return
+func (h *Host) startPatterns(i int) { h.withCurrentRow(i, h.showPatterns) }
+
+func (h *Host) editActivePatterns() {
+	if workspace, ok := h.activeWorkspaceInfo(); ok {
+		h.withCurrent(workspace.name, nil, func(w wsInfo, _ any) { h.showPatterns(w) })
 	}
+}
+
+func (h *Host) showPatterns(workspace wsInfo) {
+	h.patternWorkspace = workspace.name
+	h.set("App.patternTitle", "rules · "+workspace.name)
+	h.set("App.patternRoot", "one root: "+workspace.root)
+	h.setField("App.patternInclude", strings.Join(workspace.include, "; "))
+	h.setField("App.patternExclude", strings.Join(workspace.exclude, "; "))
+	h.set("App.patternHelp", "Patterns are relative to this root; ** spans folders. Saving reconciles the index.")
+	h.open("workspacePatterns")
+}
+
+func splitPatternRules(value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return []string{}, nil
+	}
+	parts := strings.Split(value, ";")
+	for i := range parts {
+		parts[i] = strings.TrimSpace(parts[i])
+		if parts[i] == "" {
+			return nil, fmt.Errorf("remove the empty rule between semicolons")
+		}
+	}
+	return parts, nil
+}
+
+func (h *Host) savePatterns(includeText, excludeText string) {
+	include, err := splitPatternRules(includeText)
+	if err == nil {
+		var exclude []string
+		exclude, err = splitPatternRules(excludeText)
+		if err == nil {
+			name := h.patternWorkspace
+			do(h, func(ctx context.Context) error {
+				_, err := h.call(ctx, "workspace.set_patterns", name, patternArgs(include), patternArgs(exclude))
+				return err
+			}, func(err error) {
+				if err != nil {
+					h.set("App.patternHelp", "not saved: "+wireMessage(err))
+					h.open("workspacePatterns")
+					return
+				}
+				h.notify("rules saved for " + name + "; reconciling")
+				h.loadWorkspaces()
+			})
+			return
+		}
+	}
+	h.set("App.patternHelp", "not saved: "+err.Error())
+	h.open("workspacePatterns")
+}
+
+func (h *Host) startEmbeddingPolicy(i int) { h.withCurrentRow(i, h.showEmbeddingPolicy) }
+
+func (h *Host) showEmbeddingPolicy(w wsInfo) {
 	h.policyWorkspace = w.name
 	h.set("App.policyTitle", "embedding · "+w.name)
 	h.setField("App.embeddingPolicy", w.embeddingPolicy)
@@ -313,4 +632,15 @@ func (h *Host) removeWorkspaceConfirmed() {
 		return
 	}
 	remove()
+}
+
+// partialTypesError is a custom-types save whose text types were kept but whose rules were not,
+// and whose text types could not be taken back.
+type partialTypesError struct {
+	rules error
+	kept  []string
+}
+
+func (e *partialTypesError) Error() string {
+	return fmt.Sprintf("the text types %s were saved, but the rules were not (%s)", strings.Join(e.kept, ", "), wireMessage(e.rules))
 }

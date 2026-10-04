@@ -14,8 +14,12 @@ type Workspace struct {
 	ID                   int64
 	Name, Root           string
 	EmbeddingPolicy      string
+	IncludeEmpty         int64
 	CommitSeq, ChangeSeq int64
 	SectionTokens        *int64
+	SchemaPath           *string // the frontmatter schema file: absolute, or under Root; nil: none (000007)
+	TextExtensions       *string // a JSON array of the workspace's own plain-text extensions; nil: none (000008)
+	ProviderID           *int64  // the embedding provider the workspace uses instead of the daemon's; nil: the daemon's (000010)
 	CreatedAt, UpdatedAt int64
 }
 
@@ -30,6 +34,10 @@ const (
 	WorkspaceChangeSeq       WorkspaceField = "change_seq"
 	WorkspaceSectionTokens   WorkspaceField = "section_tokens"
 	WorkspaceEmbeddingPolicy WorkspaceField = "embedding_policy"
+	WorkspaceIncludeEmpty    WorkspaceField = "include_empty"
+	WorkspaceSchemaPath      WorkspaceField = "schema_path"
+	WorkspaceTextExtensions  WorkspaceField = "text_extensions"
+	WorkspaceProviderID      WorkspaceField = "provider_id"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
 )
@@ -262,6 +270,51 @@ const (
 	DocValueValue     DocValueField = "value" // the tag or alias
 )
 
+// Facet is one typed value of a document's declared frontmatter field (000007).
+type Facet struct {
+	WorkspaceID, DocID int64
+	Field, Value       string
+}
+
+// FacetField names a doc_facet column.
+type FacetField string
+
+const (
+	FacetWorkspace FacetField = wsCol
+	FacetDoc       FacetField = "doc_id"
+	FacetName      FacetField = "field"
+	FacetValue     FacetField = "value"
+)
+
+// Diagnostic is one problem with a document's frontmatter, in source order (000007).
+type Diagnostic struct {
+	WorkspaceID, DocID int64
+	Ord                int64
+	Field              string
+	Line               int64
+	Rule, Message      string
+	DocPath            string // joined: the document's path
+}
+
+// DiagnosticField names a doc_diagnostic column.
+type DiagnosticField string
+
+const (
+	DiagWorkspace DiagnosticField = wsCol
+	DiagDoc       DiagnosticField = "doc_id"
+	DiagOrd       DiagnosticField = "ord"
+	DiagField     DiagnosticField = "field"
+	DiagLine      DiagnosticField = "line"
+	DiagRule      DiagnosticField = "rule"
+	DiagMessage   DiagnosticField = "message"
+	DiagDocPath   DiagnosticField = "doc_path" // joined
+)
+
+// DiagnosticSort names a doc_diagnostic order.
+type DiagnosticSort string
+
+const DiagByPath DiagnosticSort = "path" // the document's path, then ord
+
 // DocName is a name a link can resolve through.
 type DocName struct {
 	WorkspaceID int64
@@ -407,6 +460,26 @@ const (
 	ChangeAt         ChangeField = "at"
 )
 
+// Event is one configuration or lifecycle change, in the daemon-wide log (000009).
+type Event struct {
+	Seq                     int64
+	Kind, Workspace, Client string
+	Detail                  string
+	At                      int64
+}
+
+// EventField names an event column.
+type EventField string
+
+const (
+	EventSeq       EventField = "seq"
+	EventKind      EventField = "kind"
+	EventWorkspace EventField = "workspace"
+	EventClient    EventField = "client"
+	EventDetail    EventField = "detail"
+	EventAt        EventField = "at"
+)
+
 // The sort a table without its own order uses.
 type noSort string
 
@@ -430,12 +503,15 @@ type tables struct {
 	tags        *dao.Schema[*DocValue, DocValueField, noSort, int64]
 	aliases     *dao.Schema[*DocValue, DocValueField, noSort, int64]
 	names       *dao.Schema[*DocName, DocNameField, noSort, int64]
+	facets      *dao.Schema[*Facet, FacetField, noSort, int64]
+	diagnostics *dao.Schema[*Diagnostic, DiagnosticField, DiagnosticSort, int64]
 	linksOut    *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the target
 	linksIn     *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the source
 	models      *dao.Schema[*Model, ModelField, noSort, string]
 	embeddings  *dao.Schema[*Embedding, EmbeddingField, noSort, string]
 	jobs        *dao.Schema[*Job, JobField, noSort, string]
 	changes     *dao.Schema[*Change, ChangeField, noSort, int64]
+	events      *dao.Schema[*Event, EventField, noSort, int64]
 }
 
 func col[R any, T ~string](table string, c T, scan func(R) any) dao.Field[R] {
@@ -459,6 +535,10 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceChangeSeq:       col("workspace", WorkspaceChangeSeq, func(w *Workspace) any { return &w.ChangeSeq }),
 				WorkspaceSectionTokens:   col("workspace", WorkspaceSectionTokens, func(w *Workspace) any { return &w.SectionTokens }),
 				WorkspaceEmbeddingPolicy: col("workspace", WorkspaceEmbeddingPolicy, func(w *Workspace) any { return &w.EmbeddingPolicy }),
+				WorkspaceIncludeEmpty:    col("workspace", WorkspaceIncludeEmpty, func(w *Workspace) any { return &w.IncludeEmpty }),
+				WorkspaceSchemaPath:      col("workspace", WorkspaceSchemaPath, func(w *Workspace) any { return &w.SchemaPath }),
+				WorkspaceTextExtensions:  col("workspace", WorkspaceTextExtensions, func(w *Workspace) any { return &w.TextExtensions }),
+				WorkspaceProviderID:      col("workspace", WorkspaceProviderID, func(w *Workspace) any { return &w.ProviderID }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),
@@ -592,6 +672,34 @@ func newTables(c dao.DataConn) *tables {
 			}),
 			dao.OptionalJoinExpr[*DocName, DocNameField, noSort, int64](JoinDocument,
 				innerJoin("document", "id", "doc_name", "doc_id"))),
+		facets: dao.New[*Facet, FacetField, noSort, int64](c,
+			dao.Table[*Facet, FacetField, noSort, int64]("doc_facet"),
+			dao.Fields[*Facet, FacetField, noSort, int64](map[FacetField]dao.Field[*Facet]{
+				FacetWorkspace: col("doc_facet", FacetWorkspace, func(f *Facet) any { return &f.WorkspaceID }),
+				FacetDoc:       col("doc_facet", FacetDoc, func(f *Facet) any { return &f.DocID }),
+				FacetName:      col("doc_facet", FacetName, func(f *Facet) any { return &f.Field }),
+				FacetValue:     col("doc_facet", FacetValue, func(f *Facet) any { return &f.Value }),
+			}),
+			dao.Conflict[*Facet, FacetField, noSort, int64](FacetWorkspace, FacetName, FacetValue, FacetDoc),
+			dao.SortMap[*Facet, FacetField, noSort, int64](map[noSort]string{ByKey: `"doc_facet"."field", "doc_facet"."value"`})),
+		diagnostics: dao.New[*Diagnostic, DiagnosticField, DiagnosticSort, int64](c,
+			dao.Table[*Diagnostic, DiagnosticField, DiagnosticSort, int64]("doc_diagnostic"),
+			dao.Fields[*Diagnostic, DiagnosticField, DiagnosticSort, int64](map[DiagnosticField]dao.Field[*Diagnostic]{
+				DiagWorkspace: col("doc_diagnostic", DiagWorkspace, func(d *Diagnostic) any { return &d.WorkspaceID }),
+				DiagDoc:       col("doc_diagnostic", DiagDoc, func(d *Diagnostic) any { return &d.DocID }),
+				DiagOrd:       col("doc_diagnostic", DiagOrd, func(d *Diagnostic) any { return &d.Ord }),
+				DiagField:     col("doc_diagnostic", DiagField, func(d *Diagnostic) any { return &d.Field }),
+				DiagLine:      col("doc_diagnostic", DiagLine, func(d *Diagnostic) any { return &d.Line }),
+				DiagRule:      col("doc_diagnostic", DiagRule, func(d *Diagnostic) any { return &d.Rule }),
+				DiagMessage:   col("doc_diagnostic", DiagMessage, func(d *Diagnostic) any { return &d.Message }),
+				DiagDocPath:   joined("document", "path", JoinDocument, func(d *Diagnostic) any { return &d.DocPath }),
+			}),
+			dao.OptionalJoinExpr[*Diagnostic, DiagnosticField, DiagnosticSort, int64](JoinDocument,
+				innerJoin("document", "id", "doc_diagnostic", "doc_id")),
+			dao.SortMap[*Diagnostic, DiagnosticField, DiagnosticSort, int64](map[DiagnosticSort]string{
+				DiagByPath: `"document"."path", "doc_diagnostic"."ord"`,
+			}),
+			dao.JoinForSort[*Diagnostic, DiagnosticField, DiagnosticSort, int64](DiagByPath, JoinDocument)),
 		linksOut: links(c, "dst_doc", true),
 		linksIn:  links(c, "src_doc", false),
 		models: dao.New[*Model, ModelField, noSort, string](c,
@@ -639,6 +747,18 @@ func newTables(c dao.DataConn) *tables {
 				ChangeAt:         col("change", ChangeAt, func(x *Change) any { return &x.At }),
 			}),
 			dao.SortMap[*Change, ChangeField, noSort, int64](map[noSort]string{BySeq: `"change"."seq"`})),
+		events: dao.New[*Event, EventField, noSort, int64](c,
+			dao.Table[*Event, EventField, noSort, int64]("event"),
+			dao.ID[*Event, EventField, noSort, int64](EventSeq),
+			dao.Fields[*Event, EventField, noSort, int64](map[EventField]dao.Field[*Event]{
+				EventSeq:       col("event", EventSeq, func(e *Event) any { return &e.Seq }),
+				EventKind:      col("event", EventKind, func(e *Event) any { return &e.Kind }),
+				EventWorkspace: col("event", EventWorkspace, func(e *Event) any { return &e.Workspace }),
+				EventClient:    col("event", EventClient, func(e *Event) any { return &e.Client }),
+				EventDetail:    col("event", EventDetail, func(e *Event) any { return &e.Detail }),
+				EventAt:        col("event", EventAt, func(e *Event) any { return &e.At }),
+			}),
+			dao.SortMap[*Event, EventField, noSort, int64](map[noSort]string{BySeq: `"event"."seq"`})),
 	}
 }
 

@@ -70,11 +70,14 @@ A new workspace-owned table follows the same rule.
 | `doc_tag` | a tag from a document's frontmatter | `(workspace_id, tag, doc_id)` |
 | `doc_alias` | an alias from a document's frontmatter | `(workspace_id, alias, doc_id)` |
 | `doc_name` | a name a link can resolve through | `(workspace_id, name_key, doc_id)` |
+| `doc_facet` | a typed value of a document's valid frontmatter field under its workspace's schema, defaults included (000007) | `(workspace_id, field, value, doc_id)` |
+| `doc_diagnostic` | a problem with a document's frontmatter: field, line, rule, message, in source order (000007) | `(workspace_id, doc_id, ord)` |
 | `link` | a link from a document, and the document it resolved to | `id`, `(workspace_id, id)` |
 | `model` | an embedding model a workspace used; one is active | `(workspace_id, fp)` |
 | `embedding` | a text's vector under a model | `(workspace_id, text_hash, model_fp)` |
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
+| `event` | a configuration or lifecycle change, daemon-wide, with the client that made it; the last 1000 kept (000009) | `seq` |
 
 Each script says, in its comments, what every table and column is for.
 

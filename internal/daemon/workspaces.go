@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -44,6 +46,17 @@ type Workspaces struct {
 	setup      string
 	restarting map[string]bool
 	queue      *embeddingQueue
+	// schemas are the workspaces' frontmatter schemas, by workspace id, under mu: each outlives its
+	// workspace's restarts, so the last valid schema survives a pattern or provider change.
+	schemas map[int64]*schemaHolder
+	texts   map[int64]*textExtensions // the workspaces' own plain-text extensions, by id, under mu
+
+	// slots is the one limit on embedding requests in flight, across every provider (override.go)
+	slots chan struct{}
+	// overrides are the providers workspaces use instead of the daemon's, built once each, by the
+	// provider's name, under mu; build makes one (the Embedding's, with its key and meter)
+	overrides map[string]embed.Provider
+	build     func(ctx context.Context, name string) (embed.Provider, error)
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -75,11 +88,12 @@ func (m *Workspaces) warming(name string) []string {
 
 // served is one workspace as it runs: what the API sees, and how to stop it.
 type served struct {
-	id   int64
-	w    *rpc.Workspace
-	ctx  context.Context
-	halt func() // stops its indexer and follower; its root stays open; nil for one not opened
-	stop func() // halts it and closes its root; nil for one not opened
+	id       int64
+	override string // the provider it uses instead of the daemon's, by name; "" for the daemon's
+	w        *rpc.Workspace
+	ctx      context.Context
+	halt     func() // stops its indexer and follower; its root stays open; nil for one not opened
+	stop     func() // halts it and closes its root; nil for one not opened
 }
 
 // Options are how the daemon serves a workspace.
@@ -98,11 +112,13 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 		o.MaxEmbedRequests = 1
 	}
 	o.MaxEmbedRequests = min(o.MaxEmbedRequests, 2)
-	o.Provider = withProviderSlots(o.Provider, o.MaxEmbedRequests)
+	slots := make(chan struct{}, o.MaxEmbedRequests)
+	o.Provider = withSharedSlots(o.Provider, slots)
 	if o.Log == nil {
 		o.Log = logger.New()
 	}
-	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{}}
+	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
+		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, slots: slots, overrides: map[string]embed.Provider{}}
 	m.queue = newEmbeddingQueue(m)
 	return m
 }
@@ -186,13 +202,28 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	if c.Exclude == nil {
 		c.Exclude = config.DefaultExclude
 	}
+	schemaPath, err := m.db.SchemaPath(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	stored, err := m.db.TextExtensions(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	text := m.textExtensionsFor(id)
+	text.store(stored)
 	ws, err := workspace.Open(c)
 	if err != nil {
 		return nil, err
 	}
-	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: m.opts.Provider,
+	// the schema is read before the indexer runs, so its first pass compares the right fingerprint
+	sh := m.schemaHolder(id, c.Root)
+	sh.setPath(schemaPath)
+	sh.watch(m.ctx, schemaPoll)
+	override, provider, providerErr := m.providerOf(id)
+	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: provider,
 		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log, Workspace: c.Name, ExternalEmbedding: true,
-		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }})
+		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get, TextExtensions: text.load})
 	ix.SetSemanticPaused(!m.queue.setPolicy(c.Name, policy))
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
@@ -233,10 +264,89 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 			}
 			return n
 		},
-		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match), Following: f.Status, Warming: m.warmingOf(c.Name),
+		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load)), Following: f.Status, Warming: m.warmingOf(c.Name),
+		TextExtensions: text.load,
 		Searched:       func() { m.queue.searchWorkspace(c.Name) },
-		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) }}
-	return &served{id: id, w: w, ctx: ctx, halt: halt, stop: stop}, nil
+		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) },
+		FrontmatterSchema: func() (*schema.Schema, rpc.SchemaStatus) {
+			s, _ := sh.get()
+			return s, sh.status()
+		},
+		Provider: rpc.ProviderChoice{Override: override, Err: errText(providerErr)}}
+	return &served{id: id, override: override, w: w, ctx: ctx, halt: halt, stop: stop}, nil
+}
+
+// schemaHolder is workspace id's schema holder, made on its first start.
+func (m *Workspaces) schemaHolder(id int64, root string) *schemaHolder {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	h, ok := m.schemas[id]
+	if !ok {
+		h = newSchemaHolder(root, func() { m.revalidate(id) })
+		h.onFileChange = func() { m.event(id, "workspace.schema", "file changed") }
+		m.schemas[id] = h
+	}
+	return h
+}
+
+// event logs a change the daemon itself saw (no client caused it) about workspace id.
+func (m *Workspaces) event(id int64, kind, detail string) {
+	m.mu.Lock()
+	name := ""
+	for n, s := range m.served {
+		if s.id == id {
+			name = n
+		}
+	}
+	m.mu.Unlock()
+	if _, err := m.db.AppendEvent(m.ctx, store.Event{Kind: kind, Workspace: name, Detail: detail}); err != nil {
+		logger.Warning(m.opts.Log, err, "logging event "+kind)
+	}
+}
+
+// revalidate queues the notes of workspace id that its new schema applies to.
+func (m *Workspaces) revalidate(id int64) {
+	m.mu.Lock()
+	var ix *index.Indexer
+	for _, s := range m.served {
+		if s.id == id && s.stop != nil {
+			ix = s.w.Index
+		}
+	}
+	m.mu.Unlock()
+	if ix == nil {
+		return // not started yet: its first pass compares the new fingerprint itself
+	}
+	if err := ix.Revalidate(m.ctx); err != nil {
+		logger.Warning(m.opts.Log, err, "revalidating notes after a schema change")
+	}
+}
+
+// SetSchema names a workspace's frontmatter schema file ("" for none) and reads it at once: a valid
+// one becomes active and revalidates the notes; an invalid one is reported, and the last valid
+// schema stays active until the file is fixed.
+func (m *Workspaces) SetSchema(ctx context.Context, name, path string) (rpc.SchemaStatus, error) {
+	path = strings.TrimSpace(path)
+	m.chg.Lock()
+	defer m.chg.Unlock()
+	m.mu.Lock()
+	s, ok := m.served[name]
+	var h *schemaHolder
+	if ok {
+		h = m.schemas[s.id]
+	}
+	m.mu.Unlock()
+	if !ok {
+		return rpc.SchemaStatus{}, fmt.Errorf("%w: %s", store.ErrNoWorkspace, name)
+	}
+	if err := m.db.SetWorkspaceSchema(ctx, s.id, path); err != nil {
+		return rpc.SchemaStatus{}, err
+	}
+	if h == nil {
+		return rpc.SchemaStatus{Path: path}, nil // not served (its root is gone): read when it is
+	}
+	h.setPath(path)
+	return h.status(), nil
 }
 
 // restartHook, when set by this package's tests, runs in SetEmbedding after a workspace's indexer
@@ -252,10 +362,16 @@ func (m *Workspaces) SetEmbedding(p embed.Provider) {
 	defer m.chg.Unlock()
 	m.queue.stop()
 	defer m.queue.start()
-	m.opts.Provider = withProviderSlots(p, m.opts.MaxEmbedRequests)
+	if cap(m.slots) != m.opts.MaxEmbedRequests {
+		m.slots = make(chan struct{}, m.opts.MaxEmbedRequests) // the limit was configured since
+	}
+	m.opts.Provider = withSharedSlots(p, m.slots)
 	m.mu.Lock()
 	running := make(map[string]*served, len(m.served))
 	for name, s := range m.served {
+		if s.override != "" {
+			continue // it embeds with its own provider, which this does not change
+		}
 		running[name] = s
 		if s.halt != nil {
 			m.restarting[name] = true // until its replacement is in: index.status says so
@@ -296,6 +412,51 @@ func (m *Workspaces) SetSectionTokens(ctx context.Context, name string, tokens i
 	if s.w.Index != nil {
 		s.w.Index.Reindex("")
 	}
+	return nil
+}
+
+// SetPatterns validates and swaps a workspace's matcher, follower and indexer together.
+func (m *Workspaces) SetPatterns(ctx context.Context, name string, include, exclude []string) error {
+	if include == nil {
+		include = []string{}
+	}
+	for _, pattern := range append(append([]string(nil), include...), exclude...) {
+		if err := config.ValidPattern(pattern); err != nil {
+			return fmt.Errorf("%w: pattern %q: %v", config.ErrInvalid, pattern, err)
+		}
+	}
+	m.chg.Lock()
+	defer m.chg.Unlock()
+	m.mu.Lock()
+	old, ok := m.served[name]
+	m.mu.Unlock()
+	if !ok {
+		return fmt.Errorf("%w: %s", store.ErrNoWorkspace, name)
+	}
+	candidate := config.Workspace{Name: name, Root: old.w.Root, Include: include, Exclude: exclude}
+	if err := checkRoot(candidate); err != nil {
+		return err
+	}
+	if err := m.db.SetWorkspacePatterns(ctx, old.id, include, exclude); err != nil {
+		return err
+	}
+	m.queue.stop()
+	defer m.queue.start()
+	if old.stop != nil {
+		old.stop()
+	}
+	next, err := m.start(old.id, candidate)
+	if err != nil {
+		rollbackErr := m.db.SetWorkspacePatterns(context.WithoutCancel(ctx), old.id, old.w.Include, old.w.Exclude)
+		restored := m.serve(old.id, config.Workspace{Name: name, Root: old.w.Root, Include: old.w.Include, Exclude: old.w.Exclude})
+		m.mu.Lock()
+		m.served[name] = restored
+		m.mu.Unlock()
+		return errors.Join(err, rollbackErr)
+	}
+	m.mu.Lock()
+	m.served[name] = next
+	m.mu.Unlock()
 	return nil
 }
 
@@ -497,6 +658,11 @@ func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	} else { // the store no longer has it
 		delete(m.served, name)
 		m.queue.forget(name)
+		if h := m.schemas[s.id]; h != nil {
+			h.stop()
+			delete(m.schemas, s.id)
+		}
+		delete(m.texts, s.id)
 	}
 	return err
 }

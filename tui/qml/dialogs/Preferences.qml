@@ -37,6 +37,9 @@ Dialog {
                     Text { text: "" }
                     Text { text: "line numbers" }
                     ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.lineNumbersIndex; onActivated: App.setLineNumbersIndex(index) }
+                    Text { text: "" }
+                    Text { text: "image previews (kitty graphics)" }
+                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.imagesIndex; onActivated: App.setImagesIndex(index) }
                 }
                 Text { text: " " }
             }
@@ -74,6 +77,7 @@ Dialog {
         }
     }
     DialogButtonBox {
+        Button { text: "&File types…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openFileTypes() }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

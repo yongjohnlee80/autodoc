@@ -70,6 +70,7 @@ Window {
     Shortcut { sequence: "?"; onActivated: App.toggleVimKeys() }
 
     MenuBar {
+        id: menuBar
         Dock.edge: Tui.Top
         autoHide: App.menuAutoHide
         vimNavigation: true
@@ -85,6 +86,8 @@ Window {
             MenuItem { text: "&Open note…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
+            MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
+            MenuItem { text: "Preview Mermaid &diagram…"; onTriggered: App.previewDiagram() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
@@ -92,6 +95,7 @@ Window {
             MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "&Links"; onTriggered: App.toggleLinks() }
+            MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
@@ -110,6 +114,7 @@ Window {
             MenuItem { text: "&Hide the menu bar"; checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
             MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
+            MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
             MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
@@ -163,8 +168,14 @@ Window {
         palette.highlightedText: Theme.document.highlightedText
         palette.base: Theme.document.base
         palette.text: Theme.document.text
+        Flex {
+        direction: Tui.Vertical
+        // the open note's frontmatter, checked against its workspace's schema as it is typed:
+        // shown only while something is wrong, and never in the way of a save
+        Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
         Editor {
             id: editor
+            Layout.fillHeight: true
             focus: true
             palette.highlight: Theme.document.selection
             palette.highlightedText: Theme.document.selectedText
@@ -177,8 +188,9 @@ Window {
             lineNumberColor: Theme.document.lineNumber
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
-            // Markdown, with the find's words (/) marked over it (find.go)
-            SyntaxHighlighter { definition: "Markdown (find)" }
+            onCursorPositionChanged: App.cursorMoved()
+            SyntaxHighlighter { definition: App.syntaxDefinition }
+        }
         }
     }
 
@@ -244,6 +256,7 @@ Window {
     SearchPicker { id: searchPicker }
     Find { id: findDialog }
     NoteOpen { id: noteOpen }
+    OutlinePicker { id: outlinePicker }
     NoteName { id: noteName }
     UnsavedNote { id: unsavedNote }
     NoteConflict { id: noteConflict }
@@ -252,6 +265,9 @@ Window {
     WorkspaceAdd { id: workspaceAdd }
     WorkspaceRename { id: workspaceRename }
     WorkspaceSection { id: workspaceSection }
+    WorkspacePatterns { id: workspacePatterns }
+    WorkspaceSchema { id: workspaceSchema }
+    WorkspaceProvider { id: workspaceProvider }
     WorkspacePolicy { id: workspacePolicy }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }
@@ -259,10 +275,14 @@ Window {
     PluginManager { id: pluginManager }
     PluginRemove { id: pluginRemove }
     Preferences { id: preferences }
+    FileTypes { id: fileTypes }
+    Diagram { id: diagram }
+    HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
     RestartBackend { id: restartBackend }
+    Mismatch { id: mismatch }
     Vectors { id: vectorsDialog }
     PurgeModel { id: purgeModel }
     ConfirmQuit { id: confirmQuit }

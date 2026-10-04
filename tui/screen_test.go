@@ -87,6 +87,24 @@ func TestTheScreenIsThePageAlone(t *testing.T) {
 	r.s.WaitFor(t, "the menu bar away", func(sc string) bool { return !strings.Contains(sc, "File") })
 }
 
+func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	r.leader(t, 'm')
+	r.s.WaitFor(t, "the shown bar focused", func(sc string) bool {
+		return strings.Contains(strings.Split(sc, "\n")[0], "File") && r.focused("menuBar")
+	})
+	r.keys(t, enter())
+	r.s.WaitForText(t, "New note")
+	r.keys(t, decltest.Ctrl(' '))
+	r.s.WaitForText(t, "SPC — commands")
+	r.keys(t, key('m'))
+	r.s.WaitFor(t, "the bar hidden and page focused", func(sc string) bool {
+		return !strings.Contains(strings.Split(sc, "\n")[0], "File") && r.focused("editor") && !r.focused("menuBar")
+	})
+}
+
 // TestAMenuTitleIsClickedUnderTheToasts: a click on a menu bar title opens its menu while the
 // toasts are up. The toasts are an always-shown float over the whole screen, and its empty layer
 // took every click (Johno: "the autodoc mouse button on the menu not working anymore"); golib's
@@ -347,6 +365,17 @@ func TestPreferencesAreKept(t *testing.T) {
 	})
 }
 
+func TestFileTypesDialogShowsCommunityAndProBoundaries(t *testing.T) {
+	daemon := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	running := attached(t, daemon)
+	running.h.p.Post(running.h.openFileTypes)
+	running.s.WaitFor(t, "file types shown", func(screen string) bool {
+		return strings.Contains(screen, "file types · kb") && strings.Contains(screen, "Markdown (.md)") &&
+			strings.Contains(screen, "Plain text (.txt)") && strings.Contains(screen, "YAML (.yaml, .yml)") &&
+			strings.Contains(screen, "Pro: .doc, .docx, .odt, .pdf")
+	})
+}
+
 // TestTheSearchMarksItsWordsWhereTheyAre: the preview marks each of the search's words, case
 // aside, over exactly its bytes, however lower-casing changes the line's length before it.
 func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
@@ -601,8 +630,13 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "search: words")
 	r.keys(t, decltest.Type("zebra")...)
-	r.s.WaitFor(t, "words-only fallback announced", func(_ string) bool {
-		return onLoop(r, func() string { return r.h.lastSearchError }) == "semantic search could not answer in kb; results are by words only"
+	// the answer to "zebra" itself, not to "zebr", which a key typed later supersedes but whose
+	// answer can apply first (no lexical hit, the same fallback notice)
+	r.s.WaitFor(t, "zebra's own answer, by words only", func(_ string) bool {
+		return onLoop(r, func() bool {
+			return r.h.searchQuery == "zebra" && r.h.searchCancel == nil &&
+				r.h.lastSearchError == "semantic search could not answer in kb; results are by words only"
+		})
 	})
 	if hits := onLoop(r, func() int { return len(r.h.hitList) }); hits == 0 {
 		t.Error("query error dropped lexical results")
@@ -1459,6 +1493,9 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 	})
 	r := runTUI(t, sess, Options{Installed: func() (string, error) { return "v2", nil }})
 	r.waitNoticed(t, fmt.Sprintf("the backend is autodoc v-p%d (protocol %d), older than this TUI", rpc.Protocol-1, rpc.Protocol-1))
+	r.s.WaitFor(t, "mismatch recovery choices", func(screen string) bool {
+		return strings.Contains(screen, "backend version mismatch") && strings.Contains(screen, "Restart Now") && strings.Contains(screen, "Quit")
+	})
 	onLoop(r, func() bool {
 		r.h.awaitExit = func(ctx context.Context, _ int64) bool {
 			select {
@@ -1538,6 +1575,9 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 	newer := otherDaemon(t, sock, rpc.Protocol+1)
 	r := runTUI(t, NewSession(sock, func() (string, error) { return "", errors.New("not in this test") }), Options{})
 	r.s.WaitForText(t, fmt.Sprintf("this TUI (protocol %d) is older than the backend", rpc.Protocol))
+	r.s.WaitFor(t, "newer backend cannot be restarted", func(screen string) bool {
+		return strings.Contains(screen, "backend version mismatch") && strings.Contains(screen, "Quit") && !strings.Contains(screen, "Restart Now")
+	})
 	r.h.p.Post(r.h.startRestart)
 	r.s.WaitForText(t, "restart: not connected to a backend")
 	select {
@@ -1545,6 +1585,16 @@ func TestANewerBackendSaysTheTUIIsOlder(t *testing.T) {
 		t.Fatal("the newer daemon was stopped")
 	default:
 	}
+}
+
+func TestOlderBackendWithoutSpawnOnlyOffersQuit(t *testing.T) {
+	dir := t.TempDir()
+	sock := filepath.Join(dir, "s.sock")
+	otherDaemon(t, sock, rpc.Protocol-1)
+	running := runTUI(t, NewSession(sock, nil), Options{})
+	running.s.WaitFor(t, "restart unavailable", func(screen string) bool {
+		return strings.Contains(screen, "backend version mismatch") && strings.Contains(screen, "Quit") && !strings.Contains(screen, "Restart Now")
+	})
 }
 
 // TestFindInThePanes: / asks for a word and finds it in the pane with the keyboard. In the page

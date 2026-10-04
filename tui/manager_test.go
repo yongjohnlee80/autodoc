@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -67,7 +68,7 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	}
 	emb := serving.NewEmbedding(db, ws, nil)
 	emb.Start(ctx)
-	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb))
+	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
@@ -202,6 +203,45 @@ func TestWorkspaceSectionSizeIsEditedAtTheWorkspace(t *testing.T) {
 	if got, err := d.db.SectionTokens(context.Background(), ws[0].ID); err != nil || got != 256 {
 		t.Fatalf("section size = %d, %v; want 256", got, err)
 	}
+}
+
+func TestWorkspaceRulesDialogEditsAndClearsIncludes(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.manageWorkspaces() })
+	r.h.p.Post(func() { r.h.startPatterns(0) })
+	r.s.WaitForText(t, "rules · kb")
+	r.h.p.Post(func() { r.h.savePatterns("**/*.{md,txt", "") })
+	r.s.WaitForText(t, "not saved:")
+	r.h.p.Post(func() { r.h.savePatterns("**/*.{md,txt}", ".git/**") })
+	r.s.WaitForText(t, "rules saved for kb")
+	workspaces, err := d.db.Workspaces(context.Background())
+	if err != nil || len(workspaces) != 1 || !slices.Equal(workspaces[0].Include, []string{"**/*.{md,txt}"}) {
+		t.Fatalf("stored rules = %+v, %v", workspaces, err)
+	}
+	r.h.p.Post(func() { r.h.savePatterns("", ".git/**") })
+	r.s.WaitFor(t, "blank include saved", func(string) bool {
+		stored, err := d.db.Workspaces(context.Background())
+		return err == nil && len(stored) == 1 && stored[0].Include != nil && len(stored[0].Include) == 0
+	})
+	workspaces, err = d.db.Workspaces(context.Background())
+	if err != nil || len(workspaces) != 1 || workspaces[0].Include == nil || len(workspaces[0].Include) != 0 {
+		t.Fatalf("blank include = %+v, %v", workspaces, err)
+	}
+}
+
+func TestFileTypeChoiceUpdatesWorkspaceRules(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.openFileTypes() })
+	r.s.WaitForText(t, "file types · kb")
+	r.h.p.Post(func() { r.h.setFileType(1, "txt") })
+	r.s.WaitFor(t, "plain text disabled", func(string) bool {
+		workspaces, err := d.db.Workspaces(context.Background())
+		return err == nil && len(workspaces) == 1 && slices.Contains(workspaces[0].Exclude, "**/*.txt") && !slices.Contains(workspaces[0].Include, "**/*.txt")
+	})
 }
 
 // TestOpensTheNamedWorkspace: Options.Workspace (autodoc --ui <name>) opens that one, not the

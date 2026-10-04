@@ -48,9 +48,12 @@ func main() {
 	configPath := flag.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	showVersion := flag.Bool("version", false, "print the version")
 	call := flag.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
+	exportFormat := flag.String("export", "", "export a Markdown file as html or text")
+	exportOutput := flag.String("output", "", "--export: destination file (required)")
+	exportTheme := flag.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
 	flag.Parse()
-	if flag.NArg() > 0 && !((*ui || *call != "") && flag.NArg() == 1) {
-		fmt.Fprintln(os.Stderr, "autodoc: unexpected arguments:", flag.Args(), "(only --ui and --call take one: a workspace's name; the call's parameters)")
+	if flag.NArg() > 0 && !((*ui || *call != "" || *exportFormat != "") && flag.NArg() == 1) {
+		fmt.Fprintln(os.Stderr, "autodoc: unexpected arguments:", flag.Args(), "(only --ui, --call and --export take one argument)")
 		os.Exit(2)
 	}
 	switch {
@@ -69,6 +72,11 @@ func main() {
 		code := callMain(ctx, *configPath, *call, flag.Arg(0), os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)
+	case *exportFormat != "":
+		if err := exportMain(flag.Arg(0), *exportFormat, *exportOutput, *exportTheme); err != nil {
+			fmt.Fprintln(os.Stderr, "autodoc:", err)
+			os.Exit(1)
+		}
 	case *ui:
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
 		defer stop()

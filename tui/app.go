@@ -39,6 +39,8 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/outline"
 )
 
 // Host is the program behind qml/main.qml.
@@ -58,6 +60,7 @@ type Host struct {
 
 	// the models the document binds
 	picker, backlinks, workspaces, managed   *tuidecl.ListModel
+	outlineList, wsProviders                 *tuidecl.ListModel
 	hits, newList, providers, providerModels *tuidecl.ListModel
 	vectors                                  *tuidecl.ListModel // the workspace's models (vectors.go)
 	explorer                                 *tuidecl.TreeListModel
@@ -78,7 +81,9 @@ type Host struct {
 	marks               marks
 	findMarks           marks                 // the page find's words, as the page's highlighter marks them (find.go)
 	findHL              highlight.Highlighter // the page's: Markdown, the find's words marked over it
-	openAt              int                   // where the next note opened puts the cursor, a byte offset; -1 for its start
+	textFindHL          highlight.Highlighter
+	yamlFindHL          highlight.Highlighter
+	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find       findState
@@ -86,9 +91,10 @@ type Host struct {
 	linksAt    int
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
-	prefs     prefs
-	connected bool // to the daemon: the status line shows while not (prefs.go)
-	panelOpen map[string]bool
+	prefs                          prefs
+	connected                      bool // to the daemon: the status line shows while not (prefs.go)
+	mismatchOpen, mismatchRecovery bool
+	panelOpen                      map[string]bool
 
 	// the embedding providers (providers.go)
 	providerList                    []providerRow
@@ -105,15 +111,43 @@ type Host struct {
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
-	ws        string
-	focusSent time.Time
-	entered   bool // ws was entered on this connection's listing
+	ws               string
+	fileTypesPending bool
+	patternWorkspace string
+	schemaWorkspace  string
+	// the provider dialog's workspace and its choices, "" first for the daemon's (wsprovider.go)
+	providerWorkspace string
+	providerChoices   []string
+	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
+	dialogSeq uint64
+	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
+	fmGen         uint64
+	fmDiagnostics []fmDiagnostic
+	// the event log's cursor (events.go), and whether the next workspace entered keeps the draft
+	// a peer's removal of this one left
+	evCursor  int64
+	keepDraft bool
+	// the image previews (preview.go): previewGen numbers them, the latest wins; htmlPreviewPath is
+	// the file the HTML preview's image was made from; graphicsOverride replaces the terminal's
+	// kitty graphics answer in tests
+	previewGen       uint64
+	htmlPreviewPath  string
+	diagramImage     bool   // the Mermaid preview is an image, not its fallback
+	diagramHelpText  string // what the Mermaid preview's help line says
+	graphicsOverride func() tuicore.Tri
+	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
+	outline     *outline.Doc
+	outlineGen  uint64
+	outlineRows []outline.Heading
+	focusSent   time.Time
+	entered     bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
 	restartPID  int64
 	remember    func(name string)
 	installed   func() (string, error) // Options.Installed
+	browser     func(context.Context, string) error
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
 	// test's process, so its test waits on the daemon instead
 	awaitExit func(ctx context.Context, pid int64) bool
@@ -200,7 +234,10 @@ func newHost(session *Session, opt Options) *Host {
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed,
 		awaitExit:      awaitExit,
+		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),
+		outlineList:    tuidecl.NewListModel("key", "heading", "line"),
+		wsProviders:    tuidecl.NewListModel("key", "label"),
 		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:        tuidecl.NewListModel("key", "path"),
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
@@ -260,7 +297,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.theme = themeOf(src)
 	return append(opts,
 		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()},
-			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()}),
+			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()},
+			highlight.Definition{Name: "Plain text (find)", Highlighter: h.textHighlighter()},
+			highlight.Definition{Name: "YAML (find)", Highlighter: h.yamlHighlighter()}),
 		tuidecl.Sources(h.state()),
 		tuidecl.Handlers(h.commands()),
 		tuidecl.ErrorSink(h.keep),

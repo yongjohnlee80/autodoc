@@ -15,6 +15,26 @@ import (
 
 func md(p string) bool { return strings.HasSuffix(p, ".md") }
 
+func TestCommunityDocumentsRejectProFormatsAndInvalidPlainText(t *testing.T) {
+	roots(t, func(t *testing.T, fsys vfs.FS) {
+		ctx := context.Background()
+		docs := New(fsys, func(string) bool { return true })
+		for _, extension := range []string{".doc", ".docx", ".odt", ".pdf"} {
+			if _, err := docs.Write(ctx, "draft"+extension, []byte("data"), ""); !errors.Is(err, ErrNotEligible) {
+				t.Errorf("write %s: %v, want not eligible", extension, err)
+			}
+		}
+		for _, extension := range []string{".txt", ".yaml", ".yml"} {
+			if _, err := docs.Write(ctx, "bad"+extension, []byte{0xff}, ""); !errors.Is(err, ErrNotEligible) {
+				t.Errorf("invalid UTF-8 %s: %v, want not eligible", extension, err)
+			}
+		}
+		if _, err := docs.Write(ctx, "good.txt", []byte("plain text"), ""); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
 // roots runs a cell on both drivers: the one the daemon serves (vfs/local) and memfs.
 func roots(t *testing.T, cell func(t *testing.T, fsys vfs.FS)) {
 	t.Run("local", func(t *testing.T) {

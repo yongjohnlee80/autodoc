@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -106,6 +107,135 @@ func (s *Store) SetWorkspaceSectionTokens(ctx context.Context, id int64, tokens 
 	})
 }
 
+// SchemaPath is workspace id's frontmatter schema file as stored, "" for none.
+func (s *Store) SchemaPath(ctx context.Context, id int64) (string, error) {
+	var path string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceSchemaPath)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil {
+			return err
+		}
+		if w.SchemaPath != nil {
+			path = *w.SchemaPath
+		}
+		return nil
+	})
+	return path, err
+}
+
+// TextExtensions is workspace id's own plain-text extensions, as stored; none when it has none.
+func (s *Store) TextExtensions(ctx context.Context, id int64) ([]string, error) {
+	var out []string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceTextExtensions)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil || w.TextExtensions == nil {
+			return err
+		}
+		return json.Unmarshal([]byte(*w.TextExtensions), &out)
+	})
+	return out, err
+}
+
+// SetWorkspaceTextExtensions replaces workspace id's own plain-text extensions; none clears them.
+// The caller normalizes them (core/kind.TextExtensions).
+func (s *Store) SetWorkspaceTextExtensions(ctx context.Context, id int64, exts []string) error {
+	var value any
+	if len(exts) > 0 {
+		b, err := json.Marshal(exts)
+		if err != nil {
+			return err
+		}
+		value = string(b)
+	}
+	return s.Write(ctx, func(tx *Tx) error {
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceTextExtensions, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		return nil
+	})
+}
+
+// WorkspaceProvider is the stored provider workspace id embeds with instead of the daemon's, by
+// name; "" when it uses the daemon's.
+func (s *Store) WorkspaceProvider(ctx context.Context, id int64) (string, error) {
+	var name string
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceProviderID)
+		if errors.Is(err, dao.ErrNoRows) {
+			return ErrNoWorkspace
+		}
+		if err != nil || w.ProviderID == nil {
+			return err
+		}
+		p, err := tx.t.providers.On(tx.tx).With(ProviderID, *w.ProviderID).Get(ProviderName)
+		if errors.Is(err, dao.ErrNoRows) {
+			return nil // deleted under it: ON DELETE SET NULL is about to say so
+		}
+		if err == nil {
+			name = p.Name
+		}
+		return err
+	})
+	return name, err
+}
+
+// SetWorkspaceProvider makes workspace id embed with the stored provider named provider, or with
+// the daemon's again when provider is "".
+func (s *Store) SetWorkspaceProvider(ctx context.Context, id int64, provider string) error {
+	return s.Write(ctx, func(tx *Tx) error {
+		var value any
+		if provider != "" {
+			p, err := tx.t.providers.On(tx.tx).With(ProviderName, provider).Get(ProviderID)
+			if errors.Is(err, dao.ErrNoRows) {
+				return fmt.Errorf("%w: %s", ErrNoProvider, provider)
+			}
+			if err != nil {
+				return err
+			}
+			value = p.ID
+		}
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceProviderID, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		return nil
+	})
+}
+
+// SetWorkspaceSchema names workspace id's frontmatter schema file; "" removes it.
+func (s *Store) SetWorkspaceSchema(ctx context.Context, id int64, path string) error {
+	var value any
+	if path != "" {
+		value = path
+	}
+	return s.Write(ctx, func(tx *Tx) error {
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceSchemaPath, value).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		return nil
+	})
+}
+
 // WorkspaceInfo is a workspace with its patterns.
 type WorkspaceInfo struct {
 	Workspace
@@ -122,6 +252,9 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 		}
 		for _, w := range ws {
 			info := WorkspaceInfo{Workspace: *w}
+			if w.IncludeEmpty != 0 {
+				info.Include = []string{}
+			}
 			ps, err := s.Workspace(w.ID).Patterns(tx).OrderBy(dao.Asc(ByKey)).Select()
 			if err != nil {
 				return err
@@ -145,7 +278,11 @@ func (s *Store) AddWorkspace(ctx context.Context, name, root string, include, ex
 	now := time.Now().Unix()
 	w := Workspace{Name: name, Root: root, CreatedAt: now, UpdatedAt: now}
 	err := s.Write(ctx, func(tx *Tx) error {
-		id, err := tx.t.workspaces.On(tx.tx).Set(WorkspaceName, name).Set(WorkspaceRoot, root).
+		includeEmpty := int64(0)
+		if include != nil && len(include) == 0 {
+			includeEmpty = 1
+		}
+		id, err := tx.t.workspaces.On(tx.tx).Set(WorkspaceName, name).Set(WorkspaceRoot, root).Set(WorkspaceIncludeEmpty, includeEmpty).
 			Set(WorkspaceCreatedAt, now).Set(WorkspaceUpdatedAt, now).Insert()
 		if err != nil {
 			return taken(err)
@@ -168,6 +305,28 @@ func (s *Store) writePatterns(tx *Tx, id int64, include, exclude []string) error
 		}
 	}
 	return b.Flush()
+}
+
+// SetWorkspacePatterns replaces both pattern lists in one transaction.
+func (s *Store) SetWorkspacePatterns(ctx context.Context, id int64, include, exclude []string) error {
+	return s.Write(ctx, func(tx *Tx) error {
+		includeEmpty := int64(0)
+		if len(include) == 0 {
+			includeEmpty = 1
+		}
+		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
+			Set(WorkspaceIncludeEmpty, includeEmpty).Set(WorkspaceUpdatedAt, time.Now().Unix()))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		if err := s.Workspace(id).Patterns(tx).Delete(); err != nil {
+			return err
+		}
+		return s.writePatterns(tx, id, include, exclude)
+	})
 }
 
 // SetWorkspaceExclude replaces workspace id's exclude patterns, in one transaction; its include

@@ -17,6 +17,7 @@ const helpText = `KEYS
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
+  SPC m       show and focus the menu bar; again hides it
               On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
               keys there), and F10 may need Fn
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
@@ -30,6 +31,8 @@ THE PAGE
   types. With no note open, the page is an untitled
   draft: type, and Ctrl+S names and saves it. The status line (SPC t) shows the mode, the note,
   and [+] while it has unsaved changes, and on its right what the page says (a find's result).
+  The page's frame shows where the cursor is: the headings above it in Markdown, the key path in
+  YAML. SPC c (Go › Outline…) lists the note's headings, unsaved ones too; Enter jumps there.
   Long lines wrap at the page's width, and line numbers can show: View › Wrap long lines, Line
   numbers, or Preferences.
 
@@ -48,13 +51,21 @@ WHAT A KEY NEEDS
   does not come up, Help › About names its log.
   Ctrl+S writes only over the version you opened. If the note changed on disk since, it asks:
   keep editing, reload the disk's version, or overwrite it with yours.
-  A path must be one the workspace indexes (its include patterns, **/*.md by default); others
+  A path must be one the workspace indexes (new workspaces include Markdown, text and YAML); others
   are refused.
   Semantic search needs an embedding provider, chosen in System › AI models (SPC a): a local Ollama with
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
-  Adding a workspace needs a directory: its **/*.md are indexed, .git skipped. A name or root
+  File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
+  View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
+  allow-passthrough on); and rsvg-convert (diagrams) or a headless Chromium or Chrome (HTML).
+  Otherwise a diagram is a terminal graph and HTML opens in the browser, and the preview says
+  which was missing. View › Image previews off compares the two on the same note.
+  field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
+  names a note's frontmatter problems, only once the workspace has a schema: Manage… › Schema…
+  names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.
+  Adding a workspace needs a directory: Markdown, text and YAML are indexed, .git skipped. A name or root
   another workspace has is refused. Deleting one removes its index only; its files stay.
   A workspace marked error has a root that is gone: bring the directory back and restart the
   daemon, or delete the workspace.
@@ -65,12 +76,12 @@ WHAT A KEY NEEDS
 const leaderText = `/  search (or SPC again)   e  the explorer
 o  open a note            l  the links
 n  new note               t  the status line
-s  save                   m  the menu bar
+s  save                   m  show/focus or hide the menu
 w  switch workspace       k  the editor mode (Vim, Text)
 W  manage workspaces      ,  editor preferences
 ?  help                   a  AI models
 h  notifications          A  about
-Q  quit`
+c  the note's outline     Q  quit`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

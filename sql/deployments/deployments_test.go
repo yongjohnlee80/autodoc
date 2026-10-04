@@ -169,8 +169,15 @@ func TestSectionMigrationRevertsWithoutDroppingVectors(t *testing.T) {
 	exec(t, db, "INSERT INTO model(workspace_id, fp, active) VALUES (1, 'm', 1)")
 	exec(t, db, "INSERT INTO embedding(workspace_id, text_hash, model_fp, bits, f32) VALUES (1, x'01', 'm', x'02', x'03')")
 	exec(t, db, "UPDATE workspace SET section_tokens = 256 WHERE id = 1")
-	if _, err := deployments.Runner().Revert(context.Background(), db, 5); err != nil {
+	// every script after 000004 is reverted first, newest first: only the latest can be
+	all, err := deploy.Load(deployments.FS(), deployments.Engines[0])
+	if err != nil {
 		t.Fatal(err)
+	}
+	for n := all[len(all)-1].Number; n > 4; n-- {
+		if _, err := deployments.Runner().Revert(context.Background(), db, n); err != nil {
+			t.Fatalf("reverting %06d: %v", n, err)
+		}
 	}
 	name, err := deployments.Runner().Revert(context.Background(), db, 4)
 	if err != nil {

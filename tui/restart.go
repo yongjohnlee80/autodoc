@@ -8,6 +8,52 @@ import (
 	"time"
 )
 
+func (h *Host) showMismatch(mismatch *MismatchError) {
+	canRestart := mismatch.Server < mismatch.Client && h.session.CanSpawn()
+	message := fmt.Sprintf("This TUI speaks protocol %d; autodoc %s speaks protocol %d.", mismatch.Client, mismatch.Version, mismatch.Server)
+	if canRestart {
+		message += " Restart Now stops the older backend and starts the installed one."
+	} else {
+		message += " This TUI cannot safely restart that backend; quit and start a compatible autodoc."
+	}
+	h.set("App.mismatchQuestion", message)
+	h.set("App.canRestartMismatch", canRestart)
+	if !h.mismatchOpen {
+		h.open("mismatch")
+		h.mismatchOpen = true
+	}
+}
+
+func (h *Host) closeMismatch() {
+	if h.mismatchOpen {
+		h.closeDialog("mismatch")
+		h.mismatchOpen = false
+	}
+}
+
+func (h *Host) restartMismatch() {
+	if !h.session.CanSpawn() {
+		return
+	}
+	if h.session.Stale() == nil && !h.connected {
+		// the older backend is gone and the installed one did not start: start it again
+		h.closeMismatch()
+		h.start()
+		return
+	}
+	if h.session.Stale() == nil {
+		return
+	}
+	h.closeMismatch()
+	h.mismatchRecovery = true
+	h.restartConfirmed()
+}
+
+func (h *Host) quitMismatch() {
+	h.mismatchOpen = false
+	h.quit()
+}
+
 // RESTART — System › Restart backend…: the daemon stops, and the TUI's reconnect starts the autodoc
 // installed now, so an update takes effect without quitting (AutoDB's SPC X). Indexing and
 // embedding pick up where they stopped: their work is kept in the store.
@@ -71,9 +117,15 @@ func (h *Host) restartConfirmed() {
 		}, func(err error) {
 			if err != nil {
 				h.failed("restart", err)
+				if h.mismatchRecovery {
+					h.set("App.mismatchQuestion", "Restart failed: "+err.Error()+". Retry or quit.")
+					h.open("mismatch")
+					h.mismatchOpen = true
+				}
 				return
 			}
 			h.restartFrom = old.Version
+			h.session.forgetStale() // it has stopped: a retry starts the installed one, not stops this again
 			h.start()
 		})
 		return

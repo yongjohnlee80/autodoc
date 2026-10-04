@@ -43,6 +43,44 @@ func chunkDoc(doc *markdown.Document, title string) []chunkT {
 	return chunkDocWithLimit(doc, title, maxTokens)
 }
 
+func chunkPlainText(src []byte, title string, limit int) []chunkT {
+	if limit <= 0 {
+		limit = maxTokens
+	}
+	crumb := boundedCrumb(title, limit)
+	budget := max(1, limit-tokensOf([]byte(crumb+"\n"), 0, len(crumb)+1))
+	var units []unit
+	start := -1
+	for offset := 0; offset < len(src); {
+		end := offset
+		for end < len(src) && src[end] != '\n' {
+			end++
+		}
+		if end < len(src) {
+			end++
+		}
+		if len(bytes.TrimSpace(src[offset:end])) == 0 {
+			if start >= 0 {
+				piece := unit{start: start, end: offset, tokens: tokensOf(src, start, offset), kind: markdown.KindParagraph}
+				units = append(units, splitOversized(src, piece, piece.kind, budget)...)
+				start = -1
+			}
+		} else if start < 0 {
+			start = offset
+		}
+		offset = end
+	}
+	if start >= 0 {
+		piece := unit{start: start, end: len(src), tokens: tokensOf(src, start, len(src)), kind: markdown.KindParagraph}
+		units = append(units, splitOversized(src, piece, piece.kind, budget)...)
+	}
+	out := packLimited(src, units, crumb, 0, limit)
+	if len(out) == 0 {
+		out = append(out, newChunk(0, crumb, "", 0, 0))
+	}
+	return out
+}
+
 func chunkDocWithLimit(doc *markdown.Document, title string, limit int) []chunkT {
 	if limit <= 0 {
 		limit = maxTokens
