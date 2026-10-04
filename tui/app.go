@@ -118,6 +118,8 @@ type Host struct {
 	// the provider dialog's workspace and its choices, "" first for the daemon's (wsprovider.go)
 	providerWorkspace string
 	providerChoices   []string
+	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
+	dialogSeq uint64
 	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic
