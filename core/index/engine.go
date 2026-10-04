@@ -95,11 +95,17 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	return v.s.semanticHits(v.tx, v.sem, model, vec, optsOf(f), n)
 }
 
-// SemanticState is switching while a new model fills, partial while a document is not
-// semantic-ready, else ready.
+// SemanticState is switching while a new model fills (the active model, read in this transaction,
+// is not the target), partial while a document is not semantic-ready, else ready.
 func (v *View) SemanticState(ctx context.Context) (search.State, error) {
-	if v.sem != nil && v.sem.switching() {
-		return search.StateSwitching, nil
+	if v.sem != nil {
+		active, err := v.s.activeModel(v.tx)
+		if err != nil {
+			return "", err
+		}
+		if active != "" && active != v.sem.target.Model().Fingerprint() {
+			return search.StateSwitching, nil
+		}
 	}
 	unready, err := v.s.sc.Documents(v.tx).With(store.DocSemanticReady, int64(0)).Exists()
 	if err != nil {
@@ -169,8 +175,14 @@ func (s *Store) queryEmbedder(sem *semantic) search.QueryEmbedder {
 
 // answer runs q on searcher and gives the answer in AutoDoc's own types and errors.
 func answer(ctx context.Context, searcher search.Searcher, q string, opts QueryOpts, fields search.Fields) (Result, error) {
+	// paths as the engine takes them, root-relative with '/' trimmed: "/" and "./" are the root, so
+	// no path filter, as filtered reads them
+	var paths []string
+	for _, p := range opts.Paths {
+		paths = append(paths, strings.Trim(p, "/"))
+	}
 	res, err := searcher.Search(ctx, search.Query{Text: q, Mode: search.Mode(opts.Mode), Limit: opts.Limit, Fields: fields,
-		Filter: search.Filter{Tags: opts.Tags, Paths: opts.Paths, Facets: opts.Facets}})
+		Filter: search.Filter{Tags: opts.Tags, Paths: paths, Facets: opts.Facets}})
 	if err != nil {
 		return Result{}, ownError(err)
 	}
