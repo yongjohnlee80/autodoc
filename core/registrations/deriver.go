@@ -12,14 +12,16 @@ import (
 )
 
 // Deriver makes text of a build's document formats (ADR 0216 §1.8): a Pro build adapts autorag's
-// derive.Cache. AutoDoc 03 wires it into the indexer and doc.read.
+// derive.Cache. The indexer and doc.read call it through core/derived.
 type Deriver interface {
 	// Formats are the formats it reads: lower-case extensions with their dot, each a Pro format.
 	Formats() []string
 	// Describe is the identity format's text is made under, known without extracting. It is read
 	// once, at entry, and frozen.
 	Describe(format string) (id, version string)
-	// Derive makes the text of the file name, of size bytes, read through r.
+	// Derive makes the text of the file name, of size bytes, read through r. An error matching
+	// fs.ErrNotExist is a cache's eviction miss (autorag's derive.ErrMiss is one): the text went
+	// between its making and its reading, and AutoDoc calls Derive once more.
 	Derive(ctx context.Context, name string, r io.ReaderAt, size int64) (Derived, error)
 }
 
