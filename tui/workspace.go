@@ -299,6 +299,9 @@ func (h *Host) useWorkspace(i int) {
 func (h *Host) enter(name string) {
 	h.epoch++
 	h.ws, h.entered, h.notesAll = name, true, nil
+	if ws, ok := h.activeWorkspaceInfo(); ok {
+		h.set("App.terminalDir", termDir(ws.root)) // the terminal's next start; a running shell stays
+	}
 	h.focusSent = time.Time{}
 	if h.remember != nil {
 		h.remember(name)

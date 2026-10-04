@@ -8,12 +8,17 @@ import (
 )
 
 // TestTheLeaderCardsColumnsAlign: every row's second command starts in the same column, so its
-// key letters line up.
+// key letters line up. The last row may hold one command, when their number is odd.
 func TestTheLeaderCardsColumnsAlign(t *testing.T) {
 	row := regexp.MustCompile(`^(\S+)  (.+?) {2,}(\S+)  `)
+	lone := regexp.MustCompile(`^\S+  \S.*\S$`)
 	col := -1
-	for i, line := range strings.Split(leaderText, "\n") {
+	lines := strings.Split(leaderText, "\n")
+	for i, line := range lines {
 		m := row.FindStringSubmatchIndex(line)
+		if m == nil && i == len(lines)-1 && lone.MatchString(line) && !strings.Contains(line, "   ") {
+			continue
+		}
 		if m == nil {
 			t.Fatalf("row %d is not two commands: %q", i, line)
 		}

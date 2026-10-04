@@ -57,6 +57,11 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		// the panels
 		"App.toggleExplorer":    none(func() { h.togglePanel("explorer") }),
 		"App.toggleLinks":       none(func() { h.togglePanel("links") }),
+		"App.toggleTerminal":    none(h.toggleTerminal),
+		"App.terminalExited":    oneNumber("App.terminalExited", "an exit code", h.terminalExited),
+		"App.setTerminalEdge":   oneNumber("App.setTerminalEdge", "a row", h.setTerminalEdge),
+		"App.setTerminalSize":   oneNumber("App.setTerminalSize", "a row", h.setTerminalSize),
+		"App.setTerminalLength": oneNumber("App.setTerminalLength", "a row", h.setTerminalLength),
 		"App.panelOpened":       oneString("App.panelOpened", "a panel", h.panelOpened),
 		"App.panelClosed":       oneString("App.panelClosed", "a panel", h.panelClosed),
 		"App.movePane":          oneString("App.movePane", "h, j, k or l", h.movePane),

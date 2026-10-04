@@ -72,6 +72,9 @@ type prefs struct {
 	images                 bool   // previews as images where the terminal draws them (preview.go)
 	toastCorner            string // where the notifications stack
 	toastSeconds           int    // how long a finished one stays
+	// the terminal: the edge it opens from, and each edge's size and length the user set
+	termEdge             string
+	termSize, termLength map[string]int
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
@@ -79,7 +82,8 @@ type prefs struct {
 
 func defaultPrefs() prefs {
 	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
-		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds}
+		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
+		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}}
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
@@ -151,6 +155,7 @@ func prefsOf(m map[string]any) prefs {
 			p.ruler = n
 		}
 	}
+	readTermPrefs(&p, m)
 	return p
 }
 
@@ -166,7 +171,8 @@ func panelLength(edge string) int {
 
 // prefState is what the document reads of the preferences (the status line's is statusShown's).
 func prefState(p prefs) map[string]any {
-	return map[string]any{
+	m := termState(p)
+	for k, v := range map[string]any{
 		"App.menuAutoHide":   p.menuHidden,
 		"App.keyset":         keysetOf[p.keymap],
 		"App.keymapVim":      p.keymap == "vim",
@@ -184,7 +190,10 @@ func prefState(p prefs) map[string]any {
 		// scrolled past the page's edge still shows where it is
 		"App.rulerColumn": p.ruler + 1,
 		"App.rulerText":   strconv.Itoa(p.ruler),
+	} {
+		m[k] = v
 	}
+	return m
 }
 
 // loadPrefs reads the store's preferences on a connection, and applies them: the theme by a
@@ -429,6 +438,7 @@ func (h *Host) syncPrefDialog() {
 	h.set("App.toastCornerIndex", indexOf(corners, h.prefs.toastCorner))
 	h.set("App.toastSecondsIndex", h.prefs.toastSeconds-1)
 	h.set("App.statusShownIndex", boolIndex(h.prefs.statusOn))
+	h.syncTermDialog()
 }
 
 func (h *Host) setMenuHiddenIndex(i int) {

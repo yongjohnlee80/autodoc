@@ -95,6 +95,10 @@ type Host struct {
 	connected                      bool // to the daemon: the status line shows while not (prefs.go)
 	mismatchOpen, mismatchRecovery bool
 	panelOpen                      map[string]bool
+	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
+	// opened; whether its closing gives the keyboard back
+	termStarted, termRestore bool
+	termBefore               string
 
 	// the embedding providers (providers.go)
 	providerList                    []providerRow
@@ -248,6 +252,7 @@ func newHost(session *Session, opt Options) *Host {
 		openAt:         -1,
 		prefs:          defaultPrefs(),
 		panelOpen:      map[string]bool{},
+		termRestore:    true,
 		backlinks:      tuidecl.NewListModel("key", "label"),
 		noticeList:     tuidecl.NewListModel("key", "when", "text"),
 		workspaces:     tuidecl.NewListModel("key", "label"),
