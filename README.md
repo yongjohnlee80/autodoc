@@ -494,11 +494,12 @@ func main() {
   to it, read at offsets, and its Markdown is chunked as Markdown files are (no wikilinks, tags or
   frontmatter), under `d<ext>:<id>@<version>+<built-in>` in `document.indexer`. Its file may be up
   to 250 MiB, since a PDF is mostly images and fonts, and its text up to 16 MiB, refused by its
-  stated size before a byte is read; a text file stays at 16 MiB. A file the deriver cannot read,
-  or whose text is too large, leaves the index and waits for the file to change. An unchanged file
-  is derived again only when its format's id or version (as the deriver describes it at the start)
-  or the section size changes. A text made under another identity than the described one is
-  refused.
+  stated size before a byte is read; a text file stays at 16 MiB. When the deriver fails (an
+  error, a panic, its cache's text evicted twice), the file keeps what was indexed, and it is tried
+  again with the indexer's backoff. A text refused for what the same bytes would give again (made
+  under another identity, too large, not UTF-8) waits for the file to change, and leaves the index
+  only if the file changed since it was indexed. An unchanged file is derived again only when its
+  format's id or version (as the deriver describes it at the start) or the section size changes.
 - **`doc.read` serves the derived text, read-only.** `doc.write`, `doc.rename` and `doc.remove` of
   it are refused. Text longer than one read carries (just under 4 MiB) is cut at a paragraph's end
   and ends with a note saying how much of how much it shows. A cache's eviction miss (a deriver's
