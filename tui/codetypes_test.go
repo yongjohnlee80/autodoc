@@ -107,10 +107,11 @@ func TestTheEditTabOffersOnlyTheDaemonsTypes(t *testing.T) {
 			}
 			d := startManagedWith(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, o)
 			r := runTUI(t, NewSession(d.sock, nil), Options{Registrations: proTables})
-			r.s.WaitFor(t, "the daemon's kinds", func(string) bool {
-				return onLoop(r, func() bool { return r.h.daemonTables.Chunkers != nil })
+			r.s.WaitFor(t, "the daemon's kinds and the files", func(string) bool {
+				return onLoop(r, func() bool { return r.h.daemonTables.Chunkers != nil }) && len(r.listed()) > 0
 			})
-			r.h.p.Post(func() { r.h.closeDialog("registrations") })
+			r.h.p.Post(func() { r.h.closeDialog("registrations") }) // the community daemon's offer
+			r.s.WaitFor(t, "no offer open", func(sc string) bool { return !strings.Contains(sc, regQuestion) })
 			r.openSettings(t, "kb", 0)
 			has := strings.Contains(flat(r.s.String()), "code types this backend reads: .go, .rs")
 			if has != c.shows {
