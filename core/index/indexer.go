@@ -20,9 +20,9 @@ import (
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/chunk"
+	"github.com/yongjohnlee80/golib/search/embed"
 	"github.com/yongjohnlee80/golib/vfs"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"

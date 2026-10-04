@@ -17,8 +17,8 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/chunk"
+	"github.com/yongjohnlee80/golib/search/embed"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -693,38 +693,26 @@ func estimatedTokens(texts []string) int {
 	return total
 }
 
-// embedSome embeds texts into vb. A provider rejecting the input (not failing as a whole) is
-// narrowed down by halves to the texts it rejects, which are set aside for refusedFor; the rest
-// are embedded. Any other failure fails the batch, to be tried again after a wait.
+// embedSome embeds texts into vb (embed.Bisect). A provider rejecting the input (not failing as a
+// whole) is narrowed down by halves to the texts it rejects, which are set aside for refusedFor;
+// the rest are embedded. Any other failure fails the batch, to be tried again after a wait.
 func (m *semantic) embedSome(ctx context.Context, p embed.Provider, fp string, dims int, hashes [][]byte, texts []string, vb *vecBatch) error {
-	cctx, cancel := context.WithTimeout(ctx, batchTimeout)
-	vecs, err := p.Embed(cctx, texts)
-	cancel()
-	switch {
-	case errors.Is(err, embed.ErrRejected) && len(texts) == 1:
-		m.mu.Lock()
-		m.refused[fp+"\x00"+string(hashes[0])] = refusalEntry{err: err, retryAt: time.Now().Add(refusedFor), bytes: len(texts[0]), tokens: chunk.Tokens([]byte(texts[0]))}
-		m.mu.Unlock()
-		return nil
-	case errors.Is(err, embed.ErrRejected):
-		half := len(texts) / 2
-		if err := m.embedSome(ctx, p, fp, dims, hashes[:half], texts[:half], vb); err != nil {
-			return err
-		}
-		return m.embedSome(ctx, p, fp, dims, hashes[half:], texts[half:], vb)
-	case err != nil:
+	vecs, rejected, err := embed.Bisect(ctx, p, texts, dims, batchTimeout)
+	if err != nil {
 		return err
-	case len(vecs) != len(texts):
-		return fmt.Errorf("%w: %d vectors for %d texts", embed.ErrDims, len(vecs), len(texts))
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range rejected {
+		t := texts[r.Index]
+		m.refused[fp+"\x00"+string(hashes[r.Index])] = refusalEntry{err: r.Err, retryAt: time.Now().Add(refusedFor), bytes: len(t), tokens: chunk.Tokens([]byte(t))}
 	}
 	for i, v := range vecs {
-		if len(v) != dims {
-			return fmt.Errorf("%w: %d dimensions, the model has %d", embed.ErrDims, len(v), dims)
+		if v == nil {
+			continue
 		}
-		vb.items = append(vb.items, vecItem{textHash: hashes[i], vec: normalized(v)})
-		m.mu.Lock()
+		vb.items = append(vb.items, vecItem{textHash: hashes[i], vec: v})
 		delete(m.refused, fp+"\x00"+string(hashes[i]))
-		m.mu.Unlock()
 	}
 	return nil
 }

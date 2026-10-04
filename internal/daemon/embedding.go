@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search/embed"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )

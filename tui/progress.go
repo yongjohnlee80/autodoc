@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/golib/search/embed"
 )
 
 // PROGRESS — what the daemon still has to do, in a toast while there is any (notify.go).
