@@ -1,6 +1,6 @@
 //go:build !darwin
 
-package main
+package app
 
 import "github.com/yongjohnlee80/golib/tui/term"
 

@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"context"
@@ -28,7 +28,7 @@ var errAlreadyServing = errors.New("autodoc is already serving")
 // follower watches, then reconciles), and serve the API until ctx ends or a client says
 // sys.shutdown. Then it drains, stops every workspace, closes the store, and removes the socket if
 // it is still this process's.
-func runServe(ctx context.Context, configPath string, out io.Writer) error {
+func runServe(ctx context.Context, configPath string, out io.Writer, o Options) error {
 	log := logger.New(logger.WithWriter(out))
 	if configPath == "" {
 		var err error
@@ -98,8 +98,8 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	if len(ws.List()) == 0 {
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
-	srv := rpc.New(ws, version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
-	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", version, sock)
+	srv := rpc.New(ws, o.Version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
+	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", o.Version, sock)
 	return srv.Run(ctx)
 }
 
