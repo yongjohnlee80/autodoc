@@ -90,3 +90,34 @@ func TestTheProviderDialogReopenedAtOnceShowsTheSavedChoice(t *testing.T) {
 		t.Fatal("the dialog showed the provider from before the save")
 	}
 }
+
+// Two manager dialogs asked for in turn, the first's read answering last, leave the second on
+// screen: a late open never replaces the dialog asked for after it (Lector's review of #30, r3).
+func TestALateDialogOpenNeverReplacesALaterOne(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n")})
+	var held atomic.Int32 // only the first listing after arming waits
+	var armed atomic.Bool
+	release := make(chan struct{})
+	sess := NewSession(d.sock, nil)
+	sess.beforeCall = func(method string, _ []any) {
+		if method == "workspace.list" && armed.Load() && held.Add(1) == 1 {
+			<-release
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.manageWorkspaces() })
+	r.s.WaitForText(t, "Schema…")
+	armed.Store(true)
+	r.h.p.Post(func() { r.h.startSchema(0) }) // its read is held
+	r.s.WaitFor(t, "the schema read held", func(string) bool { return held.Load() == 1 })
+	r.h.p.Post(func() { r.h.startPatterns(0) }) // its read answers at once
+	r.s.WaitForText(t, "rules · kb")
+	close(release) // the schema read answers now, last
+	r.h.p.Post(func() {})
+	time.Sleep(150 * time.Millisecond)
+	r.s.WaitForText(t, "rules · kb")
+	if strings.Contains(r.s.String(), "frontmatter schema · kb") {
+		t.Fatal("the late Schema open replaced the Rules dialog asked for after it")
+	}
+}
