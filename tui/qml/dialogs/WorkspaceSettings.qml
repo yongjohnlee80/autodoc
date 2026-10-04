@@ -53,6 +53,8 @@ Dialog {
                         ComboBox { id: sYaml; model: App.yesNo; textRole: "label"; currentIndex: App.settingsYamlIndex }
                         Text { text: "your text types (comma-separated: .log, .rst)" }
                         TextField { id: sTexts; text: App.settingsTexts }
+                        Text { text: App.settingsCodeLabel; visible: App.settingsCodeOffered; wrapMode: Tui.WordWrap }
+                        TextField { id: sCode; text: App.settingsCode; visible: App.settingsCodeOffered }
                         Text { text: "include globs (semicolon-separated; blank matches no files)" }
                         TextField { id: sInclude; text: App.settingsInclude }
                         Text { text: "exclude globs (semicolon-separated)" }
@@ -124,5 +126,5 @@ Dialog {
     onAccepted: App.saveSettings(sName.text, sRoot.text, sSchema.text, sTexts.text, sInclude.text, sExclude.text,
         sMd.currentIndex, sTxt.currentIndex, sYaml.currentIndex, sSection.text, sPolicy.currentIndex, sProvider.currentIndex,
         sDest.currentIndex, sDestDSN.text, sDestSchema.text, sIndex.currentIndex,
-        sSource.currentIndex, sSrcDSN.text, sSrcSchema.text, sViewArgs.text)
+        sSource.currentIndex, sSrcDSN.text, sSrcSchema.text, sViewArgs.text, sCode.text)
 }

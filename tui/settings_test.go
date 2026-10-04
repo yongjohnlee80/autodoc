@@ -484,7 +484,7 @@ func TestTheManagerDetail(t *testing.T) {
 	w.db = databasesInfo{destination: store.DestinationPostgres, vectorIndex: store.IndexHNSW,
 		destConn: &connInfo{engine: "postgres", host: "db:5432", database: "rag", user: "me", hasPassword: true},
 		viewArgs: map[string]any{"LabelGroupID": "7"}}
-	without, with := managerDetail(w, false), managerDetail(w, true)
+	without, with := managerDetail(w, false, nil), managerDetail(w, true, nil)
 	for _, s := range []string{"source", "view args", "destination"} {
 		if strings.Contains(without, s) {
 			t.Errorf("without the databases, the pane lists %q:\n%s", s, without)
