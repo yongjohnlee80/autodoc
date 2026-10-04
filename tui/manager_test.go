@@ -5,7 +5,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +24,12 @@ import (
 // and embedding verbs work.
 func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	t.Helper()
+	return startManagedWith(t, roots, serving.Options{})
+}
+
+// startManagedWith is startManaged with the daemon's options: the edition's database features, say.
+func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) *managedDaemon {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
 	if err != nil {
@@ -40,7 +45,8 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 			t.Fatal(err)
 		}
 	}
-	ws := serving.New(ctx, db, serving.Options{Poll: 20 * time.Millisecond, BatchDelay: 5 * time.Millisecond})
+	o.Poll, o.BatchDelay = 20*time.Millisecond, 5*time.Millisecond
+	ws := serving.New(ctx, db, o)
 	if err := ws.OpenAll(); err != nil {
 		t.Fatal(err)
 	}
@@ -110,22 +116,23 @@ func fileDir(t *testing.T, notes ...string) string {
 
 func tab() tuicore.Event { return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab} }
 
-// addWorkspace fills the add dialog: the title over "untitled", then the folder typed into the
-// path, and Enter selects it.
+// addWorkspace fills the settings dialog Add… opens: the title over "untitled", then the root
+// typed over the home directory, and Enter, which saves.
 func (r *running) addWorkspace(t *testing.T, title, root string) {
 	t.Helper()
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "add a workspace")
-	r.s.WaitForText(t, "untitled") // the title field, which has the keyboard first
+	r.keys(t, tab()) // from the tab bar to the title
 	r.keys(t, decltest.Ctrl('u'))
 	r.keys(t, decltest.Type(title)...)
-	r.keys(t, decltest.Ctrl('j'), decltest.Ctrl('u')) // the path
+	r.keys(t, tab(), decltest.Ctrl('u')) // the root
 	r.keys(t, decltest.Type(root)...)
 	r.keys(t, enter())
 }
 
-// TestWorkspaceManager: from the picker, the manager adds a workspace (a refused add says why),
-// renames it, and deletes it after asking what goes and what stays; the files stay.
+// TestWorkspaceManager: from the picker, the manager adds a workspace through the settings dialog
+// (a refused add opens it again, saying why), renames it on the Edit tab, and deletes it after
+// asking what goes and what stays; the files stay.
 func TestWorkspaceManager(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -135,27 +142,28 @@ func TestWorkspaceManager(t *testing.T) {
 	r.keys(t, decltest.Ctrl('w'))
 	r.s.WaitForText(t, "Manage…")
 	r.keys(t, key('m'))
-	r.s.WaitForText(t, "Rename…")
+	r.s.WaitForText(t, "Advanced…")
 
 	root := fileDir(t, "b.md", "beta\n")
 	r.addWorkspace(t, "notes", root)
-	r.s.WaitForText(t, "added workspace notes")
-	r.s.WaitFor(t, "the manager lists it", func(sc string) bool { return strings.Contains(sc, root) })
+	r.waitNoticed(t, "added workspace notes")
+	r.s.WaitFor(t, "the manager lists it", func(sc string) bool { return strings.Contains(sc, filepath.Base(root)) })
 
-	// a refusal opens the dialog again, the reason on the status line
+	// a refusal opens the dialog again, the reason on its help line
 	r.addWorkspace(t, "notes", t.TempDir())
 	r.s.WaitFor(t, "the refusal, the dialog open again", func(sc string) bool {
-		return strings.Contains(sc, "not added: another workspace has this name or root") && strings.Contains(sc, "add a workspace")
+		return strings.Contains(sc, "not saved: another workspace has this name or root") && strings.Contains(sc, "add a workspace")
 	})
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the add closed", func(sc string) bool { return !strings.Contains(sc, "add a workspace") })
 
-	// the rows are by name: kb, then files
-	r.keys(t, key('j'), key('r'))
-	r.s.WaitForText(t, "rename the workspace")
+	// the rows are by name: kb, then notes; Edit… renames it
+	r.keys(t, key('j'), key('e'))
+	r.s.WaitForText(t, "workspace settings · notes")
+	r.keys(t, tab())
 	r.keys(t, decltest.Type("-2")...)
 	r.keys(t, enter())
-	r.s.WaitForText(t, "renamed notes to notes-2")
+	r.waitNoticed(t, "notes-2: saved name")
 
 	r.keys(t, key('d'))
 	r.s.WaitForText(t, "delete the workspace?")
@@ -165,7 +173,7 @@ func TestWorkspaceManager(t *testing.T) {
 	})
 	r.keys(t, key('y'))
 	r.s.WaitForText(t, "deleted workspace notes-2 (its files stay)")
-	r.s.WaitFor(t, "the manager no longer lists it", func(sc string) bool { return !strings.Contains(sc, root) })
+	r.s.WaitFor(t, "the manager no longer lists it", func(sc string) bool { return !strings.Contains(sc, "notes-2") })
 	if _, err := os.Stat(filepath.Join(root, "b.md")); err != nil {
 		t.Errorf("deleting the workspace touched its files: %v", err)
 	}
@@ -180,68 +188,6 @@ func TestWorkspaceManager(t *testing.T) {
 	if got := onLoop(r, func() string { return r.h.ws }); got != "" {
 		t.Errorf("the workspace in use is %q after deleting it, want none", got)
 	}
-}
-
-func TestWorkspaceSectionSizeIsEditedAtTheWorkspace(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n\n"+strings.Repeat("many words here in a paragraph.\n\n", 70))})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.manageWorkspaces() })
-	r.s.WaitForText(t, "SECTION")
-	r.h.p.Post(func() { r.h.startSectionSize(0) })
-	r.s.WaitForText(t, "section size · kb")
-	r.h.p.Post(func() { r.h.saveSectionSize("not a number") })
-	r.s.WaitForText(t, "section size must be 128–2048")
-	r.h.p.Post(func() { r.h.saveSectionSize("127") })
-	r.s.WaitForText(t, "section size must be 128–2048")
-	r.h.p.Post(func() { r.h.saveSectionSize("256") })
-	r.s.WaitForText(t, "section size 256; re-chunking")
-	ws, err := d.db.Workspaces(context.Background())
-	if err != nil || len(ws) != 1 {
-		t.Fatalf("workspace listing: %v, %v", ws, err)
-	}
-	if got, err := d.db.SectionTokens(context.Background(), ws[0].ID); err != nil || got != 256 {
-		t.Fatalf("section size = %d, %v; want 256", got, err)
-	}
-}
-
-func TestWorkspaceRulesDialogEditsAndClearsIncludes(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.manageWorkspaces() })
-	r.h.p.Post(func() { r.h.startPatterns(0) })
-	r.s.WaitForText(t, "rules · kb")
-	r.h.p.Post(func() { r.h.savePatterns("**/*.{md,txt", "") })
-	r.s.WaitForText(t, "not saved:")
-	r.h.p.Post(func() { r.h.savePatterns("**/*.{md,txt}", ".git/**") })
-	r.s.WaitForText(t, "rules saved for kb")
-	workspaces, err := d.db.Workspaces(context.Background())
-	if err != nil || len(workspaces) != 1 || !slices.Equal(workspaces[0].Include, []string{"**/*.{md,txt}"}) {
-		t.Fatalf("stored rules = %+v, %v", workspaces, err)
-	}
-	r.h.p.Post(func() { r.h.savePatterns("", ".git/**") })
-	r.s.WaitFor(t, "blank include saved", func(string) bool {
-		stored, err := d.db.Workspaces(context.Background())
-		return err == nil && len(stored) == 1 && stored[0].Include != nil && len(stored[0].Include) == 0
-	})
-	workspaces, err = d.db.Workspaces(context.Background())
-	if err != nil || len(workspaces) != 1 || workspaces[0].Include == nil || len(workspaces[0].Include) != 0 {
-		t.Fatalf("blank include = %+v, %v", workspaces, err)
-	}
-}
-
-func TestFileTypeChoiceUpdatesWorkspaceRules(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.openFileTypes() })
-	r.s.WaitForText(t, "file types · kb")
-	r.h.p.Post(func() { r.h.setFileType(1, "txt") })
-	r.s.WaitFor(t, "plain text disabled", func(string) bool {
-		workspaces, err := d.db.Workspaces(context.Background())
-		return err == nil && len(workspaces) == 1 && slices.Contains(workspaces[0].Exclude, "**/*.txt") && !slices.Contains(workspaces[0].Include, "**/*.txt")
-	})
 }
 
 // TestOpensTheNamedWorkspace: Options.Workspace (autodoc --ui <name>) opens that one, not the
@@ -273,26 +219,5 @@ func TestWorkspacePickerStartsAtTheCurrentWorkspace(t *testing.T) {
 	r.keys(t, enter())
 	if selected := onLoop(r, func() string { return r.h.ws }); selected != "beta" {
 		t.Fatalf("Enter on the highlighted workspace switched to %q; want current beta", selected)
-	}
-}
-
-func TestWorkspaceEmbeddingPolicyIsSetInManager(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(r.h.manageWorkspaces)
-	r.s.WaitForText(t, "Embedding…")
-	r.h.p.Post(func() { r.h.startEmbeddingPolicy(0) })
-	r.s.WaitForText(t, "embedding · kb")
-	r.h.p.Post(func() { r.h.saveEmbeddingPolicy("not-a-policy") })
-	r.s.WaitForText(t, "embedding policy must be always, when opened, or never")
-	r.h.p.Post(func() { r.h.saveEmbeddingPolicy("never") })
-	r.s.WaitForText(t, "kb: embedding never")
-	ws, err := d.db.Workspaces(context.Background())
-	if err != nil || len(ws) != 1 {
-		t.Fatalf("workspaces: %+v, %v", ws, err)
-	}
-	if policy, err := d.db.EmbeddingPolicy(context.Background(), ws[0].ID); err != nil || policy != store.EmbeddingNever {
-		t.Fatalf("stored policy = %q, %v; want never", policy, err)
 	}
 }

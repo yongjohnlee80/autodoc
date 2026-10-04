@@ -37,7 +37,7 @@ func readSchemaInfo(v any) schemaInfo {
 	return schemaInfo{path: str(m, "path"), active: active, fields: num(m, "fields"), err: str(m, "error"), line: num(m, "line")}
 }
 
-// state is the schema's standing, a sentence for the schema dialog.
+// state is the schema's standing, a sentence for the settings dialog.
 func (s schemaInfo) state() string {
 	var b strings.Builder
 	switch {
@@ -59,49 +59,6 @@ func (s schemaInfo) state() string {
 		}
 	}
 	return b.String()
-}
-
-func (h *Host) startSchema(i int) { h.withCurrentRow(i, h.showSchema) }
-
-func (h *Host) showSchema(w wsInfo) {
-	h.schemaWorkspace = w.name
-	h.set("App.schemaTitle", "frontmatter schema · "+w.name)
-	h.set("App.schemaRoot", "workspace root: "+w.root)
-	p := w.schema.path
-	if p == "" {
-		p = suggestedSchema
-	}
-	h.setField("App.schemaPath", p)
-	h.set("App.schemaState", w.schema.state())
-	h.set("App.schemaHelp", "A YAML file declaring the files' frontmatter fields (version: 1, frontmatter: …). Blank removes the schema.")
-	h.open("workspaceSchema")
-}
-
-func (h *Host) saveSchema(p string) {
-	name := h.schemaWorkspace
-	p = strings.TrimSpace(p)
-	do(h, func(ctx context.Context) answerOf[schemaInfo] {
-		res, err := h.call(ctx, "workspace.set_schema", name, p)
-		return answerOf[schemaInfo]{v: readSchemaInfo(res), err: err}
-	}, func(a answerOf[schemaInfo]) {
-		if a.err != nil {
-			h.set("App.schemaState", "not saved: "+wireMessage(a.err))
-			h.open("workspaceSchema")
-			return
-		}
-		switch {
-		case p == "":
-			h.notify(name + ": no frontmatter schema")
-		case a.v.err != "":
-			h.notify(name + ": schema saved; " + a.v.state())
-		default:
-			h.notify(fmt.Sprintf("%s: schema active, %d fields; checking the files", name, a.v.fields))
-		}
-		h.loadWorkspaces()
-		if name == h.ws {
-			h.validateSoon()
-		}
-	})
 }
 
 // answerOf is a background answer: a value, or why there is none.

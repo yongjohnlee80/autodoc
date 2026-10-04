@@ -115,13 +115,10 @@ type Host struct {
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
-	ws               string
-	fileTypesPending bool
-	patternWorkspace string
-	schemaWorkspace  string
-	// the provider dialog's workspace and its choices, "" first for the daemon's (wsprovider.go)
-	providerWorkspace string
-	providerChoices   []string
+	ws string
+	// the settings dialog (settings.go): what it was opened on, and the tab it is on
+	settings    settingsBase
+	settingsTab int
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
 	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
@@ -162,10 +159,11 @@ type Host struct {
 	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
 	filesAll  []string
 
-	// the workspace manager: the workspace a rename or a delete was started on
-	renaming, removing string
-	sectionWorkspace   string
-	policyWorkspace    string
+	// the workspace manager: the row under its cursor, the workspace a delete was started on, and
+	// whether the edition offers the database settings
+	managerIndex int
+	removing     string
+	databases    bool
 
 	file  openedFile // the file in the editor (files.go)
 	draft *draftSave // the draft being named in the new-file picker, nil when none is (files.go)

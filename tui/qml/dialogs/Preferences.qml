@@ -87,7 +87,7 @@ Dialog {
         }
     }
     DialogButtonBox {
-        Button { text: "&File types…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openFileTypes() }
+        Button { text: "&File types…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openActiveSettings() }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

@@ -27,11 +27,9 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 	one.s.WaitFor(t, "one's note dirty", func(string) bool { return one.file().dirty })
 
 	// two edits alpha's rules: one is told, two is not told of its own change
-	two.h.p.Post(func() {
-		two.h.patternWorkspace = "alpha"
-		two.h.savePatterns("**/*.md", ".git/**")
-	})
-	two.s.WaitForText(t, "rules saved for alpha")
+	two.openSettings(t, "alpha", 0)
+	two.saveForm(func(f *settingsForm) { f.include, f.exclude = "**/*.md", ".git/**" })
+	two.waitNoticed(t, "alpha: saved rules")
 	one.waitNoticed(t, "workspace alpha: its rules were changed by another client")
 	// two has read the log past that event before it is asked what it was told
 	past := onLoop(one, func() int64 { return one.h.evCursor })
@@ -57,10 +55,8 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 	}
 
 	// two renames alpha: one follows the name, its file still open and unsaved
-	two.h.p.Post(func() {
-		two.h.renaming = "alpha"
-		two.h.renameWorkspace("alpha2")
-	})
+	two.openSettings(t, "alpha", 0)
+	two.saveForm(func(f *settingsForm) { f.name = "alpha2" })
 	one.s.WaitFor(t, "one on alpha2", func(string) bool { return onLoop(one, func() string { return one.h.ws }) == "alpha2" })
 	one.s.WaitForText(t, "· alpha2")
 	if n := one.file(); !n.open || !n.dirty || n.path != "a.md" || !strings.Contains(one.editorText(), "edited and unsaved") {
