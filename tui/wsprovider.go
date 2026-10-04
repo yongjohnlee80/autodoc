@@ -13,54 +13,55 @@ import (
 const daemonsProvider = "the daemon's (System › AI models)"
 
 func (h *Host) startWorkspaceProvider(i int) {
-	w, ok := h.managerRow(i)
+	row, ok := h.managerRow(i)
 	if !ok {
 		return
 	}
-	h.providerWorkspace = w.name
-	h.set("App.wsProviderTitle", "embedding provider · "+w.name)
 	h.set("App.wsProviderHelp", "loading the providers…")
-	ep := h.epoch
-	do(h, func(ctx context.Context) answerOf[[]string] {
+	providers := func(ctx context.Context) (any, error) {
 		res, err := h.call(ctx, "embedding.providers")
 		if err != nil {
-			return answerOf[[]string]{err: err}
+			return nil, err
 		}
 		var names []string
 		for _, p := range asList(asMap(res)["providers"]) {
 			names = append(names, str(asMap(p), "name"))
 		}
-		return answerOf[[]string]{v: names}
-	}, func(a answerOf[[]string]) {
-		if ep != h.epoch {
-			return
-		}
-		if a.err != nil {
-			h.failed("providers", a.err)
-			return
-		}
-		h.providerChoices = append([]string{""}, a.v...)
-		rows := []rowOf{{"key": "", "label": daemonsProvider}}
-		current := 0
-		for i, n := range a.v {
-			rows = append(rows, rowOf{"key": n, "label": n})
-			if n == w.provider {
-				current = i + 1
-			}
-		}
-		h.wsProviders.Reset(rows)
-		h.set("App.wsProviderIndex", current)
-		state := "uses the daemon's provider"
-		if w.provider != "" {
-			state = "uses its own provider: " + w.provider
-			if w.providerErr != "" {
-				state += " (not set up: " + w.providerErr + "; searching by words)"
-			}
-		}
-		h.set("App.wsProviderState", state)
-		h.set("App.wsProviderHelp", "Changing it rebuilds this workspace's vectors alone; the daemon's switch leaves a workspace with its own provider as it is.")
-		h.open("workspaceProvider")
+		return names, nil
+	}
+	// the workspace's provider as the daemon has it now: the dialog reopened right after a save
+	// shows the saved choice, whatever the relisting is doing
+	h.withCurrent(row.name, providers, func(w wsInfo, more any) {
+		names, _ := more.([]string)
+		h.showWorkspaceProvider(w, names)
 	})
+}
+
+// showWorkspaceProvider opens the dialog over the stored providers, w's own selected.
+func (h *Host) showWorkspaceProvider(w wsInfo, names []string) {
+	h.providerWorkspace = w.name
+	h.set("App.wsProviderTitle", "embedding provider · "+w.name)
+	h.providerChoices = append([]string{""}, names...)
+	rows := []rowOf{{"key": "", "label": daemonsProvider}}
+	current := 0
+	for i, n := range names {
+		rows = append(rows, rowOf{"key": n, "label": n})
+		if n == w.provider {
+			current = i + 1
+		}
+	}
+	h.wsProviders.Reset(rows)
+	h.set("App.wsProviderIndex", current)
+	state := "uses the daemon's provider"
+	if w.provider != "" {
+		state = "uses its own provider: " + w.provider
+		if w.providerErr != "" {
+			state += " (not set up: " + w.providerErr + "; searching by words)"
+		}
+	}
+	h.set("App.wsProviderState", state)
+	h.set("App.wsProviderHelp", "Changing it rebuilds this workspace's vectors alone; the daemon's switch leaves a workspace with its own provider as it is.")
+	h.open("workspaceProvider")
 }
 
 func (h *Host) saveWorkspaceProvider(i int) {
