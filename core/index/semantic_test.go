@@ -255,6 +255,16 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 		}
 		checkPartial(t, e, cID)
 	}
+	// the fallback variant: an index one commit behind is unusable, so the query scans the stored
+	// codes, which exclude the half-embedded c.md too
+	cur := e.atHead()
+	e.ix.sem.snap.Store(cur.Next(cur.Watermark()-1, nil, nil))
+	falls := e.ix.sem.fallbackScans.Load()
+	checkPartial(t, e, cID)
+	if e.ix.sem.fallbackScans.Load() == falls {
+		t.Error("an unusable index did not send the query to the stored codes")
+	}
+	e.ix.sem.snap.Store(cur)
 	p.unhold()
 	e.ready()
 	res := e.query("zebra", QueryOpts{Mode: ModeSemantic})

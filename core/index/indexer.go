@@ -55,6 +55,9 @@ type Options struct {
 	// afterRead, when set (tests only), runs in the worker once a path's content is read, before the
 	// result goes to the writer: the seam that lets a test change and touch the file in between.
 	afterRead func(path string)
+	// beforePublish, when set (tests only), runs after a commit and before its code index is
+	// published: the seam that holds a publish while queries run against the commit.
+	beforePublish func()
 	// noGC (tests only) keeps dead chunks, to show they are never alive before GC takes them.
 	noGC bool
 	// onCommit, when set (tests only), is told how long each batch's transaction held the writer.
