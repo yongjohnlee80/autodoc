@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
+	"github.com/yongjohnlee80/golib/search/chunk"
 )
 
 // The benchmarks measure chunking and search before and after the search code moves, on the same
@@ -24,20 +25,21 @@ func BenchmarkChunk(b *testing.B) {
 		b.SetBytes(int64(len(md)))
 		for b.Loop() {
 			doc := markdown.Parse(md, markdown.GFM(), markdown.Obsidian())
-			meta := readMeta(doc, "bench.md")
-			chunkDocWithLimit(doc, meta.title, 512)
+			meta := chunk.ReadMeta(doc, "bench.md")
+			hashed(chunk.Markdown(doc, meta.Title, 512))
 		}
 	})
 	b.Run("Text", func(b *testing.B) {
 		b.SetBytes(int64(len(txt)))
 		for b.Loop() {
-			chunkPlainText(txt, "bench", 512)
+			hashed(chunk.Text(txt, "bench", 512))
 		}
 	})
 	b.Run("YAML", func(b *testing.B) {
 		b.SetBytes(int64(len(yml)))
 		for b.Loop() {
-			prepareYAML(yml, "bench.yaml", 512)
+			_, cs := chunk.YAML(yml, "bench.yaml", 512)
+			hashed(cs)
 		}
 	})
 }

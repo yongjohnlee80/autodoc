@@ -21,22 +21,6 @@ func TestPlainTextIndexesLiterally(t *testing.T) {
 	}
 }
 
-func TestPlainTextChunkSpansAndBound(t *testing.T) {
-	src := []byte(strings.Repeat("long sentence with words\n", 100) + "\nsecond paragraph")
-	chunks := chunkPlainText(src, "notes", 64)
-	if len(chunks) < 2 {
-		t.Fatalf("got %d chunks, want split text", len(chunks))
-	}
-	for _, chunk := range chunks {
-		if chunk.byteStart < 0 || chunk.byteEnd > len(src) || chunk.byteStart >= chunk.byteEnd {
-			t.Fatalf("invalid source span: %+v", chunk)
-		}
-		if tokensOf([]byte(chunk.breadcrumb+"\n"+chunk.body), 0, len(chunk.breadcrumb)+1+len(chunk.body)) > 64 {
-			t.Fatalf("oversized plain-text chunk: %+v", chunk)
-		}
-	}
-}
-
 func TestCommunityIndexerDoesNotReadProDocumentsThroughBroadGlobs(t *testing.T) {
 	env := newEnv(t, Options{Match: func(string) bool { return true }})
 	for _, extension := range []string{".doc", ".docx", ".odt", ".pdf"} {

@@ -82,7 +82,7 @@ func notesOf(notes [][]string, name string) []string {
 	return nil
 }
 
-func search(t *testing.T, w served, q string, opts QueryOpts) []Hit {
+func searchServed(t *testing.T, w served, q string, opts QueryOpts) []Hit {
 	t.Helper()
 	res, err := w.ix.Search(context.Background(), q, opts)
 	if err != nil {
@@ -99,11 +99,11 @@ func TestLimitIsTheWorkspacesBest(t *testing.T) {
 	ws := shareAStore(t, []Options{{}, {}},
 		[]string{"a", "quiet.md", "# Coast\n\nA note of the tide, the marsh and, once, an osprey among the gulls and terns.\n"},
 		[]string{"b", "loud1.md", loud, "loud2.md", loud, "loud3.md", loud})
-	hits := search(t, ws[0], "osprey", QueryOpts{Limit: 1, Mode: ModeLexical})
+	hits := searchServed(t, ws[0], "osprey", QueryOpts{Limit: 1, Mode: ModeLexical})
 	if len(hits) != 1 || hits[0].Path != "quiet.md" {
 		t.Fatalf("a's LIMIT 1 for osprey = %+v, want its quiet.md", hits)
 	}
-	if hits := search(t, ws[1], "osprey", QueryOpts{Limit: 1, Mode: ModeLexical}); len(hits) != 1 || hits[0].Path == "quiet.md" {
+	if hits := searchServed(t, ws[1], "osprey", QueryOpts{Limit: 1, Mode: ModeLexical}); len(hits) != 1 || hits[0].Path == "quiet.md" {
 		t.Fatalf("b's LIMIT 1 for osprey = %+v, want one of its own", hits)
 	}
 }
@@ -146,7 +146,7 @@ func TestSemanticReadsTheWorkspacesVectors(t *testing.T) {
 		t.Helper()
 		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 			n := w.ix.sem.snapshotScans.Load()
-			hits := search(t, w, "zebra", QueryOpts{Mode: ModeSemantic})
+			hits := searchServed(t, w, "zebra", QueryOpts{Mode: ModeSemantic})
 			if w.ix.sem.snapshotScans.Load() == n+1 {
 				return hits
 			}
@@ -161,7 +161,7 @@ func TestSemanticReadsTheWorkspacesVectors(t *testing.T) {
 		cur := w.ix.sem.snap.Load()
 		w.ix.sem.snap.Store(&codeSnap{fp: cur.fp, watermark: cur.watermark - 1, docs: cur.docs})
 		n := w.ix.sem.fallbackScans.Load()
-		hits := search(t, w, "zebra", QueryOpts{Mode: ModeSemantic})
+		hits := searchServed(t, w, "zebra", QueryOpts{Mode: ModeSemantic})
 		if w.ix.sem.fallbackScans.Load() != n+1 {
 			t.Fatalf("%s did not answer through SQL", w.name)
 		}

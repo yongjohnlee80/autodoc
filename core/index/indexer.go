@@ -18,6 +18,8 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/parse/markdown"
+	"github.com/yongjohnlee80/golib/search"
+	"github.com/yongjohnlee80/golib/search/chunk"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
@@ -127,7 +129,7 @@ type prepared struct {
 	err         error
 	tooLarge    bool // err is that the file is over MaxFileSize
 	version     vfs.Version
-	meta        docMeta
+	meta        chunk.Meta
 	chunks      []chunkT
 	links       []linkT
 	frontmatter schema.Result // a Markdown note's facets and diagnostics under the schema
@@ -498,14 +500,16 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	}
 	switch k {
 	case kind.Text:
-		p.meta.title = strings.TrimSuffix(path.Base(w.path), path.Ext(w.path))
-		p.chunks = chunkPlainText(src, p.meta.title, tokens)
+		p.meta.Title = strings.TrimSuffix(path.Base(w.path), path.Ext(w.path))
+		p.chunks = hashed(chunk.Text(src, p.meta.Title, tokens))
 	case kind.YAML:
-		p.meta, p.chunks = prepareYAML(src, w.path, tokens)
+		var cs []search.Chunk
+		p.meta, cs = chunk.YAML(src, w.path, tokens)
+		p.chunks = hashed(cs)
 	default:
 		doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
-		p.meta = readMeta(doc, w.path)
-		p.chunks = chunkDocWithLimit(doc, p.meta.title, tokens)
+		p.meta = chunk.ReadMeta(doc, w.path)
+		p.chunks = hashed(chunk.Markdown(doc, p.meta.Title, tokens))
 		p.links = extractLinks(doc, w.path, x.opts.Match)
 		// the frontmatter is validated from the parse the note already had (ADR 0212 §5)
 		if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
@@ -693,7 +697,7 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	if err != nil {
 		return 0, err
 	}
-	title, tags := p.meta.title, strings.Join(p.meta.tags, " ")
+	title, tags := p.meta.Title, strings.Join(p.meta.Tags, " ")
 	metaChanged := title != oldTitle || tags != strings.Join(oldTags, " ")
 	var reused []int64
 	// the new chunks go in as one statement: the full-text trigger makes each insert a statement of
@@ -705,17 +709,17 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 		if occ := old[key]; len(occ) > 0 {
 			id := occ[0]
 			old[key] = occ[1:]
-			if err := s.sc.Chunks(tx).With(store.ChunkID, id).Set(store.ChunkOrd, int64(c.ord)).
-				Set(store.ChunkByteStart, int64(c.byteStart)).Set(store.ChunkByteEnd, int64(c.byteEnd)).Update(); err != nil {
+			if err := s.sc.Chunks(tx).With(store.ChunkID, id).Set(store.ChunkOrd, int64(c.Ord)).
+				Set(store.ChunkByteStart, int64(c.ByteStart)).Set(store.ChunkByteEnd, int64(c.ByteEnd)).Update(); err != nil {
 				return 0, err
 			}
 			reused = append(reused, id)
 			continue
 		}
 		fresh.Add(map[store.ChunkField]any{store.ChunkDoc: docID, store.ChunkHash: c.hash, store.ChunkTextHash: c.textHash,
-			store.ChunkGenFrom: next, store.ChunkOrd: int64(c.ord), store.ChunkBreadcrumb: c.breadcrumb,
-			store.ChunkBody: c.body, store.ChunkTitle: title, store.ChunkTags: tags,
-			store.ChunkByteStart: int64(c.byteStart), store.ChunkByteEnd: int64(c.byteEnd)})
+			store.ChunkGenFrom: next, store.ChunkOrd: int64(c.Ord), store.ChunkBreadcrumb: c.Breadcrumb,
+			store.ChunkBody: c.Body, store.ChunkTitle: title, store.ChunkTags: tags,
+			store.ChunkByteStart: int64(c.ByteStart), store.ChunkByteEnd: int64(c.ByteEnd)})
 		added = true
 	}
 	if added {
@@ -742,10 +746,10 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 			}
 		}
 	}
-	if err := s.replaceValues(tx, s.sc.Tags(tx), s.sc.TagBatch(tx), docID, p.meta.tags); err != nil {
+	if err := s.replaceValues(tx, s.sc.Tags(tx), s.sc.TagBatch(tx), docID, p.meta.Tags); err != nil {
 		return 0, err
 	}
-	if err := s.replaceValues(tx, s.sc.Aliases(tx), s.sc.AliasBatch(tx), docID, p.meta.aliases); err != nil {
+	if err := s.replaceValues(tx, s.sc.Aliases(tx), s.sc.AliasBatch(tx), docID, p.meta.Aliases); err != nil {
 		return 0, err
 	}
 	if err := s.replaceFrontmatter(tx, docID, p.frontmatter); err != nil {
@@ -753,7 +757,7 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	}
 	// the names, the note's own links, then the links elsewhere whose target may have changed: those
 	// under every name the note gained or lost, and, when it appeared, under its path
-	changed, err := s.writeNames(tx, docID, namesOf(p.path, p.meta.aliases))
+	changed, err := s.writeNames(tx, docID, namesOf(p.path, p.meta.Aliases))
 	if err != nil {
 		return 0, err
 	}
@@ -767,11 +771,11 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 		return 0, err
 	}
 	var fmJSON, fmErr any
-	if p.meta.frontmatterJSON != "" {
-		fmJSON = p.meta.frontmatterJSON
+	if p.meta.FrontmatterJSON != "" {
+		fmJSON = p.meta.FrontmatterJSON
 	}
-	if p.meta.frontmatterErr != "" {
-		fmErr = p.meta.frontmatterErr
+	if p.meta.FrontmatterErr != "" {
+		fmErr = p.meta.FrontmatterErr
 	}
 	if err := s.sc.Documents(tx).With(store.DocID, docID).Set(store.DocVersion, string(p.version)).Set(store.DocActiveGen, next).
 		Set(store.DocTitle, title).Set(store.DocFrontmatterJSON, fmJSON).Set(store.DocFrontmatterError, fmErr).
