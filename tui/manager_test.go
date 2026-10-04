@@ -74,7 +74,8 @@ func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) 
 	}
 	emb := serving.NewEmbedding(db, ws, nil)
 	emb.Start(ctx)
-	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
+	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
+		rpc.WithRegistrations(o.Registrations.Tables()))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
