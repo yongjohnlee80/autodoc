@@ -827,5 +827,5 @@ func (h *Host) showManagerDetail() {
 		h.set("App.managerDetail", "no workspace · Add… makes one")
 		return
 	}
-	h.set("App.managerDetail", managerDetail(h.wsList[h.managerIndex], h.databases, h.kinds.Chunked))
+	h.set("App.managerDetail", managerDetail(h.wsList[h.managerIndex], h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
 }

@@ -23,6 +23,33 @@ func openDefaultBrowser(ctx context.Context, path string) error {
 	return exec.CommandContext(ctx, command, path).Run()
 }
 
+// openSystemViewer opens the open file itself, on disk, in the desktop's own viewer: a PDF in its
+// reader, for the diagrams and layout its derived text cannot show.
+func (h *Host) openSystemViewer() {
+	if !h.file.open {
+		h.notify("no file is open: open one, then SPC O opens it in the system viewer")
+		return
+	}
+	root := ""
+	for _, w := range h.wsList {
+		if w.name == h.ws {
+			root = w.root
+		}
+	}
+	if root == "" {
+		h.notify("the workspace's folder is not known yet: try again once it is listed")
+		return
+	}
+	full := filepath.Join(root, filepath.FromSlash(h.file.path))
+	do(h, func(ctx context.Context) error { return h.browser(ctx, full) }, func(err error) {
+		if err != nil {
+			h.notify("open in the system viewer: " + err.Error())
+			return
+		}
+		h.say("opened " + h.file.path + " in the system viewer")
+	})
+}
+
 func htmlPreviewFile(content []byte) (string, error) {
 	cache, err := os.UserCacheDir()
 	if err != nil {

@@ -48,7 +48,7 @@ func (h *Host) checkRegistrations() {
 			return
 		}
 		h.daemonTables = a.t
-		h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.t.Chunkers))}
+		h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.t.Chunkers)), Derived: slices.Sorted(maps.Keys(a.t.Formats))}
 		h.compareRegistrations()
 	})
 }

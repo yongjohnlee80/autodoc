@@ -30,7 +30,7 @@ func (h *Host) outlineKind() kind.Kind {
 	if !h.file.open {
 		return kind.Markdown
 	}
-	return h.kinds.Of(h.file.path, h.textExtensions())
+	return h.kinds.ReadAs(h.file.path, h.textExtensions()) // a derived document's text is Markdown
 }
 
 // refreshOutline outlines the editor's text now, and puts the breadcrumb at the cursor.
@@ -60,7 +60,7 @@ func (h *Host) cursorMoved() { h.showCrumb() }
 
 // showCrumb titles the page with the file's name and the breadcrumb at the cursor.
 func (h *Host) showCrumb() {
-	name := h.file.name()
+	name := h.file.title()
 	if h.outline == nil {
 		h.set("App.fileTitle", name)
 		return

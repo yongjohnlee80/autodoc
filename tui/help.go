@@ -12,6 +12,8 @@ const helpText = `KEYS
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
   Ctrl+O      open a file: a filter over the workspace's files, with a preview
+  SPC O       open the file in the desktop's own viewer (File › Open in System Viewer): a PDF
+              in its reader, for what its derived text cannot show
   Ctrl+N      new file: a path in the workspace, .md added when it has none
   Ctrl+S      save the file
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
@@ -35,6 +37,10 @@ THE PAGE
   YAML. SPC c (Go › Outline…) lists the file's headings, unsaved ones too; Enter jumps there.
   Long lines wrap at the page's width, and line numbers can show: View › Wrap long lines, Line
   numbers, or Preferences.
+  A PDF or DOCX opens as its derived text, read-only, where the daemon's build derives it: the
+  frame and the status line say [PDF · read-only]. Motions, find, copy and the outline work;
+  edits and saves do not. SPC O opens the original. A long one shows as much as one read
+  carries, and says where it was cut.
 
 NOTIFICATIONS
   What happens (a save, the connection, indexing) is a notification in a corner, saying how long
@@ -91,7 +97,7 @@ W  manage workspaces      k  the editor mode (Vim, Text)
 ?  help                   ,  editor preferences
 h  notifications          a  AI models
 c  the file's outline     A  about
-Q  quit`
+O  the system viewer      Q  quit`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.
