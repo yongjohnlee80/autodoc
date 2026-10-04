@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"net"
+	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
@@ -53,7 +54,14 @@ func TestASearcherSwappedInAnswersSearchQuery(t *testing.T) {
 		NewSearcher: func(search.Store[int64, *index.View], search.QueryEmbedder) search.Searcher { return fake }})
 	ixDone := make(chan struct{})
 	go func() { _ = ix.Run(ctx); close(ixDone) }()
-	sock := filepath.Join(t.TempDir(), "s.sock")
+	// a short directory: macOS caps a unix socket's path at 104 bytes, and t.TempDir() holds the
+	// test's long name
+	dir, err := os.MkdirTemp("", "ads")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
