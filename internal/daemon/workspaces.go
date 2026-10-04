@@ -111,7 +111,7 @@ type Options struct {
 	// Databases offers a workspace's source and destination databases (core/edition): when false,
 	// Configure refuses them and Capabilities says so.
 	Databases bool
-	// Registrations are the build's chunkers (ADR 0216); nil: none, the community build.
+	// Registrations are the build's chunkers and deriver (ADR 0216); nil: none, the community build.
 	Registrations *registrations.Table
 }
 
@@ -285,7 +285,8 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 			}
 			return n
 		},
-		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds())),
+		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds()),
+			docs.WithDeriver(m.opts.Registrations)),
 		Following: f.Status, Warming: m.warmingOf(c.Name),
 		TextExtensions: text.load,
 		TextCollisions: func() []string { return m.opts.Registrations.Collisions(text.load()) },

@@ -38,7 +38,8 @@ type Options struct {
 	// none, the community build.
 	Chunkers map[string]search.Chunker
 	// Deriver makes text of the build's Pro document formats (ADR 0216 §1.8), its formats and their
-	// identities read once, at entry; AutoDoc 03 wires it into indexing. nil: none.
+	// identities read once, at entry: a file of one is indexed from its derived text, and doc.read
+	// serves that text, read-only. nil: none.
 	Deriver Deriver
 }
 
