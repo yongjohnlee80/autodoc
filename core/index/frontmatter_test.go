@@ -123,8 +123,8 @@ func TestSchemaFacetsAndDiagnostics(t *testing.T) {
 		"zebra status:draft": {"memo.md"},
 		"zebra count:0x3":    {"adr.md"}, // read as its field's type
 		"zebra type:note":    nil,
-		"type:adr":           {"adr.md"}, // filters alone list the notes
-		"zebra other:thing":  nil,        // an undeclared field is a word, which no note has
+		"type:adr":           {"adr.md"}, // filters alone list the files
+		"zebra other:thing":  nil,        // an undeclared field is a word, which no file has
 	} {
 		r, err := e.ix.Search(ctx, q, QueryOpts{})
 		if err != nil {
@@ -181,7 +181,7 @@ func TestFacetFilterAppliesBeforeTopN(t *testing.T) {
 	}
 }
 
-// A schema change rebuilds exactly the Markdown notes, keeping every unchanged chunk (and so its
+// A schema change rebuilds exactly the Markdown files, keeping every unchanged chunk (and so its
 // vector), and its facets follow the new schema.
 func TestSchemaChangeRevalidatesMarkdownOnly(t *testing.T) {
 	var sv schemaVar

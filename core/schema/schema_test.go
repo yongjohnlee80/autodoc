@@ -126,7 +126,7 @@ func rules(r Result) []string {
 
 func TestValidateAdmitsValidFieldsAndDefaults(t *testing.T) {
 	s := mustParse(t, kbSchema)
-	r := s.ValidateNote(note("type: adr\ntitle: Storage\ntags: [store, sqlite]\ncreated: 2026-10-02T12:38:27+09:00\ncount: 0x10\ndone: true\n"))
+	r := s.ValidateFile(note("type: adr\ntitle: Storage\ntags: [store, sqlite]\ncreated: 2026-10-02T12:38:27+09:00\ncount: 0x10\ndone: true\n"))
 	if len(r.Diagnostics) != 0 {
 		t.Fatalf("diagnostics = %+v", r.Diagnostics)
 	}
@@ -141,7 +141,7 @@ func TestValidateAdmitsValidFieldsAndDefaults(t *testing.T) {
 func TestValidateReportsEachRuleOnItsLine(t *testing.T) {
 	s := mustParse(t, kbSchema)
 	src := note("type: memo\nstatus: active\ncount: many\ntags: [a, 3]\ncreated: yesterday\n")
-	r := s.ValidateNote(src)
+	r := s.ValidateFile(src)
 	want := []Diagnostic{
 		{Field: "type", Line: 2, Rule: RuleEnum},
 		{Field: "count", Line: 4, Rule: RuleType},
@@ -168,7 +168,7 @@ func TestValidateMissingRequiredAndEmptyValue(t *testing.T) {
 		"empty value":    note("type:\ntitle: x\n"),
 		"no frontmatter": []byte("# Just a note\n"),
 	} {
-		r := s.ValidateNote(src)
+		r := s.ValidateFile(src)
 		if got := rules(r); !reflect.DeepEqual(got, []string{"type:required"}) {
 			t.Errorf("%s: diagnostics = %v", name, got)
 		}
@@ -181,7 +181,7 @@ func TestValidateMissingRequiredAndEmptyValue(t *testing.T) {
 // A lone scalar where a list is declared is a list of one, as Obsidian writes tags.
 func TestValidateScalarIsAListOfOne(t *testing.T) {
 	s := mustParse(t, kbSchema)
-	r := s.ValidateNote(note("type: note\ntags: solo\n"))
+	r := s.ValidateFile(note("type: note\ntags: solo\n"))
 	if len(r.Diagnostics) != 0 || !reflect.DeepEqual(r.Facets[1], Facet{"tags", "solo"}) {
 		t.Fatalf("result = %+v", r)
 	}
@@ -191,19 +191,19 @@ func TestValidateStrictReportsUnknownFields(t *testing.T) {
 	loose := mustParse(t, kbSchema)
 	strict := mustParse(t, "strict: true\n"+kbSchema)
 	src := note("type: note\nstauts: open\n")
-	if got := rules(loose.ValidateNote(src)); len(got) != 0 {
+	if got := rules(loose.ValidateFile(src)); len(got) != 0 {
 		t.Fatalf("loose: %v", got)
 	}
-	r := strict.ValidateNote(src)
+	r := strict.ValidateFile(src)
 	if got := rules(r); !reflect.DeepEqual(got, []string{"stauts:unknown"}) || r.Diagnostics[0].Line != 3 {
 		t.Fatalf("strict: %+v", r.Diagnostics)
 	}
 }
 
-// Malformed YAML is reported (on the note's line) even with no schema, and nothing is faceted.
+// Malformed YAML is reported (on the file's line) even with no schema, and nothing is faceted.
 func TestValidateMalformedYAML(t *testing.T) {
 	for _, s := range []*Schema{nil, mustParse(t, kbSchema)} {
-		r := s.ValidateNote(note("type: note\ntags: [a,\n"))
+		r := s.ValidateFile(note("type: note\ntags: [a,\n"))
 		if len(r.Diagnostics) != 1 || r.Diagnostics[0].Rule != RuleYAML || r.Diagnostics[0].Line < 2 {
 			t.Fatalf("schema %v: %+v", s != nil, r.Diagnostics)
 		}
@@ -211,18 +211,18 @@ func TestValidateMalformedYAML(t *testing.T) {
 			t.Fatalf("facets from malformed YAML: %v", r.Facets)
 		}
 	}
-	r := (*Schema)(nil).ValidateNote(note("a: 1\na: 2\n"))
+	r := (*Schema)(nil).ValidateFile(note("a: 1\na: 2\n"))
 	if got := rules(r); !reflect.DeepEqual(got, []string{":yaml"}) {
 		t.Fatalf("duplicate key: %v", got)
 	}
-	r = (*Schema)(nil).ValidateNote(note("- a\n- b\n"))
+	r = (*Schema)(nil).ValidateFile(note("- a\n- b\n"))
 	if got := rules(r); !reflect.DeepEqual(got, []string{":mapping"}) {
 		t.Fatalf("a list: %v", got)
 	}
 }
 
 func TestNilSchemaFacetsNothing(t *testing.T) {
-	r := (*Schema)(nil).ValidateNote(note("type: note\n"))
+	r := (*Schema)(nil).ValidateFile(note("type: note\n"))
 	if len(r.Facets) != 0 || len(r.Diagnostics) != 0 {
 		t.Fatalf("result = %+v", r)
 	}

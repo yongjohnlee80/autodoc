@@ -117,7 +117,7 @@ owners:
 		// an adversarial fixture for the lexical order: one document, one section, chunks of equal
 		// BM25 rank for "kestrel"
 		"big/paragraphs.md": "# Repeated\n\n" + strings.Repeat("The kestrel hovers over the field and "+strings.Repeat("waits ", 90)+"\n\n", 12),
-		// the windowed semantic path: the keep/ notes rank behind every noise/ note by Hamming
+		// the windowed semantic path: the keep/ files rank behind every noise/ note by Hamming
 		// distance, and a path filter admits only keep/
 		"keep/k1.md": "zebra giraffe lion savanna\n",
 		"keep/k2.md": "zebra giraffe okapi forest\n",

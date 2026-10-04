@@ -1,7 +1,7 @@
-// Package schema is a workspace's frontmatter schema (ADR 0212 §5): the fields its Markdown notes
+// Package schema is a workspace's frontmatter schema (ADR 0212 §5): the fields its Markdown files
 // declare in frontmatter, their types, and which are required. One validator serves the daemon,
 // which indexes typed facets and diagnostics, and the editor, which checks unsaved text, so the two
-// never disagree. Validation never rewrites a note: a default is a value the facet index answers
+// never disagree. Validation never rewrites a file: a default is a value the facet index answers
 // for a missing field, not an edit.
 //
 // A schema file, version 1:

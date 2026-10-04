@@ -31,7 +31,7 @@ func open(t *testing.T) (*Workspaces, *store.Store) {
 	return m, db
 }
 
-// indexed waits until the workspace's index holds docs notes and nothing pending.
+// indexed waits until the workspace's index holds docs files and nothing pending.
 func indexed(t *testing.T, m *Workspaces, name string, docs int64) {
 	t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
@@ -82,7 +82,7 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 	if got := m.List(); len(got) != 1 || got[0].Name != "kb" || got[0].Err != nil {
 		t.Fatalf("after the failed remove the daemon lists %+v, want kb, served", got)
 	}
-	// served again, not only listed: a note written now is followed and indexed
+	// served again, not only listed: a file written now is followed and indexed
 	if err := os.WriteFile(filepath.Join(root, "b.md"), []byte("beta\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

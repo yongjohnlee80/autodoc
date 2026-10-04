@@ -16,7 +16,7 @@ import (
 //     connection. It shows as a toast, and the history keeps it. A long task's progress (indexing,
 //     embedding) is an ongoing toast, updated in place, that stays until the task ends.
 //   - A message about the page or the view (say) is the status line's: a find's result, the editor
-//     mode, a note opening. It replaces the one before it, and nothing keeps it.
+//     mode, a file opening. It replaces the one before it, and nothing keeps it.
 //
 // Up to three toasts show; the rest wait, and show in turn, saying how long ago they came. A
 // finished toast stays toastSeconds (Preferences: 1 to 10, default 3), in the corner the

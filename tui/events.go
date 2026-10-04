@@ -17,7 +17,7 @@ import (
 // The daemon logs every configuration and lifecycle change with the token of the client that made
 // it; this TUI follows the log (sys.events) once a second, as long as its connection lasts. A
 // change another client made, or the daemon saw itself (a schema file edited), refreshes what it
-// touches and says so once, in a notification: focus stays where it is, and the note in the editor
+// touches and says so once, in a notification: focus stays where it is, and the file in the editor
 // is never replaced. This TUI's own changes are not announced back to it. A cursor the log no
 // longer covers is answered with a snapshot (the workspaces listed again) and the log's head.
 
@@ -149,7 +149,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 				"workspace.provider": "embedding provider"}[e.kind]
 			notice, relist = fmt.Sprintf("workspace %s: its %s was changed %s", e.workspace, what, by), true
 		case "embedding.switched":
-			notice = fmt.Sprintf("embedding model switched to '%s' %s; notes are re-indexing in the background, and search stays available", e.detail, by)
+			notice = fmt.Sprintf("embedding model switched to '%s' %s; files are re-indexing in the background, and search stays available", e.detail, by)
 		case "embedding.cancelled":
 			notice = "the model switch was cancelled " + by
 		case "embedding.providers":
@@ -170,16 +170,16 @@ func (h *Host) applyEvents(events []peerEvent) {
 	}
 }
 
-// keepDraftOnLeave keeps the note's unsaved text when its workspace is about to go: the note
+// keepDraftOnLeave keeps the file's unsaved text when its workspace is about to go: the file
 // becomes the untitled draft (its path names a workspace that no longer exists), and the next
 // workspace entered keeps it instead of starting a blank page.
 func (h *Host) keepDraftOnLeave() {
-	if !h.note.dirty {
+	if !h.file.dirty {
 		return
 	}
-	h.note.open, h.note.path, h.note.version = false, "", ""
+	h.file.open, h.file.path, h.file.version = false, "", ""
 	h.keepDraft = true
-	h.set("App.noteTitle", untitled)
+	h.set("App.fileTitle", untitled)
 	h.setDirty(true)
 	h.notify("the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace")
 }

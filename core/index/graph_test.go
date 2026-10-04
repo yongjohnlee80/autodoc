@@ -12,7 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/parse/markdown"
 )
 
-// put writes and indexes notes, path then content.
+// put writes and indexes files, path then content.
 func (e *env) put(pc ...string) {
 	e.t.Helper()
 	for i := 0; i < len(pc); i += 2 {
@@ -24,7 +24,7 @@ func (e *env) put(pc ...string) {
 	}
 }
 
-// remove deletes notes and waits for them to leave the index.
+// remove deletes files and waits for them to leave the index.
 func (e *env) remove(ps ...string) {
 	e.t.Helper()
 	for _, p := range ps {
@@ -38,7 +38,7 @@ func (e *env) remove(ps ...string) {
 	}
 }
 
-// targets lists a note's links as "raw -> path", "-" for unresolved.
+// targets lists a file's links as "raw -> path", "-" for unresolved.
 func (e *env) targets(p string) []string {
 	e.t.Helper()
 	ls, err := e.store.Links(context.Background(), p)
@@ -101,7 +101,7 @@ func TestExtractLinks(t *testing.T) {
 		"markdown dir/my note.md # [enc](my%20note.md)",
 		"markdown dir/plain # [bare](plain)",
 	})
-	// an attachment type the workspace indexes is a note, judged by the workspace path it reaches
+	// an attachment type the workspace indexes is a file, judged by the workspace path it reaches
 	var pdf []string
 	for _, l := range extractLinks(markdown.Parse([]byte("![[doc.pdf]] [c](run.sh) ![[../assets/d.pdf]] [e](../assets/e.pdf) ![[../other/f.pdf]]"), markdown.Obsidian()), "notes/n.md",
 		func(p string) bool {
@@ -191,7 +191,7 @@ func TestDeletedTargetUnresolves(t *testing.T) {
 }
 
 // TestAliasChangeReresolves: an alias gained takes the links under it; an alias dropped lets them
-// go, to another note or to none.
+// go, to another file or to none.
 func TestAliasChangeReresolves(t *testing.T) {
 	e := newEnv(t, Options{})
 	e.put("a/k.md", "an older k", "n.md", "no alias yet", "src.md", "[[k]] [[nick]]")
@@ -264,7 +264,7 @@ func TestNeighborhood(t *testing.T) {
 	}
 }
 
-// TestTieBrokenByDelete: of two notes tied for a name, deleting one gives the link to the other,
+// TestTieBrokenByDelete: of two files tied for a name, deleting one gives the link to the other,
 // though the link never reached the one deleted.
 func TestTieBrokenByDelete(t *testing.T) {
 	e := newEnv(t, Options{})

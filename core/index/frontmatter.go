@@ -32,7 +32,7 @@ func (x *Indexer) kindOf(p string) kind.Kind {
 func (x *Indexer) Kind(p string) kind.Kind { return x.kindOf(p) }
 
 // Revalidate queues every document indexed under another version than it would get now: after a
-// chunker or section-size change all of them, after a schema change the Markdown notes. Each is
+// chunker or section-size change all of them, after a schema change the Markdown files. Each is
 // rebuilt from its file; an unchanged chunk keeps its row and its vector, so a schema change costs
 // no embedding.
 func (x *Indexer) Revalidate(ctx context.Context) error {

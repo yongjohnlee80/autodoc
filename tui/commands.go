@@ -19,8 +19,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.reload":         none(h.reload),
 		"App.previewHTML":    none(h.previewHTML),
 		"App.previewDiagram": none(h.previewDiagram),
-		"App.newNote":        none(h.newNote),
-		"App.createNote":     oneString("App.createNote", "a path", h.createNote),
+		"App.newFile":        none(h.newFile),
+		"App.createFile":     oneString("App.createFile", "a path", h.createFile),
 		"App.quit":           none(h.quit),
 		"App.quitConfirmed":  none(func() { h.p.Quit() }),
 		"App.edited":         none(h.edited),
@@ -38,9 +38,9 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.pickerFilter":  oneString("App.pickerFilter", "a filter", h.pickerFilter),
 		"App.previewPick":   oneNumber("App.previewPick", "a row", h.previewPick),
 		"App.pickerSelect":  oneNumber("App.pickerSelect", "a row", h.pickerSelect),
-		"App.newNoteFilter": oneString("App.newNoteFilter", "a path", h.newNoteFilter),
+		"App.newFileFilter": oneString("App.newFileFilter", "a path", h.newFileFilter),
 		"App.previewNew":    oneNumber("App.previewNew", "a row", h.previewNew),
-		"App.newNoteFolder": oneNumber("App.newNoteFolder", "a row", h.newNoteFolder),
+		"App.newFileFolder": oneNumber("App.newFileFolder", "a row", h.newFileFolder),
 
 		// the plugins
 		"App.openPlugin":            oneString("App.openPlugin", "a plugin", h.openPlugin),

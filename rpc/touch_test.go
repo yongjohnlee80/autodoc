@@ -16,7 +16,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// TestTheAPIsWritesAreIndexedAtOnce: a note written, renamed or removed through the API reaches the
+// TestTheAPIsWritesAreIndexedAtOnce: a file written, renamed or removed through the API reaches the
 // index with no follower at all — on a large root a watch or a poll can be seconds behind, and a
 // note saved in a client should be searchable when the save returns, not after.
 func TestTheAPIsWritesAreIndexedAtOnce(t *testing.T) {

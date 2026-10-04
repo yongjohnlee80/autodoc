@@ -1,11 +1,11 @@
-// NoteOpen.qml — File › Open note (Ctrl+O): the picker's layout. On the left a filter over the
+// FileOpen.qml — File › Open note (Ctrl+O): the picker's layout. On the left a filter over the
 // workspace's notes, then the notes; on the right the note under the cursor. Enter opens it; q
 // closes, outside the field. Ctrl+h/j/k/l move between the parts.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 92
     maxHeightPercent: 90
-    title: "open a note"
+    title: "open a file"
     dim: false
     onOpened: filter.clear()
     Split {
@@ -29,7 +29,7 @@ Dialog {
                     model: App.pickerRows
                     onCurrentIndexChanged: App.previewPick(index)
                     onActivated: App.pickerSelect(index)
-                    TableViewColumn { role: "path"; title: "NOTE"; width: 0; elideMode: Tui.ElidePath }
+                    TableViewColumn { role: "path"; title: "FILE"; width: 0; elideMode: Tui.ElidePath }
                 }
             }
         }

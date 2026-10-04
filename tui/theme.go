@@ -14,7 +14,7 @@ import (
 //
 // A theme is chosen by one line of main.qml, its import (`import autodoc.theme.dark 1.0`), so
 // switching theme at runtime is that line, rewritten, and the layout reloaded: the path a hot
-// reload takes. The note, the cursor and the panes stay as they were. Under -dev the file on disk
+// reload takes. The file, the cursor and the panes stay as they were. Under -dev the file on disk
 // stays the authority, and its next save brings back its own import.
 
 var themeImport = regexp.MustCompile(`(?m)^import autodoc\.theme\.([a-z][a-z0-9]*) ` + regexp.QuoteMeta(moduleVersion))

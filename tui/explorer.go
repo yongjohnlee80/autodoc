@@ -10,17 +10,17 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// THE EXPLORER — every workspace, and the folders and notes in each, as a tree in a drawer. A
-// workspace's notes are listed the first time it is opened; a folder's rows come from that list.
-// Enter on a note opens it (entering its workspace first when it is another), and the drawer
+// THE EXPLORER — every workspace, and the folders and files in each, as a tree in a drawer. A
+// workspace's files are listed the first time it is opened; a folder's rows come from that list.
+// Enter on a file opens it (entering its workspace first when it is another), and the drawer
 // closes; on a workspace or a folder, it opens or closes the row.
 
-// A row's key says what it is: the workspace, and for a folder or a note, its path in it.
+// A row's key says what it is: the workspace, and for a folder or a file, its path in it.
 const keySep = "\t"
 
 func wsKey(ws string) string       { return "ws" + keySep + ws }
 func dirKey(ws, dir string) string { return "dir" + keySep + ws + keySep + dir }
-func noteKey(ws, p string) string  { return "note" + keySep + ws + keySep + p }
+func fileKey(ws, p string) string  { return "file" + keySep + ws + keySep + p }
 func splitKey(k string) (kind, ws, rest string) {
 	parts := strings.SplitN(k, keySep, 3)
 	for len(parts) < 3 {
@@ -43,14 +43,14 @@ func explorerRows(list []wsInfo) []tuidecl.TreeRow {
 }
 
 // childrenOf are the rows under dir ("" the workspace's root) of paths: its folders, then its
-// notes, each by name.
+// files, each by name.
 func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 	prefix := ""
 	if dir != "" {
 		prefix = dir + "/"
 	}
 	folders := map[string]bool{}
-	var notes []string
+	var leaves []string
 	for _, p := range paths {
 		if !strings.HasPrefix(p, prefix) {
 			continue
@@ -59,7 +59,7 @@ func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 		if i := strings.IndexByte(rest, '/'); i >= 0 {
 			folders[rest[:i]] = true
 		} else if rest != "" {
-			notes = append(notes, rest)
+			leaves = append(leaves, rest)
 		}
 	}
 	names := make([]string, 0, len(folders))
@@ -67,13 +67,13 @@ func childrenOf(ws, dir string, paths []string) []tuidecl.TreeRow {
 		names = append(names, f)
 	}
 	sort.Strings(names)
-	sort.Strings(notes)
+	sort.Strings(leaves)
 	var rows []tuidecl.TreeRow
 	for _, f := range names {
 		rows = append(rows, tuidecl.TreeRow{Row: rowOf{"key": dirKey(ws, prefix+f), "label": f + "/"}, HasChildren: true})
 	}
-	for _, n := range notes {
-		rows = append(rows, tuidecl.TreeRow{Row: rowOf{"key": noteKey(ws, prefix+n), "label": n}})
+	for _, n := range leaves {
+		rows = append(rows, tuidecl.TreeRow{Row: rowOf{"key": fileKey(ws, prefix+n), "label": n}})
 	}
 	return rows
 }
@@ -99,7 +99,7 @@ func (h *Host) showWorkspacesInExplorer(list []wsInfo) {
 func (h *Host) fetchExplorer(ix tuidecl.Index) { h.listUnder(ix, false) }
 
 // listUnder lists the children of row ix; unchanged, when only a change is wanted (a scan's end),
-// it leaves them as they are — the view closes a row whose children are replaced, and the notes of
+// it leaves them as they are — the view closes a row whose children are replaced, and the files of
 // a workspace being edited are listed again after every scan.
 func (h *Host) listUnder(ix tuidecl.Index, onlyChanged bool) {
 	key := h.explorer.Key(ix)
@@ -124,7 +124,7 @@ func (h *Host) listUnder(ix tuidecl.Index, onlyChanged bool) {
 			return
 		}
 		if a.err != nil {
-			h.failed("the notes of "+ws, a.err)
+			h.failed("the files of "+ws, a.err)
 			return
 		}
 		// the row may have moved while the list was coming: put the children under it only if it
@@ -140,7 +140,7 @@ func (h *Host) listUnder(ix tuidecl.Index, onlyChanged bool) {
 	})
 }
 
-// relistInExplorer lists workspace ws's notes again under its row, when the explorer has listed
+// relistInExplorer lists workspace ws's files again under its row, when the explorer has listed
 // them, and replaces them only when they changed (a folder open under it then closes).
 func (h *Host) relistInExplorer(ws string) {
 	if _, listed := h.explorerPaths[ws]; !listed {
@@ -154,7 +154,7 @@ func (h *Host) relistInExplorer(ws string) {
 	}
 }
 
-// listAll is every note of workspace ws, in path order.
+// listAll is every file of workspace ws, in path order.
 func (h *Host) listAll(ctx context.Context, ws string) ([]string, error) {
 	var out []string
 	after := ""
@@ -174,12 +174,12 @@ func (h *Host) listAll(ctx context.Context, ws string) ([]string, error) {
 	}
 }
 
-// explorerActivated is Enter on a row: a note opens, entering its workspace first when it is
+// explorerActivated is Enter on a row: a file opens, entering its workspace first when it is
 // another, and the drawer closes; a workspace or a folder opens or closes.
 func (h *Host) explorerActivated(ix tuidecl.Index) error {
 	kind, ws, p := splitKey(h.explorer.Key(ix))
 	switch kind {
-	case "note":
+	case "file":
 		h.keep(h.p.Call("explorer", "close"))
 		h.openIn(ws, p)
 		return nil
@@ -189,7 +189,7 @@ func (h *Host) explorerActivated(ix tuidecl.Index) error {
 	return nil
 }
 
-// openIn opens note p of workspace ws, entering ws first when it is not the one in use; either
+// openIn opens file p of workspace ws, entering ws first when it is not the one in use; either
 // way, unsaved changes are asked about first.
 func (h *Host) openIn(ws, p string) {
 	if ws == h.ws {

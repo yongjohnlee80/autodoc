@@ -55,7 +55,7 @@ Window {
     Shortcut { sequence: "Ctrl+L"; onActivated: App.movePane("l") }
     Shortcut { sequence: "Ctrl+S"; onActivated: App.save() }
     Shortcut { sequence: "Ctrl+O"; onActivated: App.openPicker() }
-    Shortcut { sequence: "Ctrl+N"; onActivated: App.newNote() }
+    Shortcut { sequence: "Ctrl+N"; onActivated: App.newFile() }
     // Ctrl+G, and / where the editor leaves it (Normal mode), as vim's search: the Vim keyset takes
     // Ctrl+F and Ctrl+B to page
     Shortcut { sequence: "Ctrl+G"; onActivated: App.openSearch() }
@@ -82,8 +82,8 @@ Window {
 
         Menu {
             title: "&File"
-            MenuItem { text: "&New note…"; onTriggered: App.newNote() }
-            MenuItem { text: "&Open note…"; onTriggered: App.openPicker() }
+            MenuItem { text: "&New file…"; onTriggered: App.newFile() }
+            MenuItem { text: "&Open file…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
             MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
@@ -106,7 +106,7 @@ Window {
             MenuItem { text: "Find &next"; onTriggered: App.findAgainNext() }
             MenuItem { text: "Find &previous"; onTriggered: App.findAgainPrevious() }
             MenuItem { text: "&Clear find"; onTriggered: App.clearFind() }
-            MenuItem { text: "&Search notes…"; onTriggered: App.openSearch() }
+            MenuItem { text: "&Search files…"; onTriggered: App.openSearch() }
         }
         Menu {
             title: "&View"
@@ -161,7 +161,7 @@ Window {
 
     // ---- the page: the note, centred, as wide as the ruler ----
     Frame {
-        title: App.noteTitle
+        title: App.fileTitle
         maximumWidth: App.pageWidth
         palette.window: Theme.document.window
         palette.windowText: Theme.document.windowText
@@ -276,11 +276,11 @@ Window {
 
     SearchPicker { id: searchPicker }
     Find { id: findDialog }
-    NoteOpen { id: noteOpen }
+    FileOpen { id: fileOpen }
     OutlinePicker { id: outlinePicker }
-    NoteName { id: noteName }
-    UnsavedNote { id: unsavedNote }
-    NoteConflict { id: noteConflict }
+    FileName { id: fileName }
+    UnsavedFile { id: unsavedFile }
+    FileConflict { id: fileConflict }
     WorkspacePicker { id: workspacePicker }
     WorkspaceManager { id: workspaceManager }
     WorkspaceAdd { id: workspaceAdd }

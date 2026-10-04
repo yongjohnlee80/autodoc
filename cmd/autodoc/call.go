@@ -129,7 +129,7 @@ func fromJSON(v any) any {
 	return v
 }
 
-// jsonOf is a result as JSON shows it: bytes (a note's content) as text when they are UTF-8.
+// jsonOf is a result as JSON shows it: bytes (a file's content) as text when they are UTF-8.
 func jsonOf(v any) any {
 	switch x := v.(type) {
 	case []byte:

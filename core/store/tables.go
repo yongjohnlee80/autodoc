@@ -245,7 +245,7 @@ func leftJoin(table, col, from, key string) dao.Expr {
 }
 
 // The markers a chunk's full-text Snippet puts around each match: control
-// characters, which no note's text holds.
+// characters, which no file's text holds.
 const (
 	HighlightStart = "\x02"
 	HighlightEnd   = "\x03"

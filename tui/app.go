@@ -12,10 +12,10 @@
 //	client.go     the session: the only path to the daemon
 //	session.go    connecting, and reconnecting when the connection ends
 //	workspace.go  the workspaces, and switching between them
-//	notes.go      the note in the editor: opening, saving, conflicts, unsaved changes
-//	search.go     the workspace's notes, as the pickers filter them
-//	pickers.go    the search, open and new-note pickers, and their previews
-//	explorer.go   the explorer: every workspace's folders and notes, as a tree
+//	files.go      the file in the editor: opening, saving, conflicts, unsaved changes
+//	search.go     the workspace's files, as the pickers filter them
+//	pickers.go    the search, open and new-file pickers, and their previews
+//	explorer.go   the explorer: every workspace's folders and files, as a tree
 //	links.go      the backlinks panel
 //	panels.go     the panels' drawers, and moving between them and the page
 //	progress.go   the daemon's work left, on the status line
@@ -64,7 +64,7 @@ type Host struct {
 	hits, newList, providers, providerModels *tuidecl.ListModel
 	vectors                                  *tuidecl.ListModel // the workspace's models (vectors.go)
 	explorer                                 *tuidecl.TreeListModel
-	explorerPaths                            map[string][]string // by workspace: its notes, once listed (explorer.go)
+	explorerPaths                            map[string][]string // by workspace: its files, once listed (explorer.go)
 	explorerTop                              []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
 
 	// the pickers (pickers.go): what each lists, the latest answers winning, and the search's words
@@ -83,7 +83,7 @@ type Host struct {
 	findHL              highlight.Highlighter // the page's: Markdown, the find's words marked over it
 	textFindHL          highlight.Highlighter
 	yamlFindHL          highlight.Highlighter
-	openAt              int // where the next note opened puts the cursor, a byte offset; -1 for its start
+	openAt              int // where the next file opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find       findState
@@ -124,7 +124,7 @@ type Host struct {
 	providerChoices   []string
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
-	// the open note's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
+	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
 	fmGen         uint64
 	fmDiagnostics []fmDiagnostic
 	// the event log's cursor (events.go), and whether the next workspace entered keeps the draft
@@ -158,17 +158,17 @@ type Host struct {
 	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
 	wsList    []wsInfo
 	epoch     uint64
-	listSeq   uint64        // numbers the note list's loads; the latest wins (search.go)
-	listRetry time.Duration // the delay before the note list's next retry after a failure; 0 after a success
-	notesAll  []string
+	listSeq   uint64        // numbers the file list's loads; the latest wins (search.go)
+	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
+	filesAll  []string
 
 	// the workspace manager: the workspace a rename or a delete was started on
 	renaming, removing string
 	sectionWorkspace   string
 	policyWorkspace    string
 
-	note  note       // the note in the editor (notes.go)
-	draft *draftSave // the draft being named in the new-note picker, nil when none is (notes.go)
+	file  openedFile // the file in the editor (files.go)
+	draft *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
 	prog  progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history

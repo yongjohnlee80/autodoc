@@ -11,7 +11,7 @@ import (
 
 // The daemon owns the provider's capacity, not any one workspace. An unfinished
 // focused workspace gets sixteen batches before one background turn; thus it
-// gets at least 16/17 of the device while an endlessly edited focused note
+// gets at least 16/17 of the device while an endlessly edited focused file
 // cannot starve the remaining workspaces.
 const (
 	focusTTL   = 15 * time.Second

@@ -30,7 +30,7 @@ var ErrUnknownMode = errs.Sentinel(errs.ErrInvalidArgument, "index: unknown sear
 var ErrNoProvider = errs.Sentinel(errs.ErrUnsupported, "index: semantic search: no embedding provider in use")
 
 // HighlightStart and HighlightEnd mark the matched terms in a Hit's Snippet: control characters,
-// which no note contains, so a client can render them as it likes.
+// which no file contains, so a client can render them as it likes.
 const (
 	HighlightStart = store.HighlightStart
 	HighlightEnd   = store.HighlightEnd

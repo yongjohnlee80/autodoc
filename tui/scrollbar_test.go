@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestThePagesScrollbarReachesTheEnd: a note read to its end has the page's scrollbar thumb on the
+// TestThePagesScrollbarReachesTheEnd: a file read to its end has the page's scrollbar thumb on the
 // page's last row, not halfway (Johno, 2026-10-02: "The scrollbar on the right goes down only to
 // the halfway, and by the time it's there we are already at the end"; golib v0.6.20).
 func TestThePagesScrollbarReachesTheEnd(t *testing.T) {
@@ -17,12 +17,12 @@ func TestThePagesScrollbarReachesTheEnd(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"long.md", b.String()}})
 	r := attached(t, d)
 	r.openByPicker(t, "long.md")
-	r.waitNote(t, "long.md")
+	r.waitFile(t, "long.md")
 	r.s.WaitForText(t, "line 0")
 	r.keys(t, key('G')) // Normal mode: the last line
 	r.s.WaitForText(t, "line 199")
 	r.s.WaitFor(t, "the thumb on the page's last row", func(sc string) bool {
-		// the page's last row is the one above its frame's bottom border (the note's last line is the
+		// the page's last row is the one above its frame's bottom border (the file's last line is the
 		// empty one after "line 199")
 		rows := strings.Split(sc, "\n")
 		thumb, last := -1, -1

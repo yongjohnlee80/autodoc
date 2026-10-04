@@ -15,9 +15,9 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// THE PICKERS — search, open and new note: the picker's layout (the fields over the list on the
-// left, the note under the cursor on the right, the buttons beneath), each over the workspace's
-// notes through the daemon.
+// THE PICKERS — search, open and new file: the picker's layout (the fields over the list on the
+// left, the file under the cursor on the right, the buttons beneath), each over the workspace's
+// files through the daemon.
 
 // hit is one section a search found.
 type hit struct {
@@ -141,7 +141,7 @@ func (h *Host) searchLive(q string) {
 }
 
 // searchWaits are what the search's waiting line says, one at a time, while a search has not
-// answered: the provider is embedding the query, or the notes, or loading its model.
+// answered: the provider is embedding the query, or the files, or loading its model.
 var searchWaits = []string{
 	"warming up the engine",
 	"prepping the vectors",
@@ -237,7 +237,7 @@ func (h *Host) refreshSearch() {
 	}
 }
 
-// previewHit shows the note of hit i, at its section.
+// previewHit shows the file of hit i, at its section.
 func (h *Host) previewHit(i int) {
 	if i < 0 || i >= len(h.hitList) {
 		return
@@ -246,7 +246,7 @@ func (h *Host) previewHit(i int) {
 	h.preview("search", x.path, x.byteStart)
 }
 
-// openHit opens the note of hit i at its section, and closes the picker.
+// openHit opens the file of hit i at its section, and closes the picker.
 func (h *Host) openHit(i int) {
 	if i < 0 || i >= len(h.hitList) {
 		return
@@ -258,7 +258,7 @@ func (h *Host) openHit(i int) {
 	h.openPath(x.path)
 }
 
-// preview shows note p of the workspace in the named picker's preview, at byte at: read through
+// preview shows file p of the workspace in the named picker's preview, at byte at: read through
 // the daemon, the latest asked for winning.
 func (h *Host) preview(picker, p string, at int) {
 	h.previewSeq++
@@ -291,7 +291,7 @@ func (h *Host) preview(picker, p string, at int) {
 }
 
 // showPreview puts text in a picker's preview, the cursor at byte at: the position is moved away
-// first, so the same number on another note still moves it.
+// first, so the same number on another file still moves it.
 func (h *Host) showPreview(picker, title, text string, at int) {
 	at = min(max(at, 0), len(text))
 	h.set("App."+picker+"PreviewTitle", title)
@@ -315,23 +315,23 @@ func cursorAt(text string, at int) int {
 	return n
 }
 
-// The open picker: a filter over the workspace's notes.
+// The open picker: a filter over the workspace's files.
 
-// openPicker opens File › Open over the workspace's notes.
+// openPicker opens File › Open over the workspace's files.
 func (h *Host) openPicker() {
 	h.pickerFilter("")
-	h.open("noteOpen")
+	h.open("fileOpen")
 }
 
-// pickerFilter keeps the notes whose path holds text (case aside), and previews the first.
+// pickerFilter keeps the files whose path holds text (case aside), and previews the first.
 func (h *Host) pickerFilter(text string) {
-	h.pickerRows = filterNotes(h.notesAll, text)
+	h.pickerRows = filterFiles(h.filesAll, text)
 	rows := make([]rowOf, len(h.pickerRows))
 	for i, p := range h.pickerRows {
 		rows[i] = rowOf{"key": p, "path": p}
 	}
 	h.picker.Reset(rows)
-	h.set("App.pickerStatus", fmt.Sprintf("notes (%d of %d)", len(rows), len(h.notesAll)))
+	h.set("App.pickerStatus", fmt.Sprintf("files (%d of %d)", len(rows), len(h.filesAll)))
 	if len(rows) > 0 {
 		h.preview("open", h.pickerRows[0], 0)
 	} else {
@@ -339,7 +339,7 @@ func (h *Host) pickerFilter(text string) {
 	}
 }
 
-func filterNotes(all []string, text string) []string {
+func filterFiles(all []string, text string) []string {
 	text = strings.ToLower(strings.TrimSpace(text))
 	var out []string
 	for _, p := range all {
@@ -363,15 +363,15 @@ func (h *Host) pickerSelect(i int) {
 		return
 	}
 	p := h.pickerRows[i]
-	h.closeDialog("noteOpen")
+	h.closeDialog("fileOpen")
 	h.openPath(p)
 }
 
-// The new-note picker: a path, over the workspace's notes to take a folder from.
+// The new-file picker: a path, over the workspace's files to take a folder from.
 
-// newNoteFilter lists the notes under what the path holds so far, and previews the first.
-func (h *Host) newNoteFilter(text string) {
-	h.newRows = filterNotes(h.notesAll, text)
+// newFileFilter lists the files under what the path holds so far, and previews the first.
+func (h *Host) newFileFilter(text string) {
+	h.newRows = filterFiles(h.filesAll, text)
 	rows := make([]rowOf, len(h.newRows))
 	for i, p := range h.newRows {
 		rows[i] = rowOf{"key": p, "path": p}
@@ -384,15 +384,15 @@ func (h *Host) newNoteFilter(text string) {
 	}
 }
 
-// previewNew shows the new-note picker's row i.
+// previewNew shows the new-file picker's row i.
 func (h *Host) previewNew(i int) {
 	if i >= 0 && i < len(h.newRows) {
 		h.preview("new", h.newRows[i], 0)
 	}
 }
 
-// newNoteFolder writes row i's folder into the path, for a name to follow.
-func (h *Host) newNoteFolder(i int) {
+// newFileFolder writes row i's folder into the path, for a name to follow.
+func (h *Host) newFileFolder(i int) {
 	if i < 0 || i >= len(h.newRows) {
 		return
 	}
@@ -402,8 +402,8 @@ func (h *Host) newNoteFolder(i int) {
 	} else {
 		dir += "/"
 	}
-	h.set("App.newNotePath", "\x00") // moved away first, so the same folder twice still writes it
-	h.set("App.newNotePath", dir)
+	h.set("App.newFilePath", "\x00") // moved away first, so the same folder twice still writes it
+	h.set("App.newFilePath", dir)
 }
 
 // marks is the search's words, as the preview's highlighter marks them.

@@ -52,13 +52,13 @@ func benchYAML(entries int) string {
 	return s.String()
 }
 
-// benchVocabulary gives the generated notes overlapping words, so queries match many notes in
+// benchVocabulary gives the generated files overlapping words, so queries match many files in
 // both retrievers.
 var benchVocabulary = strings.Fields(`storage search index chunk vector model query writer reader
 	snapshot commit table column schema facet tag path link graph daemon client socket session
 	editor outline export diagram theme plugin provider embedding fusion rank score window`)
 
-// benchEnv indexes n generated notes with the fake provider, every one semantic-ready.
+// benchEnv indexes n generated files with the fake provider, every one semantic-ready.
 func benchEnv(b *testing.B, n int) *env {
 	b.Helper()
 	e := newEnv(b, Options{Provider: newFake("m", "a"), BatchDelay: time.Millisecond, BatchSize: 200})
@@ -76,7 +76,7 @@ func benchEnv(b *testing.B, n int) *env {
 		}
 		pc = append(pc, fmt.Sprintf("notes/%04d.md", i), body.String())
 	}
-	for i := 0; i < len(pc); i += 200 { // 100 notes at a time: put waits for the whole queue
+	for i := 0; i < len(pc); i += 200 { // 100 files at a time: put waits for the whole queue
 		e.put(pc[i:min(i+200, len(pc))]...)
 	}
 	e.ready()
@@ -84,7 +84,7 @@ func benchEnv(b *testing.B, n int) *env {
 	return e
 }
 
-// BenchmarkSearch is search.query in each mode over 2000 notes (8000 sections), from the snapshot.
+// BenchmarkSearch is search.query in each mode over 2000 files (8000 sections), from the snapshot.
 func BenchmarkSearch(b *testing.B) {
 	e := benchEnv(b, 2000)
 	ctx := context.Background()

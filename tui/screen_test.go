@@ -43,11 +43,11 @@ func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 	return &running{h: host, s: s}
 }
 
-// ready waits for the connection and the workspace's notes, which a hidden status line cannot say.
+// ready waits for the connection and the workspace's files, which a hidden status line cannot say.
 func (r *running) ready(t *testing.T) {
 	t.Helper()
 	r.s.WaitFor(t, "connected, the notes listed", func(string) bool {
-		return onLoop(r, func() bool { return r.h.connected && len(r.h.notesAll) > 0 })
+		return onLoop(r, func() bool { return r.h.connected && len(r.h.filesAll) > 0 })
 	})
 }
 
@@ -96,7 +96,7 @@ func TestLeaderMenuToggleFocusesOnlyWhenShown(t *testing.T) {
 		return strings.Contains(strings.Split(sc, "\n")[0], "File") && r.focused("menuBar")
 	})
 	r.keys(t, enter())
-	r.s.WaitForText(t, "New note")
+	r.s.WaitForText(t, "New file")
 	r.keys(t, decltest.Ctrl(' '))
 	r.s.WaitForText(t, "SPC — commands")
 	r.keys(t, key('m'))
@@ -119,7 +119,7 @@ func TestAMenuTitleIsClickedUnderTheToasts(t *testing.T) {
 	x := len([]rune(row[:strings.Index(row, "File")])) + 1
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: 0},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: 0})
-	r.s.WaitForText(t, "New note")
+	r.s.WaitForText(t, "New file")
 }
 
 // TestAToastClickedOpensTheNotificationsHistory: a click on a toast's card opens the history of the
@@ -174,7 +174,7 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
-	r.s.WaitFor(t, "the note", func(string) bool { n := r.note(); return n.open && n.path == "a.md" })
+	r.s.WaitFor(t, "the note", func(string) bool { n := r.file(); return n.open && n.path == "a.md" })
 	r.s.WaitForText(t, "short")
 	rows := strings.Split(r.s.String(), "\n")
 	// 62 wide on 160: 49 either side
@@ -206,7 +206,7 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right", "tui.links.edge": "bottom"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	where := func() (int, int) {
 		x, y, ok := find(r.s.Backend.Snapshot(), "still text")
 		if !ok {
@@ -261,7 +261,7 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 }
 
 // TestTheExplorerIsATreeOfEveryWorkspace: the explorer's top rows are the workspaces; a workspace
-// opens to its folders then its notes, a folder to its own; Enter on a note opens it, entering
+// opens to its folders then its files, a folder to its own; Enter on a file opens it, entering
 // its workspace when it is another, and closes the explorer.
 func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 	d := startDaemon(t, map[string][]string{
@@ -283,7 +283,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 	r.keys(t, key('j'), enter()) // dir/
 	r.s.WaitForText(t, "b.md")
 	r.keys(t, key('j'), enter()) // dir/b.md
-	r.waitNote(t, "dir/b.md")
+	r.waitFile(t, "dir/b.md")
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
 
 	// another workspace's note: its workspace is entered
@@ -293,7 +293,7 @@ func TestTheExplorerIsATreeOfEveryWorkspace(t *testing.T) {
 	r.s.WaitForText(t, "c.md")
 	r.keys(t, key('j'), enter())
 	r.s.WaitForText(t, "· beta")
-	r.waitNote(t, "c.md")
+	r.waitFile(t, "c.md")
 }
 
 // TestPanesMoveInNormalModeOnly: Ctrl+h/j/k/l move between the page and the panel open at that
@@ -302,7 +302,7 @@ func TestPanesMoveInNormalModeOnly(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.leader(t, 'e') // on the left, with the keyboard
 	r.s.WaitForText(t, "explorer")
 	moved := func(what, id string) {
@@ -431,7 +431,7 @@ func TestTheProviderForm(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "nomic-embed-text"}, {"name": "gpt-oss:20b"}}})
 	}))
 	defer ollama.Close()
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "a\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
 	r.leader(t, 'a') // System › AI models
@@ -521,7 +521,7 @@ func TestTheProviderForm(t *testing.T) {
 // embedding model changes, it should clear the search query, and start afresh").
 func TestAModelChangeClearsTheSearch(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(r.h.openSearch)
@@ -548,7 +548,7 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
 	release := o.hold()
 	defer release()
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
 		t.Fatal(err)
 	}
@@ -581,7 +581,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
 	release := o.hold()
 	defer release()
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +614,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 
 func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 
 func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 	o := newFakeOllama(t, "first", "second")
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	for _, model := range []string{"first", "second"} {
 		if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: model, Kind: store.KindOllama, BaseURL: o.URL, Model: model}); err != nil {
 			t.Fatal(err)
@@ -677,7 +677,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 }
 
 func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "alpha\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() {
@@ -689,8 +689,8 @@ func TestCanceledSwitchDoesNotClaimSemanticSearchReturned(t *testing.T) {
 
 func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 	d := startManaged(t, map[string]string{
-		"alpha": noteDir(t, "a.md", "# A\n\nzebra plains\n"),
-		"bravo": noteDir(t, "b.md", "# B\n\nriver mud\n"),
+		"alpha": fileDir(t, "a.md", "# A\n\nzebra plains\n"),
+		"bravo": fileDir(t, "b.md", "# B\n\nriver mud\n"),
 	})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	r.s.WaitForText(t, "· alpha")
@@ -705,7 +705,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 }
 
 func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nzebra plains\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(r.h.openSearch)
@@ -821,7 +821,7 @@ func newFakeOllama(t *testing.T, models ...string) *fakeOllama {
 // only turns it off; Remove asks, then removes it.
 func TestAProviderInUse(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder")
-	root := noteDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	ctx := context.Background()
 	for _, sp := range []store.ProviderSpec{
@@ -855,7 +855,7 @@ func TestAProviderInUse(t *testing.T) {
 		r.h.p.Post(func() { r.h.providerDetail(0) })
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
 	})
-	// at its usage limit: a new note's embedding is refused, and the log says why
+	// at its usage limit: a new file's embedding is refused, and the log says why
 	ollama.mu.Lock()
 	ollama.down = true
 	ollama.mu.Unlock()
@@ -893,7 +893,7 @@ func TestAProviderInUse(t *testing.T) {
 	r.s.WaitForText(t, "remove the provider?")
 	r.s.WaitForText(t, "Remove the provider local?")
 	r.keys(t, key('y'))
-	// the list, not the status line: a scan ending ("indexed 3 notes") can replace the message
+	// the list, not the status line: a scan ending ("indexed 3 files") can replace the message
 	r.s.WaitFor(t, "local gone from the store and the list", func(sc string) bool {
 		ps, err := d.db.Providers(ctx)
 		return err == nil && len(ps) == 1 && !strings.Contains(sc, "local           Ollama")
@@ -935,13 +935,13 @@ func TestTheFolderPickerStartsAtHome(t *testing.T) {
 	}
 }
 
-// TestAListingThatFailsSaysSo: the workspace's notes not listed (a workspace gone from the daemon)
+// TestAListingThatFailsSaysSo: the workspace's files not listed (a workspace gone from the daemon)
 // is on the status line, and the pickers list nothing.
 func TestAListingThatFailsSaysSo(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.h.p.Post(func() { r.h.enter("gone") })
-	r.s.WaitForText(t, "notes: ")
+	r.s.WaitForText(t, "files: ")
 	if got := r.listed(); len(got) != 0 {
 		t.Errorf("the pickers list %v for a workspace that failed to list", got)
 	}
@@ -966,7 +966,7 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 	r.keys(t, decltest.Type("kestrel")...)
 	r.s.WaitForText(t, "hits (1)")
 	r.keys(t, enter())
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	at := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} })
 	line := onLoop(r, func() string { return r.h.editor.Lines()[at[0]] })
 	if !strings.HasPrefix(line, "kestrel") && !strings.HasPrefix(line, "## Birds") || at[1] != 0 {
@@ -974,8 +974,8 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 	}
 }
 
-// TestTheBlankPageIsADraft: with no note open the page takes typing, as an untitled draft marked
-// unsaved; Ctrl+S names it in the new-note picker and creates the note with its text, open, the
+// TestTheBlankPageIsADraft: with no file open the page takes typing, as an untitled draft marked
+// unsaved; Ctrl+S names it in the new-note picker and creates the file with its text, open, the
 // cursor where it was. Closing the picker keeps the draft.
 func TestTheBlankPageIsADraft(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -986,15 +986,15 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 	r.s.WaitForText(t, "save the draft")
 	r.keys(t, esc()) // closed without a name: the draft stays, unsaved
 	r.s.WaitFor(t, "the picker closed", func(sc string) bool { return !strings.Contains(sc, "save the draft") })
-	if got := r.editorText(); got != "first thoughts\nsecond line" || !r.note().dirty {
-		t.Fatalf("after closing the picker: %q, dirty %v", got, r.note().dirty)
+	if got := r.editorText(); got != "first thoughts\nsecond line" || !r.file().dirty {
+		t.Fatalf("after closing the picker: %q, dirty %v", got, r.file().dirty)
 	}
 	before := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} })
 	r.keys(t, decltest.Ctrl('s'))
 	r.s.WaitForText(t, "save the draft")
 	r.keys(t, decltest.Type("ideas/draft")...)
 	r.keys(t, enter())
-	r.waitNote(t, "ideas/draft.md")
+	r.waitFile(t, "ideas/draft.md")
 	if got := d.read(t, "kb", "ideas/draft.md"); got != "first thoughts\nsecond line" {
 		t.Fatalf("the note holds %q, want the draft", got)
 	}
@@ -1003,9 +1003,9 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 	}
 }
 
-// TestADraftIsGuardedLikeANote: opening a note over an unsaved draft asks; Save names the draft,
-// creates it, and then opens the note asked for.
-func TestADraftIsGuardedLikeANote(t *testing.T) {
+// TestADraftIsGuardedLikeAFile: opening a file over an unsaved draft asks; Save names the draft,
+// creates it, and then opens the file asked for.
+func TestADraftIsGuardedLikeAFile(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.typeInEditor(t, "draft text")
@@ -1015,14 +1015,14 @@ func TestADraftIsGuardedLikeANote(t *testing.T) {
 	r.s.WaitForText(t, "save the draft")
 	r.keys(t, decltest.Type("kept")...)
 	r.keys(t, enter())
-	r.waitNote(t, "a.md") // the open it guarded, after the save
+	r.waitFile(t, "a.md") // the open it guarded, after the save
 	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
 		t.Fatalf("kept.md holds %q, want the draft", got)
 	}
 }
 
-// TestTheExplorerStaysOpenWhenNothingChanged: a scan's end lists the workspace's notes again, and
-// a connect, a create or a manager change lists the workspaces again; with the same notes and the
+// TestTheExplorerStaysOpenWhenNothingChanged: a scan's end lists the workspace's files again, and
+// a connect, a create or a manager change lists the workspaces again; with the same files and the
 // same workspaces, the rows open stay open. A note added is a change, and is listed with nothing
 // asked.
 func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
@@ -1045,7 +1045,7 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 	settled("a scan's end")
 	r.h.p.Post(func() { r.h.loadWorkspaces() })
 	settled("the workspaces listed again")
-	// a note added outside the TUI, indexed between two polls: the change log moved, so the notes
+	// a file added outside the TUI, indexed between two polls: the change log moved, so the files
 	// are listed again, the pickers' and the explorer's, with nothing asked
 	d.write(t, "kb", "c.md", "# C\n")
 	r.waitListed(t, 3)
@@ -1053,7 +1053,7 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 }
 
 // TestTheOptionsMenu: the editor mode, the theme and the editor's preferences are under Options; the AI
-// models and the backend's restart under System, right of Options; File keeps the note's commands.
+// models and the backend's restart under System, right of Options; File keeps the file's commands.
 func TestTheOptionsMenu(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
@@ -1090,7 +1090,7 @@ func TestTheTextKeymap(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.leader(t, 'k') // Vim to Text
 	r.s.WaitForText(t, "editor mode: Text (modeless)")
 	r.keys(t, decltest.Type("hi there ")...)
@@ -1117,9 +1117,9 @@ func TestTheLeaderCardListsACommandARow(t *testing.T) {
 	r := attached(t, d)
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "SPC — commands")
-	search, open, quit := screenRow(r, "search"), screenRow(r, "open a note"), screenRow(r, "quit")
+	search, open, quit := screenRow(r, "search"), screenRow(r, "open a file"), screenRow(r, "quit")
 	if !(search >= 0 && open == search+1 && quit > open) {
-		t.Fatalf("rows: search %d, open a note %d, quit %d; want one command a row\n%s", search, open, quit, r.s)
+		t.Fatalf("rows: search %d, open a file %d, quit %d; want one command a row\n%s", search, open, quit, r.s)
 	}
 }
 
@@ -1154,7 +1154,7 @@ func TestThePagesWidthAppliesAsTyped(t *testing.T) {
 // TestTheAIModelsSideBySide: the providers on the left, the usage and calls on the right, on the
 // same rows.
 func TestTheAIModelsSideBySide(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "a\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: "http://127.0.0.1:1", Model: "m"}); err != nil {
 		t.Fatal(err)
 	}
@@ -1384,7 +1384,7 @@ func TestRestartNeedsASpawner(t *testing.T) {
 // says so.
 func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder", "other")
-	root := noteDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	ctx := context.Background()
 	if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
@@ -1524,7 +1524,7 @@ func TestRestartReplacesAnOlderBackend(t *testing.T) {
 // the search is by words meanwhile; once the fill is done, the mark is green again.
 func TestTheSpinnerTurnsWhileTheModelEmbeds(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder", "other")
-	root := noteDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	ctx := context.Background()
 	if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
@@ -1605,7 +1605,7 @@ func TestFindInThePanes(t *testing.T) {
 		"kestrels/c.md", "c\n", "x.md", "also [[a]]\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	line := func() int { return onLoop(r, func() int { l, _ := r.h.editor.Line(); return l }) }
 	r.keys(t, key('/'))
 	r.s.WaitForText(t, "find in the page — n next, N previous")
@@ -1644,7 +1644,7 @@ func TestFindInThePanes(t *testing.T) {
 	// the explorer: the row holding it
 	r.leader(t, 'e')
 	r.s.WaitForText(t, "explorer")
-	r.keys(t, enter()) // kb opens: its folder and its notes load
+	r.keys(t, enter()) // kb opens: its folder and its files load
 	r.s.WaitForText(t, "kestrels/")
 	r.keys(t, key('/'))
 	r.s.WaitForText(t, "find in the explorer")
@@ -1671,7 +1671,7 @@ func TestFindInThePanes(t *testing.T) {
 		t.Fatalf("the links' cursor is on row %d, want 1 (x.md)", at)
 	}
 	r.keys(t, enter()) // Enter on the row found opens it: the view's own cursor is there
-	r.waitNote(t, "x.md")
+	r.waitFile(t, "x.md")
 
 	// SPC SPC is the workspace's search
 	r.keys(t, key(' '))
@@ -1698,7 +1698,7 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel one\nkestrel two\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.h.p.Post(func() { r.h.notify("the index is ready") })
 	r.s.WaitFor(t, "the toast at the bottom right", func(sc string) bool {
 		rows := strings.Split(sc, "\n")
@@ -1772,7 +1772,7 @@ func TestThePageWrapsAndNumbersItsLines(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "short\n" + long + "\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	words := func(sc string) int { return strings.Count(sc, "word") }
 	r.s.WaitFor(t, "the long line wrapped", func(sc string) bool { return words(sc) == 40 })
 	r.h.p.Post(r.h.toggleWrap)
@@ -1829,7 +1829,7 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
 	r.ready(t)
 	r.h.p.Post(func() { r.h.openPath("a.md") })
-	r.s.WaitFor(t, "the note", func(string) bool { n := r.note(); return n.open && n.path == "a.md" })
+	r.s.WaitFor(t, "the note", func(string) bool { n := r.file(); return n.open && n.path == "a.md" })
 	r.s.WaitForText(t, "   1  "+line)
 	rows := strings.Split(r.s.String(), "\n")
 	// 60 columns of text, a 6-column gutter and the border: 68 wide
@@ -1848,7 +1848,7 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 	})
 }
 
-func TestClosingANoteGivesThePageItsDraftWidth(t *testing.T) {
+func TestClosingAFileGivesThePageItsDraftWidth(t *testing.T) {
 	long := strings.Repeat("y\n", 10000) // five digits: a gutter one column wider
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"long.md", long}},
 		daemonOpts{prefs: map[string]string{"tui.ruler": "60", "tui.editor.linenumbers": "true"}})
@@ -1863,6 +1863,6 @@ func TestClosingANoteGivesThePageItsDraftWidth(t *testing.T) {
 	r.h.p.Post(func() { r.h.openPath("long.md") })
 	r.s.WaitFor(t, "the long note's page", width(69))
 	// closed, the page is an empty draft's again
-	r.h.p.Post(r.h.closeNote)
+	r.h.p.Post(r.h.closeFile)
 	r.s.WaitFor(t, "the draft's page", width(68))
 }

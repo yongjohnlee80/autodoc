@@ -18,7 +18,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-const flowNote = "# Flow\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
+const flowFile = "# Flow\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
 
 // placedImage waits for the terminal to hold one image, and returns its PNG.
 func (r *running) placedImage(t *testing.T) []byte {
@@ -56,7 +56,7 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	if _, ok := widget.SVGRasterizer(); !ok {
 		t.Skip("rsvg-convert is not installed")
 	}
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "f.md", flowNote)})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	graphics := tuicore.TriYes
@@ -66,7 +66,7 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	})
 	r.s.WaitFor(t, "sepia", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "sepia" })
 	r.h.p.Post(func() { r.h.openPath("f.md") })
-	r.waitNote(t, "f.md")
+	r.waitFile(t, "f.md")
 	r.h.p.Post(func() { r.h.previewDiagram() })
 	r.s.WaitForText(t, "rendered offline by rsvg-convert in the sepia theme")
 	img := r.placedImage(t)
@@ -101,7 +101,7 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	skipWithoutUsableBrowser(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Light page\n\ntext\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Light page\n\ntext\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	opened := make(chan string, 1)
@@ -112,7 +112,7 @@ func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	})
 	r.s.WaitFor(t, "light", func(string) bool { return onLoop(r, func() string { return r.h.theme }) == "light" })
 	r.h.p.Post(func() { r.h.openPath("n.md") })
-	r.waitNote(t, "n.md")
+	r.waitFile(t, "n.md")
 	r.h.p.Post(func() { r.h.previewHTML() })
 	r.s.WaitForText(t, "HTML preview · n.md")
 	img := r.placedImage(t)
@@ -181,11 +181,11 @@ func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
 	}
 }
 
-// tinyPreview runs the TUI on a w×h screen with confirmed graphics, flowNote open.
+// tinyPreview runs the TUI on a w×h screen with confirmed graphics, flowFile open.
 func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 	t.Helper()
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "f.md", flowNote)})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUISized(t, NewSession(d.sock, nil), Options{}, w, h)
 	r.s.WaitFor(t, "the workspace", func(string) bool { return onLoop(r, func() string { return r.h.ws }) == "kb" })
 	opened := make(chan string, 4)
@@ -194,7 +194,7 @@ func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 		r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil }
 		r.h.openPath("f.md")
 	})
-	r.s.WaitFor(t, "f.md open", func(string) bool { n := r.note(); return n.open && n.path == "f.md" })
+	r.s.WaitFor(t, "f.md open", func(string) bool { n := r.file(); return n.open && n.path == "f.md" })
 	return r, opened
 }
 

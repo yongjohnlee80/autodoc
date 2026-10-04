@@ -12,7 +12,7 @@ import (
 func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
 	cache := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cache)
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# On disk\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# On disk\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	opened := make(chan string, 1)

@@ -133,7 +133,7 @@ var publicErrs = []struct {
 	// before ErrUnsupported, which it is: the same code, but a message that says what is missing
 	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › AI models"},
 	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},
-	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a note of this workspace"},
+	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a file of this workspace"},
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
 	{vfs.ErrInvalidName, golibrpc.CodeInvalidParams, "not a valid path in the workspace"},
 	{index.ErrUnknownMode, golibrpc.CodeInvalidParams, "unknown search mode"},
@@ -558,7 +558,7 @@ func (s *Server) register() {
 		touch(w, path) // indexed now, not when a watch or a poll gets to it
 		return map[string]any{"version": string(v)}, nil
 	}, true))
-	// doc.outline is a saved note's headings, with the version they were read at, for a client to
+	// doc.outline is a saved file's headings, with the version they were read at, for a client to
 	// navigate by (ADR 0212 §6). A document of another kind has none.
 	s.handle("doc.outline", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		path, err := argStr(p, 1, "path")
@@ -580,7 +580,7 @@ func (s *Server) register() {
 		}
 		return map[string]any{"version": string(d.Version), "headings": out}, nil
 	}, true))
-	// doc.validate checks a note's text, saved or not, against the workspace's frontmatter schema
+	// doc.validate checks a file's text, saved or not, against the workspace's frontmatter schema
 	// with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.
 	s.handle("doc.validate", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		path, err := argStr(p, 1, "path")
@@ -600,7 +600,7 @@ func (s *Server) register() {
 		}
 		var ds []schema.Diagnostic
 		if w.Index == nil || w.Index.Kind(path) == kind.Markdown {
-			ds = sch.ValidateNote(content).Diagnostics
+			ds = sch.ValidateFile(content).Diagnostics
 		}
 		return map[string]any{"diagnostics": diagnosticsList(ds)}, nil
 	}, true))
@@ -636,7 +636,7 @@ func (s *Server) register() {
 	}, true))
 }
 
-// touch tells the workspace's indexer that paths changed through the API, so a note saved in a client
+// touch tells the workspace's indexer that paths changed through the API, so a file saved in a client
 // is indexed at once, whatever the follower is doing — watching, polling, or still scanning. The
 // indexer re-reads each path and decides for itself (eligible, unchanged, gone).
 func touch(w *Workspace, paths ...string) {

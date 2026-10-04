@@ -7,10 +7,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE LINKS PANEL — the notes that link to the note in the editor, in a drawer (panels.go).
+// THE LINKS PANEL — the files that link to the file in the editor, in a drawer (panels.go).
 
 func (h *Host) loadBacklinks(path string) {
-	gen, ep, ws := h.note.gen, h.epoch, h.ws
+	gen, ep, ws := h.file.gen, h.epoch, h.ws
 	type answer struct {
 		paths []string
 		err   error
@@ -33,7 +33,7 @@ func (h *Host) loadBacklinks(path string) {
 		}
 		return answer{paths: out}
 	}, func(a answer) {
-		if gen != h.note.gen || ep != h.epoch {
+		if gen != h.file.gen || ep != h.epoch {
 			return
 		}
 		if a.err != nil {

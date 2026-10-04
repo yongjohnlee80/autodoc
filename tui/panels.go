@@ -16,8 +16,8 @@ func (h *Host) togglePanel(name string) {
 		h.keep(h.p.Call(name, "close"))
 		return
 	}
-	if name == "links" && h.note.open {
-		h.loadBacklinks(h.note.path)
+	if name == "links" && h.file.open {
+		h.loadBacklinks(h.file.path)
 	}
 	h.keep(h.p.Call(name, "open"))
 	h.keep(h.p.Call(panels[name], "forceActiveFocus"))

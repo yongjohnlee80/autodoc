@@ -29,7 +29,7 @@ import (
 // to.
 
 // pluginRisk is the warning every add and update carries.
-const pluginRisk = "A plugin is a program that runs as you, with your files and your notes. AutoDoc does " +
+const pluginRisk = "A plugin is a program that runs as you, with your files. AutoDoc does " +
 	"not check what a plugin does: add only plugins you trust. Adding one is at your own risk."
 
 // The deadlines of a clone, a fetch and a build.

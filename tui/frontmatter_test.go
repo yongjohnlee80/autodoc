@@ -26,7 +26,7 @@ func writeSchema(t *testing.T, root string) {
 // The manager's Schema… suggests the root's .autodoc/schema.yaml; saving it activates the schema,
 // and a broken file is reported with its line.
 func TestWorkspaceSchemaDialog(t *testing.T) {
-	root := noteDir(t, "a.md", "---\ntype: adr\n---\nalpha\n")
+	root := fileDir(t, "a.md", "---\ntype: adr\n---\nalpha\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	writeSchema(t, root)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -36,7 +36,7 @@ func TestWorkspaceSchemaDialog(t *testing.T) {
 	r.h.p.Post(func() { r.h.startSchema(0) })
 	r.s.WaitForText(t, "frontmatter schema · kb")
 	r.s.WaitForText(t, suggestedSchema) // the suggestion fills the path field
-	r.s.WaitForText(t, "no schema: notes are not checked")
+	r.s.WaitForText(t, "no schema: files are not checked")
 	r.h.p.Post(func() { r.h.saveSchema(suggestedSchema) })
 	r.s.WaitForText(t, "kb: schema active, 1 fields")
 	ws, err := d.db.Workspaces(context.Background())
@@ -56,7 +56,7 @@ func TestWorkspaceSchemaDialog(t *testing.T) {
 // A note whose frontmatter breaks the schema shows the problem over the page, and fixing the text
 // clears it without a save.
 func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
-	root := noteDir(t, "memo.md", "---\ntype: memo\n---\nbody\n")
+	root := fileDir(t, "memo.md", "---\ntype: memo\n---\nbody\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	writeSchema(t, root)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -64,11 +64,11 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 	r.h.p.Post(func() { r.h.schemaWorkspace = "kb"; r.h.saveSchema(suggestedSchema) })
 	r.s.WaitForText(t, "schema active")
 	r.h.p.Post(func() { r.h.openPath("memo.md") })
-	r.waitNote(t, "memo.md")
+	r.waitFile(t, "memo.md")
 	r.s.WaitFor(t, "the diagnostic over the page", func(sc string) bool {
 		return strings.Contains(sc, `⚠ frontmatter line 2: type: "memo" is not one of [note adr]`)
 	})
-	if !onLoop(r, func() bool { return r.h.note.open && !r.h.note.dirty }) {
+	if !onLoop(r, func() bool { return r.h.file.open && !r.h.file.dirty }) {
 		t.Fatal("a diagnostic changed the note")
 	}
 	r.h.p.Post(func() {
@@ -86,7 +86,7 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 	})
 	r.s.WaitFor(t, "saved despite the diagnostic", func(string) bool {
 		b, _ := os.ReadFile(filepath.Join(root, "memo.md"))
-		return string(b) == "---\ntype: memo\n---\nbody\n" && !r.note().dirty
+		return string(b) == "---\ntype: memo\n---\nbody\n" && !r.file().dirty
 	})
 	r.s.WaitForText(t, "⚠ frontmatter line 2")
 }
@@ -94,7 +94,7 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 // Your own text types: declared and admitted in one action, previewed as indexed, refused for a
 // Pro format, and their include dropped when removed.
 func TestCustomTextTypes(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.openFileTypes() })
@@ -121,7 +121,7 @@ func TestCustomTextTypes(t *testing.T) {
 // A custom-types save whose rules change fails takes the text types back, so "not changed" is true
 // (Lector's review of #30, follow-up): the root is removed between the two verbs' checks.
 func TestCustomTextTypesRollBackWhenTheRulesFail(t *testing.T) {
-	root := noteDir(t, "n.md", "# Notes\n")
+	root := fileDir(t, "n.md", "# Notes\n")
 	d := startManaged(t, map[string]string{"kb": root})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")

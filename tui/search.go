@@ -8,12 +8,12 @@ import (
 )
 
 // THE WORKSPACE'S NOTES — the list the pickers filter, read when a workspace is entered and after
-// a note is made.
+// a file is made.
 
 type rowOf = tuidecl.Row
 
-// listNotes reads every note of the workspace in use, in path order.
-func (h *Host) listNotes() {
+// listFiles reads every file of the workspace in use, in path order.
+func (h *Host) listFiles() {
 	h.listSeq++
 	seq, ep, ws := h.listSeq, h.epoch, h.ws
 	type answer struct {
@@ -29,24 +29,24 @@ func (h *Host) listNotes() {
 		}
 		if a.err != nil {
 			// a daemon still warming up can fail a listing; an empty list would stay empty until a
-			// note changed, so try again, a little later each time, while nothing newer has asked
+			// file changed, so try again, a little later each time, while nothing newer has asked
 			if h.listRetry == 0 {
-				h.failed("notes", a.err)
+				h.failed("files", a.err)
 			}
 			h.listRetry = min(max(2*h.listRetry, listRetryFirst), listRetryMax)
 			h.after(h.listRetry, func() {
 				if seq == h.listSeq && ep == h.epoch {
-					h.listNotes()
+					h.listFiles()
 				}
 			})
 			return
 		}
 		h.listRetry = 0
-		h.notesAll = a.paths
+		h.filesAll = a.paths
 	})
 }
 
-// The notes' listing retries after a failure: first after listRetryFirst, doubling to listRetryMax.
+// The files' listing retries after a failure: first after listRetryFirst, doubling to listRetryMax.
 const (
 	listRetryFirst = 500 * time.Millisecond
 	listRetryMax   = 10 * time.Second

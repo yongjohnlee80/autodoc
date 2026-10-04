@@ -44,7 +44,7 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 	if err := ws.OpenAll(); err != nil {
 		t.Fatal(err)
 	}
-	// wait until every root's notes are indexed, so the first listing has them
+	// wait until every root's files are indexed, so the first listing has them
 	for _, w := range ws.List() {
 		want, _ := filepath.Glob(filepath.Join(w.Root, "*.md"))
 		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
@@ -97,7 +97,7 @@ func sortedNames(m map[string]string) []string {
 	return out
 }
 
-func noteDir(t *testing.T, notes ...string) string {
+func fileDir(t *testing.T, notes ...string) string {
 	t.Helper()
 	d := t.TempDir()
 	for i := 0; i < len(notes); i += 2 {
@@ -127,7 +127,7 @@ func (r *running) addWorkspace(t *testing.T, title, root string) {
 // TestWorkspaceManager: from the picker, the manager adds a workspace (a refused add says why),
 // renames it, and deletes it after asking what goes and what stays; the files stay.
 func TestWorkspaceManager(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "alpha\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.waitListed(t, 1)
@@ -137,7 +137,7 @@ func TestWorkspaceManager(t *testing.T) {
 	r.keys(t, key('m'))
 	r.s.WaitForText(t, "Rename…")
 
-	root := noteDir(t, "b.md", "beta\n")
+	root := fileDir(t, "b.md", "beta\n")
 	r.addWorkspace(t, "notes", root)
 	r.s.WaitForText(t, "added workspace notes")
 	r.s.WaitFor(t, "the manager lists it", func(sc string) bool { return strings.Contains(sc, root) })
@@ -150,7 +150,7 @@ func TestWorkspaceManager(t *testing.T) {
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the add closed", func(sc string) bool { return !strings.Contains(sc, "add a workspace") })
 
-	// the rows are by name: kb, then notes
+	// the rows are by name: kb, then files
 	r.keys(t, key('j'), key('r'))
 	r.s.WaitForText(t, "rename the workspace")
 	r.keys(t, decltest.Type("-2")...)
@@ -183,7 +183,7 @@ func TestWorkspaceManager(t *testing.T) {
 }
 
 func TestWorkspaceSectionSizeIsEditedAtTheWorkspace(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n\n"+strings.Repeat("many words here in a paragraph.\n\n", 70))})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n\n"+strings.Repeat("many words here in a paragraph.\n\n", 70))})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.manageWorkspaces() })
@@ -206,7 +206,7 @@ func TestWorkspaceSectionSizeIsEditedAtTheWorkspace(t *testing.T) {
 }
 
 func TestWorkspaceRulesDialogEditsAndClearsIncludes(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.manageWorkspaces() })
@@ -232,7 +232,7 @@ func TestWorkspaceRulesDialogEditsAndClearsIncludes(t *testing.T) {
 }
 
 func TestFileTypeChoiceUpdatesWorkspaceRules(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Notes\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.openFileTypes() })
@@ -247,7 +247,7 @@ func TestFileTypeChoiceUpdatesWorkspaceRules(t *testing.T) {
 // TestOpensTheNamedWorkspace: Options.Workspace (autodoc --ui <name>) opens that one, not the
 // first, and Remember is told each workspace the TUI enters.
 func TestOpensTheNamedWorkspace(t *testing.T) {
-	d := startManaged(t, map[string]string{"alpha": noteDir(t, "a.md", "a\n"), "beta": noteDir(t, "b.md", "b\n", "c.md", "c\n")})
+	d := startManaged(t, map[string]string{"alpha": fileDir(t, "a.md", "a\n"), "beta": fileDir(t, "b.md", "b\n", "c.md", "c\n")})
 	var mu sync.Mutex
 	var entered []string
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta", Remember: func(n string) {
@@ -265,7 +265,7 @@ func TestOpensTheNamedWorkspace(t *testing.T) {
 }
 
 func TestWorkspacePickerStartsAtTheCurrentWorkspace(t *testing.T) {
-	d := startManaged(t, map[string]string{"alpha": noteDir(t, "a.md", "alpha\n"), "beta": noteDir(t, "b.md", "beta\n")})
+	d := startManaged(t, map[string]string{"alpha": fileDir(t, "a.md", "alpha\n"), "beta": fileDir(t, "b.md", "beta\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta"})
 	r.s.WaitForText(t, "· beta")
 	r.h.p.Post(r.h.pickWorkspace)
@@ -277,7 +277,7 @@ func TestWorkspacePickerStartsAtTheCurrentWorkspace(t *testing.T) {
 }
 
 func TestWorkspaceEmbeddingPolicyIsSetInManager(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "alpha\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "alpha\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(r.h.manageWorkspaces)

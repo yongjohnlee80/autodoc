@@ -210,7 +210,7 @@ func (h *Host) useProvider(i int) {
 			h.set("App.providersStatus", p.name+" not used: "+wireMessage(err)+" · "+h.inUseText())
 			return
 		}
-		h.notify("semantic search with " + p.name + ": the notes are embedded in the background")
+		h.notify("semantic search with " + p.name + ": the files are embedded in the background")
 		h.loadProviders()
 		h.refreshSearch()
 	})

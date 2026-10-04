@@ -14,20 +14,20 @@ import (
 
 // THE NOTE IN THE EDITOR — opening, saving, and what is asked on the way.
 //
-// UNSAVED WORK IS NEVER LOST QUIETLY. Opening another note, switching workspace, reloading or
+// UNSAVED WORK IS NEVER LOST QUIETLY. Opening another file, switching workspace, reloading or
 // quitting over unsaved edits asks first (save, discard, or stay), with Save focused. A save is
-// written only over the version the note was read at (doc.write's condition), so a note that
+// written only over the version the file was read at (doc.write's condition), so a file that
 // changed on disk since is never overwritten without asking: the conflict dialog offers keep,
 // reload or overwrite.
 //
 // A load is off the loop, and applied only if it is still the latest open under the same workspace
 // and connection: a slow load cannot replace a later one.
 //
-// THE PAGE IS ALWAYS WRITABLE. With no note open, what is typed is an untitled draft: unsaved work
-// like a note's, guarded the same way; saving it asks for its path in the new-note picker, creates
-// the note with the draft's text, and opens it there, the cursor where it was.
+// THE PAGE IS ALWAYS WRITABLE. With no file open, what is typed is an untitled draft: unsaved work
+// like a file's, guarded the same way; saving it asks for its path in the new-file picker, creates
+// the file with the draft's text, and opens it there, the cursor where it was.
 
-type note struct {
+type openedFile struct {
 	path    string
 	version string // the version the editor's text was read or written at
 	open    bool
@@ -37,40 +37,40 @@ type note struct {
 	then func()
 }
 
-// untitled is the draft's name wherever a note's path would show.
+// untitled is the draft's name wherever a file's path would show.
 const untitled = "untitled"
 
-// name is the note's path, or untitled for the draft.
-func (n note) name() string {
+// name is the file's path, or untitled for the draft.
+func (n openedFile) name() string {
 	if n.open {
 		return n.path
 	}
 	return untitled
 }
 
-// guard runs then, asking first when the note has unsaved changes.
+// guard runs then, asking first when the file has unsaved changes.
 func (h *Host) guard(action string, then func()) {
-	if !h.note.dirty {
+	if !h.file.dirty {
 		then()
 		return
 	}
-	h.note.then = then
-	h.set("App.unsavedQuestion", fmt.Sprintf("%s has unsaved changes. Save them before you %s?", h.note.name(), action))
-	h.open("unsavedNote")
+	h.file.then = then
+	h.set("App.unsavedQuestion", fmt.Sprintf("%s has unsaved changes. Save them before you %s?", h.file.name(), action))
+	h.open("unsavedFile")
 }
 
 // unsaved answers the unsaved question.
 func (h *Host) unsaved(answer string) {
-	then := h.note.then
-	h.note.then = nil
-	h.closeDialog("unsavedNote")
+	then := h.file.then
+	h.file.then = nil
+	h.closeDialog("unsavedFile")
 	switch answer {
 	case "save":
-		if !h.note.open {
+		if !h.file.open {
 			h.nameDraft(then) // the draft has no path yet: name it, then go on
 			return
 		}
-		h.write(h.editor.Value(), h.note.version, then)
+		h.write(h.editor.Value(), h.file.version, then)
 	case "discard":
 		h.setDirty(false)
 		if then != nil {
@@ -79,27 +79,27 @@ func (h *Host) unsaved(answer string) {
 	}
 }
 
-// openPath opens a note, asking first over unsaved changes.
+// openPath opens a file, asking first over unsaved changes.
 func (h *Host) openPath(p string) {
-	if p == h.note.path && h.note.open && !h.note.dirty {
+	if p == h.file.path && h.file.open && !h.file.dirty {
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
 	h.guard("open "+p, func() { h.load(p) })
 }
 
-// reload reads the note again from disk, asking first over unsaved changes.
+// reload reads the file again from disk, asking first over unsaved changes.
 func (h *Host) reload() {
-	if !h.note.open {
+	if !h.file.open {
 		return
 	}
-	h.guard("reload it", func() { h.load(h.note.path) })
+	h.guard("reload it", func() { h.load(h.file.path) })
 }
 
 // load reads p into the editor.
 func (h *Host) load(p string) {
-	h.note.gen++
-	gen, ep, ws := h.note.gen, h.epoch, h.ws
+	h.file.gen++
+	gen, ep, ws := h.file.gen, h.epoch, h.ws
 	type answer struct {
 		content, version string
 		err              error
@@ -114,7 +114,7 @@ func (h *Host) load(p string) {
 		b, _ := m["content"].([]byte)
 		return answer{content: string(b), version: str(m, "version")}
 	}, func(a answer) {
-		if gen != h.note.gen || ep != h.epoch {
+		if gen != h.file.gen || ep != h.epoch {
 			return
 		}
 		if a.err != nil {
@@ -127,7 +127,7 @@ func (h *Host) load(p string) {
 	})
 }
 
-// show puts a note's text in the editor, clean.
+// show puts a file's text in the editor, clean.
 func (h *Host) show(p, content, version string) {
 	h.editor.SetValue(content) // reports no textChanged: only typing does
 	h.syncPageWidth()
@@ -136,8 +136,8 @@ func (h *Host) show(p, content, version string) {
 		h.openAt = -1
 		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
-	h.note.path, h.note.version, h.note.open = p, version, true
-	h.set("App.noteTitle", p)
+	h.file.path, h.file.version, h.file.open = p, version, true
+	h.set("App.fileTitle", p)
 	switch kind.Of(p, h.textExtensions()) {
 	case kind.Text:
 		h.set("App.syntaxDefinition", "Plain text (find)")
@@ -153,15 +153,15 @@ func (h *Host) show(p, content, version string) {
 	h.loadBacklinks(p)
 }
 
-// closeNote empties the editor: no note is open, and the page is a new draft.
-func (h *Host) closeNote() {
-	h.note.gen++
+// closeFile empties the editor: no file is open, and the page is a new draft.
+func (h *Host) closeFile() {
+	h.file.gen++
 	h.editor.SetValue("")
 	h.syncPageWidth()
-	h.note = note{gen: h.note.gen}
+	h.file = openedFile{gen: h.file.gen}
 	h.outline, h.outlineRows = nil, nil
 	h.outlineGen++
-	h.set("App.noteTitle", untitled)
+	h.set("App.fileTitle", untitled)
 	h.set("App.syntaxDefinition", "Markdown (find)")
 	h.set("App.statusCenter", "")
 	h.backlinks.Reset(nil)
@@ -169,7 +169,7 @@ func (h *Host) closeNote() {
 	h.clearDiagnostics()
 }
 
-// edited is the editor's text changing: typed, so the note (or the draft) has unsaved changes.
+// edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.
 func (h *Host) edited() {
 	h.setDirty(true)
 	h.validateSoon()
@@ -178,13 +178,13 @@ func (h *Host) edited() {
 }
 
 func (h *Host) setDirty(v bool) {
-	h.note.dirty = v
+	h.file.dirty = v
 	mark := ""
 	if v {
 		mark = " [+]"
 	}
-	if h.note.open || v {
-		h.set("App.statusCenter", h.note.name()+mark)
+	if h.file.open || v {
+		h.set("App.statusCenter", h.file.name()+mark)
 	} else {
 		h.set("App.statusCenter", "")
 	}
@@ -193,32 +193,32 @@ func (h *Host) setDirty(v bool) {
 // syncMode brings the status line's mode up to date with the editor's.
 func (h *Host) syncMode() { h.setWhere(h.where) }
 
-// save writes the note at the version it was read at; the draft is named first.
+// save writes the file at the version it was read at; the draft is named first.
 func (h *Host) save() {
-	if !h.note.open {
+	if !h.file.open {
 		h.nameDraft(nil)
 		return
 	}
-	h.write(h.editor.Value(), h.note.version, nil)
+	h.write(h.editor.Value(), h.file.version, nil)
 }
 
-// nameDraft opens the new-note picker to save the draft under a path; then runs once it is saved
+// nameDraft opens the new-file picker to save the draft under a path; then runs once it is saved
 // (a guarded open or switch), and is dropped when the picker is closed without one.
 func (h *Host) nameDraft(then func()) {
 	h.draft = &draftSave{then: then}
-	h.set("App.noteNameError", draftHelp)
-	h.setField("App.newNotePath", "")
-	h.newNoteFilter("")
-	h.open("noteName")
+	h.set("App.fileNameError", draftHelp)
+	h.setField("App.newFilePath", "")
+	h.newFileFilter("")
+	h.open("fileName")
 }
 
 // draftSave is a draft being named: what runs once it is saved.
 type draftSave struct{ then func() }
 
-// draftHelp is the new-note picker's line when it names the draft.
-const draftHelp = "save the draft: a path in the workspace; .md is added when it has none · Enter on a note takes its folder"
+// draftHelp is the new-file picker's line when it names the draft.
+const draftHelp = "save the draft: a path in the workspace; .md is added when it has none · Enter on a file takes its folder"
 
-// cursorBytes is the editor's cursor as a byte offset of its text, for the note the draft becomes.
+// cursorBytes is the editor's cursor as a byte offset of its text, for the file the draft becomes.
 func (h *Host) cursorBytes() int {
 	row, col := h.editor.Line()
 	lines := h.editor.Lines()
@@ -244,7 +244,7 @@ func (h *Host) cursorBytes() int {
 // holds what was written, its version is adopted; otherwise someone wrote after it, which is a
 // conflict. It is never sent again blindly.
 func (h *Host) write(content, want string, after func()) {
-	gen, ep, ws, p := h.note.gen, h.epoch, h.ws, h.note.path
+	gen, ep, ws, p := h.file.gen, h.epoch, h.ws, h.file.path
 	type answer struct {
 		version string
 		err     error
@@ -268,13 +268,13 @@ func (h *Host) write(content, want string, after func()) {
 		b, _ := m["content"].([]byte)
 		return answer{err: err, version: str(m, "version"), same: string(b) == content}
 	}, func(a answer) {
-		if gen != h.note.gen || ep != h.epoch {
+		if gen != h.file.gen || ep != h.epoch {
 			return
 		}
 		switch {
 		case a.err == nil, code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
-			h.note.version = a.version
-			// typing during the save leaves the note unsaved: what is on disk is what was written
+			h.file.version = a.version
+			// typing during the save leaves the file unsaved: what is on disk is what was written
 			newer := h.editor.Value() != content
 			h.setDirty(newer)
 			h.notify("saved " + p)
@@ -282,9 +282,9 @@ func (h *Host) write(content, want string, after func()) {
 			case after == nil:
 			case newer:
 				// what the save guarded (an open, a switch, a quit) would drop the newer edit: ask again
-				h.note.then = after
+				h.file.then = after
 				h.set("App.unsavedQuestion", fmt.Sprintf("%s changed again while it was saved. Save the newer changes first?", p))
-				h.open("unsavedNote")
+				h.open("unsavedFile")
 			default:
 				after()
 			}
@@ -292,9 +292,9 @@ func (h *Host) write(content, want string, after func()) {
 			h.notify("saved " + p + ", but it could not be read back: " + wireMessage(a.readErr) + " — reload before saving again")
 		case code(a.err) == rpc.CodeConflict, code(a.err) == rpc.CodeCommitted:
 			h.set("App.conflictQuestion", fmt.Sprintf("%s changed on disk since you opened it. Keep editing, reload the disk's version (your changes are lost), or overwrite it with yours?", p))
-			h.open("noteConflict")
+			h.open("fileConflict")
 		case code(a.err) == rpc.CodeNotFound:
-			h.notify(p + " is gone from disk: File › New note to write it again")
+			h.notify(p + " is gone from disk: File › New file to write it again")
 		default:
 			h.failed("save "+p, a.err)
 		}
@@ -303,12 +303,12 @@ func (h *Host) write(content, want string, after func()) {
 
 // conflict answers the conflict dialog.
 func (h *Host) conflict(answer string) {
-	h.closeDialog("noteConflict")
+	h.closeDialog("fileConflict")
 	switch answer {
 	case "reload":
-		// the note stays unsaved until the disk's version is in the editor: a failed read keeps the
+		// the file stays unsaved until the disk's version is in the editor: a failed read keeps the
 		// edits guarded
-		h.load(h.note.path)
+		h.load(h.file.path)
 	case "overwrite":
 		h.overwrite()
 	default:
@@ -319,7 +319,7 @@ func (h *Host) conflict(answer string) {
 // overwrite writes the editor's text over whatever version is on disk now: it reads the version
 // first, so the write is still conditional (a third writer in between is still a conflict).
 func (h *Host) overwrite() {
-	gen, ep, ws, p := h.note.gen, h.epoch, h.ws, h.note.path
+	gen, ep, ws, p := h.file.gen, h.epoch, h.ws, h.file.path
 	type answer struct {
 		version string
 		gone    bool
@@ -335,7 +335,7 @@ func (h *Host) overwrite() {
 		}
 		return answer{version: str(asMap(res), "version")}
 	}, func(a answer) {
-		if gen != h.note.gen || ep != h.epoch {
+		if gen != h.file.gen || ep != h.epoch {
 			return
 		}
 		switch {
@@ -348,29 +348,29 @@ func (h *Host) overwrite() {
 	})
 }
 
-// newNoteHelp is the new-note picker's line under its path.
-const newNoteHelp = "a path in the workspace; .md is added when it has none · Enter on a note takes its folder"
+// newFileHelp is the new-file picker's line under its path.
+const newFileHelp = "a path in the workspace; .md is added when it has none · Enter on a file takes its folder"
 
-// newNote asks for a new note's path, asking first over unsaved changes.
-func (h *Host) newNote() {
-	h.guard("start a new note", func() {
+// newFile asks for a new file's path, asking first over unsaved changes.
+func (h *Host) newFile() {
+	h.guard("start a new file", func() {
 		h.draft = nil
-		h.set("App.noteNameError", newNoteHelp)
-		h.setField("App.newNotePath", "")
-		h.newNoteFilter("")
-		h.open("noteName")
+		h.set("App.fileNameError", newFileHelp)
+		h.setField("App.newFilePath", "")
+		h.newFileFilter("")
+		h.open("fileName")
 	})
 }
 
-// createNote creates a note at name (".md" added when it has no extension) and opens it, closing
+// createFile creates a file at name (".md" added when it has no extension) and opens it, closing
 // the picker (Enter in its path field is not its Create button): empty, or holding the draft when it
-// is the draft being named. A path that exists, or is not a note, asks again with the reason.
-func (h *Host) createNote(name string) {
-	h.closeDialog("noteName")
+// is the draft being named. A path that exists, or is not a file, asks again with the reason.
+func (h *Host) createFile(name string) {
+	h.closeDialog("fileName")
 	name = strings.TrimSpace(strings.TrimPrefix(name, "/"))
 	if name == "" {
-		h.set("App.noteNameError", "a name is required")
-		h.open("noteName")
+		h.set("App.fileNameError", "a name is required")
+		h.open("fileName")
 		return
 	}
 	if path.Ext(name) == "" {
@@ -381,7 +381,7 @@ func (h *Host) createNote(name string) {
 	if draft != nil {
 		content = []byte(h.editor.Value())
 	}
-	ep, ws, gen := h.epoch, h.ws, h.note.gen
+	ep, ws, gen := h.epoch, h.ws, h.file.gen
 	do(h, func(ctx context.Context) error {
 		_, err := h.call(ctx, "doc.write", ws, name, content, "")
 		return err
@@ -394,14 +394,14 @@ func (h *Host) createNote(name string) {
 			if code(err) == rpc.CodeConflict {
 				reason = name + " exists: pick another name, or open it"
 			}
-			h.set("App.noteNameError", reason)
-			h.open("noteName")
+			h.set("App.fileNameError", reason)
+			h.open("fileName")
 			return
 		}
 		h.draft = nil
 		if draft != nil {
-			if gen != h.note.gen || h.note.open {
-				// the page moved on while the draft was written: the note is on disk; open it only
+			if gen != h.file.gen || h.file.open {
+				// the page moved on while the draft was written: the file is on disk; open it only
 				// when asked
 				h.notify("saved the draft as " + name)
 				return
@@ -410,7 +410,7 @@ func (h *Host) createNote(name string) {
 			h.setDirty(false) // written: the load below finds it saved
 		}
 		h.load(name)
-		h.listNotes()
+		h.listFiles()
 		h.loadWorkspaces() // the explorer lists it
 		if draft != nil && draft.then != nil {
 			draft.then()
@@ -420,7 +420,7 @@ func (h *Host) createNote(name string) {
 
 // quit quits, asking first over unsaved changes.
 func (h *Host) quit() {
-	if h.note.dirty {
+	if h.file.dirty {
 		h.open("confirmQuit")
 		return
 	}

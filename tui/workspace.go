@@ -80,11 +80,11 @@ func (h *Host) loadWorkspaces() {
 		h.managed.Reset(managed)
 		h.syncFileTypes()
 		if pick < 0 {
-			h.ws, h.notesAll = "", nil
+			h.ws, h.filesAll = "", nil
 			if h.keepDraft {
 				h.keepDraft = false
 			} else {
-				h.closeNote()
+				h.closeFile()
 			}
 			h.setWhere("autodoc · no workspace")
 			h.notify("no workspace: Go › Manage workspaces… adds one")
@@ -295,10 +295,10 @@ func (h *Host) useWorkspace(i int) {
 	h.guard("switch to "+w.name, func() { h.enter(w.name) })
 }
 
-// enter makes name the workspace in use: the note closes, and its notes are listed for the pickers.
+// enter makes name the workspace in use: the file closes, and its files are listed for the pickers.
 func (h *Host) enter(name string) {
 	h.epoch++
-	h.ws, h.entered, h.notesAll = name, true, nil
+	h.ws, h.entered, h.filesAll = name, true, nil
 	if ws, ok := h.activeWorkspaceInfo(); ok {
 		h.set("App.terminalDir", termDir(ws.root)) // the terminal's next start; a running shell stays
 	}
@@ -310,7 +310,7 @@ func (h *Host) enter(name string) {
 	if h.keepDraft {
 		h.keepDraft = false // the draft a removed workspace left stays on the page (events.go)
 	} else {
-		h.closeNote()
+		h.closeFile()
 	}
 	h.prog = progress{}
 	if h.searchCancel != nil {
@@ -323,7 +323,7 @@ func (h *Host) enter(name string) {
 	h.set("App.hitsTitle", "hits · searching "+name)
 	h.showPreview("search", "", "", 0)
 	h.refreshSearch()
-	h.listNotes()
+	h.listFiles()
 	h.poll()
 }
 
@@ -585,7 +585,7 @@ func (h *Host) renameWorkspace(to string) {
 			return
 		}
 		if h.ws == from {
-			// the same workspace under another name: the open note stays open
+			// the same workspace under another name: the open file stays open
 			h.ws = to
 			h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), to))
 			if h.remember != nil {
@@ -604,7 +604,7 @@ func (h *Host) startRemoveWorkspace(i int) {
 		return
 	}
 	h.removing = w.name
-	h.set("App.removeQuestion", fmt.Sprintf("Delete the workspace %s? Its index goes: the notes' search, links and "+
+	h.set("App.removeQuestion", fmt.Sprintf("Delete the workspace %s? Its index goes: the files' search, links and "+
 		"history in autodoc. Its files in %s stay as they are, and adding the directory again indexes them anew.", w.name, w.root))
 	h.open("workspaceRemove")
 }
@@ -624,7 +624,7 @@ func (h *Host) removeWorkspaceConfirmed() {
 			}
 			if h.ws == name {
 				h.ws, h.entered = "", false
-				h.closeNote()
+				h.closeFile()
 			}
 			h.notify("deleted workspace " + name + " (its files stay)")
 			h.loadWorkspaces()

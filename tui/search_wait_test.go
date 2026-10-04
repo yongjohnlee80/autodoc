@@ -15,7 +15,7 @@ import (
 // under the field turns a spinner beside one of searchWaits; the answer blanks it.
 func TestAnUnansweredSearchSaysWhatItWaitsOn(t *testing.T) {
 	o := newFakeOllama(t, "embedder")
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# Wildlife\n\nzebra plains\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
 		t.Fatal(err)
 	}
