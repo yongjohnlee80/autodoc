@@ -21,7 +21,11 @@ type Tables struct {
 
 // Tables are t's, empty for none.
 func (t *Table) Tables() Tables {
-	return Tables{Chunkers: t.Versions(), Formats: map[string]Format{}}
+	out := Tables{Chunkers: t.Versions(), Formats: map[string]Format{}}
+	if t != nil {
+		maps.Copy(out.Formats, t.formats)
+	}
+	return out
 }
 
 // Fingerprint is the hex sha256 over the entries, the chunkers then the formats, each sorted: a

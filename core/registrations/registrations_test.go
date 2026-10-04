@@ -40,7 +40,7 @@ func TestMainRefusesARegistrationNamingIt(t *testing.T) {
 		{".go", ver("code/1"), "version"},
 		{".go", ver(strings.Repeat("v", 33)), "version"},
 	} {
-		_, err := New(map[string]search.Chunker{c.ext: c.c})
+		_, err := New(map[string]search.Chunker{c.ext: c.c}, nil)
 		var re *Error
 		if !errors.As(err, &re) || re.Name != c.ext || !strings.Contains(err.Error(), c.says) {
 			t.Errorf("%q: %v; want a refusal naming it, saying %q", c.ext, err, c.says)
@@ -53,7 +53,7 @@ func TestMainRefusesARegistrationNamingIt(t *testing.T) {
 // answers as none.
 func TestRegistrationsAreFrozenAtEntry(t *testing.T) {
 	c := ver("code-go-1+text-5")
-	tab, err := New(map[string]search.Chunker{".go": c, ".rs": ver("code-rs-1")})
+	tab, err := New(map[string]search.Chunker{".go": c, ".rs": ver("code-rs-1")}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestRegistrationsAreFrozenAtEntry(t *testing.T) {
 	if _, v, _ := tab.Chunker("a.go"); v != "code-go-1+text-5" {
 		t.Fatal("Versions is not a copy")
 	}
-	none, err := New(nil)
+	none, err := New(nil, nil)
 	if err != nil || none != nil {
 		t.Fatalf("no chunkers: %v, %v; want the nil Table", none, err)
 	}

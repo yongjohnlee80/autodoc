@@ -1,5 +1,5 @@
-// Package registrations is a build's chunkers, validated once and frozen when it starts (ADR 0216
-// §1.2): what a main hands app.Main, as the daemon, its indexers and its clients read it. A build
+// Package registrations is a build's chunkers and deriver, validated once and frozen when it starts
+// (ADR 0216 §1.2): what a main hands app.Main, as the daemon, its indexers and its clients read it. A build
 // with none, the community build, has the nil *Table, and every method answers as for no
 // registrations.
 package registrations
@@ -18,6 +18,8 @@ import (
 type Table struct {
 	chunkers search.Chunkers
 	versions map[string]string // a chunker's Version(), by extension, read once
+	formats  map[string]Format // the deriver's identity, by format, described once (deriver.go)
+	deriver  Deriver
 }
 
 // Error is a registration Main refuses, naming the offender.
@@ -25,15 +27,17 @@ type Error struct{ Name, Why string }
 
 func (e *Error) Error() string { return fmt.Sprintf("registrations: %q: %s", e.Name, e.Why) }
 
-// New validates chunkers, keyed by lower-case extension with its dot, and freezes them: each
-// chunker's version is read here, once, so no document records a version it was not cut under.
-// It refuses an extension that is malformed, upper-case, a built-in kind's or a Pro format's, and a
-// version outside the identity charset (ValidVersion). No chunkers is the nil Table.
-func New(chunkers map[string]search.Chunker) (*Table, error) {
-	if len(chunkers) == 0 {
+// New validates chunkers, keyed by lower-case extension with its dot, and a deriver, and freezes
+// them: each chunker's version and each format's identity is read here, once, so no document
+// records an identity its text was not made under. It refuses an extension that is malformed,
+// upper-case, a built-in kind's or a Pro format's, a version outside the identity charset
+// (ValidVersion), and a deriver's format that is not a Pro format or whose identity is outside it.
+// No chunkers and no deriver is the nil Table.
+func New(chunkers map[string]search.Chunker, d Deriver) (*Table, error) {
+	if len(chunkers) == 0 && d == nil {
 		return nil, nil
 	}
-	t := &Table{versions: map[string]string{}}
+	t := &Table{versions: map[string]string{}, formats: map[string]Format{}}
 	for _, ext := range slices.Sorted(maps.Keys(chunkers)) {
 		c := chunkers[ext]
 		switch {
@@ -54,6 +58,11 @@ func New(chunkers map[string]search.Chunker) (*Table, error) {
 			return nil, &Error{ext, err.Error()}
 		}
 		t.versions[ext] = v
+	}
+	if d != nil {
+		if err := t.addDeriver(d); err != nil {
+			return nil, err
+		}
 	}
 	return t, nil
 }
@@ -115,6 +124,14 @@ func (t *Table) Versions() map[string]string {
 		return map[string]string{}
 	}
 	return maps.Clone(t.versions)
+}
+
+// Formats are the deriver's formats, sorted.
+func (t *Table) Formats() []string {
+	if t == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(t.formats))
 }
 
 // Kinds are the extensions the registrations give a kind (kind.Registrations).

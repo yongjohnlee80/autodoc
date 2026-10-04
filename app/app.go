@@ -37,7 +37,16 @@ type Options struct {
 	// built-in extension, a Pro format's, and a version outside document.indexer's charset. nil:
 	// none, the community build.
 	Chunkers map[string]search.Chunker
+	// Deriver makes text of the build's Pro document formats (ADR 0216 §1.8), its formats and their
+	// identities read once, at entry; AutoDoc 03 wires it into indexing. nil: none.
+	Deriver Deriver
 }
+
+// Deriver and Derived are a build's text derivation (core/registrations).
+type (
+	Deriver = registrations.Deriver
+	Derived = registrations.Derived
+)
 
 // build is a build as the modes run it: Options validated and frozen once, at entry.
 type build struct {
@@ -52,7 +61,7 @@ func Main(ctx context.Context, args []string, o Options) int {
 }
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
-	reg, err := registrations.New(o.Chunkers)
+	reg, err := registrations.New(o.Chunkers, o.Deriver)
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
