@@ -54,3 +54,18 @@ func (e *env) codes(fp string) (map[int64][]code, error) {
 	})
 	return out, err
 }
+
+// docsOf is idx's codes by document, read from their chunks' rows (dead ones too): an index shows
+// its codes, not the documents they came from.
+func (e *env) docsOf(idx *codeIndex) map[int64][]code {
+	e.t.Helper()
+	out := map[int64][]code{}
+	for c := range idx.Codes() {
+		var doc int64
+		if err := scanOne(context.Background(), e.raw, &doc, "SELECT doc_id FROM chunk WHERE id = ?", c.Chunk); err != nil {
+			e.t.Fatal(err)
+		}
+		out[doc] = append(out[doc], c)
+	}
+	return out
+}

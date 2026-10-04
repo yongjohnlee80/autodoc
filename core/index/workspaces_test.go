@@ -159,7 +159,7 @@ func TestSemanticReadsTheWorkspacesVectors(t *testing.T) {
 	bySQL := func(w served) []Hit {
 		t.Helper()
 		cur := w.ix.sem.snap.Load()
-		w.ix.sem.snap.Store(&codeSnap{fp: cur.fp, watermark: cur.watermark - 1, docs: cur.docs})
+		w.ix.sem.snap.Store(cur.Next(cur.Watermark()-1, nil, nil))
 		n := w.ix.sem.fallbackScans.Load()
 		hits := searchServed(t, w, "zebra", QueryOpts{Mode: ModeSemantic})
 		if w.ix.sem.fallbackScans.Load() != n+1 {

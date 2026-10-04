@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/yongjohnlee80/golib/search/embed"
+	"github.com/yongjohnlee80/golib/search/vector"
 )
 
 // fakeProvider embeds a text as the counts of its words hashed into dims buckets (with seed, so two
@@ -118,14 +119,14 @@ func (e *env) ready() {
 // then publishes that commit's snapshot, so a reader can see a document ready
 // while the snapshot is still the commit before; a test that reads or replaces
 // the snapshot waits here, or a late publish can land after it.
-func (e *env) atHead() *codeSnap {
+func (e *env) atHead() *codeIndex {
 	e.t.Helper()
-	var s *codeSnap
+	var s *codeIndex
 	e.eventually("the snapshot at the head", func() bool {
 		var seq int64
 		_ = scanOne(context.Background(), e.raw, &seq, "SELECT commit_seq FROM workspace")
 		s = e.ix.sem.snap.Load()
-		return s != nil && s.watermark == seq
+		return s != nil && s.Watermark() == seq
 	})
 	return s
 }
@@ -223,37 +224,34 @@ func TestHalfEmbeddedDocumentAnswersLexically(t *testing.T) {
 	e.atHead()
 	var cID int64
 	_ = scanOne(context.Background(), e.raw, &cID, "SELECT id FROM document WHERE path = 'c.md'")
-	if _, in := e.ix.sem.snap.Load().docs[cID]; in {
+	if _, in := e.docsOf(e.ix.sem.snap.Load())[cID]; in {
 		t.Error("the half-embedded c.md is in the code snapshot")
 	}
 	for round := range 2 {
 		if round == 1 {
 			// a snapshot that wrongly holds c.md's embedded chunk: the query's own check still refuses it
 			cur := e.ix.sem.snap.Load()
-			forged := &codeSnap{fp: cur.fp, watermark: cur.watermark, docs: map[int64][]code{}}
-			for d, cs := range cur.docs {
-				forged.docs[d] = cs
-			}
-			codes, err := e.codes(cur.fp)
+			docs := e.docsOf(cur)
+			codes, err := e.codes(cur.Model())
 			if err != nil {
 				t.Fatal(err)
 			}
 			var chunks []code
 			rows, _ := e.raw.QueryContext(context.Background(), `SELECT c.id, e.bits FROM chunk c JOIN embedding e
-				ON e.text_hash = c.text_hash AND e.model_fp = ? WHERE c.doc_id = ?`, cur.fp, cID)
+				ON e.text_hash = c.text_hash AND e.model_fp = ? WHERE c.doc_id = ?`, cur.Model(), cID)
 			for rows.Next() {
 				var c code
 				var b []byte
-				_ = rows.Scan(&c.chunk, &b)
-				c.bits = bitsOf(b)
+				_ = rows.Scan(&c.Chunk, &b)
+				c.Bits = vector.DecodeBits(b)
 				chunks = append(chunks, c)
 			}
 			rows.Close()
 			if len(chunks) != 1 || len(codes[cID]) != 0 {
 				t.Fatalf("c.md has %d embedded chunks (%d as ready codes); want 1 and 0", len(chunks), len(codes[cID]))
 			}
-			forged.docs[cID] = chunks
-			e.ix.sem.snap.Store(forged)
+			docs[cID] = chunks
+			e.ix.sem.snap.Store(vector.NewIndex(cur.Model(), cur.Watermark(), docs))
 		}
 		checkPartial(t, e, cID)
 	}
@@ -374,11 +372,11 @@ func TestDeadChunkNeverASemanticHit(t *testing.T) {
 	e.put("a.md", "# A\n\nsandpiper coast\n")
 	e.ready()
 	cur := e.atHead()
-	forged := &codeSnap{fp: cur.fp, watermark: cur.watermark, docs: map[int64][]code{}}
-	for d, cs := range cur.docs {
-		forged.docs[d] = append(append([]code(nil), cs...), old.docs[d]...)
+	forged, olds := e.docsOf(cur), e.docsOf(old)
+	for d, cs := range forged {
+		forged[d] = append(append([]code(nil), cs...), olds[d]...)
 	}
-	e.ix.sem.snap.Store(forged)
+	e.ix.sem.snap.Store(vector.NewIndex(cur.Model(), cur.Watermark(), forged))
 	scans := e.ix.sem.snapshotScans.Load()
 	for _, h := range e.query("plover marsh", QueryOpts{Mode: ModeSemantic}).Hits {
 		if strings.Contains(h.Snippet, "plover") {
@@ -407,17 +405,17 @@ func TestSnapshotAndFallbackAgree(t *testing.T) {
 		t.Fatal("the query at the head did not use the snapshot")
 	}
 	cur := e.ix.sem.snap.Load()
-	e.ix.sem.snap.Store(&codeSnap{fp: cur.fp, watermark: cur.watermark - 1, docs: cur.docs})
+	e.ix.sem.snap.Store(cur.Next(cur.Watermark()-1, nil, nil))
 	withSQL := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+1 {
 		t.Fatal("a stale snapshot was used")
 	}
-	e.ix.sem.snap.Store(&codeSnap{fp: cur.fp, watermark: cur.watermark + 1, docs: map[int64][]code{}})
+	e.ix.sem.snap.Store(vector.NewIndex[int64, int64](cur.Model(), cur.Watermark()+1, nil))
 	withNewer := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+2 {
 		t.Fatal("a newer snapshot was used")
 	}
-	e.ix.sem.snap.Store(&codeSnap{fp: "another|model||64", watermark: cur.watermark, docs: map[int64][]code{}})
+	e.ix.sem.snap.Store(vector.NewIndex[int64, int64]("another|model||64", cur.Watermark(), nil))
 	withOther := e.query("zebra giraffe", QueryOpts{Mode: ModeSemantic})
 	if e.ix.sem.fallbackScans.Load() != falls+3 {
 		t.Fatal("another model's snapshot was used")
@@ -533,8 +531,8 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 		t.Errorf("status after the flip %+v", es)
 	}
 	after := e.query("zebra", QueryOpts{Mode: ModeSemantic})
-	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().fp != fpB {
-		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().fp)
+	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().Model() != fpB {
+		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().Model())
 	}
 	// after the flip: b active, a unused, each with the room its vectors take
 	ms := models()
@@ -655,9 +653,28 @@ func TestTargetBatchPreservesOfflineSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := e.atHead()
-	if after.fp != before.fp || reflect.ValueOf(after.docs).Pointer() != reflect.ValueOf(before.docs).Pointer() || after.watermark <= before.watermark {
+	if after.Model() != before.Model() || !sharesCodes(before, after) || after.Watermark() <= before.Watermark() {
 		t.Errorf("target batch rebuilt or did not advance offline snapshot: before %+v after %+v", before, after)
 	}
+}
+
+// sharesCodes reports whether b holds exactly a's codes, in the same memory: a published index
+// shared, not rebuilt (a rebuild reads every code from the store again, into new slices).
+func sharesCodes(a, b *codeIndex) bool {
+	at := map[int64]*uint64{}
+	for c := range a.Codes() {
+		if len(c.Bits) > 0 {
+			at[c.Chunk] = &c.Bits[0]
+		}
+	}
+	n := 0
+	for c := range b.Codes() {
+		if len(c.Bits) == 0 || at[c.Chunk] != &c.Bits[0] {
+			return false
+		}
+		n++
+	}
+	return n == len(at) && n > 0
 }
 
 // ready2 waits until the document at path is semantic-ready.
@@ -734,9 +751,9 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 		if err := e.ix.handVectors(context.Background(), vb); err != nil {
 			t.Fatal(err)
 		}
-		if got := e.activeModel(); got != fpB || e.ix.sem.active() != fpB || e.ix.sem.snap.Load().fp != fpB {
+		if got := e.activeModel(); got != fpB || e.ix.sem.active() != fpB || e.ix.sem.snap.Load().Model() != fpB {
 			t.Fatalf("a late batch of the old model (%d vectors) made %s active (writer %s, snapshot %s)",
-				len(vb.items), got, e.ix.sem.active(), e.ix.sem.snap.Load().fp)
+				len(vb.items), got, e.ix.sem.active(), e.ix.sem.snap.Load().Model())
 		}
 	}
 	var stored int
