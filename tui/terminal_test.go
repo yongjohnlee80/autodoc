@@ -262,3 +262,32 @@ func TestTheShellStartsInTheWorkspacesFolderWhenThisMachineHasIt(t *testing.T) {
 		t.Errorf("termDir of a file = %q, want the home %q", got, home)
 	}
 }
+
+// A shell that fails to start says so, and the terminal tries again: on the next open, once the
+// command works.
+func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
+	_, r := runTUIWithShell(t, "/nonexistent/shell", nil)
+	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	r.s.WaitFor(t, "the failure noticed", func(string) bool {
+		return onLoop(r, func() bool {
+			for _, n := range r.h.notices {
+				if strings.Contains(n.text, "could not start") {
+					return true
+				}
+			}
+			return false
+		})
+	})
+	if onLoop(r, func() bool { return r.h.termStarted }) {
+		t.Fatal("a shell that failed to start counts as started")
+	}
+	// The command works now (as a fixed $SHELL would make it at the next run); the next open starts it.
+	term := r.terminal() // outside onLoop: it runs on the loop itself
+	onLoop(r, func() bool { term.SetCommand("/bin/sh"); return true })
+	onLoop(r, func() bool { r.h.toggleTerminal(); return true }) // hide
+	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
+	onLoop(r, func() bool { r.h.toggleTerminal(); return true }) // open again
+	r.s.WaitFor(t, "the shell started on the retry", func(string) bool {
+		return onLoop(r, func() bool { return term.Running() })
+	})
+}
