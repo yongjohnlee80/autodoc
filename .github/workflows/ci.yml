@@ -35,6 +35,20 @@ jobs:
 
       - run: go build ./...
 
+      # The community module never names the private one: no require, no import, in the code or
+      # its tests. A commercial client builds on AutoDoc's public packages from its own module.
+      - name: no private module
+        run: |
+          private=github.com/yongjohnlee80/autorag
+          if grep -n "$private" go.mod go.sum; then
+            echo "::error::go.mod or go.sum names $private"
+            exit 1
+          fi
+          if go list -deps -test ./... | grep -n "^$private"; then
+            echo "::error::a package depends on $private"
+            exit 1
+          fi
+
       # -race because the daemon, the follower, the indexer's writer and the TUI
       # all run concurrently. -count=2 because a suite run once is a suite whose
       # flakes are someone else's problem later.
