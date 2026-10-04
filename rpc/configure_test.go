@@ -6,6 +6,8 @@ import (
 	"net"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -200,5 +202,83 @@ func TestDatabasesMap(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("databases\n got %v\nwant %v", got, want)
+	}
+}
+
+// recordedEvents is an event log that keeps what is appended.
+type recordedEvents struct {
+	mu  sync.Mutex
+	got []store.Event
+}
+
+func (r *recordedEvents) AppendEvent(_ context.Context, e store.Event) (int64, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.got = append(r.got, e)
+	return int64(len(r.got)), nil
+}
+
+func (r *recordedEvents) Events(context.Context, int64, int) ([]store.Event, int64, bool, error) {
+	return nil, 0, false, nil
+}
+
+func (r *recordedEvents) all() []store.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]store.Event(nil), r.got...)
+}
+
+// A save logs what each of its changes' own verbs logs, so a client following the log does what it
+// does for that verb: the rename first, with the new name, then the rest under it; the database
+// settings as one event whose detail holds no connection. A refused save logs nothing.
+func TestConfigureVerbs_LogAnEventForEachChange(t *testing.T) {
+	m := &configurer{Workspaces: Fixed()}
+	ev := &recordedEvents{}
+	ctx, cancel := context.WithCancel(context.Background())
+	sock := filepath.Join(t.TempDir(), "s.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := New(m, "v-test", WithListener(ln), WithEvents(ev))
+	done := make(chan error, 1)
+	go func() { done <- srv.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	cli, err := golibrpc.Dial(context.Background(), sock, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = cli.Close() })
+	if _, err := cli.Call(context.Background(), "sys.hello", map[string]any{"protocol": Protocol, "name": "tui"}); err != nil {
+		t.Fatal(err)
+	}
+
+	call(t, cli, "workspace.configure", "kb", map[string]any{
+		"name": "docs", "include": []any{"**/*.md"}, "exclude": []any{}, "embedding_policy": "never", "section_tokens": 256,
+		"destination": "postgres", "destination_connection": map[string]any{"engine": "postgres", "dsn": "postgres://me:hunter2@db/rag"},
+	})
+	var got []string
+	for _, e := range ev.all() {
+		got = append(got, e.Kind+" "+e.Workspace+" "+e.Detail)
+		if !strings.HasPrefix(e.Client, "tui#") {
+			t.Errorf("%s: client %q, want the caller's token", e.Kind, e.Client)
+		}
+		if strings.Contains(e.Detail, "hunter2") || strings.Contains(e.Detail, "postgres://") {
+			t.Errorf("%s: the log holds a connection: %q", e.Kind, e.Detail)
+		}
+	}
+	want := []string{"workspace.renamed kb docs", "workspace.patterns docs ", "workspace.section_size docs ",
+		"workspace.embedding_policy docs never", "workspace.databases docs "}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("events\n got %q\nwant %q", got, want)
+	}
+
+	m.err = store.ErrTaken
+	before := len(ev.all())
+	if _, err := cli.Call(context.Background(), "workspace.configure", "kb", map[string]any{"name": "other"}); err == nil {
+		t.Fatal("a refused save succeeded")
+	}
+	if n := len(ev.all()); n != before {
+		t.Errorf("a refused save logged %d events", n-before)
 	}
 }

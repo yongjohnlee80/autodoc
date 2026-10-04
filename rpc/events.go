@@ -36,30 +36,32 @@ const sessClient = "client"
 const maxEvents = 500
 
 // eventSpec is what a verb's success logs: the kind, and which parameters name the workspace and
-// the detail (-1 for none).
+// the detail (-1 for none); or, for a verb that changes several things at once, expand, the events
+// its parameters make, one for each thing.
 type eventSpec struct {
 	kind              string
 	workspace, detail int
+	expand            func(params []any) []store.Event
 }
 
 // eventsOf are the verbs that log an event, by name.
 var eventsOf = map[string]eventSpec{
-	"workspace.add":                 {"workspace.added", 0, -1},
-	"workspace.rename":              {"workspace.renamed", 0, 1},
-	"workspace.remove":              {"workspace.removed", 0, -1},
-	"workspace.set_patterns":        {"workspace.patterns", 0, -1},
-	"workspace.set_schema":          {"workspace.schema", 0, -1},
-	"workspace.set_text_extensions": {"workspace.text_extensions", 0, -1},
-	"workspace.section_size":        {"workspace.section_size", 0, -1},
-	"workspace.embedding_policy":    {"workspace.embedding_policy", 0, 1},
-	"workspace.set_provider":        {"workspace.provider", 0, 1},
-	"workspace.configure":           {"workspace.configured", 0, -1},
-	"preference.set":                {"preference.changed", -1, 0},
-	"embedding.use":                 {"embedding.switched", -1, 0},
-	"embedding.cancel_switch":       {"embedding.cancelled", -1, -1},
-	"embedding.add":                 {"embedding.providers", -1, -1},
-	"embedding.update":              {"embedding.providers", -1, 0},
-	"embedding.remove":              {"embedding.providers", -1, 0},
+	"workspace.add":                 {"workspace.added", 0, -1, nil},
+	"workspace.rename":              {"workspace.renamed", 0, 1, nil},
+	"workspace.remove":              {"workspace.removed", 0, -1, nil},
+	"workspace.set_patterns":        {"workspace.patterns", 0, -1, nil},
+	"workspace.set_schema":          {"workspace.schema", 0, -1, nil},
+	"workspace.set_text_extensions": {"workspace.text_extensions", 0, -1, nil},
+	"workspace.section_size":        {"workspace.section_size", 0, -1, nil},
+	"workspace.embedding_policy":    {"workspace.embedding_policy", 0, 1, nil},
+	"workspace.set_provider":        {"workspace.provider", 0, 1, nil},
+	"workspace.configure":           {expand: configureEvents},
+	"preference.set":                {"preference.changed", -1, 0, nil},
+	"embedding.use":                 {"embedding.switched", -1, 0, nil},
+	"embedding.cancel_switch":       {"embedding.cancelled", -1, -1, nil},
+	"embedding.add":                 {"embedding.providers", -1, -1, nil},
+	"embedding.update":              {"embedding.providers", -1, 0, nil},
+	"embedding.remove":              {"embedding.providers", -1, 0, nil},
 }
 
 // newClientToken is a session's token: the client's own name and a random suffix.
@@ -88,15 +90,22 @@ func (s *Server) logged(spec eventSpec, h golibrpc.Handler) golibrpc.Handler {
 		if err != nil || s.events == nil {
 			return out, err
 		}
-		e := store.Event{Kind: spec.kind, Client: clientOf(req.Session)}
-		if spec.workspace >= 0 && spec.workspace < len(req.Params) {
-			e.Workspace, _ = req.Params[spec.workspace].(string)
+		events := []store.Event{{Kind: spec.kind}}
+		if spec.expand != nil {
+			events = spec.expand(req.Params)
+		} else {
+			if spec.workspace >= 0 && spec.workspace < len(req.Params) {
+				events[0].Workspace, _ = req.Params[spec.workspace].(string)
+			}
+			if spec.detail >= 0 && spec.detail < len(req.Params) {
+				events[0].Detail, _ = req.Params[spec.detail].(string)
+			}
 		}
-		if spec.detail >= 0 && spec.detail < len(req.Params) {
-			e.Detail, _ = req.Params[spec.detail].(string)
-		}
-		if _, lerr := s.events.AppendEvent(context.WithoutCancel(ctx), e); lerr != nil {
-			logger.Warning(s.log, lerr, "logging event "+spec.kind)
+		for _, e := range events {
+			e.Client = clientOf(req.Session)
+			if _, lerr := s.events.AppendEvent(context.WithoutCancel(ctx), e); lerr != nil {
+				logger.Warning(s.log, lerr, "logging event "+e.Kind)
+			}
 		}
 		return out, nil
 	}
