@@ -137,6 +137,56 @@ func TestTheScriptsApplyOnSQLite(t *testing.T) {
 	}
 }
 
+// 000012 gives every chunk an embed text, '' unless a writer sets one, and its revert takes the
+// column and nothing else: the chunks stay.
+func TestTheChunkEmbedColumn(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	exec(t, db, "INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (1, 'a', '/a', 0, 0)")
+	exec(t, db, "INSERT INTO document(id, workspace_id, path, version, active_gen, indexer, indexed_at) VALUES (10, 1, 'n.go', 'v', 1, 'i', 0)")
+	exec(t, db, "INSERT INTO chunk(workspace_id, doc_id, hash, text_hash, gen_from, ord, breadcrumb, body, title, tags, byte_start, byte_end) VALUES (1, 10, x'00', x'00', 1, 0, '', 'b', '', '', 0, 0)")
+	exec(t, db, "INSERT INTO chunk(workspace_id, doc_id, hash, text_hash, gen_from, ord, breadcrumb, body, title, tags, byte_start, byte_end, embed) VALUES (1, 10, x'01', x'01', 1, 1, '', 'b', '', '', 0, 0, 'func F()')")
+	embeds := func() []string {
+		rows, err := db.QueryContext(ctx, "SELECT embed FROM chunk ORDER BY ord")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var s string
+			if err := rows.Scan(&s); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, s)
+		}
+		return out
+	}
+	if got := embeds(); fmt.Sprint(got) != "[ func F()]" {
+		t.Fatalf("embeds %q, want '' and the one written", got)
+	}
+	if name, err := deployments.Runner().Revert(ctx, db, 12); err != nil || !strings.Contains(name, "000012") {
+		t.Fatalf("revert 000012: %s, %v", name, err)
+	}
+	if _, err := db.QueryContext(ctx, "SELECT embed FROM chunk"); err == nil {
+		t.Fatal("the revert left the column")
+	}
+	rows, err := db.QueryContext(ctx, "SELECT COUNT(*) FROM chunk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	for rows.Next() {
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = rows.Close()
+	if n != 2 {
+		t.Fatalf("%d chunks after the revert, want 2", n)
+	}
+}
+
 func TestEmbeddingModelLookupIndexIsUsed(t *testing.T) {
 	db := open(t)
 	rows, err := db.QueryContext(context.Background(), "EXPLAIN QUERY PLAN SELECT text_hash FROM embedding WHERE workspace_id = ? AND model_fp = ?", 1, "model")

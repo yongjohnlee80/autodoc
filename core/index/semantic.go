@@ -741,8 +741,9 @@ func (x *Indexer) handVectors(ctx context.Context, vb vecBatch) error {
 }
 
 // unembedded lists up to embedBatch distinct texts of alive chunks with no vector under fp, but
-// those set aside, in the order their first chunks were written: the text is breadcrumb, a line
-// feed and body, exactly what text_hash names, so every chunk of one hash has the same text.
+// those set aside, in the order their first chunks were written. The text is the row's embed, or,
+// when that is "" (the built-in chunkers'), breadcrumb, a line feed and body: exactly what
+// text_hash names (search.Chunk.EmbedText), so every chunk of one hash has the same text.
 func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool) ([][]byte, []string, error) {
 	var hashes [][]byte
 	var texts []string
@@ -756,7 +757,7 @@ func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool)
 		for len(texts) < embedBatch {
 			rows, err := alive(s.sc.Chunks(tx)).WithPredicate(dao.Gt(`"chunk"."id"`, after)).
 				OrderBy(dao.Asc(store.ChunkByID)).Limit(inPart).
-				Select(store.ChunkID, store.ChunkTextHash, store.ChunkBreadcrumb, store.ChunkBody)
+				Select(store.ChunkID, store.ChunkTextHash, store.ChunkBreadcrumb, store.ChunkBody, store.ChunkEmbed)
 			if err != nil {
 				return err
 			}
@@ -767,7 +768,8 @@ func (s *Store) unembedded(ctx context.Context, fp string, skip map[string]bool)
 					continue
 				}
 				seen[h] = true
-				hashes, texts = append(hashes, r.TextHash), append(texts, r.Breadcrumb+"\n"+r.Body)
+				c := search.Chunk{Breadcrumb: r.Breadcrumb, Body: r.Body, Embed: r.Embed}
+				hashes, texts = append(hashes, r.TextHash), append(texts, c.EmbedText())
 			}
 			if len(rows) < inPart {
 				break

@@ -211,6 +211,7 @@ type Chunk struct {
 	GenTo                  *int64
 	Ord                    int64
 	Breadcrumb, Body       string
+	Embed                  string // the text its vector is made of, when not Breadcrumb + "\n" + Body (000012)
 	Title, Tags            string
 	ByteStart, ByteEnd     int64
 	DocPath                string // joined: the document's path
@@ -234,6 +235,7 @@ const (
 	ChunkOrd          ChunkField = "ord"
 	ChunkBreadcrumb   ChunkField = "breadcrumb"
 	ChunkBody         ChunkField = "body"
+	ChunkEmbed        ChunkField = "embed"
 	ChunkTitle        ChunkField = "title"
 	ChunkTags         ChunkField = "tags"
 	ChunkByteStart    ChunkField = "byte_start"
@@ -683,6 +685,7 @@ func newTables(c dao.DataConn) *tables {
 				ChunkOrd:          col("chunk", ChunkOrd, func(x *Chunk) any { return &x.Ord }),
 				ChunkBreadcrumb:   col("chunk", ChunkBreadcrumb, func(x *Chunk) any { return &x.Breadcrumb }),
 				ChunkBody:         col("chunk", ChunkBody, func(x *Chunk) any { return &x.Body }),
+				ChunkEmbed:        col("chunk", ChunkEmbed, func(x *Chunk) any { return &x.Embed }),
 				ChunkTitle:        col("chunk", ChunkTitle, func(x *Chunk) any { return &x.Title }),
 				ChunkTags:         col("chunk", ChunkTags, func(x *Chunk) any { return &x.Tags }),
 				ChunkByteStart:    col("chunk", ChunkByteStart, func(x *Chunk) any { return &x.ByteStart }),

@@ -1,0 +1,13 @@
+-- 000012 — a chunk's embed text (ADR 0216 §1.7).
+--
+-- text_hash is the sha256 of the text a vector is made of. A registered
+-- chunker (a code chunker's signature and documentation) may embed text that
+-- is not breadcrumb, a line feed and body, and embedding is asynchronous and
+-- outlives a restart, so the text lives in the row: the embedding worker sends
+-- embed when it is not '', else breadcrumb || char(10) || body, exactly what
+-- text_hash names. The built-in chunkers leave it ''.
+--
+-- A build before this script has no hold for a registered chunker's documents
+-- (ADR 0216 §1.4); dao/deploy's downgrade refusal keeps it off a store with
+-- this script applied, so this script ships with the hold.
+ALTER TABLE chunk ADD COLUMN embed TEXT NOT NULL DEFAULT '';
