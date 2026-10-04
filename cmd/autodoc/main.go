@@ -29,6 +29,9 @@ func moduleVersion(stamped string, info *debug.BuildInfo) string {
 	return stamped
 }
 
+// exit is os.Exit; a test sees main's exit code through it.
+var exit = os.Exit
+
 func main() {
-	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{Version: version}))
+	exit(app.Main(context.Background(), os.Args[1:], app.Options{Version: version}))
 }

@@ -3,6 +3,7 @@ package index
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -41,5 +42,27 @@ func TestListPagesInPathOrder(t *testing.T) {
 	rest, more, err := e.store.List(ctx, "b.md", 0)
 	if err != nil || more || !reflect.DeepEqual([]string{rest[0].Path}, []string{"c.md"}) || len(rest) != 1 {
 		t.Fatalf("the rest: %+v, more %v, %v", rest, more, err)
+	}
+}
+
+// TestStatusFailsAsItsReads: the held documents are read once, when first asked; a status read
+// with the store closed fails, whether the held documents were read before or not.
+func TestStatusFailsAsItsReads(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, Options{})
+	e.put("a.md", "zebra\n")
+	if _, err := e.ix.Status(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fresh := NewIndexer(e.store, e.fsys, Options{}) // its held documents not read yet
+	e.stop()
+	if _, err := e.ix.Status(ctx); err == nil {
+		t.Error("a status read with the store closed")
+	}
+	if _, err := fresh.Status(ctx); err == nil || !strings.Contains(err.Error(), "reading the held documents") {
+		t.Errorf("the held documents read with the store closed: %v", err)
+	}
+	if err := fresh.Reindex("a.md"); err == nil {
+		t.Error("a reindex decided whether a.md is held with the store closed")
 	}
 }
