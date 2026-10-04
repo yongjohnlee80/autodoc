@@ -234,7 +234,19 @@ func (h *Host) setWhere(where string) {
 }
 
 // open opens a dialog the layout declares, by id.
-func (h *Host) open(id string) { h.keep(h.p.Call(id, "open")) }
+// Every dialog opened or closed here supersedes a manager dialog whose fresh read is still on its
+// way (withCurrent): the user has gone elsewhere, and the late answer must not pull them back.
+func (h *Host) open(id string) {
+	h.dialogSeq++
+	h.keep(h.p.Call(id, "open"))
+}
 
 // closeDialog closes a dialog the layout declares, by id.
-func (h *Host) closeDialog(id string) { h.keep(h.p.Call(id, "close")) }
+func (h *Host) closeDialog(id string) {
+	h.dialogSeq++
+	h.keep(h.p.Call(id, "close"))
+}
+
+// managerClosed is the workspace manager dismissed by its own Close or Esc: a dialog it asked for,
+// still reading, does not open over whatever is beneath.
+func (h *Host) managerClosed() { h.dialogSeq++ }

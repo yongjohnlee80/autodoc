@@ -7,6 +7,7 @@ Dialog {
     title: "workspaces"
     dim: false
     helpText: App.managerHelp
+    onClosed: App.managerClosed()
     TableView {
         id: managerTable
         palette.highlight: Theme.document.highlight

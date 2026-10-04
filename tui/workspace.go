@@ -356,9 +356,9 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 // withCurrent runs fn on the loop with the workspace named name as the daemon has it NOW, not as
 // the last listing had it: a dialog opened right after its own save (whose relisting is still on
 // its way) must show what was saved (Lector's review of #30). extra, when set, runs in the same
-// worker, for a dialog that needs more from the daemon. A workspace gone meanwhile says so. Only
-// the latest open shows: an earlier one answering late is dropped, so it never replaces the dialog
-// asked for after it.
+// worker, for a dialog that needs more from the daemon. A workspace gone meanwhile says so. Any
+// dialog opened or closed after it (open, closeDialog, the manager's own dismissal) supersedes it:
+// an answer arriving late never replaces what the user went to since.
 func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, error), fn func(w wsInfo, more any)) {
 	ep := h.epoch
 	h.dialogSeq++

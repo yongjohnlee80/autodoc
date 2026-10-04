@@ -121,3 +121,56 @@ func TestALateDialogOpenNeverReplacesALaterOne(t *testing.T) {
 		t.Fatal("the late Schema open replaced the Rules dialog asked for after it")
 	}
 }
+
+// heldFirstList runs the TUI over a daemon with kb, where the first workspace.list after arm()
+// waits until the returned release is called; the manager is open.
+func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, release func()) {
+	t.Helper()
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n")})
+	var n atomic.Int32
+	var armed atomic.Bool
+	ch := make(chan struct{})
+	sess := NewSession(d.sock, nil)
+	sess.beforeCall = func(method string, _ []any) {
+		if method == "workspace.list" && armed.Load() && n.Add(1) == 1 {
+			<-ch
+		}
+	}
+	r = runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.manageWorkspaces() })
+	r.s.WaitForText(t, "Schema…")
+	return r, func() { armed.Store(true) }, func() bool { return n.Load() >= 1 }, func() { close(ch) }
+}
+
+// A synchronous dialog asked for after a pending Schema… stays: Rename… is not replaced when the
+// schema read answers late (Lector's review of #30, r4).
+func TestALateDialogOpenNeverReplacesALaterSyncDialog(t *testing.T) {
+	r, arm, held, release := heldFirstList(t)
+	arm()
+	r.h.p.Post(func() { r.h.startSchema(0) })
+	r.s.WaitFor(t, "the schema read held", func(string) bool { return held() })
+	r.h.p.Post(func() { r.h.startRenameWorkspace(0) })
+	r.s.WaitForText(t, "rename the workspace")
+	release()
+	time.Sleep(150 * time.Millisecond)
+	r.s.WaitForText(t, "rename the workspace")
+	if strings.Contains(r.s.String(), "frontmatter schema · kb") {
+		t.Fatal("the late Schema open replaced Rename")
+	}
+}
+
+// Closing the manager while Schema… reads leaves nothing to open over the page.
+func TestALateDialogOpenNeverReopensAfterTheManagerCloses(t *testing.T) {
+	r, arm, held, release := heldFirstList(t)
+	arm()
+	r.h.p.Post(func() { r.h.startSchema(0) })
+	r.s.WaitFor(t, "the schema read held", func(string) bool { return held() })
+	r.keys(t, esc()) // the manager's own dismissal
+	r.s.WaitFor(t, "the manager closed", func(sc string) bool { return !strings.Contains(sc, "Schema…") })
+	release()
+	time.Sleep(150 * time.Millisecond)
+	if strings.Contains(r.s.String(), "frontmatter schema · kb") {
+		t.Fatal("the late Schema open came up after the manager was closed")
+	}
+}
