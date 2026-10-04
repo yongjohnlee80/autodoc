@@ -12,13 +12,13 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// served is one workspace of a shared store, indexing its notes.
+// served is one workspace of a shared store, indexing its files.
 type served struct {
 	name string
 	ix   *Indexer
 }
 
-// shareAStore opens one store and serves a workspace in it for each entry of notes (a name, then
+// shareAStore opens one store and serves a workspace in it for each entry of files (a name, then
 // path/text pairs), each with its options, until the test ends; it returns once every one is
 // indexed, and semantic-ready when it has a provider.
 func shareAStore(t *testing.T, opts []Options, notes ...[]string) []served {
@@ -58,7 +58,7 @@ func shareAStore(t *testing.T, opts []Options, notes ...[]string) []served {
 		out = append(out, served{ns[0], ix})
 	}
 	for _, w := range out {
-		want := int64(len(notesOf(notes, w.name)) / 2)
+		want := int64(len(filesOf(notes, w.name)) / 2)
 		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 			st, err := w.ix.Status(ctx)
 			if err == nil && st.Docs == want && st.PendingJobs == 0 &&
@@ -73,7 +73,7 @@ func shareAStore(t *testing.T, opts []Options, notes ...[]string) []served {
 	return out
 }
 
-func notesOf(notes [][]string, name string) []string {
+func filesOf(notes [][]string, name string) []string {
 	for _, ns := range notes {
 		if ns[0] == name {
 			return ns[1:]
@@ -92,7 +92,7 @@ func searchServed(t *testing.T, w served, q string, opts QueryOpts) []Hit {
 }
 
 // TestLimitIsTheWorkspacesBest: the workspace is filtered in the query, before the rank and the
-// LIMIT: with the other workspace's notes ranking higher store-wide, LIMIT 1 is still this
+// LIMIT: with the other workspace's files ranking higher store-wide, LIMIT 1 is still this
 // workspace's best, and never another's.
 func TestLimitIsTheWorkspacesBest(t *testing.T) {
 	loud := "# Osprey osprey\n\nosprey osprey osprey osprey\n"

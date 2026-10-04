@@ -12,11 +12,11 @@ import (
 // PROGRESS — what the daemon still has to do, in a toast while there is any (notify.go).
 //
 // The TUI polls index.status once a second while it is attached: the documents indexed, the jobs
-// pending (a first scan's are every note), and the texts the embedding provider has yet to embed
+// pending (a first scan's are every file), and the texts the embedding provider has yet to embed
 // (a new model's, while it fills to replace the active one). While any is pending, a toast shows a
-// bar, a spinner turning while the model embeds; when indexing ends, the toast says so, and goes, and the workspace's notes are listed again, the pickers' and the explorer's (a
+// bar, a spinner turning while the model embeds; when indexing ends, the toast says so, and goes, and the workspace's files are listed again, the pickers' and the explorer's (a
 // listing taken mid-scan was partial). They are listed again, too, whenever the index's change log
-// has moved while nothing is pending: a note added, removed or renamed outside the TUI is indexed
+// has moved while nothing is pending: a file added, removed or renamed outside the TUI is indexed
 // between two polls, faster than any poll sees it busy.
 
 const progressEvery = time.Second
@@ -156,7 +156,7 @@ func (h *Host) after(d time.Duration, fn func()) {
 // showWarming says, in a toast that stays while it lasts, that the daemon is warming up — its first
 // scan of the root, a provider being set up, a restart to take one — so a search or a listing that
 // comes back short reads as "not yet", not as "nothing". When it ends, the toast says so and the
-// notes are listed again: a listing taken while it lasted may have failed or been partial.
+// files are listed again: a listing taken while it lasted may have failed or been partial.
 func (h *Host) showWarming(reasons []string) {
 	was := len(h.prog.warming) > 0
 	h.prog.warming = reasons
@@ -164,8 +164,8 @@ func (h *Host) showWarming(reasons []string) {
 	case len(reasons) > 0:
 		h.notifyOngoing(toastWarming, "warming up: "+strings.Join(reasons, "; ")+"…")
 	case was:
-		h.notifyDone(toastWarming, "ready: search and the notes are up to date")
-		h.listNotes()
+		h.notifyDone(toastWarming, "ready: search and the files are up to date")
+		h.listFiles()
 		h.relistInExplorer(h.ws)
 	}
 }
@@ -204,11 +204,11 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 		h.searchWaitToast = false
 	}
 	if was && !h.prog.busy {
-		h.notifyDone(toastProgress, fmt.Sprintf("indexed %d notes", docs))
+		h.notifyDone(toastProgress, fmt.Sprintf("indexed %d files", docs))
 	}
 	if pending == 0 && (was || moved) {
-		// the lists taken while indexing were partial, or the notes changed since
-		h.listNotes()
+		// the lists taken while indexing were partial, or the files changed since
+		h.listFiles()
 		h.relistInExplorer(h.ws)
 	}
 	h.showSemantic()

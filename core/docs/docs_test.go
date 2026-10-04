@@ -125,8 +125,8 @@ func TestRenameNeverReplaces(t *testing.T) {
 	})
 }
 
-// TestOnlyNotes: a path the workspace does not index is refused before any I/O.
-func TestOnlyNotes(t *testing.T) {
+// TestOnlyFiles: a path the workspace does not index is refused before any I/O.
+func TestOnlyFiles(t *testing.T) {
 	ctx := context.Background()
 	fsys := memfs.New()
 	if _, err := fsys.WriteFile(ctx, "run.sh", strings.NewReader("echo")); err != nil {

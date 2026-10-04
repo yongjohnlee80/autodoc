@@ -391,7 +391,7 @@ func changed(t *testing.T, cli *golibrpc.Client, since int64, want ...string) in
 }
 
 // TestFollowsTheFiles: on a real root, an external write, an editor's atomic save (a temporary file
-// renamed over the note), a delete, a move within the root and a populated directory moved in each
+// renamed over the file), a delete, a move within the root and a populated directory moved in each
 // reach the index, and index.changes reports them (ADR 0203 §5.1).
 func TestFollowsTheFiles(t *testing.T) {
 	dir := short(t)
@@ -439,7 +439,7 @@ func TestFollowsTheFiles(t *testing.T) {
 	changed(t, cli, c, "upsert d/x.md", "upsert d/e/y.md")
 }
 
-// TestWrittenLikeAnExternalEdit: a note written through doc.write and the same note written from
+// TestWrittenLikeAnExternalEdit: a file written through doc.write and the same file written from
 // outside index the same (ADR 0203 §5.5): the one engine path.
 func TestWrittenLikeAnExternalEdit(t *testing.T) {
 	dir := short(t)
@@ -701,7 +701,7 @@ func TestInstalledVersionAsksTheBinary(t *testing.T) {
 }
 
 // TestCallPrintsTheResultAsJSON: --call dials the daemon, says hello, calls the verb with its JSON
-// parameters (integers as integers, an options map), and prints the result as JSON, a note's
+// parameters (integers as integers, an options map), and prints the result as JSON, a file's
 // content as text. A refusal is the daemon's code and message; parameters that are not a JSON
 // array are refused before anything is dialled.
 func TestCallPrintsTheResultAsJSON(t *testing.T) {

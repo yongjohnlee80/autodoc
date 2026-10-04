@@ -17,7 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
-// IMAGE PREVIEWS — a Mermaid diagram and a note's HTML, as images in the terminal (ADR 0212 §6).
+// IMAGE PREVIEWS — a Mermaid diagram and a file's HTML, as images in the terminal (ADR 0212 §6).
 //
 // With View › Image previews on, a terminal that confirmed kitty's graphics protocol, and the tool
 // to render with (rsvg-convert for a diagram, a headless Chromium or Chrome for HTML), the preview
@@ -220,7 +220,7 @@ func fitSVG(svg string, w, h int, theme string) string {
 // file the image was made from.
 func (h *Host) previewHTMLImage(content []byte, path string) {
 	h.htmlPreviewPath = path
-	h.set("App.htmlPreviewTitle", "HTML preview · "+h.note.name())
+	h.set("App.htmlPreviewTitle", "HTML preview · "+h.file.name())
 	h.set("App.htmlPreviewHelp", "Image · rendered offline by a headless browser in the "+h.exportTheme()+
 		" theme · links and selection: Open in browser · View › Image previews turns it off")
 	h.open("htmlPreview")

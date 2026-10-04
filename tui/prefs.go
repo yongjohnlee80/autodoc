@@ -234,7 +234,7 @@ func (h *Host) applyPrefs(p prefs) {
 }
 
 // syncPageWidth sizes the page to hold the ruler's columns of text: its border, and the line
-// numbers' gutter when they show, whose width the editor says (it grows with the note's lines).
+// numbers' gutter when they show, whose width the editor says (it grows with the file's lines).
 func (h *Host) syncPageWidth() {
 	w := h.prefs.ruler + 2 + h.editor.GutterWidth()
 	if w != h.pageWidth {

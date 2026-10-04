@@ -80,7 +80,7 @@ type Workspace struct {
 var (
 	DefaultInclude = []string{"**/*.md", "**/*.txt", "**/*.yaml", "**/*.yml"}
 	// node_modules anywhere: a JavaScript project's dependencies are hundreds of thousands of files,
-	// their READMEs are not the workspace's notes, and walking them is most of a scan's cost
+	// their READMEs are not the workspace's files, and walking them is most of a scan's cost
 	DefaultExclude = []string{".git/**", "**/node_modules/**"}
 )
 

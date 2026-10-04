@@ -1,4 +1,4 @@
-// Package docs reads and writes a workspace's notes for AutoDoc's own apps (ADR 0203 §4.6). Every
+// Package docs reads and writes a workspace's files for AutoDoc's own apps (ADR 0203 §4.6). Every
 // write goes through the workspace's vfs, conditional on the version the writer read, so the index
 // learns of it the same way it learns of an external edit, and no writer replaces what it has not
 // seen.
@@ -30,8 +30,8 @@ var (
 	ErrCommitted = errors.New("docs: the write landed, then a follow-up step failed")
 
 	// ErrNotEligible is a path the workspace does not index (outside include, inside exclude):
-	// AutoDoc's apps edit notes, not every file under the root.
-	ErrNotEligible = errs.Sentinel(errs.ErrInvalidArgument, "docs: not a note of this workspace")
+	// AutoDoc's apps edit files, not every file under the root.
+	ErrNotEligible = errs.Sentinel(errs.ErrInvalidArgument, "docs: not a file of this workspace")
 
 	// ErrTooLarge is a document over MaxSize.
 	ErrTooLarge = errs.Sentinel(errs.ErrInvalidArgument, "docs: the document is over the size limit")
@@ -147,7 +147,7 @@ func (d *Docs) Write(ctx context.Context, path string, content []byte, want vfs.
 		if !ok {
 			return "", fmt.Errorf("docs: creating %s: %w", path, errs.ErrUnsupported)
 		}
-		// a new note may start a new folder
+		// a new file may start a new folder
 		if dir := pathpkg.Dir(path); dir != "." {
 			if err := d.fsys.MkdirAll(ctx, dir); err != nil {
 				return "", err

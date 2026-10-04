@@ -26,7 +26,7 @@ const schemaPoll = 2 * time.Second
 // restarts (a pattern or provider change), so the last valid schema is kept across them.
 type schemaHolder struct {
 	root     string
-	onChange func() // the active schema changed: revalidate the workspace's notes
+	onChange func() // the active schema changed: revalidate the workspace's files
 	// onFileChange is told the file changed on disk (a poll saw it), valid or not: an event no
 	// client caused, which every client is told about
 	onFileChange func()

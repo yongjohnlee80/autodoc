@@ -17,7 +17,7 @@ import (
 // FIND — / in the page, the explorer or the links, as AutoDB's: a word or phrase in the pane that
 // has the keyboard. The cursor moves to the next row holding it; n and N go to the next and the
 // previous. It is a literal, case-blind match, read afresh from the pane at every jump. The
-// workspace's search (by words and meaning, across every note) is Ctrl+G, SPC / or SPC SPC.
+// workspace's search (by words and meaning, across every file) is Ctrl+G, SPC / or SPC SPC.
 //
 // WHILE A FIND IS ON in the page, the page marks its words wherever they are (the Alert style, as
 // the search's preview marks its words), and "finding …" shows under the menu at the top right,

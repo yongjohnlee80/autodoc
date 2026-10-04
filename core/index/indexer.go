@@ -28,7 +28,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// MaxFileSize is the largest note the indexer reads. A larger one leaves the index, and its job
+// MaxFileSize is the largest file the indexer reads. A larger one leaves the index, and its job
 // records the error and waits for the file to change: reading it again could only fail again.
 const MaxFileSize = 16 << 20
 
@@ -143,7 +143,7 @@ type prepared struct {
 	meta        chunk.Meta
 	chunks      []chunkT
 	links       []linkT
-	frontmatter schema.Result // a Markdown note's facets and diagnostics under the schema
+	frontmatter schema.Result // a Markdown file's facets and diagnostics under the schema
 }
 
 // NewIndexer returns the indexer for store over the workspace root fsys.
@@ -530,7 +530,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.meta = chunk.ReadMeta(doc, w.path)
 		p.chunks = hashed(chunk.Markdown(doc, p.meta.Title, tokens))
 		p.links = extractLinks(doc, w.path, x.opts.Match)
-		// the frontmatter is validated from the parse the note already had (ADR 0212 §5)
+		// the frontmatter is validated from the parse the file already had (ADR 0212 §5)
 		if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
 			p.frontmatter = sch.Validate(fm.Literal, true)
 		} else {
@@ -774,8 +774,8 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	if err := s.replaceFrontmatter(tx, docID, p.frontmatter); err != nil {
 		return 0, err
 	}
-	// the names, the note's own links, then the links elsewhere whose target may have changed: those
-	// under every name the note gained or lost, and, when it appeared, under its path
+	// the names, the file's own links, then the links elsewhere whose target may have changed: those
+	// under every name the file gained or lost, and, when it appeared, under its path
 	changed, err := s.writeNames(tx, docID, namesOf(p.path, p.meta.Aliases))
 	if err != nil {
 		return 0, err
@@ -826,7 +826,7 @@ func (s *Store) deleteDoc(tx *store.Tx, path string, now time.Time) (int64, erro
 		return 0, err
 	}
 	// the links that reached it, and those under any name it answered to, resolve again: to another
-	// note, or to none
+	// file, or to none
 	affected := markdownNames(path)
 	for n, isPath := range names {
 		affected = append(affected, linkNames(n, isPath)...)

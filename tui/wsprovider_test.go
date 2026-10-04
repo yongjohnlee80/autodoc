@@ -14,7 +14,7 @@ import (
 // this workspace its own, and a provider that does not set up is refused with the reason.
 func TestWorkspaceProviderDialog(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder")
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n\nalpha\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nalpha\n")})
 	ctx := context.Background()
 	for _, sp := range []store.ProviderSpec{
 		{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"},
@@ -60,7 +60,7 @@ func TestWorkspaceProviderDialog(t *testing.T) {
 // review of #30, round 2; the relisting raced the reopen).
 func TestTheProviderDialogReopenedAtOnceShowsTheSavedChoice(t *testing.T) {
 	ollama := newFakeOllama(t, "embedder")
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n\nalpha\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nalpha\n")})
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestTheProviderDialogReopenedAtOnceShowsTheSavedChoice(t *testing.T) {
 // Two manager dialogs asked for in turn, the first's read answering last, leave the second on
 // screen: a late open never replaces the dialog asked for after it (Lector's review of #30, r3).
 func TestALateDialogOpenNeverReplacesALaterOne(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	var held atomic.Int32 // only the first listing after arming waits
 	var armed atomic.Bool
 	release := make(chan struct{})
@@ -126,7 +126,7 @@ func TestALateDialogOpenNeverReplacesALaterOne(t *testing.T) {
 // waits until the returned release is called; the manager is open.
 func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, release func()) {
 	t.Helper()
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n")})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	var n atomic.Int32
 	var armed atomic.Bool
 	ch := make(chan struct{})

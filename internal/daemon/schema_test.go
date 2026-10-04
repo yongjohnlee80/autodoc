@@ -42,7 +42,7 @@ func eventually(t *testing.T, what string, cond func() bool) {
 }
 
 // The schema's lifecycle in a running daemon: set, edited to invalid (the last valid one stays and
-// the error names its line), fixed with a new enum (the notes revalidate), and removed.
+// the error names its line), fixed with a new enum (the files revalidate), and removed.
 func TestSchemaLifecycle(t *testing.T) {
 	m, db := open(t)
 	root := t.TempDir()
@@ -63,7 +63,7 @@ func TestSchemaLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 2)
-	// with no schema, type:adr is a word, not a filter: no note has it
+	// with no schema, type:adr is a word, not a filter: no file has it
 	if got, err := searchPaths(t, m, "kb", "alpha type:adr"); err != nil || len(got) != 0 {
 		t.Fatalf("before any schema: %v, %v; want no hits and no error", got, err)
 	}

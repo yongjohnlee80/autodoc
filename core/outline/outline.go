@@ -1,7 +1,7 @@
-// Package outline is a document's structure for navigation (ADR 0212 §6): a Markdown note's
+// Package outline is a document's structure for navigation (ADR 0212 §6): a Markdown file's
 // headings, and the breadcrumb at a place in any document — the headings above it in Markdown,
 // the key path in YAML, the title in plain text. The daemon's doc.outline and the editor's live
-// outline both read it, so a saved note and an unsaved buffer are outlined alike.
+// outline both read it, so a saved file and an unsaved buffer are outlined alike.
 package outline
 
 import (
@@ -17,7 +17,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// Heading is one heading of a Markdown note: an ID stable within one version of the note (its
+// Heading is one heading of a Markdown file: an ID stable within one version of the file (its
 // slug, numbered when another heading has it), its level (1–6), its text, and where it starts:
 // the 1-based line and the byte offset.
 type Heading struct {
@@ -52,7 +52,7 @@ func Read(src []byte, k kind.Kind, title string) *Doc {
 	return d
 }
 
-// Headings are the note's headings in source order; none outside Markdown, which is the only kind
+// Headings are the file's headings in source order; none outside Markdown, which is the only kind
 // with headings to navigate.
 func (d *Doc) Headings() []Heading { return d.headings }
 
@@ -111,7 +111,7 @@ func lineOf(lines []int, off int) int {
 	return sort.Search(len(lines), func(i int) bool { return lines[i] > off })
 }
 
-// headings walks the note's heading nodes; frontmatter is not the note's text, and is skipped.
+// headings walks the file's heading nodes; frontmatter is not the file's text, and is skipped.
 func headings(src []byte, lines []int) []Heading {
 	doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 	var out []Heading

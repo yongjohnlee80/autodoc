@@ -204,7 +204,7 @@ func TestVerbsArePinned(t *testing.T) {
 	}
 }
 
-// TestSession runs what an AutoVim-shaped client does: list the workspaces, write a note, follow
+// TestSession runs what an AutoVim-shaped client does: list the workspaces, write a file, follow
 // the change log to it, search, read the graph and the status. The server sends nothing unasked.
 func TestSession(t *testing.T) {
 	r := serve(t)
@@ -241,7 +241,7 @@ func TestSession(t *testing.T) {
 	if len(hits) != 1 || hits[0].(map[string]any)["path"] != "plan.md" || res["semantic"] != "off" || res["mode_used"] != "lexical" {
 		t.Errorf("search %v", res)
 	}
-	// "target" is in both notes: the limit is the client's
+	// "target" is in both files: the limit is the client's
 	for limit, want := range map[int64]int{1: 1, 0: 2} {
 		opts := map[string]any{}
 		if limit > 0 {

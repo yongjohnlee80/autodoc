@@ -27,7 +27,7 @@ func (r *running) cellOf(within, sub string) (tuicore.Cell, bool) {
 			continue
 		}
 		at := len([]rune(line[:i])) + len([]rune(within[:strings.Index(within, sub)]))
-		// a cell holds one grapheme here (the notes are ASCII), so runes count cells
+		// a cell holds one grapheme here (the files are ASCII), so runes count cells
 		for x, n := 0, 0; x < len(row); x++ {
 			if n == at {
 				return row[x], true
@@ -64,7 +64,7 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n", "x.md", "see [[a]]\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.s.WaitForText(t, "three kestrel")
 	if r.marked("one kestrel", "kestrel", "one") {
 		t.Fatal("kestrel is marked before any find")
@@ -114,7 +114,7 @@ func TestSearchMenuFindsInTheTextMode(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.h.p.Post(func() { r.h.setKeymap("text") })
 	r.s.WaitFor(t, "the Text mode", func(string) bool { return onLoop(r, func() bool { return r.h.prefs.keymap == "text" }) })
 	searchMenu := func(item rune) {

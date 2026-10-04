@@ -41,8 +41,8 @@ func indexerVersion(tokens int) string {
 	return fmt.Sprintf("c%s.s%d.t%d", ChunkerVersion, SchemaVersion, tokens)
 }
 
-// docVersion is what document.indexer records for one path: Markdown notes add the fingerprint of
-// the workspace's frontmatter schema, so a schema change rebuilds exactly the notes it applies to
+// docVersion is what document.indexer records for one path: Markdown files add the fingerprint of
+// the workspace's frontmatter schema, so a schema change rebuilds exactly the files it applies to
 // (their unchanged chunks keep their vectors, which are keyed by text).
 func docVersion(base string, markdown bool, schemaFP string) string {
 	if schemaFP != "" && markdown {
@@ -79,7 +79,7 @@ func (s *Store) read(ctx context.Context, fn func(tx *store.Tx) error) error {
 }
 
 // outdated lists the documents indexed under another version than the one they would get now: a
-// chunker or section-size change reaches every document, a schema change every Markdown note.
+// chunker or section-size change reaches every document, a schema change every Markdown file.
 func (s *Store) outdated(ctx context.Context, schemaFP string, markdown func(string) bool) ([]string, error) {
 	var out []string
 	tokens, err := s.sectionTokens(ctx)
@@ -260,7 +260,7 @@ type Status struct {
 	// Diagnosed counts the documents whose frontmatter has a diagnostic: malformed YAML, or a field
 	// its workspace's schema does not admit. Their bodies are indexed all the same.
 	Diagnosed int64
-	// Failing lists the jobs whose last attempt failed: a read being retried, or a note over
+	// Failing lists the jobs whose last attempt failed: a read being retried, or a file over
 	// MaxFileSize waiting for its file to change. They are counted in PendingJobs too.
 	Failing []JobError
 	// Embeddings is the embedding tier's status: nil without a provider (Store.Status never has one;

@@ -54,7 +54,7 @@ type daemon struct {
 	stopped chan struct{} // closed once its server has stopped, by stop or by sys.shutdown
 }
 
-// startDaemon serves the workspaces named (each with its notes, path then content). A name ending
+// startDaemon serves the workspaces named (each with its files, path then content). A name ending
 // in "!" is served on a filesystem whose writes land and then fail (Committed).
 func startDaemon(t *testing.T, workspaces map[string][]string) *daemon {
 	t.Helper()
@@ -152,7 +152,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
 		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, md), Following: f.Status, Warming: o.warming})
-		// wait until the notes are indexed, so the first listing has them (a slow daemon does not)
+		// wait until the files are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
 			if st.Docs == int64(len(notes)/2) && st.PendingJobs == 0 {
@@ -246,7 +246,7 @@ func runTUI(t *testing.T, sess *Session, opt Options) *running {
 	return &running{h: h, s: s}
 }
 
-// attached runs the TUI on d's socket, and waits for the workspace's notes to be listed.
+// attached runs the TUI on d's socket, and waits for the workspace's files to be listed.
 func attached(t *testing.T, d *daemon) *running {
 	t.Helper()
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -255,12 +255,12 @@ func attached(t *testing.T, d *daemon) *running {
 	return r
 }
 
-// listed is the workspace's notes, as the pickers filter them.
+// listed is the workspace's files, as the pickers filter them.
 func (r *running) listed() []string {
-	return onLoop(r, func() []string { return append([]string(nil), r.h.notesAll...) })
+	return onLoop(r, func() []string { return append([]string(nil), r.h.filesAll...) })
 }
 
-// waitListed waits for the workspace's notes to be the n listed.
+// waitListed waits for the workspace's files to be the n listed.
 func (r *running) waitListed(t *testing.T, n int) {
 	t.Helper()
 	r.s.WaitFor(t, fmt.Sprintf("%d notes listed", n), func(string) bool { return len(r.listed()) == n })
@@ -291,11 +291,11 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 	r.keys(t, esc())
 }
 
-// openByPicker opens a note through File › Open.
+// openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
 	r.keys(t, decltest.Ctrl('o'))
-	r.s.WaitForText(t, "open a note")
+	r.s.WaitForText(t, "open a file")
 	r.keys(t, decltest.Type(p)...)
 	r.s.WaitFor(t, "the filter applied", func(sc string) bool { return strings.Contains(sc, "1 of ") })
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab}, enter())
@@ -308,12 +308,12 @@ func onLoop[T any](r *running, read func() T) T {
 	return <-ch
 }
 
-func (r *running) note() note         { return onLoop(r, func() note { return r.h.note }) }
+func (r *running) file() openedFile   { return onLoop(r, func() openedFile { return r.h.file }) }
 func (r *running) editorText() string { return onLoop(r, r.h.editor.Value) }
 
-func (r *running) waitNote(t *testing.T, p string) {
+func (r *running) waitFile(t *testing.T, p string) {
 	t.Helper()
-	r.s.WaitFor(t, "note "+p+" open", func(string) bool { n := r.note(); return n.open && n.path == p && !n.dirty })
+	r.s.WaitFor(t, "note "+p+" open", func(string) bool { n := r.file(); return n.open && n.path == p && !n.dirty })
 	r.s.WaitForText(t, "opened "+p)
 }
 
@@ -322,7 +322,7 @@ func TestEveryQMLFileIsSound(t *testing.T) {
 }
 
 // TestSearchesOpensEditsSaves: the search picker finds as the words are typed, its hits on the
-// left and the note under the cursor on the right; Enter opens the hit in the editor, the cursor
+// left and the file under the cursor on the right; Enter opens the hit in the editor, the cursor
 // at its section; typed text marks it unsaved; Ctrl+S writes it to the file.
 func TestSearchesOpensEditsSaves(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nintro\n\n## Birds\n\nkestrel notes\n", "b/c.md", "# C\n\nplover\n"}})
@@ -341,8 +341,8 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 		t.Errorf("the hit's relevance is not on its left:\n%s", r.s)
 	}
 	r.keys(t, enter())
-	r.waitNote(t, "a.md")
-	// the hit is the Birds section's text: the cursor opens on it, not on the note's first line
+	r.waitFile(t, "a.md")
+	// the hit is the Birds section's text: the cursor opens on it, not on the file's first line
 	if line := onLoop(r, func() string { l, _ := r.h.editor.Line(); return r.h.editor.Lines()[l] }); line != "kestrel notes" {
 		t.Errorf("the cursor opened on %q, not on the hit", line)
 	}
@@ -364,7 +364,7 @@ func TestThePickerKeepsTheFileName(t *testing.T) {
 	r := attached(t, d)
 	r.keys(t, decltest.Ctrl('o'))
 	r.s.WaitFor(t, "the note's file name", func(sc string) bool {
-		return strings.Contains(sc, "notes (1 of 1)") && strings.Contains(sc, "the-store.md")
+		return strings.Contains(sc, "files (1 of 1)") && strings.Contains(sc, "the-store.md")
 	})
 	// the list's row: the one holding the file name and not the preview's title
 	for _, line := range strings.Split(r.s.String(), "\n") {
@@ -374,17 +374,17 @@ func TestThePickerKeepsTheFileName(t *testing.T) {
 	}
 }
 
-// TestAConflictAsks: a note changed on disk since it was opened is not overwritten: the save asks,
+// TestAConflictAsks: a file changed on disk since it was opened is not overwritten: the save asks,
 // and keep, reload and overwrite each do what they say.
 func TestAConflictAsks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	conflict := func() {
 		t.Helper()
 		r.keys(t, decltest.Ctrl('s'))
-		r.s.WaitForText(t, "note changed on disk")
+		r.s.WaitForText(t, "file changed on disk")
 	}
 	// keep: the edits stay, unsaved, and the disk is untouched
 	d.write(t, "kb", "a.md", "theirs\n")
@@ -392,8 +392,8 @@ func TestAConflictAsks(t *testing.T) {
 	conflict()
 	r.keys(t, key('k'))
 	r.s.WaitForText(t, "kept your changes")
-	if got := d.read(t, "kb", "a.md"); got != "theirs\n" || !r.note().dirty {
-		t.Fatalf("after keep: disk %q, dirty %v", got, r.note().dirty)
+	if got := d.read(t, "kb", "a.md"); got != "theirs\n" || !r.file().dirty {
+		t.Fatalf("after keep: disk %q, dirty %v", got, r.file().dirty)
 	}
 	// overwrite: the disk gets mine
 	conflict()
@@ -407,39 +407,39 @@ func TestAConflictAsks(t *testing.T) {
 	r.typeInEditor(t, "lost ")
 	conflict()
 	r.keys(t, key('r'))
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	if got := r.editorText(); got != "theirs again\n" {
 		t.Errorf("after reload: editor %q", got)
 	}
 }
 
-// TestUnsavedWorkIsNeverLostQuietly: opening another note over unsaved changes asks; stay keeps
+// TestUnsavedWorkIsNeverLostQuietly: opening another file over unsaved changes asks; stay keeps
 // them, discard drops them, save writes them first.
 func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
 	ask := func() {
 		t.Helper()
 		r.openByPicker(t, "b.md")
-		r.s.WaitForText(t, "unsaved note")
+		r.s.WaitForText(t, "unsaved file")
 	}
 	ask()
 	r.keys(t, key('t'))
-	r.s.WaitFor(t, "still a.md, unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") && !strings.Contains(sc, "unsaved note") })
+	r.s.WaitFor(t, "still a.md, unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") && !strings.Contains(sc, "unsaved file") })
 	ask()
 	r.keys(t, key('s'))
-	r.waitNote(t, "b.md")
+	r.waitFile(t, "b.md")
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Errorf("save, then open: a.md %q", got)
 	}
 	r.typeInEditor(t, "Y")
 	r.openByPicker(t, "a.md")
-	r.s.WaitForText(t, "unsaved note")
+	r.s.WaitForText(t, "unsaved file")
 	r.keys(t, key('d'))
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	if got := d.read(t, "kb", "b.md"); got != "bbb\n" {
 		t.Errorf("discard wrote b.md: %q", got)
 	}
@@ -450,7 +450,7 @@ func TestQuitOverUnsavedAsks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
 	r.keys(t, decltest.Ctrl('q'))
 	r.s.WaitForText(t, "quit autodoc?")
@@ -466,21 +466,21 @@ func TestQuitOverUnsavedAsks(t *testing.T) {
 	}
 }
 
-// TestNewNote: Ctrl+N names a note, which is created (".md" added) and opened; an existing name asks
+// TestNewFile: Ctrl+N names a file, which is created (".md" added) and opened; an existing name asks
 // again, saying so.
-func TestNewNote(t *testing.T) {
+func TestNewFile(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.keys(t, decltest.Ctrl('n'))
-	r.s.WaitForText(t, "new note")
+	r.s.WaitForText(t, "new file")
 	r.keys(t, decltest.Type("fresh/idea")...)
 	r.keys(t, enter())
-	r.waitNote(t, "fresh/idea.md")
+	r.waitFile(t, "fresh/idea.md")
 	if got := d.read(t, "kb", "fresh/idea.md"); got != "" {
-		t.Errorf("the new note holds %q", got)
+		t.Errorf("the new file holds %q", got)
 	}
 	r.keys(t, decltest.Ctrl('n'))
-	r.s.WaitForText(t, "new note")
+	r.s.WaitForText(t, "new file")
 	r.keys(t, decltest.Type("a")...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, "a.md exists")
@@ -492,37 +492,37 @@ func TestCommittedIsReadBack(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb!": {"a.md", "one\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "two ")
 	r.keys(t, decltest.Ctrl('s'))
 	r.s.WaitForText(t, "saved a.md")
-	if r.note().dirty || d.read(t, "kb", "a.md") != "two one\n" {
-		t.Fatalf("dirty %v, disk %q", r.note().dirty, d.read(t, "kb", "a.md"))
+	if r.file().dirty || d.read(t, "kb", "a.md") != "two one\n" {
+		t.Fatalf("dirty %v, disk %q", r.file().dirty, d.read(t, "kb", "a.md"))
 	}
 	// the adopted version is the disk's: the next save is not a conflict
 	r.typeInEditor(t, "three ")
 	r.keys(t, decltest.Ctrl('s'))
 	r.s.WaitFor(t, "the second save", func(sc string) bool { return strings.Contains(d.read(t, "kb", "a.md"), "three") })
-	if strings.Contains(r.s.String(), "note changed on disk") {
+	if strings.Contains(r.s.String(), "file changed on disk") {
 		t.Error("the adopted version conflicted")
 	}
 }
 
-// TestBacklinks: SPC l opens the links panel over the notes linking to the open one, and Enter
+// TestBacklinks: SPC l opens the links panel over the files linking to the open one, and Enter
 // opens one, closing the panel.
 func TestBacklinks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "target.md")
-	r.waitNote(t, "target.md")
+	r.waitFile(t, "target.md")
 	r.leader(t, 'l')
 	r.s.WaitFor(t, "the backlink", func(sc string) bool { return strings.Contains(sc, "backlinks (1)") && strings.Contains(sc, "src.md") })
 	r.keys(t, enter())
-	r.waitNote(t, "src.md")
+	r.waitFile(t, "src.md")
 	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "backlinks (") })
 }
 
-// TestWorkspaces: the picker lists the daemon's workspaces, and switching lists the other's notes.
+// TestWorkspaces: the picker lists the daemon's workspaces, and switching lists the other's files.
 func TestWorkspaces(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b1.md", "b\n", "b2.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
@@ -539,7 +539,7 @@ func TestWorkspaces(t *testing.T) {
 	r.s.WaitForText(t, "beta")
 	r.keys(t, key('j'), enter())
 	r.s.WaitForText(t, "· beta")
-	// beta's notes not come yet: the pickers have none, not alpha's
+	// beta's files not come yet: the pickers have none, not alpha's
 	if got := r.listed(); len(got) != 0 {
 		t.Fatalf("in beta, before its notes came, the pickers had %v", got)
 	}
@@ -595,9 +595,9 @@ func TestEveryThemeKeepsTextLegible(t *testing.T) {
 			src := themeImport.ReplaceAll(layout, []byte("import autodoc.theme."+name+" 1.0"))
 			r := runTUI(t, NewSession(d.sock, nil), Options{Layout: src})
 			r.s.WaitForText(t, "connected — autodoc v-test")
-			r.waitListed(t, 1) // the picker filters the notes listed: listed first
+			r.waitListed(t, 1) // the picker filters the files listed: listed first
 			r.openByPicker(t, "a.md")
-			r.waitNote(t, "a.md")
+			r.waitFile(t, "a.md")
 			legible := func(text string) {
 				t.Helper()
 				x, y, ok := find(r.s.Backend.Snapshot(), text)
@@ -645,7 +645,7 @@ func find(cells [][]tuicore.Cell, text string) (int, int, bool) {
 }
 
 // TestASlowOpenNeverReplacesALaterOne: an open whose answer comes after a later open's is dropped:
-// the editor holds the note opened last.
+// the editor holds the file opened last.
 func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"slow.md", "slow text\n", "fast.md", "fast text\n"}})
 	sess := NewSession(d.sock, nil)
@@ -660,10 +660,10 @@ func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
 	r.h.p.Post(func() { r.h.openPath("slow.md") })
 	r.s.WaitForText(t, "opening slow.md")
 	r.h.p.Post(func() { r.h.openPath("fast.md") })
-	r.waitNote(t, "fast.md")
+	r.waitFile(t, "fast.md")
 	close(release) // the slow answer lands now, after the later open
 	time.Sleep(100 * time.Millisecond)
-	if n, text := r.note(), r.editorText(); n.path != "fast.md" || text != "fast text\n" {
+	if n, text := r.file(), r.editorText(); n.path != "fast.md" || text != "fast text\n" {
 		t.Errorf("after the slow answer: %s holding %q", n.path, text)
 	}
 }
@@ -686,17 +686,17 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 	r := runTUI(t, sess, Options{})
 	r.waitListed(t, 1)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "mine ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "note changed on disk")
-	if !r.note().dirty {
+	r.s.WaitForText(t, "file changed on disk")
+	if !r.file().dirty {
 		t.Error("the note reads as saved")
 	}
 }
 
 // TestReconnects: when the daemon goes, the TUI says so and connects again to the next one on the
-// socket, listing its notes.
+// socket, listing its files.
 func TestReconnects(t *testing.T) {
 	d1 := startDaemonOn(t, "", map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d1.sock, nil), Options{})
@@ -725,11 +725,11 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	r := runTUI(t, sess, Options{})
 	r.waitListed(t, 2)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
 	holding.Store(true)
 	r.openByPicker(t, "b.md")
-	r.s.WaitForText(t, "unsaved note")
+	r.s.WaitForText(t, "unsaved file")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saving a.md")
 	r.typeInEditor(t, "Y") // while the save is held
@@ -741,37 +741,37 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	holding.Store(false)
 	close(release)
 	r.s.WaitForText(t, "changed again while it was saved")
-	if n := r.note(); n.path != "a.md" || !n.dirty || !strings.Contains(r.editorText(), "Y") {
+	if n := r.file(); n.path != "a.md" || !n.dirty || !strings.Contains(r.editorText(), "Y") {
 		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
 	}
 	r.keys(t, key('s')) // save the newer edit too; then the open goes ahead
-	r.waitNote(t, "b.md")
+	r.waitFile(t, "b.md")
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
 		t.Errorf("a.md %q", got)
 	}
 }
 
-// TestAFailedReloadKeepsTheEditsUnsaved: Reload from the conflict dialog marks the note clean only
+// TestAFailedReloadKeepsTheEditsUnsaved: Reload from the conflict dialog marks the file clean only
 // once the disk's version is in the editor; a read that fails leaves the edits guarded.
 func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n", "b.md", "b\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
-	r.waitNote(t, "a.md")
+	r.waitFile(t, "a.md")
 	d.write(t, "kb", "a.md", "theirs\n")
 	r.typeInEditor(t, "mine ")
 	r.keys(t, decltest.Ctrl('s'))
-	r.s.WaitForText(t, "note changed on disk")
+	r.s.WaitForText(t, "file changed on disk")
 	if err := d.fs["kb"].Remove(context.Background(), "a.md"); err != nil {
 		t.Fatal(err)
 	}
 	r.keys(t, key('r'))
 	r.s.WaitForText(t, "open a.md:")
-	if n := r.note(); !n.dirty || !strings.Contains(r.editorText(), "mine") {
+	if n := r.file(); !n.dirty || !strings.Contains(r.editorText(), "mine") {
 		t.Fatalf("after the failed reload: dirty %v, text %q", n.dirty, r.editorText())
 	}
 	r.openByPicker(t, "b.md")
-	r.s.WaitForText(t, "unsaved note") // still guarded
+	r.s.WaitForText(t, "unsaved file") // still guarded
 }
 
 func TestProgressText(t *testing.T) {
@@ -824,8 +824,8 @@ func TestSemanticOnline(t *testing.T) {
 	}
 }
 
-// TestProgressWhileIndexing: while the daemon indexes, the status line shows a bar of the notes
-// done; when it ends it says so once, and the notes, listed mid-scan, are listed again whole: the
+// TestProgressWhileIndexing: while the daemon indexes, the status line shows a bar of the files
+// done; when it ends it says so once, and the files, listed mid-scan, are listed again whole: the
 // pickers' and the explorer's.
 func TestProgressWhileIndexing(t *testing.T) {
 	var notes []string
@@ -849,7 +849,7 @@ func TestProgressWhileIndexing(t *testing.T) {
 		t.Fatalf("the explorer had %d notes mid-scan: the cell needs a partial list", n)
 	}
 	deadline := time.Now().Add(15 * time.Second)
-	for !strings.Contains(r.s.String(), "indexed 40 notes") {
+	for !strings.Contains(r.s.String(), "indexed 40 files") {
 		if time.Now().After(deadline) {
 			t.Fatalf("indexing never ended on screen:\n%s", r.s.String())
 		}

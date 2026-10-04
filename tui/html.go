@@ -40,8 +40,8 @@ func htmlPreviewFile(content []byte) (string, error) {
 }
 
 func (h *Host) previewHTML() {
-	if h.note.open && filepath.Ext(h.note.path) != ".md" {
-		h.notify("HTML preview currently accepts Markdown notes")
+	if h.file.open && filepath.Ext(h.file.path) != ".md" {
+		h.notify("HTML preview currently accepts Markdown files")
 		return
 	}
 	source, theme := []byte(h.editor.Value()), h.exportTheme()

@@ -17,12 +17,12 @@ func TestTheDaemonWarmingUpIsSaid(t *testing.T) {
 	r.s.WaitForText(t, "warming up: setting up the embedding provider Gemma")
 	none := []string{}
 	reasons.Store(&none)
-	r.s.WaitForText(t, "ready: search and the notes are up to date")
+	r.s.WaitForText(t, "ready: search and the files are up to date")
 }
 
-// TestTheNotesAreListedOnceTheDaemonIsReady: a daemon that cannot serve the workspace yet fails the
-// first listing; the TUI tries again, so the notes appear without anything changing.
-func TestTheNotesAreListedOnceTheDaemonIsReady(t *testing.T) {
+// TestTheFilesAreListedOnceTheDaemonIsReady: a daemon that cannot serve the workspace yet fails the
+// first listing; the TUI tries again, so the files appear without anything changing.
+func TestTheFilesAreListedOnceTheDaemonIsReady(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n", "b.md", "b\n"}},
 		daemonOpts{notReady: 4})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})

@@ -7,9 +7,9 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
-const guideNote = "# Guide\n\nintro\n\n## Setup\n\nsteps\n\n### Linux\n\napt\n\n## Usage\n\nrun\n"
+const guideFile = "# Guide\n\nintro\n\n## Setup\n\nsteps\n\n### Linux\n\napt\n\n## Usage\n\nrun\n"
 
-// frameTitle is the page frame's title row: the note's name and the breadcrumb.
+// frameTitle is the page frame's title row: the file's name and the breadcrumb.
 func (r *running) frameTitle() string {
 	for _, line := range strings.Split(r.s.String(), "\n") {
 		if strings.Contains(line, "┌ ") {
@@ -21,11 +21,11 @@ func (r *running) frameTitle() string {
 
 // The breadcrumb on the page's frame follows the cursor through the headings.
 func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "guide.md", guideNote)})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
-	r.waitNote(t, "guide.md")
+	r.waitFile(t, "guide.md")
 	r.s.WaitFor(t, "the crumb at the first heading", func(string) bool {
 		return strings.Contains(r.frameTitle(), "guide.md › Guide")
 	})
@@ -42,17 +42,17 @@ func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 
 // An unsaved heading edit is in the outline, and Enter jumps to where it is now.
 func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t, "guide.md", guideNote)})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.openPath("guide.md") })
-	r.waitNote(t, "guide.md")
+	r.waitFile(t, "guide.md")
 	// a heading added at the top, unsaved: every other heading moves down three lines
 	r.h.p.Post(func() {
-		r.h.editor.SetValue("# Preface\n\nnew\n\n" + guideNote)
+		r.h.editor.SetValue("# Preface\n\nnew\n\n" + guideFile)
 		r.h.edited()
 	})
-	r.s.WaitFor(t, "the note dirty", func(string) bool { return r.note().dirty })
+	r.s.WaitFor(t, "the note dirty", func(string) bool { return r.file().dirty })
 	r.h.p.Post(func() { r.h.openOutline() })
 	r.s.WaitForText(t, "headings (5 of 5)")
 	r.s.WaitForText(t, "Preface")
@@ -63,7 +63,7 @@ func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
 		row := onLoop(r, func() int { a, _ := r.h.editor.Line(); return a })
 		return row == 16 // "## Usage" is line 17 of the edited text (0-based 16)
 	})
-	if !r.note().dirty {
+	if !r.file().dirty {
 		t.Fatal("jumping saved or reloaded the note")
 	}
 	r.s.WaitFor(t, "the crumb at the jump", func(string) bool {
@@ -74,13 +74,13 @@ func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
 // A YAML document's breadcrumb is its key path; it has no headings to outline. Plain text has
 // neither.
 func TestYAMLAndTextBreadcrumbs(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": noteDir(t,
+	d := startManaged(t, map[string]string{"kb": fileDir(t,
 		"conf.yaml", "server:\n  database:\n    host: db\n",
 		"notes.txt", "# not a heading\nplain\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.openPath("conf.yaml") })
-	r.waitNote(t, "conf.yaml")
+	r.waitFile(t, "conf.yaml")
 	r.h.p.Post(func() { r.h.editor.SetLine(2, 6) })
 	r.s.WaitFor(t, "the key path", func(string) bool {
 		return strings.Contains(r.frameTitle(), "conf.yaml › server › database › host")
@@ -89,7 +89,7 @@ func TestYAMLAndTextBreadcrumbs(t *testing.T) {
 	r.waitNoticed(t, "has no headings to navigate: the breadcrumb shows its key path")
 
 	r.h.p.Post(func() { r.h.openPath("notes.txt") })
-	r.waitNote(t, "notes.txt")
+	r.waitFile(t, "notes.txt")
 	if title := r.frameTitle(); strings.Contains(title, "›") {
 		t.Fatalf("plain text's frame = %q: no heading crumb from # lines", title)
 	}

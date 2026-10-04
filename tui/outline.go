@@ -22,23 +22,23 @@ import (
 // outlineDelay is how long the text must rest after an edit before it is outlined again.
 const outlineDelay = 150 * time.Millisecond
 
-// crumbSep separates the breadcrumb's parts, and the note's name from them.
+// crumbSep separates the breadcrumb's parts, and the file's name from them.
 const crumbSep = " › "
 
-// outlineKind is how the open note (or the draft, a Markdown note to be) is read.
+// outlineKind is how the open file (or the draft, a Markdown file to be) is read.
 func (h *Host) outlineKind() kind.Kind {
-	if !h.note.open {
+	if !h.file.open {
 		return kind.Markdown
 	}
-	return kind.Of(h.note.path, h.textExtensions())
+	return kind.Of(h.file.path, h.textExtensions())
 }
 
 // refreshOutline outlines the editor's text now, and puts the breadcrumb at the cursor.
 func (h *Host) refreshOutline() {
 	h.outlineGen++
 	title := untitled
-	if h.note.open {
-		title = strings.TrimSuffix(path.Base(h.note.path), path.Ext(h.note.path))
+	if h.file.open {
+		title = strings.TrimSuffix(path.Base(h.file.path), path.Ext(h.file.path))
 	}
 	h.outline = outline.Read([]byte(h.editor.Value()), h.outlineKind(), title)
 	h.showCrumb()
@@ -58,11 +58,11 @@ func (h *Host) outlineSoon() {
 // cursorMoved is the editor's cursor landing elsewhere: the breadcrumb follows it.
 func (h *Host) cursorMoved() { h.showCrumb() }
 
-// showCrumb titles the page with the note's name and the breadcrumb at the cursor.
+// showCrumb titles the page with the file's name and the breadcrumb at the cursor.
 func (h *Host) showCrumb() {
-	name := h.note.name()
+	name := h.file.name()
 	if h.outline == nil {
-		h.set("App.noteTitle", name)
+		h.set("App.fileTitle", name)
 		return
 	}
 	row, col := h.editor.Line()
@@ -76,10 +76,10 @@ func (h *Host) showCrumb() {
 		crumbs = nil // the title is the name already on the frame
 	}
 	if len(crumbs) == 0 {
-		h.set("App.noteTitle", name)
+		h.set("App.fileTitle", name)
 		return
 	}
-	h.set("App.noteTitle", name+crumbSep+strings.Join(crumbs, crumbSep))
+	h.set("App.fileTitle", name+crumbSep+strings.Join(crumbs, crumbSep))
 }
 
 // clusterBytes is how many bytes the first n characters (grapheme clusters) of line take: the
@@ -96,14 +96,14 @@ func clusterBytes(line string, n int) int {
 	return b
 }
 
-// openOutline opens Go › Outline over the note's headings, as the editor's text has them now.
+// openOutline opens Go › Outline over the file's headings, as the editor's text has them now.
 func (h *Host) openOutline() {
 	if k := h.outlineKind(); k != kind.Markdown {
 		what := "its title"
 		if k == kind.YAML {
 			what = "its key path, on the page's frame"
 		}
-		h.notify(fmt.Sprintf("%s has no headings to navigate: the breadcrumb shows %s", h.note.name(), what))
+		h.notify(fmt.Sprintf("%s has no headings to navigate: the breadcrumb shows %s", h.file.name(), what))
 		return
 	}
 	h.refreshOutline()
@@ -132,15 +132,15 @@ func (h *Host) outlineFilter(text string) {
 	if len(rows) > 0 {
 		h.previewHeading(0)
 	} else {
-		h.showPreview("outline", h.note.name(), h.editor.Value(), 0)
+		h.showPreview("outline", h.file.name(), h.editor.Value(), 0)
 	}
 }
 
-// previewHeading shows the note at the picker's row i.
+// previewHeading shows the file at the picker's row i.
 func (h *Host) previewHeading(i int) {
 	if i >= 0 && i < len(h.outlineRows) {
 		hd := h.outlineRows[i]
-		h.showPreview("outline", h.note.name()+crumbSep+hd.Text, h.editor.Value(), hd.Byte)
+		h.showPreview("outline", h.file.name()+crumbSep+hd.Text, h.editor.Value(), hd.Byte)
 	}
 }
 

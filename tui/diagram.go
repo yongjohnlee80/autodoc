@@ -36,7 +36,7 @@ func mermaidBlock(source []byte, cursor int) (string, bool) {
 func (h *Host) previewDiagram() {
 	source, ok := mermaidBlock([]byte(h.editor.Value()), h.cursorBytes())
 	if !ok {
-		h.notify("no Mermaid fenced block in this note")
+		h.notify("no Mermaid fenced block in this file")
 		return
 	}
 	model, err := diagram.Parse(source)

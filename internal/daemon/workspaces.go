@@ -304,7 +304,7 @@ func (m *Workspaces) event(id int64, kind, detail string) {
 	}
 }
 
-// revalidate queues the notes of workspace id that its new schema applies to.
+// revalidate queues the files of workspace id that its new schema applies to.
 func (m *Workspaces) revalidate(id int64) {
 	m.mu.Lock()
 	var ix *index.Indexer
@@ -318,12 +318,12 @@ func (m *Workspaces) revalidate(id int64) {
 		return // not started yet: its first pass compares the new fingerprint itself
 	}
 	if err := ix.Revalidate(m.ctx); err != nil {
-		logger.Warning(m.opts.Log, err, "revalidating notes after a schema change")
+		logger.Warning(m.opts.Log, err, "revalidating files after a schema change")
 	}
 }
 
 // SetSchema names a workspace's frontmatter schema file ("" for none) and reads it at once: a valid
-// one becomes active and revalidates the notes; an invalid one is reported, and the last valid
+// one becomes active and revalidates the files; an invalid one is reported, and the last valid
 // schema stays active until the file is fixed.
 func (m *Workspaces) SetSchema(ctx context.Context, name, path string) (rpc.SchemaStatus, error) {
 	path = strings.TrimSpace(path)

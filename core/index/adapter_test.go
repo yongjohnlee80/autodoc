@@ -39,9 +39,9 @@ func (p bodyProvider) Embed(ctx context.Context, texts []string) ([][]float32, e
 	return out, nil
 }
 
-// noteOf is a corpus document as a Markdown note: its tags and facets in the frontmatter, and each
+// fileOf is a corpus document as a Markdown file: its tags and facets in the frontmatter, and each
 // chunk a section of its own (so chunk i is section i), its links at the end of the last.
-func noteOf(d searchtest.Doc) string {
+func fileOf(d searchtest.Doc) string {
 	var b strings.Builder
 	b.WriteString("---\n")
 	if len(d.Tags) > 0 {
@@ -84,11 +84,11 @@ func TestTheStorePassesTheSearchConformanceSuite(t *testing.T) {
 				later = append(later, d)
 				continue
 			}
-			e.put(d.Path, noteOf(d))
+			e.put(d.Path, fileOf(d))
 		}
 		e.ready()
 		for _, d := range later {
-			e.put(d.Path, noteOf(d)) // its text is refused: it stays not ready
+			e.put(d.Path, fileOf(d)) // its text is refused: it stays not ready
 		}
 		e.atHead()
 		byPath := map[string]searchtest.Doc{}
@@ -98,7 +98,7 @@ func TestTheStorePassesTheSearchConformanceSuite(t *testing.T) {
 		change := func(path string, chunks []string) {
 			d := byPath[path]
 			d.Chunks = chunks
-			e.put(path, noteOf(d))
+			e.put(path, fileOf(d))
 			e.ready2(path)
 			e.atHead()
 		}

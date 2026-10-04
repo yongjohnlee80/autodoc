@@ -15,7 +15,7 @@ import (
 //
 // Every connection is given a client token at sys.hello. A verb that changes configuration or a
 // workspace's lifecycle logs an event once it succeeds: its kind, the workspace it is about, the
-// token of the client that asked, and a short detail (a name; never a secret, never a note's
+// token of the client that asked, and a short detail (a name; never a secret, never a file's
 // content). A client follows the log with sys.events, as it follows index.changes, and tells its
 // user about the events other clients caused. The server still sends nothing unasked: the log is
 // pulled.

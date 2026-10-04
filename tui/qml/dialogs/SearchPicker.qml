@@ -34,7 +34,7 @@ Dialog {
                     onCurrentIndexChanged: App.previewHit(index)
                     onActivated: App.openHit(index)
                     TableViewColumn { role: "hit"; title: "HIT"; width: 4 }
-                    TableViewColumn { role: "path"; title: "NOTE"; width: 0; elideMode: Tui.ElidePath }
+                    TableViewColumn { role: "path"; title: "FILE"; width: 0; elideMode: Tui.ElidePath }
                     TableViewColumn { role: "section"; title: "SECTION"; width: 22 }
                 }
             }

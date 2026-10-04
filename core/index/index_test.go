@@ -615,7 +615,7 @@ func TestRebuildFromScratchIsEqual(t *testing.T) {
 	}
 	e.raw, e.ws, e.stop = nil, 0, nil // a new store: a new workspace, and a raw connection to it
 	e.open(Options{})
-	// the other order: b.md's links resolve only once notes/a.md is back, by re-resolution
+	// the other order: b.md's links resolve only once files/a.md is back, by re-resolution
 	for _, p := range []string{"b.md", "notes/a.md"} {
 		e.ix.Touch(p)
 		e.indexedAt(p)

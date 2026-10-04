@@ -7,7 +7,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// TestTheDefaultsLeaveDependenciesOut: a workspace with the default patterns indexes its notes but
+// TestTheDefaultsLeaveDependenciesOut: a workspace with the default patterns indexes its files but
 // not a node_modules at any depth, nor .git — and treats those directories as excluded, so they are
 // never walked or watched.
 func TestTheDefaultsLeaveDependenciesOut(t *testing.T) {

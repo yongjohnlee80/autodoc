@@ -9,12 +9,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// FRONTMATTER — the workspace's schema, and the open note checked against it (ADR 0212 §5).
+// FRONTMATTER — the workspace's schema, and the open file checked against it (ADR 0212 §5).
 //
-// The note is checked by the daemon's own validator (doc.validate), the one the index uses, so the
+// The file is checked by the daemon's own validator (doc.validate), the one the index uses, so the
 // line over the page and the index never disagree. It is checked as it is typed, a moment after
 // the last key, and the answer is applied only if no later text was sent since. A diagnostic never
-// blocks a save: the note is the user's, and the schema only describes it.
+// blocks a save: the file is the user's, and the schema only describes it.
 
 // validateDelay is how long the text must rest before it is checked.
 const validateDelay = 300 * time.Millisecond
@@ -42,7 +42,7 @@ func (s schemaInfo) state() string {
 	var b strings.Builder
 	switch {
 	case s.path == "":
-		b.WriteString("no schema: notes are not checked, and field:value searches as words")
+		b.WriteString("no schema: files are not checked, and field:value searches as words")
 	case s.active:
 		fmt.Fprintf(&b, "active: %d fields", s.fields)
 	default:
@@ -73,7 +73,7 @@ func (h *Host) showSchema(w wsInfo) {
 	}
 	h.setField("App.schemaPath", p)
 	h.set("App.schemaState", w.schema.state())
-	h.set("App.schemaHelp", "A YAML file declaring the notes' frontmatter fields (version: 1, frontmatter: …). Blank removes the schema.")
+	h.set("App.schemaHelp", "A YAML file declaring the files' frontmatter fields (version: 1, frontmatter: …). Blank removes the schema.")
 	h.open("workspaceSchema")
 }
 
@@ -95,7 +95,7 @@ func (h *Host) saveSchema(p string) {
 		case a.v.err != "":
 			h.notify(name + ": schema saved; " + a.v.state())
 		default:
-			h.notify(fmt.Sprintf("%s: schema active, %d fields; checking the notes", name, a.v.fields))
+			h.notify(fmt.Sprintf("%s: schema active, %d fields; checking the files", name, a.v.fields))
 		}
 		h.loadWorkspaces()
 		if name == h.ws {
@@ -110,7 +110,7 @@ type answerOf[T any] struct {
 	err error
 }
 
-// validateSoon checks the open note once its text has rested; a later call supersedes it.
+// validateSoon checks the open file once its text has rested; a later call supersedes it.
 func (h *Host) validateSoon() {
 	h.fmGen++
 	gen := h.fmGen
@@ -123,8 +123,8 @@ func (h *Host) validateSoon() {
 
 // validateNow sends the editor's text to doc.validate. Only Markdown has frontmatter.
 func (h *Host) validateNow(gen uint64) {
-	p := h.note.path
-	if !h.note.open {
+	p := h.file.path
+	if !h.file.open {
 		p = untitled + ".md"
 	}
 	if h.ws == "" || kind.Of(p, h.textExtensions()) != kind.Markdown {
@@ -148,7 +148,7 @@ func (h *Host) validateNow(gen uint64) {
 			return // later text was sent, or another workspace or connection
 		}
 		if a.err != nil {
-			h.showDiagnostics(nil) // a check that could not run says nothing about the note
+			h.showDiagnostics(nil) // a check that could not run says nothing about the file
 			return
 		}
 		h.showDiagnostics(a.v)
@@ -177,7 +177,7 @@ func (h *Host) showDiagnostics(ds []fmDiagnostic) {
 	h.set("App.diagnosticsShown", true)
 }
 
-// clearDiagnostics forgets the note's diagnostics and any check still under way.
+// clearDiagnostics forgets the file's diagnostics and any check still under way.
 func (h *Host) clearDiagnostics() {
 	h.fmGen++
 	h.showDiagnostics(nil)

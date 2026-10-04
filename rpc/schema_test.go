@@ -23,7 +23,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// schemaServer serves one workspace, kb, whose notes are checked against src.
+// schemaServer serves one workspace, kb, whose files are checked against src.
 func schemaServer(t *testing.T, src string) (*golibrpc.Client, *memfs.FS) {
 	t.Helper()
 	sch, err := schema.Parse([]byte(src))

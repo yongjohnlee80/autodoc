@@ -26,15 +26,15 @@ const (
 	ReasonAmbiguous = "ambiguous" // several do, at the same depth
 )
 
-// linkT is one link a note makes. name is what resolution looks up: for a wikilink or an embed the
+// linkT is one link a file makes. name is what resolution looks up: for a wikilink or an embed the
 // lowercased page name without ".md", after a '/' when it is a relative path (which names one path,
 // never a file name elsewhere); for a markdown link the workspace path it reaches.
 type linkT struct {
 	raw, name, anchor, kind string
 }
 
-// attachments are the file types Obsidian opens that are not notes
-// (https://help.obsidian.md/file-formats). A link to one is not an edge between notes, unless the
+// attachments are the file types Obsidian opens that are not files
+// (https://help.obsidian.md/file-formats). A link to one is not an edge between files, unless the
 // workspace indexes that type.
 var attachments = map[string]bool{
 	".base": true, ".canvas": true, ".pdf": true,
@@ -43,17 +43,17 @@ var attachments = map[string]bool{
 	".mkv": true, ".mov": true, ".mp4": true, ".ogv": true,
 }
 
-// extractLinks takes the links of note p, in source order: wikilinks and embeds, and markdown
+// extractLinks takes the links of file p, in source order: wikilinks and embeds, and markdown
 // links. Left out: a link to a heading or block of p itself, a URL, a path out of the workspace, and
-// a file that is not a note. A wikilink names a note unless it names an attachment (a page may hold
+// a file that is not a file. A wikilink names a file unless it names an attachment (a page may hold
 // dots: "Meeting 2024.05.01"); a markdown link, which names files of every kind (a KB links to its
 // code), only with ".md" or no extension. Either counts when eligible (nil: nothing) indexes it,
 // judged on the workspace path for a path, and on the name as written for a wikilink by name.
 func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) []linkT {
 	var out []linkT
 	indexed := func(target string) bool { return eligible != nil && eligible(target) }
-	wikiNote := func(page string) bool { return !attachments[strings.ToLower(path.Ext(page))] || indexed(page) }
-	fileNote := func(target string) bool {
+	wikiFile := func(page string) bool { return !attachments[strings.ToLower(path.Ext(page))] || indexed(page) }
+	targetsFile := func(target string) bool {
 		ext := strings.ToLower(path.Ext(target))
 		return ext == "" || ext == ".md" || indexed(target)
 	}
@@ -75,7 +75,7 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 						continue
 					}
 				}
-				if !wikiNote(target) {
+				if !wikiFile(target) {
 					continue
 				}
 				name := wikiName(target)
@@ -93,7 +93,7 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 				out = append(out, linkT{raw: string(doc.Source[c.Span.Start:c.Span.End]), name: name, anchor: anchor, kind: kind})
 				continue
 			case markdown.KindLink:
-				if target, anchor, ok := localTarget(p, string(c.Dest)); ok && fileNote(target) {
+				if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
 					out = append(out, linkT{raw: string(doc.Source[c.Span.Start:c.Span.End]), name: target, anchor: anchor, kind: LinkMarkdown})
 				}
 			}
@@ -104,7 +104,7 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 	return out
 }
 
-// localTarget reads a markdown link's destination as a workspace path: relative to the note's
+// localTarget reads a markdown link's destination as a workspace path: relative to the file's
 // directory, or to the root with a leading '/'. A URL (a scheme, or "//"), a bare "#anchor" and a
 // path out of the root are not local.
 func localTarget(from, dest string) (target, anchor string, ok bool) {

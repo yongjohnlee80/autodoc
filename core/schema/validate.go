@@ -19,7 +19,7 @@ const (
 	RuleUnknown  = "unknown"  // a strict schema does not declare the field
 )
 
-// Diagnostic is one problem in a note's frontmatter: the field (when it is one field's), the note's
+// Diagnostic is one problem in a file's frontmatter: the field (when it is one field's), the file's
 // line it is on (1-based), the rule it breaks, and a message for a person.
 type Diagnostic struct {
 	Field   string
@@ -32,16 +32,16 @@ type Diagnostic struct {
 // field has one facet per item.
 type Facet struct{ Field, Value string }
 
-// Result is what a note's frontmatter declares under a schema: its valid fields' facets, defaults
+// Result is what a file's frontmatter declares under a schema: its valid fields' facets, defaults
 // included, and its diagnostics, in source order.
 type Result struct {
 	Facets      []Facet
 	Diagnostics []Diagnostic
 }
 
-// ValidateNote checks a Markdown note's frontmatter, parsing the note as the indexer does. A nil
+// ValidateFile checks a Markdown file's frontmatter, parsing the file as the indexer does. A nil
 // schema still reports frontmatter that is not well-formed, which is worth saying before a save.
-func (s *Schema) ValidateNote(src []byte) Result {
+func (s *Schema) ValidateFile(src []byte) Result {
 	doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 	if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
 		return s.Validate(fm.Literal, true)
@@ -49,8 +49,8 @@ func (s *Schema) ValidateNote(src []byte) Result {
 	return s.Validate(nil, false)
 }
 
-// Validate checks a note's frontmatter: fm is the text between its fences, which begins on the
-// note's line 2. present says the note has frontmatter at all; a note without any still has its
+// Validate checks a file's frontmatter: fm is the text between its fences, which begins on the
+// file's line 2. present says the file has frontmatter at all; a file without any still has its
 // required fields reported, against line 1.
 func (s *Schema) Validate(fm []byte, present bool) Result {
 	const firstLine = 2 // the line after the opening "---"
@@ -132,7 +132,7 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 			}
 		}
 	}
-	at := 1 // a missing field is the frontmatter's, or the note's first line when it has none
+	at := 1 // a missing field is the frontmatter's, or the file's first line when it has none
 	for _, f := range s.Fields {
 		if written[f.Name] {
 			continue
@@ -152,7 +152,7 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 
 // FacetValue reads text typed as a filter on field (status:active, count:7) into the facet value it
 // matches, or says why the field's type cannot hold it. The text is read as YAML's Core schema reads
-// a plain scalar, as the note's own value was.
+// a plain scalar, as the file's own value was.
 func (s *Schema) FacetValue(field, text string) (string, error) {
 	f, ok := s.Field(field)
 	if !ok {

@@ -38,7 +38,7 @@ func (h *Host) state() map[string]any {
 		"App.managedPlugins":       h.managedPlugins,
 		"App.pluginsHelp":          pluginsHelp,
 		"App.removePluginQuestion": "",
-		"App.noteTitle":            untitled,
+		"App.fileTitle":            untitled,
 		"App.fileTypesTitle":       "file types",
 		"App.fileTypesRoot":        "",
 		"App.fileTypesPatterns":    "",
@@ -91,14 +91,14 @@ func (h *Host) state() map[string]any {
 		"App.outlinePreviewAt":    0,
 		// the open picker
 		"App.pickerRows":       h.picker,
-		"App.pickerStatus":     "notes",
+		"App.pickerStatus":     "files",
 		"App.openPreviewTitle": "",
 		"App.openPreviewText":  "",
 		"App.openPreviewAt":    0,
-		// the new-note picker
-		"App.newNotes":        h.newList,
-		"App.newNotePath":     "",
-		"App.noteNameError":   newNoteHelp,
+		// the new-file picker
+		"App.newFiles":        h.newList,
+		"App.newFilePath":     "",
+		"App.fileNameError":   newFileHelp,
 		"App.newPreviewTitle": "",
 		"App.newPreviewText":  "",
 		"App.newPreviewAt":    0,
@@ -177,7 +177,7 @@ func (h *Host) state() map[string]any {
 
 		"App.unsavedQuestion":  "",
 		"App.conflictQuestion": "",
-		"App.quitQuestion":     "The note has unsaved changes. Quit, and lose them?",
+		"App.quitQuestion":     "The file has unsaved changes. Quit, and lose them?",
 		"App.workspaces":       h.workspaces,
 
 		"App.managed":              h.managed,

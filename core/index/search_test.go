@@ -50,15 +50,15 @@ func TestSearchRanksTitleOverBody(t *testing.T) {
 
 // TestSearchQuotesOperators: FTS5's syntax in a query is words, never syntax, and never an error.
 // Each word is a phrase of the tokens it holds, so "title:alpha" is the phrase "title alpha": as a
-// column filter it would match no note (no title is alpha).
+// column filter it would match no file (no title is alpha).
 func TestSearchQuotesOperators(t *testing.T) {
 	e := newEnv(t, Options{})
 	e.put("a.md", "alpha beta\n", "b.md", "alpha or beta, near alpha, title alpha\n", "c.md", "gamma\n")
 	for q, want := range map[string][]string{
-		"alpha OR gamma":  nil,              // OR is a word: no note has alpha, or and gamma
+		"alpha OR gamma":  nil,              // OR is a word: no file has alpha, or and gamma
 		"alpha or beta":   {"b.md"},         // the word "or"
-		"alpha AND":       nil,              // no note has "and"
-		"NOT gamma":       nil,              // no note has "not"
+		"alpha AND":       nil,              // no file has "and"
+		"NOT gamma":       nil,              // no file has "not"
 		"title:alpha":     {"b.md"},         // the phrase "title alpha", not a column filter
 		"NEAR(alpha beta": {"b.md"},         // the phrase "near alpha", and beta; unquoted, a syntax error
 		`"alpha`:          {"a.md", "b.md"}, // a stray quote
@@ -127,8 +127,8 @@ func TestSearchCollapsesPerDocument(t *testing.T) {
 	}
 }
 
-// TestSearchBoostsAfterFusion: of two notes with the same text, the one linked to ranks first, and
-// a query word equal to a tag lifts its note; each factor is exactly the ADR's.
+// TestSearchBoostsAfterFusion: of two files with the same text, the one linked to ranks first, and
+// a query word equal to a tag lifts its file; each factor is exactly the ADR's.
 func TestSearchBoostsAfterFusion(t *testing.T) {
 	e := newEnv(t, Options{})
 	// a.md links to itself, which is no in-link, from a section of its own: the heron chunks match
@@ -217,7 +217,7 @@ func TestSearchNeverFindsADeadChunk(t *testing.T) {
 	eq(t, "the new text", paths(e.search("sandpiper", QueryOpts{})), []string{"a.md"})
 }
 
-// TestSearchAcrossCommitsAgrees: searches running while a note flips between two texts get hits
+// TestSearchAcrossCommitsAgrees: searches running while a file flips between two texts get hits
 // whose text and generation agree: odd generations hold one text, even ones the other.
 func TestSearchAcrossCommitsAgrees(t *testing.T) {
 	e := newEnv(t, Options{BatchDelay: 2 * time.Millisecond})
@@ -266,9 +266,9 @@ func TestSearchAcrossCommitsAgrees(t *testing.T) {
 	}
 }
 
-// TestNoteWithNoTextIsFound: a note that is only its title (a heading, or frontmatter) is found by
+// TestFileWithNoTextIsFound: a note that is only its title (a heading, or frontmatter) is found by
 // its title, though it has no body to chunk.
-func TestNoteWithNoTextIsFound(t *testing.T) {
+func TestFileWithNoTextIsFound(t *testing.T) {
 	e := newEnv(t, Options{})
 	e.put("a.md", "# Kittiwake\n", "b.md", "---\ntitle: Puffin\n---\n", "c.md", "")
 	eq(t, "heading", paths(e.search("kittiwake", QueryOpts{})), []string{"a.md"})
