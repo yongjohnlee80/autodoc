@@ -222,6 +222,9 @@ func (e *env) goldenDocs() []goldenDoc {
 		}
 		docs = append(docs, d)
 	}
+	if err := rows.Err(); err != nil {
+		e.t.Fatal(err)
+	}
 	if err := rows.Close(); err != nil {
 		e.t.Fatal(err)
 	}
@@ -238,6 +241,9 @@ func (e *env) goldenDocs() []goldenDoc {
 				e.t.Fatal(err)
 			}
 			out = append(out, s)
+		}
+		if err := rows.Err(); err != nil {
+			e.t.Fatal(err)
 		}
 		return out
 	}
@@ -262,6 +268,9 @@ func (e *env) goldenDocs() []goldenDoc {
 			}
 			c.Hash, c.TextHash = hex.EncodeToString(h), hex.EncodeToString(th)
 			d.doc.Chunks = append(d.doc.Chunks, c)
+		}
+		if err := rows.Err(); err != nil {
+			e.t.Fatal(err)
 		}
 		if err := rows.Close(); err != nil {
 			e.t.Fatal(err)
@@ -425,10 +434,12 @@ func TestGoldenSearch(t *testing.T) {
 			e.ix.sem.snap.Store(&codeSnap{fp: cur.fp, watermark: cur.watermark - 1, docs: cur.docs})
 			falls := e.ix.sem.fallbackScans.Load()
 			b := e.ask(q)
-			if a.Result.Semantic == SemanticReady && e.ix.sem.fallbackScans.Load() == falls && b.Result.ModeUsed != ModeFacet {
+			switch {
+			case b.Result == nil:
+				t.Errorf("%s: the fallback failed: %s", q.Name, b.Err)
+			case a.Result.Semantic == SemanticReady && e.ix.sem.fallbackScans.Load() == falls && b.Result.ModeUsed != ModeFacet:
 				t.Errorf("%s: the fallback did not run", q.Name)
-			}
-			if !reflect.DeepEqual(a, b) {
+			case !reflect.DeepEqual(a, b):
 				t.Errorf("%s: the snapshot and the fallback answer differently:\n%+v\n%+v", q.Name, a, b)
 			}
 			e.ix.sem.snap.Store(cur)
