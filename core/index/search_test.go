@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -264,36 +263,6 @@ func TestSearchAcrossCommitsAgrees(t *testing.T) {
 	t.Logf("%d hits checked across %d generations", checked, gen)
 	if gen < 5 {
 		t.Errorf("only %d generations: the searches did not run across commits", gen)
-	}
-}
-
-// TestFuse: reciprocal rank fusion (ADR 0204 §5.5). A chunk found by both retrievers outranks one
-// found by one at the same ranks; equal scores order by path, then position, every time.
-func TestFuse(t *testing.T) {
-	c := func(path string, doc int64, ord int, via string) candidate {
-		return candidate{hit: Hit{Path: path, Via: []string{via}}, docID: doc, ord: ord}
-	}
-	lex := []candidate{c("b.md", 2, 0, "lexical"), c("a.md", 1, 1, "lexical"), c("a.md", 1, 0, "lexical")}
-	sem := []candidate{c("a.md", 1, 1, "semantic"), c("b.md", 2, 0, "semantic"), c("c.md", 3, 0, "semantic")}
-	got := fuse(lex, sem)
-	sort.Slice(got, func(i, j int) bool { return got[i].before(got[j]) })
-	var order []string
-	for _, g := range got {
-		order = append(order, fmt.Sprintf("%s#%d %v %.6f", g.hit.Path, g.ord, g.hit.Via, g.hit.Score))
-	}
-	both := 1.0/61 + 1.0/62 // b.md#0 and a.md#1: ranks 1 and 2 each way, the same sum
-	eq(t, "fused", order, []string{
-		fmt.Sprintf("a.md#1 [lexical semantic] %.6f", both), // tied with b.md#0: the path decides
-		fmt.Sprintf("b.md#0 [lexical semantic] %.6f", both),
-		fmt.Sprintf("a.md#0 [lexical] %.6f", 1.0/63),  // third in one list …
-		fmt.Sprintf("c.md#0 [semantic] %.6f", 1.0/63), // … and third in the other: the path decides
-	})
-	if got[0].hit.Score != got[1].hit.Score {
-		t.Errorf("the tie is not exact: %v, %v", got[0].hit.Score, got[1].hit.Score)
-	}
-	a0 := []candidate{c("x.md", 9, 0, "lexical")}
-	if s := fuse(a0, a0)[0].hit.Score; s <= fuse(a0)[0].hit.Score {
-		t.Errorf("found by both scores %v, by one %v", s, fuse(a0)[0].hit.Score)
 	}
 }
 

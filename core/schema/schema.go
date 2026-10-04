@@ -80,6 +80,13 @@ type Schema struct {
 }
 
 // Field is the declaration of name.
+// Declared reports whether the schema declares name; a nil schema declares nothing. With
+// FacetValue it makes a schema the query's facet fields (golib's search/query.Fields).
+func (s *Schema) Declared(name string) bool {
+	_, ok := s.Field(name)
+	return ok
+}
+
 func (s *Schema) Field(name string) (Field, bool) {
 	if s == nil {
 		return Field{}, false

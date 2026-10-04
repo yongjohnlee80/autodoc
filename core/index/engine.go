@@ -1,0 +1,207 @@
+package index
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/search"
+	"github.com/yongjohnlee80/golib/search/chunk"
+	"github.com/yongjohnlee80/golib/search/query"
+
+	"github.com/yongjohnlee80/autodoc/core/store"
+)
+
+// SEARCH THROUGH GOLIB'S ENGINE. The engine (golib search) owns the search's policy: modes, the
+// query's facets, rank fusion, boosts, relevance and the per-document cap. This file is the store's
+// side of it: a View over one read transaction, answering from AutoDoc's own tables.
+
+// View is one search's read transaction of a workspace's index: every retriever, signal and
+// presentation field reads the same snapshot.
+type View struct {
+	s   *Store
+	tx  *store.Tx
+	sem *semantic // nil: the store has no semantic tier in this search
+}
+
+// searchStore is a workspace's index as the engine reads it.
+type searchStore struct {
+	s   *Store
+	sem *semantic
+}
+
+// View opens one read transaction; fn's error comes back as it is.
+func (st searchStore) View(ctx context.Context, fn func(v *View) error) error {
+	return st.s.read(ctx, func(tx *store.Tx) error { return fn(&View{s: st.s, tx: tx, sem: st.sem}) })
+}
+
+// NewSearcher builds the engine over a workspace's index: embed is nil for a search by words
+// alone. index.Options.NewSearcher replaces it.
+type NewSearcher func(st search.Store[int64, *View], embed search.QueryEmbedder) search.Searcher
+
+// defaultSearcher is golib's engine with the search's constants.
+func defaultSearcher(st search.Store[int64, *View], embed search.QueryEmbedder) search.Searcher {
+	opts := []search.Option{search.WithFusionK(rrfK), search.WithRetrieverTop(retrieverTop), search.WithPerDocument(perDocument),
+		search.WithLimits(defaultLimit, maxLimit), search.WithBoosts(linkBoost, tagBoost)}
+	if embed != nil {
+		opts = append(opts, search.WithQueryEmbedder(embed))
+	}
+	return search.NewEngine[int64, *View](st, opts...)
+}
+
+func optsOf(f search.Filter) QueryOpts {
+	return QueryOpts{Tags: f.Tags, Paths: f.Paths, Facets: f.Facets}
+}
+
+func candidateOf(r *store.Chunk, snippet string) search.Candidate[int64] {
+	return search.Candidate[int64]{Doc: r.DocID, Ord: int(r.Ord), Path: r.DocPath, Breadcrumb: r.Breadcrumb, Snippet: snippet,
+		Generation: r.DocActiveGen, ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd)}
+}
+
+// Lexical runs the FTS query over the alive chunks the filters admit, best first (BM25 weighs
+// title 10, breadcrumb 5, tags 5, body 1), at most n. The workspace and the filters are in the same
+// WHERE as the MATCH, so they apply before the rank and the limit.
+func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	d, ok, err := v.s.filtered(v.tx, alive(v.s.sc.Chunks(v.tx)), optsOf(f))
+	if err != nil || !ok {
+		return nil, err
+	}
+	rows, err := d.Join(store.JoinFTS).WithPredicate(dao.Match(store.ChunkFTS, query.FTS5(terms))).
+		OrderBy(dao.Asc(store.ChunkByRank), dao.Asc(store.ChunkByPath)).Limit(uint64(n)).
+		Select(store.ChunkDoc, store.ChunkOrd, store.ChunkDocPath, store.ChunkBreadcrumb, store.ChunkByteStart,
+			store.ChunkByteEnd, store.ChunkDocActiveGen, store.ChunkSnippet)
+	if err != nil {
+		return nil, fmt.Errorf("index: lexical search: %w", err)
+	}
+	out := make([]search.Candidate[int64], 0, len(rows))
+	for _, r := range rows {
+		out = append(out, candidateOf(r, r.Snippet))
+	}
+	return out, nil
+}
+
+// Semantic is the semantic retriever in this transaction (semanticHits). It answers
+// search.ErrModelChanged when the active model is no longer the one the query was embedded with.
+func (v *View) Semantic(ctx context.Context, model string, vec []float32, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	now, err := v.s.activeModel(v.tx)
+	if err != nil {
+		return nil, err
+	}
+	if now != model {
+		return nil, search.ErrModelChanged
+	}
+	return v.s.semanticHits(v.tx, v.sem, model, vec, optsOf(f), n)
+}
+
+// SemanticState is switching while a new model fills, partial while a document is not
+// semantic-ready, else ready.
+func (v *View) SemanticState(ctx context.Context) (search.State, error) {
+	if v.sem != nil && v.sem.switching() {
+		return search.StateSwitching, nil
+	}
+	unready, err := v.s.sc.Documents(v.tx).With(store.DocSemanticReady, int64(0)).Exists()
+	if err != nil {
+		return "", err
+	}
+	if unready {
+		return search.StatePartial, nil
+	}
+	return search.StateReady, nil
+}
+
+// Signals are each document's in-links (the documents linking to it, itself not counted) and tags.
+func (v *View) Signals(ctx context.Context, docs []int64) (map[int64]search.Signals, error) {
+	out := make(map[int64]search.Signals, len(docs))
+	for _, id := range docs {
+		inLinks, err := dao.CountDistinct(v.s.sc.LinksOut(v.tx).With(store.LinkDst, id).Excluding(store.LinkSrc, id), store.LinkSrc)
+		if err != nil {
+			return nil, err
+		}
+		tags, err := v.s.tagsOf(v.tx, id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = search.Signals{InLinks: int(inLinks), Tags: tags}
+	}
+	return out, nil
+}
+
+// List answers a query of filters and no words: the documents they admit, in path order, each as
+// its first section.
+func (v *View) List(ctx context.Context, f search.Filter, n int) ([]search.Candidate[int64], error) {
+	d, ok, err := v.s.filtered(v.tx, alive(v.s.sc.Chunks(v.tx)).With(store.ChunkOrd, int64(0)), optsOf(f))
+	if err != nil || !ok {
+		return nil, err
+	}
+	rows, err := d.OrderBy(dao.Asc(store.ChunkByPath)).Limit(uint64(n)).
+		Select(store.ChunkDoc, store.ChunkOrd, store.ChunkDocPath, store.ChunkBreadcrumb, store.ChunkBody, store.ChunkByteStart,
+			store.ChunkByteEnd, store.ChunkDocActiveGen)
+	if err != nil {
+		return nil, fmt.Errorf("index: facet search: %w", err)
+	}
+	out := make([]search.Candidate[int64], 0, len(rows))
+	for _, r := range rows {
+		out = append(out, candidateOf(r, chunk.Snippet(r.Body)))
+	}
+	return out, nil
+}
+
+var (
+	_ search.Store[int64, *View] = searchStore{}
+	_ search.Semantic[int64]     = (*View)(nil)
+	_ search.Signaler[int64]     = (*View)(nil)
+	_ search.Lister[int64]       = (*View)(nil)
+)
+
+// queryEmbedder embeds a query for the engine with the model active now. The model a filling
+// target replaces is offline: that is search.ErrSwitching to the engine.
+func (s *Store) queryEmbedder(sem *semantic) search.QueryEmbedder {
+	return func(ctx context.Context, q string) (string, []float32, error) {
+		fp, vec, err := s.embedQuery(ctx, sem, q)
+		if errors.Is(err, errOffline) {
+			return "", nil, fmt.Errorf("%w: %w", search.ErrSwitching, err)
+		}
+		return fp, vec, err
+	}
+}
+
+// answer runs q on searcher and gives the answer in AutoDoc's own types and errors.
+func answer(ctx context.Context, searcher search.Searcher, q string, opts QueryOpts, fields search.Fields) (Result, error) {
+	res, err := searcher.Search(ctx, search.Query{Text: q, Mode: search.Mode(opts.Mode), Limit: opts.Limit, Fields: fields,
+		Filter: search.Filter{Tags: opts.Tags, Paths: opts.Paths, Facets: opts.Facets}})
+	if err != nil {
+		return Result{}, ownError(err)
+	}
+	out := Result{Hits: make([]Hit, len(res.Hits)), ModeUsed: string(res.ModeUsed), Semantic: string(res.Semantic)}
+	if res.SemanticError != "" {
+		out.SemanticError = ErrEmbedFailed.Error()
+	}
+	for i, h := range res.Hits {
+		out.Hits[i] = Hit{Path: h.Path, Breadcrumb: h.Breadcrumb, Snippet: h.Snippet, Generation: h.Generation,
+			ByteStart: h.ByteStart, ByteEnd: h.ByteEnd, Score: h.Score, Relevance: h.Relevance, Via: h.Via}
+	}
+	return out, nil
+}
+
+// ownErrors are the engine's errors as AutoDoc names them. The engine and AutoDoc format the
+// detail after a sentinel the same way, so AutoDoc's sentinel takes the engine's place in front of
+// it.
+var ownErrors = []struct{ engine, own error }{
+	{search.ErrUnknownMode, ErrUnknownMode},
+	{search.ErrNoProvider, ErrNoProvider},
+	{search.ErrSwitching, ErrSwitching},
+	{search.ErrEmbedFailed, ErrEmbedFailed},
+	{query.ErrUnknownFacet, ErrUnknownFacet},
+	{query.ErrFacetValue, ErrFacetValue},
+}
+
+func ownError(err error) error {
+	for _, e := range ownErrors {
+		if errors.Is(err, e.engine) {
+			return fmt.Errorf("%w%s", e.own, strings.TrimPrefix(err.Error(), e.engine.Error()))
+		}
+	}
+	return err
+}
