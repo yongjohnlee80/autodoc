@@ -182,3 +182,78 @@ func TestAFailedRecoveryRestartStaysActionable(t *testing.T) {
 		t.Fatalf("%d spawns, want the failed one and the retry", n)
 	}
 }
+
+// tinyPreview runs the TUI on a w×h screen with confirmed graphics, flowNote open.
+func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
+	t.Helper()
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "f.md", flowNote)})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, w, h)
+	r.s.WaitFor(t, "the workspace", func(string) bool { return onLoop(r, func() string { return r.h.ws }) == "kb" })
+	opened := make(chan string, 4)
+	r.h.p.Post(func() {
+		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil }
+		r.h.openPath("f.md")
+	})
+	r.s.WaitFor(t, "f.md open", func(string) bool { n := r.note(); return n.open && n.path == "f.md" })
+	return r, opened
+}
+
+// On a screen too small for an image the Mermaid preview falls back to the terminal graph, saying
+// why, rather than staying a blank image area (Lector's review of #30, finding 1).
+func TestATinyScreenDiagramFallsBackToTheTerminalGraph(t *testing.T) {
+	if _, ok := widget.SVGRasterizer(); !ok {
+		t.Skip("rsvg-convert is not installed: image mode is never entered")
+	}
+	r, _ := tinyPreview(t, 12, 3)
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitFor(t, "the fallback", func(string) bool {
+		return onLoop(r, func() bool { return !r.h.lastDiagramImage() })
+	})
+	help := onLoop(r, func() string { return r.h.diagramHelpText })
+	if !strings.HasPrefix(help, "Terminal graph · ") || !(strings.Contains(help, "too small") || strings.Contains(help, "never laid out")) {
+		t.Fatalf("help = %q", help)
+	}
+	if len(r.s.Backend.Images()) != 0 {
+		t.Fatal("an image was placed on a screen too small for one")
+	}
+}
+
+// On a screen too small for an image the HTML preview opens the browser instead.
+func TestATinyScreenHTMLFallsBackToTheBrowser(t *testing.T) {
+	if _, ok := widget.HTMLRasterizer(); !ok {
+		t.Skip("no headless browser: image mode is never entered")
+	}
+	r, opened := tinyPreview(t, 12, 3)
+	r.h.p.Post(func() { r.h.previewHTML() })
+	select {
+	case p := <-opened:
+		if !strings.HasSuffix(p, ".html") {
+			t.Fatalf("opened %q", p)
+		}
+	case <-time.After(imageWait + 3*time.Second):
+		t.Fatal("the HTML preview neither showed an image nor opened the browser")
+	}
+	if len(r.s.Backend.Images()) != 0 {
+		t.Fatal("an image was placed on a screen too small for one")
+	}
+}
+
+// A screen resized to a usable size before the wait ends renders the image after all.
+func TestAPreviewRendersOnceAResizeGivesItRoom(t *testing.T) {
+	if _, ok := widget.SVGRasterizer(); !ok {
+		t.Skip("rsvg-convert is not installed")
+	}
+	r, _ := tinyPreview(t, 12, 3)
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	time.Sleep(200 * time.Millisecond)
+	r.s.Backend.InjectResize(100, 30)
+	img := r.placedImage(t)
+	if pixel(t, img, 0, 0) == "" {
+		t.Fatal("no PNG")
+	}
+	if !onLoop(r, func() bool { return r.h.lastDiagramImage() }) {
+		t.Fatal("the preview fell back although the resize gave it room")
+	}
+}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -151,7 +152,9 @@ func customTypesPreview(m wsfilter.Matcher, exts []string) string {
 
 // setCustomTypes declares the workspace's own plain-text extensions, then admits each new one with
 // an include (unless the rules already admit it) and drops the include of each one removed. The
-// extensions are validated by the daemon before any rule changes.
+// extensions are validated by the daemon before any rule changes. The two are separate verbs, so a
+// rules change that fails takes the extensions back to what they were, and "not changed" is true;
+// if even that fails, the dialog says what was kept.
 func (h *Host) setCustomTypes(text string) {
 	workspace, ok := h.activeWorkspaceInfo()
 	if !ok || h.fileTypesPending {
@@ -192,11 +195,22 @@ func (h *Host) setCustomTypes(text string) {
 		if !changed {
 			return nil
 		}
-		_, err = h.call(ctx, "workspace.set_patterns", workspace.name, patternArgs(include), patternArgs(exclude))
+		if _, err = h.call(ctx, "workspace.set_patterns", workspace.name, patternArgs(include), patternArgs(exclude)); err == nil {
+			return nil
+		}
+		if _, back := h.call(ctx, "workspace.set_text_extensions", workspace.name, patternArgs(workspace.textExtensions)); back != nil {
+			return &partialTypesError{rules: err, kept: norm}
+		}
 		return err
 	}, func(err error) {
 		h.fileTypesPending = false
-		if err != nil {
+		var partial *partialTypesError
+		switch {
+		case errors.As(err, &partial):
+			h.set("App.fileTypesHelp", "partly changed: "+partial.Error())
+			h.loadWorkspaces()
+			return
+		case err != nil:
 			h.set("App.fileTypesHelp", "not changed: "+wireMessage(err))
 			h.loadWorkspaces()
 			return
@@ -571,4 +585,15 @@ func (h *Host) removeWorkspaceConfirmed() {
 		return
 	}
 	remove()
+}
+
+// partialTypesError is a custom-types save whose text types were kept but whose rules were not,
+// and whose text types could not be taken back.
+type partialTypesError struct {
+	rules error
+	kept  []string
+}
+
+func (e *partialTypesError) Error() string {
+	return fmt.Sprintf("the text types %s were saved, but the rules were not (%s)", strings.Join(e.kept, ", "), wireMessage(e.rules))
 }

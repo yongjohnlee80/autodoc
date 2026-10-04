@@ -117,3 +117,29 @@ func TestCustomTextTypes(t *testing.T) {
 		return err == nil && len(ws) == 1 && ws[0].TextExtensions == nil && !slices.Contains(ws[0].Include, "**/*.log")
 	})
 }
+
+// A custom-types save whose rules change fails takes the text types back, so "not changed" is true
+// (Lector's review of #30, follow-up): the root is removed between the two verbs' checks.
+func TestCustomTextTypesRollBackWhenTheRulesFail(t *testing.T) {
+	root := noteDir(t, "n.md", "# Notes\n")
+	d := startManaged(t, map[string]string{"kb": root})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.openFileTypes() })
+	r.s.WaitForText(t, "none: e.g. .log, .rst")
+	if err := os.RemoveAll(root); err != nil { // set_patterns checks the root; set_text_extensions does not
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.setCustomTypes(".log") })
+	r.s.WaitForText(t, "not changed:")
+	ws, err := d.db.Workspaces(context.Background())
+	if err != nil || len(ws) != 1 {
+		t.Fatal(err)
+	}
+	if ws[0].TextExtensions != nil {
+		t.Fatalf("text types kept after the rules failed: %s", *ws[0].TextExtensions)
+	}
+	if slices.Contains(ws[0].Include, "**/*.log") {
+		t.Fatal("the rules changed")
+	}
+}

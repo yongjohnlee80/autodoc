@@ -130,6 +130,8 @@ type Host struct {
 	// kitty graphics answer in tests
 	previewGen       uint64
 	htmlPreviewPath  string
+	diagramImage     bool   // the Mermaid preview is an image, not its fallback
+	diagramHelpText  string // what the Mermaid preview's help line says
 	graphicsOverride func() tuicore.Tri
 	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
 	outline     *outline.Doc
