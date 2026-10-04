@@ -962,11 +962,11 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 			logger.Warning(x.opts.Logger, nil, logger.Fields{"event": "embedding.status.slow", "duration_ms": elapsed.Milliseconds()})
 		}
 	}()
-	st, err := x.store.Status(ctx)
-	if err != nil {
-		return st, err
-	}
 	h, err := x.holding(ctx)
+	if err != nil {
+		return Status{}, err
+	}
+	st, err := x.store.Status(ctx)
 	if err != nil {
 		return st, err
 	}

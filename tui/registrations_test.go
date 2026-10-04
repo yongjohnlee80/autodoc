@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -214,4 +218,71 @@ func TestHeldHitsAreMarked(t *testing.T) {
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("sections %q", got)
 	}
+}
+
+// refusingDaemon is a daemon at the current protocol whose sys.shutdown refuses: a restart of it
+// fails, and says so.
+func refusingDaemon(t *testing.T, sock string) {
+	t.Helper()
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))
+	srv.Handle("sys.hello", func(context.Context, *golibrpc.Request) (any, error) {
+		return map[string]any{"protocol": rpc.Protocol, "version": "v-refusing", "pid": int64(os.Getpid())}, nil
+	})
+	srv.Handle("sys.capabilities", func(context.Context, *golibrpc.Request) (any, error) {
+		return map[string]any{"registrations": rpc.RegistrationsMap(registrations.Tables{})}, nil
+	})
+	srv.Handle("sys.shutdown", func(context.Context, *golibrpc.Request) (any, error) {
+		return nil, &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "not today"}
+	})
+	stopped := make(chan struct{})
+	go func() { _ = srv.Run(ctx); close(stopped) }()
+	t.Cleanup(func() { cancel(); <-stopped })
+}
+
+// TestARefusedRestartTakesItsHandoffBack: a refused restart removes this TUI's handoff, so the
+// other clients may spawn again at once; a handoff that cannot be written is said, and the restart
+// goes on as before.
+func TestARefusedRestartTakesItsHandoffBack(t *testing.T) {
+	for _, writable := range []bool{true, false} {
+		t.Run(fmt.Sprint("writable ", writable), func(t *testing.T) {
+			sock := filepath.Join(shortDir(t), "s.sock")
+			refusingDaemon(t, sock)
+			state := t.TempDir()
+			dir := state
+			if !writable {
+				dir = filepath.Join(state, "missing")
+			}
+			r := runTUI(t, NewSession(sock, func() (string, error) { return "", nil }).UseHandoffs(dir), Options{})
+			r.s.WaitForText(t, "connected — autodoc v-refusing")
+			r.h.p.Post(r.h.restartConfirmed)
+			if !writable {
+				r.waitKept(t, "restart: the handoff to the other clients was not written")
+			}
+			r.waitKept(t, "restart refused")
+			if _, found := readHandoff(dir, sock); found {
+				t.Fatal("a refused restart left its handoff")
+			}
+		})
+	}
+}
+
+// waitKept waits for a notification the history keeps: a toast can be replaced on the screen by the
+// next before the screen is read.
+func (r *running) waitKept(t *testing.T, text string) {
+	t.Helper()
+	r.s.WaitFor(t, "the notification kept: "+text, func(string) bool {
+		return onLoop(r, func() bool {
+			for _, n := range r.h.notices {
+				if strings.Contains(n.text, text) {
+					return true
+				}
+			}
+			return false
+		})
+	})
 }

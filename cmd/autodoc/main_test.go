@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
@@ -41,5 +42,24 @@ func TestAStampedBuildSaysItsVersion(t *testing.T) {
 	}
 	if out, err := exec.Command(bin, "kb").CombinedOutput(); err == nil || !strings.Contains(string(out), "unexpected arguments") {
 		t.Fatalf("a usage error: %q, %v", out, err)
+	}
+}
+
+// TestMainExitsWithAppMainsCode: main hands app.Main its arguments and the stamped version, and
+// exits with what it returns.
+func TestMainExitsWithAppMainsCode(t *testing.T) {
+	args, was := os.Args, exit
+	defer func() { os.Args, exit = args, was }()
+	code := -1
+	exit = func(c int) { code = c }
+	os.Args = []string{"autodoc", "--version"}
+	main()
+	if code != 0 {
+		t.Fatalf("--version exited %d", code)
+	}
+	os.Args = []string{"autodoc", "kb"}
+	main()
+	if code != 2 {
+		t.Fatalf("a usage error exited %d", code)
 	}
 }
