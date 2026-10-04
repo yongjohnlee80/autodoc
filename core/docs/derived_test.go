@@ -114,12 +114,15 @@ func TestALongDerivedTextIsCutToFitAndSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, label, ok := strings.Cut(string(got.Content), "\n\n---\n\n> Truncated: ")
+	body, label, ok := strings.Cut(string(got.Content), "\n\n---\n\n"+TruncatedMark+" ")
 	if !ok || len(got.Content) > MaxSize {
 		t.Fatalf("%d bytes (limit %d), labelled %v", len(got.Content), MaxSize, ok)
 	}
-	if want := fmt.Sprintf("this is the first %d of the %d bytes of text derived from this PDF", len(body), len(text)); !strings.HasPrefix(label, want) {
+	if want := fmt.Sprintf("the first %d of the %d bytes of text derived from this PDF", len(body), len(text)); !strings.HasPrefix(label, want) {
 		t.Fatalf("label %q, want it to start %q", label, want)
+	}
+	if strings.Count(label, "\n") != 1 || !strings.HasSuffix(label, "\n") {
+		t.Fatalf("the note is not one last line: %q", label)
 	}
 	if !strings.HasPrefix(text, body) || strings.HasSuffix(body, "\n") || !strings.HasPrefix(text[len(body):], "\n\n") || len(body) < MaxSize/2 {
 		t.Fatalf("not cut at a paragraph's end: ...%q", body[len(body)-20:])

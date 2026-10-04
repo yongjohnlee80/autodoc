@@ -271,6 +271,10 @@ func (d *Docs) readDerived(ctx context.Context, path string) (Doc, error) {
 	}
 }
 
+// TruncatedMark begins the last line of a derived text cut to fit one read. The line is AutoDoc's,
+// never the document's: a reader quoting the text stops before it.
+const TruncatedMark = "[autodoc: truncated]"
+
 // excerpt reads a derived text whole when it fits in MaxSize. A longer one is cut at a clean place
 // within the room left for its label: the last blank line in the second half of that room, else
 // the last line break, else the last whole character. The label says how much was shown of how
@@ -289,8 +293,8 @@ func excerpt(t registrations.Derived, label string) ([]byte, error) {
 		if t.Bytes <= int64(len(b)) {
 			whole = fmt.Sprintf("more than %d bytes", MaxSize) // its stated size was short
 		}
-		return fmt.Sprintf("\n\n---\n\n> Truncated: this is the first %d of %s of text derived from this %s, "+
-			"as much as one read carries. Open the original in its system viewer for the rest.\n", shown, whole, label)
+		return fmt.Sprintf("\n\n---\n\n%s the first %d of %s of text derived from this %s, as much as one read "+
+			"carries; open the original in its system viewer for the rest.\n", TruncatedMark, shown, whole, label)
 	}
 	room := MaxSize - len(note(MaxSize))
 	cut := cleanCut(b, room)
