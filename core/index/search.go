@@ -93,6 +93,10 @@ func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, e
 // Search answers a query through the indexer's searcher: with the semantic tier when it has a
 // provider (and the tier is not paused), and with the workspace's schema now.
 func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
+	h, err := x.holding(ctx) // read once: the hits it marks never wait for a scan
+	if err != nil {
+		return Result{}, err
+	}
 	sch, _ := x.schema()
 	searcher := x.words
 	if x.hybrid != nil && !x.semanticPaused.Load() {
@@ -101,10 +105,6 @@ func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result,
 	res, err := answer(ctx, searcher, q, opts, sch)
 	if err != nil {
 		return res, err
-	}
-	h, err := x.holding(ctx)
-	if err != nil {
-		return Result{}, err
 	}
 	for i := range res.Hits {
 		if d, ok := h.of(res.Hits[i].Path); ok {
