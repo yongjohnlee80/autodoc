@@ -273,3 +273,55 @@ func skipWithoutUsableBrowser(t *testing.T) {
 		t.Fatalf("the browser probe failed: %v", err)
 	}
 }
+
+// The mismatch dialog's edges: without a spawner Restart Now does nothing and Quit quits; on a
+// connected session there is nothing to recover; a stop that does not complete stays in the dialog
+// with the reason and a retry.
+func TestTheMismatchDialogsEdges(t *testing.T) {
+	t.Run("no spawner, then Quit", func(t *testing.T) {
+		sock := filepath.Join(t.TempDir(), "s.sock")
+		otherDaemon(t, sock, rpc.Protocol-1)
+		r := runTUI(t, NewSession(sock, nil), Options{})
+		r.s.WaitFor(t, "the dialog", func(sc string) bool { return strings.Contains(sc, "backend version mismatch") })
+		r.h.p.Post(r.h.restartMismatch) // nothing would bring a backend back: a no-op
+		r.h.p.Post(r.h.quitMismatch)
+		select {
+		case <-r.s.Quit():
+		case <-time.After(3 * time.Second):
+			t.Fatal("Quit did not quit")
+		}
+	})
+	t.Run("connected: nothing to recover", func(t *testing.T) {
+		d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+		r := runTUI(t, NewSession(d.sock, func() (string, error) { return "", errors.New("no spawn") }), Options{})
+		r.s.WaitForText(t, "· kb")
+		r.h.p.Post(r.h.restartMismatch)
+		if onLoop(r, func() bool { return r.h.mismatchOpen || r.h.mismatchRecovery }) {
+			t.Fatal("a connected session started a recovery")
+		}
+	})
+	t.Run("a stop that does not complete", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "adm")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		sock := filepath.Join(dir, "s.sock")
+		otherDaemon(t, sock, rpc.Protocol-1)
+		r := runTUI(t, NewSession(sock, func() (string, error) { return "", errors.New("unused") }), Options{})
+		r.s.WaitFor(t, "the dialog", func(sc string) bool { return strings.Contains(sc, "Restart Now") })
+		onLoop(r, func() bool {
+			r.h.awaitExit = func(context.Context, int64) bool { return false } // it never goes
+			return true
+		})
+		r.h.p.Post(r.h.restartMismatch)
+		r.s.WaitFor(t, "the failure, actionable", func(sc string) bool {
+			flat := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
+			return strings.Contains(flat, "Restart failed:") && strings.Contains(flat, "has not stopped")
+		})
+		// a toast may lie over the buttons on screen: the dialog's own state says Restart Now is there
+		if !onLoop(r, func() bool { return r.h.mismatchOpen && r.h.mismatchRecovery }) {
+			t.Fatal("the failure is not in the recovery dialog")
+		}
+	})
+}

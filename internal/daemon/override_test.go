@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -183,5 +184,76 @@ func TestQueueKeepsToOneProviderForABoundedRun(t *testing.T) {
 	}
 	if switches == 0 || switches > 3 {
 		t.Fatalf("%d provider switches in %d turns, want a few bounded runs: %v", switches, len(seq), seq)
+	}
+}
+
+// The setting verbs refuse a workspace the daemon does not have; a nil include is an explicit blank
+// one; a schema set on a workspace whose root is gone is stored for when it is served; a provider
+// that does not exist is refused through the Embedding's builder; and editing a provider that is not
+// the daemon's reaches only the workspaces that use it.
+func TestSettingVerbsEdgeCases(t *testing.T) {
+	m, db := open(t)
+	ctx := context.Background()
+	if _, err := m.SetSchema(ctx, "nope", "s.yaml"); !errors.Is(err, store.ErrNoWorkspace) {
+		t.Errorf("SetSchema on no workspace: %v", err)
+	}
+	if err := m.SetPatterns(ctx, "nope", []string{"**/*.md"}, nil); !errors.Is(err, store.ErrNoWorkspace) {
+		t.Errorf("SetPatterns on no workspace: %v", err)
+	}
+	if err := m.SetProvider(ctx, "nope", ""); !errors.Is(err, store.ErrNoWorkspace) {
+		t.Errorf("SetProvider on no workspace: %v", err)
+	}
+	if _, err := m.SetTextExtensions(ctx, "nope", nil); !errors.Is(err, store.ErrNoWorkspace) {
+		t.Errorf("SetTextExtensions on no workspace: %v", err)
+	}
+	addQueueWorkspace(t, m, "kb", 1)
+	if err := m.SetPatterns(ctx, "kb", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, m, "kb", 0) // a nil include is an explicit blank one: nothing indexed
+	if ws, _ := db.Workspaces(ctx); ws[0].Include == nil || len(ws[0].Include) != 0 {
+		t.Fatalf("include after nil = %v", ws[0].Include)
+	}
+
+	// the Embedding's builder: a provider that does not exist is refused, nothing stored
+	e := NewEmbedding(db, m, nil)
+	if err := m.SetProvider(ctx, "kb", "ghost"); !errors.Is(err, store.ErrNoProvider) {
+		t.Errorf("SetProvider to a missing provider: %v", err)
+	}
+	if p, _ := db.WorkspaceProvider(ctx, mustID(t, m, "kb")); p != "" {
+		t.Fatalf("a refused provider was stored: %q", p)
+	}
+	// editing a provider that is not the daemon's: stored, and the workspaces using it told
+	if _, err := db.AddProvider(ctx, store.ProviderSpec{Name: "side", Kind: store.KindOllama, BaseURL: "http://127.0.0.1:1", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.UpdateProvider(ctx, "side", store.ProviderSpec{Name: "side2", Kind: store.KindOllama, BaseURL: "http://127.0.0.1:1", Model: "m"}); err != nil {
+		t.Fatal(err)
+	}
+	if ps, _ := db.Providers(ctx); len(ps) != 1 || ps[0].Name != "side2" {
+		t.Fatalf("providers after the edit = %+v", ps)
+	}
+}
+
+// A schema set on a workspace whose root is gone is stored, and reported back as its path alone.
+func TestSchemaOnAnUnservedWorkspace(t *testing.T) {
+	m, db := open(t)
+	root := t.TempDir()
+	if _, err := db.AddWorkspace(context.Background(), "gone", root, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.OpenAll(); err != nil {
+		t.Fatal(err)
+	}
+	st, err := m.SetSchema(context.Background(), "gone", "s.yaml")
+	if err != nil || st.Path != "s.yaml" || st.Active {
+		t.Fatalf("SetSchema on an unserved workspace = %+v, %v", st, err)
+	}
+	ws, _ := db.Workspaces(context.Background())
+	if ws[0].SchemaPath == nil || *ws[0].SchemaPath != "s.yaml" {
+		t.Fatal("not stored")
 	}
 }
