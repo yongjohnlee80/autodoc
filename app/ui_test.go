@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func TestTheUIWantsATerminal(t *testing.T) {
 	os.Stdin = r
 	defer func() { os.Stdin = stdin }()
 
-	err = runUI(context.Background(), conf, "", "")
+	err = runUI(context.Background(), conf, "", "", testOptions)
 	if !errors.Is(err, term.ErrNotTerminal) || !strings.Contains(err.Error(), "cannot open the terminal") {
 		t.Fatalf("runUI with a pipe for stdin: err = %v, want it to refuse a non-terminal", err)
 	}

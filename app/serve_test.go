@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"bytes"
@@ -102,7 +102,7 @@ func start(t *testing.T, cfg, sock string) *daemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{t: t, sock: sock, out: &syncBuf{}, cancel: cancel, done: make(chan error, 1)}
-	go func() { d.done <- runServe(ctx, cfg, d.out) }()
+	go func() { d.done <- runServe(ctx, cfg, d.out, testOptions) }()
 	t.Cleanup(func() { d.stop() })
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -191,7 +191,7 @@ func TestSecondDaemonIsRefused(t *testing.T) {
 	sock := filepath.Join(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir())
 	start(t, cfg, sock)
-	err := runServe(context.Background(), cfg, io.Discard)
+	err := runServe(context.Background(), cfg, io.Discard, testOptions)
 	if !errors.Is(err, errAlreadyServing) {
 		t.Fatalf("a second daemon: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestSecondDaemonOnTheStoreIsRefused(t *testing.T) {
 	a := filepath.Join(dir, "a.sock")
 	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
 	b := filepath.Join(dir, "b.sock")
-	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard)
+	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testOptions)
 	if !errors.Is(err, store.ErrBusy) {
 		t.Fatalf("a second daemon over the store: %v, want store.ErrBusy", err)
 	}
@@ -576,12 +576,15 @@ func TestEmbeddingProvidersFromTheStore(t *testing.T) {
 	}
 }
 
-// TestMain lets a test run this binary's main: tui.SpawnServe starts os.Executable(), which in a test is
-// the test binary, so it runs main when asked to.
+// testOptions is the build the tests run as.
+var testOptions = Options{Version: "v0.0.0-test"}
+
+// TestMain lets a test run this binary as autodoc: tui.SpawnServe starts os.Executable(), which in a
+// test is the test binary, so it runs Main when asked to.
 func TestMain(m *testing.M) {
 	if os.Getenv("AUTODOC_TEST_MAIN") == "1" {
-		main() // with the arguments the spawn gave: --serve --config <file>
-		os.Exit(0)
+		// with the arguments the spawn gave: --serve --config <file>
+		os.Exit(Main(context.Background(), os.Args[1:], testOptions))
 	}
 	os.Exit(m.Run())
 }
@@ -691,12 +694,12 @@ func isCode(err error, code int64) bool {
 }
 
 // TestInstalledVersionAsksTheBinary: the version a restart would start is the binary's own answer
-// to --version (here the test binary, running main). tui's own cells refuse a binary that answers
+// to --version (here the test binary, running Main). tui's own cells refuse a binary that answers
 // otherwise.
 func TestInstalledVersionAsksTheBinary(t *testing.T) {
 	t.Setenv("AUTODOC_TEST_MAIN", "1")
-	if v, err := tui.InstalledVersion(); err != nil || v != version {
-		t.Fatalf("installed %q, %v; want %q", v, err, version)
+	if v, err := tui.InstalledVersion(); err != nil || v != testOptions.Version {
+		t.Fatalf("installed %q, %v; want %q", v, err, testOptions.Version)
 	}
 }
 

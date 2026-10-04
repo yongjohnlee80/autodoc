@@ -23,7 +23,8 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `tui` | the terminal UI: search, the files, a Vim-keyed editor, backlinks; its screen written in QML |
 | `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
-| `cmd/autodoc` | the binary: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON |
+| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON; a main hands it its version (ADR 0216) |
+| `cmd/autodoc` | the binary, the community build: `app.Main` with no registrations |
 
 ## Install
 

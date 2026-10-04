@@ -1,25 +1,13 @@
-// Command autodoc is AutoDoc's one binary, with its modes as flags (ADR 0203 §4.1). --serve is the
-// daemon; --ui is the TUI, its client, which starts the daemon when nothing answers:
-//
-//	autodoc --ui [--dev dir] [workspace]
-//
-// opens the named workspace, or the one the TUI last used. --call is one verb, as JSON, for a shell
-// or an AI agent (AGENTS.md):
-//
-//	autodoc --call search.query '["kb", "a query", {"limit": 5}]'
-//
-// The Web-UI (--web-ui) follows.
+// Command autodoc is AutoDoc's one binary, the community build: app.Main with no registrations
+// (ADR 0216 §1.1). The modes and their flags are app's.
 package main
 
 import (
 	"context"
-	"errors"
-	"flag"
-	"fmt"
 	"os"
-	"os/signal"
 	"runtime/debug"
-	"syscall"
+
+	"github.com/yongjohnlee80/autodoc/app"
 )
 
 // version is stamped at build time (-ldflags "-X main.version=…"). Unstamped, as
@@ -42,51 +30,5 @@ func moduleVersion(stamped string, info *debug.BuildInfo) string {
 }
 
 func main() {
-	serve := flag.Bool("serve", false, "run the daemon")
-	ui := flag.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
-	dev := flag.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
-	configPath := flag.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
-	showVersion := flag.Bool("version", false, "print the version")
-	call := flag.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
-	exportFormat := flag.String("export", "", "export a Markdown file as html or text")
-	exportOutput := flag.String("output", "", "--export: destination file (required)")
-	exportTheme := flag.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
-	flag.Parse()
-	if flag.NArg() > 0 && !((*ui || *call != "" || *exportFormat != "") && flag.NArg() == 1) {
-		fmt.Fprintln(os.Stderr, "autodoc: unexpected arguments:", flag.Args(), "(only --ui, --call and --export take one argument)")
-		os.Exit(2)
-	}
-	switch {
-	case *showVersion:
-		fmt.Println("autodoc", version)
-	case *serve:
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-		if err := runServe(ctx, *configPath, os.Stderr); err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintln(os.Stderr, "autodoc:", err)
-			stop()
-			os.Exit(1)
-		}
-	case *call != "":
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		code := callMain(ctx, *configPath, *call, flag.Arg(0), os.Stdout, os.Stderr)
-		stop()
-		os.Exit(code)
-	case *exportFormat != "":
-		if err := exportMain(flag.Arg(0), *exportFormat, *exportOutput, *exportTheme); err != nil {
-			fmt.Fprintln(os.Stderr, "autodoc:", err)
-			os.Exit(1)
-		}
-	case *ui:
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
-		defer stop()
-		if err := runUI(ctx, *configPath, *dev, flag.Arg(0)); err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintln(os.Stderr, "autodoc:", err)
-			stop()
-			os.Exit(1)
-		}
-	default:
-		flag.Usage()
-		os.Exit(2)
-	}
+	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{Version: version}))
 }
