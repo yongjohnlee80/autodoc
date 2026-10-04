@@ -42,7 +42,7 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
-	session := tui.NewSession(sock, func() (string, error) { return tui.SpawnServe(configPath, stateDir) })
+	session := tui.NewSession(sock, func() (string, error) { return tui.SpawnServe(configPath, stateDir) }).UseHandoffs(stateDir)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}

@@ -298,6 +298,7 @@ Window {
     ProviderRemove { id: providerRemove }
     RestartBackend { id: restartBackend }
     Mismatch { id: mismatch }
+    Registrations { id: registrations }
     Vectors { id: vectorsDialog }
     PurgeModel { id: purgeModel }
     ConfirmQuit { id: confirmQuit }

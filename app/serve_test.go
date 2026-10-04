@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -782,5 +783,41 @@ func TestCallPrintsTheResultAsJSON(t *testing.T) {
 		if _, err := run("workspace.list", bad); err == nil || !strings.Contains(err.Error(), "--call") {
 			t.Errorf("parameters %s: %v, want refused", bad, err)
 		}
+	}
+}
+
+// TestACallDuringARestartSpawnsNothing: --call goes through the same Connect as the TUI, so while
+// another process's restart handoff stands it only dials, and reaches the daemon that restart
+// starts; nothing is spawned (no serve.log).
+func TestACallDuringARestartSpawnsNothing(t *testing.T) {
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	state := filepath.Join(dir, "state")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
+	requester := exec.Command("sleep", "60")
+	if err := requester.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = requester.Process.Kill(); _ = requester.Wait() })
+	if err := tui.WriteHandoff(state, sock, int64(requester.Process.Pid)); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AUTODOC_TEST_MAIN", "1") // a spawn would start a real daemon, logging to serve.log
+	var out strings.Builder
+	done := make(chan error, 1)
+	go func() { done <- runCall(context.Background(), cfg, "workspace.list", "", &out) }()
+	time.Sleep(time.Second)
+	if _, err := os.Stat(filepath.Join(state, "serve.log")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("--call spawned a daemon during the restart: %v", err)
+	}
+	start(t, cfg, sock) // the requester's daemon
+	if err := <-done; err != nil || !strings.Contains(out.String(), `"name": "kb"`) {
+		t.Fatalf("--call: %v, %q", err, out.String())
+	}
+	if _, err := os.Stat(filepath.Join(state, "serve.log")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("--call spawned a daemon: %v", err)
 	}
 }

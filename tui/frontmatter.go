@@ -84,7 +84,7 @@ func (h *Host) validateNow(gen uint64) {
 	if !h.file.open {
 		p = untitled + ".md"
 	}
-	if h.ws == "" || kind.Of(p, h.textExtensions()) != kind.Markdown {
+	if h.ws == "" || h.kinds.Of(p, h.textExtensions()) != kind.Markdown {
 		h.showDiagnostics(nil)
 		return
 	}

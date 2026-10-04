@@ -18,7 +18,10 @@ func (h *Host) state() map[string]any {
 		"App.statusCenter":       "",
 		"App.mismatchQuestion":   "",
 		"App.canRestartMismatch": false,
-		"App.pageWidth":          defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
+		// the registration restart's question (registrations.go)
+		"App.registrationQuestion":    "",
+		"App.canRestartRegistrations": false,
+		"App.pageWidth":               defaultRuler + 2, // the ruler, the border, and the gutter (syncPageWidth)
 		// semantic search's mark: shown once a status poll answers (progress.go)
 		"App.semanticMark":   "",
 		"App.semanticDot":    "default",

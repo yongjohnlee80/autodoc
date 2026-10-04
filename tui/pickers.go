@@ -24,6 +24,7 @@ type hit struct {
 	path, breadcrumb string
 	byteStart        int
 	relevance        float64 // 0 to 1: 1 is first in every retriever the search ran
+	hold             string  // "" interpreted; current, stale or unchecked: a document the daemon holds
 }
 
 // relevanceText is a hit's relevance as the list shows it, a percentage.
@@ -77,7 +78,8 @@ func (h *Host) searchLive(q string) {
 			hm := asMap(x)
 			start, _ := hm["byte_start"].(int64)
 			rel, _ := hm["relevance"].(float64)
-			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start), relevance: rel})
+			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start), relevance: rel,
+				hold: str(hm, "hold")})
 		}
 		return answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic")}
 	}, func(a answer) {
@@ -126,11 +128,7 @@ func (h *Host) searchLive(q string) {
 			h.searchWaitToast = false
 		}
 		h.hitList = a.hits
-		rows := make([]rowOf, len(a.hits))
-		for i, x := range a.hits {
-			rows[i] = rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": x.breadcrumb}
-		}
-		h.hits.Reset(rows)
+		h.hits.Reset(hitRows(a.hits))
 		h.set("App.hitsTitle", fmt.Sprintf("hits (%d) · %s · semantic %s", len(a.hits), a.mode, a.semantic))
 		if len(a.hits) > 0 {
 			h.previewHit(0)
@@ -243,6 +241,7 @@ func (h *Host) previewHit(i int) {
 		return
 	}
 	x := h.hitList[i]
+	h.previewHeld = x.hold != ""
 	h.preview("search", x.path, x.byteStart)
 }
 
@@ -256,6 +255,12 @@ func (h *Host) openHit(i int) {
 	h.searchClosed()
 	h.openAt = x.byteStart
 	h.openPath(x.path)
+	switch x.hold {
+	case "stale":
+		h.notify(x.path + " changed since this backend's build indexed it: the section may have moved")
+	case "unchecked":
+		h.notify(x.path + " is held, not yet checked against its file: the section may have moved")
+	}
 }
 
 // preview shows file p of the workspace in the named picker's preview, at byte at: read through
@@ -283,7 +288,12 @@ func (h *Host) preview(picker, p string, at int) {
 			return
 		}
 		if a.err != nil {
-			h.showPreview(picker, p+" · "+wireMessage(a.err), "", 0)
+			why := wireMessage(a.err)
+			if picker == "search" && h.previewHeld {
+				// a held hit this backend cannot read (a PDF under a community build): say why
+				why = "held: this backend's build does not read this file; it was indexed by another (" + why + ")"
+			}
+			h.showPreview(picker, p+" · "+why, "", 0)
 			return
 		}
 		h.showPreview(picker, p, a.text, at)
@@ -486,4 +496,17 @@ func foldAt(s string, i int, t string) int {
 		i += n
 	}
 	return i
+}
+
+// hitRows are the hit list's rows: a held document's hit says so after its section.
+func hitRows(hits []hit) []rowOf {
+	rows := make([]rowOf, len(hits))
+	for i, x := range hits {
+		section := x.breadcrumb
+		if l := holdLabel(x.hold); l != "" {
+			section += " · " + l
+		}
+		rows[i] = rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": section}
+	}
+	return rows
 }

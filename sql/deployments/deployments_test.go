@@ -137,7 +137,7 @@ func TestTheScriptsApplyOnSQLite(t *testing.T) {
 	}
 }
 
-// 000012 gives every chunk an embed text, '' unless a writer sets one, and its revert takes the
+// 000012 gives every chunk an embed text, ” unless a writer sets one, and its revert takes the
 // column and nothing else: the chunks stay.
 func TestTheChunkEmbedColumn(t *testing.T) {
 	ctx := context.Background()

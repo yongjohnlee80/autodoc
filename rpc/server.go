@@ -27,6 +27,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -44,7 +45,7 @@ import (
 // setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214). Protocol 10
 // adds a build's registrations (ADR 0216): workspace.list's text_collisions; the documents a daemon
 // holds, index.status's held, held_stale and held_unchecked, search.query's hold on a hit, and
-// index.reindex's refusal of a held document.
+// index.reindex's refusal of a held document; sys.capabilities' registrations, always there.
 const Protocol int64 = 10
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
@@ -176,6 +177,7 @@ type Preferences interface {
 
 // Server is the API over the daemon's workspaces.
 type Server struct {
+	reg         registrations.Tables // the build's registrations, sys.capabilities reports them
 	rpc         *golibrpc.Server
 	workspaces  Workspaces
 	preferences Preferences
@@ -195,6 +197,7 @@ type options struct {
 	preferences Preferences
 	embeddings  Embeddings
 	events      Events
+	reg         registrations.Tables
 }
 
 // Option configures a Server.
@@ -208,6 +211,10 @@ func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } 
 
 // WithPreferences keeps clients' preferences in p (the daemon's store).
 func WithPreferences(p Preferences) Option { return func(o *options) { o.preferences = p } }
+
+// WithRegistrations reports the build's registrations in sys.capabilities (ADR 0216 §1.4); without
+// it, the empty ones of the community build.
+func WithRegistrations(t registrations.Tables) Option { return func(o *options) { o.reg = t } }
 
 // decodeLimits bound what a peer may send: a document (docs.MaxSize) and little else.
 func decodeLimits() *msgpack.Limits {
@@ -224,7 +231,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, events: o.events, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]),
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg,
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
