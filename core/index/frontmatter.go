@@ -57,14 +57,14 @@ func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string) 
 // rebuilt from its file; an unchanged chunk keeps its row and its vector, so a schema change costs
 // no embedding.
 func (x *Indexer) Revalidate(ctx context.Context) error {
+	h, err := x.holding(ctx)
+	if err != nil {
+		return err
+	}
 	_, fp := x.schema()
 	outdated, err := x.store.outdated(ctx, func(p string, tokens int) string { return x.versionOf(p, x.kindOf(p), tokens, fp) })
 	if err != nil {
 		return fmt.Errorf("index: listing outdated documents: %w", err)
-	}
-	h, err := x.holding(ctx)
-	if err != nil {
-		return err
 	}
 	for _, p := range outdated {
 		if _, held := h.of(p); held {

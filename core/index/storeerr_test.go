@@ -46,7 +46,8 @@ func TestListPagesInPathOrder(t *testing.T) {
 }
 
 // TestStatusFailsAsItsReads: the held documents are read once, when first asked; a status read
-// with the store closed fails, whether the held documents were read before or not.
+// with the store closed fails, whether the held documents were read before or not, and so does a
+// revalidation, at whichever read comes first.
 func TestStatusFailsAsItsReads(t *testing.T) {
 	ctx := context.Background()
 	e := newEnv(t, Options{})
@@ -67,5 +68,11 @@ func TestStatusFailsAsItsReads(t *testing.T) {
 	}
 	if err := fresh.Reindex("a.md"); err == nil {
 		t.Error("a reindex decided whether a.md is held with the store closed")
+	}
+	if err := fresh.Revalidate(ctx); err == nil || !strings.Contains(err.Error(), "reading the held documents") {
+		t.Errorf("a revalidation read the held documents with the store closed: %v", err)
+	}
+	if err := e.ix.Revalidate(ctx); err == nil || !strings.Contains(err.Error(), "listing outdated documents") {
+		t.Errorf("a revalidation listed the outdated documents with the store closed: %v", err)
 	}
 }
