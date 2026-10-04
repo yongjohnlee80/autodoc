@@ -41,8 +41,9 @@ import (
 // index.status's diagnosed), doc.outline, workspace.set_text_extensions with workspace.list's
 // text_extensions, sys.events (sys.hello answers the client's token and the log's head), and
 // workspace.set_provider with workspace.list's provider. Protocol 9 adds workspace.configure, every
-// setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214).
-const Protocol int64 = 9
+// setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214). Protocol 10
+// adds a build's registrations (ADR 0216): workspace.list's text_collisions.
+const Protocol int64 = 10
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -87,6 +88,9 @@ type Workspace struct {
 	FrontmatterSchema func() (*schema.Schema, SchemaStatus)
 	// TextExtensions are the workspace's own plain-text extensions (ADR 0212 §3); nil for none.
 	TextExtensions func() []string
+	// TextCollisions are those of its text extensions a registration of the build reads instead
+	// (ADR 0216 §1.3); nil for none.
+	TextCollisions func() []string
 	// Databases are the workspace's identity, destination and database connections (ADR 0214),
 	// read from the store when listed; nil when the server keeps none.
 	Databases func() Databases

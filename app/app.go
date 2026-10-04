@@ -21,6 +21,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/yongjohnlee80/golib/search"
+
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
 
 // Options is what a main hands Main: what makes its build its own.
@@ -28,6 +32,17 @@ type Options struct {
 	// Version is the build's, stamped in its main package: --version prints it, the daemon reports
 	// it, and the TUI compares it with the installed binary's, so it must be real.
 	Version string
+	// Chunkers are the build's own chunkers, by lower-case extension with its dot (".go"): a file
+	// of one is indexed by it, as kind.Registered (ADR 0216 §1.2-1.3). Main refuses a malformed or
+	// built-in extension, a Pro format's, and a version outside document.indexer's charset. nil:
+	// none, the community build.
+	Chunkers map[string]search.Chunker
+}
+
+// build is a build as the modes run it: Options validated and frozen once, at entry.
+type build struct {
+	version string
+	reg     *registrations.Table
 }
 
 // Main runs autodoc as its CLI does and returns the process's exit code: 2 for usage, 1 for an
@@ -37,6 +52,12 @@ func Main(ctx context.Context, args []string, o Options) int {
 }
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
+	reg, err := registrations.New(o.Chunkers)
+	if err != nil {
+		fmt.Fprintln(stderr, "autodoc:", err)
+		return 1
+	}
+	b := build{version: o.Version, reg: reg}
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	serve := fs.Bool("serve", false, "run the daemon")
@@ -60,11 +81,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	}
 	switch {
 	case *showVersion:
-		fmt.Fprintln(stdout, "autodoc", o.Version)
+		fmt.Fprintln(stdout, "autodoc", b.version)
 	case *serve:
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
-		if err := runServe(ctx, *configPath, stderr, o); err != nil && !errors.Is(err, context.Canceled) {
+		if err := runServe(ctx, *configPath, stderr, b); err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}
@@ -81,7 +102,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		// SIGTERM only: the terminal's own keys (ctrl-c among them) are the TUI's
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
 		defer stop()
-		if err := runUI(ctx, *configPath, *dev, fs.Arg(0), o); err != nil && !errors.Is(err, context.Canceled) {
+		if err := runUI(ctx, *configPath, *dev, fs.Arg(0), b); err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}

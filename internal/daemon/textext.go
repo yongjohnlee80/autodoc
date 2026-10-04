@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync/atomic"
+
+	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -38,9 +41,10 @@ func (m *Workspaces) textExtensionsFor(id int64) *textExtensions {
 
 // SetTextExtensions replaces a workspace's own plain-text extensions and answers them normalized.
 // A file whose extension joined or left the list is read again as its new kind; which files are
-// indexed is still the patterns'. A Pro format or a built-in kind's extension is refused.
+// indexed is still the patterns'. A Pro format's, a built-in kind's or a registration's extension
+// is refused.
 func (m *Workspaces) SetTextExtensions(ctx context.Context, name string, exts []string) ([]string, error) {
-	norm, err := kind.TextExtensions(exts)
+	norm, err := m.textExtensions(exts)
 	if err != nil {
 		return nil, err
 	}
@@ -85,5 +89,34 @@ func (m *Workspaces) applyTextExtensions(s *served, norm []string) {
 				s.w.Index.Reindex(p)
 			}
 		}
+	}
+}
+
+// textExtensions normalizes a workspace's own plain-text extensions (kind.TextExtensions) and
+// refuses one a registration of this build reads (ADR 0216 §1.3): the registration would win.
+func (m *Workspaces) textExtensions(exts []string) ([]string, error) {
+	norm, err := kind.TextExtensions(exts)
+	if err != nil {
+		return nil, err
+	}
+	if c := m.opts.Registrations.Collisions(norm); len(c) > 0 {
+		return nil, &kind.ErrExtension{Ext: c[0], Why: "this build reads it with a registered chunker"}
+	}
+	return norm, nil
+}
+
+// noteCollisions logs, once for each change, a workspace's stored text extensions that a
+// registration of this build reads instead. They do not stop it: the registration wins, and
+// workspace.list names them.
+func (m *Workspaces) noteCollisions(id int64, name string, stored []string) {
+	c := m.opts.Registrations.Collisions(stored)
+	key := strings.Join(c, " ")
+	m.mu.Lock()
+	seen := m.collided[id] == key
+	m.collided[id] = key
+	m.mu.Unlock()
+	if len(c) > 0 && !seen {
+		logger.Warning(m.opts.Log, nil, logger.Fields{"event": "workspace.text_collision", "workspace": name, "extensions": key,
+			"message": "these text extensions are read by this build's registered chunkers instead"})
 	}
 }

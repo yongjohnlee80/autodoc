@@ -2,6 +2,7 @@ package index
 
 import (
 	"crypto/sha256"
+	"fmt"
 
 	"github.com/yongjohnlee80/golib/search"
 )
@@ -16,12 +17,16 @@ type chunkT struct {
 	hash, textHash []byte
 }
 
-// hashed is chunks with their hashes.
-func hashed(chunks []search.Chunk) []chunkT {
+// hashed is chunks the built-in chunkers cut, with their hashes.
+func hashed(chunks []search.Chunk) []chunkT { return hashedUnder(ChunkerVersion, chunks) }
+
+// hashedUnder is chunks cut by a chunker of version, with their hashes: a chunker's change of
+// version rewrites only its own documents' chunks (ADR 0216 §1.5).
+func hashedUnder(version string, chunks []search.Chunk) []chunkT {
 	out := make([]chunkT, len(chunks))
 	for i, c := range chunks {
 		h := sha256.New()
-		h.Write([]byte(ChunkerVersion))
+		h.Write([]byte(version))
 		h.Write([]byte{0})
 		h.Write([]byte(c.Breadcrumb))
 		h.Write([]byte{0})
@@ -34,4 +39,15 @@ func hashed(chunks []search.Chunk) []chunkT {
 		out[i] = chunkT{Chunk: c, hash: h.Sum(nil), textHash: t[:]}
 	}
 	return out
+}
+
+// cutRegistered cuts d with a registered chunker. The chunker is another module's code: a panic is
+// the document's error, as a refusal is, and never the indexer's.
+func cutRegistered(c search.Chunker, version string, d search.Doc) (cs []search.Chunk, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			cs, err = nil, fmt.Errorf("the %s chunker failed: %v", version, r)
+		}
+	}()
+	return c.Chunk(d)
 }

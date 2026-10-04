@@ -102,7 +102,7 @@ func start(t *testing.T, cfg, sock string) *daemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{t: t, sock: sock, out: &syncBuf{}, cancel: cancel, done: make(chan error, 1)}
-	go func() { d.done <- runServe(ctx, cfg, d.out, testOptions) }()
+	go func() { d.done <- runServe(ctx, cfg, d.out, testBuild) }()
 	t.Cleanup(func() { d.stop() })
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -191,7 +191,7 @@ func TestSecondDaemonIsRefused(t *testing.T) {
 	sock := filepath.Join(dir, "a.sock")
 	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir())
 	start(t, cfg, sock)
-	err := runServe(context.Background(), cfg, io.Discard, testOptions)
+	err := runServe(context.Background(), cfg, io.Discard, testBuild)
 	if !errors.Is(err, errAlreadyServing) {
 		t.Fatalf("a second daemon: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestSecondDaemonOnTheStoreIsRefused(t *testing.T) {
 	a := filepath.Join(dir, "a.sock")
 	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
 	b := filepath.Join(dir, "b.sock")
-	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testOptions)
+	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild)
 	if !errors.Is(err, store.ErrBusy) {
 		t.Fatalf("a second daemon over the store: %v, want store.ErrBusy", err)
 	}
@@ -576,8 +576,11 @@ func TestEmbeddingProvidersFromTheStore(t *testing.T) {
 	}
 }
 
-// testOptions is the build the tests run as.
-var testOptions = Options{Version: "v0.0.0-test"}
+// testOptions is the build the tests run as, and testBuild the same build as the modes take it.
+var (
+	testOptions = Options{Version: "v0.0.0-test"}
+	testBuild   = build{version: testOptions.Version}
+)
 
 // TestMain lets a test run this binary as autodoc: tui.SpawnServe starts os.Executable(), which in a
 // test is the test binary, so it runs Main when asked to.

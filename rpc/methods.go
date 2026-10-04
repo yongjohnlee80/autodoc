@@ -48,6 +48,11 @@ func workspaceMap(w *Workspace) map[string]any {
 		text = w.TextExtensions()
 	}
 	out["text_extensions"] = anyList(text)
+	var collisions []string
+	if w.TextCollisions != nil {
+		collisions = w.TextCollisions()
+	}
+	out["text_collisions"] = anyList(collisions)
 	out["provider"] = w.Provider.Override
 	if w.Provider.Err != "" {
 		out["provider_error"] = w.Provider.Err

@@ -42,6 +42,7 @@ type Docs struct {
 	fsys     vfs.FS
 	eligible func(path string) bool // the workspace's include and exclude; nil: every path
 	text     func() []string        // the workspace's own plain-text extensions; nil: none
+	kinds    kind.Registrations     // the build's registered extensions (ADR 0216)
 }
 
 // Option configures Docs.
@@ -50,6 +51,10 @@ type Option func(*Docs)
 // WithTextExtensions reads the workspace's own plain-text extensions (core/kind) from text, asked
 // at each read and write, so a change applies without a restart.
 func WithTextExtensions(text func() []string) Option { return func(d *Docs) { d.text = text } }
+
+// WithRegistrations reads files of the build's registered extensions as their kind (kind.Registered:
+// UTF-8 text, validated as such on a write).
+func WithRegistrations(r kind.Registrations) Option { return func(d *Docs) { d.kinds = r } }
 
 // New returns the documents of fsys that eligible admits.
 func New(fsys vfs.FS, eligible func(path string) bool, opts ...Option) *Docs {
@@ -65,7 +70,7 @@ func (d *Docs) kindOf(path string) kind.Kind {
 	if d.text != nil {
 		text = d.text()
 	}
-	return kind.Of(path, text)
+	return d.kinds.Of(path, text)
 }
 
 // Doc is a document's content at a version.

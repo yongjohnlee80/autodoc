@@ -9,7 +9,6 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/edition"
-	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -53,7 +52,7 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 	}
 	var texts []string
 	if c.TextExtensions != nil {
-		norm, err := kind.TextExtensions(*c.TextExtensions)
+		norm, err := m.textExtensions(*c.TextExtensions)
 		if err != nil {
 			return err
 		}

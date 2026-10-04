@@ -23,7 +23,7 @@ func TestTheStoresReadsFailAsThemselves(t *testing.T) {
 	if _, _, err := e.store.embedQuery(ctx, sem, "zebra"); err == nil {
 		t.Error("a query embedded with the store closed")
 	}
-	if _, err := e.store.outdated(ctx, "", nil); err == nil {
+	if _, err := e.store.outdated(ctx, nil); err == nil {
 		t.Error("the rebuild check read the section size with the store closed")
 	}
 }

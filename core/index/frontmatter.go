@@ -19,17 +19,31 @@ func (x *Indexer) schema() (*schema.Schema, string) {
 	return x.opts.Schema()
 }
 
-// kindOf is how the indexer reads path, with the workspace's own text extensions.
+// kindOf is how the indexer reads path, with the build's registrations and the workspace's own
+// text extensions.
 func (x *Indexer) kindOf(p string) kind.Kind {
 	var text []string
 	if x.opts.TextExtensions != nil {
 		text = x.opts.TextExtensions()
 	}
-	return kind.Of(p, text)
+	return x.kinds.Of(p, text)
 }
 
-// Kind is how the indexer reads path: by extension, with the workspace's own text extensions.
+// Kind is how the indexer reads path: by extension, with the build's registrations and the
+// workspace's own text extensions.
 func (x *Indexer) Kind(p string) kind.Kind { return x.kindOf(p) }
+
+// versionOf is what document.indexer records for path, of kind k, indexed now (ADR 0216 §1.6): a
+// registered chunker's extension and version, or the built-in chunkers' version, with the schema's
+// fingerprint for Markdown.
+func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string) string {
+	if k == kind.Registered {
+		if _, v, ok := x.opts.Registrations.Chunker(p); ok {
+			return registeredVersion(kind.Ext(p), v, tokens)
+		}
+	}
+	return docVersion(indexerVersion(tokens), k == kind.Markdown, schemaFP)
+}
 
 // Revalidate queues every document indexed under another version than it would get now: after a
 // chunker or section-size change all of them, after a schema change the Markdown files. Each is
@@ -37,7 +51,7 @@ func (x *Indexer) Kind(p string) kind.Kind { return x.kindOf(p) }
 // no embedding.
 func (x *Indexer) Revalidate(ctx context.Context) error {
 	_, fp := x.schema()
-	outdated, err := x.store.outdated(ctx, fp, func(p string) bool { return x.kindOf(p) == kind.Markdown })
+	outdated, err := x.store.outdated(ctx, func(p string, tokens int) string { return x.versionOf(p, x.kindOf(p), tokens, fp) })
 	if err != nil {
 		return fmt.Errorf("index: listing outdated documents: %w", err)
 	}
