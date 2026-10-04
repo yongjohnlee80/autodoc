@@ -144,9 +144,9 @@ func (h *Host) applyEvents(events []peerEvent) {
 			recheck = recheck || e.workspace == h.ws
 		case "workspace.text_extensions":
 			notice, relist = fmt.Sprintf("workspace %s: its text types were changed %s", e.workspace, by), true
-		case "workspace.section_size", "workspace.embedding_policy", "workspace.provider":
+		case "workspace.section_size", "workspace.embedding_policy", "workspace.provider", "workspace.databases":
 			what := map[string]string{"workspace.section_size": "section size", "workspace.embedding_policy": "embedding policy",
-				"workspace.provider": "embedding provider"}[e.kind]
+				"workspace.provider": "embedding provider", "workspace.databases": "database settings"}[e.kind]
 			notice, relist = fmt.Sprintf("workspace %s: its %s was changed %s", e.workspace, what, by), true
 		case "embedding.switched":
 			notice = fmt.Sprintf("embedding model switched to '%s' %s; files are re-indexing in the background, and search stays available", e.detail, by)

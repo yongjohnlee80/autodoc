@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -169,6 +170,44 @@ func databasesMap(d Databases) map[string]any {
 		}
 		out[key] = map[string]any{"engine": c.Engine, "host": c.Host, "database": c.Database, "user": c.User,
 			"schema": c.Schema, "has_password": c.HasPassword}
+	}
+	return out
+}
+
+// configureEvents are the events a workspace.configure that succeeded logs: one for each thing it
+// changed, of the kind that thing's own verb logs, so a client following the log does what it does
+// for that verb. A rename comes first, with the new name; what follows is about the workspace under
+// it. The database settings are one event, workspace.databases, whose detail is empty: a
+// connection is never in the log.
+func configureEvents(p []any) []store.Event {
+	name, _ := p[0].(string)
+	m, _ := p[1].(map[string]any)
+	var out []store.Event
+	if to, ok := m["name"].(string); ok && to != name {
+		out = append(out, store.Event{Kind: "workspace.renamed", Workspace: name, Detail: to})
+		name = to
+	}
+	for _, f := range []struct {
+		kind   string
+		keys   []string
+		detail string
+	}{
+		{"workspace.patterns", []string{"include", "exclude"}, ""},
+		{"workspace.schema", []string{"schema"}, ""},
+		{"workspace.text_extensions", []string{"text_extensions"}, ""},
+		{"workspace.section_size", []string{"section_tokens"}, ""},
+		{"workspace.embedding_policy", []string{"embedding_policy"}, "embedding_policy"},
+		{"workspace.provider", []string{"provider"}, "provider"},
+		{"workspace.databases", []string{"destination", "vector_index", "view_args", "source", "destination_connection"}, ""},
+	} {
+		if !slices.ContainsFunc(f.keys, func(k string) bool { _, ok := m[k]; return ok }) {
+			continue
+		}
+		e := store.Event{Kind: f.kind, Workspace: name}
+		if f.detail != "" {
+			e.Detail, _ = m[f.detail].(string)
+		}
+		out = append(out, e)
 	}
 	return out
 }
