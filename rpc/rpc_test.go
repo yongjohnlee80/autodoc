@@ -75,7 +75,7 @@ func serve(t *testing.T) *rig {
 	}
 	ws := []*Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
 		{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)}}
-	r.sock = filepath.Join(t.TempDir(), "s.sock")
+	r.sock = shortSocket(t) // macOS bounds a socket's path at 104 bytes; a test's TempDir can pass it
 	ln, err := net.Listen("unix", r.sock)
 	if err != nil {
 		t.Fatal(err)
