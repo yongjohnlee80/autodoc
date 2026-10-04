@@ -173,3 +173,63 @@ func capsOf(m *Workspaces) []string {
 	}
 	return out
 }
+
+// A save whose restart fails after the save is written is taken back whole: every setting it
+// changed is as it was in the store, and the workspace is served under its old name with its old
+// patterns, section size, policy and schema. Not its patterns alone, with the rest left saved.
+func TestConfigure_ARestartThatFailsTakesTheWholeSaveBack(t *testing.T) {
+	m, db := openWith(t, Options{Databases: true})
+	kbWith(t, m, map[string]string{"a.md": "# A\n"}, "**/*.md")
+	indexed(t, m, "kb", 1)
+	failed := false
+	startFault = func(name string) error {
+		if !failed && name == "docs" {
+			failed = true
+			return errors.New("the root vanished")
+		}
+		return nil
+	}
+	t.Cleanup(func() { startFault = nil })
+
+	err := m.Configure(context.Background(), "kb", store.Changes{
+		Name:            ptr("docs"),
+		Include:         ptr([]string{"**/*.{md,txt}"}),
+		Exclude:         ptr([]string{}),
+		SectionTokens:   ptr(256),
+		SchemaPath:      ptr("s.yaml"),
+		TextExtensions:  ptr([]string{".log"}),
+		EmbeddingPolicy: ptr(store.EmbeddingNever),
+		ViewArgs:        ptr(map[string]any{"a": "b"}),
+	})
+	if err == nil || !strings.Contains(err.Error(), "the root vanished") {
+		t.Fatalf("Configure = %v, want the restart's failure", err)
+	}
+	if !failed {
+		t.Fatal("the fault never fired: the test did not reach the restart")
+	}
+
+	list, err := db.Workspaces(context.Background())
+	if err != nil || len(list) != 1 {
+		t.Fatalf("stored %+v, %v", list, err)
+	}
+	w := list[0]
+	if w.Name != "kb" || w.SectionTokens != nil || w.SchemaPath != nil || w.TextExtensions != nil || w.ViewArgs != nil ||
+		strings.Join(w.Include, ",") != "**/*.md" {
+		t.Errorf("the store kept part of the save: %+v include %v", w.Workspace, w.Include)
+	}
+	if p, _ := db.EmbeddingPolicy(context.Background(), w.ID); p != store.EmbeddingAlways {
+		t.Errorf("the store kept the policy %q", p)
+	}
+
+	if _, ok := m.Get("docs"); ok {
+		t.Error("served under the new name")
+	}
+	served, ok := m.Get("kb")
+	if !ok {
+		t.Fatal("kb is not served")
+	}
+	if served.SectionSize() != store.SectionTokensDefault || strings.Join(served.Include, ",") != "**/*.md" {
+		t.Errorf("served with section %d, include %v", served.SectionSize(), served.Include)
+	}
+	indexed(t, m, "kb", 1)
+}

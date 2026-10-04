@@ -189,8 +189,17 @@ func (m *Workspaces) serve(id int64, c config.Workspace) *served {
 	return s
 }
 
+// startFault, when set by this package's tests, fails a start before anything opens. Production
+// code never sets it.
+var startFault func(name string) error
+
 // start opens a workspace's root and starts its indexer and follower.
 func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
+	if startFault != nil {
+		if err := startFault(c.Name); err != nil {
+			return nil, err
+		}
+	}
 	sectionTokens, err := m.db.SectionTokens(m.ctx, id)
 	if err != nil {
 		return nil, err
