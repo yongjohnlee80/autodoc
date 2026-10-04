@@ -630,8 +630,13 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "search: words")
 	r.keys(t, decltest.Type("zebra")...)
-	r.s.WaitFor(t, "words-only fallback announced", func(_ string) bool {
-		return onLoop(r, func() string { return r.h.lastSearchError }) == "semantic search could not answer in kb; results are by words only"
+	// the answer to "zebra" itself, not to "zebr", which a key typed later supersedes but whose
+	// answer can apply first (no lexical hit, the same fallback notice)
+	r.s.WaitFor(t, "zebra's own answer, by words only", func(_ string) bool {
+		return onLoop(r, func() bool {
+			return r.h.searchQuery == "zebra" && r.h.searchCancel == nil &&
+				r.h.lastSearchError == "semantic search could not answer in kb; results are by words only"
+		})
 	})
 	if hits := onLoop(r, func() int { return len(r.h.hitList) }); hits == 0 {
 		t.Error("query error dropped lexical results")
