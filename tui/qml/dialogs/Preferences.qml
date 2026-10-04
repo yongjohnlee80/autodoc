@@ -40,6 +40,16 @@ Dialog {
                     Text { text: "" }
                     Text { text: "image previews (kitty graphics)" }
                     ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.imagesIndex; onActivated: App.setImagesIndex(index) }
+                    Text { text: "" }
+                    Text { text: "the terminal: from · size · length" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.terminalEdges; textRole: "label"; currentIndex: App.terminalEdgeIndex; onActivated: App.setTerminalEdge(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.terminalSizes; textRole: "label"; currentIndex: App.terminalSizeIndex; onActivated: App.setTerminalSize(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.terminalLengths; textRole: "label"; currentIndex: App.terminalLengthIndex; onActivated: App.setTerminalLength(index) }
+                    }
                 }
                 Text { text: " " }
             }

@@ -16,6 +16,7 @@ Dialog {
     Shortcut { sequence: "s"; onActivated: { leader.close(); App.save() } }
     Shortcut { sequence: "e"; onActivated: { leader.close(); App.toggleExplorer() } }
     Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleLinks() } }
+    Shortcut { sequence: "`"; onActivated: { leader.close(); App.toggleTerminal() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
     Shortcut { sequence: "m"; onActivated: { leader.close(); App.leaderMenuBar() } }
     Shortcut { sequence: "w"; onActivated: { leader.close(); App.pickWorkspace() } }

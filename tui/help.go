@@ -45,6 +45,14 @@ THE PANELS
   The explorer (SPC e) is every workspace's folders and notes; the links (SPC l) are the notes
   that link to this one. Each opens over the page from its side (Preferences sets which), and
   Escape or its key again closes it. Enter on a note opens it.
+  The terminal (SPC ` + "`" + `, View › Terminal) runs your shell in the workspace's folder, at the bottom
+  or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
+  It starts the first time it opens, and keeps running while hidden. Every key goes to the
+  shell; Ctrl+\ Ctrl+n leaves for Normal mode, where h j k l, w b e, gg G, Ctrl+u/d/b/f, / and ?
+  move over its history, v or V selects and y copies, and i or Enter goes back. In the Vim
+  editor mode, Esc leaves too, except in a full-screen program (vim, less), which needs it.
+  Escape in Normal mode, or SPC ` + "`" + ` again, hides it; the keyboard goes back where it was. When
+  the shell exits the pane says so, and Enter starts another.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -75,13 +83,14 @@ WHAT A KEY NEEDS
 // leaderText is the leader card's body, a key a line, as its Shortcuts are (views/Leader.qml).
 const leaderText = `/  search (or SPC again)  e  the explorer
 o  open a note            l  the links
-n  new note               t  the status line
-s  save                   m  show/focus or hide the menu
-w  switch workspace       k  the editor mode (Vim, Text)
-W  manage workspaces      ,  editor preferences
-?  help                   a  AI models
-h  notifications          A  about
-c  the note's outline     Q  quit`
+n  new note               ` + "`" + `  the terminal
+s  save                   t  the status line
+w  switch workspace       m  show/focus or hide the menu
+W  manage workspaces      k  the editor mode (Vim, Text)
+?  help                   ,  editor preferences
+h  notifications          a  AI models
+c  the note's outline     A  about
+Q  quit`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

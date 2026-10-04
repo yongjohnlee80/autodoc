@@ -8,7 +8,7 @@ import "github.com/yongjohnlee80/golib/tui/widget"
 // they are the editor's.
 
 // The panels, by the document's ids: the drawer, and what in it takes the keyboard.
-var panels = map[string]string{"explorer": "explorerTree", "links": "linksList"}
+var panels = map[string]string{"explorer": "explorerTree", "links": "linksList", "terminal": "terminalView"}
 
 // togglePanel opens or closes a panel; open, it has the keyboard.
 func (h *Host) togglePanel(name string) {
@@ -28,11 +28,19 @@ func (h *Host) togglePanel(name string) {
 func (h *Host) panelOpened(name string) {
 	h.panelOpen[name] = true
 	h.showFind() // a drawer at the right edge hides "finding …"
+	if name == "terminal" {
+		h.set("App.terminalShown", true)
+	}
 }
 
 func (h *Host) panelClosed(name string) {
 	h.panelOpen[name] = false
 	h.showFind()
+	if name == "terminal" {
+		h.set("App.terminalShown", false)
+		h.terminalClosed()
+		return
+	}
 	h.keep(h.p.Call("editor", "forceActiveFocus"))
 }
 
@@ -71,5 +79,5 @@ func (h *Host) movePane(dir string) {
 }
 
 func (h *Host) panelEdges() map[string]string {
-	return map[string]string{"explorer": h.prefs.explorerEdge, "links": h.prefs.linkEdge}
+	return map[string]string{"explorer": h.prefs.explorerEdge, "links": h.prefs.linkEdge, "terminal": h.prefs.termEdge}
 }

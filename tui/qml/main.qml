@@ -115,6 +115,7 @@ Window {
             MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
+            MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
             MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
@@ -249,6 +250,26 @@ Window {
                 currentIndex: App.linksIndex
                 onCurrentIndexChanged: App.linksMoved(index)
                 onActivated: App.openBacklink(index)
+            }
+        }
+    }
+    // the terminal: a shell in the workspace's folder, from the edge (or the centre) its preference
+    // names, at that place's size; it keeps running while hidden (terminal.go)
+    Drawer {
+        id: terminal
+        modal: false
+        edge: App.terminalEdge
+        size: App.terminalSize
+        length: App.terminalLength
+        onOpened: App.panelOpened("terminal")
+        onClosed: App.panelClosed("terminal")
+        Frame {
+            title: "terminal"
+            Terminal {
+                id: terminalView
+                dir: App.terminalDir
+                vimKeys: App.keymapVim
+                onExited: App.terminalExited(code)
             }
         }
     }
