@@ -71,7 +71,7 @@ WHAT A KEY NEEDS
   Otherwise a diagram is a terminal graph and HTML opens in the browser, and the preview says
   which was missing. View › Image previews off compares the two on the same file.
   field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
-  names a file's frontmatter problems, only once the workspace has a schema: Manage… › Schema…
+  names a file's frontmatter problems, only once the workspace has a schema: Manage… › Edit…
   names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.
   Adding a workspace needs a directory: Markdown, text and YAML are indexed, .git skipped. A name or root
   another workspace has is refused. Deleting one removes its index only; its files stay.

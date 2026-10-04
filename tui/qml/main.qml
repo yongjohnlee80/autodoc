@@ -283,20 +283,14 @@ Window {
     FileConflict { id: fileConflict }
     WorkspacePicker { id: workspacePicker }
     WorkspaceManager { id: workspaceManager }
-    WorkspaceAdd { id: workspaceAdd }
-    WorkspaceRename { id: workspaceRename }
-    WorkspaceSection { id: workspaceSection }
-    WorkspacePatterns { id: workspacePatterns }
-    WorkspaceSchema { id: workspaceSchema }
-    WorkspaceProvider { id: workspaceProvider }
-    WorkspacePolicy { id: workspacePolicy }
+    WorkspaceSettings { id: workspaceSettings }
+    WorkspaceRoot { id: workspaceRoot }
     WorkspaceRemove { id: workspaceRemove }
     PluginAdd { id: pluginAdd }
     PluginConfirm { id: pluginConfirm }
     PluginManager { id: pluginManager }
     PluginRemove { id: pluginRemove }
     Preferences { id: preferences }
-    FileTypes { id: fileTypes }
     Diagram { id: diagram }
     HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }

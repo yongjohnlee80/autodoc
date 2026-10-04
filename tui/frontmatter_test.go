@@ -1,10 +1,8 @@
 package tui
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -23,36 +21,6 @@ func writeSchema(t *testing.T, root string) {
 	}
 }
 
-// The manager's Schema… suggests the root's .autodoc/schema.yaml; saving it activates the schema,
-// and a broken file is reported with its line.
-func TestWorkspaceSchemaDialog(t *testing.T) {
-	root := fileDir(t, "a.md", "---\ntype: adr\n---\nalpha\n")
-	d := startManaged(t, map[string]string{"kb": root})
-	writeSchema(t, root)
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.manageWorkspaces() })
-	r.s.WaitForText(t, "Schema…")
-	r.h.p.Post(func() { r.h.startSchema(0) })
-	r.s.WaitForText(t, "frontmatter schema · kb")
-	r.s.WaitForText(t, suggestedSchema) // the suggestion fills the path field
-	r.s.WaitForText(t, "no schema: files are not checked")
-	r.h.p.Post(func() { r.h.saveSchema(suggestedSchema) })
-	r.s.WaitForText(t, "kb: schema active, 1 fields")
-	ws, err := d.db.Workspaces(context.Background())
-	if err != nil || ws[0].SchemaPath == nil || *ws[0].SchemaPath != suggestedSchema {
-		t.Fatalf("stored schema = %+v, %v", ws, err)
-	}
-
-	if err := os.WriteFile(filepath.Join(root, "broken.yaml"), []byte("version: 1\nfrontmatter:\n  type: {type: nope}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	r.h.p.Post(func() { r.h.saveSchema("broken.yaml") })
-	r.s.WaitFor(t, "the broken schema reported with its line", func(sc string) bool {
-		return strings.Contains(sc, "schema saved; active: 1 fields · line 3:")
-	})
-}
-
 // A note whose frontmatter breaks the schema shows the problem over the page, and fixing the text
 // clears it without a save.
 func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
@@ -61,8 +29,9 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 	writeSchema(t, root)
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.schemaWorkspace = "kb"; r.h.saveSchema(suggestedSchema) })
-	r.s.WaitForText(t, "schema active")
+	r.openSettings(t, "kb", 0)
+	r.saveForm(func(f *settingsForm) { f.schema = suggestedSchema })
+	r.waitNoticed(t, "kb: saved schema")
 	r.h.p.Post(func() { r.h.openPath("memo.md") })
 	r.waitFile(t, "memo.md")
 	r.s.WaitFor(t, "the diagnostic over the page", func(sc string) bool {
@@ -89,57 +58,4 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 		return string(b) == "---\ntype: memo\n---\nbody\n" && !r.file().dirty
 	})
 	r.s.WaitForText(t, "⚠ frontmatter line 2")
-}
-
-// Your own text types: declared and admitted in one action, previewed as indexed, refused for a
-// Pro format, and their include dropped when removed.
-func TestCustomTextTypes(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.openFileTypes() })
-	r.s.WaitForText(t, "none: e.g. .log, .rst")
-	r.h.p.Post(func() { r.h.setCustomTypes("log") })
-	r.s.WaitFor(t, ".log declared and admitted", func(string) bool {
-		ws, err := d.db.Workspaces(context.Background())
-		return err == nil && len(ws) == 1 && ws[0].TextExtensions != nil && *ws[0].TextExtensions == `[".log"]` &&
-			slices.Contains(ws[0].Include, "**/*.log")
-	})
-	r.s.WaitForText(t, "sample.log: indexed")
-
-	r.h.p.Post(func() { r.h.setCustomTypes(".log, .pdf") })
-	r.s.WaitForText(t, "not changed:")
-	r.s.WaitForText(t, "Pro document format")
-
-	r.h.p.Post(func() { r.h.setCustomTypes("") })
-	r.s.WaitFor(t, ".log removed with its include", func(string) bool {
-		ws, err := d.db.Workspaces(context.Background())
-		return err == nil && len(ws) == 1 && ws[0].TextExtensions == nil && !slices.Contains(ws[0].Include, "**/*.log")
-	})
-}
-
-// A custom-types save whose rules change fails takes the text types back, so "not changed" is true
-// (Lector's review of #30, follow-up): the root is removed between the two verbs' checks.
-func TestCustomTextTypesRollBackWhenTheRulesFail(t *testing.T) {
-	root := fileDir(t, "n.md", "# Notes\n")
-	d := startManaged(t, map[string]string{"kb": root})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.openFileTypes() })
-	r.s.WaitForText(t, "none: e.g. .log, .rst")
-	if err := os.RemoveAll(root); err != nil { // set_patterns checks the root; set_text_extensions does not
-		t.Fatal(err)
-	}
-	r.h.p.Post(func() { r.h.setCustomTypes(".log") })
-	r.s.WaitForText(t, "not changed:")
-	ws, err := d.db.Workspaces(context.Background())
-	if err != nil || len(ws) != 1 {
-		t.Fatal(err)
-	}
-	if ws[0].TextExtensions != nil {
-		t.Fatalf("text types kept after the rules failed: %s", *ws[0].TextExtensions)
-	}
-	if slices.Contains(ws[0].Include, "**/*.log") {
-		t.Fatal("the rules changed")
-	}
 }

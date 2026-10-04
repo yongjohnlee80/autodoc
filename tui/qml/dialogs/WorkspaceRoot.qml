@@ -1,14 +1,9 @@
-// WorkspaceAdd.qml — a new workspace: its title, then its folder, chosen in the picker's layout.
-// The folder field follows the listing, and a path typed there lists it; its **/*.md are indexed,
-// .git skipped. Select adds it; a refusal opens it again, the reason on the status line.
+// WorkspaceRoot.qml — the folder a workspace being added indexes, chosen in the picker's layout
+// over the settings dialog (Browse…). The folder field follows the listing, and a path typed there
+// lists it; Select puts the folder in the dialog's root.
 FolderDialog {
-    title: "add a workspace"
-    currentFolder: App.home
+    title: "the workspace's root"
+    currentFolder: App.browseFolder
     dim: false
-    Flex {
-        direction: Tui.Vertical
-        Text { text: "title" }
-        TextField { id: wsName; text: App.wsTitle }
-    }
-    onAccepted: App.addWorkspace(wsName.text, selectedFolder)
+    onAccepted: App.rootChosen(selectedFolder)
 }

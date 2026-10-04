@@ -365,17 +365,6 @@ func TestPreferencesAreKept(t *testing.T) {
 	})
 }
 
-func TestFileTypesDialogShowsCommunityAndProBoundaries(t *testing.T) {
-	daemon := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	running := attached(t, daemon)
-	running.h.p.Post(running.h.openFileTypes)
-	running.s.WaitFor(t, "file types shown", func(screen string) bool {
-		return strings.Contains(screen, "file types · kb") && strings.Contains(screen, "Markdown (.md)") &&
-			strings.Contains(screen, "Plain text (.txt)") && strings.Contains(screen, "YAML (.yaml, .yml)") &&
-			strings.Contains(screen, "Pro: .doc, .docx, .odt, .pdf")
-	})
-}
-
 // TestTheSearchMarksItsWordsWhereTheyAre: the preview marks each of the search's words, case
 // aside, over exactly its bytes, however lower-casing changes the line's length before it.
 func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {
