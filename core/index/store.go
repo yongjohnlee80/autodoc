@@ -276,6 +276,11 @@ type Status struct {
 	// Embeddings is the embedding tier's status: nil without a provider (Store.Status never has one;
 	// Indexer.Status does when it has a provider).
 	Embeddings *EmbeddingStatus
+	// Held counts the documents this daemon holds, made by a chunker or a format it lacks (ADR
+	// 0216 §1.4): searchable, never reinterpreted. HeldStale are those whose files changed since,
+	// HeldUnchecked those the scan or the watcher has not seen yet; both are counted in Held.
+	// Store.Status never has them; Indexer.Status does.
+	Held, HeldStale, HeldUnchecked int64
 }
 
 // JobError is a job whose last attempt failed.

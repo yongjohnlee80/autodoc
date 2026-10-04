@@ -55,7 +55,14 @@ func (x *Indexer) Revalidate(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("index: listing outdated documents: %w", err)
 	}
+	h, err := x.holding(ctx)
+	if err != nil {
+		return err
+	}
 	for _, p := range outdated {
+		if _, held := h.of(p); held {
+			continue // never reinterpreted (ADR 0216 §1.4)
+		}
 		x.touch(p, false) // the version check rebuilds each: no file changed, the indexer did
 	}
 	return nil

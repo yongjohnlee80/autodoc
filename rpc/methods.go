@@ -171,6 +171,10 @@ func wireErr(err error) error {
 	if errors.As(err, &setErr) {
 		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: setErr.Reason}
 	}
+	var heldErr *index.HeldError
+	if errors.As(err, &heldErr) {
+		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: heldErr.Error()}
+	}
 	var extErr *kind.ErrExtension
 	if errors.As(err, &extErr) {
 		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: extErr.Error()[len("kind: "):]}
@@ -465,8 +469,7 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
-		w.Index.Reindex(path)
-		return nil, nil
+		return nil, w.Index.Reindex(path)
 	}, true))
 	// the workspace's models and the room their vectors take
 	s.handle("index.models", s.verb(1, 1, func(ctx context.Context, w *Workspace, _ []any) (any, error) {
@@ -746,7 +749,7 @@ func resultMap(r index.Result) map[string]any {
 	for i, h := range r.Hits {
 		hits[i] = map[string]any{"path": h.Path, "breadcrumb": h.Breadcrumb, "snippet": h.Snippet,
 			"generation": h.Generation, "byte_start": int64(h.ByteStart), "byte_end": int64(h.ByteEnd),
-			"score": h.Score, "relevance": h.Relevance, "via": strs(h.Via)}
+			"score": h.Score, "relevance": h.Relevance, "via": strs(h.Via), "hold": h.Hold}
 	}
 	out := map[string]any{"hits": hits, "mode_used": r.ModeUsed, "semantic": r.Semantic}
 	if r.SemanticError != "" {
@@ -762,7 +765,8 @@ func statusMap(st index.Status, w *Workspace) map[string]any {
 	}
 	out := map[string]any{"cursor": st.Cursor, "oldest_retained": st.OldestRetained, "docs": st.Docs,
 		"chunks": st.Chunks, "pending_jobs": st.PendingJobs, "unparsed_frontmatter": strs(st.UnparsedFrontmatter),
-		"diagnosed": st.Diagnosed, "failing": failing}
+		"diagnosed": st.Diagnosed, "failing": failing,
+		"held": st.Held, "held_stale": st.HeldStale, "held_unchecked": st.HeldUnchecked}
 	if w.Following != nil {
 		f := w.Following()
 		out["following"] = map[string]any{"mode": f.Following, "error": f.Err, "retrying": strs(f.Retrying)}

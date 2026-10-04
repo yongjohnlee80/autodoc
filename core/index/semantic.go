@@ -963,8 +963,17 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 		}
 	}()
 	st, err := x.store.Status(ctx)
-	if err != nil || x.sem == nil {
+	if err != nil {
 		return st, err
+	}
+	h, err := x.holding(ctx)
+	if err != nil {
+		return st, err
+	}
+	current, stale, unchecked := h.counts()
+	st.Held, st.HeldStale, st.HeldUnchecked = current+stale+unchecked, stale, unchecked
+	if x.sem == nil {
+		return st, nil
 	}
 	m := x.sem
 	es := EmbeddingStatus{Provider: m.target.Name(), Model: m.active(), Semantic: SemanticReady}

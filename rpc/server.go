@@ -42,7 +42,9 @@ import (
 // text_extensions, sys.events (sys.hello answers the client's token and the log's head), and
 // workspace.set_provider with workspace.list's provider. Protocol 9 adds workspace.configure, every
 // setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214). Protocol 10
-// adds a build's registrations (ADR 0216): workspace.list's text_collisions.
+// adds a build's registrations (ADR 0216): workspace.list's text_collisions; the documents a daemon
+// holds, index.status's held, held_stale and held_unchecked, search.query's hold on a hit, and
+// index.reindex's refusal of a held document.
 const Protocol int64 = 10
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.

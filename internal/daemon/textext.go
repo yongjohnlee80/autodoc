@@ -86,7 +86,7 @@ func (m *Workspaces) applyTextExtensions(s *served, norm []string) {
 	if len(changed) > 0 {
 		for _, p := range s.w.Index.PathsUnder(".") {
 			if slices.Contains(changed, kind.Ext(p)) {
-				s.w.Index.Reindex(p)
+				_ = s.w.Index.Reindex(p) // a held document keeps its rows: no type of the workspace's reads it
 			}
 		}
 	}

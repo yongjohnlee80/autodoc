@@ -119,6 +119,7 @@ type Indexer struct {
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
 
 	kinds kind.Registrations // Options.Registrations' extensions, read once
+	holds holds              // the documents this daemon holds (ADR 0216 §1.4)
 }
 
 type job struct {
@@ -145,6 +146,8 @@ type prepared struct {
 	delete      bool
 	err         error
 	tooLarge    bool // err is that the file is over MaxFileSize
+	hold        bool // a held document: nothing is written, and holdState is how its file stands
+	holdState   string
 	version     vfs.Version
 	meta        chunk.Meta
 	chunks      []chunkT
@@ -215,11 +218,19 @@ func (x *Indexer) EmbeddingReady() bool {
 
 // Reindex queues path to be re-read and re-parsed even when its file is unchanged: the forced job
 // bypasses the fast path. "" is the whole workspace: every indexed document, and, through the
-// Rescanner, the files the index has not seen.
-func (x *Indexer) Reindex(path string) {
+// Rescanner, the files the index has not seen; the held among them are only checked against disk.
+// A held path alone is refused (HeldError), naming the way out.
+func (x *Indexer) Reindex(path string) error {
 	if path != "" {
+		h, err := x.holding(context.Background())
+		if err != nil {
+			return err
+		}
+		if d, ok := h.of(path); ok {
+			return &HeldError{Path: path, Ext: d.ext, What: d.what}
+		}
 		x.touch(path, true)
-		return
+		return nil
 	}
 	for _, p := range x.store.PathsUnder(".") {
 		x.touch(p, true)
@@ -230,6 +241,7 @@ func (x *Indexer) Reindex(path string) {
 	if r != nil {
 		r.Rescan()
 	}
+	return nil
 }
 
 // Rescanner finds the eligible files under the root that the index does not have: core/follow's
@@ -480,6 +492,19 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.delete = true // a directory now, a symlink, or outside include / inside exclude
 		return p
 	}
+	// a held document is never reinterpreted, forced or not; disk and the rules still delete it
+	h, err := x.holding(ctx)
+	if err != nil {
+		p.err = err
+		return p
+	}
+	if _, ok := h.of(w.path); ok {
+		p.hold, p.holdState = true, HoldCurrent
+		if v, ok := x.store.Version(w.path); !ok || v != fi.Version {
+			p.holdState = HoldStale
+		}
+		return p
+	}
 	if k == kind.Pro {
 		p.delete = true // Community never reads a Pro document format, whatever a glob admits
 		return p
@@ -631,6 +656,8 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 					return err
 				}
 				changed = append(changed, id)
+			case p.hold:
+				// nothing is written: its chunks and vectors stay, searchable
 			case !p.skip:
 				id, err := s.upsertDoc(tx, p, now)
 				if err != nil {
@@ -661,6 +688,15 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 		}
 	}
 	clear(x.unpersisted)
+	for _, o := range outcomes {
+		switch {
+		case !o.done:
+		case o.p.hold:
+			x.holds.set(o.p.path, o.p.holdState)
+		case o.p.delete:
+			x.holds.drop(o.p.path)
+		}
+	}
 	for _, o := range outcomes {
 		j := x.jobs[o.p.path]
 		switch {

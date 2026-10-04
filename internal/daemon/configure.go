@@ -137,7 +137,7 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		now := m.served[name]
 		m.mu.Unlock()
 		if now != nil && now.w.Index != nil {
-			now.w.Index.Reindex("")
+			_ = now.w.Index.Reindex("") // the whole workspace is never refused
 		}
 	}
 	return nil
