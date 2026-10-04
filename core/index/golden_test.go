@@ -201,6 +201,7 @@ type goldenChunk struct {
 	ByteStart, ByteEnd int
 	BodyBytes          int
 	Hash, TextHash     string
+	Embed              string `json:",omitempty"` // the built-ins' is "", so their goldens never name it
 }
 
 func (e *env) goldenDocs() []goldenDoc {
@@ -256,7 +257,7 @@ func (e *env) goldenDocs() []goldenDoc {
 		d.doc.Diagnostics = strs("SELECT ord || ' ' || field || ' ' || line || ' ' || rule || ': ' || message FROM doc_diagnostic WHERE doc_id = ? ORDER BY ord", d.id)
 		d.doc.Links = strs(`SELECT l.kind || ' ' || l.raw || ' -> ' || l.name || COALESCE('#' || l.anchor, '') || ' = ' || COALESCE(dd.path, '(none)')
 			FROM link l LEFT JOIN document dd ON dd.id = l.dst_doc WHERE l.src_doc = ? AND l.gen_to IS NULL ORDER BY l.id`, d.id)
-		rows, err := e.raw.QueryContext(ctx, `SELECT ord, breadcrumb, title, tags, byte_start, byte_end, length(CAST(body AS BLOB)), hash, text_hash
+		rows, err := e.raw.QueryContext(ctx, `SELECT ord, breadcrumb, title, tags, byte_start, byte_end, length(CAST(body AS BLOB)), hash, text_hash, embed
 			FROM chunk WHERE doc_id = ? AND gen_to IS NULL ORDER BY ord`, d.id)
 		if err != nil {
 			e.t.Fatal(err)
@@ -264,7 +265,7 @@ func (e *env) goldenDocs() []goldenDoc {
 		for rows.Next() {
 			var c goldenChunk
 			var h, th []byte
-			if err := rows.Scan(&c.Ord, &c.Breadcrumb, &c.Title, &c.Tags, &c.ByteStart, &c.ByteEnd, &c.BodyBytes, &h, &th); err != nil {
+			if err := rows.Scan(&c.Ord, &c.Breadcrumb, &c.Title, &c.Tags, &c.ByteStart, &c.ByteEnd, &c.BodyBytes, &h, &th, &c.Embed); err != nil {
 				e.t.Fatal(err)
 			}
 			c.Hash, c.TextHash = hex.EncodeToString(h), hex.EncodeToString(th)

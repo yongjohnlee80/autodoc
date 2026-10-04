@@ -66,7 +66,7 @@ A new workspace-owned table follows the same rule.
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema (ADR 0214) | `(workspace_id, role)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
-| `chunk` | a section of a document, live from `gen_from` until `gen_to` | `id`, `(workspace_id, id)` |
+| `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012) | `id`, `(workspace_id, id)` |
 | `chunk_fts` | SQLite's full-text index over the chunks (FTS5, external content) | the chunk's `id` |
 | `doc_tag` | a tag from a document's frontmatter | `(workspace_id, tag, doc_id)` |
 | `doc_alias` | an alias from a document's frontmatter | `(workspace_id, alias, doc_id)` |

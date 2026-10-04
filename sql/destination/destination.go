@@ -3,6 +3,8 @@
 // the destination, with a ledger of their own (ADR 0214 §7).
 //
 //	postgres/000001_update_initialize_index.sql   the baseline: no revert
+//	postgres/000002_update_chunk_embed.sql        a change …
+//	postgres/000002_revert_chunk_embed.sql        … and its undo
 //
 // The local store's scripts are sql/deployments; these are the tables a workspace's index needs
 // when it lives elsewhere. The same rules hold: a released script never changes, and a set that is

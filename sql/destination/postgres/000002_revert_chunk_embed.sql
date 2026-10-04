@@ -1,0 +1,1 @@
+ALTER TABLE chunk DROP COLUMN IF EXISTS embed;

@@ -737,7 +737,7 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 		}
 		fresh.Add(map[store.ChunkField]any{store.ChunkDoc: docID, store.ChunkHash: c.hash, store.ChunkTextHash: c.textHash,
 			store.ChunkGenFrom: next, store.ChunkOrd: int64(c.Ord), store.ChunkBreadcrumb: c.Breadcrumb,
-			store.ChunkBody: c.Body, store.ChunkTitle: title, store.ChunkTags: tags,
+			store.ChunkBody: c.Body, store.ChunkEmbed: c.Embed, store.ChunkTitle: title, store.ChunkTags: tags,
 			store.ChunkByteStart: int64(c.ByteStart), store.ChunkByteEnd: int64(c.ByteEnd)})
 		added = true
 	}
