@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -52,14 +53,31 @@ func handoffPath(stateDir, sock string) string {
 	return filepath.Join(stateDir, "restart-handoff-"+hex.EncodeToString(sum[:6]))
 }
 
+// errHandoffBusy is the handoff's lock held by another, asked for without waiting.
+var errHandoffBusy = errors.New("tui: the restart handoff is being changed")
+
+// beforeHandoffRemove, when set (tests only), runs inside a removal, between its read and its
+// unlink: the seam a test replaces the handoff through.
+var beforeHandoffRemove func()
+
 // writeHandoff records that process pid is restarting the daemon on sock until now+handoffSpan,
-// atomically.
+// atomically, under the handoff's lock (lockHandoff): a requester's write never lands inside
+// another's removal.
 func writeHandoff(stateDir, sock string, pid int64, now time.Time) error {
+	return writeHandoffLocked(stateDir, sock, pid, now, true)
+}
+
+func writeHandoffLocked(stateDir, sock string, pid int64, now time.Time, wait bool) error {
 	b, err := json.Marshal(handoff{PID: pid, Socket: socketID(sock), Deadline: now.Add(handoffSpan).UnixNano()})
 	if err != nil {
 		return err
 	}
 	path := handoffPath(stateDir, sock)
+	release, err := lockHandoff(path, wait)
+	if err != nil {
+		return err
+	}
+	defer release()
 	tmp, err := os.CreateTemp(stateDir, ".restart-handoff-*")
 	if err != nil {
 		return err
@@ -88,9 +106,21 @@ func WriteHandoff(stateDir, sock string, pid int64) error {
 }
 
 // removeHandoff removes the handoff for sock if pid wrote it: another requester's is left alone.
+// The read, the check and the unlink run whole under the handoff's lock, so another requester's
+// handoff renamed into place meanwhile is never the one removed.
 func removeHandoff(stateDir, sock string, pid int64) {
-	if h, ok := readHandoff(stateDir, sock); ok && h.PID == pid {
-		_ = os.Remove(handoffPath(stateDir, sock))
+	path := handoffPath(stateDir, sock)
+	release, err := lockHandoff(path, true)
+	if err != nil {
+		return // the deadline retires it: a reader ignores a lapsed handoff
+	}
+	defer release()
+	h, ok := readHandoff(stateDir, sock)
+	if beforeHandoffRemove != nil {
+		beforeHandoffRemove()
+	}
+	if ok && h.PID == pid {
+		_ = os.Remove(path)
 	}
 }
 

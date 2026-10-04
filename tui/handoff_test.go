@@ -215,3 +215,27 @@ func shortDir(t *testing.T) string {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
+
+// TestAHandoffReplacedDuringARemovalStays: a second requester's handoff, written while the first
+// removes its own, is never the one removed: the write waits for the removal's lock, then stands.
+func TestAHandoffReplacedDuringARemovalStays(t *testing.T) {
+	sock, state := filepath.Join(t.TempDir(), "s.sock"), t.TempDir()
+	if err := writeHandoff(state, sock, 42, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var midway error
+	beforeHandoffRemove = func() { midway = writeHandoffLocked(state, sock, 43, time.Now(), false) }
+	defer func() { beforeHandoffRemove = nil }()
+	removeHandoff(state, sock, 42)
+	if !errors.Is(midway, errHandoffBusy) {
+		t.Fatalf("the second requester's write landed inside the first's removal: %v", midway)
+	}
+	beforeHandoffRemove = nil
+	if err := writeHandoff(state, sock, 43, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	removeHandoff(state, sock, 42) // the first requester's again: not its handoff now
+	if h, found := readHandoff(state, sock); !found || h.PID != 43 {
+		t.Fatalf("the second requester's handoff: %+v, %v", h, found)
+	}
+}
