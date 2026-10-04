@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/chunk"
 	"github.com/yongjohnlee80/golib/search/embed"
 	"github.com/yongjohnlee80/golib/search/vector"
@@ -862,7 +863,7 @@ func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 // snapshot of model fp at the transaction's commit_seq (or, when there is none, the same scan over
 // embedding rows in SQL), then windows of hammingTop candidates validated in the transaction (alive,
 // ready, the filters) and rescored by dot product, until retrieverTop survive.
-func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float32, opts QueryOpts) ([]candidate, error) {
+func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float32, opts QueryOpts, n int) ([]search.Candidate[int64], error) {
 	watermark, err := s.commitSeq(tx)
 	if err != nil {
 		return nil, err
@@ -880,7 +881,7 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 		codes = vector.NewIndex(fp, watermark, stored).Codes()
 	}
 	order := vector.Nearest(codes, vector.SignBits(qvec), cmp.Compare[int64])
-	fetch := func(ids []int64) ([]vector.Vec[candidate], error) {
+	fetch := func(ids []int64) ([]vector.Vec[search.Candidate[int64]], error) {
 		in := make([]any, len(ids))
 		for i, id := range ids {
 			in[i] = id
@@ -897,25 +898,23 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 		if err != nil {
 			return nil, fmt.Errorf("index: semantic search: %w", err)
 		}
-		out := make([]vector.Vec[candidate], 0, len(rows))
+		out := make([]vector.Vec[search.Candidate[int64]], 0, len(rows))
 		for _, r := range rows {
-			out = append(out, vector.Vec[candidate]{F32: vector.DecodeFloats(r.EmbF32), Item: candidate{docID: r.DocID, ord: int(r.Ord),
-				hit: Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb, ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd),
-					Generation: r.DocActiveGen, Snippet: chunk.Snippet(r.Body), Via: []string{ModeSemantic}}}})
+			out = append(out, vector.Vec[search.Candidate[int64]]{F32: vector.DecodeFloats(r.EmbF32), Item: candidateOf(r, chunk.Snippet(r.Body))})
 		}
 		return out, nil
 	}
-	byPath := func(a, b candidate) bool {
-		if a.hit.Path != b.hit.Path {
-			return a.hit.Path < b.hit.Path
+	byPath := func(a, b search.Candidate[int64]) bool {
+		if a.Path != b.Path {
+			return a.Path < b.Path
 		}
-		return a.ord < b.ord
+		return a.Ord < b.Ord
 	}
-	best, err := vector.TwoStage(order, qvec, hammingTop, retrieverTop, fetch, byPath)
+	best, err := vector.TwoStage(order, qvec, hammingTop, n, fetch, byPath)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]candidate, len(best))
+	out := make([]search.Candidate[int64], len(best))
 	for i, v := range best {
 		out[i] = v.Item
 	}

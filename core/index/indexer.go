@@ -74,6 +74,11 @@ type Options struct {
 	Schema func() (*schema.Schema, string)
 	// TextExtensions are the workspace's own plain-text extensions (kind.Of); nil: none.
 	TextExtensions func() []string
+	// NewSearcher builds the engine that answers the indexer's searches, over the workspace's
+	// index: once by words alone (embed nil), and once with the semantic tier when there is a
+	// provider. nil is golib's search engine with the search's constants. Any search.Searcher can
+	// take its place.
+	NewSearcher NewSearcher
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -99,7 +104,10 @@ type Indexer struct {
 	sem            *semantic // nil without a provider
 	embedPosition  atomic.Int64
 	semanticPaused atomic.Bool
-	ready          chan struct{} // model row committed before the queue embeds
+	// words and hybrid answer searches: by words alone, and with the semantic tier (nil without a
+	// provider). Both are built once, by Options.NewSearcher.
+	words, hybrid search.Searcher
+	ready         chan struct{} // model row committed before the queue embeds
 
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
 }
@@ -165,6 +173,14 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{})}
 	if opts.Provider != nil {
 		ix.sem = newSemantic(opts.Provider)
+	}
+	newSearcher := opts.NewSearcher
+	if newSearcher == nil {
+		newSearcher = defaultSearcher
+	}
+	ix.words = newSearcher(searchStore{s: store}, nil)
+	if ix.sem != nil {
+		ix.hybrid = newSearcher(searchStore{s: store, sem: ix.sem}, store.queryEmbedder(ix.sem))
 	}
 	return ix
 }
