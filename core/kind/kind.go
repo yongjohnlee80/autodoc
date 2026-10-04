@@ -46,9 +46,10 @@ func Ext(p string) string { return strings.ToLower(path.Ext(p)) }
 // plain-text extensions (".log", ".rst"), lowercased with their dot; the built-in kinds win over it.
 func Of(p string, text []string) Kind { return Registrations{}.Of(p, text) }
 
-// Registrations are the extensions a build's registered chunkers read (ADR 0216 §1.3), lowercased
-// with their dot. The zero value is a build with none.
-type Registrations struct{ Chunked []string }
+// Registrations are the extensions a build's registrations read, lowercased with
+// their dot: its chunkers' (Chunked), and the Pro formats its deriver makes text of (Derived). The
+// zero value is a build with none.
+type Registrations struct{ Chunked, Derived []string }
 
 // Of is the kind of path: a built-in kind, then a registered chunker's, then the workspace's own
 // text extension (text), then Markdown.
@@ -70,6 +71,23 @@ func (r Registrations) Of(p string, text []string) Kind {
 	}
 	return Markdown
 }
+
+// Readable reports whether path is a Pro format the build derives: still kind Pro, never written,
+// but its derived text can be read.
+func (r Registrations) Readable(p string) bool { return slices.Contains(r.Derived, Ext(p)) }
+
+// ReadAs is the kind of the text a reader gets for path: a derived document's text is Markdown,
+// and every other path's is its kind.
+func (r Registrations) ReadAs(p string, text []string) Kind {
+	if r.Readable(p) {
+		return Markdown
+	}
+	return r.Of(p, text)
+}
+
+// Label is how a reader names a Pro format's kind: its extension, upper-case, without the dot
+// ("PDF", "DOCX").
+func Label(p string) string { return strings.ToUpper(strings.TrimPrefix(Ext(p), ".")) }
 
 // IsText reports whether the kind is read as UTF-8 text that must validate as such.
 func (k Kind) IsText() bool { return k == Text || k == YAML || k == Registered }
