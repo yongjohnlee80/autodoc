@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/search/chunk"
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -23,19 +24,21 @@ import (
 // even when its file has not changed, so a chunker change reaches every document. SchemaVersion is
 // the layout of the rows the indexer writes; the store's own schema is its scripts
 // (sql/deployments).
+// ChunkerVersion is golib's chunkers' (search/chunk.Version), so a change there rebuilds every
+// document.
 const (
-	ChunkerVersion = 5
+	ChunkerVersion = chunk.Version
 	SchemaVersion  = 3
 )
 
 // IndexerVersion is what document.indexer records: "c<chunker>.s<schema>".
-var IndexerVersion = "c" + strconv.Itoa(ChunkerVersion) + ".s" + strconv.Itoa(SchemaVersion) + ".t512"
+var IndexerVersion = "c" + ChunkerVersion + ".s" + strconv.Itoa(SchemaVersion) + ".t512"
 
 func indexerVersion(tokens int) string {
 	if tokens <= 0 {
 		tokens = store.SectionTokensDefault
 	}
-	return fmt.Sprintf("c%d.s%d.t%d", ChunkerVersion, SchemaVersion, tokens)
+	return fmt.Sprintf("c%s.s%d.t%d", ChunkerVersion, SchemaVersion, tokens)
 }
 
 // docVersion is what document.indexer records for one path: Markdown notes add the fingerprint of

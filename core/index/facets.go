@@ -9,6 +9,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/search/chunk"
 
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -93,7 +94,7 @@ func (s *Store) facetOnly(ctx context.Context, res Result, opts QueryOpts, limit
 			return fmt.Errorf("index: facet search: %w", err)
 		}
 		for _, r := range rows {
-			res.Hits = append(res.Hits, Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb, Snippet: snippetOf(r.Body),
+			res.Hits = append(res.Hits, Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb, Snippet: chunk.Snippet(r.Body),
 				ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd), Generation: r.DocActiveGen, Score: 1, Relevance: 1,
 				Via: []string{ModeFacet}})
 		}

@@ -12,11 +12,11 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search/chunk"
 
 	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -56,7 +56,6 @@ const (
 	batchTimeout = 2 * time.Minute  // one provider call for a batch
 	queryTimeout = 30 * time.Second // one provider call for a query
 	hammingTop   = 200              // candidates the 1-bit scan passes to float32 rescoring, per window
-	snippetBytes = 200              // a semantic hit's snippet: the start of its text
 )
 
 // code is one chunk's 1-bit code: the signs of its vector's dimensions.
@@ -689,7 +688,7 @@ func (x *Indexer) embedOnce(ctx context.Context) (bool, error) {
 func estimatedTokens(texts []string) int {
 	total := 0
 	for _, text := range texts {
-		total += tokensOf([]byte(text), 0, len(text))
+		total += chunk.Tokens([]byte(text))
 	}
 	return total
 }
@@ -704,7 +703,7 @@ func (m *semantic) embedSome(ctx context.Context, p embed.Provider, fp string, d
 	switch {
 	case errors.Is(err, embed.ErrRejected) && len(texts) == 1:
 		m.mu.Lock()
-		m.refused[fp+"\x00"+string(hashes[0])] = refusalEntry{err: err, retryAt: time.Now().Add(refusedFor), bytes: len(texts[0]), tokens: tokensOf([]byte(texts[0]), 0, len(texts[0]))}
+		m.refused[fp+"\x00"+string(hashes[0])] = refusalEntry{err: err, retryAt: time.Now().Add(refusedFor), bytes: len(texts[0]), tokens: chunk.Tokens([]byte(texts[0]))}
 		m.mu.Unlock()
 		return nil
 	case errors.Is(err, embed.ErrRejected):
@@ -960,7 +959,7 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 		for _, r := range rows {
 			valid = append(valid, rescored{dot: dot(qvec, floatsOf(r.EmbF32)), c: candidate{docID: r.DocID, ord: int(r.Ord),
 				hit: Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb, ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd),
-					Generation: r.DocActiveGen, Snippet: snippetOf(r.Body), Via: []string{ModeSemantic}}}})
+					Generation: r.DocActiveGen, Snippet: chunk.Snippet(r.Body), Via: []string{ModeSemantic}}}})
 		}
 	}
 	sort.Slice(valid, func(i, j int) bool {
@@ -977,18 +976,6 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 		out = append(out, r.c)
 	}
 	return out, nil
-}
-
-// snippetOf is the start of a chunk's text, cut at a rune boundary.
-func snippetOf(body string) string {
-	if len(body) <= snippetBytes {
-		return body
-	}
-	cut := snippetBytes
-	for cut > 0 && !utf8.RuneStart(body[cut]) {
-		cut--
-	}
-	return body[:cut] + "…"
 }
 
 func normalized(v []float32) []float32 {
