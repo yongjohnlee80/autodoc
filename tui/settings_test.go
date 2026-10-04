@@ -522,3 +522,25 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 		t.Fatalf("Delete… asked about %q, want docs", got)
 	}
 }
+
+// The links panel's backlinks for a workspace that is gone: the failure is said, not swallowed.
+func TestBacklinksOfAWorkspaceGoneSaySo(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.ws = "gone"; r.h.loadBacklinks("a.md") })
+	r.waitNoticed(t, "backlinks: no such workspace")
+}
+
+// Find › Find previous (its command, as the menu runs it) with nothing found yet says so.
+func TestFindPreviousWithNothingToFind(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() {
+		if err := r.h.commands()["App.findAgainPrevious"](nil); err != nil {
+			t.Error(err)
+		}
+	})
+	r.s.WaitForText(t, "nothing to find again")
+}

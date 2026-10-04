@@ -30,6 +30,7 @@ type fakeProvider struct {
 	release chan struct{}
 	failing string // a text holding this word fails
 	refuse  string // a batch holding a text with this word is rejected (the input, not the provider)
+	short   string // a text holding this word embeds to a vector one short of the model's size
 }
 
 func newFake(name, seed string) *fakeProvider {
@@ -44,7 +45,7 @@ func (f *fakeProvider) Model() embed.Model {
 func (f *fakeProvider) Embed(ctx context.Context, texts []string) ([][]float32, error) {
 	f.mu.Lock()
 	f.calls = append(f.calls, texts)
-	held, failing, release, refuse := f.held, f.failing, f.release, f.refuse
+	held, failing, release, refuse, short := f.held, f.failing, f.release, f.refuse, f.short
 	f.mu.Unlock()
 	for _, t := range texts {
 		if refuse != "" && strings.Contains(t, refuse) {
@@ -68,6 +69,9 @@ func (f *fakeProvider) Embed(ctx context.Context, texts []string) ([][]float32, 
 			h := fnv.New32a()
 			h.Write([]byte(f.seed + w))
 			v[h.Sum32()%uint32(f.dims)]++
+		}
+		if short != "" && strings.Contains(t, short) {
+			v = v[:f.dims-1]
 		}
 		out[i] = v
 	}
@@ -309,6 +313,25 @@ func TestEditClearsReadiness(t *testing.T) {
 	}
 	p.unhold()
 	e.ready()
+}
+
+// A provider answering the query with a vector that is not its model's size is a failed embedding,
+// never a search over vectors of another shape: words answer, and the error is the constant one.
+func TestAQueryVectorOfTheWrongSizeIsAnEmbedFailure(t *testing.T) {
+	p := newFake("m", "a")
+	e := newEnv(t, Options{Provider: p})
+	e.put("a.md", "zebra stripes\n")
+	e.ready()
+	p.mu.Lock()
+	p.short = "quokka"
+	p.mu.Unlock()
+	res := e.query("zebra quokka", QueryOpts{})
+	if res.Semantic != SemanticError || res.SemanticError != ErrEmbedFailed.Error() || res.ModeUsed != ModeLexical {
+		t.Errorf("auto: %+v", res)
+	}
+	if _, err := e.ix.Search(context.Background(), "zebra quokka", QueryOpts{Mode: ModeSemantic}); !errors.Is(err, ErrEmbedFailed) {
+		t.Errorf("semantic: %v, want ErrEmbedFailed", err)
+	}
 }
 
 // TestQueryEmbedFailure: a query the provider cannot embed answers lexically in auto mode, with

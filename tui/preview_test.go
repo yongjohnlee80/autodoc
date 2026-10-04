@@ -178,6 +178,14 @@ func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
 	if p := placed(); p.Cols != p0.Cols || p.Rows != p0.Rows || p.Clip.Y == 0 {
 		t.Fatalf("zoomed, the image is %d×%d cells from row %d: the dialog changed, or the place in the page was lost", p.Cols, p.Rows, p.Clip.Y)
 	}
+	r.keys(t, key('o')) // Zoom out: back to 100%, the page as first drawn
+	r.waitPlaced(t, "the page zoomed out", func(p tuicore.ImagePlacement) bool {
+		w, h2 := pngSize(t, p.PNG)
+		return w == p0.Cols*widget.CellPixelsW && h2 == h
+	})
+	if got := onLoop(r, func() int { return r.h.imagePreview.zoom }); got != zoomDefault {
+		t.Fatalf("zoomed out to step %d, want %d (100%%)", got, zoomDefault)
+	}
 	for range len(zooms) {
 		r.h.p.Post(func() { r.h.zoomPreview(1) })
 	}
