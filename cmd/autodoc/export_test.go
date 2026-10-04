@@ -25,3 +25,22 @@ func TestExportMainWritesChosenDestination(t *testing.T) {
 		t.Fatal("export overwrote its source")
 	}
 }
+
+// autodoc --export through main: a written file and exit 0; a failed export says why and exits 1.
+func TestExportThroughTheCommandLine(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "note.md")
+	if err := os.WriteFile(src, []byte("# Heading\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "note.html")
+	if code, msg := runMain(t, nil, "--export", "html", "--output", out, "--theme", "sepia", src); code != 0 {
+		t.Fatalf("exit %d: %s", code, msg)
+	}
+	if b, err := os.ReadFile(out); err != nil || !strings.Contains(string(b), "#f4ecd8") {
+		t.Fatalf("export = %.80q, %v", b, err)
+	}
+	if code, msg := runMain(t, nil, "--export", "html", "--output", out, "--theme", "neon", src); code != 1 || !strings.Contains(msg, "autodoc:") {
+		t.Fatalf("a bad theme: exit %d, %q", code, msg)
+	}
+}
