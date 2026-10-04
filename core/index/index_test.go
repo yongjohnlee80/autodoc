@@ -26,7 +26,7 @@ import (
 var testMatch = func(p string) bool { return strings.HasSuffix(p, ".md") }
 
 type env struct {
-	t     *testing.T
+	t     testing.TB
 	fsys  *memfs.FS
 	fault *faultFS // what the indexer reads through
 	dir   string
@@ -40,7 +40,7 @@ type env struct {
 	raw dao.DataConn
 }
 
-func newEnv(t *testing.T, opts Options) *env {
+func newEnv(t testing.TB, opts Options) *env {
 	t.Helper()
 	e := &env{t: t, fsys: memfs.New(), dir: t.TempDir()}
 	e.fault = &faultFS{FS: e.fsys, fail: map[string]error{}, opens: map[string]int{}}
