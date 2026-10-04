@@ -32,8 +32,16 @@ const (
 	cellPixelsH = 20
 )
 
-// imageWait is how long a preview's image cells may take to be laid out after its dialog opens.
+// imageWait is how long a preview's image cells may take to be laid out, and to become usable after
+// a resize, once its dialog opens; then it falls back.
 const imageWait = 2 * time.Second
+
+// minImageCols and minImageRows are the smallest image area worth rendering into: on a smaller one
+// a diagram or a page is unreadable, and the fallback serves better.
+const (
+	minImageCols = 16
+	minImageRows = 4
+)
 
 // imageMode reports whether a preview can be an image, and why not when it cannot.
 func (h *Host) imageMode(html bool) (bool, string) {
@@ -95,11 +103,14 @@ func (h *Host) showDiagram(model diagram.Model) {
 		return
 	}
 	theme := h.exportTheme()
+	h.diagramImage = true
+	h.diagramHelpText = "Image · rendered offline by rsvg-convert in the " + theme + " theme · View › Image previews turns it off"
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramImageShown", true)
-	h.set("App.diagramHelp", "Image · rendered offline by rsvg-convert in the "+theme+" theme · View › Image previews turns it off")
+	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
-	h.withImageCells("diagram", func(img *widget.Image, cols, rows int) {
+	fallback := func(why string) { h.showDiagramText(model.Terminal(), "Terminal graph · "+why) }
+	h.withImageCells("diagram", fallback, func(img *widget.Image, cols, rows int) {
 		w, ht := cols*cellPixelsW, rows*cellPixelsH
 		svg, err := export.DiagramSVG(model, theme)
 		if err != nil {
@@ -126,6 +137,7 @@ func (h *Host) showDiagram(model diagram.Model) {
 
 // showDiagramText shows the terminal graph (or a diagnostic) with help saying why it is not an image.
 func (h *Host) showDiagramText(text, help string) {
+	h.diagramImage, h.diagramHelpText = false, help
 	h.set("App.diagramImageShown", false)
 	h.set("App.diagramText", text)
 	h.set("App.diagramTextShown", true)
@@ -133,9 +145,12 @@ func (h *Host) showDiagramText(text, help string) {
 	h.open("diagram")
 }
 
-// withImageCells runs fn once the Image in the dialog (main.qml's id for it) has been laid out,
-// with its cells; a new preview or a dialog closed in the meantime drops it.
-func (h *Host) withImageCells(dialog string, fn func(img *widget.Image, cols, rows int)) {
+// withImageCells runs fn once the Image in the dialog (main.qml's id for it) has been laid out with
+// a usable area (minImageCols × minImageRows), with its cells. An area still unusable at imageWait
+// (a screen too small, a layout that never gave it cells) runs fallback instead, with why: a
+// preview always ends as an image or as its fallback, never blank (ADR 0212 §6). A screen resized
+// to a usable size before then renders the image. A new preview or a closed dialog drops both.
+func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(img *widget.Image, cols, rows int)) {
 	h.previewGen++
 	gen := h.previewGen
 	deadline := time.Now().Add(imageWait)
@@ -144,15 +159,21 @@ func (h *Host) withImageCells(dialog string, fn func(img *widget.Image, cols, ro
 		if gen != h.previewGen {
 			return
 		}
+		cols, rows := 0, 0
 		img, ok := imageUnder(h.p, dialog)
 		if ok {
-			if cols, rows := img.Cells(); cols > 0 && rows > 0 {
+			cols, rows = img.Cells()
+			if cols >= minImageCols && rows >= minImageRows {
 				fn(img, cols, rows)
 				return
 			}
 		}
 		if time.Now().After(deadline) {
-			h.say("the preview's image area was never laid out")
+			if cols > 0 && rows > 0 {
+				fallback(fmt.Sprintf("the screen leaves the image %d×%d cells, too small to read", cols, rows))
+			} else {
+				fallback("the preview's image area was never laid out")
+			}
 			return
 		}
 		h.after(20*time.Millisecond, try)
@@ -181,6 +202,9 @@ func imageUnder(p *tuidecl.Program, id string) (*widget.Image, bool) {
 	return nil, false
 }
 
+// lastDiagramImage reports whether the Mermaid preview is in image mode (not its fallback).
+func (h *Host) lastDiagramImage() bool { return h.diagramImage }
+
 // previewClosed is a preview dialog closing: what it was waiting on is dropped.
 func (h *Host) previewClosed() { h.previewGen++ }
 
@@ -200,7 +224,12 @@ func (h *Host) previewHTMLImage(content []byte, path string) {
 	h.set("App.htmlPreviewHelp", "Image · rendered offline by a headless browser in the "+h.exportTheme()+
 		" theme · links and selection: Open in browser · View › Image previews turns it off")
 	h.open("htmlPreview")
-	h.withImageCells("htmlPreview", func(img *widget.Image, cols, rows int) {
+	fallback := func(why string) {
+		h.closeDialog("htmlPreview")
+		h.notify("HTML preview: " + why + "; opening it in the browser")
+		h.openPreviewInBrowser()
+	}
+	h.withImageCells("htmlPreview", fallback, func(img *widget.Image, cols, rows int) {
 		gen := h.previewGen
 		do(h, func(ctx context.Context) answerOf[[]byte] {
 			png, err := widget.RasterizeHTML(ctx, content, cols*cellPixelsW, rows*cellPixelsH)
