@@ -45,7 +45,7 @@ func (h *Host) previewHTML() {
 		return
 	}
 	source, theme := []byte(h.editor.Value()), h.exportTheme()
-	image, why := h.imageMode(true)
+	image, why := h.imageMode()
 	h.say("opening HTML preview…")
 	type answer struct {
 		content []byte

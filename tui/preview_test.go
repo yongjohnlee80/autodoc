@@ -20,18 +20,29 @@ import (
 
 const flowFile = "# Flow\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
 
+// browserWait is how long a test waits for a headless browser's render: seconds alone, longer
+// beside a race-detected suite.
+const browserWait = 30 * time.Second
+
 // placedImage waits for the terminal to hold one image, and returns its PNG.
 func (r *running) placedImage(t *testing.T) []byte {
 	t.Helper()
-	var got []byte
-	r.s.WaitFor(t, "an image placed", func(string) bool {
+	return r.waitPlaced(t, "an image placed", func(tuicore.ImagePlacement) bool { return true }).PNG
+}
+
+// waitPlaced waits, as long as a browser's render may take, for the terminal to hold an image that
+// ok accepts, and returns it.
+func (r *running) waitPlaced(t *testing.T, what string, ok func(tuicore.ImagePlacement) bool) tuicore.ImagePlacement {
+	t.Helper()
+	for deadline := time.Now().Add(browserWait); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		for _, p := range r.s.Backend.Images() {
-			got = p.PNG
-			return true
+			if ok(p) {
+				return p
+			}
 		}
-		return false
-	})
-	return got
+	}
+	t.Fatalf("%s never happened:\n%s", what, r.s)
+	return tuicore.ImagePlacement{}
 }
 
 // pixel is the PNG's colour at (x, y) as #rrggbb.
@@ -49,13 +60,11 @@ func hex2(v uint32) string {
 	return string("0123456789abcdef"[v>>4]) + string("0123456789abcdef"[v&15])
 }
 
-// With graphics confirmed and rsvg-convert installed, the diagram is an image in the theme's
-// colours, placed over the dialog's cells; turning image previews off shows the terminal graph and
-// says why; a terminal that did not confirm graphics says that.
+// With graphics confirmed and a headless browser, the diagram is drawn by mermaid as an image in
+// the theme's colours, placed over the dialog's cells; turning image previews off shows its source
+// and says why; a terminal that did not confirm graphics says that.
 func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
-	if _, ok := widget.SVGRasterizer(); !ok {
-		t.Skip("rsvg-convert is not installed")
-	}
+	skipWithoutUsableBrowser(t)
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", flowFile)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
@@ -68,21 +77,22 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	r.h.p.Post(func() { r.h.openPath("f.md") })
 	r.waitFile(t, "f.md")
 	r.h.p.Post(func() { r.h.previewDiagram() })
-	r.s.WaitForText(t, "rendered offline by rsvg-convert in the sepia theme")
+	r.s.WaitForText(t, "drawn offline by mermaid")
 	img := r.placedImage(t)
 	if got := pixel(t, img, 0, 0); got != "#f4ecd8" {
 		t.Fatalf("the image's corner is %s, want sepia's paper #f4ecd8", got)
 	}
-	if strings.Contains(r.s.String(), "Start ──") {
-		t.Fatal("the terminal graph shows beside the image")
+	if strings.Contains(r.s.String(), "flowchart LR") {
+		t.Fatal("the source shows beside the image")
 	}
 	// closing the dialog takes the image off the screen
 	r.keys(t, key('q'))
 	r.s.WaitFor(t, "the image gone", func(string) bool { return len(r.s.Backend.Images()) == 0 })
 
-	// image previews off: the terminal graph, and why
+	// image previews off: the source, and why
 	r.h.p.Post(func() { r.h.toggleImagePreviews(); r.h.previewDiagram() })
 	r.s.WaitForText(t, "image previews are off")
+	r.s.WaitForText(t, "flowchart LR")
 	if len(r.s.Backend.Images()) != 0 {
 		t.Fatal("an image with image previews off")
 	}
@@ -94,6 +104,95 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	if len(r.s.Backend.Images()) != 0 {
 		t.Fatal("an image on an unconfirmed terminal")
 	}
+}
+
+// What the hand-written renderer refused — edge text written "A -- yes --> B", quoted labels with
+// line breaks, a state diagram — is drawn, not shown as its source.
+func TestTheDiagramsItCouldNotDrawAreDrawn(t *testing.T) {
+	skipWithoutUsableBrowser(t)
+	for name, block := range map[string]string{
+		"flowchart": "flowchart TD\n  A[\"event arrives<br/>at node N\"] --> B{\"pointer<br/>disabled?\"}\n  B -- yes --> P[\"skip N\"]\n  B -- no --> C[resolve]\n",
+		"state":     "stateDiagram-v2\n  [*] --> Idle\n  Idle --> Armed: press\n  Armed --> Idle: release\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := startManaged(t, map[string]string{"kb": fileDir(t, "f.md", "# D\n\n```mermaid\n"+block+"```\n")})
+			r := runTUI(t, NewSession(d.sock, nil), Options{})
+			r.s.WaitForText(t, "· kb")
+			r.h.p.Post(func() { r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes } })
+			r.h.p.Post(func() { r.h.openPath("f.md") })
+			r.waitFile(t, "f.md")
+			r.h.p.Post(func() { r.h.previewDiagram() })
+			r.placedImage(t)
+			if !onLoop(r, func() bool { return r.h.lastDiagramImage() }) {
+				t.Fatalf("the preview fell back: %s", onLoop(r, func() string { return r.h.diagramHelpText }))
+			}
+		})
+	}
+}
+
+// The HTML preview renders the whole page and scrolls it: the image is the page's full height at
+// the dialog's width, j and Page Down move the part shown without sending the image again, and
+// Zoom in draws the page again larger in the same dialog, at the same place in it.
+func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
+	skipWithoutUsableBrowser(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	long := "# Long page\n\n" + strings.Repeat("A paragraph of the long page, to scroll through.\n\n", 80)
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", long)})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() {
+		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		r.h.browser = func(context.Context, string) error { return nil }
+	})
+	r.h.p.Post(func() { r.h.openPath("n.md") })
+	r.waitFile(t, "n.md")
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitForText(t, "HTML preview · n.md")
+	first := r.placedImage(t)
+	placed := func() tuicore.ImagePlacement {
+		for _, p := range r.s.Backend.Images() {
+			return p
+		}
+		return tuicore.ImagePlacement{}
+	}
+	p0 := placed()
+	w, h := pngSize(t, first)
+	if w != p0.Cols*widget.CellPixelsW || h <= p0.Rows*widget.CellPixelsH {
+		t.Fatalf("the page is %d×%d for %d×%d cells: not the whole page at the dialog's width", w, h, p0.Cols, p0.Rows)
+	}
+	if p0.Clip != (tuicore.Rect{W: w, H: p0.Rows * widget.CellPixelsH}) {
+		t.Fatalf("the first view is %+v, want the top of the page", p0.Clip)
+	}
+	r.keys(t, key('j'), tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown})
+	r.s.WaitFor(t, "scrolled", func(string) bool { return placed().Clip.Y == p0.Rows*widget.CellPixelsH })
+	if p := placed(); p.Version != p0.Version {
+		t.Fatal("a scroll made a new image")
+	}
+
+	r.keys(t, key('i')) // Zoom in
+	r.waitPlaced(t, "the zoomed page", func(p tuicore.ImagePlacement) bool { return p.Version != p0.Version })
+	_, zh := pngSize(t, placed().PNG)
+	if zh <= h {
+		t.Fatalf("zoomed in, the page is %d tall, not taller than %d", zh, h)
+	}
+	if p := placed(); p.Cols != p0.Cols || p.Rows != p0.Rows || p.Clip.Y == 0 {
+		t.Fatalf("zoomed, the image is %d×%d cells from row %d: the dialog changed, or the place in the page was lost", p.Cols, p.Rows, p.Clip.Y)
+	}
+	for range len(zooms) {
+		r.h.p.Post(func() { r.h.zoomPreview(1) })
+	}
+	r.s.WaitFor(t, "the zoom at its largest", func(string) bool {
+		return onLoop(r, func() bool { return r.h.imagePreview.zoom == len(zooms)-1 })
+	})
+}
+
+func pngSize(t *testing.T, b []byte) (int, int) {
+	t.Helper()
+	cfg, err := png.DecodeConfig(bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg.Width, cfg.Height
 }
 
 // With graphics and a headless browser, HTML preview is an image of the exported page; Open in
@@ -198,11 +297,11 @@ func tinyPreview(t *testing.T, w, h int) (*running, chan string) {
 	return r, opened
 }
 
-// On a screen too small for an image the Mermaid preview falls back to the terminal graph, saying
-// why, rather than staying a blank image area (Lector's review of #30, finding 1).
-func TestATinyScreenDiagramFallsBackToTheTerminalGraph(t *testing.T) {
-	if _, ok := widget.SVGRasterizer(); !ok {
-		t.Skip("rsvg-convert is not installed: image mode is never entered")
+// On a screen too small for an image the Mermaid preview falls back to the source, saying why,
+// rather than staying a blank image area (Lector's review of #30, finding 1).
+func TestATinyScreenDiagramFallsBackToItsSource(t *testing.T) {
+	if _, ok := widget.HTMLRasterizer(); !ok {
+		t.Skip("no headless browser: image mode is never entered")
 	}
 	r, _ := tinyPreview(t, 12, 3)
 	r.h.p.Post(func() { r.h.previewDiagram() })
@@ -210,7 +309,7 @@ func TestATinyScreenDiagramFallsBackToTheTerminalGraph(t *testing.T) {
 		return onLoop(r, func() bool { return !r.h.lastDiagramImage() })
 	})
 	help := onLoop(r, func() string { return r.h.diagramHelpText })
-	if !strings.HasPrefix(help, "Terminal graph · ") || !(strings.Contains(help, "too small") || strings.Contains(help, "never laid out")) {
+	if !strings.HasPrefix(help, "Diagram source · ") || !(strings.Contains(help, "too small") || strings.Contains(help, "never laid out")) {
 		t.Fatalf("help = %q", help)
 	}
 	if len(r.s.Backend.Images()) != 0 {
@@ -240,9 +339,7 @@ func TestATinyScreenHTMLFallsBackToTheBrowser(t *testing.T) {
 
 // A screen resized to a usable size before the wait ends renders the image after all.
 func TestAPreviewRendersOnceAResizeGivesItRoom(t *testing.T) {
-	if _, ok := widget.SVGRasterizer(); !ok {
-		t.Skip("rsvg-convert is not installed")
-	}
+	skipWithoutUsableBrowser(t)
 	r, _ := tinyPreview(t, 12, 3)
 	r.h.p.Post(func() { r.h.previewDiagram() })
 	time.Sleep(200 * time.Millisecond)

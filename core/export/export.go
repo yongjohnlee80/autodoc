@@ -10,10 +10,12 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
-	"github.com/yongjohnlee80/autodoc/core/diagram"
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	markdownhtml "github.com/yongjohnlee80/golib/parse/markdown/html"
+
+	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 )
 
 type Format string
@@ -59,18 +61,47 @@ func ThemeOf(tuiTheme string) string {
 	return "dark"
 }
 
-// DiagramSVG is a diagram as a standalone SVG in a theme's colours, its own background and font
-// included, for a rasterizer: what a page's CSS gives an inline one.
-func DiagramSVG(model diagram.Model, theme string) (string, error) {
+// MERMAID — a ```mermaid block is drawn by the vendored mermaid.js (core/export/mermaid), in the
+// page, offline: the page holds the script, and its policy allows that script and the fixed one
+// that starts it, by their digests, and no other. A page without a diagram has no script at all.
+// A diagram mermaid cannot draw shows mermaid's own error in its place.
+
+// mermaidStart draws every pre.mermaid in the theme the html element names (data-mermaid); on a
+// diagram page (data-diagram) each kind at its own size rather than the page's width.
+const mermaidStart = `(function(){var d=document.documentElement.dataset,w={useMaxWidth:!d.diagram},c={startOnLoad:false,securityLevel:"strict",theme:d.mermaid||"default"};` +
+	`["flowchart","sequence","gantt","journey","timeline","class","state","er","pie","quadrantChart","xyChart","requirement","mindmap","gitGraph","c4","sankey","packet","block","architecture","radar","kanban"].forEach(function(k){c[k]=w});` +
+	`mermaid.initialize(c);mermaid.run({querySelector:"pre.mermaid",suppressErrors:true})})()`
+
+var (
+	hashesOnce     sync.Once
+	scriptPolicies string
+)
+
+// scriptPolicy is the script-src of a page with diagrams: the vendored script and mermaidStart.
+func scriptPolicy() string {
+	hashesOnce.Do(func() { scriptPolicies = mermaid.Hash(mermaid.Script()) + " " + mermaid.Hash(mermaidStart) })
+	return scriptPolicies
+}
+
+// mermaidTheme is the mermaid theme for a palette.
+func mermaidTheme(colors palette) string {
+	switch {
+	case colors.scheme == "dark":
+		return "dark"
+	case colors.background == palettes["mono"].background:
+		return "neutral"
+	}
+	return "default"
+}
+
+// DiagramPage is a page of one Mermaid diagram, drawn at its own size on the theme's background:
+// for a preview, which renders it whole and scrolls it.
+func DiagramPage(source, theme string) ([]byte, error) {
 	colors, ok := palettes[theme]
 	if !ok {
-		return "", fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
+		return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 	}
-	svg := diagramSVG(model, colors)
-	// the inline SVG's background and font come from the page; standalone, it carries them
-	open := strings.Index(svg, ">") + 1
-	return svg[:open] + fmt.Sprintf(`<rect width="100%%" height="100%%" fill="%s"/><g font-family="sans-serif" font-size="15">`, colors.background) +
-		svg[open:len(svg)-len("</svg>")] + "</g></svg>", nil
+	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true), nil
 }
 
 var mermaidBlock = regexp.MustCompile(`(?s)<pre><code class="language-mermaid">(.*?)</code></pre>`)
@@ -92,29 +123,13 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 		if err := markdownhtml.Render(&body, document); err != nil {
 			return nil, err
 		}
+		diagrams := false
 		rendered := mermaidBlock.ReplaceAllStringFunc(body.String(), func(block string) string {
-			match := mermaidBlock.FindStringSubmatch(block)
-			source := stdhtml.UnescapeString(match[1])
-			model, err := diagram.Parse(source)
-			if err != nil {
-				return `<div class="diagram-error">Unsupported Mermaid construct: ` + stdhtml.EscapeString(err.Error()) + block + `</div>`
-			}
-			return diagramSVG(model, colors)
+			diagrams = true
+			// the source stays escaped: mermaid reads the element's text
+			return `<pre class="mermaid">` + mermaidBlock.FindStringSubmatch(block)[1] + `</pre>`
 		})
-		var output bytes.Buffer
-		output.WriteString("<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n")
-		output.WriteString("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:\">\n")
-		output.WriteString("<meta name=\"color-scheme\" content=\"" + colors.scheme + "\">\n")
-		fmt.Fprintf(&output, "<style>:root{color-scheme:%s;--background:%s;--foreground:%s;--accent:%s;--muted:%s;--surface:%s;--border:%s}",
-			colors.scheme, colors.background, colors.foreground, colors.accent, colors.muted, colors.surface, colors.border)
-		output.WriteString("body{max-width:76ch;margin:3rem auto;padding:0 1.5rem;background:var(--background);color:var(--foreground);font:1rem/1.6 system-ui,sans-serif}")
-		output.WriteString("a{color:var(--accent)}pre,code{background:var(--surface)}pre{padding:1rem;overflow:auto;border:1px solid var(--border)}")
-		output.WriteString("blockquote{border-left:.2rem solid var(--accent);padding-left:1rem;color:var(--muted)}table{border-collapse:collapse}th,td{border:1px solid var(--border);padding:.3rem .6rem}")
-		output.WriteString("svg.diagram{max-width:100%;height:auto;background:var(--background)}.diagram-error{color:var(--accent)}")
-		output.WriteString("</style></head><body>\n")
-		output.WriteString(rendered)
-		output.WriteString("</body></html>\n")
-		return output.Bytes(), nil
+		return page(colors, rendered, diagrams, false), nil
 	case Text:
 		var output bytes.Buffer
 		writeText(&output, document.Root, document.Source)
@@ -124,53 +139,41 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 	}
 }
 
-func diagramSVG(model diagram.Model, colors palette) string {
-	rows := max(len(model.Edges), len(model.Nodes))
-	if rows == 0 {
-		rows = 1
+// page is a whole HTML document of body in colors, with the diagrams' script when it has any; a
+// diagram page has the diagram alone, at its own size.
+func page(colors palette, body string, diagrams, diagramPage bool) []byte {
+	var output bytes.Buffer
+	output.WriteString("<!doctype html>\n<html lang=\"en\"")
+	if diagrams {
+		fmt.Fprintf(&output, ` data-mermaid="%s"`, mermaidTheme(colors))
 	}
-	height := rows*62 + 20
-	var output strings.Builder
-	fmt.Fprintf(&output, `<svg class="diagram" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Mermaid diagram" viewBox="0 0 760 %d">`, height)
-	for index, edge := range model.Edges {
-		y := 20 + index*62
-		from, to := diagramLabel(model, edge.From), diagramLabel(model, edge.To)
-		fmt.Fprintf(&output, `<rect x="8" y="%d" width="240" height="42" rx="6" fill="%s" stroke="%s"/>`, y, colors.surface, colors.border)
-		fmt.Fprintf(&output, `<rect x="512" y="%d" width="240" height="42" rx="6" fill="%s" stroke="%s"/>`, y, colors.surface, colors.border)
-		fmt.Fprintf(&output, `<text x="128" y="%d" text-anchor="middle" fill="%s">%s</text>`, y+27, colors.foreground, stdhtml.EscapeString(from))
-		fmt.Fprintf(&output, `<text x="632" y="%d" text-anchor="middle" fill="%s">%s</text>`, y+27, colors.foreground, stdhtml.EscapeString(to))
-		fmt.Fprintf(&output, `<line x1="252" y1="%d" x2="506" y2="%d" stroke="%s" stroke-width="2"/>`, y+21, y+21, colors.accent)
-		fmt.Fprintf(&output, `<path d="M 506 %d l -9 -5 v 10 z" fill="%s"/>`, y+21, colors.accent)
-		if edge.Label != "" {
-			fmt.Fprintf(&output, `<text x="380" y="%d" text-anchor="middle" fill="%s">%s</text>`, y+14, colors.accent, stdhtml.EscapeString(shortLabel(edge.Label)))
-		}
+	if diagramPage {
+		output.WriteString(` data-diagram="1"`)
 	}
-	if len(model.Edges) == 0 {
-		for index, node := range model.Nodes {
-			y := 20 + index*62
-			fmt.Fprintf(&output, `<rect x="260" y="%d" width="240" height="42" rx="6" fill="%s" stroke="%s"/>`, y, colors.surface, colors.border)
-			fmt.Fprintf(&output, `<text x="380" y="%d" text-anchor="middle" fill="%s">%s</text>`, y+27, colors.foreground, stdhtml.EscapeString(shortLabel(node.Label)))
-		}
+	output.WriteString("><head><meta charset=\"utf-8\">\n")
+	policy := "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+	if diagrams {
+		policy += "; script-src " + scriptPolicy()
 	}
-	output.WriteString("</svg>")
-	return output.String()
-}
-
-func diagramLabel(model diagram.Model, id string) string {
-	for _, node := range model.Nodes {
-		if node.ID == id {
-			return shortLabel(node.Label)
-		}
+	output.WriteString("<meta http-equiv=\"Content-Security-Policy\" content=\"" + policy + "\">\n")
+	output.WriteString("<meta name=\"color-scheme\" content=\"" + colors.scheme + "\">\n")
+	fmt.Fprintf(&output, "<style>:root{color-scheme:%s;--background:%s;--foreground:%s;--accent:%s;--muted:%s;--surface:%s;--border:%s}",
+		colors.scheme, colors.background, colors.foreground, colors.accent, colors.muted, colors.surface, colors.border)
+	if diagramPage {
+		output.WriteString("html,body{margin:0;background:var(--background)}body{padding:1rem;width:max-content}pre.mermaid{margin:0}")
+	} else {
+		output.WriteString("body{max-width:76ch;margin:3rem auto;padding:0 1.5rem;background:var(--background);color:var(--foreground);font:1rem/1.6 system-ui,sans-serif}")
+		output.WriteString("a{color:var(--accent)}pre,code{background:var(--surface)}pre{padding:1rem;overflow:auto;border:1px solid var(--border)}")
+		output.WriteString("blockquote{border-left:.2rem solid var(--accent);padding-left:1rem;color:var(--muted)}table{border-collapse:collapse}th,td{border:1px solid var(--border);padding:.3rem .6rem}")
 	}
-	return shortLabel(id)
-}
-
-func shortLabel(label string) string {
-	runes := []rune(label)
-	if len(runes) > 28 {
-		return string(runes[:27]) + "…"
+	output.WriteString("pre.mermaid{background:none;border:0;text-align:center;color:var(--foreground)}")
+	output.WriteString("</style></head><body>\n")
+	output.WriteString(body)
+	if diagrams {
+		output.WriteString("\n<script>" + mermaid.Script() + "</script>\n<script>" + mermaidStart + "</script>\n")
 	}
-	return label
+	output.WriteString("</body></html>\n")
+	return output.Bytes()
 }
 
 func forEach(node *markdown.Node, visit func(*markdown.Node)) {

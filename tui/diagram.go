@@ -1,12 +1,9 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
-
-	"github.com/yongjohnlee80/autodoc/core/diagram"
 )
 
 func mermaidBlock(source []byte, cursor int) (string, bool) {
@@ -39,11 +36,5 @@ func (h *Host) previewDiagram() {
 		h.notify("no Mermaid fenced block in this file")
 		return
 	}
-	model, err := diagram.Parse(source)
-	if err != nil {
-		h.showDiagramText(fmt.Sprintf("Unsupported Mermaid construct: %v\n\nSource:\n%s", err, source),
-			"The source remains editable; the renderer supports basic flowcharts and sequences.")
-		return
-	}
-	h.showDiagram(model) // an image where it can be, else the terminal graph (preview.go)
+	h.showDiagram(source) // an image where it can be, else its source (preview.go)
 }
