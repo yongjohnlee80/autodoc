@@ -4,7 +4,7 @@
 // names no colour (the imported theme does) and runs nothing itself: every action is an App
 // command, and the host decides what it does.
 //
-// A writing screen: the note is a page, as wide as reading wants (App.pageWidth, the ruler's
+// A writing screen: the file is a page, as wide as reading wants (App.pageWidth, the ruler's
 // columns and its border) and centred, and nothing else shows until it is asked for. The menu bar
 // hides until F10 or an Alt+letter brings it up; the status line shows when its preference says;
 // the explorer and the links are drawers over the page, which never moves under them.
@@ -12,7 +12,7 @@
 import tui 1.0
 import autodoc 1.0                // App: this program's state and commands
 import autodoc.theme.dark 1.0     // the Theme singleton; View › Theme switches it
-import autodoc.dialogs 1.0        // the pickers, the note, workspace, preference and quit dialogs
+import autodoc.dialogs 1.0        // the pickers, the file, workspace, preference and quit dialogs
 import autodoc.views 1.0          // Help, About, the leader card
 
 Window {
@@ -159,7 +159,7 @@ Window {
         }
     }
 
-    // ---- the page: the note, centred, as wide as the ruler ----
+    // ---- the page: the file, centred, as wide as the ruler ----
     Frame {
         title: App.fileTitle
         maximumWidth: App.pageWidth
@@ -171,7 +171,7 @@ Window {
         palette.text: Theme.document.text
         Flex {
         direction: Tui.Vertical
-        // the open note's frontmatter, checked against its workspace's schema as it is typed:
+        // the open file's frontmatter, checked against its workspace's schema as it is typed:
         // shown only while something is wrong, and never in the way of a save
         Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
         Editor {
