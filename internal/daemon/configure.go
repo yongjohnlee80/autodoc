@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -88,9 +89,16 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 			return err
 		}
 	}
+	// what puts every setting back, read before the save: a restart that fails after it takes the
+	// whole save back, not its patterns alone
+	inverse, err := m.inverseOf(ctx, s.id, c)
+	if err != nil {
+		return err
+	}
 	if err := m.db.Configure(ctx, s.id, c); err != nil {
 		return err
 	}
+	was := name
 
 	if renamed {
 		m.mu.Lock()
@@ -117,7 +125,7 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 	case c.Include != nil:
 		// a restart starts the workspace as the store has it, its provider included
 		if err := m.restartWithPatterns(ctx, name, s, candidate); err != nil {
-			return err
+			return m.undoConfigure(ctx, s.id, was, name, inverse, err)
 		}
 	case c.Provider != nil:
 		m.restartOne(name, s)
@@ -134,6 +142,131 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		}
 	}
 	return nil
+}
+
+// inverseOf is the changes that put back each setting c changes, as the store has it now.
+func (m *Workspaces) inverseOf(ctx context.Context, id int64, c store.Changes) (store.Changes, error) {
+	var inv store.Changes
+	list, err := m.db.Workspaces(ctx)
+	if err != nil {
+		return inv, err
+	}
+	var w *store.WorkspaceInfo
+	for i := range list {
+		if list[i].ID == id {
+			w = &list[i]
+		}
+	}
+	if w == nil {
+		return inv, fmt.Errorf("%w: %d", store.ErrNoWorkspace, id)
+	}
+	str := func(v string) *string { return &v }
+	if c.Name != nil {
+		inv.Name = str(w.Name)
+	}
+	if c.Include != nil {
+		include, exclude := append([]string{}, w.Include...), append([]string{}, w.Exclude...)
+		inv.Include, inv.Exclude = &include, &exclude
+	}
+	if c.SchemaPath != nil {
+		inv.SchemaPath = str(deref(w.SchemaPath))
+	}
+	if c.TextExtensions != nil {
+		exts, err := m.db.TextExtensions(ctx, id)
+		if err != nil {
+			return inv, err
+		}
+		exts = append([]string{}, exts...)
+		inv.TextExtensions = &exts
+	}
+	if c.SectionTokens != nil {
+		n := 0 // the default
+		if w.SectionTokens != nil {
+			n = int(*w.SectionTokens)
+		}
+		inv.SectionTokens = &n
+	}
+	if c.EmbeddingPolicy != nil {
+		p, err := m.db.EmbeddingPolicy(ctx, id)
+		if err != nil {
+			return inv, err
+		}
+		inv.EmbeddingPolicy = &p
+	}
+	if c.Provider != nil {
+		p, err := m.db.WorkspaceProvider(ctx, id)
+		if err != nil {
+			return inv, err
+		}
+		inv.Provider = &p
+	}
+	if c.Destination != nil {
+		inv.Destination = str(w.Destination)
+	}
+	if c.VectorIndex != nil {
+		inv.VectorIndex = str(deref(w.VectorIndex))
+	}
+	if c.ViewArgs != nil {
+		args := map[string]any{}
+		if w.ViewArgs != nil {
+			if err := json.Unmarshal([]byte(*w.ViewArgs), &args); err != nil {
+				return inv, err
+			}
+		}
+		inv.ViewArgs = &args
+	}
+	for _, conn := range []struct {
+		changed bool
+		role    string
+		put     **store.ConnectionSpec
+	}{{c.Source != nil, store.RoleSource, &inv.Source}, {c.DestinationConn != nil, store.RoleDestination, &inv.DestinationConn}} {
+		if !conn.changed {
+			continue
+		}
+		info, found, err := m.db.Connection(ctx, id, conn.role)
+		if err != nil {
+			return inv, err
+		}
+		if !found {
+			*conn.put = &store.ConnectionSpec{Remove: true}
+			continue
+		}
+		*conn.put = &store.ConnectionSpec{Engine: info.Engine, DSN: info.DSN, Schema: info.Schema}
+	}
+	return inv, nil
+}
+
+// undoConfigure takes back a save whose restart failed after it was written: the store gets every
+// setting back, the workspace its name, schema, text types and policy, and it is served again as
+// the store has it (its provider, section size and patterns). cause is returned with any failure
+// to undo.
+func (m *Workspaces) undoConfigure(ctx context.Context, id int64, was, now string, inv store.Changes, cause error) error {
+	ctx = context.WithoutCancel(ctx)
+	out := []error{cause}
+	if err := m.db.Configure(ctx, id, inv); err != nil {
+		out = append(out, fmt.Errorf("putting the settings back: %w", err))
+	}
+	m.mu.Lock()
+	cur := m.served[now]
+	if cur != nil && was != now {
+		m.renameServed(now, was, cur)
+	}
+	h := m.schemas[id]
+	m.mu.Unlock()
+	if cur == nil {
+		return errors.Join(out...)
+	}
+	if inv.SchemaPath != nil && h != nil {
+		h.setPath(*inv.SchemaPath)
+	}
+	if inv.TextExtensions != nil {
+		m.applyTextExtensions(cur, *inv.TextExtensions)
+	}
+	if inv.EmbeddingPolicy != nil {
+		m.applyPolicy(was, cur, *inv.EmbeddingPolicy)
+	}
+	m.restartOne(was, cur)
+	return errors.Join(out...)
 }
 
 // databases are workspace id's database settings as workspace.list reports them; a read that
