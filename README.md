@@ -502,7 +502,8 @@ func main() {
   format's id or version (as the deriver describes it at the start) or the section size changes.
 - **`doc.read` serves the derived text, read-only.** `doc.write`, `doc.rename` and `doc.remove` of
   it are refused. Text longer than one read carries (just under 4 MiB) is cut at a paragraph's end
-  and ends with a note saying how much of how much it shows. A cache's eviction miss (a deriver's
+  and ends with one line of AutoDoc's own, after a `---` rule, beginning `[autodoc: truncated]` and
+  saying how much of how much it shows. A cache's eviction miss (a deriver's
   error matching `fs.ErrNotExist`) is retried once. The deriver's own text limit, if it has one,
   is its own.
 - **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker

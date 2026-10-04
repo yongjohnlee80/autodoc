@@ -137,7 +137,7 @@ first.
 | `workspace.set_text_extensions` | workspace, list of extensions | declare the workspace's own plain-text extensions (`.log`); answers them normalized. Which files are indexed is still the patterns'. An extension the daemon's build reads with a registered chunker is refused |
 | `workspace.set_schema` | workspace, path | name the frontmatter schema file (under the root, or absolute; `""` for none); answers the `schema` status |
 | `search.query` | workspace, query, options? | see above |
-| `doc.read` | workspace, path | `{content, version}`: the file's text, and its version. A PDF or DOCX a build derives answers its derived Markdown, read-only; when that is longer than one answer carries it ends with a note saying how much was shown |
+| `doc.read` | workspace, path | `{content, version}`: the file's text, and its version. A PDF or DOCX a build derives answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a `---` rule, begins `[autodoc: truncated]`: that line is AutoDoc's, not the document's, so stop quoting before it |
 | `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown file's headings in order, with the version they were read at; other kinds have none |
 | `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema; only Markdown has frontmatter |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every file in path order, after `after` (`""` from the start) |
