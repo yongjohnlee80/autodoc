@@ -120,7 +120,7 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 
 | Group | Verbs |
 | --- | --- |
-| `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core: `{databases}`) |
+| `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core, `{databases}`, and the build's registrations) |
 | `workspace` | `list`, `add(name, root, include?, exclude?)`, `configure(name, settings)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)`, `set_schema(name, path)`, `set_text_extensions(name, exts)`, `set_provider(name, provider)` |
 | `search` | `query(ws, q, {limit, mode, tags, paths})` |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
@@ -213,7 +213,8 @@ terminal, as below; where it cannot, it shows the block's source and why.
   usage by day and latest calls on the right (see below).
 - **Restart backend…** stops the daemon, and the TUI starts the autodoc installed in its place, so
   an update takes effect without quitting. The question says which version runs and which one
-  starts. Indexing and embedding carry on where they stopped.
+  starts. Indexing and embedding carry on where they stopped. A TUI built with more registrations
+  than the daemon (below) offers this once a session; see [Builds of your own](#builds-of-your-own).
 
 The preferences and the AI models are kept in the daemon's store, so they are the same whichever
 workspace is open. **Embedding is scheduled across the daemon**: the open TUI workspace has first
@@ -458,6 +459,39 @@ pull one of these:
 | `qwen3-embedding:4b` | 40,960 tokens | strong; 2,560 dimensions, about 3× snowflake's time |
 
 They are small beside a chat model and run alongside one.
+
+## Builds of your own
+
+`cmd/autodoc` is the community build: `app.Main` with nothing registered. Another main can hand
+`app.Main` its own chunkers and a deriver (ADR 0216):
+
+```go
+func main() {
+	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
+		Version:  version,                                     // -X main.version, as cmd/autodoc's
+		Chunkers: map[string]search.Chunker{".go": goChunker}, // golib's search.Chunker, by extension
+		Deriver:  pdfDeriver,                                  // Pro formats' text; AutoDoc 03 wires it
+	}))
+}
+```
+
+- **They are checked once, at the start.** An extension that is upper-case, built in (`.md`, `.txt`,
+  `.yaml`, `.yml`) or a Pro format, or a version outside `[A-Za-z0-9._+-]{1,32}` (a deriver's id
+  may hold `/` too, up to 64), stops the binary, naming it. Each version is read once.
+- **A registered file is code, read as text.** Its kind is the chunker's, after the built-in kinds and
+  before the workspace's own text types (one of which naming it is refused). Its chunks keep the
+  chunker's version and its own embed text, so a vector is made of exactly what its hash names. Code
+  is opt-in: the Edit tab offers the daemon's registered types beside the built-in ones, and turning
+  one on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to the excludes.
+- **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker
+  or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted in
+  `index.status`, and deleted only when the file or the rules say so. A file a community daemon
+  indexed as Markdown is cut by a build with its chunker.
+- **The TUI offers the build that reads more.** A TUI whose binary registers a strict superset of the
+  daemon's registrations offers, once a session, to restart the daemon as its own build; a community
+  TUI never offers to replace a registered daemon. While one client restarts the daemon, the others
+  only reconnect (a handoff beside the daemon's log, at most 30 seconds), so its build is the one
+  that serves next.
 
 ## Building
 

@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 9, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 10, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step
@@ -79,7 +79,7 @@ The answer:
   "hits": [
     {"path": "adrs/0203.md", "breadcrumb": "ADR 0203 › Storage", "snippet": "…",
      "byte_start": 1204, "byte_end": 2310, "relevance": 0.94, "score": 0.031,
-     "via": ["lexical", "semantic"], "generation": 7}
+     "via": ["lexical", "semantic"], "generation": 7, "hold": ""}
   ],
   "mode_used": "hybrid",
   "semantic": "ready"
@@ -91,6 +91,12 @@ The answer:
   way alone scores about 0.5 at best, unless many files link to it or it has a tag matching the
   query, which boost it.
 - `via` says which way found it.
+- `hold` is `""` for a file this daemon indexed. Builds of AutoDoc share one index, and a file
+  another build indexed with a chunker or a format this one lacks (a `.go` file a Pro build cut, say)
+  is held: searchable, never indexed again. Its `hold` says how far to trust it:
+  - `current`: the file is as it was indexed;
+  - `stale`: the file changed since, so the section may have moved: read the file before you quote it;
+  - `unchecked`: the daemon has not seen the file yet; treat it as `stale`.
 - `semantic` says whether meaning was searched too:
   - `ready`: every file is embedded;
   - `partial`: some files are found by words only, until they are embedded;
@@ -124,25 +130,25 @@ first.
 
 | verb | parameters | answers |
 | --- | --- | --- |
-| `workspace.list` | — | `[{name, root, state, include, exclude, schema, text_extensions, provider, databases}]`; `provider` is the workspace's own embedding provider (`""`: the daemon's), with `provider_error` when it is not set up; `schema` is `{path, active, fields, error, line}`; `text_extensions` are the extensions read as plain text besides `.txt`; `databases` is `{uid, destination, vector_index, view_args, source?, destination_connection?}`, each connection `{engine, host, database, user, schema, has_password}`, never its DSN |
+| `workspace.list` | — | `[{name, root, state, include, exclude, schema, text_extensions, text_collisions, provider, databases}]`; `provider` is the workspace's own embedding provider (`""`: the daemon's), with `provider_error` when it is not set up; `schema` is `{path, active, fields, error, line}`; `text_extensions` are the extensions read as plain text besides `.txt`; `text_collisions` are those of them the daemon's build reads with a registered chunker instead; `databases` is `{uid, destination, vector_index, view_args, source?, destination_connection?}`, each connection `{engine, host, database, user, schema, has_password}`, never its DSN |
 | `workspace.configure` | workspace, settings map | save any of `name`, `include`+`exclude`, `schema`, `text_extensions`, `section_tokens`, `embedding_policy`, `provider`, and (where `sys.capabilities` says `databases`) `destination`, `vector_index`, `view_args`, `source` and `destination_connection` (`{engine, dsn, schema}` or `{remove: true}`; a blank `dsn` keeps the stored one) at once: all of it or none. An unknown key is InvalidParams. Logs the event each changed setting's own verb logs, a rename first |
 | `workspace.set_patterns` | workspace, include list, exclude list | replace validated globs and reconcile that workspace; an empty include matches no files |
 | `workspace.set_provider` | workspace, provider | give the workspace a stored embedding provider of its own (`""`: the daemon's again); set up first, and only that workspace re-embeds |
-| `workspace.set_text_extensions` | workspace, list of extensions | declare the workspace's own plain-text extensions (`.log`); answers them normalized. Which files are indexed is still the patterns' |
+| `workspace.set_text_extensions` | workspace, list of extensions | declare the workspace's own plain-text extensions (`.log`); answers them normalized. Which files are indexed is still the patterns'. An extension the daemon's build reads with a registered chunker is refused |
 | `workspace.set_schema` | workspace, path | name the frontmatter schema file (under the root, or absolute; `""` for none); answers the `schema` status |
 | `search.query` | workspace, query, options? | see above |
 | `doc.read` | workspace, path | `{content, version}`: the file's text, and its version |
 | `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown file's headings in order, with the version they were read at; other kinds have none |
 | `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema; only Markdown has frontmatter |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every file in path order, after `after` (`""` from the start) |
-| `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts files whose frontmatter has a problem |
+| `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, held, held_stale, held_unchecked, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts files whose frontmatter has a problem; `held` the files another build indexed that this one holds (see `hold` above), `held_stale` and `held_unchecked` among them |
 | `index.changes` | workspace, since, limit | `{cursor, changes: [{path, op, generation}], more}`: what changed after cursor `since` |
 | `graph.links` | workspace, path | `[{path, raw, anchor, kind, resolved}]`: the links the file makes |
 | `graph.backlinks` | workspace, path | the same shape: the files that link to it |
 | `graph.neighborhood` | workspace, path, depth | `{nodes, edges: [{src, dst, kind}]}`: the files within `depth` links |
 | `graph.unresolved` | workspace | `[{src, raw, reason}]`: links that name no file |
 | `sys.hello` | `{protocol, name}` | `{protocol, server, version, pid, addr, client, events}`: `client` is this connection's token, `events` the event log's head |
-| `sys.capabilities` | — | `{databases}`: what this edition offers beyond the core; a client hides what is false, and the daemon refuses its settings |
+| `sys.capabilities` | — | `{databases, registrations}`: what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), and the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build |
 | `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema, database settings (`workspace.databases`, never a connection) or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
 
 Writing files (`doc.write`, `doc.rename`, `doc.remove`), changing workspaces and choosing the
@@ -155,7 +161,7 @@ asks you to change their files through AutoDoc.
 | --- | --- | --- |
 | -32060 | no such workspace | call `workspace.list` and use a listed name |
 | -32061 | no such file | the path is wrong or not indexed; `index.list` shows the paths |
-| -32602 | invalid parameters | the message says which; check the table above |
+| -32602 | invalid parameters | the message says which; check the table above. `held: …` is a reindex of a file this build cannot index again: the message names the way out |
 | -32065 | not supported here | `mode: "semantic"` with no model in use; search without it |
 | -32067 | the query could not be embedded | retry, or search with `mode: "lexical"` |
 | -32069 | a new model is filling | search with `mode: "auto"` or `"lexical"` |
