@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 8, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 9, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step
@@ -124,7 +124,8 @@ first.
 
 | verb | parameters | answers |
 | --- | --- | --- |
-| `workspace.list` | — | `[{name, root, state, include, exclude, schema, text_extensions, provider}]`; `provider` is the workspace's own embedding provider (`""`: the daemon's), with `provider_error` when it is not set up; `schema` is `{path, active, fields, error, line}`; `text_extensions` are the extensions read as plain text besides `.txt` |
+| `workspace.list` | — | `[{name, root, state, include, exclude, schema, text_extensions, provider, databases}]`; `provider` is the workspace's own embedding provider (`""`: the daemon's), with `provider_error` when it is not set up; `schema` is `{path, active, fields, error, line}`; `text_extensions` are the extensions read as plain text besides `.txt`; `databases` is `{uid, destination, vector_index, view_args, source?, destination_connection?}`, each connection `{engine, host, database, user, schema, has_password}`, never its DSN |
+| `workspace.configure` | workspace, settings map | save any of `name`, `include`+`exclude`, `schema`, `text_extensions`, `section_tokens`, `embedding_policy`, `provider`, and (where `sys.capabilities` says `databases`) `destination`, `vector_index`, `view_args`, `source` and `destination_connection` (`{engine, dsn, schema}` or `{remove: true}`; a blank `dsn` keeps the stored one) at once: all of it or none. An unknown key is InvalidParams. Logs the event each changed setting's own verb logs, a rename first |
 | `workspace.set_patterns` | workspace, include list, exclude list | replace validated globs and reconcile that workspace; an empty include matches no files |
 | `workspace.set_provider` | workspace, provider | give the workspace a stored embedding provider of its own (`""`: the daemon's again); set up first, and only that workspace re-embeds |
 | `workspace.set_text_extensions` | workspace, list of extensions | declare the workspace's own plain-text extensions (`.log`); answers them normalized. Which files are indexed is still the patterns' |
@@ -141,7 +142,8 @@ first.
 | `graph.neighborhood` | workspace, path, depth | `{nodes, edges: [{src, dst, kind}]}`: the files within `depth` links |
 | `graph.unresolved` | workspace | `[{src, raw, reason}]`: links that name no file |
 | `sys.hello` | `{protocol, name}` | `{protocol, server, version, pid, addr, client, events}`: `client` is this connection's token, `events` the event log's head |
-| `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
+| `sys.capabilities` | — | `{databases}`: what this edition offers beyond the core; a client hides what is false, and the daemon refuses its settings |
+| `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema, database settings (`workspace.databases`, never a connection) or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
 
 Writing files (`doc.write`, `doc.rename`, `doc.remove`), changing workspaces and choosing the
 embedding model are for the user's tools, not an agent's search. Do not call them unless the user

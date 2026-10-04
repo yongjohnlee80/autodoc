@@ -63,8 +63,8 @@ poll_interval = "2s"        # the listing interval when a root cannot be watched
 
 A missing file is every default. An unknown setting is an error, so a misspelling is reported.
 
-**Workspaces are not configured here.** They are kept in the store: add, rename and delete them in
-the TUI (`Go › Manage workspaces…`) or with `workspace.add`. A workspace has a name (what `--ui` and
+**Workspaces are not configured here.** They are kept in the store: add, edit and delete them in
+the TUI (`Go › Manage workspaces…`) or with `workspace.add` and `workspace.configure`. A workspace has a name (what `--ui` and
 every API call take), a root directory, and include and exclude patterns. New workspaces include
 `**/*.md`, `**/*.txt`, `**/*.yaml`, and `**/*.yml`, and exclude `.git/**` and `**/node_modules/**`
 by default. An excluded directory is never walked or watched. A workspace
@@ -76,18 +76,28 @@ expanded before matching. Existing workspaces keep their stored include patterns
 that still has a `[[workspace]]` section is
 refused with a message saying so.
 
-`Go › Manage workspaces… › Globs…` edits the selected workspace's include and exclude lists.
-Enter semicolon-separated root-relative patterns; a blank include list matches no files. Invalid
-rules leave the stored patterns and running watcher unchanged. Use another workspace for a separate
-directory root rather than trying to combine roots in one rule.
+`Go › Manage workspaces…` lists the workspaces by title and directory on the left, and the settings
+of the one under the cursor on the right. **Its settings are one dialog with two tabs**, opened by
+Add…, Edit… or Advanced…; Ctrl+PageUp and Ctrl+PageDown switch tabs, and Enter in a field saves:
 
-`Options › Editor preferences… › File types…` shows the active workspace's text-format choices.
-Markdown, plain text and YAML can be toggled there; the daemon validates the new patterns and reconciles
-the index before the change is shown. Your own text types (`.log`, `.rst`, …) are entered there too:
-each is read as UTF-8 plain text by declaration (never sniffed), admitted with an include unless the
-rules already admit it, and previewed as indexed or not by the current rules. `.doc`, `.docx`, `.odt`,
-and `.pdf` are Pro-only and unavailable in Community, even if a broad include glob names them, and
-cannot be declared as text.
+- **Edit**: the title; the root (typed or browsed to when the workspace is added, then fixed: add
+  another directory as a workspace of its own); the frontmatter schema; the file types; and the
+  include and exclude lists, semicolon-separated root-relative patterns (a blank include matches no
+  files). Markdown, plain text and YAML are toggled here, and your own text types (`.log`, `.rst`,
+  …) are entered here: each is read as UTF-8 plain text by declaration (never sniffed) and admitted
+  with an include unless the rules already admit it. `.doc`, `.docx`, `.odt`, and `.pdf` are
+  Pro-only and unavailable in Community, even if a broad include glob names them, and cannot be
+  declared as text. `Options › Editor preferences… › File types…` opens this tab for the workspace
+  in use.
+- **Advanced**: the section size, the embedding policy and the embedding provider; and, where the
+  edition offers them, the databases: a **source** (postgres or sqlite) that the workspace's `.view`
+  files read, with the arguments they take, and the **destination** its index is kept in, the local
+  store or postgres with pgvector (with its schema and vector index, hnsw or ivfflat). A
+  connection's DSN is sealed in the store and never shown again: the dialog shows where it points,
+  and a blank DSN keeps the stored one.
+
+Save sends what changed in one `workspace.configure`, which saves all of it or none: a refused
+setting leaves every setting as it was, and the dialog opens again as it was typed with the reason.
 
 **Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
 added and chosen in the TUI's AI models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
@@ -109,8 +119,8 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 
 | Group | Verbs |
 | --- | --- |
-| `sys` | `hello`, `shutdown` |
-| `workspace` | `list`, `add(name, root, include?, exclude?)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)` |
+| `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core: `{databases}`) |
+| `workspace` | `list`, `add(name, root, include?, exclude?)`, `configure(name, settings)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)`, `set_schema(name, path)`, `set_text_extensions(name, exts)`, `set_provider(name, provider)` |
 | `search` | `query(ws, q, {limit, mode, tags, paths})` |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
@@ -166,7 +176,7 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
   `Image previews` off compares the two on the same file. Both follow the active theme's colours
   (light, dark, sepia, retro, mono), as `autodoc --export html --theme …` does.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
-  has a schema (`Manage… › Schema…`); they never block a save.
+  has a schema (`Manage… › Edit…`); they never block a save.
 - **The pickers** (search, open, new file, add a workspace) share one layout: the fields over the
   list on the left, the file under the cursor on the right, the buttons beneath. The search runs
   as it is typed and refreshes its open query after a model or workspace transition; its preview
@@ -178,7 +188,7 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a file, new file, save |
-| `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, renames and deletes them |
+| `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
 
@@ -201,7 +211,7 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
 The preferences and the AI models are kept in the daemon's store, so they are the same whichever
 workspace is open. **Embedding is scheduled across the daemon**: the open TUI workspace has first
 turn, then recently searched workspaces, while background work gets regular turns. A workspace's
-Embedding… setting in Manage workspaces chooses `always` (default), `when opened` (continues
+embedding setting (Manage workspaces › Advanced…) chooses `always` (default), `when opened` (continues
 after first opening), or `never` (words-only). The progress line says which workspace a pending
 one waits for, or that its setting paused embedding. An optional `[embedding_queue]`
 `max_inflight = 1` in `config.toml` bounds concurrent provider calls to 1 (or 2 if set to 2).
@@ -292,7 +302,7 @@ it. One connection writes, and any number read, each from one snapshot:
   generations, and a reader sees the old one or the new one, never a mix.
 - **Frontmatter is metadata:** the title, tags and aliases. Inline `#tags` count too.
 - **A frontmatter schema types it.** A workspace may name a YAML schema file
-  (`Go › Manage workspaces… › Schema…`, suggested at `<root>/.autodoc/schema.yaml`). Each Markdown file's
+  (`Go › Manage workspaces… › Edit…`, suggested at `<root>/.autodoc/schema.yaml`). Each Markdown file's
   frontmatter is checked against it when it is indexed, and in the editor as it is typed. A field
   the schema admits becomes a facet that search can filter by exactly. A field it does not admit is
   a diagnostic: shown over the page, counted in `index.status`, and never a reason to refuse a save or
@@ -352,7 +362,7 @@ autodoc --call workspace.list
 autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
 ```
 
-**A workspace may embed with its own provider** (`Manage workspaces… › Provider…`): one of the stored
+**A workspace may embed with its own provider** (`Manage workspaces… › Advanced…`): one of the stored
 providers instead of the daemon's. Choosing it sets it up first, and only that workspace's vectors
 fill again; a switch of the daemon's provider leaves it as it is, and deleting the provider returns
 it to the daemon's. Every provider shares the daemon's limit on requests in flight, and the queue
