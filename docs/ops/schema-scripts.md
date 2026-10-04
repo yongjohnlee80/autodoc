@@ -98,3 +98,21 @@ anything runs.
   release that stops using the old form;
 - it is idempotent where the engine allows (`IF NOT EXISTS`); the ledger makes
   every script run once regardless.
+
+## A destination's scripts
+
+A workspace whose destination is Postgres keeps its index in that database, not in the local store
+(ADR 0214). Its tables are `sql/destination/postgres/`, compiled in and applied by golib `dao/deploy`
+to the destination with a ledger of its own, `autodoc_schema`, when the destination is first
+connected. The same rules hold as for the store: a released script never changes, and the set must be
+dense and paired.
+
+- **The workspace key is the uid.** Several machines' workspaces may share one destination, so every
+  key starts with `workspace_uid`, the local store's `workspace.uid`, never a local id.
+- **Lexical search** is a generated, weighted `tsvector` on `chunk` with a GIN index: title above
+  breadcrumb and tags, above the body.
+- **Vectors** are pgvector's `vector`. The nearest-neighbour index (HNSW or IVFFlat, cosine) needs a
+  fixed dimension, so it is a partial index per model, made when the model becomes active.
+- **pgvector must be installed in a schema the connection searches** (public, usually). The script
+  creates the extension only when the database has none.
+- **The integration test** runs with `AUTODOC_TEST_PGURL` set, in a schema of its own that it drops.
