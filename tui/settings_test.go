@@ -493,3 +493,32 @@ func TestTheManagerDetail(t *testing.T) {
 		}
 	}
 }
+
+// After a rename, and before the relisting answers, Delete… and Edit… act on the workspace by its
+// new name: the list holds it at once (a delete asked for by the old name was refused as no such
+// workspace).
+func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	var holding atomic.Bool
+	release := make(chan struct{})
+	sess := NewSession(d.sock, nil)
+	sess.beforeCall = func(method string, _ []any) {
+		if method == "workspace.list" && holding.Load() {
+			<-release
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(r.h.manageWorkspaces)
+	r.s.WaitForText(t, "Advanced…")
+	r.openSettings(t, "kb", 0)
+	holding.Store(true) // from here every listing waits
+	defer close(release)
+	r.saveForm(func(f *settingsForm) { f.name = "docs" })
+	r.waitNoticed(t, "docs: saved name")
+	r.h.p.Post(func() { r.h.startRemoveWorkspace(0) })
+	r.s.WaitForText(t, "Delete the workspace docs?")
+	if got := onLoop(r, func() string { return r.h.removing }); got != "docs" {
+		t.Fatalf("Delete… asked about %q, want docs", got)
+	}
+}

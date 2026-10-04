@@ -627,6 +627,14 @@ func (h *Host) saved(name string, c map[string]any) {
 	to := name
 	if n, ok := c["name"].(string); ok {
 		to = n
+		// the list holds the new name at once: a Delete… or Edit… asked for before the relisting
+		// answers acts on the workspace as it is now named
+		for i := range h.wsList {
+			if h.wsList[i].name == name {
+				h.wsList[i].name = to
+			}
+		}
+		h.showWorkspaceRows()
 		if h.ws == name {
 			// the same workspace under another name: the open file stays open
 			h.ws = to

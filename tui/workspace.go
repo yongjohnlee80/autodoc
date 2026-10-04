@@ -60,22 +60,13 @@ func (h *Host) loadWorkspaces() {
 		}
 		h.wsList = a.list
 		h.showWorkspacesInExplorer(a.list)
-		var rows, managed []rowOf
 		pick := -1
 		for i, w := range a.list {
-			label := w.name
-			if w.state != "ready" {
-				label += "  (" + w.state + ")"
-			}
-			rows = append(rows, rowOf{"key": w.name, "label": label})
-			managed = append(managed, rowOf{"key": w.name, "name": label, "root": w.root})
 			if w.state == "ready" && (pick < 0 || w.name == h.ws) {
 				pick = i
 			}
 		}
-		h.workspaces.Reset(rows)
-		h.managed.Reset(managed)
-		h.showManagerDetail()
+		h.showWorkspaceRows()
 		if pick < 0 {
 			h.ws, h.filesAll = "", nil
 			if h.keepDraft {
@@ -91,6 +82,23 @@ func (h *Host) loadWorkspaces() {
 			h.enter(a.list[pick].name)
 		}
 	})
+}
+
+// showWorkspaceRows shows h.wsList in the picker and the manager, and the settings of the
+// manager's row.
+func (h *Host) showWorkspaceRows() {
+	var rows, managed []rowOf
+	for _, w := range h.wsList {
+		label := w.name
+		if w.state != "ready" {
+			label += "  (" + w.state + ")"
+		}
+		rows = append(rows, rowOf{"key": w.name, "label": label})
+		managed = append(managed, rowOf{"key": w.name, "name": label, "root": w.root})
+	}
+	h.workspaces.Reset(rows)
+	h.managed.Reset(managed)
+	h.showManagerDetail()
 }
 
 func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
