@@ -224,6 +224,9 @@ func TestAViewHeldOnTheOldModelScansItsCodes(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		if st, err := v.SemanticState(context.Background()); err != nil || st != search.StateSwitching {
+			t.Errorf("while b fills the view's state is %q, %v; want switching", st, err)
+		}
 		b.unhold()
 		fpB := b.Model().Fingerprint()
 		e.eventually("b active and its index published", func() bool {
@@ -240,6 +243,19 @@ func TestAViewHeldOnTheOldModelScansItsCodes(t *testing.T) {
 		}
 		if len(before) == 0 || !reflect.DeepEqual(before, after) {
 			t.Errorf("the held view's answer: %v, then %v", pathsOf(before), pathsOf(after))
+		}
+		// the state is the snapshot's too: A active, B the target, so still switching
+		if st, err := v.SemanticState(context.Background()); err != nil || st != search.StateSwitching {
+			t.Errorf("after B's flip the held view's state is %q, %v; want its own snapshot's, switching", st, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = st.View(context.Background(), func(v *View) error {
+		if st, err := v.SemanticState(context.Background()); err != nil || st != search.StateReady {
+			t.Errorf("a view after the flip has state %q, %v; want ready", st, err)
 		}
 		return nil
 	})
@@ -299,6 +315,10 @@ func TestEveryFilterAloneLists(t *testing.T) {
 		"a path":              {QueryOpts{Paths: []string{"guides"}}, []string{"guides/a.md", "guides/b.md"}},
 		"a tag and a path":    {QueryOpts{Tags: []string{"design"}, Paths: []string{"guides"}}, []string{"guides/a.md"}},
 		"a root path":         {QueryOpts{Paths: []string{"."}}, nil},
+		"the root as /":       {QueryOpts{Paths: []string{"/"}}, nil},
+		"the root as ./":      {QueryOpts{Paths: []string{"./"}}, nil},
+		"the root and a path": {QueryOpts{Paths: []string{"/", "guides"}}, nil},
+		"a path with slashes": {QueryOpts{Paths: []string{"/guides/"}}, []string{"guides/a.md", "guides/b.md"}},
 		"no words, no filter": {QueryOpts{}, nil},
 	} {
 		res, err := e.store.Search(context.Background(), "  ", c.opts)
