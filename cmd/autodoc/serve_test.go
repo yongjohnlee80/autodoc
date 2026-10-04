@@ -576,7 +576,7 @@ func TestEmbeddingProvidersFromTheStore(t *testing.T) {
 	}
 }
 
-// TestMain lets a test run this binary's main: spawnServe starts os.Executable(), which in a test is
+// TestMain lets a test run this binary's main: tui.SpawnServe starts os.Executable(), which in a test is
 // the test binary, so it runs main when asked to.
 func TestMain(m *testing.M) {
 	if os.Getenv("AUTODOC_TEST_MAIN") == "1" {
@@ -597,7 +597,7 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 	}
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	t.Setenv("AUTODOC_TEST_MAIN", "1")
-	logPath, err := spawnServe(cfg, state)
+	logPath, err := tui.SpawnServe(cfg, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -659,28 +659,6 @@ func TestServesWithoutAConfigFile(t *testing.T) {
 	}
 }
 
-// TestUINamesAWorkspace: --ui <name> is checked against the daemon before the TUI starts: a name
-// it has is opened, and one it lacks is refused with the names it has.
-func TestUINamesAWorkspace(t *testing.T) {
-	dir := short(t)
-	sock := filepath.Join(dir, "s.sock")
-	start(t, writeConfig(t, sock, filepath.Join(dir, "state"), "", "kb="+t.TempDir(), "notes="+t.TempDir()), sock)
-	ctx := context.Background()
-	if err := checkWorkspace(ctx, tui.NewSession(sock, nil), "notes"); err != nil {
-		t.Errorf("a workspace the daemon has: %v", err)
-	}
-	err := checkWorkspace(ctx, tui.NewSession(sock, nil), "nope")
-	if err == nil || !strings.Contains(err.Error(), `no workspace named "nope"; the workspaces are: kb, notes`) {
-		t.Errorf("a workspace it lacks: %v", err)
-	}
-	dir2 := short(t)
-	sock2 := filepath.Join(dir2, "s.sock")
-	start(t, writeConfig(t, sock2, filepath.Join(dir2, "state"), ""), sock2)
-	if err := checkWorkspace(ctx, tui.NewSession(sock2, nil), "kb"); err == nil || !strings.Contains(err.Error(), "none yet") {
-		t.Errorf("a daemon with none: %v", err)
-	}
-}
-
 // TestOldIndexesAreNotedOnce: the per-workspace index files of earlier builds are named once, and
 // left where they are.
 func TestOldIndexesAreNotedOnce(t *testing.T) {
@@ -713,21 +691,12 @@ func isCode(err error, code int64) bool {
 }
 
 // TestInstalledVersionAsksTheBinary: the version a restart would start is the binary's own answer
-// to --version (here the test binary, running main); a binary that answers otherwise is refused.
+// to --version (here the test binary, running main). tui's own cells refuse a binary that answers
+// otherwise.
 func TestInstalledVersionAsksTheBinary(t *testing.T) {
 	t.Setenv("AUTODOC_TEST_MAIN", "1")
-	if v, err := installedVersion(); err != nil || v != version {
+	if v, err := tui.InstalledVersion(); err != nil || v != version {
 		t.Fatalf("installed %q, %v; want %q", v, err, version)
-	}
-	sh := filepath.Join(t.TempDir(), "not-autodoc")
-	if err := os.WriteFile(sh, []byte("#!/bin/sh\necho something else\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if v, err := versionOf(sh); err == nil {
-		t.Errorf("a binary that is not autodoc gave %q", v)
-	}
-	if _, err := versionOf(filepath.Join(t.TempDir(), "absent")); err == nil {
-		t.Error("an absent binary gave a version")
 	}
 }
 
