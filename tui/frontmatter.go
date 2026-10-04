@@ -61,11 +61,9 @@ func (s schemaInfo) state() string {
 	return b.String()
 }
 
-func (h *Host) startSchema(i int) {
-	w, ok := h.managerRow(i)
-	if !ok {
-		return
-	}
+func (h *Host) startSchema(i int) { h.withCurrentRow(i, h.showSchema) }
+
+func (h *Host) showSchema(w wsInfo) {
 	h.schemaWorkspace = w.name
 	h.set("App.schemaTitle", "frontmatter schema · "+w.name)
 	h.set("App.schemaRoot", "workspace root: "+w.root)

@@ -51,19 +51,8 @@ func (h *Host) loadWorkspaces() {
 		err  error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "workspace.list")
-		if err != nil {
-			return answer{err: err}
-		}
-		var out []wsInfo
-		for _, w := range asList(res) {
-			m := asMap(w)
-			out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
-				embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
-				schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
-				provider: str(m, "provider"), providerErr: str(m, "provider_error")})
-		}
-		return answer{list: out}
+		list, err := h.listWorkspaces(ctx)
+		return answer{list: list, err: err}
 	}, func(a answer) {
 		if ep != h.epoch {
 			return
@@ -347,6 +336,71 @@ const managerHelp = "Add… a directory · Rename… or Delete… the one under 
 
 // managerRow is the manager's row i: the one under its cursor when a button was pressed, read
 // from the table then, since a move of the cursor may not have reached the host yet.
+// listWorkspaces is workspace.list, read into wsInfo; from a worker.
+func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
+	res, err := h.call(ctx, "workspace.list")
+	if err != nil {
+		return nil, err
+	}
+	var out []wsInfo
+	for _, w := range asList(res) {
+		m := asMap(w)
+		out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
+			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
+			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
+			provider: str(m, "provider"), providerErr: str(m, "provider_error")})
+	}
+	return out, nil
+}
+
+// withCurrent runs fn on the loop with the workspace named name as the daemon has it NOW, not as
+// the last listing had it: a dialog opened right after its own save (whose relisting is still on
+// its way) must show what was saved (Lector's review of #30). extra, when set, runs in the same
+// worker, for a dialog that needs more from the daemon. A workspace gone meanwhile says so.
+func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, error), fn func(w wsInfo, more any)) {
+	ep := h.epoch
+	type answer struct {
+		w     wsInfo
+		found bool
+		more  any
+		err   error
+	}
+	do(h, func(ctx context.Context) answer {
+		list, err := h.listWorkspaces(ctx)
+		if err != nil {
+			return answer{err: err}
+		}
+		var a answer
+		for _, w := range list {
+			if w.name == name {
+				a.w, a.found = w, true
+			}
+		}
+		if a.found && extra != nil {
+			a.more, a.err = extra(ctx)
+		}
+		return a
+	}, func(a answer) {
+		switch {
+		case ep != h.epoch:
+		case a.err != nil:
+			h.failed(name, a.err)
+		case !a.found:
+			h.set("App.managerHelp", "the workspace "+name+" is gone")
+			h.loadWorkspaces()
+		default:
+			fn(a.w, a.more)
+		}
+	})
+}
+
+// withCurrentRow is withCurrent for the manager's row i.
+func (h *Host) withCurrentRow(i int, fn func(w wsInfo)) {
+	if w, ok := h.managerRow(i); ok {
+		h.withCurrent(w.name, nil, func(w wsInfo, _ any) { fn(w) })
+	}
+}
+
 func (h *Host) managerRow(i int) (wsInfo, bool) {
 	if i < 0 || i >= len(h.wsList) {
 		h.set("App.managerHelp", "no workspace under the cursor · Add… makes one")
@@ -393,11 +447,9 @@ func (h *Host) startRenameWorkspace(i int) {
 }
 
 // startSectionSize edits the workspace's shared chunk limit, not a provider setting.
-func (h *Host) startSectionSize(i int) {
-	w, ok := h.managerRow(i)
-	if !ok {
-		return
-	}
+func (h *Host) startSectionSize(i int) { h.withCurrentRow(i, h.showSectionSize) }
+
+func (h *Host) showSectionSize(w wsInfo) {
 	h.sectionWorkspace = w.name
 	h.set("App.sectionTitle", "section size · "+w.name)
 	h.setField("App.sectionSize", strconv.FormatInt(w.sectionTokens, 10))
@@ -405,20 +457,12 @@ func (h *Host) startSectionSize(i int) {
 	h.open("workspaceSection")
 }
 
-func (h *Host) startPatterns(i int) {
-	workspace, ok := h.managerRow(i)
-	if !ok {
-		return
-	}
-	h.showPatterns(workspace)
-}
+func (h *Host) startPatterns(i int) { h.withCurrentRow(i, h.showPatterns) }
 
 func (h *Host) editActivePatterns() {
-	workspace, ok := h.activeWorkspaceInfo()
-	if !ok {
-		return
+	if workspace, ok := h.activeWorkspaceInfo(); ok {
+		h.withCurrent(workspace.name, nil, func(w wsInfo, _ any) { h.showPatterns(w) })
 	}
-	h.showPatterns(workspace)
 }
 
 func (h *Host) showPatterns(workspace wsInfo) {
@@ -471,11 +515,9 @@ func (h *Host) savePatterns(includeText, excludeText string) {
 	h.open("workspacePatterns")
 }
 
-func (h *Host) startEmbeddingPolicy(i int) {
-	w, ok := h.managerRow(i)
-	if !ok {
-		return
-	}
+func (h *Host) startEmbeddingPolicy(i int) { h.withCurrentRow(i, h.showEmbeddingPolicy) }
+
+func (h *Host) showEmbeddingPolicy(w wsInfo) {
 	h.policyWorkspace = w.name
 	h.set("App.policyTitle", "embedding · "+w.name)
 	h.setField("App.embeddingPolicy", w.embeddingPolicy)

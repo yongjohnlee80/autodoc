@@ -2,7 +2,10 @@ package tui
 
 import (
 	"context"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -50,4 +53,40 @@ func TestWorkspaceProviderDialog(t *testing.T) {
 	}
 	r.h.p.Post(func() { r.h.startWorkspaceProvider(0) })
 	r.s.WaitForText(t, "uses its own provider: local")
+}
+
+// Reopened at once after a save, while the save's relisting is held back, the dialog shows the
+// saved provider: it reads the workspace from the daemon, not from the last listing (Lector's
+// review of #30, round 2; the relisting raced the reopen).
+func TestTheProviderDialogReopenedAtOnceShowsTheSavedChoice(t *testing.T) {
+	ollama := newFakeOllama(t, "embedder")
+	d := startManaged(t, map[string]string{"kb": noteDir(t, "a.md", "# A\n\nalpha\n")})
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	var holding atomic.Bool
+	release := make(chan struct{})
+	sess := NewSession(d.sock, nil)
+	sess.beforeCall = func(method string, _ []any) {
+		if method == "workspace.list" && holding.Load() {
+			<-release
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.manageWorkspaces() })
+	r.s.WaitForText(t, "Provider…")
+	holding.Store(true) // from here every listing waits: the save's relisting cannot land first
+	r.h.p.Post(func() {
+		r.h.providerWorkspace, r.h.providerChoices = "kb", []string{"", "local"}
+		r.h.saveWorkspaceProvider(1)
+	})
+	r.waitNoticed(t, "kb: embedding with local")
+	r.h.p.Post(func() { r.h.startWorkspaceProvider(0) })
+	time.Sleep(100 * time.Millisecond) // the reopen is under way, its listing held with the relisting
+	close(release)
+	r.s.WaitForText(t, "uses its own provider: local")
+	if strings.Contains(r.s.String(), "uses the daemon's provider") {
+		t.Fatal("the dialog showed the provider from before the save")
+	}
 }
