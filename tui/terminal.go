@@ -193,11 +193,16 @@ func (h *Host) toggleTerminal() {
 	h.termBefore = h.keyboardPane()
 	h.keep(h.p.Call("terminal", "open"))
 	if !h.termStarted {
-		h.termStarted = true
 		if ws, ok := h.activeWorkspaceInfo(); ok {
 			h.set("App.terminalDir", termDir(ws.root))
 		}
-		h.keep(h.p.Call("terminalView", "start"))
+		// Started only once it starts: a shell that fails to launch is tried again on the next
+		// open (and Enter in the pane tries it at once).
+		if err := h.p.Call("terminalView", "start"); err != nil {
+			h.notify("the terminal could not start (" + err.Error() + "): SPC ` or Enter in it tries again")
+		} else {
+			h.termStarted = true
+		}
 	}
 	h.keep(h.p.Call("terminalView", "forceActiveFocus"))
 }
