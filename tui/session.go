@@ -57,7 +57,9 @@ func (h *Host) start() {
 		} else {
 			h.notifyDone(toastConnection, "connected — autodoc "+h.session.Version())
 		}
+		h.session.RemoveHandoff() // a restart this TUI asked for has its daemon: the others may spawn again
 		h.setConnected(true)
+		h.checkRegistrations()
 		h.entered = false // a new connection enters its workspace again, as the first did
 		h.loadPrefs()
 		h.loadWorkspaces()

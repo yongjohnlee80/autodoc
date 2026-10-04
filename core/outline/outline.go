@@ -58,7 +58,7 @@ func (d *Doc) Headings() []Heading { return d.headings }
 
 // Crumbs is the breadcrumb at a place: line is 1-based, col counts bytes into the line. Markdown:
 // the heading the place is under and the headings above it, outermost first. YAML: the key path
-// to the value there. Plain text: the title.
+// to the value there. Plain text, and a registered chunker's file: the title.
 func (d *Doc) Crumbs(line, col int) []string {
 	switch d.kind {
 	case kind.Markdown:
@@ -82,8 +82,8 @@ func (d *Doc) Crumbs(line, col int) []string {
 			return nil
 		}
 		return yamlPath(d.yaml, d.offset(line, col))
-	case kind.Text:
-		return []string{d.title}
+	case kind.Text, kind.Registered:
+		return []string{d.title} // a code outline is not AutoDoc's yet (ADR 0216 §3)
 	}
 	return nil
 }

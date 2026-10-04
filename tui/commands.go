@@ -107,10 +107,11 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
 
 		// the backend
-		"App.startRestart":     none(h.startRestart),
-		"App.restartConfirmed": none(h.restartConfirmed),
-		"App.restartMismatch":  none(h.restartMismatch),
-		"App.quitMismatch":     none(h.quitMismatch),
+		"App.startRestart":            none(h.startRestart),
+		"App.restartConfirmed":        none(h.restartConfirmed),
+		"App.restartMismatch":         none(h.restartMismatch),
+		"App.quitMismatch":            none(h.quitMismatch),
+		"App.restartForRegistrations": none(h.restartForRegistrations),
 
 		// the preferences
 		"App.openPrefs":            none(h.openPrefs),

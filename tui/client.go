@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -45,6 +46,11 @@ type Session struct {
 	addr   string
 	spawn  func() (logPath string, err error) // start `autodoc --serve`; nil: never
 	window time.Duration
+	// stateDir, when set, is where restart handoffs are kept (handoff.go); self is this process;
+	// handoffCap bounds how long one Connect waits on handoffs in all, on its own clock
+	stateDir   string
+	self       int64
+	handoffCap time.Duration
 	// beforeCall, when set (tests only), runs on the worker before each call: the seam that holds
 	// one answer back while a later one lands
 	beforeCall func(method string, params []any)
@@ -80,12 +86,52 @@ func (e *MismatchError) Error() string {
 // NewSession is the session to the daemon on the unix socket addr. spawn, when not nil, starts the
 // daemon once when nothing answers.
 func NewSession(addr string, spawn func() (string, error)) *Session {
-	return &Session{addr: addr, spawn: spawn, window: spawnProbeWindow}
+	return &Session{addr: addr, spawn: spawn, window: spawnProbeWindow, self: int64(os.Getpid()), handoffCap: handoffSpan}
+}
+
+// UseHandoffs keeps restart handoffs in stateDir, the daemon's state directory: Connect waits on
+// another process's restart before it spawns, and WriteHandoff announces this one's (handoff.go).
+func (s *Session) UseHandoffs(stateDir string) *Session {
+	s.stateDir = stateDir
+	return s
+}
+
+// WriteHandoff announces that this process is restarting the daemon: until the handoff's deadline,
+// another client's Connect only dials, so the daemon this one spawns is the one that serves. A
+// session without a state directory writes none.
+func (s *Session) WriteHandoff() error {
+	if s.stateDir == "" {
+		return nil
+	}
+	return writeHandoff(s.stateDir, s.addr, s.self, time.Now())
+}
+
+// RemoveHandoff removes this process's handoff, once its daemon answers or its restart failed.
+func (s *Session) RemoveHandoff() {
+	if s.stateDir != "" {
+		removeHandoff(s.stateDir, s.addr, s.self)
+	}
+}
+
+// heldBack reports whether a restart another process announced holds this Connect back from
+// spawning: a live handoff, while this Connect has waited on handoffs for less than handoffCap in
+// all, on its own monotonic clock, from the first it saw (since: zero until then). Past the cap
+// every handoff counts as lapsed, so a deadline stretched by a clock step, a reused pid or one
+// handoff after another never holds a Connect for longer.
+func (s *Session) heldBack(since time.Time) bool {
+	if s.stateDir == "" || !since.IsZero() && time.Since(since) >= s.handoffCap {
+		return false
+	}
+	h, ok := readHandoff(s.stateDir, s.addr)
+	return ok && h.holdsBack(s.self, s.addr, time.Now())
 }
 
 // Connect dials the daemon: on refusal it spawns --serve (once, when it may) and retries with
 // backoff, 100 ms doubling to 2 s, within the probe window; then it says hello at this build's
-// protocol. The generation moves as soon as Connect begins.
+// protocol. The generation moves as soon as Connect begins. While another process's restart
+// handoff stands (heldBack), it only dials, the probe window suspended, and connects as soon as
+// that restart's daemon answers; once the handoff ends, dies, lapses or reaches this Connect's
+// cap, a full window starts, with the spawn allowed. ctx ends it at any point.
 func (s *Session) Connect(ctx context.Context) error {
 	s.mu.Lock()
 	old := s.client
@@ -97,7 +143,8 @@ func (s *Session) Connect(ctx context.Context) error {
 	}
 	backoff := 100 * time.Millisecond
 	spawned, logPath := false, ""
-	var deadline time.Time
+	var deadline, heldSince time.Time
+	held := false
 	var cli *golibrpc.Client
 	for {
 		var err error
@@ -105,16 +152,25 @@ func (s *Session) Connect(ctx context.Context) error {
 		if err == nil {
 			break
 		}
-		if deadline.IsZero() {
+		switch {
+		case s.heldBack(heldSince):
+			if heldSince.IsZero() {
+				heldSince = time.Now()
+			}
+			held, deadline = true, time.Time{} // the window waits for the restart
+		case held:
+			held, backoff = false, 100*time.Millisecond // the handoff ended: dial again at once
+		}
+		if !held && deadline.IsZero() {
 			deadline = time.Now().Add(s.window)
 		}
-		if s.spawn != nil && !spawned {
+		if !held && s.spawn != nil && !spawned {
 			if logPath, err = s.spawn(); err != nil {
 				return fmt.Errorf("starting autodoc --serve: %w", err)
 			}
 			spawned = true
 		}
-		if time.Now().After(deadline) {
+		if !held && time.Now().After(deadline) {
 			return &ConnectError{Addr: s.addr, Window: s.window, LogPath: logPath, Last: err}
 		}
 		select {

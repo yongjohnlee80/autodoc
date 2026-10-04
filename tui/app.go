@@ -40,7 +40,9 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/outline"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
 
 // Host is the program behind qml/main.qml.
@@ -94,7 +96,15 @@ type Host struct {
 	prefs                          prefs
 	connected                      bool // to the daemon: the status line shows while not (prefs.go)
 	mismatchOpen, mismatchRecovery bool
-	panelOpen                      map[string]bool
+	// the registrations (registrations.go): this binary's, the daemon's, and the kinds a file is
+	// read as, which are the daemon's; whether the restart was offered, a mismatch that cannot be
+	// offered noted, and a restart for them, or any restart, accepted, this session
+	ownTables, daemonTables                registrations.Tables
+	kinds                                  kind.Registrations
+	registrationOffered, registrationNoted bool
+	registrationRestart, restartAccepted   bool
+	previewHeld                            bool // the search preview's hit is of a held document
+	panelOpen                              map[string]bool
 	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
 	// opened; whether its closing gives the keyboard back
 	termStarted, termRestore bool
@@ -217,6 +227,9 @@ type Options struct {
 	Installed func() (string, error)
 	// Plugins is where the Plugins menu finds plugins (plugins.go); its zero value finds none.
 	Plugins Plugins
+	// Registrations are this binary's own (ADR 0216): a daemon reporting a strict subset of them is
+	// offered a restart as this build (registrations.go). The zero value is the community build's.
+	Registrations registrations.Tables
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -235,7 +248,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations,
 		awaitExit:      awaitExit,
 		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),

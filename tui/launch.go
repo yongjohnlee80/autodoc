@@ -13,6 +13,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/term"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
 
 // LaunchOptions is what a program running AutoDoc's TUI changes about how it starts: autodoc's own
@@ -44,6 +45,9 @@ type LaunchOptions struct {
 	TermOptions []term.Option
 	// Backend, when set, is the terminal to run on instead of opening one: a test's, say.
 	Backend tuicore.Backend
+	// Registrations are this binary's own (ADR 0216): the daemon's are compared with them
+	// (Options.Registrations). The zero value is the community build's.
+	Registrations registrations.Tables
 }
 
 // Launch runs AutoDoc's TUI until it quits or ctx ends: it reads the config, attaches to the daemon
@@ -73,7 +77,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	if spawn == nil {
 		spawn = SpawnServe
 	}
-	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) })
+	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) }).UseHandoffs(stateDir)
 	workspace, last := o.Workspace, filepath.Join(stateDir, "last-workspace")
 	if workspace != "" {
 		if err := checkWorkspace(ctx, session, workspace); err != nil {
@@ -110,9 +114,10 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Layout:    o.Layout,
 		Workspace: workspace,
 		// a convenience for the next start: nothing depends on it being written
-		Remember:  func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
-		Installed: installed,
-		Plugins:   plugins,
+		Remember:      func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
+		Installed:     installed,
+		Plugins:       plugins,
+		Registrations: o.Registrations,
 	})
 	if err != nil {
 		return err

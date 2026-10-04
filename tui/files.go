@@ -138,8 +138,8 @@ func (h *Host) show(p, content, version string) {
 	}
 	h.file.path, h.file.version, h.file.open = p, version, true
 	h.set("App.fileTitle", p)
-	switch kind.Of(p, h.textExtensions()) {
-	case kind.Text:
+	switch h.kinds.Of(p, h.textExtensions()) { // the daemon's registrations: it is the one indexing
+	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
 	case kind.YAML:
 		h.set("App.syntaxDefinition", "YAML (find)")

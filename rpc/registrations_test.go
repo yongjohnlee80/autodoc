@@ -10,6 +10,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
 
 // workspace.list names the text extensions a registration of the build reads instead (Protocol
@@ -39,5 +40,31 @@ func TestHeldDocumentsOnTheWire(t *testing.T) {
 	err := wireErr(fmt.Errorf("reindex: %w", &index.HeldError{Path: "a.go", Ext: ".go", What: "chunker"}))
 	if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.HasPrefix(re.Message, "held: this backend has no chunker for .go") {
 		t.Errorf("the refusal: %v", err)
+	}
+}
+
+// sys.capabilities reports the build's registrations, read back as they were; without them, a
+// Protocol 10 answer is a protocol error, never none.
+func TestCapabilitiesReportTheRegistrations(t *testing.T) {
+	pro := registrations.Tables{Chunkers: map[string]string{".go": "code-go-1+text-5"},
+		Formats: map[string]registrations.Format{".pdf": {ID: "autorag/pdf", Version: "1"}}}
+	got, err := RegistrationsOf(map[string]any{"registrations": RegistrationsMap(pro)})
+	if err != nil || got.Fingerprint() != pro.Fingerprint() {
+		t.Fatalf("read back %+v, %v", got, err)
+	}
+	if m := RegistrationsMap(pro); m["fingerprint"] != pro.Fingerprint() {
+		t.Errorf("fingerprint %v", m["fingerprint"])
+	}
+	for _, caps := range []any{nil, map[string]any{"databases": true}, map[string]any{"registrations": map[string]any{"chunkers": map[string]any{}}},
+		map[string]any{"registrations": map[string]any{"chunkers": map[string]any{".go": int64(1)}, "formats": map[string]any{}}}} {
+		if _, err := RegistrationsOf(caps); !errors.Is(err, ErrNoRegistrations) {
+			t.Errorf("%v: %v, want a protocol error", caps, err)
+		}
+	}
+	r := serve(t)
+	cli := r.dial(true)
+	community, err := RegistrationsOf(call(t, cli, "sys.capabilities"))
+	if err != nil || len(community.Chunkers)+len(community.Formats) != 0 || community.Fingerprint() != (registrations.Tables{}).Fingerprint() {
+		t.Fatalf("the community build's: %+v, %v", community, err)
 	}
 }

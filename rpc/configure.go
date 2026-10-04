@@ -2,10 +2,12 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
 
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -235,9 +237,10 @@ func (s *Server) configureVerbs() {
 		return nil, manager.Configure(ctx, name, c)
 	}, false))
 	// sys.capabilities is what this daemon offers beyond the core (core/edition): a client hides
-	// what is false. A daemon whose workspaces say nothing offers nothing extra.
+	// what is false. A daemon whose workspaces say nothing offers nothing extra. Its registrations
+	// are always there, empty for the community build (Protocol 10).
 	s.handle("sys.capabilities", s.verb(0, 0, func(context.Context, *Workspace, []any) (any, error) {
-		out := map[string]any{"databases": false}
+		out := map[string]any{"databases": false, "registrations": RegistrationsMap(s.reg)}
 		if c, ok := s.workspaces.(interface{ Capabilities() map[string]bool }); ok {
 			for k, v := range c.Capabilities() {
 				out[k] = v
@@ -245,4 +248,53 @@ func (s *Server) configureVerbs() {
 		}
 		return out, nil
 	}, false))
+}
+
+// RegistrationsMap is a build's registrations as sys.capabilities reports them: each chunker's
+// version by extension, each format's deriver by format, and their fingerprint.
+func RegistrationsMap(t registrations.Tables) map[string]any {
+	chunkers, formats := map[string]any{}, map[string]any{}
+	for ext, v := range t.Chunkers {
+		chunkers[ext] = v
+	}
+	for f, d := range t.Formats {
+		formats[f] = map[string]any{"id": d.ID, "version": d.Version}
+	}
+	return map[string]any{"chunkers": chunkers, "formats": formats, "fingerprint": t.Fingerprint()}
+}
+
+// ErrNoRegistrations is a Protocol 10 sys.capabilities without its registrations: a protocol
+// error, never read as none, or every client built with registrations would offer a restart.
+var ErrNoRegistrations = errors.New("rpc: sys.capabilities has no registrations: a protocol error")
+
+// RegistrationsOf reads the registrations of a sys.capabilities answer.
+func RegistrationsOf(caps any) (registrations.Tables, error) {
+	m, _ := caps.(map[string]any)
+	r, ok := m["registrations"].(map[string]any)
+	if !ok {
+		return registrations.Tables{}, ErrNoRegistrations
+	}
+	cs, ok1 := r["chunkers"].(map[string]any)
+	fs, ok2 := r["formats"].(map[string]any)
+	if !ok1 || !ok2 {
+		return registrations.Tables{}, ErrNoRegistrations
+	}
+	t := registrations.Tables{Chunkers: map[string]string{}, Formats: map[string]registrations.Format{}}
+	for ext, v := range cs {
+		s, ok := v.(string)
+		if !ok {
+			return registrations.Tables{}, fmt.Errorf("%w: chunker %q", ErrNoRegistrations, ext)
+		}
+		t.Chunkers[ext] = s
+	}
+	for f, v := range fs {
+		d, _ := v.(map[string]any)
+		id, ok1 := d["id"].(string)
+		ver, ok2 := d["version"].(string)
+		if !ok1 || !ok2 {
+			return registrations.Tables{}, fmt.Errorf("%w: format %q", ErrNoRegistrations, f)
+		}
+		t.Formats[f] = registrations.Format{ID: id, Version: ver}
+	}
+	return t, nil
 }

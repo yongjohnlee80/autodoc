@@ -27,6 +27,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -81,6 +82,8 @@ type daemonOpts struct {
 	// notReady fails this many workspace lookups first (every verb on a workspace), as a daemon
 	// still starting up can
 	notReady int32
+	// reg are the registrations its sys.capabilities reports (ADR 0216); zero: the community build's
+	reg registrations.Tables
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -176,7 +179,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db)}
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg)}
 	if o.emb != nil {
 		opts = append(opts, rpc.WithEmbeddings(o.emb))
 	}

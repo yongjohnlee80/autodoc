@@ -11,6 +11,13 @@ import (
 func (h *Host) showMismatch(mismatch *MismatchError) {
 	canRestart := mismatch.Server < mismatch.Client && h.session.CanSpawn()
 	message := fmt.Sprintf("This TUI speaks protocol %d; autodoc %s speaks protocol %d.", mismatch.Client, mismatch.Version, mismatch.Server)
+	old := h.session.Stale()
+	if canRestart && h.restartAccepted && old != nil {
+		// an older backend answered again after a restart this TUI asked for: something else starts
+		// it (a supervisor's binary, say); offered again, the restart would loop
+		canRestart = false
+		message += fmt.Sprintf(" It answered after the restart this TUI asked for (pid %d): something else starts it. Stop that, then start the installed autodoc.", old.PID)
+	}
 	if canRestart {
 		message += " Restart Now stops the older backend and starts the installed one."
 	} else {
@@ -104,6 +111,12 @@ func (h *Host) startRestart() {
 // refused this TUI's protocol, is stopped over a connection of its own protocol; there is no
 // connection to end, so the wait and the start follow here.
 func (h *Host) restartConfirmed() {
+	h.restartAccepted = true
+	// until this TUI's daemon answers, another client only dials, so the build that serves next is
+	// this one (handoff.go); a handoff that cannot be written fails open, as before
+	if err := h.session.WriteHandoff(); err != nil {
+		h.notify("restart: the handoff to the other clients was not written: " + err.Error())
+	}
 	if old := h.session.Stale(); old != nil && !h.connected {
 		h.notify(fmt.Sprintf("asking the older backend (autodoc %s) to stop…", old.Version))
 		do(h, func(ctx context.Context) error {
@@ -116,6 +129,7 @@ func (h *Host) restartConfirmed() {
 			return nil
 		}, func(err error) {
 			if err != nil {
+				h.session.RemoveHandoff()
 				h.failed("restart", err)
 				if h.mismatchRecovery {
 					h.set("App.mismatchQuestion", "Restart failed: "+err.Error()+". Retry or quit.")
@@ -138,6 +152,7 @@ func (h *Host) restartConfirmed() {
 		return err
 	}, func(err error) {
 		if err != nil && gen == h.session.Gen() {
+			h.session.RemoveHandoff()
 			h.restartPID, h.restartFrom = 0, ""
 			h.failed("restart refused", err)
 		}
