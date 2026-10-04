@@ -261,7 +261,7 @@ func (d *Docs) readDerived(ctx context.Context, path string) (Doc, error) {
 		}
 		if after.Version == before.Version {
 			if !utf8.Valid(content) || bytes.IndexByte(content, 0) >= 0 {
-				return Doc{}, fmt.Errorf("%w: %s: its derived text is not UTF-8", derived.ErrDerive, path)
+				return Doc{}, fmt.Errorf("%w: %s: its derived text is not UTF-8", derived.ErrRefused, path)
 			}
 			return Doc{Content: content, Version: after.Version}, nil
 		}

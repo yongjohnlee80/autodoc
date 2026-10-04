@@ -132,13 +132,14 @@ func TestAnEvictionMissIsRetriedOnce(t *testing.T) {
 	_ = got.Text.Close()
 	d = &deriver{}
 	d.misses.Store(2)
-	if _, err := Text(context.Background(), table(t, d), fsys, "a.pdf", size); !errors.Is(err, fs.ErrNotExist) || d.calls.Load() != 2 {
-		t.Fatalf("two misses: %v after %d calls, want the miss after 2", err, d.calls.Load())
+	if _, err := Text(context.Background(), table(t, d), fsys, "a.pdf", size); !errors.Is(err, ErrDeriverFailed) || errors.Is(err, fs.ErrNotExist) || d.calls.Load() != 2 {
+		t.Fatalf("two misses: %v after %d calls, want the deriver's failure after 2, not a file gone", err, d.calls.Load())
 	}
 }
 
-// TestADerivedTextIsRefused: a text made under another identity, a failure, a panic, no text, a
-// negative size, or a format the build does not derive is refused, and a text handed back is closed.
+// TestADerivedTextIsRefused: the deriver's own failures (an error, a panic, no text) are
+// ErrDeriverFailed; a text it delivered under another identity or with a negative size is
+// ErrRefused, and closed; a format the build does not derive is ErrNoDeriver.
 func TestADerivedTextIsRefused(t *testing.T) {
 	fsys := memfs.New()
 	size := put(t, fsys, "a.pdf", "x")
@@ -149,11 +150,11 @@ func TestADerivedTextIsRefused(t *testing.T) {
 		want error
 		why  string
 	}{
-		"another identity": {&deriver{id: "fake/pdf", version: "2"}, "a.pdf", ErrDerive, "not the frozen fake/pdf@1"},
-		"a failure":        {&deriver{fail: errors.New("encrypted")}, "a.pdf", ErrDerive, "encrypted"},
-		"a panic":          {&deriver{panics: true}, "a.pdf", ErrDerive, "the deriver failed: fake deriver"},
-		"no text":          {&deriver{noText: true}, "a.pdf", ErrDerive, "gave no text"},
-		"a negative size":  {&deriver{bytes: -1}, "a.pdf", ErrDerive, "size as -1"},
+		"another identity": {&deriver{id: "fake/pdf", version: "2"}, "a.pdf", ErrRefused, "not the frozen fake/pdf@1"},
+		"a failure":        {&deriver{fail: errors.New("encrypted")}, "a.pdf", ErrDeriverFailed, "encrypted"},
+		"a panic":          {&deriver{panics: true}, "a.pdf", ErrDeriverFailed, "the deriver panicked: fake deriver"},
+		"no text":          {&deriver{noText: true}, "a.pdf", ErrDeriverFailed, "gave no text"},
+		"a negative size":  {&deriver{bytes: -1}, "a.pdf", ErrRefused, "size as -1"},
 		"another format":   {&deriver{}, "b.docx", ErrNoDeriver, "b.docx"},
 	} {
 		t.Run(name, func(t *testing.T) {

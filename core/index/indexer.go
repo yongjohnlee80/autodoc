@@ -147,7 +147,8 @@ type prepared struct {
 	skip        bool
 	delete      bool
 	err         error
-	final       bool // err is the file's own (over a bound, or its text cannot be derived): it waits for the file to change
+	tooLarge    bool // err is that the file is over its bound: its indexed text is no longer the file's
+	refused     bool // err refuses a derived text the same bytes would deliver again (prepareDerived)
 	hold        bool // a held document: nothing is written, and holdState is how its file stands
 	holdState   string
 	version     vfs.Version
@@ -525,7 +526,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		limit = derived.MaxContainer
 	}
 	if fi.Size > limit {
-		p.err, p.final = tooLarge(w.path, limit), true
+		p.err, p.tooLarge = tooLarge(w.path, limit), true
 		return p
 	}
 	if derives {
@@ -550,7 +551,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		x.opts.afterRead(w.path)
 	}
 	if len(src) > MaxFileSize { // it grew after the Stat
-		p.err, p.final = tooLarge(w.path, MaxFileSize), true
+		p.err, p.tooLarge = tooLarge(w.path, MaxFileSize), true
 		return p
 	}
 	p.version = fi.Version
@@ -648,8 +649,17 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			}
 			switch {
 			case p.err != nil:
-				if p.final {
-					// its indexed text is no longer the file's
+				drop := p.tooLarge // its indexed text is no longer the file's
+				if p.refused {
+					// an unchanged file re-derived for a new identity alone still has a correct row:
+					// only a file no longer the one indexed loses it
+					d, err := s.sc.Documents(tx).With(store.DocPath, p.path).Get(store.DocVersion)
+					if err != nil && !errors.Is(err, dao.ErrNoRows) {
+						return err
+					}
+					drop = err == nil && vfs.Version(d.Version) != p.version
+				}
+				if drop {
 					id, err := s.deleteDoc(tx, p.path, now)
 					if err != nil {
 						return err
@@ -720,7 +730,7 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			x.enqueue(o.p.path, j)
 		default:
 			j.inflight, j.attempts, j.lastErr = false, j.attempts+1, o.p.err.Error()
-			if o.p.final {
+			if o.p.tooLarge || o.p.refused {
 				continue // the next touch of the path runs it again
 			}
 			j.notUntil = time.Now().Add(x.retryDelay(j.attempts))
@@ -736,27 +746,42 @@ func tooLarge(path string, limit int64) error {
 
 // prepareDerived makes the text of a Pro document through the build's deriver and chunks it as
 // Markdown. Its text is bounded apart from its file (derived.MaxText), refused by its stated size
-// before it is read. A text the deriver cannot make, or makes too large, is the file's own error:
-// it waits for the file to change, since deriving the same bytes again fails again.
+// before it is read. Two kinds of failure are told apart:
+//   - the deriver's own (derived.ErrDeriverFailed: an error, a second miss, a panic, no text, or a
+//     text that fails as it is read) may pass: it is the document's error, retried with the
+//     backoff, and its row stays;
+//   - a refusal of the text it delivered (derived.ErrRefused, derived.ErrTooLarge, not UTF-8) is
+//     what the same bytes would deliver again: it waits for the file to change, and deletes the row
+//     only if the file changed since it was indexed (refused).
+//
+// A file gone before it could be opened leaves the index, as any file does.
 func (x *Indexer) prepareDerived(ctx context.Context, p *prepared, fi vfs.FileInfo, tokens int) *prepared {
+	p.version = fi.Version // what a refusal compares with the row's
 	d, err := derived.Text(ctx, x.opts.Registrations, x.fsys, p.path, fi.Size)
-	if err != nil {
-		p.err, p.final = err, errors.Is(err, derived.ErrDerive)
+	switch {
+	case err == nil:
+	case errors.Is(err, derived.ErrRefused):
+		p.err, p.refused = err, true
+		return p
+	case errors.Is(err, fs.ErrNotExist):
+		p.delete = true
+		return p
+	default:
+		p.err = err
 		return p
 	}
 	src, err := derived.Read(d, derived.MaxText)
 	if err != nil {
-		p.err, p.final = fmt.Errorf("index: %s: %w", p.path, err), errors.Is(err, derived.ErrTooLarge)
+		p.err, p.refused = fmt.Errorf("index: %s: %w", p.path, err), errors.Is(err, derived.ErrTooLarge)
 		return p
 	}
 	if x.opts.afterRead != nil {
 		x.opts.afterRead(p.path)
 	}
 	if !utf8.Valid(src) || bytes.IndexByte(src, 0) >= 0 {
-		p.err, p.final = fmt.Errorf("%s: its derived text is not UTF-8", p.path), true
+		p.err, p.refused = fmt.Errorf("%s: its derived text is not UTF-8", p.path), true
 		return p
 	}
-	p.version = fi.Version
 	// the text is a document's, not a vault's: no wikilinks or #tags, no frontmatter to check
 	doc := markdown.Parse(src, markdown.GFM())
 	p.meta = chunk.ReadMeta(doc, p.path)
