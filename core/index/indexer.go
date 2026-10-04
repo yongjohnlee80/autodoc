@@ -23,14 +23,16 @@ import (
 	"github.com/yongjohnlee80/golib/search/embed"
 	"github.com/yongjohnlee80/golib/vfs"
 
+	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// MaxFileSize is the largest file the indexer reads. A larger one leaves the index, and its job
-// records the error and waits for the file to change: reading it again could only fail again.
+// MaxFileSize is the largest file the indexer reads as text. A larger one leaves the index, and its
+// job records the error and waits for the file to change: reading it again could only fail again.
+// A derived format's file has its own bound, derived.MaxContainer, and its text derived.MaxText.
 const MaxFileSize = 16 << 20
 
 // The change log's retention (ADR 0204 §4.7): a row goes only when it is BOTH older than
@@ -145,7 +147,7 @@ type prepared struct {
 	skip        bool
 	delete      bool
 	err         error
-	tooLarge    bool // err is that the file is over MaxFileSize
+	final       bool // err is the file's own (over a bound, or its text cannot be derived): it waits for the file to change
 	hold        bool // a held document: nothing is written, and holdState is how its file stands
 	holdState   string
 	version     vfs.Version
@@ -505,19 +507,29 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		}
 		return p
 	}
-	if k == kind.Pro {
-		p.delete = true // Community never reads a Pro document format, whatever a glob admits
+	derives := k == kind.Pro && x.kinds.Readable(w.path)
+	if k == kind.Pro && !derives {
+		p.delete = true // a build without its deriver never reads a Pro document format, whatever a glob admits
 		return p
 	}
 	if !w.force {
+		// a derived document's identity is the frozen one: an unchanged file is derived again only
+		// when that changed
 		if v, ok := x.store.Version(w.path); ok && v == fi.Version && x.store.indexer(w.path) == p.indexer {
 			p.skip = true
 			return p
 		}
 	}
-	if fi.Size > MaxFileSize {
-		p.err, p.tooLarge = tooLarge(w.path), true
+	limit := int64(MaxFileSize)
+	if derives {
+		limit = derived.MaxContainer
+	}
+	if fi.Size > limit {
+		p.err, p.final = tooLarge(w.path, limit), true
 		return p
+	}
+	if derives {
+		return x.prepareDerived(ctx, p, fi, tokens)
 	}
 	r, err := x.fsys.Open(ctx, w.path, 0)
 	if err != nil {
@@ -538,7 +550,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		x.opts.afterRead(w.path)
 	}
 	if len(src) > MaxFileSize { // it grew after the Stat
-		p.err, p.tooLarge = tooLarge(w.path), true
+		p.err, p.final = tooLarge(w.path, MaxFileSize), true
 		return p
 	}
 	p.version = fi.Version
@@ -636,7 +648,7 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			}
 			switch {
 			case p.err != nil:
-				if p.tooLarge {
+				if p.final {
 					// its indexed text is no longer the file's
 					id, err := s.deleteDoc(tx, p.path, now)
 					if err != nil {
@@ -708,7 +720,7 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 			x.enqueue(o.p.path, j)
 		default:
 			j.inflight, j.attempts, j.lastErr = false, j.attempts+1, o.p.err.Error()
-			if o.p.tooLarge {
+			if o.p.final {
 				continue // the next touch of the path runs it again
 			}
 			j.notUntil = time.Now().Add(x.retryDelay(j.attempts))
@@ -718,8 +730,44 @@ func (x *Indexer) commit(ctx context.Context, batch []*prepared) error {
 	return nil
 }
 
-func tooLarge(path string) error {
-	return fmt.Errorf("index: %s is over %d bytes", path, MaxFileSize)
+func tooLarge(path string, limit int64) error {
+	return fmt.Errorf("index: %s is over %d bytes", path, limit)
+}
+
+// prepareDerived makes the text of a Pro document through the build's deriver and chunks it as
+// Markdown. Its text is bounded apart from its file (derived.MaxText), refused by its stated size
+// before it is read. A text the deriver cannot make, or makes too large, is the file's own error:
+// it waits for the file to change, since deriving the same bytes again fails again.
+func (x *Indexer) prepareDerived(ctx context.Context, p *prepared, fi vfs.FileInfo, tokens int) *prepared {
+	d, err := derived.Text(ctx, x.opts.Registrations, x.fsys, p.path, fi.Size)
+	if err != nil {
+		p.err, p.final = err, errors.Is(err, derived.ErrDerive)
+		return p
+	}
+	src, err := derived.Read(d, derived.MaxText)
+	if err != nil {
+		p.err, p.final = fmt.Errorf("index: %s: %w", p.path, err), errors.Is(err, derived.ErrTooLarge)
+		return p
+	}
+	if x.opts.afterRead != nil {
+		x.opts.afterRead(p.path)
+	}
+	if !utf8.Valid(src) || bytes.IndexByte(src, 0) >= 0 {
+		p.err, p.final = fmt.Errorf("%s: its derived text is not UTF-8", p.path), true
+		return p
+	}
+	p.version = fi.Version
+	// the text is a document's, not a vault's: no wikilinks or #tags, no frontmatter to check
+	doc := markdown.Parse(src, markdown.GFM())
+	p.meta = chunk.ReadMeta(doc, p.path)
+	if d.Info.Title != "" {
+		p.meta.Title = d.Info.Title
+	}
+	p.chunks = hashed(chunk.Markdown(doc, p.meta.Title, tokens))
+	x.mu.Lock()
+	x.parses++
+	x.mu.Unlock()
+	return p
 }
 
 // retryDelay is the wait after a job's attempts-th failure in a row.

@@ -170,9 +170,11 @@ func heldBy(s string, reg *registrations.Table) (ext, what string) {
 			return id.Ext, "chunker"
 		}
 	case Derived:
-		// held by every build until AutoDoc 03 wires derivation into the indexer, one with a
-		// deriver included: until then its kind is Pro, which prepare would delete
-		return id.Ext, "deriver"
+		// a build that derives the format makes the text again, under its own identity, as a
+		// chunker of another version cuts again; one that does not would delete it as kind Pro
+		if _, ok := reg.Format(id.Ext); !ok {
+			return id.Ext, "deriver"
+		}
 	}
 	return "", ""
 }

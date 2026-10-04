@@ -34,12 +34,19 @@ func (x *Indexer) kindOf(p string) kind.Kind {
 func (x *Indexer) Kind(p string) kind.Kind { return x.kindOf(p) }
 
 // versionOf is what document.indexer records for path, of kind k, indexed now (ADR 0216 §1.6): a
-// registered chunker's extension and version, or the built-in chunkers' version, with the schema's
-// fingerprint for Markdown.
+// registered chunker's extension and version; a derived format's frozen identity, then the
+// built-in identity its Markdown is chunked under; or the built-in chunkers' version, with the
+// schema's fingerprint for Markdown. A derived document has no frontmatter to check, so a schema
+// change never derives it again.
 func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string) string {
-	if k == kind.Registered {
+	switch k {
+	case kind.Registered:
 		if _, v, ok := x.opts.Registrations.Chunker(p); ok {
 			return registeredVersion(kind.Ext(p), v, tokens)
+		}
+	case kind.Pro:
+		if f, ok := x.opts.Registrations.Format(kind.Ext(p)); ok {
+			return derivedVersion(kind.Ext(p), f.ID, f.Version, indexerVersion(tokens))
 		}
 	}
 	return docVersion(indexerVersion(tokens), k == kind.Markdown, schemaFP)
