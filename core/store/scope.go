@@ -57,6 +57,11 @@ func (sc *Scope) Self(tx *Tx) dao.DAO[*Workspace, WorkspaceField, int64] {
 	return tx.t.workspaces.On(tx.tx).With(WorkspaceID, sc.id)
 }
 
+// Connections are the workspace's databases (connections.go).
+func (sc *Scope) Connections(tx *Tx) dao.DAO[*Connection, ConnectionField, int64] {
+	return scoped(sc, tx.t.connections, tx)
+}
+
 func (sc *Scope) Patterns(tx *Tx) dao.DAO[*Pattern, PatternField, int64] {
 	return scoped(sc, tx.t.patterns, tx)
 }

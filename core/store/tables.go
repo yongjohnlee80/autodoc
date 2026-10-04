@@ -20,6 +20,10 @@ type Workspace struct {
 	SchemaPath           *string // the frontmatter schema file: absolute, or under Root; nil: none (000007)
 	TextExtensions       *string // a JSON array of the workspace's own plain-text extensions; nil: none (000008)
 	ProviderID           *int64  // the embedding provider the workspace uses instead of the daemon's; nil: the daemon's (000010)
+	UID                  *string // 128 random bits in hex, its identity in a shared destination database (000011)
+	Destination          string  // where its index lives: "sqlite", the local store, or "postgres" (000011)
+	VectorIndex          *string // a Postgres destination's pgvector index method, "hnsw" or "ivfflat"; nil: the default (000011)
+	ViewArgs             *string // the default arguments of its .view files, by name, as a JSON object; nil: none (000011)
 	CreatedAt, UpdatedAt int64
 }
 
@@ -38,8 +42,36 @@ const (
 	WorkspaceSchemaPath      WorkspaceField = "schema_path"
 	WorkspaceTextExtensions  WorkspaceField = "text_extensions"
 	WorkspaceProviderID      WorkspaceField = "provider_id"
+	WorkspaceUID             WorkspaceField = "uid"
+	WorkspaceDestination     WorkspaceField = "destination"
+	WorkspaceVectorIndex     WorkspaceField = "vector_index"
+	WorkspaceViewArgs        WorkspaceField = "view_args"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
+)
+
+// Connection is one of a workspace's databases: its source, where the .view files run, or its
+// destination, where its index lives. DSN is sealed by the keyslot; Connection and SetConnection
+// open and seal it (connections.go).
+type Connection struct {
+	WorkspaceID int64
+	Role        string // "source" or "destination"
+	Engine      string // "postgres" or "sqlite"
+	DSN         []byte
+	Schema      *string // a Postgres schema; nil: the connection's default
+	UpdatedAt   int64
+}
+
+// ConnectionField names a workspace_connection column.
+type ConnectionField string
+
+const (
+	ConnWorkspace ConnectionField = "workspace_id"
+	ConnRole      ConnectionField = "role"
+	ConnEngine    ConnectionField = "engine"
+	ConnDSN       ConnectionField = "dsn"
+	ConnSchema    ConnectionField = "schema_name"
+	ConnUpdatedAt ConnectionField = "updated_at"
 )
 
 // Preference is one of a client's preferences, by name: the store's, not a
@@ -498,6 +530,7 @@ type tables struct {
 	usage       *dao.Schema[*Usage, UsageField, noSort, int64]
 	calls       *dao.Schema[*LogEntry, LogField, noSort, int64]
 	patterns    *dao.Schema[*Pattern, PatternField, noSort, int64]
+	connections *dao.Schema[*Connection, ConnectionField, noSort, int64]
 	documents   *dao.Schema[*Document, DocumentField, noSort, int64]
 	chunks      *dao.Schema[*Chunk, ChunkField, ChunkSort, int64]
 	tags        *dao.Schema[*DocValue, DocValueField, noSort, int64]
@@ -539,6 +572,10 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceSchemaPath:      col("workspace", WorkspaceSchemaPath, func(w *Workspace) any { return &w.SchemaPath }),
 				WorkspaceTextExtensions:  col("workspace", WorkspaceTextExtensions, func(w *Workspace) any { return &w.TextExtensions }),
 				WorkspaceProviderID:      col("workspace", WorkspaceProviderID, func(w *Workspace) any { return &w.ProviderID }),
+				WorkspaceUID:             col("workspace", WorkspaceUID, func(w *Workspace) any { return &w.UID }),
+				WorkspaceDestination:     col("workspace", WorkspaceDestination, func(w *Workspace) any { return &w.Destination }),
+				WorkspaceVectorIndex:     col("workspace", WorkspaceVectorIndex, func(w *Workspace) any { return &w.VectorIndex }),
+				WorkspaceViewArgs:        col("workspace", WorkspaceViewArgs, func(w *Workspace) any { return &w.ViewArgs }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),
@@ -603,6 +640,18 @@ func newTables(c dao.DataConn) *tables {
 				PatternValue:     col("workspace_pattern", PatternValue, func(p *Pattern) any { return &p.Pattern }),
 			}),
 			dao.SortMap[*Pattern, PatternField, noSort, int64](map[noSort]string{ByKey: `"workspace_pattern"."kind", "workspace_pattern"."ord"`})),
+		connections: dao.New[*Connection, ConnectionField, noSort, int64](c,
+			dao.Table[*Connection, ConnectionField, noSort, int64]("workspace_connection"),
+			dao.Fields[*Connection, ConnectionField, noSort, int64](map[ConnectionField]dao.Field[*Connection]{
+				ConnWorkspace: col("workspace_connection", ConnWorkspace, func(x *Connection) any { return &x.WorkspaceID }),
+				ConnRole:      col("workspace_connection", ConnRole, func(x *Connection) any { return &x.Role }),
+				ConnEngine:    col("workspace_connection", ConnEngine, func(x *Connection) any { return &x.Engine }),
+				ConnDSN:       col("workspace_connection", ConnDSN, func(x *Connection) any { return &x.DSN }),
+				ConnSchema:    col("workspace_connection", ConnSchema, func(x *Connection) any { return &x.Schema }),
+				ConnUpdatedAt: col("workspace_connection", ConnUpdatedAt, func(x *Connection) any { return &x.UpdatedAt }),
+			}),
+			dao.Conflict[*Connection, ConnectionField, noSort, int64](ConnWorkspace, ConnRole),
+			dao.SortMap[*Connection, ConnectionField, noSort, int64](map[noSort]string{ByKey: `"workspace_connection"."role"`})),
 		documents: dao.New[*Document, DocumentField, noSort, int64](c,
 			dao.Table[*Document, DocumentField, noSort, int64]("document"),
 			dao.ID[*Document, DocumentField, noSort, int64](DocID),

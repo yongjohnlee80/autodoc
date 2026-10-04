@@ -49,8 +49,8 @@ func (s *Store) EmbeddingPolicy(ctx context.Context, id int64) (string, error) {
 
 // SetWorkspaceEmbeddingPolicy sets whether the shared daemon queue fills a workspace.
 func (s *Store) SetWorkspaceEmbeddingPolicy(ctx context.Context, id int64, policy string) error {
-	if policy != EmbeddingAlways && policy != EmbeddingWhenOpened && policy != EmbeddingNever {
-		return ErrEmbeddingPolicy
+	if err := validPolicy(policy); err != nil {
+		return err
 	}
 	return s.Write(ctx, func(tx *Tx) error {
 		n, err := dao.UpdateAffected(tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).
@@ -87,8 +87,8 @@ func (s *Store) SectionTokens(ctx context.Context, id int64) (int, error) {
 
 // SetWorkspaceSectionTokens sets the chunk limit. Zero selects the default.
 func (s *Store) SetWorkspaceSectionTokens(ctx context.Context, id int64, tokens int) error {
-	if tokens != 0 && (tokens < 128 || tokens > 2048) {
-		return fmt.Errorf("store: section size must be 128 to 2048 tokens")
+	if err := validSection(tokens); err != nil {
+		return err
 	}
 	var value any
 	if tokens > 0 {
@@ -276,13 +276,18 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 // AddWorkspace creates a workspace with its patterns, in one transaction.
 func (s *Store) AddWorkspace(ctx context.Context, name, root string, include, exclude []string) (Workspace, error) {
 	now := time.Now().Unix()
-	w := Workspace{Name: name, Root: root, CreatedAt: now, UpdatedAt: now}
-	err := s.Write(ctx, func(tx *Tx) error {
+	uid, err := newUID()
+	if err != nil {
+		return Workspace{}, err
+	}
+	w := Workspace{Name: name, Root: root, UID: &uid, Destination: DestinationLocal, CreatedAt: now, UpdatedAt: now}
+	err = s.Write(ctx, func(tx *Tx) error {
 		includeEmpty := int64(0)
 		if include != nil && len(include) == 0 {
 			includeEmpty = 1
 		}
 		id, err := tx.t.workspaces.On(tx.tx).Set(WorkspaceName, name).Set(WorkspaceRoot, root).Set(WorkspaceIncludeEmpty, includeEmpty).
+			Set(WorkspaceUID, uid).
 			Set(WorkspaceCreatedAt, now).Set(WorkspaceUpdatedAt, now).Insert()
 		if err != nil {
 			return taken(err)
