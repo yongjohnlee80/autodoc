@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/search"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // deriver is a build's deriver for tests: autorag's ids by default, its answers changeable after
@@ -72,6 +74,9 @@ func TestADeriverIsFrozenAtEntry(t *testing.T) {
 		if err := tab.CheckDerived(c.format, c.d); err == nil {
 			t.Errorf("%s %+v admitted", c.format, c.d)
 		}
+	}
+	if k := tab.Kinds(); !k.Readable("a.pdf") || !k.Readable("b.docx") || k.Readable("c.odt") || k.Of("a.go", nil) != kind.Registered {
+		t.Fatalf("kinds %+v: the formats are not readable", k)
 	}
 	if (*Table)(nil).Deriver() != nil || (*Table)(nil).Formats() != nil {
 		t.Fatal("the nil Table has a deriver")

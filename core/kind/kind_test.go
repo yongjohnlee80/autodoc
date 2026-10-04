@@ -66,3 +66,21 @@ func TestARegistrationReadsItsExtension(t *testing.T) {
 		t.Error("a registered file is UTF-8 text")
 	}
 }
+
+// TestADerivedFormatIsReadableAsMarkdown: a format the build derives stays kind Pro, and its text
+// reads as Markdown; one it does not derive is neither readable nor Markdown.
+func TestADerivedFormatIsReadableAsMarkdown(t *testing.T) {
+	r := Registrations{Derived: []string{".pdf"}}
+	if r.Of("manual.PDF", nil) != Pro || !r.Readable("manual.PDF") || r.ReadAs("manual.PDF", nil) != Markdown {
+		t.Fatal("a derived PDF is not a readable Pro document read as Markdown")
+	}
+	if r.Readable("letter.docx") || r.ReadAs("letter.docx", nil) != Pro {
+		t.Fatal("a format the build does not derive is readable")
+	}
+	if r.ReadAs("n.txt", nil) != Text || (Registrations{}).Readable("a.pdf") {
+		t.Fatal("ReadAs changed another kind, or the zero value derives")
+	}
+	if Label("a/Manual.Pdf") != "PDF" || Label("b.docx") != "DOCX" {
+		t.Fatalf("labels %q %q", Label("a/Manual.Pdf"), Label("b.docx"))
+	}
+}

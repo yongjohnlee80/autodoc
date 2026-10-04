@@ -134,8 +134,11 @@ func (t *Table) Formats() []string {
 	return slices.Sorted(maps.Keys(t.formats))
 }
 
-// Kinds are the extensions the registrations give a kind (kind.Registrations).
-func (t *Table) Kinds() kind.Registrations { return kind.Registrations{Chunked: t.Extensions()} }
+// Kinds are the extensions the registrations give a kind (kind.Registrations): the chunkers', and
+// the deriver's formats, which stay kind.Pro and become readable.
+func (t *Table) Kinds() kind.Registrations {
+	return kind.Registrations{Chunked: t.Extensions(), Derived: t.Formats()}
+}
 
 // Collisions are the extensions of text, a workspace's own plain-text extensions, that a
 // registration reads instead: the registration wins (ADR 0216 §1.3).
