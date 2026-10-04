@@ -267,7 +267,11 @@ func TestTheSettingsSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.saveForm(func(f *settingsForm) { f.schema = "broken.yaml" })
-	r.waitNoticed(t, "kb: saved schema")
+	// the first save's notice may still be on screen: wait for the second save in the store
+	r.s.WaitFor(t, "broken.yaml stored", func(string) bool {
+		ws, err := d.db.Workspaces(context.Background())
+		return err == nil && len(ws) == 1 && ws[0].SchemaPath != nil && *ws[0].SchemaPath == "broken.yaml"
+	})
 	r.openSettings(t, "kb", 0)
 	r.s.WaitForText(t, "line 3:")
 }
@@ -543,4 +547,25 @@ func TestFindPreviousWithNothingToFind(t *testing.T) {
 		}
 	})
 	r.s.WaitForText(t, "nothing to find again")
+}
+
+// Zoom in and Zoom out with no image preview open (their buttons are a preview's) change nothing.
+func TestZoomWithNoImagePreviewDoesNothing(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	before := onLoop(r, func() previewing { return r.h.imagePreview })
+	r.h.p.Post(func() {
+		for _, c := range []string{"App.zoomIn", "App.zoomOut"} {
+			if err := r.h.commands()[c](nil); err != nil {
+				t.Error(err)
+			}
+		}
+	})
+	if after := onLoop(r, func() previewing { return r.h.imagePreview }); after.zoom != before.zoom || after.page != nil {
+		t.Errorf("zoom with no preview changed it: %+v", after)
+	}
+	if len(r.s.Backend.Images()) != 0 {
+		t.Error("an image was placed")
+	}
 }
