@@ -239,7 +239,7 @@ func accessors(sc *Scope, tx *Tx) map[string]dao.Named {
 		"doc_tag": sc.Tags(tx), "doc_alias": sc.Aliases(tx), "doc_name": sc.Names(tx),
 		"doc_facet": sc.Facets(tx), "doc_diagnostic": sc.Diagnostics(tx),
 		"link": sc.LinksOut(tx), "model": sc.Models(tx), "embedding": sc.Embeddings(tx),
-		"index_job": sc.Jobs(tx), "change": sc.Changes(tx),
+		"index_job": sc.Jobs(tx), "change": sc.Changes(tx), "workspace_connection": sc.Connections(tx),
 	}
 }
 
@@ -336,6 +336,10 @@ func seed(t *testing.T, s *Store, sc *Scope) {
 		if _, err := sc.Changes(tx).Set(ChangeSeq, int64(1)).Set(ChangePath, "n.md").Set(ChangeOp, "upsert").
 			Set(ChangeGeneration, int64(1)).Set(ChangeAt, int64(0)).Insert(); err != nil {
 			return fmt.Errorf("change: %w", err)
+		}
+		if _, err := sc.Connections(tx).Set(ConnRole, RoleSource).Set(ConnEngine, EngineSQLite).Set(ConnDSN, []byte{1}).
+			Set(ConnUpdatedAt, int64(0)).Insert(); err != nil {
+			return fmt.Errorf("connection: %w", err)
 		}
 		return sc.PatternBatch(tx).Add(map[PatternField]any{PatternKind: "include", PatternOrd: int64(0), PatternValue: "*.md"}).Flush()
 	})
