@@ -14,6 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -83,7 +84,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer) error {
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
 	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: log,
-		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight})
+		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases})
 	// the provider the preferences name, before any workspace starts, so each starts with it; the
 	// last calls its meter heard are written before the store closes
 	emb := serving.NewEmbedding(db, ws, log)

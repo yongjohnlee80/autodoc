@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/outline"
@@ -50,6 +51,9 @@ func workspaceMap(w *Workspace) map[string]any {
 	out["provider"] = w.Provider.Override
 	if w.Provider.Err != "" {
 		out["provider_error"] = w.Provider.Err
+	}
+	if w.Databases != nil {
+		out["databases"] = databasesMap(w.Databases())
 	}
 	return out
 }
@@ -132,6 +136,8 @@ var publicErrs = []struct {
 	{index.ErrSwitching, CodeSwitching, "a new model is filling: search by words until it is ready"},
 	// before ErrUnsupported, which it is: the same code, but a message that says what is missing
 	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › AI models"},
+	{edition.ErrDatabases, CodeUnsupported, "this edition has no database settings"},
+	{errFixed, CodeUnsupported, "this server's set of workspaces is fixed"},
 	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},
 	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a file of this workspace"},
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
@@ -156,6 +162,10 @@ func wireErr(err error) error {
 	if errors.As(err, &maxErr) {
 		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: maxErr.Error()}
 	}
+	var setErr *store.SettingError
+	if errors.As(err, &setErr) {
+		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: setErr.Reason}
+	}
 	var extErr *kind.ErrExtension
 	if errors.As(err, &extErr) {
 		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: extErr.Error()[len("kind: "):]}
@@ -171,6 +181,7 @@ func wireErr(err error) error {
 func (s *Server) register() {
 	s.registerEmbeddings()
 	s.registerEvents()
+	s.configureVerbs()
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {

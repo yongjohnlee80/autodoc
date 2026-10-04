@@ -53,6 +53,7 @@ var eventsOf = map[string]eventSpec{
 	"workspace.section_size":        {"workspace.section_size", 0, -1},
 	"workspace.embedding_policy":    {"workspace.embedding_policy", 0, 1},
 	"workspace.set_provider":        {"workspace.provider", 0, 1},
+	"workspace.configure":           {"workspace.configured", 0, -1},
 	"preference.set":                {"preference.changed", -1, 0},
 	"embedding.use":                 {"embedding.switched", -1, 0},
 	"embedding.cancel_switch":       {"embedding.cancelled", -1, -1},
