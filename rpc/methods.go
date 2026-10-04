@@ -10,6 +10,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/index"
@@ -143,7 +144,9 @@ var publicErrs = []struct {
 	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › AI models"},
 	{edition.ErrDatabases, CodeUnsupported, "this edition has no database settings"},
 	{errFixed, CodeUnsupported, "this server's set of workspaces is fixed"},
+	{derived.ErrDerive, CodeUnsupported, "this document's text could not be derived: open it in its own viewer"},
 	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},
+	{docs.ErrReadOnly, golibrpc.CodeInvalidParams, "a derived document is read-only: its text is served, its file never written"},
 	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a file of this workspace"},
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
 	{vfs.ErrInvalidName, golibrpc.CodeInvalidParams, "not a valid path in the workspace"},
@@ -591,6 +594,9 @@ func (s *Server) register() {
 		k := kind.Markdown
 		if w.Index != nil {
 			k = w.Index.Kind(path)
+		}
+		if k == kind.Pro {
+			k = kind.Markdown // read, so derived: its text is Markdown
 		}
 		hs := outline.Read(d.Content, k, "").Headings()
 		out := make([]any, len(hs))
