@@ -88,7 +88,8 @@ Add…, Edit… or Advanced…; Ctrl+PageUp and Ctrl+PageDown switch tabs, and E
   …) are entered here: each is read as UTF-8 plain text by declaration (never sniffed) and admitted
   with an include unless the rules already admit it. `.doc`, `.docx`, `.odt`, and `.pdf` are
   Pro-only and unavailable in Community, even if a broad include glob names them, and cannot be
-  declared as text. `Options › Editor preferences… › File types…` opens this tab for the workspace
+  declared as text; a build with a deriver for one indexes it once an include names it (see
+  [Builds of your own](#builds-of-your-own)). `Options › Editor preferences… › File types…` opens this tab for the workspace
   in use.
 - **Advanced**: the section size, the embedding policy and the embedding provider; and, where the
   edition offers them, the databases: a **source** (postgres or sqlite) that the workspace's `.view`
@@ -182,6 +183,11 @@ terminal, as below; where it cannot, it shows the block's source and why.
   preview says which was missing; turning `Image previews` off compares the two on the same file.
   Both follow the active theme's colours (light, dark, sepia, retro, mono), as
   `autodoc --export html --theme …` does.
+- **A derived document is read-only.** Where the daemon's build derives PDFs or DOCX files (see
+  [Builds of your own](#builds-of-your-own)), one opens as its derived text in a read-only page,
+  the frame and the status line badged `[PDF · read-only]`. Motions, find, copy and the outline
+  over its headings work; edits and saves do not. `SPC O` opens the file itself in the desktop's
+  viewer, for its diagrams and layout.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
 - **The pickers** (search, open, new file, add a workspace) share one layout: the fields over the
@@ -195,6 +201,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a file, new file, save |
+| `SPC O` | open the file in the desktop's own viewer (`File › Open in System Viewer`): `xdg-open`, or `open` on a Mac |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
@@ -470,7 +477,7 @@ func main() {
 	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
 		Version:  version,                                     // -X main.version, as cmd/autodoc's
 		Chunkers: map[string]search.Chunker{".go": goChunker}, // golib's search.Chunker, by extension
-		Deriver:  pdfDeriver,                                  // Pro formats' text; AutoDoc 03 wires it
+		Deriver:  pdfDeriver,                                  // Pro formats' text, read-only
 	}))
 }
 ```
@@ -483,10 +490,25 @@ func main() {
   chunker's version and its own embed text, so a vector is made of exactly what its hash names. Code
   is opt-in: the Edit tab offers the daemon's registered types beside the built-in ones, and turning
   one on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to the excludes.
+- **A derived document is indexed from its text.** A file of a format the deriver offers is handed
+  to it, read at offsets, and its Markdown is chunked as Markdown files are (no wikilinks, tags or
+  frontmatter), under `d<ext>:<id>@<version>+<built-in>` in `document.indexer`. Its file may be up
+  to 250 MiB, since a PDF is mostly images and fonts, and its text up to 16 MiB, refused by its
+  stated size before a byte is read; a text file stays at 16 MiB. A file the deriver cannot read,
+  or whose text is too large, leaves the index and waits for the file to change. An unchanged file
+  is derived again only when its format's id or version (as the deriver describes it at the start)
+  or the section size changes. A text made under another identity than the described one is
+  refused.
+- **`doc.read` serves the derived text, read-only.** `doc.write`, `doc.rename` and `doc.remove` of
+  it are refused. Text longer than one read carries (just under 4 MiB) is cut at a paragraph's end
+  and ends with a note saying how much of how much it shows. A cache's eviction miss (a deriver's
+  error matching `fs.ErrNotExist`) is retried once. The deriver's own text limit, if it has one,
+  is its own.
 - **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker
-  or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted in
-  `index.status`, and deleted only when the file or the rules say so. A file a community daemon
-  indexed as Markdown is cut by a build with its chunker.
+  or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted
+  in `index.status`, and deleted only when the file or the rules say so. A file a community daemon
+  indexed as Markdown is cut by a build with its chunker, and a derived file is held only by a
+  build that derives no such format: one that does derives it again, under its own identity.
 - **The TUI offers the build that reads more.** A TUI whose binary registers a strict superset of the
   daemon's registrations offers, once a session, to restart the daemon as its own build; a community
   TUI never offers to replace a registered daemon. While one client restarts the daemon, the others
