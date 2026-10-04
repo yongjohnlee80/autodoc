@@ -28,6 +28,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/schema"
+	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
 // Protocol is the API's version. A client must declare exactly this one; any change to the verbs,
@@ -39,8 +40,9 @@ import (
 // schemas (workspace.set_schema, doc.validate, search.query's facets, workspace.list's schema and
 // index.status's diagnosed), doc.outline, workspace.set_text_extensions with workspace.list's
 // text_extensions, sys.events (sys.hello answers the client's token and the log's head), and
-// workspace.set_provider with workspace.list's provider.
-const Protocol int64 = 8
+// workspace.set_provider with workspace.list's provider. Protocol 9 adds workspace.configure, every
+// setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214).
+const Protocol int64 = 9
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -53,6 +55,14 @@ const (
 	sessHello   = "hello"   // true once a compatible sys.hello was said
 	sessRefused = "refused" // true after a hello with another protocol: the session is spent
 )
+
+// Databases is a workspace's database settings as workspace.list reports them: never a DSN, only
+// what each connection points at (store.ConnectionSummary).
+type Databases struct {
+	UID, Destination, VectorIndex string
+	ViewArgs                      map[string]any
+	Connections                   []store.ConnectionSummary
+}
 
 // Workspace is one workspace as the daemon serves it. Err set means it could not be opened (its
 // root is gone); every verb naming it fails with Err, and workspace.list reports it.
@@ -77,6 +87,9 @@ type Workspace struct {
 	FrontmatterSchema func() (*schema.Schema, SchemaStatus)
 	// TextExtensions are the workspace's own plain-text extensions (ADR 0212 §3); nil for none.
 	TextExtensions func() []string
+	// Databases are the workspace's identity, destination and database connections (ADR 0214),
+	// read from the store when listed; nil when the server keeps none.
+	Databases func() Databases
 	// Provider is the workspace's own embedding provider, when it has one (ADR 0212 §7).
 	Provider ProviderChoice
 }
@@ -126,6 +139,9 @@ func Fixed(ws ...*Workspace) Workspaces {
 
 type fixed map[string]*Workspace
 
+// errFixed is a change asked of a fixed set of workspaces.
+var errFixed = fmt.Errorf("%w: this set of workspaces is fixed", errs.ErrUnsupported)
+
 func (f fixed) List() []*Workspace {
 	out := make([]*Workspace, 0, len(f))
 	for _, w := range f {
@@ -136,13 +152,13 @@ func (f fixed) List() []*Workspace {
 }
 func (f fixed) Get(name string) (*Workspace, bool) { w, ok := f[name]; return w, ok }
 func (fixed) Add(context.Context, config.Workspace) (*Workspace, error) {
-	return nil, fmt.Errorf("%w: this set of workspaces is fixed", errs.ErrUnsupported)
+	return nil, errFixed
 }
 func (fixed) Rename(context.Context, string, string) error {
-	return fmt.Errorf("%w: this set of workspaces is fixed", errs.ErrUnsupported)
+	return errFixed
 }
 func (fixed) Remove(context.Context, string) error {
-	return fmt.Errorf("%w: this set of workspaces is fixed", errs.ErrUnsupported)
+	return errFixed
 }
 
 // Preferences are what a client keeps between runs, by name: the store's. A server given none

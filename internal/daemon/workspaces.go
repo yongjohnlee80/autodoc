@@ -104,6 +104,9 @@ type Options struct {
 	MaxEmbedRequests int // across the daemon, 1 by default, 2 maximum
 	// BatchDelay is the indexer's (0: its default); tests shorten it.
 	BatchDelay time.Duration
+	// Databases offers a workspace's source and destination databases (core/edition): when false,
+	// Configure refuses them and Capabilities says so.
+	Databases bool
 }
 
 // New is the workspaces of db, served until ctx ends. Nothing is served until OpenAll.
@@ -272,7 +275,8 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 			s, _ := sh.get()
 			return s, sh.status()
 		},
-		Provider: rpc.ProviderChoice{Override: override, Err: errText(providerErr)}}
+		Provider:  rpc.ProviderChoice{Override: override, Err: errText(providerErr)},
+		Databases: func() rpc.Databases { return m.databases(id) }}
 	return &served{id: id, override: override, w: w, ctx: ctx, halt: halt, stop: stop}, nil
 }
 
@@ -440,6 +444,13 @@ func (m *Workspaces) SetPatterns(ctx context.Context, name string, include, excl
 	if err := m.db.SetWorkspacePatterns(ctx, old.id, include, exclude); err != nil {
 		return err
 	}
+	return m.restartWithPatterns(ctx, name, old, candidate)
+}
+
+// restartWithPatterns serves workspace name again under the patterns the store now holds for it,
+// candidate's: its follower and indexer are stopped and started anew. When the new ones cannot
+// start, the store gets old's patterns back and old's are served again. m.chg is held.
+func (m *Workspaces) restartWithPatterns(ctx context.Context, name string, old *served, candidate config.Workspace) error {
 	m.queue.stop()
 	defer m.queue.start()
 	if old.stop != nil {
@@ -488,11 +499,17 @@ func (m *Workspaces) SetEmbeddingPolicy(ctx context.Context, name, policy string
 	if err := m.db.SetWorkspaceEmbeddingPolicy(ctx, s.id, policy); err != nil {
 		return err
 	}
+	m.applyPolicy(name, s, policy)
+	return nil
+}
+
+// applyPolicy gives the embedding queue workspace name's stored policy, pausing its semantic work
+// when the queue will not fill it.
+func (m *Workspaces) applyPolicy(name string, s *served, policy string) {
 	active := m.queue.setPolicy(name, policy)
 	if s.w.Index != nil {
 		s.w.Index.SetSemanticPaused(!active)
 	}
-	return nil
 }
 
 // Replacing is the model a switch is replacing: the active model of a served workspace whose
@@ -616,6 +633,12 @@ func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 	if err := m.db.RenameWorkspace(ctx, s.id, to); err != nil {
 		return err
 	}
+	m.renameServed(name, to, s)
+	return nil
+}
+
+// renameServed serves s, renamed in the store, under its new name. m.chg and m.mu are held.
+func (m *Workspaces) renameServed(name, to string, s *served) {
 	w := *s.w
 	w.Name = to
 	w.Warming = m.warmingOf(to)
@@ -625,7 +648,6 @@ func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
 	s.w = &w
 	delete(m.served, name)
 	m.served[to] = s
-	return nil
 }
 
 // Remove stops serving a workspace, then deletes it and, by the schema's cascade, its index, in

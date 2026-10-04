@@ -34,8 +34,15 @@ const (
 	IndexIVFFlat = "ivfflat"
 )
 
-// ErrSetting is a workspace setting the store refuses; the message says which and why.
+// ErrSetting is a workspace setting the store refuses; a SettingError says which and why.
 var ErrSetting = errors.New("store: invalid workspace setting")
+
+// SettingError is ErrSetting with its reason, a constant of this package's own: a client may be
+// shown it.
+type SettingError struct{ Reason string }
+
+func (e *SettingError) Error() string        { return "store: " + e.Reason }
+func (e *SettingError) Is(target error) bool { return target == ErrSetting }
 
 // ConnectionInfo is a connection with its DSN opened: for the daemon, which connects with it.
 type ConnectionInfo struct {
@@ -199,4 +206,4 @@ func (s *Store) setConnection(tx *Tx, id int64, role string, c ConnectionSpec) e
 		Set(ConnSchema, schema).Set(ConnUpdatedAt, time.Now().Unix()).Upsert()
 }
 
-func errSetting(msg string) error { return errors.Join(ErrSetting, errors.New(msg)) }
+func errSetting(reason string) error { return &SettingError{Reason: reason} }

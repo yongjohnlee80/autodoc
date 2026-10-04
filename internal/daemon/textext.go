@@ -55,11 +55,18 @@ func (m *Workspaces) SetTextExtensions(ctx context.Context, name string, exts []
 	if err := m.db.SetWorkspaceTextExtensions(ctx, s.id, norm); err != nil {
 		return nil, err
 	}
+	m.applyTextExtensions(s, norm)
+	return norm, nil
+}
+
+// applyTextExtensions gives workspace s's holder the extensions the store now has, and reads again
+// each file whose extension joined or left them, as its new kind.
+func (m *Workspaces) applyTextExtensions(s *served, norm []string) {
 	t := m.textExtensionsFor(s.id)
 	old := t.load()
 	t.store(norm)
 	if s.w.Index == nil {
-		return norm, nil
+		return
 	}
 	var changed []string
 	for _, e := range old {
@@ -79,5 +86,4 @@ func (m *Workspaces) SetTextExtensions(ctx context.Context, name string, exts []
 			}
 		}
 	}
-	return norm, nil
 }
