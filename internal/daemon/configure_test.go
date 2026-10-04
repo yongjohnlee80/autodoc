@@ -233,3 +233,70 @@ func TestConfigure_ARestartThatFailsTakesTheWholeSaveBack(t *testing.T) {
 	}
 	indexed(t, m, "kb", 1)
 }
+
+// The database connections are taken back too: a failing save that replaced the destination's
+// connection and added a source leaves the old destination (its sealed DSN and its schema) and no
+// source; one that removed the destination's connection leaves it in place.
+func TestConfigure_ARestartThatFailsTakesTheConnectionsBack(t *testing.T) {
+	m, db := openWith(t, Options{Databases: true})
+	kbWith(t, m, map[string]string{"a.md": "# A\n"}, "**/*.md")
+	indexed(t, m, "kb", 1)
+	ctx := context.Background()
+	const was = "postgres://me:old@db:5432/rag"
+	if err := m.Configure(ctx, "kb", store.Changes{
+		Destination:     ptr(store.DestinationPostgres),
+		DestinationConn: &store.ConnectionSpec{Engine: store.EnginePostgres, DSN: was, Schema: "s1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fail := func() {
+		failed := false
+		startFault = func(string) error {
+			if !failed {
+				failed = true
+				return errors.New("the root vanished")
+			}
+			return nil
+		}
+	}
+	t.Cleanup(func() { startFault = nil })
+	check := func(what string) {
+		t.Helper()
+		list, _ := db.Workspaces(ctx)
+		id := list[0].ID
+		dest, found, err := db.Connection(ctx, id, store.RoleDestination)
+		if err != nil || !found || dest.DSN != was || dest.Schema != "s1" || dest.Engine != store.EnginePostgres {
+			t.Errorf("%s: the destination is %+v (found %v, %v), want the old one", what, dest.Engine, found, err)
+		}
+		if _, found, _ := db.Connection(ctx, id, store.RoleSource); found {
+			t.Errorf("%s: the source the failed save added is stored", what)
+		}
+		if list[0].Destination != store.DestinationPostgres {
+			t.Errorf("%s: destination %q", what, list[0].Destination)
+		}
+	}
+
+	fail()
+	err := m.Configure(ctx, "kb", store.Changes{
+		Include:         ptr([]string{"**/*.{md,txt}"}),
+		Exclude:         ptr([]string{}),
+		DestinationConn: &store.ConnectionSpec{Engine: store.EnginePostgres, DSN: "postgres://me:new@other/rag2", Schema: "s2"},
+		Source:          &store.ConnectionSpec{Engine: store.EngineSQLite, DSN: "/data/labels.db"},
+	})
+	if err == nil {
+		t.Fatal("the failing save succeeded")
+	}
+	check("a replaced connection")
+
+	fail()
+	err = m.Configure(ctx, "kb", store.Changes{
+		Include:         ptr([]string{"**/*.{md,txt}"}),
+		Exclude:         ptr([]string{}),
+		Destination:     ptr(store.DestinationLocal),
+		DestinationConn: &store.ConnectionSpec{Remove: true},
+	})
+	if err == nil {
+		t.Fatal("the failing save succeeded")
+	}
+	check("a removed connection")
+}
