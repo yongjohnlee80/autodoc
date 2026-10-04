@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,9 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/search"
+
+	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // runMain runs this binary as autodoc with args and env, as TestMain lets a test: its exit code and
@@ -112,3 +116,38 @@ func TestMainRefusesABadRegistration(t *testing.T) {
 		t.Fatalf("exit %d, stdout %q, stderr %q; want 1 naming .GO", code, stdout.String(), stderr.String())
 	}
 }
+
+// pdfDeriver derives .pdf as autorag's does, for the capabilities' sake: nothing is derived yet.
+type pdfDeriver struct{}
+
+func (pdfDeriver) Formats() []string                { return []string{".pdf"} }
+func (pdfDeriver) Describe(string) (string, string) { return "autorag/pdf", "1" }
+func (pdfDeriver) Derive(context.Context, string, io.ReaderAt, int64) (Derived, error) {
+	return Derived{}, errors.New("not wired")
+}
+
+// TestABuildsDeriverIsReported: Options.Deriver is validated at entry (a bad one stops every mode,
+// naming its format) and its formats are in sys.capabilities with their identities.
+func TestABuildsDeriverIsReported(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	bad := badDeriver{}
+	if code := run(context.Background(), []string{"--version"}, Options{Version: "v1", Deriver: bad}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), `".pptx"`) {
+		t.Fatalf("a bad deriver: exit %d, %q", code, stderr.String())
+	}
+	reg, err := registrations.New(nil, pdfDeriver{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
+	startAs(t, cfg, sock, build{version: "v1", reg: reg})
+	got, err := rpc.RegistrationsOf(call(t, dial(t, sock), "sys.capabilities"))
+	if err != nil || got.Formats[".pdf"] != (registrations.Format{ID: "autorag/pdf", Version: "1"}) {
+		t.Fatalf("capabilities: %+v, %v", got, err)
+	}
+}
+
+type badDeriver struct{ pdfDeriver }
+
+func (badDeriver) Formats() []string { return []string{".pptx"} }

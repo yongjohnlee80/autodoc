@@ -58,7 +58,7 @@ func goAndMarkdown(p string) bool { return strings.HasSuffix(p, ".go") || string
 // registered is a build registering c for .go.
 func registered(t testing.TB, c search.Chunker) *registrations.Table {
 	t.Helper()
-	reg, err := registrations.New(map[string]search.Chunker{".go": c})
+	reg, err := registrations.New(map[string]search.Chunker{".go": c}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

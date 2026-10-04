@@ -170,7 +170,9 @@ func heldBy(s string, reg *registrations.Table) (ext, what string) {
 			return id.Ext, "chunker"
 		}
 	case Derived:
-		return id.Ext, "deriver" // no build derives yet: AutoDoc 03 wires the deriver
+		// held by every build until AutoDoc 03 wires derivation into the indexer, one with a
+		// deriver included: until then its kind is Pro, which prepare would delete
+		return id.Ext, "deriver"
 	}
 	return "", ""
 }

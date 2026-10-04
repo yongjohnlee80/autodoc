@@ -56,7 +56,7 @@ func openOn(t *testing.T, path string, o Options) (m *Workspaces, close func()) 
 
 func goRegistered(t *testing.T) *registrations.Table {
 	t.Helper()
-	reg, err := registrations.New(map[string]search.Chunker{".go": wholeFile{}})
+	reg, err := registrations.New(map[string]search.Chunker{".go": wholeFile{}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

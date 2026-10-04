@@ -99,11 +99,14 @@ func writeConfig(t *testing.T, sock, state, extra string, workspaces ...string) 
 
 // start runs runServe on cfg and waits until it answers, or until it returns (wait false: return
 // at once with the handle).
-func start(t *testing.T, cfg, sock string) *daemon {
+func start(t *testing.T, cfg, sock string) *daemon { return startAs(t, cfg, sock, testBuild) }
+
+// startAs is start, as build b.
+func startAs(t *testing.T, cfg, sock string, b build) *daemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{t: t, sock: sock, out: &syncBuf{}, cancel: cancel, done: make(chan error, 1)}
-	go func() { d.done <- runServe(ctx, cfg, d.out, testBuild) }()
+	go func() { d.done <- runServe(ctx, cfg, d.out, b) }()
 	t.Cleanup(func() { d.stop() })
 	deadline := time.Now().Add(10 * time.Second)
 	for {
