@@ -99,9 +99,7 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 // With graphics and a headless browser, HTML preview is an image of the exported page; Open in
 // browser opens the very file it was made from.
 func TestTheHTMLPreviewIsAnImageWhereItCanBe(t *testing.T) {
-	if _, ok := widget.HTMLRasterizer(); !ok {
-		t.Skip("no headless Chromium or Chrome")
-	}
+	skipWithoutUsableBrowser(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
 	d := startManaged(t, map[string]string{"kb": noteDir(t, "n.md", "# Light page\n\ntext\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -255,5 +253,23 @@ func TestAPreviewRendersOnceAResizeGivesItRoom(t *testing.T) {
 	}
 	if !onLoop(r, func() bool { return r.h.lastDiagramImage() }) {
 		t.Fatal("the preview fell back although the resize gave it room")
+	}
+}
+
+// skipWithoutUsableBrowser skips where no headless browser can render here: none installed, or one
+// that refuses to run without its sandbox (a CI runner whose AppArmor forbids user namespaces; the
+// rasterizer never turns the sandbox off, and the preview falls back to the browser). Any other
+// failure of the probe is a failure.
+func skipWithoutUsableBrowser(t *testing.T) {
+	t.Helper()
+	if _, ok := widget.HTMLRasterizer(); !ok {
+		t.Skip("no headless Chromium or Chrome")
+	}
+	_, err := widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
+	if err != nil && strings.Contains(err.Error(), "No usable sandbox") {
+		t.Skip("the installed browser has no usable sandbox here")
+	}
+	if err != nil {
+		t.Fatalf("the browser probe failed: %v", err)
 	}
 }
