@@ -471,6 +471,9 @@ func (x *Indexer) publish(ctx context.Context, changed []int64) error {
 	if m == nil {
 		return nil
 	}
+	if x.opts.beforePublish != nil {
+		x.opts.beforePublish()
+	}
 	s := x.store
 	return s.read(ctx, func(tx *store.Tx) error {
 		watermark, err := s.commitSeq(tx)
