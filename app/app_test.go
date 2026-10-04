@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/golib/search"
 )
 
 // runMain runs this binary as autodoc with args and env, as TestMain lets a test: its exit code and
@@ -92,5 +94,21 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		if code != c.code || stdout.String() != c.stdout || !strings.Contains(stderr.String(), c.says) {
 			t.Errorf("%v: exit %d, stdout %q, stderr %q; want exit %d, stdout %q, stderr saying %q", c.args, code, stdout.String(), stderr.String(), c.code, c.stdout, c.says)
 		}
+	}
+}
+
+// upper is a chunker registered for an extension Main must refuse.
+type upper struct{}
+
+func (upper) Version() string                          { return "1" }
+func (upper) Chunk(search.Doc) ([]search.Chunk, error) { return nil, nil }
+
+// TestMainRefusesABadRegistration: a registration outside the rules stops every mode at entry,
+// naming it, before anything is served.
+func TestMainRefusesABadRegistration(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run(context.Background(), []string{"--version"}, Options{Version: "v1", Chunkers: map[string]search.Chunker{".GO": upper{}}}, &stdout, &stderr)
+	if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), `".GO"`) {
+		t.Fatalf("exit %d, stdout %q, stderr %q; want 1 naming .GO", code, stdout.String(), stderr.String())
 	}
 }

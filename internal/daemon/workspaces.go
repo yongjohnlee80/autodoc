@@ -19,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
@@ -50,6 +51,9 @@ type Workspaces struct {
 	// workspace's restarts, so the last valid schema survives a pattern or provider change.
 	schemas map[int64]*schemaHolder
 	texts   map[int64]*textExtensions // the workspaces' own plain-text extensions, by id, under mu
+	// collided is what each workspace's text extensions last collided with, by id, under mu: a
+	// collision is logged once, not at every restart
+	collided map[int64]string
 
 	// slots is the one limit on embedding requests in flight, across every provider (override.go)
 	slots chan struct{}
@@ -107,6 +111,8 @@ type Options struct {
 	// Databases offers a workspace's source and destination databases (core/edition): when false,
 	// Configure refuses them and Capabilities says so.
 	Databases bool
+	// Registrations are the build's chunkers (ADR 0216); nil: none, the community build.
+	Registrations *registrations.Table
 }
 
 // New is the workspaces of db, served until ctx ends. Nothing is served until OpenAll.
@@ -121,7 +127,8 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 		o.Log = logger.New()
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
-		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, slots: slots, overrides: map[string]embed.Provider{}}
+		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, collided: map[int64]string{}, slots: slots,
+		overrides: map[string]embed.Provider{}}
 	m.queue = newEmbeddingQueue(m)
 	return m
 }
@@ -224,6 +231,7 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	}
 	text := m.textExtensionsFor(id)
 	text.store(stored)
+	m.noteCollisions(id, c.Name, stored)
 	ws, err := workspace.Open(c)
 	if err != nil {
 		return nil, err
@@ -235,7 +243,8 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 	override, provider, providerErr := m.providerOf(id)
 	ix := index.NewIndexer(index.Open(m.db, id), ws.FS, index.Options{Match: ws.Matcher.Match, Provider: provider,
 		BatchDelay: m.opts.BatchDelay, Logger: m.opts.Log, Workspace: c.Name, ExternalEmbedding: true,
-		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get, TextExtensions: text.load})
+		OnEmbeddingWork: func() { m.queue.wakeWorkspace(c.Name) }, Schema: sh.get, TextExtensions: text.load,
+		Registrations: m.opts.Registrations})
 	ix.SetSemanticPaused(!m.queue.setPolicy(c.Name, policy))
 	f := follow.New(ws.FS, ix, ix, follow.Options{PollInterval: m.opts.Poll, Match: ws.Matcher.Match, Excluded: ws.Matcher.Excluded})
 	ix.SetRescanner(f) // index.reindex(ws, "") finds the files the index lacks through the follower
@@ -276,8 +285,10 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 			}
 			return n
 		},
-		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load)), Following: f.Status, Warming: m.warmingOf(c.Name),
+		Index: ix, Docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds())),
+		Following: f.Status, Warming: m.warmingOf(c.Name),
 		TextExtensions: text.load,
+		TextCollisions: func() []string { return m.opts.Registrations.Collisions(text.load()) },
 		Searched:       func() { m.queue.searchWorkspace(c.Name) },
 		EmbeddingQueue: func() (string, string) { return m.queue.queueState(c.Name) },
 		FrontmatterSchema: func() (*schema.Schema, rpc.SchemaStatus) {

@@ -28,7 +28,7 @@ var errAlreadyServing = errors.New("autodoc is already serving")
 // follower watches, then reconciles), and serve the API until ctx ends or a client says
 // sys.shutdown. Then it drains, stops every workspace, closes the store, and removes the socket if
 // it is still this process's.
-func runServe(ctx context.Context, configPath string, out io.Writer, o Options) error {
+func runServe(ctx context.Context, configPath string, out io.Writer, b build) error {
 	log := logger.New(logger.WithWriter(out))
 	if configPath == "" {
 		var err error
@@ -84,7 +84,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer, o Options) 
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
 	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: log,
-		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases})
+		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg})
 	// the provider the preferences name, before any workspace starts, so each starts with it; the
 	// last calls its meter heard are written before the store closes
 	emb := serving.NewEmbedding(db, ws, log)
@@ -98,8 +98,8 @@ func runServe(ctx context.Context, configPath string, out io.Writer, o Options) 
 	if len(ws.List()) == 0 {
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
-	srv := rpc.New(ws, o.Version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
-	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", o.Version, sock)
+	srv := rpc.New(ws, b.version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db))
+	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", b.version, sock)
 	return srv.Run(ctx)
 }
 

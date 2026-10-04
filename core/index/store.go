@@ -41,6 +41,16 @@ func indexerVersion(tokens int) string {
 	return fmt.Sprintf("c%s.s%d.t%d", ChunkerVersion, SchemaVersion, tokens)
 }
 
+// registeredVersion is what document.indexer records for a file a registered chunker cut: its
+// extension and the chunker's version, then the layout and the section size, as the built-ins'
+// (ADR 0216 §1.6's registered form: "c" EXT "@" VERSION ".s" SCHEMA ".t" TOKENS).
+func registeredVersion(ext, version string, tokens int) string {
+	if tokens <= 0 {
+		tokens = store.SectionTokensDefault
+	}
+	return fmt.Sprintf("c%s@%s.s%d.t%d", ext, version, SchemaVersion, tokens)
+}
+
 // docVersion is what document.indexer records for one path: Markdown files add the fingerprint of
 // the workspace's frontmatter schema, so a schema change rebuilds exactly the files it applies to
 // (their unchanged chunks keep their vectors, which are keyed by text).
@@ -78,19 +88,19 @@ func (s *Store) read(ctx context.Context, fn func(tx *store.Tx) error) error {
 	return s.db.Read(ctx, fn)
 }
 
-// outdated lists the documents indexed under another version than the one they would get now: a
-// chunker or section-size change reaches every document, a schema change every Markdown file.
-func (s *Store) outdated(ctx context.Context, schemaFP string, markdown func(string) bool) ([]string, error) {
+// outdated lists the documents indexed under another version than the one they would get now
+// (want, for a path at the section size): a chunker or section-size change reaches every document
+// of that chunker, a schema change every Markdown file.
+func (s *Store) outdated(ctx context.Context, want func(path string, tokens int) string) ([]string, error) {
 	var out []string
 	tokens, err := s.sectionTokens(ctx)
 	if err != nil {
 		return nil, err
 	}
-	base := indexerVersion(tokens)
 	err = s.read(ctx, func(tx *store.Tx) error {
 		docs, err := s.sc.Documents(tx).OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath, store.DocIndexer)
 		for _, d := range docs {
-			if d.Indexer != docVersion(base, markdown(d.Path), schemaFP) {
+			if d.Indexer != want(d.Path, tokens) {
 				out = append(out, d.Path)
 			}
 		}

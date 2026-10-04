@@ -24,6 +24,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -77,6 +78,9 @@ type Options struct {
 	Schema func() (*schema.Schema, string)
 	// TextExtensions are the workspace's own plain-text extensions (kind.Of); nil: none.
 	TextExtensions func() []string
+	// Registrations are the build's chunkers (ADR 0216): a file of a registered extension is cut
+	// by its chunker, under its version. nil: none, the community build.
+	Registrations *registrations.Table
 	// NewSearcher builds the engine that answers the indexer's searches, over the workspace's
 	// index: once by words alone (embed nil), and once with the semantic tier when there is a
 	// provider. nil is golib's search engine with the search's constants. Any search.Searcher can
@@ -113,6 +117,8 @@ type Indexer struct {
 	ready         chan struct{} // model row committed before the queue embeds
 
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
+
+	kinds kind.Registrations // Options.Registrations' extensions, read once
 }
 
 type job struct {
@@ -170,7 +176,7 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	if opts.Logger == nil {
 		opts.Logger = logger.Nop{}
 	}
-	ix := &Indexer{store: store, fsys: fsys, opts: opts, touched: map[string]bool{},
+	ix := &Indexer{store: store, fsys: fsys, opts: opts, kinds: opts.Registrations.Kinds(), touched: map[string]bool{},
 		signal: make(chan struct{}, 1), jobs: map[string]*job{}, unpersisted: map[string]bool{},
 		results: make(chan *prepared, 2*opts.Workers),
 		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{})}
@@ -461,7 +467,7 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 	}
 	sch, schemaFP := x.schema()
 	k := x.kindOf(w.path)
-	p.indexer = docVersion(indexerVersion(tokens), k == kind.Markdown, schemaFP)
+	p.indexer = x.versionOf(w.path, k, tokens, schemaFP)
 	fi, err := x.fsys.Stat(ctx, w.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -518,6 +524,15 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		}
 	}
 	switch k {
+	case kind.Registered:
+		p.meta.Title = strings.TrimSuffix(path.Base(w.path), path.Ext(w.path))
+		c, v, _ := x.opts.Registrations.Chunker(w.path)
+		cs, err := cutRegistered(c, v, search.Doc{Path: w.path, Title: p.meta.Title, Text: src, Tokens: tokens})
+		if err != nil {
+			p.err = fmt.Errorf("%s: %w", w.path, err)
+			return p
+		}
+		p.chunks = hashedUnder(v, cs)
 	case kind.Text:
 		p.meta.Title = strings.TrimSuffix(path.Base(w.path), path.Ext(w.path))
 		p.chunks = hashed(chunk.Text(src, p.meta.Title, tokens))

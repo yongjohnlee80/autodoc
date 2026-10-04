@@ -35,3 +35,34 @@ func TestTextExtensions(t *testing.T) {
 		}
 	}
 }
+
+// TestARegistrationReadsItsExtension: a built-in kind wins, then a registered chunker's, then the
+// workspace's own text extension; a registered file is text that validates as such.
+func TestARegistrationReadsItsExtension(t *testing.T) {
+	r := Registrations{Chunked: []string{".go", ".rs"}}
+	for _, c := range []struct {
+		path string
+		text []string
+		want Kind
+	}{
+		{"main.go", nil, Registered},
+		{"MAIN.GO", nil, Registered},
+		{"lib.rs", []string{".rs"}, Registered},
+		{"notes.md", nil, Markdown},
+		{"a.txt", nil, Text},
+		{"a.yaml", nil, YAML},
+		{"a.pdf", nil, Pro},
+		{"a.log", []string{".log"}, Text},
+		{"a.py", nil, Markdown},
+	} {
+		if got := r.Of(c.path, c.text); got != c.want {
+			t.Errorf("%s with text %v: %v, want %v", c.path, c.text, got, c.want)
+		}
+	}
+	if Of("main.go", nil) != Markdown {
+		t.Error("a build with no registrations reads .go as Markdown, as before")
+	}
+	if !Registered.IsText() || Registered.String() != "registered" {
+		t.Error("a registered file is UTF-8 text")
+	}
+}
