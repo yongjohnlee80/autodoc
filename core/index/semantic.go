@@ -1,12 +1,11 @@
 package index
 
 import (
+	"cmp"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"math"
-	"math/bits"
+	"iter"
 	"sort"
 	"strings"
 	"sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/chunk"
 	"github.com/yongjohnlee80/golib/search/embed"
+	"github.com/yongjohnlee80/golib/search/vector"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -59,19 +59,12 @@ const (
 )
 
 // code is one chunk's 1-bit code: the signs of its vector's dimensions.
-type code struct {
-	chunk int64
-	bits  []uint64
-}
+type code = vector.Code[int64]
 
-// codeSnap is the code index of one model at one commit: the codes of the alive chunks of the
-// semantic-ready documents. It is never changed once published; the next commit publishes another,
-// sharing the documents that did not change.
-type codeSnap struct {
-	fp        string
-	watermark int64 // the commit_seq it reflects
-	docs      map[int64][]code
-}
+// codeIndex is the code index of one model at one commit (its watermark is the commit_seq): the
+// codes of the alive chunks of the semantic-ready documents, by document. It is never changed once
+// published; the next commit publishes another, sharing the documents that did not change.
+type codeIndex = vector.Index[int64, int64]
 
 // vecItem is one vector for the writer to store.
 type vecItem struct {
@@ -104,7 +97,7 @@ type RefusedText struct {
 // semantic is the Indexer's embedding tier: nil without a provider.
 type semantic struct {
 	target  embed.Provider
-	snap    atomic.Pointer[codeSnap]
+	snap    atomic.Pointer[codeIndex]
 	vectors chan vecBatch
 	wake    chan struct{}
 
@@ -320,7 +313,7 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 			b := s.sc.EmbeddingBatch(tx).SkipConflicts()
 			for _, it := range vb.items {
 				b.Add(map[store.EmbeddingField]any{store.EmbTextHash: it.textHash, store.EmbModel: vb.fp,
-					store.EmbBits: codeBytes(signBits(it.vec)), store.EmbF32: floatBytes(it.vec)})
+					store.EmbBits: vector.EncodeBits(vector.SignBits(it.vec)), store.EmbF32: vector.EncodeFloats(it.vec)})
 			}
 			if err := b.Flush(); err != nil {
 				return err
@@ -485,29 +478,22 @@ func (x *Indexer) publish(ctx context.Context, changed []int64) error {
 		}
 		fp := m.active()
 		cur := m.snap.Load()
-		next := &codeSnap{fp: fp, watermark: watermark}
+		var next *codeIndex
 		switch {
-		case cur == nil || cur.fp != fp || changed == nil:
-			if next.docs, err = s.loadCodes(tx, fp, nil); err != nil {
-				return err
-			}
-		case len(changed) == 0:
-			next.docs = cur.docs
-		default:
-			fresh, err := s.loadCodes(tx, fp, changed)
+		case cur == nil || cur.Model() != fp || changed == nil:
+			codes, err := s.loadCodes(tx, fp, nil)
 			if err != nil {
 				return err
 			}
-			next.docs = make(map[int64][]code, len(cur.docs)+len(fresh))
-			for d, cs := range cur.docs {
-				next.docs[d] = cs
+			next = vector.NewIndex(fp, watermark, codes)
+		default:
+			var fresh map[int64][]code
+			if len(changed) > 0 {
+				if fresh, err = s.loadCodes(tx, fp, changed); err != nil {
+					return err
+				}
 			}
-			for _, d := range changed {
-				delete(next.docs, d)
-			}
-			for d, cs := range fresh {
-				next.docs[d] = cs
-			}
+			next = cur.Next(watermark, changed, fresh)
 		}
 		m.snap.Store(next)
 		return nil
@@ -527,7 +513,7 @@ func (s *Store) loadCodes(tx *store.Tx, fp string, docs []int64) (map[int64][]co
 	add := func(d dao.DAO[*store.Chunk, store.ChunkField, int64]) error {
 		rows, err := withVectors(alive(d), fp).Select(store.ChunkDoc, store.ChunkID, store.ChunkEmbBits)
 		for _, r := range rows {
-			out[r.DocID] = append(out[r.DocID], code{chunk: r.ID, bits: bitsOf(r.EmbBits)})
+			out[r.DocID] = append(out[r.DocID], code{Chunk: r.ID, Bits: vector.DecodeBits(r.EmbBits)})
 		}
 		return err
 	}
@@ -881,156 +867,59 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 	if err != nil {
 		return nil, err
 	}
-	qbits := signBits(qvec)
-	type scored struct {
-		chunk int64
-		dist  int
-	}
-	var all []scored
-	add := func(c code) {
-		d := 0
-		for i, w := range c.bits {
-			if i < len(qbits) {
-				d += bits.OnesCount64(w ^ qbits[i])
-			}
-		}
-		all = append(all, scored{c.chunk, d})
-	}
-	if snap := m.snap.Load(); snap != nil && snap.fp == fp && snap.watermark == watermark {
+	var codes iter.Seq[code]
+	if snap := m.snap.Load(); snap.Usable(fp, watermark) {
 		m.snapshotScans.Add(1)
-		for _, cs := range snap.docs {
-			for _, c := range cs {
-				add(c)
-			}
-		}
+		codes = snap.Codes()
 	} else {
 		m.fallbackScans.Add(1)
-		codes, err := s.loadCodes(tx, fp, nil)
+		stored, err := s.loadCodes(tx, fp, nil)
 		if err != nil {
 			return nil, err
 		}
-		for _, cs := range codes {
-			for _, c := range cs {
-				add(c)
-			}
-		}
+		codes = vector.NewIndex(fp, watermark, stored).Codes()
 	}
-	sort.Slice(all, func(i, j int) bool {
-		if all[i].dist != all[j].dist {
-			return all[i].dist < all[j].dist
+	order := vector.Nearest(codes, vector.SignBits(qvec), cmp.Compare[int64])
+	fetch := func(ids []int64) ([]vector.Vec[candidate], error) {
+		in := make([]any, len(ids))
+		for i, id := range ids {
+			in[i] = id
 		}
-		return all[i].chunk < all[j].chunk
-	})
-	type rescored struct {
-		c   candidate
-		dot float64
-	}
-	var valid []rescored
-	for start := 0; start < len(all) && len(valid) < retrieverTop; start += hammingTop {
-		window := all[start:min(start+hammingTop, len(all))]
-		ids := make([]any, len(window))
-		for i, w := range window {
-			ids[i] = w.chunk
-		}
-		d, ok, err := s.filtered(tx, withVectors(alive(s.sc.Chunks(tx)), fp).With(store.ChunkID, ids...), opts)
+		d, ok, err := s.filtered(tx, withVectors(alive(s.sc.Chunks(tx)), fp).With(store.ChunkID, in...), opts)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			break
+			return nil, vector.SkipRest // no document has every filter: no window can hold a hit
 		}
 		rows, err := d.Select(store.ChunkDoc, store.ChunkOrd, store.ChunkDocPath, store.ChunkBreadcrumb, store.ChunkByteStart,
 			store.ChunkByteEnd, store.ChunkDocActiveGen, store.ChunkBody, store.ChunkEmbF32)
 		if err != nil {
 			return nil, fmt.Errorf("index: semantic search: %w", err)
 		}
+		out := make([]vector.Vec[candidate], 0, len(rows))
 		for _, r := range rows {
-			valid = append(valid, rescored{dot: dot(qvec, floatsOf(r.EmbF32)), c: candidate{docID: r.DocID, ord: int(r.Ord),
+			out = append(out, vector.Vec[candidate]{F32: vector.DecodeFloats(r.EmbF32), Item: candidate{docID: r.DocID, ord: int(r.Ord),
 				hit: Hit{Path: r.DocPath, Breadcrumb: r.Breadcrumb, ByteStart: int(r.ByteStart), ByteEnd: int(r.ByteEnd),
 					Generation: r.DocActiveGen, Snippet: chunk.Snippet(r.Body), Via: []string{ModeSemantic}}}})
 		}
+		return out, nil
 	}
-	sort.Slice(valid, func(i, j int) bool {
-		if valid[i].dot != valid[j].dot {
-			return valid[i].dot > valid[j].dot
+	byPath := func(a, b candidate) bool {
+		if a.hit.Path != b.hit.Path {
+			return a.hit.Path < b.hit.Path
 		}
-		if valid[i].c.hit.Path != valid[j].c.hit.Path {
-			return valid[i].c.hit.Path < valid[j].c.hit.Path
-		}
-		return valid[i].c.ord < valid[j].c.ord
-	})
-	out := make([]candidate, 0, min(len(valid), retrieverTop))
-	for _, r := range valid[:min(len(valid), retrieverTop)] {
-		out = append(out, r.c)
+		return a.ord < b.ord
+	}
+	best, err := vector.TwoStage(order, qvec, hammingTop, retrieverTop, fetch, byPath)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]candidate, len(best))
+	for i, v := range best {
+		out[i] = v.Item
 	}
 	return out, nil
-}
-
-func normalized(v []float32) []float32 {
-	var sum float64
-	for _, x := range v {
-		sum += float64(x) * float64(x)
-	}
-	out := make([]float32, len(v))
-	if sum == 0 {
-		return out
-	}
-	n := math.Sqrt(sum)
-	for i, x := range v {
-		out[i] = float32(float64(x) / n)
-	}
-	return out
-}
-
-func dot(a, b []float32) float64 {
-	var s float64
-	for i := range min(len(a), len(b)) {
-		s += float64(a[i]) * float64(b[i])
-	}
-	return s
-}
-
-// signBits is a vector's 1-bit code: bit i is set when dimension i is positive.
-func signBits(v []float32) []uint64 {
-	out := make([]uint64, (len(v)+63)/64)
-	for i, x := range v {
-		if x > 0 {
-			out[i/64] |= 1 << (i % 64)
-		}
-	}
-	return out
-}
-
-func codeBytes(ws []uint64) []byte {
-	b := make([]byte, 8*len(ws))
-	for i, w := range ws {
-		binary.LittleEndian.PutUint64(b[8*i:], w)
-	}
-	return b
-}
-
-func bitsOf(b []byte) []uint64 {
-	out := make([]uint64, len(b)/8)
-	for i := range out {
-		out[i] = binary.LittleEndian.Uint64(b[8*i:])
-	}
-	return out
-}
-
-func floatBytes(v []float32) []byte {
-	b := make([]byte, 4*len(v))
-	for i, x := range v {
-		binary.LittleEndian.PutUint32(b[4*i:], math.Float32bits(x))
-	}
-	return b
-}
-
-func floatsOf(b []byte) []float32 {
-	out := make([]float32, len(b)/4)
-	for i := range out {
-		out[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[4*i:]))
-	}
-	return out
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/search/vector"
 
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -282,7 +283,7 @@ func (s *Store) embedQuery(ctx context.Context, sem *semantic, q string) (string
 	if len(vecs) != 1 || len(vecs[0]) != dims {
 		return "", nil, fmt.Errorf("index: the query's vector does not fit model %s", fp)
 	}
-	return fp, normalized(vecs[0]), nil
+	return fp, vector.Normalize(vecs[0]), nil
 }
 
 // ftsQuery makes an FTS5 query of the user's words: each one quoted, so no character of FTS5's

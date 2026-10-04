@@ -8,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"maps"
-	"math/bits"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,6 +17,8 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/schema"
+
+	"github.com/yongjohnlee80/golib/search/vector"
 )
 
 // The golden cells pin what the indexer stores and what search answers, so that moving the
@@ -431,7 +432,7 @@ func TestGoldenSearch(t *testing.T) {
 		if q.Opts.Mode != ModeLexical && !q.Store && a.Err == "" {
 			// the same answer from the SQL fallback: a snapshot one commit behind is never used
 			cur := e.atHead()
-			e.ix.sem.snap.Store(&codeSnap{fp: cur.fp, watermark: cur.watermark - 1, docs: cur.docs})
+			e.ix.sem.snap.Store(cur.Next(cur.Watermark()-1, nil, nil))
 			falls := e.ix.sem.fallbackScans.Load()
 			b := e.ask(q)
 			switch {
@@ -477,7 +478,7 @@ func (e *env) windowedPrecondition(t *testing.T, p *fakeProvider) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q := signBits(normalized(vecs[0]))
+	q := vector.SignBits(vector.Normalize(vecs[0]))
 	codes, err := e.codes(e.activeModel())
 	if err != nil {
 		t.Fatal(err)
@@ -490,13 +491,7 @@ func (e *env) windowedPrecondition(t *testing.T, p *fakeProvider) {
 		}
 		keep[id] = true
 	}
-	dist := func(c code) int {
-		d := 0
-		for i, w := range c.bits {
-			d += bits.OnesCount64(w ^ q[i])
-		}
-		return d
-	}
+	dist := func(c code) int { return vector.Hamming(c.Bits, q) }
 	best := 1 << 30
 	for doc, cs := range codes {
 		if keep[doc] {
