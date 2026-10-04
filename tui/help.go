@@ -73,7 +73,7 @@ WHAT A KEY NEEDS
   Opening, switching or quitting over unsaved changes asks first: Save, Discard or Stay.`
 
 // leaderText is the leader card's body, a key a line, as its Shortcuts are (views/Leader.qml).
-const leaderText = `/  search (or SPC again)   e  the explorer
+const leaderText = `/  search (or SPC again)  e  the explorer
 o  open a note            l  the links
 n  new note               t  the status line
 s  save                   m  show/focus or hide the menu
