@@ -219,4 +219,3 @@ func TestAVectorIsMadeOfWhatItsHashNames(t *testing.T) {
 		t.Fatalf("the twins' embed text was embedded %d times, want 1", twins)
 	}
 }
-

@@ -100,6 +100,15 @@ func (t *Table) Extensions() []string {
 	return slices.Sorted(maps.Keys(t.versions))
 }
 
+// Has reports whether ext (lowercased, with its dot) has a registered chunker.
+func (t *Table) Has(ext string) bool {
+	if t == nil {
+		return false
+	}
+	_, ok := t.versions[ext]
+	return ok
+}
+
 // Versions are the registered chunkers' frozen versions, by extension: a copy.
 func (t *Table) Versions() map[string]string {
 	if t == nil {

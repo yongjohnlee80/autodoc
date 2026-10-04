@@ -69,6 +69,9 @@ type Hit struct {
 	// (1/(rrfK+1) each), before boosts; boosts past it stay at 1.
 	Relevance float64
 	Via       []string // the retrievers that found it
+	// Hold is "" for a document this daemon interprets; for one it holds (ADR 0216 §1.4),
+	// HoldCurrent, HoldStale (its file changed since: the span may have moved) or HoldUnchecked.
+	Hold string `json:",omitempty"` // the goldens' hits are interpreted: their JSON never names it
 }
 
 // Result is search.query's answer: the hits, and what the search could use (ADR 0204 §4.4).
@@ -95,7 +98,20 @@ func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result,
 	if x.hybrid != nil && !x.semanticPaused.Load() {
 		searcher = x.hybrid
 	}
-	return answer(ctx, searcher, q, opts, sch)
+	res, err := answer(ctx, searcher, q, opts, sch)
+	if err != nil {
+		return res, err
+	}
+	h, err := x.holding(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	for i := range res.Hits {
+		if d, ok := h.of(res.Hits[i].Path); ok {
+			res.Hits[i].Hold = d.state
+		}
+	}
+	return res, nil
 }
 
 // activeModel is the fingerprint of the active model, "" for none.

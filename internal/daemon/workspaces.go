@@ -434,7 +434,7 @@ func (m *Workspaces) SetSectionTokens(ctx context.Context, name string, tokens i
 		return err
 	}
 	if s.w.Index != nil {
-		s.w.Index.Reindex("")
+		_ = s.w.Index.Reindex("") // the whole workspace is never refused
 	}
 	return nil
 }
