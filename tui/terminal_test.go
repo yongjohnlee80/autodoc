@@ -5,6 +5,7 @@ package tui
 import (
 	"context"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -23,7 +24,13 @@ import (
 // machine's own.
 func runShellTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 	t.Helper()
-	t.Setenv("SHELL", "/bin/sh")
+	return runTUIWithShell(t, "/bin/sh", prefs)
+}
+
+// runTUIWithShell is runShellTUI with shell as the user's shell.
+func runTUIWithShell(t *testing.T, shell string, prefs map[string]string) (*daemon, *running) {
+	t.Helper()
+	t.Setenv("SHELL", shell)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PS1", "$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
@@ -206,11 +213,18 @@ func TestTheTerminalSaysWhenTheShellExitsAndStartsAnother(t *testing.T) {
 	r.s.WaitForText(t, "again-42")
 }
 
+// A shell that forwards its hang-up to its jobs (bash and zsh do; dash, Ubuntu's /bin/sh, does not)
+// ends with them when AutoDoc quits.
 func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
-	_, r := runShellTUI(t, nil)
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("no bash: the cell needs a shell that forwards its hang-up to its jobs")
+	}
+	_, r := runTUIWithShell(t, bash, nil)
 	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.keys(t, decltest.Type("sleep 1000 & echo J''OB=$!\r")...)
+	// +H: no history expansion of the $! below (macOS's bash 3.2 applies it).
+	r.keys(t, decltest.Type("set +H; sleep 1000 & echo J''OB=$!\r")...)
 	var job int
 	re := regexp.MustCompile(`JOB=(\d+)`)
 	r.s.WaitFor(t, "the job's pid", func(sc string) bool {
