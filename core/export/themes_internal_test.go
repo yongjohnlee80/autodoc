@@ -3,8 +3,6 @@ package export
 import (
 	"strings"
 	"testing"
-
-	"github.com/yongjohnlee80/autodoc/core/diagram"
 )
 
 // Every shipped theme exports with its own colours and the color scheme that suits them.
@@ -27,22 +25,18 @@ func TestEveryThemeExportsInItsOwnColours(t *testing.T) {
 	}
 }
 
-// A standalone diagram SVG carries its own background and font, in the theme's colours.
-func TestDiagramSVGIsStandalone(t *testing.T) {
-	model, err := diagram.Parse("flowchart LR\n  A[Start] --> B[End]\n")
-	if err != nil {
-		t.Fatal(err)
+// Each theme's diagrams take the mermaid theme of its scheme; mono's, neutral.
+func TestEachThemesDiagramsTakeAMermaidTheme(t *testing.T) {
+	for theme, want := range map[string]string{"dark": "dark", "retro": "dark", "light": "default", "sepia": "default", "mono": "neutral"} {
+		out, err := DiagramPage("flowchart LR\n  A --> B\n", theme)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(out), `data-mermaid="`+want+`"`) || !strings.Contains(string(out), "--background:"+palettes[theme].background) {
+			t.Errorf("%s: not mermaid's %s theme on its own background", theme, want)
+		}
 	}
-	svg, err := DiagramSVG(model, "sepia")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(svg, `<svg `) || !strings.HasSuffix(svg, "</svg>") ||
-		!strings.Contains(svg, `<rect width="100%" height="100%" fill="#f4ecd8"/>`) || !strings.Contains(svg, "font-family") ||
-		!strings.Contains(svg, ">Start<") {
-		t.Fatalf("svg = %s", svg)
-	}
-	if _, err := DiagramSVG(model, "neon"); err == nil {
+	if _, err := DiagramPage("flowchart LR", "neon"); err == nil {
 		t.Fatal("an unknown theme")
 	}
 }

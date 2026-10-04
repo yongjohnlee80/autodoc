@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/decl"
@@ -13,24 +12,26 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
-	"github.com/yongjohnlee80/autodoc/core/diagram"
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/core/export/mermaid"
 )
 
 // IMAGE PREVIEWS — a Mermaid diagram and a file's HTML, as images in the terminal (ADR 0212 §6).
 //
-// With View › Image previews on, a terminal that confirmed kitty's graphics protocol, and the tool
-// to render with (rsvg-convert for a diagram, a headless Chromium or Chrome for HTML), the preview
-// is an image: the diagram's SVG or the exported HTML rendered offline to a PNG the size of the
-// preview's cells, in the active theme's colours. Otherwise the diagram is drawn as a terminal
-// graph and the HTML opens in the default browser, and the preview says why. Turning the
-// preference off is how both can be compared on the same document.
+// With View › Image previews on, a terminal that confirmed kitty's graphics protocol, and a
+// headless Chromium or Chrome, the preview is an image: the exported HTML, or a page of the one
+// diagram drawn by the vendored mermaid (core/export/mermaid), rendered offline in the active
+// theme's colours. The whole page is rendered, at the preview's width (a diagram at its own), and
+// the image scrolls in its dialog: the arrows, j k h l, Page Up/Down, [ ], Home/End and the wheel
+// (golib's scrollable Image). Zoom in and Zoom out render it again at another scale, as a
+// browser's zoom does; the dialog keeps its size. Otherwise the HTML opens in the default browser
+// and the diagram's dialog shows its source, and the preview says why. Turning the preference off
+// is how both can be compared on the same document.
 
-// cellPixels is the pixels a terminal cell is taken to be, to render a PNG at the cells' aspect.
-const (
-	cellPixelsW = 10
-	cellPixelsH = 20
-)
+// zooms are the previews' zoom steps; zoomDefault is 100%.
+var zooms = []float64{0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2}
+
+const zoomDefault = 4
 
 // imageWait is how long a preview's image cells may take to be laid out, and to become usable after
 // a resize, once its dialog opens; then it falls back.
@@ -44,7 +45,7 @@ const (
 )
 
 // imageMode reports whether a preview can be an image, and why not when it cannot.
-func (h *Host) imageMode(html bool) (bool, string) {
+func (h *Host) imageMode() (bool, string) {
 	if !h.prefs.images {
 		return false, "image previews are off (View › Image previews)"
 	}
@@ -54,12 +55,8 @@ func (h *Host) imageMode(html bool) (bool, string) {
 	case tuicore.TriUnknown:
 		return false, "the terminal did not confirm kitty graphics (inside tmux: set -g allow-passthrough on)"
 	}
-	if html {
-		if _, ok := widget.HTMLRasterizer(); !ok {
-			return false, "no headless Chromium or Chrome to render HTML"
-		}
-	} else if _, ok := widget.SVGRasterizer(); !ok {
-		return false, "rsvg-convert is not installed"
+	if _, ok := widget.HTMLRasterizer(); !ok {
+		return false, "no headless Chromium or Chrome to render with"
 	}
 	return true, ""
 }
@@ -80,12 +77,12 @@ func (h *Host) toggleImagePreviews() {
 	v := !h.prefs.images
 	h.setPref(prefImages, strconv.FormatBool(v), func(p *prefs) { p.images = v })
 	if v {
-		if ok, why := h.imageMode(false); !ok {
+		if ok, why := h.imageMode(); !ok {
 			h.say("image previews on; for now: " + why)
 			return
 		}
 	}
-	h.say("image previews " + map[bool]string{true: "on", false: "off: terminal graphs and the browser"}[v])
+	h.say("image previews " + map[bool]string{true: "on", false: "off: diagram sources and the browser"}[v])
 }
 
 func (h *Host) setImagesIndex(i int) {
@@ -95,47 +92,48 @@ func (h *Host) setImagesIndex(i int) {
 	}
 }
 
-// showDiagram shows a parsed diagram: an image when it can be, else the terminal graph.
-func (h *Host) showDiagram(model diagram.Model) {
-	ok, why := h.imageMode(false)
+// previewing is the image preview open: its dialog, the page it renders, whether that page is as
+// wide as its content (a diagram) and how tall it may be, and its zoom step.
+type previewing struct {
+	dialog    string
+	page      []byte
+	wide      bool
+	maxHeight int
+	zoom      int
+	// background is the page's colour, what the render cuts below and beside it
+	background string
+}
+
+// diagramMaxHeight bounds a diagram's page, in pixels: rendered as wide as it is, a window as tall as
+// a long page's would take the browser seconds.
+const diagramMaxHeight = 4096
+
+// showDiagram shows a Mermaid block: an image where it can be, else its source, saying why.
+func (h *Host) showDiagram(source string) {
+	ok, why := h.imageMode()
 	if !ok {
-		h.showDiagramText(model.Terminal(), "Terminal graph · "+why)
+		h.showDiagramText(source, "Diagram source · "+why)
 		return
 	}
 	theme := h.exportTheme()
+	page, err := export.DiagramPage(source, theme)
+	if err != nil {
+		h.showDiagramText(source, "Diagram source · "+err.Error())
+		return
+	}
 	h.diagramImage = true
-	h.diagramHelpText = "Image · rendered offline by rsvg-convert in the " + theme + " theme · View › Image previews turns it off"
+	h.diagramHelpText = "Image · drawn offline by mermaid " + mermaid.Version + " in the " + theme + " theme · scroll: arrows, j k h l, PgUp/PgDn, wheel"
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramImageShown", true)
 	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
-	fallback := func(why string) { h.showDiagramText(model.Terminal(), "Terminal graph · "+why) }
-	h.withImageCells("diagram", fallback, func(img *widget.Image, cols, rows int) {
-		w, ht := cols*cellPixelsW, rows*cellPixelsH
-		svg, err := export.DiagramSVG(model, theme)
-		if err != nil {
-			h.showDiagramText(model.Terminal(), "Terminal graph · "+err.Error())
-			return
-		}
-		fitted := fitSVG(svg, w, ht, theme)
-		gen := h.previewGen
-		do(h, func(ctx context.Context) answerOf[[]byte] {
-			png, err := widget.RasterizeSVG(ctx, []byte(fitted), w)
-			return answerOf[[]byte]{v: png, err: err}
-		}, func(a answerOf[[]byte]) {
-			if gen != h.previewGen {
-				return // closed, or another preview since
-			}
-			if a.err != nil {
-				h.showDiagramText(model.Terminal(), "Terminal graph · the image failed: "+a.err.Error())
-				return
-			}
-			img.SetPNG(a.v)
-		})
-	})
+	h.imagePreview = previewing{dialog: "diagram", page: page, wide: true, maxHeight: diagramMaxHeight, zoom: zoomDefault,
+		background: export.Background(theme)}
+	h.renderPreview(func(why string) { h.showDiagramText(source, "Diagram source · "+why) })
 }
 
-// showDiagramText shows the terminal graph (or a diagnostic) with help saying why it is not an image.
+// showDiagramText shows the diagram's source (or a diagnostic), with help saying why it is not an
+// image.
 func (h *Host) showDiagramText(text, help string) {
 	h.diagramImage, h.diagramHelpText = false, help
 	h.set("App.diagramImageShown", false)
@@ -143,6 +141,53 @@ func (h *Host) showDiagramText(text, help string) {
 	h.set("App.diagramTextShown", true)
 	h.set("App.diagramHelp", help)
 	h.open("diagram")
+}
+
+// renderPreview renders the open preview's page into its Image at its zoom, once the Image has its
+// cells, keeping the part of it shown where it was; fallback is the preview's, for an image that
+// cannot be had.
+func (h *Host) renderPreview(fallback func(why string)) {
+	pv := h.imagePreview
+	h.withImageCells(pv.dialog, fallback, func(img *widget.Image, cols, rows int) {
+		shown, w, ht := img.Scroll()
+		gen := h.previewGen
+		do(h, func(ctx context.Context) answerOf[[]byte] {
+			png, err := widget.RasterizeHTMLPage(ctx, pv.page, widget.Page{Width: cols * widget.CellPixelsW,
+				MinHeight: rows * widget.CellPixelsH, MaxHeight: pv.maxHeight, Scale: zooms[pv.zoom], Wide: pv.wide, Background: pv.background})
+			return answerOf[[]byte]{v: png, err: err}
+		}, func(a answerOf[[]byte]) {
+			if gen != h.previewGen {
+				return // closed, or another preview since
+			}
+			if a.err != nil {
+				fallback("the image failed: " + a.err.Error())
+				return
+			}
+			img.SetPNG(a.v)
+			if w > 0 && ht > 0 { // the same place in the page, at the new scale
+				_, nw, nh := img.Scroll()
+				img.ScrollTo(shown.X*nw/w, shown.Y*nh/ht)
+			}
+		})
+	})
+}
+
+// zoomPreview is Zoom in (step 1) and Zoom out (-1) in an image preview: the page rendered again
+// at the next scale, the dialog as it was.
+func (h *Host) zoomPreview(step int) {
+	pv := &h.imagePreview
+	if pv.page == nil || (pv.dialog == "diagram" && !h.diagramImage) {
+		return
+	}
+	z := min(max(pv.zoom+step, 0), len(zooms)-1)
+	if z == pv.zoom {
+		h.say(fmt.Sprintf("zoom is at its %s", map[bool]string{true: "largest", false: "smallest"}[step > 0]))
+		return
+	}
+	pv.zoom = z
+	h.say(fmt.Sprintf("zoom %d%%", int(zooms[z]*100+0.5)))
+	fallback := func(why string) { h.say("zoom: " + why) }
+	h.renderPreview(fallback)
 }
 
 // withImageCells runs fn once the Image in the dialog (main.qml's id for it) has been laid out with
@@ -208,44 +253,19 @@ func (h *Host) lastDiagramImage() bool { return h.diagramImage }
 // previewClosed is a preview dialog closing: what it was waiting on is dropped.
 func (h *Host) previewClosed() { h.previewGen++ }
 
-// fitSVG places svg, letterboxed and centred, in a w × h pixel canvas of the theme's background,
-// so the PNG has the cells' aspect and the terminal does not stretch the diagram.
-func fitSVG(svg string, w, h int, theme string) string {
-	inner := strings.Replace(svg, "<svg ", fmt.Sprintf(`<svg x="0" y="0" width="%d" height="%d" preserveAspectRatio="xMidYMid meet" `, w, h), 1)
-	return fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d"><rect width="100%%" height="100%%" fill="%s"/>%s</svg>`,
-		w, h, w, h, export.Background(theme), inner)
-}
-
 // previewHTMLImage renders the exported HTML into the HTML preview's image; Open in browser has the
 // file the image was made from.
 func (h *Host) previewHTMLImage(content []byte, path string) {
 	h.htmlPreviewPath = path
 	h.set("App.htmlPreviewTitle", "HTML preview · "+h.file.name())
 	h.set("App.htmlPreviewHelp", "Image · rendered offline by a headless browser in the "+h.exportTheme()+
-		" theme · links and selection: Open in browser · View › Image previews turns it off")
+		" theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser")
 	h.open("htmlPreview")
-	fallback := func(why string) {
+	h.imagePreview = previewing{dialog: "htmlPreview", page: content, zoom: zoomDefault, background: export.Background(h.exportTheme())}
+	h.renderPreview(func(why string) {
 		h.closeDialog("htmlPreview")
 		h.notify("HTML preview: " + why + "; opening it in the browser")
 		h.openPreviewInBrowser()
-	}
-	h.withImageCells("htmlPreview", fallback, func(img *widget.Image, cols, rows int) {
-		gen := h.previewGen
-		do(h, func(ctx context.Context) answerOf[[]byte] {
-			png, err := widget.RasterizeHTML(ctx, content, cols*cellPixelsW, rows*cellPixelsH)
-			return answerOf[[]byte]{v: png, err: err}
-		}, func(a answerOf[[]byte]) {
-			if gen != h.previewGen {
-				return
-			}
-			if a.err != nil {
-				h.closeDialog("htmlPreview")
-				h.notify("HTML preview as an image failed (" + a.err.Error() + "); opening it in the browser")
-				h.openPreviewInBrowser()
-				return
-			}
-			img.SetPNG(a.v)
-		})
 	})
 }
 

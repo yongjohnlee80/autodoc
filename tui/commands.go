@@ -19,6 +19,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.reload":         none(h.reload),
 		"App.previewHTML":    none(h.previewHTML),
 		"App.previewDiagram": none(h.previewDiagram),
+		"App.zoomIn":         none(func() { h.zoomPreview(1) }),
+		"App.zoomOut":        none(func() { h.zoomPreview(-1) }),
 		"App.newFile":        none(h.newFile),
 		"App.createFile":     oneString("App.createFile", "a path", h.createFile),
 		"App.quit":           none(h.quit),

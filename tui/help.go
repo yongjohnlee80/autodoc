@@ -67,9 +67,10 @@ WHAT A KEY NEEDS
   a change of model clears the search, its words and hits, to start afresh.
   File › Preview Mermaid diagram and Preview HTML show an image in the terminal only with all of:
   View › Image previews on; a terminal that confirmed kitty graphics (inside tmux, set -g
-  allow-passthrough on); and rsvg-convert (diagrams) or a headless Chromium or Chrome (HTML).
-  Otherwise a diagram is a terminal graph and HTML opens in the browser, and the preview says
-  which was missing. View › Image previews off compares the two on the same file.
+  allow-passthrough on); and a headless Chromium or Chrome. The image scrolls (arrows, j k h l,
+  PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
+  shows its source and HTML opens in the browser, and the preview says which was missing.
+  View › Image previews off compares the two on the same file.
   field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
   names a file's frontmatter problems, only once the workspace has a schema: Manage… › Edit…
   names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.
