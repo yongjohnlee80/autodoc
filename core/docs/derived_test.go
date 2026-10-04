@@ -155,10 +155,10 @@ func TestADerivationThatFailsIsTheDocumentsError(t *testing.T) {
 	if _, err := fsys.WriteFile(ctx, "a.pdf", strings.NewReader("%PDF")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := deriving(t, fsys, &pdfText{fail: errors.New("encrypted")}).Read(ctx, "a.pdf"); !errors.Is(err, derived.ErrDerive) {
+	if _, err := deriving(t, fsys, &pdfText{fail: errors.New("encrypted")}).Read(ctx, "a.pdf"); !errors.Is(err, derived.ErrDeriverFailed) {
 		t.Fatalf("a failed derivation: %v", err)
 	}
-	if _, err := deriving(t, fsys, &pdfText{text: "\xff"}).Read(ctx, "a.pdf"); !errors.Is(err, derived.ErrDerive) {
+	if _, err := deriving(t, fsys, &pdfText{text: "\xff"}).Read(ctx, "a.pdf"); !errors.Is(err, derived.ErrRefused) {
 		t.Fatalf("a text that is not UTF-8: %v", err)
 	}
 	big := sized{FS: fsys, size: derived.MaxContainer + 1}

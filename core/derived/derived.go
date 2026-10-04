@@ -34,15 +34,21 @@ var (
 	ErrNoDeriver = errs.Sentinel(errs.ErrInvalidArgument, "derived: this build derives no such format")
 	// ErrTooLarge is derived text over the reader's bound.
 	ErrTooLarge = errs.Sentinel(errs.ErrInvalidArgument, "derived: the text is over the size limit")
-	// ErrDerive is a deriver that could not make a document's text, or made it under another
-	// identity than the frozen one.
-	ErrDerive = errors.New("derived: the text could not be derived")
+	// ErrDeriverFailed is the deriver's own failure to make a document's text: an error other than
+	// a miss, a second miss, a panic, or no text. It may pass (a busy lease, a full cache disk), so
+	// it is the document's error for now, tried again; it never says what the file holds.
+	ErrDeriverFailed = errors.New("derived: the deriver could not make the text")
+	// ErrRefused is a text the deriver delivered that AutoDoc refuses, which the same bytes would
+	// deliver again: made under another identity than the frozen one, or a negative stated size.
+	ErrRefused = errors.New("derived: the derived text is refused")
 )
 
 // Text derives the text of path, a file of size bytes in fsys, with reg's deriver. The text is the
 // caller's to close; it holds the file open until then. A deriver's error matching fs.ErrNotExist
 // is a cache's eviction miss: the text went between its making and its reading, so Derive is called
-// once more. A text whose identity is not the frozen one for its format is refused.
+// once more, and a second miss is ErrDeriverFailed. The deriver's other failures are
+// ErrDeriverFailed; a text it delivers whose identity is not the frozen one for its format is
+// ErrRefused. A file gone before it could be opened is returned as it is.
 func Text(ctx context.Context, reg *registrations.Table, fsys vfs.FS, path string, size int64) (registrations.Derived, error) {
 	format := kind.Ext(path)
 	d := reg.Deriver()
@@ -51,8 +57,14 @@ func Text(ctx context.Context, reg *registrations.Table, fsys vfs.FS, path strin
 	}
 	var out registrations.Derived
 	var err error
-	for attempt := 0; attempt < 2; attempt++ {
-		if out, err = derive(ctx, d, fsys, path, size); !errors.Is(err, fs.ErrNotExist) || ctx.Err() != nil {
+	for attempt := 0; ; attempt++ {
+		var miss bool
+		out, miss, err = derive(ctx, d, fsys, path, size)
+		if !miss || ctx.Err() != nil {
+			break
+		}
+		if attempt == 1 {
+			err = fmt.Errorf("%w: %s: its text was evicted twice: %v", ErrDeriverFailed, path, err)
 			break
 		}
 	}
@@ -61,22 +73,22 @@ func Text(ctx context.Context, reg *registrations.Table, fsys vfs.FS, path strin
 	}
 	if err := reg.CheckDerived(format, out); err != nil {
 		_ = out.Text.Close()
-		return registrations.Derived{}, fmt.Errorf("%w: %s: %v", ErrDerive, path, err)
+		return registrations.Derived{}, fmt.Errorf("%w: %s: %v", ErrRefused, path, err)
 	}
 	if out.Bytes < 0 {
 		_ = out.Text.Close()
-		return registrations.Derived{}, fmt.Errorf("%w: %s: the deriver gave its text's size as %d", ErrDerive, path, out.Bytes)
+		return registrations.Derived{}, fmt.Errorf("%w: %s: the deriver gave its text's size as %d", ErrRefused, path, out.Bytes)
 	}
 	return out, nil
 }
 
-// derive calls d once. The deriver is another module's code: a panic is the document's error, as a
-// refusal is. A miss and a failure to open the file are returned as they are, so a miss is retried
-// and a file gone is seen as gone.
-func derive(ctx context.Context, d registrations.Deriver, fsys vfs.FS, path string, size int64) (out registrations.Derived, err error) {
+// derive calls d once, and reports whether its error is a miss. The deriver is another module's
+// code: a panic is its failure, as an error is. A failure to open the file is returned as it is, so
+// a file gone is seen as gone.
+func derive(ctx context.Context, d registrations.Deriver, fsys vfs.FS, path string, size int64) (out registrations.Derived, miss bool, err error) {
 	src, err := fsys.Open(ctx, path, 0)
 	if err != nil {
-		return registrations.Derived{}, err
+		return registrations.Derived{}, false, err
 	}
 	r, ok := src.(io.ReaderAt) // a local file is one; another driver is read at offsets
 	if !ok {
@@ -84,7 +96,7 @@ func derive(ctx context.Context, d registrations.Deriver, fsys vfs.FS, path stri
 	}
 	defer func() {
 		if p := recover(); p != nil {
-			out, err = registrations.Derived{}, fmt.Errorf("%w: %s: the deriver failed: %v", ErrDerive, path, p)
+			out, miss, err = registrations.Derived{}, false, fmt.Errorf("%w: %s: the deriver panicked: %v", ErrDeriverFailed, path, p)
 		}
 		if err != nil {
 			if out.Text != nil {
@@ -95,15 +107,17 @@ func derive(ctx context.Context, d registrations.Deriver, fsys vfs.FS, path stri
 	}()
 	out, err = d.Derive(ctx, path, r, size)
 	switch {
-	case errors.Is(err, fs.ErrNotExist) || ctx.Err() != nil:
-		return out, err
+	case ctx.Err() != nil && err != nil:
+		return out, false, err
+	case errors.Is(err, fs.ErrNotExist):
+		return out, true, err
 	case err != nil:
-		return out, fmt.Errorf("%w: %s: %v", ErrDerive, path, err)
+		return out, false, fmt.Errorf("%w: %s: %v", ErrDeriverFailed, path, err)
 	case out.Text == nil:
-		return out, fmt.Errorf("%w: %s: the deriver gave no text", ErrDerive, path)
+		return out, false, fmt.Errorf("%w: %s: the deriver gave no text", ErrDeriverFailed, path)
 	}
 	out.Text = closing{ReadCloser: out.Text, src: src}
-	return out, nil
+	return out, false, nil
 }
 
 // closing is a derived text that closes the file it was made of with itself.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -62,7 +63,12 @@ func TestADerivedDocumentOnTheWire(t *testing.T) {
 		ix := index.NewIndexer(index.Open(db, row.ID), fsys, index.Options{Match: pdf, BatchDelay: 5 * time.Millisecond, Registrations: reg})
 		return &Workspace{Name: name, Index: ix, Docs: docs.New(fsys, pdf, docs.WithRegistrations(reg.Kinds()), docs.WithDeriver(reg))}
 	}
-	sock := filepath.Join(t.TempDir(), "s.sock")
+	dir, err := os.MkdirTemp("", "adr") // a short path: macOS bounds a socket's at 104 bytes
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +93,7 @@ func TestADerivedDocumentOnTheWire(t *testing.T) {
 		t.Fatalf("doc.write: %v", err)
 	}
 	_, err = cli.Call(ctx, "doc.read", "locked", "locked.pdf")
-	if !errors.As(err, &re) || re.Code != CodeUnsupported || !strings.Contains(re.Message, "could not be derived") {
+	if !errors.As(err, &re) || re.Code != CodeUnsupported || !strings.Contains(re.Message, "could not be made now: try again later") {
 		t.Fatalf("doc.read of a text that cannot be derived: %v", err)
 	}
 }

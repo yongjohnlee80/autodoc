@@ -2,8 +2,10 @@ package index
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,6 +26,7 @@ type pdfDeriver struct {
 	version string
 	claim   string // the version a Derived claims, when not version
 	bytes   int64
+	fail    atomic.Int32 // a failureMode of the deriver's own, none when 0
 	derives atomic.Int64
 	reads   atomic.Int64
 	mu      sync.Mutex
@@ -41,11 +44,26 @@ func (d *pdfDeriver) Describe(f string) (string, string) {
 	return "fake" + strings.Replace(f, ".", "/", 1), d.version
 }
 
+// The ways a pdfDeriver fails of its own: a cache's eviction miss on every call, an error, a panic.
+const (
+	failMiss int32 = iota + 1
+	failError
+	failPanic
+)
+
 func (d *pdfDeriver) Derive(_ context.Context, name string, r io.ReaderAt, size int64) (registrations.Derived, error) {
 	d.derives.Add(1)
 	d.mu.Lock()
 	d.seen = append(d.seen, name)
 	d.mu.Unlock()
+	switch d.fail.Load() {
+	case failMiss:
+		return registrations.Derived{}, fmt.Errorf("evicted: %w", fs.ErrNotExist)
+	case failError:
+		return registrations.Derived{}, errors.New("the staging lease is busy")
+	case failPanic:
+		panic("pdfDeriver")
+	}
 	src := make([]byte, min(size, 1<<10)) // a container's first bytes are its text here
 	if _, err := r.ReadAt(src, 0); err != nil && err != io.EOF {
 		return registrations.Derived{}, err
@@ -170,4 +188,73 @@ func TestAFormatTheBuildDerivesIsNotHeld(t *testing.T) {
 	if len(pdfOnly.seen) != 1 || pdfOnly.seen[0] != "a.pdf" {
 		t.Fatalf("derived %q, want a.pdf alone", pdfOnly.seen)
 	}
+}
+
+// TestTheDeriversOwnFailureKeepsTheRow: a deriver that misses twice, fails or panics fails the
+// document for now: its indexed row stays, searchable, and its job is tried again with the backoff,
+// each try a Derive; once the deriver answers, the file's new text is indexed.
+func TestTheDeriversOwnFailureKeepsTheRow(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		mode int32
+		why  string
+	}{
+		{"two misses", failMiss, "its text was evicted twice"},
+		{"an error", failError, "the staging lease is busy"},
+		{"a panic", failPanic, "the deriver panicked: pdfDeriver"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d := &pdfDeriver{version: "1"}
+			e := newEnv(t, Options{Match: withPDF, Registrations: deriving(t, d), RetryDelay: time.Millisecond, MaxRetryDelay: 5 * time.Millisecond})
+			e.put("a.pdf", "kestrel")
+			indexed, _ := e.store.Version("a.pdf")
+			d.fail.Store(c.mode)
+			before := d.derives.Load()
+			e.write("a.pdf", "kestrel and merlin")
+			e.ix.Touch("a.pdf")
+			e.eventually("tried again", func() bool { _, n, _ := e.job("a.pdf"); return n >= 3 })
+			e.failing("a.pdf", c.why)
+			if n := d.derives.Load() - before; n < 3 {
+				t.Fatalf("%d Derive calls over three tries", n)
+			}
+			if v, ok := e.store.Version("a.pdf"); !ok || v != indexed {
+				t.Fatalf("the row left or moved: %q, %v", v, ok)
+			}
+			if r := e.query("kestrel", QueryOpts{Mode: ModeLexical}); len(r.Hits) != 1 {
+				t.Fatalf("the document is no longer searchable: %+v", r.Hits)
+			}
+			d.fail.Store(0)
+			e.indexedAt("a.pdf")
+			if r := e.query("merlin", QueryOpts{Mode: ModeLexical}); len(r.Hits) != 1 {
+				t.Fatalf("the new text was not indexed once the deriver answered: %+v", r.Hits)
+			}
+		})
+	}
+}
+
+// TestARefusalDeletesOnlyARowItsFileLeft: a build whose deriver delivers text under another identity
+// than it describes re-derives an unchanged file for the identity alone; the refusal keeps the row,
+// still searchable, and fails the job without trying again. Once the file is edited, the same
+// refusal deletes the row: its text is no longer the file's.
+func TestARefusalDeletesOnlyARowItsFileLeft(t *testing.T) {
+	e := newEnv(t, Options{Match: withPDF, Registrations: deriving(t, &pdfDeriver{version: "1"}), RetryDelay: time.Millisecond})
+	e.put("a.pdf", "kestrel")
+	recorded := e.indexerOf("a.pdf")
+	liar := &pdfDeriver{version: "2", claim: "1"}
+	e.open(Options{Match: withPDF, Registrations: deriving(t, liar), RetryDelay: time.Millisecond})
+	e.eventually("the refusal recorded", func() bool { _, n, _ := e.job("a.pdf"); return n == 1 })
+	e.failing("a.pdf", "derived as fake/pdf@1, not the frozen fake/pdf@2")
+	time.Sleep(50 * time.Millisecond)
+	if n := liar.derives.Load(); n != 1 {
+		t.Fatalf("derived %d times: a refusal is tried again", n)
+	}
+	if got := e.indexerOf("a.pdf"); got != recorded {
+		t.Fatalf("the row changed: %q, was %q", got, recorded)
+	}
+	if r := e.query("kestrel", QueryOpts{Mode: ModeLexical}); len(r.Hits) != 1 {
+		t.Fatalf("an unchanged file's row was deleted: %+v", r.Hits)
+	}
+	e.write("a.pdf", "kestrel, edited")
+	e.ix.Touch("a.pdf")
+	e.eventually("the edited file's row deleted", func() bool { _, ok := e.store.Version("a.pdf"); return !ok })
 }
