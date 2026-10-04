@@ -150,11 +150,14 @@ browser-launch error is reported in the TUI. Export a Markdown file without the 
 overwrite its source. Remote images are represented by their alt text in HTML exports; scripts
 and remote resources are not loaded.
 
-`File › Preview Mermaid diagram…` shows a terminal graph for a Mermaid fenced block. The block
-under the cursor wins; otherwise the first is used. Basic flowcharts and sequences are supported;
-unsupported constructs show a diagnostic alongside their unchanged source. The preview text uses
-the active document theme, including light and dark. Supported diagrams render as offline SVG
-in HTML exports; unsupported constructs remain visible as source with a diagnostic.
+**Mermaid diagrams are drawn by mermaid itself**: mermaid 12.1.0 is vendored in the binary
+(`core/export/mermaid`, MIT), so every diagram kind it knows (flowcharts, sequence, state, class,
+ER, gantt, mindmaps, …) is drawn as the Mermaid project draws it, offline. An HTML export with a
+```` ```mermaid ```` block carries the script (about 5.5 MB) and draws its diagrams when opened; its
+policy allows that script and the one that starts it, by digest, and no other, and a page without
+a diagram has no script at all. A diagram mermaid cannot read shows mermaid's own error in its
+place. `File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
+terminal, as below; where it cannot, it shows the block's source and why.
 
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
@@ -170,11 +173,14 @@ in HTML exports; unsupported constructs remain visible as source with a diagnost
   editor's text has them, saved or not; Enter jumps to the one under the cursor.
 - **Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
   they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
-  (inside tmux, `set -g allow-passthrough on`), and `rsvg-convert` for a diagram or a headless
-  Chromium or Chrome for HTML, each run offline. Elsewhere a diagram is drawn as a terminal graph
-  and HTML opens in the default browser, and the preview says which was missing; turning
-  `Image previews` off compares the two on the same file. Both follow the active theme's colours
-  (light, dark, sepia, retro, mono), as `autodoc --export html --theme …` does.
+  (inside tmux, `set -g allow-passthrough on`), and a headless Chromium or Chrome, run offline.
+  The whole page (or the whole diagram) is rendered and **scrolls** in its dialog: the arrows,
+  `j` `k` `h` `l`, `Page Up`/`Page Down`, `[` `]`, `Home`/`End` and the mouse wheel. **Zoom in**
+  and **Zoom out** draw it again larger or smaller (50 % to 200 %, as a browser zooms), in the same
+  dialog. Elsewhere a diagram shows its source and HTML opens in the default browser, and the
+  preview says which was missing; turning `Image previews` off compares the two on the same file.
+  Both follow the active theme's colours (light, dark, sepia, retro, mono), as
+  `autodoc --export html --theme …` does.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
 - **The pickers** (search, open, new file, add a workspace) share one layout: the fields over the
