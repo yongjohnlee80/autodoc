@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/golib/search/embed"
 )
 
 // VECTORS — AI models › Vectors…: the workspace's models, each with the room its vectors take (the

@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search/embed"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
-	"github.com/yongjohnlee80/autodoc/core/embed"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/schema"

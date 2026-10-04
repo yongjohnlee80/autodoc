@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/golib/search/embed"
 )
 
 // fakeProvider embeds a text as the counts of its words hashed into dims buckets (with seed, so two

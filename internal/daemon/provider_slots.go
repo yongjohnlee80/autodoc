@@ -3,7 +3,7 @@ package daemon
 import (
 	"context"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/golib/search/embed"
 )
 
 // providerSlots is one admission limit for document batches AND query embeds.

@@ -7,7 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/embed"
+	"github.com/yongjohnlee80/golib/search/embed"
+
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
