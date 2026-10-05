@@ -383,7 +383,9 @@ server of a re-ranker (`BAAI/bge-reranker-v2-m3`, say), or a Cohere-style rerank
   window ranks deeper and takes longer. On a CPU, `bge-reranker-v2-m3` takes about a quarter of a
   second a text as an ONNX export and about half a second as is, so give a CPU ranker 10 to 20.
 - **The hits say so.** Each ranked hit has a `rank_score`, the answer's `rank` names the model, and
-  the TUI's hits title says `re-ranked by <model>`.
+  the TUI's hits title says `re-ranked by <model>`. The search picker's ranker line names the
+  ranker in use as soon as it opens (`ranker: none` when there is none), then says
+  `re-ranked by <model>` or `not re-ranked: <why>` for each answer.
 - **A ranker that does not answer leaves the hits in the order they were found**, and the answer's
   `rank` says why. Its calls are metered like a provider's.
 
