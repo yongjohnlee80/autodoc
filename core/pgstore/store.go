@@ -123,8 +123,11 @@ type Text struct {
 
 // Pending lists up to limit distinct text hashes of the tenant's chunks with no vector under
 // model, except the ones skip names, each with its embed text, in (doc, ord) order: the input an
-// embedding worker reads back after a restart. The limit counts distinct hashes, so a caller
-// paging with the returned hashes in its skip set gets every hash in at most limit rounds.
+// embedding worker reads back after a restart. The limit counts distinct hashes: the chunk scan
+// pages forward past embedded, skipped and duplicate hashes until limit distinct pending ones are
+// collected or the chunks end, so a later unembedded text is never hidden behind a page of
+// already-embedded ones, and a caller paging with the returned hashes in its skip set gets every
+// hash in at most limit rounds.
 func (s *Store) Pending(ctx context.Context, model string, skip map[[32]byte]bool, limit int) ([]Text, error) {
 	if limit <= 0 {
 		return nil, nil
@@ -140,28 +143,54 @@ func (s *Store) Pending(ctx context.Context, model string, skip map[[32]byte]boo
 		copy(h[:], r.TextHash)
 		have[h] = true
 	}
-	// the tenant's chunks in (doc, ord) order; distinctness is folded in Go against the
-	// embedded and skipped sets, so the limit counts distinct hashes
-	rows, err := s.rw.chunk.DAO(dao.WithQueryContext(ctx)).With(cTenant, s.tenant).Join(joinDoc).
-		OrderBy(dao.Asc(cByPath), dao.Asc(cByOrd)).Limit(uint64(limit)*2).Select(cHash, cEmb, cCrumb, cBody)
-	if err != nil {
-		return nil, fmt.Errorf("pgstore: pending chunks: %w", err)
-	}
+	// the tenant's chunks in (doc, ord) order, one page at a time: distinctness is folded in Go
+	// against the embedded and skipped sets, and the page advances until the limit is met, so no
+	// unembedded text sits beyond a page of embedded ones
+	const page = 256
 	out := make([]Text, 0, limit)
 	seen := map[[32]byte]bool{}
-	for _, r := range rows {
-		var h [32]byte
-		copy(h[:], r.TextHash)
-		if seen[h] || have[h] || skip[h] {
-			continue
+	var last docOrd
+	started := false
+	for len(out) < limit {
+		d := s.rw.chunk.DAO(dao.WithQueryContext(ctx)).With(cTenant, s.tenant).Join(joinDoc)
+		if started {
+			d = d.WithPredicate(dao.Or(
+				dao.Gt(qcol(tDoc, string(dPath)), last.doc),
+				dao.And(dao.Eq(qcol(tDoc, string(dPath)), last.doc), dao.Gt(qcol(tChunk, string(cOrd)), last.ord)),
+			))
 		}
-		seen[h] = true
-		out = append(out, Text{TextHash: h, Text: r.EmbedText()})
-		if len(out) == limit {
+		rows, err := d.OrderBy(dao.Asc(cByPath), dao.Asc(cByOrd)).Limit(page).Select(cDoc, cOrd, cHash, cEmb, cCrumb, cBody)
+		if err != nil {
+			return nil, fmt.Errorf("pgstore: pending chunks: %w", err)
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, r := range rows {
+			last.doc, last.ord = r.Path, r.Ord
+			started = true
+			var h [32]byte
+			copy(h[:], r.TextHash)
+			if seen[h] || have[h] || skip[h] {
+				continue
+			}
+			seen[h] = true
+			out = append(out, Text{TextHash: h, Text: r.EmbedText()})
+			if len(out) == limit {
+				break
+			}
+		}
+		if len(rows) < page {
 			break
 		}
 	}
 	return out, nil
+}
+
+// docOrd is a chunk's (document path, ordinal): the keyset a Pending page resumes from.
+type docOrd struct {
+	doc string
+	ord int
 }
 
 // facetPairs stores facets as "field=value", which a facet filter matches exactly.
@@ -175,15 +204,51 @@ func facetPairs(f map[string][]string) []string {
 	return out
 }
 
+// ErrWriteRace is a document another writer replaced while Put or MarkReady was deciding: the
+// store's writes are conditioned on the generation they read, so a concurrent writer makes the
+// condition fail, and after putRetries retries the caller holds the document's current state and
+// decides again. AutoDoc's writer is one per tenant; another importer with concurrent writers
+// surfaces this instead of corrupting readiness or the generation.
+var ErrWriteRace = errs.Sentinel(errs.ErrPrecondition, "pgstore: the document changed under the write")
+
+const putRetries = 8
+
 // Put writes a document: replaced whole when its path exists (its generation bumped, its chunks
 // and links replaced), created otherwise, in one transaction. It is not ready for semantic search
 // until MarkReady says so. It returns the document's id.
+//
+// The generation bump and the chunk replacement are one compare-and-set: the update carries the
+// generation it read, so a concurrent Put of the same path that committed first makes this one's
+// condition fail, and the whole transaction is retried against the newer row. Without the
+// condition, two Puts reading generation 1 could both write 2 under READ COMMITTED, and the
+// second's chunk replacement would answer for the first's text.
 func (s *Store) Put(ctx context.Context, d Document) (int64, error) {
 	if d.Path == "" {
 		return 0, errs.Wrap(errs.ErrInvalidArgument, "pgstore: a document has no path")
 	}
 	tags, facets := nonNil(d.Tags), nonNil(facetPairs(d.Facets))
 	tagText := strings.Join(d.Tags, " ")
+	for range putRetries {
+		id, raced, err := s.putOnce(ctx, d, tags, facets, tagText)
+		if raced {
+			// another writer bumped the generation: retry against the newer row
+			if err := ctx.Err(); err != nil {
+				return 0, fmt.Errorf("pgstore: put %s: %w", d.Path, err)
+			}
+			continue
+		}
+		if err != nil {
+			return 0, fmt.Errorf("pgstore: put %s: %w", d.Path, err)
+		}
+		return id, nil
+	}
+	return 0, fmt.Errorf("pgstore: put %s: %w", d.Path, ErrWriteRace)
+}
+
+// putOnce is Put's compare-and-set attempt: one transaction that reads the document's generation
+// and writes conditioned on it. raced says the condition failed and the caller should retry
+// against the newer row.
+func (s *Store) putOnce(ctx context.Context, d Document, tags, facets []string, tagText string) (int64, bool, error) {
 	var id int64
 	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
 		cur, err := s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, d.Path).Get(dID, dGen)
@@ -193,16 +258,28 @@ func (s *Store) Put(ctx context.Context, d Document) (int64, error) {
 				Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
 				Set(dGen, int64(1)).Set(dReady, false).Insert()
 			if err != nil {
+				// two first writers of one path both saw no row: the unique (tenant, path) makes
+				// the second's insert a duplicate — the same race, retried on the update path
+				if errors.Is(err, dao.ErrDuplicate) {
+					return ErrWriteRace
+				}
 				return err
 			}
 		case err != nil:
 			return err
 		default:
 			id = cur.ID
-			if err := s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
+			// the compare-and-set: the update holds only while the generation is still the one
+			// this read; a concurrent writer that bumped it makes the count 0
+			n, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
+				With(dGen, cur.Generation).
 				Set(dTitle, d.Title).Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, cur.Generation+1).Set(dReady, false).Update(); err != nil {
+				Set(dGen, cur.Generation+1).Set(dReady, false))
+			if err != nil {
 				return err
+			}
+			if n == 0 {
+				return ErrWriteRace
 			}
 			if err := s.rw.chunk.On(tx, dao.WithQueryContext(ctx)).With(cTenant, s.tenant).With(cDoc, id).Delete(); err != nil {
 				return err
@@ -234,10 +311,13 @@ func (s *Store) Put(ctx context.Context, d Document) (int64, error) {
 		}
 		return nil
 	})
-	if err != nil {
-		return 0, fmt.Errorf("pgstore: put %s: %w", d.Path, err)
+	if errors.Is(err, ErrWriteRace) {
+		return 0, true, nil
 	}
-	return id, nil
+	if err != nil {
+		return 0, false, err
+	}
+	return id, false, nil
 }
 
 func nonNil(s []string) []string {
@@ -270,12 +350,22 @@ func (s *Store) Embed(ctx context.Context, model string, vecs []Embedding) error
 	return nil
 }
 
+// markReadyHook runs between MarkReady's read of the chunks and its conditioned write. It is
+// nil in production; the interleaving cell sets it to land a Put inside that window, the exact
+// race the generation condition exists to survive.
+var markReadyHook func()
+
 // MarkReady marks the document at path ready for semantic search under model when every one of its
 // chunks has a vector under it, and not ready otherwise. It reports whether the document is ready.
+//
+// The verdict is conditioned on the generation the chunks were read at: a concurrent Put that
+// replaces the chunks makes the write's condition fail, and MarkReady answers ErrWriteRace rather
+// than marking the new, unembedded generation ready from the old hashes. The caller — the
+// embedding worker, which owns the document while it embeds — retries against the newer row.
 func (s *Store) MarkReady(ctx context.Context, path, model string) (bool, error) {
 	var ready bool
 	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
-		doc, err := s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, path).Get(dID)
+		doc, err := s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dPath, path).Get(dID, dGen)
 		if err != nil {
 			return err
 		}
@@ -301,7 +391,20 @@ func (s *Store) MarkReady(ctx context.Context, path, model string) (bool, error)
 			have = int(n)
 		}
 		ready = have == len(in)
-		return s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, doc.ID).Set(dReady, ready).Update()
+		if markReadyHook != nil {
+			markReadyHook()
+		}
+		// the verdict holds only for the generation it was computed from: a newer generation's
+		// chunks are not this verdict's, and the write refuses to speak for them
+		n, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, doc.ID).
+			With(dGen, doc.Generation).Set(dReady, ready))
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrWriteRace
+		}
+		return nil
 	})
 	if err != nil {
 		return false, fmt.Errorf("pgstore: mark ready %s: %w", path, err)
