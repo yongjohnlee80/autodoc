@@ -63,7 +63,9 @@ local function settle(c, err)
   for _, cb in ipairs(queue) do pcall(cb, c, err) end
 end
 
-local function on_lost(reason)
+local function on_lost(reason, lost)
+  -- a session that ended after another took its place ends nothing of the current one
+  if lost ~= nil and lost ~= _client then return end
   _epoch = _epoch + 1
   _client = nil
   log.info("session ended: " .. tostring(reason))
@@ -71,7 +73,12 @@ local function on_lost(reason)
 end
 
 local function dial(addr, cb)
-  client.connect({ addr = addr, on_lost = vim.schedule_wrap(on_lost) }, vim.schedule_wrap(cb))
+  local this = {}
+  client.connect({ addr = addr, on_lost = vim.schedule_wrap(function(reason) on_lost(reason, this.c) end) },
+    vim.schedule_wrap(function(c, err, info)
+      this.c = c
+      cb(c, err, info)
+    end))
 end
 
 ---ensure calls back with a ready client, connecting first when there is none. Concurrent callers
@@ -197,6 +204,9 @@ function M.on_write(path)
     _client:call("index.reindex", { name, rel }, function() end)
   end
 end
+
+-- Test seam: the loss handler, called as a client's on_lost is.
+M._on_lost_for_tests = function(reason, lost) on_lost(reason, lost) end
 
 ---reset_for_tests clears all state. Production code never calls this.
 function M.reset_for_tests()
