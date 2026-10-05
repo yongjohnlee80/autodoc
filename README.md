@@ -328,8 +328,8 @@ speak.
   `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`,
   `:AutodocPreviewFind`, `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and
   `:AutodocPreviewBrowser` (the document as HTML, through `autodoc --export html`). In a float, a
-  Mermaid block is marked and `B` opens it drawn in the browser; `gx` opens the link or image
-  under the cursor. A slot follows its file as it changes.
+  Mermaid block is marked, and `B` opens the document in the browser, where it is drawn; `gx`
+  opens the link or image under the cursor. A slot follows its file as it changes.
 - **The KB migration** (`:AutodocKbMigrate [root]`) moves a KB to the current layout. The plain
   command is a dry run: it writes a checksummed manifest, a diff and a summary, and changes
   nothing. `--apply` applies that manifest after checking that no file changed since. It first
