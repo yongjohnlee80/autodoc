@@ -65,6 +65,7 @@ func (h *Host) searchLive(q string) {
 	type answer struct {
 		hits           []hit
 		mode, semantic string
+		ranked         string // the title's note of the hits' order (rankedTitle)
 		err            error
 	}
 	do(h, func(ctx context.Context) answer {
@@ -81,7 +82,7 @@ func (h *Host) searchLive(q string) {
 			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start), relevance: rel,
 				hold: str(hm, "hold")})
 		}
-		return answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic")}
+		return answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic"), ranked: rankedTitle(asMap(m["rank"]))}
 	}, func(a answer) {
 		if seq != h.searchSeq || ep != h.epoch {
 			return
@@ -129,7 +130,9 @@ func (h *Host) searchLive(q string) {
 		}
 		h.hitList = a.hits
 		h.hits.Reset(hitRows(a.hits))
-		h.set("App.hitsTitle", fmt.Sprintf("hits (%d) · %s · semantic %s", len(a.hits), a.mode, a.semantic))
+		// the order first: a narrow pane keeps what is read first
+		h.hitsRanked = a.ranked
+		h.set("App.hitsTitle", fmt.Sprintf("hits (%d)%s · %s · semantic %s", len(a.hits), a.ranked, a.mode, a.semantic))
 		if len(a.hits) > 0 {
 			h.previewHit(0)
 		} else {

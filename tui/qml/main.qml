@@ -297,6 +297,9 @@ Window {
     AIModels { id: aiModels }
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
+    RankerEdit { id: rankerEdit }
+    RankerRemove { id: rankerRemove }
+    RankerWindow { id: rankerWindow }
     RestartBackend { id: restartBackend }
     Mismatch { id: mismatch }
     Registrations { id: registrations }

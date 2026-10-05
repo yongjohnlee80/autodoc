@@ -111,7 +111,7 @@ var (
 func (h *Host) applyEvents(events []peerEvent) {
 	self := h.session.Client()
 	var notices []string
-	relist, recheck := false, false
+	relist, recheck, reranked := false, false, false
 	for _, e := range events {
 		if e.client == self && self != "" {
 			continue // this TUI's own change: it already knows
@@ -154,6 +154,10 @@ func (h *Host) applyEvents(events []peerEvent) {
 			notice = "the model switch was cancelled " + by
 		case "embedding.providers":
 			notice = "the embedding providers were changed " + by
+		case "ranker.switched":
+			notice, reranked = "the ranker in use was changed "+by, true
+		case "ranker.providers":
+			notice, reranked = "the rankers were changed "+by, true
 		}
 		if notice != "" && !slices.Contains(notices, notice) {
 			notices = append(notices, notice)
@@ -161,6 +165,9 @@ func (h *Host) applyEvents(events []peerEvent) {
 	}
 	for _, n := range notices {
 		h.notify(n)
+	}
+	if reranked && h.aiTab == rankerTab {
+		h.loadRankers()
 	}
 	if relist {
 		h.loadWorkspaces()

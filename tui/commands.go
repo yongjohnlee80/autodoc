@@ -157,7 +157,22 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.openVectors":             none(h.openVectors),
 		"App.startPurge":              oneNumber("App.startPurge", "a row", h.startPurge),
 		"App.purgeConfirmed":          none(h.purgeConfirmed),
-		"App.saveProvider":            fiveStrings("App.saveProvider", "a name, the base URL, the model, the key and the context window", h.saveProvider),
+		// the ranker models, and the buttons AI models' tabs share
+		"App.aiTabMoved":            oneNumber("App.aiTabMoved", "a tab", h.aiTabMoved),
+		"App.aiAdd":                 none(h.aiAdd),
+		"App.aiEdit":                oneNumber("App.aiEdit", "a row", h.aiEdit),
+		"App.aiUse":                 oneNumber("App.aiUse", "a row", h.aiUse),
+		"App.aiRemove":              oneNumber("App.aiRemove", "a row", h.aiRemove),
+		"App.showRanker":            oneNumber("App.showRanker", "a row", h.rankerDetail),
+		"App.startEditRanker":       oneNumber("App.startEditRanker", "a row", h.startEditRanker),
+		"App.stopRanking":           none(h.stopRanking),
+		"App.startRankerWindow":     none(h.startRankerWindow),
+		"App.saveRankerWindow":      oneString("App.saveRankerWindow", "a number of candidates", h.saveRankerWindow),
+		"App.removeRankerConfirmed": none(h.removeRankerConfirmed),
+		"App.rankerKindChosen":      numberAndString("App.rankerKindChosen", "a row and the base URL", h.rankerKindChosen),
+		"App.checkRanker":           twoStrings("App.checkRanker", "the base URL and the key", h.checkRanker),
+		"App.saveRanker":            fourStrings("App.saveRanker", "a name, the base URL, the model and the key", h.saveRanker),
+		"App.saveProvider":          fiveStrings("App.saveProvider", "a name, the base URL, the model, the key and the context window", h.saveProvider),
 	}
 }
 
@@ -202,6 +217,21 @@ func oneNumber(name, what string, fn func(int)) decl.HandlerFunc {
 			return fmt.Errorf("%s takes %s, not %s", name, what, args[0].Raw)
 		}
 		fn(n)
+		return nil
+	}
+}
+
+func fourStrings(name, what string, fn func(a, b, c, d string)) decl.HandlerFunc {
+	return func(args []qml.SpecValue) error {
+		if len(args) != 4 {
+			return fmt.Errorf("%s takes %s", name, what)
+		}
+		for _, a := range args {
+			if a.Kind != qml.SpecValueString {
+				return fmt.Errorf("%s takes %s", name, what)
+			}
+		}
+		fn(args[0].Raw, args[1].Raw, args[2].Raw, args[3].Raw)
 		return nil
 	}
 }
