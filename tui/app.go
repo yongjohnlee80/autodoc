@@ -112,6 +112,8 @@ type Host struct {
 	termStarted, termRestore bool
 	// the agent terminal (agent.go): where agents work, and the profile running ("" for none)
 	agentDir, agentRunning string
+	agentConfig            string // the TUI's config, the agent's autodoc's (Options.ConfigPath)
+	agentBinPath           string // the autodoc the agent calls; "" is this binary (a test sets it)
 	editingAgent           string // the profile the agent form edits, "" adding one
 	switchingAgent         string // the profile the switch question would start
 	agentRows              *tuidecl.ListModel
@@ -259,6 +261,9 @@ type Options struct {
 	// AgentDir is where the agent terminal's agents work, a folder a workspace (agent.go); "" is
 	// one under the system's temporary folder.
 	AgentDir string
+	// ConfigPath is the config file the TUI runs on: the agent's autodoc runs on it too, so it
+	// reaches the TUI's store (agent.go). "" is the default config.
+	ConfigPath string
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -277,7 +282,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath,
 		awaitExit:      awaitExit,
 		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),

@@ -84,8 +84,8 @@ func (h *Host) toggleAgent() {
 	h.startAgent(p)
 }
 
-// startAgent starts p in the agent's terminal and shows it. A command whose program is not
-// installed is refused before anything starts.
+// startAgent starts p in the agent's terminal and shows it. The shell runs the command as written,
+// so it decides what the command is: one it cannot find exits 127, which agentExited explains.
 func (h *Host) startAgent(p agentProfile) {
 	ws, ok := h.activeWorkspaceInfo()
 	if !ok {
@@ -93,19 +93,12 @@ func (h *Host) startAgent(p agentProfile) {
 		return
 	}
 	command := fillAgentCommand(p.Command, ws)
-	if first := strings.Fields(command); len(first) == 0 {
-		h.say("the profile " + p.Name + " has no command")
-		return
-	} else if _, err := exec.LookPath(first[0]); err != nil {
-		h.notify(p.Name + ": " + first[0] + " is not installed (not on PATH)")
-		return
-	}
 	dir, err := h.writeAgentGuide(ws)
 	if err != nil {
 		h.notify("the agent's folder could not be written: " + err.Error())
 		return
 	}
-	path, args, err := agentArgv(command, h.agentEnv(ws))
+	path, args, err := agentArgv(command, h.agentEnv(ws, dir))
 	if err != nil {
 		h.notify("the agent could not start: " + err.Error())
 		return
@@ -138,11 +131,19 @@ func (h *Host) stopAgent() {
 	h.agentRunning = ""
 }
 
-// agentExited is the agent's program ending: the next SPC ~ starts the default again.
+// agentExited is the agent's program ending: the next SPC ~ starts the default again. The shell's
+// 127 and 126 are its command not found and not runnable: the profile's command is wrong.
 func (h *Host) agentExited(code int) {
 	name := h.agentRunning
 	h.agentRunning = ""
-	if name != "" {
+	if name == "" {
+		return
+	}
+	switch code {
+	case 127, 126:
+		why := map[int]string{127: "was not found", 126: "could not run"}[code]
+		h.notify(fmt.Sprintf("the agent %s's command %s (%d): check it in Options › Agent profiles…", name, why, code))
+	default:
 		h.notify(fmt.Sprintf("the agent %s exited (%d): SPC ~ starts the default again", name, code))
 	}
 }
@@ -167,16 +168,37 @@ func agentArgv(command string, env []string) (string, []string, error) {
 	return envPath, args, nil
 }
 
-// agentEnv are the variables the agent is started with: the workspace, its root, the daemon the
-// TUI is attached to, and the autodoc binary, so `autodoc --call` reaches the same build.
-func (h *Host) agentEnv(ws wsInfo) []string {
-	bin, _ := os.Executable()
+// agentEnv are the variables the agent is started with, in its folder dir: the workspace, its root,
+// the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
+// folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
+// store, not the default config's, and is found when no autodoc is installed.
+func (h *Host) agentEnv(ws wsInfo, dir string) []string {
 	return []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
 		"AUTODOC_SOCKET=" + h.session.address(),
-		"AUTODOC_BIN=" + bin,
+		"AUTODOC_BIN=" + h.agentBin(),
+		"AUTODOC_CONFIG=" + h.agentConfig,
+		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}
+}
+
+// agentBin is the autodoc binary the agent calls: this one, unless a test says otherwise.
+func (h *Host) agentBin() string {
+	if h.agentBinPath != "" {
+		return h.agentBinPath
+	}
+	bin, _ := os.Executable()
+	return bin
+}
+
+// agentWrapper is the agent's autodoc: this build, on the TUI's config.
+func agentWrapper(bin, config string) string {
+	cmd := "exec " + shellQuote(bin)
+	if config != "" {
+		cmd += " --config " + shellQuote(config)
+	}
+	return "#!/bin/sh\n# AutoDoc as the TUI that started this agent runs it: its build, its config.\n" + cmd + ` "$@"` + "\n"
 }
 
 // agentDir is the folder the agent works in for a workspace: AutoDoc's, never the workspace's.
@@ -199,19 +221,24 @@ func safeName(s string) string {
 }
 
 // writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into the agent's folder for ws:
-// most agent CLIs read one of the two from where they start. It returns the folder.
+// most agent CLIs read one of the two from where they start; and bin/autodoc, agentWrapper. It
+// returns the folder.
 func (h *Host) writeAgentGuide(ws wsInfo) (string, error) {
 	dir := h.agentFolder(ws)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err
 	}
-	guide := agentGuide(ws, "")
-	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
-		tmp := filepath.Join(dir, "."+name+".tmp")
-		if err := os.WriteFile(tmp, []byte(guide), 0o600); err != nil {
+	guide := agentGuide(ws, h.agentBin(), h.agentConfig, filepath.Join(dir, "bin", "autodoc"))
+	for _, f := range []struct {
+		name, text string
+		mode       os.FileMode
+	}{{"AGENTS.md", guide, 0o600}, {"CLAUDE.md", guide, 0o600}, {filepath.Join("bin", "autodoc"), agentWrapper(h.agentBin(), h.agentConfig), 0o700}} {
+		path := filepath.Join(dir, f.name)
+		tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".tmp")
+		if err := os.WriteFile(tmp, []byte(f.text), f.mode); err != nil {
 			return "", err
 		}
-		if err := os.Rename(tmp, filepath.Join(dir, name)); err != nil {
+		if err := os.Rename(tmp, path); err != nil {
 			return "", err
 		}
 	}
@@ -219,11 +246,8 @@ func (h *Host) writeAgentGuide(ws wsInfo) (string, error) {
 }
 
 // agentGuide is what the agent is told: the workspace, what to help with, and how to call AutoDoc
-// (its own AGENTS.md).
-func agentGuide(ws wsInfo, bin string) string {
-	if bin == "" {
-		bin, _ = os.Executable()
-	}
+// (its own AGENTS.md): as wrapper, the build bin on the TUI's config.
+func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# You are working in AutoDoc\n\n")
 	fmt.Fprintf(&b, "You were started from AutoDoc, a search engine and editor over the user's files. ")
@@ -244,8 +268,12 @@ func agentGuide(ws wsInfo, bin string) string {
 	if len(ws.textExtensions) > 0 {
 		fmt.Fprintf(&b, "- also read as text: `%s`\n", strings.Join(ws.textExtensions, "`, `"))
 	}
-	fmt.Fprintf(&b, "\n## Calling AutoDoc\n\nThe `autodoc` below is `%s` (also `$AUTODOC_BIN`), the build the user runs, ", bin)
-	b.WriteString("attached to the same daemon. Search before you answer, and cite the paths you read.\n\n")
+	fmt.Fprintf(&b, "\n## Calling AutoDoc\n\n`autodoc` on your PATH is `%s`: it runs `%s` (`$AUTODOC_BIN`), the build the user runs", wrapper, bin)
+	if config != "" {
+		fmt.Fprintf(&b, ", with `--config %s` (`$AUTODOC_CONFIG`)", config)
+	}
+	b.WriteString(", so it reaches the same store and daemon as the TUI that started you. Call it as `autodoc`, as the ")
+	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
 	b.WriteString("## What to help with\n\n")
 	b.WriteString("- Finding documents and answering from them: `search.query`, then `doc.read`.\n")
 	b.WriteString("- Editing the user's files under the root, when asked. AutoDoc follows the edits, as it follows any editor's.\n")
