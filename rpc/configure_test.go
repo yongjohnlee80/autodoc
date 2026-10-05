@@ -131,10 +131,23 @@ func wireError(err error) (int64, string) {
 	return 0, ""
 }
 
+// capabilities is sys.capabilities without its verbs, which it checks: a session at this build's
+// protocol may call every verb.
+func capabilities(t *testing.T, cli *golibrpc.Client) map[string]any {
+	t.Helper()
+	got := call(t, cli, "sys.capabilities").(map[string]any)
+	verbs, _ := got["verbs"].([]any)
+	if len(verbs) != len(New(Fixed(), "v").Verbs()) {
+		t.Errorf("sys.capabilities' verbs %v: a session at protocol %d may call every verb", verbs, Protocol)
+	}
+	delete(got, "verbs")
+	return got
+}
+
 // A fixed set of workspaces offers nothing beyond the core and configures nothing.
 func TestConfigureVerbs_AFixedSet(t *testing.T) {
 	cli := dialServer(t, Fixed())
-	if got := call(t, cli, "sys.capabilities"); !reflect.DeepEqual(got, map[string]any{"databases": false, "registrations": RegistrationsMap(registrations.Tables{}),
+	if got := capabilities(t, cli); !reflect.DeepEqual(got, map[string]any{"databases": false, "registrations": RegistrationsMap(registrations.Tables{}),
 		"ranker": map[string]any{"supplied": false}}) {
 		t.Errorf("sys.capabilities = %v, want databases false, no registrations and no ranker supplied", got)
 	}
@@ -150,7 +163,7 @@ func TestConfigureVerbs_AFixedSet(t *testing.T) {
 func TestConfigureVerbs_OverTheWire(t *testing.T) {
 	m := &configurer{Workspaces: Fixed()}
 	cli := dialServer(t, m)
-	if got := call(t, cli, "sys.capabilities"); !reflect.DeepEqual(got, map[string]any{"databases": true, "registrations": RegistrationsMap(registrations.Tables{}),
+	if got := capabilities(t, cli); !reflect.DeepEqual(got, map[string]any{"databases": true, "registrations": RegistrationsMap(registrations.Tables{}),
 		"ranker": map[string]any{"supplied": false}}) {
 		t.Errorf("sys.capabilities = %v, want databases true, no registrations and no ranker supplied", got)
 	}
