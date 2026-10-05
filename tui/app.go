@@ -116,6 +116,9 @@ type Host struct {
 	switchingAgent         string // the profile the switch question would start
 	agentRows              *tuidecl.ListModel
 	termBefore             string
+	// the recent files (recent.go): those listed, in their rows' order
+	recentRows  []recentDoc
+	recentModel *tuidecl.ListModel
 
 	// the embedding providers (providers.go)
 	providerList                    []providerRow
@@ -285,6 +288,7 @@ func newHost(session *Session, opt Options) *Host {
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
 		providerModels: tuidecl.NewListModel("key", "name"),
 		agentRows:      tuidecl.NewListModel("key", "default", "name", "command"),
+		recentModel:    tuidecl.NewListModel("key", "workspace", "path"),
 		rankers:        tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
 		vectors:        tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
 		explorer:       tuidecl.NewTreeListModel("key", "label"),

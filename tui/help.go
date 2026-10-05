@@ -14,6 +14,8 @@ const helpText = `KEYS
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
   Ctrl+O      open a file: a filter over the workspace's files, with a preview
+  SPC r       the recent files, the newest first, of every workspace (File › Recent files…);
+              one of another workspace opens there
   SPC O       open the file in the desktop's own viewer (File › Open in System Viewer): a PDF
               in its reader, for what its derived text cannot show
   Ctrl+N      new file: a path in the workspace, .md added when it has none
@@ -98,13 +100,14 @@ const leaderText = `/  search (or SPC again)  e  the explorer
 o  open a file            l  the links
 n  new file               ` + "`" + `  the terminal
 s  save                   t  the status line
-~  the agent              g  agent profiles
+r  recent files           ~  the agent
 w  switch workspace       m  show/focus or hide the menu
 W  manage workspaces      k  the editor mode (Vim, Text)
 ?  help                   ,  editor preferences
 h  notifications          a  AI models
 c  the file's outline     A  about
-O  the system viewer      Q  quit`
+O  the system viewer      Q  quit
+g  agent profiles`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

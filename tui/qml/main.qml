@@ -84,6 +84,7 @@ Window {
             title: "&File"
             MenuItem { text: "&New file…"; onTriggered: App.newFile() }
             MenuItem { text: "&Open file…"; onTriggered: App.openPicker() }
+            MenuItem { text: "Recen&t files…"; onTriggered: App.openRecent() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
             MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
@@ -330,6 +331,7 @@ Window {
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
     RankerEdit { id: rankerEdit }
+    Recent { id: recent }
     AgentProfiles { id: agentProfiles }
     AgentEdit { id: agentEdit }
     AgentSwitch { id: agentSwitch }

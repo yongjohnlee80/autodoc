@@ -145,6 +145,7 @@ func (h *Host) load(p string) {
 			return
 		}
 		h.show(p, a.content, a.version)
+		h.noteRecent(ws, p)
 		h.say("opened " + p)
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	})

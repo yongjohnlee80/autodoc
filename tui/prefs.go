@@ -85,6 +85,8 @@ type prefs struct {
 	// agents are the agent terminal's profiles, and agentDefault the one SPC ~ opens (agent.go)
 	agents       []agentProfile
 	agentDefault string
+	// recent are the files opened last, newest first (recent.go)
+	recent []recentDoc
 }
 
 func defaultPrefs() prefs {
@@ -171,6 +173,9 @@ func prefsOf(m map[string]any) prefs {
 	}
 	if s, ok := str(prefAgentDefault); ok {
 		p.agentDefault = s
+	}
+	if s, ok := str(prefRecent); ok {
+		p.recent = recentOf(s)
 	}
 	readPanelPrefs(&p, m)
 	return p
@@ -288,6 +293,12 @@ func (h *Host) setPref(name, value string, change func(*prefs)) {
 	p := h.prefs
 	change(&p)
 	h.applyPrefs(p)
+	h.storePref(name, value)
+}
+
+// storePref writes one preference to the store, behind those waiting. Alone, it is for one
+// nothing on screen shows: the recent files (recent.go), which every file opened changes.
+func (h *Host) storePref(name, value string) {
 	h.prefWrites = append(h.prefWrites, [2]string{name, value})
 	if len(h.prefWrites) == 1 {
 		h.writePref()
