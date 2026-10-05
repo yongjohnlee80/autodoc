@@ -149,13 +149,29 @@ t.section("the snacks source", function()
   spec.actions.autodoc_lexical(p)
   t.ok(picker.enabled.lexical == true and found == 1, "the lexical action is refused while it is the last retriever")
   spec.actions.autodoc_semantic(p)
-  local sent
-  package.loaded["autodoc.preview"] = { render_path = function(path, o) sent = { path, o and o.line } end }
+  local sent, offered
+  local real_select = vim.ui.select
+  vim.ui.select = function(slots, _, cb) offered = slots; cb(slots[2]) end
+  package.loaded["autodoc.preview"] = { render_path = function(slot, path) sent = { slot, path } end }
   spec.actions.autodoc_preview(p, items[1])
-  t.eq(sent, { items[1].file, items[1].pos[1] }, "<M-p> sends the hit to autodoc.preview's slot")
+  local slots = require("autodoc.preview.layout").SLOTS
+  t.eq(offered, slots, "<M-p> offers the preview's slots")
+  t.eq(sent, { slots[2], items[1].file }, "and renders the hit's file into the slot chosen: render_path(slot, path)")
+  sent = nil
+  vim.ui.select = function(_, _, cb) cb(nil) end
+  spec.actions.autodoc_preview(p, items[1])
+  t.eq(sent, nil, "a dismissed prompt renders nothing")
+  vim.ui.select = function(s, _, cb) cb(s[1]) end
+  package.loaded["autodoc.preview"] = { render_path = function() error("boom") end }
+  spec.actions.autodoc_preview(p, items[1])
+  t.ok(notes[#notes]:find("preview: .*boom") ~= nil, "a render that fails says so", notes[#notes])
+  vim.ui.select = real_select
+  -- the preview ships in this build: a build without it is a require that fails
   package.loaded["autodoc.preview"] = nil
+  package.preload["autodoc.preview"] = function() error("not in this build") end
   spec.actions.autodoc_preview(p, items[1])
   t.ok(notes[#notes]:find("preview is not in this build", 1, true) ~= nil, "without autodoc.preview it says so")
+  package.preload["autodoc.preview"] = nil
   package.loaded["snacks"] = nil
 end)
 
