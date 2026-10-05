@@ -1263,7 +1263,11 @@ function M.apply(opts)
   local okw, werr = pcall(function()
     -- 4. moves
     for _, e in ipairs(m.files) do
-      if e.new ~= e.old then util.rename(root .. "/" .. e.old, root .. "/" .. e.new) end
+      if e.new ~= e.old then
+        -- a move never replaces a file, whatever the plan says (rename(2) would)
+        if vim.uv.fs_lstat(root .. "/" .. e.new) then error("refusing to overwrite " .. e.new) end
+        util.rename(root .. "/" .. e.old, root .. "/" .. e.new)
+      end
     end
     step("moved")
     -- 5. rewrites and normalization, from the manifest's own edit list
