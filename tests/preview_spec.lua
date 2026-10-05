@@ -634,7 +634,40 @@ section("[8] the browser view exports a snapshot with --base", function()
   notes = {}
   local r = P.browser("d")
   cfgmod.values.binary = saved
-  ok("a missing binary warns instead of failing", r == nil and #notes > 0 and notes[1].msg:find("not found", 1, true) ~= nil)
+  ok("a missing binary warns instead of failing", r == nil and #notes > 0 and notes[1].msg:find("not executable", 1, true) ~= nil,
+    notes[1] and notes[1].msg)
+
+  -- Found as the daemon's binary is: a build that is not on PATH still serves the browser view.
+  local lifecycle = require("autodoc.lifecycle")
+  local real_root, real_path = lifecycle.plugin_root, vim.env.PATH
+  local fake = SANDBOX .. "/fake-plugin"
+  vim.fn.mkdir(fake .. "/bin", "p")
+  vim.fn.writefile(vim.fn.readfile(STUB .. "/autodoc"), fake .. "/bin/autodoc")
+  vim.fn.setfperm(fake .. "/bin/autodoc", "rwxr-xr-x")
+  lifecycle.plugin_root = function() return fake end
+  vim.env.PATH = real_path:gsub("^" .. vim.pesc(STUB) .. ":", "")
+  cfgmod.values.binary = nil
+  ok("the stub is off PATH for these cells", vim.fn.executable("autodoc") == 0 or vim.fn.exepath("autodoc") ~= STUB .. "/autodoc")
+  ok("with no binary set, the browser runs the plugin's own build", require("autodoc.preview.browser").binary() == fake .. "/bin/autodoc",
+    tostring(require("autodoc.preview.browser").binary()))
+  vim.fn.delete(ARGS)
+  opened = {}
+  P.browser("d")
+  -- wait for the opener, as the other browser cells do: the export finishes before it opens, and a
+  -- late open would land in the next cell's list
+  vim.wait(5000, function() return #opened > 0 end, 10)
+  ok("…and the export runs: the browser view works with nothing on PATH", #opened > 0 and vim.fn.filereadable(ARGS) == 1)
+  -- setup's opts.bin wins over the plugin's build, as it does for the daemon
+  local other = SANDBOX .. "/elsewhere/autodoc"
+  vim.fn.mkdir(SANDBOX .. "/elsewhere", "p")
+  vim.fn.writefile(vim.fn.readfile(STUB .. "/autodoc"), other)
+  vim.fn.setfperm(other, "rwxr-xr-x")
+  local real_autodoc = package.loaded["autodoc"]
+  package.loaded["autodoc"] = { options = function() return { bin = other } end }
+  ok("setup's opts.bin is the browser's binary too", require("autodoc.preview.browser").binary() == other,
+    tostring(require("autodoc.preview.browser").binary()))
+  package.loaded["autodoc"] = real_autodoc
+  lifecycle.plugin_root, vim.env.PATH, cfgmod.values.binary = real_root, real_path, saved
 end)
 
 -- ── [9] find: any Markdown file under cwd ─────────────────────────────────

@@ -18,8 +18,10 @@ M.DEFAULTS = {
   debounce_ms = 150,
 
   -- Browser view: the `autodoc` binary, and the export theme (light, dark,
-  -- sepia, retro or mono). nil follows 'background'.
-  binary = "autodoc",
+  -- sepia, retro or mono; nil follows 'background'). A nil binary is found as
+  -- the daemon's is (autodoc.lifecycle): setup's opts.bin, then the plugin's
+  -- own build (lazy `build = "make build"`), PATH, the managed cache.
+  binary = nil,
   theme  = nil,
 
   -- Opens a URL or file with the system opener (`gx`, the browser view).

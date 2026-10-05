@@ -73,15 +73,31 @@ end
 ---Export `source` and open the page.
 ---@param source AutodocPreviewSource
 ---@param opts? { on_done?: fun(ok: boolean, html: string?, argv: string[]?) }
+---binary is the executable the export runs: preview's `binary` when set, else the one the daemon is
+---started from (setup's opts.bin, the plugin's own build, PATH, the managed cache), so a build that
+---is not on PATH serves the browser view as it serves the daemon.
+---@return string|nil path, string|nil err
+function M.binary()
+  local configured = config.values.binary
+  if configured == nil then
+    local ok, autodoc = pcall(require, "autodoc")
+    if ok and type(autodoc) == "table" and type(autodoc.options) == "function" then
+      configured = (autodoc.options() or {}).bin
+    end
+  end
+  local path, err = require("autodoc.lifecycle").resolve_binary(configured)
+  return path, err
+end
+
 ---@return string[]? argv the command run
 function M.open(source, opts)
   opts = opts or {}
   local function done(ok, html, argv)
     if opts.on_done then opts.on_done(ok, html, argv) end
   end
-  local bin = config.values.binary
-  if vim.fn.executable(bin) ~= 1 then
-    warn(("`%s` not found on PATH (needed for the browser view)"):format(bin))
+  local bin, berr = M.binary()
+  if not bin then
+    warn("the browser view needs the autodoc binary: " .. tostring(berr))
     return done(false)
   end
   local d = M.dir()
