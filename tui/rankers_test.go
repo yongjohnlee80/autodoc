@@ -17,13 +17,16 @@ import (
 )
 
 // fakeTEI is a TEI server of a re-ranker, each text scoring its length.
-func fakeTEI(t *testing.T) *httptest.Server {
+func fakeTEI(t *testing.T) *httptest.Server { return fakeTEIOf(t, "reranker") }
+
+// fakeTEIOf is a TEI server of a model of modelType ("embedding": not a re-ranker).
+func fakeTEIOf(t *testing.T, modelType string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/info":
 			_ = json.NewEncoder(w).Encode(map[string]any{"model_id": "BAAI/bge-reranker-v2-m3",
-				"model_type": map[string]any{"reranker": map[string]any{}}, "max_client_batch_size": 8})
+				"model_type": map[string]any{modelType: map[string]any{}}, "max_client_batch_size": 8})
 		case "/rerank":
 			var req struct{ Texts []string }
 			_ = json.NewDecoder(r.Body).Decode(&req)
@@ -162,9 +165,13 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	rankerTabOpen(t, r)
 	r.keys(t, key('a')) // Add…
 	r.s.WaitForText(t, "add a ranker")
-	r.s.WaitForText(t, "http://localhost:8080")
+	// the TEI playbook's address, and no key: a local TEI has none
+	r.s.WaitForText(t, "http://127.0.0.1:18080")
 	r.h.p.Post(func() { r.h.checkRanker(tei.URL, "") })
 	r.s.WaitForText(t, "it ranks with BAAI/bge-reranker-v2-m3")
+	// a TEI that answers but serves an embedder says so
+	r.h.p.Post(func() { r.h.checkRanker(fakeTEIOf(t, "embedding").URL, "") })
+	r.s.WaitForText(t, "not a ranker: the server's model is not a re-ranker")
 	r.h.p.Post(func() { r.h.closeDialog("rankerEdit"); r.h.saveRanker("local", "ftp://nowhere", "", "") })
 	r.s.WaitForText(t, "not saved: a ranker needs a name")
 	// as the form's Save calls it
