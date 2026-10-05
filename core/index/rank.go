@@ -14,7 +14,7 @@ import (
 
 // Rank is the indexer's re-ranking stage (golib search/rank): Source holds the ranker in use, the
 // daemon's one for every workspace. Texts are what the ranker reads, the chunks' own by default;
-// Required makes a search ranked or refused. A zero Rank has no stage.
+// Required makes a search that asks for the stage ranked or refused. A zero Rank has no stage.
 type Rank struct {
 	Source   rank.Source
 	Texts    rank.TextSource

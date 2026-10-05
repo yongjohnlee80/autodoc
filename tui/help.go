@@ -6,8 +6,9 @@ const helpText = `KEYS
   Space       the leader card, in Normal mode: a key runs its command (its list is the card);
               Ctrl+Space opens it in every editor mode
   Ctrl+G, SPC /, SPC SPC  search the workspace, by words and meaning: the hits on the left,
-              the file on the right at the hit; a line under the field names the ranker in use,
-              then whether it re-ranked the hits
+              the file on the right at the hit; beneath, a checkbox per stage it can run
+              (Lexical; Semantic with a model in use; Rerank, naming the ranker, with one in
+              use): a change searches again, and one of Lexical and Semantic stays checked
   /           find a word in the pane with the keyboard (the page, the explorer, the links);
               n and N find it again, forward and back. In the page its words are marked, and
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.

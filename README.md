@@ -123,7 +123,7 @@ Every client speaks one API. A session starts with `sys.hello({protocol})`, and 
 | --- | --- |
 | `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core, `{databases}`, and the build's registrations) |
 | `workspace` | `list`, `add(name, root, include?, exclude?)`, `configure(name, settings)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)`, `set_schema(name, path)`, `set_text_extensions(name, exts)`, `set_provider(name, provider)` |
-| `search` | `query(ws, q, {limit, mode, tags, paths})` |
+| `search` | `query(ws, q, {limit, stages, mode, tags, paths, facets})`: `stages` is any of `lexical`, `semantic` and `rerank`, at least one of the first two (default: all); the answer's `stages` says which ran, and why the others did not |
 | `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
 | `doc` | `read`, `write(ws, path, content, version)`, `rename`, `remove(ws, path, version)` |
@@ -193,7 +193,11 @@ terminal, as below; where it cannot, it shows the block's source and why.
 - **The pickers** (search, open, new file, add a workspace) share one layout: the fields over the
   list on the left, the file under the cursor on the right, the buttons beneath. The search runs
   as it is typed and refreshes its open query after a model or workspace transition; its preview
-  is at the hit, the words marked.
+  is at the hit, the words marked. Under it, a checkbox for each stage the search can run:
+  **Lexical**, **Semantic** while an embedding model is in use, and **Rerank (<model>)** while a
+  ranker is. All start checked; each change searches again at once, so flipping them shows what
+  each stage changes. One of Lexical and Semantic always stays checked. The choice is kept, and a
+  box that hides while its stage is unavailable comes back as it was left.
 
 | Key | Does |
 | --- | --- |
@@ -373,6 +377,10 @@ float vectors, and its results are fused with BM25 by reciprocal rank.
   offline when the new one is chosen: its server is told to unload it, so the two are never loaded
   together. The answer says the semantic side is `switching` until the new model covers every chunk.
 - **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
+- **A search can ask for its stages**: `lexical` (words), `semantic` (meaning) and `rerank` (the
+  ranker below), at least one of the first two; asked for none, it runs them all. Meaning alone
+  fails where it cannot answer, rather than answer by words. The answer's `stages` says which ran
+  and why each other did not.
 
 **A ranker can re-order the top hits** (ADR 0215). It is a cross-encoder that reads the query
 beside each candidate's text (its chunk's breadcrumb and body) and scores them. Add one in
@@ -383,9 +391,11 @@ server of a re-ranker (`BAAI/bge-reranker-v2-m3`, say), or a Cohere-style rerank
   window ranks deeper and takes longer. On a CPU, `bge-reranker-v2-m3` takes about a quarter of a
   second a text as an ONNX export and about half a second as is, so give a CPU ranker 10 to 20.
 - **The hits say so.** Each ranked hit has a `rank_score`, the answer's `rank` names the model, and
-  the TUI's hits title says `re-ranked by <model>`. The search picker's ranker line names the
-  ranker in use as soon as it opens (`ranker: none` when there is none), then says
-  `re-ranked by <model>` or `not re-ranked: <why>` for each answer.
+  the TUI's hits title says `re-ranked by <model>` or `not re-ranked: <why>`. The search picker's
+  Rerank checkbox names the ranker in use as soon as it opens; unchecked, the hits are in the order
+  they were found.
+- **A search that leaves `rerank` out is never ranked**, even under a build that answers ranked
+  or not at all, so a client can compare the two.
 - **A ranker that does not answer leaves the hits in the order they were found**, and the answer's
   `rank` says why. Its calls are metered like a provider's.
 
@@ -412,7 +422,7 @@ unsaved file. A workspace another client renames is followed; one it deletes lea
 text as an untitled draft.
 
 [AGENTS.md](AGENTS.md) tells an AI agent how to search with it: the verbs, the query syntax, the
-filters (`paths`, `tags`, `facets`, `mode`, `limit`) and the errors.
+options (`stages`, `paths`, `tags`, `facets`, `limit`) and the errors.
 
 ## Semantic search and embedding models
 
@@ -532,8 +542,9 @@ func main() {
   `rank` state `error`. It is not stored. The ranker chosen in the TUI is kept as it was, and
   cannot be changed while the build's is in use; it comes back for a build without one.
   `Rank.Texts` gives the ranker the build's own text for each hit in place of its chunk's.
-  `Rank.Required` answers ranked or not at all: a search the ranker cannot rank is refused (code
-  -32070).
+  `Rank.Required` answers ranked or not at all: a search that asks for `rerank` (or auto) and the
+  ranker cannot rank is refused (code -32070). A search that leaves `rerank` out is answered,
+  unranked: the client chose it.
 - **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker
   or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted
   in `index.status`, and deleted only when the file or the rules say so. A file a community daemon
