@@ -140,15 +140,27 @@ function M.query(q, cb)
   end)
 end
 
----to_preview sends an item to a preview slot through autodoc.preview, when it is installed.
+---to_preview asks which preview slot the item's file goes into (the preview's own prompt), then
+---renders it there, when autodoc.preview is installed. The preview renders a whole file: the hit's
+---line is not passed.
 ---@param item table
 function M.to_preview(item)
   local ok, preview = pcall(require, "autodoc.preview")
   if not ok or type(preview) ~= "table" or type(preview.render_path) ~= "function" then
     return notify("autodoc: the preview is not in this build", vim.log.levels.WARN)
   end
-  local rok, err = pcall(preview.render_path, item.file, { line = item.pos and item.pos[1] or nil })
-  if not rok then notify("autodoc: preview: " .. tostring(err), vim.log.levels.ERROR) end
+  -- the preview's own slot prompt, then render_path(slot, path), as its find does
+  local fok, find = pcall(require, "autodoc.preview.find")
+  if not fok or type(find.pick_slot) ~= "function" then
+    return notify("autodoc: the preview's slot prompt is not in this build", vim.log.levels.WARN)
+  end
+  local function failed(err) notify("autodoc: preview: " .. tostring(err), vim.log.levels.ERROR) end
+  -- the render runs in the prompt's callback, after this returns: it is guarded there too
+  local rok, err = pcall(find.pick_slot, item.file, function(slot, path)
+    local ok2, err2 = pcall(preview.render_path, slot, path)
+    if not ok2 then failed(err2) end
+  end)
+  if not rok then failed(err) end
 end
 
 ---open_at opens file at line in an editor window (the fallback's jump), never a panel.
