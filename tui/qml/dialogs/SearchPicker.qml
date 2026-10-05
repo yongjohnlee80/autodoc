@@ -58,9 +58,11 @@ Dialog {
         // not; one of Lexical and Semantic always stays checked
         Flex {
             direction: Tui.Horizontal
-            Button { text: App.stageLexical; onClicked: App.toggleSearchStage("lexical") }
-            Button { text: App.stageSemantic; visible: App.stageSemanticShown; onClicked: App.toggleSearchStage("semantic") }
-            Button { text: App.stageRerank; visible: App.stageRerankShown; onClicked: App.toggleSearchStage("rerank") }
+            CheckBox { text: "Lexical"; checked: App.stageLexical; onToggled: App.toggleSearchStage("lexical") }
+            Text { text: "  " }
+            CheckBox { text: "Semantic"; checked: App.stageSemantic; visible: App.stageSemanticShown; onToggled: App.toggleSearchStage("semantic") }
+            Text { text: "  "; visible: App.stageRerankShown }
+            CheckBox { text: App.stageRerankText; checked: App.stageRerank; visible: App.stageRerankShown; onToggled: App.toggleSearchStage("rerank") }
         }
     }
     Shortcut { sequence: "Ctrl+K"; onActivated: query.forceActiveFocus() }

@@ -31,10 +31,11 @@ func (h *Host) state() map[string]any {
 		"App.searchText":     "",       // the search field's words: set to clear them (clearSearch)
 		"App.searchStatus":   "",       // the line under the field: blank, or what a search is waiting on (pickers.go)
 		// the search's stages' boxes (stages.go)
-		"App.stageLexical":       "[x] Lexical",
-		"App.stageSemantic":      "[x] Semantic",
+		"App.stageLexical":       true,
+		"App.stageSemantic":      true,
 		"App.stageSemanticShown": false,
-		"App.stageRerank":        "[x] Rerank",
+		"App.stageRerank":        true,
+		"App.stageRerankText":    "Rerank",
 		"App.stageRerankShown":   false,
 
 		"App.explorer": h.explorer,
