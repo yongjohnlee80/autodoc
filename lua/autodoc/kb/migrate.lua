@@ -279,6 +279,22 @@ end
 
 ---Build the plan for root. Pure: reads the KB (and external todo stores), writes nothing.
 ---@return table plan, string? err
+---special_refusal is the plan's refusal for entries that are not regular files, or nil when there
+---are none.
+---@param root string
+---@param special table<string, string> rel -> type, from util.walk
+---@return string|nil
+function M.special_refusal(root, special)
+  local list = {}
+  for rel, typ in pairs(special or {}) do list[#list + 1] = rel .. " (" .. typ .. ")" end
+  if #list == 0 then return nil end
+  table.sort(list)
+  return ("refusing to migrate %s: only regular files can be migrated and restored, and these are not "
+    .. "(a symbolic link would be edited through and come back from an undo as a copy of its target). "
+    .. "Replace each with the file it points at, or move it out of the KB, then plan again:\n  %s")
+    :format(root, table.concat(list, "\n  "))
+end
+
 function M.plan(opts)
   local root = util.normpath(opts.root)
   if not util.isdir(root) then return nil, "not a directory: " .. root end
@@ -302,7 +318,13 @@ function M.plan(opts)
     counts = {},
   }
 
-  local files, dirs = util.walk(root, { [".git"] = true })
+  local files, dirs, special = util.walk(root, { [".git"] = true })
+  -- Only regular files are migrated. A symbolic link would be edited THROUGH (rewriting its target,
+  -- which may lie outside the KB) and saved in the pre-image as a copy of its target, so an undo
+  -- would bring back a regular file in its place; a fifo, socket or device cannot be copied at all.
+  -- Refused before anything is planned, let alone written.
+  local bad = M.special_refusal(root, special)
+  if bad then return nil, bad end
   local pre_view = refs.view(files, dirs)
 
   -- destinations
@@ -744,7 +766,7 @@ function M.plan(opts)
       local parent = dir:match("^(.*)/[^/]+$") or ""
       local other_kb = parent ~= root and (util.isfile(parent .. "/AGENTS.md") or util.isfile(parent .. "/KB_RULES.md"))
       entry.kb_root_refs = other_kb and ("another KB's (" .. parent .. "): only absolute references count") or "this KB's"
-      local sfiles = util.walk(dir, { [".git"] = true })
+      local sfiles, _, sspecial = util.walk(dir, { [".git"] = true })
       local spx = refs.prefixes(root, agent_names)
       local joined = { dir = dir, files = {}, rewrites = {} }
       for _, rel in ipairs(sfiles) do
@@ -763,6 +785,10 @@ function M.plan(opts)
                   target = target, new_target = ntarget }
               end
             end
+          end
+          if #rw > 0 and sspecial[rel] then
+            -- a store's file this migration would rewrite: the same refusal as the KB's own
+            return nil, M.special_refusal(dir, { [rel] = sspecial[rel] })
           end
           if #rw > 0 then
             local out = M.apply_edits(text, rw, nil)

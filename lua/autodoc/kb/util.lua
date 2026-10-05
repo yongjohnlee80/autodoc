@@ -196,13 +196,15 @@ function M.rmtree(path)
   end
 end
 
----Walk a tree. Returns sorted relative file paths and relative directory paths. `skip` names
----directories (by basename) never entered; `skip_rel` names relative directories never entered.
----Symbolic links are listed as files and never followed.
+---Walk a tree. Returns sorted relative file paths, relative directory paths, and the entries that
+---are neither a regular file nor a directory, as { rel = type } (a symbolic link, to a file or a
+---directory, is "link"; a fifo, socket or device its own type). `skip` names directories (by
+---basename) never entered; `skip_rel` names relative directories never entered. A symbolic link is
+---never followed; it is listed among the files AND among the special entries.
 function M.walk(root, skip, skip_rel)
   skip = skip or {}
   skip_rel = skip_rel or {}
-  local files, dirs = {}, {}
+  local files, dirs, special = {}, {}, {}
   local function rec(abs, rel)
     local h = uv.fs_scandir(abs)
     if not h then return end
@@ -222,13 +224,14 @@ function M.walk(root, skip, skip_rel)
         end
       else
         files[#files + 1] = r
+        if typ ~= "file" then special[r] = typ end
       end
     end
   end
   rec(root, "")
   table.sort(files)
   table.sort(dirs)
-  return files, dirs
+  return files, dirs, special
 end
 
 -- ─── hashing ────────────────────────────────────────────────────────
