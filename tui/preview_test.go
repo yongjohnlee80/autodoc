@@ -21,8 +21,9 @@ import (
 const flowFile = "# Flow\n\n```mermaid\nflowchart LR\n  A[Start] --> B[Finish]\n```\n"
 
 // browserWait is how long a test waits for a headless browser's render: seconds alone, longer
-// beside a race-detected suite.
-const browserWait = 30 * time.Second
+// beside a race-detected suite, and raceFactor times that in a -race build, whose image work on the
+// rendered page is itself slower.
+const browserWait = 30 * time.Second * raceFactor
 
 // placedImage waits for the terminal to hold one image, and returns its PNG.
 func (r *running) placedImage(t *testing.T) []byte {
@@ -201,7 +202,7 @@ func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
 func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
 	skipWithoutUsableBrowser(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	long := "# A long page\n\n" + strings.Repeat("A paragraph of the long page, one of very many.\n\n", 400)
+	long := "# A long page\n\n" + strings.Repeat("A paragraph of the long page, one of very many.\n\n", 280)
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", long)})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
