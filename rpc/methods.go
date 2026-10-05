@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"errors"
 
@@ -448,7 +449,33 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
-		return resultMap(res), nil
+		out := resultMap(res)
+		addLines(ctx, w, res.Hits, out["hits"].([]any))
+		return out, nil
+	}, true))
+
+	// index.documents lists the workspace's documents with their frontmatter, ordered by updated
+	// (default), path or indexed, narrowed by tags, paths, facets and missing fields: the index a
+	// client renders instead of a hand-kept one (Protocol 13).
+	s.handle("index.documents", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+		o, err := documentsOpts(p)
+		if err != nil {
+			return nil, err
+		}
+		docs, more, err := w.Index.Store().Documents(ctx, o)
+		if errors.Is(err, index.ErrBadSort) {
+			return nil, invalid("index.documents: opts.sort is updated, path or indexed")
+		}
+		if err != nil {
+			return nil, err
+		}
+		out := make([]any, len(docs))
+		for i, d := range docs {
+			out[i] = map[string]any{"path": d.Path, "generation": d.Generation, "title": d.Title, "updated": d.Updated,
+				"indexed_at": d.IndexedAt, "fields": d.Fields}
+		}
+		next := int64(o.After + len(docs))
+		return map[string]any{"docs": out, "more": more, "next": next}, nil
 	}, true))
 
 	s.handle("index.status", s.verb(1, 1, func(ctx context.Context, w *Workspace, _ []any) (any, error) {
@@ -787,6 +814,118 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 		}
 	}
 	return o, nil
+}
+
+// documentsOpts reads index.documents' optional second parameter: {sort, fields, tags, paths,
+// facets, missing, after, limit}.
+func documentsOpts(p []any) (index.DocumentsOpts, error) {
+	var o index.DocumentsOpts
+	if len(p) < 2 || p[1] == nil {
+		return o, nil
+	}
+	m, ok := p[1].(map[string]any)
+	if !ok {
+		return o, invalid("index.documents: opts must be a map")
+	}
+	for k, v := range m {
+		switch k {
+		case "sort":
+			s, ok := v.(string)
+			if !ok {
+				return o, invalid("index.documents: opts.sort must be a string")
+			}
+			o.Sort = s
+		case "after", "limit":
+			n, ok := v.(int64)
+			if !ok || n < 0 {
+				return o, invalid("index.documents: opts." + k + " must be a non-negative integer")
+			}
+			if k == "after" {
+				o.After = int(n)
+			} else {
+				o.Limit = int(n)
+			}
+		case "fields", "tags", "paths", "missing":
+			l, err := strList(v, "index.documents: opts."+k)
+			if err != nil {
+				return o, err
+			}
+			switch k {
+			case "fields":
+				o.Fields = l
+			case "tags":
+				o.Tags = l
+			case "paths":
+				o.Paths = l
+			default:
+				o.Missing = l
+			}
+		case "facets":
+			fm, ok := v.(map[string]any)
+			if !ok {
+				return o, invalid("index.documents: opts.facets must be a map of field to a value or a list of values")
+			}
+			o.Facets = map[string][]string{}
+			for field, fv := range fm {
+				if s, ok := fv.(string); ok {
+					o.Facets[field] = []string{s}
+					continue
+				}
+				l, err := strList(fv, "index.documents: opts.facets."+field)
+				if err != nil {
+					return o, err
+				}
+				o.Facets[field] = l
+			}
+		default:
+			return o, invalid("index.documents: unknown option " + k)
+		}
+	}
+	return o, nil
+}
+
+// addLines gives each hit line_start and line_end (1-based, the lines its span starts and ends on)
+// when its document is a file read as it is, so a client reads just that range with a line-ranged
+// reader, and opens a file at the line without converting bytes (Protocol 13). Each document is read
+// once. A hit on a held or derived document, or one whose span the file no longer holds (it changed
+// since it was indexed), gets neither: its bytes are not the file's.
+func addLines(ctx context.Context, w *Workspace, hits []index.Hit, out []any) {
+	if w.Docs == nil {
+		return
+	}
+	read := map[string][]byte{}
+	for i, h := range hits {
+		if h.Hold != "" || w.Docs.Derived(h.Path) {
+			continue
+		}
+		content, ok := read[h.Path]
+		if !ok {
+			if d, err := w.Docs.Read(ctx, h.Path); err == nil {
+				content = d.Content
+			}
+			read[h.Path] = content
+		}
+		start, end, ok := spanLines(content, h.ByteStart, h.ByteEnd)
+		if !ok {
+			continue
+		}
+		m := out[i].(map[string]any)
+		m["line_start"], m["line_end"] = int64(start), int64(end)
+	}
+}
+
+// spanLines is the 1-based lines the bytes [start, end) of content start and end on; false when
+// content does not hold the span.
+func spanLines(content []byte, start, end int) (int, int, bool) {
+	if content == nil || start < 0 || end < start || end > len(content) {
+		return 0, 0, false
+	}
+	first := 1 + bytes.Count(content[:start], []byte{'\n'})
+	last := first + bytes.Count(content[start:end], []byte{'\n'})
+	if end > start && content[end-1] == '\n' {
+		last-- // a span that ends with its line's newline ends on that line
+	}
+	return first, last, true
 }
 
 func resultMap(r index.Result) map[string]any {

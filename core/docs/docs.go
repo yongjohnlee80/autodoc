@@ -90,6 +90,10 @@ type Doc struct {
 	Version vfs.Version
 }
 
+// Derived reports whether path is a format the build derives: Read returns text derived from the
+// file, not the file's own bytes.
+func (d *Docs) Derived(path string) bool { return d.derives(path) }
+
 // derives reports whether path is a format the build derives.
 func (d *Docs) derives(path string) bool {
 	_, ok := d.reg.Format(kind.Ext(path))
