@@ -47,8 +47,9 @@ import (
 // holds, index.status's held, held_stale and held_unchecked, search.query's hold on a hit, and
 // index.reindex's refusal of a held document; sys.capabilities' registrations, always there. Protocol
 // 11 adds the ranker models (ADR 0215): the ranker.* verbs, search.query's rank and a ranked hit's
-// rank_score, and sys.capabilities' ranker.
-const Protocol int64 = 11
+// rank_score, and sys.capabilities' ranker. Protocol 12 adds search.query's stages: the
+// stages a search runs, asked for in place of a mode, and how its answer was made.
+const Protocol int64 = 12
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
