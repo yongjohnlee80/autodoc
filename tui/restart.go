@@ -162,6 +162,10 @@ func (h *Host) restartConfirmed() {
 // awaitExit is the Host's wait for a stopped daemon: until its process has gone, restartWait at most.
 func awaitExit(ctx context.Context, pid int64) bool { return waitGone(ctx, pid, restartWait) }
 
+// WaitGone waits until process pid has exited, or d has passed (false): `autodoc --print-endpoint
+// --restart` waits on the stopped daemon as the TUI's restart does.
+func WaitGone(ctx context.Context, pid int64, d time.Duration) bool { return waitGone(ctx, pid, d) }
+
 // waitGone waits until process pid has exited, or d has passed (false).
 func waitGone(ctx context.Context, pid int64, d time.Duration) bool {
 	deadline := time.Now().Add(d)

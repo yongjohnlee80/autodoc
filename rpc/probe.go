@@ -30,6 +30,7 @@ type ProbeInfo struct {
 	StoreID     string
 	Instance    string
 	Addr        string
+	PID         int64 // the daemon's process; 0 when its hello names none
 }
 
 // Probe asks the occupant of addr who it is, with a sys.hello that declares no protocol (so it
@@ -83,6 +84,7 @@ func Probe(ctx context.Context, network, addr string) (ProbeInfo, error) {
 	info.StoreID, _ = result["store_id"].(string)
 	info.Instance, _ = result["instance"].(string)
 	info.Addr, _ = result["addr"].(string)
+	info.PID, _ = result["pid"].(int64)
 	return info, nil
 }
 
