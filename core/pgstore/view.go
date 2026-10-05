@@ -45,9 +45,9 @@ func hitFields() []chunkField {
 	return []chunkField{cDoc, cOrd, cCrumb, cBody, cStart, cEnd, cPath, cGen}
 }
 
-// Lexical is the chunks matching every term, best first by ts_rank_cd over the breadcrumb (class
-// A) and the body (class D), then path, then ordinal, with the filters in the same WHERE so they
-// apply before the rank and the limit.
+// Lexical is the chunks matching every term, best first by ts_rank_cd over the title (class A),
+// breadcrumb (B), tags (C) and body (D), then path, then ordinal, with the filters in the same
+// WHERE so they apply before the rank and the limit.
 func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
 	if n <= 0 || len(terms) == 0 {
 		return nil, nil
