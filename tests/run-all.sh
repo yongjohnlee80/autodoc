@@ -9,7 +9,7 @@
 # A new suite is picked up by its *_spec.lua name; nothing else needs editing.
 #
 #   tests/run-all.sh            every suite
-#   tests/run-all.sh preview    one suite (preview_spec.lua)
+#   tests/run-all.sh preview    one suite (preview_spec.lua); AUTODOC_SPEC=preview does the same
 #
 # auto-core.nvim comes from AUTODOC_TEST_AUTOCORE, else the sibling checkout.
 set -uo pipefail
@@ -21,7 +21,10 @@ cd "$root" || exit 1
 command -v nvim >/dev/null 2>&1 || { echo "run-all: nvim not found on PATH"; exit 127; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/autodoc-lua.XXXXXX")" || { echo "run-all: no work dir"; exit 1; }
-trap 'rm -rf -- "$work"' EXIT
+# a suite's daemon outlives its nvim (the binary starts it detached): stop it after each suite, and
+# whatever is left on exit, by this run's own binary path
+stop_daemons() { pkill -f "^$work/bin/autodoc --serve" 2>/dev/null || true; }
+trap 'stop_daemons; rm -rf -- "$work"' EXIT
 
 if [ -z "${AUTODOC_TEST_AUTOCORE:-}" ]; then
   for c in "$root/../../auto-core.nvim/main" "$root/../auto-core.nvim"; do
@@ -43,7 +46,7 @@ fi
 export AUTODOC_TEST_BIN="$work/bin/autodoc"
 export LUA_PATH="$here/?.lua;;"
 
-only="${1:-}"
+only="${1:-${AUTODOC_SPEC:-}}"
 overall=0
 ran=0
 
@@ -81,6 +84,7 @@ for f in "$here"/*_spec.lua; do
   [ -e "$f" ] || continue
   if [ -n "$only" ] && [ "$(basename "$f" .lua)" != "${only}_spec" ]; then continue; fi
   run_suite "$f"
+  stop_daemons
   ran=$((ran + 1))
 done
 
