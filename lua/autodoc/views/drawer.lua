@@ -146,11 +146,14 @@ end
 ---answer first, with the cursor on it, so a bare <CR> never fires it (auto-core enforces this).
 ---@param spec { title: string, body: string[]|string, yes: string, no: string?, irreversible: boolean? }
 ---@param on_yes fun()
-local function confirm(spec, on_yes)
+---confirm asks a yes or no: on_yes on yes, on_no (when given) on an explicit no. Dismissing the
+---prompt is neither: it ends what was asked.
+local function confirm(spec, on_yes, on_no)
   local ok, modal = pcall(require, "auto-core.ui.modal")
   if not ok then
-    vim.ui.select({ spec.no or "Cancel", spec.yes }, { prompt = spec.title }, function(choice)
-      if choice == spec.yes then on_yes() end
+    local no = spec.no or "Cancel"
+    vim.ui.select({ no, spec.yes }, { prompt = spec.title }, function(choice)
+      if choice == spec.yes then on_yes() elseif choice == no and on_no then on_no() end
     end)
     return
   end
@@ -163,7 +166,9 @@ local function confirm(spec, on_yes)
       { label = spec.yes, value = true, role = "confirm" },
       { label = spec.no or "Cancel", value = false, role = "cancel" },
     },
-    on_choice = function(v) if v == true then on_yes() end end,
+    on_choice = function(v)
+      if v == true then on_yes() elseif v == false and on_no then on_no() end
+    end,
   })
 end
 M._confirm = confirm
@@ -878,7 +883,7 @@ function M.new(profile)
         notify("autodoc: scaffolded a KB in " .. w.root)
       end
       after()
-    end)
+    end, after) -- not now: the folder is added as it is, and what follows is still asked
   end
 
   local function add_location()

@@ -297,18 +297,56 @@ t.section("a stale reply is dropped", function()
 end)
 
 t.section("A adds a location, creating its folder", function()
+  local function titled(word) return function(o) return o.title:find(word, 1, true) and true or nil end end
+  local function offered(word, from)
+    for i = from + 1, #modal_seen do if modal_seen[i].title:find(word, 1, true) then return true end end
+    return false
+  end
   local dir = t.tmp("kb3")
   inputs = { dir, "kb3" }
-  answers = { function(o) return o.title:find("Create", 1, true) and true or nil end, NO }
+  local before = #modal_seen
+  answers = { titled("Create"), NO, NO }
   view._dispatch("A", (ws_row("kb1")))
   t.ok(vim.fn.isdirectory(dir) == 1, "the new folder was created")
   t.ok(input_seen[#input_seen - 1].completion == "dir", "the folder prompt completes directories")
   t.ok(t.wait(5000, function() return ws_row("kb3") ~= nil end), "the workspace is listed")
-  t.ok(noted("not a KB yet"), "a folder without AGENTS.md is said not to be a KB yet (no scaffold in this build)")
+  t.ok(t.wait(5000, function() return offered("Scaffold", before) end), "a folder without AGENTS.md is offered the scaffold")
+  t.eq(vim.fn.filereadable(dir .. "/AGENTS.md"), 0, "declined: nothing is written")
   if has_kb then
-    t.ok(modal_seen[#modal_seen].title:find("primary", 1, true) ~= nil, "then it asks whether to make it primary")
+    t.ok(t.wait(5000, function() return modal_seen[#modal_seen].title:find("primary", 1, true) ~= nil end),
+      "then it asks whether to make it primary")
     t.eq(require("auto-core.kb").primary().workspace, "kb1", "declined: the primary is unchanged")
+    -- dismissed (not declined), the scaffold prompt ends what was asked
+    local dir7 = t.tmp("kb7")
+    vim.fn.mkdir(dir7, "p")
+    inputs = { dir7, "kb7" }
+    local at = #modal_seen
+    answers = { function() return nil end, NO }
+    view._dispatch("A", (ws_row("kb1")))
+    t.ok(t.wait(5000, function() return offered("Scaffold", at) end), "kb7 is offered the scaffold")
+    vim.wait(300)
+    t.ok(not offered("primary", at), "dismissing it asks nothing more")
+    answers = {}
   end
+  -- accepted, the build's own scaffold writes the KB
+  local dir5 = t.tmp("kb5")
+  vim.fn.mkdir(dir5, "p")
+  inputs = { dir5, "kb5" }
+  answers = { titled("Scaffold"), NO }
+  view._dispatch("A", (ws_row("kb1")))
+  t.ok(t.wait(5000, function() return vim.fn.filereadable(dir5 .. "/AGENTS.md") == 1 end),
+    "accepted, the scaffold writes AGENTS.md", vim.inspect(notes[#notes]))
+  t.ok(t.wait(2000, function() return noted("scaffolded a KB in " .. dir5) end), "and says so")
+  -- a build without the scaffold says the folder is not a KB yet
+  package.loaded["autodoc.kb.scaffold"] = nil
+  package.preload["autodoc.kb.scaffold"] = function() error("not in this build") end
+  local dir6 = t.tmp("kb6")
+  vim.fn.mkdir(dir6, "p")
+  inputs = { dir6, "kb6" }
+  answers = { NO }
+  view._dispatch("A", (ws_row("kb1")))
+  t.ok(t.wait(5000, function() return noted("kb6 is not a KB yet") end), "without the scaffold, it says the folder is not a KB yet")
+  package.preload["autodoc.kb.scaffold"] = nil
   -- with a scaffold module, the scaffold is offered and run
   local scaffolded = nil
   package.loaded["autodoc.kb.scaffold"] = { scaffold = function(root, opts)
