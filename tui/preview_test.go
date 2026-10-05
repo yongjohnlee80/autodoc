@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
@@ -198,17 +199,20 @@ func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
 // A page longer than a terminal takes an image (widget.MaxImagePixels; Ghostty's and kitty's
 // limit, a refusal the placement keeps quiet) is placed as strips: no image placed is taller than
 // that, at the top or at the bottom, and the bottom is reached. Sent whole, the long page showed
-// nothing.
+// nothing. The browser is a fake rendering a page 12000 px tall: the strips are AutoDoc's to place,
+// whatever renders the page, and a CI runner's Chrome has no sandbox to run in.
 func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
-	skipWithoutUsableBrowser(t)
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
-	long := "# A long page\n\n" + strings.Repeat("A paragraph of the long page, one of very many.\n\n", 280)
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", long)})
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# A long page\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() {
+	onLoop(r, func() bool {
 		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
 		r.h.browser = func(context.Context, string) error { return nil }
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			return tallPage(t, p.Width, widget.MaxImagePixels+2000), nil
+		}
+		return true
 	})
 	r.h.p.Post(func() { r.h.openPath("n.md") })
 	r.waitFile(t, "n.md")
@@ -490,4 +494,20 @@ func TestTheMismatchDialogsEdges(t *testing.T) {
 			t.Fatal("the failure is not in the recovery dialog")
 		}
 	})
+}
+
+// tallPage is a PNG w wide and h tall, its rows shaded down the page so each strip differs.
+func tallPage(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewGray(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Pix[y*img.Stride+x] = uint8(y * 255 / h)
+		}
+	}
+	var b bytes.Buffer
+	if err := png.Encode(&b, img); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
 }
