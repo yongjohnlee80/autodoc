@@ -18,20 +18,64 @@ import (
 	"github.com/yongjohnlee80/golib/search/searchtest"
 )
 
+// TestRequiredURLFailsLoudly pins the no-silent-skip contract itself: with AUTODOC_TEST_PG_REQUIRED
+// set and no URL, the gate's verdict is a failure naming the variable, never a skip; without the
+// requirement the same missing URL is a clean skip, so a local run with no database stays green.
+// A runner that loses its service sees its cells go red with the variable's name in the log.
+func TestRequiredURLFailsLoudly(t *testing.T) {
+	t.Setenv(dsnEnv, "")
+	t.Setenv("AUTODOC_TEST_PG_REQUIRED", "1")
+	verdict, msg := gateVerdict()
+	if verdict != gateFail {
+		t.Errorf("a required run with no URL: %v; want a loud failure", verdict)
+	}
+	if !strings.Contains(msg, dsnEnv) {
+		t.Errorf("the failure message = %q; want it to name %s", msg, dsnEnv)
+	}
+	t.Setenv("AUTODOC_TEST_PG_REQUIRED", "")
+	verdict, msg = gateVerdict()
+	if verdict != gateSkip || !strings.Contains(msg, dsnEnv) {
+		t.Errorf("without the requirement: %v (%q); want a clean skip naming the variable", verdict, msg)
+	}
+}
+
+// a gate verdict: pass with a URL, skip without one when not required, fail without one when
+// required. The message names the variable in every case, so a red log says what was missing.
+type gateResult int
+
+const (
+	gatePass gateResult = iota
+	gateSkip
+	gateFail
+)
+
+func gateVerdict() (gateResult, string) {
+	dsn := os.Getenv(dsnEnv)
+	if dsn == "" {
+		if os.Getenv("AUTODOC_TEST_PG_REQUIRED") == "1" {
+			return gateFail, fmt.Sprintf("%s is not set: the Postgres cells are required here (AUTODOC_TEST_PG_REQUIRED=1) and cannot skip", dsnEnv)
+		}
+		return gateSkip, dsnEnv + " is not set: pgstore's cells need a PostgreSQL with pgvector"
+	}
+	return gatePass, dsn
+}
+
 // dsnBase is the admin connection a scratch database is made through, with the DSN the cells run
 // against. When AUTODOC_TEST_PG_REQUIRED is set and the URL is missing, the cells must fail loudly
 // rather than skip: a runner that names no database has lost its service, and a silent skip turns
 // a required gate into a green lie.
 func dsnBase(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv(dsnEnv)
-	if dsn == "" {
-		if os.Getenv("AUTODOC_TEST_PG_REQUIRED") == "1" {
-			t.Fatalf("%s is not set: the Postgres cells are required here (AUTODOC_TEST_PG_REQUIRED=1) and cannot skip", dsnEnv)
-		}
-		t.Skip(dsnEnv + " is not set: pgstore's cells need a PostgreSQL with pgvector")
+	verdict, msg := gateVerdict()
+	switch verdict {
+	case gatePass:
+		return msg
+	case gateSkip:
+		t.Skip(msg)
+	default:
+		t.Fatal(msg)
 	}
-	return dsn
+	return ""
 }
 
 // schemaDSN is dsn with its connection pointed at schema: the tables and the rag_english
