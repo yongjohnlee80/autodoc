@@ -54,6 +54,9 @@ type Session struct {
 	// beforeCall, when set (tests only), runs on the worker before each call: the seam that holds
 	// one answer back while a later one lands
 	beforeCall func(method string, params []any)
+	// afterCall, when set (tests only), runs on the worker after each call, before its answer is
+	// handed back: the seam that holds an answer already read while the page moves on
+	afterCall func(method string)
 
 	mu      sync.Mutex
 	client  *golibrpc.Client
@@ -277,7 +280,11 @@ func (s *Session) Call(ctx context.Context, method string, params ...any) (any, 
 	if s.beforeCall != nil {
 		s.beforeCall(method, params)
 	}
-	return cli.Call(ctx, method, params...)
+	res, err := cli.Call(ctx, method, params...)
+	if s.afterCall != nil {
+		s.afterCall(method)
+	}
+	return res, err
 }
 
 // Gen is the connection's generation.
