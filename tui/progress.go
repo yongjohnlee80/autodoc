@@ -212,6 +212,7 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 		h.relistInExplorer(h.ws)
 	}
 	h.showSemantic()
+	h.syncStages(false) // a search a model's change affects is refreshed or cleared above
 	h.publishStatus()
 	h.spinWhileEmbedding()
 }

@@ -66,11 +66,15 @@ func (h *Host) searchLive(q string) {
 		hits           []hit
 		mode, semantic string
 		ranked         string // the title's note of the hits' order (rankedTitle)
-		rankLine       string // the ranker line's say, when the answer ordered or failed to (searchRankedLine)
+		rankedBy       string // the model that ordered them, "" when none did
 		err            error
 	}
+	opts := map[string]any{"limit": int64(100)}
+	if stages := h.stageBoxes().stages(); stages != nil {
+		opts["stages"] = stages
+	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(queryCtx, "search.query", ws, q, map[string]any{"limit": int64(100)})
+		res, err := h.call(queryCtx, "search.query", ws, q, opts)
 		if err != nil {
 			return answer{err: err}
 		}
@@ -83,8 +87,12 @@ func (h *Host) searchLive(q string) {
 			out = append(out, hit{path: str(hm, "path"), breadcrumb: str(hm, "breadcrumb"), byteStart: int(start), relevance: rel,
 				hold: str(hm, "hold")})
 		}
-		return answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic"), ranked: rankedTitle(asMap(m["rank"])),
-			rankLine: searchRankedLine(asMap(m["rank"]))}
+		rk := asMap(m["rank"])
+		a := answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic"), ranked: rankedTitle(rk)}
+		if str(rk, "state") == "ready" {
+			a.rankedBy = str(rk, "model")
+		}
+		return a
 	}, func(a answer) {
 		if seq != h.searchSeq || ep != h.epoch {
 			return
@@ -134,10 +142,7 @@ func (h *Host) searchLive(q string) {
 		h.hits.Reset(hitRows(a.hits))
 		// the order first: a narrow pane keeps what is read first
 		h.hitsRanked = a.ranked
-		if a.rankLine != "" {
-			h.searchRankerAnswered = true
-			h.setSearchRanker(a.rankLine)
-		}
+		h.rankedBy(a.rankedBy)
 		h.set("App.hitsTitle", fmt.Sprintf("hits (%d)%s · %s · semantic %s", len(a.hits), a.ranked, a.mode, a.semantic))
 		if len(a.hits) > 0 {
 			h.previewHit(0)
@@ -207,9 +212,8 @@ func termsOf(q string) []string {
 // openSearch opens the search picker, the last query still in it.
 func (h *Host) openSearch() {
 	h.searchOpen = true
-	h.searchRankerAnswered = false
 	h.open("searchPicker")
-	h.loadSearchRanker()
+	h.loadStageRanker(false)
 	h.refreshSearch()
 }
 

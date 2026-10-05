@@ -169,6 +169,9 @@ func (h *Host) applyEvents(events []peerEvent) {
 	if reranked && h.aiTab == rankerTab {
 		h.loadRankers()
 	}
+	if reranked {
+		h.loadStageRanker(true)
+	}
 	if relist {
 		h.loadWorkspaces()
 	}

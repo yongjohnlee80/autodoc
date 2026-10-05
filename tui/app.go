@@ -135,8 +135,10 @@ type Host struct {
 	rankerCursor                  int
 	rankerSeq                     uint64
 	hitsRanked                    string // the hits' title's note of their order (rankedTitle)
-	searchRankerAnswered          bool   // a search answer has named the ranker since the search opened
-	searchRanker                  string // what the search's ranker line says (setSearchRanker)
+	// the search's stages (stages.go): the ranker in use, who it is and how its box names it ("" for
+	// none), and the stages the boxes last asked for
+	stageRankerID, stageRanker string
+	stagesSent                 string
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)

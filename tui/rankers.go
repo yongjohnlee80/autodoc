@@ -30,80 +30,6 @@ func shortModel(m string) string {
 	return m
 }
 
-// searchRankedLine is what the search's ranker line says after an answer: the model that ordered
-// its hits, or why it could not. Short: the picker's left side is narrow. "" when the answer says nothing of it (no ranker in use, or hits
-// it does not rank: a facet's, or a search with no words), so the line keeps what it said.
-func searchRankedLine(rk map[string]any) string {
-	switch str(rk, "state") {
-	case "ready":
-		return "re-ranked by " + shortModel(str(rk, "model"))
-	case "error":
-		return "not re-ranked: " + str(rk, "error")
-	}
-	return ""
-}
-
-// searchRankerLine is what the search's ranker line says when the search opens, from ranker.list:
-// the ranker in use, a build's own, or none; and, for either, why it is unavailable when it is.
-func searchRankerLine(m map[string]any) string {
-	var line string
-	if s := str(m, "supplied"); s != "" {
-		line = "ranker: " + shortModel(s) + " · build's"
-	} else if active := str(m, "active"); active == "" {
-		return "ranker: none"
-	} else {
-		line = "ranker: " + active
-		for _, x := range asList(m["rankers"]) {
-			r := asMap(x)
-			if str(r, "name") != active {
-				continue
-			}
-			if model := str(r, "model"); model != "" {
-				line += " · " + shortModel(model)
-			} else if str(r, "kind") == "tei" {
-				line += " · TEI"
-			}
-		}
-	}
-	if e := str(m, "error"); e != "" {
-		line += " · unavailable: " + e
-	}
-	return line
-}
-
-// loadSearchRanker names the ranker in use on the search's ranker line when the search opens. A
-// search answered first says more (which model ordered its hits), so this one then keeps quiet.
-func (h *Host) loadSearchRanker() {
-	gen := h.session.Gen()
-	h.setSearchRanker("")
-	type answer struct {
-		line string
-		err  error
-	}
-	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "ranker.list")
-		if err != nil {
-			return answer{err: err}
-		}
-		return answer{line: searchRankerLine(asMap(res))}
-	}, func(a answer) {
-		if gen != h.session.Gen() || !h.searchOpen || h.searchRankerAnswered {
-			return
-		}
-		if a.err != nil {
-			h.setSearchRanker("ranker: " + wireMessage(a.err))
-			return
-		}
-		h.setSearchRanker(a.line)
-	})
-}
-
-// setSearchRanker sets the search's ranker line.
-func (h *Host) setSearchRanker(line string) {
-	h.searchRanker = line
-	h.set("App.searchRanker", line)
-}
-
 // defaultTEIURL is where AutoDoc's TEI playbook (shell/tei/tei-rerank.sh) serves a re-ranker, so a
 // local one is a step away: Add…, TEI, no key, Save, Use.
 const defaultTEIURL = "http://127.0.0.1:18080"
@@ -358,7 +284,7 @@ func (h *Host) rankerChoice(name string, refused func(error) string) {
 			h.notify("search is re-ranked with " + name)
 		}
 		h.loadRankers()
-		h.refreshSearch()
+		h.loadStageRanker(true)
 	})
 }
 
