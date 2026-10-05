@@ -222,7 +222,7 @@ func page(colors palette, body string, diagrams, diagramPage bool) []byte {
 // scheme (http:, mailto:, file:, …), one naming another host (//host/…), a bare #fragment or none.
 func fileURL(base string, destination []byte) (string, bool) {
 	link := string(destination)
-	if link == "" || link[0] == '#' || strings.HasPrefix(link, "//") || hasScheme(link) {
+	if strings.HasPrefix(link, "//") || hasScheme(link) {
 		return "", false
 	}
 	path, rest := link, ""
@@ -230,7 +230,7 @@ func fileURL(base string, destination []byte) (string, bool) {
 		path, rest = link[:i], link[i:]
 	}
 	if path == "" {
-		return "", false
+		return "", false // none, or a bare #fragment or ?query: this page's own
 	}
 	if decoded, err := url.PathUnescape(path); err == nil {
 		path = decoded // an escape that is not one (100%.md) is the file's own name
