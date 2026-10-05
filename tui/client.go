@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -52,6 +53,9 @@ type Session struct {
 	// a Connect that spawns dials it from then on.
 	resolve    func(ctx context.Context) string
 	configured string
+	// storePath, when set, is the store this session must find served: a daemon that answers with
+	// another store's id is refused (StoreMismatchError)
+	storePath string
 	// stateDir, when set, is where restart handoffs are kept (handoff.go); self is this process;
 	// handoffCap bounds how long one Connect waits on handoffs in all, on its own clock
 	stateDir   string
@@ -92,6 +96,20 @@ func (e *MismatchError) Error() string {
 	return fmt.Sprintf("protocol mismatch: this TUI speaks %d, the backend (autodoc %s) %d", e.Client, e.Version, e.Server)
 }
 
+// StoreMismatchError is a daemon answering on the session's socket for another store than the
+// config names: a config that changed its data_dir but kept its socket would otherwise read and
+// write the old store. Nothing is spawned over it; the user stops that daemon or names another
+// socket.
+type StoreMismatchError struct {
+	Addr, StorePath string
+	Served, Wanted  string // store ids; Wanted "" when the config's store does not exist yet
+}
+
+func (e *StoreMismatchError) Error() string {
+	return fmt.Sprintf("the daemon on %s serves another store than %s: stop it (autodoc --call sys.shutdown with its config) or give this config its own socket",
+		e.Addr, e.StorePath)
+}
+
 // NewSession is the session to the daemon on the unix socket addr. spawn, when not nil, starts the
 // daemon once when nothing answers.
 func NewSession(addr string, spawn func() (string, error)) *Session {
@@ -123,7 +141,25 @@ func (s *Session) UseResolver(configured string, resolve func(ctx context.Contex
 // the configured socket, or another config's, when that daemon's lease-info names it and it answers
 // as this store's daemon.
 func (s *Session) ForStore(configured, storePath string) *Session {
+	s.storePath = storePath
 	return s.UseResolver(configured, func(ctx context.Context) string { return endpoint.Holder(ctx, storePath, configured) })
+}
+
+// checkStore refuses a daemon that serves another store than the session's (ForStore). A daemon
+// too old to say its store_id is let through: nothing can be checked.
+func (s *Session) checkStore(hello map[string]any) error {
+	if s.storePath == "" {
+		return nil
+	}
+	served, _ := hello["store_id"].(string)
+	if served == "" {
+		return nil
+	}
+	wanted, _ := store.Identity(s.storePath)
+	if served == wanted {
+		return nil
+	}
+	return &StoreMismatchError{Addr: s.address(), StorePath: s.storePath, Served: served, Wanted: wanted}
 }
 
 // UseHandoffs keeps restart handoffs in stateDir, the daemon's state directory: Connect waits on
@@ -239,6 +275,10 @@ func (s *Session) Connect(ctx context.Context) error {
 	if sp, ok := m["server_protocol"].(int64); ok && sp != rpc.Protocol {
 		_ = cli.Close()
 		return s.mismatch(ctx)
+	}
+	if err := s.checkStore(m); err != nil {
+		_ = cli.Close()
+		return err
 	}
 	v, _ := m["version"].(string)
 	pid, _ := m["pid"].(int64)

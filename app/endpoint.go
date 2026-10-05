@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
+	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
 
@@ -16,7 +19,8 @@ import (
 // config's socket, or the socket of the daemon already serving this config's store (its
 // lease-info, confirmed by a probe). With ensure it first makes sure a daemon answers, starting one
 // through the same Session.Connect the TUI and --call use, restart handoffs and all; a daemon of
-// another protocol answers too, and the client's own hello finds the mismatch.
+// another protocol answers too, and the client's own hello finds the mismatch. A daemon that
+// answers for another store is refused either way (tui.StoreMismatchError).
 func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out io.Writer) error {
 	if configPath == "" {
 		var err error
@@ -37,6 +41,18 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 		return err
 	}
 	addr := endpoint.Holder(ctx, storePath, sock)
+	if !ensure {
+		// what answers on the socket must be this store's daemon: a config that changed its
+		// data_dir but kept its socket would otherwise send its client to the old store
+		probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		info, perr := rpc.Probe(probeCtx, "unix", addr)
+		cancel()
+		if perr == nil && info.StoreID != "" {
+			if wanted, _ := store.Identity(storePath); info.StoreID != wanted {
+				return &tui.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
+			}
+		}
+	}
 	if ensure {
 		stateDir, err := cfg.Server.StateDirPath()
 		if err != nil {
