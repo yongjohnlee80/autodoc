@@ -175,9 +175,9 @@ func TestARegisteredPageReadsByTheRegistrationsWhenTheyCome(t *testing.T) {
 	r.typeOnPage(t, "typed ")
 }
 
-// TestAReconnectReadsThePageByTheNewBuild: after a reconnect to a build without the .go chunker, a
-// .go file opened before that build's registrations answer reads as the last daemon's (plain text);
-// when they come, the page reads it as the new build does: Markdown, its "# " line a heading.
+// TestAReconnectReadsThePageByTheNewBuild: a .go file open over a reconnect to a build without the
+// .go chunker reads as the last daemon's (plain text) until that build's registrations answer; when
+// they come, the page reads it as the new build does: Markdown, its "# " line a heading.
 func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 	sock := filepath.Join(shortDir(t), "s.sock")
 	pro := startDaemonWith(t, sock, map[string][]string{"kb": {"a.go", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}, version: "v-pro"})
@@ -203,8 +203,9 @@ func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 			return r.h.connected && r.h.session.Version() == "v-community" && r.h.entered && len(r.h.filesAll) > 0
 		})
 	})
-	r.h.p.Post(func() { r.h.openPath("a.go") })
-	r.waitFile(t, "a.go")
+	if f := r.file(); !f.open || f.path != "a.go" {
+		t.Fatalf("the reconnect closed the page: %+v", f)
+	}
 	if asked.Load() != 2 || r.headings() != 0 {
 		t.Fatalf("before the new build's registrations: %d asked, %d headings; want 2 and the last build's reading", asked.Load(), r.headings())
 	}

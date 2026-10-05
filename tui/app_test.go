@@ -91,6 +91,9 @@ type daemonOpts struct {
 	goChunker search.Chunker
 	// goFiles admits .go files, whether or not it has a chunker for them
 	goFiles bool
+	// roots, when one names a workspace, is that workspace's files as another daemon left them: the
+	// same daemon after a restart. Its notes are not written again.
+	roots map[string]*memfs.FS
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -147,9 +150,12 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		}
 	}
 	for _, name := range sortedKeys(workspaces) {
-		mem := memfs.New()
-		var fsys vfs.FS = mem
 		wsName := strings.TrimSuffix(name, "!")
+		mem, kept := o.roots[wsName]
+		if !kept {
+			mem = memfs.New()
+		}
+		var fsys vfs.FS = mem
 		if wsName != name {
 			fsys = committing{mem}
 		}
@@ -159,7 +165,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		}
 		d.fs[wsName] = mem
 		notes := workspaces[name]
-		for i := 0; i < len(notes); i += 2 {
+		for i := 0; i < len(notes) && !kept; i += 2 {
 			if dir := filepath.Dir(notes[i]); dir != "." {
 				_ = mem.MkdirAll(ctx, dir)
 			}

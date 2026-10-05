@@ -252,7 +252,10 @@ semantic search returns; a search already open refreshes its hits without anothe
 
 A save writes only over the version the file was opened at. If the file changed on disk since, the
 TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or
-quitting over unsaved changes asks first, too.
+quitting over unsaved changes asks first, too. A lost connection loses nothing: the open file stays
+on the page through the reconnect, unsaved changes and cursor as they were. It is read again if it
+changed on disk meanwhile and has no unsaved changes; if it is gone, closing it asks first; if its
+workspace is no longer served, its unsaved text stays as the untitled draft.
 
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
