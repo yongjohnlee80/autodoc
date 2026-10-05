@@ -88,6 +88,39 @@ jobs:
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
 
+  # The Lua side (lua/autodoc/): the suites under tests/, against a daemon built from this checkout,
+  # in a pinned Neovim with a pinned auto-core.nvim (its hard dependency).
+  lua:
+    runs-on: ubuntu-latest
+    env:
+      # auto-core main at 132d27a; bump deliberately with a compatibility check (to the release that
+      # carries auto-core.kb once it is out).
+      AUTO_CORE_SHA: "132d27a"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: install neovim
+        env:
+          # The version the suites were verified against, by its SHA-256: a release asset can be
+          # replaced under the same tag, so the tag alone is not reproducible.
+          NVIM_VERSION: "v0.12.2"
+          NVIM_SHA256: "31cf85945cb600d96cdf69f88bc68bec814acbff50863c5546adef3a1bcef260"
+        run: |
+          curl -fsSL -o /tmp/nvim.tar.gz \
+            "https://github.com/neovim/neovim/releases/download/$NVIM_VERSION/nvim-linux-x86_64.tar.gz"
+          echo "$NVIM_SHA256  /tmp/nvim.tar.gz" | sha256sum -c -
+          sudo tar -C /opt -xzf /tmp/nvim.tar.gz
+          echo "/opt/nvim-linux-x86_64/bin" >> "$GITHUB_PATH"
+      - name: fetch auto-core.nvim
+        run: |
+          git clone https://github.com/yongjohnlee80/auto-core.nvim "$RUNNER_TEMP/auto-core.nvim"
+          git -C "$RUNNER_TEMP/auto-core.nvim" checkout "$AUTO_CORE_SHA"
+          echo "AUTODOC_TEST_AUTOCORE=$RUNNER_TEMP/auto-core.nvim" >> "$GITHUB_ENV"
+      - name: lua suites
+        run: ./tests/run-all.sh
+
   # macOS watches workspace roots with FSEvents through cgo (golib vfs/local):
   # the follower's native watch, and the whole suite, on a Mac.
   macos:
