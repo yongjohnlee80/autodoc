@@ -715,6 +715,8 @@ section("[11] user commands from setup(); keys only with keys = true", function(
   ok("keys = true maps <leader>m1", vim.fn.maparg("<leader>m1", "n") ~= "")
   ok("keys = true maps <leader>mA and <leader>mf",
     vim.fn.maparg("<leader>mA", "n") ~= "" and vim.fn.maparg("<leader>mf", "n") ~= "")
+  local mb = vim.fn.maparg("<leader>mb", "n", false, true)
+  ok("keys = true maps <leader>mb to the browser, as md-harpoon did", (mb.desc or ""):find("browser", 1, true) ~= nil, vim.inspect(mb))
   P.teardown()
   ok("teardown removes the keys", vim.fn.maparg("<leader>m1", "n") == "")
   ok("teardown removes the commands", vim.api.nvim_get_commands({}).AutodocPreviewFocus == nil)
