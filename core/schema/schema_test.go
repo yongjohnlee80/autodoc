@@ -2,6 +2,7 @@ package schema
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,7 +72,7 @@ func TestParseErrorsAreLineAware(t *testing.T) {
 	}{
 		{"malformed yaml", "version: 1\nfrontmatter:\n  a: [unclosed\n", 4, ""}, // where the parser finds the end
 		{"no version", "frontmatter: {}\n", 1, "version"},
-		{"wrong version", "version: 2\nfrontmatter: {}\n", 1, "version must be 1"},
+		{"wrong version", "version: 3\nfrontmatter: {}\n", 1, "version must be 1 or 2"},
 		{"unknown top key", "version: 1\nfields: {}\n", 2, `unknown key "fields"`},
 		{"unknown type", "version: 1\nfrontmatter:\n  a:\n    type: text\n", 4, "type must be one of"},
 		{"list item list", "version: 1\nfrontmatter:\n  a: {type: list, item_type: list}\n", 3, "item_type"},
@@ -249,5 +250,221 @@ func TestFacetValueReadsTypedText(t *testing.T) {
 		if _, err := s.FacetValue(bad[0], bad[1]); err == nil {
 			t.Errorf("FacetValue(%s, %s) accepted", bad[0], bad[1])
 		}
+	}
+}
+
+const kbSchemaV2 = `version: 2
+discriminator: type
+common:
+  type:
+    type: string
+    required: true
+  title:
+    type: string
+  status:
+    type: string
+    enum: [draft, proposed, accepted, approved, rejected]
+    default: draft
+  tags:
+    type: list
+types:
+  adr:
+    number:
+      type: string
+      required: true
+    status:
+      type: string
+      enum: [proposed, accepted]
+      default: proposed
+  review:
+    reviewer:
+      type: string
+      required: true
+    verdict:
+      type: string
+      enum: [approved, rejected]
+      required: true
+    status:
+      type: string
+      required: true
+  note:
+`
+
+// A version 2 schema's Fields are the union of common and the types, each once, in the schema's
+// order: what the indexer facets and the query filters by.
+func TestParseV2FieldsAreTheUnion(t *testing.T) {
+	s := mustParse(t, kbSchemaV2)
+	if s.Version != 2 || s.Discriminator != "type" {
+		t.Fatalf("version %d, discriminator %q", s.Version, s.Discriminator)
+	}
+	var names []string
+	for _, f := range s.Fields {
+		names = append(names, f.Name)
+	}
+	if want := []string{"type", "title", "status", "tags", "number", "reviewer", "verdict"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("fields = %v, want %v", names, want)
+	}
+	status, _ := s.Field("status")
+	if status.Line != 9 || len(status.Enum) != 5 {
+		t.Fatalf("status = %+v, want common's declaration", status)
+	}
+	for field, text := range map[string]string{"verdict": "approved", "number": "7", "type": "adr"} {
+		if v, err := s.FacetValue(field, text); err != nil || v != text {
+			t.Errorf("FacetValue(%s, %s) = %q, %v", field, text, v, err)
+		}
+	}
+	if v1 := mustParse(t, kbSchema); v1.Version != 1 || v1.Discriminator != "" {
+		t.Fatalf("a version 1 schema reads as version %d, discriminator %q", v1.Version, v1.Discriminator)
+	}
+}
+
+// A document is checked against common merged with its type: a type adds fields, narrows a common
+// field's enum, makes it required or gives it its own default; a type the schema does not name is
+// diagnosed and checked against common alone.
+func TestValidateV2ByType(t *testing.T) {
+	s := mustParse(t, kbSchemaV2)
+	cases := []struct {
+		name, fm string
+		rules    []string
+		facets   []Facet
+	}{
+		{"review without verdict", "type: review\nreviewer: kim\nstatus: draft\n", []string{"verdict:required"},
+			[]Facet{{"type", "review"}, {"reviewer", "kim"}, {"status", "draft"}}},
+		{"adr without verdict", "type: adr\nnumber: '7'\n", nil,
+			[]Facet{{"type", "adr"}, {"number", "7"}, {"status", "proposed"}}}, // the adr's own default
+		{"review with every field", "type: review\nreviewer: kim\nverdict: approved\nstatus: approved\n", nil,
+			[]Facet{{"type", "review"}, {"reviewer", "kim"}, {"verdict", "approved"}, {"status", "approved"}}},
+		{"narrowed enum", "type: adr\nnumber: '7'\nstatus: approved\n", []string{"status:enum"},
+			[]Facet{{"type", "adr"}, {"number", "7"}}},
+		{"common's enum where the type has none", "type: note\nstatus: approved\n", nil,
+			[]Facet{{"type", "note"}, {"status", "approved"}}},
+		{"required in the type", "type: review\nreviewer: kim\nverdict: rejected\n", []string{"status:required"},
+			[]Facet{{"type", "review"}, {"reviewer", "kim"}, {"verdict", "rejected"}}},
+		{"common's default", "type: note\n", nil, []Facet{{"type", "note"}, {"status", "draft"}}},
+		{"unknown type", "type: memo\nstatus: bogus\n", []string{"type:unknown_type", "status:enum"},
+			[]Facet{{"type", "memo"}}}, // common alone: no number or verdict required, common's enum checked
+		{"no type", "title: x\n", []string{"type:required"}, []Facet{{"title", "x"}, {"status", "draft"}}},
+		{"a type that is not a string", "type: 7\n", []string{"type:type"}, []Facet{{"status", "draft"}}},
+		{"another type's field", "type: adr\nnumber: '7'\nverdict: approved\n", nil,
+			[]Facet{{"type", "adr"}, {"number", "7"}, {"status", "proposed"}}}, // not an adr's: no facet
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := s.ValidateFile(note(c.fm))
+			if got := rules(r); !reflect.DeepEqual(got, c.rules) {
+				t.Errorf("diagnostics = %+v, want %v", r.Diagnostics, c.rules)
+			}
+			if !reflect.DeepEqual(r.Facets, c.facets) {
+				t.Errorf("facets = %v\nwant     %v", r.Facets, c.facets)
+			}
+		})
+	}
+	r := s.ValidateFile(note("type: memo\n"))
+	if d := r.Diagnostics[0]; d.Line != 2 || d.Message != `unknown type "memo"` {
+		t.Errorf("unknown type = %+v, want line 2, unknown type \"memo\"", d)
+	}
+}
+
+// strict: true reports what the document's own type does not declare: a review's field on an adr,
+// not on a review; a document of no known type is checked against common.
+func TestValidateV2StrictPerType(t *testing.T) {
+	s := mustParse(t, "strict: true\n"+kbSchemaV2)
+	cases := []struct {
+		name, fm string
+		rules    []string
+	}{
+		{"a review's field on an adr", "type: adr\nnumber: '7'\nverdict: approved\n", []string{"verdict:unknown"}},
+		{"on a review", "type: review\nreviewer: kim\nverdict: approved\nstatus: draft\n", nil},
+		{"an adr's field on a note", "type: note\nnumber: '7'\n", []string{"number:unknown"}},
+		{"on a memo", "type: memo\nverdict: approved\n", []string{"type:unknown_type", "verdict:unknown"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := rules(s.ValidateFile(note(c.fm))); !reflect.DeepEqual(got, c.rules) {
+				t.Errorf("diagnostics = %v, want %v", got, c.rules)
+			}
+		})
+	}
+	r := s.ValidateFile(note("type: adr\nnumber: '7'\nverdict: approved\n"))
+	if d := r.Diagnostics[0]; d.Line != 4 || !strings.Contains(d.Message, `type "adr"`) {
+		t.Errorf("strict = %+v, want line 4 naming type \"adr\"", d)
+	}
+	if loose := mustParse(t, kbSchemaV2); len(loose.ValidateFile(note("type: adr\nnumber: '7'\nverdict: x\n")).Diagnostics) != 0 {
+		t.Error("a loose schema reported another type's field")
+	}
+}
+
+// A type that makes a field required may narrow its enum past common's default: a required field
+// is written, so common's default never answers for it.
+func TestParseV2RequiredDropsCommonsDefault(t *testing.T) {
+	s := mustParse(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string}\n  status: {type: string, default: draft}\n"+
+		"types:\n  review:\n    status: {type: string, enum: [approved], required: true}\n")
+	if got := rules(s.ValidateFile(note("type: review\n"))); !reflect.DeepEqual(got, []string{"status:required"}) {
+		t.Errorf("a review without status = %v, want status:required", got)
+	}
+	r := s.ValidateFile(note("type: memo\n"))
+	if !reflect.DeepEqual(r.Facets, []Facet{{"type", "memo"}, {"status", "draft"}}) {
+		t.Errorf("a memo's facets = %v, want common's default", r.Facets)
+	}
+}
+
+// A version 2 schema that is not a valid one is refused, with its line, as a version 1 schema is.
+func TestParseV2ErrorsAreLineAware(t *testing.T) {
+	const head = "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, enum: [adr, review]}\n  status: {type: string, enum: [a, b], required: true}\n  n: {type: integer, default: 1, enum: [1, 2]}\n"
+	cases := []struct {
+		name, src string
+		line      int
+		msg       string
+	}{
+		{"conflicting types across types", head + "types:\n  adr:\n    x: {type: string}\n  review:\n    x: {type: integer}\n", 11,
+			`field "x": types.review declares it integer, but line 9 declares it string`},
+		{"a type changes common's type", head + "types:\n  adr:\n    status: {type: integer}\n", 9,
+			`field "status": types.adr declares it integer, but line 5 declares it string`},
+		{"a type changes a list's item type", "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string}\n  tags: {type: list}\ntypes:\n  adr:\n    tags: {type: list, item_type: integer}\n", 8,
+			"declares it list of integer, but line 5 declares it list of string"},
+		{"a type widens an enum", head + "types:\n  adr:\n    status: {type: string, enum: [a, c]}\n", 9, `enum value "c" is not one of common's enum`},
+		{"a type makes a required field optional", head + "types:\n  adr:\n    status: {type: string, required: false}\n", 9, "cannot make a field common requires optional"},
+		{"a type defaults a required field", head + "types:\n  adr:\n    status: {type: string, default: a}\n", 9, "a required field has no default"},
+		{"a narrowed enum leaves out the default", head + "types:\n  adr:\n    n: {type: integer, enum: [2]}\n", 9, `leaves out its default "1"`},
+		{"a type outside the discriminator's enum", head + "types:\n  memo:\n", 8, `type "memo" is not one of type's enum`},
+		{"a type declared twice", head + "types:\n  adr:\n  adr:\n", 9, `type "adr" is declared twice`},
+		{"a field declared twice in a type", head + "types:\n  adr:\n    x: {type: string}\n    x: {type: string}\n", 10, `field "x" is declared twice`},
+		{"no discriminator", "version: 2\ncommon:\n  type: {type: string}\n", 1, "needs a discriminator"},
+		{"no common", "version: 2\ndiscriminator: type\n", 1, "needs a common mapping"},
+		{"discriminator not in common", "version: 2\ndiscriminator: kind\ncommon:\n  type: {type: string}\n", 2, `"kind" must be a field of common`},
+		{"discriminator not a string", "version: 2\ndiscriminator: n\ncommon:\n  n: {type: integer}\n", 2, "must be a string field, not integer"},
+		{"types not a mapping", head + "types: [adr]\n", 7, "types must be a mapping"},
+		{"frontmatter in version 2", "version: 2\nfrontmatter: {}\n", 2, "under common and types, not frontmatter"},
+		{"unknown top key", "version: 2\nfields: {}\n", 2, `unknown key "fields"`},
+		{"a bad field in a type", head + "types:\n  adr:\n    x: {type: text}\n", 9, "type must be one of"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse([]byte(c.src))
+			var se *Error
+			if !errors.As(err, &se) {
+				t.Fatalf("err = %v, want a *schema.Error", err)
+			}
+			if se.Line != c.line {
+				t.Errorf("line = %d, want %d (%v)", se.Line, c.line, err)
+			}
+			if !strings.Contains(se.Msg, c.msg) {
+				t.Errorf("msg = %q, want it to contain %q", se.Msg, c.msg)
+			}
+		})
+	}
+}
+
+// MaxFields bounds every declaration in a version 2 schema, common's and the types' together.
+func TestParseV2CountsEveryDeclaration(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("version: 2\ndiscriminator: type\ncommon:\n  type: {type: string}\ntypes:\n")
+	for i := range MaxFields {
+		fmt.Fprintf(&b, "  t%d:\n    f%d: {type: string}\n", i, i)
+	}
+	_, err := Parse([]byte(b.String()))
+	var se *Error
+	if !errors.As(err, &se) || !strings.Contains(se.Msg, fmt.Sprintf("more than %d fields", MaxFields)) {
+		t.Fatalf("err = %v, want more than %d fields", err, MaxFields)
 	}
 }

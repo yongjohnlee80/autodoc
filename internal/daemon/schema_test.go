@@ -141,6 +141,34 @@ func TestSchemaPathBeforeItsFile(t *testing.T) {
 	})
 }
 
+// workspace.set_schema loads a version 2 schema as it does version 1: its fields are every type's,
+// and a filter by one type's field finds that type's files.
+func TestSchemaV2Loads(t *testing.T) {
+	m, _ := open(t)
+	root := t.TempDir()
+	for p, content := range map[string]string{
+		"a.md":        "---\ntype: review\nverdict: approved\n---\nalpha\n",
+		"b.md":        "---\ntype: adr\n---\nalpha\n",
+		"schema.yaml": "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string}\ntypes:\n  review:\n    verdict: {type: string}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, p), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, m, "kb", 2)
+	st, err := m.SetSchema(context.Background(), "kb", "schema.yaml")
+	if err != nil || !st.Active || st.Fields != 2 || st.Err != "" {
+		t.Fatalf("SetSchema = %+v, %v", st, err)
+	}
+	eventually(t, "verdict:approved to find a.md", func() bool {
+		got, err := searchPaths(t, m, "kb", "alpha verdict:approved")
+		return err == nil && reflect.DeepEqual(got, []string{"a.md"})
+	})
+}
+
 func mustID(t *testing.T, m *Workspaces, name string) int64 {
 	t.Helper()
 	m.mu.Lock()
