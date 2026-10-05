@@ -460,6 +460,29 @@ do
   ok("A7: the validator catches a new broken internal reference", r11 ~= nil and r12 == nil and tostring(e12):find("new broken reference") ~= nil, e12)
 end
 
+section("[E] a mention of an empty folder the migration removes")
+do
+  -- ADR 1791209946's own table mentions `shared/agents/`, an empty folder the migration removes: it
+  -- was planned "unchanged" (map_dir is vacuously true of a folder with no files), so the apply's
+  -- validation found it broken and rolled back
+  local E = tmp .. "/kb-e"
+  build_fixture(E, nil)
+  util.mkdirp(E .. "/shared/agents/lector/reviews")
+  write(E, "shared/conventions/folders.md", "# Folders\n\nThe empty `shared/agents/` folder is removed.\n")
+  local r1, e1 = dry(E, nil)
+  ok("E1: the dry run plans it", r1 ~= nil, e1)
+  local rep = r1 and r1.plan.reported.removed_dirs or {}
+  ok("E2: the mention is reported as a removed folder", #rep == 1 and rep[1].old == "shared/agents/", vim.inspect(rep))
+  local rw = 0
+  for _, x in ipairs(r1 and r1.plan.rewrites or {}) do if x.old == "shared/agents/" then rw = rw + 1 end end
+  ok("E3: …and not rewritten", rw == 0)
+  local r2, e2 = apply(E, nil)
+  ok("E4: the apply succeeds", r2 ~= nil, e2)
+  ok("E5: the folder is gone and the mention is left as written",
+    not util.exists(E .. "/shared/agents") and (read(E, "conventions/folders.md") or ""):find("`shared/agents/`", 1, true) ~= nil,
+    read(E, "conventions/folders.md"))
+end
+
 section("[L] symbolic links and other special files are refused")
 do
   local uv = vim.uv

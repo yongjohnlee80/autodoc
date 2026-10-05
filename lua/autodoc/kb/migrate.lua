@@ -308,7 +308,8 @@ function M.plan(opts)
     files = {},
     rewrites = {},
     normalize = {},
-    reported = { fenced = {}, unresolved = {}, split_dirs = {}, bare_wikilinks = {}, normalize = {}, unmapped = {} },
+    reported = { fenced = {}, unresolved = {}, split_dirs = {}, removed_dirs = {}, bare_wikilinks = {}, normalize = {},
+      unmapped = {} },
     collisions = {},
     removed_dirs = {},
     created_dirs = {},
@@ -460,8 +461,20 @@ function M.plan(opts)
     counts[k] = (counts[k] or 0) + 1
   end
 
+  ---vanishes is true for a directory that holds no file now and that the migration removes (an
+  ---empty folder under a source root): a reference to it has no destination. map_dir would say
+  ---"everything in it goes to itself", which is vacuously true of an empty folder, and the reference
+  ---would be kept as it is, to break when the folder is removed.
+  local function vanishes(d)
+    if not M.SOURCE_ROOTS[d:match("^[^/]+")] or post_view.dirs[d] then return false end
+    for _, f in ipairs(files) do
+      if under(f, d) then return false end
+    end
+    return true
+  end
+
   ---Compute a reference's new text, from new source location nsrc. Returns new_text, target,
-  ---new_target, status ("rewrite", "unchanged", "unresolved", "split-dir", "ignored").
+  ---new_target, status ("rewrite", "unchanged", "unresolved", "split-dir", "removed-dir", "ignored").
   local function plan_ref(r, src, nsrc)
     if r.kind == "none" then return nil, nil, nil, "ignored" end
     if r.kind == "bare" then return nil, nil, nil, "bare" end
@@ -473,6 +486,7 @@ function M.plan(opts)
     local ntarget
     if is_dir then
       local d = target:sub(1, -2)
+      if vanishes(d) then return nil, target, nil, "removed-dir" end
       ntarget = map_dir(d)
       if not ntarget then return nil, target, nil, "split-dir" end
       ntarget = ntarget .. "/"
@@ -567,6 +581,10 @@ function M.plan(opts)
           if r.ctx ~= "fence" then pre_broken[nsrc .. "\0" .. r.old] = true end
         elseif status == "split-dir" then
           table.insert(plan.reported.split_dirs, rec)
+          if r.ctx ~= "fence" then pre_broken[nsrc .. "\0" .. r.old] = true end
+        elseif status == "removed-dir" then
+          -- the folder it names is empty and goes: reported, left as written
+          table.insert(plan.reported.removed_dirs, rec)
           if r.ctx ~= "fence" then pre_broken[nsrc .. "\0" .. r.old] = true end
         elseif status == "bare" then
           local cands = refs.resolve_wiki(f, r.old, pre_view)
@@ -848,6 +866,7 @@ function M.summary(plan)
   p("")
   p("rewrites: ", #plan.rewrites, "  fenced (reported, not rewritten): ", #plan.reported.fenced,
     "  unresolved: ", #plan.reported.unresolved, "  split directories: ", #plan.reported.split_dirs,
+    "  removed (empty) directories: ", #plan.reported.removed_dirs,
     "  unresolved bare wikilinks: ", #plan.reported.bare_wikilinks)
   p("collisions: ", #plan.collisions)
   for _, c in ipairs(plan.collisions) do
