@@ -105,3 +105,15 @@ func TestAViewsReadsFailAsThemselves(t *testing.T) {
 		t.Error("a facet was read in an ended transaction")
 	}
 }
+
+// TestAModelOfUnknownDimensionsReadsAsZero: a model row whose dimensions are not known yet (nil)
+// reads as 0 dimensions, never a nil dereference; a known one reads as itself.
+func TestAModelOfUnknownDimensionsReadsAsZero(t *testing.T) {
+	if got := derefInt(nil); got != 0 {
+		t.Errorf("unknown dimensions read as %d, want 0", got)
+	}
+	d := int64(768)
+	if got := derefInt(&d); got != 768 {
+		t.Errorf("known dimensions read as %d, want 768", got)
+	}
+}
