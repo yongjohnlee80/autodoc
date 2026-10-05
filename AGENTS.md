@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 10, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 11, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step
@@ -79,10 +79,11 @@ The answer:
   "hits": [
     {"path": "adrs/0203.md", "breadcrumb": "ADR 0203 › Storage", "snippet": "…",
      "byte_start": 1204, "byte_end": 2310, "relevance": 0.94, "score": 0.031,
-     "via": ["lexical", "semantic"], "generation": 7, "hold": ""}
+     "via": ["lexical", "semantic", "rank"], "rank_score": 0.87, "generation": 7, "hold": ""}
   ],
   "mode_used": "hybrid",
-  "semantic": "ready"
+  "semantic": "ready",
+  "rank": {"state": "ready", "model": "BAAI/bge-reranker-v2-m3", "error": ""}
 }
 ```
 
@@ -106,6 +107,16 @@ The answer:
   - `off`: no model is in use.
 
   With `off`, `error` or `switching`, rephrase with the exact words the files would use.
+- `rank` says whether a ranker re-read the top hits and ordered them (a second stage, after words
+  and meaning found them):
+  - `ready`: the hits are in the ranker's order; `model` names it, and each hit it scored has a
+    `rank_score` (higher is more relevant; 0 is a score), and `via` includes `"rank"`;
+  - `error`: the ranker did not answer, so the hits are in the order they were found; `error` says
+    why;
+  - `off`: no ranker is in use, or the query had no words to rank by (filters alone).
+
+  A build may answer ranked or not at all: then a search the ranker cannot rank is refused with
+  code -32070, and no hits. Retry later.
 
 ### Complex queries
 
@@ -125,8 +136,8 @@ recur. For a precise one (a name, an error text), search the exact words with `m
 
 ## The other verbs
 
-Every verb but `workspace.*`, `preference.*`, `embedding.*` and `sys.*` takes the workspace's name
-first.
+Every verb but `workspace.*`, `preference.*`, `embedding.*`, `ranker.*` and `sys.*` takes the
+workspace's name first.
 
 | verb | parameters | answers |
 | --- | --- | --- |
@@ -148,11 +159,13 @@ first.
 | `graph.neighborhood` | workspace, path, depth | `{nodes, edges: [{src, dst, kind}]}`: the files within `depth` links |
 | `graph.unresolved` | workspace | `[{src, raw, reason}]`: links that name no file |
 | `sys.hello` | `{protocol, name}` | `{protocol, server, version, pid, addr, client, events}`: `client` is this connection's token, `events` the event log's head |
-| `sys.capabilities` | — | `{databases, registrations}`: what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), and the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build |
+| `ranker.list` | — | `{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}`: the stored rankers (`kind` `tei` or `rerank-api`), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (`""` for none), which is then the one in use |
+| `sys.capabilities` | — | `{databases, registrations, ranker}`: what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build, and `ranker`, `{supplied, model}`: whether the build supplies its own ranker |
 | `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema, database settings (`workspace.databases`, never a connection) or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
 
 Writing files (`doc.write`, `doc.rename`, `doc.remove`), changing workspaces and choosing the
-embedding model are for the user's tools, not an agent's search. Do not call them unless the user
+embedding model or the ranker (`ranker.add`, `update`, `remove`, `use`, `window`) are for the user's
+tools, not an agent's search. Do not call them unless the user
 asks you to change their files through AutoDoc.
 
 ## Errors
@@ -165,4 +178,5 @@ asks you to change their files through AutoDoc.
 | -32065 | not supported here | `mode: "semantic"` with no model in use; search without it |
 | -32067 | the query could not be embedded | retry, or search with `mode: "lexical"` |
 | -32069 | a new model is filling | search with `mode: "auto"` or `"lexical"` |
+| -32070 | the ranker is unavailable, and this build answers ranked results or none | retry later; there is no unranked search on this build |
 | -32020 | protocol mismatch | the daemon is another version: `autodoc --version`, then restart it |
