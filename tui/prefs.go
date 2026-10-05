@@ -82,6 +82,9 @@ type prefs struct {
 	searchStages stageChoice
 	// panelGeo are the explorer's and the links' dragged sizes, by preference name (panelsize.go)
 	panelGeo map[string]int
+	// agents are the agent terminal's profiles, and agentDefault the one SPC ~ opens (agent.go)
+	agents       []agentProfile
+	agentDefault string
 }
 
 func defaultPrefs() prefs {
@@ -163,6 +166,12 @@ func prefsOf(m map[string]any) prefs {
 		}
 	}
 	readTermPrefs(&p, m)
+	if s, ok := str(prefAgentProfiles); ok {
+		p.agents = agentProfilesOf(s)
+	}
+	if s, ok := str(prefAgentDefault); ok {
+		p.agentDefault = s
+	}
 	readPanelPrefs(&p, m)
 	return p
 }

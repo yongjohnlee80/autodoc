@@ -146,6 +146,17 @@ func (h *Host) state() map[string]any {
 		"App.providerModels":         h.providerModels,
 		"App.providerModelsStatus":   "",
 		"App.providerRemoveQuestion": "",
+		// the agent terminal and its profiles (agent.go, agentprofiles.go)
+		"App.agentTitle":          "agent",
+		"App.agentShown":          false,
+		"App.agentEdge":           "center",
+		"App.agentProfiles":       h.agentRows,
+		"App.agentProfilesStatus": "",
+		"App.agentFormTitle":      "",
+		"App.agentFormError":      "",
+		"App.agentName":           "",
+		"App.agentCommand":        "",
+		"App.agentSwitchQuestion": "",
 		// the ranker models (rankers.go)
 		"App.aiTab":                0,
 		"App.aiEmbeddingTab":       true,

@@ -110,7 +110,12 @@ type Host struct {
 	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
 	// opened; whether its closing gives the keyboard back
 	termStarted, termRestore bool
-	termBefore               string
+	// the agent terminal (agent.go): where agents work, and the profile running ("" for none)
+	agentDir, agentRunning string
+	editingAgent           string // the profile the agent form edits, "" adding one
+	switchingAgent         string // the profile the switch question would start
+	agentRows              *tuidecl.ListModel
+	termBefore             string
 
 	// the embedding providers (providers.go)
 	providerList                    []providerRow
@@ -248,6 +253,9 @@ type Options struct {
 	// Registrations are this binary's own (ADR 0216): a daemon reporting a strict subset of them is
 	// offered a restart as this build (registrations.go). The zero value is the community build's.
 	Registrations registrations.Tables
+	// AgentDir is where the agent terminal's agents work, a folder a workspace (agent.go); "" is
+	// one under the system's temporary folder.
+	AgentDir string
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -266,7 +274,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir,
 		awaitExit:      awaitExit,
 		browser:        openDefaultBrowser,
 		picker:         tuidecl.NewListModel("key", "path"),
@@ -276,6 +284,7 @@ func newHost(session *Session, opt Options) *Host {
 		newList:        tuidecl.NewListModel("key", "path"),
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
 		providerModels: tuidecl.NewListModel("key", "name"),
+		agentRows:      tuidecl.NewListModel("key", "default", "name", "command"),
 		rankers:        tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
 		vectors:        tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
 		explorer:       tuidecl.NewTreeListModel("key", "label"),

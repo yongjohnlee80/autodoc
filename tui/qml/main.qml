@@ -117,6 +117,7 @@ Window {
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
             MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
+            MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
@@ -150,6 +151,7 @@ Window {
         Menu {
             title: "&System"
             MenuItem { text: "&AI models…"; onTriggered: App.openAIModels() }
+            MenuItem { text: "A&gent profiles…"; onTriggered: App.openAgentProfiles() }
             MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
         }
         Menu {
@@ -283,6 +285,28 @@ Window {
         }
     }
 
+    // the agent: an AI agent's CLI, as its default profile says, floating over the page; it keeps
+    // running while hidden (agent.go)
+    Drawer {
+        id: agent
+        modal: false
+        edge: App.agentEdge
+        size: App.agentSize
+        length: App.agentLength
+        resizable: true
+        onOpened: App.panelOpened("agent")
+        onClosed: App.panelClosed("agent")
+        onResized: App.panelResized("agent", size, length)
+        Frame {
+            title: App.agentTitle
+            Terminal {
+                id: agentView
+                vimKeys: App.keymapVim
+                onExited: App.agentExited(code)
+            }
+        }
+    }
+
     SearchPicker { id: searchPicker }
     Find { id: findDialog }
     FileOpen { id: fileOpen }
@@ -306,6 +330,9 @@ Window {
     ProviderEdit { id: providerEdit }
     ProviderRemove { id: providerRemove }
     RankerEdit { id: rankerEdit }
+    AgentProfiles { id: agentProfiles }
+    AgentEdit { id: agentEdit }
+    AgentSwitch { id: agentSwitch }
     RankerRemove { id: rankerRemove }
     RankerWindow { id: rankerWindow }
     RestartBackend { id: restartBackend }
