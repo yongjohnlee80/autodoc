@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -190,8 +191,12 @@ func TestServeOpensNothingForAnotherProtocol(t *testing.T) {
 
 // TestAHandlerSlowerThanTheKeysDoesNotOverflowTheLink: more keys than the link's queue holds (1024),
 // sent faster than the Handler takes them, all arrive, in order — Serve's own queue takes them, where
-// the link's would overflow and end the link.
+// the link's would overflow and end the link. On one CPU, as a busy machine is: there the link's
+// reader outruns its dispatcher on any burst larger than its queue, and only the link's
+// backpressure keeps it alive (golib #163); with more, the race is the scheduler's, and the cell
+// would catch a regression only sometimes.
 func TestAHandlerSlowerThanTheKeysDoesNotOverflowTheLink(t *testing.T) {
+	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
 	const n = 3000
 	r := &recorder{keyLag: 200 * time.Microsecond}
 	hs := start(t, r)
