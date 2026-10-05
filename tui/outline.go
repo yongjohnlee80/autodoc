@@ -30,7 +30,10 @@ func (h *Host) outlineKind() kind.Kind {
 	if !h.file.open {
 		return kind.Markdown
 	}
-	return h.kinds.ReadAs(h.file.path, h.textExtensions()) // a derived document's text is Markdown
+	if h.file.derived != "" {
+		return kind.Markdown // a derived document's text
+	}
+	return h.kinds.Of(h.file.path, h.textExtensions())
 }
 
 // refreshOutline outlines the editor's text now, and puts the breadcrumb at the cursor.

@@ -76,15 +76,6 @@ func (r Registrations) Of(p string, text []string) Kind {
 // but its derived text can be read.
 func (r Registrations) Readable(p string) bool { return slices.Contains(r.Derived, Ext(p)) }
 
-// ReadAs is the kind of the text a reader gets for path: a derived document's text is Markdown,
-// and every other path's is its kind.
-func (r Registrations) ReadAs(p string, text []string) Kind {
-	if r.Readable(p) {
-		return Markdown
-	}
-	return r.Of(p, text)
-}
-
 // Label is how a reader names a Pro format's kind: its extension, upper-case, without the dot
 // ("PDF", "DOCX").
 func Label(p string) string { return strings.ToUpper(strings.TrimPrefix(Ext(p), ".")) }
