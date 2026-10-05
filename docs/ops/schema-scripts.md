@@ -121,9 +121,9 @@ set must be dense and paired.
   exactly; an approximate-nearest-neighbour index is a measured follow-up, not in the baseline.
 - **pgvector must be installed in a schema the connection searches** (public, usually). The
   baseline creates the extension only when the database has none.
-- **The cells** run with `AUTODOC_TEST_PGURL` set (or `autodoc-test.sh --target vm43`), each in a
-  scratch database it creates and drops; in CI they run on a service container and are required
-  (`AUTODOC_TEST_PG_REQUIRED=1`), never silently skipped.
+- **The cells** run with `AUTODOC_TEST_PGURL` set, each in a scratch database it creates and
+  drops; in CI they run on a service container and are required (`AUTODOC_TEST_PG_REQUIRED=1`),
+  never silently skipped.
 
 ### A destination that holds the old scripts
 

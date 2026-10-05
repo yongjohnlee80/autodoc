@@ -12,9 +12,9 @@ import (
 )
 
 // dsnEnv names the PostgreSQL (with pgvector) these cells run against: a DSN whose user may create
-// databases, such as VM43's autodb-r3-pg. Each test creates a scratch database of its own there
-// and drops it when it ends. Without it the cells skip, unless AUTODOC_TEST_PG_REQUIRED names a
-// runner whose service the cells must not skip on: then a missing URL fails loudly instead.
+// databases. Each test creates a scratch database of its own there and drops it when it ends.
+// Without it the cells skip, unless AUTODOC_TEST_PG_REQUIRED names a runner whose service the
+// cells must not skip on: then a missing URL fails loudly instead.
 const dsnEnv = "AUTODOC_TEST_PGURL"
 
 // scratch opens a fresh database with pgstore's migrations applied, dropped when t ends.
