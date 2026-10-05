@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -844,6 +845,8 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 		})
 	})
 
+	before := onLoop(r, func() []managedPlugin { return slices.Clone(r.h.managedList) })
+
 	commitPlugin(t, repo, "Echo two", "echo two > built.txt")
 	next := runGit(t, repo, "rev-parse", "--short", "HEAD")
 	i := onLoop(r, func() int {
@@ -873,7 +876,9 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 			return false
 		})
 	})
-	r.h.p.Post(func() { r.h.startUpdatePlugin(i) })
+	// Update again while the row still shows the commit before the update, as it does until the
+	// manager's listing, run off the loop, comes back: up to date all the same.
+	r.h.p.Post(func() { r.h.managedList = before; r.h.startUpdatePlugin(i) })
 	r.waitNotice(t, "echo is up to date at "+next)
 
 	r.h.p.Post(func() { r.h.startRemovePlugin(i) })
