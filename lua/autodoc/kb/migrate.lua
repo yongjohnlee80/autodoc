@@ -1498,12 +1498,21 @@ function M.command(fargs)
   return res
 end
 
----Define the user command (the main plugin calls this from its setup).
+M.FLAGS = { "--apply", "--undo", "--forget", "--keep-edited", "--no-commit", "--out=", "--manifest=", "--id=" }
+M.DESC = "autodoc: migrate a KB to the v2 layout (dry run, --apply, --undo, --forget)"
+
+---complete is the command's completion: the flags starting with what was typed.
+function M.complete(lead)
+  return vim.tbl_filter(function(f) return vim.startswith(f, lead or "") end, M.FLAGS)
+end
+
+---Define :AutodocKbMigrate over this module (the main plugin's setup defines one that loads it
+---only when run).
 function M.register()
   vim.api.nvim_create_user_command("AutodocKbMigrate", function(a) M.command(a.fargs) end, {
     nargs = "*",
-    complete = function() return { "--apply", "--undo", "--forget", "--keep-edited", "--no-commit", "--out=", "--manifest=", "--id=" } end,
-    desc = "AutoDoc: migrate a KB to the v2 layout (dry run, --apply, --undo, --forget)",
+    complete = M.complete,
+    desc = M.DESC,
   })
 end
 

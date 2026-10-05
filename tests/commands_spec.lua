@@ -24,9 +24,11 @@ local host = require("autodoc.views.host")
 
 t.section("setup without keys", function()
   autodoc.setup({ bin = bin, config = cfg })
-  for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect" }) do
+  for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect", "AutodocKbMigrate" }) do
     t.ok(vim.fn.exists(":" .. c) == 2, ":" .. c .. " exists")
   end
+  t.eq(package.loaded["autodoc.kb.migrate"], nil, "the migration's module is not loaded by setup")
+  t.eq(vim.fn.getcompletion("AutodocKbMigrate --ap", "cmdline"), { "--apply" }, ":AutodocKbMigrate completes its flags")
   t.eq(vim.fn.maparg("<leader>fk", "n"), "", "no <leader>fk unless opts.keys")
   t.ok(vim.fn.exists(":AutodocPreviewFind") == 2,
     "the preview's commands are set up too")

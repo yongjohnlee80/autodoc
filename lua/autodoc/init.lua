@@ -11,7 +11,8 @@
 ---  })
 ---
 ---Commands: `:AutodocDrawer` (toggle the kb drawer), `:AutodocSearch [query]` (search the
----selected KB), `:AutodocSelect [workspace]` (choose the KB to search).
+---selected KB), `:AutodocSelect [workspace]` (choose the KB to search), `:AutodocKbMigrate`
+---(move a KB to the v2 layout: a dry run, then --apply / --undo / --forget; autodoc.kb.migrate).
 ---
 ---Default keys (opts.keys = true):
 ---  <leader>fk   search the selected KB (:AutodocSearch)
@@ -64,6 +65,13 @@ local function create_commands()
   vim.api.nvim_create_user_command("AutodocSearch", function(c)
     require("autodoc.picker").open({ query = c.args ~= "" and c.args or nil })
   end, { nargs = "*", desc = "autodoc: search the selected KB" })
+  -- the migration's module is loaded when it runs, not at setup
+  local function migrate() return require("autodoc.kb.migrate") end
+  vim.api.nvim_create_user_command("AutodocKbMigrate", function(c) migrate().command(c.fargs) end, {
+    nargs = "*",
+    complete = function(lead) return migrate().complete(lead) end,
+    desc = "autodoc: migrate a KB to the v2 layout (dry run, --apply, --undo, --forget)",
+  })
   vim.api.nvim_create_user_command("AutodocSelect", function(c) select_command(c.args) end, {
     nargs = "?",
     desc = "autodoc: choose the KB to search",
