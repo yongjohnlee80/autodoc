@@ -63,7 +63,8 @@ func TestUnsavedEditsSurviveAReconnect(t *testing.T) {
 	x := onARestartableDaemon(t, notes)
 	x.r.h.p.Post(func() { x.r.h.openPath("a.md") })
 	x.r.waitFile(t, "a.md")
-	x.r.h.p.Post(func() { x.r.h.editor.SetLine(4, 0) })
+	// On the loop before the keys: they come by the terminal's queue, a Post by another, unordered.
+	onLoop(x.r, func() bool { x.r.h.editor.SetLine(4, 0); return true })
 	x.r.typeOnPage(t, "unsaved ")
 	text, at := x.r.editorText(), x.r.cursor()
 	reads := x.reads.Load()

@@ -167,11 +167,13 @@ func TestTheSettingsDialogSavesEveryField(t *testing.T) {
 	r.s.WaitForText(t, "· kb")
 	r.openSettings(t, "kb", 1)
 	r.s.WaitForText(t, "source database") // the edition offers the databases
-	r.h.p.Post(func() {
+	// Filled on the loop before the keys: they come by the terminal's queue, a Post by another.
+	onLoop(r, func() bool {
 		r.h.fillSettings(settingsForm{name: "docs", root: "/ignored", schema: schema, texts: ".log",
 			include: "**/*.md", exclude: ".git/**", md: 0, txt: 1, yaml: 1, section: "256", policy: 2, provider: 0,
 			dest: 1, destDSN: "postgres://me:pw@db:5432/rag", destSchema: "autodoc", index: 2,
 			src: 2, srcDSN: "/data/labels.db", srcSchema: "main", viewArgs: "LabelGroupID=7"})
+		return true
 	})
 	r.keys(t, tab(), enter()) // into the first field of the tab, and Enter saves
 	r.waitNoticed(t, "docs: saved")
