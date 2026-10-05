@@ -62,6 +62,9 @@ A new workspace-owned table follows the same rule.
 | `embedding_provider` | an embedding provider: kind, base URL, model, and its API key sealed with the keyslot (000002); its context window in tokens (000003) | `id`, `name` |
 | `embedding_usage` | a provider's requests, texts, tokens and failures by day (000002) | `(provider_id, day)` |
 | `embedding_log` | a provider's recent calls, the last 200 kept (000002) | `id` |
+| `ranker` | a ranker model: kind (tei, rerank-api), base URL, model, and its API key sealed with the keyslot (000013) | `id`, `name` |
+| `ranker_usage` | a ranker's requests, texts, tokens and failures by day (000013) | `(ranker_id, day)` |
+| `ranker_log` | a ranker's recent calls, the last 200 kept (000013) | `id` |
 | `preference` | a client's preference, by name: the store's, not a workspace's (000002) | `name` |
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema (ADR 0214) | `(workspace_id, role)` |

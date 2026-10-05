@@ -267,32 +267,50 @@ type CallRecord struct {
 
 // RecordCalls adds calls to a provider's usage by day and to its log, which keeps the last 200.
 func (s *Store) RecordCalls(ctx context.Context, providerID int64, calls []CallRecord) error {
+	return s.recordCalls(ctx, func(t *tables) meterTables { return t.embeddingMeter() }, providerID, calls)
+}
+
+// meterTables are where a model's calls are kept: its usage by day and its log (log names the
+// log's table). An embedding provider's and a ranker's are the same shape in their own tables.
+type meterTables struct {
+	usage *dao.Schema[*Usage, UsageField, noSort, int64]
+	calls *dao.Schema[*LogEntry, LogField, noSort, int64]
+	log   string
+}
+
+func (t *tables) embeddingMeter() meterTables { return meterTables{t.usage, t.calls, "embedding_log"} }
+func (t *tables) rankerMeter() meterTables {
+	return meterTables{t.rankUsage, t.rankCalls, "ranker_log"}
+}
+
+func (s *Store) recordCalls(ctx context.Context, meterOf func(*tables) meterTables, id int64, calls []CallRecord) error {
 	if len(calls) == 0 {
 		return nil
 	}
 	return s.Write(ctx, func(tx *Tx) error {
+		m := meterOf(tx.t)
 		for _, c := range calls {
-			if err := s.addUsage(tx, providerID, c); err != nil {
+			if err := addUsage(tx, m, id, c); err != nil {
 				return err
 			}
-			if _, err := tx.t.calls.On(tx.tx).Set(LogProvider, providerID).Set(LogAt, c.At.Unix()).
+			if _, err := m.calls.On(tx.tx).Set(LogProvider, id).Set(LogAt, c.At.Unix()).
 				Set(LogTexts, int64(c.Texts)).Set(LogTokens, int64(c.Tokens)).Set(LogMillis, c.Millis).
 				Set(LogOutcome, c.Outcome).Insert(); err != nil {
 				return err
 			}
 		}
 		// the oldest beyond the last logKept go
-		old, err := tx.t.calls.On(tx.tx).With(LogProvider, providerID).OrderBy(dao.Desc(ByKey)).
+		old, err := m.calls.On(tx.tx).With(LogProvider, id).OrderBy(dao.Desc(ByKey)).
 			Offset(logKept).Limit(1).Select(LogID)
 		if err != nil || len(old) == 0 {
 			return err
 		}
-		return tx.t.calls.On(tx.tx).With(LogProvider, providerID).
-			WithPredicate(dao.Cmp(dao.T("embedding_log", LogID), dao.OpLte, dao.Int(old[0].ID))).Delete()
+		return m.calls.On(tx.tx).With(LogProvider, id).
+			WithPredicate(dao.Cmp(dao.T(m.log, LogID), dao.OpLte, dao.Int(old[0].ID))).Delete()
 	})
 }
 
-func (s *Store) addUsage(tx *Tx, providerID int64, c CallRecord) error {
+func addUsage(tx *Tx, m meterTables, id int64, c CallRecord) error {
 	day := c.At.UTC().Format(time.DateOnly)
 	var failed, limited int64
 	if c.Failed {
@@ -301,13 +319,13 @@ func (s *Store) addUsage(tx *Tx, providerID int64, c CallRecord) error {
 	if c.Limited {
 		limited = 1
 	}
-	n, err := dao.UpdateAffected(tx.t.usage.On(tx.tx).With(UsageProvider, providerID).With(UsageDay, day).
+	n, err := dao.UpdateAffected(m.usage.On(tx.tx).With(UsageProvider, id).With(UsageDay, day).
 		Set(UsageRequests, dao.Incr(1)).Set(UsageTexts, dao.Incr(int64(c.Texts))).Set(UsageTokens, dao.Incr(int64(c.Tokens))).
 		Set(UsageFailures, dao.Incr(failed)).Set(UsageLimited, dao.Incr(limited)))
 	if err != nil || n > 0 {
 		return err
 	}
-	_, err = tx.t.usage.On(tx.tx).Set(UsageProvider, providerID).Set(UsageDay, day).Set(UsageRequests, int64(1)).
+	_, err = m.usage.On(tx.tx).Set(UsageProvider, id).Set(UsageDay, day).Set(UsageRequests, int64(1)).
 		Set(UsageTexts, int64(c.Texts)).Set(UsageTokens, int64(c.Tokens)).Set(UsageFailures, failed).
 		Set(UsageLimited, limited).Insert()
 	return err
@@ -315,13 +333,22 @@ func (s *Store) addUsage(tx *Tx, providerID int64, c CallRecord) error {
 
 // ProviderUsage is the provider's use by day, the latest first, at most days of them.
 func (s *Store) ProviderUsage(ctx context.Context, name string, days int) ([]Usage, error) {
+	return s.usageOf(ctx, func(t *tables) meterTables { return t.embeddingMeter() }, s.providerID, name, days)
+}
+
+// ProviderLog is the provider's recent calls, the latest first, at most limit of them.
+func (s *Store) ProviderLog(ctx context.Context, name string, limit int) ([]LogEntry, error) {
+	return s.logOf(ctx, func(t *tables) meterTables { return t.embeddingMeter() }, s.providerID, name, limit)
+}
+
+func (s *Store) usageOf(ctx context.Context, meterOf func(*tables) meterTables, idOf func(*Tx, string) (int64, error), name string, days int) ([]Usage, error) {
 	var out []Usage
 	err := s.Read(ctx, func(tx *Tx) error {
-		id, err := s.providerID(tx, name)
+		id, err := idOf(tx, name)
 		if err != nil {
 			return err
 		}
-		rows, err := tx.t.usage.On(tx.tx).With(UsageProvider, id).OrderBy(dao.Desc(ByKey)).Limit(uint64(max(days, 1))).Select()
+		rows, err := meterOf(tx.t).usage.On(tx.tx).With(UsageProvider, id).OrderBy(dao.Desc(ByKey)).Limit(uint64(max(days, 1))).Select()
 		for _, r := range rows {
 			out = append(out, *r)
 		}
@@ -330,15 +357,14 @@ func (s *Store) ProviderUsage(ctx context.Context, name string, days int) ([]Usa
 	return out, err
 }
 
-// ProviderLog is the provider's recent calls, the latest first, at most limit of them.
-func (s *Store) ProviderLog(ctx context.Context, name string, limit int) ([]LogEntry, error) {
+func (s *Store) logOf(ctx context.Context, meterOf func(*tables) meterTables, idOf func(*Tx, string) (int64, error), name string, limit int) ([]LogEntry, error) {
 	var out []LogEntry
 	err := s.Read(ctx, func(tx *Tx) error {
-		id, err := s.providerID(tx, name)
+		id, err := idOf(tx, name)
 		if err != nil {
 			return err
 		}
-		rows, err := tx.t.calls.On(tx.tx).With(LogProvider, id).OrderBy(dao.Desc(ByKey)).Limit(uint64(max(limit, 1))).Select()
+		rows, err := meterOf(tx.t).calls.On(tx.tx).With(LogProvider, id).OrderBy(dao.Desc(ByKey)).Limit(uint64(max(limit, 1))).Select()
 		for _, r := range rows {
 			out = append(out, *r)
 		}
