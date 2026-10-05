@@ -1,0 +1,79 @@
+# autodoc_version: {{autodoc_version}}
+# The KB's one frontmatter schema (ADR 1791209946 §4). Managed by AutoDoc: it is replaced when a
+# newer AutoDoc ships a newer copy, so a KB's own rules go in AGENTS.md, not here.
+# `type` picks the document type; its fields are added to `common`. Diagnostics never block a write.
+version: 2
+strict: false
+discriminator: type
+common:
+  type: {type: string, required: true, enum: [adr, adr-rationale, convention, playbook, reference, synthesis, review, pr, note, about, kb]}
+  status: {type: string, required: true}
+  created: {type: date, required: true}
+  tags: {type: list, required: true}
+  abstract: {type: string, required: true}
+  title: {type: string}
+  updated: {type: date}
+  author: {type: string}
+  sources: {type: list}
+  related: {type: list}
+  supersedes: {type: list}
+  superseded_by: {type: list}
+  amends: {type: list}
+types:
+  adr:
+    status: {type: string, enum: [proposed, accepted, rejected, superseded, deprecated]}
+    number: {type: string, required: true}
+    revision: {type: integer}
+    formerly: {type: string}
+    project: {type: string}
+    repo: {type: string}
+    reviewers: {type: list}
+    decided_by: {type: string}
+  adr-rationale:
+    status: {type: string, enum: [proposed, accepted, rejected, superseded, deprecated]}
+    adr: {type: string, required: true}
+  convention:
+    status: {type: string, enum: [draft, active, retired]}
+    area: {type: string}
+    revision: {type: integer}
+    applies_to: {type: list}
+  playbook:
+    status: {type: string, enum: [draft, active, retired]}
+    area: {type: string}
+    revision: {type: integer}
+  reference:
+    status: {type: string, enum: [active, stale]}
+    kind: {type: string, enum: [glossary, route, source, reference]}
+    source_sha: {type: string}
+    ingested_at: {type: date}
+  synthesis:
+    status: {type: string, enum: [draft, final, superseded]}
+    kind: {type: string, enum: [analysis, investigation, lesson, bug-fix, benchmark, incident, design, evidence, handoff, research]}
+  review:
+    status: {type: string, enum: [in-progress, completed]}
+    reviewer: {type: string, required: true}
+    subject: {type: string, required: true}
+    verdict: {type: string, enum: [approved, approved_with_notes, change_requested, rejected, commented]}
+    round: {type: integer}
+    repo: {type: string}
+    pr: {type: integer}
+    head: {type: string}
+    base: {type: string}
+    adr: {type: string}
+  pr:
+    status: {type: string, enum: [active, closed]}
+    repo: {type: string, required: true}
+    pr: {type: integer, required: true}
+    state: {type: string, enum: [open, merged, closed]}
+    head: {type: string}
+    base: {type: string}
+  note:
+    status: {type: string, enum: [active, done]}
+    kind: {type: string, enum: [task, scratch, incoming, handoff, draft]}
+  about:
+    status: {type: string, enum: [active]}
+  kb:
+    status: {type: string, enum: [active]}
+    kind: {type: string, enum: [agents, rules, operations, readme, pointer]}
+    autodoc_version: {type: string}
+    revision: {type: integer}
