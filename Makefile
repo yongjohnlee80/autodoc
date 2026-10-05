@@ -6,7 +6,7 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 # LDFLAGS instead. CI clones normally and is unaffected.
 export GOFLAGS := -buildvcs=false
 
-.PHONY: build test race vet fmt cover clean
+.PHONY: build test race vet fmt cover test-lua clean
 
 # cgo on macOS only: golib watches the workspace roots with FSEvents there, which needs it (the
 # Command Line Tools). Elsewhere the binary stays static; modernc SQLite needs no cgo.
@@ -32,6 +32,10 @@ fmt:
 cover:
 	go test -count=1 -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | tail -1
+
+# The Lua side's suites (tests/run-all.sh): a daemon built from this checkout, in headless Neovim.
+test-lua:
+	./tests/run-all.sh
 
 clean:
 	rm -rf bin coverage.out
