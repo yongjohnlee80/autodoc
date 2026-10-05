@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/golib/search"
 )
 
 // TestTheStoresReadsFailAsThemselves: a read that fails comes back as an error, from the index's own
@@ -74,5 +76,32 @@ func TestStatusFailsAsItsReads(t *testing.T) {
 	}
 	if err := e.ix.Revalidate(ctx); err == nil || !strings.Contains(err.Error(), "listing outdated documents") {
 		t.Errorf("a revalidation listed the outdated documents with the store closed: %v", err)
+	}
+}
+
+// TestAViewsReadsFailAsThemselves: a view's reads, after its transaction has ended, fail as
+// themselves, never as an empty answer: the semantic state's read of the active model, a
+// document's in-links, and a facet listing, filtered or not.
+func TestAViewsReadsFailAsThemselves(t *testing.T) {
+	ctx := context.Background()
+	e := newEnv(t, Options{Provider: newFake("m", "a")})
+	e.put("a.md", "zebra\n")
+	e.ready()
+	var v *View
+	if err := (searchStore{s: e.store, sem: e.ix.sem}).View(ctx, func(in *View) error { v = in; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	// the transaction is over: every read on it fails
+	if _, err := v.SemanticState(ctx); err == nil {
+		t.Error("the semantic state was read in an ended transaction")
+	}
+	if _, err := v.Signals(ctx, []int64{1}); err == nil {
+		t.Error("the in-links were read in an ended transaction")
+	}
+	if _, err := v.List(ctx, search.Filter{}, 10); err == nil {
+		t.Error("the documents were listed in an ended transaction")
+	}
+	if _, err := v.List(ctx, search.Filter{Facets: map[string][]string{"type": {"adr"}}}, 10); err == nil {
+		t.Error("a facet was read in an ended transaction")
 	}
 }
