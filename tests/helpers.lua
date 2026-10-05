@@ -34,11 +34,11 @@ function M.wait(ms, cond) return vim.wait(ms, cond, 20) end
 
 ---await runs fn(done) and waits for done(...) up to ms; returns its arguments.
 function M.await(ms, fn)
-  local args, finished = nil, false
-  fn(function(...) args, finished = { ... }, true end)
+  local args, n, finished = nil, 0, false
+  fn(function(...) args, n, finished = { ... }, select("#", ...), true end)
   vim.wait(ms, function() return finished end, 20)
   if not finished then return nil, "timed out" end
-  return unpack(args)
+  return unpack(args, 1, n) -- n, not #args: a leading nil (no result, an error) must survive
 end
 
 function M.tmp(...) return table.concat({ assert(os.getenv("AUTODOC_TEST_TMP")), ... }, "/") end
