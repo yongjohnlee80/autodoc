@@ -3,11 +3,12 @@
 # tag and the model; see shell/tei/README.md.
 #
 #   gpu profile: an NVIDIA GPU (needs the NVIDIA Container Toolkit); the tag matches its
-#                compute capability, 120-<version> for Blackwell (RTX 50 series)
+#                compute capability, e.g. 120-<version> for RTX 50 series, 121-<version> for 12.1
 #   cpu profile: any x86_64 machine; slower, and capped in memory
 #
 # The port listens on 127.0.0.1 only. HF_TOKEN is passed through from the caller's environment
-# when set (only gated models need it) and is never written here.
+# when set (only gated models need it). It is not written in this file, but it does end up in the
+# container's environment, readable by anyone who can run docker (docker inspect, compose config).
 name: autodoc-tei
 
 x-tei: &tei

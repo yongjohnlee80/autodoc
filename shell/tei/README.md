@@ -65,6 +65,13 @@ models apart.
 
 `TEI_URL` points `status`, `rank` and `eval` at a TEI that is already running elsewhere.
 
+## Tokens
+
+None of the listed models needs a token. For a gated model, export `HF_TOKEN` before `up`. The
+script and the Compose file never write it down, but Docker passes it into the container's
+environment, so anyone who can run `docker` on the machine can read it (`docker inspect`,
+`docker compose config`). Use a read-only token, and unset it when you're done.
+
 ## Using it from AutoDoc
 
 Once AutoDoc's ranker models are available (System › AI models…, the **Ranker Models** tab), add
