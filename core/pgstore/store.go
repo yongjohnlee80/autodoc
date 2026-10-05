@@ -16,9 +16,10 @@ import (
 //go:embed postgres/*.sql
 var migrations embed.FS
 
-// Ledger is the table dao/deploy records pgstore's applied migrations in, so a database other
-// products also deploy to keeps their ledgers apart.
-const Ledger = "autorag_pgstore_schema_version"
+// Ledger is the table dao/deploy records pgstore's applied migrations in: a destination database
+// other products also deploy to keeps their ledgers apart. It is the same name the local store's
+// destination scripts used, so a destination's existing ledger is still found.
+const Ledger = "autodoc_schema"
 
 // Migrate applies pgstore's pending migrations to conn, in one transaction, and records them.
 func Migrate(ctx context.Context, conn dao.DataConn) error {

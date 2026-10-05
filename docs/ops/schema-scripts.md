@@ -105,17 +105,44 @@ anything runs.
 ## A destination's scripts
 
 A workspace whose destination is Postgres keeps its index in that database, not in the local store
-(ADR 0214). Its tables are `sql/destination/postgres/`, compiled in and applied by golib `dao/deploy`
-to the destination with a ledger of its own, `autodoc_schema`, when the destination is first
-connected. The same rules hold as for the store: a released script never changes, and the set must be
-dense and paired.
+(ADR 0214). Its tables are `core/pgstore/postgres/`, compiled into `core/pgstore` and applied by
+golib `dao/deploy` through `pgstore.Migrate`, with a ledger of its own, `autodoc_schema`
+(`pgstore.Ledger`). The same rules hold as for the store: a released script never changes, and the
+set must be dense and paired.
 
-- **The workspace key is the uid.** Several machines' workspaces may share one destination, so every
-  key starts with `workspace_uid`, the local store's `workspace.uid`, never a local id.
-- **Lexical search** is a generated, weighted `tsvector` on `chunk` with a GIN index: title above
-  breadcrumb and tags, above the body.
-- **Vectors** are pgvector's `vector`. The nearest-neighbour index (HNSW or IVFFlat, cosine) needs a
-  fixed dimension, so it is a partial index per model, made when the model becomes active.
-- **pgvector must be installed in a schema the connection searches** (public, usually). The script
-  creates the extension only when the database has none.
-- **The integration test** runs with `AUTODOC_TEST_PGURL` set, in a schema of its own that it drops.
+- **The tenant is the workspace uid.** Several machines' workspaces share one destination, so
+  every key starts with `tenant` — the local store's `workspace.uid` for an AutoDoc workspace,
+  never a local id, and any tenant string for another importer.
+- **Lexical search** is a generated, weighted `tsvector` on `rag_chunk` with a GIN index: title
+  (class A), breadcrumb (B) and tags (C) above the body (D), stemmed by the `rag_english`
+  configuration the baseline creates (Snowball English, no stop words: every query word stays
+  required).
+- **Vectors** are pgvector's `vector`, keyed `(tenant, model, text_hash)`. Semantic search scans
+  exactly; an approximate-nearest-neighbour index is a measured follow-up, not in the baseline.
+- **pgvector must be installed in a schema the connection searches** (public, usually). The
+  baseline creates the extension only when the database has none.
+- **The cells** run with `AUTODOC_TEST_PGURL` set (or `autodoc-test.sh --target vm43`), each in a
+  scratch database it creates and drops; in CI they run on a service container and are required
+  (`AUTODOC_TEST_PG_REQUIRED=1`), never silently skipped.
+
+### A destination that holds the old scripts
+
+Before pgstore, a destination's tables were `sql/destination/postgres/` (000001 and 000002),
+applied by no production code — only by a test. Those scripts are deleted, as a narrow exception
+to the released-script rule, and pgstore's baseline starts the history again under the same
+`autodoc_schema` ledger.
+
+**Nothing is dropped automatically, ever.** A database whose ledger records the old
+`000001_update_initialize_index.sql` is refused by `Migrate` with `dao/deploy`'s `ErrDowngrade`
+before any pending script runs: the refusal happens inside the transaction, so the database is
+left exactly as it was, data and ledger both.
+
+**Recovery is an operator's deliberate, by-hand choice.** An operator who owns such a database and
+wants it as an AutoDoc destination should prefer pointing the destination at a **fresh schema**.
+The old table names (`workspace`, `document`, `chunk`, `doc_tag`, `doc_alias`, `doc_name`,
+`doc_facet`, `doc_diagnostic`, `link`, `model`, `embedding`) are unprefixed and may belong to
+another product in a shared schema, so never drop them unread: first verify the `autodoc_schema`
+ledger in that schema names them, and that their owner agrees. Only then drop the old destination
+tables and the `autodoc_schema` ledger rows in that schema — the `vector` extension stays — and
+let `pgstore.Migrate` apply the new baseline. Nothing is lost that cannot be rebuilt: a destination
+is derived from the workspace's files, and re-indexing into a new destination reproduces it.
