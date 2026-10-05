@@ -1,6 +1,6 @@
 -- setup's user commands and keys: :AutodocDrawer toggles the drawer in autodoc's own panel,
 -- :AutodocSearch opens the picker, :AutodocSelect chooses the KB to search; <leader>fk is mapped
--- only when opts.keys is true.
+-- only when opts.keys is true; the preview is set up with them, its keys following opts.keys.
 local t = require("helpers")
 
 local bin = assert(os.getenv("AUTODOC_TEST_BIN"), "AUTODOC_TEST_BIN")
@@ -28,12 +28,30 @@ t.section("setup without keys", function()
     t.ok(vim.fn.exists(":" .. c) == 2, ":" .. c .. " exists")
   end
   t.eq(vim.fn.maparg("<leader>fk", "n"), "", "no <leader>fk unless opts.keys")
+  t.ok(vim.fn.exists(":AutodocPreviewFind") == 2,
+    "the preview's commands are set up too")
+  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "and its keys are not mapped")
+end)
+
+t.section("setup with the preview off", function()
+  autodoc.setup({ bin = bin, config = cfg, keys = true, preview = false })
+  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "preview = false maps none of its keys")
+  t.ok(vim.fn.exists(":AutodocPreviewFind") ~= 2,
+    "and takes its commands down")
+  t.ok(vim.fn.maparg("<leader>fk", "n") ~= "", "while the rest of setup stands")
+end)
+
+t.section("setup with the preview's own keys", function()
+  autodoc.setup({ bin = bin, config = cfg, keys = true, preview = { keys = false } })
+  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "preview.keys = false wins over opts.keys")
 end)
 
 t.section("setup with keys", function()
   autodoc.setup({ bin = bin, config = cfg, keys = true })
   local m = vim.fn.maparg("<leader>fk", "n", false, true)
   t.ok(m.desc == "autodoc: search the selected KB", "<leader>fk searches the selected KB", vim.inspect(m))
+  local pm = vim.fn.maparg("<leader>mf", "n", false, true)
+  t.ok(pm.desc ~= nil and pm.desc:find("autodoc preview", 1, true) ~= nil, "and the preview's keys follow opts.keys", vim.inspect(pm))
 end)
 
 t.section(":AutodocSelect", function()
