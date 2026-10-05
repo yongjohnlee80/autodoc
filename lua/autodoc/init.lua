@@ -6,7 +6,8 @@
 ---  require("autodoc").setup({
 ---    bin = nil,     -- the autodoc binary; default: the plugin's own build, then PATH
 ---    config = nil,  -- autodoc's config.toml; default: the binary's own default
----    keys = false,  -- true maps the default keys below
+---    keys = false,  -- true maps the default keys below, and the preview's
+---    preview = {},  -- the preview's options (autodoc.preview.config); false leaves it off
 ---  })
 ---
 ---Commands: `:AutodocDrawer` (toggle the kb drawer), `:AutodocSearch [query]` (search the
@@ -14,6 +15,7 @@
 ---
 ---Default keys (opts.keys = true):
 ---  <leader>fk   search the selected KB (:AutodocSearch)
+---  <leader>m*   the preview's (autodoc.preview.commands), unless opts.preview.keys says otherwise
 ---@module 'autodoc'
 
 local M = {}
@@ -27,6 +29,15 @@ function M.options() return _options end
 M.KEYS = {
   { "<leader>fk", function() require("autodoc.picker").open() end, "autodoc: search the selected KB" },
 }
+
+---setup_preview sets the preview up with opts.preview, its keys following opts.keys unless it
+---names its own; false leaves it off (and takes down one set up before).
+local function setup_preview(opts)
+  local preview = require("autodoc.preview")
+  if opts.preview == false then return preview.teardown() end
+  local popts = vim.tbl_extend("keep", type(opts.preview) == "table" and opts.preview or {}, { keys = opts.keys == true })
+  preview.setup(popts)
+end
 
 ---select_command is :AutodocSelect: the named workspace, or a choice among them.
 local function select_command(name)
@@ -67,12 +78,13 @@ local function create_commands()
 end
 
 function M.setup(opts)
-  _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false }, opts or {})
+  _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false, preview = {} }, opts or {})
   local session = require("autodoc.session")
   session.configure(_options)
   require("autodoc.verbs").register()
   require("autodoc.views.panel").setup()
   create_commands()
+  setup_preview(_options)
   if _options.keys then
     for _, k in ipairs(M.KEYS) do vim.keymap.set("n", k[1], k[2], { desc = k[3] }) end
   end
