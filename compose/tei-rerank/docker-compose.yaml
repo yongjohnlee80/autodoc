@@ -1,0 +1,51 @@
+# TEI (Hugging Face Text Embeddings Inference) serving a reranker model, for manual testing of
+# reranking accuracy. Use it through shell/tei/tei-rerank.sh, which picks the profile, the image
+# tag and the model; see shell/tei/README.md.
+#
+#   gpu profile: an NVIDIA GPU (needs the NVIDIA Container Toolkit); the tag matches its
+#                compute capability, 120-<version> for Blackwell (RTX 50 series)
+#   cpu profile: any x86_64 machine; slower, and capped in memory
+#
+# The port listens on 127.0.0.1 only. HF_TOKEN is passed through from the caller's environment
+# when set (only gated models need it) and is never written here.
+name: autodoc-tei
+
+x-tei: &tei
+  command:
+    - --model-id
+    - ${TEI_MODEL:-BAAI/bge-reranker-v2-m3}
+    - --port
+    - "80"
+    # TEI sizes its warm-up to this; the default can exhaust memory on a CPU host
+    - --max-batch-tokens
+    - ${TEI_MAX_BATCH_TOKENS:-8192}
+    - --auto-truncate
+  ports:
+    - 127.0.0.1:${TEI_PORT:-18080}:80
+  volumes:
+    - tei-models:/data
+  environment:
+    - HF_TOKEN
+
+services:
+  tei-gpu:
+    <<: *tei
+    profiles: [gpu]
+    image: ghcr.io/huggingface/text-embeddings-inference:${TEI_GPU_TAG:-120-1.9}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  tei-cpu:
+    <<: *tei
+    profiles: [cpu]
+    image: ghcr.io/huggingface/text-embeddings-inference:${TEI_CPU_TAG:-cpu-1.9}
+    # the warm-up peaks well above the steady state: 8g was OOM-killed on a 4-vCPU host
+    mem_limit: ${TEI_MEM_LIMIT:-12g}
+
+volumes:
+  tei-models:
