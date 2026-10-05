@@ -70,7 +70,9 @@ When the workspace has a frontmatter schema, `field:value` for a field it declar
 filter, not a word: `migration type:adr` finds *migration* among files whose `type` is `adr`. The
 value is read as the field's type. A query of filters alone (`type:adr status:active`) lists the
 files they admit, in path order, with `mode_used` `"facet"`. For a field the schema does not
-declare, `field:value` is searched as words.
+declare, `field:value` is searched as words. A version 2 schema declares fields by document type
+(a review's `verdict`, an ADR's `number`); every field of every type is a filter, and it matches the
+files whose type declares it.
 
 Options, a map, all optional:
 
@@ -191,7 +193,7 @@ workspace's name first.
 | `search.query` | workspace, query, options? | see above |
 | `doc.read` | workspace, path | `{content, version}`: the file's text, and its version. A PDF or DOCX a build derives answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a `---` rule, begins `[autodoc: truncated]`: that line is AutoDoc's, not the document's, so stop quoting before it |
 | `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown file's headings in order, with the version they were read at; other kinds have none |
-| `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema; only Markdown has frontmatter |
+| `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule `unknown_type`); only Markdown has frontmatter |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every file in path order, after `after` (`""` from the start) |
 | `index.documents` | workspace, options? | `{docs: [{path, generation, title, updated, indexed_at, fields}], more, next}`: the files with their frontmatter, most recently updated first. Options: `sort` (`updated`, `path` or `indexed`), `fields` (the frontmatter fields to return; default `title`, `type`, `status`, `updated`, `tags`, `abstract`), `tags` (every one), `paths` (folders or files), `facets` (as search's), `missing` (files that lack one of these fields), `after` (the previous page's `next`), `limit` (up to 500, default 100). `updated` is the frontmatter's, else when the index last read a change to the file. Protocol 13 |
 | `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, held, held_stale, held_unchecked, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts files whose frontmatter has a problem; `held` the files another build indexed that this one holds (see `hold` above), `held_stale` and `held_unchecked` among them |

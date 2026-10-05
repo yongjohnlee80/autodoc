@@ -356,6 +356,37 @@ it. One connection writes, and any number read, each from one snapshot:
 
   The types are `string`, `integer`, `number`, `boolean`, `date` and `list` (of `item_type`, strings
   by default; a lone value is a list of one). A required field has no default.
+
+  **Version 2 declares fields by document type**, still in one file that validates every document.
+  The `discriminator` names a string field of `common`; a file is checked against `common` merged
+  with the `types` entry its value names:
+
+  ```yaml
+  version: 2
+  strict: false
+  discriminator: type            # the field whose value picks the type
+  common:                        # every document
+    type:    {type: string, required: true}
+    status:  {type: string, enum: [draft, proposed, accepted, approved], default: draft}
+    tags:    {type: list}
+  types:                         # merged over common when type has this value
+    adr:
+      number:  {type: string, required: true}
+      status:  {type: string, enum: [proposed, accepted], default: proposed}
+    review:
+      verdict: {type: string, enum: [approved, rejected], required: true}
+    note:                        # common alone
+  ```
+
+  - A type adds fields and narrows common's: a smaller enum, `required: true`, its own default. It
+    never widens one or changes a field's type, and a name has one type across the file; a schema
+    that breaks either is refused with its line, as an invalid version 1 schema is.
+  - A file whose type the schema does not name is diagnosed (`unknown type "memo"`, rule
+    `unknown_type`) and checked against `common` alone.
+  - `strict: true` reports the fields the file's own type does not declare: a `verdict` on an ADR.
+  - Every field of every type is a facet, so `verdict:approved` filters as `type:adr` does.
+
+  Version 1 schemas are read as before.
 - **Links are resolved per workspace, as Obsidian does.** A link reaches the file whose path is its name.
   Failing that, it reaches the one file whose file name, path suffix or alias it is, and of several,
   the one nearest the root. A tie leaves it unresolved. Links resolve again whenever a file that could
