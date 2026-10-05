@@ -117,6 +117,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text")
 	exportOutput := fs.String("output", "", "--export: destination file (required)")
 	exportTheme := fs.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
+	printEndpoint := fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
+	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -127,14 +129,26 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --call and --export take one argument)")
 		return 2
 	}
+	if *ensure && !*printEndpoint {
+		fmt.Fprintln(stderr, "autodoc: --ensure goes with --print-endpoint")
+		return 2
+	}
 	switch {
 	case *showVersion:
 		fmt.Fprintln(stdout, "autodoc", b.version)
+	case *printEndpoint:
+		if err := runPrintEndpoint(ctx, *configPath, *ensure, stdout); err != nil {
+			fmt.Fprintln(stderr, "autodoc:", err)
+			return 1
+		}
 	case *serve:
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		if err := runServe(ctx, *configPath, stderr, b); err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintln(stderr, "autodoc:", err)
+			if errors.Is(err, errAlreadyServing) {
+				return 0 // this store's daemon is serving: nothing is wrong
+			}
 			return 1
 		}
 	case *call != "":

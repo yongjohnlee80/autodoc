@@ -73,11 +73,15 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	if err != nil {
 		return err
 	}
+	storePath, err := cfg.Server.StorePath()
+	if err != nil {
+		return err
+	}
 	spawn := o.Spawn
 	if spawn == nil {
 		spawn = SpawnServe
 	}
-	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) }).UseHandoffs(stateDir)
+	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
 	workspace, last := o.Workspace, filepath.Join(stateDir, "last-workspace")
 	if workspace != "" {
 		if err := checkWorkspace(ctx, session, workspace); err != nil {
