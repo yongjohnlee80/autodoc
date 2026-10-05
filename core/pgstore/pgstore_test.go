@@ -2,10 +2,6 @@ package pgstore
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
-	"net/url"
-	"os"
 	"strings"
 	"testing"
 
@@ -17,35 +13,22 @@ import (
 
 // dsnEnv names the PostgreSQL (with pgvector) these cells run against: a DSN whose user may create
 // databases, such as VM43's autodb-r3-pg. Each test creates a scratch database of its own there
-// and drops it when it ends. Without it the cells skip, as autorag's CI has no database.
+// and drops it when it ends. Without it the cells skip, unless AUTODOC_TEST_PG_REQUIRED names a
+// runner whose service the cells must not skip on: then a missing URL fails loudly instead.
 const dsnEnv = "AUTODOC_TEST_PGURL"
 
 // scratch opens a fresh database with pgstore's migrations applied, dropped when t ends.
 func scratch(t *testing.T) dao.DataConn {
 	t.Helper()
-	dsn := os.Getenv(dsnEnv)
-	if dsn == "" {
-		t.Skip(dsnEnv + " is not set: pgstore's cells need a PostgreSQL with pgvector")
-	}
+	dsn := dsnBase(t)
 	ctx := context.Background()
 	admin, err := postgres.Open(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect to %s: %v", dsnEnv, err)
 	}
 	t.Cleanup(func() { closeConn(admin) })
-	b := make([]byte, 6)
-	rand.Read(b)
-	name := "autodoc_pgstore_" + hex.EncodeToString(b)
-	if _, err := admin.ExecContext(ctx, "CREATE DATABASE "+name); err != nil {
-		t.Fatalf("create the scratch database: %v", err)
-	}
-	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP DATABASE IF EXISTS "+name+" WITH (FORCE)") })
-	u, err := url.Parse(dsn)
-	if err != nil {
-		t.Fatalf("%s is not a URL DSN: %v", dsnEnv, err)
-	}
-	u.Path = "/" + name
-	conn, err := postgres.OpenNamed(ctx, name, u.String())
+	name := scratchName(t, admin, "autodoc_pgstore_")
+	conn, err := postgres.OpenNamed(ctx, name, dsnOf(t, admin, name))
 	if err != nil {
 		t.Fatalf("connect to the scratch database: %v", err)
 	}

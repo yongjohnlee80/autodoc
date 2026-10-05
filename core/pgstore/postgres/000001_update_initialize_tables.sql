@@ -1,13 +1,34 @@
 -- pgstore's schema. Every table's key starts with tenant, every reference
 -- between them carries it, so one tenant's rows never answer for another's.
 
+-- The vector extension must live in a schema the connection searches
+-- (public, usually). CREATE EXTENSION only when the database has none: an
+-- extension already installed in a schema off the connection's search_path
+-- leaves the vector type unfound.
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- A document: its path within the tenant, presentation, filters (tags and
--- field=value facet pairs), its generation (bumped on every write) and whether
--- every chunk has an embedding under the active model. Paths compare byte by
--- byte (COLLATE "C"): "path order" is the same on every server, whatever its
--- locale, and keep/ sorts before keeper/.
+-- Snowball English stemming with no StopWords: every word is kept, so every
+-- query word is required and none is dropped, as SQLite's porter tokenizer
+-- does. The built-in english configuration cannot be used: its dictionary
+-- removes stop words at indexing and at query time, so a query for "not"
+-- would find nothing and "not ready" would admit a body with no "not".
+-- COPY = simple keeps every other token type (numbers, hosts, files, URLs)
+-- on the simple dictionary. The configuration is created in the first schema
+-- of the connection's search_path, as the tables are, and every query resolves
+-- it by name through the same search_path.
+CREATE TEXT SEARCH DICTIONARY rag_english_stem (TEMPLATE = snowball, Language = english);
+CREATE TEXT SEARCH CONFIGURATION rag_english (COPY = simple);
+ALTER TEXT SEARCH CONFIGURATION rag_english
+    ALTER MAPPING FOR asciiword, asciihword, hword_asciipart, word, hword, hword_part
+    WITH rag_english_stem;
+
+-- A document: its path within the tenant, presentation (title, tags and
+-- field=value facet pairs), the source's version and the identity it was cut
+-- under as the consumer compares them (pgstore stores and returns both
+-- verbatim and never parses them), its generation (bumped on every write) and
+-- whether every chunk has an embedding under the active model. Paths compare
+-- byte by byte (COLLATE "C"): "path order" is the same on every server,
+-- whatever its locale, and keep/ sorts before keeper/.
 CREATE TABLE rag_document (
     tenant         text    NOT NULL,
     id             bigint  GENERATED ALWAYS AS IDENTITY,
@@ -15,6 +36,8 @@ CREATE TABLE rag_document (
     title          text    NOT NULL DEFAULT '',
     tags           text[]  NOT NULL DEFAULT '{}',
     facets         text[]  NOT NULL DEFAULT '{}',
+    version        text    NOT NULL DEFAULT '',
+    indexer        text    NOT NULL DEFAULT '',
     generation     bigint  NOT NULL DEFAULT 1,
     semantic_ready boolean NOT NULL DEFAULT false,
     PRIMARY KEY (tenant, id),
@@ -23,21 +46,32 @@ CREATE TABLE rag_document (
 CREATE INDEX rag_document_tags ON rag_document USING gin (tags);
 CREATE INDEX rag_document_facets ON rag_document USING gin (facets);
 
--- A chunk: a document's section, in order. tsv is generated from the
--- breadcrumb (class A) and the body (class D) with the simple configuration,
--- which lowercases and does not stem.
+-- A chunk: a document's section, in order. embed is the text a vector of the
+-- chunk is made of when it differs from the breadcrumb and body ('' embeds
+-- breadcrumb + line feed + body): embedding is asynchronous and survives
+-- restarts, so the text has to be in the row. title and tags are the
+-- document's, on every chunk: lexical ranking weighs them above the body, and
+-- a registered chunker's breadcrumb need not contain the file name.
+-- tsv is generated with the rag_english configuration, four weight classes:
+-- title A, breadcrumb B, tags C, body D — the local store's 10 : 5 : 5 : 1
+-- column for column.
 CREATE TABLE rag_chunk (
     tenant     text    NOT NULL,
     doc        bigint  NOT NULL,
     ord        integer NOT NULL,
     breadcrumb text    NOT NULL DEFAULT '',
     body       text    NOT NULL DEFAULT '',
+    embed      text    NOT NULL DEFAULT '',
+    title      text    NOT NULL DEFAULT '',
+    tags       text    NOT NULL DEFAULT '',
     byte_start integer NOT NULL DEFAULT 0,
     byte_end   integer NOT NULL DEFAULT 0,
     text_hash  bytea   NOT NULL,
     tsv        tsvector GENERATED ALWAYS AS (
-        setweight(to_tsvector('simple'::regconfig, breadcrumb), 'A') ||
-        setweight(to_tsvector('simple'::regconfig, body), 'D')
+        setweight(to_tsvector('rag_english'::regconfig, title), 'A') ||
+        setweight(to_tsvector('rag_english'::regconfig, breadcrumb), 'B') ||
+        setweight(to_tsvector('rag_english'::regconfig, tags), 'C') ||
+        setweight(to_tsvector('rag_english'::regconfig, body), 'D')
     ) STORED,
     PRIMARY KEY (tenant, doc, ord),
     FOREIGN KEY (tenant, doc) REFERENCES rag_document (tenant, id) ON DELETE CASCADE

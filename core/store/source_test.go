@@ -11,6 +11,10 @@ import (
 // Data access is the store's: outside core/store no production code opens a SQL connection,
 // declares a table, runs SQL of its own, or batches without the scope's workspace stamp. Every
 // read and write elsewhere goes through a Scope's DAOs (and dao's predicates).
+//
+// core/pgstore is exempt: it is a store itself — a search.Store over a destination database, the
+// one package beside core/store that owns dao declarations — and its every statement carries its
+// tenant, the same rule this test holds the rest of the tree to.
 func TestNoDataAccessOutsideTheStore(t *testing.T) {
 	root := filepath.Join("..", "..")
 	forbidden := []string{
@@ -33,7 +37,11 @@ func TestNoDataAccessOutsideTheStore(t *testing.T) {
 			case ".git", "bin", ".autodoc-test-logs":
 				return filepath.SkipDir
 			}
-			if filepath.ToSlash(path) == filepath.ToSlash(filepath.Join(root, "core", "store")) {
+			skip := filepath.Join(root, "core", "store")
+			if filepath.ToSlash(path) == filepath.ToSlash(skip) {
+				return filepath.SkipDir
+			}
+			if filepath.ToSlash(path) == filepath.ToSlash(filepath.Join(root, "core", "pgstore")) {
 				return filepath.SkipDir
 			}
 			return nil
