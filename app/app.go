@@ -120,6 +120,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	exportBase := fs.String("base", "", "--export html: the directory relative links are read from, written as file: URLs (default the source's directory)")
 	printEndpoint := fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
+	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -130,8 +131,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --call and --export take one argument)")
 		return 2
 	}
-	if *ensure && !*printEndpoint {
-		fmt.Fprintln(stderr, "autodoc: --ensure goes with --print-endpoint")
+	if (*ensure || *restart) && !*printEndpoint {
+		fmt.Fprintln(stderr, "autodoc: --ensure and --restart go with --print-endpoint")
 		return 2
 	}
 	if *exportFormat == "" {
@@ -150,7 +151,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	case *showVersion:
 		fmt.Fprintln(stdout, "autodoc", b.version)
 	case *printEndpoint:
-		if err := runPrintEndpoint(ctx, *configPath, *ensure, stdout); err != nil {
+		run := func() error { return runPrintEndpoint(ctx, *configPath, *ensure, stdout) }
+		if *restart {
+			run = func() error { return runRestart(ctx, *configPath, stdout) }
+		}
+		if err := run(); err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}

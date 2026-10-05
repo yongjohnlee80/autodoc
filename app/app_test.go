@@ -99,8 +99,11 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"-h"}, 0, "", "-serve"},
 		{[]string{"--no-such-flag"}, 2, "", "flag provided but not defined"},
 		{nil, 2, "", "-serve"},
-		// --ensure starts the daemon --print-endpoint names: alone it is refused
-		{[]string{"--ensure"}, 2, "", "--ensure goes with --print-endpoint"},
+		// --ensure starts, and --restart replaces, the daemon --print-endpoint names: alone each is refused
+		{[]string{"--ensure"}, 2, "", "--ensure and --restart go with --print-endpoint"},
+		{[]string{"--restart"}, 2, "", "--ensure and --restart go with --print-endpoint"},
+		// --restart reads its config before it stops anything
+		{[]string{"--config", bad, "--print-endpoint", "--restart"}, 1, "", "config: invalid"},
 		// a --print-endpoint that cannot read its config prints no endpoint (a client reads stdout's
 		// first line as one) and says why
 		{[]string{"--config", bad, "--print-endpoint"}, 1, "", "config: invalid"},
