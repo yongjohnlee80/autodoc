@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/core/index"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
@@ -149,6 +150,54 @@ func TestSpanLines(t *testing.T) {
 		first, last, ok := spanLines(content, tc.start, tc.end)
 		if first != tc.first || last != tc.last || ok != tc.ok {
 			t.Errorf("spanLines(%d, %d) = %d, %d, %v; want %d, %d, %v", tc.start, tc.end, first, last, ok, tc.first, tc.last, tc.ok)
+		}
+	}
+}
+
+// TestDocumentsOptsReadsEveryOptionAndRefusesTheRest: index.documents' second parameter, each
+// option read into its field, and each malformed value refused with the option it names.
+func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
+	o, err := documentsOpts([]any{"kb"})
+	if err != nil || o.Sort != "" || o.Limit != 0 {
+		t.Fatalf("no opts: %+v, %v", o, err)
+	}
+	if _, err := documentsOpts([]any{"kb", nil}); err != nil {
+		t.Fatalf("nil opts: %v", err)
+	}
+	o, err = documentsOpts([]any{"kb", map[string]any{
+		"sort": "path", "after": int64(2), "limit": int64(5),
+		"fields": []any{"status"}, "tags": []any{"adr"}, "paths": []any{"adrs/"}, "missing": []any{"abstract"},
+		"facets": map[string]any{"status": "accepted", "type": []any{"adr", "note"}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := index.DocumentsOpts{Sort: "path", After: 2, Limit: 5, Fields: []string{"status"}, Tags: []string{"adr"},
+		Paths: []string{"adrs/"}, Missing: []string{"abstract"},
+		Facets: map[string][]string{"status": {"accepted"}, "type": {"adr", "note"}}}
+	if !reflect.DeepEqual(o, want) {
+		t.Fatalf("got %+v\nwant %+v", o, want)
+	}
+	for _, c := range []struct {
+		opts any
+		says string
+	}{
+		{"sort", "opts must be a map"},
+		{map[string]any{"sort": int64(1)}, "opts.sort must be a string"},
+		{map[string]any{"after": int64(-1)}, "opts.after must be a non-negative integer"},
+		{map[string]any{"limit": "5"}, "opts.limit must be a non-negative integer"},
+		{map[string]any{"fields": "status"}, "opts.fields must be a list of strings"},
+		{map[string]any{"tags": []any{int64(1)}}, "opts.tags must be a list of strings"},
+		{map[string]any{"paths": nil}, "opts.paths must be a list of strings"},
+		{map[string]any{"missing": map[string]any{}}, "opts.missing must be a list of strings"},
+		{map[string]any{"facets": []any{"status"}}, "opts.facets must be a map"},
+		{map[string]any{"facets": map[string]any{"status": int64(1)}}, "opts.facets.status must be a list of strings"},
+		{map[string]any{"colour": "red"}, "unknown option colour"},
+	} {
+		_, err := documentsOpts([]any{"kb", c.opts})
+		var rerr *golibrpc.Error
+		if !errors.As(err, &rerr) || rerr.Code != golibrpc.CodeInvalidParams || !strings.Contains(rerr.Message, c.says) {
+			t.Errorf("opts %#v: got %v, want invalid params saying %q", c.opts, err, c.says)
 		}
 	}
 }
