@@ -23,6 +23,8 @@ Dialog {
             // a row between the field and the hits: blank, or a turning spinner and what an
             // unanswered search is waiting on
             Text { text: App.searchStatus; color: Theme.document.lineNumber }
+            // the ranker: the one in use when the search opens, then whether it ordered these hits
+            Text { text: App.searchRanker; color: Theme.document.lineNumber }
             Frame {
                 title: App.hitsTitle
                 Layout.fillHeight: true
