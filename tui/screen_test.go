@@ -365,6 +365,52 @@ func TestPreferencesAreKept(t *testing.T) {
 	})
 }
 
+// TestPreferencesAreStoredInTheOrderTheyChanged: a preference changed twice in a row is stored as
+// the second change, however long the first one's write takes to reach the daemon.
+func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	var holding atomic.Bool
+	var answered atomic.Int32
+	overtaken := make(chan struct{}) // a write answered while the first was held
+	once := sync.OnceFunc(func() { close(overtaken) })
+	sess := NewSession(d.sock, nil)
+	sess.beforeCall = func(method string, p []any) {
+		if method == "preference.set" && p[1] == "top" {
+			// held until a later write overtakes it, or a while: written one at a time, the
+			// next is not sent before this one is answered, and nothing overtakes it
+			holding.Store(true)
+			select {
+			case <-overtaken:
+			case <-time.After(300 * time.Millisecond):
+			}
+			holding.Store(false)
+		}
+	}
+	sess.afterCall = func(method string) {
+		if method == "preference.set" {
+			if holding.Load() {
+				once()
+			}
+			answered.Add(1)
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	onLoop(r, func() bool {
+		r.h.setTerminalEdge(indexOf(termEdges, "top"))
+		r.h.setTerminalEdge(indexOf(termEdges, "right"))
+		return true
+	})
+	r.s.WaitFor(t, "both writes answered", func(string) bool { return answered.Load() == 2 })
+	m, err := d.db.Preferences(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e := m["tui.terminal.edge"]; e != "right" {
+		t.Fatalf("stored edge %q after top then right: the earlier write landed last", e)
+	}
+}
+
 // TestTheSearchMarksItsWordsWhereTheyAre: the preview marks each of the search's words, case
 // aside, over exactly its bytes, however lower-casing changes the line's length before it.
 func TestTheSearchMarksItsWordsWhereTheyAre(t *testing.T) {

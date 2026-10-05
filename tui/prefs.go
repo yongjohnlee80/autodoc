@@ -267,17 +267,33 @@ func (h *Host) setConnected(v bool) {
 	}
 }
 
-// setPref changes one preference: on screen at once, and in the store.
+// setPref changes one preference: on screen at once, and in the store, in the order the changes
+// were made. Each write is its own call on its own worker, and the daemon may answer them in any
+// order: sent together, an earlier change could land after a later one and the store keep it, so
+// the next start shows what the user changed away from. They go one at a time instead.
 func (h *Host) setPref(name, value string, change func(*prefs)) {
 	p := h.prefs
 	change(&p)
 	h.applyPrefs(p)
+	h.prefWrites = append(h.prefWrites, [2]string{name, value})
+	if len(h.prefWrites) == 1 {
+		h.writePref()
+	}
+}
+
+// writePref writes the first preference waiting, then the next, until none waits.
+func (h *Host) writePref() {
+	w := h.prefWrites[0]
 	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "preference.set", name, value)
+		_, err := h.call(ctx, "preference.set", w[0], w[1])
 		return err
 	}, func(err error) {
 		if err != nil {
 			h.failed("save the preference", err)
+		}
+		h.prefWrites = h.prefWrites[1:]
+		if len(h.prefWrites) > 0 {
+			h.writePref()
 		}
 	})
 }

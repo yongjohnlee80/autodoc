@@ -95,7 +95,8 @@ type Host struct {
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs                          prefs
-	connected                      bool // to the daemon: the status line shows while not (prefs.go)
+	prefWrites                     [][2]string // name and value, the first being written (prefs.go)
+	connected                      bool        // to the daemon: the status line shows while not (prefs.go)
 	mismatchOpen, mismatchRecovery bool
 	// the registrations (registrations.go): this binary's, the daemon's, and the kinds a file is
 	// read as, which are the daemon's; whether the restart was offered, a mismatch that cannot be

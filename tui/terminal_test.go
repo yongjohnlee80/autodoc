@@ -163,15 +163,13 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 			return row == 0 && c == 60 // 40% of 100 columns, at the right
 		})
 	}
-	// Kept in the daemon's store, so a restart finds them.
-	ctx := context.Background()
-	got, err := d.db.Preferences(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got["tui.terminal.edge"] != "right" || got["tui.terminal.center.size"] != "40" || got["tui.terminal.bottom.size"] != "50" {
-		t.Errorf("stored: edge %q, center.size %q, bottom.size %q", got["tui.terminal.edge"], got["tui.terminal.center.size"], got["tui.terminal.bottom.size"])
-	}
+	// Kept in the daemon's store, so a restart finds them. The screen follows a change at once and
+	// its write lands after: wait for the values written, not any value.
+	r.s.WaitFor(t, "edge right, center.size 40, bottom.size 50 stored", func(string) bool {
+		got, err := d.db.Preferences(context.Background())
+		return err == nil && got["tui.terminal.edge"] == "right" && got["tui.terminal.center.size"] == "40" &&
+			got["tui.terminal.bottom.size"] == "50"
+	})
 	again := attached(t, d)
 	if e := onLoop(again, func() string { return again.h.prefs.termEdge }); e != "right" {
 		t.Errorf("a new TUI opens the terminal from %q, want the kept right", e)
