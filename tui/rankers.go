@@ -22,8 +22,12 @@ type rankerKind struct {
 	model             bool
 }
 
+// defaultTEIURL is where AutoDoc's TEI playbook (shell/tei/tei-rerank.sh) serves a re-ranker, so a
+// local one is a step away: Add…, TEI, no key, Save, Use.
+const defaultTEIURL = "http://127.0.0.1:18080"
+
 var rankerKinds = []rankerKind{
-	{"tei", "TEI", "http://localhost:8080", false},                  // text-embeddings-inference, serving a re-ranker
+	{"tei", "TEI", defaultTEIURL, false},                            // text-embeddings-inference, serving a re-ranker
 	{"rerank-api", "Rerank API", "https://api.cohere.com/v2", true}, // Cohere-style: POST {base}/rerank
 }
 
