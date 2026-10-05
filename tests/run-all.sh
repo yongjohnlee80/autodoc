@@ -11,7 +11,10 @@
 #   tests/run-all.sh            every suite
 #   tests/run-all.sh preview    one suite (preview_spec.lua); AUTODOC_SPEC=preview does the same
 #
-# auto-core.nvim comes from AUTODOC_TEST_AUTOCORE, else the sibling checkout.
+# auto-core.nvim comes from AUTODOC_TEST_AUTOCORE, else the sibling checkout. tests/composition.lua
+# (the drawer hosted by the real auto-finder.nvim) runs too when AUTODOC_TEST_AUTOFINDER names a
+# checkout, else the sibling one when it has the kb section; otherwise it is reported skipped.
+#   tests/run-all.sh composition    that one alone
 set -uo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,6 +39,12 @@ if [ -z "${AUTODOC_TEST_AUTOCORE:-}" ] || [ ! -d "$AUTODOC_TEST_AUTOCORE/lua/aut
   exit 1
 fi
 export AUTODOC_TEST_AUTOCORE
+if [ -z "${AUTODOC_TEST_AUTOFINDER:-}" ]; then
+  for c in "$root/../../auto-finder.nvim/main" "$root/../auto-finder.nvim"; do
+    if [ -d "$c/lua/auto-finder/views/kb" ]; then AUTODOC_TEST_AUTOFINDER="$(cd "$c" && pwd)"; break; fi
+  done
+fi
+export AUTODOC_TEST_AUTOFINDER="${AUTODOC_TEST_AUTOFINDER:-}"
 export AUTO_CORE="$AUTODOC_TEST_AUTOCORE" # the name the KB tooling's suite reads
 
 echo "==> building autodoc"
@@ -87,6 +96,19 @@ for f in "$here"/*_spec.lua; do
   stop_daemons
   ran=$((ran + 1))
 done
+
+if [ -z "$only" ] || [ "$only" = "composition" ]; then
+  if [ -n "$AUTODOC_TEST_AUTOFINDER" ] && [ -d "$AUTODOC_TEST_AUTOFINDER/lua/auto-finder/views/kb" ]; then
+    run_suite "$here/composition.lua"
+    stop_daemons
+    ran=$((ran + 1))
+  elif [ "$only" = "composition" ]; then
+    echo "run-all: composition needs AUTODOC_TEST_AUTOFINDER: an auto-finder.nvim with the kb section"
+    exit 1
+  else
+    echo "==> composition: skipped (no auto-finder.nvim with the kb section: set AUTODOC_TEST_AUTOFINDER)"
+  fi
+fi
 
 if [ "$ran" -eq 0 ]; then
   echo "run-all: no suite matched ${only:-*}"
