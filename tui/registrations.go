@@ -45,11 +45,14 @@ func (h *Host) checkRegistrations() {
 		if a.err != nil {
 			h.daemonTables, h.kinds = registrations.Tables{}, kind.Registrations{}
 			h.notify("the backend's registrations: " + wireMessage(a.err))
-			return
+		} else {
+			h.daemonTables = a.t
+			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.t.Chunkers)), Derived: slices.Sorted(maps.Keys(a.t.Formats))}
+			h.compareRegistrations()
 		}
-		h.daemonTables = a.t
-		h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.t.Chunkers)), Derived: slices.Sorted(maps.Keys(a.t.Formats))}
-		h.compareRegistrations()
+		if h.file.open {
+			h.readPage() // a page opened before they came, or under another build's, reads by them now
+		}
 	})
 }
 

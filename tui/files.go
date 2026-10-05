@@ -152,13 +152,27 @@ func (h *Host) show(p, content, version string) {
 		h.openAt = -1
 		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
-	h.file.path, h.file.version, h.file.open = p, version, true
+	h.file.path, h.file.version, h.file.open, h.file.dirty = p, version, true, false
+	h.readPage()
+	h.backlinks.Reset(nil)
+	h.loadBacklinks(p)
+}
+
+// readPage decides how the open page reads its file, the one place that does: on every open, and
+// again whenever the daemon's registrations arrive, which a read may have beaten.
+//   - A Pro format's file is a derived document, read-only and badged, whatever the registrations
+//     say or whether they have come: no build reads one but by its deriver, and none writes one.
+//   - Its highlighting, outline and frontmatter check follow the daemon's kinds as last known: a
+//     registered file's change from Markdown to plain text when they come.
+//
+// Unsaved text stays as it is: only how it is read changes.
+func (h *Host) readPage() {
+	p := h.file.path
 	h.file.derived = ""
-	if h.kinds.Readable(p) { // the daemon's registrations: it is the one deriving
+	if kind.Of(p, nil) == kind.Pro {
 		h.file.derived = kind.Label(p)
 	}
 	h.editor.SetReadOnly(h.file.derived != "")
-	h.set("App.fileTitle", h.file.title())
 	switch h.kinds.Of(p, h.textExtensions()) { // the daemon's registrations: it is the one indexing
 	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
@@ -167,11 +181,9 @@ func (h *Host) show(p, content, version string) {
 	default:
 		h.set("App.syntaxDefinition", "Markdown (find)")
 	}
-	h.setDirty(false)
+	h.setDirty(h.file.dirty) // the status line's title carries the badge
 	h.validateSoon()
-	h.refreshOutline()
-	h.backlinks.Reset(nil)
-	h.loadBacklinks(p)
+	h.refreshOutline() // and the frame's
 }
 
 // closeFile empties the editor: no file is open, and the page is a new draft.

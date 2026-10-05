@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/search"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
@@ -86,6 +87,10 @@ type daemonOpts struct {
 	reg registrations.Tables
 	// deriver, when set, is its build's deriver: it indexes and reads PDFs with it, and reports it
 	deriver registrations.Deriver
+	// goChunker, when set, is its build's chunker for .go, reported as deriver is
+	goChunker search.Chunker
+	// goFiles admits .go files, whether or not it has a chunker for them
+	goFiles bool
 }
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
@@ -116,16 +121,21 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	d.db = db
-	match := md
 	var derives *registrations.Table
 	var docOpts []docs.Option
-	if o.deriver != nil {
-		if derives, err = registrations.New(nil, o.deriver); err != nil {
+	if o.deriver != nil || o.goChunker != nil {
+		var chunkers map[string]search.Chunker
+		if o.goChunker != nil {
+			chunkers = map[string]search.Chunker{".go": o.goChunker}
+		}
+		if derives, err = registrations.New(chunkers, o.deriver); err != nil {
 			t.Fatal(err)
 		}
-		match = func(p string) bool { return md(p) || strings.HasSuffix(p, ".pdf") }
 		docOpts = []docs.Option{docs.WithRegistrations(derives.Kinds()), docs.WithDeriver(derives)}
 		o.reg = derives.Tables()
+	}
+	match := func(p string) bool {
+		return md(p) || o.deriver != nil && strings.HasSuffix(p, ".pdf") || (o.goFiles || o.goChunker != nil) && strings.HasSuffix(p, ".go")
 	}
 	prefs := o.prefs
 	if prefs == nil {
