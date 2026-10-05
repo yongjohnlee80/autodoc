@@ -157,16 +157,27 @@ func (s *Server) registerEmbeddings() {
 		return map[string]any{"model": model}, nil
 	}, false))
 	// a stored provider's models by its name, or an unsaved one's by its kind, base_url and key
-	s.handle("embedding.models", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+	s.handle("embedding.models", s.verb(1, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		if err := need(); err != nil {
 			return nil, err
 		}
+		// a stored one by its name; an unsaved one by its spec; an edit of a stored one by its name
+		// and the edit's spec, which is what is asked, with the stored key unless it carries one
 		var name string
 		var sp store.ProviderSpec
 		switch v := p[0].(type) {
 		case string:
 			name = v
+			if len(p) == 2 {
+				var err error
+				if sp, err = specOf(p[1]); err != nil {
+					return nil, err
+				}
+			}
 		default:
+			if len(p) == 2 {
+				return nil, invalid("embedding.models: a spec alone, or a name and a spec")
+			}
 			var err error
 			if sp, err = specOf(v); err != nil {
 				return nil, err

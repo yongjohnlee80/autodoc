@@ -555,3 +555,34 @@ func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
 		t.Error("still replacing after the cancel")
 	}
 }
+
+// TestProviderModelsAskTheEditsEndpoint: a stored provider's name with an edit's kind and base URL lists
+// the edit's server, not the stored one.
+func TestProviderModelsAskTheEditsEndpoint(t *testing.T) {
+	o := newOllama(t, "embedder")
+	e, _, _ := embedding(t, o)
+	ctx := context.Background()
+	if models, err := e.Models(ctx, "a", store.ProviderSpec{}); err != nil || !reflect.DeepEqual(models, []string{"embedder"}) {
+		t.Fatalf("the stored endpoint: %v, %v", models, err)
+	}
+	other := newOllama(t, "other-embedder")
+	models, err := e.Models(ctx, "a", store.ProviderSpec{Kind: store.KindOllama, BaseURL: other.URL})
+	if err != nil || !reflect.DeepEqual(models, []string{"other-embedder"}) {
+		t.Errorf("an edit to another server: %v, %v; want its models", models, err)
+	}
+}
+
+// TestModelContextAsksTheEditsEndpoint: a stored provider's name with an edit's kind and base URL
+// reads the edit's server's context window, not the stored one's.
+func TestModelContextAsksTheEditsEndpoint(t *testing.T) {
+	o := newOllama(t, "embedder") // no /api/show: the stored server knows no window
+	e, _, _ := embedding(t, o)
+	show := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"model_info": map[string]any{"gemma.context_length": 2048}})
+	}))
+	t.Cleanup(show.Close)
+	n, err := e.ModelContext(context.Background(), "a", store.ProviderSpec{Kind: store.KindOllama, BaseURL: show.URL, Model: "embedder"})
+	if err != nil || n != 2048 {
+		t.Errorf("the edit's window: %d, %v; want 2048", n, err)
+	}
+}

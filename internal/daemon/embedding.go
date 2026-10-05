@@ -447,8 +447,9 @@ func (e *Embedding) RemoveProvider(ctx context.Context, name string) error {
 	return nil
 }
 
-// Models are what a provider offers: a stored one's, by name (its key opened here), or those of
-// one not yet stored, by its kind, base URL and key.
+// Models are what a provider offers: a stored one's, by name (its key opened here); those of one
+// not yet stored, by its kind, base URL and key; or a stored one's as an edit would make it, by its
+// name and the edit's kind and base URL, the stored key used unless the edit has one.
 func (e *Embedding) Models(ctx context.Context, name string, sp store.ProviderSpec) ([]string, error) {
 	kind, base, key := sp.Kind, sp.BaseURL, ""
 	if sp.Key != nil {
@@ -459,7 +460,12 @@ func (e *Embedding) Models(ctx context.Context, name string, sp store.ProviderSp
 		if err != nil {
 			return nil, err
 		}
-		kind, base, key = info.Kind, info.BaseURL, k
+		if sp.Kind == "" {
+			kind, base = info.Kind, info.BaseURL
+		}
+		if sp.Key == nil {
+			key = k
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, setupTimeout)
 	defer cancel()
@@ -477,7 +483,12 @@ func (e *Embedding) ModelContext(ctx context.Context, stored string, sp store.Pr
 		if err != nil {
 			return 0, err
 		}
-		sp.Kind, sp.BaseURL, key = info.Kind, info.BaseURL, k
+		if sp.Kind == "" {
+			sp.Kind, sp.BaseURL = info.Kind, info.BaseURL
+		}
+		if sp.Key == nil {
+			key = k
+		}
 	}
 	if sp.Kind != store.KindOllama && sp.Kind != store.KindOllamaCloud {
 		return 0, nil
