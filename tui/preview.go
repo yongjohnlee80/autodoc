@@ -151,11 +151,17 @@ func (h *Host) renderPreview(fallback func(why string)) {
 	h.withImageCells(pv.dialog, fallback, func(img *widget.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
 		gen := h.previewGen
-		do(h, func(ctx context.Context) answerOf[[]byte] {
+		// a page taller than a terminal shows an image (widget.MaxImagePixels) is cut into strips
+		// here, off the loop: a long file's page, whole, shows nothing at all
+		do(h, func(ctx context.Context) answerOf[widget.Strips] {
 			png, err := widget.RasterizeHTMLPage(ctx, pv.page, widget.Page{Width: cols * widget.CellPixelsW,
 				MinHeight: rows * widget.CellPixelsH, MaxHeight: pv.maxHeight, Scale: zooms[pv.zoom], Wide: pv.wide, Background: pv.background})
-			return answerOf[[]byte]{v: png, err: err}
-		}, func(a answerOf[[]byte]) {
+			if err != nil {
+				return answerOf[widget.Strips]{err: err}
+			}
+			strips, err := widget.SplitPNG(png)
+			return answerOf[widget.Strips]{v: strips, err: err}
+		}, func(a answerOf[widget.Strips]) {
 			if gen != h.previewGen {
 				return // closed, or another preview since
 			}
@@ -163,7 +169,7 @@ func (h *Host) renderPreview(fallback func(why string)) {
 				fallback("the image failed: " + a.err.Error())
 				return
 			}
-			img.SetPNG(a.v)
+			img.SetStrips(a.v)
 			if w > 0 && ht > 0 { // the same place in the page, at the new scale
 				_, nw, nh := img.Scroll()
 				img.ScrollTo(shown.X*nw/w, shown.Y*nh/ht)

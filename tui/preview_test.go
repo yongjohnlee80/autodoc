@@ -194,6 +194,66 @@ func TestTheHTMLPreviewScrollsAndZooms(t *testing.T) {
 	})
 }
 
+// A page longer than a terminal takes an image (widget.MaxImagePixels; Ghostty's and kitty's
+// limit, a refusal the placement keeps quiet) is placed as strips: no image placed is taller than
+// that, at the top or at the bottom, and the bottom is reached. Sent whole, the long page showed
+// nothing.
+func TestALongPagePreviewIsPlacedInStrips(t *testing.T) {
+	skipWithoutUsableBrowser(t)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	long := "# A long page\n\n" + strings.Repeat("A paragraph of the long page, one of very many.\n\n", 400)
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", long)})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() {
+		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		r.h.browser = func(context.Context, string) error { return nil }
+	})
+	r.h.p.Post(func() { r.h.openPath("n.md") })
+	r.waitFile(t, "n.md")
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitForText(t, "HTML preview · n.md")
+	r.placedImage(t)
+	placed := func() tuicore.ImagePlacement {
+		for _, p := range r.s.Backend.Images() {
+			return p
+		}
+		return tuicore.ImagePlacement{}
+	}
+	whole := func() int { // the page's height, as the Image holds it
+		return onLoop(r, func() int {
+			img, _ := imageUnder(r.h.p, "htmlPreview")
+			_, _, h := img.Scroll()
+			return h
+		})
+	}
+	if h := whole(); h <= widget.MaxImagePixels {
+		t.Fatalf("the page is %d tall: not longer than a terminal takes, so it tests nothing", h)
+	}
+	fits := func(where string, p tuicore.ImagePlacement) {
+		t.Helper()
+		w, h := pngSize(t, p.PNG)
+		if w > widget.MaxImagePixels || h > widget.MaxImagePixels {
+			t.Fatalf("%s: an image %d×%d was placed, past the terminal's %d", where, w, h, widget.MaxImagePixels)
+		}
+		if p.Clip.Y < 0 || p.Clip.Y+p.Clip.H > h {
+			t.Fatalf("%s: the clip %+v is outside the image placed (%d tall)", where, p.Clip, h)
+		}
+	}
+	top := placed()
+	fits("the top", top)
+	r.keys(t, key('G')) // the bottom
+	r.waitPlaced(t, "the bottom's strip", func(p tuicore.ImagePlacement) bool { return p.Version != top.Version })
+	fits("the bottom", placed())
+	if shown := onLoop(r, func() tuicore.Rect {
+		img, _ := imageUnder(r.h.p, "htmlPreview")
+		s, _, _ := img.Scroll()
+		return s
+	}); shown.Y+shown.H != whole() {
+		t.Fatalf("at the bottom the part shown is %+v of a page %d tall", shown, whole())
+	}
+}
+
 func pngSize(t *testing.T, b []byte) (int, int) {
 	t.Helper()
 	cfg, err := png.DecodeConfig(bytes.NewReader(b))
