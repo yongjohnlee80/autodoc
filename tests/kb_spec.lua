@@ -83,6 +83,7 @@ local function build_fixture(root, ext)
   write(root, "log.md", "## [2026-05-01] op | wrote shared/adrs/0001-first.md\n")
   write(root, "KB_RULES.md", "# KB rules\n\nR1: append to log.md.\n")
   write(root, "raw/source.md", "Raw notes citing [[shared/adrs/0001-first]] and shared/adrs/0002-second.md.\n")
+  write(root, "_templates/synthesis.md", "---\ntype: synthesis\n---\n# {{title}}\n")
   write(root, "shared/adrs/0001-first.md", table.concat({
     "---",
     "type: adr",
@@ -391,6 +392,10 @@ if res then
     vim.tbl_contains(plan.scaffold.created, "adrs/ABOUT.md") and vim.tbl_contains(plan.scaffold.created, "AGENTS.md")
     and vim.tbl_contains(plan.scaffold.kept, "RULES.md") and vim.tbl_contains(plan.scaffold.kept, "CLAUDE.md"))
   ok("M28: raw/ABOUT.md is not planned into an existing raw/", vim.tbl_contains(plan.scaffold.skipped, "raw/ABOUT.md"))
+  ok("M28b: an old template is archived, and the schema's template takes its place",
+    file_entry("_templates/synthesis.md") and file_entry("_templates/synthesis.md").new == "archive/_templates/synthesis.md"
+    and vim.tbl_contains(plan.scaffold.created, "_templates/synthesis.md"),
+    vim.inspect(file_entry("_templates/synthesis.md")))
   local joined = plan.todo_stores.joined[1]
   ok("M29: an external todo store that references the KB joins the manifest",
     joined and joined.dir == EXT_A and #joined.files == 1 and #joined.rewrites == 2, vim.inspect(plan.todo_stores.checked))

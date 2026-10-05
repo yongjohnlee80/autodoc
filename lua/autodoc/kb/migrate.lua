@@ -91,6 +91,9 @@ function M.dest(rel)
     return "archive/" .. rel, "root->archive"
   end
   if ARCHIVE_DIRS[p[1]] and n >= 2 then return "archive/" .. rel, p[1] .. "/->archive" end
+  -- the old templates predate the schema; the scaffold writes `_templates/<type>.md` from it after
+  -- the move (§4.6), so the old ones are archived rather than left to shadow the generated ones
+  if p[1] == "_templates" and n >= 2 then return "archive/" .. rel, "_templates->archive (regenerated from the schema)" end
   return rel, "stay"
 end
 
