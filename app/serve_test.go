@@ -281,20 +281,45 @@ func TestSuccessorsSocketIsLeft(t *testing.T) {
 	}
 }
 
-// TestSecondDaemonOnTheStoreIsRefused: a second daemon on another endpoint over the same store
-// does not start: the store's lease is the daemon's, for every workspace in it.
-func TestSecondDaemonOnTheStoreIsRefused(t *testing.T) {
+// TestSecondDaemonOnTheStoreFindsTheFirst: a second daemon on another endpoint over the same store
+// does not start: the store's lease is the daemon's, for every workspace in it. Its lease-info names
+// the first daemon's endpoint, which answers as that store's daemon, so the second says where the
+// store is served and exits as having nothing to do.
+func TestSecondDaemonOnTheStoreFindsTheFirst(t *testing.T) {
 	dir := short(t)
 	state := filepath.Join(dir, "state")
 	a := filepath.Join(dir, "a.sock")
 	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
 	b := filepath.Join(dir, "b.sock")
 	err := runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild)
-	if !errors.Is(err, store.ErrBusy) {
-		t.Fatalf("a second daemon over the store: %v, want store.ErrBusy", err)
+	if !errors.Is(err, errAlreadyServing) || !strings.Contains(err.Error(), a) {
+		t.Fatalf("a second daemon over the store: %v, want errAlreadyServing naming %s", err, a)
 	}
 	if _, err := os.Stat(b); !os.IsNotExist(err) {
-		t.Errorf("the refused daemon left its socket: %v", err)
+		t.Errorf("the second daemon left its socket: %v", err)
+	}
+}
+
+// TestSecondDaemonDoesNotTrustAMismatchedLeaseInfo: a lease-info naming another process than the
+// one that answers is not believed: the second daemon is refused by the lease, as before.
+func TestSecondDaemonDoesNotTrustAMismatchedLeaseInfo(t *testing.T) {
+	dir := short(t)
+	state := filepath.Join(dir, "state")
+	a := filepath.Join(dir, "a.sock")
+	start(t, writeConfig(t, a, state, "", "kb="+t.TempDir()), a)
+	storePath := filepath.Join(state, "autodoc.db")
+	li, err := store.ReadLeaseInfo(storePath)
+	if err != nil {
+		t.Fatalf("the first daemon wrote no lease-info: %v", err)
+	}
+	li.Instance = "someone-else"
+	if err := store.WriteLeaseInfo(storePath, li); err != nil {
+		t.Fatal(err)
+	}
+	b := filepath.Join(dir, "b.sock")
+	err = runServe(context.Background(), writeConfig(t, b, state, ""), io.Discard, testBuild)
+	if !errors.Is(err, store.ErrBusy) {
+		t.Fatalf("a second daemon over a mismatched lease-info: %v, want store.ErrBusy", err)
 	}
 }
 

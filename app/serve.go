@@ -22,7 +22,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// errAlreadyServing is a compatible AutoDoc answering on the endpoint: this process serves nothing.
+// errAlreadyServing is this store's daemon already answering, on this endpoint or the one its
+// lease-info names: this process serves nothing, and exits 0.
 var errAlreadyServing = errors.New("autodoc is already serving")
 
 // runServe is --serve (ADR 0203 §3): bind the endpoint, open the store (its lease makes this the
@@ -46,14 +47,22 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	if err != nil {
 		return err
 	}
+	storePath, err := cfg.Server.StorePath()
+	if err != nil {
+		return err
+	}
 	ln, err := listen(sock)
 	if errors.Is(err, syscall.EADDRINUSE) {
 		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if v, perr := rpc.ProbeOn(probeCtx, "unix", sock); perr == nil {
-			return fmt.Errorf("%w on %s (version %s); this process is not serving", errAlreadyServing, sock, v)
-		} else {
-			return fmt.Errorf("bind %s: in use by something that is not a compatible autodoc: %v", sock, perr)
+		info, perr := rpc.Probe(probeCtx, "unix", sock)
+		switch {
+		case perr != nil:
+			return fmt.Errorf("bind %s: in use by something that is not an autodoc: %v", sock, perr)
+		case servesStore(info, storePath):
+			return fmt.Errorf("%w on %s (version %s); this process is not serving", errAlreadyServing, sock, info.Version)
+		default:
+			return fmt.Errorf("bind %s: in use by an autodoc %s (protocol %d) that is not serving %s", sock, info.Version, info.Protocol, storePath)
 		}
 	}
 	if err != nil {
@@ -66,18 +75,25 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	}
 	defer removeIfStillOurs(sock, id)
 
-	storePath, err := cfg.Server.StorePath()
-	if err != nil {
-		return err
-	}
 	if stateDir, err := cfg.Server.StateDirPath(); err == nil {
 		noteOldIndexes(stateDir, storePath, out)
 	}
 	db, err := store.Open(ctx, storePath)
+	if errors.Is(err, store.ErrBusy) {
+		// the store's daemon serves on another endpoint: a config naming another socket for the
+		// same store finds it there, through the lease-info, and leaves it be
+		if addr, ok := verifiedHolder(ctx, storePath); ok {
+			return fmt.Errorf("%w on %s, for %s; this process is not serving", errAlreadyServing, addr, storePath)
+		}
+	}
 	if err != nil {
 		return err
 	}
 	defer db.Close()
+	storeID, err := store.Identity(storePath)
+	if err != nil {
+		return err
+	}
 	if st := db.Schema(); len(st.Pending) > 0 {
 		fmt.Fprintf(out, "store %s: schema scripts applied: %s\n", storePath, strings.Join(st.Pending, ", "))
 	}
@@ -108,9 +124,39 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
 	srv := rpc.New(ws, b.version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
-		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking))
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking), rpc.WithStoreID(storeID))
+	// the lease and the socket are both this process's now: say where it serves, beside the store
+	li := store.LeaseInfo{StoreID: storeID, StorePath: storePath, Addr: sock, PID: int64(os.Getpid()), Instance: srv.Instance(),
+		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
+	if err := store.WriteLeaseInfo(storePath, li); err != nil {
+		logger.Warning(log, err, "the lease-info was not written: a client with another socket for this store will not find this daemon")
+	}
+	defer func() { _ = store.RemoveLeaseInfo(storePath, srv.Instance()) }()
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", b.version, sock)
 	return srv.Run(ctx)
+}
+
+// servesStore reports whether a probed daemon serves the store at storePath: its store_id is that
+// store's identity. A daemon too old to say is not taken for it.
+func servesStore(info rpc.ProbeInfo, storePath string) bool {
+	id, err := store.Identity(storePath)
+	return err == nil && info.StoreID != "" && info.StoreID == id
+}
+
+// verifiedHolder is the endpoint of the daemon holding the store's lease, when its lease-info names
+// one that answers as this store's daemon and the same process the record was written by.
+func verifiedHolder(ctx context.Context, storePath string) (string, bool) {
+	li, err := store.ReadLeaseInfo(storePath)
+	if err != nil || li.Addr == "" {
+		return "", false
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	info, err := rpc.Probe(probeCtx, "unix", li.Addr)
+	if err != nil || !servesStore(info, storePath) || info.Instance != li.Instance {
+		return "", false
+	}
+	return li.Addr, true
 }
 
 // noteOldIndexes says once where the index files of the builds before the store are: they are no

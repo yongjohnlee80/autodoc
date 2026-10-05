@@ -38,11 +38,15 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
+	storePath, err := cfg.Server.StorePath()
+	if err != nil {
+		return err
+	}
 	args, err := callParams(params)
 	if err != nil {
 		return err
 	}
-	session := tui.NewSession(sock, func() (string, error) { return tui.SpawnServe(configPath, stateDir) }).UseHandoffs(stateDir)
+	session := tui.NewSession(sock, func() (string, error) { return tui.SpawnServe(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}

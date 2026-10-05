@@ -11,6 +11,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -46,6 +47,11 @@ type Session struct {
 	addr   string
 	spawn  func() (logPath string, err error) // start `autodoc --serve`; nil: never
 	window time.Duration
+	// resolve, when set, finds the address afresh at each Connect (internal/endpoint): the store's
+	// daemon may serve on another config's socket. configured is where a spawned daemon binds, so
+	// a Connect that spawns dials it from then on.
+	resolve    func(ctx context.Context) string
+	configured string
 	// stateDir, when set, is where restart handoffs are kept (handoff.go); self is this process;
 	// handoffCap bounds how long one Connect waits on handoffs in all, on its own clock
 	stateDir   string
@@ -92,6 +98,34 @@ func NewSession(addr string, spawn func() (string, error)) *Session {
 	return &Session{addr: addr, spawn: spawn, window: spawnProbeWindow, self: int64(os.Getpid()), handoffCap: handoffSpan}
 }
 
+// address is where the session dials now.
+func (s *Session) address() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.addr
+}
+
+func (s *Session) setAddr(addr string) {
+	s.mu.Lock()
+	s.addr = addr
+	s.mu.Unlock()
+}
+
+// UseResolver has each Connect find its address with resolve first, and dial configured, where a
+// spawned daemon binds, once it spawns one: a daemon found on another socket that is gone by the
+// time it is dialed costs one spawn here, never a dial loop on a dead address.
+func (s *Session) UseResolver(configured string, resolve func(ctx context.Context) string) *Session {
+	s.configured, s.resolve = configured, resolve
+	return s
+}
+
+// ForStore has each Connect find the daemon serving the store at storePath (internal/endpoint):
+// the configured socket, or another config's, when that daemon's lease-info names it and it answers
+// as this store's daemon.
+func (s *Session) ForStore(configured, storePath string) *Session {
+	return s.UseResolver(configured, func(ctx context.Context) string { return endpoint.Holder(ctx, storePath, configured) })
+}
+
 // UseHandoffs keeps restart handoffs in stateDir, the daemon's state directory: Connect waits on
 // another process's restart before it spawns, and WriteHandoff announces this one's (handoff.go).
 func (s *Session) UseHandoffs(stateDir string) *Session {
@@ -106,13 +140,13 @@ func (s *Session) WriteHandoff() error {
 	if s.stateDir == "" {
 		return nil
 	}
-	return writeHandoff(s.stateDir, s.addr, s.self, time.Now())
+	return writeHandoff(s.stateDir, s.address(), s.self, time.Now())
 }
 
 // RemoveHandoff removes this process's handoff, once its daemon answers or its restart failed.
 func (s *Session) RemoveHandoff() {
 	if s.stateDir != "" {
-		removeHandoff(s.stateDir, s.addr, s.self)
+		removeHandoff(s.stateDir, s.address(), s.self)
 	}
 }
 
@@ -125,8 +159,8 @@ func (s *Session) heldBack(since time.Time) bool {
 	if s.stateDir == "" || !since.IsZero() && time.Since(since) >= s.handoffCap {
 		return false
 	}
-	h, ok := readHandoff(s.stateDir, s.addr)
-	return ok && h.holdsBack(s.self, s.addr, time.Now())
+	h, ok := readHandoff(s.stateDir, s.address())
+	return ok && h.holdsBack(s.self, s.address(), time.Now())
 }
 
 // Connect dials the daemon: on refusal it spawns --serve (once, when it may) and retries with
@@ -144,6 +178,9 @@ func (s *Session) Connect(ctx context.Context) error {
 	if old != nil {
 		_ = old.Close()
 	}
+	if s.resolve != nil {
+		s.setAddr(s.resolve(ctx))
+	}
 	backoff := 100 * time.Millisecond
 	spawned, logPath := false, ""
 	var deadline, heldSince time.Time
@@ -151,7 +188,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	var cli *golibrpc.Client
 	for {
 		var err error
-		cli, err = golibrpc.Dial(ctx, s.addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+		cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
 		if err == nil {
 			break
 		}
@@ -172,9 +209,12 @@ func (s *Session) Connect(ctx context.Context) error {
 				return fmt.Errorf("starting autodoc --serve: %w", err)
 			}
 			spawned = true
+			if s.configured != "" {
+				s.setAddr(s.configured) // the daemon just started binds the configured socket
+			}
 		}
 		if !held && time.Now().After(deadline) {
-			return &ConnectError{Addr: s.addr, Window: s.window, LogPath: logPath, Last: err}
+			return &ConnectError{Addr: s.address(), Window: s.window, LogPath: logPath, Last: err}
 		}
 		select {
 		case <-ctx.Done():
@@ -183,7 +223,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		}
 		backoff = min(backoff*2, 2*time.Second)
 	}
-	res, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": "autodoc-tui"})
+	res, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName})
 	if err != nil {
 		_ = cli.Close()
 		var re *golibrpc.Error
@@ -193,6 +233,13 @@ func (s *Session) Connect(ctx context.Context) error {
 		return fmt.Errorf("hello: %w", err)
 	}
 	m, _ := res.(map[string]any)
+	// The daemon holds the TUI to its own protocol by name; a daemon that admitted this build at
+	// another one is a mismatch all the same, so the restart offer follows rather than a session
+	// that half works.
+	if sp, ok := m["server_protocol"].(int64); ok && sp != rpc.Protocol {
+		_ = cli.Close()
+		return s.mismatch(ctx)
+	}
 	v, _ := m["version"].(string)
 	pid, _ := m["pid"].(int64)
 	token, _ := m["client"].(string)
@@ -219,12 +266,12 @@ func (s *Session) mismatch(ctx context.Context) error {
 }
 
 func (s *Session) probe(ctx context.Context) (OlderServer, error) {
-	cli, err := golibrpc.Dial(ctx, s.addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
 	if err != nil {
 		return OlderServer{}, err
 	}
 	defer cli.Close()
-	res, err := cli.Call(ctx, "sys.hello", map[string]any{"name": "autodoc-tui"})
+	res, err := cli.Call(ctx, "sys.hello", map[string]any{"name": rpc.TUIName})
 	if err != nil {
 		return OlderServer{}, err
 	}
@@ -257,12 +304,12 @@ func (s *Session) StopStale(ctx context.Context) error {
 	if old == nil {
 		return errors.New("tui: no older backend to stop")
 	}
-	cli, err := golibrpc.Dial(ctx, s.addr, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	cli, err := golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
 	if err != nil {
 		return err
 	}
 	defer cli.Close()
-	if _, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": old.Protocol, "name": "autodoc-tui"}); err != nil {
+	if _, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": old.Protocol, "name": rpc.TUIName}); err != nil {
 		return fmt.Errorf("hello at protocol %d: %w", old.Protocol, err)
 	}
 	_, err = cli.Call(ctx, "sys.shutdown")
@@ -320,6 +367,10 @@ func (s *Session) EventsHead() int64 {
 }
 
 // Version is the daemon's, as its hello said.
+// Address is where the session dials now: the address a Connect resolved, or the configured one
+// after a spawn.
+func (s *Session) Address() string { return s.address() }
+
 func (s *Session) Version() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
