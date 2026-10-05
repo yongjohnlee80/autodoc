@@ -40,7 +40,7 @@ func (f *fakeRankers) RemoveRanker(_ context.Context, name string) error {
 func (f *fakeRankers) Use(_ context.Context, name string) error { return f.note("use", name) }
 func (f *fakeRankers) SetWindow(_ context.Context, n int) error { return f.note("window", n) }
 func (f *fakeRankers) Models(_ context.Context, name string, sp store.RankerSpec) ([]string, error) {
-	return []string{"BAAI/bge-reranker-v2-m3"}, f.note("models", name, sp.Kind)
+	return []string{"BAAI/bge-reranker-v2-m3"}, f.note("models", name, sp.Kind, sp.BaseURL)
 }
 func (f *fakeRankers) Usage(_ context.Context, name string, days int) ([]store.Usage, error) {
 	return []store.Usage{{Day: "2026-10-05", Requests: 3, Texts: 60}}, f.note("usage", name, days)
@@ -89,6 +89,7 @@ func TestRankerVerbs(t *testing.T) {
 		t.Errorf("ranker.models = %v", got)
 	}
 	call(t, cli, "ranker.models", map[string]any{"kind": "tei", "base_url": "http://h:2"})
+	call(t, cli, "ranker.models", "tei", map[string]any{"kind": "tei", "base_url": "http://h:3"}) // an edit of tei
 	if got := call(t, cli, "ranker.usage", "tei", 7).([]any); len(got) != 1 || got[0].(map[string]any)["requests"] != int64(3) {
 		t.Errorf("ranker.usage = %v", got)
 	}
@@ -97,7 +98,8 @@ func TestRankerVerbs(t *testing.T) {
 	}
 	wantGot := []any{
 		[]any{"add", "c", true}, []any{"update", "c", "c2", false}, []any{"remove", "c2"}, []any{"use", "tei"},
-		[]any{"window", 30}, []any{"models", "tei", ""}, []any{"models", "", "tei"}, []any{"usage", "tei", 7}, []any{"log", "tei", 10},
+		[]any{"window", 30}, []any{"models", "tei", "", ""}, []any{"models", "", "tei", "http://h:2"},
+		[]any{"models", "tei", "tei", "http://h:3"}, []any{"usage", "tei", 7}, []any{"log", "tei", 10},
 	}
 	if !reflect.DeepEqual(f.got, wantGot) {
 		t.Errorf("the rankers were asked %v\nwant %v", f.got, wantGot)
@@ -108,6 +110,7 @@ func TestRankerVerbs(t *testing.T) {
 		{"ranker.add", map[string]any{"name": "x", "key": 1}},
 		{"ranker.window", "thirty"},
 		{"ranker.use"},
+		{"ranker.models", map[string]any{"kind": "tei"}, map[string]any{"kind": "tei"}},
 	} {
 		if _, err := cli.Call(context.Background(), bad[0].(string), bad[1:]...); code(err) != golibrpc.CodeInvalidParams {
 			t.Errorf("%v: %v, want invalid params", bad, err)

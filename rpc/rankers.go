@@ -164,18 +164,28 @@ func (s *Server) registerRankers() {
 		}
 		return nil, s.rankers.SetWindow(ctx, int(n))
 	}, false))
-	// a stored ranker's models by its name, or an unsaved one's by its kind, base_url and key: a
-	// TEI server's one model, none for a rerank-API endpoint (its model is typed)
-	s.handle("ranker.models", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+	// a ranker's models: a TEI server's one model, none for a rerank-API endpoint (its model is typed)
+	s.handle("ranker.models", s.verb(1, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
 		if err := need(); err != nil {
 			return nil, err
 		}
+		// a stored one by its name; an unsaved one by its spec; an edit of a stored one by its name
+		// and the edit's spec, which is what is asked, with the stored key unless it carries one
 		var name string
 		var sp store.RankerSpec
 		switch v := p[0].(type) {
 		case string:
 			name = v
+			if len(p) == 2 {
+				var err error
+				if sp, err = rankerSpecOf(p[1]); err != nil {
+					return nil, err
+				}
+			}
 		default:
+			if len(p) == 2 {
+				return nil, invalid("ranker.models: a spec alone, or a name and a spec")
+			}
 			var err error
 			if sp, err = rankerSpecOf(v); err != nil {
 				return nil, err

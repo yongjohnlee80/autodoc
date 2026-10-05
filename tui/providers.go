@@ -353,11 +353,11 @@ func (h *Host) providerKindChosen(i int, base string) {
 func (h *Host) listModels(base, key string) {
 	h.formBase, h.formKey = base, key
 	spec := map[string]any{"kind": providerKinds[h.formKind].kind, "base_url": strings.TrimSpace(base)}
-	var arg any = spec
+	args := []any{spec}
 	if key != "" {
 		spec["key"] = key
 	} else if h.editingProvider != "" {
-		arg = h.editingProvider // its stored key, opened by the daemon
+		args = []any{h.editingProvider, spec} // the form's endpoint, with the stored key, opened by the daemon
 	}
 	h.set("App.providerModelsStatus", "asking the provider…")
 	gen := h.session.Gen()
@@ -365,7 +365,7 @@ func (h *Host) listModels(base, key string) {
 		models []string
 		err    error
 	}) {
-		res, err := h.call(ctx, "embedding.models", arg)
+		res, err := h.call(ctx, "embedding.models", args...)
 		if err != nil {
 			out.err = err
 			return

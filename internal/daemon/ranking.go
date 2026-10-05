@@ -361,9 +361,10 @@ func (r *Ranking) Supplied() (string, bool) {
 	return "", false
 }
 
-// Models are what a ranker serves: a stored one's, by name, or one not yet stored, by its kind,
-// base URL and key. A TEI server names its one model; a rerank-API endpoint names none, so its
-// model is typed.
+// Models are what a ranker serves: a stored one's, by name; one not yet stored, by its kind, base
+// URL and key; or a stored one as an edit would make it, by its name and the edit's kind and base
+// URL, the stored key used unless the edit has one. A TEI server names its one model; a rerank-API
+// endpoint names none, so its model is typed.
 func (r *Ranking) Models(ctx context.Context, name string, sp store.RankerSpec) ([]string, error) {
 	kind, base, key := sp.Kind, sp.BaseURL, ""
 	if sp.Key != nil {
@@ -374,7 +375,12 @@ func (r *Ranking) Models(ctx context.Context, name string, sp store.RankerSpec) 
 		if err != nil {
 			return nil, err
 		}
-		kind, base, key = info.Kind, info.BaseURL, k
+		if sp.Kind == "" {
+			kind, base = info.Kind, info.BaseURL
+		}
+		if sp.Key == nil {
+			key = k
+		}
 	}
 	if kind != store.KindTEI {
 		return nil, nil

@@ -403,3 +403,41 @@ func TestALiveTEIRanker(t *testing.T) {
 		t.Errorf("usage %+v, %v", us, err)
 	}
 }
+
+// TestModelsAsksTheEditsEndpoint: a stored ranker's name alone asks its stored endpoint; with an
+// edit's kind and base URL, the edit's endpoint is asked, the stored key lent: a Check of an edit
+// never answers for the endpoint the edit replaces.
+func TestModelsAsksTheEditsEndpoint(t *testing.T) {
+	db := rankStore(t, newTEI(t, "reranker"), "t")
+	r, _, _ := rankingOver(t, db, Supplied{})
+	ctx := context.Background()
+	if models, err := r.Models(ctx, "t", store.RankerSpec{}); err != nil || len(models) != 1 {
+		t.Fatalf("the stored endpoint: %v, %v", models, err)
+	}
+	edit := store.RankerSpec{Kind: store.KindTEI, BaseURL: newTEI(t, "embedding").URL}
+	if _, err := r.Models(ctx, "t", edit); !errors.Is(err, rank.ErrNotARanker) {
+		t.Errorf("an edit to an embedder: %v, want ErrNotARanker", err)
+	}
+	// the stored key is lent to the edit's endpoint when none is typed, and a typed one wins
+	keyed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer sk-stored" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"model_id": "keyed", "model_type": map[string]any{"reranker": map[string]any{}}})
+	}))
+	t.Cleanup(keyed.Close)
+	key := "sk-stored"
+	if _, err := db.AddRanker(ctx, store.RankerSpec{Name: "k", Kind: store.KindTEI, BaseURL: keyed.URL, Key: &key}); err != nil {
+		t.Fatal(err)
+	}
+	moved := store.RankerSpec{Kind: store.KindTEI, BaseURL: keyed.URL + "/"}
+	if models, err := r.Models(ctx, "k", moved); err != nil || len(models) != 1 {
+		t.Errorf("an edit with the stored key lent: %v, %v", models, err)
+	}
+	wrong := "sk-typed"
+	moved.Key = &wrong
+	if _, err := r.Models(ctx, "k", moved); !errors.Is(err, rank.ErrUnauthorized) {
+		t.Errorf("an edit with a typed key: %v, want the typed key sent (ErrUnauthorized)", err)
+	}
+}

@@ -412,14 +412,15 @@ func (h *Host) rankerKindChosen(i int, base string) {
 }
 
 // checkRanker asks the ranker the form describes what it serves: a TEI server names its model; a
-// rerank API names none, its model typed.
+// rerank API names none, its model typed. It is the form's kind and base URL that are asked, an
+// edited ranker lending its stored key when none is typed.
 func (h *Host) checkRanker(base, key string) {
 	spec := map[string]any{"kind": rankerKinds[h.rankerFormKind].kind, "base_url": strings.TrimSpace(base)}
-	var arg any = spec
+	args := []any{spec}
 	if key != "" {
 		spec["key"] = key
 	} else if h.editingRanker != "" {
-		arg = h.editingRanker // its stored key, opened by the daemon
+		args = []any{h.editingRanker, spec} // its stored key, opened by the daemon
 	}
 	h.set("App.rankerModelsStatus", "asking the ranker…")
 	gen := h.session.Gen()
@@ -428,7 +429,7 @@ func (h *Host) checkRanker(base, key string) {
 		err    error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "ranker.models", arg)
+		res, err := h.call(ctx, "ranker.models", args...)
 		if err != nil {
 			return answer{err: err}
 		}

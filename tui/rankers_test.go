@@ -188,6 +188,15 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 		return err == nil && len(rs) == 1 && rs[0].Name == "local" && rs[0].BaseURL == tei.URL
 	})
 	r.s.WaitForText(t, "local         TEI")
+	// Check on an edit asks the edited endpoint, with the stored key: here, an embedder
+	r.h.p.Post(func() { r.h.startEditRanker(0) })
+	r.s.WaitForText(t, "edit local")
+	r.h.p.Post(func() { r.h.checkRanker(fakeTEIOf(t, "embedding").URL, "") })
+	r.s.WaitForText(t, "not a ranker: the server's model is not a re-ranker")
+	r.h.p.Post(func() { r.h.checkRanker(tei.URL, "") })
+	r.s.WaitForText(t, "it ranks with BAAI/bge-reranker-v2-m3")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the form closed", func(sc string) bool { return !strings.Contains(sc, "edit local") })
 	r.keys(t, key('u'))
 	r.s.WaitForText(t, "re-ranking with local over the top 40 candidates")
 	r.keys(t, key('n')) // Window…
@@ -224,4 +233,25 @@ func TestAPeersRankerChangesAreAnnounced(t *testing.T) {
 	one.waitNoticed(t, "the rankers were changed by another client")
 	one.waitNoticed(t, "the ranker in use was changed by another client")
 	one.s.WaitForText(t, "re-ranking with tei over the top 40 candidates")
+}
+
+// TestListModelsOfAnEditAsksItsServer: List models on an edited provider, with no key typed, lists
+// the server the form names, not the one stored.
+func TestListModelsOfAnEditAsksItsServer(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nkestrel\n")})
+	stored, other := newFakeOllama(t, "embedder"), newFakeOllama(t, "other-embedder")
+	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: stored.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	r.h.p.Post(r.h.loadProviders)
+	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.providerList) }) == 1 })
+	r.h.p.Post(func() { r.h.startEditProvider(0) })
+	r.s.WaitForText(t, "edit local")
+	r.h.p.Post(func() { r.h.listModels(other.URL, "") })
+	r.s.WaitForText(t, "1 models")
+	if got := onLoop(r, func() []string { return r.h.modelList }); len(got) != 1 || got[0] != "other-embedder" {
+		t.Errorf("listed %v, want the edited server's other-embedder", got)
+	}
 }
