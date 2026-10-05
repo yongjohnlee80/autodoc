@@ -92,14 +92,6 @@ func TestMermaidDrawsInABrowser(t *testing.T) {
 	if !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}
-	// the browser's own sandbox must run here: a runner that forbids user namespaces refuses it,
-	// and says so; any other failure of the probe is a failure
-	if _, err := widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32); err != nil {
-		if strings.Contains(err.Error(), "No usable sandbox") {
-			t.Skip("the installed browser has no usable sandbox here")
-		}
-		t.Fatalf("the browser probe failed: %v", err)
-	}
 	source := []byte("# Diagrams\n\n```mermaid\nflowchart TD\n  A[\"event arrives<br/>at node N\"] --> B{\"pointer<br/>disabled?\"}\n  B -- yes --> P[\"skip N\"]\n  B -- no --> C[resolve]\n```\n\n" +
 		"```mermaid\nstateDiagram-v2\n  [*] --> Idle\n  Idle --> Armed: press<br/>MenuArm\n  Armed --> Idle: release\n```\n")
 	content, err := export.Render(source, export.HTML, "dark")
@@ -120,6 +112,13 @@ func TestMermaidDrawsInABrowser(t *testing.T) {
 		var stderr []byte
 		if ee, ok := err.(*exec.ExitError); ok {
 			stderr = ee.Stderr
+		}
+		// the browser's own sandbox must run here: a runner that forbids user namespaces refuses
+		// it, and says so. That is read from this run, not a probe before it: the rasterizer's
+		// probe had its 15-second budget, which a cold browser on a loaded runner outlasted, and
+		// was killed for it (CI, 2026-10-04 and -05)
+		if strings.Contains(string(stderr), "No usable sandbox") {
+			t.Skip("the installed browser has no usable sandbox here")
 		}
 		t.Fatalf("the browser: %v: %s", err, stderr)
 	}
