@@ -134,8 +134,9 @@ func wireError(err error) (int64, string) {
 // A fixed set of workspaces offers nothing beyond the core and configures nothing.
 func TestConfigureVerbs_AFixedSet(t *testing.T) {
 	cli := dialServer(t, Fixed())
-	if got := call(t, cli, "sys.capabilities"); !reflect.DeepEqual(got, map[string]any{"databases": false, "registrations": RegistrationsMap(registrations.Tables{})}) {
-		t.Errorf("sys.capabilities = %v, want databases false and no registrations", got)
+	if got := call(t, cli, "sys.capabilities"); !reflect.DeepEqual(got, map[string]any{"databases": false, "registrations": RegistrationsMap(registrations.Tables{}),
+		"ranker": map[string]any{"supplied": false}}) {
+		t.Errorf("sys.capabilities = %v, want databases false, no registrations and no ranker supplied", got)
 	}
 	_, err := cli.Call(context.Background(), "workspace.configure", "kb", map[string]any{"name": "docs"})
 	if c, msg := wireError(err); c != CodeUnsupported || msg != "this server's set of workspaces is fixed" {
@@ -149,8 +150,9 @@ func TestConfigureVerbs_AFixedSet(t *testing.T) {
 func TestConfigureVerbs_OverTheWire(t *testing.T) {
 	m := &configurer{Workspaces: Fixed()}
 	cli := dialServer(t, m)
-	if got := call(t, cli, "sys.capabilities"); !reflect.DeepEqual(got, map[string]any{"databases": true, "registrations": RegistrationsMap(registrations.Tables{})}) {
-		t.Errorf("sys.capabilities = %v, want databases true and no registrations", got)
+	if got := call(t, cli, "sys.capabilities"); !reflect.DeepEqual(got, map[string]any{"databases": true, "registrations": RegistrationsMap(registrations.Tables{}),
+		"ranker": map[string]any{"supplied": false}}) {
+		t.Errorf("sys.capabilities = %v, want databases true, no registrations and no ranker supplied", got)
 	}
 	call(t, cli, "workspace.configure", "kb", map[string]any{"section_tokens": 256, "destination": "sqlite"})
 	if m.name != "kb" || !reflect.DeepEqual(m.got, store.Changes{SectionTokens: ptr(256), Destination: ptr("sqlite")}) {

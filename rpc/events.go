@@ -62,6 +62,11 @@ var eventsOf = map[string]eventSpec{
 	"embedding.add":                 {"embedding.providers", -1, -1, nil},
 	"embedding.update":              {"embedding.providers", -1, 0, nil},
 	"embedding.remove":              {"embedding.providers", -1, 0, nil},
+	"ranker.use":                    {"ranker.switched", -1, 0, nil},
+	"ranker.window":                 {"ranker.switched", -1, 0, nil},
+	"ranker.add":                    {"ranker.providers", -1, -1, nil},
+	"ranker.update":                 {"ranker.providers", -1, 0, nil},
+	"ranker.remove":                 {"ranker.providers", -1, 0, nil},
 }
 
 // newClientToken is a session's token: the client's own name and a random suffix.

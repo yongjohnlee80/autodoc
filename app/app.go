@@ -23,6 +23,7 @@ import (
 	"syscall"
 
 	"github.com/yongjohnlee80/golib/search"
+	"github.com/yongjohnlee80/golib/search/rank"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
@@ -41,6 +42,38 @@ type Options struct {
 	// identities read once, at entry: a file of one is indexed from its derived text, and doc.read
 	// serves that text, read-only. nil: none.
 	Deriver Deriver
+	// Rank is the build's search ranking (ADR 0215 §3): its own ranker, the texts the ranker reads,
+	// and whether a search answers ranked or not at all. The zero value: the stored ranker models,
+	// over the chunks' texts, falling back to recall order.
+	Rank Rank
+}
+
+// Rank is a build's search ranking.
+type Rank struct {
+	// Ranker is the build's own ranker: probed at startup, then the only one in use for the
+	// daemon's life, and not persisted; the stored selection is kept, unchangeable, for a build
+	// that does not supply one. nil: the stored ranker models.
+	Ranker rank.Ranker
+	// Window is how many candidates Ranker ranks, 10 to 100; 0: the default (40). It needs Ranker:
+	// the stored models' window is the preference ranker.window.
+	Window int
+	// Texts are the texts the ranker reads for the hits, in any format. nil: each hit's chunk, its
+	// breadcrumb then its body.
+	Texts rank.TextSource
+	// Required answers ranked or not at all: a worded search the ranker cannot rank is refused,
+	// never answered in recall order.
+	Required bool
+}
+
+// check refuses a Rank a build cannot mean: a window outside the bounds, or one with no ranker.
+func (r Rank) check() error {
+	switch {
+	case r.Window != 0 && r.Ranker == nil:
+		return errors.New("Options.Rank.Window needs Options.Rank.Ranker: the stored rankers' window is the preference ranker.window")
+	case r.Window != 0 && (r.Window < rank.MinWindow || r.Window > rank.MaxWindow):
+		return fmt.Errorf("Options.Rank.Window %d is outside %d to %d", r.Window, rank.MinWindow, rank.MaxWindow)
+	}
+	return nil
 }
 
 // Deriver and Derived are a build's text derivation (core/registrations).
@@ -53,6 +86,7 @@ type (
 type build struct {
 	version string
 	reg     *registrations.Table
+	rank    Rank
 }
 
 // Main runs autodoc as its CLI does and returns the process's exit code: 2 for usage, 1 for an
@@ -63,11 +97,14 @@ func Main(ctx context.Context, args []string, o Options) int {
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
 	reg, err := registrations.New(o.Chunkers, o.Deriver)
+	if err == nil {
+		err = o.Rank.check()
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	b := build{version: o.Version, reg: reg}
+	b := build{version: o.Version, reg: reg, rank: o.Rank}
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	serve := fs.Bool("serve", false, "run the daemon")

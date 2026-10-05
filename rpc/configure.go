@@ -240,7 +240,7 @@ func (s *Server) configureVerbs() {
 	// what is false. A daemon whose workspaces say nothing offers nothing extra. Its registrations
 	// are always there, empty for the community build (Protocol 10).
 	s.handle("sys.capabilities", s.verb(0, 0, func(context.Context, *Workspace, []any) (any, error) {
-		out := map[string]any{"databases": false, "registrations": RegistrationsMap(s.reg)}
+		out := map[string]any{"databases": false, "registrations": RegistrationsMap(s.reg), "ranker": s.rankerCapability()}
 		if c, ok := s.workspaces.(interface{ Capabilities() map[string]bool }); ok {
 			for k, v := range c.Capabilities() {
 				out[k] = v
