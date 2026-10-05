@@ -55,4 +55,18 @@ function M.set_primary(ws, confirmed)
   return kb.set_primary(nil, { workspace = ws.name, root = ws.root }, { confirmed = confirmed == true })
 end
 
+---add_location adds a folder as a workspace (workspace.add); the drawer's A wraps it in dialogs.
+---@param name string
+---@param root string an absolute directory
+---@param cb fun(ws: table|nil, err: table|nil)
+function M.add_location(name, root, cb)
+  session.call("workspace.add", { name, root }, cb)
+end
+
+---drawer_open / drawer_toggle / drawer_focus show the kb drawer in whichever host is active
+---(auto-finder's kb section, else autodoc's own panel). `cb(ok, value)` as the host registry's.
+function M.drawer_open(cb) return require("autodoc.views.host").open(cb) end
+function M.drawer_toggle(cb) return require("autodoc.views.host").toggle(cb) end
+function M.drawer_focus(cb) return require("autodoc.views.host").focus(cb) end
+
 return M
