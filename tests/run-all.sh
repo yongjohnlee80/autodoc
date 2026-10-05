@@ -33,6 +33,7 @@ if [ -z "${AUTODOC_TEST_AUTOCORE:-}" ] || [ ! -d "$AUTODOC_TEST_AUTOCORE/lua/aut
   exit 1
 fi
 export AUTODOC_TEST_AUTOCORE
+export AUTO_CORE="$AUTODOC_TEST_AUTOCORE" # the name the KB tooling's suite reads
 
 echo "==> building autodoc"
 if ! CGO_ENABLED=0 GOFLAGS=-buildvcs=false go build -o "$work/bin/autodoc" ./cmd/autodoc; then
