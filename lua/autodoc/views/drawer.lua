@@ -7,7 +7,7 @@
 ---    ★ global-kb      primary · watching · semantic ready
 ---      ▶ adrs/                       documents from index.documents, folded client-side
 ---      README.md
----    ● monstercat-kb  selected · watching · embedding 412/980
+---    ● work-kb        selected · watching · embedding 412/980
 ---    ○ docs-archive   watching · embedding when opened
 ---  ▼ Embedding Models (2)
 ---    ● embeddinggemma  embeddinggemma:300m · in use
