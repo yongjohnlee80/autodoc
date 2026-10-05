@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -199,5 +200,38 @@ func TestRerankRunsOnlyWhenAsked(t *testing.T) {
 			t.Errorf("%v: %d calls, first %v, rank %v, stages %v; want one call and the ranker's order", opts,
 				ranker.count()-before, first["path"], res["rank"], res["stages"])
 		}
+	}
+}
+
+// TestAWordlessSemanticSearchListsWithoutAModel: a query of filters alone embeds nothing, so asked
+// for meaning alone on a workspace with no model it still lists the files its filters admit, by the
+// lexical scan, and says meaning was skipped for want of words; one with a word is refused.
+func TestAWordlessSemanticSearchListsWithoutAModel(t *testing.T) {
+	cli, fsys := schemaServer(t, "version: 1\nfrontmatter:\n  type: {type: string, enum: [note, adr]}\n")
+	ctx := context.Background()
+	for p, content := range map[string]string{"adr.md": "---\ntype: adr\n---\nkestrel\n", "note.md": "---\ntype: note\n---\nkestrel\n"} {
+		if _, err := fsys.WriteFile(ctx, p, strings.NewReader(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	eventually(t, "both indexed", func() bool {
+		st := call(t, cli, "search.query", "kb", "kestrel").(map[string]any)
+		return len(st["hits"].([]any)) == 2
+	})
+	semantic := map[string]any{"stages": []any{"semantic"}}
+	for name, params := range map[string][]any{
+		"a facet in the query": {"kb", "type:adr", semantic},
+		"opts.facets alone":    {"kb", "", map[string]any{"stages": []any{"semantic"}, "facets": map[string]any{"type": "adr"}}},
+	} {
+		res := call(t, cli, "search.query", params...).(map[string]any)
+		hits := res["hits"].([]any)
+		want := map[string]any{"requested": []any{"semantic"}, "performed": []any{"lexical"},
+			"skipped": map[string]any{"semantic": "the query has no words"}}
+		if len(hits) != 1 || hits[0].(map[string]any)["path"] != "adr.md" || res["mode_used"] != "facet" || !reflect.DeepEqual(res["stages"], want) {
+			t.Errorf("%s, semantic alone, no model: %d hits, %s, stages %v; want adr.md listed, %v", name, len(hits), res["mode_used"], res["stages"], want)
+		}
+	}
+	if _, err := cli.Call(ctx, "search.query", "kb", "kestrel type:adr", semantic); code(err) != CodeUnsupported {
+		t.Errorf("a word beside the facet, semantic alone, no model: %v, want CodeUnsupported", err)
 	}
 }
