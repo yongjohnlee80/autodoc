@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/parse/qml"
@@ -125,7 +124,7 @@ func (buildRanker) Rank(_ context.Context, _ string, texts []string) ([]float64,
 func (buildRanker) Model() rank.Model { return rank.Model{Provider: "build", Name: "slm-ranker"} }
 
 // TestABuildsRankerIsShownReadOnly: under a build's ranker the tab says so, Use and Don't use do
-// nothing, and the stored rankers can still be removed.
+// nothing, and the stored rankers can still be removed; the search's Rerank box names it.
 func TestABuildsRankerIsShownReadOnly(t *testing.T) {
 	d := startManagedRanking(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nkestrel\n")}, serving.Options{}, serving.Supplied{Ranker: buildRanker{}})
 	ctx := context.Background()
@@ -151,10 +150,14 @@ func TestABuildsRankerIsShownReadOnly(t *testing.T) {
 	if sc := r.s.String(); strings.Contains(sc, "not used") || strings.Contains(sc, "the ranker's window") {
 		t.Errorf("a choice was asked of the daemon under the build's ranker:\n%s", sc)
 	}
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "AI models closed", func(sc string) bool { return !strings.Contains(sc, "rankers") })
+	r.h.p.Post(r.h.openSearch)
+	r.s.WaitForText(t, "[x] Rerank (slm-ranker)") // the search's box names the build's ranker
 }
 
-// TestTheRankerFormAndWindow: Add… opens the form on a TEI server; Check names the model it ranks
-// with; a ranker the store would not keep opens the form again with the reason, and a good one is
+// TestTheRankerFormAndWindow: Add… opens the form on a TEI server; another kind fills in its own
+// address, never over one typed; Check names the model it ranks with; a ranker the store would not keep opens the form again with the reason, and a good one is
 // saved. Window… sets the window of the one in use; one outside the bounds opens it again, saying
 // why.
 func TestTheRankerFormAndWindow(t *testing.T) {
@@ -167,6 +170,21 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	r.keys(t, key('a')) // Add…
 	r.s.WaitForText(t, "add a ranker")
 	// the TEI playbook's address, and no key: a local TEI has none
+	r.s.WaitForText(t, "http://127.0.0.1:18080")
+	// another kind fills in its own address over the one kind's default, never over one typed
+	r.h.p.Post(func() { r.h.rankerKindChosen(1, defaultTEIURL) })
+	r.s.WaitForText(t, "https://api.cohere.com/v2")
+	r.h.p.Post(func() { r.h.rankerKindChosen(len(rankerKinds), "") }) // no such kind: nothing changes
+	r.h.p.Post(func() { r.h.rankerKindChosen(0, "https://api.cohere.com/v2") })
+	r.s.WaitForText(t, "http://127.0.0.1:18080")
+	r.h.p.Post(func() {
+		r.h.setField("App.rankerBase", "http://my-ranker:9000")
+		r.h.rankerKindChosen(1, "http://my-ranker:9000")
+	})
+	r.s.WaitFor(t, "the typed address kept", func(sc string) bool {
+		return onLoop(r, func() int { return r.h.rankerFormKind }) == 1 && strings.Contains(sc, "http://my-ranker:9000")
+	})
+	r.h.p.Post(func() { r.h.rankerKindChosen(0, defaultTEIURL) })
 	r.s.WaitForText(t, "http://127.0.0.1:18080")
 	r.h.p.Post(func() { r.h.checkRanker(tei.URL, "") })
 	r.s.WaitForText(t, "it ranks with BAAI/bge-reranker-v2-m3")
@@ -255,124 +273,4 @@ func TestListModelsOfAnEditAsksItsServer(t *testing.T) {
 	if got := onLoop(r, func() []string { return r.h.modelList }); len(got) != 1 || got[0] != "other-embedder" {
 		t.Errorf("listed %v, want the edited server's other-embedder", got)
 	}
-}
-
-// TestTheSearchRankerLines: what the search's ranker line says when the search opens (the ranker in
-// use, a build's own, or none) and after an answer (the model that ordered the hits, or why not).
-func TestTheSearchRankerLines(t *testing.T) {
-	opened := []struct {
-		list map[string]any
-		want string
-	}{
-		{map[string]any{}, "ranker: none"},
-		{map[string]any{"supplied": "acme/slm-ranker"}, "ranker: slm-ranker · build's"},
-		{map[string]any{"supplied": "acme/slm-ranker", "error": "the ranker did not answer"},
-			"ranker: slm-ranker · build's · unavailable: the ranker did not answer"},
-		{map[string]any{"active": "tei", "rankers": []any{map[string]any{"name": "tei", "kind": "tei"}}}, "ranker: tei · TEI"},
-		{map[string]any{"active": "cohere", "rankers": []any{
-			map[string]any{"name": "tei", "kind": "tei"},
-			map[string]any{"name": "cohere", "kind": "rerank-api", "model": "rerank-v3.5"}}}, "ranker: cohere · rerank-v3.5"},
-		{map[string]any{"active": "tei", "error": "the server did not answer",
-			"rankers": []any{map[string]any{"name": "tei", "kind": "tei"}}}, "ranker: tei · TEI · unavailable: the server did not answer"},
-	}
-	for _, c := range opened {
-		if got := searchRankerLine(c.list); got != c.want {
-			t.Errorf("opened over %v: %q, want %q", c.list, got, c.want)
-		}
-	}
-	answered := []struct {
-		rank map[string]any
-		want string
-	}{
-		{map[string]any{"state": "ready", "model": "BAAI/bge-reranker-v2-m3"}, "re-ranked by bge-reranker-v2-m3"},
-		{map[string]any{"state": "error", "error": "the ranker did not answer"}, "not re-ranked: the ranker did not answer"},
-		{map[string]any{"state": "off"}, ""},
-		{map[string]any{}, ""},
-	}
-	for _, c := range answered {
-		if got := searchRankedLine(c.rank); got != c.want {
-			t.Errorf("answered %v: %q, want %q", c.rank, got, c.want)
-		}
-	}
-}
-
-// TestTheSearchNamesItsRanker: the search picker's ranker line, end to end: none before a ranker is
-// used; the ranker in use as soon as the search opens; the model once a search re-ranked its hits;
-// and why not, when the ranker in use cannot rank.
-func TestTheSearchNamesItsRanker(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nkestrel\n", "b.md", "# B\n\nkestrel in a longer note\n")})
-	ctx := context.Background()
-	if _, err := d.db.AddRanker(ctx, store.RankerSpec{Name: "tei", Kind: store.KindTEI, BaseURL: fakeTEI(t).URL}); err != nil {
-		t.Fatal(err)
-	}
-	// broken answers ranker.use's probe (its first /rerank), then fails every search's
-	var reranks atomic.Int32
-	broken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/info":
-			_ = json.NewEncoder(w).Encode(map[string]any{"model_id": "BAAI/bge-reranker-v2-m3",
-				"model_type": map[string]any{"reranker": map[string]any{}}, "max_client_batch_size": 8})
-		case reranks.Add(1) == 1:
-			var req struct{ Texts []string }
-			_ = json.NewDecoder(r.Body).Decode(&req)
-			out := []map[string]any{}
-			for i := range req.Texts {
-				out = append(out, map[string]any{"index": i, "score": 1.0})
-			}
-			_ = json.NewEncoder(w).Encode(out)
-		default:
-			http.Error(w, "boom", http.StatusInternalServerError)
-		}
-	}))
-	t.Cleanup(broken.Close)
-	if _, err := d.db.AddRanker(ctx, store.RankerSpec{Name: "broken", Kind: store.KindTEI, BaseURL: broken.URL}); err != nil {
-		t.Fatal(err)
-	}
-	o := newFakeOllama(t, "embedder")
-	if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
-		t.Fatal(err)
-	}
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
-	r.ready(t)
-	if _, err := r.h.session.Call(ctx, "embedding.use", "local"); err != nil {
-		t.Fatal(err)
-	}
-	reopen := func() {
-		t.Helper()
-		if onLoop(r, func() bool { return r.h.searchOpen }) {
-			r.keys(t, esc())
-			r.s.WaitFor(t, "search closed", func(sc string) bool { return !strings.Contains(sc, "search: words") })
-		}
-		r.h.p.Post(func() { r.h.searchQuery = "" })
-		r.h.p.Post(r.h.openSearch)
-		r.s.WaitForText(t, "search: words")
-	}
-
-	line := func(want string) {
-		t.Helper()
-		r.s.WaitForText(t, want)
-		r.s.WaitFor(t, "the ranker line saying "+want, func(string) bool {
-			return onLoop(r, func() string { return r.h.searchRanker }) == want
-		})
-	}
-	reopen()
-	line("ranker: none")
-
-	if _, err := r.h.session.Call(ctx, "ranker.use", "tei"); err != nil {
-		t.Fatal(err)
-	}
-	reopen()
-	line("ranker: tei · TEI")
-	r.h.p.Post(func() { r.h.searchLive("kestrel") })
-	line("re-ranked by bge-reranker-v2-m3")
-
-	if _, err := r.h.session.Call(ctx, "ranker.use", "broken"); err != nil {
-		t.Fatal(err)
-	}
-	reopen()
-	line("ranker: broken · TEI")
-	r.h.p.Post(func() { r.h.searchLive("kestrel") })
-	r.s.WaitFor(t, "the ranker line saying why not", func(string) bool {
-		return strings.HasPrefix(onLoop(r, func() string { return r.h.searchRanker }), "not re-ranked: ")
-	})
 }

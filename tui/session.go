@@ -62,6 +62,7 @@ func (h *Host) start() {
 		h.checkRegistrations()
 		h.entered = false // a new connection enters its workspace again, as the first did
 		h.loadPrefs()
+		h.loadStageRanker(false)
 		h.loadWorkspaces()
 		h.followEvents()
 		h.watch()

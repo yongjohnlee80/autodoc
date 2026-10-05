@@ -78,12 +78,14 @@ type prefs struct {
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
+	// searchStages are the search's boxes as the user left them (stages.go)
+	searchStages stageChoice
 }
 
 func defaultPrefs() prefs {
 	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
 		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
-		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}}
+		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}, searchStages: allStagesChecked()}
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
@@ -132,6 +134,9 @@ func prefsOf(m map[string]any) prefs {
 	}
 	if s, ok := str(prefCorner); ok && slices.Contains(corners, s) {
 		p.toastCorner = s
+	}
+	if s, ok := str(prefSearchStages); ok {
+		p.searchStages = stageChoiceOf(s)
 	}
 	if s, ok := str(prefSeconds); ok {
 		if n, err := strconv.Atoi(s); err == nil && n >= 1 && n <= maxToastSeconds {
@@ -228,6 +233,7 @@ func (h *Host) applyPrefs(p prefs) {
 	h.syncPageWidth()
 	h.syncPrefDialog()
 	h.applyToastPrefs()
+	h.syncStages(true)
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
 	}
