@@ -67,6 +67,9 @@ func (h *Host) loadWorkspaces() {
 			}
 		}
 		h.showWorkspaceRows()
+		if h.ws != "" && (pick < 0 || a.list[pick].name != h.ws) {
+			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
+		}
 		if pick < 0 {
 			h.ws, h.filesAll = "", nil
 			if h.keepDraft {
@@ -141,8 +144,12 @@ func (h *Host) useWorkspace(i int) {
 	h.guard("switch to "+w.name, func() { h.enter(w.name) })
 }
 
-// enter makes name the workspace in use: the file closes, and its files are listed for the pickers.
+// enter makes name the workspace in use, and lists its files for the pickers. Entering another
+// workspace closes the file (every caller has asked about unsaved changes first). Entering the one in
+// use again, as a new connection does, keeps the page as it is, unsaved text, cursor and all: only
+// the connection changed, so the open file is checked against the disk (recheckFile).
 func (h *Host) enter(name string) {
+	again := name == h.ws
 	h.epoch++
 	h.ws, h.entered, h.filesAll = name, true, nil
 	if ws, ok := h.activeWorkspaceInfo(); ok {
@@ -153,9 +160,13 @@ func (h *Host) enter(name string) {
 		h.remember(name)
 	}
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
-	if h.keepDraft {
+	switch {
+	case h.keepDraft:
 		h.keepDraft = false // the draft a removed workspace left stays on the page (events.go)
-	} else {
+	case again && h.file.open:
+		h.recheckFile()
+	case again: // the untitled draft, or the empty page, stays
+	default:
 		h.closeFile()
 	}
 	h.prog = progress{}

@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
@@ -184,6 +185,51 @@ func (h *Host) readPage() {
 	h.setDirty(h.file.dirty) // the status line's title carries the badge
 	h.validateSoon()
 	h.refreshOutline() // and the frame's
+}
+
+// recheckFile checks the open file against the disk on a new connection, which may have missed a
+// change: kept as it is at the version it was read at; read again, the cursor where it was, when
+// it changed and has no unsaved changes (one that has finds out at its save, as a conflict); when it
+// is gone, closed, after asking over unsaved changes, whose save writes it anew.
+func (h *Host) recheckFile() {
+	gen, ep, ws, p := h.file.gen, h.epoch, h.ws, h.file.path
+	type answer struct {
+		content, version string
+		err              error
+	}
+	do(h, func(ctx context.Context) answer {
+		res, err := h.call(ctx, "doc.read", ws, p)
+		if err != nil {
+			return answer{err: err}
+		}
+		m := asMap(res)
+		b, _ := m["content"].([]byte)
+		return answer{content: string(b), version: str(m, "version")}
+	}, func(a answer) {
+		if gen != h.file.gen || ep != h.epoch || !h.file.open {
+			return
+		}
+		switch {
+		case code(a.err) == rpc.CodeNotFound, code(a.err) == golibrpc.CodeInvalidParams:
+			if !h.file.dirty {
+				h.closeFile()
+				h.notify(p + " is gone from the workspace: closed")
+				return
+			}
+			h.file.version = "" // gone: a save writes it anew
+			h.guard("close it: it is gone from the workspace", h.closeFile)
+		case a.err != nil:
+			h.failed("check "+p, a.err)
+		case a.version == h.file.version:
+		case h.file.dirty:
+			h.notify(p + " changed on disk while the backend was away: a save asks before it overwrites it")
+		default:
+			row, col := h.editor.Line()
+			h.show(p, a.content, a.version)
+			h.editor.SetLine(row, col)
+			h.notify("read " + p + " again: it changed on disk while the backend was away")
+		}
+	})
 }
 
 // closeFile empties the editor: no file is open, and the page is a new draft.
