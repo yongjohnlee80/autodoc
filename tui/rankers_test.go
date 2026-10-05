@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/parse/qml"
 	"github.com/yongjohnlee80/golib/search/rank"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
@@ -166,7 +167,15 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	r.s.WaitForText(t, "it ranks with BAAI/bge-reranker-v2-m3")
 	r.h.p.Post(func() { r.h.closeDialog("rankerEdit"); r.h.saveRanker("local", "ftp://nowhere", "", "") })
 	r.s.WaitForText(t, "not saved: a ranker needs a name")
-	r.h.p.Post(func() { r.h.closeDialog("rankerEdit"); r.h.saveRanker("local", tei.URL, "", "") })
+	// as the form's Save calls it
+	save := r.h.commands()["App.saveRanker"]
+	str := func(v string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: v} }
+	r.h.p.Post(func() {
+		r.h.closeDialog("rankerEdit")
+		if err := save([]qml.SpecValue{str("local"), str(tei.URL), str(""), str("")}); err != nil {
+			t.Error(err)
+		}
+	})
 	r.s.WaitFor(t, "local stored", func(string) bool {
 		rs, err := d.db.Rankers(ctx)
 		return err == nil && len(rs) == 1 && rs[0].Name == "local" && rs[0].BaseURL == tei.URL
@@ -183,4 +192,29 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	if p, _ := d.db.Preferences(ctx); p[store.PrefRankerWindow] != "20" {
 		t.Errorf("the stored window: %q", p[store.PrefRankerWindow])
 	}
+}
+
+// TestAPeersRankerChangesAreAnnounced: another client adding a ranker and using it is announced,
+// and the Ranker Models tab open here lists it again, in use.
+func TestAPeersRankerChangesAreAnnounced(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n\nkestrel\n")})
+	one := runTUI(t, NewSession(d.sock, nil), Options{})
+	one.ready(t)
+	rankerTabOpen(t, one)
+	one.s.WaitForText(t, "not re-ranking")
+	peer := NewSession(d.sock, nil)
+	ctx := context.Background()
+	if err := peer.Connect(ctx); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(peer.Close)
+	if _, err := peer.Call(ctx, "ranker.add", map[string]any{"name": "tei", "kind": "tei", "base_url": fakeTEI(t).URL}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := peer.Call(ctx, "ranker.use", "tei"); err != nil {
+		t.Fatal(err)
+	}
+	one.waitNoticed(t, "the rankers were changed by another client")
+	one.waitNoticed(t, "the ranker in use was changed by another client")
+	one.s.WaitForText(t, "re-ranking with tei over the top 40 candidates")
 }
