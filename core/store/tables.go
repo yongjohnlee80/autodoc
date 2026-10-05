@@ -115,7 +115,31 @@ const (
 	ProviderUpdatedAt ProviderField = "updated_at"
 )
 
-// Usage is a provider's use on one day (UTC, YYYY-MM-DD).
+// Ranker is a ranker model (000013). APIKey is the key as the store keeps it, sealed.
+type Ranker struct {
+	ID                   int64
+	Name, Kind           string
+	BaseURL, Model       string
+	APIKey               []byte
+	CreatedAt, UpdatedAt int64
+}
+
+// RankerField names a ranker column.
+type RankerField string
+
+const (
+	RankerID        RankerField = "id"
+	RankerName      RankerField = "name"
+	RankerKind      RankerField = "kind"
+	RankerBaseURL   RankerField = "base_url"
+	RankerModel     RankerField = "model"
+	RankerAPIKey    RankerField = "api_key"
+	RankerCreatedAt RankerField = "created_at"
+	RankerUpdatedAt RankerField = "updated_at"
+)
+
+// Usage is a provider's or a ranker's use on one day (UTC, YYYY-MM-DD); ProviderID is the ranker's
+// id in ranker_usage.
 type Usage struct {
 	ProviderID                                 int64
 	Day                                        string
@@ -135,7 +159,8 @@ const (
 	UsageLimited  UsageField = "limited"
 )
 
-// LogEntry is one of a provider's recent calls.
+// LogEntry is one of a provider's or a ranker's recent calls; ProviderID is the ranker's id in
+// ranker_log.
 type LogEntry struct {
 	ID, ProviderID            int64
 	At, Texts, Tokens, Millis int64
@@ -531,6 +556,9 @@ type tables struct {
 	providers   *dao.Schema[*Provider, ProviderField, noSort, int64]
 	usage       *dao.Schema[*Usage, UsageField, noSort, int64]
 	calls       *dao.Schema[*LogEntry, LogField, noSort, int64]
+	rankers     *dao.Schema[*Ranker, RankerField, noSort, int64]
+	rankUsage   *dao.Schema[*Usage, UsageField, noSort, int64]
+	rankCalls   *dao.Schema[*LogEntry, LogField, noSort, int64]
 	patterns    *dao.Schema[*Pattern, PatternField, noSort, int64]
 	connections *dao.Schema[*Connection, ConnectionField, noSort, int64]
 	documents   *dao.Schema[*Document, DocumentField, noSort, int64]
@@ -633,6 +661,48 @@ func newTables(c dao.DataConn) *tables {
 				LogOutcome:  col("embedding_log", LogOutcome, func(e *LogEntry) any { return &e.Outcome }),
 			}),
 			dao.SortMap[*LogEntry, LogField, noSort, int64](map[noSort]string{ByKey: `"embedding_log"."id"`})),
+		rankers: dao.New[*Ranker, RankerField, noSort, int64](c,
+			dao.Table[*Ranker, RankerField, noSort, int64]("ranker"),
+			dao.ID[*Ranker, RankerField, noSort, int64](RankerID),
+			dao.Fields[*Ranker, RankerField, noSort, int64](map[RankerField]dao.Field[*Ranker]{
+				RankerID:        col("ranker", RankerID, func(r *Ranker) any { return &r.ID }),
+				RankerName:      col("ranker", RankerName, func(r *Ranker) any { return &r.Name }),
+				RankerKind:      col("ranker", RankerKind, func(r *Ranker) any { return &r.Kind }),
+				RankerBaseURL:   col("ranker", RankerBaseURL, func(r *Ranker) any { return &r.BaseURL }),
+				RankerModel:     col("ranker", RankerModel, func(r *Ranker) any { return &r.Model }),
+				RankerAPIKey:    col("ranker", RankerAPIKey, func(r *Ranker) any { return &r.APIKey }),
+				RankerCreatedAt: col("ranker", RankerCreatedAt, func(r *Ranker) any { return &r.CreatedAt }),
+				RankerUpdatedAt: col("ranker", RankerUpdatedAt, func(r *Ranker) any { return &r.UpdatedAt }),
+			}),
+			dao.SortMap[*Ranker, RankerField, noSort, int64](map[noSort]string{ByKey: `"ranker"."name"`})),
+		// a ranker's usage and log are an embedding provider's, in their own tables, ranker_id for
+		// provider_id
+		rankUsage: dao.New[*Usage, UsageField, noSort, int64](c,
+			dao.Table[*Usage, UsageField, noSort, int64]("ranker_usage"),
+			dao.Fields[*Usage, UsageField, noSort, int64](map[UsageField]dao.Field[*Usage]{
+				UsageProvider: col("ranker_usage", "ranker_id", func(u *Usage) any { return &u.ProviderID }),
+				UsageDay:      col("ranker_usage", UsageDay, func(u *Usage) any { return &u.Day }),
+				UsageRequests: col("ranker_usage", UsageRequests, func(u *Usage) any { return &u.Requests }),
+				UsageTexts:    col("ranker_usage", UsageTexts, func(u *Usage) any { return &u.Texts }),
+				UsageTokens:   col("ranker_usage", UsageTokens, func(u *Usage) any { return &u.Tokens }),
+				UsageFailures: col("ranker_usage", UsageFailures, func(u *Usage) any { return &u.Failures }),
+				UsageLimited:  col("ranker_usage", UsageLimited, func(u *Usage) any { return &u.Limited }),
+			}),
+			dao.Conflict[*Usage, UsageField, noSort, int64](UsageProvider, UsageDay),
+			dao.SortMap[*Usage, UsageField, noSort, int64](map[noSort]string{ByKey: `"ranker_usage"."day"`})),
+		rankCalls: dao.New[*LogEntry, LogField, noSort, int64](c,
+			dao.Table[*LogEntry, LogField, noSort, int64]("ranker_log"),
+			dao.ID[*LogEntry, LogField, noSort, int64](LogID),
+			dao.Fields[*LogEntry, LogField, noSort, int64](map[LogField]dao.Field[*LogEntry]{
+				LogID:       col("ranker_log", LogID, func(e *LogEntry) any { return &e.ID }),
+				LogProvider: col("ranker_log", "ranker_id", func(e *LogEntry) any { return &e.ProviderID }),
+				LogAt:       col("ranker_log", LogAt, func(e *LogEntry) any { return &e.At }),
+				LogTexts:    col("ranker_log", LogTexts, func(e *LogEntry) any { return &e.Texts }),
+				LogTokens:   col("ranker_log", LogTokens, func(e *LogEntry) any { return &e.Tokens }),
+				LogMillis:   col("ranker_log", LogMillis, func(e *LogEntry) any { return &e.Millis }),
+				LogOutcome:  col("ranker_log", LogOutcome, func(e *LogEntry) any { return &e.Outcome }),
+			}),
+			dao.SortMap[*LogEntry, LogField, noSort, int64](map[noSort]string{ByKey: `"ranker_log"."id"`})),
 		patterns: dao.New[*Pattern, PatternField, noSort, int64](c,
 			dao.Table[*Pattern, PatternField, noSort, int64]("workspace_pattern"),
 			dao.Fields[*Pattern, PatternField, noSort, int64](map[PatternField]dao.Field[*Pattern]{

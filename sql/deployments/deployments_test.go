@@ -165,6 +165,16 @@ func TestTheChunkEmbedColumn(t *testing.T) {
 	if got := embeds(); fmt.Sprint(got) != "[ func F()]" {
 		t.Fatalf("embeds %q, want '' and the one written", got)
 	}
+	// the later scripts go first: only the latest applied can be reverted
+	all, err := deploy.Load(deployments.FS(), deployments.Engines[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := all[len(all)-1].Number; n > 12; n-- {
+		if _, err := deployments.Runner().Revert(ctx, db, n); err != nil {
+			t.Fatalf("reverting %06d: %v", n, err)
+		}
+	}
 	if name, err := deployments.Runner().Revert(ctx, db, 12); err != nil || !strings.Contains(name, "000012") {
 		t.Fatalf("revert 000012: %s, %v", name, err)
 	}
