@@ -124,6 +124,23 @@ t.section("verbs", function()
   t.ok(commands.get("kb.set_primary") == nil, "kb.set_primary is not a verb")
 end)
 
+t.section("a late loss from an old session", function()
+  local current = session.client()
+  local at = session.epoch()
+  -- an old client's loss arriving after this one connected: it must not end the current session
+  local old = setmetatable({}, { __index = current })
+  session._on_lost_for_tests("an old socket closed", old)
+  t.ok(session.client() == current and session.epoch() == at, "a loss from a client that is not current ends nothing")
+end)
+
+t.section("capabilities unknown", function()
+  local c = require("autodoc.client")
+  local fake = setmetatable({ _verbs = {}, _verbs_known = false }, { __index = getmetatable(session.client()).__index })
+  t.ok(fake:can("index.documents"), "a session whose capabilities could not be read lets calls through")
+  fake._verbs_known = true
+  t.ok(not fake:can("index.documents"), "a session with known verbs refuses one it lacks")
+end)
+
 t.section("the epoch guard", function()
   local at = session.epoch()
   local ran = false

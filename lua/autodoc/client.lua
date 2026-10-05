@@ -105,9 +105,14 @@ function Client:_declare(cb)
     end
     self._hello = outcome.value
     self._ready = true
-    self:call("sys.capabilities", {}, function(caps)
+    self:call("sys.capabilities", {}, function(caps, err)
       if type(caps) == "table" and type(caps.verbs) == "table" then
         for _, v in ipairs(caps.verbs) do self._verbs[v] = true end
+        self._verbs_known = true
+      else
+        -- the session works without them: `can` then lets a call through, and the daemon
+        -- answers a verb it lacks as an unknown method, rather than this client hiding it
+        require("autodoc.log").warn("sys.capabilities failed: " .. (err and err.message or "no verbs in the answer"))
       end
       self._capabilities = caps
       cb(self, nil)
@@ -135,8 +140,9 @@ function Client:call(method, params, cb, opts)
   return id
 end
 
----can reports whether this session may call method (sys.capabilities' verbs).
-function Client:can(method) return self._verbs[method] == true end
+---can reports whether this session may call method (sys.capabilities' verbs); true for any verb when
+---the capabilities could not be read, since the daemon answers a verb it lacks as an unknown method.
+function Client:can(method) return not self._verbs_known or self._verbs[method] == true end
 function Client:hello() return self._hello end
 function Client:capabilities() return self._capabilities end
 function Client:instance() return self._hello and self._hello.instance end
