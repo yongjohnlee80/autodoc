@@ -129,5 +129,5 @@ func (h *Host) aboutText() string {
 		about = "AutoDoc — indexes, searches and edits a tree of files."
 	}
 	return about + "\n\nBy " + author + ". Licensed under the Apache License, Version 2.0." +
-		"\n\nThe daemon's socket: " + h.session.addr
+		"\n\nThe daemon's socket: " + h.session.address()
 }

@@ -12,7 +12,7 @@ import (
 func (h *Host) start() {
 	h.setConnected(false)
 	h.setWhere("autodoc [connecting]")
-	h.notifyOngoing(toastConnection, "connecting to "+h.session.addr+"…")
+	h.notifyOngoing(toastConnection, "connecting to "+h.session.address()+"…")
 	do(h, h.session.Connect, func(err error) {
 		if err != nil {
 			h.setWhere("autodoc [disconnected]")
