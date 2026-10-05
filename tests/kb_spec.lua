@@ -11,7 +11,7 @@
 
 local here = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
 vim.opt.runtimepath:append(here)
-local auto_core = os.getenv("AUTO_CORE") or "/home/johno/Source/Projects/nvim-plugins/auto-core.nvim/main"
+local auto_core = os.getenv("AUTO_CORE") or vim.fn.fnamemodify(here .. "/../../auto-core.nvim/main", ":p")
 vim.opt.runtimepath:append(auto_core)
 
 local util = require("autodoc.kb.util")
