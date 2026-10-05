@@ -109,12 +109,12 @@ func (b stageBoxes) toggle(choice stageChoice, stage string) (stageChoice, bool)
 	return choice, true
 }
 
-// checkbox is a box's label, checked or not.
-func checkbox(on bool, label string) string {
-	if on {
-		return "[x] " + label
-	}
-	return "[ ] " + label
+// setBox sets a box's checked, moved away first: a CheckBox flips itself when clicked, so a refused
+// click leaves it showing the other state while the value the host holds has not changed, and
+// only a change reaches it.
+func (h *Host) setBox(name string, on bool) {
+	h.set(name, !on)
+	h.set(name, on)
 }
 
 // stageBoxes are the search's boxes now.
@@ -126,10 +126,11 @@ func (h *Host) stageBoxes() stageBoxes {
 // for changed, searches again with them.
 func (h *Host) syncStages(refresh bool) {
 	b := h.stageBoxes()
-	h.set("App.stageLexical", checkbox(b.on.lexical, "Lexical"))
-	h.set("App.stageSemantic", checkbox(b.on.semantic, "Semantic"))
+	h.setBox("App.stageLexical", b.on.lexical)
+	h.setBox("App.stageSemantic", b.on.semantic)
 	h.set("App.stageSemanticShown", b.semanticShown)
-	h.set("App.stageRerank", checkbox(b.on.rerank, "Rerank ("+h.stageRanker+")"))
+	h.setBox("App.stageRerank", b.on.rerank)
+	h.set("App.stageRerankText", "Rerank ("+h.stageRanker+")")
 	h.set("App.stageRerankShown", b.rerankShown)
 	sent := strings.Join(strs(b.stages()), ",") // "" is auto
 	changed := sent != h.stagesSent
@@ -147,6 +148,7 @@ func (h *Host) toggleSearchStage(stage string) {
 		if stage == stageLexical || stage == stageSemantic {
 			h.say("search needs Lexical or Semantic: one stays checked")
 		}
+		h.syncStages(false) // a clicked box flipped itself: it shows the stages as they are again
 		return
 	}
 	h.say("")

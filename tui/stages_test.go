@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
+
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -161,6 +163,19 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	if p, _ := d.db.Preferences(ctx); p[prefSearchStages] != "" || rec.count() != n {
 		t.Errorf("the last retriever unchecked: kept %q, %d searches sent", p[prefSearchStages], rec.count()-n)
 	}
+	// clicked, as a user does: the CheckBox flips itself, the refusal flips it back
+	r.h.p.Post(func() { r.h.say("") })
+	r.s.WaitFor(t, "the status cleared", func(sc string) bool { return !strings.Contains(sc, "one stays checked") })
+	x, y := screenCell(t, r, "[x] Lexical")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x + 1, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x + 1, Y: y})
+	r.s.WaitForText(t, "search needs Lexical or Semantic: one stays checked") // the click was refused
+	r.s.WaitFor(t, "the clicked box back to checked", func(sc string) bool {
+		return strings.Contains(sc, "[x] Lexical") && !strings.Contains(sc, "[ ] Lexical")
+	})
+	if strings.Contains(r.s.String(), "[ [x]") {
+		t.Errorf("a box is drawn in a button's brackets:\n%s", r.s)
+	}
 
 	if _, err := d.db.AddRanker(ctx, store.RankerSpec{Name: "tei", Kind: store.KindTEI, BaseURL: fakeTEI(t).URL}); err != nil {
 		t.Fatal(err)
@@ -228,4 +243,24 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	again.s.WaitForText(t, "[ ] Lexical")
 	again.s.WaitForText(t, "[x] Semantic")
 	again.s.WaitForText(t, "[ ] Rerank (tei)")
+}
+
+// screenCell is the column and row text starts at on the screen.
+func screenCell(t *testing.T, r *running, text string) (int, int) {
+	t.Helper()
+	for y, row := range r.s.Backend.Snapshot() {
+		var line strings.Builder
+		cols := []int{}
+		for x, c := range row {
+			line.WriteString(c.Content)
+			for range len(c.Content) {
+				cols = append(cols, x)
+			}
+		}
+		if i := strings.Index(line.String(), text); i >= 0 {
+			return cols[i], y
+		}
+	}
+	t.Fatalf("%q is not on the screen:\n%s", text, r.s)
+	return 0, 0
 }
