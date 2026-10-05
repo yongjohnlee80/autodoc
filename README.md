@@ -287,6 +287,58 @@ workspace is no longer served, its unsaved text stays as the untitled draft.
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
 
+## Neovim
+
+The repository is also a Neovim plugin (Neovim 0.12+). It talks to the same daemon over its
+socket, and needs [auto-core.nvim](https://github.com/yongjohnlee80/auto-core.nvim):
+
+```lua
+{
+  "yongjohnlee80/autodoc",
+  build = "make build", -- the plugin's own binary, under bin/; without it, autodoc on PATH
+  dependencies = { "yongjohnlee80/auto-core.nvim" },
+  opts = {
+    bin = nil,     -- the autodoc binary; default: the plugin's build, then PATH
+    config = nil,  -- autodoc's config.toml; default: the binary's own
+    keys = false,  -- true maps <leader>fk and the preview's <leader>m* keys
+    preview = {},  -- the preview's options; false leaves it off
+  },
+}
+```
+
+`setup()` connects nothing. The first call that needs the daemon asks the binary where it is
+(`autodoc --print-endpoint --ensure`), which starts it when nothing serves the store, so loading
+the plugin costs nothing. A daemon serving a different store is refused, not used.
+`:checkhealth autodoc` says which binary was found, where the daemon is, and the protocol both
+speak.
+
+- **The kb drawer** (`:AutodocDrawer`) lists the workspaces and their documents, which follow the
+  files as they change, along with the embedding models and the reranker. With
+  [auto-finder.nvim](https://github.com/yongjohnlee80/auto-finder.nvim) installed it opens in
+  auto-finder's panel; otherwise in its own. `?` shows its keys: `s` selects the KB to search, `P`
+  makes a KB this project's primary (stored by auto-core, and only after you confirm), and `A`
+  adds a location, offering to scaffold the KB layout when the folder has no `AGENTS.md`.
+- **Search** (`:AutodocSearch [query]`, `<leader>fk`) searches the selected KB, which defaults
+  to the project's primary KB. Results update as you type; the title says which stages ran and
+  why any were skipped, and `<M-l>` / `<M-s>` / `<M-r>` toggle lexical, semantic and rerank. A hit
+  opens at its line, and `<M-p>` sends it to a preview slot. It uses snacks.picker when that is
+  installed, and `vim.ui.input` / `vim.ui.select` otherwise. `:AutodocSelect [workspace]` picks
+  the KB to search.
+- **The preview** renders Markdown in six floating slots, and replaces md-harpoon.nvim. Use
+  `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`,
+  `:AutodocPreviewFind`, `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and
+  `:AutodocPreviewBrowser` (the document as HTML, through `autodoc --export html`). In a float, a
+  Mermaid block is marked and `B` opens it drawn in the browser; `gx` opens the link or image
+  under the cursor. A slot follows its file as it changes.
+- **The KB migration** (`:AutodocKbMigrate [root]`) moves a KB to the current layout. The plain
+  command is a dry run: it writes a checksummed manifest, a diff and a summary, and changes
+  nothing. `--apply` applies that manifest after checking that no file changed since. It first
+  saves a full copy of every file it will touch, so `--undo` restores the KB without git, and
+  `--forget` deletes that copy. In a git repository it commits the migration's paths; it never
+  pushes.
+
+Saving a file in a KB reindexes it at once, without waiting for the daemon's watch.
+
 ## Plugins
 
 A plugin is a program AutoDoc runs in a dialog over the page, from the **Plugins** menu. It draws
