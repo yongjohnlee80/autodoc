@@ -422,6 +422,9 @@ func (h *Host) openPrefs() {
 // and calls on the right.
 func (h *Host) openAIModels() {
 	h.loadProviders()
+	if h.aiTab == rankerTab {
+		h.loadRankers()
+	}
 	h.open("aiModels")
 }
 

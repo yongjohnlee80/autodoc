@@ -11,9 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/search/rank"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
+	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -29,6 +31,12 @@ func startManaged(t *testing.T, roots map[string]string) *managedDaemon {
 
 // startManagedWith is startManaged with the daemon's options: the edition's database features, say.
 func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) *managedDaemon {
+	t.Helper()
+	return startManagedRanking(t, roots, o, serving.Supplied{})
+}
+
+// startManagedRanking is startManagedWith as a build supplying its ranker (none: the stored ones).
+func startManagedRanking(t *testing.T, roots map[string]string, o serving.Options, supplied serving.Supplied) *managedDaemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
@@ -46,6 +54,10 @@ func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) 
 		}
 	}
 	o.Poll, o.BatchDelay = 20*time.Millisecond, 5*time.Millisecond
+	holder := &rank.Holder{}
+	ranking := serving.NewRanking(db, holder, supplied, nil)
+	ranking.Start(ctx)
+	o.Rank = index.Rank{Source: holder}
 	ws := serving.New(ctx, db, o)
 	if err := ws.OpenAll(); err != nil {
 		t.Fatal(err)
@@ -75,13 +87,14 @@ func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) 
 	emb := serving.NewEmbedding(db, ws, nil)
 	emb.Start(ctx)
 	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
-		rpc.WithRegistrations(o.Registrations.Tables()))
+		rpc.WithRegistrations(o.Registrations.Tables()), rpc.WithRankers(ranking))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {
 		cancel()
 		<-done
 		emb.Wait()
+		ranking.Wait()
 		ws.StopAll()
 		_ = db.Close()
 		_ = os.RemoveAll(dir)

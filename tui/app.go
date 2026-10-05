@@ -21,6 +21,7 @@
 //	progress.go   the daemon's work left, on the status line
 //	prefs.go      the preferences, kept in the daemon's store
 //	providers.go  Preferences › Embedding: the providers, their models and usage
+//	rankers.go    AI models › Ranker Models: the rankers, the one in use, its window and usage
 //	theme.go      View › Theme: switching the theme import at runtime
 //	help.go       the help and the about text
 //	plugins.go    the Plugins menu: the plugins folder, and a plugin's dialog
@@ -61,13 +62,13 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	picker, backlinks, workspaces, managed   *tuidecl.ListModel
-	outlineList, wsProviders                 *tuidecl.ListModel
-	hits, newList, providers, providerModels *tuidecl.ListModel
-	vectors                                  *tuidecl.ListModel // the workspace's models (vectors.go)
-	explorer                                 *tuidecl.TreeListModel
-	explorerPaths                            map[string][]string // by workspace: its files, once listed (explorer.go)
-	explorerTop                              []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
+	picker, backlinks, workspaces, managed            *tuidecl.ListModel
+	outlineList, wsProviders                          *tuidecl.ListModel
+	hits, newList, providers, providerModels, rankers *tuidecl.ListModel
+	vectors                                           *tuidecl.ListModel // the workspace's models (vectors.go)
+	explorer                                          *tuidecl.TreeListModel
+	explorerPaths                                     map[string][]string // by workspace: its files, once listed (explorer.go)
+	explorerTop                                       []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
 
 	// the pickers (pickers.go): what each lists, the latest answers winning, and the search's words
 	hitList             []hit
@@ -122,6 +123,18 @@ type Host struct {
 	vectorList                      []vectorRow // the workspace's models, as listed (vectors.go)
 	purging                         vectorRow   // the model the purge question asks about
 	providerSeq                     uint64
+
+	// the ranker models (rankers.go): AI models' tab, the rankers listed, the one in use, the
+	// build's own (its model, "" for none), and the row the shared buttons act on
+	aiTab                         int
+	rankerList                    []rankerRow
+	activeRanker, rankerSupplied  string
+	editingRanker, removingRanker string
+	rankerFormKind                int
+	rankerFormHasKey              bool
+	rankerCursor                  int
+	rankerSeq                     uint64
+	hitsRanked                    string // the hits' title's note of their order (rankedTitle)
 
 	// the workspace in use, and the epoch: moved by a switch and a reconnect, so an answer asked
 	// under another workspace or connection is dropped (workspace.go)
@@ -258,6 +271,7 @@ func newHost(session *Session, opt Options) *Host {
 		newList:        tuidecl.NewListModel("key", "path"),
 		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
 		providerModels: tuidecl.NewListModel("key", "name"),
+		rankers:        tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
 		vectors:        tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
 		explorer:       tuidecl.NewTreeListModel("key", "label"),
 		explorerPaths:  map[string][]string{},
