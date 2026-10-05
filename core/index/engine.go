@@ -173,15 +173,21 @@ func (s *Store) queryEmbedder(sem *semantic) search.QueryEmbedder {
 	}
 }
 
-// answer runs q on searcher and gives the answer in AutoDoc's own types and errors.
-func answer(ctx context.Context, searcher search.Searcher, q string, opts QueryOpts, fields search.Fields) (Result, error) {
+// answer runs q on the face of s its stages ask for, in the mode they search in, and gives the
+// answer in AutoDoc's own types and errors, with how it was made. paused is semantic search held
+// off by the workspace's embedding policy.
+func answer(ctx context.Context, s searchers, q string, opts QueryOpts, fields search.Fields, paused bool) (Result, error) {
+	p, err := planOf(opts)
+	if err != nil {
+		return Result{}, err
+	}
 	// paths as the engine takes them, root-relative with '/' trimmed: "/" and "./" are the root, so
 	// no path filter, as filtered reads them
 	var paths []string
 	for _, p := range opts.Paths {
 		paths = append(paths, strings.Trim(p, "/"))
 	}
-	res, err := searcher.Search(ctx, search.Query{Text: q, Mode: search.Mode(opts.Mode), Limit: opts.Limit, Fields: fields,
+	res, err := s.of(p.rerank).Search(ctx, search.Query{Text: q, Mode: p.mode, Limit: opts.Limit, Fields: fields,
 		Filter: search.Filter{Tags: opts.Tags, Paths: paths, Facets: opts.Facets}})
 	if err != nil {
 		return Result{}, ownError(err)
@@ -196,6 +202,7 @@ func answer(ctx context.Context, searcher search.Searcher, q string, opts QueryO
 			RankScore: h.RankScore}
 	}
 	out.Rank = RankState{State: string(res.Rank.State), Model: res.Rank.Model, Error: res.Rank.Error}
+	out.Stages = p.report(out, wordless(q, opts, fields), paused)
 	return out, nil
 }
 

@@ -88,7 +88,8 @@ type Options struct {
 	// provider. nil is golib's search engine with the search's constants. Any search.Searcher can
 	// take its place.
 	NewSearcher NewSearcher
-	// Rank is the re-ranking stage both searchers are wrapped in, once (rank.go); zero: none.
+	// Rank is the re-ranking stage both searchers are wrapped in, once (rank.go), for the queries
+	// that ask for it; zero: none.
 	Rank Rank
 }
 
@@ -115,9 +116,9 @@ type Indexer struct {
 	sem            *semantic // nil without a provider
 	embedPosition  atomic.Int64
 	semanticPaused atomic.Bool
-	// words and hybrid answer searches: by words alone, and with the semantic tier (nil without a
-	// provider). Both are built once, by Options.NewSearcher.
-	words, hybrid search.Searcher
+	// words and hybrid answer searches: by words alone, and with the semantic tier (zero without a
+	// provider). Both are built once, by Options.NewSearcher, each with and without the rank stage.
+	words, hybrid searchers
 	ready         chan struct{} // model row committed before the queue embeds
 
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
@@ -195,9 +196,9 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	if newSearcher == nil {
 		newSearcher = defaultSearcher
 	}
-	ix.words = ix.ranked(newSearcher(searchStore{s: store}, nil))
+	ix.words = ix.searchers(newSearcher(searchStore{s: store}, nil))
 	if ix.sem != nil {
-		ix.hybrid = ix.ranked(newSearcher(searchStore{s: store, sem: ix.sem}, store.queryEmbedder(ix.sem)))
+		ix.hybrid = ix.searchers(newSearcher(searchStore{s: store, sem: ix.sem}, store.queryEmbedder(ix.sem)))
 	}
 	return ix
 }

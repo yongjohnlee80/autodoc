@@ -49,10 +49,13 @@ const (
 
 // QueryOpts is search.query's options.
 type QueryOpts struct {
-	Limit int      // default 20, at most 200
-	Mode  string   // ModeAuto (default), ModeLexical or ModeSemantic
-	Tags  []string // every hit's document has all of these
-	Paths []string // hits under these paths: a directory and what is below it, or one file
+	Limit int // default 20, at most 200
+	// Stages are the stages to run, each of StageLexical, StageSemantic and StageRerank once, at
+	// least one retriever among them; nil is Mode's.
+	Stages []string `json:",omitempty"` // the goldens' queries have none
+	Mode   string   // ModeAuto (default: every stage), ModeLexical or ModeSemantic; "" with Stages
+	Tags   []string // every hit's document has all of these
+	Paths  []string // hits under these paths: a directory and what is below it, or one file
 	// Facets are exact filters on the workspace schema's fields: a hit's document has, for every
 	// field, one of its values. A field the schema does not declare is refused (ErrUnknownFacet).
 	// The query's own field:value words for declared fields join them.
@@ -88,6 +91,9 @@ type Result struct {
 	// Rank is what the re-ranking stage did (ADR 0215): off, ready (the ranker's order) or error
 	// (recall order), with the model that ranked and a constant message.
 	Rank RankState `json:",omitzero"` // a search with no stage: the goldens never name it
+	// Stages is how the answer was made: the stages asked for, those that ran, and why the others
+	// did not. It follows from the rest, so the goldens never name it.
+	Stages Stages `json:"-"`
 }
 
 // RankState is a Result's re-ranking state.
@@ -98,7 +104,7 @@ type RankState struct {
 // Search answers a query lexically: the store alone has no embedding provider, and no schema, so
 // a field filter is refused.
 func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
-	return answer(ctx, defaultSearcher(searchStore{s: s}, nil), q, opts, nil)
+	return answer(ctx, searchers{plain: defaultSearcher(searchStore{s: s}, nil)}, q, opts, nil, false)
 }
 
 // Search answers a query through the indexer's searcher: with the semantic tier when it has a
@@ -109,11 +115,12 @@ func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result,
 		return Result{}, err
 	}
 	sch, _ := x.schema()
-	searcher := x.words
-	if x.hybrid != nil && !x.semanticPaused.Load() {
-		searcher = x.hybrid
+	paused := x.semanticPaused.Load()
+	s := x.words
+	if x.hybrid.plain != nil && !paused {
+		s = x.hybrid
 	}
-	res, err := answer(ctx, searcher, q, opts, sch)
+	res, err := answer(ctx, s, q, opts, sch, paused)
 	if err != nil {
 		return res, err
 	}

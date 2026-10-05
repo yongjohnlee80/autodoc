@@ -172,6 +172,10 @@ var publicErrs = []struct {
 	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
 	{vfs.ErrInvalidName, golibrpc.CodeInvalidParams, "not a valid path in the workspace"},
 	{index.ErrUnknownMode, golibrpc.CodeInvalidParams, "unknown search mode"},
+	{index.ErrNoRetriever, golibrpc.CodeInvalidParams, "search stages must include lexical or semantic: a ranker only re-orders what they find"},
+	{index.ErrUnknownStage, golibrpc.CodeInvalidParams, "unknown search stage: the stages are lexical, semantic and rerank"},
+	{index.ErrRepeatedStage, golibrpc.CodeInvalidParams, "a search stage is named twice"},
+	{index.ErrStagesAndMode, golibrpc.CodeInvalidParams, "search stages and a search mode together: send one or the other"},
 	{index.ErrUnknownFacet, golibrpc.CodeInvalidParams, "a facet filter names a field the workspace's schema does not declare"},
 	{index.ErrFacetValue, golibrpc.CodeInvalidParams, "a facet filter's value is not of its field's type"},
 	{index.ErrModelInUse, golibrpc.CodeInvalidParams, "the model is in use"},
@@ -717,7 +721,8 @@ func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (an
 	}
 }
 
-// queryOpts reads search.query's optional third parameter: {limit, mode, tags, paths, facets}.
+// queryOpts reads search.query's optional third parameter: {limit, stages, mode, tags, paths,
+// facets}.
 func queryOpts(p []any) (index.QueryOpts, error) {
 	var o index.QueryOpts
 	if len(p) < 3 || p[2] == nil {
@@ -735,10 +740,19 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 				return o, invalid("search.query: opts.limit must be an integer")
 			}
 			o.Limit = int(n)
+		case "stages":
+			l, err := strList(v, "search.query: opts.stages")
+			if err != nil {
+				return o, err
+			}
+			o.Stages = l // an empty list is stages naming none, never auto
 		case "mode":
 			s, ok := v.(string)
 			if !ok {
 				return o, invalid("search.query: opts.mode must be a string")
+			}
+			if s == "" {
+				s = index.ModeAuto // a mode said is a mode, so stages beside it are refused
 			}
 			o.Mode = s
 		case "facets":
@@ -791,6 +805,11 @@ func resultMap(r index.Result) map[string]any {
 		state = "off"
 	}
 	out["rank"] = map[string]any{"state": state, "model": r.Rank.Model, "error": r.Rank.Error}
+	skipped := map[string]any{}
+	for stage, why := range r.Stages.Skipped {
+		skipped[stage] = why
+	}
+	out["stages"] = map[string]any{"requested": strs(r.Stages.Requested), "performed": strs(r.Stages.Performed), "skipped": skipped}
 	if r.SemanticError != "" {
 		out["semantic_error"] = r.SemanticError
 	}

@@ -21,11 +21,12 @@ type Rank struct {
 	Required bool
 }
 
-// ranked wraps s in the stage, when the indexer has one.
-func (x *Indexer) ranked(s search.Searcher) search.Searcher {
+// searchers are s as it is, and wrapped in the stage when the indexer has one: a query that does
+// not ask for the ranker is answered by s itself.
+func (x *Indexer) searchers(s search.Searcher) searchers {
 	r := x.opts.Rank
 	if r.Source == nil {
-		return s
+		return searchers{plain: s}
 	}
 	texts := r.Texts
 	if texts == nil {
@@ -35,7 +36,7 @@ func (x *Indexer) ranked(s search.Searcher) search.Searcher {
 	if r.Required {
 		opts = append(opts, rank.Required())
 	}
-	return rank.NewSearcher(s, texts, r.Source, opts...)
+	return searchers{plain: s, ranked: rank.NewSearcher(s, texts, r.Source, opts...)}
 }
 
 // chunkTexts is the ranker's default text for each hit: its chunk's breadcrumb and body, the text
