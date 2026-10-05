@@ -324,7 +324,9 @@ func (h *Host) managedRow(i int) (managedPlugin, bool) {
 }
 
 // startUpdatePlugin is the manager's Update…: the origin fetched, and PluginConfirm asked about the
-// commit it would move to.
+// commit it would move to. Up to date is the fetched commit against the clone's HEAD, read with the
+// fetch: the manager's row is listed off the loop, so for a moment after an update it still shows
+// the commit before it.
 func (h *Host) startUpdatePlugin(i int) {
 	m, ok := h.managedRow(i)
 	if !ok {
@@ -336,18 +338,23 @@ func (h *Host) startUpdatePlugin(i int) {
 	}
 	h.notifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
 	type fetched struct {
-		c   pluginChange
-		err error
+		c    pluginChange
+		head string
+		err  error
 	}
 	do(h, func(ctx context.Context) fetched {
 		c, err := fetchUpdate(ctx, m)
-		return fetched{c, err}
+		if err != nil {
+			return fetched{err: err}
+		}
+		head, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "--short", "HEAD")
+		return fetched{c, head, err}
 	}, func(r fetched) {
 		switch {
 		case r.err != nil:
 			h.notifyDone(toastPlugin, m.e.m.Name+" not updated: "+r.err.Error())
-		case r.c.commit == m.commit:
-			h.notifyDone(toastPlugin, m.e.m.Name+" is up to date at "+m.commit)
+		case r.c.commit == r.head:
+			h.notifyDone(toastPlugin, m.e.m.Name+" is up to date at "+r.head)
 		default:
 			h.notifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+r.c.commit)
 			h.askPlugin(r.c)
