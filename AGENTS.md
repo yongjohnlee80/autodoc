@@ -26,7 +26,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
 A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 11, "name": "<your client>"}`. Any other protocol
+connection must be `sys.hello` with `{"protocol": 12, "name": "<your client>"}`. Any other protocol
 number is refused, and so is every verb until the hello succeeds.
 
 ## A search, step by step
@@ -67,10 +67,28 @@ Options, a map, all optional:
 | option | value | effect |
 | --- | --- | --- |
 | `limit` | integer, 1 to 200 (default 20) | how many hits |
-| `mode` | `"auto"` (default), `"lexical"`, `"semantic"` | auto fuses words and meaning when a model is in use, else words alone; `"semantic"` fails when no model answers |
+| `stages` | list of `"lexical"`, `"semantic"`, `"rerank"` (default: all of them) | the stages to run; see below |
+| `mode` | `"auto"`, `"lexical"`, `"semantic"` | the older way to choose: `auto` is every stage, `lexical` is `["lexical", "rerank"]`, `semantic` is `["semantic", "rerank"]`. Send `stages` or `mode`, not both |
 | `paths` | list of strings | only under these: a folder (`"adrs"` covers `adrs/…`) or one file |
 | `tags` | list of strings | only files that have **every** one of these tags (front matter `tags:` or `#tag`) |
 | `facets` | map of field to a string or a list of strings | only files whose frontmatter field has one of the values; every field must match. The field must be one the workspace's schema declares (`workspace.list` shows its `schema`) |
+
+The stages:
+
+| `stages` | the search |
+| --- | --- |
+| absent (auto) | every stage the daemon can run: words and meaning fused, then ranked, when a model and a ranker are in use |
+| `["lexical", "semantic"]` | words and meaning fused; when meaning cannot answer (no model, a model switching, the query not embedded), by words, and `semantic` is skipped |
+| `["lexical"]` | words alone |
+| `["semantic"]` | meaning alone; when meaning cannot answer, it **fails** (codes -32065, -32067, -32069), never by words |
+| add `"rerank"` | a ranker in use re-orders the hits; with none, or one that fails, `rerank` is skipped |
+
+- `stages` must name `lexical` or `semantic`: an empty list, `["rerank"]` alone, an unknown name or
+  a name twice is refused with -32602.
+- Without `rerank`, the hits are never ranked, even with a ranker in use: compare a search with and
+  without it to see what the ranker changed.
+- A build may answer ranked or not at all: then a search that asks for `rerank` (or auto) and cannot
+  be ranked is refused with -32070. One that leaves `rerank` out is answered, unranked.
 
 The answer:
 
@@ -83,7 +101,8 @@ The answer:
   ],
   "mode_used": "hybrid",
   "semantic": "ready",
-  "rank": {"state": "ready", "model": "BAAI/bge-reranker-v2-m3", "error": ""}
+  "rank": {"state": "ready", "model": "BAAI/bge-reranker-v2-m3", "error": ""},
+  "stages": {"requested": ["lexical", "semantic", "rerank"], "performed": ["lexical", "semantic", "rerank"], "skipped": {}}
 }
 ```
 
@@ -113,10 +132,19 @@ The answer:
     `rank_score` (higher is more relevant; 0 is a score), and `via` includes `"rank"`;
   - `error`: the ranker did not answer, so the hits are in the order they were found; `error` says
     why;
-  - `off`: no ranker is in use, or the query had no words to rank by (filters alone).
+  - `off`: no ranker is in use, `rerank` was not asked for, or the query had no words to rank by
+    (filters alone).
 
-  A build may answer ranked or not at all: then a search the ranker cannot rank is refused with
-  code -32070, and no hits. Retry later.
+  A build may answer ranked or not at all: then a search that asked for `rerank` (or auto) and the
+  ranker cannot rank is refused with code -32070, and no hits. Retry later, or leave `rerank` out.
+- `stages` says how the answer was made: `requested` is the stages asked for (auto lists all
+  three), `performed` the stages that shaped these hits, and `skipped` why each other one did not
+  run, a constant sentence:
+  - `semantic`: "no embedding model is in use", "the workspace's embedding policy pauses semantic
+    search", "a new embedding model is filling" or "the query could not be embedded";
+  - `rerank`: "no ranker is in use" or "the ranker could not rank this search";
+  - any stage: "the query has no words". A query of filters alone runs only the scan that lists
+    their files, which `performed` names `lexical`.
 
 ### Complex queries
 
@@ -127,12 +155,15 @@ Combine the options, and search more than once:
 autodoc --call search.query '["kb", "storage decision", {"paths": ["adrs"], "limit": 10}]'
 # files tagged both todo and autodoc that mention the TUI
 autodoc --call search.query '["kb", "tui", {"tags": ["todo", "autodoc"]}]'
-# two folders, words only, many hits
-autodoc --call search.query '["kb", "migration*", {"paths": ["docs/ops", "sql"], "mode": "lexical", "limit": 50}]'
+# two folders, words only, unranked, many hits
+autodoc --call search.query '["kb", "migration*", {"paths": ["docs/ops", "sql"], "stages": ["lexical"], "limit": 50}]'
+# the same question by meaning alone, ranked
+autodoc --call search.query '["kb", "how we move the schema forward", {"stages": ["semantic", "rerank"]}]'
 ```
 
 For a broad question, search for its key terms in two or three phrasings and read the files that
-recur. For a precise one (a name, an error text), search the exact words with `mode: "lexical"`.
+recur. For a precise one (a name, an error text), search the exact words with
+`stages: ["lexical", "rerank"]`.
 
 ## The other verbs
 
@@ -175,8 +206,8 @@ asks you to change their files through AutoDoc.
 | -32060 | no such workspace | call `workspace.list` and use a listed name |
 | -32061 | no such file | the path is wrong or not indexed; `index.list` shows the paths |
 | -32602 | invalid parameters | the message says which; check the table above. `held: …` is a reindex of a file this build cannot index again: the message names the way out |
-| -32065 | not supported here | `mode: "semantic"` with no model in use; search without it |
-| -32067 | the query could not be embedded | retry, or search with `mode: "lexical"` |
-| -32069 | a new model is filling | search with `mode: "auto"` or `"lexical"` |
-| -32070 | the ranker is unavailable, and this build answers ranked results or none | retry later; there is no unranked search on this build |
+| -32065 | not supported here | `stages: ["semantic"]` (or `mode: "semantic"`) with no model in use; search with `lexical` among the stages |
+| -32067 | the query could not be embedded | retry, or search with `lexical` among the stages |
+| -32069 | a new model is filling | search with `lexical` among the stages, or with no `stages` |
+| -32070 | the ranker is unavailable, and this build answers ranked results or none | retry later, or leave `rerank` out of the stages for an unranked answer |
 | -32020 | protocol mismatch | the daemon is another version: `autodoc --version`, then restart it |

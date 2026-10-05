@@ -60,8 +60,9 @@ type Rank struct {
 	// Texts are the texts the ranker reads for the hits, in any format. nil: each hit's chunk, its
 	// breadcrumb then its body.
 	Texts rank.TextSource
-	// Required answers ranked or not at all: a worded search the ranker cannot rank is refused,
-	// never answered in recall order.
+	// Required answers ranked or not at all: a worded search that asks for the ranker (or runs
+	// every stage) and that the ranker cannot rank is refused, never answered in recall order. A
+	// search that leaves the ranker out is answered, unranked.
 	Required bool
 }
 
