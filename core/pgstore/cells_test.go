@@ -649,3 +649,123 @@ func embedVec(text string) []float32 {
 func hashOf(text string) [32]byte {
 	return search.Chunk{Embed: text}.TextHash()
 }
+
+// Cell — Pending pages past embedded chunks to the pending ones. More than 2*limit chunks
+// already embedded (and so filtered) come before the unembedded one in (doc, ord) order, with
+// limit 1: an early-truncated scan would return nothing forever and the worker would never reach
+// the pending text. The reverted line is Pending's per-page Limit with no resumption: a scan that
+// stops at the first page hides every later pending hash.
+func TestPendingPagesPastEmbeddedChunks(t *testing.T) {
+	conn := scratch(t)
+	ctx := context.Background()
+	s, err := Open(conn, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetModels(ctx, model, ""); err != nil {
+		t.Fatal(err)
+	}
+	// six documents, each one chunk, all embedded: six chunks ahead of the pending one, with
+	// limit 1 (a scan capped at 2*limit would read two embedded chunks and answer nothing)
+	for i := 0; i < 6; i++ {
+		d := Document{Path: fmt.Sprintf("d%d.md", i), Chunks: []search.Chunk{{Ord: 0, Breadcrumb: "b", Body: fmt.Sprintf("body words %d", i)}}}
+		putDoc(t, s, d, true)
+	}
+	// the pending one, last in path order
+	pending := search.Chunk{Ord: 0, Breadcrumb: "b", Body: "the unembedded tail"}
+	if _, err := s.Put(ctx, Document{Path: "z-last.md", Chunks: []search.Chunk{pending}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Pending(ctx, model, nil, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].TextHash != pending.TextHash() || got[0].Text != pending.Breadcrumb+"\n"+pending.Body {
+		t.Fatalf("pending with six embedded chunks ahead = %+v; want the last document's text", got)
+	}
+}
+
+// Cell — concurrent Puts of one path. The generation bump is a compare-and-set on the generation
+// each attempt read, so two concurrent Puts land on successive generations, never both on 2 after
+// starting at 1, and the chunks answer for the generation that wrote them. The reverted line is
+// the update's With(dGen, cur.Generation): without the condition both writers' updates hold and
+// the second's chunks answer for the first's text.
+func TestConcurrentPutsKeepGenerationsApart(t *testing.T) {
+	conn := scratch(t)
+	ctx := context.Background()
+	s, err := Open(conn, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Put(ctx, Document{Path: "race.md", Chunks: []search.Chunk{{Ord: 0, Breadcrumb: "b", Body: "first body"}}}); err != nil {
+		t.Fatal(err)
+	}
+	const writers = 4
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func(i int) {
+			_, err := s.Put(ctx, Document{Path: "race.md", Chunks: []search.Chunk{{Ord: 0, Breadcrumb: "b", Body: fmt.Sprintf("body %d", i)}}})
+			errs <- err
+		}(i)
+	}
+	for i := 0; i < writers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("a concurrent put: %v", err)
+		}
+	}
+	docs, _, err := s.Docs(ctx, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(docs) != 1 || docs[0].Generation != 1+writers {
+		t.Fatalf("after %d concurrent puts: %+v; want one document at generation %d", writers, docs, 1+writers)
+	}
+	// the stored chunks are exactly the last writer's
+	n, err := s.rw.chunk.DAO().With(cTenant, "t").Count()
+	if err != nil || n != 1 {
+		t.Fatalf("%d chunks after the race, %v; want 1", n, err)
+	}
+}
+
+// Cell — MarkReady's verdict is conditioned on the generation it read. The hook lands a Put
+// between MarkReady's read of the chunks and its write — the exact interleaving the generation
+// condition exists to survive — so the verdict computed for the embedded generation 1 refuses to
+// land on the replaced, unembedded generation 2. The reverted line is the update's
+// With(dGen, doc.Generation): without it the stale verdict marks the new generation ready and
+// Semantic answers for a document with no vector.
+func TestMarkReadyRefusesAStaleVerdict(t *testing.T) {
+	conn := scratch(t)
+	ctx := context.Background()
+	s, err := Open(conn, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetModels(ctx, model, ""); err != nil {
+		t.Fatal(err)
+	}
+	// generation 1, fully embedded
+	putDoc(t, s, Document{Path: "p.md", Chunks: []search.Chunk{{Ord: 0, Breadcrumb: "b", Body: "vectored words"}}}, true)
+	// the interleave: a Put inside the window replaces the chunks and bumps the generation
+	putDone := make(chan error, 1)
+	markReadyHook = func() {
+		_, err := s.Put(ctx, Document{Path: "p.md", Chunks: []search.Chunk{{Ord: 0, Breadcrumb: "b", Body: "the replaced unvectored body"}}})
+		putDone <- err
+	}
+	defer func() { markReadyHook = nil }()
+	if _, err := s.MarkReady(ctx, "p.md", model); !errors.Is(err, ErrWriteRace) {
+		t.Fatalf("MarkReady with the chunks replaced under it: %v; want ErrWriteRace", err)
+	}
+	if err := <-putDone; err != nil {
+		t.Fatalf("the interleaved put: %v", err)
+	}
+	// the new generation is not ready and does not answer by meaning
+	s.View(ctx, func(v *View) error {
+		if st, err := v.SemanticState(ctx); err != nil || st != search.StatePartial {
+			t.Errorf("the replaced generation's state: %v, %v; want partial (not ready)", st, err)
+		}
+		if got, err := v.Semantic(ctx, model, embedVec("vectored words"), search.Filter{}, 5); err != nil || len(got) != 0 {
+			t.Errorf("the replaced generation answered by meaning: %+v, %v", got, err)
+		}
+		return nil
+	})
+}
