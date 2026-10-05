@@ -216,8 +216,10 @@ terminal, as below; where it cannot, it shows the block's source and why.
 
 **System**, right of Options, is the menu for the backend:
 
-- **AI models…** (`SPC a`): the embedding providers on the left, and the one under the cursor's
-  usage by day and latest calls on the right (see below).
+- **AI models…** (`SPC a`): two tabs. **Embedding Models** has the embedding providers on the
+  left, and the one under the cursor's usage by day and latest calls on the right (see below).
+  **Ranker Models** has the rankers the same way, the one in use and how many candidates it
+  ranks (`Window…`). Add…, Edit…, Use and Remove… act on the tab that is open.
 - **Restart backend…** stops the daemon, and the TUI starts the autodoc installed in its place, so
   an update takes effect without quitting. The question says which version runs and which one
   starts. Indexing and embedding carry on where they stopped. A TUI built with more registrations
@@ -372,6 +374,19 @@ float vectors, and its results are fused with BM25 by reciprocal rank.
   together. The answer says the semantic side is `switching` until the new model covers every chunk.
 - **Without a provider, or when the query cannot be embedded, search stays lexical** and says so.
 
+**A ranker can re-order the top hits** (ADR 0215). It is a cross-encoder that reads the query
+beside each candidate's text (its chunk's breadcrumb and body) and scores them. Add one in
+`AI models… › Ranker Models` and Use it: a [TEI](https://github.com/huggingface/text-embeddings-inference)
+server of a re-ranker (`BAAI/bge-reranker-v2-m3`, say), or a Cohere-style rerank API.
+
+- **It ranks the top window** of what words and meaning found: 40 by default, 10 to 100. A wider
+  window ranks deeper and takes longer. A ranker on a CPU takes about half a second a text, so give
+  it 10 to 20.
+- **The hits say so.** Each ranked hit has a `rank_score`, the answer's `rank` names the model, and
+  the TUI's hits title says `re-ranked by <model>`.
+- **A ranker that does not answer leaves the hits in the order they were found**, and the answer's
+  `rank` says why. Its calls are metered like a provider's.
+
 **From a shell, or an AI agent.** `autodoc --call <verb> '<JSON array of parameters>'` calls any
 verb of the daemon (starting it when nothing answers) and prints the result as JSON:
 
@@ -481,6 +496,7 @@ func main() {
 		Version:  version,                                     // -X main.version, as cmd/autodoc's
 		Chunkers: map[string]search.Chunker{".go": goChunker}, // golib's search.Chunker, by extension
 		Deriver:  pdfDeriver,                                  // Pro formats' text, read-only
+		Rank:     app.Rank{Ranker: slmRanker, Window: 20},     // golib's rank.Ranker: the only one in use
 	}))
 }
 ```
@@ -509,6 +525,13 @@ func main() {
   saying how much of how much it shows. A cache's eviction miss (a deriver's
   error matching `fs.ErrNotExist`) is retried once. The deriver's own text limit, if it has one,
   is its own.
+- **A build's own ranker is the only one in use** (`app.Options.Rank`). It is probed at startup and
+  kept for the daemon's life, even when the probe fails: then each search answers unranked, its
+  `rank` state `error`. It is not stored. The ranker chosen in the TUI is kept as it was, and
+  cannot be changed while the build's is in use; it comes back for a build without one.
+  `Rank.Texts` gives the ranker the build's own text for each hit in place of its chunk's.
+  `Rank.Required` answers ranked or not at all: a search the ranker cannot rank is refused (code
+  -32070).
 - **Every build shares one store and one socket.** A daemon never indexes again a file that a chunker
   or a format it lacks made: the file is *held*, still searchable, marked on its hits and counted
   in `index.status`, and deleted only when the file or the rules say so. A file a community daemon
