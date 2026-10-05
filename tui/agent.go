@@ -174,7 +174,7 @@ func (h *Host) agentEnv(ws wsInfo) []string {
 	return []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
-		"AUTODOC_SOCKET=" + h.session.addr,
+		"AUTODOC_SOCKET=" + h.session.address(),
 		"AUTODOC_BIN=" + bin,
 	}
 }
