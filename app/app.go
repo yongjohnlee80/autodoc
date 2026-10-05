@@ -117,6 +117,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text")
 	exportOutput := fs.String("output", "", "--export: destination file (required)")
 	exportTheme := fs.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
+	exportBase := fs.String("base", "", "--export html: the directory relative links are read from, written as file: URLs (default the source's directory)")
 	printEndpoint := fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	if err := fs.Parse(args); err != nil {
@@ -132,6 +133,18 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	if *ensure && !*printEndpoint {
 		fmt.Fprintln(stderr, "autodoc: --ensure goes with --print-endpoint")
 		return 2
+	}
+	if *exportFormat == "" {
+		stray := ""
+		fs.Visit(func(f *flag.Flag) {
+			if stray == "" && (f.Name == "output" || f.Name == "theme" || f.Name == "base") {
+				stray = f.Name
+			}
+		})
+		if stray != "" {
+			fmt.Fprintf(stderr, "autodoc: --%s is for --export\n", stray)
+			return 2
+		}
 	}
 	switch {
 	case *showVersion:
@@ -156,7 +169,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		defer stop()
 		return callMain(ctx, *configPath, *call, fs.Arg(0), stdout, stderr)
 	case *exportFormat != "":
-		if err := exportMain(fs.Arg(0), *exportFormat, *exportOutput, *exportTheme); err != nil {
+		if err := exportMain(fs.Arg(0), *exportFormat, *exportOutput, *exportTheme, *exportBase); err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}

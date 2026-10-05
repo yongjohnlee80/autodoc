@@ -2,13 +2,16 @@ package export
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	stdhtml "html"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -106,7 +109,20 @@ func DiagramPage(source, theme string) ([]byte, error) {
 
 var mermaidBlock = regexp.MustCompile(`(?s)<pre><code class="language-mermaid">(.*?)</code></pre>`)
 
+// Options are what a render reads besides the source, its format and its theme.
+type Options struct {
+	// Base is the directory the source's relative links are read from: each becomes the file: URL
+	// of the file it names there, so the page's links reach their files wherever it is written. ""
+	// writes every link as the source has it.
+	Base string
+}
+
+// Render is RenderWith without options: every link as the source has it.
 func Render(source []byte, format Format, theme string) ([]byte, error) {
+	return RenderWith(source, format, theme, Options{})
+}
+
+func RenderWith(source []byte, format Format, theme string, options Options) ([]byte, error) {
 	document := markdown.Parse(source, markdown.GFM(), markdown.Obsidian())
 	switch format {
 	case HTML:
@@ -114,9 +130,32 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 		if !ok {
 			return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 		}
+		base := options.Base
+		if base != "" {
+			var err error
+			if base, err = filepath.Abs(base); err != nil {
+				return nil, err
+			}
+		}
+		// the renderer writes a file: URL empty (only http, https, mailto, ftp and tel are written,
+		// unless every raw HTML block is written too), so a resolved link is rendered as a
+		// placeholder and its URL written in its place. The placeholder holds the source's digest,
+		// which the source cannot hold, so no text of its own is taken for one.
+		placeholder := fmt.Sprintf("autodoc-link-%x-", sha256.Sum256(source))
+		var resolved []string
 		forEach(document.Root, func(node *markdown.Node) {
-			if node.Kind == markdown.KindImage {
+			switch node.Kind {
+			case markdown.KindImage:
 				node.Kind = markdown.KindEmph
+			case markdown.KindLink:
+				if base == "" {
+					return
+				}
+				if target, ok := fileURL(base, node.Dest); ok {
+					id := placeholder + strconv.Itoa(len(resolved)/2)
+					node.Dest = []byte(id)
+					resolved = append(resolved, `href="`+id+`"`, `href="`+stdhtml.EscapeString(target)+`"`)
+				}
 			}
 		})
 		var body bytes.Buffer
@@ -124,7 +163,8 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 			return nil, err
 		}
 		diagrams := false
-		rendered := mermaidBlock.ReplaceAllStringFunc(body.String(), func(block string) string {
+		rendered := strings.NewReplacer(resolved...).Replace(body.String())
+		rendered = mermaidBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 			diagrams = true
 			// the source stays escaped: mermaid reads the element's text
 			return `<pre class="mermaid">` + mermaidBlock.FindStringSubmatch(block)[1] + `</pre>`
@@ -174,6 +214,66 @@ func page(colors palette, body string, diagrams, diagramPage bool) []byte {
 	}
 	output.WriteString("</body></html>\n")
 	return output.Bytes()
+}
+
+// fileURL is the file: URL of a link's destination read from base, as a browser beside the source
+// would read it: a relative path from base, an absolute one as it is, its escapes decoded, and its
+// query and fragment as written. ok is false for a destination that is not a path: a URL with a
+// scheme (http:, mailto:, file:, …), one naming another host (//host/…), a bare #fragment or none.
+func fileURL(base string, destination []byte) (string, bool) {
+	link := string(destination)
+	if link == "" || link[0] == '#' || strings.HasPrefix(link, "//") || hasScheme(link) {
+		return "", false
+	}
+	path, rest := link, ""
+	if i := strings.IndexAny(link, "?#"); i >= 0 {
+		path, rest = link[:i], link[i:]
+	}
+	if path == "" {
+		return "", false
+	}
+	if decoded, err := url.PathUnescape(path); err == nil {
+		path = decoded // an escape that is not one (100%.md) is the file's own name
+	}
+	path = filepath.FromSlash(path)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(base, path)
+	}
+	path = filepath.ToSlash(filepath.Clean(path))
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path // a drive's path: file:///C:/…
+	}
+	return (&url.URL{Scheme: "file", Path: path}).String() + escapeURL(rest), true
+}
+
+// hasScheme reports whether link starts with a scheme, as a URL parser reads one: a letter, then
+// letters, digits, '+', '-' or '.', then ':'.
+func hasScheme(link string) bool {
+	for i := 0; i < len(link); i++ {
+		switch c := link[i]; {
+		case c == ':':
+			return i > 0
+		case 'a' <= c|0x20 && c|0x20 <= 'z', i > 0 && ('0' <= c && c <= '9' || c == '+' || c == '-' || c == '.'):
+		default:
+			return false
+		}
+	}
+	return false
+}
+
+// escapeURL percent-encodes what is not safe in a URL (a space, a quote, any byte past ASCII) and
+// keeps the rest, '%' among it, as written.
+func escapeURL(s string) string {
+	var out strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9' || strings.IndexByte("-_.!~*'();/?:@&=+$,#%", c) >= 0 {
+			out.WriteByte(c)
+		} else {
+			fmt.Fprintf(&out, "%%%02X", c)
+		}
+	}
+	return out.String()
 }
 
 func forEach(node *markdown.Node, visit func(*markdown.Node)) {

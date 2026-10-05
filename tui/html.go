@@ -30,12 +30,7 @@ func (h *Host) openSystemViewer() {
 		h.notify("no file is open: open one, then SPC O opens it in the system viewer")
 		return
 	}
-	root := ""
-	for _, w := range h.wsList {
-		if w.name == h.ws {
-			root = w.root
-		}
-	}
+	root := h.workspaceRoot()
 	if root == "" {
 		h.notify("the workspace's folder is not known yet: try again once it is listed")
 		return
@@ -48,6 +43,16 @@ func (h *Host) openSystemViewer() {
 		}
 		h.say("opened " + h.file.path + " in the system viewer")
 	})
+}
+
+// workspaceRoot is the open workspace's folder, "" until the workspace is listed.
+func (h *Host) workspaceRoot() string {
+	for _, w := range h.wsList {
+		if w.name == h.ws {
+			return w.root
+		}
+	}
+	return ""
 }
 
 func htmlPreviewFile(content []byte) (string, error) {
@@ -72,6 +77,12 @@ func (h *Host) previewHTML() {
 		return
 	}
 	source, theme := []byte(h.editor.Value()), h.exportTheme()
+	// the page is written to the cache: its relative links are read from the file's own folder, so
+	// they reach the files beside it. An untitled draft's are written as it has them
+	var options export.Options
+	if root := h.workspaceRoot(); h.file.open && root != "" {
+		options.Base = filepath.Dir(filepath.Join(root, filepath.FromSlash(h.file.path)))
+	}
 	image, why := h.imageMode()
 	h.say("opening HTML preview…")
 	type answer struct {
@@ -80,7 +91,7 @@ func (h *Host) previewHTML() {
 		err     error
 	}
 	do(h, func(ctx context.Context) answer {
-		content, err := export.Render(source, export.HTML, theme)
+		content, err := export.RenderWith(source, export.HTML, theme, options)
 		if err != nil {
 			return answer{err: err}
 		}
