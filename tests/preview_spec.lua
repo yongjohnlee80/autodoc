@@ -3,8 +3,9 @@
 -- Run:   nvim --headless -u NONE -l tests/preview_spec.lua
 -- or:    tests/run-all.sh            (every suite, XDG sandboxed, summary-gated)
 --
--- Loads auto-core from the sibling worktree (…/auto-core.nvim/<this branch>,
--- then …/main, then an installed copy) and never touches a running nvim. The
+-- Loads auto-core from AUTODOC_TEST_AUTOCORE (run-all.sh sets it), else the
+-- sibling worktree (…/auto-core.nvim/<this branch>, then …/main, then an
+-- installed copy), and never touches a running nvim. The
 -- `autodoc` binary is a stub script on PATH that records its arguments and
 -- writes the --output file; the system opener is a recorder.
 --
@@ -18,7 +19,10 @@ local branch = vim.fn.fnamemodify(plugin_root, ":t")
 
 vim.opt.rtp:prepend(plugin_root)
 local core_found
+-- run-all.sh names it (AUTODOC_TEST_AUTOCORE, the runner contract, as CI sets it); run alone, the
+-- siblings are tried
 for _, p in ipairs({
+  os.getenv("AUTODOC_TEST_AUTOCORE") or "",
   siblings .. "/auto-core.nvim/" .. branch,
   siblings .. "/auto-core.nvim/main",
   vim.fn.expand("~/.local/share/nvim/lazy/auto-core.nvim"),
@@ -26,6 +30,7 @@ for _, p in ipairs({
   if vim.fn.isdirectory(p .. "/lua/auto-core") == 1 then
     vim.opt.rtp:prepend(p)
     core_found = p
+    print("auto-core: " .. p)
     break
   end
 end
