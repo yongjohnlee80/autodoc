@@ -193,6 +193,7 @@ func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 	}
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-pro")
+	r.s.WaitFor(t, "the files listed", func(string) bool { return len(r.listed()) > 0 }) // the workspace entered
 	r.h.p.Post(func() { r.h.openPath("a.go") })
 	r.waitFile(t, "a.go")
 	r.s.WaitFor(t, "the page read as registered", func(string) bool { return r.headings() == 0 })
