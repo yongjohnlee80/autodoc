@@ -115,6 +115,7 @@ var publicErrs = []struct {
 	{store.ErrEmbeddingPolicy, golibrpc.CodeInvalidParams, "embedding policy must be always, when opened, or never"},
 	{store.ErrTaken, CodeConflict, "another workspace has this name or root"},
 	{store.ErrNoPreferenceName, golibrpc.CodeInvalidParams, "a preference needs a name"},
+	{store.ErrOwnedPreference, golibrpc.CodeInvalidParams, "this preference is set by its own verb: embedding.use, ranker.use or ranker.window"},
 	{errNoPreferences, CodeUnsupported, "this server keeps no preferences"},
 	{errNoEmbeddings, CodeUnsupported, "this server keeps no embedding providers"},
 	{errNoEvents, CodeUnsupported, "this server keeps no event log"},
@@ -420,6 +421,9 @@ func (s *Server) register() {
 		value, err := argStr(p, 1, "value")
 		if err != nil {
 			return nil, err
+		}
+		if store.Owned(name) {
+			return nil, store.ErrOwnedPreference
 		}
 		return nil, s.preferences.SetPreference(ctx, name, value)
 	}, false))
