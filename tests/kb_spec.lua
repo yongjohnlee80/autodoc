@@ -460,6 +460,70 @@ do
   ok("A7: the validator catches a new broken internal reference", r11 ~= nil and r12 == nil and tostring(e12):find("new broken reference") ~= nil, e12)
 end
 
+section("[L] symbolic links and other special files are refused")
+do
+  local uv = vim.uv
+  local function kind(path) local st = uv.fs_lstat(path); return st and st.type end
+  local outside = tmp .. "/outside"
+  util.mkdirp(outside .. "/dir")
+  write(outside, "target.md", "# Target\n\nsee shared/adrs/0001-first.md\n")
+  write(outside, "dir/inner.md", "# Inner\n")
+  -- a link to a file outside the KB, and a link to a directory
+  local L = tmp .. "/kb-l"
+  build_fixture(L, nil)
+  assert(uv.fs_symlink(outside .. "/target.md", L .. "/shared/adrs/link.md"))
+  assert(uv.fs_symlink(outside .. "/dir", L .. "/shared/linked-dir"))
+  local target_before = util.sha256_file(outside .. "/target.md")
+  local p1, e1 = migrate.plan({ root = L, todo_stores = { L .. "/.todo-list" } })
+  ok("L1: the plan refuses a KB holding symbolic links", p1 == nil and tostring(e1):find("refusing to migrate", 1, true) ~= nil, e1)
+  ok("L2: …naming each, file and directory links alike",
+    tostring(e1):find("shared/adrs/link.md (link)", 1, true) ~= nil and tostring(e1):find("shared/linked-dir (link)", 1, true) ~= nil, e1)
+  local d1, de1 = dry(L, nil)
+  ok("L3: the dry run refuses too, writing no output", d1 == nil and tostring(de1):find("refusing to migrate", 1, true) ~= nil
+    and not util.exists(tmp .. "/out-kb-l"), de1)
+  ok("L4: …and the links and their targets are as they were",
+    kind(L .. "/shared/adrs/link.md") == "link" and kind(L .. "/shared/linked-dir") == "link"
+    and util.sha256_file(outside .. "/target.md") == target_before)
+
+  -- a file swapped for a link to identical bytes after a clean dry run: its hash still matches (the
+  -- hash reads through the link), so only the apply's re-plan can see it, and it refuses
+  local M2 = tmp .. "/kb-l2"
+  build_fixture(M2, nil)
+  local r1 = dry(M2, nil)
+  local copy = outside .. "/0002-copy.md"
+  util.write_file(copy, read(M2, "shared/adrs/0002-second.md"))
+  util.remove(M2 .. "/shared/adrs/0002-second.md")
+  assert(uv.fs_symlink(copy, M2 .. "/shared/adrs/0002-second.md"))
+  local copy_before = util.sha256_file(copy)
+  local r2, e2 = apply(M2, nil)
+  ok("L5: a file swapped for a link after the dry run: apply refuses", r1 ~= nil and r2 == nil
+    and tostring(e2):find("shared/adrs/0002-second.md (link)", 1, true) ~= nil, e2)
+  ok("L6: …before any write: the link is a link, its target untouched, and no pre-image exists",
+    kind(M2 .. "/shared/adrs/0002-second.md") == "link" and util.sha256_file(copy) == copy_before
+    and util.isfile(M2 .. "/shared/adrs/0001-first.md") and not util.exists(M2 .. "/adrs")
+    and not util.exists(state_dir .. "/migrations/" .. r1.plan.id))
+
+  -- an external todo store: refused only when the migration would rewrite the link
+  local S = tmp .. "/kb-ls"
+  local SE = tmp .. "/ext-ls"
+  build_fixture(S, SE)
+  local real = tmp .. "/ext-ls-real.md"
+  util.write_file(real, read(SE, "open/task-b.md"))
+  util.remove(SE .. "/open/task-b.md")
+  assert(uv.fs_symlink(real, SE .. "/open/task-b.md"))
+  local real_before = util.sha256_file(real)
+  local p3, e3 = migrate.plan({ root = S, todo_stores = { S .. "/.todo-list", SE } })
+  ok("L7: a store's link the migration would rewrite is refused", p3 == nil
+    and tostring(e3):find("open/task-b.md (link)", 1, true) ~= nil, e3)
+  ok("L8: …and its target is untouched", util.sha256_file(real) == real_before)
+  util.remove(SE .. "/open/task-b.md")
+  util.write_file(SE .. "/open/task-b.md", util.read_file(real))
+  util.write_file(tmp .. "/ext-ls-note.md", "# nothing about the KB\n")
+  assert(uv.fs_symlink(tmp .. "/ext-ls-note.md", SE .. "/open/unrelated.md"))
+  local p4, e4 = migrate.plan({ root = S, todo_stores = { S .. "/.todo-list", SE } })
+  ok("L9: a store's link the migration never touches does not block it", p4 ~= nil, e4)
+end
+
 section("[P] pre-image, apply and undo (no git)")
 local pre_ok, pre_detail = false, "hook never ran"
 local r_apply, e_apply = apply(A, EXT_A, { hooks = { before_first_write = function(pdir, pi)
