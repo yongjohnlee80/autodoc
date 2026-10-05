@@ -17,6 +17,7 @@ Dialog {
     Shortcut { sequence: "e"; onActivated: { leader.close(); App.toggleExplorer() } }
     Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleLinks() } }
     Shortcut { sequence: "`"; onActivated: { leader.close(); App.toggleTerminal() } }
+    Shortcut { sequence: "r"; onActivated: { leader.close(); App.openRecent() } }
     Shortcut { sequence: "~"; onActivated: { leader.close(); App.toggleAgent() } }
     Shortcut { sequence: "g"; onActivated: { leader.close(); App.openAgentProfiles() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
