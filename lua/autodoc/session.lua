@@ -141,18 +141,54 @@ function M.guarded(cb)
   end
 end
 
+---request is call for views: ensure, then the call, its reply guarded by the epoch the call was
+---ISSUED in. Wrapping a callback in `guarded` before `ensure` has connected would capture the
+---epoch before the connect and drop the first reply of every new session; this takes the epoch
+---after. The reply is dropped (cb never fires) when the session ended while it was in flight;
+---a failure to connect still calls back, with the lifecycle's message.
+---@param method string
+---@param params table
+---@param cb fun(result: any, err: table|nil)
+function M.request(method, params, cb)
+  M.ensure(function(c, err)
+    if not c then return cb(nil, { code = nil, message = err or "autodoc: not connected" }) end
+    c:call(method, params, vim.schedule_wrap(M.guarded(cb)))
+  end)
+end
+
+---remember keeps a workspace.list answer for the save hook and the views, and says so.
+---@param list table[]
+function M.remember_workspaces(list)
+  _workspaces = {}
+  local names = {}
+  for _, w in ipairs(list or {}) do
+    _workspaces[w.name] = w
+    names[#names + 1] = w.name
+  end
+  publish(M.TOPIC_WORKSPACES, { names = names })
+end
+
+---workspace is the last listed workspace named name, or nil.
+---@param name string
+---@return table|nil
+function M.workspace(name)
+  return _workspaces and _workspaces[name] or nil
+end
+
+---cached_workspaces is the names of the last listed workspaces, sorted (for completion).
+---@return string[]
+function M.cached_workspaces()
+  local out = vim.tbl_keys(_workspaces or {})
+  table.sort(out)
+  return out
+end
+
 ---workspaces lists the daemon's workspaces, and keeps them for the save hook.
 ---@param cb fun(list: table[]|nil, err: table|nil)
 function M.workspaces(cb)
   M.call("workspace.list", {}, function(list, err)
     if err then return cb(nil, err) end
-    _workspaces = {}
-    local names = {}
-    for _, w in ipairs(list or {}) do
-      _workspaces[w.name] = w
-      names[#names + 1] = w.name
-    end
-    publish(M.TOPIC_WORKSPACES, { names = names })
+    M.remember_workspaces(list)
     cb(list, nil)
   end)
 end
