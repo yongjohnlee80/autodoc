@@ -18,8 +18,9 @@ import (
 // the workspace, told about it; hidden, it keeps running; the profiles are added, edited, made the
 // default and removed in Options › Agent profiles…, and Use switches, asking first.
 
-// fakeAgent is an agent CLI that writes where it started, with what, and what it was told to
-// report (the screen wraps long paths), then echoes what it is sent until told to exit.
+// fakeAgent is an agent CLI that writes where it started, with what, what it was told, and which
+// autodoc it calls, to report (the screen wraps long paths), calls it, then echoes what it is sent
+// until told to exit.
 func fakeAgent(t *testing.T) (agent, report string) {
 	t.Helper()
 	dir := t.TempDir()
@@ -28,9 +29,11 @@ func fakeAgent(t *testing.T) (agent, report string) {
 {
 echo "cwd=$(pwd)"
 echo "args=$*"
-echo "env=$AUTODOC_WORKSPACE|$AUTODOC_ROOT"
-ls
+echo "env=$AUTODOC_WORKSPACE|$AUTODOC_ROOT|$FAKE_GREETING"
+LC_ALL=C ls
+echo "autodoc=$(command -v autodoc)"
 } > ` + shellQuote(report) + `
+autodoc --call workspace.list
 echo "started $1"
 while read line; do
   case "$line" in
@@ -45,19 +48,35 @@ done
 	return p, report
 }
 
-// runAgentTUI runs the TUI with the profiles given, the default named def, its agent folder dir.
-func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) (*daemon, *running) {
+// agentConfig is the config the agent tests' TUI runs on: not the default, and one word only quoted.
+const agentConfig = "/a config's dir/autodoc.toml"
+
+// runAgentTUI runs the TUI with the profiles given, the default named def, its agent folder dir, on
+// agentConfig, with no autodoc installed: the autodoc it hands its agent is a fake that writes the
+// arguments it is called with to calls.
+func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) (d *daemon, r *running, calls string) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", "/usr/bin:/bin")
+	bins := filepath.Join(t.TempDir(), "a build's dir") // a path the shell must have quoted
+	if err := os.Mkdir(bins, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	calls = filepath.Join(bins, "calls")
+	bin := filepath.Join(bins, "autodoc-build")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\necho \"$@\" >> "+shellQuote(calls)+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	prefs := map[string]string{prefAgentProfiles: agentProfilesJSON(profiles)}
 	if def != "" {
 		prefs[prefAgentDefault] = def
 	}
-	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
-	r := runTUI(t, NewSession(d.sock, nil), Options{AgentDir: dir})
+	d = startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
+	r = runTUI(t, NewSession(d.sock, nil), Options{AgentDir: dir, ConfigPath: agentConfig})
+	onLoop(r, func() bool { r.h.agentBinPath = bin; return true })
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
-	return d, r
+	return d, r, calls
 }
 
 func (r *running) agentTerm() *widget.Terminal {
@@ -82,9 +101,10 @@ func (r *running) noticed(text string) bool {
 func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	agent, report := fakeAgent(t)
-	_, r := runAgentTUI(t, dir, []agentProfile{
+	// as a user may write a command: a variable set before it, its program's path quoted
+	_, r, calls := runAgentTUI(t, dir, []agentProfile{
 		{Name: "other", Command: "false"},
-		{Name: "fake", Command: agent + " --root {root} --ws {workspace}"},
+		{Name: "fake", Command: "FAKE_GREETING=hi " + shellQuote(agent) + " --root {root} --ws {workspace}"},
 	}, "fake")
 	root := onLoop(r, func() string { ws, _ := r.h.activeWorkspaceInfo(); return ws.root })
 	folder := filepath.Join(dir, "kb")
@@ -97,9 +117,14 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	r.s.WaitForText(t, "started --root")
 	if b, err := os.ReadFile(report); err != nil {
 		t.Fatal(err)
-	} else if want := "cwd=" + folder + "\nargs=--root " + root + " --ws kb\nenv=kb|" + root +
-		"\nAGENTS.md\nCLAUDE.md\n"; string(b) != want {
+	} else if want := "cwd=" + folder + "\nargs=--root " + root + " --ws kb\nenv=kb|" + root + "|hi" +
+		"\nAGENTS.md\nCLAUDE.md\nbin\nautodoc=" + filepath.Join(folder, "bin", "autodoc") + "\n"; string(b) != want {
 		t.Fatalf("the agent reported\n%s\nwant\n%s", b, want)
+	}
+	// Its autodoc, with none installed, is the TUI's build on the TUI's config, not the default one.
+	r.s.WaitFor(t, "the agent's call", func(string) bool { b, _ := os.ReadFile(calls); return len(b) > 0 })
+	if b, _ := os.ReadFile(calls); string(b) != "--config "+agentConfig+" --call workspace.list\n" {
+		t.Fatalf("the agent's autodoc was called with %q", b)
 	}
 	for _, name := range []string{"AGENTS.md", "CLAUDE.md"} {
 		b, err := os.ReadFile(filepath.Join(folder, name))
@@ -107,7 +132,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 			t.Fatal(err)
 		}
 		if g := string(b); !strings.Contains(g, "name: `kb`") || !strings.Contains(g, "root: `"+root+"`") ||
-			!strings.Contains(g, "# AutoDoc") {
+			!strings.Contains(g, "# AutoDoc") || !strings.Contains(g, "`--config "+agentConfig+"`") {
 			t.Errorf("%s does not tell the agent the workspace and how to call AutoDoc:\n%.600s", name, g)
 		}
 	}
@@ -156,24 +181,23 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 	t.Fatalf("stored: default %q, profiles %s; want %q, %s", got[prefAgentDefault], got[prefAgentProfiles], def, profiles)
 }
 
-// A profile whose program is not installed starts nothing, and says so.
-func TestAnAgentNotInstalledIsRefusedBeforeAnythingStarts(t *testing.T) {
-	dir := t.TempDir()
-	_, r := runAgentTUI(t, dir, []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
+// A profile whose program is not installed is the shell's to report: its 127 says the command was
+// not found, and the next SPC ~ tries again.
+func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
-	r.s.WaitFor(t, "the refusal", func(string) bool { return r.noticed("autodoc-no-such-agent is not installed") })
-	if onLoop(r, func() bool { return r.h.panelOpen["agent"] || r.h.agentRunning != "" }) {
-		t.Fatal("an agent not installed opened the panel")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "kb")); !os.IsNotExist(err) {
-		t.Fatalf("an agent not installed wrote its folder (%v)", err)
+	r.s.WaitFor(t, "not found", func(string) bool {
+		return r.noticed("the agent gone's command was not found (127): check it in Options › Agent profiles…")
+	})
+	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "" {
+		t.Fatalf("after its command was not found %q is running", n)
 	}
 }
 
 // With no profile SPC ~ opens the profiles: the first added becomes the default, a name another has
 // is refused, an edit renames the default with it, and a removal leaves none. All of it is kept.
 func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
-	d, r := runAgentTUI(t, t.TempDir(), nil, "")
+	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
 	r.s.WaitForText(t, "no profiles yet")
 
@@ -233,7 +257,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 // Use starts another agent: with one running it asks first, and only Yes stops it.
 func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 	agent, _ := fakeAgent(t)
-	_, r := runAgentTUI(t, t.TempDir(), []agentProfile{
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
 		{Name: "one", Command: agent + " first"},
 		{Name: "two", Command: agent + " second"},
 	}, "one")
@@ -274,7 +298,7 @@ func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 
 // The agent's panel is kept where its grip leaves it.
 func TestTheAgentsPanelSizeIsKept(t *testing.T) {
-	d, r := runAgentTUI(t, t.TempDir(), nil, "")
+	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.panelResized("agent", 60, 70); return true })
 	r.s.WaitFor(t, "kept", func(string) bool {
 		got, _ := d.db.Preferences(context.Background())
@@ -318,5 +342,12 @@ func TestAgentProfilesReadOnlyTheWholeOnes(t *testing.T) {
 	}
 	if agentProfilesJSON(nil) != "[]" {
 		t.Fatalf("no profiles written as %s", agentProfilesJSON(nil))
+	}
+}
+
+// With no config named, the agent's autodoc is the build alone, on the default config.
+func TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone(t *testing.T) {
+	if got, want := agentWrapper("/opt/auto doc", ""), "exec '/opt/auto doc' \"$@\"\n"; !strings.HasSuffix(got, want) || strings.Contains(got, "--config") {
+		t.Fatalf("the wrapper is\n%s\nwant it to end %q, with no --config", got, want)
 	}
 }
