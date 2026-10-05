@@ -156,4 +156,18 @@ t.section("the epoch guard", function()
   t.ok(not ran, "a callback from the ended epoch is dropped")
 end)
 
+t.section("session.request across a connect", function()
+  t.ok(not session.is_ready(), "no session after the shutdown")
+  local before = session.epoch()
+  local list, err = t.await(20000, function(done) session.request("workspace.list", {}, done) end)
+  t.ok(session.epoch() > before, "the request connected a new session")
+  t.ok(err == nil and type(list) == "table" and #list >= 1,
+    "its reply is answered, not dropped as the epoch before the connect", vim.inspect({ list, err }))
+  session.remember_workspaces({ { name = "other", root = "/elsewhere" } })
+  t.eq(session.workspace("kb"), nil, "remember_workspaces replaces the kept listing")
+  t.eq(session.cached_workspaces(), { "other" }, "and its names are what completion offers")
+  session.remember_workspaces(list)
+  t.eq(session.workspace("kb") and session.workspace("kb").root, kb, "a workspace is found by name in the kept listing")
+end)
+
 t.finish()
