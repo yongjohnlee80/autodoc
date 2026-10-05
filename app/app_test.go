@@ -86,6 +86,10 @@ func TestServeRefusesAWorkspaceSection(t *testing.T) {
 // TestMainReturnsItsExitCodes: Main returns what the process would exit with, and writes where it
 // is told: the version on stdout, usage and refusals on stderr; -h is not an error.
 func TestMainReturnsItsExitCodes(t *testing.T) {
+	bad := filepath.Join(t.TempDir(), "autodoc.toml")
+	if err := os.WriteFile(bad, []byte("not = [toml\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
 		args         []string
 		code         int
@@ -95,6 +99,11 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"-h"}, 0, "", "-serve"},
 		{[]string{"--no-such-flag"}, 2, "", "flag provided but not defined"},
 		{nil, 2, "", "-serve"},
+		// --ensure starts the daemon --print-endpoint names: alone it is refused
+		{[]string{"--ensure"}, 2, "", "--ensure goes with --print-endpoint"},
+		// a --print-endpoint that cannot read its config prints no endpoint (a client reads stdout's
+		// first line as one) and says why
+		{[]string{"--config", bad, "--print-endpoint"}, 1, "", "config: invalid"},
 		{[]string{"--export", "html", "--output", filepath.Join(t.TempDir(), "x.html"), filepath.Join(t.TempDir(), "missing.md")}, 1, "", "autodoc:"},
 	} {
 		var stdout, stderr bytes.Buffer
