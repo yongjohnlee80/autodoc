@@ -168,13 +168,14 @@ type Host struct {
 	keepDraft bool
 	// the image previews (preview.go): previewGen numbers them, the latest wins; htmlPreviewPath is
 	// the file the HTML preview's image was made from; graphicsOverride replaces the terminal's
-	// kitty graphics answer in tests
-	previewGen       uint64
-	htmlPreviewPath  string
-	diagramImage     bool       // the Mermaid preview is an image, not its fallback
-	diagramHelpText  string     // what the Mermaid preview's help line says
-	imagePreview     previewing // the image preview open, to zoom it (preview.go)
-	graphicsOverride func() tuicore.Tri
+	// kitty graphics answer in tests, and rasterizeOverride the headless browser
+	previewGen        uint64
+	htmlPreviewPath   string
+	diagramImage      bool       // the Mermaid preview is an image, not its fallback
+	diagramHelpText   string     // what the Mermaid preview's help line says
+	imagePreview      previewing // the image preview open, to zoom it (preview.go)
+	graphicsOverride  func() tuicore.Tri
+	rasterizeOverride func(context.Context, []byte, widget.Page) ([]byte, error)
 	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
 	outline     *outline.Doc
 	outlineGen  uint64

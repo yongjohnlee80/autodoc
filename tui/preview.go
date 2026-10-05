@@ -55,7 +55,7 @@ func (h *Host) imageMode() (bool, string) {
 	case tuicore.TriUnknown:
 		return false, "the terminal did not confirm kitty graphics (inside tmux: set -g allow-passthrough on)"
 	}
-	if _, ok := widget.HTMLRasterizer(); !ok {
+	if _, ok := widget.HTMLRasterizer(); !ok && h.rasterizeOverride == nil {
 		return false, "no headless Chromium or Chrome to render with"
 	}
 	return true, ""
@@ -67,6 +67,15 @@ func (h *Host) graphics() tuicore.Tri {
 		return h.graphicsOverride()
 	}
 	return h.p.App().Capabilities().KittyGraphics
+}
+
+// rasterizer renders a page as an image: golib's headless browser, or rasterizeOverride in tests.
+// Taken on the loop, it is called off it.
+func (h *Host) rasterizer() func(context.Context, []byte, widget.Page) ([]byte, error) {
+	if h.rasterizeOverride != nil {
+		return h.rasterizeOverride
+	}
+	return widget.RasterizeHTMLPage
 }
 
 // exportTheme is the export palette of the active theme.
@@ -150,11 +159,11 @@ func (h *Host) renderPreview(fallback func(why string)) {
 	pv := h.imagePreview
 	h.withImageCells(pv.dialog, fallback, func(img *widget.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
-		gen := h.previewGen
+		gen, rasterize := h.previewGen, h.rasterizer()
 		// a page taller than a terminal shows an image (widget.MaxImagePixels) is cut into strips
 		// here, off the loop: a long file's page, whole, shows nothing at all
 		do(h, func(ctx context.Context) answerOf[widget.Strips] {
-			png, err := widget.RasterizeHTMLPage(ctx, pv.page, widget.Page{Width: cols * widget.CellPixelsW,
+			png, err := rasterize(ctx, pv.page, widget.Page{Width: cols * widget.CellPixelsW,
 				MinHeight: rows * widget.CellPixelsH, MaxHeight: pv.maxHeight, Scale: zooms[pv.zoom], Wide: pv.wide, Background: pv.background})
 			if err != nil {
 				return answerOf[widget.Strips]{err: err}

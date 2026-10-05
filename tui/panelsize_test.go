@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -70,4 +72,29 @@ func TestADraggedPanelKeepsItsSize(t *testing.T) {
 	})
 	onLoop(again, func() bool { again.h.togglePanel("explorer"); again.h.toggleTerminal(); return true })
 	again.s.WaitFor(t, "the terminal 50% high in a new TUI", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
+}
+
+// App.panelResized takes a panel's name and two whole numbers, and refuses anything else, naming it.
+func TestPanelResizedTakesANameAndTwoWholeNumbers(t *testing.T) {
+	var got []any
+	h := stringAndTwoNumbers("App.panelResized", "a panel and its size and length", func(p string, s, l int) { got = []any{p, s, l} })
+	str := func(v string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: v} }
+	num := func(v string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueNumber, Raw: v} }
+	if err := h([]qml.SpecValue{str("agent"), num("60"), num("70")}); err != nil || len(got) != 3 || got[0] != "agent" || got[1] != 60 || got[2] != 70 {
+		t.Fatalf("(agent, 60, 70) gave %v, %v", got, err)
+	}
+	for _, c := range []struct {
+		args []qml.SpecValue
+		says string
+	}{
+		{[]qml.SpecValue{str("agent"), num("60")}, "takes a panel and its size and length"},
+		{[]qml.SpecValue{num("1"), num("60"), num("70")}, "takes a panel and its size and length"},
+		{[]qml.SpecValue{str("agent"), num("33.5"), num("70")}, "not 33.5 and 70"},
+		{[]qml.SpecValue{str("agent"), num("60"), num("7e1")}, "not 60 and 7e1"},
+	} {
+		got = nil
+		if err := h(c.args); err == nil || !strings.Contains(err.Error(), c.says) || got != nil {
+			t.Errorf("%v: err %v (want %q), called with %v", c.args, err, c.says, got)
+		}
+	}
 }
