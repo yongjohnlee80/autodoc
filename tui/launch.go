@@ -122,6 +122,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Installed:     installed,
 		Plugins:       plugins,
 		Registrations: o.Registrations,
+		AgentDir:      filepath.Join(stateDir, "agent"),
 	})
 	if err != nil {
 		return err
