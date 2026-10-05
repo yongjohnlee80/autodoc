@@ -567,11 +567,14 @@ git clone https://github.com/yongjohnlee80/autodoc && cd autodoc && make build  
 
 `make build` stamps the version from `git describe`.
 
-Tests run through `autodoc-test.sh` (beside the repository, as golib's and AutoDB's harnesses are):
+Tests run through the Makefile; `make race` is what CI runs:
 
 ```sh
-autodoc-test.sh run --worktree . --race
+make test    # or: make race, make cover
 ```
+
+The Postgres destination's cells need `AUTODOC_TEST_PGURL`, a PostgreSQL with pgvector whose user
+may create databases; without it they skip ([core/pgstore](core/pgstore/README.md#testing)).
 
 ## License
 

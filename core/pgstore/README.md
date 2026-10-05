@@ -81,8 +81,7 @@ reproduces it.
 ## Testing
 
 The cells run against a PostgreSQL with pgvector whose user may create databases, named by
-`AUTODOC_TEST_PGURL` (locally `autodoc-test.sh --target vm43` wires it to the project's test
-Postgres); each creates and drops a scratch database. Without it they skip — unless
+`AUTODOC_TEST_PGURL`; each creates and drops a scratch database. Without it they skip, unless
 `AUTODOC_TEST_PG_REQUIRED=1` says the run has a service it must not skip on, in which case a
 missing URL fails loudly.
 
