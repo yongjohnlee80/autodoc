@@ -80,6 +80,8 @@ type prefs struct {
 	pluginPlace map[string]string
 	// searchStages are the search's boxes as the user left them (stages.go)
 	searchStages stageChoice
+	// panelGeo are the explorer's and the links' dragged sizes, by preference name (panelsize.go)
+	panelGeo map[string]int
 }
 
 func defaultPrefs() prefs {
@@ -161,6 +163,7 @@ func prefsOf(m map[string]any) prefs {
 		}
 	}
 	readTermPrefs(&p, m)
+	readPanelPrefs(&p, m)
 	return p
 }
 
@@ -177,18 +180,19 @@ func panelLength(edge string) int {
 // prefState is what the document reads of the preferences (the status line's is statusShown's).
 func prefState(p prefs) map[string]any {
 	m := termState(p)
+	for k, v := range panelState(p) {
+		m[k] = v
+	}
 	for k, v := range map[string]any{
-		"App.menuAutoHide":   p.menuHidden,
-		"App.keyset":         keysetOf[p.keymap],
-		"App.keymapVim":      p.keymap == "vim",
-		"App.keymapText":     p.keymap == "text",
-		"App.explorerEdge":   p.explorerEdge,
-		"App.linksEdge":      p.linkEdge,
-		"App.explorerLength": panelLength(p.explorerEdge),
-		"App.editorWrap":     p.wrap,
-		"App.lineNumbers":    p.lineNumbers,
-		"App.imagePreviews":  p.images,
-		"App.linksLength":    panelLength(p.linkEdge),
+		"App.menuAutoHide":  p.menuHidden,
+		"App.keyset":        keysetOf[p.keymap],
+		"App.keymapVim":     p.keymap == "vim",
+		"App.keymapText":    p.keymap == "text",
+		"App.explorerEdge":  p.explorerEdge,
+		"App.linksEdge":     p.linkEdge,
+		"App.editorWrap":    p.wrap,
+		"App.lineNumbers":   p.lineNumbers,
+		"App.imagePreviews": p.images,
 		// the page: the ruler's columns of text (editable columns: the line numbers' gutter is added
 		// to them, syncPageWidth), and its border, whose right edge is the first column past them
 		// (vim's colorcolumn at textwidth+1); the editor's guide marks that column too, so a line

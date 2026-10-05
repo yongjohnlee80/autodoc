@@ -35,6 +35,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.openSearch":        none(h.openSearch),
 		"App.searchLive":        oneString("App.searchLive", "a query", h.searchLive),
 		"App.searchClosed":      none(h.searchClosed),
+		"App.panelResized":      stringAndTwoNumbers("App.panelResized", "a panel and its size and length", h.panelResized),
 		"App.toggleSearchStage": oneString("App.toggleSearchStage", "lexical, semantic or rerank", h.toggleSearchStage),
 		"App.previewHit":        oneNumber("App.previewHit", "a row", h.previewHit),
 		"App.openHit":           oneNumber("App.openHit", "a row", h.openHit),
@@ -248,6 +249,23 @@ func fiveStrings(name, what string, fn func(a, b, c, d, e string)) decl.HandlerF
 			}
 		}
 		fn(args[0].Raw, args[1].Raw, args[2].Raw, args[3].Raw, args[4].Raw)
+		return nil
+	}
+}
+
+// stringAndTwoNumbers is a command taking a name and two whole numbers: a panel and its size and
+// length.
+func stringAndTwoNumbers(name, what string, fn func(string, int, int)) decl.HandlerFunc {
+	return func(args []qml.SpecValue) error {
+		if len(args) != 3 || args[0].Kind != qml.SpecValueString || args[1].Kind != qml.SpecValueNumber || args[2].Kind != qml.SpecValueNumber {
+			return fmt.Errorf("%s takes %s", name, what)
+		}
+		a, err1 := strconv.Atoi(args[1].Raw)
+		b, err2 := strconv.Atoi(args[2].Raw)
+		if err1 != nil || err2 != nil {
+			return fmt.Errorf("%s takes %s, not %s and %s", name, what, args[1].Raw, args[2].Raw)
+		}
+		fn(args[0].Raw, a, b)
 		return nil
 	}
 }

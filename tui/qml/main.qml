@@ -215,8 +215,11 @@ Window {
         id: explorer
         modal: false
         edge: App.explorerEdge
-        size: 30
+        size: App.explorerSize
         length: App.explorerLength
+        resizable: true
+        minimumSize: 15
+        onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
         onClosed: App.panelClosed("explorer")
         Frame {
@@ -236,8 +239,11 @@ Window {
         id: links
         modal: false
         edge: App.linksEdge
-        size: 30
+        size: App.linksSize
         length: App.linksLength
+        resizable: true
+        minimumSize: 15
+        onResized: App.panelResized("links", size, length)
         onOpened: App.panelOpened("links")
         onClosed: App.panelClosed("links")
         Frame {
@@ -262,6 +268,8 @@ Window {
         edge: App.terminalEdge
         size: App.terminalSize
         length: App.terminalLength
+        resizable: true
+        onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
         Frame {
