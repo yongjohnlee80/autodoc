@@ -171,6 +171,8 @@ function M.default_keys()
   end
   keys[#keys + 1] = { "<leader>mf", function() preview().find() end, desc = "autodoc preview: find → pick panel" }
   keys[#keys + 1] = { "<leader>mc", function() preview().close_all() end, desc = "autodoc preview: close all floats" }
+  keys[#keys + 1] = { "<leader>mb", function() preview().browser() end,
+    desc = "autodoc preview: open in the browser (focused slot or current buffer)" }
   return keys
 end
 
