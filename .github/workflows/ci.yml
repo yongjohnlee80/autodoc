@@ -14,6 +14,25 @@ jobs:
   test:
     name: build, vet, test
     runs-on: ubuntu-latest
+    services:
+      # The Postgres the pgstore cells run against: ephemeral, CI-only. The
+      # DSN below is a throwaway credential of this job, never a secret of any
+      # real database. Each cell makes and drops its own scratch database.
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: autodoc
+          POSTGRES_PASSWORD: autodoc
+          POSTGRES_DB: autodoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U autodoc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGURL: postgres://autodoc:autodoc@localhost:5432/autodoc?sslmode=disable
     steps:
       - uses: actions/checkout@v4
 
@@ -51,8 +70,14 @@ jobs:
 
       # -race because the daemon, the follower, the indexer's writer and the TUI
       # all run concurrently. -count=2 because a suite run once is a suite whose
-      # flakes are someone else's problem later.
+      # flakes are someone else's problem later. The Postgres cells are required
+      # here, where the service exists: they fail loudly rather than skip when
+      # the URL is missing (AUTODOC_TEST_PG_REQUIRED, not CI: the macOS job runs
+      # core/... too and has no service container to give it one).
       - name: test
+        env:
+          AUTODOC_TEST_PGURL: ${{ env.PGURL }}
+          AUTODOC_TEST_PG_REQUIRED: "1"
         run: go test -race -count=2 -timeout 20m ./...
 
       # Linux ships without cgo (modernc SQLite). A macOS build without cgo still
@@ -88,9 +113,28 @@ jobs:
     name: coverage policy
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    services:
+      # The same ephemeral Postgres the test job runs: the head-coverage run
+      # executes the pgstore cells, so it needs the service to cover the
+      # package at all (the cells are the only code paths that touch a
+      # database).
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: autodoc
+          POSTGRES_PASSWORD: autodoc
+          POSTGRES_DB: autodoc
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U autodoc"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       BASE_SHA: ${{ github.event.pull_request.base.sha }}
       HEAD_SHA: ${{ github.sha }}
+      PGURL: postgres://autodoc:autodoc@localhost:5432/autodoc?sslmode=disable
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,15 +146,28 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      # The head run gets the service's URL and the requirement: without it
+      # the cells would skip and the changed package would report no coverage
+      # at all, failing the policy for a reason the log would not show.
       - name: generate head coverage
+        env:
+          AUTODOC_TEST_PGURL: ${{ env.PGURL }}
+          AUTODOC_TEST_PG_REQUIRED: "1"
         run: >-
           go test -count=1 -timeout 20m -covermode=atomic
           -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-head.out" ./...
 
+      # The base run gets the URL only when the base tree already has
+      # core/pgstore: this PR's base still carries the old destination test,
+      # which is red against a real Postgres, and the service would fail the
+      # step for a tree this PR does not change.
       - name: generate base coverage
         run: |
           git worktree add --detach "$RUNNER_TEMP/coverage-base" "$BASE_SHA"
           cd "$RUNNER_TEMP/coverage-base"
+          if [ -d core/pgstore ]; then
+            export AUTODOC_TEST_PGURL="$PGURL"
+          fi
           go test -count=1 -timeout 20m -covermode=atomic \
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
