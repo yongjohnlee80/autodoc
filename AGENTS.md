@@ -18,16 +18,24 @@ autodoc --call search.query '["kb", "why did we store workspaces in sqlite", {"l
 autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 ```
 
-- `--call` starts the daemon when nothing answers, as the TUI does.
+- `--call` starts the daemon when nothing answers, as the TUI does. When another config's daemon
+  already serves the same store, `--call` finds it there (the store's lease-info, confirmed by a
+  probe) instead of starting a second one.
 - A refusal exits 1 and prints `{"error": {"code": …, "message": …}}` on stderr. The codes are
   listed below.
 - Paths are relative to the workspace's root, with `/` separators: `adrs/0203.md`, never an
   absolute path.
 - Integers in the parameters are sent as integers; the verbs that take a number need one.
 
-A program that speaks msgpack-rpc itself can dial the socket directly. The first call on a
-connection must be `sys.hello` with `{"protocol": 12, "name": "<your client>"}`. Any other protocol
-number is refused, and so is every verb until the hello succeeds.
+A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
+`autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
+when nothing answers), never by rules of your own. The first call on a connection must be
+`sys.hello` with `{"protocol": 13, "name": "<your client>"}`: the protocol your client was written
+for. The daemon serves every protocol from `min_protocol` (12) to its own (13); another is
+refused, and so is every verb until the hello succeeds. A session keeps the protocol it declared: a
+verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
+and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
+`verbs` the session may call. The name `autodoc-tui` is admitted at the daemon's own protocol only.
 
 ## A search, step by step
 
@@ -35,8 +43,10 @@ number is refused, and so is every verb until the hello succeeds.
    `[{"name", "root", "state", "include", "exclude"}]`. Search only one whose `state` is `ready`.
    Choose the one whose `root` holds the tree you are asked about.
 2. **Search it.** Use `search.query` (below). Read `hits` in order; they are ranked.
-3. **Read what you need.** `doc.read` returns the whole file. A hit's `byte_start` and `byte_end`
-   are its section in the file's bytes, and `breadcrumb` is the headings above it.
+3. **Read what you need.** A hit's `line_start` and `line_end` are the lines its section spans in
+   the file (1-based): read just those, with a line-ranged reader. `byte_start` and `byte_end` are
+   the same span in bytes, and `breadcrumb` is the headings above it. A hit on a derived document
+   (a PDF's text) has no lines. `doc.read` returns the whole file.
 4. **Follow links** when the question is about how files relate. Use `graph.links` and
    `graph.backlinks` for one file, and `graph.neighborhood` for a file and its links a few hops
    out.
@@ -96,7 +106,7 @@ The answer:
 {
   "hits": [
     {"path": "adrs/0203.md", "breadcrumb": "ADR 0203 › Storage", "snippet": "…",
-     "byte_start": 1204, "byte_end": 2310, "relevance": 0.94, "score": 0.031,
+     "byte_start": 1204, "byte_end": 2310, "line_start": 41, "line_end": 77, "relevance": 0.94, "score": 0.031,
      "via": ["lexical", "semantic", "rank"], "rank_score": 0.87, "generation": 7, "hold": ""}
   ],
   "mode_used": "hybrid",
@@ -183,15 +193,16 @@ workspace's name first.
 | `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown file's headings in order, with the version they were read at; other kinds have none |
 | `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema; only Markdown has frontmatter |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every file in path order, after `after` (`""` from the start) |
+| `index.documents` | workspace, options? | `{docs: [{path, generation, title, updated, indexed_at, fields}], more, next}`: the files with their frontmatter, most recently updated first. Options: `sort` (`updated`, `path` or `indexed`), `fields` (the frontmatter fields to return; default `title`, `type`, `status`, `updated`, `tags`, `abstract`), `tags` (every one), `paths` (folders or files), `facets` (as search's), `missing` (files that lack one of these fields), `after` (the previous page's `next`), `limit` (up to 500, default 100). `updated` is the frontmatter's, else when the index last read a change to the file. Protocol 13 |
 | `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, held, held_stale, held_unchecked, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts files whose frontmatter has a problem; `held` the files another build indexed that this one holds (see `hold` above), `held_stale` and `held_unchecked` among them |
 | `index.changes` | workspace, since, limit | `{cursor, changes: [{path, op, generation}], more}`: what changed after cursor `since` |
 | `graph.links` | workspace, path | `[{path, raw, anchor, kind, resolved}]`: the links the file makes |
 | `graph.backlinks` | workspace, path | the same shape: the files that link to it |
 | `graph.neighborhood` | workspace, path, depth | `{nodes, edges: [{src, dst, kind}]}`: the files within `depth` links |
 | `graph.unresolved` | workspace | `[{src, raw, reason}]`: links that name no file |
-| `sys.hello` | `{protocol, name}` | `{protocol, server, version, pid, addr, client, events}`: `client` is this connection's token, `events` the event log's head |
+| `sys.hello` | `{protocol, name}` | `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`: `protocol` is the session's, `server_protocol` and `min_protocol` the range the daemon serves, `store_id` the store's identity, `client` this connection's token, `events` the event log's head |
 | `ranker.list` | — | `{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}`: the stored rankers (`kind` `tei` or `rerank-api`), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (`""` for none), which is then the one in use |
-| `sys.capabilities` | — | `{databases, registrations, ranker}`: what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build, and `ranker`, `{supplied, model}`: whether the build supplies its own ranker |
+| `sys.capabilities` | — | `{databases, registrations, ranker, verbs}`: `verbs` is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build, and `ranker`, `{supplied, model}`: whether the build supplies its own ranker |
 | `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema, database settings (`workspace.databases`, never a connection) or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
 
 Writing files (`doc.write`, `doc.rename`, `doc.remove`), changing workspaces and choosing the

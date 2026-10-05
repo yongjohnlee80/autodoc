@@ -112,19 +112,28 @@ autodoc --serve             # or: autodoc --serve --config path/to/config.toml
 ```
 
 It listens on its unix socket, mode 0600: the file is the access control, so there is no login
-locally. It opens the store, takes its lease, and serves every workspace in it. A second `--serve`
-on the same socket exits, reporting the instance that answers there; one on another socket over the
-same store is refused, since the lease is taken.
+locally. It opens the store, takes its lease, and serves every workspace in it, then records where
+it serves (the store's lease-info, beside the store). A second `--serve` that finds this store's
+daemon already serving, on the same socket or another config's, says where and exits 0; anything
+else on its socket, or a lease it cannot account for, is refused.
 
-Every client speaks one API. A session starts with `sys.hello({protocol})`, and until then only
-`sys.hello` answers. Every other verb takes the workspace name first:
+```sh
+autodoc --print-endpoint            # unix<TAB><socket>: the config's, or the one serving its store
+autodoc --print-endpoint --ensure   # the same, starting the daemon first when nothing answers
+```
+
+A client that dials the socket itself asks the binary where it is, so it never repeats the rules.
+Every client speaks one API. A session starts with `sys.hello({protocol, name})`, and until then
+only `sys.hello` answers. The daemon serves a range of protocols (`min_protocol` to its own): a
+session keeps the one it declared, and a verb added after it answers as an unknown method. Every
+other verb takes the workspace name first:
 
 | Group | Verbs |
 | --- | --- |
-| `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core, `{databases}`, and the build's registrations) |
+| `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core, `{databases}`, the build's registrations, and the `verbs` this session may call) |
 | `workspace` | `list`, `add(name, root, include?, exclude?)`, `configure(name, settings)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)`, `set_schema(name, path)`, `set_text_extensions(name, exts)`, `set_provider(name, provider)` |
-| `search` | `query(ws, q, {limit, stages, mode, tags, paths, facets})`: `stages` is any of `lexical`, `semantic` and `rerank`, at least one of the first two (default: all); the answer's `stages` says which ran, and why the others did not |
-| `index` | `status`, `list(ws, after, limit)`, `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
+| `search` | `query(ws, q, {limit, stages, mode, tags, paths, facets})`: `stages` is any of `lexical`, `semantic` and `rerank`, at least one of the first two (default: all); the answer's `stages` says which ran, and why the others did not; a hit gives its lines (`line_start`, `line_end`) beside its bytes |
+| `index` | `status`, `list(ws, after, limit)`, `documents(ws, {sort, fields, tags, paths, facets, missing, after, limit})` (the files with their frontmatter, most recently updated first), `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
 | `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
 | `doc` | `read`, `write(ws, path, content, version)`, `rename`, `remove(ws, path, version)` |
 
