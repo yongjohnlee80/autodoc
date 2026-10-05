@@ -380,8 +380,8 @@ beside each candidate's text (its chunk's breadcrumb and body) and scores them. 
 server of a re-ranker (`BAAI/bge-reranker-v2-m3`, say), or a Cohere-style rerank API.
 
 - **It ranks the top window** of what words and meaning found: 40 by default, 10 to 100. A wider
-  window ranks deeper and takes longer. A ranker on a CPU takes about half a second a text, so give
-  it 10 to 20.
+  window ranks deeper and takes longer. On a CPU, `bge-reranker-v2-m3` takes about a quarter of a
+  second a text as an ONNX export and about half a second as is, so give a CPU ranker 10 to 20.
 - **The hits say so.** Each ranked hit has a `rank_score`, the answer's `rank` names the model, and
   the TUI's hits title says `re-ranked by <model>`.
 - **A ranker that does not answer leaves the hits in the order they were found**, and the answer's
