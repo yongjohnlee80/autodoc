@@ -159,7 +159,19 @@ browser-launch error is reported in the TUI. Export a Markdown file without the 
 `autodoc --export=html --theme=light --output=/path/page.html /path/page.md` or use
 `--export=text` for stripped text. Export requires an explicit destination and refuses to
 overwrite its source. Remote images are represented by their alt text in HTML exports; scripts
-and remote resources are not loaded.
+and remote resources are not loaded. `--output`, `--theme` and `--base` are refused without
+`--export`.
+
+**Relative links reach their files wherever the page is written.** An HTML export reads each
+link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's
+own directory and writes it as the `file://` URL of the file it names, percent-encoded (a space,
+a `#`, a byte past ASCII), its query and `#fragment` kept; an absolute path (`/etc/hosts`) becomes
+its own `file://` URL. `--base <dir>` reads them from another directory instead: for a page made
+from a copy of a file kept elsewhere, say. A URL with a scheme (`https:`, `mailto:`, …), one naming
+another host (`//host/…`) and a bare `#fragment` are written as they are, and Obsidian
+`[[wikilinks]]` are not resolved. A link is navigation, not a load, so the page's policy, which
+loads nothing from outside it, stays as it is. The TUI's HTML preview reads them from the open
+file's directory.
 
 **Mermaid diagrams are drawn by mermaid itself**: mermaid 12.1.0 is vendored in the binary
 (`core/export/mermaid`, MIT), so every diagram kind it knows (flowcharts, sequence, state, class,

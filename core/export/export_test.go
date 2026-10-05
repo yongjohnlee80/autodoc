@@ -103,11 +103,31 @@ func TestMermaidDrawsInABrowser(t *testing.T) {
 	if err := os.WriteFile(path, content, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	out := dumpDOM(t, browser, dir, path)
+	// the page as drawn, without its scripts, whose own text names mermaid's errors
+	dom := regexp.MustCompile(`(?s)<script>.*?</script>`).ReplaceAllString(out, "")
+	// fill:#ccc is mermaid's dark theme, which only the page's start script asks for: mermaid left
+	// to start itself draws in its default theme
+	for _, want := range []string{`aria-roledescription="flowchart-v2"`, `aria-roledescription="stateDiagram"`, "event arrives", "pointer", "MenuArm", "fill:#ccc"} {
+		if !strings.Contains(dom, want) {
+			t.Errorf("the drawn page lacks %q", want)
+		}
+	}
+	if strings.Contains(dom, "Syntax error") || strings.Contains(dom, `aria-roledescription="error"`) {
+		t.Error("mermaid drew an error")
+	}
+}
+
+// dumpDOM is the page at path as the browser leaves it once its scripts have settled, offline: every
+// host resolves nowhere and every request goes to a proxy that is not there. dir holds the
+// browser's profile; flags are added to the browser's own.
+func dumpDOM(t *testing.T, browser, dir, path string, flags ...string) string {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, browser, "--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
-		"--proxy-server=127.0.0.1:9", "--host-resolver-rules=MAP * ~NOTFOUND", "--user-data-dir="+filepath.Join(dir, "profile"),
-		"--virtual-time-budget=10000", "--dump-dom", "file://"+path).Output()
+	args := append([]string{"--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions",
+		"--proxy-server=127.0.0.1:9", "--host-resolver-rules=MAP * ~NOTFOUND", "--user-data-dir=" + filepath.Join(dir, "profile")}, flags...)
+	out, err := exec.CommandContext(ctx, browser, append(args, "--virtual-time-budget=10000", "--dump-dom", "file://"+path)...).Output()
 	if err != nil {
 		var stderr []byte
 		if ee, ok := err.(*exec.ExitError); ok {
@@ -122,17 +142,122 @@ func TestMermaidDrawsInABrowser(t *testing.T) {
 		}
 		t.Fatalf("the browser: %v: %s", err, stderr)
 	}
-	// the page as drawn, without its scripts, whose own text names mermaid's errors
-	dom := regexp.MustCompile(`(?s)<script>.*?</script>`).ReplaceAllString(string(out), "")
-	// fill:#ccc is mermaid's dark theme, which only the page's start script asks for: mermaid left
-	// to start itself draws in its default theme
-	for _, want := range []string{`aria-roledescription="flowchart-v2"`, `aria-roledescription="stateDiagram"`, "event arrives", "pointer", "MenuArm", "fill:#ccc"} {
-		if !strings.Contains(dom, want) {
-			t.Errorf("the drawn page lacks %q", want)
+	return string(out)
+}
+
+// fileURL is the file: URL of an absolute path whose every byte is safe in a URL, written by hand.
+func fileURL(path string) string { return "file://" + filepath.ToSlash(path) }
+
+// With a base, a relative link is the file: URL of the file it names there: its escapes decoded, the
+// path encoded again (a space, a '#', a byte past ASCII), its query and fragment kept; an absolute
+// path is its own file: URL. A URL (another host's among them), a #fragment, a wikilink and an
+// image are as they were without one, and without one every link is as written.
+func TestRelativeLinksResolveAgainstTheBase(t *testing.T) {
+	parent := t.TempDir()
+	base := filepath.Join(parent, "my docs")
+	source := []byte("[a](notes/a.md#intro) [up](../x.md#sec) [space](<sub dir/b c.md>) [korean](노트.md#제목)\n" +
+		"[hash](a%23b.md) [percent](100%.md) [query](c.md?x=1&y=2#f) [abs](/etc/hosts) [ref][r]\n\n" +
+		"[web](https://example.com/x#y) [host](//example.com/z) [frag](#local) [mail](mailto:a@example.com) [[Other note]] ![pic](pic.png)\n\n" +
+		"[r]: ./ref.md\n")
+	content, err := export.RenderWith(source, export.HTML, "light", export.Options{Base: base})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	docs := fileURL(parent) + "/my%20docs"
+	for _, want := range []string{
+		`href="` + docs + `/notes/a.md#intro"`,
+		`href="` + fileURL(parent) + `/x.md#sec"`,
+		`href="` + docs + `/sub%20dir/b%20c.md"`,
+		`href="` + docs + `/%EB%85%B8%ED%8A%B8.md#%EC%A0%9C%EB%AA%A9"`,
+		`href="` + docs + `/a%23b.md"`,
+		`href="` + docs + `/100%25.md"`,
+		`href="` + docs + `/c.md?x=1&amp;y=2#f"`,
+		`href="file:///etc/hosts"`,
+		`href="` + docs + `/ref.md"`,
+		`href="https://example.com/x#y"`,
+		`href="//example.com/z"`,
+		`href="#local"`,
+		`href="mailto:a@example.com"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %s", want)
 		}
 	}
-	if strings.Contains(dom, "Syntax error") || strings.Contains(dom, `aria-roledescription="error"`) {
-		t.Error("mermaid drew an error")
+	if strings.Contains(page, "autodoc-link-") || strings.Contains(page, "<img") || strings.Contains(page, "pic.png") {
+		t.Error("the page kept a placeholder or an image")
+	}
+	plain, err := export.Render(source, export.HTML, "light")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wikilink := regexp.MustCompile(`<a class="wikilink"[^>]*>`)
+	if got, want := wikilink.FindString(page), wikilink.FindString(string(plain)); got == "" || got != want {
+		t.Errorf("the wikilink is %q with a base, %q without", got, want)
+	}
+	for _, want := range []string{`href="notes/a.md#intro"`, `href="../x.md#sec"`, `href="sub%20dir/b%20c.md"`} {
+		if !strings.Contains(string(plain), want) {
+			t.Errorf("without a base, the page lacks %s", want)
+		}
+	}
+}
+
+// A relative base is read from the working directory.
+func TestARelativeBaseIsReadFromTheWorkingDirectory(t *testing.T) {
+	content, err := export.RenderWith([]byte("[a](a.md)\n"), export.HTML, "light", export.Options{Base: "."})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `href="` + fileURL(wd) + `/a.md"`; !strings.Contains(string(content), want) {
+		t.Errorf("the page lacks %s", want)
+	}
+}
+
+// In a browser, a page written away from its source follows a resolved link to the file it names,
+// fragment and all, though the page's policy loads nothing: a link is navigation, not a load. The
+// test's own page frames the export, clicks its link and writes down where the frame went and what
+// it shows.
+func TestAResolvedLinkIsFollowedInABrowser(t *testing.T) {
+	browser, ok := widget.HTMLRasterizer()
+	if !ok {
+		t.Skip("no headless Chromium or Chrome")
+	}
+	dir := t.TempDir()
+	sources := filepath.Join(dir, "source docs")
+	if err := os.MkdirAll(filepath.Join(sources, "sub dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sources, "sub dir", "노트 #1.md"), []byte("# Target\n\nthe target file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	content, err := export.RenderWith([]byte("[the target](<sub dir/노트 %231.md#sec>)\n"), export.HTML, "dark", export.Options{Base: sources})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pages := filepath.Join(dir, "pages")
+	if err := os.Mkdir(pages, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pages, "page.html"), content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	frame := `<!doctype html><html><body><iframe id="f" src="page.html"></iframe><pre id="r"></pre><script>` +
+		`var f=document.getElementById("f"),r=document.getElementById("r"),loads=0;` +
+		`f.onload=function(){try{var d=f.contentDocument;if(++loads==1){d.querySelector("a").click();return}` +
+		`r.textContent="at "+f.contentWindow.location.href+" shows "+d.body.innerText}catch(e){r.textContent="failed: "+e}}` +
+		`</script></body></html>`
+	if err := os.WriteFile(filepath.Join(pages, "frame.html"), []byte(frame), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// the frame reads the export's document, which a file: page may only with this flag
+	out := dumpDOM(t, browser, dir, filepath.Join(pages, "frame.html"), "--allow-file-access-from-files")
+	want := "at " + fileURL(dir) + "/source%20docs/sub%20dir/%EB%85%B8%ED%8A%B8%20%231.md#sec shows # Target\n\nthe target file"
+	if !strings.Contains(out, want) {
+		t.Fatalf("the browser did not follow the link to the target: %s", out)
 	}
 }
 

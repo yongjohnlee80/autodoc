@@ -38,8 +38,8 @@ func runMain(t *testing.T, env []string, args ...string) (int, string) {
 	return 0, string(out)
 }
 
-// TestArguments: a workspace's name is --ui's alone, and one at most; no mode is the usage; and
-// --version says which build this is.
+// TestArguments: a workspace's name is --ui's alone, and one at most; --export's flags are its
+// alone; no mode is the usage; and --version says which build this is.
 func TestArguments(t *testing.T) {
 	for _, c := range []struct {
 		args []string
@@ -53,6 +53,10 @@ func TestArguments(t *testing.T) {
 		// refused before anything is dialled: exit 1, saying why
 		{[]string{"--config", "/nonexistent/autodoc.toml", "--call", "workspace.list", "{"}, 1, "--call: the parameters are not JSON"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
+		// --export's own flags are refused without it
+		{[]string{"--base", "/tmp", "--version"}, 2, "--base is for --export"},
+		{[]string{"--ui", "--theme", "dark"}, 2, "--theme is for --export"},
+		{[]string{"--output", "x.html"}, 2, "--output is for --export"},
 		{nil, 2, "-serve"},
 	} {
 		code, out := runMain(t, nil, c.args...)
