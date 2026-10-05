@@ -148,6 +148,31 @@ func TestSchemaVerbsOverTheWire(t *testing.T) {
 	}
 }
 
+// A version 2 schema flows through the same verbs: doc.validate checks the text against its type,
+// and workspace.list counts every field of every type.
+func TestSchemaV2OverTheWire(t *testing.T) {
+	cli, _ := schemaServer(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, required: true}\n"+
+		"types:\n  adr:\n    number: {type: string}\n  review:\n    verdict: {type: string, required: true}\n")
+	ws := call(t, cli, "workspace.list").([]any)[0].(map[string]any)
+	if sch, _ := ws["schema"].(map[string]any); sch["fields"] != int64(3) {
+		t.Errorf("workspace.list schema = %v, want 3 fields", ws["schema"])
+	}
+	for content, want := range map[string]string{
+		"---\ntype: review\n---\nbody\n": "verdict:" + schema.RuleRequired,
+		"---\ntype: adr\n---\nbody\n":    "",
+		"---\ntype: memo\n---\nbody\n":   "type:" + schema.RuleUnknownType,
+	} {
+		var got []string
+		for _, d := range call(t, cli, "doc.validate", "kb", "d.md", []byte(content)).(map[string]any)["diagnostics"].([]any) {
+			m := d.(map[string]any)
+			got = append(got, m["field"].(string)+":"+m["rule"].(string))
+		}
+		if strings.Join(got, ",") != want {
+			t.Errorf("doc.validate %q = %v, want %q", content, got, want)
+		}
+	}
+}
+
 func TestDocOutlineOverTheWire(t *testing.T) {
 	cli, fsys := schemaServer(t, "version: 1\nfrontmatter:\n")
 	ctx := context.Background()

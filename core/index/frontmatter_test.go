@@ -147,6 +147,71 @@ func TestSchemaFacetsAndDiagnostics(t *testing.T) {
 	}
 }
 
+const facetSchemaV2 = `version: 2
+discriminator: type
+common:
+  type: {type: string, required: true}
+  status: {type: string, enum: [draft, active], default: active}
+types:
+  adr:
+    number: {type: integer, required: true}
+  review:
+    verdict: {type: string, enum: [approved, rejected], required: true}
+`
+
+// A version 2 schema facets each file by its own type's fields, and the query filters by any field
+// of any type; a review missing its verdict is diagnosed, an adr without one is not.
+func TestSchemaV2FacetsByType(t *testing.T) {
+	var sv schemaVar
+	sv.set(t, facetSchemaV2, "s1")
+	e := newEnv(t, Options{Schema: sv.get})
+	e.write("adr.md", "---\ntype: adr\nnumber: 7\n---\nzebra crossing\n")
+	e.write("good.md", "---\ntype: review\nverdict: approved\nstatus: draft\n---\nzebra review\n")
+	e.write("bad.md", "---\ntype: review\n---\nzebra review\n")
+	e.write("memo.md", "---\ntype: memo\n---\nzebra stripes\n")
+	for _, p := range []string{"adr.md", "good.md", "bad.md", "memo.md"} {
+		e.ix.Touch(p)
+		e.indexedAt(p)
+	}
+	for p, want := range map[string][]string{
+		"adr.md":  {"number=7", "status=active", "type=adr"},
+		"good.md": {"status=draft", "type=review", "verdict=approved"},
+		"bad.md":  {"status=active", "type=review"},
+		"memo.md": {"status=active", "type=memo"}, // common alone
+	} {
+		if got := e.facets(p); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s facets = %v, want %v", p, got, want)
+		}
+	}
+	ctx := context.Background()
+	if d, _ := e.store.Diagnostics(ctx, "adr.md"); len(d) != 0 {
+		t.Errorf("adr.md diagnostics = %+v, want none", d)
+	}
+	if d, _ := e.store.Diagnostics(ctx, "bad.md"); len(d) != 1 || d[0].Field != "verdict" || d[0].Rule != schema.RuleRequired {
+		t.Errorf("bad.md diagnostics = %+v, want verdict required", d)
+	}
+	if d, _ := e.store.Diagnostics(ctx, "memo.md"); len(d) != 1 || d[0].Rule != schema.RuleUnknownType || d[0].Line != 2 {
+		t.Errorf("memo.md diagnostics = %+v, want an unknown type on line 2", d)
+	}
+	if st, _ := e.store.Status(ctx); st.Diagnosed != 2 {
+		t.Errorf("Status().Diagnosed = %d, want 2 (bad.md, memo.md)", st.Diagnosed)
+	}
+	for q, want := range map[string][]string{
+		"zebra verdict:approved": {"good.md"},
+		"zebra number:0x7":       {"adr.md"}, // read as its field's type
+		"type:review":            {"bad.md", "good.md"},
+	} {
+		r, err := e.ix.Search(ctx, q, QueryOpts{})
+		if err != nil {
+			t.Errorf("%q: %v", q, err)
+			continue
+		}
+		if got := hitPaths(r); !reflect.DeepEqual(got, want) {
+			t.Errorf("%q = %v, want %v", q, got, want)
+		}
+	}
+}
+
 // A facet filter narrows every retriever before its top-N: a matching note ranked far below the
 // retriever's limit is still found.
 func TestFacetFilterAppliesBeforeTopN(t *testing.T) {

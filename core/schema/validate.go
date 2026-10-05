@@ -17,6 +17,9 @@ const (
 	RuleType     = "type"     // a field's value is not of its declared type
 	RuleEnum     = "enum"     // a field's value is not one its enum allows
 	RuleUnknown  = "unknown"  // a strict schema does not declare the field
+	// RuleUnknownType: a version 2 schema names no type the document's discriminator gives, so the
+	// document is checked against common alone
+	RuleUnknownType = "unknown_type"
 )
 
 // Diagnostic is one problem in a file's frontmatter: the field (when it is one field's), the file's
@@ -92,6 +95,7 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 		return r
 	}
 	lineOf := func(n *pyaml.Node) int { return doc.Position(n.Span.Start).Line + firstLine - 1 }
+	set, typ, known := s.fieldsFor(root, tags)
 	written := map[string]bool{}
 	if root != nil && root.Kind == pyaml.KindMapping {
 		for _, pr := range root.Pairs {
@@ -103,11 +107,14 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 				}
 				continue
 			}
-			f, declared := s.Field(name)
+			f, declared := set.field(name)
 			if !declared {
 				if s.Strict {
-					r.Diagnostics = append(r.Diagnostics, Diagnostic{Field: name, Line: lineOf(pr.Key), Rule: RuleUnknown,
-						Message: fmt.Sprintf("%s is not a field of this workspace's schema", strconv.Quote(name))})
+					msg := fmt.Sprintf("%s is not a field of this workspace's schema", strconv.Quote(name))
+					if known {
+						msg = fmt.Sprintf("%s is not a field of type %s in this workspace's schema", strconv.Quote(name), strconv.Quote(typ))
+					}
+					r.Diagnostics = append(r.Diagnostics, Diagnostic{Field: name, Line: lineOf(pr.Key), Rule: RuleUnknown, Message: msg})
 				}
 				continue
 			}
@@ -130,10 +137,14 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 			for _, val := range vals {
 				r.Facets = append(r.Facets, Facet{Field: name, Value: val})
 			}
+			if typ != "" && !known && name == s.Discriminator {
+				r.Diagnostics = append(r.Diagnostics, Diagnostic{Field: name, Line: lineOf(pr.Value), Rule: RuleUnknownType,
+					Message: fmt.Sprintf("unknown type %s", strconv.Quote(typ))})
+			}
 		}
 	}
 	at := 1 // a missing field is the frontmatter's, or the file's first line when it has none
-	for _, f := range s.Fields {
+	for _, f := range set.fields {
 		if written[f.Name] {
 			continue
 		}
@@ -148,6 +159,35 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 		}
 	}
 	return r
+}
+
+// fieldsFor is the fields a document is checked against: a version 1 schema's, or a version 2
+// schema's common merged with the document's type. typ is that type when the discriminator's value
+// is one its declaration admits (else the discriminator's own diagnostic says why), and known says
+// the schema names it; a type it does not name is checked against common alone.
+func (s *Schema) fieldsFor(root *pyaml.Node, tags yaml.Tags) (set fieldSet, typ string, known bool) {
+	if s.Discriminator == "" || root == nil || root.Kind != pyaml.KindMapping {
+		return s.common, "", false
+	}
+	f, _ := s.common.field(s.Discriminator)
+	for _, pr := range root.Pairs {
+		if name, ok := nodeValue(pr.Key, tags).(string); !ok || name != s.Discriminator {
+			continue
+		}
+		v := nodeValue(pr.Value, tags)
+		if v == nil {
+			break
+		}
+		vals, why := typed(f, v)
+		if why != "" || outsideEnum(f, vals) != "" {
+			break
+		}
+		if t, ok := s.types[vals[0]]; ok {
+			return t, vals[0], true
+		}
+		return s.common, vals[0], false
+	}
+	return s.common, "", false
 }
 
 // FacetValue reads text typed as a filter on field (status:active, count:7) into the facet value it
