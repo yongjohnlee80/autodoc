@@ -18,7 +18,9 @@
 #   TEI_PORT       local port (default 18080)
 #   TEI_URL        an already running TEI to test instead (rank, eval, status); up/down ignore it
 #   TEI_VERSION    TEI image version (default 1.9)
-#   HF_TOKEN       passed to TEI for gated models; never printed or stored
+#   HF_TOKEN       passed to TEI for gated models. This script never prints or writes it, but Docker
+#                  puts it in the container's environment, where anyone who can run docker can read
+#                  it (docker inspect, docker compose config). Only set it when a model needs it.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,7 +63,9 @@ gpu_tag() {
   cap="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')" ||
     true
   case "$cap" in
-    12.*) echo "120-$version" ;;
+    12.0) echo "120-$version" ;;
+    12.1) echo "121-$version" ;;
+    10.0) echo "100-$version" ;;
     9.0) echo "hopper-$version" ;;
     8.9) echo "89-$version" ;;
     8.6) echo "86-$version" ;;
@@ -198,6 +202,8 @@ for n, case in enumerate(cases, 1):
     mark = "ok  " if first == 1 else "MISS"
     print("%s %2d. first relevant at %s  %s" % (mark, n, first if first else "-", case["query"][:70]))
 count = len(cases)
+if count == 0:
+    sys.exit("tei-rerank: %s has no cases" % path)
 print()
 print("cases %d   hit@1 %.2f   hit@3 %.2f   MRR %.3f   median %.2fs per case" % (
     count, hits1 / count, hits3 / count, sum(rr) / count, statistics.median(took)))
