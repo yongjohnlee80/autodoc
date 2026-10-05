@@ -27,6 +27,21 @@ func (s *Store) Preferences(ctx context.Context) (map[string]string, error) {
 	return out, err
 }
 
+// ErrOwnedPreference is a write, as a plain preference, of one a verb of its own sets.
+var ErrOwnedPreference = errors.New("store: this preference is set by its own verb")
+
+// Owned reports whether name is a preference the daemon sets through a verb of its own (the
+// embedding provider, the ranker and its window): the daemon holds what it names, set up, and a
+// write around the verb would leave the two apart, and around a build's ranker, the selection it
+// protects open to change.
+func Owned(name string) bool {
+	switch name {
+	case PrefProvider, PrefRanker, PrefRankerWindow:
+		return true
+	}
+	return false
+}
+
 // SetPreference keeps value under name, replacing what it held.
 func (s *Store) SetPreference(ctx context.Context, name, value string) error {
 	if name == "" {

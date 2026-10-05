@@ -487,6 +487,16 @@ func TestPreferenceVerbs(t *testing.T) {
 	if _, err := cli.Call(ctx, "preference.set", "", "x"); code(err) != golibrpc.CodeInvalidParams {
 		t.Fatalf("a nameless preference: %v, want invalid params", err)
 	}
+	// the preferences a verb of its own sets are not written around it: under a build's ranker, a
+	// write of ranker.in_use would open the selection it protects to change
+	for _, owned := range []string{store.PrefProvider, store.PrefRanker, store.PrefRankerWindow} {
+		if _, err := cli.Call(ctx, "preference.set", owned, "other"); code(err) != golibrpc.CodeInvalidParams {
+			t.Errorf("preference.set %s: %v, want invalid params", owned, err)
+		}
+	}
+	if got := fmt.Sprint(call(t, cli, "preference.list")); got != "map[tui.theme:retro]" {
+		t.Fatalf("after the refused writes, preference.list = %s", got)
+	}
 	none := serve(t).dial(true)
 	if _, err := none.Call(ctx, "preference.list"); code(err) != CodeUnsupported {
 		t.Fatalf("preference.list without Preferences: %v, want unsupported", err)
