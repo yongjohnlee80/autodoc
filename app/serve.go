@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
+	"github.com/yongjohnlee80/golib/search/rank"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/edition"
+	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -83,8 +85,15 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 		logger.Warning(log, nil, w)
 	}
 	wsCtx, stopWorkspaces := context.WithCancel(ctx)
+	// one ranker for the daemon (ADR 0215), set up before any workspace starts, so each first
+	// search is ranked; its last calls are written before the store closes
+	holder := &rank.Holder{}
+	ranking := serving.NewRanking(db, holder, serving.Supplied{Ranker: b.rank.Ranker, Window: b.rank.Window}, log)
+	ranking.Start(wsCtx)
+	defer ranking.Wait()
 	ws := serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: log,
-		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg})
+		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg,
+		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}})
 	// the provider the preferences name, before any workspace starts, so each starts with it; the
 	// last calls its meter heard are written before the store closes
 	emb := serving.NewEmbedding(db, ws, log)
@@ -99,7 +108,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}
 	srv := rpc.New(ws, b.version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
-		rpc.WithRegistrations(b.reg.Tables()))
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking))
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", b.version, sock)
 	return srv.Run(ctx)
 }

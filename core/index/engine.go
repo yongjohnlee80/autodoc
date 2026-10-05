@@ -192,8 +192,10 @@ func answer(ctx context.Context, searcher search.Searcher, q string, opts QueryO
 	}
 	for i, h := range res.Hits {
 		out.Hits[i] = Hit{Path: h.Path, Breadcrumb: h.Breadcrumb, Snippet: h.Snippet, Generation: h.Generation,
-			ByteStart: h.ByteStart, ByteEnd: h.ByteEnd, Score: h.Score, Relevance: h.Relevance, Via: h.Via}
+			ByteStart: h.ByteStart, ByteEnd: h.ByteEnd, Score: h.Score, Relevance: h.Relevance, Via: h.Via,
+			RankScore: h.RankScore}
 	}
+	out.Rank = RankState{State: string(res.Rank.State), Model: res.Rank.Model, Error: res.Rank.Error}
 	return out, nil
 }
 

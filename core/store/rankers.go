@@ -54,7 +54,8 @@ func rankerInfoOf(r *Ranker) RankerInfo {
 	return RankerInfo{ID: r.ID, Name: r.Name, Kind: r.Kind, BaseURL: r.BaseURL, Model: r.Model, HasKey: len(r.APIKey) > 0}
 }
 
-func (sp RankerSpec) check() error {
+// Check refuses a spec the store would not keep, so the ranker in use is not probed with one.
+func (sp RankerSpec) Check() error {
 	if strings.TrimSpace(sp.Name) == "" || (sp.Kind != KindTEI && sp.Kind != KindRerankAPI) ||
 		(sp.Kind == KindRerankAPI && strings.TrimSpace(sp.Model) == "") {
 		return ErrRankerInvalid
@@ -91,7 +92,7 @@ func (s *Store) Rankers(ctx context.Context) ([]RankerInfo, error) {
 
 // AddRanker records a ranker, its key sealed.
 func (s *Store) AddRanker(ctx context.Context, sp RankerSpec) (RankerInfo, error) {
-	if err := sp.check(); err != nil {
+	if err := sp.Check(); err != nil {
 		return RankerInfo{}, err
 	}
 	var info RankerInfo
@@ -119,7 +120,7 @@ func (s *Store) AddRanker(ctx context.Context, sp RankerSpec) (RankerInfo, error
 // UpdateRanker rewrites the ranker named name as sp: sp.Name renames it, and the preference naming
 // it follows.
 func (s *Store) UpdateRanker(ctx context.Context, name string, sp RankerSpec) error {
-	if err := sp.check(); err != nil {
+	if err := sp.Check(); err != nil {
 		return err
 	}
 	return s.Write(ctx, func(tx *Tx) error {

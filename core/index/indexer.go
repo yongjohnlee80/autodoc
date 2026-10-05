@@ -88,6 +88,8 @@ type Options struct {
 	// provider. nil is golib's search engine with the search's constants. Any search.Searcher can
 	// take its place.
 	NewSearcher NewSearcher
+	// Rank is the re-ranking stage both searchers are wrapped in, once (rank.go); zero: none.
+	Rank Rank
 }
 
 // Indexer is the store's one writer and the parallel workers that feed it. It implements
@@ -193,9 +195,9 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	if newSearcher == nil {
 		newSearcher = defaultSearcher
 	}
-	ix.words = newSearcher(searchStore{s: store}, nil)
+	ix.words = ix.ranked(newSearcher(searchStore{s: store}, nil))
 	if ix.sem != nil {
-		ix.hybrid = newSearcher(searchStore{s: store, sem: ix.sem}, store.queryEmbedder(ix.sem))
+		ix.hybrid = ix.ranked(newSearcher(searchStore{s: store, sem: ix.sem}, store.queryEmbedder(ix.sem)))
 	}
 	return ix
 }

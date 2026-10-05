@@ -72,6 +72,9 @@ type Hit struct {
 	// Hold is "" for a document this daemon interprets; for one it holds (ADR 0216 §1.4),
 	// HoldCurrent, HoldStale (its file changed since: the span may have moved) or HoldUnchecked.
 	Hold string `json:",omitempty"` // the goldens' hits are interpreted: their JSON never names it
+	// RankScore is the ranker's score for the hit, nil when no ranker scored it (ADR 0215);
+	// comparable only within one Result.
+	RankScore *float64 `json:",omitempty"`
 }
 
 // Result is search.query's answer: the hits, and what the search could use (ADR 0204 §4.4).
@@ -82,6 +85,14 @@ type Result struct {
 	// SemanticError is the constant message of SemanticError: a provider's own error text is not
 	// passed to clients.
 	SemanticError string
+	// Rank is what the re-ranking stage did (ADR 0215): off, ready (the ranker's order) or error
+	// (recall order), with the model that ranked and a constant message.
+	Rank RankState `json:",omitzero"` // a search with no stage: the goldens never name it
+}
+
+// RankState is a Result's re-ranking state.
+type RankState struct {
+	State, Model, Error string `json:",omitempty"`
 }
 
 // Search answers a query lexically: the store alone has no embedding provider, and no schema, so

@@ -188,7 +188,7 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 10's, as 9's (8 had no workspace.configure or sys.capabilities; 7 had no workspace.set_schema, workspace.set_text_extensions, workspace.set_provider, doc.validate, doc.outline or sys.events; 6 had no workspace.set_patterns; 5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
+// TestVerbsArePinned: the verb surface is Protocol 11's (10 had no ranker verbs; 10's was 9's; 8 had no workspace.configure or sys.capabilities; 7 had no workspace.set_schema, workspace.set_text_extensions, workspace.set_provider, doc.validate, doc.outline or sys.events; 6 had no workspace.set_patterns; 5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
 // index.models; 2 had no preference or embedding verbs; 1 had no workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
@@ -198,8 +198,9 @@ func TestVerbsArePinned(t *testing.T) {
 		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
 		"index.changes", "index.list", "index.models", "index.purge_model", "index.reindex", "index.status",
 		"preference.list", "preference.set",
+		"ranker.add", "ranker.list", "ranker.log", "ranker.models", "ranker.remove", "ranker.update", "ranker.usage", "ranker.use", "ranker.window",
 		"search.query", "sys.capabilities", "sys.events", "sys.hello", "sys.shutdown", "workspace.add", "workspace.configure", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size", "workspace.set_patterns", "workspace.set_provider", "workspace.set_schema", "workspace.set_text_extensions"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 10 {
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 11 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }

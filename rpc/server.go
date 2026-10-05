@@ -45,8 +45,10 @@ import (
 // setting saved at once, sys.capabilities, and workspace.list's databases (ADR 0214). Protocol 10
 // adds a build's registrations (ADR 0216): workspace.list's text_collisions; the documents a daemon
 // holds, index.status's held, held_stale and held_unchecked, search.query's hold on a hit, and
-// index.reindex's refusal of a held document; sys.capabilities' registrations, always there.
-const Protocol int64 = 10
+// index.reindex's refusal of a held document; sys.capabilities' registrations, always there. Protocol
+// 11 adds the ranker models (ADR 0215): the ranker.* verbs, search.query's rank and a ranked hit's
+// rank_score, and sys.capabilities' ranker.
+const Protocol int64 = 11
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -182,6 +184,7 @@ type Server struct {
 	workspaces  Workspaces
 	preferences Preferences
 	embeddings  Embeddings
+	rankers     Rankers
 	events      Events
 	log         logger.Logger
 	version     string
@@ -196,6 +199,7 @@ type options struct {
 	log         logger.Logger
 	preferences Preferences
 	embeddings  Embeddings
+	rankers     Rankers
 	events      Events
 	reg         registrations.Tables
 }
@@ -230,7 +234,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	}
 	var id [8]byte
 	_, _ = rand.Read(id[:])
-	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, events: o.events, log: o.log,
+	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
 		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg,
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}

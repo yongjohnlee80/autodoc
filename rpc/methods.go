@@ -6,6 +6,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/search/embed"
+	"github.com/yongjohnlee80/golib/search/rank"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs"
 
@@ -99,6 +100,7 @@ const (
 	CodeEmbedFailed       int64 = -32067 // search lexically, or retry later
 	CodeProviderRefused   int64 = -32068 // the provider refused: switch provider, or fix its key
 	CodeSwitching         int64 = -32069 // a new model is filling: search lexically until it is ready
+	CodeRankUnavailable   int64 = -32070 // a build that answers ranked results or none could not rank: retry later
 )
 
 // publicErrs maps core's errors to codes, first match wins. Only the message here crosses the
@@ -119,6 +121,23 @@ var publicErrs = []struct {
 	{store.ErrEventsExpired, CodeCursorExpired, "the event cursor is outside the retained log: take a snapshot and resume from the head"},
 	{ErrNoSwitch, golibrpc.CodeInvalidParams, "no model switch is under way"},
 	{store.ErrNoProvider, CodeNotFound, "no such embedding provider"},
+	{errNoRankers, CodeUnsupported, "this server keeps no rankers"},
+	{store.ErrNoRanker, CodeNotFound, "no such ranker"},
+	{store.ErrRankerTaken, CodeConflict, "another ranker has this name"},
+	{store.ErrRankerInvalid, golibrpc.CodeInvalidParams, "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api"},
+	{ErrSuppliedRanker, golibrpc.CodeInvalidParams, "this build supplies its ranker"},
+	{ErrWindow, golibrpc.CodeInvalidParams, ErrWindow.Error()},
+	// before the ranker's own errors: a ranked-or-nothing refusal wraps the ranker's reason too, and
+	// its code is what the client acts on
+	{rank.ErrUnavailable, CodeRankUnavailable, "the ranker is unavailable: this build answers ranked results or none"},
+	{rank.ErrRateLimited, CodeProviderRefused, "the ranker's usage limit is reached"},
+	{rank.ErrUnauthorized, CodeProviderRefused, "the ranker refused the key"},
+	{rank.ErrNoModel, CodeProviderRefused, "the ranker has no such model"},
+	{rank.ErrNotARanker, CodeProviderRefused, "the server's model is not a re-ranker"},
+	{rank.ErrUnreachable, CodeProviderRefused, "the ranker did not answer: check its base URL, and that it is running"},
+	{rank.ErrBadAnswer, CodeProviderRefused, "the ranker's answer is not one score for each text"},
+	{rank.ErrRefused, CodeProviderRefused, "the ranker refused the request"},
+	{rank.ErrTooLarge, CodeProviderRefused, "the request is over the size a ranker is sent"},
 	{store.ErrProviderTaken, CodeConflict, "another embedding provider has this name"},
 	{store.ErrProviderInvalid, golibrpc.CodeInvalidParams, "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"},
 	{store.ErrContextRange, golibrpc.CodeInvalidParams, store.ErrContextRange.Error()[len("store: "):]},
@@ -193,6 +212,7 @@ func wireErr(err error) error {
 
 func (s *Server) register() {
 	s.registerEmbeddings()
+	s.registerRankers()
 	s.registerEvents()
 	s.configureVerbs()
 	s.handle("sys.hello", s.hello)
@@ -757,8 +777,16 @@ func resultMap(r index.Result) map[string]any {
 		hits[i] = map[string]any{"path": h.Path, "breadcrumb": h.Breadcrumb, "snippet": h.Snippet,
 			"generation": h.Generation, "byte_start": int64(h.ByteStart), "byte_end": int64(h.ByteEnd),
 			"score": h.Score, "relevance": h.Relevance, "via": strs(h.Via), "hold": h.Hold}
+		if h.RankScore != nil { // present only for a ranked hit: 0 is a score
+			hits[i].(map[string]any)["rank_score"] = *h.RankScore
+		}
 	}
 	out := map[string]any{"hits": hits, "mode_used": r.ModeUsed, "semantic": r.Semantic}
+	state := r.Rank.State
+	if state == "" {
+		state = "off"
+	}
+	out["rank"] = map[string]any{"state": state, "model": r.Rank.Model, "error": r.Rank.Error}
 	if r.SemanticError != "" {
 		out["semantic_error"] = r.SemanticError
 	}
