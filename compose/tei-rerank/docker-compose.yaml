@@ -27,6 +27,8 @@ x-tei: &tei
     - tei-models:/data
   environment:
     - HF_TOKEN
+  # comes back with Docker after a reboot; `tei-rerank.sh down` removes it, so it stays stopped
+  restart: unless-stopped
 
 services:
   tei-gpu:
