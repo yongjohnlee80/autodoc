@@ -51,7 +51,7 @@ func schemaServer(t *testing.T, src string) (*golibrpc.Client, *memfs.FS) {
 		FrontmatterSchema: func() (*schema.Schema, SchemaStatus) {
 			return sch, SchemaStatus{Path: ".autodoc/schema.yaml", Active: true, Fields: len(sch.Fields)}
 		}}
-	sock := filepath.Join(t.TempDir(), "s.sock")
+	sock := shortSocket(t) // a TempDir named after a long test passes macOS's socket-path limit
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatal(err)
