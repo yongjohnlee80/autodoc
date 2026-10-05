@@ -113,10 +113,12 @@ func (h *Host) reload() {
 	h.guard("reload it", func() { h.load(h.file.path) })
 }
 
-// load reads p into the editor.
+// load reads p into the editor. Reading the open file again yields to a save that lands while it is
+// read: the page is then what the disk holds, and the read is older.
 func (h *Host) load(p string) {
 	h.file.gen++
 	gen, ep, ws := h.file.gen, h.epoch, h.ws
+	again, read := h.file.open && h.file.path == p, h.file.version
 	type answer struct {
 		content, version string
 		err              error
@@ -132,6 +134,10 @@ func (h *Host) load(p string) {
 		return answer{content: string(b), version: str(m, "version")}
 	}, func(a answer) {
 		if gen != h.file.gen || ep != h.epoch {
+			return
+		}
+		if again && h.file.version != read {
+			h.say("kept " + p + " as it was saved while it was read")
 			return
 		}
 		if a.err != nil {
@@ -190,9 +196,10 @@ func (h *Host) readPage() {
 // recheckFile checks the open file against the disk on a new connection, which may have missed a
 // change: kept as it is at the version it was read at; read again, the cursor where it was, when
 // it changed and has no unsaved changes (one that has finds out at its save, as a conflict); when it
-// is gone, closed, after asking over unsaved changes, whose save writes it anew.
+// is gone, closed, after asking over unsaved changes, whose save writes it anew. A save that lands
+// while it reads moves the page's version on, and the read, older, is dropped.
 func (h *Host) recheckFile() {
-	gen, ep, ws, p := h.file.gen, h.epoch, h.ws, h.file.path
+	gen, ep, ws, p, read := h.file.gen, h.epoch, h.ws, h.file.path, h.file.version
 	type answer struct {
 		content, version string
 		err              error
@@ -206,7 +213,7 @@ func (h *Host) recheckFile() {
 		b, _ := m["content"].([]byte)
 		return answer{content: string(b), version: str(m, "version")}
 	}, func(a answer) {
-		if gen != h.file.gen || ep != h.epoch || !h.file.open {
+		if gen != h.file.gen || ep != h.epoch || !h.file.open || h.file.version != read {
 			return
 		}
 		switch {

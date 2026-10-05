@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -161,4 +162,100 @@ func TestAReconnectAsksBeforeItDropsEdits(t *testing.T) {
 			t.Fatalf("after the reconnect: open %v dirty %v, %q in %q", f.open, f.dirty, x.r.editorText(), onLoop(x.r, func() string { return x.r.h.ws }))
 		}
 	})
+}
+
+// heldReads is a TUI whose next doc.read, once armed, is read and then held before its answer is
+// handed back, until released.
+type heldReads struct {
+	d       *daemon
+	r       *running
+	armed   atomic.Bool
+	held    chan struct{}
+	release func()
+	gate    chan struct{}
+	done    chan struct{} // the held answer was handed back
+}
+
+func withHeldReads(t *testing.T, notes map[string][]string) *heldReads {
+	t.Helper()
+	x := &heldReads{d: startDaemonWith(t, "", notes, daemonOpts{}), held: make(chan struct{}), gate: make(chan struct{}), done: make(chan struct{})}
+	x.release = sync.OnceFunc(func() { close(x.gate) })
+	t.Cleanup(x.release)
+	sess := NewSession(x.d.sock, nil)
+	sess.afterCall = func(method string) {
+		if method == "doc.read" && x.armed.CompareAndSwap(true, false) {
+			close(x.held)
+			<-x.gate
+			defer close(x.done)
+		}
+	}
+	x.r = runTUI(t, sess, Options{})
+	x.r.s.WaitFor(t, "the files listed", func(string) bool { return len(x.r.listed()) > 0 })
+	return x
+}
+
+// steady checks for a while, after the held answer was handed back, that the page holds want, saved,
+// as the disk does.
+func (x *heldReads) steady(t *testing.T, want string) {
+	t.Helper()
+	<-x.done
+	for end := time.Now().Add(300 * time.Millisecond); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		if got, f := x.r.editorText(), x.r.file(); got != want || f.dirty || !f.open {
+			t.Fatalf("the page after the older read: %q (dirty %v, open %v), want %q saved; disk %q", got, f.dirty, f.open, want, x.d.read(t, "kb", "a.md"))
+		}
+	}
+	if got := x.d.read(t, "kb", "a.md"); got != want {
+		t.Fatalf("the disk holds %q, the page %q", got, want)
+	}
+}
+
+// TestAnOlderReadNeverUndoesASave: a reconnect's check of the open file, read before a save lands
+// and answered after it, is older than the page: the page keeps the saved text, saved, as the disk
+// has it. So does reading the file again (File › Reload) when a save lands meanwhile.
+func TestAnOlderReadNeverUndoesASave(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		read func(h *Host)
+	}{
+		{"the reconnect's check", func(h *Host) { h.recheckFile() }},
+		{"a reload", func(h *Host) { h.reload() }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			x := withHeldReads(t, map[string][]string{"kb": {"a.md", "# Original\n"}})
+			x.r.h.p.Post(func() { x.r.h.openPath("a.md") })
+			x.r.waitFile(t, "a.md")
+			x.armed.Store(true)
+			x.r.h.p.Post(func() { c.read(x.r.h) })
+			<-x.held
+			x.r.typeOnPage(t, "saved edit ")
+			want := x.r.editorText()
+			x.r.h.p.Post(x.r.h.save)
+			x.r.waitNoticed(t, "saved a.md")
+			x.release()
+			x.steady(t, want)
+		})
+	}
+}
+
+// TestACheckAnsweredBeforeASaveLeavesItAlone: the same check answered before the save, the disk
+// unchanged, keeps the unsaved edit, and the save then writes it.
+func TestACheckAnsweredBeforeASaveLeavesItAlone(t *testing.T) {
+	x := withHeldReads(t, map[string][]string{"kb": {"a.md", "# Original\n"}})
+	x.r.h.p.Post(func() { x.r.h.openPath("a.md") })
+	x.r.waitFile(t, "a.md")
+	x.r.typeOnPage(t, "saved edit ")
+	want := x.r.editorText()
+	x.armed.Store(true)
+	x.r.h.p.Post(x.r.h.recheckFile)
+	<-x.held
+	x.release()
+	<-x.done
+	for end := time.Now().Add(200 * time.Millisecond); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		if f := x.r.file(); x.r.editorText() != want || !f.dirty {
+			t.Fatalf("the check changed the page: %q, dirty %v", x.r.editorText(), f.dirty)
+		}
+	}
+	x.r.h.p.Post(x.r.h.save)
+	x.r.waitNoticed(t, "saved a.md")
+	x.steady(t, want)
 }
