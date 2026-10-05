@@ -1,9 +1,10 @@
 // Package rpc is AutoDoc's msgpack-RPC API (ADR 0203 §4.4): a projection of core, with no business
 // logic of its own. Every client speaks it: the TUI, the Web-UI, AutoVim's auto-core, the GUI.
 //
-// A session must say sys.hello with this build's Protocol before any other verb answers; a hello
-// with another protocol refuses the session for good. The server only answers: it never sends a
-// notification or a request, so a request/response-only client (auto-core's) can use every verb.
+// A session must say sys.hello with a protocol this build serves (MinProtocol through Protocol)
+// before any other verb answers; a hello with another refuses the session for good. The TUI is held
+// to this build's Protocol exactly. The server only answers: it never sends a notification or a
+// request, so a request/response-only client (auto-core's) can use every verb.
 package rpc
 
 import (
@@ -32,8 +33,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// Protocol is the API's version. A client must declare exactly this one; any change to the verbs,
-// their parameters or their results bumps it (TestVerbsArePinned holds the list). sys.hello and
+// Protocol is the API's version. A client declares the one it was written for, which this build
+// serves from MinProtocol up; any change to the verbs, their parameters or their results bumps it
+// (TestVerbsArePinned holds the list). sys.hello and
 // sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
 // declaring the daemon's number, to start the installed one in its place.
 //
@@ -48,8 +50,24 @@ import (
 // index.reindex's refusal of a held document; sys.capabilities' registrations, always there. Protocol
 // 11 adds the ranker models (ADR 0215): the ranker.* verbs, search.query's rank and a ranked hit's
 // rank_score, and sys.capabilities' ranker. Protocol 12 adds search.query's stages: the
-// stages a search runs, asked for in place of a mode, and how its answer was made.
-const Protocol int64 = 12
+// stages a search runs, asked for in place of a mode, and how its answer was made. Protocol 13
+// adds index.documents, search.query's line_start and line_end on a hit, sys.capabilities' verbs,
+// and sys.hello's server_protocol, min_protocol and store_id.
+const Protocol int64 = 13
+
+// MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
+// declared: a verb added after it answers as an unknown method, as an older daemon would, and every
+// request and result it knew keeps its shape and meaning; a result may only gain keys, which a
+// client ignores. A change that is not an addition raises MinProtocol, or keeps the old behaviour
+// for sessions below it.
+const MinProtocol int64 = 12
+
+// TUIName is the name the TUI says hello with. It is admitted at this build's Protocol only: the
+// TUI is the same binary as its daemon, and a mismatch is its cue to offer a restart.
+const TUIName = "autodoc-tui"
+
+// verbSince is the protocol each verb arrived in, for the verbs newer than MinProtocol.
+var verbSince = map[string]int64{"index.documents": 13}
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -59,8 +77,9 @@ const MaxMessage = 4 << 20
 
 // Session keys.
 const (
-	sessHello   = "hello"   // true once a compatible sys.hello was said
-	sessRefused = "refused" // true after a hello with another protocol: the session is spent
+	sessHello    = "hello"    // true once a compatible sys.hello was said
+	sessRefused  = "refused"  // true after a hello with another protocol: the session is spent
+	sessProtocol = "protocol" // the protocol the session's hello declared
 )
 
 // Databases is a workspace's database settings as workspace.list reports them: never a DSN, only
@@ -190,6 +209,7 @@ type Server struct {
 	log         logger.Logger
 	version     string
 	instance    string
+	storeID     string // the store's identity (store.Identity), "" when not set
 	verbs       map[string]bool
 	stop        chan struct{}
 	stopOnce    sync.Once
@@ -203,6 +223,7 @@ type options struct {
 	rankers     Rankers
 	events      Events
 	reg         registrations.Tables
+	storeID     string
 }
 
 // Option configures a Server.
@@ -210,6 +231,10 @@ type Option func(*options)
 
 // WithListener serves on ln (the daemon's unix socket).
 func WithListener(ln net.Listener) Option { return func(o *options) { o.listener = ln } }
+
+// WithStoreID reports the store's identity (store.Identity) in sys.hello and its probe, so a client
+// that found this daemon through the store's lease-info can check it serves that store.
+func WithStoreID(id string) Option { return func(o *options) { o.storeID = id } }
 
 // WithLogger logs to l.
 func WithLogger(l logger.Logger) Option { return func(o *options) { o.log = l } }
@@ -236,7 +261,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg,
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, storeID: o.storeID,
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
@@ -290,6 +315,9 @@ func (s *Server) RequestShutdown() { s.stopOnce.Do(func() { close(s.stop) }) }
 // Addr is the address the server listens on.
 func (s *Server) Addr() string { return s.rpc.Addr() }
 
+// Instance is this process's instance id, as sys.hello answers it.
+func (s *Server) Instance() string { return s.instance }
+
 // gate admits only sys.hello until a compatible hello was said, and nothing after a mismatch.
 func (s *Server) gate(sess *golibrpc.Session, method string) error {
 	if refused, _ := sess.Value(sessRefused).(bool); refused {
@@ -301,11 +329,41 @@ func (s *Server) gate(sess *golibrpc.Session, method string) error {
 	if ok, _ := sess.Value(sessHello).(bool); !ok {
 		return &golibrpc.Error{Code: CodeHandshakeRequired, Message: "handshake required: call sys.hello first"}
 	}
+	if since := verbSince[method]; since > sessionProtocol(sess) {
+		return &golibrpc.Error{Code: golibrpc.CodeMethodNotFound,
+			Message: fmt.Sprintf("unknown method: %s (it needs protocol %d)", method, since)}
+	}
 	return nil
 }
 
+// sessionProtocol is the protocol a session's hello declared.
+func sessionProtocol(sess *golibrpc.Session) int64 {
+	p, _ := sess.Value(sessProtocol).(int64)
+	return p
+}
+
+// admits reports whether a hello from name declaring proto opens a session.
+func admits(proto int64, name string) bool {
+	if name == TUIName {
+		return proto == Protocol
+	}
+	return proto >= MinProtocol && proto <= Protocol
+}
+
+// verbsAt lists the verbs a session at protocol p may call, sorted.
+func (s *Server) verbsAt(p int64) []string {
+	out := []string{}
+	for _, v := range s.Verbs() {
+		if verbSince[v] <= p {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // hello answers sys.hello({protocol, name}). No protocol is a probe: it is answered, and admits
-// nothing. This build's protocol admits the session; another refuses it for good.
+// nothing. A protocol this build serves admits the session at that protocol (the TUI's, only this
+// build's own); another refuses it for good.
 func (s *Server) hello(ctx context.Context, req *golibrpc.Request) (any, error) {
 	if len(req.Params) > 1 {
 		return nil, invalid("sys.hello takes one map")
@@ -318,8 +376,9 @@ func (s *Server) hello(ctx context.Context, req *golibrpc.Request) (any, error) 
 		}
 		info = m
 	}
-	reply := map[string]any{"protocol": Protocol, "server": ServerName, "version": s.version,
-		"instance": s.instance, "pid": int64(os.Getpid()), "addr": s.rpc.Addr()}
+	reply := map[string]any{"protocol": Protocol, "server_protocol": Protocol, "min_protocol": MinProtocol,
+		"server": ServerName, "version": s.version, "instance": s.instance, "pid": int64(os.Getpid()),
+		"addr": s.rpc.Addr(), "store_id": s.storeID}
 	raw, declared := info["protocol"]
 	if !declared {
 		return reply, nil
@@ -328,12 +387,15 @@ func (s *Server) hello(ctx context.Context, req *golibrpc.Request) (any, error) 
 	if !ok {
 		return nil, invalid("sys.hello: protocol must be an integer")
 	}
-	if proto != Protocol {
+	name, _ := info["name"].(string)
+	if !admits(proto, name) {
 		req.Session.SetValue(sessRefused, true)
-		return nil, &golibrpc.Error{Code: CodeProtocolMismatch, Message: fmt.Sprintf("protocol mismatch: client %d, server %d", proto, Protocol)}
+		return nil, &golibrpc.Error{Code: CodeProtocolMismatch,
+			Message: fmt.Sprintf("protocol mismatch: client %d, server %d (serves %d to %d)", proto, Protocol, MinProtocol, Protocol)}
 	}
 	req.Session.SetValue(sessHello, true)
-	name, _ := info["name"].(string)
+	req.Session.SetValue(sessProtocol, proto)
+	reply["protocol"] = proto
 	token := newClientToken(name)
 	req.Session.SetValue(sessClient, token)
 	reply["client"] = token

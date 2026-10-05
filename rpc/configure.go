@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sort"
 
+	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
+
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -238,16 +240,21 @@ func (s *Server) configureVerbs() {
 	}, false))
 	// sys.capabilities is what this daemon offers beyond the core (core/edition): a client hides
 	// what is false. A daemon whose workspaces say nothing offers nothing extra. Its registrations
-	// are always there, empty for the community build (Protocol 10).
-	s.handle("sys.capabilities", s.verb(0, 0, func(context.Context, *Workspace, []any) (any, error) {
-		out := map[string]any{"databases": false, "registrations": RegistrationsMap(s.reg), "ranker": s.rankerCapability()}
+	// are always there, empty for the community build (Protocol 10). verbs is what the session may
+	// call at the protocol it declared, so a client asks before it calls (Protocol 13).
+	s.handle("sys.capabilities", func(_ context.Context, req *golibrpc.Request) (any, error) {
+		if err := argsBetween(req.Params, 0, 0); err != nil {
+			return nil, err
+		}
+		out := map[string]any{"databases": false, "registrations": RegistrationsMap(s.reg), "ranker": s.rankerCapability(),
+			"verbs": strs(s.verbsAt(sessionProtocol(req.Session)))}
 		if c, ok := s.workspaces.(interface{ Capabilities() map[string]bool }); ok {
 			for k, v := range c.Capabilities() {
 				out[k] = v
 			}
 		}
 		return out, nil
-	}, false))
+	})
 }
 
 // RegistrationsMap is a build's registrations as sys.capabilities reports them: each chunker's
