@@ -44,25 +44,25 @@ func searchRankedLine(rk map[string]any) string {
 }
 
 // searchRankerLine is what the search's ranker line says when the search opens, from ranker.list:
-// the ranker in use, a build's own, or none.
+// the ranker in use, a build's own, or none; and, for either, why it is unavailable when it is.
 func searchRankerLine(m map[string]any) string {
+	var line string
 	if s := str(m, "supplied"); s != "" {
-		return "ranker: " + shortModel(s) + " · build's"
-	}
-	active := str(m, "active")
-	if active == "" {
+		line = "ranker: " + shortModel(s) + " · build's"
+	} else if active := str(m, "active"); active == "" {
 		return "ranker: none"
-	}
-	line := "ranker: " + active
-	for _, x := range asList(m["rankers"]) {
-		r := asMap(x)
-		if str(r, "name") != active {
-			continue
-		}
-		if model := str(r, "model"); model != "" {
-			line += " · " + shortModel(model)
-		} else if str(r, "kind") == "tei" {
-			line += " · TEI"
+	} else {
+		line = "ranker: " + active
+		for _, x := range asList(m["rankers"]) {
+			r := asMap(x)
+			if str(r, "name") != active {
+				continue
+			}
+			if model := str(r, "model"); model != "" {
+				line += " · " + shortModel(model)
+			} else if str(r, "kind") == "tei" {
+				line += " · TEI"
+			}
 		}
 	}
 	if e := str(m, "error"); e != "" {
