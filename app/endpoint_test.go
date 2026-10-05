@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // configSharing writes a config with its own socket and state directory over the store in data.
@@ -139,5 +141,26 @@ func TestALiveDaemonOfAnotherStoreIsNotTakenForThisOne(t *testing.T) {
 	cfgA2 := configSharing(t, filepath.Join(dir, "a2.sock"), filepath.Join(dir, "state-a2"), filepath.Join(dir, "data-a"))
 	if got := printEndpoint(t, cfgA2); !strings.HasSuffix(got, "\t"+filepath.Join(dir, "a2.sock")+"\n") {
 		t.Errorf("a record naming another process: --print-endpoint = %q", got)
+	}
+}
+
+// TestAConfigWithAnotherStoreOnTheSameSocketIsRefused: a config that changed its data_dir but kept
+// its socket finds another store's daemon there. Neither --print-endpoint, --ensure nor --call
+// takes it for its own: each refuses with the mismatch, so nothing reads or writes the old store.
+func TestAConfigWithAnotherStoreOnTheSameSocketIsRefused(t *testing.T) {
+	dir := short(t)
+	sock := filepath.Join(dir, "s.sock")
+	start(t, configSharing(t, sock, filepath.Join(dir, "state-a"), filepath.Join(dir, "data-a")), sock)
+	cfgB := configSharing(t, sock, filepath.Join(dir, "state-b"), filepath.Join(dir, "data-b"))
+	var mm *tui.StoreMismatchError
+	var out bytes.Buffer
+	if err := runPrintEndpoint(context.Background(), cfgB, false, &out); !errors.As(err, &mm) {
+		t.Errorf("--print-endpoint over another store's daemon: %v (printed %q), want a store mismatch", err, out.String())
+	}
+	if err := runPrintEndpoint(context.Background(), cfgB, true, &out); !errors.As(err, &mm) {
+		t.Errorf("--print-endpoint --ensure over another store's daemon: %v, want a store mismatch", err)
+	}
+	if err := runCall(context.Background(), cfgB, "workspace.list", "", &out); !errors.As(err, &mm) {
+		t.Errorf("--call over another store's daemon: %v, want a store mismatch", err)
 	}
 }
