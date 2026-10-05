@@ -30,8 +30,11 @@ shell/tei/tei-rerank.sh down
 ```
 
 TEI listens on `http://127.0.0.1:18080` (`TEI_PORT` changes it). The first start of a model
-downloads it into the `autodoc-tei_tei-models` Docker volume, so later starts are quick. On a CPU,
-the warm-up takes a few minutes and briefly needs several GB of memory.
+downloads the image and the model (into the `autodoc-tei_tei-models` Docker volume), so later
+starts are quick. On a CPU, the warm-up takes a few minutes and briefly needs several GB of memory.
+
+Once started, TEI comes back by itself when Docker restarts, after a reboot for example
+(`restart: unless-stopped`). `down` removes the container, so a stopped TEI stays stopped.
 
 ## Models
 
