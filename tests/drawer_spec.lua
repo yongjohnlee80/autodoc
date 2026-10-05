@@ -104,6 +104,11 @@ t.section("setup", function()
   local _, e1 = call("workspace.add", { "kb1", kb1 })
   local _, e2 = call("workspace.add", { "kb2", kb2 })
   t.ok(e1 == nil and e2 == nil, "two workspaces added", vim.inspect({ e1, e2 }))
+  -- indexed before the drawer opens, so the tree cells exercise the listing, not the change feed
+  t.ok(t.wait(15000, function()
+    local a, b = call("index.status", { "kb1" }), call("index.status", { "kb2" })
+    return a and a.docs == 3 and b and b.docs == 1
+  end), "both are indexed")
 end)
 
 t.section("the drawer opens in autodoc's own panel", function()
