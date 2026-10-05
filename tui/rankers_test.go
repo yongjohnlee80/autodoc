@@ -266,6 +266,8 @@ func TestTheSearchRankerLines(t *testing.T) {
 	}{
 		{map[string]any{}, "ranker: none"},
 		{map[string]any{"supplied": "acme/slm-ranker"}, "ranker: slm-ranker · build's"},
+		{map[string]any{"supplied": "acme/slm-ranker", "error": "the ranker did not answer"},
+			"ranker: slm-ranker · build's · unavailable: the ranker did not answer"},
 		{map[string]any{"active": "tei", "rankers": []any{map[string]any{"name": "tei", "kind": "tei"}}}, "ranker: tei · TEI"},
 		{map[string]any{"active": "cohere", "rankers": []any{
 			map[string]any{"name": "tei", "kind": "tei"},
