@@ -12,13 +12,16 @@ local M = {}
 ---@param cb fun(result: table|nil, err: table|nil)
 ---@param ws string?
 function M.search(query, opts, cb, ws)
-  ws = ws or session.selected()
-  if not ws then
-    return cb(nil, { code = nil, message = "autodoc: no KB selected, and this project has no primary KB" })
+  local function run(name)
+    if not name then
+      return cb(nil, { code = nil, message = "autodoc: no KB selected, and this project has no primary KB" })
+    end
+    local params = { name, query }
+    if opts and next(opts) ~= nil then params[3] = opts end
+    session.call("search.query", params, cb)
   end
-  local params = { ws, query }
-  if opts and next(opts) ~= nil then params[3] = opts end
-  session.call("search.query", params, cb)
+  if ws then return run(ws) end
+  session.resolve_selected(run)
 end
 
 ---documents runs index.documents: the files with their frontmatter, most recently updated first.
@@ -40,10 +43,7 @@ M.selected = session.selected
 
 ---primary is the project's primary KB (auto-core.kb), or nil.
 ---@return { workspace: string|nil, root: string }|nil
-function M.primary()
-  local ok, kb = pcall(require, "auto-core.kb")
-  return ok and kb.primary() or nil
-end
+function M.primary() return session.primary() end
 
 ---set_primary makes a workspace the project's primary KB. It is the caller's job to have asked
 ---the user first (the drawer's P asks): auto-core refuses without confirmed = true.

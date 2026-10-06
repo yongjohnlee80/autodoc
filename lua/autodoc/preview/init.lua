@@ -40,7 +40,7 @@
 ---
 ---  <leader>m1 m2 m3 ma ms md   focus / open the slot (cursor restored)
 ---  <leader>m! m@ m# mA mS mD   render the current buffer into 1 2 3 a s d
----  <leader>mf                  find a Markdown file under cwd → pick a slot
+---  <leader>mp                  find a Markdown file under cwd → pick a slot
 ---  <leader>mc                  close every float (pins and cursors kept)
 ---
 ---User commands (setup() defines them unless `commands = false`):

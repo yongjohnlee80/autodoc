@@ -29,7 +29,7 @@ function M.binary_candidates(configured)
   if configured and configured ~= "" then
     out[#out + 1] = { label = "configured (opts.bin)", path = vim.fn.expand(configured) }
   end
-  out[#out + 1] = { label = "plugin build (lazy `build = \"make build\"`)", path = M.plugin_root() .. "/bin/" .. M.BINARY_NAME }
+  out[#out + 1] = { label = "plugin build (lazy's build.lua: the release binary, else make build)", path = M.plugin_root() .. "/bin/" .. M.BINARY_NAME }
   out[#out + 1] = { label = "PATH (Homebrew, mise, go install)", path = M.BINARY_NAME }
   out[#out + 1] = { label = "managed cache", path = vim.fn.stdpath("data") .. "/autodoc/bin/" .. M.BINARY_NAME }
   return out
@@ -45,7 +45,7 @@ function M.describe_manual(msg, tried)
     lines[#lines + 1] = "searched:"
     for _, t in ipairs(tried) do lines[#lines + 1] = "  " .. t end
   end
-  lines[#lines + 1] = "By hand: build it (make build in the autodoc checkout), then run `autodoc --serve`."
+  lines[#lines + 1] = "By hand: :Lazy build autodoc (or make build in the autodoc checkout), then run `autodoc --serve`."
   return table.concat(lines, "\n")
 end
 
@@ -79,13 +79,19 @@ function M.parse_endpoint(out)
 end
 
 ---endpoint asks bin where the daemon is; with ensure it starts the daemon first when nothing
----answers. `cb(addr, err)` fires once, on the main loop.
+---answers; with restart it stops the daemon serving the store and starts bin in its place (the
+---binary does both, `--print-endpoint --restart`: this plugin never stops or spawns a daemon).
+---`cb(addr, err)` fires once, on the main loop.
 ---@param bin string
----@param opts { ensure: boolean?, config: string? }
+---@param opts { ensure: boolean?, restart: boolean?, config: string? }
 ---@param cb fun(addr: string|nil, err: string|nil)
 function M.endpoint(bin, opts, cb)
   local cmd = { bin, "--print-endpoint" }
-  if opts.ensure then cmd[#cmd + 1] = "--ensure" end
+  if opts.restart then
+    cmd[#cmd + 1] = "--restart"
+  elseif opts.ensure then
+    cmd[#cmd + 1] = "--ensure"
+  end
   if opts.config and opts.config ~= "" then
     cmd[#cmd + 1] = "--config"
     cmd[#cmd + 1] = vim.fn.expand(opts.config)
@@ -102,6 +108,20 @@ function M.endpoint(bin, opts, cb)
     cb(addr, nil)
   end))
   if not ok then cb(nil, "autodoc: running " .. bin .. ": " .. tostring(err)) end
+end
+
+---version is what `bin --version` prints, "v0.1.18" from "autodoc v0.1.18"; `cb(version, err)`
+---fires once, on the main loop.
+---@param bin string
+---@param cb fun(version: string|nil, err: string|nil)
+function M.version(bin, cb)
+  local ok, err = pcall(vim.system, { bin, "--version" }, { text = true }, vim.schedule_wrap(function(res)
+    if res.code ~= 0 then return cb(nil, vim.trim(res.stderr or "") ~= "" and vim.trim(res.stderr) or "exit " .. res.code) end
+    local v = vim.trim(res.stdout or ""):match("^autodoc%s+(%S+)")
+    if not v then return cb(nil, "unexpected --version output: " .. vim.trim(res.stdout or "")) end
+    cb(v, nil)
+  end))
+  if not ok then cb(nil, tostring(err)) end
 end
 
 return M

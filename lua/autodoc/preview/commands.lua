@@ -169,7 +169,9 @@ function M.default_keys()
     keys[#keys + 1] = { "<leader>m" .. SHIFTED[slot], function() preview().render_current(slot) end,
       desc = "autodoc preview: render → " .. slot }
   end
-  keys[#keys + 1] = { "<leader>mf", function() preview().find() end, desc = "autodoc preview: find → pick panel" }
+  -- <leader>mf is the KB search (autodoc's <leader>m group): finding a Markdown file under the cwd
+  -- for a slot is <leader>mp
+  keys[#keys + 1] = { "<leader>mp", function() preview().find() end, desc = "autodoc preview: find → pick panel" }
   keys[#keys + 1] = { "<leader>mc", function() preview().close_all() end, desc = "autodoc preview: close all floats" }
   keys[#keys + 1] = { "<leader>mb", function() preview().browser() end,
     desc = "autodoc preview: open in the browser (focused slot or current buffer)" }

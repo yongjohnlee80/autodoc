@@ -25,6 +25,8 @@ local _workspaces = nil -- the last workspace.list, by name
 local _kb_refreshed = {} -- KB roots whose managed files this session already brought up to date
 local _selected = nil -- the workspace selected for searching, by name
 local _mismatch = nil -- the last probe that refused this plugin's protocol
+local _offered = {} -- the daemon instances a restart was offered for: once each
+local _restarted = false -- this session restarted the daemon: a mismatch after that is not offered again
 
 local _registered = false
 local function ensure_topics()
@@ -97,6 +99,7 @@ function M.ensure(cb)
   local function connected(c, err, info)
     if not c then
       _mismatch = info
+      if info then vim.schedule(function() M.offer_restart(info) end) end
       return settle(nil, err)
     end
     _mismatch = nil
@@ -217,16 +220,51 @@ function M.workspaces(cb)
   end)
 end
 
+---primary is the project's primary KB record (auto-core.kb), or nil.
+---@return { workspace: string|nil, root: string }|nil
+function M.primary()
+  local ok, kb = pcall(require, "auto-core.kb")
+  return ok and kb.primary() or nil
+end
+
+---is_primary is whether workspace w is the project's primary KB p: by name when the record names
+---one, else by root, since auto-core's first-run import records the root alone. The one resolver
+---the drawer's star and the search's default both use.
+---@param w { name: string, root: string? }
+---@param p { workspace: string|nil, root: string|nil }|nil
+---@return boolean
+function M.is_primary(w, p)
+  if not p or not w then return false end
+  if p.workspace then return p.workspace == w.name end
+  return w.root ~= nil and p.root ~= nil and vim.fs.normalize(w.root) == vim.fs.normalize(p.root)
+end
+
+---primary_workspace is the name of the listed workspace that is the project's primary KB, or nil
+---(no primary, or the workspaces not listed yet).
+---@return string|nil
+function M.primary_workspace()
+  local p = M.primary()
+  if not p then return nil end
+  if p.workspace then return p.workspace end
+  for name, w in pairs(_workspaces or {}) do
+    if M.is_primary(w, p) then return name end
+  end
+  return nil
+end
+
 ---selected is the workspace selected for searching: the one chosen, else the project's primary.
 ---@return string|nil
 function M.selected()
-  if _selected then return _selected end
-  local ok, kb = pcall(require, "auto-core.kb")
-  if ok then
-    local p = kb.primary()
-    if p and p.workspace then return p.workspace end
-  end
-  return nil
+  return _selected or M.primary_workspace()
+end
+
+---resolve_selected is selected, listing the workspaces first when the primary is known by its root
+---alone and they were not listed yet. `cb(name)` with nil when nothing is selected or primary.
+---@param cb fun(name: string|nil)
+function M.resolve_selected(cb)
+  local name = M.selected()
+  if name or _workspaces or not M.primary() then return cb(name) end
+  M.workspaces(function() cb(M.selected()) end)
 end
 
 ---select chooses the workspace to search, and gives it the embedding queue's next batch, as the
@@ -253,6 +291,78 @@ function M.workspace_of(path)
   return best, rel
 end
 
+---notify is a message from the session, never a dialog.
+local function notify(msg, level) vim.notify(msg, level or vim.log.levels.INFO, { title = "autodoc" }) end
+
+---restart stops the daemon serving the store and starts this plugin's build in its place, through
+---the binary (`--print-endpoint --restart`), then connects. Other clients reconnect on their own.
+---`cb(client, err)` once.
+---@param cb fun(c: AutodocClient|nil, err: string|nil)
+function M.restart(cb)
+  local bin, berr = lifecycle.resolve_binary(_opts.bin)
+  if not bin then return cb(nil, berr) end
+  if _client then
+    local c = _client
+    on_lost("restart", c)
+    c:close()
+  end
+  _restarted = true
+  lifecycle.endpoint(bin, { config = _opts.config, restart = true }, function(addr, err)
+    if not addr then return cb(nil, err) end
+    M.ensure(function(c, eerr)
+      if c then
+        _restarted = false -- it answers at this plugin's protocol: a later mismatch is a new one
+        local h = c:hello() or {}
+        notify(string.format("autodoc: restarted the daemon: autodoc %s, protocol %s", tostring(h.version), tostring(h.protocol)))
+      end
+      cb(c, eerr)
+    end)
+  end)
+end
+
+---older_daemon is whether a refusing probe came from a daemon older than this plugin: the only
+---mismatch a restart as this plugin's build mends. A newer daemon refuses an older plugin, which
+---an update mends; restarting it would start the older build over it.
+---@param info table the probe's answer
+---@return boolean
+function M.older_daemon(info)
+  local own = type(info) == "table" and tonumber(info.protocol) or nil
+  return own ~= nil and client.PROTOCOL > own
+end
+
+---offer_restart asks, once per daemon instance, whether to restart an older daemon as this
+---plugin's build (ADR 1791209945 §3.1); other clients share it, hence the question. Not after
+---this session restarted it already: a daemon that still refuses then is the binary's fault, and
+---offering again would loop.
+---@param info table the probe's answer
+function M.offer_restart(info)
+  if _opts.offer_restart == false or not M.older_daemon(info) then return end
+  local key = tostring(info.instance or "") .. "|" .. tostring(info.version) .. "|" .. tostring(info.pid)
+  if _offered[key] then return end
+  _offered[key] = true
+  if _restarted then
+    return notify(string.format("autodoc: the daemon this plugin started (autodoc %s, protocol %s) still speaks an older protocol "
+      .. "than this plugin (%d): its binary is older. Update it (:Lazy build autodoc), or set opts.bin to a current one.",
+      tostring(info.version), tostring(info.protocol), client.PROTOCOL), vim.log.levels.ERROR)
+  end
+  local bin = lifecycle.resolve_binary(_opts.bin)
+  local function ask(build)
+    local q = string.format("The AutoDoc daemon (autodoc %s, protocol %s) is older than this plugin (protocol %d). "
+      .. "Restart it as %s? It is shared: every client reconnects.", tostring(info.version), tostring(info.protocol),
+      client.PROTOCOL, build and ("autodoc " .. build) or "this plugin's build")
+    vim.ui.select({ "Restart the daemon", "Not now" }, { prompt = q }, function(_, idx)
+      if idx ~= 1 then
+        return notify("autodoc: not restarted; <leader>mX (:AutodocMaintenance) restarts it later", vim.log.levels.WARN)
+      end
+      M.restart(function(_, err)
+        if err then notify("autodoc: restart failed: " .. tostring(err), vim.log.levels.ERROR) end
+      end)
+    end)
+  end
+  if not bin then return ask(nil) end
+  lifecycle.version(bin, function(v) ask(v) end)
+end
+
 ---on_write nudges the daemon to index a saved file at once (index.reindex queues it): the drawer,
 ---the picker and agents see the change without waiting on the daemon's watcher. Eventual, not
 ---immediate: the change becomes searchable within moments.
@@ -273,6 +383,7 @@ function M.reset_for_tests()
   if _client then pcall(function() _client:close() end) end
   _client, _epoch, _waiting, _workspaces, _selected, _mismatch = nil, 0, nil, nil, nil, nil
   _kb_refreshed = {}
+  _offered, _restarted = {}, false
 end
 
 return M

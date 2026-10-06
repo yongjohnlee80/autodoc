@@ -362,11 +362,7 @@ function M.new(profile)
     return api().primary()
   end
 
-  local function is_primary(w, p)
-    if not p then return false end
-    if p.workspace then return p.workspace == w.name end
-    return w.root and vim.fs.normalize(w.root) == vim.fs.normalize(p.root)
-  end
+  local function is_primary(w, p) return session().is_primary(w, p) end
 
   -- ─── loading ───────────────────────────────────────────────────
 

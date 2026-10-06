@@ -127,16 +127,17 @@ end
 ---@param cb fun(items: table[]|nil, result: table|nil, err: table|nil)
 function M.query(q, cb)
   local api = require("autodoc.api")
-  local ws = api.selected()
-  if not ws then
-    return cb(nil, nil, { message = "autodoc: no KB selected, and this project has no primary KB: s in the kb drawer selects one" })
-  end
-  M.root_of(ws, function(root, rerr)
-    if not root then return cb(nil, nil, rerr) end
-    api.search(q, M.request_opts(), function(result, err)
-      if err then return cb(nil, nil, err) end
-      cb(M.items(result, root), result, nil)
-    end, ws)
+  require("autodoc.session").resolve_selected(function(ws)
+    if not ws then
+      return cb(nil, nil, { message = "autodoc: no KB selected, and this project has no primary KB: s in the kb drawer selects one" })
+    end
+    M.root_of(ws, function(root, rerr)
+      if not root then return cb(nil, nil, rerr) end
+      api.search(q, M.request_opts(), function(result, err)
+        if err then return cb(nil, nil, err) end
+        cb(M.items(result, root), result, nil)
+      end, ws)
+    end)
   end)
 end
 
