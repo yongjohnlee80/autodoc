@@ -58,7 +58,7 @@ A new workspace-owned table follows the same rule.
 | table | what a row is | key |
 | --- | --- | --- |
 | `schema_version` | an applied update script; golib `dao/deploy` creates and keeps it | `script` |
-| `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed | `id` |
+| `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed; its retrieval settings `abstract_chunk` and `demote_superseded` (000014) | `id` |
 | `embedding_provider` | an embedding provider: kind, base URL, model, and its API key sealed with the keyslot (000002); its context window in tokens (000003) | `id`, `name` |
 | `embedding_usage` | a provider's requests, texts, tokens and failures by day (000002) | `(provider_id, day)` |
 | `embedding_log` | a provider's recent calls, the last 200 kept (000002) | `id` |
@@ -69,7 +69,7 @@ A new workspace-owned table follows the same rule.
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema (ADR 0214) | `(workspace_id, role)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
-| `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012) | `id`, `(workspace_id, id)` |
+| `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012); its kind, `section` or `abstract` (000014) | `id`, `(workspace_id, id)` |
 | `chunk_fts` | SQLite's full-text index over the chunks (FTS5, external content) | the chunk's `id` |
 | `doc_tag` | a tag from a document's frontmatter | `(workspace_id, tag, doc_id)` |
 | `doc_alias` | an alias from a document's frontmatter | `(workspace_id, alias, doc_id)` |
@@ -77,6 +77,7 @@ A new workspace-owned table follows the same rule.
 | `doc_facet` | a typed value of a document's valid frontmatter field under its workspace's schema, defaults included (000007) | `(workspace_id, field, value, doc_id)` |
 | `doc_diagnostic` | a problem with a document's frontmatter: field, line, rule, message, in source order (000007) | `(workspace_id, doc_id, ord)` |
 | `link` | a link from a document, and the document it resolved to | `id`, `(workspace_id, id)` |
+| `link_key` | a frontmatter relation link's names, tried in order when it resolves (000014) | `(workspace_id, link_id, ord)` |
 | `model` | an embedding model a workspace used; one is active | `(workspace_id, fp)` |
 | `embedding` | a text's vector under a model | `(workspace_id, text_hash, model_fp)` |
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |

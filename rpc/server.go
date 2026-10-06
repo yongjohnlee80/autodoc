@@ -55,7 +55,9 @@ import (
 // and sys.hello's server_protocol, min_protocol and store_id. Protocol 14 adds links from frontmatter
 // relations (the kinds supersedes, superseded_by, amends, related, sources and adr) to graph.links,
 // graph.backlinks, graph.neighborhood and graph.unresolved, and their kinds option; a session below 14
-// sees the body links alone, its graph unchanged.
+// sees the body links alone, its graph unchanged. It also adds graph.unresolved's reason cycle (a
+// supersession loop), workspace.configure's abstract_chunk and demote_superseded with
+// workspace.list's, search.query's retrieval option and a hit's superseded_by.
 const Protocol int64 = 14
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
