@@ -463,7 +463,7 @@ func (s *Server) register() {
 	// index.documents lists the workspace's documents with their frontmatter, ordered by updated
 	// (default), path or indexed, narrowed by tags, paths, facets and missing fields: the index a
 	// client renders instead of a hand-kept one (Protocol 13). opts.diagnosed keeps the documents the
-	// schema diagnoses, each with its diagnostics: the KB's frontmatter scan (Protocol 14).
+	// schema diagnoses, each with its diagnostics: the KB's frontmatter scan (Protocol 15).
 	s.handle("index.documents", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		o, err := documentsOpts(ctx, p)
 		if err != nil {
@@ -862,7 +862,7 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 // documentsOpts reads index.documents' optional second parameter: {sort, fields, tags, paths,
 // facets, missing, after, limit}.
 // diagnosedSince is the protocol index.documents' diagnosed option arrived in.
-const diagnosedSince = 14
+const diagnosedSince = 15
 
 // documentsOpts reads index.documents' options for the request's session: an option newer than the
 // session's protocol is refused, whatever its value, as the daemon of that protocol refuses it.
@@ -910,7 +910,7 @@ func documentsOpts(ctx context.Context, p []any) (index.DocumentsOpts, error) {
 			}
 		case "diagnosed":
 			if protocolOf(ctx) < diagnosedSince {
-				// refused, not ignored, and false too: a protocol-13 daemon knows no such option
+				// refused, not ignored, and false too: a protocol-14 daemon knows no such option
 				return o, invalid("index.documents: opts.diagnosed needs protocol " + strconv.FormatInt(diagnosedSince, 10))
 			}
 			b, ok := v.(bool)

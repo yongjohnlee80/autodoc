@@ -84,21 +84,21 @@ func TestHelloAdmitsTheRangeAndHoldsTheTUIToItsOwn(t *testing.T) {
 	}
 }
 
-// TestDiagnosedNeedsProtocol14: index.documents' diagnosed option arrived in protocol 14. A session
-// below it is refused it, true or false, naming the protocol, as a protocol-13 daemon refuses an
-// unknown option; a
-// protocol-14 session is served, and the same call without the option still answers at 13.
-func TestDiagnosedNeedsProtocol14(t *testing.T) {
+// TestDiagnosedNeedsProtocol15: index.documents' diagnosed option arrived in protocol 15. A session
+// below it is refused it, true or false, naming the protocol, as a protocol-14 daemon refuses an
+// unknown option; a protocol-15 session is served, and the same call without the option still
+// answers at 14.
+func TestDiagnosedNeedsProtocol15(t *testing.T) {
 	r := serve(t)
-	old, _, err := helloAs(r, 13, "an-older-client")
+	old, _, err := helloAs(r, 14, "an-older-client")
 	if err != nil {
-		t.Fatalf("a protocol-13 hello: %v", err)
+		t.Fatalf("a protocol-14 hello: %v", err)
 	}
 	for _, v := range []bool{true, false} {
 		_, err = old.Call(context.Background(), "index.documents", "kb", map[string]any{"diagnosed": v})
 		var re *golibrpc.Error
-		if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.Contains(re.Message, "protocol 14") {
-			t.Errorf("diagnosed=%v at 13: %v, want invalid params naming protocol 14 (an unknown option to a protocol-13 daemon, whatever its value)", v, err)
+		if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.Contains(re.Message, "protocol 15") {
+			t.Errorf("diagnosed=%v at 14: %v, want invalid params naming protocol 15 (an unknown option to a protocol-14 daemon, whatever its value)", v, err)
 		}
 	}
 	call(t, old, "index.documents", "kb", map[string]any{"sort": "path"})
