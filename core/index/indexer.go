@@ -484,9 +484,14 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.err = err
 		return p
 	}
+	ret, err := x.store.retrieval(ctx)
+	if err != nil {
+		p.err = err
+		return p
+	}
 	sch, schemaFP := x.schema()
 	k := x.kindOf(w.path)
-	p.indexer = x.versionOf(w.path, k, tokens, schemaFP)
+	p.indexer = x.versionOf(w.path, k, tokens, schemaFP, ret.AbstractChunk)
 	fi, err := x.fsys.Stat(ctx, w.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -586,6 +591,12 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 		p.meta = chunk.ReadMeta(doc, w.path)
 		p.chunks = hashed(chunk.Markdown(doc, p.meta.Title, tokens))
+		if ret.AbstractChunk {
+			if c, ok := chunk.Abstract(p.meta, p.meta.Title); ok {
+				c.Ord = len(p.chunks) // after the sections, so none of them moves
+				p.chunks = append(p.chunks, abstractChunk(c))
+			}
+		}
 		p.links = append(extractLinks(doc, w.path, x.opts.Match), extractRelations(doc, w.path)...)
 		p.adr = adrNumber(p.meta.FrontmatterJSON)
 		// the frontmatter is validated from the parse the file already had (ADR 0212 §5)
@@ -867,7 +878,7 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 		fresh.Add(map[store.ChunkField]any{store.ChunkDoc: docID, store.ChunkHash: c.hash, store.ChunkTextHash: c.textHash,
 			store.ChunkGenFrom: next, store.ChunkOrd: int64(c.Ord), store.ChunkBreadcrumb: c.Breadcrumb,
 			store.ChunkBody: c.Body, store.ChunkEmbed: c.Embed, store.ChunkTitle: title, store.ChunkTags: tags,
-			store.ChunkByteStart: int64(c.ByteStart), store.ChunkByteEnd: int64(c.ByteEnd)})
+			store.ChunkByteStart: int64(c.ByteStart), store.ChunkByteEnd: int64(c.ByteEnd), store.ChunkKind: c.kindOr()})
 		added = true
 	}
 	if added {

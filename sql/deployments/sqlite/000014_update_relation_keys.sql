@@ -19,3 +19,8 @@ CREATE INDEX IF NOT EXISTS link_key_key ON link_key(workspace_id, key);
 -- its sections). A search may leave the abstracts out before it ranks anything.
 -- ('section' or 'abstract'; the indexer writes nothing else).
 ALTER TABLE chunk ADD COLUMN kind TEXT NOT NULL DEFAULT 'section';
+
+-- Two retrieval settings, off until measured: abstract_chunk indexes each document's abstract as a
+-- chunk of its own; demote_superseded moves a superseded document's hits below its successor's.
+ALTER TABLE workspace ADD COLUMN abstract_chunk INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE workspace ADD COLUMN demote_superseded INTEGER NOT NULL DEFAULT 0;

@@ -390,3 +390,33 @@ func taken(err error) error {
 	}
 	return err
 }
+
+// Retrieval is a workspace's two retrieval settings.
+type Retrieval struct {
+	AbstractChunk    bool // each document's abstract is a chunk of its own
+	DemoteSuperseded bool // a superseded document's hits sit below its successor's
+}
+
+// Retrieval returns the workspace's retrieval settings.
+func (s *Store) Retrieval(ctx context.Context, id int64) (Retrieval, error) {
+	var r Retrieval
+	err := s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceAbstractChunk, WorkspaceDemote)
+		if errors.Is(err, dao.ErrNoRows) {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		if err != nil {
+			return err
+		}
+		r = Retrieval{AbstractChunk: w.AbstractChunk != 0, DemoteSuperseded: w.DemoteSuperseded != 0}
+		return nil
+	})
+	return r, err
+}
+
+func boolInt(b bool) int64 {
+	if b {
+		return 1
+	}
+	return 0
+}

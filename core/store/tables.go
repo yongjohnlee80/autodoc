@@ -24,6 +24,8 @@ type Workspace struct {
 	Destination          string  // where its index lives: "sqlite", the local store, or "postgres" (000011)
 	VectorIndex          *string // a Postgres destination's pgvector index method, "hnsw" or "ivfflat"; nil: the default (000011)
 	ViewArgs             *string // the default arguments of its .view files, by name, as a JSON object; nil: none (000011)
+	AbstractChunk        int64   // 1: each document's abstract is a chunk of its own (000014)
+	DemoteSuperseded     int64   // 1: a superseded document's hits sit below its successor's (000014)
 	CreatedAt, UpdatedAt int64
 }
 
@@ -46,6 +48,8 @@ const (
 	WorkspaceDestination     WorkspaceField = "destination"
 	WorkspaceVectorIndex     WorkspaceField = "vector_index"
 	WorkspaceViewArgs        WorkspaceField = "view_args"
+	WorkspaceAbstractChunk   WorkspaceField = "abstract_chunk"
+	WorkspaceDemote          WorkspaceField = "demote_superseded"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
 )
@@ -239,6 +243,7 @@ type Chunk struct {
 	Embed                  string // the text its vector is made of, when not Breadcrumb + "\n" + Body (000012)
 	Title, Tags            string
 	ByteStart, ByteEnd     int64
+	Kind                   string // "section", or "abstract": the document's abstract (000014)
 	DocPath                string // joined: the document's path
 	DocActiveGen           int64  // joined: the document's active generation
 	DocReady               int64  // joined: the document's semantic_ready
@@ -265,6 +270,7 @@ const (
 	ChunkTags         ChunkField = "tags"
 	ChunkByteStart    ChunkField = "byte_start"
 	ChunkByteEnd      ChunkField = "byte_end"
+	ChunkKind         ChunkField = "kind"
 	ChunkDocPath      ChunkField = "doc_path"       // joined
 	ChunkDocActiveGen ChunkField = "doc_active_gen" // joined
 	ChunkDocReady     ChunkField = "doc_ready"      // joined
@@ -627,6 +633,8 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceDestination:     col("workspace", WorkspaceDestination, func(w *Workspace) any { return &w.Destination }),
 				WorkspaceVectorIndex:     col("workspace", WorkspaceVectorIndex, func(w *Workspace) any { return &w.VectorIndex }),
 				WorkspaceViewArgs:        col("workspace", WorkspaceViewArgs, func(w *Workspace) any { return &w.ViewArgs }),
+				WorkspaceAbstractChunk:   col("workspace", WorkspaceAbstractChunk, func(w *Workspace) any { return &w.AbstractChunk }),
+				WorkspaceDemote:          col("workspace", WorkspaceDemote, func(w *Workspace) any { return &w.DemoteSuperseded }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
 			}),
@@ -781,6 +789,7 @@ func newTables(c dao.DataConn) *tables {
 				ChunkTags:         col("chunk", ChunkTags, func(x *Chunk) any { return &x.Tags }),
 				ChunkByteStart:    col("chunk", ChunkByteStart, func(x *Chunk) any { return &x.ByteStart }),
 				ChunkByteEnd:      col("chunk", ChunkByteEnd, func(x *Chunk) any { return &x.ByteEnd }),
+				ChunkKind:         col("chunk", ChunkKind, func(x *Chunk) any { return &x.Kind }),
 				ChunkDocPath:      joined("document", "path", JoinDocument, func(x *Chunk) any { return &x.DocPath }),
 				ChunkDocActiveGen: joined("document", "active_gen", JoinDocument, func(x *Chunk) any { return &x.DocActiveGen }),
 				ChunkDocReady:     joined("document", "semantic_ready", JoinDocument, func(x *Chunk) any { return &x.DocReady }),

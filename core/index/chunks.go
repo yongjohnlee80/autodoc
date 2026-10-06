@@ -15,6 +15,24 @@ import (
 type chunkT struct {
 	search.Chunk
 	hash, textHash []byte
+	kind           string // ChunkSection or ChunkAbstract
+}
+
+// The kinds of chunk: a document's section, or its abstract.
+const (
+	ChunkSection  = "section"
+	ChunkAbstract = "abstract"
+)
+
+// abstractVersion versions the abstract chunk's identity on its own, so a change to how it is made
+// rebuilds abstract chunks only, never a section.
+const abstractVersion = "a1"
+
+// abstractChunk is a document's abstract chunk, hashed under its own version.
+func abstractChunk(c search.Chunk) chunkT {
+	out := hashedUnder(abstractVersion, []search.Chunk{c})[0]
+	out.kind = ChunkAbstract
+	return out
 }
 
 // hashed is chunks the built-in chunkers cut, with their hashes.
@@ -50,4 +68,12 @@ func cutRegistered(c search.Chunker, version string, d search.Doc) (cs []search.
 		}
 	}()
 	return c.Chunk(d)
+}
+
+// kindOr is the chunk's kind, a section unless it is the abstract.
+func (c chunkT) kindOr() string {
+	if c.kind == "" {
+		return ChunkSection
+	}
+	return c.kind
 }

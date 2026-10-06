@@ -51,14 +51,28 @@ func registeredVersion(ext, version string, tokens int) string {
 	return fmt.Sprintf("c%s@%s.s%d.t%d", ext, version, SchemaVersion, tokens)
 }
 
-// docVersion is what document.indexer records for one path: Markdown files add the fingerprint of
-// the workspace's frontmatter schema, so a schema change rebuilds exactly the files it applies to
-// (their unchanged chunks keep their vectors, which are keyed by text).
-func docVersion(base string, markdown bool, schemaFP string) string {
-	if schemaFP != "" && markdown {
-		return base + ".f" + schemaFP
+// docVersion is what document.indexer records for one path. Markdown files add the fingerprint of
+// the workspace's frontmatter schema, so a schema change rebuilds exactly the files it applies to;
+// ".r1", the frontmatter relations read into links; and ".a1" while the abstract is a chunk of its
+// own. Each rebuild keeps the unchanged chunks' vectors, which are keyed by text.
+func docVersion(base string, markdown bool, schemaFP string, abstract bool) string {
+	if !markdown {
+		return base
 	}
-	return base
+	v := base
+	if schemaFP != "" {
+		v += ".f" + schemaFP
+	}
+	v += ".r1"
+	if abstract {
+		v += ".a1"
+	}
+	return v
+}
+
+// retrieval is the workspace's retrieval settings.
+func (s *Store) retrieval(ctx context.Context) (store.Retrieval, error) {
+	return s.db.Retrieval(ctx, s.sc.ID())
 }
 
 func (s *Store) sectionTokens(ctx context.Context) (int, error) {

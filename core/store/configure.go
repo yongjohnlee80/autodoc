@@ -27,8 +27,11 @@ type Changes struct {
 	Destination     *string // DestinationLocal or DestinationPostgres
 	VectorIndex     *string // IndexHNSW or IndexIVFFlat; "" the default
 	ViewArgs        *map[string]any
-	Source          *ConnectionSpec // the database the .view files run on
-	DestinationConn *ConnectionSpec // the Postgres database the index lives in
+	// Retrieval, off until measured
+	AbstractChunk    *bool           // each document's abstract as a chunk of its own
+	DemoteSuperseded *bool           // a superseded document's hits below its successor's
+	Source           *ConnectionSpec // the database the .view files run on
+	DestinationConn  *ConnectionSpec // the Postgres database the index lives in
 }
 
 // ConnectionSpec is a connection as a client sets it. Remove drops the connection; otherwise an
@@ -113,6 +116,12 @@ func (s *Store) Configure(ctx context.Context, id int64, c Changes) error {
 		}
 		if c.EmbeddingPolicy != nil {
 			row = row.Set(WorkspaceEmbeddingPolicy, *c.EmbeddingPolicy)
+		}
+		if c.AbstractChunk != nil {
+			row = row.Set(WorkspaceAbstractChunk, boolInt(*c.AbstractChunk))
+		}
+		if c.DemoteSuperseded != nil {
+			row = row.Set(WorkspaceDemote, boolInt(*c.DemoteSuperseded))
 		}
 		if c.Provider != nil {
 			var v any

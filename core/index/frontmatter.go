@@ -38,7 +38,7 @@ func (x *Indexer) Kind(p string) kind.Kind { return x.kindOf(p) }
 // built-in identity its Markdown is chunked under; or the built-in chunkers' version, with the
 // schema's fingerprint for Markdown. A derived document has no frontmatter to check, so a schema
 // change never derives it again.
-func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string) string {
+func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string, abstract bool) string {
 	switch k {
 	case kind.Registered:
 		if _, v, ok := x.opts.Registrations.Chunker(p); ok {
@@ -49,7 +49,7 @@ func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string) 
 			return derivedVersion(kind.Ext(p), f.ID, f.Version, indexerVersion(tokens))
 		}
 	}
-	return docVersion(indexerVersion(tokens), k == kind.Markdown, schemaFP)
+	return docVersion(indexerVersion(tokens), k == kind.Markdown, schemaFP, abstract)
 }
 
 // Revalidate queues every document indexed under another version than it would get now: after a
@@ -62,7 +62,13 @@ func (x *Indexer) Revalidate(ctx context.Context) error {
 		return err
 	}
 	_, fp := x.schema()
-	outdated, err := x.store.outdated(ctx, func(p string, tokens int) string { return x.versionOf(p, x.kindOf(p), tokens, fp) })
+	ret, err := x.store.retrieval(ctx)
+	if err != nil {
+		return fmt.Errorf("index: listing outdated documents: reading the retrieval settings: %w", err)
+	}
+	outdated, err := x.store.outdated(ctx, func(p string, tokens int) string {
+		return x.versionOf(p, x.kindOf(p), tokens, fp, ret.AbstractChunk)
+	})
 	if err != nil {
 		return fmt.Errorf("index: listing outdated documents: %w", err)
 	}

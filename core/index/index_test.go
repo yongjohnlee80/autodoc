@@ -649,7 +649,7 @@ func TestOutdatedDocumentsRebuild(t *testing.T) {
 	// state itself: every document carrying this version's indexer
 	e.eventually("both documents rebuilt", func() bool {
 		var stale int
-		_ = scanOne(context.Background(), e.raw, &stale, "SELECT COUNT(*) FROM document WHERE indexer != ?", IndexerVersion)
+		_ = scanOne(context.Background(), e.raw, &stale, "SELECT COUNT(*) FROM document WHERE indexer != ?", docVersion(IndexerVersion, true, "", false))
 		return stale == 0
 	})
 	if e.ix.Parses() != 2 {
