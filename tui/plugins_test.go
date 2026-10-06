@@ -1273,3 +1273,38 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	r.keys(t, key('i'), key('k'), esc())
 	waitSaid(t, logs, "onfeed", `doc "" v`)
 }
+
+// TestTheInstallConfirmationListsWhatIsDeclared (ADR 1791268009 §2.1): after the risk, the question
+// says what the manifest declares: a card or a service and when it starts, the feed, and the
+// commands with their letters; a 0209 dialog declares nothing more.
+func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
+	read := func(toml string) manifest {
+		dir := filepath.Join(t.TempDir(), "p")
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "plugin.toml"), []byte(toml), 0o644)
+		e := readPlugin(dir)
+		if e.reason != "" {
+			t.Fatalf("%q: %s", toml, e.reason)
+		}
+		return e.m
+	}
+	card := read("name = \"stats\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n[dialog]\nmodal = false\n[feed]\ndocument = true\n" +
+		"[[commands]]\nid = \"toggle\"\ntitle = \"Show / hide the stats\"\nkey = \"s\"\n[[commands]]\nid = \"copy\"\ntitle = \"Copy\"\n")
+	q := pluginQuestion(pluginChange{m: card, url: "file:///x", commit: "abc"}, "Doc stats")
+	want := "Declares:  a card beside the page · reads the open note's text (feed) · commands: Show / hide the stats (SPC p s), Copy"
+	if !strings.HasSuffix(q, want) || strings.Index(q, pluginRisk) > strings.Index(q, "Declares:") {
+		t.Errorf("a card's question:\n%s\nwant it to end, after the risk, with\n%s", q, want)
+	}
+	svc := read("name = \"svc\"\nkind = \"service\"\nprotocol = 2\nstart = \"launch\"\ncommand = [\"x\"]\n")
+	if got := pluginDeclares(&svc); got != "a service, with no surface · starts with AutoDoc" {
+		t.Errorf("a service at launch: %q", got)
+	}
+	use := read("name = \"svc\"\nkind = \"service\"\nprotocol = 2\ncommand = [\"x\"]\n[feed]\ndocument = true\n")
+	if got := pluginDeclares(&use); got != "a service, with no surface · starts on first use · reads the open note's text (feed)" {
+		t.Errorf("a service on use: %q", got)
+	}
+	old := read("name = \"tetris\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n")
+	if q := pluginQuestion(pluginChange{m: old}, "Tetris"); strings.Contains(q, "Declares") {
+		t.Errorf("a 0209 dialog declares something:\n%s", q)
+	}
+}
