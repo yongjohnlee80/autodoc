@@ -13,6 +13,7 @@
 ---    ● embeddinggemma  embeddinggemma:300m · in use
 ---  ▼ Reranker (1)
 ---    ● bge  BAAI/bge-reranker-v2-m3 · in use · window 50
+---    ○ none   search is not re-ranked
 ---
 ---**The todos drawer's pattern:** a fixed section table, `▼/▶ Header (count)`, collapse state
 ---persisted in `auto-core.state` namespace `autodoc.ui`, and ONE keymap set whose handlers
@@ -291,6 +292,7 @@ M.HELP = {
   "",
   "  Embedding Models / Reranker",
   "  <CR>  use it        a  add      e  edit      d  remove",
+  "  <CR> on the Reranker's none: search is not re-ranked",
   "  w     the reranker's window",
   "",
   "  ▼/▶ headers: <CR> folds a section",
@@ -699,7 +701,9 @@ function M.new(profile)
           if st.rank_err then
             msg("ranker", 2, st.rank_err, HL.error)
           elseif st.rankers then
-            if st.rankers.supplied then msg("ranker", 2, "(this build supplies its ranker)") end
+            -- ranker.list's supplied is "" when the build supplies none, and "" is true in Lua
+            local supplied = st.rankers.supplied ~= nil and st.rankers.supplied ~= ""
+            if supplied then msg("ranker", 2, "(this build supplies its ranker)") end
             if st.rankers.error and st.rankers.error ~= "" then msg("ranker", 2, st.rankers.error, HL.error) end
             if #(st.rankers.rankers or {}) == 0 then msg("ranker", 2, "(no rerankers: a adds one)") end
             for _, rk in ipairs(st.rankers.rankers or {}) do
@@ -713,6 +717,13 @@ function M.new(profile)
               end
               row({ kind = "ranker", section = "ranker", ranker = rk, in_use = use },
                 label .. (#info > 0 and ("   " .. table.concat(info, " · ")) or ""), use and HL.selected or HL.item, #label)
+            end
+            -- the TUI's "Don't use": a choice like the rankers, unless the build fixes its own
+            if #(st.rankers.rankers or {}) > 0 and not supplied then
+              local none = (st.rankers.active or "") == ""
+              local label = "  " .. (none and "●" or "○") .. " none"
+              row({ kind = "no_ranker", section = "ranker", in_use = none },
+                label .. "   search is not re-ranked", none and HL.selected or HL.item, #label)
             end
           end
         end
@@ -1098,6 +1109,16 @@ function M.new(profile)
     end)
   end
 
+  ---stop_ranking uses no ranker (ranker.use ""): the hits stay in recall order.
+  local function stop_ranking(r)
+    if r.in_use then return notify("autodoc: search is already not re-ranked") end
+    session().request("ranker.use", { "" }, function(_, err)
+      if err then return failed("stop re-ranking", err) end
+      notify("autodoc: search is not re-ranked: the hits are in recall order")
+      load_rankers()
+    end)
+  end
+
   local function remove_model(r)
     local is_provider = r.kind == "provider"
     local name = is_provider and r.provider.name or r.ranker.name
@@ -1162,6 +1183,8 @@ function M.new(profile)
       return open_doc(r)
     elseif r.kind == "provider" or r.kind == "ranker" then
       return use_model(r)
+    elseif r.kind == "no_ranker" then
+      return stop_ranking(r)
     end
   end
   actions["s"] = function(r) if r and r.ws then select_ws(r) end end
