@@ -365,10 +365,7 @@ func (h *Host) openPlugin(key string) {
 		return
 	}
 	h.running[key] = r
-	h.refreshPlugins()
-	if e.m.card() {
-		r.focusOnOpen = true // the menu's Open is the user asking for it: it takes the keys
-	}
+	h.refreshPlugins() // a card shown takes no keys: a click or its command focuses it (§2.2)
 }
 
 // pluginTheme is the theme a plugin is sent: the one the screen wears.
