@@ -169,3 +169,19 @@ func TestASupersededHitNamesASuccessorWithNoHit(t *testing.T) {
 		t.Errorf("marks %v, want %v", marks, want)
 	}
 }
+
+// TestTheDemotionCutsAfterItMoves: with demotion, the search fetches past the limit, so a successor
+// ranked beyond it is found, takes its place above the superseded hit, and the cut falls after the
+// move: a limit of one answers with the successor alone.
+func TestTheDemotionCutsAfterItMoves(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("old.md", "# Old\n\nkestrel kestrel kestrel\n", "new.md", "---\nsupersedes: [old.md]\n---\n# New\n\nkestrel\n")
+	opts := QueryOpts{Limit: 1, Mode: ModeLexical}
+	if got := pathsOfResult(e.search("kestrel", opts)); !reflect.DeepEqual(got, []string{"old.md"}) {
+		t.Fatalf("no demotion: %v, want old.md alone", got)
+	}
+	opts.Retrieval = &Retrieval{DemoteSuperseded: on()}
+	if got := pathsOfResult(e.search("kestrel", opts)); !reflect.DeepEqual(got, []string{"new.md"}) {
+		t.Errorf("demoted, limit 1: %v, want new.md alone", got)
+	}
+}

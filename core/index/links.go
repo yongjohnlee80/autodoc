@@ -336,12 +336,10 @@ func (s *Store) resolveStored(tx *store.Tx, linkID int64, kind, name string) (ds
 	if !isRelation(kind) {
 		return s.resolve(tx, kind, name)
 	}
+	// writeLinks stores a relation's names with it, in the one transaction, and it has at least one
 	keys, err := s.keysOf(tx, linkID)
 	if err != nil {
 		return 0, "", err
-	}
-	if len(keys) == 0 {
-		keys = []string{name}
 	}
 	return s.resolveKeys(tx, keys)
 }

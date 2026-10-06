@@ -197,3 +197,13 @@ func TestACycleIsListedByItsOwnKind(t *testing.T) {
 	eq(t, "superseded_by", rows([]string{kindSupersededBy}), []string{"m.md n.md cycle", "n.md m.md cycle", "s.md t.md cycle"})
 	eq(t, "every kind", rows(nil), []string{"m.md n.md cycle", "n.md m.md cycle", "s.md t.md cycle", "s.md t.md cycle"})
 }
+
+// TestARelationWakesByALaterName: a relation with neither of its paths there resolves when the one
+// its second name gives arrives, though the link is stored under its first.
+func TestARelationWakesByALaterName(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("notes/n.md", "---\namends: [x.md]\n---\nbody\n")
+	eq(t, "neither", e.kinds("notes/n.md"), []string{"amends x.md -> -"})
+	e.put("notes/x.md", "the folder's")
+	eq(t, "the folder's arrived", e.kinds("notes/n.md"), []string{"amends x.md -> notes/x.md"})
+}
