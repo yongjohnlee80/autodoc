@@ -17,7 +17,9 @@ import (
 func TestTheUIWantsATerminal(t *testing.T) {
 	dir := t.TempDir()
 	conf := filepath.Join(dir, "config.toml")
-	body := "[server]\nsocket = \"" + filepath.Join(short(t), "a.sock") + "\"\nstate_dir = \"" + filepath.Join(dir, "state") + "\"\n"
+	// data_dir too: never the user's store, whose daemon the endpoint's resolution would find
+	body := "[server]\nsocket = \"" + filepath.Join(short(t), "a.sock") + "\"\nstate_dir = \"" + filepath.Join(dir, "state") +
+		"\"\ndata_dir = \"" + filepath.Join(dir, "data") + "\"\n"
 	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

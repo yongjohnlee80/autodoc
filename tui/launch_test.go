@@ -25,7 +25,10 @@ func TestLaunchRunsAnotherClientsLayoutAndDaemon(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	sock, state := filepath.Join(dir, "s.sock"), filepath.Join(dir, "state")
 	conf := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(conf, []byte("[server]\nsocket = \""+sock+"\"\nstate_dir = \""+state+"\"\n"), 0o600); err != nil {
+	// a data_dir of its own: without one the store is the user's, and resolving the endpoint by the
+	// store's lease-info would find the user's daemon serving it instead of spawning this test's
+	body := "[server]\nsocket = \"" + sock + "\"\nstate_dir = \"" + state + "\"\ndata_dir = \"" + filepath.Join(dir, "data") + "\"\n"
+	if err := os.WriteFile(conf, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	var spawns atomic.Int32
