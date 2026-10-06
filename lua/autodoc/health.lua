@@ -20,8 +20,23 @@ function M.check()
     return
   end
   h.ok(string.format("binary: %s (%s)", bin, label))
-  local res = vim.system({ bin, "--version" }, { text = true }):wait(5000)
-  if res and res.code == 0 then h.info(vim.trim(res.stdout or "")) end
+  local function version_of(path)
+    local res = vim.system({ path, "--version" }, { text = true }):wait(5000)
+    return res and res.code == 0 and vim.trim(res.stdout or "") or nil
+  end
+  local own = version_of(bin)
+  if own then h.info(own) end
+  -- one binary per machine: the TUI on PATH restarts the shared daemon as ITS build
+  local on_path = require("autodoc.maintenance").path_binary(bin)
+  if on_path then
+    local theirs = version_of(on_path)
+    if own and theirs and theirs ~= own then
+      h.warn(string.format("the autodoc on PATH (%s, %s) is not this plugin's (%s): a TUI of another build "
+        .. "restarts the shared daemon as itself", on_path, theirs, own), { string.format("ln -sf %s %s", bin, on_path) })
+    else
+      h.ok(string.format("the autodoc on PATH (%s) is this plugin's build", on_path))
+    end
+  end
   local done, cerr, client = false, nil, nil
   session.ensure(function(c, e) client, cerr, done = c, e, true end)
   vim.wait(15000, function() return done end, 50)

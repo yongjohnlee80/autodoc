@@ -120,7 +120,14 @@ else on its socket, or a lease it cannot account for, is refused.
 ```sh
 autodoc --print-endpoint            # unix<TAB><socket>: the config's, or the one serving its store
 autodoc --print-endpoint --ensure   # the same, starting the daemon first when nothing answers
+autodoc --print-endpoint --restart  # stop the daemon serving the store, start this build in its place
 ```
+
+`--restart` stops whatever daemon serves the store, of any protocol: it says `sys.hello` at that
+daemon's own protocol, then `sys.shutdown`, both frozen across protocols. It waits for the
+process to exit, so nothing starts while the store's lease is still held. Meanwhile it holds the
+other clients back from starting one of their own. A daemon serving another store is refused and
+left alone. With nothing serving, `--restart` only starts.
 
 A client that dials the socket itself asks the binary where it is, so it never repeats the rules.
 Every client speaks one API. A session starts with `sys.hello({protocol, name})`, and until then
@@ -295,20 +302,48 @@ socket, and needs [auto-core.nvim](https://github.com/yongjohnlee80/auto-core.nv
 ```lua
 {
   "yongjohnlee80/autodoc",
-  build = "make build", -- the plugin's own binary, under bin/; without it, autodoc on PATH
+  build = "build.lua", -- the release binary for this version, under bin/; else make build
   dependencies = { "yongjohnlee80/auto-core.nvim" },
   opts = {
-    bin = nil,     -- the autodoc binary; default: the plugin's build, then PATH
+    bin = nil,     -- the autodoc binary; default: the plugin's own, then PATH
     config = nil,  -- autodoc's config.toml; default: the binary's own
-    keys = false,  -- true maps <leader>fk and the preview's <leader>m* keys
+    keys = false,  -- true maps the <leader>m group below (and <leader>fk)
     preview = {},  -- the preview's options; false leaves it off
+    offer_restart = true, -- offer to restart a daemon older than the plugin
   },
 }
 ```
 
+`build.lua` (which lazy.nvim also runs on its own) installs `bin/autodoc` from the release built
+for the plugin's tag, after checking it against the published SHA-256. That needs no Go, and on
+macOS the binary is built with cgo, so it keeps the FSEvents watcher. On a checkout that is not a
+release tag, offline, or on a platform without a release binary, it runs `make build`, which
+needs Go.
+
+**Use one binary per machine.** The TUI is the `autodoc` on your PATH. When the shared daemon
+refuses a TUI of another build, the TUI restarts the daemon as itself. Make the TUI the plugin's
+binary instead: `ln -sf <plugin>/bin/autodoc ~/.local/bin/autodoc`. `:AutodocMaintenance
+versions` shows all three versions (the daemon's, the plugin's and the one on PATH) and gives
+that command when they differ.
+
+| Key | Command | |
+| --- | --- | --- |
+| `<leader>mf` | `:AutodocSearch [query]` | search the selected KB (also `<leader>fk`) |
+| `<leader>mF` | `:AutodocFiles` | a document of the selected KB by name |
+| `<leader>mr` | `:AutodocRecent` | the files opened last, newest first, across KBs |
+| `<leader>ml` | `:AutodocBacklinks` | the documents linking to this file |
+| `<leader>mk` | `:AutodocDrawer` | the kb drawer |
+| `<leader>mw` | `:AutodocSelect [workspace]` | choose the KB to search |
+| `<leader>mX` | `:AutodocMaintenance [restart\|install\|versions]` | restart the daemon, install the binary again, versions |
+| `<leader>mp` | `:AutodocPreviewFind` | a Markdown file under the cwd into a preview slot |
+| `<leader>m1` … `md`, `m!` … `mD`, `mc`, `mb` | | the preview's slots: focus, render, close all, the browser |
+
 `setup()` connects nothing. The first call that needs the daemon asks the binary where it is
 (`autodoc --print-endpoint --ensure`), which starts it when nothing serves the store, so loading
-the plugin costs nothing. A daemon serving a different store is refused, not used.
+the plugin costs nothing. A daemon serving a different store is refused, not used. A daemon older
+than the plugin refuses it. The plugin then offers to restart that daemon as the plugin's own build
+(`--print-endpoint --restart`), once per daemon. It doesn't offer again after a restart of its own:
+a daemon that still refuses then means the binary itself is older.
 `:checkhealth autodoc` says which binary was found, where the daemon is, and the protocol both
 speak.
 
@@ -318,15 +353,19 @@ speak.
   auto-finder's panel; otherwise in its own. `?` shows its keys: `s` selects the KB to search, `P`
   makes a KB this project's primary (stored by auto-core, and only after you confirm), and `A`
   adds a location, offering to scaffold the KB layout when the folder has no `AGENTS.md`.
-- **Search** (`:AutodocSearch [query]`, `<leader>fk`) searches the selected KB, which defaults
-  to the project's primary KB. Results update as you type; the title says which stages ran and
+- **Search** (`:AutodocSearch [query]`, `<leader>mf`) searches the selected KB, which defaults
+  to the project's primary KB, matched by its root when auto-core records no workspace name. Results update as you type; the title says which stages ran and
   why any were skipped, and `<M-l>` / `<M-s>` / `<M-r>` toggle lexical, semantic and rerank. A hit
   opens at its line, and `<M-p>` sends it to a preview slot. It uses snacks.picker when that is
   installed, and `vim.ui.input` / `vim.ui.select` otherwise. `:AutodocSelect [workspace]` picks
   the KB to search.
+- **By name, recent, and links.** `:AutodocFiles` lists every document of the selected KB, for the
+  picker to match by name. `:AutodocRecent` lists the files opened last. The TUI keeps the same list
+  (its `tui.recent` preference), and a KB file you open in Neovim joins it while a session is up.
+  `:AutodocBacklinks` lists the documents that link to the current file.
 - **The preview** renders Markdown in six floating slots, and replaces md-harpoon.nvim. Use
   `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`,
-  `:AutodocPreviewFind`, `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and
+  `:AutodocPreviewFind` (`<leader>mp`), `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and
   `:AutodocPreviewBrowser` (the document as HTML, through `autodoc --export html`). In a float, a
   Mermaid block is marked, and `B` opens the document in the browser, where it is drawn; `gx`
   opens the link or image under the cursor. A slot follows its file as it changes.
