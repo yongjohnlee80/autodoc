@@ -143,14 +143,52 @@ func (h *Host) askPlugin(c pluginChange) {
 	if title == "" {
 		title = c.m.Name
 	}
+	h.set("App.pluginConfirmTitle", verb+" the plugin "+title+"?")
+	h.set("App.pluginQuestion", pluginQuestion(c, title))
+	h.open("pluginConfirm")
+}
+
+// pluginQuestion is PluginConfirm's text: what the plugin is, where it came from, what its build
+// runs and what it starts, the risk, and then what its manifest declares it does in AutoDoc.
+func pluginQuestion(c pluginChange, title string) string {
 	build := "nothing: it has no build step"
 	if len(c.m.Install.Build) > 0 {
 		build = strings.Join(c.m.Install.Build, " ")
 	}
-	h.set("App.pluginConfirmTitle", verb+" the plugin "+title+"?")
-	h.set("App.pluginQuestion", fmt.Sprintf("%s (%s)\nfrom  %s\nat    %s\n\nIts build runs:  %s\nIt then starts:  %s\n\n%s",
-		title, c.m.Name, c.url, c.commit, build, strings.Join(c.m.Command, " "), pluginRisk))
-	h.open("pluginConfirm")
+	q := fmt.Sprintf("%s (%s)\nfrom  %s\nat    %s\n\nIts build runs:  %s\nIt then starts:  %s\n\n%s",
+		title, c.m.Name, c.url, c.commit, build, strings.Join(c.m.Command, " "), pluginRisk)
+	if d := pluginDeclares(&c.m); d != "" {
+		q += "\n\nDeclares:  " + d
+	}
+	return q
+}
+
+// pluginDeclares is what a manifest's protocol-2 keys say the plugin does, for the install
+// confirmation (ADR 1791268009 §2.1): "" for a 0209 dialog.
+func pluginDeclares(m *manifest) string {
+	var parts []string
+	switch {
+	case m.service() && m.Start == "launch":
+		parts = append(parts, "a service, with no surface · starts with AutoDoc")
+	case m.service():
+		parts = append(parts, "a service, with no surface · starts on first use")
+	case m.card():
+		parts = append(parts, "a card beside the page")
+	}
+	if m.Feed.Document {
+		parts = append(parts, "reads the open note's text (feed)")
+	}
+	if len(m.Commands) > 0 {
+		cmds := make([]string, len(m.Commands))
+		for i, c := range m.Commands {
+			cmds[i] = c.Title
+			if c.Key != "" {
+				cmds[i] += " (SPC p " + c.Key + ")"
+			}
+		}
+		parts = append(parts, "commands: "+strings.Join(cmds, ", "))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // pluginConfirmed is PluginConfirm's Yes: the build, then the plugin in the folder.
