@@ -231,16 +231,81 @@ func (h *Host) stopSemantic() {
 	})
 }
 
-// startRemoveProvider asks before removing provider i, with its usage and log.
+// startRemoveProvider asks before removing provider i, with its usage and log, and says what its
+// removal deletes (ADR 1791284787 §2.3, item 4): the provider in use, or with none in use, takes its
+// model's vectors in every workspace with it, unless another provider serves the same model.
 func (h *Host) startRemoveProvider(i int) {
 	p, ok := h.providerAt(i)
 	if !ok {
 		return
 	}
 	h.removingProvider = p.name
-	h.set("App.providerRemoveQuestion", "Remove the provider "+p.name+"? Its key, its usage and its log go. "+
-		"Vectors it made stay in the index until another model replaces them.")
+	ask := "Remove the provider " + p.name + "? Its key, its usage and its log go. "
+	var sibling string
+	for _, o := range h.providerList {
+		if o.name != p.name && providerFamily(o.kind) == providerFamily(p.kind) && o.model == p.model {
+			sibling = o.name
+		}
+	}
+	switch {
+	case h.activeProvider != "" && h.activeProvider != p.name:
+		h.set("App.providerRemoveQuestion", ask+"Its model's vectors go once no workspace uses them.")
+	case sibling != "":
+		h.set("App.providerRemoveQuestion", ask+fmt.Sprintf("%s keeps its vectors: %s serves it too.", p.model, sibling))
+	default:
+		h.set("App.providerRemoveQuestion", ask+"Semantic search goes off, and "+p.model+"'s vectors are deleted: counting them…")
+		h.countRemoved(p)
+	}
 	h.open("providerRemove")
+}
+
+// providerFamily is the embedding family a provider's kind embeds under: an Ollama Cloud
+// provider's models are Ollama's.
+func providerFamily(kind string) string {
+	if kind == store.KindOllamaCloud {
+		return store.KindOllama
+	}
+	return kind
+}
+
+// countRemoved says, in the removal's question, how many of p's model's vectors it deletes, and in
+// how many workspaces.
+func (h *Host) countRemoved(p providerRow) {
+	names := make([]string, len(h.wsList))
+	for i, w := range h.wsList {
+		names[i] = w.name
+	}
+	type answer struct{ vectors, bytes, spaces int64 }
+	do(h, func(ctx context.Context) answer {
+		var a answer
+		for _, ws := range names {
+			res, err := h.call(ctx, "index.models", ws)
+			if err != nil {
+				continue
+			}
+			counted := false
+			for _, x := range asList(res) {
+				m := asMap(x)
+				if embed.ModelName(str(m, "fp")) != p.model {
+					continue
+				}
+				a.vectors += num(m, "vectors")
+				a.bytes += num(m, "f32_bytes") + num(m, "bits_bytes") + num(m, "key_bytes")
+				counted = true
+			}
+			if counted {
+				a.spaces++
+			}
+		}
+		return a
+	}, func(a answer) {
+		if h.removingProvider != p.name {
+			return
+		}
+		h.set("App.providerRemoveQuestion", fmt.Sprintf("Remove the provider %s? Its key, its usage and its log go. "+
+			"Semantic search goes off, and %s's %d vectors (%s) in %d workspaces are deleted.",
+			p.name, p.model, a.vectors, bytesText(a.bytes), a.spaces))
+	})
 }
 
 func (h *Host) removeProviderConfirmed() {

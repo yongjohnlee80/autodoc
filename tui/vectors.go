@@ -112,12 +112,16 @@ func (h *Host) startPurge(i int) {
 	}
 	r := h.vectorList[i]
 	if r.state != "unused" {
-		h.set("App.vectorsStatus", fmt.Sprintf("%s is the %s model: only one no longer used can be purged", r.name, r.state))
+		what := "the active model: choose another model, or remove its provider in AI models"
+		if r.state != "active" {
+			what = "the switch's target: cancel the switch"
+		}
+		h.set("App.vectorsStatus", fmt.Sprintf("%s is %s", r.name, what))
 		return
 	}
 	h.purging = r
 	h.set("App.purgeQuestion", fmt.Sprintf("Purge %s's %d vectors (%s) from %s? Switching back to it would embed "+
-		"every section again. The store reuses the room; its file does not shrink.", r.name, r.vectors,
+		"every section again; the store gives its room back.", r.name, r.vectors,
 		bytesText(r.f32+r.bits+r.keys), h.ws))
 	h.open("purgeModel")
 }
@@ -138,8 +142,8 @@ func (h *Host) purgeConfirmed() {
 }
 
 // cancelIndexing ends the embedding under way: a model switch goes back to the model still active,
-// which covers every section; embedding outside a switch stops (semantic search off), keeping the
-// vectors made, so Use carries on from them.
+// which covers every section, and the switch's partial vectors are deleted; embedding outside a
+// switch stops (semantic search off), keeping the vectors made, so Use carries on from them.
 func (h *Host) cancelIndexing() {
 	e := h.prog.emb
 	switch {
@@ -160,7 +164,7 @@ func (h *Host) cancelIndexing() {
 				h.failed("cancel the switch", a.err)
 				return
 			}
-			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are kept", a.model, target))
+			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are deleted", a.model, target))
 			h.loadProviders()
 		})
 	case e.working() > 0:

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/yongjohnlee80/autodoc/rpc"
+	"github.com/yongjohnlee80/golib/dao/sqlite"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 	"io/fs"
@@ -1442,34 +1443,126 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 		map[string]any{"name": "local", "kind": "ollama", "base_url": ollama.URL, "model": "other"}); err != nil {
 		t.Fatal(err)
 	}
-	// the switch done: other the active model, the one listed first
-	r.s.WaitFor(t, "other active", func(string) bool {
+	// the switch done: other the active model, and embedder, superseded, reclaimed (ADR 1791284787)
+	r.s.WaitFor(t, "other active, embedder reclaimed", func(string) bool {
 		v, _ := r.h.session.Call(ctx, "index.models", "kb")
 		ms := asList(v)
-		return len(ms) == 2 && str(asMap(ms[0]), "name") == "other" && str(asMap(ms[0]), "state") == "active"
+		return len(ms) == 1 && str(asMap(ms[0]), "name") == "other" && str(asMap(ms[0]), "state") == "active"
 	})
 	settled("other covering the notes")
 	r.h.p.Post(r.h.cancelIndexing)
 	r.s.WaitForText(t, "nothing is being embedded")
 
+	// a model no longer used, as one is while it is reclaimed: two 3-dimension vectors
+	seedUnusedModel(t, d.db, "kb", "ollama|old|sha256:old|3", 2)
 	r.h.p.Post(r.h.openVectors)
 	r.s.WaitFor(t, "both models listed", func(sc string) bool {
-		return regexp.MustCompile(`active +other +3 +2 `).MatchString(sc) && regexp.MustCompile(`unused +embedder +3 +2 `).MatchString(sc) &&
+		return regexp.MustCompile(`active +other +3 +2 `).MatchString(sc) && regexp.MustCompile(`unused +old +3 +2 `).MatchString(sc) &&
 			strings.Contains(sc, "in models no longer used")
 	})
 	// two 3-dimension vectors: 24 bytes of float32, 16 of codes
-	if sc := r.s.String(); !regexp.MustCompile(`unused +embedder +3 +2 +24 B +16 B `).MatchString(sc) {
-		t.Fatalf("embedder's room:\n%s", sc)
+	if sc := r.s.String(); !regexp.MustCompile(`unused +old +3 +2 +24 B +16 B `).MatchString(sc) {
+		t.Fatalf("old's room:\n%s", sc)
 	}
 	r.h.p.Post(func() { r.h.startPurge(0) })
-	r.s.WaitForText(t, "only one no longer used can be purged")
+	r.s.WaitForText(t, "other is the active model: choose another model, or remove its provider in AI models")
 	r.h.p.Post(func() { r.h.startPurge(1) })
 	r.s.WaitForText(t, "purge the model?")
 	r.keys(t, key('y'))
-	r.s.WaitForText(t, "purged embedder's 2 vectors from kb")
-	r.s.WaitFor(t, "embedder gone from the list", func(sc string) bool {
+	r.s.WaitForText(t, "purged old's 2 vectors from kb")
+	r.s.WaitFor(t, "old gone from the list", func(sc string) bool {
 		return !strings.Contains(sc, "unused") && strings.Contains(sc, "1 models")
 	})
+}
+
+// TestRemovingAProviderSaysWhatItDeletes (ADR 1791284787 §2.3, item 4): the removal's question
+// says what goes. The provider in use, its model served by no other: semantic search off, and its
+// vectors counted across the workspaces. Another provider of the same model: its vectors kept.
+// Another provider in use: its vectors go once nothing uses them.
+func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
+	ollama := newFakeOllama(t, "embedder", "other")
+	root := fileDir(t, "a.md", "# A\n\nalpha\n", "b.md", "# B\n\nbeta\n")
+	d := startManaged(t, map[string]string{"kb": root})
+	ctx := context.Background()
+	for name, model := range map[string]string{"local": "embedder", "spare": "other"} {
+		if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: name, Kind: store.KindOllama, BaseURL: ollama.URL, Model: model}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.ready(t)
+	if _, err := r.h.session.Call(ctx, "embedding.use", "local"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "embedder covering the notes", func(string) bool {
+		e := onLoop(r, func() embedProgress { return r.h.prog.emb })
+		return e.online() && e.texts > 0 && e.working() == 0
+	})
+	// ask opens the removal's question for name, once the list holds listed too
+	ask := func(name, listed string) {
+		t.Helper()
+		onLoop(r, func() bool { r.h.loadProviders(); return true })
+		r.s.WaitFor(t, "the providers listed", func(string) bool {
+			return onLoop(r, func() bool {
+				return slices.ContainsFunc(r.h.providerList, func(p providerRow) bool { return p.name == listed })
+			})
+		})
+		onLoop(r, func() bool {
+			r.h.startRemoveProvider(slices.IndexFunc(r.h.providerList, func(p providerRow) bool { return p.name == name }))
+			return true
+		})
+	}
+	question := func() string {
+		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.providerRemoveQuestion"); return v.Raw })
+	}
+
+	ask("local", "local")
+	r.s.WaitFor(t, "the vectors counted", func(string) bool {
+		return strings.Contains(question(), "Semantic search goes off, and embedder's 2 vectors (") &&
+			strings.HasSuffix(question(), " in 1 workspaces are deleted.")
+	})
+	onLoop(r, func() bool { r.h.closeDialog("providerRemove"); return true })
+
+	if _, err := d.db.AddProvider(ctx, store.ProviderSpec{Name: "twin", Kind: store.KindOllama, BaseURL: ollama.URL, Model: "embedder"}); err != nil {
+		t.Fatal(err)
+	}
+	ask("local", "twin")
+	r.s.WaitFor(t, "the twin keeps them", func(string) bool { return strings.HasSuffix(question(), "embedder keeps its vectors: twin serves it too.") })
+	onLoop(r, func() bool { r.h.closeDialog("providerRemove"); return true })
+
+	ask("spare", "spare")
+	r.s.WaitFor(t, "another in use", func(string) bool { return strings.HasSuffix(question(), "Its model's vectors go once no workspace uses them.") })
+}
+
+// seedUnusedModel adds model fp to workspace name, neither active nor the target, with n vectors of
+// 3 dimensions, through a raw connection to the store's file: the API writes none such.
+func seedUnusedModel(t *testing.T, db *store.Store, name, fp string, n int) {
+	t.Helper()
+	ctx := context.Background()
+	ws, err := db.Workspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var id int64
+	for _, w := range ws {
+		if w.Name == name {
+			id = w.ID
+		}
+	}
+	raw, err := sqlite.OpenNamed(ctx, "seed:"+db.Path(), "file:"+db.Path()+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.ExecContext(ctx, "INSERT INTO model (workspace_id, fp, provider, name, dims, active, target) VALUES (?, ?, 'ollama', 'old', 3, 0, 0)", id, fp); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < n; i++ {
+		if _, err := raw.ExecContext(ctx, "INSERT INTO embedding (workspace_id, text_hash, model_fp, bits, f32) VALUES (?, ?, ?, x'0000000000000000', x'000000000000000000000000')",
+			id, []byte(fmt.Sprintf("old-%d", i)), fp); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // otherDaemon is a daemon of protocol proto at sock: its hello refuses any other, admits proto, and
