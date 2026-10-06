@@ -1409,10 +1409,7 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 	r.openPlugin("py-echo")
 	r.waitShown(t, "dark p2")
 	waitSaid(t, logs, "py-echo", "doc draft v")
-	waitSaid(t, logs, "py-echo", "focus True") // opened from its menu, it took the keys
-	r.keys(t, esc())
-	waitSaid(t, logs, "py-echo", "focus False")
-	r.leader(t, 'p')
+	r.leader(t, 'p') // opened from its menu, the card took no keys: the page has them
 	r.s.WaitForText(t, "SPC p — plugin commands")
 	r.keys(t, key('c'))
 	waitSaid(t, logs, "py-echo", "command clear")
