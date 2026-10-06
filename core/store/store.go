@@ -49,7 +49,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 }
 
 func open(ctx context.Context, path string) (*Store, error) {
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+	// journal_size_limit: a checkpoint truncates the write-ahead log back to 64 MiB, so the room a
+	// large write (a compaction, a reclaim) took in it is given back, not kept at its high-water mark
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_size_limit(67108864)"
 	w, err := sqlite.OpenNamed(ctx, "store-w:"+path, dsn+"&_txlock=immediate", sqlite.MaxOpenConns(1))
 	if err != nil {
 		return nil, fmt.Errorf("store: opening %s: %w", path, err)
