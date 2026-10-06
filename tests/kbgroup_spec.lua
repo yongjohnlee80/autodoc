@@ -113,6 +113,21 @@ t.section("recent files, shared with the TUI", function()
   finders.note_recent("global", "doc1.md")
   t.ok(poll(5000, function() local r = recent() return r[1] and r[1].path == "doc1.md" end), "a file opened again is first")
   t.eq(recent(), { { workspace = "global", path = "doc1.md" }, { workspace = "global", path = "doc2.md" } }, "once each, newest first")
+  -- the TUI reorders the shared list: Neovim reopening its last file puts it first again (it reads
+  -- the shared list, it does not remember its own last file)
+  local tui_first = vim.json.encode({ { workspace = "global", path = "doc2.md" }, { workspace = "global", path = "doc1.md" } })
+  t.await(5000, function(done) session.call("preference.set", { finders.PREF_RECENT, tui_first }, done) end)
+  finders.note_recent("global", "doc1.md")
+  t.ok(poll(5000, function() local r = recent() return r[1] and r[1].path == "doc1.md" end),
+    "after the TUI opened another file, reopening Neovim's last one puts it first")
+  -- quick opens, no wait between them: neither overwrites the other
+  finders.note_recent("global", "doc3.md")
+  finders.note_recent("global", "birds.md")
+  finders.note_recent("global", "notes/owls.md")
+  t.ok(poll(5000, function()
+    local r = recent()
+    return #r == 5 and r[1].path == "notes/owls.md" and r[2].path == "birds.md" and r[3].path == "doc3.md"
+  end), "three quick opens are all kept, newest first", vim.inspect(recent()))
   -- the TUI's own shape, written by the TUI: a list Neovim reads, and a KB that is gone left out
   local tui = vim.json.encode({ { workspace = "gone", path = "x.md" }, { workspace = "global", path = "doc3.md" } })
   t.await(5000, function(done) session.call("preference.set", { finders.PREF_RECENT, tui }, done) end)
@@ -125,8 +140,8 @@ t.section("recent files, shared with the TUI", function()
   t.eq(docs[1].path, "25.md", "the newest first")
   t.eq(finders.decode_recent("not json"), {}, "anything but a list reads as none")
   -- a KB file opened in Neovim, with a session up, is noted
-  vim.cmd("edit " .. vim.fn.fnameescape(kb .. "/notes/owls.md"))
-  t.ok(poll(5000, function() local r = recent() return r[1] and r[1].path == "notes/owls.md" end),
+  vim.cmd("edit " .. vim.fn.fnameescape(kb .. "/doc2.md"))
+  t.ok(poll(5000, function() local r = recent() return r[1] and r[1].path == "doc2.md" end),
     "opening a KB file puts it first among the recent files")
   vim.cmd("bwipeout!")
 end)
