@@ -3,5 +3,5 @@
 -- AutoDoc take the new copy; a release that changes KB_OPERATIONS.md's surface also bumps its
 -- `revision:` (ADR 1791209946 §3.4).
 return {
-  autodoc = "0.1.18",
+  autodoc = "0.1.20",
 }

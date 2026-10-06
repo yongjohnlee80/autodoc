@@ -4,7 +4,7 @@ kind: operations
 status: active
 created: {{date}}
 autodoc_version: {{autodoc_version}}
-revision: 2
+revision: 3
 tags: [kb, autodoc, operations]
 abstract: "How agents search, read and write this KB through AutoDoc. Shipped and versioned by AutoDoc; re-read it when its revision changes."
 ---
@@ -135,6 +135,15 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 - `graph.links` (what a file links to) and `graph.backlinks` (what links to it), both
   `[workspace, path]`.
 - `graph.neighborhood` `[workspace, path, depth]`: a file and its links a few hops out.
+- Besides the body's links (`wikilink`, `embed`, `markdown`), a link's `kind` may be a frontmatter
+  relation: `supersedes`, `superseded_by`, `amends`, `related`, `sources` or `adr`. A relation names
+  a path (from the KB root, then from the document's folder), a `[[wikilink]]` or bare slug, or an
+  ADR number (`0021` and `21` are the same ADR). URLs and prose are not links.
+- To follow only some kinds, add `{"kinds": ["supersedes", "superseded_by"]}` as the last parameter:
+  "what replaced this ADR" is `graph.backlinks` with `supersedes` plus `graph.links` with
+  `superseded_by`.
+- `graph.unresolved` `[workspace]` lists the links that reach nothing (`missing`, `ambiguous`), and the
+  supersession relations that go round a loop (`cycle`). Fix them in the frontmatter.
 
 ## 6. Writing
 
