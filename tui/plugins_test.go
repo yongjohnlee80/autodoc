@@ -143,6 +143,17 @@ func (e *echo) Resize(w, h int) {
 }
 
 func (e *echo) Theme(t plugin.Theme) { e.say("theme " + t.Name) }
+
+// protocol 2's: a card's focus, a command, the feed's document
+func (e *echo) Focus(focused bool) { e.say(fmt.Sprintf("focus %v", focused)) }
+func (e *echo) Command(id string)  { e.say("command " + id) }
+func (e *echo) Document(d plugin.Document) {
+	sel := ""
+	for _, r := range d.Selection {
+		sel += fmt.Sprintf(" sel %d:%d-%d:%d", r.Start.Line, r.Start.Col, r.End.Line, r.End.Col)
+	}
+	e.say(fmt.Sprintf("doc %q v%d %q at %d:%d%s large=%v", d.Path, d.Version, d.Text, d.Cursor.Line, d.Cursor.Col, sel, d.TooLarge))
+}
 func (e *echo) Hide()                { e.say("hide") }
 func (e *echo) Show()                { e.say("show") }
 
@@ -156,6 +167,7 @@ func (e *echo) Close() {
 func (e *echo) say(line string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	fmt.Fprintln(os.Stderr, "said: "+line) // a service has no surface: its log is where a test reads it
 	e.lines = append(e.lines, line)
 	f := plugin.NewFrame(e.w, e.h)
 	for i, l := range e.lines[max(0, len(e.lines)-e.h):] {
@@ -179,6 +191,25 @@ func installTestPlugin(t *testing.T, dir, name, mode string, w, h int) {
 	}
 	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, %q]\n[dialog]\nwidth = %d\nheight = %d\n",
 		name, strings.ToUpper(name[:1])+name[1:], exe, testPluginArg, mode, w, h)
+	if err := os.WriteFile(filepath.Join(p, "plugin.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// installPlugin2 writes a protocol-2 manifest for the test plugin in mode: kind, then extra, the
+// rest of the manifest (its tables).
+func installPlugin2(t *testing.T, dir, name, kind, mode, extra string) {
+	t.Helper()
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, name)
+	if err := os.MkdirAll(p, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = %q\nprotocol = 2\ncommand = [%q, %q, %q]\n%s",
+		name, strings.ToUpper(name[:1])+name[1:], kind, exe, testPluginArg, mode, extra)
 	if err := os.WriteFile(filepath.Join(p, "plugin.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -935,5 +966,55 @@ func TestProtocolTwosManifestKeys(t *testing.T) {
 		if c.reason == "" && e.reason != "" || c.reason != "" && !strings.HasPrefix(e.reason, c.reason) {
 			t.Errorf("%q: reason %q, want %q", c.toml, e.reason, c.reason)
 		}
+	}
+}
+
+// textAt is where text is on the screen: its column and row, -1 when it is not there.
+func (r *running) textAt(text string) (x, y int) {
+	for i, line := range strings.Split(r.s.String(), "\n") {
+		if j := strings.Index(line, text); j >= 0 {
+			return len([]rune(line[:j])), i
+		}
+	}
+	return -1, -1
+}
+
+// TestACardTakesTheKeysOnlyWhenFocused (ADR 1791268009 §2.2): a non-modal card opens beside the
+// page without taking the keys; a click on it focuses it, the plugin told plugin.focus true, and
+// its keys go to the plugin; Esc gives them back to the editor, plugin.focus false, and the card
+// stays open.
+func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements = [\"top-right\"]\n")
+	r, _ := pluginTUI(t, dir)
+	r.openPlugin("card")
+	r.waitShown(t, "open 36x8 dark")
+	r.waitShown(t, "p2")
+	r.s.WaitForText(t, "Card · Esc returns the keys")
+
+	r.keys(t, key('i'), key('Q'))
+	r.s.WaitFor(t, "the editor took the keys", func(string) bool { return strings.Contains(r.editorText(), "Q") })
+	if strings.Contains(r.s.String(), "key Q") {
+		t.Fatalf("a card that was not focused took a key:\n%s", r.s)
+	}
+	r.keys(t, esc())
+
+	x, y := r.textAt("open 36x8")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
+	r.waitShown(t, "focus true")
+	r.keys(t, key('z'))
+	r.waitShown(t, "key z")
+	before := r.editorText()
+
+	r.keys(t, esc())
+	r.waitShown(t, "focus false")
+	if !strings.Contains(r.s.String(), "Card · Esc returns the keys") {
+		t.Fatalf("Esc closed the card:\n%s", r.s)
+	}
+	r.keys(t, key('i'), key('W'))
+	r.s.WaitFor(t, "the editor has the keys again", func(string) bool { return strings.Contains(r.editorText(), "W") })
+	if strings.Contains(r.s.String(), "key W") || !strings.Contains(before, "Q") {
+		t.Fatalf("after Esc the card still took keys:\n%s", r.s)
 	}
 }

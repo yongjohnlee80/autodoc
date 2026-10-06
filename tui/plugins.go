@@ -399,15 +399,20 @@ type pluginRun struct {
 	link  *plugin.Link
 	ctx   context.Context
 	stop  context.CancelFunc
-	out   chan outNote // to the sender goroutine
+	out   *outQueue // to the sender goroutine
 	log   *pluginLog
-	float *widget.Float
+	float *widget.Float // nil for a service, which has no surface
 	box   *widget.Box
 	view  *pluginView
 
 	ready, closing bool
 	hidden         bool // Esc hid it (esc = "hide"): the plugin runs, told plugin.hide
-	opened         bool // plugin.open sent, at the dialog's first layout
+	opened         bool // plugin.open sent: at the dialog's first layout, or a service's start
+	focused        bool // a card that holds the keys (plugin.focus true was sent)
+	focusOnOpen    bool // a card started by its command: it takes the keys at its first layout
+	// early is what was sent before plugin.open: a command or the feed, for a plugin just started.
+	// plugin.open goes first, then these, in order.
+	early []outNote
 	// the deadlines, as they were when it started
 	handshake, grace, termGrace time.Duration
 
@@ -428,15 +433,100 @@ type outNote struct {
 	params []any
 }
 
+// outQueue is what the host sends a plugin, waiting for the sender. A document is state, not an
+// event: one still waiting is dropped when a newer one is sent, which takes the tail, so at most one
+// waits (ADR 1791268009 §2.3). Every other notification keeps its order, and more than pluginQueue
+// of them waiting is a plugin not reading.
+type outQueue struct {
+	mu     sync.Mutex
+	items  []outNote
+	closed bool
+	wake   chan struct{}
+}
+
+func newOutQueue() *outQueue { return &outQueue{wake: make(chan struct{}, 1)} }
+
+// push queues n; false when the plugin has not read pluginQueue of what it was sent, or the queue
+// is closed.
+func (q *outQueue) push(n outNote) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.closed {
+		return false
+	}
+	if n.method == plugin.MethodDocument {
+		q.items = slices.DeleteFunc(q.items, func(o outNote) bool { return o.method == plugin.MethodDocument })
+	} else if len(q.items) >= pluginQueue {
+		return false
+	}
+	q.items = append(q.items, n)
+	select {
+	case q.wake <- struct{}{}:
+	default:
+	}
+	return true
+}
+
+// close ends the queue: the sender sends what it holds, then stops.
+func (q *outQueue) close() {
+	q.mu.Lock()
+	q.closed = true
+	q.mu.Unlock()
+	select {
+	case q.wake <- struct{}{}:
+	default:
+	}
+}
+
+// pop is the next to send, in order; false once the queue is closed and empty.
+func (q *outQueue) pop() (outNote, bool) {
+	for {
+		q.mu.Lock()
+		if len(q.items) > 0 {
+			n := q.items[0]
+			q.items[0] = outNote{}
+			q.items = q.items[1:]
+			q.mu.Unlock()
+			return n, true
+		}
+		closed := q.closed
+		q.mu.Unlock()
+		if closed {
+			return outNote{}, false
+		}
+		<-q.wake
+	}
+}
+
+// drop empties the queue, closing it: what waits is never sent.
+func (q *outQueue) drop() {
+	q.mu.Lock()
+	q.items, q.closed = nil, true
+	q.mu.Unlock()
+}
+
+// waiting is how many notifications wait, and how many of them are documents.
+func (q *outQueue) waiting() (all, documents int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for _, n := range q.items {
+		if n.method == plugin.MethodDocument {
+			documents++
+		}
+	}
+	return len(q.items), documents
+}
+
 type pluginCell struct {
 	text string
 	st   style.Style
 }
 
-// startPlugin starts e's process, its link and its dialog, and sends plugin.open.
+// startPlugin starts e's process, its link and its surface, and sends plugin.open: a dialog's at
+// its first layout, a service's at once.
 func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 	host, ok := h.p.Overlay()
-	if !ok {
+	if !ok && !e.m.service() {
 		return nil, errors.New("the screen is not ready")
 	}
 	toPlugin, hostOut, err := os.Pipe()
@@ -466,7 +556,7 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 
-	r := &pluginRun{h: h, e: e, cmd: cmd, log: log, out: make(chan outNote, pluginQueue),
+	r := &pluginRun{h: h, e: e, cmd: cmd, log: log, out: newOutQueue(),
 		exited: make(chan struct{}), shutDone: make(chan struct{}),
 		handshake: pluginHandshake, grace: pluginGrace, termGrace: pluginTermGrace}
 	r.ctx, r.stop = context.WithCancel(h.ctx)
@@ -483,11 +573,15 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 	go r.sender()
+	if e.m.service() {
+		r.openAt(0, 0) // no surface to lay out: open it now
+		return r, nil
+	}
 
 	r.view = &pluginView{run: r, w: e.m.Dialog.Width, h: e.m.Dialog.Height.rows, fill: e.m.Dialog.Height.pct > 0}
 	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
 		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	opts := []widget.FloatOption{widget.WithModal(true), widget.WithAnchor(pluginAnchors[h.placement(e)])}
+	opts := []widget.FloatOption{widget.WithModal(e.m.modal()), widget.WithAnchor(pluginAnchors[h.placement(e)])}
 	if pct := e.m.Dialog.Height.pct; pct > 0 {
 		opts = append(opts, widget.WithSizeFraction(0, pct))
 	}
@@ -503,6 +597,11 @@ func (r *pluginRun) openAt(w, h int) {
 	r.opened = true
 	r.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: r.e.m.Protocol,
 		Width: w, Height: h, Theme: r.h.pluginTheme()}))
+	early := r.early
+	r.early = nil
+	for _, n := range early {
+		r.send(n.method, n.params)
+	}
 	time.AfterFunc(r.handshake, func() {
 		r.h.p.Post(func() {
 			if !r.ready && !r.closing {
@@ -514,6 +613,9 @@ func (r *pluginRun) openAt(w, h int) {
 
 // title is the dialog's title, saying what Esc does.
 func (r *pluginRun) title(t string) string {
+	if !r.e.m.modal() {
+		return t + " · Esc returns the keys"
+	}
 	if r.e.m.Dialog.Esc == "hide" {
 		return t + " · Esc hides"
 	}
@@ -532,6 +634,9 @@ func (r *pluginRun) hide() {
 
 // show brings the dialog back: its Plugins menu entry, chosen again.
 func (r *pluginRun) show() {
+	if r.float == nil {
+		return
+	}
 	r.float.Show()
 	if r.hidden {
 		r.hidden = false
@@ -547,29 +652,41 @@ func (h *Host) placement(e pluginEntry) string {
 	return e.m.Dialog.Placements[0]
 }
 
-// send queues a notification for the plugin. A plugin that has not read pluginQueue of them is not
-// answering: its dialog closes.
+// send queues a notification for the plugin; before plugin.open it waits for it (early). A plugin
+// that has not read pluginQueue of them is not answering: its dialog closes.
 func (r *pluginRun) send(method string, params []any) {
 	if r.closing {
 		return
 	}
-	select {
-	case r.out <- outNote{method, params}:
-	default:
+	if !r.opened && method != plugin.MethodOpen {
+		r.early = append(slices.DeleteFunc(r.early, func(n outNote) bool {
+			return method == plugin.MethodDocument && n.method == plugin.MethodDocument
+		}), outNote{method, params})
+		return
+	}
+	if !r.out.push(outNote{method, params}) {
 		r.close("is not reading what it is sent")
 	}
+}
+
+// sendDocument sends d, as it can be sent: whole, or too large for the link (plugin.FitDocument).
+func (r *pluginRun) sendDocument(d plugin.Document) {
+	r.send(plugin.MethodDocument, plugin.DocumentParams(plugin.FitDocument(d)))
 }
 
 // sender writes the queue to the plugin, off the loop; a write the plugin does not take within the
 // link's timeout closes its dialog. It ends when the queue is closed, after sending what it holds.
 func (r *pluginRun) sender() {
-	for n := range r.out {
+	for {
+		n, ok := r.out.pop()
+		if !ok {
+			return
+		}
 		if err := r.link.Notify(r.ctx, n.method, n.params); err != nil {
 			if r.ctx.Err() == nil {
 				r.h.p.Post(func() { r.close("stopped answering: " + firstLine(err.Error())) })
 			}
-			for range r.out { // drain, so a close's send never blocks
-			}
+			r.out.drop()
 			return
 		}
 	}
@@ -587,7 +704,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 		}
 		r.h.p.Post(func() { r.readied(p, err) })
 	case plugin.MethodFrame:
-		if !r.readyIn.Load() {
+		if !r.readyIn.Load() || r.e.m.service() { // a service has nothing to draw into
 			return
 		}
 		rows, dropped, err := plugin.ReadFrame(params)
@@ -609,7 +726,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 			})
 		}
 	case plugin.MethodTitle:
-		if t, err := plugin.ReadTitle(params); err == nil {
+		if t, err := plugin.ReadTitle(params); err == nil && !r.e.m.service() {
 			r.h.p.Post(func() { r.box.SetTitle(r.title(t)) })
 		}
 	case plugin.MethodHostClose:
@@ -652,11 +769,16 @@ func (r *pluginRun) close(why string) {
 		return
 	}
 	r.closing = true
-	if r.float.Shown() {
-		r.float.Hide()
-	}
-	if host, ok := r.h.p.Overlay(); ok {
-		host.Detach(r.float)
+	if r.float != nil {
+		if r.focused {
+			r.h.keep(r.h.p.Call("editor", "forceActiveFocus"))
+		}
+		if r.float.Shown() {
+			r.float.Hide()
+		}
+		if host, ok := r.h.p.Overlay(); ok {
+			host.Detach(r.float)
+		}
 	}
 	if r.h.running[r.e.key()] == r {
 		delete(r.h.running, r.e.key())
@@ -675,11 +797,8 @@ func (r *pluginRun) close(why string) {
 func (r *pluginRun) shutdown() {
 	r.shutOnce.Do(func() {
 		defer close(r.shutDone)
-		select {
-		case r.out <- outNote{plugin.MethodClose, plugin.EmptyParams()}:
-		default:
-		}
-		close(r.out)
+		r.out.push(outNote{plugin.MethodClose, plugin.EmptyParams()})
+		r.out.close()
 		select {
 		case <-r.exited:
 		case <-time.After(r.grace):
@@ -787,6 +906,10 @@ func (v *pluginView) resized() {
 	if !v.run.opened {
 		v.sentW, v.sentH = v.laidW, v.laidH
 		v.run.openAt(v.laidW, v.laidH)
+		if v.run.focusOnOpen {
+			v.run.focusOnOpen = false
+			v.RequestFocus()
+		}
 		return
 	}
 	if v.laidW == v.sentW && v.laidH == v.sentH {
@@ -821,13 +944,33 @@ func (v *pluginView) Render(s tuicore.Surface) {
 	}
 }
 
-// HandleEvent: Esc closes; every other key is the plugin's.
+// RequestFocus gives the card the keys: a card started by its command, or one already open.
+func (v *pluginView) RequestFocus() {
+	if ctx := v.Context(); ctx != nil {
+		ctx.RequestFocus()
+	}
+}
+
+// HandleEvent: Esc closes a dialog, or gives a card's keys back to the editor; every other key is
+// the plugin's. A card is told when it takes the keys (a click, or its command) and gives them back.
 func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
+	if f, ok := ev.(tuicore.FocusEvent); ok {
+		if !f.Terminal && !v.run.e.m.modal() && f.Gained != v.run.focused && !v.run.closing {
+			v.run.focused = f.Gained
+			v.run.send(plugin.MethodFocus, plugin.FocusParams(f.Gained))
+		}
+		return false
+	}
 	e, ok := ev.(tuicore.KeyEvent)
 	if !ok || e.Kind == tuicore.KeyRelease {
 		return false
 	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
+		if !v.run.e.m.modal() {
+			// the card stays open; the editor has the keys again (ADR 1791268009 §2.2)
+			v.run.h.keep(v.run.h.p.Call("editor", "forceActiveFocus"))
+			return true
+		}
 		if v.run.e.m.Dialog.Esc == "hide" {
 			v.run.hide()
 		} else {
