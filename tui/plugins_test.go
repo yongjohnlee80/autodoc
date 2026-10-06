@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"maps"
 	"net"
 	"os"
@@ -11,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"slices"
 	"strings"
@@ -1306,5 +1310,72 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 	old := read("name = \"tetris\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n")
 	if q := pluginQuestion(pluginChange{m: old}, "Tetris"); strings.Contains(q, "Declares") {
 		t.Errorf("a 0209 dialog declares something:\n%s", q)
+	}
+}
+
+// TestThePluginReferenceKeepsUp (ADR 1791268009 §4): docs/plugins.md is the published reference.
+// Every notification the protocol defines (each plugin.Method* constant, read from the source) is
+// documented, and every manifest sample in it runs: it decodes, strictly, with no reason against it.
+func TestThePluginReferenceKeepsUp(t *testing.T) {
+	doc, err := os.ReadFile("../docs/plugins.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := parser.ParseFile(token.NewFileSet(), "../plugin/protocol.go", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	methods := 0
+	for _, d := range f.Decls {
+		g, ok := d.(*ast.GenDecl)
+		if !ok || g.Tok != token.CONST {
+			continue
+		}
+		for _, s := range g.Specs {
+			v := s.(*ast.ValueSpec)
+			for i, n := range v.Names {
+				if !strings.HasPrefix(n.Name, "Method") || i >= len(v.Values) {
+					continue
+				}
+				lit, ok := v.Values[i].(*ast.BasicLit)
+				if !ok {
+					continue
+				}
+				methods++
+				if name := strings.Trim(lit.Value, `"`); !strings.Contains(string(doc), "`"+name+"`") {
+					t.Errorf("%s (%s) is not in docs/plugins.md", n.Name, name)
+				}
+			}
+		}
+	}
+	if methods < 14 { // ten the host sends, four the plugin sends
+		t.Fatalf("read %d Method constants from protocol.go: the reader is not seeing them", methods)
+	}
+
+	samples := regexp.MustCompile("(?s)```toml\n(.*?)```").FindAllSubmatch(doc, -1)
+	if len(samples) != 3 {
+		t.Fatalf("%d manifest samples, want 3 (a dialog, a card, a service)", len(samples))
+	}
+	kinds := map[string]bool{}
+	for _, m := range samples {
+		dir := filepath.Join(t.TempDir(), "p")
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "plugin.toml"), m[1], 0o644)
+		e := readPlugin(dir)
+		if e.reason != "" {
+			t.Errorf("a sample does not run (%s):\n%s", e.reason, m[1])
+			continue
+		}
+		switch {
+		case e.m.service():
+			kinds["service "+e.m.Start] = true
+		case e.m.card():
+			kinds["card"] = true
+		default:
+			kinds["dialog"] = true
+		}
+	}
+	if want := map[string]bool{"dialog": true, "card": true, "service use": true}; !reflect.DeepEqual(kinds, want) {
+		t.Errorf("the samples are %v, want %v", kinds, want)
 	}
 }
