@@ -121,6 +121,7 @@ else on its socket, or a lease it cannot account for, is refused.
 autodoc --print-endpoint            # unix<TAB><socket>: the config's, or the one serving its store
 autodoc --print-endpoint --ensure   # the same, starting the daemon first when nothing answers
 autodoc --print-endpoint --restart  # stop the daemon serving the store, start this build in its place
+autodoc --compact                   # with the daemon stopped: reclaim unused vectors, rewrite the store
 ```
 
 `--restart` stops whatever daemon serves the store, of any protocol: it says `sys.hello` at that
@@ -600,7 +601,14 @@ whose vectors are closest are the matches.
 - **A search reads what is stored.** The only model call it makes is for the query itself.
 - **Switching models embeds everything once more.** The old model goes offline at once, unloaded
   from its server, and search is by words until the new one covers every section; then it takes
-  over. The old model's vectors stay until purged, so switching back is instant.
+  over.
+- **A workspace keeps one model's vectors** (two while a switch fills): the old model's are deleted
+  once the new one answers, a cancelled switch's partial vectors with the cancel, and removing the
+  provider in use deletes its model's, unless another provider serves that model. Switching back
+  embeds again. Unused vectors slow the scans of the ones kept, so the store does not carry them.
+- **The store gives the room back.** After the upgrade that brought this, the daemon compacts the
+  store once, when there is free space for it: about twice the store. `autodoc --compact` does it
+  again with the daemon stopped.
 
 **Providers.** Semantic search is off until a provider is chosen in the TUI's AI models
 (`System › AI models…`). A
