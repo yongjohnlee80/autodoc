@@ -849,3 +849,57 @@ func TestACallDuringARestartSpawnsNothing(t *testing.T) {
 		t.Fatalf("--call spawned a daemon: %v", err)
 	}
 }
+
+// TestServeWaitsForAPredecessorClosing: a daemon started while the one before it is still closing
+// the store (its lease held, its lease-info already gone, as a shutdown leaves them) waits for the
+// lease and serves, instead of exiting and leaving the client that started it with no daemon. This
+// is the reconnect after sys.shutdown a slow machine hits.
+func TestServeWaitsForAPredecessorClosing(t *testing.T) {
+	dir := short(t)
+	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	held, err := store.Open(context.Background(), filepath.Join(state, "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := make(chan struct{})
+	go func() {
+		time.Sleep(600 * time.Millisecond)
+		_ = held.Close()
+		close(released)
+	}()
+	start(t, writeConfig(t, sock, state, ""), sock)
+	select {
+	case <-released:
+	default:
+		t.Fatal("the daemon answered while its predecessor still held the store")
+	}
+}
+
+// TestServeGivesUpOnAStoreStillHeld: a lease held past predecessorWait, with no lease-info, is
+// ErrBusy as before; the wait is bounded.
+func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
+	old := predecessorWait
+	predecessorWait = 300 * time.Millisecond
+	t.Cleanup(func() { predecessorWait = old })
+	dir := short(t)
+	state, sock := filepath.Join(dir, "state"), filepath.Join(dir, "s.sock")
+	if err := os.MkdirAll(state, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	held, err := store.Open(context.Background(), filepath.Join(state, "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = held.Close() })
+	began := time.Now()
+	err = runServe(context.Background(), writeConfig(t, sock, state, ""), io.Discard, testBuild)
+	if !errors.Is(err, store.ErrBusy) {
+		t.Fatalf("a store held throughout: %v, want store.ErrBusy", err)
+	}
+	if took := time.Since(began); took < predecessorWait || took > predecessorWait+5*time.Second {
+		t.Errorf("gave up after %v, want about %v", took, predecessorWait)
+	}
+}
