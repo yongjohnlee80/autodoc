@@ -20,51 +20,76 @@ the wire are relative to the root, with `/` separators.
 - If `$AUTODOC_WORKSPACE` is unset, run `autodoc --call workspace.list '[]'` and use the `name` whose
   `root` is `$AUTO_AGENTS_KB_ROOT`.
 
-## 0. Pick the method from what this machine has
+## 0. Pick the method
 
-Your first search tells you which stages ran: the answer's `stages.performed` and `stages.skipped`.
-Pick the method from that, once per session:
+**Known target? Go straight to it.** When you already have the path, a wikilink, an identifier, a
+commit or an exact error string (from memory, a task's `adr:`/`review:` fields, a link), read it or
+`rg` for it directly. Searching for what you can name costs more than reading it.
+
+**Topic lookup? Search, and let the first answer tell you the mode.** Each answer's
+`stages.performed` and `stages.skipped` say which stages ran. Pick the method from that, once per
+session:
 
 | The first search shows | Use |
 |---|---|
-| `semantic` and `rerank` performed | AutoDoc search for every lookup (§1). This is the best case. |
-| `semantic` performed, `rerank` skipped | AutoDoc search still. Ranking is weaker but well ahead of grep. |
-| `semantic` skipped (no embedding model, a model switching, the query not embedded) | `rg` over the tree (§7). Keep AutoDoc for listings, facets and relations (§2, §3, §5), which need no model. |
-| no answer (daemon down, workspace not ready) | `rg` over the tree (§7). |
+| `semantic` and `rerank` performed | AutoDoc search, `limit 3` (§1). The best case. |
+| `semantic` performed, `rerank` skipped | AutoDoc search, `limit 10`: without the reranker the answer often sits below the top 3. |
+| `semantic` skipped (no embedding model, a model switching, the query not embedded) | The words-only ladder (§1, then §7). Keep AutoDoc for listings, facets and relations (§2, §3, §5), which need no model. |
+| no answer (daemon down, workspace not ready) | `rg` (§7). |
 
-Why, measured on a 2,200-document KB (32 real lookups, 2026-10-06, AutoDoc 0.1.17):
+Why, measured 2026-10-06 on two KBs with AutoDoc 0.1.17 (method and numbers:
+https://github.com/yongjohnlee80/autodoc/blob/main/docs/benchmarks/kb-retrieval.md):
 
-- **Ranking.** With an embedding model and a reranker, the answer document was in the top 5 for 94%
-  of questions; with an embedding model alone, 78%. A keyword grep ranking over the tree (skipping
-  `archive/` and `raw/`) got 47%.
-- **Cost to an agent.** Agents found every answer with both methods; the method changed the cost.
-  AutoDoc search-first pulled about 11% fewer KB tokens into context than grep over the same tree
-  (23% fewer than grep over the pre-AutoDoc layout), used fewer tool calls, and finished faster. The
-  heaviest lookups improved most.
-- **Without an embedding model**, a search runs on words alone, and a word search needs every word to
-  appear (§1). A natural-language question then finds nothing (0 hits on all 32). Grep, which agents
-  used successfully on every question, is the safer first move there. A words-only AutoDoc search with
-  a few keywords wasn't measured.
+- KB A: 2,200 docs, 32 lookups, 96 agent runs; Ollama `snowflake-arctic-embed2` and a
+  reranker;
+- KB B: 18 lookups; `bge` and `bge-reranker-v2-m3`.
+
+What the measurements showed:
+
+- **Ranking with the reranker.**
+  - KB A: the answer document was in the top 3 for 94% of questions, the same as the top 10.
+  - KB B: 18 of 18 in the top 3, and first on 15 of 18 when scoped with `paths`.
+  - Limit 3 costs about 60% fewer tokens than limit 10, for no loss in accuracy.
+  - Without the reranker (KB A): 72% in the top 3 and 91% in the top 10.
+- **Ranking with grep.** A keyword grep ranking over the tree got 47% in the top 5 (skipping
+  `archive/` and `raw/`).
+- **Cost to an agent (KB A).**
+  - Agents found every answer by either method; the method changed the cost.
+  - AutoDoc search-first pulled about 11% fewer KB tokens into context than grep over the same tree,
+    and 23% fewer than grep over the pre-AutoDoc layout.
+  - It also used fewer tool calls and finished faster. The heaviest lookups improved most.
+- **Without an embedding model** a search runs on words alone (KB B).
+  - A plain-language question found the answer 1 time in 18.
+  - Two or three distinctive keywords put it first 12 times and found it 14 times. A substring grep
+    found 17, because words-only search misses unstarred prefixes and wording that differs.
+  - Hence the ladder: AutoDoc first (cheap), then one retry, then grep.
 
 ## 1. Search first
 
 ```sh
-autodoc --call search.query '["'"$AUTODOC_WORKSPACE"'", "<words>", {"limit": 10}]'
+autodoc --call search.query '["'"$AUTODOC_WORKSPACE"'", "<words>", {"limit": 3}]'
 ```
 
 - **Ask in plain words.** Leave `stages` at its default, which combines meaning, words and the
   reranker. A short natural-language query of about 4 to 8 words works best, for example
   `"merge a stacked PR with --delete-branch"`. Don't paste a whole paragraph.
+- **Scope when you can.** `"paths": ["conventions", "adrs"]` keeps the search to the folders that hold
+  the answer. `archive/` is indexed unless the workspace excludes it (the user's choice), and its
+  retired indexes and logs mention everything, so leave it out of `paths` unless you want history.
 - Each hit gives `path`, `breadcrumb`, `snippet` and `line_start`..`line_end`.
-- **Read only that line range** with your own Read tool, then stop if it answers you. Open the whole
-  document only when the range isn't enough. Reading ranges instead of whole files is where most of
-  the saving comes from.
+- **Read only that line range** with your own Read tool, then stop if it answers you. Read a whole
+  document only when it must be read end to end (a convention, an ADR, a review you are acting on).
+  Reading ranges instead of whole files is where most of the saving comes from: a median 2.6k tokens
+  for a whole KB file, against about 220 for a hit's range.
 - No good hit? Search again with other words (the document's likely vocabulary) before concluding
   the KB has nothing.
 - Search before writing, so you extend a document instead of duplicating it.
-- **Words-only search (`"stages": ["lexical"]`, or any search on a machine without a model) is not
-  for questions.** Every word must appear in a hit, so pass two or three distinctive terms
-  (`"--delete-branch stacked"`), not a sentence. `"a phrase"` matches in order. `sto*` is a prefix.
+- **The words-only ladder** (`"stages": ["lexical"]`, or any search on a machine without a model):
+  1. Pass two or three distinctive terms (`"--delete-branch stacked"`), never a sentence. Every word
+     must appear as a whole word in one section. `"a phrase"` matches in order, and `sto*` is a
+     prefix.
+  2. No hit? Retry once: drop a word, or star a prefix (`subscri*`).
+  3. Still nothing? Use `rg` with the terms OR'd (§7), and say in your work that you fell back.
 
 ## 2. Filters, facets and stages
 
@@ -131,12 +156,13 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 Use `rg` over `$AUTO_AGENTS_KB_ROOT` when §0 says so, and say in your work that you did.
 
 ```sh
-rg -n -i '<distinctive term>' "$AUTO_AGENTS_KB_ROOT" --glob '*.md' --glob '!archive/**' --glob '!raw/**'
+rg -il -e '<term>' -e '<other term>' "$AUTO_AGENTS_KB_ROOT" --glob '*.md' --glob '!archive/**' --glob '!raw/**'
+rg -n -i -C1 '<term>' "$AUTO_AGENTS_KB_ROOT/<folder>"
 ```
 
-- **Skip `archive/` and `raw/`.** Retired material lives there, often old indexes and logs that
-  mention everything and crowd out the live document. Skipping them doubled grep's ranking in the
-  measurement above.
+- **Never grep the KB root unscoped. Skip `archive/` and `raw/`.** Retired material lives there,
+  often old indexes and logs that mention everything. Unscoped, they took grep's top hit in 14 of
+  18 lookups on one KB, and skipping them doubled grep's ranking on the other.
 - Search for the term the answer document would use, not the question's words; narrow with
   `--glob '<folder>/**'` when you know the folder (`ABOUT.md` says what each holds).
 - Read the matching lines' section, not the whole file, and stop when it answers you.
