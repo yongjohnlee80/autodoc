@@ -246,6 +246,26 @@ do
   write(d4, "KB_OPERATIONS.md", "# hand written\n")
   scaffold.scaffold(d4, { autodoc_version = "0.2.0" })
   ok("S15: a managed file with no readable version is kept", read(d4, "KB_OPERATIONS.md") == "# hand written\n")
+  -- refresh_managed: an existing KB takes newer managed files and nothing else
+  local d6 = tmp .. "/refresh"
+  scaffold.scaffold(d6, { autodoc_version = "0.1.15", date = "2026-10-06" })
+  vim.fn.delete(d6 .. "/notes", "rf")
+  vim.fn.delete(d6 .. "/GEMINI.md")
+  write(d6, "AGENTS.md", "# this KB's own\n")
+  local old_ops = read(d6, "KB_OPERATIONS.md")
+  local r6 = scaffold.refresh_managed(d6, { autodoc_version = "0.1.18", date = "2026-10-06" })
+  ok("S16: refresh_managed replaces older managed files", #r6.updated == 2 and read(d6, "KB_OPERATIONS.md") ~= old_ops
+    and scaffold.declared_version(read(d6, "KB_OPERATIONS.md")) == "0.1.18", vim.inspect(r6.updated))
+  ok("S17: refresh_managed creates nothing (a removed folder and root file stay removed)",
+    not util.isdir(d6 .. "/notes") and not util.isfile(d6 .. "/GEMINI.md"))
+  ok("S18: refresh_managed never touches an unmanaged file", read(d6, "AGENTS.md") == "# this KB's own\n")
+  local r7 = scaffold.refresh_managed(d6, { autodoc_version = "0.1.18" })
+  ok("S19: refresh_managed keeps same-version managed files", #r7.updated == 0 and #r7.kept == 2, vim.inspect(r7))
+  local d8 = tmp .. "/refresh-missing"
+  util.mkdirp(d8)
+  write(d8, "AGENTS.md", "# kb\n")
+  local r8 = scaffold.refresh_managed(d8, { autodoc_version = "0.1.18" })
+  ok("S20: refresh_managed leaves a missing managed file missing", #r8.updated == 0 and not util.isfile(d8 .. "/KB_OPERATIONS.md"))
   -- raw/ is the user's: no ABOUT.md written into an existing non-empty raw/
   local d5 = tmp .. "/rawkb"
   write(d5, "raw/x.txt", "x")

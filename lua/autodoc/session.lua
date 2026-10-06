@@ -22,6 +22,7 @@ local _opts = {} -- setup's: bin, config
 local _client, _epoch = nil, 0
 local _waiting = nil -- callbacks queued behind a connect in flight
 local _workspaces = nil -- the last workspace.list, by name
+local _kb_refreshed = {} -- KB roots whose managed files this session already brought up to date
 local _selected = nil -- the workspace selected for searching, by name
 local _mismatch = nil -- the last probe that refused this plugin's protocol
 
@@ -156,9 +157,32 @@ function M.request(method, params, cb)
   end)
 end
 
----remember keeps a workspace.list answer for the save hook and the views, and says so.
+---refresh_kbs brings each listed KB's managed files (KB_OPERATIONS.md, the schema) up to this build's
+---AutoDoc, once per root per session (ADR 1791209946 §3.1: replaced only when the KB's copy is older).
+---A workspace is a KB when its root has AGENTS.md; nothing else in it is written.
+---@param list table[]
+function M.refresh_kbs(list)
+  local ok, scaffold = pcall(require, "autodoc.kb.scaffold")
+  if not ok or type(scaffold) ~= "table" or type(scaffold.refresh_managed) ~= "function" then return end
+  for _, w in ipairs(list or {}) do
+    local root = w.root
+    if type(root) == "string" and not _kb_refreshed[root] and vim.fn.filereadable(root .. "/AGENTS.md") == 1 then
+      _kb_refreshed[root] = true
+      local rok, rep = pcall(scaffold.refresh_managed, root)
+      if not rok then
+        log.warn("refreshing the managed KB files in " .. root .. " failed: " .. tostring(rep))
+      elseif #rep.updated > 0 then
+        log.info("updated " .. table.concat(rep.updated, ", ") .. " in " .. root .. " to this AutoDoc's copy")
+      end
+    end
+  end
+end
+
+---remember keeps a workspace.list answer for the save hook and the views, and says so. Each listed KB's
+---managed files are brought up to date on the way (refresh_kbs).
 ---@param list table[]
 function M.remember_workspaces(list)
+  M.refresh_kbs(list)
   _workspaces = {}
   local names = {}
   for _, w in ipairs(list or {}) do
@@ -248,6 +272,7 @@ M._on_lost_for_tests = function(reason, lost) on_lost(reason, lost) end
 function M.reset_for_tests()
   if _client then pcall(function() _client:close() end) end
   _client, _epoch, _waiting, _workspaces, _selected, _mismatch = nil, 0, nil, nil, nil, nil
+  _kb_refreshed = {}
 end
 
 return M
