@@ -394,6 +394,26 @@ const (
 	NameDocPath   DocNameField = "doc_path" // joined
 )
 
+// LinkKey is one of the names a relation link is looked up under, tried in Ord order: a
+// frontmatter relation may name its target as a path from the workspace root and from its own
+// folder, and resolves to the first that exists.
+type LinkKey struct {
+	WorkspaceID int64
+	LinkID      int64
+	Ord         int64
+	Key         string
+}
+
+// LinkKeyField names a link_key column.
+type LinkKeyField string
+
+const (
+	LinkKeyWorkspace LinkKeyField = wsCol
+	LinkKeyLink      LinkKeyField = "link_id"
+	LinkKeyOrd       LinkKeyField = "ord"
+	LinkKeyKey       LinkKeyField = "key"
+)
+
 // Link is one link from a document.
 type Link struct {
 	ID, WorkspaceID, SrcDoc int64
@@ -566,6 +586,7 @@ type tables struct {
 	tags        *dao.Schema[*DocValue, DocValueField, noSort, int64]
 	aliases     *dao.Schema[*DocValue, DocValueField, noSort, int64]
 	names       *dao.Schema[*DocName, DocNameField, noSort, int64]
+	linkKeys    *dao.Schema[*LinkKey, LinkKeyField, noSort, int64]
 	facets      *dao.Schema[*Facet, FacetField, noSort, int64]
 	diagnostics *dao.Schema[*Diagnostic, DiagnosticField, DiagnosticSort, int64]
 	linksOut    *dao.Schema[*Link, LinkField, LinkSort, int64] // joined to the target
@@ -794,6 +815,14 @@ func newTables(c dao.DataConn) *tables {
 			}),
 			dao.OptionalJoinExpr[*DocName, DocNameField, noSort, int64](JoinDocument,
 				innerJoin("document", "id", "doc_name", "doc_id"))),
+		linkKeys: dao.New[*LinkKey, LinkKeyField, noSort, int64](c,
+			dao.Table[*LinkKey, LinkKeyField, noSort, int64]("link_key"),
+			dao.Fields[*LinkKey, LinkKeyField, noSort, int64](map[LinkKeyField]dao.Field[*LinkKey]{
+				LinkKeyWorkspace: col("link_key", LinkKeyWorkspace, func(k *LinkKey) any { return &k.WorkspaceID }),
+				LinkKeyLink:      col("link_key", LinkKeyLink, func(k *LinkKey) any { return &k.LinkID }),
+				LinkKeyOrd:       col("link_key", LinkKeyOrd, func(k *LinkKey) any { return &k.Ord }),
+				LinkKeyKey:       col("link_key", LinkKeyKey, func(k *LinkKey) any { return &k.Key }),
+			})),
 		facets: dao.New[*Facet, FacetField, noSort, int64](c,
 			dao.Table[*Facet, FacetField, noSort, int64]("doc_facet"),
 			dao.Fields[*Facet, FacetField, noSort, int64](map[FacetField]dao.Field[*Facet]{

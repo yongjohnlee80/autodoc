@@ -80,6 +80,11 @@ func (sc *Scope) Aliases(tx *Tx) dao.DAO[*DocValue, DocValueField, int64] {
 func (sc *Scope) Names(tx *Tx) dao.DAO[*DocName, DocNameField, int64] {
 	return scoped(sc, tx.t.names, tx)
 }
+
+// LinkKeys is the names relation links are looked up under.
+func (sc *Scope) LinkKeys(tx *Tx) dao.DAO[*LinkKey, LinkKeyField, int64] {
+	return scoped(sc, tx.t.linkKeys, tx)
+}
 func (sc *Scope) Facets(tx *Tx) dao.DAO[*Facet, FacetField, int64] {
 	return scoped(sc, tx.t.facets, tx)
 }
@@ -139,7 +144,10 @@ func (sc *Scope) AliasBatch(tx *Tx) Batch[*DocValue, DocValueField] {
 	return batch(sc, tx.t.aliases, tx)
 }
 func (sc *Scope) NameBatch(tx *Tx) Batch[*DocName, DocNameField] { return batch(sc, tx.t.names, tx) }
-func (sc *Scope) FacetBatch(tx *Tx) Batch[*Facet, FacetField]    { return batch(sc, tx.t.facets, tx) }
+func (sc *Scope) LinkKeyBatch(tx *Tx) Batch[*LinkKey, LinkKeyField] {
+	return batch(sc, tx.t.linkKeys, tx)
+}
+func (sc *Scope) FacetBatch(tx *Tx) Batch[*Facet, FacetField] { return batch(sc, tx.t.facets, tx) }
 func (sc *Scope) DiagnosticBatch(tx *Tx) Batch[*Diagnostic, DiagnosticField] {
 	return batch(sc, tx.t.diagnostics, tx)
 }

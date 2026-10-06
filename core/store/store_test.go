@@ -238,7 +238,7 @@ func accessors(sc *Scope, tx *Tx) map[string]dao.Named {
 		"workspace_pattern": sc.Patterns(tx), "document": sc.Documents(tx), "chunk": sc.Chunks(tx),
 		"doc_tag": sc.Tags(tx), "doc_alias": sc.Aliases(tx), "doc_name": sc.Names(tx),
 		"doc_facet": sc.Facets(tx), "doc_diagnostic": sc.Diagnostics(tx),
-		"link": sc.LinksOut(tx), "model": sc.Models(tx), "embedding": sc.Embeddings(tx),
+		"link": sc.LinksOut(tx), "link_key": sc.LinkKeys(tx), "model": sc.Models(tx), "embedding": sc.Embeddings(tx),
 		"index_job": sc.Jobs(tx), "change": sc.Changes(tx), "workspace_connection": sc.Connections(tx),
 	}
 }
@@ -320,9 +320,13 @@ func seed(t *testing.T, s *Store, sc *Scope) {
 			DiagLine: int64(1), DiagRule: "required", DiagMessage: "type is required"}).Flush(); err != nil {
 			return fmt.Errorf("diagnostic: %w", err)
 		}
-		if _, err := sc.LinksOut(tx).Set(LinkSrc, doc).Set(LinkGenFrom, int64(1)).Set(LinkRaw, "[[x]]").
-			Set(LinkName, "x").Set(LinkKind, "wikilink").Insert(); err != nil {
+		link, err := sc.LinksOut(tx).Set(LinkSrc, doc).Set(LinkGenFrom, int64(1)).Set(LinkRaw, "[[x]]").
+			Set(LinkName, "x").Set(LinkKind, "wikilink").Insert()
+		if err != nil {
 			return fmt.Errorf("link: %w", err)
+		}
+		if err := sc.LinkKeyBatch(tx).Add(map[LinkKeyField]any{LinkKeyLink: link, LinkKeyOrd: int64(0), LinkKeyKey: "x"}).Flush(); err != nil {
+			return fmt.Errorf("link_key: %w", err)
 		}
 		if _, err := sc.Models(tx).Set(ModelFP, "m").Set(ModelActive, int64(1)).Insert(); err != nil {
 			return fmt.Errorf("model: %w", err)
