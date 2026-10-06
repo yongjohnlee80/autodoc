@@ -427,6 +427,13 @@ func (f faulty) RemoveProvider(ctx context.Context, name string) error {
 	return f.Store.RemoveProvider(ctx, name)
 }
 
+func (f faulty) RemoveProviderInUse(ctx context.Context, name string) ([]store.Retired, error) {
+	if f.removes.Load() {
+		return nil, errors.New("store: disk full")
+	}
+	return f.Store.RemoveProviderInUse(ctx, name)
+}
+
 // TestTheProviderVerbsChangeNothingWhenTheyFail: over the API, as a client asks, a use whose
 // choice is not written, an edit that does not set up, and a remove that fails each answer an
 // error, and embedding.providers still names the provider in use, its model as it was.
@@ -553,6 +560,86 @@ func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
 	}
 	if m.Replacing(ctx) != "" {
 		t.Error("still replacing after the cancel")
+	}
+	// the partial target is reclaimed (ADR 1791284787 §2.3, item 2): only embedder's model is left
+	kb := mustID(t, m, "kb")
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		got := modelsOf(t, db, kb)
+		if len(got) == 1 {
+			for fp := range got {
+				if embed.ModelName(fp) != "embedder" {
+					t.Fatalf("the model left after the cancel: %v", got)
+				}
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the cancelled target was not reclaimed: %v", got)
+		}
+	}
+}
+
+// TestRemovingTheProviderInUseReclaimsItsModel (ADR 1791284787 §2.3, item 4): removing the provider
+// in use turns semantic search off; another provider could still serve its model (b serves
+// embedder too), so the model stays active with its vectors. Removing b, the last provider of the
+// model, with none in use, reclaims its vectors and rows in every workspace.
+func TestRemovingTheProviderInUseReclaimsItsModel(t *testing.T) {
+	o := newOllama(t, "embedder")
+	e, m, db := embedding(t, o)
+	ctx := context.Background()
+	for _, name := range []string{"kb", "notes"} {
+		root := t.TempDir()
+		if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("# A\n\nalpha\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := m.Add(ctx, config.Workspace{Name: name, Root: root}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := e.Use(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	ids := []int64{mustID(t, m, "kb"), mustID(t, m, "notes")}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		filled := true
+		for _, id := range ids {
+			got := modelsOf(t, db, id)
+			if len(got) != 1 {
+				filled = false
+			}
+			for _, n := range got {
+				filled = filled && n > 0
+			}
+		}
+		if filled {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("embedder never filled both workspaces")
+		}
+	}
+	if err := e.RemoveProvider(ctx, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if e.current() != "" {
+		t.Errorf("in use after the removal: %q", e.current())
+	}
+	time.Sleep(100 * time.Millisecond) // a reclaim, were one queued, has had its turn
+	for _, id := range ids {
+		if got := modelsOf(t, db, id); len(got) != 1 {
+			t.Fatalf("b serves embedder too, yet workspace %d's model went: %v", id, got)
+		}
+	}
+	if err := e.RemoveProvider(ctx, "b"); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if len(modelsOf(t, db, ids[0])) == 0 && len(modelsOf(t, db, ids[1])) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the removed provider's model is still here: %v, %v", modelsOf(t, db, ids[0]), modelsOf(t, db, ids[1]))
+		}
 	}
 }
 

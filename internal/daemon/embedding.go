@@ -36,6 +36,7 @@ type providerStore interface {
 	AddProvider(ctx context.Context, sp store.ProviderSpec) (store.ProviderInfo, error)
 	UpdateProvider(ctx context.Context, name string, sp store.ProviderSpec) error
 	RemoveProvider(ctx context.Context, name string) error
+	RemoveProviderInUse(ctx context.Context, name string) ([]store.Retired, error)
 	ProviderWithKey(ctx context.Context, name string) (store.ProviderInfo, string, error)
 	RecordCalls(ctx context.Context, providerID int64, calls []store.CallRecord) error
 	ProviderUsage(ctx context.Context, name string, days int) ([]store.Usage, error)
@@ -434,16 +435,37 @@ func (e *Embedding) update(ctx context.Context, name string, sp store.ProviderSp
 
 // RemoveProvider deletes a provider, the preference naming none with it when it names this one;
 // only once it is gone does the one in use go out of use, so a remove that fails changes nothing.
+// Removing the provider in use also takes its model out of use in every workspace, in the same
+// transaction as the record, unless another provider could serve it; then semantic search goes
+// off, and the model's vectors are reclaimed in the background (ADR 1791284787 §2.3, item 4).
+//
+// With no provider in use at all (removed, or none chosen), a removal does the same: the model kept
+// active for another provider that could serve it is retired with the last such provider. While
+// another provider is in use its model is left: it may be the active one answering until a switch's
+// flip, which reclaims it.
 func (e *Embedding) RemoveProvider(ctx context.Context, name string) error {
 	e.switching.Lock()
 	defer e.switching.Unlock()
-	if err := e.db.RemoveProvider(ctx, name); err != nil {
+	cur := e.current()
+	if cur != "" && cur != name {
+		if err := e.db.RemoveProvider(ctx, name); err != nil {
+			return err
+		}
+		e.overridesChanged(name)
+		return nil
+	}
+	retired, err := e.db.RemoveProviderInUse(ctx, name)
+	if err != nil {
 		return err
 	}
-	if e.current() == name {
+	if cur == name {
 		e.swap("", nil)
 	}
 	e.overridesChanged(name)
+	if len(retired) > 0 && e.ws != nil {
+		// committed with the record: an interrupted reclaim is finished by the next start's sweep
+		go e.ws.ReclaimRetired(e.ws.ctx, retired)
+	}
 	return nil
 }
 
