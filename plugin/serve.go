@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"slices"
 	"sync"
 )
 
@@ -33,6 +34,28 @@ type Hider interface {
 	Hide()
 	Show()
 }
+
+// The optional interfaces of protocol 2 (ADR 1791268009). Serve probes the Handler for each; a
+// notification no interface takes is dropped. A plugin implements the ones its manifest declares.
+type (
+	// DocumentReader takes the feed ([feed] document = true): the open note, after each pause in
+	// editing. Only the latest waits for it: a newer document replaces one not yet handled.
+	DocumentReader interface{ Document(d Document) }
+	// Commander takes the manifest's [[commands]], by id.
+	Commander interface{ Command(id string) }
+	// Focuser is a non-modal card told it took the keys (true) or gave them back (false).
+	Focuser interface{ Focus(focused bool) }
+)
+
+// Base is a Handler that does nothing: a service plugin, which has no dialog, embeds it and adds
+// the optional interfaces it needs.
+type Base struct{}
+
+func (Base) Open(*Peer, Open) {}
+func (Base) Key(Key)          {}
+func (Base) Resize(int, int)  {}
+func (Base) Theme(Theme)      {}
+func (Base) Close()           {}
 
 // Peer is the host, as a plugin sends to it.
 type Peer struct {
@@ -98,11 +121,17 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 			if err != nil {
 				return err
 			}
-			if err := link.Notify(ctx, MethodReady, ReadyParams(Protocol)); err != nil {
+			// one in the range is answered with itself; another with the newest this SDK speaks,
+			// which the host refuses, and closes: nothing is opened
+			speaks := o.Protocol >= MinProtocol && o.Protocol <= Protocol
+			answer := Protocol
+			if speaks {
+				answer = o.Protocol
+			}
+			if err := link.Notify(ctx, MethodReady, ReadyParams(answer)); err != nil {
 				return err
 			}
-			// another protocol: the host refuses it, and closes; nothing is opened
-			if o.Protocol == Protocol && !opened {
+			if speaks && !opened {
 				opened = true
 				h.Open(peer, o)
 			}
@@ -126,6 +155,24 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 					hd.Show()
 				}
 			}
+		case MethodFocus:
+			if f, ok := h.(Focuser); ok && opened {
+				if focused, err := ReadFocus(n.params); err == nil {
+					f.Focus(focused)
+				}
+			}
+		case MethodDocument:
+			if r, ok := h.(DocumentReader); ok && opened {
+				if d, err := ReadDocument(n.params); err == nil {
+					r.Document(d)
+				}
+			}
+		case MethodCommand:
+			if c, ok := h.(Commander); ok && opened {
+				if id, err := ReadCommand(n.params); err == nil {
+					c.Command(id)
+				}
+			}
 		case MethodClose:
 			return nil
 		}
@@ -145,7 +192,10 @@ type note struct {
 }
 
 // queue is unbounded: the link's callback only appends, so a Handler slower than the keys it is sent
-// never fills the link's own bounded queue, whose overflow would end the link.
+// never fills the link's own bounded queue, whose overflow would end the link. A document is state,
+// not an event: one still waiting is dropped when a newer arrives, which takes the tail, so a slow
+// DocumentReader holds at most the copy it is handling and one waiting. Nothing else is dropped or
+// reordered.
 type queue struct {
 	mu    sync.Mutex
 	items []note
@@ -157,6 +207,9 @@ func newQueue() *queue { return &queue{wake: make(chan struct{}, 1)} }
 
 func (q *queue) push(method string, params []any) {
 	q.mu.Lock()
+	if method == MethodDocument {
+		q.items = slices.DeleteFunc(q.items, func(n note) bool { return n.method == MethodDocument })
+	}
 	q.items = append(q.items, note{method, params})
 	q.mu.Unlock()
 	q.signal()
