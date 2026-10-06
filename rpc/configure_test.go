@@ -171,6 +171,10 @@ func TestConfigureVerbs_OverTheWire(t *testing.T) {
 	if m.name != "kb" || !reflect.DeepEqual(m.got, store.Changes{SectionTokens: ptr(256), Destination: ptr("sqlite")}) {
 		t.Errorf("the manager got %q %+v", m.name, m.got)
 	}
+	call(t, cli, "workspace.configure", "kb", map[string]any{"abstract_chunk": true, "demote_superseded": false})
+	if !reflect.DeepEqual(m.got, store.Changes{AbstractChunk: ptr(true), DemoteSuperseded: ptr(false)}) {
+		t.Errorf("the retrieval settings reached the manager as %+v", m.got)
+	}
 
 	for _, tc := range []struct {
 		name string
@@ -191,10 +195,11 @@ func TestConfigureVerbs_OverTheWire(t *testing.T) {
 
 	m.err, m.name = nil, ""
 	for name, params := range map[string][]any{
-		"an unknown setting":  {"kb", map[string]any{"colour": "red"}},
-		"settings not a map":  {"kb", []any{"name"}},
-		"no settings":         {"kb"},
-		"a name not a string": {int64(1), map[string]any{}},
+		"an unknown setting":   {"kb", map[string]any{"colour": "red"}},
+		"settings not a map":   {"kb", []any{"name"}},
+		"no settings":          {"kb"},
+		"a name not a string":  {int64(1), map[string]any{}},
+		"a setting not a bool": {"kb", map[string]any{"abstract_chunk": "yes"}},
 	} {
 		if _, err := cli.Call(context.Background(), "workspace.configure", params...); code(err) != golibrpc.CodeInvalidParams {
 			t.Errorf("%s: %v, want InvalidParams", name, err)
@@ -273,6 +278,7 @@ func TestConfigureVerbs_LogAnEventForEachChange(t *testing.T) {
 	call(t, cli, "workspace.configure", "kb", map[string]any{
 		"name": "docs", "include": []any{"**/*.md"}, "exclude": []any{}, "embedding_policy": "never", "section_tokens": 256,
 		"destination": "postgres", "destination_connection": map[string]any{"engine": "postgres", "dsn": "postgres://me:hunter2@db/rag"},
+		"demote_superseded": true,
 	})
 	var got []string
 	for _, e := range ev.all() {
@@ -285,7 +291,7 @@ func TestConfigureVerbs_LogAnEventForEachChange(t *testing.T) {
 		}
 	}
 	want := []string{"workspace.renamed kb docs", "workspace.patterns docs ", "workspace.section_size docs ",
-		"workspace.embedding_policy docs never", "workspace.databases docs "}
+		"workspace.embedding_policy docs never", "workspace.databases docs ", "workspace.retrieval docs "}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("events\n got %q\nwant %q", got, want)
 	}
