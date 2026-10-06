@@ -552,8 +552,12 @@ func (s *Server) register() {
 	}, true))
 
 	links := func(backlinks bool) golibrpc.Handler {
-		return s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+		return s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 			path, err := argStr(p, 1, "path")
+			if err != nil {
+				return nil, err
+			}
+			kinds, err := graphKinds(ctx, p, 2)
 			if err != nil {
 				return nil, err
 			}
@@ -561,7 +565,7 @@ func (s *Server) register() {
 			if backlinks {
 				read = w.Index.Store().Backlinks
 			}
-			ls, err := read(ctx, path)
+			ls, err := read(ctx, path, kinds)
 			if err != nil {
 				return nil, err
 			}
@@ -574,7 +578,7 @@ func (s *Server) register() {
 	}
 	s.handle("graph.links", links(false))
 	s.handle("graph.backlinks", links(true))
-	s.handle("graph.neighborhood", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+	s.handle("graph.neighborhood", s.verb(3, 4, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		path, err := argStr(p, 1, "path")
 		if err != nil {
 			return nil, err
@@ -583,7 +587,11 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
-		nb, err := w.Index.Store().Neighborhood(ctx, path, int(depth))
+		kinds, err := graphKinds(ctx, p, 3)
+		if err != nil {
+			return nil, err
+		}
+		nb, err := w.Index.Store().Neighborhood(ctx, path, int(depth), kinds)
 		if err != nil {
 			return nil, err
 		}
@@ -593,8 +601,12 @@ func (s *Server) register() {
 		}
 		return map[string]any{"nodes": strs(nb.Nodes), "edges": edges}, nil
 	}, true))
-	s.handle("graph.unresolved", s.verb(1, 1, func(ctx context.Context, w *Workspace, _ []any) (any, error) {
-		us, err := w.Index.Store().Unresolved(ctx)
+	s.handle("graph.unresolved", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+		kinds, err := graphKinds(ctx, p, 1)
+		if err != nil {
+			return nil, err
+		}
+		us, err := w.Index.Store().Unresolved(ctx, kinds)
 		if err != nil {
 			return nil, err
 		}
@@ -743,7 +755,7 @@ func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (an
 				return nil, wireErr(err)
 			}
 		}
-		out, err := h(ctx, w, req.Params)
+		out, err := h(withProtocol(ctx, sessionProtocol(req.Session)), w, req.Params)
 		return out, wireErr(err)
 	}
 }

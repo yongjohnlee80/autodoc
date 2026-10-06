@@ -117,11 +117,18 @@ func (v *View) SemanticState(ctx context.Context) (search.State, error) {
 	return search.StateReady, nil
 }
 
-// Signals are each document's in-links (the documents linking to it, itself not counted) and tags.
+// Signals are each document's in-links (the documents linking to it from their bodies, itself not
+// counted) and tags. A frontmatter relation is not an in-link: whether relations should lift a
+// document is a ranking change of its own, to be measured, so they leave the boost as it was.
 func (v *View) Signals(ctx context.Context, docs []int64) (map[int64]search.Signals, error) {
 	out := make(map[int64]search.Signals, len(docs))
+	body := make([]any, len(BodyKinds))
+	for i, k := range BodyKinds {
+		body[i] = k
+	}
 	for _, id := range docs {
-		inLinks, err := dao.CountDistinct(v.s.sc.LinksOut(v.tx).With(store.LinkDst, id).Excluding(store.LinkSrc, id), store.LinkSrc)
+		inLinks, err := dao.CountDistinct(v.s.sc.LinksOut(v.tx).With(store.LinkDst, id).Excluding(store.LinkSrc, id).
+			WithPredicate(dao.In(`"link"."kind"`, body)), store.LinkSrc)
 		if err != nil {
 			return nil, err
 		}

@@ -159,6 +159,7 @@ type prepared struct {
 	chunks      []chunkT
 	links       []linkT
 	frontmatter schema.Result // a Markdown file's facets and diagnostics under the schema
+	adr         string        // the decision record number a document of type adr carries; "" otherwise
 }
 
 // NewIndexer returns the indexer for store over the workspace root fsys.
@@ -585,7 +586,8 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		doc := markdown.Parse(src, markdown.GFM(), markdown.Obsidian())
 		p.meta = chunk.ReadMeta(doc, w.path)
 		p.chunks = hashed(chunk.Markdown(doc, p.meta.Title, tokens))
-		p.links = extractLinks(doc, w.path, x.opts.Match)
+		p.links = append(extractLinks(doc, w.path, x.opts.Match), extractRelations(doc, w.path)...)
+		p.adr = adrNumber(p.meta.FrontmatterJSON)
 		// the frontmatter is validated from the parse the file already had (ADR 0212 §5)
 		if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
 			p.frontmatter = sch.Validate(fm.Literal, true)
@@ -903,7 +905,11 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 	}
 	// the names, the file's own links, then the links elsewhere whose target may have changed: those
 	// under every name the file gained or lost, and, when it appeared, under its path
-	changed, err := s.writeNames(tx, docID, namesOf(p.path, p.meta.Aliases))
+	names := namesOf(p.path, p.meta.Aliases)
+	if p.adr != "" {
+		names = append(names, docName{key: adrKey(p.adr)})
+	}
+	changed, err := s.writeNames(tx, docID, names)
 	if err != nil {
 		return 0, err
 	}
