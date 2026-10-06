@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -48,7 +49,19 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	return s, nil
 }
 
+// tempBeside makes SQLite's temporary files (a VACUUM's copy among them) go beside the store, never
+// to the system's temp directory, which may be memory (tmpfs). SQLite's unix VFS reads
+// SQLITE_TMPDIR; the driver's C library takes its copy of the environment at the process's first
+// connection, so it is set before any, and is never changed under a running connection (the
+// deprecated temp_store_directory pragma would, process-wide). A value the user set is kept.
+func tempBeside(path string) {
+	if os.Getenv("SQLITE_TMPDIR") == "" {
+		_ = os.Setenv("SQLITE_TMPDIR", filepath.Dir(path))
+	}
+}
+
 func open(ctx context.Context, path string) (*Store, error) {
+	tempBeside(path)
 	// journal_size_limit: a checkpoint truncates the write-ahead log back to 64 MiB, so the room a
 	// large write (a compaction, a reclaim) took in it is given back, not kept at its high-water mark
 	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_size_limit(67108864)"

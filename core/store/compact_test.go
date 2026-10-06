@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -118,24 +119,20 @@ func TestCompactRefusesWithoutRoom(t *testing.T) {
 	}
 }
 
-// TestCompactKeepsTempFilesBesideTheStore: the temporary files of VACUUM go to the store's own
-// directory, which the driver confirms.
-func TestCompactKeepsTempFilesBesideTheStore(t *testing.T) {
-	ctx := context.Background()
-	s := filled(t, 10)
-	if _, err := s.Compact(ctx); err != nil {
-		t.Fatal(err)
+// TestTheStoresTempFilesGoBesideIt: SQLite's temporary files (a VACUUM's copy) are placed by
+// SQLITE_TMPDIR, set to the store's directory when the user set none, before any connection opens
+// (the driver takes the environment at the process's first): nothing is changed under a running
+// connection. A value the user set is kept.
+func TestTheStoresTempFilesGoBesideIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	t.Setenv("SQLITE_TMPDIR", "")
+	tempBeside(path)
+	if got := os.Getenv("SQLITE_TMPDIR"); got != filepath.Dir(path) {
+		t.Errorf("SQLITE_TMPDIR = %q, want the store's directory %q", got, filepath.Dir(path))
 	}
-	rows, err := s.w.QueryContext(ctx, "PRAGMA temp_store_directory")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	var dir string
-	if rows.Next() {
-		_ = rows.Scan(&dir)
-	}
-	if dir != filepath.Dir(s.path) {
-		t.Errorf("temp_store_directory = %q, want the store's %q", dir, filepath.Dir(s.path))
+	t.Setenv("SQLITE_TMPDIR", "/the/users/choice")
+	tempBeside(path)
+	if got := os.Getenv("SQLITE_TMPDIR"); got != "/the/users/choice" {
+		t.Errorf("a SQLITE_TMPDIR the user set became %q", got)
 	}
 }
