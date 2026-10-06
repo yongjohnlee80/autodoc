@@ -1,6 +1,7 @@
 -- setup's user commands and keys: :AutodocDrawer toggles the drawer in autodoc's own panel,
--- :AutodocSearch opens the picker, :AutodocSelect chooses the KB to search; <leader>fk is mapped
--- only when opts.keys is true; the preview is set up with them, its keys following opts.keys.
+-- :AutodocSearch opens the picker, :AutodocSelect chooses the KB to search; the <leader>m group
+-- (and <leader>fk) is mapped only when opts.keys is true; the preview is set up with them, its keys
+-- following opts.keys.
 local t = require("helpers")
 
 local bin = assert(os.getenv("AUTODOC_TEST_BIN"), "AUTODOC_TEST_BIN")
@@ -24,7 +25,8 @@ local host = require("autodoc.views.host")
 
 t.section("setup without keys", function()
   autodoc.setup({ bin = bin, config = cfg })
-  for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect", "AutodocKbMigrate" }) do
+  for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect", "AutodocKbMigrate", "AutodocFiles",
+    "AutodocRecent", "AutodocBacklinks", "AutodocMaintenance" }) do
     t.ok(vim.fn.exists(":" .. c) == 2, ":" .. c .. " exists")
   end
   t.eq(package.loaded["autodoc.kb.migrate"], nil, "the migration's module is not loaded by setup")
@@ -32,12 +34,14 @@ t.section("setup without keys", function()
   t.eq(vim.fn.maparg("<leader>fk", "n"), "", "no <leader>fk unless opts.keys")
   t.ok(vim.fn.exists(":AutodocPreviewFind") == 2,
     "the preview's commands are set up too")
-  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "and its keys are not mapped")
+  t.eq(vim.fn.maparg("<leader>mp", "n"), "", "and its keys are not mapped")
+  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "nor the KB group's")
+  t.eq(vim.fn.getcompletion("AutodocMaintenance re", "cmdline"), { "restart" }, ":AutodocMaintenance completes its actions")
 end)
 
 t.section("setup with the preview off", function()
   autodoc.setup({ bin = bin, config = cfg, keys = true, preview = false })
-  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "preview = false maps none of its keys")
+  t.eq(vim.fn.maparg("<leader>mp", "n"), "", "preview = false maps none of its keys")
   t.ok(vim.fn.exists(":AutodocPreviewFind") ~= 2,
     "and takes its commands down")
   t.ok(vim.fn.maparg("<leader>fk", "n") ~= "", "while the rest of setup stands")
@@ -45,15 +49,29 @@ end)
 
 t.section("setup with the preview's own keys", function()
   autodoc.setup({ bin = bin, config = cfg, keys = true, preview = { keys = false } })
-  t.eq(vim.fn.maparg("<leader>mf", "n"), "", "preview.keys = false wins over opts.keys")
+  t.eq(vim.fn.maparg("<leader>mp", "n"), "", "preview.keys = false wins over opts.keys")
 end)
 
 t.section("setup with keys", function()
   autodoc.setup({ bin = bin, config = cfg, keys = true })
-  local m = vim.fn.maparg("<leader>fk", "n", false, true)
-  t.ok(m.desc == "autodoc: search the selected KB", "<leader>fk searches the selected KB", vim.inspect(m))
-  local pm = vim.fn.maparg("<leader>mf", "n", false, true)
-  t.ok(pm.desc ~= nil and pm.desc:find("autodoc preview", 1, true) ~= nil, "and the preview's keys follow opts.keys", vim.inspect(pm))
+  local want = {
+    ["<leader>mf"] = "autodoc: search the selected KB",
+    ["<leader>fk"] = "autodoc: search the selected KB",
+    ["<leader>mF"] = "autodoc: find a KB document by name",
+    ["<leader>mr"] = "autodoc: recent KB files",
+    ["<leader>ml"] = "autodoc: what links to this file",
+    ["<leader>mk"] = "autodoc: the kb drawer",
+    ["<leader>mw"] = "autodoc: choose the KB to search",
+    ["<leader>mX"] = "autodoc: maintenance",
+  }
+  for lhs, desc in pairs(want) do
+    local m = vim.fn.maparg(lhs, "n", false, true)
+    t.eq(m.desc, desc, lhs .. " is the KB group's")
+  end
+  local pm = vim.fn.maparg("<leader>mp", "n", false, true)
+  t.ok(pm.desc ~= nil and pm.desc:find("autodoc preview", 1, true) ~= nil, "the preview's find is <leader>mp, following opts.keys", vim.inspect(pm))
+  local slot = vim.fn.maparg("<leader>m1", "n", false, true)
+  t.ok(slot.desc ~= nil and slot.desc:find("autodoc preview", 1, true) ~= nil, "and its slots stay on <leader>m1…", vim.inspect(slot))
 end)
 
 t.section(":AutodocSelect", function()

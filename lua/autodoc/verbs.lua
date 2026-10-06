@@ -63,7 +63,7 @@ M.SPECS = {
     description = "search.query on a workspace (default: the selected KB, else the project's primary). Args: {query, workspace?, opts?}.",
     schema = { query = "string", workspace = "string?", opts = "table?" },
     handler = function(args)
-      local ws = args.workspace or session.selected()
+      local ws = args.workspace or await(function(done) session.resolve_selected(done) end)
       if not ws then return fail("no KB selected, and this project has no primary KB") end
       local params = { ws, args.query }
       if type(args.opts) == "table" and next(args.opts) ~= nil then params[3] = args.opts end

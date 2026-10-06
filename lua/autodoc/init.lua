@@ -8,15 +8,25 @@
 ---    config = nil,  -- autodoc's config.toml; default: the binary's own default
 ---    keys = false,  -- true maps the default keys below, and the preview's
 ---    preview = {},  -- the preview's options (autodoc.preview.config); false leaves it off
+---    offer_restart = true, -- offer to restart a daemon older than this plugin (once per daemon)
 ---  })
 ---
 ---Commands: `:AutodocDrawer` (toggle the kb drawer), `:AutodocSearch [query]` (search the
----selected KB), `:AutodocSelect [workspace]` (choose the KB to search), `:AutodocKbMigrate`
----(move a KB to the v2 layout: a dry run, then --apply / --undo / --forget; autodoc.kb.migrate).
+---selected KB), `:AutodocFiles` (a document by name), `:AutodocRecent` (the files opened last,
+---shared with the TUI), `:AutodocBacklinks` (what links to this file), `:AutodocSelect
+---[workspace]` (choose the KB to search), `:AutodocMaintenance [restart|install|versions]`, and
+---`:AutodocKbMigrate` (move a KB to the v2 layout: a dry run, then --apply / --undo / --forget).
 ---
----Default keys (opts.keys = true):
----  <leader>fk   search the selected KB (:AutodocSearch)
----  <leader>m*   the preview's (autodoc.preview.commands), unless opts.preview.keys says otherwise
+---Default keys (opts.keys = true), the knowledge base's `<leader>m` group:
+---  <leader>mf   search the selected KB: lexical + semantic + rerank (:AutodocSearch)
+---  <leader>mF   find a document of the selected KB by name (:AutodocFiles)
+---  <leader>mr   recent files, newest first, across KBs (:AutodocRecent)
+---  <leader>ml   the documents linking to this file (:AutodocBacklinks)
+---  <leader>mk   the kb drawer (:AutodocDrawer)
+---  <leader>mw   choose the KB to search (:AutodocSelect)
+---  <leader>mX   maintenance: restart the daemon, install the binary, versions
+---  <leader>fk   search, as <leader>mf
+---  and the preview's <leader>m* (autodoc.preview.commands), unless opts.preview.keys says otherwise
 ---@module 'autodoc'
 
 local M = {}
@@ -27,8 +37,22 @@ local _augroup = nil
 ---options is what setup was given.
 function M.options() return _options end
 
+local function search() require("autodoc.picker").open() end
+local function toggle_drawer()
+  require("autodoc.views.host").toggle(function(ok, v)
+    if not ok then vim.notify("autodoc: " .. tostring(v and v.message), vim.log.levels.WARN, { title = "autodoc" }) end
+  end)
+end
+
 M.KEYS = {
-  { "<leader>fk", function() require("autodoc.picker").open() end, "autodoc: search the selected KB" },
+  { "<leader>mf", search, "autodoc: search the selected KB" },
+  { "<leader>mF", function() require("autodoc.finders").files() end, "autodoc: find a KB document by name" },
+  { "<leader>mr", function() require("autodoc.finders").recent() end, "autodoc: recent KB files" },
+  { "<leader>ml", function() require("autodoc.finders").backlinks() end, "autodoc: what links to this file" },
+  { "<leader>mk", toggle_drawer, "autodoc: the kb drawer" },
+  { "<leader>mw", function() vim.cmd("AutodocSelect") end, "autodoc: choose the KB to search" },
+  { "<leader>mX", function() require("autodoc.maintenance").run() end, "autodoc: maintenance" },
+  { "<leader>fk", search, "autodoc: search the selected KB" },
 }
 
 ---setup_preview sets the preview up with opts.preview, its keys following opts.keys unless it
@@ -57,14 +81,24 @@ local function select_command(name)
 end
 
 local function create_commands()
-  vim.api.nvim_create_user_command("AutodocDrawer", function()
-    require("autodoc.views.host").toggle(function(ok, v)
-      if not ok then vim.notify("autodoc: " .. tostring(v and v.message), vim.log.levels.WARN, { title = "autodoc" }) end
-    end)
-  end, { desc = "autodoc: toggle the kb drawer" })
+  vim.api.nvim_create_user_command("AutodocDrawer", toggle_drawer, { desc = "autodoc: toggle the kb drawer" })
   vim.api.nvim_create_user_command("AutodocSearch", function(c)
     require("autodoc.picker").open({ query = c.args ~= "" and c.args or nil })
   end, { nargs = "*", desc = "autodoc: search the selected KB" })
+  local function finders() return require("autodoc.finders") end
+  vim.api.nvim_create_user_command("AutodocFiles", function() finders().files() end,
+    { desc = "autodoc: find a document of the selected KB by name" })
+  vim.api.nvim_create_user_command("AutodocRecent", function() finders().recent() end,
+    { desc = "autodoc: the KB files opened last, shared with the TUI" })
+  vim.api.nvim_create_user_command("AutodocBacklinks", function() finders().backlinks() end,
+    { desc = "autodoc: the documents linking to this file" })
+  vim.api.nvim_create_user_command("AutodocMaintenance", function(c) require("autodoc.maintenance").run(c.args) end, {
+    nargs = "?",
+    complete = function(lead)
+      return vim.tbl_filter(function(a) return vim.startswith(a, lead) end, require("autodoc.maintenance").ACTIONS)
+    end,
+    desc = "autodoc: restart the daemon, install the binary again, or show the versions",
+  })
   -- the migration's module is loaded when it runs, not at setup
   local function migrate() return require("autodoc.kb.migrate") end
   vim.api.nvim_create_user_command("AutodocKbMigrate", function(c) migrate().command(c.fargs) end, {
@@ -86,7 +120,7 @@ local function create_commands()
 end
 
 function M.setup(opts)
-  _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false, preview = {} }, opts or {})
+  _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false, preview = {}, offer_restart = true }, opts or {})
   local session = require("autodoc.session")
   session.configure(_options)
   require("autodoc.verbs").register()
@@ -102,6 +136,13 @@ function M.setup(opts)
     desc = "autodoc: index a saved KB file at once",
     callback = function(ev)
       if ev.file and ev.file ~= "" then session.on_write(vim.fn.fnamemodify(ev.file, ":p")) end
+    end,
+  })
+  vim.api.nvim_create_autocmd("BufReadPost", {
+    group = _augroup,
+    desc = "autodoc: a KB file opened is first among the recent files (shared with the TUI)",
+    callback = function(ev)
+      if ev.file and ev.file ~= "" then require("autodoc.finders").on_open(vim.fn.fnamemodify(ev.file, ":p")) end
     end,
   })
 end
