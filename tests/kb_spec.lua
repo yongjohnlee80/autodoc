@@ -246,26 +246,33 @@ do
   write(d4, "KB_OPERATIONS.md", "# hand written\n")
   scaffold.scaffold(d4, { autodoc_version = "0.2.0" })
   ok("S15: a managed file with no readable version is kept", read(d4, "KB_OPERATIONS.md") == "# hand written\n")
-  -- refresh_managed: an existing KB takes newer managed files and nothing else
-  local d6 = tmp .. "/refresh"
-  scaffold.scaffold(d6, { autodoc_version = "0.1.15", date = "2026-10-06" })
-  vim.fn.delete(d6 .. "/notes", "rf")
-  vim.fn.delete(d6 .. "/GEMINI.md")
-  write(d6, "AGENTS.md", "# this KB's own\n")
-  local old_ops = read(d6, "KB_OPERATIONS.md")
-  local r6 = scaffold.refresh_managed(d6, { autodoc_version = "0.1.18", date = "2026-10-06" })
-  ok("S16: refresh_managed replaces older managed files", #r6.updated == 2 and read(d6, "KB_OPERATIONS.md") ~= old_ops
-    and scaffold.declared_version(read(d6, "KB_OPERATIONS.md")) == "0.1.18", vim.inspect(r6.updated))
-  ok("S17: refresh_managed creates nothing (a removed folder and root file stay removed)",
-    not util.isdir(d6 .. "/notes") and not util.isfile(d6 .. "/GEMINI.md"))
-  ok("S18: refresh_managed never touches an unmanaged file", read(d6, "AGENTS.md") == "# this KB's own\n")
-  local r7 = scaffold.refresh_managed(d6, { autodoc_version = "0.1.18" })
-  ok("S19: refresh_managed keeps same-version managed files", #r7.updated == 0 and #r7.kept == 2, vim.inspect(r7))
-  local d8 = tmp .. "/refresh-missing"
-  util.mkdirp(d8)
-  write(d8, "AGENTS.md", "# kb\n")
-  local r8 = scaffold.refresh_managed(d8, { autodoc_version = "0.1.18" })
-  ok("S20: refresh_managed leaves a missing managed file missing", #r8.updated == 0 and not util.isfile(d8 .. "/KB_OPERATIONS.md"))
+  -- the managed documents AutoDoc hands auto-core (autodoc.kb.managed)
+  local managed = require("autodoc.kb.managed")
+  local mf = managed.files({ autodoc_version = "0.1.18", date = "2026-10-06" })
+  local rels = vim.tbl_map(function(f) return f.rel end, mf)
+  table.sort(rels)
+  ok("S16: the managed documents are KB_OPERATIONS.md and the schema", vim.deep_equal(rels, { "KB_OPERATIONS.md", "_schema/frontmatter.yaml" }), vim.inspect(rels))
+  local declared = true
+  for _, f in ipairs(mf) do
+    if f.version ~= "0.1.18" or scaffold.declared_version(f.text) ~= "0.1.18" then declared = false end
+  end
+  ok("S17: each declares the version it is provided as (what auto-core reads back from a KB's copy)", declared)
+  local kbm = (function() local okk, k = pcall(require, "auto-core.kb"); return okk and type(k.sync_managed) == "function" and k or nil end)()
+  ok("S18: the test auto-core carries the managed-documents API (auto-core v0.3.1+)", kbm ~= nil)
+  if kbm then
+    kbm._reset_for_tests()
+    local pok, perr = managed.provide({ autodoc_version = "0.1.18", date = "2026-10-06" })
+    ok("S19: provide hands them to auto-core", pok and kbm.managed()["KB_OPERATIONS.md"].version == "0.1.18", tostring(perr))
+    local d6 = tmp .. "/sync"
+    scaffold.scaffold(d6, { autodoc_version = "0.1.15", date = "2026-10-06" })
+    write(d6, "AGENTS.md", "# this KB's own\n")
+    vim.fn.delete(d6 .. "/notes", "rf")
+    local sok, _, rep = managed.sync(d6)
+    ok("S20: sync brings an older KB up to the provided copies, through auto-core",
+      sok and #rep.updated == 2 and scaffold.declared_version(read(d6, "KB_OPERATIONS.md")) == "0.1.18", vim.inspect(rep))
+    ok("S21: and touches nothing else", read(d6, "AGENTS.md") == "# this KB's own\n" and not util.isdir(d6 .. "/notes"))
+    kbm._reset_for_tests()
+  end
   -- raw/ is the user's: no ABOUT.md written into an existing non-empty raw/
   local d5 = tmp .. "/rawkb"
   write(d5, "raw/x.txt", "x")

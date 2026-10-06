@@ -127,33 +127,4 @@ function M.scaffold(root, opts)
   return report
 end
 
----refresh_managed brings an existing KB's managed files (KB_OPERATIONS.md, _schema/frontmatter.yaml) up
----to this build's AutoDoc version, by the scaffold's rule: replaced only when the KB's copy declares an
----older autodoc_version, kept when it is the same, newer, or unreadable. Unlike scaffold(), it creates
----nothing: a KB that removed a folder or a root file keeps it removed. A missing managed file stays
----missing too (that KB chose not to have it).
----@param root string
----@param opts? {autodoc_version: string?, date: string?}
----@return {updated: string[], kept: string[], reasons: table<string, string>}
-function M.refresh_managed(root, opts)
-  opts = opts or {}
-  root = util.normpath(root)
-  local vars = { autodoc_version = opts.autodoc_version or version.autodoc, date = opts.date or os.date("%Y-%m-%d") }
-  local report = { updated = {}, kept = {}, reasons = {} }
-  for _, f in ipairs(M.files(vars)) do
-    local path = root .. "/" .. f.rel
-    if f.managed and util.isfile(path) then
-      local cmp = util.semver_cmp(M.declared_version(util.read_file(path)), vars.autodoc_version)
-      if cmp == -1 then
-        util.write_file(path, f.text)
-        report.updated[#report.updated + 1] = f.rel
-      else
-        report.kept[#report.kept + 1] = f.rel
-        report.reasons[f.rel] = cmp == nil and "no readable autodoc_version: kept" or "same or newer autodoc_version"
-      end
-    end
-  end
-  return report
-end
-
 return M

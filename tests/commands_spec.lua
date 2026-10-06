@@ -24,7 +24,12 @@ local session = require("autodoc.session")
 local host = require("autodoc.views.host")
 
 t.section("setup without keys", function()
+  local kbm = package.loaded["auto-core.kb"] or select(2, pcall(require, "auto-core.kb"))
+  if type(kbm) == "table" and kbm._reset_for_tests then kbm._reset_for_tests() end
   autodoc.setup({ bin = bin, config = cfg })
+  local provided = type(kbm) == "table" and kbm.managed and kbm.managed() or {}
+  t.ok(provided["KB_OPERATIONS.md"] and provided["KB_OPERATIONS.md"].version == require("autodoc.kb.version").autodoc,
+    "setup hands this build's managed KB documents to auto-core", vim.inspect(vim.tbl_keys(provided)))
   for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect", "AutodocKbMigrate", "AutodocFiles",
     "AutodocRecent", "AutodocBacklinks", "AutodocMaintenance" }) do
     t.ok(vim.fn.exists(":" .. c) == 2, ":" .. c .. " exists")

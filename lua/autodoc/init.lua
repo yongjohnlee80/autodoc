@@ -124,6 +124,12 @@ function M.setup(opts)
   local session = require("autodoc.session")
   session.configure(_options)
   require("autodoc.verbs").register()
+  -- this build's managed KB documents go to auto-core on every load; it keeps the newest and brings
+  -- KBs up to them (the session for listed KBs, auto-agents for the primary before each spawn)
+  local pok, ok, err = pcall(require("autodoc.kb.managed").provide)
+  if not pok or not ok then
+    require("autodoc.log").warn("providing the managed KB documents to auto-core failed: " .. tostring(pok and err or ok))
+  end
   require("autodoc.views.panel").setup()
   create_commands()
   setup_preview(_options)

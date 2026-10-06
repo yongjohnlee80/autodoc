@@ -160,21 +160,20 @@ function M.request(method, params, cb)
   end)
 end
 
----refresh_kbs brings each listed KB's managed files (KB_OPERATIONS.md, the schema) up to this build's
----AutoDoc, once per root per session (ADR 1791209946 §3.1: replaced only when the KB's copy is older).
----A workspace is a KB when its root has AGENTS.md; nothing else in it is written.
+---refresh_kbs asks auto-core to bring each listed KB's managed files (KB_OPERATIONS.md, the schema) up
+---to the newest copies AutoDoc provided, once per root per session (auto-core.kb.sync_managed: replaced
+---only when the KB's copy is older, nothing created). A workspace is a KB when its root has AGENTS.md.
 ---@param list table[]
 function M.refresh_kbs(list)
-  local ok, scaffold = pcall(require, "autodoc.kb.scaffold")
-  if not ok or type(scaffold) ~= "table" or type(scaffold.refresh_managed) ~= "function" then return end
+  local managed = require("autodoc.kb.managed")
   for _, w in ipairs(list or {}) do
     local root = w.root
     if type(root) == "string" and not _kb_refreshed[root] and vim.fn.filereadable(root .. "/AGENTS.md") == 1 then
       _kb_refreshed[root] = true
-      local rok, rep = pcall(scaffold.refresh_managed, root)
-      if not rok then
-        log.warn("refreshing the managed KB files in " .. root .. " failed: " .. tostring(rep))
-      elseif #rep.updated > 0 then
+      local rok, ok, err, rep = pcall(managed.sync, root)
+      if not rok or not ok then
+        log.warn("syncing the managed KB files in " .. root .. " failed: " .. tostring(rok and err or ok))
+      elseif rep and #rep.updated > 0 then
         log.info("updated " .. table.concat(rep.updated, ", ") .. " in " .. root .. " to this AutoDoc's copy")
       end
     end
