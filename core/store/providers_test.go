@@ -365,6 +365,28 @@ func TestRemovingTheProviderInUseRetiresItsModel(t *testing.T) {
 		t.Fatalf("with another provider of the model: retired %v, %v, model %s", got, err, state(w1.ID, fp))
 	}
 
+	// the record's delete refused, and the preference's follow-up refused: nothing changes either way
+	for _, trigger := range []string{
+		"CREATE TRIGGER refuse BEFORE DELETE ON embedding_provider BEGIN SELECT RAISE(ABORT, 'injected'); END",
+		"CREATE TRIGGER refuse BEFORE UPDATE ON preference BEGIN SELECT RAISE(ABORT, 'injected'); END",
+	} {
+		if err := s.SetPreference(ctx, PrefProvider, "cloud"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.w.ExecContext(ctx, trigger); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.RemoveProviderInUse(ctx, "cloud"); err == nil {
+			t.Errorf("under %q the removal reported no failure", trigger)
+		}
+		if _, _, err := s.ProviderWithKey(ctx, "cloud"); err != nil || state(w1.ID, fp) != "active=1 target=1" {
+			t.Errorf("under %q: provider %v, model %s", trigger, err, state(w1.ID, fp))
+		}
+		if _, err := s.w.ExecContext(ctx, "DROP TRIGGER refuse"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 	if _, err := s.RemoveProviderInUse(ctx, "nowhere"); !errors.Is(err, ErrNoProvider) {
 		t.Errorf("removing a provider that is not there: %v, want ErrNoProvider", err)
 	}
