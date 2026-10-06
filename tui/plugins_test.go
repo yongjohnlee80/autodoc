@@ -1202,6 +1202,11 @@ func TestTheDocumentFeed(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	installPlugin2(t, dir, "quiet", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 30\nheight = 4\nplacements = [\"bottom-left\"]\n")
+	// a pause longer than a slow (-race) runner takes between two keys of one burst, so the burst is
+	// one document whatever the runner; the debounce is the same code at any length
+	delay := pluginFeedDelay
+	pluginFeedDelay = time.Second
+	t.Cleanup(func() { pluginFeedDelay = delay })
 	r, logs := pluginTUI(t, dir)
 	// any feed the start scheduled has fired, to nobody: the one sent now is the plugin's start's
 	time.Sleep(3 * pluginFeedDelay)
@@ -1213,6 +1218,10 @@ func TestTheDocumentFeed(t *testing.T) {
 	onLoop(r, func() bool { r.h.p.Call("editor", "forceActiveFocus"); return true })
 
 	r.keys(t, key('i'), key('h'), key('é'), key('l'), key('l'), key('o'), esc())
+	// the keys are injected, not yet all handled: the version is read once the editor has them all
+	r.s.WaitFor(t, "the burst typed", func(string) bool {
+		return onLoop(r, func() bool { return r.h.editor.Value() == "héllo" && r.h.editor.Mode().String() == "NORMAL" })
+	})
 	got := docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.feedVersion }))))
 	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst
 	got = docsIn(said(t, logs, "stats"))
@@ -1228,7 +1237,8 @@ func TestTheDocumentFeed(t *testing.T) {
 	got = docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(v2)+` "héllo" at 1:3 sel 1:3-1:6`))
 	r.keys(t, esc())
 
-	big := strings.Repeat("x", plugin.MaxMessageBytes)
+	// over the link's limit, in lines as a note has them (one line of a megabyte lays out slowly)
+	big := strings.Repeat(strings.Repeat("x", 79)+"\n", plugin.MaxMessageBytes/80+1)
 	onLoop(r, func() bool { r.h.editor.SetValue(big); r.h.edited(); return true })
 	waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(v2+1)+` "" at 0:0 large=true`)
 
