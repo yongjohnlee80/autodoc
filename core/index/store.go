@@ -75,6 +75,9 @@ func (s *Store) retrieval(ctx context.Context) (store.Retrieval, error) {
 	return s.db.Retrieval(ctx, s.sc.ID())
 }
 
+// Retrieval is the workspace's retrieval settings, as workspace.list reports them.
+func (s *Store) Retrieval(ctx context.Context) (store.Retrieval, error) { return s.retrieval(ctx) }
+
 func (s *Store) sectionTokens(ctx context.Context) (int, error) {
 	return s.db.SectionTokens(ctx, s.sc.ID())
 }

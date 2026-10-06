@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -165,7 +165,7 @@ func TestWorkspaceSectionSizeReindexesOnlyTheNamedWorkspace(t *testing.T) {
 				}
 				return err
 			})
-			if err == nil && strings.HasSuffix(version, fmt.Sprintf(".t%d", want)) {
+			if id, perr := index.ParseIdentity(version); err == nil && perr == nil && id.Tokens == want {
 				break
 			}
 			if time.Now().After(deadline) {

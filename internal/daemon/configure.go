@@ -140,6 +140,11 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 			_ = now.w.Index.Reindex("") // the whole workspace is never refused
 		}
 	}
+	if c.AbstractChunk != nil {
+		// the Markdown documents' identity carries the setting: revalidating rebuilds exactly those,
+		// and only their abstract chunks embed
+		m.revalidate(s.id)
+	}
 	return nil
 }
 
@@ -177,6 +182,14 @@ func (m *Workspaces) inverseOf(ctx context.Context, id int64, c store.Changes) (
 		}
 		exts = append([]string{}, exts...)
 		inv.TextExtensions = &exts
+	}
+	if c.AbstractChunk != nil {
+		b := w.AbstractChunk != 0
+		inv.AbstractChunk = &b
+	}
+	if c.DemoteSuperseded != nil {
+		b := w.DemoteSuperseded != 0
+		inv.DemoteSuperseded = &b
 	}
 	if c.SectionTokens != nil {
 		n := 0 // the default
