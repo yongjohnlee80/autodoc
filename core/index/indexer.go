@@ -113,6 +113,7 @@ type Indexer struct {
 	results        chan *prepared
 	work           chan workItem
 	ops            chan op   // writes other than documents' (PurgeModel)
+	reclaims       chan string // models to reclaim, off the writer (reclaim.go)
 	sem            *semantic // nil without a provider
 	embedPosition  atomic.Int64
 	semanticPaused atomic.Bool
@@ -189,7 +190,7 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	ix := &Indexer{store: store, fsys: fsys, opts: opts, kinds: opts.Registrations.Kinds(), touched: map[string]bool{},
 		signal: make(chan struct{}, 1), jobs: map[string]*job{}, unpersisted: map[string]bool{},
 		results: make(chan *prepared, 2*opts.Workers),
-		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{})}
+		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{}), reclaims: make(chan string, 64)}
 	if opts.Provider != nil {
 		ix.sem = newSemantic(opts.Provider)
 	}
@@ -313,6 +314,11 @@ func (x *Indexer) Run(ctx context.Context) error {
 			x.embedLoop(workCtx)
 		}()
 	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		x.reclaimer(workCtx)
+	}()
 	defer func() { stopWorkers(); wg.Wait() }()
 	return x.writer(ctx)
 }
