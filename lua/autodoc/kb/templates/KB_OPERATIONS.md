@@ -4,7 +4,7 @@ kind: operations
 status: active
 created: {{date}}
 autodoc_version: {{autodoc_version}}
-revision: 3
+revision: 4
 tags: [kb, autodoc, operations]
 abstract: "How agents search, read and write this KB through AutoDoc. Shipped and versioned by AutoDoc; re-read it when its revision changes."
 ---
