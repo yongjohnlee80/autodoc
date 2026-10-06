@@ -1199,6 +1199,8 @@ func TestTheDocumentFeed(t *testing.T) {
 	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
 	installPlugin2(t, dir, "quiet", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 30\nheight = 4\nplacements = [\"bottom-left\"]\n")
 	r, logs := pluginTUI(t, dir)
+	// any feed the start scheduled has fired, to nobody: the one sent now is the plugin's start's
+	time.Sleep(3 * pluginFeedDelay)
 	onLoop(r, func() bool { r.h.openPlugin("stats"); r.h.openPlugin("quiet"); return true })
 	first := docsIn(waitSaid(t, logs, "stats", "doc "))
 	if len(first) != 1 || !strings.HasPrefix(first[0], `doc "" v`) || !strings.Contains(first[0], `"" at 1:1 large=false`) {
