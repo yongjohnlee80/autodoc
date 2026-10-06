@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
@@ -146,6 +147,15 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	sess.beforeCall = rec.record
 	r := runTUI(t, sess, Options{})
 	r.ready(t)
+	// the first progress poll's answer searches again (showProgress), so the counts below start after
+	// it: a slow machine's late answer was a search the cells did not ask for
+	deadline := time.Now().Add(10 * time.Second)
+	for !onLoop(r, func() bool { return r.h.prog.polled }) {
+		if time.Now().After(deadline) {
+			t.Fatal("the first progress poll never answered")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "search: words")
 	n := rec.count()
