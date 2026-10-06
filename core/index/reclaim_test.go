@@ -291,3 +291,38 @@ func TestPurgeSaysWhatToDoInstead(t *testing.T) {
 		t.Errorf("a purged inactive model kept %d vectors, row %v", n, row)
 	}
 }
+
+// TestAFailedTargetWriteChangesNothing: setupModels records the target in its own transaction; a
+// write refused part-way (clearing the old target, or setting the new) fails it whole, and the
+// target is as it was.
+func TestAFailedTargetWriteChangesNothing(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("x.md", "zebra\n")
+	e.ready()
+	fpA := a.Model().Fingerprint()
+	target := func() string {
+		var fp string
+		_ = scanOne(context.Background(), e.raw, &fp, "SELECT fp FROM model WHERE target = 1")
+		return fp
+	}
+	for _, trigger := range []string{
+		"CREATE TRIGGER refuse BEFORE UPDATE OF target ON model WHEN OLD.target = 1 AND NEW.target = 0 BEGIN SELECT RAISE(ABORT, 'injected'); END",
+		"CREATE TRIGGER refuse BEFORE UPDATE OF target ON model WHEN OLD.target = 0 AND NEW.target = 1 BEGIN SELECT RAISE(ABORT, 'injected'); END",
+	} {
+		if _, err := e.raw.ExecContext(context.Background(), trigger); err != nil {
+			t.Fatal(err)
+		}
+		e.ix.sem.target = newFake("m2", "b") // the indexer asked to fill another model
+		if err := e.ix.setupModels(context.Background()); err == nil {
+			t.Errorf("setupModels under %q: no error", trigger)
+		}
+		if got := target(); got != fpA {
+			t.Errorf("after a refused write the target is %q, want a's", got)
+		}
+		e.ix.sem.target = a
+		if _, err := e.raw.ExecContext(context.Background(), "DROP TRIGGER refuse"); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
