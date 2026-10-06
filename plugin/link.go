@@ -13,10 +13,11 @@ import (
 // MaxMessageBytes bounds one notification either way: a frame of a dialog is a few kilobytes.
 const MaxMessageBytes = 1 << 20
 
-// MaxDocumentBytes bounds a whole plugin.document as the link encodes it: MaxMessageBytes, less
-// room for the envelope around it. A note whose document is larger is sent as too large, without its
-// text (ADR 1791268009 §2.3).
-const MaxDocumentBytes = MaxMessageBytes - 4<<10
+// MaxDocumentBytes bounds a whole plugin.document as the link encodes it. It is the link's own
+// limit: EncodedSize measures the notification exactly as the link writes it, envelope and all, and
+// the link takes a message of MaxMessageBytes and refuses one byte more. A note whose document is
+// larger is sent as too large, without its text (ADR 1791268009 §2.3).
+const MaxDocumentBytes = MaxMessageBytes
 
 // EncodedSize is the size of the notification method with params, as the link writes it.
 func EncodedSize(method string, params []any) (int, error) {
