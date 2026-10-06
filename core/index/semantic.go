@@ -872,29 +872,40 @@ func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
 	return out, err
 }
 
-// PurgeModel removes a model's vectors and its row (index.purge_model). The active model and the
-// target cannot be purged.
+// PurgeModel reclaims a model no longer used, at once rather than at the next start
+// (index.purge_model; ADR 1791284787 §2.4). The active model and the target are refused, saying
+// what to do instead: a workspace's active model goes with its provider, in AI models, and a
+// switch's target with the switch's cancel.
 func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
-	if x.sem != nil && (fp == x.sem.active() || fp == x.sem.target.Model().Fingerprint()) {
-		return fmt.Errorf("%w: %s", ErrModelInUse, fp)
+	var active, target string
+	if x.sem != nil {
+		active, target = x.sem.active(), x.sem.target.Model().Fingerprint()
 	}
-	sc := x.store.sc
-	return x.do(ctx, func(ctx context.Context, tx *store.Tx) error {
-		m, err := sc.Models(tx).With(store.ModelFP, fp).Get(store.ModelActive)
+	err := x.store.read(ctx, func(tx *store.Tx) error {
+		m, err := x.store.sc.Models(tx).With(store.ModelFP, fp).Get(store.ModelActive, store.ModelTarget)
 		if errors.Is(err, dao.ErrNoRows) {
 			return fmt.Errorf("index: no model %s: %w", fp, ErrNoDocument)
 		}
 		if err != nil {
 			return err
 		}
-		if m.Active == 1 {
-			return fmt.Errorf("%w: %s is active", ErrModelInUse, fp)
+		switch {
+		case m.Active == 1 || fp == active:
+			return fmt.Errorf("%w: %s is the active model: choose another model, or remove its provider in AI models",
+				ErrModelInUse, embed.ModelName(fp))
+		case m.Target == 1 || fp == target:
+			return fmt.Errorf("%w: %s is the switch's target: cancel the switch", ErrModelInUse, embed.ModelName(fp))
 		}
-		if err := sc.Embeddings(tx).With(store.EmbModel, fp).Delete(); err != nil {
-			return err
-		}
-		return sc.Models(tx).With(store.ModelFP, fp).Delete()
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	r, err := x.store.reclaim(ctx, fp, x.do)
+	if err == nil && !r.Gone {
+		return fmt.Errorf("%w: %s became the target while it was purged", ErrModelInUse, embed.ModelName(fp))
+	}
+	return err
 }
 
 // semanticHits is the semantic retriever, inside the query's transaction: the 1-bit scan over the

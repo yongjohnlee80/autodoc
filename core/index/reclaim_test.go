@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -252,5 +253,30 @@ func TestAReadOpenAcrossTheFlipKeepsTheOldVectors(t *testing.T) {
 	var still int
 	if err := scanOne(ctx, tx, &still, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA); err != nil || still != before {
 		t.Errorf("the read opened before the flip now sees %d of a's %d vectors (%v)", still, before, err)
+	}
+}
+
+// TestPurgeSaysWhatToDoInstead (§2.4): purging the active model is refused, pointing at AI models,
+// and deletes nothing; an inactive model is reclaimed at once.
+func TestPurgeSaysWhatToDoInstead(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("x.md", "zebra\n")
+	e.ready()
+	fpA := a.Model().Fingerprint()
+	kept, _ := e.vectorsOf(fpA)
+	err := e.ix.PurgeModel(context.Background(), fpA)
+	if !errors.Is(err, ErrModelInUse) || !strings.Contains(err.Error(), "m is the active model: choose another model, or remove its provider in AI models") {
+		t.Errorf("purging the active model: %v", err)
+	}
+	if n, row := e.vectorsOf(fpA); n != kept || !row {
+		t.Errorf("a refused purge deleted: %d of %d vectors, row %v", n, kept, row)
+	}
+	e.seedModel(e.ws, "fake|old|sha256:o|4", 3, 0, 0)
+	if err := e.ix.PurgeModel(context.Background(), "fake|old|sha256:o|4"); err != nil {
+		t.Fatal(err)
+	}
+	if n, row := e.vectorsOf("fake|old|sha256:o|4"); n != 0 || row {
+		t.Errorf("a purged inactive model kept %d vectors, row %v", n, row)
 	}
 }
