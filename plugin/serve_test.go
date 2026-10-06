@@ -406,9 +406,9 @@ func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 }
 
 // TestADocumentIsBoundedByItsEncoding (ADR 1791268009 §2.3): the bound is the whole notification
-// as the link writes it, not the text. A document that encodes to exactly MaxDocumentBytes is sent
-// whole and arrives; one byte more is too large, keeping its path, workspace and version; neither
-// ends the link, and a note too large for the link itself is never what is sent.
+// as the link writes it, not the text, and it is the link's own limit. A document that encodes to
+// exactly MaxMessageBytes is sent whole and arrives; one byte more, which the link would refuse to
+// send, is too large, keeping its path, workspace and version; neither ends the link.
 func TestADocumentIsBoundedByItsEncoding(t *testing.T) {
 	sized := func(target int) Document {
 		d := Document{Path: "notes/a.md", Workspace: "kb", Cursor: Position{1, 1},
@@ -424,16 +424,13 @@ func TestADocumentIsBoundedByItsEncoding(t *testing.T) {
 		}
 		return d
 	}
-	at := FitDocument(sized(MaxDocumentBytes))
-	over := FitDocument(sized(MaxDocumentBytes + 1))
+	at := FitDocument(sized(MaxMessageBytes))
+	over := FitDocument(sized(MaxMessageBytes + 1))
 	if at.TooLarge || len(at.Text) == 0 {
 		t.Fatalf("a document at the bound is too large")
 	}
 	if want := (Document{Path: "notes/a.md", Workspace: "kb", Version: 4, TooLarge: true}); !reflect.DeepEqual(over, want) {
 		t.Fatalf("one byte over: %+v, want %+v", over, want)
-	}
-	if n, _ := EncodedSize(MethodDocument, DocumentParams(sized(MaxMessageBytes))); n <= MaxMessageBytes-1 {
-		t.Fatalf("the link's own limit is not above the bound: %d", n)
 	}
 
 	s := &service{}
