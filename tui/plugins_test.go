@@ -1379,3 +1379,47 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 		t.Errorf("the samples are %v, want %v", kinds, want)
 	}
 }
+
+// TestThePythonExampleSpeaksTheProtocol (ADR 1791268009 §4): examples/python/echo_plugin.py, with no
+// AutoDoc code, runs as a card: opened at protocol 2, a command, and the feed. It needs python3 with
+// msgpack (AUTODOC_TEST_PYTHON names another interpreter); without one it is skipped, saying so.
+func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
+	py := os.Getenv("AUTODOC_TEST_PYTHON")
+	if py == "" {
+		py = "python3"
+	}
+	if err := exec.Command(py, "-c", "import msgpack").Run(); err != nil {
+		t.Skipf("no %s with msgpack (%v): set AUTODOC_TEST_PYTHON to one", py, err)
+	}
+	src, err := filepath.Abs("../examples/python")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := os.ReadFile(filepath.Join(src, "plugin.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "py-echo")
+	_ = os.MkdirAll(p, 0o755)
+	manifest := strings.Replace(string(m), `command  = ["python3", "echo_plugin.py"]`,
+		fmt.Sprintf("command  = [%q, %q]", py, filepath.Join(src, "echo_plugin.py")), 1)
+	_ = os.WriteFile(filepath.Join(p, "plugin.toml"), []byte(manifest), 0o644)
+	r, logs := pluginTUI(t, dir)
+	r.openPlugin("py-echo")
+	r.waitShown(t, "dark p2")
+	waitSaid(t, logs, "py-echo", "doc draft v")
+	waitSaid(t, logs, "py-echo", "focus True") // opened from its menu, it took the keys
+	r.keys(t, esc())
+	waitSaid(t, logs, "py-echo", "focus False")
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.keys(t, key('c'))
+	waitSaid(t, logs, "py-echo", "command clear")
+	r.keys(t, esc())
+	r.keys(t, key('i'), key('h'), key('i'), key(' '), key('y'), key('o'), esc())
+	waitSaid(t, logs, "py-echo", "doc draft v")
+	r.s.WaitFor(t, "two words fed", func(string) bool {
+		return slices.ContainsFunc(said(t, logs, "py-echo"), func(s string) bool { return strings.Contains(s, " 2 words at 1:5") })
+	})
+}
