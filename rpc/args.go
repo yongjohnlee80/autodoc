@@ -106,6 +106,20 @@ func protocolOf(ctx context.Context) int64 {
 	return p
 }
 
+// reclaimSince is the protocol from which embedding.cancel_switch and embedding.remove delete
+// vectors (ADR 1791284787 §2.7): the partial target's, and the removed provider's model's. A session
+// below it knew them to keep the vectors, which cannot be kept for it (the start sweep would delete
+// them), so it is refused the two verbs.
+const reclaimSince = 16
+
+// needReclaim refuses verb to a session below reclaimSince.
+func needReclaim(ctx context.Context, verb string) error {
+	if protocolOf(ctx) < reclaimSince {
+		return invalid(fmt.Sprintf("%s deletes vectors since protocol %d", verb, reclaimSince))
+	}
+	return nil
+}
+
 // relationsSince is the protocol frontmatter relation links arrived in. A session below it sees the
 // body links alone: a new kind of link changes what a graph answer means.
 const relationsSince = 14

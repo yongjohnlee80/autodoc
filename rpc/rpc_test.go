@@ -200,7 +200,7 @@ func TestVerbsArePinned(t *testing.T) {
 		"preference.list", "preference.set",
 		"ranker.add", "ranker.list", "ranker.log", "ranker.models", "ranker.remove", "ranker.update", "ranker.usage", "ranker.use", "ranker.window",
 		"search.query", "sys.capabilities", "sys.events", "sys.hello", "sys.shutdown", "workspace.add", "workspace.configure", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size", "workspace.set_patterns", "workspace.set_provider", "workspace.set_schema", "workspace.set_text_extensions"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 15 || MinProtocol != 12 {
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 16 || MinProtocol != 12 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }
