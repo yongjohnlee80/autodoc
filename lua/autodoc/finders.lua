@@ -135,22 +135,42 @@ function M.read_recent(cb)
   end)
 end
 
-local _last_noted = nil
+-- The files noted and not yet written, oldest first; one read-modify-write runs at a time, so two
+-- quick opens never read the same list and overwrite one another.
+local _pending, _writing = {}, false
 
----note_recent puts file rel of workspace ws first among the recent files, when a session is up:
----it reads the list first, so a file the TUI opened meanwhile is kept.
+---drain writes the next noted file: it reads the SHARED list first (the TUI changes it too) and
+---skips the write only when that list already has the file first.
+local function drain()
+  if _writing then return end
+  local d = table.remove(_pending, 1)
+  if not d then return end
+  if not session().is_ready() then
+    _pending = {}
+    return
+  end
+  _writing = true
+  local function done()
+    _writing = false
+    drain()
+  end
+  M.read_recent(function(docs)
+    if not docs then return done() end
+    local head = docs[1]
+    if head and head.workspace == d.workspace and head.path == d.path then return done() end
+    session().call("preference.set", { M.PREF_RECENT, vim.json.encode(M.with_recent(docs, d)) }, function() done() end)
+  end)
+end
+
+---note_recent puts file rel of workspace ws first among the recent files, when a session is up.
+---Neovim's own notes are written in turn; a TUI writing between this read and write can still
+---lose its entry (the daemon has no atomic update of a preference), as the TUI's own write can.
 ---@param ws string
 ---@param rel string
 function M.note_recent(ws, rel)
   if not session().is_ready() then return end
-  local key = ws .. "\0" .. rel
-  if _last_noted == key then return end
-  _last_noted = key
-  M.read_recent(function(docs)
-    if not docs then return end
-    local next_docs = M.with_recent(docs, { workspace = ws, path = rel })
-    session().call("preference.set", { M.PREF_RECENT, vim.json.encode(next_docs) }, function() end)
-  end)
+  _pending[#_pending + 1] = { workspace = ws, path = rel }
+  drain()
 end
 
 ---on_open is the BufReadPost hook: a file inside a listed KB is noted as recent.
@@ -217,6 +237,6 @@ function M.backlinks(path)
 end
 
 -- Test seam.
-function M._reset_for_tests() _last_noted = nil end
+function M._reset_for_tests() _pending, _writing = {}, false end
 
 return M
