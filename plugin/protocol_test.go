@@ -11,16 +11,32 @@ import (
 // lack what a notification needs, are ErrParams.
 func TestAMalformedNotificationIsRefused(t *testing.T) {
 	for name, read := range map[string]func([]any) error{
-		"open":        func(p []any) error { _, err := ReadOpen(p); return err },
-		"key":         func(p []any) error { _, err := ReadKey(p); return err },
-		"resize":      func(p []any) error { _, _, err := ReadResize(p); return err },
-		"theme":       func(p []any) error { _, err := ReadTheme(p); return err },
-		"ready":       func(p []any) error { _, err := ReadReady(p); return err },
-		"title":       func(p []any) error { _, err := ReadTitle(p); return err },
-		"frame":       func(p []any) error { _, _, err := ReadFrame(p); return err },
-		"two maps":    func(p []any) error { _, err := ReadKey([]any{map[string]any{}, map[string]any{}}); return err },
-		"not a map":   func(p []any) error { _, err := ReadKey([]any{"key"}); return err },
-		"open, sizes": func(p []any) error { _, err := ReadOpen(one(map[string]any{"protocol": int64(1)})); return err },
+		"open":      func(p []any) error { _, err := ReadOpen(p); return err },
+		"key":       func(p []any) error { _, err := ReadKey(p); return err },
+		"resize":    func(p []any) error { _, _, err := ReadResize(p); return err },
+		"theme":     func(p []any) error { _, err := ReadTheme(p); return err },
+		"ready":     func(p []any) error { _, err := ReadReady(p); return err },
+		"title":     func(p []any) error { _, err := ReadTitle(p); return err },
+		"frame":     func(p []any) error { _, _, err := ReadFrame(p); return err },
+		"two maps":  func(p []any) error { _, err := ReadKey([]any{map[string]any{}, map[string]any{}}); return err },
+		"not a map": func(p []any) error { _, err := ReadKey([]any{"key"}); return err },
+		"open, protocol": func(p []any) error {
+			_, err := ReadOpen(one(map[string]any{"width": int64(3), "height": int64(3)}))
+			return err
+		},
+		"open, one size": func(p []any) error {
+			_, err := ReadOpen(one(map[string]any{"protocol": int64(1), "width": int64(3)}))
+			return err
+		},
+		"focus":          func(p []any) error { _, err := ReadFocus(p); return err },
+		"focus, missing": func(p []any) error { _, err := ReadFocus(EmptyParams()); return err },
+		"command":        func(p []any) error { _, err := ReadCommand(p); return err },
+		"command, id":    func(p []any) error { _, err := ReadCommand(EmptyParams()); return err },
+		"document":       func(p []any) error { _, err := ReadDocument(p); return err },
+		"document, version": func(p []any) error {
+			_, err := ReadDocument(one(map[string]any{"path": "a.md", "text": "x"}))
+			return err
+		},
 		"resize, w":   func(p []any) error { _, _, err := ReadResize(one(map[string]any{"height": int64(3)})); return err },
 		"ready, p":    func(p []any) error { _, err := ReadReady(EmptyParams()); return err },
 		"frame, rows": func(p []any) error { _, _, err := ReadFrame(EmptyParams()); return err },
@@ -126,4 +142,65 @@ func stringOf(v any) string {
 	}
 	walk(v)
 	return b.String()
+}
+
+// TestProtocolTwosNotificationsRoundTrip: what the host writes, the SDK reads back: a document with
+// its cursor and selections, a too-large one with its path, workspace and version alone, a focus and
+// a command; and a service's plugin.open, which has no size.
+func TestProtocolTwosNotificationsRoundTrip(t *testing.T) {
+	wire := func(params []any) []any { // through msgpack's number types, as the decoder gives them
+		m := params[0].(map[string]any)
+		return one(widen(m).(map[string]any))
+	}
+	doc := Document{Path: "notes/a.md", Workspace: "kb", Text: "é\nline two", Cursor: Position{2, 3},
+		Selection: []Range{{Position{1, 1}, Position{1, 2}}, {Position{2, 1}, Position{2, 5}}}, Version: 7}
+	if got, err := ReadDocument(wire(DocumentParams(doc))); err != nil || !reflect.DeepEqual(got, doc) {
+		t.Errorf("a document: %+v, %v; want %+v", got, err, doc)
+	}
+	big := Document{Path: "big.md", Workspace: "kb", Text: "dropped", Cursor: Position{1, 1}, Version: 9, TooLarge: true}
+	sent := DocumentParams(big)[0].(map[string]any)
+	if _, has := sent["text"]; has {
+		t.Errorf("a too-large document carries its text: %v", sent)
+	}
+	want := Document{Path: "big.md", Workspace: "kb", Version: 9, TooLarge: true}
+	if got, err := ReadDocument(wire(DocumentParams(big))); err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("a too-large document: %+v, %v; want %+v", got, err, want)
+	}
+	if f, err := ReadFocus(wire(FocusParams(true))); err != nil || !f {
+		t.Errorf("focus true: %v, %v", f, err)
+	}
+	if f, err := ReadFocus(wire(FocusParams(false))); err != nil || f {
+		t.Errorf("focus false: %v, %v", f, err)
+	}
+	if id, err := ReadCommand(wire(CommandParams("toggle"))); err != nil || id != "toggle" {
+		t.Errorf("command: %q, %v", id, err)
+	}
+	svc := OpenParams(Open{Protocol: 2, Theme: Theme{Name: "dark", Colors: map[string]string{}}})
+	if _, has := svc[0].(map[string]any)["width"]; has {
+		t.Errorf("a service's plugin.open carries a size: %v", svc)
+	}
+	if o, err := ReadOpen(wire(svc)); err != nil || o.Protocol != 2 || o.Width != 0 || o.Height != 0 {
+		t.Errorf("a service's plugin.open: %+v, %v", o, err)
+	}
+}
+
+// widen gives numbers the type msgpack decodes them as: int64.
+func widen(v any) any {
+	switch x := v.(type) {
+	case int:
+		return int64(x)
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = widen(e)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = widen(e)
+		}
+		return out
+	}
+	return v
 }

@@ -1,21 +1,29 @@
-// Package plugin is AutoDoc's plugins (ADR 0209): the protocol between the TUI and a plugin it
-// runs, and the SDK a plugin is written with.
+// Package plugin is AutoDoc's plugins (ADR 0209, ADR 1791268009): the protocol between the TUI and
+// a plugin it runs, and the SDK a plugin is written with.
 //
 // A dialog plugin is a program the TUI starts when its Plugins menu entry is chosen. The TUI draws a
 // dialog over the page and fills it with the plugin's frames; every key but Esc goes to the plugin,
-// and Esc closes it. The two speak msgpack-RPC NOTIFICATIONS, both ways, over the plugin's stdin and
-// stdout — nothing waits for an answer:
+// and Esc closes it. A non-modal one (a card) sits beside the page and takes the keys only when
+// focused; a service has no surface at all. The two speak msgpack-RPC NOTIFICATIONS, both ways, over
+// the plugin's stdin and stdout — nothing waits for an answer:
 //
-//	host → plugin   plugin.open {protocol, width, height, theme}   the first, once
+//	host → plugin   plugin.open {protocol, width, height, theme}   the first, once; a service's has no size
 //	                plugin.key {key, text, ctrl, alt, shift}
 //	                plugin.resize {width, height}
 //	                plugin.theme {theme}
 //	                plugin.hide {}, plugin.show {}                  esc = "hide": hidden, shown again
+//	                plugin.focus {focused}                          2: a card took or gave back the keys
+//	                plugin.document {path, workspace, text,         2: the open note, as [feed] declares
+//	                  cursor, selection, version, too_large}
+//	                plugin.command {id}                             2: one of the manifest's [[commands]]
 //	                plugin.close {}                                 the last
 //	plugin → host   host.ready {protocol}                           the answer to plugin.open
 //	                host.frame {rows}                               the whole dialog, any time
 //	                host.title {title}
 //	                host.close {}
+//
+// The notifications marked 2 are protocol 2's. A host sends them only to a plugin whose manifest
+// says protocol = 2 and declares them, so a protocol-1 plugin never sees one.
 //
 // A plugin in Go writes a [Handler] and calls [Serve]; one in another language speaks the table
 // above. The frame's colours are the themes' vocabulary: "default", an ANSI name ("brightwhite"), or
@@ -27,9 +35,14 @@ import (
 	"fmt"
 )
 
-// Protocol is the plugin protocol's version. The host and the plugin must speak the same one: any
-// change to the notifications or their parameters bumps it.
-const Protocol = 1
+// The plugin protocol's versions this SDK speaks. A host speaks to each plugin the one its manifest
+// says, and Serve answers any from MinProtocol to Protocol with that same one. The protocol rises
+// when a manifest can declare something an older host must not run without, for a changed meaning,
+// or for something a plugin must handle (ADR 1791268009 §1).
+const (
+	MinProtocol = 1
+	Protocol    = 2
+)
 
 // The notifications the host sends.
 const (
@@ -42,6 +55,12 @@ const (
 	// its Plugins menu entry showed it again. A plugin may ignore them; it keeps running either way.
 	MethodHide = "plugin.hide"
 	MethodShow = "plugin.show"
+	// MethodFocus is a non-modal card focused (a click, or its command's key) or given back (Esc).
+	MethodFocus = "plugin.focus"
+	// MethodDocument is the open note, to a plugin whose manifest declares [feed] document = true.
+	MethodDocument = "plugin.document"
+	// MethodCommand is one of the manifest's [[commands]], chosen.
+	MethodCommand = "plugin.command"
 )
 
 // The notifications the plugin sends.
@@ -66,11 +85,31 @@ type Theme struct {
 }
 
 // Open is plugin.open: the protocol the host speaks, the dialog's size inside its border, and the
-// theme.
+// theme. A service has no dialog: its size is 0 by 0.
 type Open struct {
 	Protocol      int
 	Width, Height int
 	Theme         Theme
+}
+
+// Position is a place in a note: its line and column, both from 1. A column counts characters as
+// the editor's cursor does: grapheme clusters (what shows as one character, "é" written as e and a
+// combining accent, say), not bytes or code points.
+type Position struct{ Line, Col int }
+
+// Range is a selection, from Start to End.
+type Range struct{ Start, End Position }
+
+// Document is plugin.document: the note open in the editor, as it stands, saved or not. Path is ""
+// when none is open. TooLarge says the note was too large to send: Path, Workspace and Version are
+// set, and the rest is empty. Version rises with every edit, so a plugin can drop a stale answer.
+type Document struct {
+	Path, Workspace string
+	Text            string
+	Cursor          Position
+	Selection       []Range
+	Version         int
+	TooLarge        bool
 }
 
 // Key is a key typed into the dialog. Key is its text for a printable key (" " for Space), or one of
@@ -110,9 +149,37 @@ func (t Theme) wire() map[string]any {
 	return map[string]any{"name": t.Name, "colors": colors}
 }
 
-// OpenParams are plugin.open's parameters.
+// OpenParams are plugin.open's parameters. A service's (a size of 0 by 0) has no width or height.
 func OpenParams(o Open) []any {
-	return one(map[string]any{"protocol": o.Protocol, "width": o.Width, "height": o.Height, "theme": o.Theme.wire()})
+	m := map[string]any{"protocol": o.Protocol, "theme": o.Theme.wire()}
+	if o.Width != 0 || o.Height != 0 {
+		m["width"], m["height"] = o.Width, o.Height
+	}
+	return one(m)
+}
+
+// FocusParams are plugin.focus's.
+func FocusParams(focused bool) []any { return one(map[string]any{"focused": focused}) }
+
+// CommandParams are plugin.command's.
+func CommandParams(id string) []any { return one(map[string]any{"id": id}) }
+
+func (p Position) wire() map[string]any { return map[string]any{"line": p.Line, "col": p.Col} }
+
+// DocumentParams are plugin.document's. A TooLarge one carries its path, workspace and version
+// alone.
+func DocumentParams(d Document) []any {
+	m := map[string]any{"path": d.Path, "workspace": d.Workspace, "version": d.Version}
+	if d.TooLarge {
+		m["too_large"] = true
+		return one(m)
+	}
+	sel := make([]any, len(d.Selection))
+	for i, r := range d.Selection {
+		sel[i] = map[string]any{"start": r.Start.wire(), "end": r.End.wire()}
+	}
+	m["text"], m["cursor"], m["selection"] = d.Text, d.Cursor.wire(), sel
+	return one(m)
 }
 
 // KeyParams are plugin.key's.
@@ -215,19 +282,87 @@ func readTheme(v any) Theme {
 	return t
 }
 
-// ReadOpen reads plugin.open.
+// ReadOpen reads plugin.open. A service's has no size: both width and height are left out, and
+// read as 0.
 func ReadOpen(params []any) (Open, error) {
 	m, err := arg(params)
 	if err != nil {
 		return Open{}, err
 	}
-	p, ok1 := num(m, "protocol")
-	w, ok2 := num(m, "width")
-	h, ok3 := num(m, "height")
-	if !ok1 || !ok2 || !ok3 {
-		return Open{}, fmt.Errorf("%w: plugin.open wants protocol, width and height", ErrParams)
+	p, ok := num(m, "protocol")
+	if !ok {
+		return Open{}, fmt.Errorf("%w: plugin.open wants protocol", ErrParams)
+	}
+	_, hasW := m["width"]
+	_, hasH := m["height"]
+	if !hasW && !hasH {
+		return Open{Protocol: p, Theme: readTheme(m["theme"])}, nil
+	}
+	w, ok1 := num(m, "width")
+	h, ok2 := num(m, "height")
+	if !ok1 || !ok2 {
+		return Open{}, fmt.Errorf("%w: plugin.open wants a width and a height, or neither", ErrParams)
 	}
 	return Open{Protocol: p, Width: w, Height: h, Theme: readTheme(m["theme"])}, nil
+}
+
+// ReadFocus reads plugin.focus.
+func ReadFocus(params []any) (bool, error) {
+	m, err := arg(params)
+	if err != nil {
+		return false, err
+	}
+	f, ok := m["focused"].(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: plugin.focus wants focused", ErrParams)
+	}
+	return f, nil
+}
+
+// ReadCommand reads plugin.command: the command's id.
+func ReadCommand(params []any) (string, error) {
+	m, err := arg(params)
+	if err != nil {
+		return "", err
+	}
+	id := str(m, "id")
+	if id == "" {
+		return "", fmt.Errorf("%w: plugin.command wants id", ErrParams)
+	}
+	return id, nil
+}
+
+func readPosition(v any) Position {
+	m, _ := v.(map[string]any)
+	l, _ := num(m, "line")
+	c, _ := num(m, "col")
+	return Position{Line: l, Col: c}
+}
+
+// ReadDocument reads plugin.document. A selection entry that is not a map is dropped.
+func ReadDocument(params []any) (Document, error) {
+	m, err := arg(params)
+	if err != nil {
+		return Document{}, err
+	}
+	v, ok := num(m, "version")
+	if !ok {
+		return Document{}, fmt.Errorf("%w: plugin.document wants version", ErrParams)
+	}
+	d := Document{Path: str(m, "path"), Workspace: str(m, "workspace"), Version: v, TooLarge: flag(m, "too_large")}
+	if d.TooLarge {
+		return d, nil
+	}
+	d.Text, d.Cursor = str(m, "text"), readPosition(m["cursor"])
+	sel, _ := m["selection"].([]any)
+	for _, r := range sel {
+		rm, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		d.Selection = append(d.Selection, Range{Start: readPosition(rm["start"]), End: readPosition(rm["end"])})
+	}
+	return d, nil
 }
 
 // ReadKey reads plugin.key.
