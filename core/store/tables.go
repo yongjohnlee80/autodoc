@@ -467,6 +467,8 @@ type Model struct {
 	Provider, Name *string
 	Dims           *int64
 	Active         int64
+	// Target is the model the workspace's indexer fills: the active one outside a switch (000015)
+	Target int64
 }
 
 // ModelField names a model column.
@@ -479,6 +481,7 @@ const (
 	ModelName      ModelField = "name"
 	ModelDims      ModelField = "dims"
 	ModelActive    ModelField = "active"
+	ModelTarget    ModelField = "target"
 )
 
 // Embedding is a text's vector under a model.
@@ -871,6 +874,7 @@ func newTables(c dao.DataConn) *tables {
 				ModelName:      col("model", ModelName, func(m *Model) any { return &m.Name }),
 				ModelDims:      col("model", ModelDims, func(m *Model) any { return &m.Dims }),
 				ModelActive:    col("model", ModelActive, func(m *Model) any { return &m.Active }),
+				ModelTarget:    col("model", ModelTarget, func(m *Model) any { return &m.Target }),
 			}),
 			dao.Conflict[*Model, ModelField, noSort, string](ModelWorkspace, ModelFP)),
 		embeddings: dao.New[*Embedding, EmbeddingField, noSort, string](c,
