@@ -461,7 +461,8 @@ func (s *Server) register() {
 
 	// index.documents lists the workspace's documents with their frontmatter, ordered by updated
 	// (default), path or indexed, narrowed by tags, paths, facets and missing fields: the index a
-	// client renders instead of a hand-kept one (Protocol 13).
+	// client renders instead of a hand-kept one (Protocol 13). opts.diagnosed keeps the documents the
+	// schema diagnoses, each with its diagnostics: the KB's frontmatter scan (Protocol 14).
 	s.handle("index.documents", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		o, err := documentsOpts(p)
 		if err != nil {
@@ -478,6 +479,9 @@ func (s *Server) register() {
 		for i, d := range docs {
 			out[i] = map[string]any{"path": d.Path, "generation": d.Generation, "title": d.Title, "updated": d.Updated,
 				"indexed_at": d.IndexedAt, "fields": d.Fields}
+			if o.Diagnosed {
+				out[i].(map[string]any)["diagnostics"] = diagnosticsList(d.Diagnostics)
+			}
 		}
 		next := int64(o.After + len(docs))
 		return map[string]any{"docs": out, "more": more, "next": next}, nil
@@ -898,6 +902,12 @@ func documentsOpts(p []any) (index.DocumentsOpts, error) {
 			default:
 				o.Missing = l
 			}
+		case "diagnosed":
+			b, ok := v.(bool)
+			if !ok {
+				return o, invalid("index.documents: opts.diagnosed must be a boolean")
+			}
+			o.Diagnosed = b
 		case "facets":
 			fm, ok := v.(map[string]any)
 			if !ok {

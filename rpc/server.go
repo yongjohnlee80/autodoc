@@ -58,7 +58,9 @@ import (
 // sees the body links alone, its graph unchanged. It also adds graph.unresolved's reason cycle (a
 // supersession loop), workspace.configure's abstract_chunk and demote_superseded with
 // workspace.list's, search.query's retrieval option and a hit's superseded_by.
-const Protocol int64 = 14
+// Protocol 15 adds index.documents' diagnosed: the documents whose frontmatter the schema
+// diagnoses, each with its diagnostics; a session below 15 is refused the option.
+const Protocol int64 = 15
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

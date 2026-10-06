@@ -166,14 +166,14 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 	}
 	o, err = documentsOpts([]any{"kb", map[string]any{
 		"sort": "path", "after": int64(2), "limit": int64(5),
-		"fields": []any{"status"}, "tags": []any{"adr"}, "paths": []any{"adrs/"}, "missing": []any{"abstract"},
+		"fields": []any{"status"}, "tags": []any{"adr"}, "paths": []any{"adrs/"}, "missing": []any{"abstract"}, "diagnosed": true,
 		"facets": map[string]any{"status": "accepted", "type": []any{"adr", "note"}},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := index.DocumentsOpts{Sort: "path", After: 2, Limit: 5, Fields: []string{"status"}, Tags: []string{"adr"},
-		Paths: []string{"adrs/"}, Missing: []string{"abstract"},
+		Paths: []string{"adrs/"}, Missing: []string{"abstract"}, Diagnosed: true,
 		Facets: map[string][]string{"status": {"accepted"}, "type": {"adr", "note"}}}
 	if !reflect.DeepEqual(o, want) {
 		t.Fatalf("got %+v\nwant %+v", o, want)
@@ -192,6 +192,7 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 		{map[string]any{"missing": map[string]any{}}, "opts.missing must be a list of strings"},
 		{map[string]any{"facets": []any{"status"}}, "opts.facets must be a map"},
 		{map[string]any{"facets": map[string]any{"status": int64(1)}}, "opts.facets.status must be a list of strings"},
+		{map[string]any{"diagnosed": "yes"}, "opts.diagnosed must be a boolean"},
 		{map[string]any{"colour": "red"}, "unknown option colour"},
 	} {
 		_, err := documentsOpts([]any{"kb", c.opts})

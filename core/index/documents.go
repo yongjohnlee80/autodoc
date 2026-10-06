@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -37,8 +38,11 @@ type DocumentsOpts struct {
 	Paths   []string            // a document is under one of these folders, or is one of these files
 	Facets  map[string][]string // a document has one of the values of each field (the schema's facets)
 	Missing []string            // a document lacks one of these frontmatter fields: the backfill's scan
-	After   int                 // how many of the ordered documents to skip: the previous page's next
-	Limit   int                 // MaxDocumentsPage at most; 100 when zero
+	// Diagnosed keeps the documents whose frontmatter the schema diagnoses (malformed YAML, a missing
+	// or refused field), each with its diagnostics: the scan for every problem, not only absences.
+	Diagnosed bool
+	After     int // how many of the ordered documents to skip: the previous page's next
+	Limit     int // MaxDocumentsPage at most; 100 when zero
 }
 
 // DocumentEntry is one document as index.documents lists it.
@@ -49,6 +53,9 @@ type DocumentEntry struct {
 	Updated    string         // the frontmatter's updated as written, else IndexedAt as an RFC 3339 time
 	IndexedAt  int64          // when the index last read a change to it, in Unix seconds
 	Fields     map[string]any // the asked-for frontmatter fields it has
+	// Diagnostics is what the schema found wrong with its frontmatter, in source order; filled only
+	// when DocumentsOpts.Diagnosed asked for them.
+	Diagnostics []schema.Diagnostic
 }
 
 // listed is one document while index.documents filters and orders it.
@@ -83,6 +90,7 @@ func (s *Store) Documents(ctx context.Context, o DocumentsOpts) ([]DocumentEntry
 	var all []listed
 	tags := map[int64]map[string]bool{}
 	facets := map[int64]map[string]map[string]bool{}
+	diags := map[int64][]store.Diagnostic{}
 	err := s.read(ctx, func(tx *store.Tx) error {
 		docs, err := s.sc.Documents(tx).Select(store.DocID, store.DocPath, store.DocActiveGen, store.DocTitle,
 			store.DocFrontmatterJSON, store.DocIndexedAt)
@@ -111,6 +119,16 @@ func (s *Store) Documents(ctx context.Context, o DocumentsOpts) ([]DocumentEntry
 				tags[t.DocID][strings.ToLower(t.Value)] = true
 			}
 		}
+		if o.Diagnosed {
+			rows, err := s.sc.Diagnostics(tx).Select(store.DiagDoc, store.DiagOrd, store.DiagField, store.DiagLine,
+				store.DiagRule, store.DiagMessage)
+			if err != nil {
+				return err
+			}
+			for _, d := range rows {
+				diags[d.DocID] = append(diags[d.DocID], *d)
+			}
+		}
 		if len(o.Facets) > 0 {
 			rows, err := s.sc.Facets(tx).Select(store.FacetDoc, store.FacetName, store.FacetValue)
 			if err != nil {
@@ -135,7 +153,7 @@ func (s *Store) Documents(ctx context.Context, o DocumentsOpts) ([]DocumentEntry
 	kept := all[:0]
 	for _, l := range all {
 		if !underAny(l.entry.Path, o.Paths) || !hasEvery(tags[l.id], o.Tags) || !matchesFacets(facets[l.id], o.Facets) ||
-			!missesOne(l.front, o.Missing) {
+			!missesOne(l.front, o.Missing) || (o.Diagnosed && len(diags[l.id]) == 0) {
 			continue
 		}
 		l.updated = time.Unix(l.entry.IndexedAt, 0).UTC()
@@ -173,6 +191,14 @@ func (s *Store) Documents(ctx context.Context, o DocumentsOpts) ([]DocumentEntry
 	out := make([]DocumentEntry, len(page))
 	for i, l := range page {
 		e := l.entry
+		if o.Diagnosed {
+			ds := diags[l.id]
+			sort.Slice(ds, func(i, j int) bool { return ds[i].Ord < ds[j].Ord })
+			e.Diagnostics = make([]schema.Diagnostic, len(ds))
+			for k, d := range ds {
+				e.Diagnostics[k] = schema.Diagnostic{Field: d.Field, Line: int(d.Line), Rule: d.Rule, Message: d.Message}
+			}
+		}
 		e.Fields = map[string]any{}
 		for _, f := range fields {
 			if v, ok := l.front[f]; ok {
