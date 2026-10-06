@@ -572,6 +572,9 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 	go r.sender()
+	if e.m.Feed.Document {
+		r.sendDocument(h.document()) // after plugin.open: the note as it stands when it starts
+	}
 	if e.m.service() {
 		r.openAt(0, 0) // no surface to lay out: open it now
 		return r, nil

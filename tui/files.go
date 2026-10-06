@@ -161,6 +161,7 @@ func (h *Host) show(p, content, version string) {
 		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.file.path, h.file.version, h.file.open, h.file.dirty = p, version, true, false
+	h.feedEdited() // another note: a new version
 	h.readPage()
 	h.backlinks.Reset(nil)
 	h.loadBacklinks(p)
@@ -255,11 +256,13 @@ func (h *Host) closeFile() {
 	h.backlinks.Reset(nil)
 	h.set("App.linksTitle", "backlinks")
 	h.clearDiagnostics()
+	h.feedEdited()
 }
 
 // edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.
 func (h *Host) edited() {
 	h.setDirty(true)
+	h.feedEdited()
 	h.validateSoon()
 	h.outlineSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter

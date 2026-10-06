@@ -59,7 +59,10 @@ func (h *Host) outlineSoon() {
 }
 
 // cursorMoved is the editor's cursor landing elsewhere: the breadcrumb follows it.
-func (h *Host) cursorMoved() { h.showCrumb() }
+func (h *Host) cursorMoved() {
+	h.showCrumb()
+	h.feedSoon()
+}
 
 // showCrumb titles the page with the file's name and the breadcrumb at the cursor.
 func (h *Host) showCrumb() {
