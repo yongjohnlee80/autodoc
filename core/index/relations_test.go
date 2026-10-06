@@ -147,3 +147,22 @@ func TestTheBodyKindsWalkNoRelation(t *testing.T) {
 		t.Errorf("unresolved body links: %+v, %v", us, err)
 	}
 }
+
+// TestASupersessionLoopIsReported: two documents that each say the other replaced it resolve, so
+// neither is unresolved, yet a loop has no order: both relations are listed as a cycle, with every
+// kind, and not with the body kinds alone.
+func TestASupersessionLoopIsReported(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("a.md", "---\nsupersedes: [b.md]\n---\nA\n", "b.md", "---\nsuperseded_by: [a.md]\nsupersedes: [a.md]\n---\nB\n",
+		"c.md", "---\nsupersedes: [d.md]\n---\nC\n", "d.md", "D", "broken.md", "[[nowhere]]")
+	// a supersedes b; b says a replaced it (the same relation) and that it replaces a: a loop
+	got := e.unresolved()
+	want := []string{"broken.md [[nowhere]] missing", "a.md b.md cycle", "b.md a.md cycle", "b.md a.md cycle"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("unresolved:\n got %q\nwant %q", got, want)
+	}
+	body, err := e.store.Unresolved(context.Background(), BodyKinds)
+	if err != nil || len(body) != 1 || body[0].Reason != ReasonMissing {
+		t.Errorf("body kinds alone: %+v, %v; want only the missing wikilink", body, err)
+	}
+}

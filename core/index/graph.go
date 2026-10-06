@@ -3,6 +3,7 @@ package index
 import (
 	"context"
 	"errors"
+	"slices"
 	"sort"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -151,7 +152,9 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int, kinds 
 	return nb, nil
 }
 
-// Unresolved lists every link of the given kinds (nil: every kind) that reaches no document, by source path, then source order.
+// Unresolved lists every link of the given kinds (nil: every kind) that reaches no document, by
+// source path, then source order; then, when the kinds take in supersession, the supersession
+// relations that go round a loop (ReasonCycle), which resolve but have no order.
 func (s *Store) Unresolved(ctx context.Context, kinds []string) ([]Unresolved, error) {
 	out := []Unresolved{}
 	err := s.read(ctx, func(tx *store.Tx) error {
@@ -168,9 +171,47 @@ func (s *Store) Unresolved(ctx context.Context, kinds []string) ([]Unresolved, e
 			}
 			out = append(out, Unresolved{Src: r.OtherPath, Raw: r.Raw, Reason: reason})
 		}
-		return nil
+		if kinds != nil && !slices.Contains(kinds, kindSupersedes) && !slices.Contains(kinds, kindSupersededBy) {
+			return nil
+		}
+		loops, err := s.supersessionLoops(tx)
+		out = append(out, loops...)
+		return err
 	})
 	return out, err
+}
+
+// supersessionLoops lists the supersession relations that go round a loop (A superseded by B, B by
+// A): each resolves, so none is unresolved, yet a loop has no order, and the demotion leaves its
+// documents where they are. A relation is on a loop when its successor leads back to the document
+// it replaces. Listed by source path, then source order, with ReasonCycle.
+func (s *Store) supersessionLoops(tx *store.Tx) ([]Unresolved, error) {
+	rows, err := kindsIn(s.sc.LinksIn(tx), []string{kindSupersedes, kindSupersededBy}).
+		WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(store.LinkByOtherPath), dao.Asc(store.LinkByID)).
+		Select(store.LinkSrc, store.LinkDst, store.LinkKind, store.LinkRaw, store.LinkOtherPath)
+	if err != nil {
+		return nil, err
+	}
+	// every relation as "replaced -> successor", whichever side wrote it
+	g := graph.New[int64]()
+	edge := func(src, dst int64, kind string) (old, successor int64) {
+		if kind == kindSupersededBy {
+			return src, dst
+		}
+		return dst, src
+	}
+	for _, r := range rows {
+		old, successor := edge(r.SrcDoc, *r.DstDoc, r.Kind)
+		g.Add(graph.Edge[int64]{Src: old, Dst: successor, Kind: kindSupersededBy})
+	}
+	var out []Unresolved
+	for _, r := range rows {
+		old, successor := edge(r.SrcDoc, *r.DstDoc, r.Kind)
+		if old != successor && g.Neighborhood(successor, len(rows), graph.Out, graph.Filter{}).Has(old) {
+			out = append(out, Unresolved{Src: r.OtherPath, Raw: r.Raw, Reason: ReasonCycle})
+		}
+	}
+	return out, nil
 }
 
 func (s *Store) docID(tx *store.Tx, path string) (int64, error) {
