@@ -60,6 +60,20 @@ type QueryOpts struct {
 	// field, one of its values. A field the schema does not declare is refused (ErrUnknownFacet).
 	// The query's own field:value words for declared fields join them.
 	Facets map[string][]string
+	// Retrieval overrides the workspace's retrieval settings for this query; nil keeps them.
+	Retrieval *Retrieval `json:",omitempty"`
+
+	sectionsOnly bool // the abstract chunks are left out, in the retrievers themselves
+}
+
+// Retrieval is a query's override of its workspace's retrieval settings; a nil field keeps the
+// workspace's.
+type Retrieval struct {
+	// AbstractChunk false leaves the abstract chunks out of this search, inside both retrievers,
+	// before either takes its best; true searches them, where the index holds them.
+	AbstractChunk *bool `json:",omitempty"`
+	// DemoteSuperseded moves a superseded document's hits below its successor's.
+	DemoteSuperseded *bool `json:",omitempty"`
 }
 
 // Hit is one chunk a search found.
@@ -78,6 +92,9 @@ type Hit struct {
 	// RankScore is the ranker's score for the hit, nil when no ranker scored it (ADR 0215);
 	// comparable only within one Result.
 	RankScore *float64 `json:",omitempty"`
+	// SupersededBy is a successor of the hit's document, when its frontmatter relations say it was
+	// superseded and the search demoted superseded documents; "" otherwise.
+	SupersededBy string `json:",omitempty"`
 }
 
 // Result is search.query's answer: the hits, and what the search could use (ADR 0204 §4.4).
@@ -104,7 +121,7 @@ type RankState struct {
 // Search answers a query lexically: the store alone has no embedding provider, and no schema, so
 // a field filter is refused.
 func (s *Store) Search(ctx context.Context, q string, opts QueryOpts) (Result, error) {
-	return answer(ctx, searchers{plain: defaultSearcher(searchStore{s: s}, nil)}, q, opts, nil, false)
+	return answer(ctx, s, searchers{plain: defaultSearcher(searchStore{s: s}, nil)}, q, opts, nil, false)
 }
 
 // Search answers a query through the indexer's searcher: with the semantic tier when it has a
@@ -120,7 +137,7 @@ func (x *Indexer) Search(ctx context.Context, q string, opts QueryOpts) (Result,
 	if x.hybrid.plain != nil && !paused {
 		s = x.hybrid
 	}
-	res, err := answer(ctx, s, q, opts, sch, paused)
+	res, err := answer(ctx, x.store, s, q, opts, sch, paused)
 	if err != nil {
 		return res, err
 	}
@@ -176,6 +193,9 @@ func (s *Store) embedQuery(ctx context.Context, sem *semantic, q string) (string
 // field and every tag, and any of the paths. ok is false when no document has them all, so nothing
 // can match. Every retriever filters here, before its rank and its limit.
 func (s *Store) filtered(tx *store.Tx, d dao.DAO[*store.Chunk, store.ChunkField, int64], opts QueryOpts) (dao.DAO[*store.Chunk, store.ChunkField, int64], bool, error) {
+	if opts.sectionsOnly {
+		d = d.With(store.ChunkKind, ChunkSection)
+	}
 	var docs map[int64]bool
 	for field, values := range opts.Facets {
 		vals := make([]any, len(values))
