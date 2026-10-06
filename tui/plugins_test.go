@@ -365,7 +365,9 @@ func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
 // TestAPluginThatFailsClosesItsDialogAndSaysWhy: a crash, silence, another protocol, a command that
 // is not there, each closes the dialog with a toast naming the cause.
 func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
-	shorten(t, 4*time.Second, 2*time.Second, time.Second)
+	// the plugins that answer get a handshake longer than a loaded runner's start of this test binary
+	// (the plugin) under -race; only the one that never answers is held to the short deadline
+	shorten(t, 30*time.Second, 2*time.Second, time.Second)
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "crash", "echo", 30, 6)
 	installTestPlugin(t, dir, "silent", "silent", 30, 6)
@@ -380,8 +382,10 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	r.keys(t, key('x'))
 	r.waitNotice(t, "crash exited (exit status 3): boom: the test plugin crashed")
 
+	onLoop(r, func() bool { pluginHandshake = 4 * time.Second; return true }) // read as a plugin opens, on the loop
 	r.openPlugin("silent")
 	r.waitNotice(t, "silent did not answer in 4s")
+	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
 	r.waitNotice(t, "future speaks protocol 2; this AutoDoc speaks 1")
