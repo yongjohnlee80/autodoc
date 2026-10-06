@@ -618,6 +618,13 @@ func TestRemovingTheProviderInUseReclaimsItsModel(t *testing.T) {
 			t.Fatal("embedder never filled both workspaces")
 		}
 	}
+	// a provider not in use, with another in use: it goes, and nothing else changes
+	if _, err := db.AddProvider(ctx, store.ProviderSpec{Name: "spare", Kind: store.KindOllama, BaseURL: o.URL, Model: "unused"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.RemoveProvider(ctx, "spare"); err != nil || e.current() != "a" {
+		t.Fatalf("removing a provider not in use: %v, in use %q", err, e.current())
+	}
 	if err := e.RemoveProvider(ctx, "a"); err != nil {
 		t.Fatal(err)
 	}

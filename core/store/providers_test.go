@@ -365,6 +365,10 @@ func TestRemovingTheProviderInUseRetiresItsModel(t *testing.T) {
 		t.Fatalf("with another provider of the model: retired %v, %v, model %s", got, err, state(w1.ID, fp))
 	}
 
+	if _, err := s.RemoveProviderInUse(ctx, "nowhere"); !errors.Is(err, ErrNoProvider) {
+		t.Errorf("removing a provider that is not there: %v, want ErrNoProvider", err)
+	}
+
 	// the last provider of the model: it is retired in both workspaces
 	got, err := s.RemoveProviderInUse(ctx, "cloud")
 	if err != nil || len(got) != 2 {
