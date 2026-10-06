@@ -45,7 +45,7 @@ func runTestPlugin(mode string) int {
 	switch mode {
 	case "silent": // never answers
 		select {}
-	case "protocol2": // answers in another protocol
+	case "otherprotocol": // answers in a protocol its manifest does not say
 		conn := testStdio()
 		done := make(chan struct{})
 		var link *plugin.Link
@@ -112,7 +112,7 @@ type echo struct {
 
 func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
 	e.peer, e.w, e.h = p, o.Width, o.Height
-	e.say(fmt.Sprintf("open %dx%d %s %s", o.Width, o.Height, o.Theme.Name, o.Theme.Colors["document.cursor"]))
+	e.say(fmt.Sprintf("open %dx%d %s %s p%d", o.Width, o.Height, o.Theme.Name, o.Theme.Colors["document.cursor"], o.Protocol))
 	if e.mode == "stubborn" {
 		fmt.Fprintln(os.Stderr, "stubborn: opened")
 	}
@@ -260,7 +260,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 3\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -277,8 +277,8 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 2; this AutoDoc speaks 1",
-		`panel — kind "panel": this AutoDoc runs dialog plugins`, "nocmd — no command",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 3; this AutoDoc speaks 1 to 2",
+		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
 		`huge — plugin.toml:`} {
@@ -317,7 +317,7 @@ func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	r.keys(t, enter())
-	r.waitShown(t, "open 30x6 dark #ffaf00") // the size, and dark's cursor from its values
+	r.waitShown(t, "open 30x6 dark #ffaf00 p1") // the size, dark's cursor from its values, and the manifest's protocol
 	if !strings.Contains(r.s.String(), "Echo · Esc closes") {
 		t.Fatalf("the dialog is not titled:\n%s", r.s)
 	}
@@ -371,7 +371,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "crash", "echo", 30, 6)
 	installTestPlugin(t, dir, "silent", "silent", 30, 6)
-	installTestPlugin(t, dir, "future", "protocol2", 30, 6)
+	installTestPlugin(t, dir, "future", "otherprotocol", 30, 6)
 	_ = os.MkdirAll(filepath.Join(dir, "gone"), 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "gone", "plugin.toml"),
 		[]byte("name = \"gone\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"./no-such-program\"]\n"), 0o644)
@@ -388,7 +388,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
-	r.waitNotice(t, "future speaks protocol 2; this AutoDoc speaks 1")
+	r.waitNotice(t, "future speaks protocol 3; its manifest says 1")
 
 	if r.openPlugin("gone") != nil {
 		t.Error("a plugin that did not start is open")
@@ -800,11 +800,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 3\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 2; this AutoDoc speaks 1")
+	r.waitNotice(t, "not added: protocol 3; this AutoDoc speaks 1 to 2")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)
@@ -894,5 +894,46 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	}
 	if got := entries(t, dir); len(got) != 1 || got[0] != "local" {
 		t.Fatalf("the folder holds %v, want the local plugin only", got)
+	}
+}
+
+// TestProtocolTwosManifestKeys (ADR 1791268009 §1, §2.1): protocol 2's keys run only under
+// protocol = 2, so no manifest half-works on an AutoDoc that speaks 1; an unknown key at any level
+// disables the plugin, naming it; each key's own rules hold. A 0209 manifest still runs, and a valid
+// card and service are listed enabled.
+func TestProtocolTwosManifestKeys(t *testing.T) {
+	const head = "kind = \"dialog\"\ncommand = [\"x\"]\n"
+	const svc = "kind = \"service\"\nprotocol = 2\ncommand = [\"x\"]\n"
+	for _, c := range []struct{ toml, reason string }{
+		{"protocol = 1\n" + head, ""}, // 0209's
+		{"protocol = 2\n" + head + "[dialog]\nmodal = false\nwidth = 30\n[feed]\ndocument = true\n[[commands]]\nid = \"toggle\"\ntitle = \"Toggle\"\nkey = \"s\"\n", ""},
+		{svc + "start = \"launch\"\n", ""},
+		{svc + "[feed]\ndocument = true\n", ""},
+		{"protocol = 1\n" + head + "[feed]\ndocument = true\n", "declares [feed]: needs protocol = 2"},
+		{"protocol = 1\n" + head + "[dialog]\nmodal = false\n", "declares [dialog] modal: needs protocol = 2"},
+		{"protocol = 1\n" + head + "[[commands]]\nid = \"a\"\ntitle = \"A\"\n", "declares [[commands]]: needs protocol = 2"},
+		{"protocol = 1\nkind = \"service\"\ncommand = [\"x\"]\nstart = \"launch\"\n", `declares kind = "service": needs protocol = 2`},
+		{"protocol = 1\n" + head + "colour = \"red\"\n", `unknown key "colour"`},
+		{"protocol = 1\n" + head + "[dialog]\ncolour = \"red\"\n", `unknown key "dialog.colour"`},
+		{"protocol = 2\n" + head + "[feed]\ndiffs = true\n", `unknown key "feed.diffs"`},
+		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\ntitle = \"A\"\nletter = \"a\"\n", `unknown key "commands.letter"`},
+		{svc + "start = \"launch\"\n[dialog]\nwidth = 30\n", "[dialog]: a service has no dialog"},
+		{"protocol = 2\n" + head + "start = \"launch\"\n", "start: only a service starts on its own"},
+		{svc + "start = \"boot\"\n", `start "boot": want use or launch`},
+		{svc, `start = "use": nothing would start it (no command, no feed)`},
+		{"protocol = 2\n" + head + "[dialog]\nmodal = false\nesc = \"hide\"\n", "[dialog] esc: a card's Esc gives the keys back"},
+		{"protocol = 2\n" + head + "[[commands]]\nid = \"A\"\ntitle = \"A\"\n", `command id "A": want lower-case`},
+		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\ntitle = \"A\"\n[[commands]]\nid = \"a\"\ntitle = \"B\"\n", `command id "a": twice`},
+		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\n", `command "a": no title`},
+		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\ntitle = \"A\"\nkey = \"ab\"\n", `command "a": key "ab": want one letter or digit`},
+		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\ntitle = \"A\"\nkey = \"s\"\n[[commands]]\nid = \"b\"\ntitle = \"B\"\nkey = \"s\"\n", `command "b": key "s" is "a"'s already`},
+	} {
+		dir := filepath.Join(t.TempDir(), "p")
+		_ = os.MkdirAll(dir, 0o755)
+		_ = os.WriteFile(filepath.Join(dir, "plugin.toml"), []byte("name = \"p\"\n"+c.toml), 0o644)
+		e := readPlugin(dir)
+		if c.reason == "" && e.reason != "" || c.reason != "" && !strings.HasPrefix(e.reason, c.reason) {
+			t.Errorf("%q: reason %q, want %q", c.toml, e.reason, c.reason)
+		}
 	}
 }

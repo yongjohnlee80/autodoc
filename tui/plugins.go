@@ -89,14 +89,22 @@ func (d *dialogSize) UnmarshalTOML(v any) error {
 	return fmt.Errorf("height %v: want rows, or a percentage from \"10%%\" to \"100%%\"", v)
 }
 
-// manifest is a plugin.toml.
+// manifest is a plugin.toml. Protocol 2's keys (ADR 1791268009) are kind = "service", start,
+// [dialog] modal, [feed] and [[commands]]; a manifest that uses any of them says protocol = 2.
 type manifest struct {
 	Name     string   `toml:"name"`
 	Title    string   `toml:"title"`
-	Kind     string   `toml:"kind"`
+	Kind     string   `toml:"kind"` // "dialog", or "service" (no surface)
 	Protocol int      `toml:"protocol"`
 	Command  []string `toml:"command"`
-	Dialog   struct {
+	// Start is when a service starts: "use" (the default), on its first command or feed event, or
+	// "launch", with the TUI.
+	Start  string `toml:"start"`
+	Dialog struct {
+		// Modal is a dialog that holds the keys while open (the default); false is a card beside
+		// the page, which takes them when clicked or its command's key is pressed, and gives them
+		// back on Esc.
+		Modal  *bool      `toml:"modal"`
 		Width  int        `toml:"width"`
 		Height dialogSize `toml:"height"` // rows, or "80%" of the screen's
 		// Placements are where it is designed to sit (pluginAnchors' names), the first its
@@ -106,12 +114,34 @@ type manifest struct {
 		// the dialog hides, the plugin is told (plugin.hide) and keeps running.
 		Esc string `toml:"esc"`
 	} `toml:"dialog"`
+	// Feed is what the plugin is sent of the editor: Document, the open note (plugin.document).
+	Feed struct {
+		Document bool `toml:"document"`
+	} `toml:"feed"`
+	// Commands are the plugin's own, on the Plugins menu and the SPC p card.
+	Commands []pluginCommand `toml:"commands"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv (plugininstall.go).
 	Install struct {
 		Build []string `toml:"build"`
 	} `toml:"install"`
 }
+
+// pluginCommand is one of a manifest's [[commands]]: its id (plugin.command's), its title on the
+// menu, and its letter on the SPC p card ("" for none).
+type pluginCommand struct {
+	ID    string `toml:"id"`
+	Title string `toml:"title"`
+	Key   string `toml:"key"`
+}
+
+// modal is whether the plugin's dialog holds the keys: a dialog's is, unless it says modal = false.
+func (m *manifest) modal() bool {
+	return m.Kind == "dialog" && (m.Dialog.Modal == nil || *m.Dialog.Modal)
+}
+
+// service is a plugin with no surface.
+func (m *manifest) service() bool { return m.Kind == "service" }
 
 // pluginEntry is a plugin found in the folder: its directory, its manifest, and why it cannot run
 // ("" when it can).
@@ -182,7 +212,8 @@ func readPlugin(dir string) *pluginEntry {
 		return nil
 	}
 	e := &pluginEntry{dir: dir}
-	if _, err := toml.DecodeFile(path, &e.m); err != nil {
+	md, err := toml.DecodeFile(path, &e.m)
+	if err != nil {
 		e.reason = "plugin.toml: " + firstLine(err.Error())
 		return e
 	}
@@ -190,12 +221,18 @@ func readPlugin(dir string) *pluginEntry {
 	switch {
 	case !pluginName.MatchString(m.Name):
 		e.reason = fmt.Sprintf("name %q: want lower-case letters, digits and -", m.Name)
-	case m.Kind != "dialog":
-		e.reason = fmt.Sprintf("kind %q: this AutoDoc runs dialog plugins", m.Kind)
-	case m.Protocol != plugin.Protocol:
-		e.reason = fmt.Sprintf("protocol %d; this AutoDoc speaks %d", m.Protocol, plugin.Protocol)
+	case m.Kind != "dialog" && m.Kind != "service":
+		e.reason = fmt.Sprintf("kind %q: want dialog or service", m.Kind)
+	case m.Protocol < plugin.MinProtocol || m.Protocol > plugin.Protocol:
+		e.reason = fmt.Sprintf("protocol %d; this AutoDoc speaks %d to %d", m.Protocol, plugin.MinProtocol, plugin.Protocol)
+	case len(md.Undecoded()) > 0:
+		// strictly: a key this AutoDoc does not know is one it would ignore, and run the plugin
+		// without (ADR 1791268009 §1)
+		e.reason = fmt.Sprintf("unknown key %q", md.Undecoded()[0].String())
 	case len(m.Command) == 0 || m.Command[0] == "":
 		e.reason = "no command"
+	default:
+		e.reason = checkProtocolTwo(m, md)
 	}
 	if m.Dialog.Width == 0 {
 		m.Dialog.Width = pluginWidth
@@ -215,6 +252,9 @@ func readPlugin(dir string) *pluginEntry {
 			e.reason = fmt.Sprintf("placement %q: want %s", p, pluginAnchorNames)
 		}
 	}
+	if m.Start == "" {
+		m.Start = "use"
+	}
 	if m.Dialog.Esc == "" {
 		m.Dialog.Esc = "close"
 	}
@@ -222,6 +262,69 @@ func readPlugin(dir string) *pluginEntry {
 		e.reason = fmt.Sprintf("esc %q: want close or hide", m.Dialog.Esc)
 	}
 	return e
+}
+
+// checkProtocolTwo is why m's protocol-2 keys cannot run ("" when they can): each needs
+// protocol = 2, so an older AutoDoc, which speaks 1 alone, refuses the manifest rather than run it
+// without them.
+func checkProtocolTwo(m *manifest, md toml.MetaData) string {
+	var declares []string
+	if m.service() {
+		declares = append(declares, `kind = "service"`)
+	}
+	if md.IsDefined("start") {
+		declares = append(declares, "start")
+	}
+	if md.IsDefined("dialog", "modal") {
+		declares = append(declares, "[dialog] modal")
+	}
+	if md.IsDefined("feed") {
+		declares = append(declares, "[feed]")
+	}
+	if md.IsDefined("commands") {
+		declares = append(declares, "[[commands]]")
+	}
+	if len(declares) > 0 && m.Protocol < 2 {
+		return fmt.Sprintf("declares %s: needs protocol = 2", declares[0])
+	}
+	switch {
+	case m.service() && md.IsDefined("dialog"):
+		return "[dialog]: a service has no dialog"
+	case !m.service() && md.IsDefined("start"):
+		return "start: only a service starts on its own"
+	case !m.modal() && md.IsDefined("dialog", "esc"):
+		return "[dialog] esc: a card's Esc gives the keys back, and nothing else"
+	case m.Start != "" && m.Start != "use" && m.Start != "launch":
+		return fmt.Sprintf("start %q: want use or launch", m.Start)
+	}
+	ids, keys := map[string]bool{}, map[string]string{}
+	for _, c := range m.Commands {
+		switch {
+		case !pluginName.MatchString(c.ID):
+			return fmt.Sprintf("command id %q: want lower-case letters, digits and -", c.ID)
+		case ids[c.ID]:
+			return fmt.Sprintf("command id %q: twice", c.ID)
+		case c.Title == "":
+			return fmt.Sprintf("command %q: no title", c.ID)
+		case c.Key != "" && !pluginLetter(c.Key):
+			return fmt.Sprintf("command %q: key %q: want one letter or digit", c.ID, c.Key)
+		case c.Key != "" && keys[c.Key] != "":
+			return fmt.Sprintf("command %q: key %q is %q's already", c.ID, c.Key, keys[c.Key])
+		}
+		ids[c.ID] = true
+		if c.Key != "" {
+			keys[c.Key] = c.ID
+		}
+	}
+	if m.service() && (m.Start == "" || m.Start == "use") && len(m.Commands) == 0 && !m.Feed.Document {
+		return `start = "use": nothing would start it (no command, no feed)`
+	}
+	return ""
+}
+
+// pluginLetter is a key a command may hold on the SPC p card: one lower-case letter or digit.
+func pluginLetter(k string) bool {
+	return len(k) == 1 && (k[0] >= 'a' && k[0] <= 'z' || k[0] >= '0' && k[0] <= '9')
 }
 
 func firstLine(s string) string {
@@ -349,7 +452,7 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 	log := openPluginLog(h.pluginOpt.LogDir, e.m.Name)
 	cmd := exec.Command(e.m.Command[0], e.m.Command[1:]...)
 	cmd.Dir = e.dir
-	cmd.Env = append(os.Environ(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", plugin.Protocol),
+	cmd.Env = append(os.Environ(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
 		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+h.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	cmd.SysProcAttr = pluginProcAttr()
@@ -398,7 +501,7 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 // handshake's deadline from then.
 func (r *pluginRun) openAt(w, h int) {
 	r.opened = true
-	r.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: plugin.Protocol,
+	r.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: r.e.m.Protocol,
 		Width: w, Height: h, Theme: r.h.pluginTheme()}))
 	time.AfterFunc(r.handshake, func() {
 		r.h.p.Post(func() {
@@ -478,7 +581,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 	switch method {
 	case plugin.MethodReady:
 		p, err := plugin.ReadReady(params)
-		if err == nil && p == plugin.Protocol {
+		if err == nil && p == r.e.m.Protocol {
 			// here, not on the loop: the plugin's first frame follows at once, on this goroutine
 			r.readyIn.Store(true)
 		}
@@ -514,14 +617,15 @@ func (r *pluginRun) onNote(method string, params []any) {
 	}
 }
 
-// readied is host.ready: the plugin's protocol, which must be this AutoDoc's.
+// readied is host.ready: the plugin's protocol, which must be the one its manifest says, and
+// plugin.open told it.
 func (r *pluginRun) readied(p int, err error) {
 	switch {
 	case r.closing || r.ready:
 	case err != nil:
 		r.close("answered wrongly: " + err.Error())
-	case p != plugin.Protocol:
-		r.close(fmt.Sprintf("speaks protocol %d; this AutoDoc speaks %d", p, plugin.Protocol))
+	case p != r.e.m.Protocol:
+		r.close(fmt.Sprintf("speaks protocol %d; its manifest says %d", p, r.e.m.Protocol))
 	default:
 		r.ready = true
 	}
