@@ -195,3 +195,67 @@ func TestDocOutlineOverTheWire(t *testing.T) {
 		t.Errorf("a missing note: %v", err)
 	}
 }
+
+// TestIndexDocumentsDiagnosed: opts.diagnosed lists exactly the documents the schema diagnoses —
+// a missing required field, a value the enum refuses, YAML that does not parse — each with its
+// diagnostics in source order; a valid one is left out, a fixed one drops out once reindexed, and
+// a call without the option carries no diagnostics key.
+func TestIndexDocumentsDiagnosed(t *testing.T) {
+	cli, _ := schemaServer(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, required: true, enum: [adr, note]}\n"+
+		"  status: {type: string, required: true}\ntypes:\n  adr: {}\n  note: {}\n")
+	write := func(path, content string) { call(t, cli, "doc.write", "kb", path, []byte(content), "") }
+	write("good.md", "---\ntype: adr\nstatus: accepted\n---\n# Good\n")
+	write("missing.md", "---\ntype: adr\n---\n# Missing\n")
+	write("enum.md", "---\ntype: memo\nstatus: x\n---\n# Enum\n")
+	write("broken.md", "---\ntype: adr\nstatus: [unclosed\n---\n# Broken\n")
+	listed := func(opts map[string]any) map[string][]any {
+		out := map[string][]any{}
+		for _, d := range call(t, cli, "index.documents", "kb", opts).(map[string]any)["docs"].([]any) {
+			m := d.(map[string]any)
+			ds, has := m["diagnostics"].([]any)
+			if !has && m["diagnostics"] != nil {
+				t.Errorf("%v: diagnostics is %T", m["path"], m["diagnostics"])
+			}
+			out[m["path"].(string)] = ds
+		}
+		return out
+	}
+	eventually(t, "the four documents indexed", func() bool { return len(listed(nil)) == 4 })
+
+	got := listed(map[string]any{"diagnosed": true, "sort": "path"})
+	if len(got) != 3 || got["good.md"] != nil {
+		t.Fatalf("diagnosed lists %v, want broken.md, enum.md, missing.md", got)
+	}
+	rule := func(ds []any, i int) (string, string) {
+		if i >= len(ds) {
+			return "", ""
+		}
+		d := ds[i].(map[string]any)
+		return d["rule"].(string), d["field"].(string)
+	}
+	if r, f := rule(got["missing.md"], 0); len(got["missing.md"]) != 1 || r != schema.RuleRequired || f != "status" {
+		t.Errorf("missing.md: %v", got["missing.md"])
+	}
+	if r, f := rule(got["enum.md"], 0); r != schema.RuleEnum || f != "type" {
+		t.Errorf("enum.md: %v", got["enum.md"])
+	}
+	if len(got["broken.md"]) == 0 {
+		t.Errorf("broken.md: no diagnostic for YAML that does not parse")
+	}
+	for path, ds := range listed(nil) {
+		if ds != nil {
+			t.Errorf("%s: diagnostics without opts.diagnosed: %v", path, ds)
+		}
+	}
+	ver := call(t, cli, "doc.read", "kb", "missing.md").(map[string]any)["version"].(string)
+	call(t, cli, "doc.write", "kb", "missing.md", []byte("---\ntype: adr\nstatus: proposed\n---\n# Missing\n"), ver)
+	eventually(t, "the fixed document drops out", func() bool {
+		g := listed(map[string]any{"diagnosed": true})
+		_, still := g["missing.md"]
+		return len(g) == 2 && !still
+	})
+	// it composes with the other filters
+	if g := listed(map[string]any{"diagnosed": true, "paths": []any{"enum.md"}}); len(g) != 1 || g["enum.md"] == nil {
+		t.Errorf("diagnosed with paths: %v", g)
+	}
+}

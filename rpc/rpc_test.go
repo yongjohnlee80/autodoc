@@ -188,7 +188,7 @@ func TestDuplicateVerbPanics(t *testing.T) {
 	s.handle("sys.hello", s.hello)
 }
 
-// TestVerbsArePinned: the verb surface is Protocol 14's, the same verbs as 13's (14 changed what the graph verbs answer, not which there are); 13's was 12's, with index.documents; 12's was 11's, with search.query's stages; 10 had no ranker verbs; 10's was 9's; 8 had no workspace.configure or sys.capabilities; 7 had no workspace.set_schema, workspace.set_text_extensions, workspace.set_provider, doc.validate, doc.outline or sys.events; 6 had no workspace.set_patterns; 5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
+// TestVerbsArePinned: the verb surface is Protocol 15's, the same verbs as 14's (15 adds index.documents' diagnosed option, no verb); 14's is 13's (14 changed what the graph verbs answer, not which there are); 13's was 12's, with index.documents; 12's was 11's, with search.query's stages; 10 had no ranker verbs; 10's was 9's; 8 had no workspace.configure or sys.capabilities; 7 had no workspace.set_schema, workspace.set_text_extensions, workspace.set_provider, doc.validate, doc.outline or sys.events; 6 had no workspace.set_patterns; 5 had no workspace.focus; 4 had no workspace.section_size or embedding.model_context; 3 had no embedding.cancel_switch or
 // index.models; 2 had no preference or embedding verbs; 1 had no workspace.add, rename or remove).
 // Changing it means bumping Protocol and this list together.
 func TestVerbsArePinned(t *testing.T) {
@@ -200,7 +200,7 @@ func TestVerbsArePinned(t *testing.T) {
 		"preference.list", "preference.set",
 		"ranker.add", "ranker.list", "ranker.log", "ranker.models", "ranker.remove", "ranker.update", "ranker.usage", "ranker.use", "ranker.window",
 		"search.query", "sys.capabilities", "sys.events", "sys.hello", "sys.shutdown", "workspace.add", "workspace.configure", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size", "workspace.set_patterns", "workspace.set_provider", "workspace.set_schema", "workspace.set_text_extensions"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 14 || MinProtocol != 12 {
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 15 || MinProtocol != 12 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }
