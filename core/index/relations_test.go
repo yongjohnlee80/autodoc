@@ -154,10 +154,17 @@ func TestTheBodyKindsWalkNoRelation(t *testing.T) {
 func TestASupersessionLoopIsReported(t *testing.T) {
 	e := newEnv(t, Options{})
 	e.put("a.md", "---\nsupersedes: [b.md]\n---\nA\n", "b.md", "---\nsuperseded_by: [a.md]\nsupersedes: [a.md]\n---\nB\n",
-		"c.md", "---\nsupersedes: [d.md]\n---\nC\n", "d.md", "D", "broken.md", "[[nowhere]]")
+		"c.md", "---\nsupersedes: [d.md]\n---\nC\n", "d.md", "D", "broken.md", "[[nowhere]]",
+		// both sides of one relation, which agree: x replaced y; no loop
+		"x.md", "---\nsupersedes: [y.md]\n---\nX\n", "y.md", "---\nsuperseded_by: [x.md]\n---\nY\n",
+		// a loop of three: p replaced q, q replaced r, r replaced p
+		"p.md", "---\nsupersedes: [q.md]\n---\nP\n", "q.md", "---\nsupersedes: [r.md]\n---\nQ\n", "r.md", "---\nsupersedes: [p.md]\n---\nR\n",
+		// a document that says it replaces itself is ignored, as the demotion ignores it
+		"self.md", "---\nsupersedes: [self.md]\n---\nS\n")
 	// a supersedes b; b says a replaced it (the same relation) and that it replaces a: a loop
 	got := e.unresolved()
-	want := []string{"broken.md [[nowhere]] missing", "a.md b.md cycle", "b.md a.md cycle", "b.md a.md cycle"}
+	want := []string{"broken.md [[nowhere]] missing", "a.md b.md cycle", "b.md a.md cycle", "b.md a.md cycle",
+		"p.md q.md cycle", "q.md r.md cycle", "r.md p.md cycle"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("unresolved:\n got %q\nwant %q", got, want)
 	}
