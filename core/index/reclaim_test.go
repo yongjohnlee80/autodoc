@@ -313,14 +313,14 @@ func TestAFailedTargetWriteChangesNothing(t *testing.T) {
 		if _, err := e.raw.ExecContext(context.Background(), trigger); err != nil {
 			t.Fatal(err)
 		}
-		e.ix.sem.target = newFake("m2", "b") // the indexer asked to fill another model
-		if err := e.ix.setupModels(context.Background()); err == nil {
+		// an indexer asked to fill another model, never run: its setupModels alone, nothing racing it
+		x := NewIndexer(e.store, e.fault, Options{Provider: newFake("m2", "b"), Match: testMatch})
+		if err := x.setupModels(context.Background()); err == nil {
 			t.Errorf("setupModels under %q: no error", trigger)
 		}
 		if got := target(); got != fpA {
 			t.Errorf("after a refused write the target is %q, want a's", got)
 		}
-		e.ix.sem.target = a
 		if _, err := e.raw.ExecContext(context.Background(), "DROP TRIGGER refuse"); err != nil {
 			t.Fatal(err)
 		}
