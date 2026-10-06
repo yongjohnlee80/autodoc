@@ -223,6 +223,9 @@ type Host struct {
 	pluginOpt  Plugins
 	pluginList []pluginEntry
 	pluginRows *tuidecl.ListModel
+	// feedVersion numbers the editor's text for the document feed, and feedGen its pending send
+	// (pluginfeed.go)
+	feedVersion, feedGen int
 	// pluginKeyRows are the SPC p card's letters: each command's, as bound (plugincmds.go)
 	pluginKeyRows *tuidecl.ListModel
 	running       map[string]*pluginRun

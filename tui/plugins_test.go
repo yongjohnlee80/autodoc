@@ -1156,3 +1156,118 @@ func TestAPreferenceRebindsAPluginCommand(t *testing.T) {
 	r.keys(t, key('b'))
 	r.waitShown(t, "command x")
 }
+
+// said is what the test plugin named has said so far, from its log: each line it drew, in order.
+func said(t *testing.T, logs, name string) []string {
+	t.Helper()
+	b, _ := os.ReadFile(filepath.Join(logs, name+".log"))
+	var out []string
+	for _, l := range strings.Split(string(b), "\n") {
+		if s, ok := strings.CutPrefix(l, "said: "); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// waitSaid waits until the plugin has said a line starting with prefix, and returns what it said.
+func waitSaid(t *testing.T, logs, name, prefix string) []string {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		got := said(t, logs, name)
+		if slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, prefix) }) {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never said %q; it said %q", name, prefix, got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func docsIn(lines []string) []string {
+	return slices.DeleteFunc(slices.Clone(lines), func(s string) bool { return !strings.HasPrefix(s, "doc ") })
+}
+
+// TestTheDocumentFeed (ADR 1791268009 §2.3): a plugin that declares the feed is sent the note when
+// it starts, then once per pause in editing: the editor's own text, unsaved, with the cursor and the
+// selection in its columns (grapheme clusters, from 1), the version rising with each edit. A note too
+// large for the link is sent too large. A plugin that did not declare the feed is never sent it.
+func TestTheDocumentFeed(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "stats", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n")
+	installPlugin2(t, dir, "quiet", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 30\nheight = 4\nplacements = [\"bottom-left\"]\n")
+	r, logs := pluginTUI(t, dir)
+	onLoop(r, func() bool { r.h.openPlugin("stats"); r.h.openPlugin("quiet"); return true })
+	first := docsIn(waitSaid(t, logs, "stats", "doc "))
+	if len(first) != 1 || !strings.HasPrefix(first[0], `doc "" v`) || !strings.Contains(first[0], `"" at 1:1 large=false`) {
+		t.Fatalf("the document at start: %q", first)
+	}
+	onLoop(r, func() bool { r.h.p.Call("editor", "forceActiveFocus"); return true })
+
+	r.keys(t, key('i'), key('h'), key('é'), key('l'), key('l'), key('o'), esc())
+	got := docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.feedVersion }))))
+	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst
+	got = docsIn(said(t, logs, "stats"))
+	if len(got) != 2 || !strings.Contains(got[1], `"héllo" at 1:5 large=false`) {
+		t.Fatalf("one document for the burst, the text typed and the cursor on o (column 5): %q", got)
+	}
+	v1, v2 := version(t, got[0]), version(t, got[1])
+	if v2 <= v1 {
+		t.Fatalf("the version did not rise: %d then %d", v1, v2)
+	}
+
+	r.keys(t, key('v'), key('h'), key('h')) // the selection: é, l, l — columns 2 to 4, its end after it
+	got = docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(v2)+` "héllo" at 1:3 sel 1:3-1:6`))
+	r.keys(t, esc())
+
+	big := strings.Repeat("x", plugin.MaxMessageBytes)
+	onLoop(r, func() bool { r.h.editor.SetValue(big); r.h.edited(); return true })
+	waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(v2+1)+` "" at 0:0 large=true`)
+
+	if q := docsIn(said(t, logs, "quiet")); len(q) != 0 {
+		t.Fatalf("a plugin that did not declare the feed was sent it: %q", q)
+	}
+}
+
+func version(t *testing.T, doc string) int {
+	t.Helper()
+	var v int
+	if _, err := fmt.Sscanf(doc[strings.Index(doc, " v")+2:], "%d", &v); err != nil {
+		t.Fatalf("no version in %q", doc)
+	}
+	return v
+}
+
+// TestServicesStartOnUseOrAtLaunch (ADR 1791268009 §2.4): a service has no surface. One that starts
+// on use is not running until its command, which it is then sent, or the first event of its feed;
+// one that starts at launch runs with the TUI. Each is opened with no size.
+func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "oncmd", "service", "echo", "[[commands]]\nid = \"run\"\ntitle = \"Run\"\nkey = \"r\"\n")
+	installPlugin2(t, dir, "onfeed", "service", "echo", "[feed]\ndocument = true\n")
+	installPlugin2(t, dir, "atstart", "service", "echo", "start = \"launch\"\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n")
+	r, logs := pluginTUI(t, dir)
+	waitSaid(t, logs, "atstart", "open 0x0 dark")
+	if running := onLoop(r, func() []string { return slices.Sorted(maps.Keys(r.h.running)) }); !reflect.DeepEqual(running, []string{"atstart"}) {
+		t.Fatalf("running at start: %v, want atstart alone", running)
+	}
+
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.keys(t, key('r'))
+	got := waitSaid(t, logs, "oncmd", "command run")
+	if !reflect.DeepEqual(got[len(got)-1:], []string{"command run"}) || !strings.HasPrefix(got[0], "open 0x0 dark") {
+		t.Fatalf("oncmd said %q: want it opened with no size, then the command", got)
+	}
+	if strings.Contains(r.s.String(), "open 0x0") {
+		t.Fatalf("a service drew on the screen:\n%s", r.s)
+	}
+
+	if onLoop(r, func() bool { return r.h.running["onfeed"] != nil }) {
+		t.Fatal("onfeed runs before its feed's first event")
+	}
+	r.keys(t, key('i'), key('k'), esc())
+	waitSaid(t, logs, "onfeed", `doc "" v`)
+}
