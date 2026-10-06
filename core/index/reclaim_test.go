@@ -272,6 +272,17 @@ func TestPurgeSaysWhatToDoInstead(t *testing.T) {
 	if n, row := e.vectorsOf(fpA); n != kept || !row {
 		t.Errorf("a refused purge deleted: %d of %d vectors, row %v", n, kept, row)
 	}
+	// a switch to b under way: b is the target, and purging it is the cancel's to do
+	b := newFake("m2", "b")
+	b.hold("zebra")
+	e.open(Options{Provider: b})
+	fpB := b.Model().Fingerprint()
+	e.eventually("b filling", func() bool { return len(b.texts()) > 0 })
+	err = e.ix.PurgeModel(context.Background(), fpB)
+	if !errors.Is(err, ErrModelInUse) || !strings.Contains(err.Error(), "m2 is the switch's target: cancel the switch") {
+		t.Errorf("purging the target: %v", err)
+	}
+	b.unhold()
 	e.seedModel(e.ws, "fake|old|sha256:o|4", 3, 0, 0)
 	if err := e.ix.PurgeModel(context.Background(), "fake|old|sha256:o|4"); err != nil {
 		t.Fatal(err)
