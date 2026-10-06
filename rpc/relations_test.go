@@ -114,3 +114,48 @@ func TestKindsNeedsProtocol14(t *testing.T) {
 		}
 	}
 }
+
+// TestSearchDemotesOnRequest: search.query's retrieval option demotes a superseded document below its
+// successor for one query, its hit naming the successor; an unknown retrieval option is refused.
+func TestSearchDemotesOnRequest(t *testing.T) {
+	r := serve(t)
+	for p, c := range map[string]string{
+		"old.md": "# Old\n\nkestrel kestrel kestrel\n",
+		"new.md": "---\nsupersedes: [old.md]\n---\n# New\n\nkestrel\n",
+	} {
+		if _, err := r.fsys.WriteFile(context.Background(), p, strings.NewReader(c)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cli, _, err := helloAs(r, Protocol, "a-new-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	search := func(opts map[string]any) []any {
+		res, err := cli.Call(context.Background(), "search.query", "kb", "kestrel", opts)
+		if err != nil {
+			return nil
+		}
+		return res.(map[string]any)["hits"].([]any)
+	}
+	eventually(t, "both indexed, the relation resolved", func() bool {
+		hits := search(map[string]any{"mode": "lexical", "retrieval": map[string]any{"demote_superseded": true}})
+		return len(hits) == 2 && hits[0].(map[string]any)["path"] == "new.md"
+	})
+	hits := search(map[string]any{"mode": "lexical", "retrieval": map[string]any{"demote_superseded": true}})
+	if hits[1].(map[string]any)["superseded_by"] != "new.md" {
+		t.Errorf("the superseded hit: %v", hits[1])
+	}
+	if _, ok := hits[0].(map[string]any)["superseded_by"]; ok {
+		t.Errorf("the successor's hit carries superseded_by: %v", hits[0])
+	}
+	plain := search(map[string]any{"mode": "lexical"})
+	if len(plain) != 2 || plain[0].(map[string]any)["path"] != "old.md" {
+		t.Errorf("without the option: %v, want old.md first", plain)
+	}
+	_, err = cli.Call(context.Background(), "search.query", "kb", "kestrel", map[string]any{"retrieval": map[string]any{"colour": true}})
+	var re *golibrpc.Error
+	if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams {
+		t.Errorf("an unknown retrieval option: %v, want invalid params", err)
+	}
+}
