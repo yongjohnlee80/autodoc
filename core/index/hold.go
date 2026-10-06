@@ -37,7 +37,7 @@ type Identity struct {
 	// built-in Markdown: the relations reading ("r1") and the abstract chunk ("a1") it was indexed
 	// with; "" when it was not
 	Relations, Abstract string
-	Schema, Tokens    int    // built-in and registered
+	Schema, Tokens      int // built-in and registered
 }
 
 // Form is which of document.indexer's forms a string is.
