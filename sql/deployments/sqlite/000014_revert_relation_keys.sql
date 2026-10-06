@@ -1,0 +1,3 @@
+ALTER TABLE chunk DROP COLUMN kind;
+DROP INDEX IF EXISTS link_key_key;
+DROP TABLE IF EXISTS link_key;
