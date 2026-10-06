@@ -121,7 +121,7 @@ func TestSectionSizeRechunksOnlyItsWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.Reindex("")
-	for deadline := time.Now().Add(10 * time.Second); a.store.indexer("n.md") != indexerVersion(256); time.Sleep(10 * time.Millisecond) {
+	for deadline := time.Now().Add(10 * time.Second); a.store.indexer("n.md") != docVersion(indexerVersion(256), true, "", false); time.Sleep(10 * time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("section-size change did not reindex workspace a")
 		}

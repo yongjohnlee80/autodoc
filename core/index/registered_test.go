@@ -109,7 +109,8 @@ func TestARegisteredChunkerCutsItsFiles(t *testing.T) {
 	}
 	community := newEnv(t, Options{Match: goAndMarkdown})
 	community.put("a.go", goSrc)
-	if got := community.indexerOf("a.go"); got != "c"+ChunkerVersion+".s3.t512" {
+	// unregistered, a.go is read as Markdown: its relations are read too (".r1")
+	if got := community.indexerOf("a.go"); got != "c"+ChunkerVersion+".s3.t512.r1" {
 		t.Errorf("the community build records a.go under %q", got)
 	}
 	if got := community.embedsOf("a.go"); len(got) == 0 || slices.ContainsFunc(got, func(s string) bool { return s != "" }) {

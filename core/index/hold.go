@@ -34,6 +34,9 @@ type Identity struct {
 	// Built is a derived document's built-in identity: its text is Markdown, chunked as such.
 	Built             string
 	Chunker, SchemaFP string // built-in: golib's chunker version, and Markdown's schema fingerprint
+	// built-in Markdown: the relations reading ("r1") and the abstract chunk ("a1") it was indexed
+	// with; "" when it was not
+	Relations, Abstract string
 	Schema, Tokens    int    // built-in and registered
 }
 
@@ -99,12 +102,42 @@ func ParseIdentity(s string) (Identity, error) {
 		if !ok || !ok1 {
 			return Identity{}, bad
 		}
-		tok, fp, hasFP := strings.Cut(rest, ".f")
-		tokens, ok2 := digits(tok)
-		if !ok2 || hasFP && !isHex12(fp) {
+		// TOKENS, then in this order, each optional: ".f" FP, ".r" N (relations), ".a" N (abstract)
+		parts := strings.Split(rest, ".")
+		tokens, ok2 := digits(parts[0])
+		if !ok2 {
 			return Identity{}, bad
 		}
-		return Identity{Form: BuiltIn, Chunker: chunker, Schema: schema, Tokens: tokens, SchemaFP: fp}, nil
+		id := Identity{Form: BuiltIn, Chunker: chunker, Schema: schema, Tokens: tokens}
+		order := "fra"
+		for _, part := range parts[1:] {
+			if part == "" {
+				return Identity{}, bad
+			}
+			i := strings.IndexByte(order, part[0])
+			if i < 0 {
+				return Identity{}, bad
+			}
+			order = order[i+1:]
+			switch v := part[1:]; part[0] {
+			case 'f':
+				if !isHex12(v) {
+					return Identity{}, bad
+				}
+				id.SchemaFP = v
+			case 'r':
+				if _, ok := digits(v); !ok {
+					return Identity{}, bad
+				}
+				id.Relations = part
+			case 'a':
+				if _, ok := digits(v); !ok {
+					return Identity{}, bad
+				}
+				id.Abstract = part
+			}
+		}
+		return id, nil
 	}
 	return Identity{}, bad
 }
