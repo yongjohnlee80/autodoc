@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -154,8 +155,8 @@ func (e *echo) Document(d plugin.Document) {
 	}
 	e.say(fmt.Sprintf("doc %q v%d %q at %d:%d%s large=%v", d.Path, d.Version, d.Text, d.Cursor.Line, d.Cursor.Col, sel, d.TooLarge))
 }
-func (e *echo) Hide()                { e.say("hide") }
-func (e *echo) Show()                { e.say("show") }
+func (e *echo) Hide() { e.say("hide") }
+func (e *echo) Show() { e.say("show") }
 
 func (e *echo) Close() {
 	fmt.Fprintln(os.Stderr, "echo: closing")
@@ -1016,5 +1017,65 @@ func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 	r.s.WaitFor(t, "the editor has the keys again", func(string) bool { return strings.Contains(r.editorText(), "W") })
 	if strings.Contains(r.s.String(), "key W") || !strings.Contains(before, "Q") {
 		t.Fatalf("after Esc the card still took keys:\n%s", r.s)
+	}
+}
+
+// TestTheHostKeepsOnlyTheNewestDocumentWaiting (ADR 1791268009 §2.3): with the plugin reading
+// nothing, 50 documents among keys and commands leave one document waiting, the newest, at the
+// tail of what came before it; the keys and commands all wait, in order. Documents never count
+// toward the queue's bound, and anything else past it is a plugin not reading.
+func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
+	q := newOutQueue()
+	var want []string
+	for i := 1; i <= 50; i++ {
+		if !q.push(outNote{plugin.MethodDocument, plugin.DocumentParams(plugin.Document{Path: "a.md", Version: i})}) {
+			t.Fatalf("document %d refused", i)
+		}
+		// the newer document takes the tail as it is sent; the one waiting goes
+		want = append(slices.DeleteFunc(want, func(s string) bool { return strings.HasPrefix(s, "document") }),
+			fmt.Sprintf("document v%d", i))
+		k := outNote{plugin.MethodKey, plugin.KeyParams(plugin.Key{Key: fmt.Sprint(i)})}
+		c := outNote{plugin.MethodCommand, plugin.CommandParams(fmt.Sprintf("c%d", i))}
+		q.push(k)
+		q.push(c)
+		want = append(want, "key "+fmt.Sprint(i), fmt.Sprintf("command c%d", i))
+	}
+	if all, docs := q.waiting(); all != 101 || docs != 1 {
+		t.Fatalf("%d waiting, %d documents; want 101 and 1", all, docs)
+	}
+	q.close()
+	var got []string
+	for {
+		n, ok := q.pop()
+		if !ok {
+			break
+		}
+		switch n.method {
+		case plugin.MethodDocument:
+			d, _ := plugin.ReadDocument(n.params)
+			got = append(got, fmt.Sprintf("document v%d", d.Version))
+		case plugin.MethodKey:
+			k, _ := plugin.ReadKey(n.params)
+			got = append(got, "key "+k.Key)
+		case plugin.MethodCommand:
+			id, _ := plugin.ReadCommand(n.params)
+			got = append(got, "command "+id)
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sent in the order\n%q\nwant\n%q", got, want)
+	}
+
+	full := newOutQueue()
+	for i := 0; i < pluginQueue; i++ {
+		if !full.push(outNote{plugin.MethodKey, nil}) {
+			t.Fatalf("key %d refused under the bound", i)
+		}
+	}
+	if !full.push(outNote{plugin.MethodDocument, nil}) {
+		t.Error("a document refused at the bound: documents do not count toward it")
+	}
+	if full.push(outNote{plugin.MethodKey, nil}) {
+		t.Error("a key past the bound was taken")
 	}
 }
