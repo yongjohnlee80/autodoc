@@ -375,6 +375,12 @@ speak.
   saves a full copy of every file it will touch, so `--undo` restores the KB without git, and
   `--forget` deletes that copy. In a git repository it commits the migration's paths; it never
   pushes.
+- **The KB layout** is the one the drawer's scaffold writes. Each folder's `ABOUT.md` says what
+  belongs there. The `_` folders use `_ABOUT.md` instead, because on a case-insensitive
+  filesystem (macOS's default) `_templates/ABOUT.md` and `_templates/about.md` (the `about` type's
+  template) are the same file. A KB an older scaffold wrote keeps the old names. Rename them
+  on a Linux host and commit: `git mv _templates/ABOUT.md _templates/_ABOUT.md` and
+  `git mv _schema/ABOUT.md _schema/_ABOUT.md`. A macOS clone then checks out both files cleanly.
 
 Saving a file in a KB reindexes it at once, without waiting for the daemon's watch.
 
