@@ -420,6 +420,75 @@ t.section("the Reranker section's dialogs", function()
     "d removes it")
 end)
 
+-- fake_tei serves a TEI re-ranker's /info and /rerank (a score for each text), enough for the daemon
+-- to set it up, probe it and use it. It runs in this nvim's loop, which every t.wait turns.
+local function fake_tei()
+  local srv = assert(vim.uv.new_tcp())
+  assert(srv:bind("127.0.0.1", 0))
+  srv:listen(16, function()
+    local c = vim.uv.new_tcp()
+    srv:accept(c)
+    local got = ""
+    c:read_start(function(_, data)
+      if not data then return c:close() end
+      got = got .. data
+      local head_end = got:find("\r\n\r\n", 1, true)
+      if not head_end then return end
+      local len = tonumber(got:sub(1, head_end):lower():match("content%-length:%s*(%d+)")) or 0
+      if #got < head_end + 3 + len then return end
+      c:read_stop()
+      local body
+      if got:find("^POST /rerank") then
+        local req = vim.json.decode(got:sub(head_end + 4, head_end + 3 + len))
+        local out = {}
+        for i = 1, #req.texts do out[i] = { index = i - 1, score = 1 / i } end
+        body = vim.json.encode(out)
+      else
+        body = vim.json.encode({ model_id = "fake/reranker", model_type = { reranker = vim.empty_dict() },
+          max_client_batch_size = 32 })
+      end
+      c:write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: "
+        .. #body .. "\r\n\r\n" .. body, function() c:close() end)
+    end)
+  end)
+  return srv, "http://127.0.0.1:" .. srv:getsockname().port
+end
+
+t.section("the Reranker's none, and removing the only ranker while it is in use", function()
+  local srv, base = fake_tei()
+  local ranker_row = function() return find(function(r) return r.kind == "ranker" and r.ranker.name == "tei-live" end) end
+  local none_row = function() return find(function(r) return r.kind == "no_ranker" end) end
+  t.ok(none_row() == nil, "no none while there is no ranker to choose against")
+  selects = { function(items) return items[1] end } -- TEI
+  inputs = { "tei-live", base }
+  secrets = { "" }
+  view._dispatch("a", (section_row("ranker")))
+  t.ok(t.wait(5000, function() return ranker_row() ~= nil end), "a ranker is added")
+  for i = 1, #rows() do
+    t.ok(not line(i):find("this build supplies its ranker", 1, true), "no build ranker is claimed for a build with none", line(i))
+  end
+  local _, ni = none_row()
+  t.ok(ni and line(ni):find("^  ● none") ~= nil, "none is marked while no ranker is used", ni and line(ni))
+  view._dispatch("<CR>", (ranker_row()))
+  t.ok(t.wait(5000, function() return (call("ranker.list", {}) or {}).active == "tei-live" end), "<CR> uses the ranker", vim.inspect(call("ranker.list", {}), { newline = " ", indent = "" }))
+  t.ok(t.wait(5000, function() local _, i = none_row(); return i and line(i):find("^  ○ none") ~= nil end),
+    "and none is no longer marked")
+  view._dispatch("<CR>", (none_row()))
+  t.ok(t.wait(5000, function() return (call("ranker.list", {}) or {}).active == "" end), "<CR> on none stops re-ranking")
+  t.ok(t.wait(5000, function() local _, i = none_row(); return i and line(i):find("^  ● none") ~= nil end), "none is marked again")
+  t.ok(noted("search is not re-ranked"), "and says so")
+  view._dispatch("<CR>", (ranker_row()))
+  t.ok(t.wait(5000, function() return (call("ranker.list", {}) or {}).active == "tei-live" end), "in use again")
+  answers = { YES }
+  view._dispatch("d", (ranker_row()))
+  t.ok(t.wait(5000, function()
+    local l = call("ranker.list", {}) or {}
+    return #(l.rankers or { 1 }) == 0 and l.active == ""
+  end), "d removes the only ranker while it is in use, and none is used")
+  t.ok(t.wait(5000, function() return ranker_row() == nil and none_row() == nil end), "the section lists neither")
+  srv:close()
+end)
+
 t.section("the Embedding Models section's dialogs", function()
   selects = { function(items) return items[3] end } -- OpenAI-compatible
   inputs = { "local-oa", "http://127.0.0.1:9", "text-embedding-3-small" }
