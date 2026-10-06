@@ -153,19 +153,37 @@ func (m *semantic) signal() {
 
 // setupModels records the target model and, when none is active yet, makes it active: the first
 // model has nothing to keep answering. Another active model keeps answering until the target
-// covers every chunk (commitVectors flips then).
+// covers every chunk (commitVectors flips then). The target is recorded as such, and a model that
+// was the target and is no longer, and is not active, is reclaimed: a cancelled switch's, or one
+// switched past (ADR 1791284787 §2.3).
 func (x *Indexer) setupModels(ctx context.Context) error {
 	m := x.sem
 	target := m.target.Model()
 	s := x.store
 	var active string
+	var untargeted []string
 	err := s.db.Write(ctx, func(tx *store.Tx) error {
 		row := s.sc.Models(tx).Set(store.ModelFP, target.Fingerprint()).Set(store.ModelProvider, target.Provider).
 			Set(store.ModelName, target.Name).Set(store.ModelDims, int64(target.Dims)).Set(store.ModelActive, int64(0))
 		if err := dao.UpsertOnly(row); err != nil { // kept as it is when the model is known
 			return err
 		}
-		var err error
+		was, err := s.sc.Models(tx).With(store.ModelTarget, int64(1)).Excluding(store.ModelFP, target.Fingerprint()).
+			Select(store.ModelFP, store.ModelActive)
+		if err != nil {
+			return err
+		}
+		for _, w := range was {
+			if w.Active == 0 {
+				untargeted = append(untargeted, w.FP)
+			}
+		}
+		if err := s.sc.Models(tx).With(store.ModelTarget, int64(1)).Set(store.ModelTarget, int64(0)).Update(); err != nil {
+			return err
+		}
+		if err := s.sc.Models(tx).With(store.ModelFP, target.Fingerprint()).Set(store.ModelTarget, int64(1)).Update(); err != nil {
+			return err
+		}
 		if active, err = s.activeModel(tx); err != nil {
 			return err
 		}
@@ -187,6 +205,9 @@ func (x *Indexer) setupModels(ctx context.Context) error {
 	m.mu.Lock()
 	m.activeFP = active
 	m.mu.Unlock()
+	for _, fp := range untargeted {
+		x.reclaimLater(fp)
+	}
 	return x.publish(ctx, nil)
 }
 
@@ -298,17 +319,21 @@ const inPart = 500
 // commitVectors stores a batch of vectors in one transaction. Under the active model it makes the
 // documents they complete ready; under the target it flips the active model once the target covers
 // every alive chunk, and every document's readiness follows the new model. Under any other model
-// (none embeds with one, but a batch is the writer's to check, not to trust) it only stores them:
-// the choice of model is the target's to make, never a late batch's.
+// (none embeds with one, but a batch is the writer's to check, not to trust) it drops them: such a
+// model is reclaimed, and the choice of model is the target's to make, never a late batch's.
 func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 	m := x.sem
 	s := x.store
 	started := time.Now()
 	changed := []int64{} // target batches change no active-model codes
 	flipped := false
+	superseded := "" // the model the flip retires: reclaimed once the new one is published
 	err := s.db.Write(ctx, func(tx *store.Tx) error {
 		if _, err := s.bumpSeq(tx); err != nil {
 			return err
+		}
+		if vb.fp != m.active() && vb.fp != m.target.Model().Fingerprint() {
+			return nil // a late batch of a retired model: reclaimed, never stored again
 		}
 		if len(vb.items) > 0 {
 			b := s.sc.EmbeddingBatch(tx).SkipConflicts()
@@ -334,6 +359,10 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 				return err
 			}
 			if missing == 0 {
+				var err error
+				if superseded, err = s.activeModel(tx); err != nil {
+					return err
+				}
 				if err := s.sc.Models(tx).With(store.ModelActive, int64(1)).Set(store.ModelActive, int64(0)).Update(); err != nil {
 					return err
 				}
@@ -365,6 +394,10 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 			m.mu.Lock()
 			m.fillDone = true
 			m.mu.Unlock()
+			if superseded != vb.fp {
+				// published: no query starts on it now, and one under way holds its own snapshot
+				x.reclaimLater(superseded)
+			}
 			duration := time.Since(fillStart)
 			logger.Info(x.opts.Logger, logger.Fields{"event": "embedding.fill.complete", "model": vb.fp,
 				"texts": fillTexts, "sections": fillTotal, "refused": len(m.skip(vb.fp)),

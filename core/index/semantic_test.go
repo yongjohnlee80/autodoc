@@ -567,39 +567,32 @@ func TestAModelSwitchAnswersByWords(t *testing.T) {
 	if len(after.Hits) == 0 || after.Semantic != SemanticReady || e.ix.sem.snap.Load().Model() != fpB {
 		t.Errorf("after the flip: %+v, snapshot %q", after, e.ix.sem.snap.Load().Model())
 	}
-	// after the flip: b active, a unused, each with the room its vectors take
+	// after the flip: b active; a, superseded, is reclaimed (ADR 1791284787), its vectors and its row
+	e.eventually("the superseded model reclaimed", func() bool { return len(models()) == 1 })
 	ms := models()
-	if len(ms) != 2 || ms[0].FP != fpB || ms[0].State != ModelActive || ms[1].FP != fpA || ms[1].State != ModelUnused {
+	if len(ms) != 1 || ms[0].FP != fpB || ms[0].State != ModelActive {
 		t.Fatalf("models after the flip: %+v", ms)
 	}
-	var texts int64
-	_ = scanOne(context.Background(), e.raw, &texts, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
-	var f32, bits int64
-	_ = scanOne(context.Background(), e.raw, &f32, "SELECT SUM(LENGTH(f32)) FROM embedding WHERE model_fp = ?", fpA)
-	_ = scanOne(context.Background(), e.raw, &bits, "SELECT SUM(LENGTH(bits)) FROM embedding WHERE model_fp = ?", fpA)
-	if u := ms[1]; u.Vectors != texts || u.F32Bytes != f32 || u.BitsBytes != bits || u.KeyBytes != texts*int64(32+len(fpA)+1) {
-		t.Errorf("a's room %+v, want %d vectors, %d float32 bytes, %d code bytes", u, texts, f32, bits)
-	}
-	// the old model's vectors stay until purged; the active one cannot be purged
-	var vecs int
+	// a's vectors and row are gone; b's room is what its vectors take
+	var vecs, rows int
 	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
-	if vecs == 0 {
-		t.Error("the old model's vectors went implicitly")
+	_ = scanOne(context.Background(), e.raw, &rows, "SELECT COUNT(*) FROM model WHERE fp = ?", fpA)
+	if vecs != 0 || rows != 0 {
+		t.Errorf("the superseded model kept %d vectors and %d rows", vecs, rows)
 	}
+	var texts, f32, bits int64
+	_ = scanOne(context.Background(), e.raw, &texts, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpB)
+	_ = scanOne(context.Background(), e.raw, &f32, "SELECT SUM(LENGTH(f32)) FROM embedding WHERE model_fp = ?", fpB)
+	_ = scanOne(context.Background(), e.raw, &bits, "SELECT SUM(LENGTH(bits)) FROM embedding WHERE model_fp = ?", fpB)
+	if u := ms[0]; u.Vectors != texts || u.F32Bytes != f32 || u.BitsBytes != bits || u.KeyBytes != texts*int64(32+len(fpB)+1) {
+		t.Errorf("b's room %+v, want %d vectors, %d float32 bytes, %d code bytes", u, texts, f32, bits)
+	}
+	// the active model cannot be purged, and a reclaimed one is no model at all
 	if err := e.ix.PurgeModel(context.Background(), fpB); err == nil {
 		t.Error("the active model was purged")
 	}
-	if err := e.ix.PurgeModel(context.Background(), fpA); err != nil {
-		t.Fatal(err)
-	}
-	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding WHERE model_fp = ?", fpA)
-	var rows int
-	_ = scanOne(context.Background(), e.raw, &rows, "SELECT COUNT(*) FROM model WHERE fp = ?", fpA)
-	if vecs != 0 || rows != 0 {
-		t.Errorf("after the purge: %d vectors, %d rows", vecs, rows)
-	}
-	if ms := models(); len(ms) != 1 || ms[0].FP != fpB {
-		t.Errorf("models after the purge: %+v, want b alone", ms)
+	if err := e.ix.PurgeModel(context.Background(), fpA); err == nil {
+		t.Error("a reclaimed model was purged again")
 	}
 }
 
@@ -768,8 +761,8 @@ func (e *env) embStatus() EmbeddingStatus {
 }
 
 // TestLateOldModelBatchKeepsTheFlip: after the target has become active, a batch of the old model
-// handed to the writer is stored, and changes nothing about which model is active, though the old
-// model covers every chunk.
+// handed to the writer changes nothing about which model is active, and is not stored: the old
+// model is reclaimed, and a late batch must not leave its vectors behind (ADR 1791284787).
 func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	a := newFake("m", "a")
 	e := newEnv(t, Options{Provider: a})
@@ -793,8 +786,8 @@ func TestLateOldModelBatchKeepsTheFlip(t *testing.T) {
 	}
 	var stored int
 	_ = scanOne(context.Background(), e.raw, &stored, "SELECT COUNT(*) FROM embedding WHERE model_fp = ? AND text_hash = ?", fpA, []byte("late"))
-	if stored != 1 {
-		t.Error("the late batch's vector was not stored")
+	if stored != 0 {
+		t.Error("the late batch's vector was stored under a retired model")
 	}
 }
 
