@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,12 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 		if addr, ok := verifiedHolder(ctx, storePath); ok {
 			return fmt.Errorf("%w on %s, for %s; this process is not serving", errAlreadyServing, addr, storePath)
 		}
+		// the lease is held and no lease-info says by whom: the daemon before this one is closing
+		// (it removes its lease-info first and lets go of the lease last). Wait for it rather than
+		// exit and leave the client that started this process with no daemon at all.
+		if _, lerr := store.ReadLeaseInfo(storePath); errors.Is(lerr, fs.ErrNotExist) {
+			db, err = openAfterPredecessor(ctx, storePath)
+		}
 	}
 	if err != nil {
 		return err
@@ -134,6 +141,35 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	defer func() { _ = store.RemoveLeaseInfo(storePath, srv.Instance()) }()
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", b.version, sock)
 	return srv.Run(ctx)
+}
+
+// predecessorWait bounds how long a daemon waits for the one before it to let go of the store: its
+// shutdown drains, stops every workspace and closes the store, well within a client's probe window
+// (tui's 15 s).
+var predecessorWait = 10 * time.Second
+
+// openAfterPredecessor opens the store once the daemon closing it lets go of its lease, polling
+// within predecessorWait. A daemon that comes up for the store meanwhile (its lease-info verified)
+// is the one serving, and this process is not; a lease still held at the end is ErrBusy, as before.
+func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, error) {
+	deadline := time.Now().Add(predecessorWait)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+		db, err := store.Open(ctx, storePath)
+		if !errors.Is(err, store.ErrBusy) {
+			return db, err
+		}
+		if addr, ok := verifiedHolder(ctx, storePath); ok {
+			return nil, fmt.Errorf("%w on %s, for %s; this process is not serving", errAlreadyServing, addr, storePath)
+		}
+		if time.Now().After(deadline) {
+			return nil, err
+		}
+	}
 }
 
 // servesStore reports whether a probed daemon serves the store at storePath: its store_id is that
