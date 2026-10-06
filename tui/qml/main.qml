@@ -143,7 +143,12 @@ Window {
             title: "&Plugins"
             Instantiator {
                 model: App.plugins
-                MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.openPlugin(model.key) }
+                DelegateChooser {
+                    role: "kind"
+                    DelegateChoice { roleValue: "item"; MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.pluginEntry(model.target) } }
+                    DelegateChoice { roleValue: "submenu"; Menu { title: model.label
+                        Instantiator { model: model.rows; MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.pluginEntry(model.target) } } } }
+                }
             }
             MenuSeparator {}
             MenuItem { text: "&Add from a git URL…"; onTriggered: App.startAddPlugin() }
@@ -344,6 +349,7 @@ Window {
     PurgeModel { id: purgeModel }
     ConfirmQuit { id: confirmQuit }
     Leader { id: leader }
+    PluginKeys { id: pluginKeys }
     Help { id: help }
     About { id: about }
     Notifications { id: notifications }

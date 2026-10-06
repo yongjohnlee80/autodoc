@@ -19,7 +19,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/style"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -335,14 +334,10 @@ func firstLine(s string) string {
 // loadPlugins lists the folder's plugins in the Plugins menu.
 func (h *Host) loadPlugins() {
 	h.pluginList = discoverPlugins(h.pluginOpt.Dir)
-	rows := make([]tuidecl.Row, len(h.pluginList))
-	for i, e := range h.pluginList {
-		rows[i] = tuidecl.Row{"key": e.key(), "label": e.label(), "enabled": e.reason == ""}
+	h.refreshPlugins()
+	if h.p != nil { // read anew, not at New: the program runs, and attach launched the first ones
+		h.launchServices()
 	}
-	if len(rows) == 0 {
-		rows = []tuidecl.Row{{"key": "", "label": "no plugins yet", "enabled": false}}
-	}
-	h.pluginRows.Reset(rows)
 }
 
 // openPlugin is a Plugins menu entry: the plugin's dialog, started, or brought forward when open.
@@ -370,6 +365,10 @@ func (h *Host) openPlugin(key string) {
 		return
 	}
 	h.running[key] = r
+	h.refreshPlugins()
+	if e.m.card() {
+		r.focusOnOpen = true // the menu's Open is the user asking for it: it takes the keys
+	}
 }
 
 // pluginTheme is the theme a plugin is sent: the one the screen wears.
@@ -782,6 +781,7 @@ func (r *pluginRun) close(why string) {
 	}
 	if r.h.running[r.e.key()] == r {
 		delete(r.h.running, r.e.key())
+		r.h.refreshPlugins()
 	}
 	go r.shutdown()
 	if why != "" {
