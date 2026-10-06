@@ -17,8 +17,9 @@ const (
 	kindSupersededBy = "superseded_by"
 )
 
-// successorsOf reads the supersession among the documents at paths: for each superseded one, the
-// documents that replace it, from either side's relation. Only resolved relations count.
+// successorsOf reads, for each superseded document at paths, the documents that replace it, from
+// either side's relation: its own superseded_by, or a successor's supersedes. A successor need not
+// be among paths, so a hit whose successor has none still names it. Only resolved relations count.
 func (s *Store) successorsOf(ctx context.Context, paths []string) (map[string][]string, error) {
 	out := map[string][]string{}
 	if len(paths) == 0 {
@@ -42,23 +43,45 @@ func (s *Store) successorsOf(ctx context.Context, paths []string) (map[string][]
 		if len(ids) == 0 {
 			return nil
 		}
-		kinds := kindsIn(s.sc.LinksOut(tx), []string{kindSupersedes, kindSupersededBy})
-		rows, err := kinds.WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).With(store.LinkSrc, ids...).
-			Select(store.LinkSrc, store.LinkDst, store.LinkKind)
+		// a listed document's own superseded_by, and a successor's supersedes naming a listed one
+		byOld, err := kindsIn(s.sc.LinksOut(tx), []string{kindSupersededBy}).With(store.LinkSrc, ids...).
+			WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(store.LinkByID)).Select(store.LinkSrc, store.LinkDst)
 		if err != nil {
 			return err
 		}
-		add := func(old, successor string) {
-			if old != "" && successor != "" && old != successor && !slices.Contains(out[old], successor) {
-				out[old] = append(out[old], successor)
+		bySuccessor, err := kindsIn(s.sc.LinksOut(tx), []string{kindSupersedes}).With(store.LinkDst, ids...).
+			OrderBy(dao.Asc(store.LinkByID)).Select(store.LinkSrc, store.LinkDst)
+		if err != nil {
+			return err
+		}
+		type pair struct{ old, successor int64 }
+		var pairs []pair
+		for _, l := range byOld {
+			pairs = append(pairs, pair{l.SrcDoc, *l.DstDoc})
+		}
+		for _, l := range bySuccessor {
+			pairs = append(pairs, pair{*l.DstDoc, l.SrcDoc})
+		}
+		// the successors not listed, by path
+		var more []any
+		for _, p := range pairs {
+			if _, ok := path[p.successor]; !ok {
+				more = append(more, p.successor)
 			}
 		}
-		for _, l := range rows {
-			src, dst := path[l.SrcDoc], path[*l.DstDoc]
-			if l.Kind == kindSupersededBy {
-				add(src, dst) // src says dst replaces it
-			} else {
-				add(dst, src) // src says it replaces dst
+		if len(more) > 0 {
+			docs, err := s.sc.Documents(tx).With(store.DocID, more...).Select(store.DocID, store.DocPath)
+			if err != nil {
+				return err
+			}
+			for _, d := range docs {
+				path[d.ID] = d.Path
+			}
+		}
+		for _, p := range pairs {
+			old, successor := path[p.old], path[p.successor]
+			if old != "" && successor != "" && old != successor && !slices.Contains(out[old], successor) {
+				out[old] = append(out[old], successor)
 			}
 		}
 		return nil

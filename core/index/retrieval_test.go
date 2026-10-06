@@ -152,3 +152,20 @@ func pathsOfResult(r Result) []string {
 	}
 	return out
 }
+
+// TestASupersededHitNamesASuccessorWithNoHit: a superseded hit names its successor though the
+// successor has no hit, whichever side says so: its own superseded_by, or the successor's supersedes.
+func TestASupersededHitNamesASuccessorWithNoHit(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("old.md", "---\nsuperseded_by: [new.md]\n---\n# Old\n\nkestrel\n", "new.md", "# New\n\nnothing here\n",
+		"older.md", "# Older\n\nkestrel\n", "newer.md", "---\nsupersedes: [older.md]\n---\n# Newer\n\nnothing here\n")
+	res := e.search("kestrel", QueryOpts{Limit: 5, Mode: ModeLexical, Retrieval: &Retrieval{DemoteSuperseded: on()}})
+	marks := map[string]string{}
+	for _, h := range res.Hits {
+		marks[h.Path] = h.SupersededBy
+	}
+	want := map[string]string{"old.md": "new.md", "older.md": "newer.md"}
+	if !reflect.DeepEqual(marks, want) {
+		t.Errorf("marks %v, want %v", marks, want)
+	}
+}

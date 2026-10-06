@@ -173,3 +173,27 @@ func TestASupersessionLoopIsReported(t *testing.T) {
 		t.Errorf("body kinds alone: %+v, %v; want only the missing wikilink", body, err)
 	}
 }
+
+// TestACycleIsListedByItsOwnKind: a loop is found through either supersession kind, but a row is
+// listed only when its own kind was asked for.
+func TestACycleIsListedByItsOwnKind(t *testing.T) {
+	e := newEnv(t, Options{})
+	// a loop of superseded_by alone: m says n replaced it, n says m did
+	e.put("m.md", "---\nsuperseded_by: [n.md]\n---\nM\n", "n.md", "---\nsuperseded_by: [m.md]\n---\nN\n",
+		// a loop of both kinds: s says it replaced t, and that t replaced it
+		"s.md", "---\nsupersedes: [t.md]\nsuperseded_by: [t.md]\n---\nS\n", "t.md", "T")
+	rows := func(kinds []string) []string {
+		us, err := e.store.Unresolved(context.Background(), kinds)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, u := range us {
+			out = append(out, u.Src+" "+u.Raw+" "+u.Reason)
+		}
+		return out
+	}
+	eq(t, "supersedes", rows([]string{kindSupersedes}), []string{"s.md t.md cycle"})
+	eq(t, "superseded_by", rows([]string{kindSupersededBy}), []string{"m.md n.md cycle", "n.md m.md cycle", "s.md t.md cycle"})
+	eq(t, "every kind", rows(nil), []string{"m.md n.md cycle", "n.md m.md cycle", "s.md t.md cycle", "s.md t.md cycle"})
+}

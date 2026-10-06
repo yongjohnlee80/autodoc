@@ -174,7 +174,7 @@ func (s *Store) Unresolved(ctx context.Context, kinds []string) ([]Unresolved, e
 		if kinds != nil && !slices.Contains(kinds, kindSupersedes) && !slices.Contains(kinds, kindSupersededBy) {
 			return nil
 		}
-		loops, err := s.supersessionLoops(tx)
+		loops, err := s.supersessionLoops(tx, kinds)
 		out = append(out, loops...)
 		return err
 	})
@@ -184,8 +184,9 @@ func (s *Store) Unresolved(ctx context.Context, kinds []string) ([]Unresolved, e
 // supersessionLoops lists the supersession relations that go round a loop (A superseded by B, B by
 // A): each resolves, so none is unresolved, yet a loop has no order, and the demotion leaves its
 // documents where they are. A relation is on a loop when its successor leads back to the document
-// it replaces. Listed by source path, then source order, with ReasonCycle.
-func (s *Store) supersessionLoops(tx *store.Tx) ([]Unresolved, error) {
+// it replaces. Listed by source path, then source order, with ReasonCycle: of the given kinds only
+// (nil: both), though a loop is found through either.
+func (s *Store) supersessionLoops(tx *store.Tx, kinds []string) ([]Unresolved, error) {
 	rows, err := kindsIn(s.sc.LinksIn(tx), []string{kindSupersedes, kindSupersededBy}).
 		WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(store.LinkByOtherPath), dao.Asc(store.LinkByID)).
 		Select(store.LinkSrc, store.LinkDst, store.LinkKind, store.LinkRaw, store.LinkOtherPath)
@@ -207,7 +208,9 @@ func (s *Store) supersessionLoops(tx *store.Tx) ([]Unresolved, error) {
 	var out []Unresolved
 	for _, r := range rows {
 		old, successor := edge(r.SrcDoc, *r.DstDoc, r.Kind)
-		if old != successor && g.Neighborhood(successor, len(rows), graph.Out, graph.Filter{}).Has(old) {
+		// the loop is found through both kinds; a row is listed only when its own kind was asked for
+		if (kinds == nil || slices.Contains(kinds, r.Kind)) && old != successor &&
+			g.Neighborhood(successor, len(rows), graph.Out, graph.Filter{}).Has(old) {
 			out = append(out, Unresolved{Src: r.OtherPath, Raw: r.Raw, Reason: ReasonCycle})
 		}
 	}
