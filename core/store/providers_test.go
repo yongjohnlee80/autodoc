@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -299,4 +300,79 @@ func TestThePreferenceFollowsItsProvider(t *testing.T) {
 	}, "a2")
 	step("removing b2", func() error { return s.RemoveProvider(ctx, "b2") }, "a2")
 	step("removing a2", func() error { return s.RemoveProvider(ctx, "a2") }, "")
+}
+
+// TestRemovingTheProviderInUseRetiresItsModel (ADR 1791284787 §2.3, item 4): in one transaction the
+// provider goes and, in every workspace, the model it serves is neither active nor the target; with
+// another provider of the same family and model, the model stays as it is; a failure part-way
+// changes nothing.
+func TestRemovingTheProviderInUseRetiresItsModel(t *testing.T) {
+	ctx := context.Background()
+	s, err := Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	model := func(ws int64, fp string, active, target int) {
+		if _, err := s.w.ExecContext(ctx, "INSERT INTO model (workspace_id, fp, provider, name, dims, active, target) VALUES (?, ?, 'ollama', 'm1:latest', 4, ?, ?)",
+			ws, fp, active, target); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := func(ws int64, fp string) string {
+		var out string
+		err := s.Read(ctx, func(tx *Tx) error {
+			m, err := s.Workspace(ws).Models(tx).With(ModelFP, fp).Get(ModelActive, ModelTarget)
+			if err != nil {
+				return err
+			}
+			out = fmt.Sprintf("active=%d target=%d", m.Active, m.Target)
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	w1, _ := s.AddWorkspace(ctx, "one", "/one", nil, nil)
+	w2, _ := s.AddWorkspace(ctx, "two", "/two", nil, nil)
+	fp := "ollama|m1:latest|sha256:x|4"
+	model(w1.ID, fp, 1, 1)
+	model(w2.ID, fp, 1, 1)
+	if _, err := s.AddProvider(ctx, ProviderSpec{Name: "local", Kind: KindOllama, BaseURL: "http://h", Model: "m1:latest"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// a failure in the transaction: the provider and both models are as they were
+	if _, err := s.w.ExecContext(ctx, "CREATE TRIGGER refuse BEFORE UPDATE ON model BEGIN SELECT RAISE(ABORT, 'injected'); END"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RemoveProviderInUse(ctx, "local"); err == nil {
+		t.Fatal("the removal reported no failure")
+	}
+	if _, _, err := s.ProviderWithKey(ctx, "local"); err != nil || state(w1.ID, fp) != "active=1 target=1" {
+		t.Fatalf("after the failure: provider %v, model %s", err, state(w1.ID, fp))
+	}
+	if _, err := s.w.ExecContext(ctx, "DROP TRIGGER refuse"); err != nil {
+		t.Fatal(err)
+	}
+
+	// another provider of the same family and model: the model stays active
+	if _, err := s.AddProvider(ctx, ProviderSpec{Name: "cloud", Kind: KindOllamaCloud, BaseURL: "https://ollama.com", Model: "m1:latest", Key: strp("k")}); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := s.RemoveProviderInUse(ctx, "local"); err != nil || len(got) != 0 || state(w1.ID, fp) != "active=1 target=1" {
+		t.Fatalf("with another provider of the model: retired %v, %v, model %s", got, err, state(w1.ID, fp))
+	}
+
+	// the last provider of the model: it is retired in both workspaces
+	got, err := s.RemoveProviderInUse(ctx, "cloud")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("removing the last provider of the model: %v, %v", got, err)
+	}
+	for _, ws := range []int64{w1.ID, w2.ID} {
+		if st := state(ws, fp); st != "active=0 target=0" {
+			t.Errorf("workspace %d's model after the removal: %s", ws, st)
+		}
+	}
 }

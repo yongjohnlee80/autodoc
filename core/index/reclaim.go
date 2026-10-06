@@ -115,6 +115,13 @@ func SweepStore(ctx context.Context, db *store.Store, workspace int64) ([]Reclai
 	return s.sweep(ctx, s.storeWrite)
 }
 
+// ReclaimStore reclaims workspace's model fp through the store alone: a model taken out of use with
+// its provider's removal, whose workspace's indexer is restarting without one.
+func ReclaimStore(ctx context.Context, db *store.Store, workspace int64, fp string) (Reclaimed, error) {
+	s := Open(db, workspace)
+	return s.reclaim(ctx, fp, s.storeWrite)
+}
+
 func (s *Store) sweep(ctx context.Context, write writeFn) ([]Reclaimed, error) {
 	fps, err := s.reclaimable(ctx)
 	if err != nil {

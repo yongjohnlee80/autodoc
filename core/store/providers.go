@@ -230,6 +230,72 @@ func (s *Store) RemoveProvider(ctx context.Context, name string) error {
 	})
 }
 
+// Retired is a model a provider's removal took out of use: its workspace and fingerprint, to
+// reclaim (ADR 1791284787 §2.3, item 4).
+type Retired struct {
+	Workspace int64
+	FP        string
+}
+
+// family is the embed.Model.Provider a provider of kind embeds under: the model rows' provider.
+func family(kind string) string {
+	if kind == KindOllamaCloud {
+		return KindOllama // the same client and the same models, on ollama.com
+	}
+	return kind
+}
+
+// RemoveProviderInUse deletes the provider in use, named name, and in the same transaction takes
+// the model it serves out of use in every workspace: neither active nor the target, so it is
+// reclaimed. A model another stored provider could serve (the same family and model name) stays
+// active instead, with semantic search off: choosing that provider compares the fingerprints, and
+// reuses its vectors only for an exact match. A failure changes nothing. It returns the models taken
+// out of use.
+func (s *Store) RemoveProviderInUse(ctx context.Context, name string) ([]Retired, error) {
+	var out []Retired
+	err := s.Write(ctx, func(tx *Tx) error {
+		p, err := tx.t.providers.On(tx.tx).With(ProviderName, name).Get()
+		if errors.Is(err, dao.ErrNoRows) {
+			return fmt.Errorf("%w: %s", ErrNoProvider, name)
+		}
+		if err != nil {
+			return err
+		}
+		if err := tx.t.providers.On(tx.tx).With(ProviderID, p.ID).Delete(); err != nil {
+			return err
+		}
+		if err := followProvider(tx, name, ""); err != nil {
+			return err
+		}
+		others, err := tx.t.providers.On(tx.tx).Select(ProviderKind, ProviderModel)
+		if err != nil {
+			return err
+		}
+		for _, o := range others {
+			if family(o.Kind) == family(p.Kind) && o.Model == p.Model {
+				return nil // another provider may serve it: it stays as it is
+			}
+		}
+		models, err := tx.t.models.On(tx.tx).With(ModelProvider, family(p.Kind)).With(ModelName, p.Model).
+			Select(ModelWorkspace, ModelFP)
+		if err != nil {
+			return err
+		}
+		for _, m := range models {
+			if err := tx.t.models.On(tx.tx).With(ModelWorkspace, m.WorkspaceID).With(ModelFP, m.FP).
+				Set(ModelActive, int64(0)).Set(ModelTarget, int64(0)).Update(); err != nil {
+				return err
+			}
+			out = append(out, Retired{Workspace: m.WorkspaceID, FP: m.FP})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ProviderWithKey is the provider named name and its key, opened: for the daemon, which embeds
 // with it, and never for a client.
 func (s *Store) ProviderWithKey(ctx context.Context, name string) (ProviderInfo, string, error) {

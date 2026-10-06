@@ -49,6 +49,22 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 	m.convert(ctx)
 }
 
+// ReclaimRetired reclaims the models a provider's removal took out of use, through the store: their
+// workspaces' indexers are restarting without a provider. One cut short is finished by the next
+// start's sweep.
+func (m *Workspaces) ReclaimRetired(ctx context.Context, retired []store.Retired) {
+	for _, r := range retired {
+		got, err := index.ReclaimStore(ctx, m.db, r.Workspace, r.FP)
+		if err != nil {
+			if ctx.Err() == nil {
+				logger.Warning(m.opts.Log, err, logger.Fields{"event": "model.reclaim.failed", "model": r.FP})
+			}
+			continue
+		}
+		logger.Info(m.opts.Log, logger.Fields{"event": "model.reclaimed", "model": r.FP, "vectors": got.Vectors, "gone": got.Gone})
+	}
+}
+
 // sweepOne sweeps workspace id through its indexer when one runs, else through the store.
 func (m *Workspaces) sweepOne(ctx context.Context, id int64, name string) ([]index.Reclaimed, error) {
 	m.mu.Lock()
