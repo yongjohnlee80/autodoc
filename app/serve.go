@@ -127,6 +127,9 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	if err := ws.OpenAll(); err != nil {
 		return err
 	}
+	// every workspace keeps only its active and target models' vectors; the store is compacted
+	// once (ADR 1791284787): in the background, while the daemon serves
+	go ws.SweepModels(wsCtx)
 	if len(ws.List()) == 0 {
 		logger.Warning(log, nil, "no workspace yet: add one in the TUI's workspace manager (autodoc --ui, then w) or with workspace.add")
 	}

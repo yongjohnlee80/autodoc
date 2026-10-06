@@ -148,6 +148,10 @@ func (h *Host) applyEvents(events []peerEvent) {
 			what := map[string]string{"workspace.section_size": "section size", "workspace.embedding_policy": "embedding policy",
 				"workspace.provider": "embedding provider", "workspace.databases": "database settings"}[e.kind]
 			notice, relist = fmt.Sprintf("workspace %s: its %s was changed %s", e.workspace, what, by), true
+		case "models.reclaimed": // the daemon's own: what its start sweep removed (ADR 1791284787)
+			notice = fmt.Sprintf("workspace %s: reclaimed %s", e.workspace, e.detail)
+		case "store.compacted", "store.compact_skipped":
+			notice = e.detail
 		case "embedding.switched":
 			notice = fmt.Sprintf("embedding model switched to '%s' %s; files are re-indexing in the background, and search stays available", e.detail, by)
 		case "embedding.cancelled":
