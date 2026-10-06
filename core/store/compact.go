@@ -103,8 +103,8 @@ func (s *Store) Checkpoint(ctx context.Context) error {
 
 // Compact puts the store in incremental auto-vacuum mode and rewrites it with VACUUM. VACUUM may need
 // free space of twice the store's size, a temporary copy and its journal (sqlite.org/lang_vacuum),
-// so less than that is ErrNoRoom, before anything runs. Its temporary files go beside the store,
-// never to the system's temp directory, which may be memory.
+// so less than that is ErrNoRoom, before anything runs. Its temporary files go beside the store
+// (tempBeside, at the process's first connection), never to the system's temp directory.
 //
 // The rewrite goes through the write-ahead log. A read holding the old snapshot keeps the log from
 // being checkpointed back into a smaller file: the store reaches its new size at the first checkpoint
@@ -121,7 +121,6 @@ func (s *Store) Compact(ctx context.Context) (Compaction, error) {
 			ErrNoRoom, 2*before>>20, free>>20)
 	}
 	for _, stmt := range []string{
-		fmt.Sprintf("PRAGMA temp_store_directory = '%s'", escapeLiteral(dir)),
 		"PRAGMA auto_vacuum = INCREMENTAL",
 		"VACUUM",
 		"PRAGMA wal_checkpoint(PASSIVE)", // a TRUNCATE would hold the writer while reads finish
@@ -131,16 +130,4 @@ func (s *Store) Compact(ctx context.Context) (Compaction, error) {
 		}
 	}
 	return Compaction{Before: before, After: s.FileSize()}, nil
-}
-
-// escapeLiteral doubles a string's quotes for an SQL literal.
-func escapeLiteral(s string) string {
-	out := make([]byte, 0, len(s))
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\'' {
-			out = append(out, '\'')
-		}
-		out = append(out, s[i])
-	}
-	return string(out)
 }

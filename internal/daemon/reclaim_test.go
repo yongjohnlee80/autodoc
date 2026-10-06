@@ -106,3 +106,41 @@ func TestTheStartSweepReclaimsAndCompacts(t *testing.T) {
 		t.Errorf("events after a second start: %v; want nothing more", k)
 	}
 }
+
+// TestTheStoreIsCompactedOnlyOnceEveryWorkspaceSwept (ADR 1791284787 §2.5): a start whose sweep of
+// a workspace fails compacts nothing, so that workspace's leftovers are not left out of the one
+// rewrite; the next start sweeps it, then compacts.
+func TestTheStoreIsCompactedOnlyOnceEveryWorkspaceSwept(t *testing.T) {
+	ctx := context.Background()
+	m, db := openWith(t, Options{})
+	w, err := db.AddWorkspace(ctx, "elsewhere", "/nowhere", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedLeftover(t, db, w.ID, "fake|left|x|3", 3, 0)
+	raw, err := sqlite.OpenNamed(ctx, "fault:"+db.Path(), "file:"+db.Path()+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.ExecContext(ctx, "CREATE TRIGGER refuse BEFORE DELETE ON embedding BEGIN SELECT RAISE(ABORT, 'injected'); END"); err != nil {
+		t.Fatal(err)
+	}
+	m.SweepModels(ctx)
+	if mode, _ := db.AutoVacuum(ctx); mode != store.AutoVacuumNone {
+		t.Fatalf("compacted with a workspace's sweep failed: auto_vacuum %d", mode)
+	}
+	if got := modelsOf(t, db, w.ID); got["fake|left|x|3"] != 3 {
+		t.Fatalf("the failed sweep: %v", got)
+	}
+	if _, err := raw.ExecContext(ctx, "DROP TRIGGER refuse"); err != nil {
+		t.Fatal(err)
+	}
+	m.SweepModels(ctx) // the next start
+	if got := modelsOf(t, db, w.ID); len(got) != 0 {
+		t.Errorf("the next start left %v", got)
+	}
+	if mode, _ := db.AutoVacuum(ctx); mode != store.AutoVacuumIncremental {
+		t.Errorf("the next start did not compact: auto_vacuum %d", mode)
+	}
+}

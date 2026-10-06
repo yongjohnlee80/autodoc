@@ -17,7 +17,9 @@ import (
 // recorded first); one with no indexer (no provider, or its root unavailable) through the store.
 // It runs in the background, while the daemon serves. Then, once, a store not yet in incremental
 // auto-vacuum mode is compacted into it, behind its free-space check: refused for want of room, it is
-// said, and tried again at the next start.
+// said, and tried again at the next start. It is compacted only once every workspace has swept: a
+// compaction while one still holds its leftovers would leave them out of the one rewrite that
+// restores the store's layout, so a sweep that failed leaves the compaction to a later start.
 
 // SweepModels runs the start sweep, then the conversion, until ctx ends.
 func (m *Workspaces) SweepModels(ctx context.Context) {
@@ -26,6 +28,7 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 		logger.Warning(m.opts.Log, err, logger.Fields{"event": "models.sweep.failed"})
 		return
 	}
+	swept := true
 	for _, w := range ws {
 		got, err := m.sweepOne(ctx, w.ID, w.Name)
 		if ctx.Err() != nil {
@@ -34,6 +37,7 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 		if err != nil {
 			// what it left is swept at the next start
 			logger.Warning(m.opts.Log, err, logger.Fields{"event": "models.sweep.failed", "workspace": w.Name})
+			swept = false
 			continue
 		}
 		var vectors int
@@ -45,6 +49,10 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 			logger.Info(m.opts.Log, logger.Fields{"event": "models.reclaimed", "workspace": w.Name, "models": len(got), "vectors": vectors})
 			m.notice(ctx, store.Event{Kind: "models.reclaimed", Workspace: w.Name, Detail: detail})
 		}
+	}
+	if !swept {
+		logger.Info(m.opts.Log, logger.Fields{"event": "store.compact.deferred", "why": "a workspace's sweep failed; the next start sweeps it, then compacts"})
+		return
 	}
 	m.convert(ctx)
 }
