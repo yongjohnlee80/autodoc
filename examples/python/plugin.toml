@@ -1,0 +1,16 @@
+name     = "py-echo"
+title    = "Python echo"
+kind     = "dialog"
+protocol = 2
+command  = ["python3", "echo_plugin.py"]
+
+[dialog]
+modal = false
+
+[feed]
+document = true
+
+[[commands]]
+id    = "clear"
+title = "Clear"
+key   = "c"
