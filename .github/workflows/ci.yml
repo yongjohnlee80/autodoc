@@ -93,9 +93,9 @@ jobs:
   lua:
     runs-on: ubuntu-latest
     env:
-      # auto-core main at 132d27a; bump deliberately with a compatibility check (to the release that
-      # carries auto-core.kb once it is out).
-      AUTO_CORE_SHA: "132d27a"
+      # auto-core v0.3.1: the managed KB documents autodoc.kb.managed hands it; bump deliberately
+      # with a compatibility check.
+      AUTO_CORE_SHA: "9ea026c"  # v0.3.1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

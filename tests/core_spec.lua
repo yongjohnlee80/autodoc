@@ -172,6 +172,8 @@ end)
 
 t.section("a listed KB's managed files are brought up to date, once", function()
   local scaffold = require("autodoc.kb.scaffold")
+  local okp, perr = require("autodoc.kb.managed").provide()
+  t.ok(okp, "this build's managed documents are provided to auto-core", tostring(perr))
   local old = t.tmp("oldkb")
   scaffold.scaffold(old, { autodoc_version = "0.0.1", date = "2026-10-06" })
   local plain = t.tmp("plainfolder")

@@ -621,12 +621,14 @@ func TestRejectedTextDoesNotBlockOthers(t *testing.T) {
 	if badReady != 0 {
 		t.Error("the document with a rejected chunk is ready")
 	}
-	// its other chunk has its vector: only the rejected text was set aside
+	// its other chunk has its vector: only the rejected text was set aside. That chunk is embedded
+	// after the rejected batch is narrowed down, which can finish after the other documents are
+	// ready, so wait for the count itself; a queue that never embeds it still fails, by timing out.
 	var vecs int
-	_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding")
-	if vecs != 4 {
-		t.Errorf("%d vectors, want 4 (every text but the rejected one)", vecs)
-	}
+	e.eventually("every text but the rejected one has its vector", func() bool {
+		_ = scanOne(context.Background(), e.raw, &vecs, "SELECT COUNT(*) FROM embedding")
+		return vecs == 4
+	})
 	asked := func() int {
 		n := 0
 		for _, s := range p.texts() {
