@@ -223,7 +223,9 @@ type Host struct {
 	pluginOpt  Plugins
 	pluginList []pluginEntry
 	pluginRows *tuidecl.ListModel
-	running    map[string]*pluginRun
+	// pluginKeyRows are the SPC p card's letters: each command's, as bound (plugincmds.go)
+	pluginKeyRows *tuidecl.ListModel
+	running       map[string]*pluginRun
 	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, the manager's
 	// rows, and the directory PluginRemove asks about
 	pendingPlugin  *pluginChange
@@ -308,7 +310,8 @@ func newHost(session *Session, opt Options) *Host {
 		workspaces:     tuidecl.NewListModel("key", "label"),
 		managed:        tuidecl.NewListModel("key", "name", "state", "root"),
 		pluginOpt:      opt.Plugins,
-		pluginRows:     tuidecl.NewListModel("key", "label", "enabled"),
+		pluginRows:     tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
+		pluginKeyRows:  tuidecl.NewListModel("key", "target"),
 		managedPlugins: tuidecl.NewListModel("key", "name", "place", "commit", "source"),
 		running:        map[string]*pluginRun{}}
 	h.explorer.OnFetch = h.fetchExplorer
@@ -328,6 +331,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)
 	p.Post(h.start)
+	p.Post(h.launchServices)
 	return nil
 }
 

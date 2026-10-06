@@ -20,6 +20,7 @@ Dialog {
     Shortcut { sequence: "r"; onActivated: { leader.close(); App.openRecent() } }
     Shortcut { sequence: "~"; onActivated: { leader.close(); App.toggleAgent() } }
     Shortcut { sequence: "g"; onActivated: { leader.close(); App.openAgentProfiles() } }
+    Shortcut { sequence: "p"; onActivated: { leader.close(); pluginKeys.open() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
     Shortcut { sequence: "m"; onActivated: { leader.close(); App.leaderMenuBar() } }
     Shortcut { sequence: "w"; onActivated: { leader.close(); App.pickWorkspace() } }

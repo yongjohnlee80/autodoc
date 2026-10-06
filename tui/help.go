@@ -107,7 +107,7 @@ W  manage workspaces      k  the editor mode (Vim, Text)
 h  notifications          a  AI models
 c  the file's outline     A  about
 O  the system viewer      Q  quit
-g  agent profiles`
+g  agent profiles         p  plugin commands`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

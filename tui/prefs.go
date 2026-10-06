@@ -30,6 +30,8 @@ const (
 	// a plugin's placement: tui.plugin.<name>.placement
 	prefPluginPrefix = "tui.plugin."
 	prefPluginPlace  = ".placement"
+	// a plugin command's SPC p letter: tui.plugin.<name>.key.<id>
+	prefPluginKey = ".key."
 )
 
 // corners are where the toasts can stack, in the order the Preferences dialog offers them.
@@ -78,6 +80,9 @@ type prefs struct {
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
+	// pluginKeys are the SPC p letters the user chose, by "<plugin>.<command id>"
+	// (tui.plugin.<name>.key.<id>); "" unbinds the command (plugincmds.go)
+	pluginKeys map[string]string
 	// searchStages are the search's boxes as the user left them (stages.go)
 	searchStages stageChoice
 	// panelGeo are the explorer's and the links' dragged sizes, by preference name (panelsize.go)
@@ -152,6 +157,15 @@ func prefsOf(m map[string]any) prefs {
 	}
 	for k, v := range m {
 		if name, ok := strings.CutPrefix(k, prefPluginPrefix); ok {
+			if plug, id, ok := strings.Cut(name, prefPluginKey); ok {
+				if s, isStr := v.(string); isStr {
+					if p.pluginKeys == nil {
+						p.pluginKeys = map[string]string{}
+					}
+					p.pluginKeys[plug+"."+id] = s
+				}
+				continue
+			}
 			if name, ok = strings.CutSuffix(name, prefPluginPlace); ok {
 				if s, _ := v.(string); s != "" {
 					if p.pluginPlace == nil {
@@ -252,6 +266,7 @@ func (h *Host) applyPrefs(p prefs) {
 	h.syncPrefDialog()
 	h.applyToastPrefs()
 	h.syncStages(true)
+	h.refreshPlugins() // the SPC p letters the user chose
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
 	}

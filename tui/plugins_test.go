@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -227,8 +228,16 @@ func shorten(t *testing.T, handshake, grace, term time.Duration) {
 // pluginTUI runs the TUI with the plugins in dir, and stops what it started when the test ends.
 func pluginTUI(t *testing.T, dir string) (*running, string) {
 	t.Helper()
+	return pluginTUIWith(t, dir, nil)
+}
+
+// pluginTUIWith is pluginTUI with these preferences stored before the TUI starts.
+func pluginTUIWith(t *testing.T, dir string, prefs map[string]string) (*running, string) {
+	t.Helper()
 	logs := t.TempDir()
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	all := maps.Clone(testPrefs)
+	maps.Copy(all, prefs)
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: all})
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	t.Cleanup(func() {
@@ -1078,4 +1087,72 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 	if full.push(outNote{plugin.MethodKey, nil}) {
 		t.Error("a key past the bound was taken")
 	}
+}
+
+// TestPluginCommandsOnTheSpcPCard (ADR 1791268009 §2.5): SPC p lists every plugin command with its
+// letter, built from the host's model (a Repeater of Shortcuts in the card); a letter runs its
+// command, starting the plugin first and sending the command once it has opened, and a card's
+// command focuses it. Two plugins wanting one letter: the first by name keeps it, the other is
+// listed unbound with why. A card's toggle is the host's: it closes the open card, and opens it
+// again, focused; it is never sent to the plugin.
+func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
+		"[[commands]]\nid = \"toggle\"\ntitle = \"Show the card\"\nkey = \"s\"\n"+
+		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n")
+	installPlugin2(t, dir, "beta", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
+		"[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
+	// gamma's folder is listed first, but alpha comes first by name: alpha keeps h
+	installPlugin2(t, dir, "gamma", "dialog", "echo", "[[commands]]\nid = \"g\"\ntitle = \"Do g\"\nkey = \"h\"\n")
+	if err := os.Rename(filepath.Join(dir, "gamma"), filepath.Join(dir, "0-gamma")); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := pluginTUI(t, dir)
+
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "SPC p — plugin commands")
+	for _, want := range []string{"s  Alpha: Show the card", "h  Alpha: Say hello", "Beta: Do x — s is alpha's",
+		"Gamma: Do g — h is alpha's"} {
+		r.s.WaitForText(t, want)
+	}
+	r.keys(t, key('h')) // alpha is not running: started, then told
+	r.waitShown(t, "command hello")
+	r.waitShown(t, "focus true") // a card's command focuses it
+	r.keys(t, key('z'))
+	r.waitShown(t, "key z")
+
+	r.keys(t, esc()) // the keys back to the editor; the card stays
+	r.waitShown(t, "focus false")
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.keys(t, key('s')) // toggle, the card open: closed
+	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "Alpha · Esc returns the keys") })
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.keys(t, key('s')) // toggle, the card closed: opened, focused
+	r.waitShown(t, "focus true")
+	if strings.Contains(r.s.String(), "command toggle") {
+		t.Fatalf("the host's toggle was sent to the plugin:\n%s", r.s)
+	}
+	r.keys(t, key('y'))
+	r.waitShown(t, "key y")
+}
+
+// TestAPreferenceRebindsAPluginCommand: tui.plugin.<name>.key.<id> overrides the manifest's letter,
+// so the loser of a letter can be given another; "" unbinds a command.
+func TestAPreferenceRebindsAPluginCommand(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
+		"[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
+		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n")
+	installPlugin2(t, dir, "beta", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
+		"[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
+	r, _ := pluginTUIWith(t, dir, map[string]string{"tui.plugin.beta.key.x": "b", "tui.plugin.alpha.key.hello": ""})
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "SPC p — plugin commands")
+	for _, want := range []string{"s  Alpha: Do a", "b  Beta: Do x", "Alpha: Say hello — unbound in the preferences"} {
+		r.s.WaitForText(t, want)
+	}
+	r.keys(t, key('b'))
+	r.waitShown(t, "command x")
 }
