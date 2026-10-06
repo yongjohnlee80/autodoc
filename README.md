@@ -353,6 +353,13 @@ speak.
   auto-finder's panel; otherwise in its own. `?` shows its keys: `s` selects the KB to search, `P`
   makes a KB this project's primary (stored by auto-core, and only after you confirm), and `A`
   adds a location, offering to scaffold the KB layout when the folder has no `AGENTS.md`.
+- **Linking the primary KB.** auto-core's first-run import records the project's primary KB by its
+  root alone. auto-agents gives a spawned agent `$AUTODOC_WORKSPACE` only when that record names a
+  workspace. So when the workspaces are first listed and the primary names none, the plugin offers to
+  link it, once per session. If a workspace already serves that folder, it is linked. Otherwise the
+  folder is added under a name you confirm (`AutoVimKB` for AutoVim's global KB) and then linked.
+  "Don't ask again" is remembered per folder. `:AutodocLinkKb` asks on demand, and
+  `offer_link = false` turns the offer off.
 - **Search** (`:AutodocSearch [query]`, `<leader>mf`) searches the selected KB, which defaults
   to the project's primary KB, matched by its root when auto-core records no workspace name. Results update as you type; the title says which stages ran and
   why any were skipped, and `<M-l>` / `<M-s>` / `<M-r>` toggle lexical, semantic and rerank. A hit

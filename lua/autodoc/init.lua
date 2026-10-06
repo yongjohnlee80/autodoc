@@ -9,13 +9,15 @@
 ---    keys = false,  -- true maps the default keys below, and the preview's
 ---    preview = {},  -- the preview's options (autodoc.preview.config); false leaves it off
 ---    offer_restart = true, -- offer to restart a daemon older than this plugin (once per daemon)
+---    offer_link = true, -- offer a workspace for a primary KB auto-core knows by its root alone
 ---  })
 ---
 ---Commands: `:AutodocDrawer` (toggle the kb drawer), `:AutodocSearch [query]` (search the
 ---selected KB), `:AutodocFiles` (a document by name), `:AutodocRecent` (the files opened last,
 ---shared with the TUI), `:AutodocBacklinks` (what links to this file), `:AutodocSelect
 ---[workspace]` (choose the KB to search), `:AutodocMaintenance [restart|install|versions]`, and
----`:AutodocKbMigrate` (move a KB to the v2 layout: a dry run, then --apply / --undo / --forget).
+---`:AutodocKbMigrate` (move a KB to the v2 layout: a dry run, then --apply / --undo / --forget), and
+---`:AutodocLinkKb` (link the project's primary KB to an AutoDoc workspace, adding one if none serves it).
 ---
 ---Default keys (opts.keys = true), the knowledge base's `<leader>m` group:
 ---  <leader>mf   search the selected KB: lexical + semantic + rerank (:AutodocSearch)
@@ -106,6 +108,8 @@ local function create_commands()
     complete = function(lead) return migrate().complete(lead) end,
     desc = "autodoc: migrate a KB to the v2 layout (dry run, --apply, --undo, --forget)",
   })
+  vim.api.nvim_create_user_command("AutodocLinkKb", function() require("autodoc.kb.link").run() end,
+    { desc = "autodoc: link the project's primary KB to an AutoDoc workspace, adding one if none serves it" })
   vim.api.nvim_create_user_command("AutodocSelect", function(c) select_command(c.args) end, {
     nargs = "?",
     desc = "autodoc: choose the KB to search",
@@ -120,7 +124,7 @@ local function create_commands()
 end
 
 function M.setup(opts)
-  _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false, preview = {}, offer_restart = true }, opts or {})
+  _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false, preview = {}, offer_restart = true, offer_link = true }, opts or {})
   local session = require("autodoc.session")
   session.configure(_options)
   require("autodoc.verbs").register()

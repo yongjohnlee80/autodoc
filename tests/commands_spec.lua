@@ -31,7 +31,7 @@ t.section("setup without keys", function()
   t.ok(provided["KB_OPERATIONS.md"] and provided["KB_OPERATIONS.md"].version == require("autodoc.kb.version").autodoc,
     "setup hands this build's managed KB documents to auto-core", vim.inspect(vim.tbl_keys(provided)))
   for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect", "AutodocKbMigrate", "AutodocFiles",
-    "AutodocRecent", "AutodocBacklinks", "AutodocMaintenance" }) do
+    "AutodocRecent", "AutodocBacklinks", "AutodocMaintenance", "AutodocLinkKb" }) do
     t.ok(vim.fn.exists(":" .. c) == 2, ":" .. c .. " exists")
   end
   t.eq(package.loaded["autodoc.kb.migrate"], nil, "the migration's module is not loaded by setup")

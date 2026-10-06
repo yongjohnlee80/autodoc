@@ -18,7 +18,7 @@ M.TOPIC_DISCONNECTED = "autodoc.session:disconnected"
 M.TOPIC_WORKSPACES = "autodoc.session:workspaces"
 M.TOPIC_SELECTED = "autodoc.session:selected"
 
-local _opts = {} -- setup's: bin, config
+local _opts = {} -- setup's: bin, config, offer_restart, offer_link
 local _client, _epoch = nil, 0
 local _waiting = nil -- callbacks queued behind a connect in flight
 local _workspaces = nil -- the last workspace.list, by name
@@ -181,10 +181,15 @@ function M.refresh_kbs(list)
 end
 
 ---remember keeps a workspace.list answer for the save hook and the views, and says so. Each listed KB's
----managed files are brought up to date on the way (refresh_kbs).
+---managed files are brought up to date on the way (refresh_kbs), and a primary KB with no workspace
+---named is offered one (opts.offer_link).
 ---@param list table[]
 function M.remember_workspaces(list)
   M.refresh_kbs(list)
+  -- a primary KB auto-core knows by its root alone is offered a workspace (autodoc.kb.link)
+  if _opts.offer_link then
+    vim.schedule(function() require("autodoc.kb.link").check(list) end)
+  end
   _workspaces = {}
   local names = {}
   for _, w in ipairs(list or {}) do

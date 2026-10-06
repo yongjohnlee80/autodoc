@@ -30,7 +30,7 @@ local session = require("autodoc.session")
 local finders = require("autodoc.finders")
 local client = require("autodoc.client")
 local lifecycle = require("autodoc.lifecycle")
-autodoc.setup({ bin = bin, config = cfg })
+autodoc.setup({ bin = bin, config = cfg, offer_link = false })
 
 -- poll calls check, which may itself wait on the daemon, until it holds or ms have passed by the
 -- clock. Never t.wait around a check that waits: nested vim.wait loops never reach the outer
@@ -67,7 +67,7 @@ t.section("the primary KB by its root", function()
   local _, err = t.await(20000, function(done) session.call("workspace.add", { "global", kb }, done) end)
   t.ok(err == nil, "workspace.add", err and err.message)
   session.reset_for_tests() -- forget the listing workspace.add made: a fresh Neovim
-  autodoc.setup({ bin = bin, config = cfg })
+  autodoc.setup({ bin = bin, config = cfg, offer_link = false })
   local name = t.await(20000, function(done) session.resolve_selected(done) end)
   t.eq(name, "global", "resolve_selected lists the workspaces and finds the primary by its root")
   t.eq(session.selected(), "global", "selected() then answers it")
@@ -76,7 +76,7 @@ t.section("the primary KB by its root", function()
   t.ok(session.is_primary({ name = "named" }, { workspace = "named", root = "/x" }), "a record naming a workspace matches by name")
   t.ok(not session.is_primary({ name = "global", root = kb }, { workspace = "named", root = kb }), "and by name only, then")
   session.reset_for_tests()
-  autodoc.setup({ bin = bin, config = cfg })
+  autodoc.setup({ bin = bin, config = cfg, offer_link = false })
   local res, serr
   poll(20000, function() -- the new workspace indexes first
     res, serr = t.await(5000, function(done) require("autodoc.api").search("kestrel", { limit = 5 }, done) end)
@@ -174,7 +174,7 @@ t.section("the offer to restart an older daemon", function()
 
   -- a refused connect is what brings the offer: the probe's answer reaches it
   session.reset_for_tests()
-  autodoc.setup({ bin = bin, config = cfg })
+  autodoc.setup({ bin = bin, config = cfg, offer_link = false })
   client.connect = function(_, cb) cb(nil, client.mismatch(older), older) end
   local _, err = t.await(10000, function(done) session.ensure(done) end)
   t.ok(err and err:find("DAEMON is older", 1, true), "the connect is refused", err)
@@ -217,7 +217,7 @@ t.section("the offer to restart an older daemon", function()
   t.ok(said and said:find("its binary is older", 1, true), "it says the binary is the older one", said)
   vim.ui.select = real_select
   session.reset_for_tests()
-  autodoc.setup({ bin = bin, config = cfg })
+  autodoc.setup({ bin = bin, config = cfg, offer_link = false })
 end)
 
 t.section("install: the release binary", function()
