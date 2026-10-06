@@ -95,7 +95,7 @@ jobs:
     env:
       # auto-core v0.3.1 (PR #57): the managed KB documents autodoc.kb.managed hands it; bump
       # deliberately with a compatibility check.
-      AUTO_CORE_SHA: "d953c44"
+      AUTO_CORE_SHA: "c399257"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
