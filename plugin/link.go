@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"bufio"
 	"context"
 	"net"
 	"time"
@@ -11,6 +12,41 @@ import (
 
 // MaxMessageBytes bounds one notification either way: a frame of a dialog is a few kilobytes.
 const MaxMessageBytes = 1 << 20
+
+// MaxDocumentBytes bounds a whole plugin.document as the link encodes it: MaxMessageBytes, less
+// room for the envelope around it. A note whose document is larger is sent as too large, without its
+// text (ADR 1791268009 §2.3).
+const MaxDocumentBytes = MaxMessageBytes - 4<<10
+
+// EncodedSize is the size of the notification method with params, as the link writes it.
+func EncodedSize(method string, params []any) (int, error) {
+	var n counter
+	w := bufio.NewWriter(&n)
+	m := &golibrpc.Message{Kind: golibrpc.KindNotification, Method: method, Params: params}
+	if err := msgpackrpc.New(nil).Write(w, m); err != nil {
+		return 0, err
+	}
+	if err := w.Flush(); err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// FitDocument is d as it can be sent: d itself when its plugin.document encodes to at most
+// MaxDocumentBytes, else its too-large form, which keeps its path, workspace and version alone.
+func FitDocument(d Document) Document {
+	if d.TooLarge {
+		return d
+	}
+	if n, err := EncodedSize(MethodDocument, DocumentParams(d)); err == nil && n <= MaxDocumentBytes {
+		return d
+	}
+	return Document{Path: d.Path, Workspace: d.Workspace, Version: d.Version, TooLarge: true}
+}
+
+type counter int
+
+func (c *counter) Write(b []byte) (int, error) { *c += counter(len(b)); return len(b), nil }
 
 // WriteTimeout bounds one send: a peer that has not read for this long is not answering.
 const WriteTimeout = 2 * time.Second

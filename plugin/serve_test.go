@@ -404,3 +404,60 @@ func TestASlowReaderGetsOnlyTheLatestDocument(t *testing.T) {
 		t.Errorf("%d of %d documents handled: the waiting ones were not replaced", len(versions), n)
 	}
 }
+
+// TestADocumentIsBoundedByItsEncoding (ADR 1791268009 §2.3): the bound is the whole notification
+// as the link writes it, not the text. A document that encodes to exactly MaxDocumentBytes is sent
+// whole and arrives; one byte more is too large, keeping its path, workspace and version; neither
+// ends the link, and a note too large for the link itself is never what is sent.
+func TestADocumentIsBoundedByItsEncoding(t *testing.T) {
+	sized := func(target int) Document {
+		d := Document{Path: "notes/a.md", Workspace: "kb", Cursor: Position{1, 1},
+			Selection: []Range{{Position{1, 1}, Position{1, 2}}}, Version: 4}
+		d.Text = strings.Repeat("x", target)
+		n, err := EncodedSize(MethodDocument, DocumentParams(d))
+		if err != nil {
+			t.Fatal(err)
+		}
+		d.Text = strings.Repeat("x", target+(target-n)) // a long string's header is fixed: one byte a character
+		if n, _ := EncodedSize(MethodDocument, DocumentParams(d)); n != target {
+			t.Fatalf("sized to %d, encodes to %d", target, n)
+		}
+		return d
+	}
+	at := FitDocument(sized(MaxDocumentBytes))
+	over := FitDocument(sized(MaxDocumentBytes + 1))
+	if at.TooLarge || len(at.Text) == 0 {
+		t.Fatalf("a document at the bound is too large")
+	}
+	if want := (Document{Path: "notes/a.md", Workspace: "kb", Version: 4, TooLarge: true}); !reflect.DeepEqual(over, want) {
+		t.Fatalf("one byte over: %+v, want %+v", over, want)
+	}
+	if n, _ := EncodedSize(MethodDocument, DocumentParams(sized(MaxMessageBytes))); n <= MaxMessageBytes-1 {
+		t.Fatalf("the link's own limit is not above the bound: %d", n)
+	}
+
+	s := &service{}
+	hs := start(t, s)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 2}))
+	hs.next(t)
+	hs.send(t, MethodDocument, DocumentParams(at))
+	hs.send(t, MethodCommand, CommandParams("after-the-whole-one"))
+	// handled before the next is sent: a document still waiting would be replaced by it
+	for deadline := time.Now().Add(5 * time.Second); len(s.rec.all()) < 3; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the whole document never arrived: %q", s.rec.all())
+		}
+	}
+	hs.send(t, MethodDocument, DocumentParams(over))
+	hs.send(t, MethodCommand, CommandParams("after-the-large-one"))
+	hs.send(t, MethodClose, EmptyParams())
+	if err := hs.served(t); err != nil {
+		t.Fatalf("ServeConn = %v", err)
+	}
+	got := s.rec.all()
+	want := []string{"open 0x0  ", fmt.Sprintf("document notes/a.md v4 %d bytes", len(at.Text)), "command after-the-whole-one",
+		"document notes/a.md v4 0 bytes", "command after-the-large-one", "close"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("the service's calls:\n got %q\nwant %q", got, want)
+	}
+}
