@@ -26,6 +26,8 @@ import (
 //	destination        string     sqlite or postgres
 //	vector_index       string     hnsw or ivfflat; "" the default
 //	view_args          map
+//	abstract_chunk     bool       each document's abstract as a chunk of its own; off by default
+//	demote_superseded  bool       a superseded document's hits below its successor's; off by default
 //	source, destination_connection   {engine, dsn, schema, remove}   an empty dsn keeps the stored one
 //
 // A key it does not know, or a value of the wrong shape, is InvalidParams: a client's typo is
@@ -33,7 +35,8 @@ import (
 
 var configureKeys = map[string]bool{"name": true, "include": true, "exclude": true, "schema": true,
 	"text_extensions": true, "section_tokens": true, "embedding_policy": true, "provider": true,
-	"destination": true, "vector_index": true, "view_args": true, "source": true, "destination_connection": true}
+	"destination": true, "vector_index": true, "view_args": true, "source": true, "destination_connection": true,
+	"abstract_chunk": true, "demote_superseded": true}
 
 // changesOf reads workspace.configure's settings map.
 func changesOf(m map[string]any) (store.Changes, error) {
@@ -94,6 +97,15 @@ func changesOf(m map[string]any) (store.Changes, error) {
 	}
 	if c.VectorIndex, err = str("vector_index"); err != nil {
 		return c, err
+	}
+	for key, dst := range map[string]**bool{"abstract_chunk": &c.AbstractChunk, "demote_superseded": &c.DemoteSuperseded} {
+		if v, ok := m[key]; ok {
+			b, ok := v.(bool)
+			if !ok {
+				return c, invalid(key + " must be true or false")
+			}
+			*dst = &b
+		}
 	}
 	if v, ok := m["section_tokens"]; ok {
 		n, err := argInt([]any{v}, 0, "section_tokens")
@@ -203,6 +215,7 @@ func configureEvents(p []any) []store.Event {
 		{"workspace.embedding_policy", []string{"embedding_policy"}, "embedding_policy"},
 		{"workspace.provider", []string{"provider"}, "provider"},
 		{"workspace.databases", []string{"destination", "vector_index", "view_args", "source", "destination_connection"}, ""},
+		{"workspace.retrieval", []string{"abstract_chunk", "demote_superseded"}, ""},
 	} {
 		if !slices.ContainsFunc(f.keys, func(k string) bool { _, ok := m[k]; return ok }) {
 			continue

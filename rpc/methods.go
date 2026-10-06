@@ -42,6 +42,11 @@ func workspaceMap(w *Workspace) map[string]any {
 	}
 	out := map[string]any{"name": w.Name, "root": w.Root, "state": state,
 		"include": anyList(w.Include), "exclude": anyList(w.Exclude), "section_tokens": int64(tokens), "embedding_policy": policy}
+	if w.Index != nil {
+		if r, err := w.Index.Store().Retrieval(context.Background()); err == nil {
+			out["abstract_chunk"], out["demote_superseded"] = r.AbstractChunk, r.DemoteSuperseded
+		}
+	}
 	if w.FrontmatterSchema != nil {
 		_, st := w.FrontmatterSchema()
 		out["schema"] = schemaMap(st)
@@ -811,6 +816,27 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 				}
 				o.Facets[field] = l
 			}
+		case "retrieval":
+			rm, ok := v.(map[string]any)
+			if !ok {
+				return o, invalid("search.query: opts.retrieval must be a map")
+			}
+			r := &index.Retrieval{}
+			for rk, rv := range rm {
+				b, ok := rv.(bool)
+				if !ok {
+					return o, invalid("search.query: opts.retrieval." + rk + " must be true or false")
+				}
+				switch rk {
+				case "abstract_chunk":
+					r.AbstractChunk = &b
+				case "demote_superseded":
+					r.DemoteSuperseded = &b
+				default:
+					return o, invalid("search.query: unknown retrieval option " + rk)
+				}
+			}
+			o.Retrieval = r
 		case "tags", "paths":
 			l, err := strList(v, "search.query: opts."+k)
 			if err != nil {
@@ -946,6 +972,9 @@ func resultMap(r index.Result) map[string]any {
 		hits[i] = map[string]any{"path": h.Path, "breadcrumb": h.Breadcrumb, "snippet": h.Snippet,
 			"generation": h.Generation, "byte_start": int64(h.ByteStart), "byte_end": int64(h.ByteEnd),
 			"score": h.Score, "relevance": h.Relevance, "via": strs(h.Via), "hold": h.Hold}
+		if h.SupersededBy != "" {
+			hits[i].(map[string]any)["superseded_by"] = h.SupersededBy
+		}
 		if h.RankScore != nil { // present only for a ranked hit: 0 is a score
 			hits[i].(map[string]any)["rank_score"] = *h.RankScore
 		}
