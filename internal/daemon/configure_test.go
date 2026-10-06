@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -192,14 +193,16 @@ func TestConfigure_ARestartThatFailsTakesTheWholeSaveBack(t *testing.T) {
 	t.Cleanup(func() { startFault = nil })
 
 	err := m.Configure(context.Background(), "kb", store.Changes{
-		Name:            ptr("docs"),
-		Include:         ptr([]string{"**/*.{md,txt}"}),
-		Exclude:         ptr([]string{}),
-		SectionTokens:   ptr(256),
-		SchemaPath:      ptr("s.yaml"),
-		TextExtensions:  ptr([]string{".log"}),
-		EmbeddingPolicy: ptr(store.EmbeddingNever),
-		ViewArgs:        ptr(map[string]any{"a": "b"}),
+		Name:             ptr("docs"),
+		Include:          ptr([]string{"**/*.{md,txt}"}),
+		Exclude:          ptr([]string{}),
+		SectionTokens:    ptr(256),
+		SchemaPath:       ptr("s.yaml"),
+		TextExtensions:   ptr([]string{".log"}),
+		EmbeddingPolicy:  ptr(store.EmbeddingNever),
+		ViewArgs:         ptr(map[string]any{"a": "b"}),
+		AbstractChunk:    ptr(true),
+		DemoteSuperseded: ptr(true),
 	})
 	if err == nil || !strings.Contains(err.Error(), "the root vanished") {
 		t.Fatalf("Configure = %v, want the restart's failure", err)
@@ -219,6 +222,9 @@ func TestConfigure_ARestartThatFailsTakesTheWholeSaveBack(t *testing.T) {
 	}
 	if p, _ := db.EmbeddingPolicy(context.Background(), w.ID); p != store.EmbeddingAlways {
 		t.Errorf("the store kept the policy %q", p)
+	}
+	if r, err := db.Retrieval(context.Background(), w.ID); err != nil || r.AbstractChunk || r.DemoteSuperseded {
+		t.Errorf("the store kept the retrieval settings %+v, %v", r, err)
 	}
 
 	if _, ok := m.Get("docs"); ok {
@@ -299,4 +305,28 @@ func TestConfigure_ARestartThatFailsTakesTheConnectionsBack(t *testing.T) {
 		t.Fatal("the failing save succeeded")
 	}
 	check("a removed connection")
+}
+
+// Turning the abstract chunk on rebuilds the Markdown documents under the identity that carries it,
+// with no restart: the setting reaches the index through a revalidation.
+func TestConfigure_TheAbstractChunkRebuildsTheMarkdown(t *testing.T) {
+	m, db := openWith(t, Options{})
+	kbWith(t, m, map[string]string{"a.md": "---\nabstract: Where rows live.\n---\n# A\n"}, "**/*.md")
+	indexed(t, m, "kb", 1)
+	if err := m.Configure(context.Background(), "kb", store.Changes{AbstractChunk: ptr(true)}); err != nil {
+		t.Fatal(err)
+	}
+	id := mustID(t, m, "kb")
+	eventually(t, "a.md indexed with the abstract chunk", func() bool {
+		var version string
+		err := db.Read(context.Background(), func(tx *store.Tx) error {
+			d, err := db.Workspace(id).Documents(tx).With(store.DocPath, "a.md").Get(store.DocIndexer)
+			if err == nil {
+				version = d.Indexer
+			}
+			return err
+		})
+		got, perr := index.ParseIdentity(version)
+		return err == nil && perr == nil && got.Abstract == "a1"
+	})
 }
