@@ -78,7 +78,7 @@ A new workspace-owned table follows the same rule.
 | `doc_diagnostic` | a problem with a document's frontmatter: field, line, rule, message, in source order (000007) | `(workspace_id, doc_id, ord)` |
 | `link` | a link from a document, and the document it resolved to | `id`, `(workspace_id, id)` |
 | `link_key` | a frontmatter relation link's names, tried in order when it resolves (000014) | `(workspace_id, link_id, ord)` |
-| `model` | an embedding model a workspace used; one is active | `(workspace_id, fp)` |
+| `model` | an embedding model a workspace uses: the active one, and the target its indexer fills (000015); any other is reclaimed | `(workspace_id, fp)` |
 | `embedding` | a text's vector under a model | `(workspace_id, text_hash, model_fp)` |
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
