@@ -121,6 +121,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	printEndpoint := fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
+	compact := fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -150,6 +151,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	switch {
 	case *showVersion:
 		fmt.Fprintln(stdout, "autodoc", b.version)
+	case *compact:
+		if err := runCompact(ctx, *configPath, stdout); err != nil {
+			fmt.Fprintln(stderr, "autodoc:", err)
+			return 1
+		}
 	case *printEndpoint:
 		run := func() error { return runPrintEndpoint(ctx, *configPath, *ensure, stdout) }
 		if *restart {
