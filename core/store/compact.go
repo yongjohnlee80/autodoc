@@ -66,8 +66,8 @@ func (s *Store) IncrementalVacuum(ctx context.Context) error {
 	return nil
 }
 
-// Compaction is what a compaction did: the store's size before and after, in bytes (its file and
-// its write-ahead log).
+// Compaction is what a compaction did: the store's file's size before and after, in bytes. The
+// write-ahead log is not counted: it is transient, and empties at a checkpoint.
 type Compaction struct {
 	Before, After int64
 }
@@ -82,15 +82,23 @@ var freeSpace = func(dir string) (int64, error) {
 	return int64(st.Bavail) * int64(st.Bsize), nil
 }
 
-// size is the store's size on disk: its file and its write-ahead log.
-func (s *Store) size() int64 {
-	var n int64
-	for _, p := range []string{s.path, s.path + "-wal"} {
-		if fi, err := os.Stat(p); err == nil {
-			n += fi.Size()
-		}
+// FileSize is the store's file's size in bytes, its write-ahead log aside.
+func (s *Store) FileSize() int64 {
+	fi, err := os.Stat(s.path)
+	if err != nil {
+		return 0
 	}
-	return n
+	return fi.Size()
+}
+
+// Checkpoint copies the write-ahead log into the store's file and empties it, waiting for the reads
+// that hold older snapshots (up to the busy timeout): for a store no daemon serves, whose file then
+// shows its size (--compact).
+func (s *Store) Checkpoint(ctx context.Context) error {
+	if _, err := s.w.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
+		return fmt.Errorf("store: checkpoint: %w", err)
+	}
+	return nil
 }
 
 // Compact puts the store in incremental auto-vacuum mode and rewrites it with VACUUM. VACUUM may need
@@ -102,7 +110,7 @@ func (s *Store) size() int64 {
 // being checkpointed back into a smaller file: the store reaches its new size at the first checkpoint
 // after such reads are done. After reports the size once Compact's own checkpoint has run.
 func (s *Store) Compact(ctx context.Context) (Compaction, error) {
-	before := s.size()
+	before := s.FileSize()
 	dir := filepath.Dir(s.path)
 	free, err := freeSpace(dir)
 	if err != nil {
@@ -122,7 +130,7 @@ func (s *Store) Compact(ctx context.Context) (Compaction, error) {
 			return Compaction{}, fmt.Errorf("store: compacting (%s): %w", stmt, err)
 		}
 	}
-	return Compaction{Before: before, After: s.size()}, nil
+	return Compaction{Before: before, After: s.FileSize()}, nil
 }
 
 // escapeLiteral doubles a string's quotes for an SQL literal.

@@ -56,6 +56,10 @@ func runCompact(ctx context.Context, configPath string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "compacted %s from %d MB to %d MB\n", storePath, c.Before>>20, c.After>>20)
+	// no daemon reads this store: the log empties at once, and the file shows its size
+	if err := db.Checkpoint(ctx); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "compacted %s from %d MB to %d MB\n", storePath, c.Before>>20, db.FileSize()>>20)
 	return nil
 }
