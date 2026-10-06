@@ -181,11 +181,12 @@ section("[S] scaffold and templates")
 do
   local root = tmp .. "/fresh"
   local r = scaffold.scaffold(root, { autodoc_version = "0.2.0", date = "2026-10-06" })
-  ok("S1: a fresh scaffold creates every layout folder with its ABOUT.md", (function()
+  ok("S1: a fresh scaffold creates every layout folder with its descriptor (ABOUT.md, _ABOUT.md in a _ folder)", (function()
     for _, d in ipairs(scaffold.DIRS) do
-      if not util.isfile(root .. "/" .. d .. "/ABOUT.md") then return false end
+      if not util.isfile(root .. "/" .. d .. "/" .. scaffold.about_name(d)) then return false end
     end
-    return true
+    return util.isfile(root .. "/_templates/_ABOUT.md") and util.isfile(root .. "/_schema/_ABOUT.md")
+      and not util.exists(root .. "/_templates/ABOUT.md") and util.isfile(root .. "/adrs/ABOUT.md")
   end)())
   ok("S2: the scaffold never creates .todo-list/", not util.exists(root .. "/.todo-list"))
   ok("S3: root files and the managed files are created",
@@ -278,6 +279,41 @@ do
   write(d5, "raw/x.txt", "x")
   local rep5 = scaffold.scaffold(d5, {})
   ok("S16: the scaffold writes nothing into an existing non-empty raw/", not util.exists(d5 .. "/raw/ABOUT.md") and vim.tbl_contains(rep5.skipped, "raw/ABOUT.md"))
+
+  -- on a case-insensitive filesystem (macOS) two names that differ in case are one file
+  local seen, clash = {}, {}
+  for _, f in ipairs(scaffold.files({ autodoc_version = "0.2.0", date = "2026-10-06" })) do
+    local k = f.rel:lower()
+    if seen[k] then clash[#clash + 1] = seen[k] .. " ~ " .. f.rel end
+    seen[k] = f.rel
+  end
+  ok("S22: no two scaffold files differ only in case (_templates/about.md vs a descriptor)", #clash == 0, table.concat(clash, ", "))
+  -- a view that answers exists/read as a case-insensitive filesystem does, over a real folder
+  local ci = tmp .. "/case-insensitive"
+  util.mkdirp(ci)
+  local function find_ci(rel)
+    local dir, name = rel:match("^(.*)/([^/]+)$")
+    dir, name = dir and (ci .. "/" .. dir) or ci, name or rel
+    local h = vim.uv.fs_scandir(dir)
+    while h do
+      local n = vim.uv.fs_scandir_next(h)
+      if not n then break end
+      if n:lower() == name:lower() then return dir .. "/" .. n end
+    end
+  end
+  local ciview = {
+    exists = function(rel) return find_ci(rel) ~= nil end,
+    read = function(rel) local p = find_ci(rel); return p and util.read_file(p) end,
+    dir_empty = function() return true end,
+  }
+  local rci = scaffold.scaffold(ci, { autodoc_version = "0.2.0", date = "2026-10-06", view = ciview })
+  local missing = {}
+  for _, f in ipairs(scaffold.files({ autodoc_version = "0.2.0", date = "2026-10-06" })) do
+    if not vim.tbl_contains(rci.created, f.rel) then missing[#missing + 1] = f.rel end
+  end
+  ok("S23: on a case-insensitive filesystem every scaffold file is created, the about template and the descriptors alike",
+    #missing == 0 and read(ci, "_templates/about.md"):find("type: about", 1, true) ~= nil
+    and read(ci, "_templates/_ABOUT.md"):find("# _templates/", 1, true) ~= nil, table.concat(missing, ", "))
 end
 
 -- ─── reference scanning ─────────────────────────────────────────────

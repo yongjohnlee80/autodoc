@@ -7,6 +7,9 @@
 --   * Never creates `.todo-list/` (the todo store is not part of the KB, §1).
 --   * Never writes into an existing, non-empty raw/ (it is the user's immutable material): raw/ABOUT.md
 --     is created only with a new or empty raw/.
+--   * A `_` folder's descriptor is `_ABOUT.md` (M.about_name): `_templates/ABOUT.md` would be the same
+--     file as `_templates/about.md`, the `about` type's template, on a case-insensitive filesystem
+--     (macOS). A KB an older scaffold wrote renames its two by hand (README, "The KB layout").
 
 local util = require("autodoc.kb.util")
 local schema = require("autodoc.kb.schema")
@@ -18,6 +21,16 @@ M.DIRS = { "raw", "adrs", "conventions", "playbooks", "reference", "synthesis", 
   "scripts", "archive", "_templates", "_schema" }
 M.ROOT_FILES = { "RULES.md", "AGENTS.md", "KB_OPERATIONS.md", "CLAUDE.md", "GEMINI.md" }
 M.MANAGED = { ["KB_OPERATIONS.md"] = true, ["_schema/frontmatter.yaml"] = true }
+
+---about_name is the name of folder d's descriptor: `_ABOUT.md` in a folder whose name starts with
+---`_`, else `ABOUT.md`. `_templates/` holds a template per type, `about.md` among them, and
+---`ABOUT.md` beside it is one file where case is not significant; the `_` folders all take the
+---prefix, so the rule is one rule.
+---@param d string a folder of M.DIRS
+---@return string
+function M.about_name(d)
+  return d:sub(1, 1) == "_" and "_ABOUT.md" or "ABOUT.md"
+end
 
 local function render(text, vars)
   text = text:gsub("{{autodoc_version}}", vars.autodoc_version)
@@ -49,7 +62,7 @@ function M.files(vars)
     managed = true,
   }
   for _, d in ipairs(M.DIRS) do
-    out[#out + 1] = { rel = d .. "/ABOUT.md", text = render(assert(util.read_file(tdir .. "/about/" .. d .. ".md")), vars), managed = false }
+    out[#out + 1] = { rel = d .. "/" .. M.about_name(d), text = render(assert(util.read_file(tdir .. "/about/" .. d .. ".md")), vars), managed = false }
   end
   local s = schema.shipped()
   for _, t in ipairs(s.type_order) do

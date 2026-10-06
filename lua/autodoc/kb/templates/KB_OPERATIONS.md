@@ -155,7 +155,7 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 - **Check a draft before writing it:**
   `autodoc --call doc.validate '["'"$AUTODOC_WORKSPACE"'", "<path>", "<full text>"]'`. It answers
   `{diagnostics: [{field, line, rule, message}]}`. Diagnostics never block a write, but fix them.
-- `ABOUT.md` in each folder says what goes there, how files are named and which `type` they carry.
+- `ABOUT.md` in each folder (`_ABOUT.md` in `_templates/` and `_schema/`) says what goes there, how files are named and which `type` they carry.
   "Where does X go" is a search: `"<X>" type:about`.
 - YAML frontmatter is the source of truth. Don't add inline `**Tags:**` or `**Abstract:**` lines.
 - Link with paths relative to the KB root (`[[adrs/<file>]]`) or relative Markdown links.

@@ -17,7 +17,7 @@ abstract: "The agent contract for this KB. Read RULES.md first, then this file, 
 2. **This file.**
 3. **`KB_OPERATIONS.md`**: how to search, read and write through AutoDoc. It is versioned with
    AutoDoc; re-read it when its `revision:` changes.
-4. **The folder's `ABOUT.md`**: what belongs in that folder.
+4. **The folder's `ABOUT.md`** (`_ABOUT.md` in `_templates/` and `_schema/`): what belongs in that folder.
 
 ## 1. Hard rules
 
@@ -49,7 +49,7 @@ Every document starts with YAML frontmatter valid against `_schema/frontmatter.y
 
 ## 4. Where things go
 
-Each folder's `ABOUT.md` says what belongs there, the file naming and the `type`. In short:
+Each folder's `ABOUT.md` (`_ABOUT.md` in the `_` folders) says what belongs there, the file naming and the `type`. In short:
 
 | Folder | Holds |
 |---|---|
