@@ -302,3 +302,51 @@ func TestPartlyEmbeddedDocumentIsNotReady(t *testing.T) {
 		return nil
 	})
 }
+
+// TestReclaimModelsKeepsTheActiveAndTheTarget (ADR 1791284787 §2.6): the tenant's embeddings under
+// any model but its active one and its target are deleted, a batch at a time; another tenant's,
+// under the same model, are left.
+func TestReclaimModelsKeepsTheActiveAndTheTarget(t *testing.T) {
+	conn := scratch(t)
+	ctx := context.Background()
+	docs := []searchtest.Doc{{Path: "a.md", Chunks: []string{"words"}}, {Path: "b.md", Chunks: []string{"more words"}}}
+	s := openCorpus(t, conn, "t", docs)
+	other := openCorpus(t, conn, "u", docs)
+	vecs := []Embedding{{TextHash: [32]byte{1}, Vec: searchtest.Embed("x")}, {TextHash: [32]byte{2}, Vec: searchtest.Embed("y")},
+		{TextHash: [32]byte{3}, Vec: searchtest.Embed("z")}}
+	for _, m := range []string{"old|m||64", "target|m||64"} {
+		if err := s.Embed(ctx, m, vecs); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := other.Embed(ctx, "old|m||64", vecs); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetModels(ctx, model, "target|m||64"); err != nil {
+		t.Fatal(err)
+	}
+	count := func(st *Store, m string) uint64 {
+		n, err := st.rw.emb.DAO(dao.WithQueryContext(ctx)).With(eTenant, st.tenant).With(eModel, m).Count()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	active := count(s, model)
+	was := reclaimBatch
+	reclaimBatch = 2
+	t.Cleanup(func() { reclaimBatch = was })
+	n, err := s.ReclaimModels(ctx)
+	if err != nil || n != 3 {
+		t.Fatalf("ReclaimModels: %d, %v; want the 3 of old", n, err)
+	}
+	if count(s, "old|m||64") != 0 || count(s, "target|m||64") != 3 || count(s, model) != active || active == 0 {
+		t.Errorf("after: old %d, target %d, active %d of %d", count(s, "old|m||64"), count(s, "target|m||64"), count(s, model), active)
+	}
+	if count(other, "old|m||64") != 3 {
+		t.Errorf("another tenant's embeddings went: %d of 3 left", count(other, "old|m||64"))
+	}
+	if n, err := s.ReclaimModels(ctx); err != nil || n != 0 {
+		t.Errorf("a second reclaim: %d, %v; want nothing", n, err)
+	}
+}

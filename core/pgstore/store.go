@@ -459,6 +459,55 @@ func (s *Store) SetModels(ctx context.Context, active, target string) error {
 	return nil
 }
 
+// reclaimBatch is how many embeddings one ReclaimModels transaction deletes (a variable, so a test
+// can take smaller steps).
+var reclaimBatch uint64 = 2000
+
+// ReclaimModels deletes the tenant's embeddings under any model but its active one and its target
+// (ADR 1791284787 §2.6), in batches, each its own transaction that reads the two models again: one
+// set active or the target meanwhile keeps what is left. pgstore's writer calls it after a flip, a
+// change of target, and at its start. It returns how many it deleted.
+func (s *Store) ReclaimModels(ctx context.Context) (int, error) {
+	total := 0
+	for {
+		n := 0
+		err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+			keep := []any{""}
+			m, err := s.rw.meta.On(tx, dao.WithQueryContext(ctx)).With(mTenant, s.tenant).Get(mActive, mTarget)
+			if err != nil && !errors.Is(err, dao.ErrNoRows) {
+				return err
+			}
+			if err == nil {
+				keep = append(keep, m.Active, m.Target)
+			}
+			rows, err := s.rw.emb.On(tx, dao.WithQueryContext(ctx)).With(eTenant, s.tenant).
+				WithPredicate(dao.NotIn(qcol(tEmb, string(eModel)), keep)).Limit(reclaimBatch).Select(eModel, eHash)
+			if err != nil || len(rows) == 0 {
+				return err
+			}
+			byModel := map[string][]any{}
+			for _, r := range rows {
+				byModel[r.Model] = append(byModel[r.Model], r.TextHash)
+			}
+			for model, hashes := range byModel {
+				if err := s.rw.emb.On(tx, dao.WithQueryContext(ctx)).With(eTenant, s.tenant).With(eModel, model).
+					WithPredicate(dao.In(qcol(tEmb, string(eHash)), hashes)).Delete(); err != nil {
+					return err
+				}
+			}
+			n = len(rows)
+			return nil
+		})
+		if err != nil {
+			return total, fmt.Errorf("pgstore: reclaiming models: %w", err)
+		}
+		if n == 0 {
+			return total, nil
+		}
+		total += n
+	}
+}
+
 // qcol is a table-qualified column for a raw-column predicate; pgstore's names need no quoting.
 func qcol(table, col string) string { return table + "." + col }
 
