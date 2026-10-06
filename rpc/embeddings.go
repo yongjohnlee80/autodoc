@@ -129,6 +129,9 @@ func (s *Server) registerEmbeddings() {
 		if err := need(); err != nil {
 			return nil, err
 		}
+		if err := needReclaim(ctx, "embedding.remove"); err != nil {
+			return nil, err
+		}
 		name, err := argStr(p, 0, "name")
 		if err != nil {
 			return nil, err
@@ -148,6 +151,9 @@ func (s *Server) registerEmbeddings() {
 	// the model switch under way ends: the provider in use goes back to the model still active
 	s.handle("embedding.cancel_switch", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
 		if err := need(); err != nil {
+			return nil, err
+		}
+		if err := needReclaim(ctx, "embedding.cancel_switch"); err != nil {
 			return nil, err
 		}
 		model, err := s.embeddings.CancelSwitch(ctx)

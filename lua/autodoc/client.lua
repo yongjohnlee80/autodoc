@@ -18,7 +18,7 @@ local M = {}
 
 -- The protocol this plugin is written for. The daemon serves it while it is within the daemon's
 -- range; a verb added after it answers as an unknown method, so a newer daemon is fine.
-M.PROTOCOL = 15
+M.PROTOCOL = 16
 
 -- The name the daemon logs this client by. Not the TUI's: the TUI is held to the daemon's own
 -- protocol, this plugin to the range.

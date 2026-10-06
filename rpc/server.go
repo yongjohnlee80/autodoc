@@ -59,8 +59,11 @@ import (
 // supersession loop), workspace.configure's abstract_chunk and demote_superseded with
 // workspace.list's, search.query's retrieval option and a hit's superseded_by.
 // Protocol 15 adds index.documents' diagnosed: the documents whose frontmatter the schema
-// diagnoses, each with its diagnostics; a session below 15 is refused the option.
-const Protocol int64 = 15
+// diagnoses, each with its diagnostics; a session below 15 is refused the option. Protocol 16 is
+// ADR 1791284787: embedding.cancel_switch deletes the partial target's vectors and embedding.remove
+// the removed provider's model's, so a session below 16 is refused those two verbs; index.purge_model
+// refuses the active model and the target saying what to do instead.
+const Protocol int64 = 16
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
