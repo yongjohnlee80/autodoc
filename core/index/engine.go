@@ -51,8 +51,21 @@ func defaultSearcher(st search.Store[int64, *View], embed search.QueryEmbedder) 
 	return search.NewEngine[int64, *View](st, opts...)
 }
 
-func optsOf(f search.Filter) QueryOpts {
-	return QueryOpts{Tags: f.Tags, Paths: f.Paths, Facets: f.Facets}
+// optsOf is a retriever's filters: the query's, and whether the request leaves the abstract chunks
+// out, which travels on the context the search was asked with.
+func optsOf(ctx context.Context, f search.Filter) QueryOpts {
+	return QueryOpts{Tags: f.Tags, Paths: f.Paths, Facets: f.Facets, sectionsOnly: sectionsOnly(ctx)}
+}
+
+type sectionsOnlyKey struct{}
+
+func withSectionsOnly(ctx context.Context, on bool) context.Context {
+	return context.WithValue(ctx, sectionsOnlyKey{}, on)
+}
+
+func sectionsOnly(ctx context.Context) bool {
+	on, _ := ctx.Value(sectionsOnlyKey{}).(bool)
+	return on
 }
 
 func candidateOf(r *store.Chunk, snippet string) search.Candidate[int64] {
@@ -64,7 +77,7 @@ func candidateOf(r *store.Chunk, snippet string) search.Candidate[int64] {
 // title 10, breadcrumb 5, tags 5, body 1), at most n. The workspace and the filters are in the same
 // WHERE as the MATCH, so they apply before the rank and the limit.
 func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter, n int) ([]search.Candidate[int64], error) {
-	d, ok, err := v.s.filtered(v.tx, alive(v.s.sc.Chunks(v.tx)), optsOf(f))
+	d, ok, err := v.s.filtered(v.tx, alive(v.s.sc.Chunks(v.tx)), optsOf(ctx, f))
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -92,7 +105,7 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	if now != model {
 		return nil, search.ErrModelChanged
 	}
-	return v.s.semanticHits(v.tx, v.sem, model, vec, optsOf(f), n)
+	return v.s.semanticHits(v.tx, v.sem, model, vec, optsOf(ctx, f), n)
 }
 
 // SemanticState is switching while a new model fills (the active model, read in this transaction,
@@ -144,7 +157,7 @@ func (v *View) Signals(ctx context.Context, docs []int64) (map[int64]search.Sign
 // List answers a query of filters and no words: the documents they admit, in path order, each as
 // its first section.
 func (v *View) List(ctx context.Context, f search.Filter, n int) ([]search.Candidate[int64], error) {
-	d, ok, err := v.s.filtered(v.tx, alive(v.s.sc.Chunks(v.tx)).With(store.ChunkOrd, int64(0)), optsOf(f))
+	d, ok, err := v.s.filtered(v.tx, alive(v.s.sc.Chunks(v.tx)).With(store.ChunkOrd, int64(0)), optsOf(ctx, f))
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -183,10 +196,35 @@ func (s *Store) queryEmbedder(sem *semantic) search.QueryEmbedder {
 // answer runs q on the face of s its stages ask for, in the mode they search in, and gives the
 // answer in AutoDoc's own types and errors, with how it was made. paused is semantic search held
 // off by the workspace's embedding policy.
-func answer(ctx context.Context, s searchers, q string, opts QueryOpts, fields search.Fields, paused bool) (Result, error) {
+func answer(ctx context.Context, st *Store, s searchers, q string, opts QueryOpts, fields search.Fields, paused bool) (Result, error) {
 	p, err := planOf(opts)
 	if err != nil {
 		return Result{}, err
+	}
+	// the workspace's retrieval settings, as this query overrides them: the abstract chunks are
+	// left out in the retrievers themselves, and a demotion asks for more hits than it returns
+	set, err := st.retrieval(ctx)
+	if err != nil {
+		return Result{}, err
+	}
+	abstract, demoting := set.AbstractChunk, set.DemoteSuperseded
+	if r := opts.Retrieval; r != nil {
+		if r.AbstractChunk != nil {
+			abstract = *r.AbstractChunk
+		}
+		if r.DemoteSuperseded != nil {
+			demoting = *r.DemoteSuperseded
+		}
+	}
+	ctx = withSectionsOnly(ctx, !abstract)
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+	limit = min(limit, maxLimit)
+	ask := opts.Limit
+	if demoting {
+		ask = min(max(2*limit, limit+20), maxLimit)
 	}
 	// paths as the engine takes them, root-relative with '/' trimmed: "/" and "./" are the root, so
 	// no path filter, as filtered reads them
@@ -194,7 +232,7 @@ func answer(ctx context.Context, s searchers, q string, opts QueryOpts, fields s
 	for _, p := range opts.Paths {
 		paths = append(paths, strings.Trim(p, "/"))
 	}
-	res, err := s.of(p.rerank).Search(ctx, search.Query{Text: q, Mode: p.mode, Limit: opts.Limit, Fields: fields,
+	res, err := s.of(p.rerank).Search(ctx, search.Query{Text: q, Mode: p.mode, Limit: ask, Fields: fields,
 		Filter: search.Filter{Tags: opts.Tags, Paths: paths, Facets: opts.Facets}})
 	if err != nil {
 		return Result{}, ownError(err)
@@ -207,6 +245,20 @@ func answer(ctx context.Context, s searchers, q string, opts QueryOpts, fields s
 		out.Hits[i] = Hit{Path: h.Path, Breadcrumb: h.Breadcrumb, Snippet: h.Snippet, Generation: h.Generation,
 			ByteStart: h.ByteStart, ByteEnd: h.ByteEnd, Score: h.Score, Relevance: h.Relevance, Via: h.Via,
 			RankScore: h.RankScore}
+	}
+	if demoting {
+		paths := make([]string, 0, len(out.Hits))
+		for _, h := range out.Hits {
+			paths = append(paths, h.Path)
+		}
+		successors, err := st.successorsOf(ctx, paths)
+		if err != nil {
+			return Result{}, err
+		}
+		out.Hits = demote(out.Hits, successors)
+		if len(out.Hits) > limit {
+			out.Hits = out.Hits[:limit]
+		}
 	}
 	out.Rank = RankState{State: string(res.Rank.State), Model: res.Rank.Model, Error: res.Rank.Error}
 	out.Stages = p.report(out, wordless(q, opts, fields), paused)
