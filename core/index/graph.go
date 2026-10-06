@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/graph"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -41,15 +42,29 @@ type Unresolved struct {
 	Src, Raw, Reason string
 }
 
-// Links lists the links of the document at path, in source order.
-func (s *Store) Links(ctx context.Context, path string) ([]Link, error) {
+// kindsIn narrows a link query to links of the given kinds; nil leaves it every kind. The filter is
+// in the query, so a walk never passes through a link of a kind it was not given.
+func kindsIn(q dao.DAO[*store.Link, store.LinkField, int64], kinds []string) dao.DAO[*store.Link, store.LinkField, int64] {
+	if kinds == nil {
+		return q
+	}
+	vs := make([]any, len(kinds))
+	for i, k := range kinds {
+		vs[i] = k
+	}
+	return q.WithPredicate(dao.In(`"link"."kind"`, vs))
+}
+
+// Links lists the links of the document at path, in source order: those of the given kinds, every
+// kind when kinds is nil.
+func (s *Store) Links(ctx context.Context, path string, kinds []string) ([]Link, error) {
 	out := []Link{}
 	err := s.read(ctx, func(tx *store.Tx) error {
 		id, err := s.docID(tx, path)
 		if err != nil {
 			return err
 		}
-		rows, err := s.sc.LinksOut(tx).With(store.LinkSrc, id).OrderBy(dao.Asc(store.LinkByID)).
+		rows, err := kindsIn(s.sc.LinksOut(tx), kinds).With(store.LinkSrc, id).OrderBy(dao.Asc(store.LinkByID)).
 			Select(store.LinkOtherPath, store.LinkRaw, store.LinkAnchor, store.LinkKind, store.LinkDst)
 		for _, r := range rows {
 			out = append(out, Link{Path: r.OtherPath, Raw: r.Raw, Anchor: deref(r.Anchor), Kind: r.Kind, Resolved: r.DstDoc != nil})
@@ -59,15 +74,16 @@ func (s *Store) Links(ctx context.Context, path string) ([]Link, error) {
 	return out, err
 }
 
-// Backlinks lists the links that reach the document at path, by source path, then source order.
-func (s *Store) Backlinks(ctx context.Context, path string) ([]Link, error) {
+// Backlinks lists the links of the given kinds (nil: every kind) that reach the document at path,
+// by source path, then source order.
+func (s *Store) Backlinks(ctx context.Context, path string, kinds []string) ([]Link, error) {
 	out := []Link{}
 	err := s.read(ctx, func(tx *store.Tx) error {
 		id, err := s.docID(tx, path)
 		if err != nil {
 			return err
 		}
-		rows, err := s.sc.LinksIn(tx).With(store.LinkDst, id).OrderBy(dao.Asc(store.LinkByOtherPath)).
+		rows, err := kindsIn(s.sc.LinksIn(tx), kinds).With(store.LinkDst, id).OrderBy(dao.Asc(store.LinkByOtherPath)).
 			Select(store.LinkOtherPath, store.LinkRaw, store.LinkAnchor, store.LinkKind)
 		for _, r := range rows {
 			out = append(out, Link{Path: r.OtherPath, Raw: r.Raw, Anchor: deref(r.Anchor), Kind: r.Kind, Resolved: true})
@@ -78,8 +94,10 @@ func (s *Store) Backlinks(ctx context.Context, path string) ([]Link, error) {
 }
 
 // Neighborhood gathers the documents within depth (1 or 2; others are clamped) resolved links of
-// the one at path, following links both ways, and the links among them.
-func (s *Store) Neighborhood(ctx context.Context, path string, depth int) (Neighborhood, error) {
+// the one at path, following links of the given kinds (nil: every kind) both ways, and those links
+// among them. The workspace's resolved links of those kinds are walked as a graph.Graph, so a
+// document reached only through a link of another kind is not in it.
+func (s *Store) Neighborhood(ctx context.Context, path string, depth int, kinds []string) (Neighborhood, error) {
 	depth = min(max(depth, 1), 2)
 	var nb Neighborhood
 	err := s.read(ctx, func(tx *store.Tx) error {
@@ -87,38 +105,19 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int) (Neigh
 		if err != nil {
 			return err
 		}
-		seen := map[int64]bool{start: true}
-		frontier := []int64{start}
-		for d := 0; d < depth && len(frontier) > 0; d++ {
-			var next []int64
-			for _, id := range frontier {
-				// the documents it links to, and those linking to it
-				out, err := s.sc.LinksOut(tx).With(store.LinkSrc, id).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).Select(store.LinkDst)
-				if err != nil {
-					return err
-				}
-				in, err := s.sc.LinksOut(tx).With(store.LinkDst, id).Select(store.LinkSrc)
-				if err != nil {
-					return err
-				}
-				var ns []int64
-				for _, l := range out {
-					ns = append(ns, *l.DstDoc)
-				}
-				for _, l := range in {
-					ns = append(ns, l.SrcDoc)
-				}
-				for _, n := range ns {
-					if !seen[n] {
-						seen[n] = true
-						next = append(next, n)
-					}
-				}
-			}
-			frontier = next
+		rows, err := kindsIn(s.sc.LinksOut(tx), kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
+			Select(store.LinkSrc, store.LinkDst, store.LinkKind)
+		if err != nil {
+			return err
 		}
-		ids := make([]any, 0, len(seen))
-		for id := range seen {
+		g := graph.New[int64]()
+		g.AddNode(start)
+		for _, l := range rows {
+			g.Add(graph.Edge[int64]{Src: l.SrcDoc, Dst: *l.DstDoc, Kind: l.Kind})
+		}
+		sub := g.Neighborhood(start, depth, graph.Both, graph.Filter{})
+		var ids []any
+		for id := range sub.Nodes() {
 			ids = append(ids, id)
 		}
 		docs, err := s.sc.Documents(tx).With(store.DocID, ids...).Select(store.DocID, store.DocPath)
@@ -131,19 +130,8 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int) (Neigh
 			nb.Nodes = append(nb.Nodes, d.Path)
 		}
 		sort.Strings(nb.Nodes)
-		links, err := s.sc.LinksOut(tx).With(store.LinkSrc, ids...).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
-			Select(store.LinkSrc, store.LinkDst, store.LinkKind)
-		if err != nil {
-			return err
-		}
-		edges := map[Edge]bool{}
-		for _, l := range links {
-			if seen[*l.DstDoc] {
-				edges[Edge{paths[l.SrcDoc], paths[*l.DstDoc], l.Kind}] = true
-			}
-		}
-		for e := range edges {
-			nb.Edges = append(nb.Edges, e)
+		for e := range sub.Edges(graph.Filter{}) {
+			nb.Edges = append(nb.Edges, Edge{paths[e.Src], paths[e.Dst], e.Kind})
 		}
 		return nil
 	})
@@ -163,18 +151,18 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int) (Neigh
 	return nb, nil
 }
 
-// Unresolved lists every link that reaches no document, by source path, then source order.
-func (s *Store) Unresolved(ctx context.Context) ([]Unresolved, error) {
+// Unresolved lists every link of the given kinds (nil: every kind) that reaches no document, by source path, then source order.
+func (s *Store) Unresolved(ctx context.Context, kinds []string) ([]Unresolved, error) {
 	out := []Unresolved{}
 	err := s.read(ctx, func(tx *store.Tx) error {
-		rows, err := s.sc.LinksIn(tx).WithPredicate(dao.IsNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(store.LinkByOtherPath)).
-			Select(store.LinkOtherPath, store.LinkRaw, store.LinkKind, store.LinkName)
+		rows, err := kindsIn(s.sc.LinksIn(tx), kinds).WithPredicate(dao.IsNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(store.LinkByOtherPath)).
+			Select(store.LinkID, store.LinkOtherPath, store.LinkRaw, store.LinkKind, store.LinkName)
 		if err != nil {
 			return err
 		}
 		for _, r := range rows {
 			// the reason is not stored: resolving again, in this snapshot, gives the writer's answer
-			_, reason, err := s.resolve(tx, r.Kind, r.Name)
+			_, reason, err := s.resolveStored(tx, r.ID, r.Kind, r.Name)
 			if err != nil {
 				return err
 			}

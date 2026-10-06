@@ -52,8 +52,11 @@ import (
 // rank_score, and sys.capabilities' ranker. Protocol 12 adds search.query's stages: the
 // stages a search runs, asked for in place of a mode, and how its answer was made. Protocol 13
 // adds index.documents, search.query's line_start and line_end on a hit, sys.capabilities' verbs,
-// and sys.hello's server_protocol, min_protocol and store_id.
-const Protocol int64 = 13
+// and sys.hello's server_protocol, min_protocol and store_id. Protocol 14 adds links from frontmatter
+// relations (the kinds supersedes, superseded_by, amends, related, sources and adr) to graph.links,
+// graph.backlinks, graph.neighborhood and graph.unresolved, and their kinds option; a session below 14
+// sees the body links alone, its graph unchanged.
+const Protocol int64 = 14
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

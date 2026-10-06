@@ -41,7 +41,7 @@ func (e *env) remove(ps ...string) {
 // targets lists a file's links as "raw -> path", "-" for unresolved.
 func (e *env) targets(p string) []string {
 	e.t.Helper()
-	ls, err := e.store.Links(context.Background(), p)
+	ls, err := e.store.Links(context.Background(), p, nil)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func (e *env) targets(p string) []string {
 
 func (e *env) unresolved() []string {
 	e.t.Helper()
-	us, err := e.store.Unresolved(context.Background())
+	us, err := e.store.Unresolved(context.Background(), nil)
 	if err != nil {
 		e.t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestBacklinksMatchLinks(t *testing.T) {
 	ctx := context.Background()
 	var fromLinks, fromBacklinks []string
 	for _, p := range []string{"a.md", "b.md", "c.md", "d.md"} {
-		ls, err := e.store.Links(ctx, p)
+		ls, err := e.store.Links(ctx, p, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -218,7 +218,7 @@ func TestBacklinksMatchLinks(t *testing.T) {
 				fromLinks = append(fromLinks, p+" "+l.Raw+" "+l.Path+" "+l.Kind+" "+l.Anchor)
 			}
 		}
-		bs, err := e.store.Backlinks(ctx, p)
+		bs, err := e.store.Backlinks(ctx, p, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +232,7 @@ func TestBacklinksMatchLinks(t *testing.T) {
 	if len(fromLinks) != 6 {
 		t.Errorf("%d resolved links, want 6: %q", len(fromLinks), fromLinks)
 	}
-	if _, err := e.store.Links(ctx, "nope.md"); !errors.Is(err, ErrNoDocument) {
+	if _, err := e.store.Links(ctx, "nope.md", nil); !errors.Is(err, ErrNoDocument) {
 		t.Errorf("links of an unknown path: %v", err)
 	}
 }
@@ -250,7 +250,7 @@ func TestNeighborhood(t *testing.T) {
 		9: {Nodes: []string{"a.md", "b.md", "c.md", "e.md"}, // clamped to 2
 			Edges: []Edge{{"a.md", "b.md", LinkWikilink}, {"b.md", "c.md", LinkWikilink}, {"e.md", "a.md", LinkEmbed}}},
 	} {
-		got, err := e.store.Neighborhood(ctx, "a.md", depth)
+		got, err := e.store.Neighborhood(ctx, "a.md", depth, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -258,7 +258,7 @@ func TestNeighborhood(t *testing.T) {
 			t.Errorf("depth %d:\n got %+v\nwant %+v", depth, got, want)
 		}
 	}
-	got, err := e.store.Neighborhood(ctx, "f.md", 2)
+	got, err := e.store.Neighborhood(ctx, "f.md", 2, nil)
 	if err != nil || !reflect.DeepEqual(got, Neighborhood{Nodes: []string{"f.md"}}) {
 		t.Errorf("a lone note: %+v, %v", got, err)
 	}

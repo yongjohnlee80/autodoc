@@ -31,6 +31,9 @@ const (
 // never a file name elsewhere); for a markdown link the workspace path it reaches.
 type linkT struct {
 	raw, name, anchor, kind string
+	// keys are a relation link's names, tried in order, name being the first; nil for a body link,
+	// which has the one name
+	keys []string
 }
 
 // attachments are the file types Obsidian opens that are not files
@@ -298,13 +301,65 @@ func (s *Store) writeNames(tx *store.Tx, docID int64, names []docName) ([]string
 	return changed, nil
 }
 
-// writeLinks replaces a document's links with links, each resolved as the index stands.
+// resolveKeys finds the document a relation link reaches: the first of its names, in order, that
+// resolves as a wikilink name does. Unresolved, the reason is the first name's.
+func (s *Store) resolveKeys(tx *store.Tx, keys []string) (dst int64, reason string, err error) {
+	for i, k := range keys {
+		d, why, err := s.resolve(tx, LinkWikilink, k)
+		if err != nil || d != 0 {
+			return d, "", err
+		}
+		if i == 0 {
+			reason = why
+		}
+	}
+	return 0, reason, nil
+}
+
+// keysOf reads a relation link's names, in order.
+func (s *Store) keysOf(tx *store.Tx, linkID int64) ([]string, error) {
+	rows, err := s.sc.LinkKeys(tx).With(store.LinkKeyLink, linkID).Select(store.LinkKeyOrd, store.LinkKeyKey)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Ord < rows[j].Ord })
+	keys := make([]string, len(rows))
+	for i, r := range rows {
+		keys[i] = r.Key
+	}
+	return keys, nil
+}
+
+// resolveStored resolves a stored link as the writer did: a relation through its names in order, a
+// body link through its one name.
+func (s *Store) resolveStored(tx *store.Tx, linkID int64, kind, name string) (dst int64, reason string, err error) {
+	if !isRelation(kind) {
+		return s.resolve(tx, kind, name)
+	}
+	keys, err := s.keysOf(tx, linkID)
+	if err != nil {
+		return 0, "", err
+	}
+	if len(keys) == 0 {
+		keys = []string{name}
+	}
+	return s.resolveKeys(tx, keys)
+}
+
+// writeLinks replaces a document's links with links, each resolved as the index stands; a relation
+// link's names go in link_key, in order, so it is found again when any of them changes.
 func (s *Store) writeLinks(tx *store.Tx, docID, gen int64, links []linkT) error {
 	if err := s.sc.LinksOut(tx).With(store.LinkSrc, docID).Delete(); err != nil {
 		return err
 	}
 	for _, l := range links {
-		dst, _, err := s.resolve(tx, l.kind, l.name)
+		var dst int64
+		var err error
+		if l.keys != nil {
+			dst, _, err = s.resolveKeys(tx, l.keys)
+		} else {
+			dst, _, err = s.resolve(tx, l.kind, l.name)
+		}
 		if err != nil {
 			return err
 		}
@@ -315,9 +370,19 @@ func (s *Store) writeLinks(tx *store.Tx, docID, gen int64, links []linkT) error 
 		if l.anchor != "" {
 			anchor = l.anchor
 		}
-		if _, err := s.sc.LinksOut(tx).Set(store.LinkSrc, docID).Set(store.LinkGenFrom, gen).Set(store.LinkRaw, l.raw).
-			Set(store.LinkName, l.name).Set(store.LinkDst, d).Set(store.LinkAnchor, anchor).Set(store.LinkKind, l.kind).Insert(); err != nil {
+		id, err := s.sc.LinksOut(tx).Set(store.LinkSrc, docID).Set(store.LinkGenFrom, gen).Set(store.LinkRaw, l.raw).
+			Set(store.LinkName, l.name).Set(store.LinkDst, d).Set(store.LinkAnchor, anchor).Set(store.LinkKind, l.kind).Insert()
+		if err != nil {
 			return err
+		}
+		if len(l.keys) > 0 {
+			b := s.sc.LinkKeyBatch(tx)
+			for i, k := range l.keys {
+				b.Add(map[store.LinkKeyField]any{store.LinkKeyLink: id, store.LinkKeyOrd: int64(i), store.LinkKeyKey: k})
+			}
+			if err := b.Flush(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -355,9 +420,25 @@ func (s *Store) reresolve(tx *store.Tx, names []string, docID int64) error {
 		if err := probe(dao.In(`"link"."name"`, vs)); err != nil {
 			return err
 		}
+		// a relation link is found by any of its names, not only the first
+		keyed, err := s.sc.LinkKeys(tx).WithPredicate(dao.In(`"link_key"."key"`, vs)).Select(store.LinkKeyLink)
+		if err != nil {
+			return err
+		}
+		var ids []any
+		for _, k := range keyed {
+			if !seen[k.LinkID] {
+				ids = append(ids, k.LinkID)
+			}
+		}
+		if len(ids) > 0 {
+			if err := probe(dao.In(`"link"."id"`, ids)); err != nil {
+				return err
+			}
+		}
 	}
 	for _, r := range rows {
-		dst, _, err := s.resolve(tx, r.Kind, r.Name)
+		dst, _, err := s.resolveStored(tx, r.ID, r.Kind, r.Name)
 		if err != nil {
 			return err
 		}
