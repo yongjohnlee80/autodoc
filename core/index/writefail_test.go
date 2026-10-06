@@ -153,3 +153,16 @@ func TestTheStatusAndTheViewFailAsThemselves(t *testing.T) {
 		}
 	}
 }
+
+// TestASearchFailsWhenItsSettingsCannotBeRead: the workspace's retrieval settings are a read of
+// their own; its failing fails the search, rather than answering as if nothing were set.
+func TestASearchFailsWhenItsSettingsCannotBeRead(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("a.md", "# A\n\nkestrel\n")
+	undo := e.renamed("workspace")
+	_, err := e.store.Search(context.Background(), "kestrel", QueryOpts{Limit: 5, Mode: ModeLexical})
+	undo()
+	if err == nil {
+		t.Error("a search with the workspace table gone answered")
+	}
+}
