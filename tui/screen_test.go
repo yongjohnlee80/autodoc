@@ -1527,11 +1527,15 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 		t.Fatal(err)
 	}
 	ask("local", "twin")
-	r.s.WaitFor(t, "the twin keeps them", func(string) bool { return strings.HasSuffix(question(), "embedder keeps its vectors: twin serves it too.") })
+	r.s.WaitFor(t, "the twin keeps them", func(string) bool {
+		return strings.HasSuffix(question(), "embedder keeps its vectors: twin serves it too.")
+	})
 	onLoop(r, func() bool { r.h.closeDialog("providerRemove"); return true })
 
 	ask("spare", "spare")
-	r.s.WaitFor(t, "another in use", func(string) bool { return strings.HasSuffix(question(), "Its model's vectors go once no workspace uses them.") })
+	r.s.WaitFor(t, "another in use", func(string) bool {
+		return strings.HasSuffix(question(), "Its model's vectors go once no workspace uses them.")
+	})
 }
 
 // seedUnusedModel adds model fp to workspace name, neither active nor the target, with n vectors of

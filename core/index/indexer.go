@@ -112,9 +112,9 @@ type Indexer struct {
 	nextSeq        int64
 	results        chan *prepared
 	work           chan workItem
-	ops            chan op   // writes other than documents' (PurgeModel)
+	ops            chan op     // writes other than documents' (PurgeModel)
 	reclaims       chan string // models to reclaim, off the writer (reclaim.go)
-	sem            *semantic // nil without a provider
+	sem            *semantic   // nil without a provider
 	embedPosition  atomic.Int64
 	semanticPaused atomic.Bool
 	// words and hybrid answer searches: by words alone, and with the semantic tier (zero without a

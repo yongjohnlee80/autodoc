@@ -46,7 +46,7 @@ func TestCompactConvertsAndShrinksOnline(t *testing.T) {
 	if _, err := s.w.ExecContext(ctx, "DELETE FROM ballast WHERE id > 1000"); err != nil {
 		t.Fatal(err)
 	}
-	full := s.size()
+	full := s.FileSize()
 
 	// a read transaction, opened and holding its snapshot, stays open until the compaction is done
 	opened, release := make(chan struct{}), make(chan struct{})
@@ -83,7 +83,7 @@ func TestCompactConvertsAndShrinksOnline(t *testing.T) {
 	if _, err := s.w.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil {
 		t.Fatal(err)
 	}
-	if after := s.size(); after >= full/2 {
+	if after := s.FileSize(); after >= full/2 {
 		t.Errorf("compacted %d bytes to %d once the read was done: want well under half (4,000 of 5,000 rows deleted)", full, after)
 	}
 
@@ -107,7 +107,7 @@ func TestCompactRefusesWithoutRoom(t *testing.T) {
 	ctx := context.Background()
 	s := filled(t, 500)
 	was := freeSpace
-	freeSpace = func(string) (int64, error) { return s.size(), nil } // once the store, not twice
+	freeSpace = func(string) (int64, error) { return s.FileSize(), nil } // once the store, not twice
 	t.Cleanup(func() { freeSpace = was })
 	_, err := s.Compact(ctx)
 	if !errors.Is(err, ErrNoRoom) || !strings.Contains(err.Error(), "MB free beside the store") {
