@@ -32,6 +32,19 @@ local client = require("autodoc.client")
 local lifecycle = require("autodoc.lifecycle")
 autodoc.setup({ bin = bin, config = cfg })
 
+-- poll calls check, which may itself wait on the daemon, until it holds or ms have passed by the
+-- clock. Never t.wait around a check that waits: nested vim.wait loops never reach the outer
+-- deadline when the check keeps failing, so a failing cell would hang the suite.
+local function poll(ms, check)
+  local deadline = vim.uv.now() + ms
+  repeat
+    if check() then return true end
+    vim.wait(50)
+    vim.uv.update_time()
+  until vim.uv.now() >= deadline
+  return false
+end
+
 -- the pickers' items, instead of a picker
 local presented
 finders.present = function(title, items) presented = { title = title, items = items } end
@@ -65,7 +78,7 @@ t.section("the primary KB by its root", function()
   session.reset_for_tests()
   autodoc.setup({ bin = bin, config = cfg })
   local res, serr
-  t.wait(20000, function() -- the new workspace indexes first
+  poll(20000, function() -- the new workspace indexes first
     res, serr = t.await(5000, function(done) require("autodoc.api").search("kestrel", { limit = 5 }, done) end)
     return serr ~= nil or (res and #(res.hits or {}) > 0)
   end)
@@ -74,7 +87,7 @@ t.section("the primary KB by its root", function()
 end)
 
 t.section("a document by name", function()
-  t.wait(10000, function()
+  poll(10000, function()
     local paths = t.await(5000, function(done) finders.list_paths("global", done) end)
     return paths and #paths == 5
   end)
@@ -94,11 +107,11 @@ t.section("recent files, shared with the TUI", function()
     return t.await(5000, function(done) finders.read_recent(done) end) or {}
   end
   finders.note_recent("global", "doc1.md")
-  t.wait(5000, function() return #recent() == 1 end)
+  poll(5000, function() return #recent() == 1 end)
   finders.note_recent("global", "doc2.md")
-  t.wait(5000, function() return #recent() == 2 end)
+  poll(5000, function() return #recent() == 2 end)
   finders.note_recent("global", "doc1.md")
-  t.ok(t.wait(5000, function() local r = recent() return r[1] and r[1].path == "doc1.md" end), "a file opened again is first")
+  t.ok(poll(5000, function() local r = recent() return r[1] and r[1].path == "doc1.md" end), "a file opened again is first")
   t.eq(recent(), { { workspace = "global", path = "doc1.md" }, { workspace = "global", path = "doc2.md" } }, "once each, newest first")
   -- the TUI's own shape, written by the TUI: a list Neovim reads, and a KB that is gone left out
   local tui = vim.json.encode({ { workspace = "gone", path = "x.md" }, { workspace = "global", path = "doc3.md" } })
@@ -113,14 +126,14 @@ t.section("recent files, shared with the TUI", function()
   t.eq(finders.decode_recent("not json"), {}, "anything but a list reads as none")
   -- a KB file opened in Neovim, with a session up, is noted
   vim.cmd("edit " .. vim.fn.fnameescape(kb .. "/notes/owls.md"))
-  t.ok(t.wait(5000, function() local r = recent() return r[1] and r[1].path == "notes/owls.md" end),
+  t.ok(poll(5000, function() local r = recent() return r[1] and r[1].path == "notes/owls.md" end),
     "opening a KB file puts it first among the recent files")
   vim.cmd("bwipeout!")
 end)
 
 t.section("backlinks", function()
   local p
-  t.wait(15000, function()
+  poll(15000, function()
     p = present_wait(function() finders.backlinks(kb .. "/notes/owls.md") end)
     return p ~= nil and #p.items > 0
   end)
@@ -155,13 +168,20 @@ t.section("the offer to restart an older daemon", function()
     "naming the daemon's version and protocol", asked[1])
   t.eq(restarted, 1, "a yes restarts it")
 
+  -- the question comes after `bin --version` answers: give a second one time to come
+  local function settled() vim.wait(2000, function() return #asked > 1 end) return #asked end
   session.offer_restart(older)
-  t.eq(#asked, 1, "the same daemon instance is not asked about twice")
+  t.eq(settled(), 1, "the same daemon instance is not asked about twice")
   session.offer_restart({ protocol = client.PROTOCOL + 1, min_protocol = client.PROTOCOL + 1, instance = "i2" })
-  t.eq(#asked, 1, "a NEWER daemon is not offered a restart: the plugin is the older side")
+  t.eq(settled(), 1, "a NEWER daemon is not offered a restart: the plugin is the older side")
   session.configure({ bin = bin, config = cfg, offer_restart = false })
   session.offer_restart(vim.tbl_extend("force", older, { instance = "i3" }))
-  t.eq(#asked, 1, "offer_restart = false asks nothing")
+  t.eq(settled(), 1, "offer_restart = false asks nothing")
+  -- the cells above observe a second question: an older daemon of a new instance is asked about
+  session.configure({ bin = bin, config = cfg })
+  session.offer_restart(vim.tbl_extend("force", older, { instance = "i5" }))
+  t.ok(t.wait(5000, function() return #asked == 2 end), "another older daemon instance is asked about")
+  table.remove(asked)
   session.configure({ bin = bin, config = cfg })
   client.connect = real_connect
 
@@ -176,7 +196,7 @@ t.section("the offer to restart an older daemon", function()
   local real_notify = vim.notify
   vim.notify = function(msg) said = msg end
   session.offer_restart(vim.tbl_extend("force", older, { instance = "i4" }))
-  vim.wait(200)
+  vim.wait(2000, function() return #asked > 1 end)
   vim.notify = real_notify
   t.eq(#asked, 1, "after this session's own restart, an older daemon is not offered again (no loop)")
   t.ok(said and said:find("its binary is older", 1, true), "it says the binary is the older one", said)
