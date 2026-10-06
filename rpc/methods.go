@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/search/embed"
@@ -468,6 +469,10 @@ func (s *Server) register() {
 		if err != nil {
 			return nil, err
 		}
+		if o.Diagnosed && protocolOf(ctx) < diagnosedSince {
+			// refused, not ignored: a session below it is served as a protocol-13 daemon serves it
+			return nil, invalid("index.documents: opts.diagnosed needs protocol " + strconv.FormatInt(diagnosedSince, 10))
+		}
 		docs, more, err := w.Index.Store().Documents(ctx, o)
 		if errors.Is(err, index.ErrBadSort) {
 			return nil, invalid("index.documents: opts.sort is updated, path or indexed")
@@ -860,6 +865,9 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 
 // documentsOpts reads index.documents' optional second parameter: {sort, fields, tags, paths,
 // facets, missing, after, limit}.
+// diagnosedSince is the protocol index.documents' diagnosed option arrived in.
+const diagnosedSince = 14
+
 func documentsOpts(p []any) (index.DocumentsOpts, error) {
 	var o index.DocumentsOpts
 	if len(p) < 2 || p[1] == nil {
