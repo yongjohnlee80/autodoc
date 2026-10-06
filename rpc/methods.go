@@ -465,13 +465,9 @@ func (s *Server) register() {
 	// client renders instead of a hand-kept one (Protocol 13). opts.diagnosed keeps the documents the
 	// schema diagnoses, each with its diagnostics: the KB's frontmatter scan (Protocol 14).
 	s.handle("index.documents", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		o, err := documentsOpts(p)
+		o, err := documentsOpts(ctx, p)
 		if err != nil {
 			return nil, err
-		}
-		if o.Diagnosed && protocolOf(ctx) < diagnosedSince {
-			// refused, not ignored: a session below it is served as a protocol-13 daemon serves it
-			return nil, invalid("index.documents: opts.diagnosed needs protocol " + strconv.FormatInt(diagnosedSince, 10))
 		}
 		docs, more, err := w.Index.Store().Documents(ctx, o)
 		if errors.Is(err, index.ErrBadSort) {
@@ -868,7 +864,9 @@ func queryOpts(p []any) (index.QueryOpts, error) {
 // diagnosedSince is the protocol index.documents' diagnosed option arrived in.
 const diagnosedSince = 14
 
-func documentsOpts(p []any) (index.DocumentsOpts, error) {
+// documentsOpts reads index.documents' options for the request's session: an option newer than the
+// session's protocol is refused, whatever its value, as the daemon of that protocol refuses it.
+func documentsOpts(ctx context.Context, p []any) (index.DocumentsOpts, error) {
 	var o index.DocumentsOpts
 	if len(p) < 2 || p[1] == nil {
 		return o, nil
@@ -911,6 +909,10 @@ func documentsOpts(p []any) (index.DocumentsOpts, error) {
 				o.Missing = l
 			}
 		case "diagnosed":
+			if protocolOf(ctx) < diagnosedSince {
+				// refused, not ignored, and false too: a protocol-13 daemon knows no such option
+				return o, invalid("index.documents: opts.diagnosed needs protocol " + strconv.FormatInt(diagnosedSince, 10))
+			}
 			b, ok := v.(bool)
 			if !ok {
 				return o, invalid("index.documents: opts.diagnosed must be a boolean")

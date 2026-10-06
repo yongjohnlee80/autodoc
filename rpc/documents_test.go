@@ -157,14 +157,15 @@ func TestSpanLines(t *testing.T) {
 // TestDocumentsOptsReadsEveryOptionAndRefusesTheRest: index.documents' second parameter, each
 // option read into its field, and each malformed value refused with the option it names.
 func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
-	o, err := documentsOpts([]any{"kb"})
+	at14 := withProtocol(context.Background(), Protocol)
+	o, err := documentsOpts(at14, []any{"kb"})
 	if err != nil || o.Sort != "" || o.Limit != 0 {
 		t.Fatalf("no opts: %+v, %v", o, err)
 	}
-	if _, err := documentsOpts([]any{"kb", nil}); err != nil {
+	if _, err := documentsOpts(at14, []any{"kb", nil}); err != nil {
 		t.Fatalf("nil opts: %v", err)
 	}
-	o, err = documentsOpts([]any{"kb", map[string]any{
+	o, err = documentsOpts(at14, []any{"kb", map[string]any{
 		"sort": "path", "after": int64(2), "limit": int64(5),
 		"fields": []any{"status"}, "tags": []any{"adr"}, "paths": []any{"adrs/"}, "missing": []any{"abstract"}, "diagnosed": true,
 		"facets": map[string]any{"status": "accepted", "type": []any{"adr", "note"}},
@@ -177,6 +178,15 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 		Facets: map[string][]string{"status": {"accepted"}, "type": {"adr", "note"}}}
 	if !reflect.DeepEqual(o, want) {
 		t.Fatalf("got %+v\nwant %+v", o, want)
+	}
+	// below protocol 14 the option is unknown, true or false, as it is to a protocol-13 daemon
+	at13 := withProtocol(context.Background(), 13)
+	for _, v := range []bool{true, false} {
+		_, err := documentsOpts(at13, []any{"kb", map[string]any{"diagnosed": v}})
+		var rerr *golibrpc.Error
+		if !errors.As(err, &rerr) || rerr.Code != golibrpc.CodeInvalidParams || !strings.Contains(rerr.Message, "needs protocol 14") {
+			t.Errorf("diagnosed=%v at 13: %v, want invalid params naming protocol 14", v, err)
+		}
 	}
 	for _, c := range []struct {
 		opts any
@@ -195,7 +205,7 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 		{map[string]any{"diagnosed": "yes"}, "opts.diagnosed must be a boolean"},
 		{map[string]any{"colour": "red"}, "unknown option colour"},
 	} {
-		_, err := documentsOpts([]any{"kb", c.opts})
+		_, err := documentsOpts(at14, []any{"kb", c.opts})
 		var rerr *golibrpc.Error
 		if !errors.As(err, &rerr) || rerr.Code != golibrpc.CodeInvalidParams || !strings.Contains(rerr.Message, c.says) {
 			t.Errorf("opts %#v: got %v, want invalid params saying %q", c.opts, err, c.says)
