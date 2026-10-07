@@ -121,3 +121,23 @@ func TestRecentFilesKeepTheNewestOnce(t *testing.T) {
 		t.Fatal("no recent files written as other than []")
 	}
 }
+
+// TestTheRecentListFollowsTheFilesOfAWorkspaceJustEntered: Recent files opened before the workspace's
+// files have been listed (just entered) lists its files once they come, not only the other
+// workspaces'. CI caught the dialog at "1 recent files" with three stored.
+func TestTheRecentListFollowsTheFilesOfAWorkspaceJustEntered(t *testing.T) {
+	d, r := runRecentTUI(t, nil)
+	r.s.WaitFor(t, "kb in use", func(string) bool { return onLoop(r, func() string { return r.h.ws }) == "kb" })
+	for _, p := range []string{"a.md", "b.md"} {
+		onLoop(r, func() bool { r.h.openPath(p); return true })
+		r.waitFile(t, p)
+	}
+	onLoop(r, func() bool { r.h.openIn("notes", "c.md"); return true })
+	r.waitFile(t, "c.md")
+	d.waitRecentStored(t, `[{"workspace":"notes","path":"c.md"},{"workspace":"kb","path":"b.md"},{"workspace":"kb","path":"a.md"}]`)
+	// notes in use, its files not listed yet: as just after entering it
+	onLoop(r, func() bool { r.h.filesAll = nil; r.h.openRecent(); return true })
+	r.s.WaitForText(t, "2 recent files, the newest first") // kb's two; c.md waits for notes' files
+	onLoop(r, func() bool { r.h.listFiles(); return true })
+	r.s.WaitForText(t, "3 recent files, the newest first")
+}
