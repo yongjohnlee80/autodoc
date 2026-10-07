@@ -598,6 +598,9 @@ whose vectors are closest are the matches.
   file is skipped by its version (size, modification time, inode).
 - **A section's vector is kept in the store,** keyed by its text's hash: an edit re-embeds only the
   sections it changed, and two identical passages share one vector. Each workspace keeps its own.
+- **A vector lives as long as a section has its text.** When an edit or a removal takes the last
+  section with a text, that text's vectors go in the same write. The daemon sweeps what is left over
+  at each start, in small batches while it serves.
 - **A search reads what is stored.** The only model call it makes is for the query itself.
 - **Switching models embeds everything once more.** The old model goes offline at once, unloaded
   from its server, and search is by words until the new one covers every section; then it takes
