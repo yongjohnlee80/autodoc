@@ -53,6 +53,25 @@ func (r *running) ready(t *testing.T) {
 }
 
 // focused says whether the widget the document declares as id has the keyboard.
+// searchReady waits for the search dialog with its query field focused: a key typed before the
+// focus lands there reaches the page instead (a race a loaded CI runner loses). The field's id is
+// its component's, and an open dialog's card is in the overlay, so the test reads what the user
+// sees: the caret on the field's row, the one under "search: words".
+func (r *running) searchReady(t *testing.T) {
+	t.Helper()
+	r.s.WaitFor(t, "the caret in the search field", func(sc string) bool {
+		row := -1
+		for i, line := range strings.Split(sc, "\n") {
+			if strings.Contains(line, "search: words") {
+				row = i
+				break
+			}
+		}
+		_, y, shown := r.s.Backend.CursorPos()
+		return row >= 0 && shown && y == row+1
+	})
+}
+
 func (r *running) focused(id string) bool {
 	return onLoop(r, func() bool {
 		c, ok := r.h.p.Find(id)
@@ -561,7 +580,7 @@ func TestAModelChangeClearsTheSearch(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("unrelatedquery")...)
 	r.s.WaitForText(t, "hits (0) · lexical · semantic off")
 	if _, err := d.db.AddProvider(context.Background(), store.ProviderSpec{Name: "local", Kind: store.KindOllama, BaseURL: o.URL, Model: "embedder"}); err != nil {
@@ -600,7 +619,7 @@ func TestPartialEmbeddingExplainsEmptyHitsUntilSearchRefreshes(t *testing.T) {
 	})
 	model := onLoop(r, func() string { return r.h.prog.emb.model })
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("unrelatedquery")...)
 	// Hold the provider request, then deliver the poll's partial state. The
 	// notification must precede the blocked search RPC's answer.
@@ -664,7 +683,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 	o.down = true
 	o.mu.Unlock()
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
 	// the answer to "zebra" itself, not to "zebr", which a key typed later supersedes but whose
 	// answer can apply first (no lexical hit, the same fallback notice)
@@ -693,7 +712,7 @@ func TestModelSwitchExplainsTemporaryWordsOnlyAndClearsSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("unrelatedquery")...)
 	r.s.WaitFor(t, "semantic hit before switch", func(sc string) bool { return strings.Contains(sc, "hits (1) · hybrid") })
 	release := o.hold()
@@ -731,7 +750,7 @@ func TestWorkspaceSwitchReplacesSearchResultsWithoutEditingQuery(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	r.s.WaitForText(t, "· alpha")
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
 	r.s.WaitForText(t, "hits (1) · lexical")
 	r.h.p.Post(func() { r.h.enter("bravo") })
@@ -745,7 +764,7 @@ func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
 	r.s.WaitForText(t, "hits (1) · lexical")
 	r.h.p.Post(func() { r.h.ws = "missing"; r.h.searchLive("zebra") })
