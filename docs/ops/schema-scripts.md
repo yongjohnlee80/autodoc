@@ -69,7 +69,7 @@ A new workspace-owned table follows the same rule.
 | `workspace_pattern` | an include or exclude pattern of a workspace, in order | `(workspace_id, kind, ord)` |
 | `workspace_connection` | a workspace's source or destination database: engine, sealed DSN, schema (ADR 0214) | `(workspace_id, role)` |
 | `document` | a file under the root | `id`, `(workspace_id, path)` |
-| `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012); its kind, `section` or `abstract` (000014) | `id`, `(workspace_id, id)` |
+| `chunk` | a section of a document, live from `gen_from` until `gen_to`; its embed text when a registered chunker gives one (000012); its kind, `section` or `abstract` (000014); found by its text through `chunk_text` (000016) | `id`, `(workspace_id, id)` |
 | `chunk_fts` | SQLite's full-text index over the chunks (FTS5, external content) | the chunk's `id` |
 | `doc_tag` | a tag from a document's frontmatter | `(workspace_id, tag, doc_id)` |
 | `doc_alias` | an alias from a document's frontmatter | `(workspace_id, alias, doc_id)` |
@@ -79,7 +79,7 @@ A new workspace-owned table follows the same rule.
 | `link` | a link from a document, and the document it resolved to | `id`, `(workspace_id, id)` |
 | `link_key` | a frontmatter relation link's names, tried in order when it resolves (000014) | `(workspace_id, link_id, ord)` |
 | `model` | an embedding model a workspace uses: the active one, and the target its indexer fills (000015); any other is reclaimed | `(workspace_id, fp)` |
-| `embedding` | a text's vector under a model | `(workspace_id, text_hash, model_fp)` |
+| `embedding` | a text's vector under a model, kept while some chunk of the workspace has the text (ADR 1791329335) | `(workspace_id, text_hash, model_fp)` |
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
 | `event` | a configuration or lifecycle change, daemon-wide, with the client that made it; the last 1000 kept (000009) | `seq` |
