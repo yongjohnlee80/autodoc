@@ -365,7 +365,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Sources(h.state()),
 		tuidecl.Handlers(h.commands()),
 		tuidecl.ErrorSink(h.keep),
-		tuidecl.AppOptions(opt.App...))
+		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
+		// the caller's options come after, and may set another.
+		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit)}, opt.App...)...))
 }
 
 // Run runs the program until it quits; the session and every background call end with it.
