@@ -28,7 +28,7 @@ func TestAnUnansweredSearchSaysWhatItWaitsOn(t *testing.T) {
 	release := o.hold()
 	defer release()
 	r.h.p.Post(r.h.openSearch)
-	r.s.WaitForText(t, "search: words")
+	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
 	waits := regexp.MustCompile(`([-\\|/]) (` + strings.Join(searchWaits, "|") + `)…`)
 	frames := map[string]bool{}
