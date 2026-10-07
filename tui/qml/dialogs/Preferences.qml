@@ -76,6 +76,16 @@ Dialog {
                     Text { text: "the links open from" }
                     ComboBox { model: App.edges; textRole: "label"; currentIndex: App.linksEdgeIndex; onActivated: App.setLinksEdge(index) }
                     Text { text: "" }
+                    Text { text: "the agent: from · size · length" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.agentEdges; textRole: "label"; currentIndex: App.agentEdgeIndex; onActivated: App.setAgentEdge(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.agentSizes; textRole: "label"; currentIndex: App.agentSizeIndex; onActivated: App.setAgentSize(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.agentLengths; textRole: "label"; currentIndex: App.agentLengthIndex; onActivated: App.setAgentLength(index) }
+                    }
+                    Text { text: "" }
                     Text { text: "notifications in the" }
                     ComboBox { model: App.corners; textRole: "label"; currentIndex: App.toastCornerIndex; onActivated: App.setToastCorner(index) }
                     Text { text: "" }

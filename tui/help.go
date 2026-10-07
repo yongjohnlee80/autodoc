@@ -55,8 +55,9 @@ THE PANELS
   The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are the files
   that link to this one. Each opens over the page from its side (Preferences sets which), and
   Escape or its key again closes it. Enter on a file opens it.
-  The agent (SPC ~, View › Agent) runs an AI agent's CLI centred over the page: the default of
-  Options › Agent profiles…, each profile a name and the command that starts it (claude, codex…).
+  The agent (SPC g, View › Agent) runs an AI agent's CLI over the page, from the top unless
+  Preferences sets another edge or the centre: the default of Options › Agent profiles… (SPC G),
+  each profile a name and the command that starts it (claude, codex…).
   It starts in AutoDoc's own folder for the workspace, told about the workspace in AGENTS.md and
   CLAUDE.md there, and keeps running while hidden; Use in the profiles starts another.
   The terminal (SPC ` + "`" + `, View › Terminal) runs your shell in the workspace's folder, at the bottom
@@ -100,14 +101,14 @@ const leaderText = `/  search (or SPC again)  e  the explorer
 o  open a file            l  the links
 n  new file               ` + "`" + `  the terminal
 s  save                   t  the status line
-r  recent files           ~  the agent
+r  recent files           g  the agent
 w  switch workspace       m  show/focus or hide the menu
 W  manage workspaces      k  the editor mode (Vim, Text)
 ?  help                   ,  editor preferences
 h  notifications          a  AI models
 c  the file's outline     A  about
 O  the system viewer      Q  quit
-g  agent profiles         p  plugin commands`
+G  agent profiles         p  plugin commands`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

@@ -14,7 +14,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// agent_test.go: the agent — SPC ~ starts the default profile's command in AutoDoc's own folder for
+// agent_test.go: the agent — SPC g starts the default profile's command in AutoDoc's own folder for
 // the workspace, told about it; hidden, it keeps running; the profiles are added, edited, made the
 // default and removed in Options › Agent profiles…, and Use switches, asking first.
 
@@ -109,7 +109,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	root := onLoop(r, func() string { ws, _ := r.h.activeWorkspaceInfo(); return ws.root })
 	folder := filepath.Join(dir, "kb")
 
-	r.leader(t, '~')
+	r.leader(t, 'g')
 	r.s.WaitForText(t, "agent · fake")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 	// In AutoDoc's folder for the workspace, never the workspace's, its guides beside it; {root}
@@ -141,18 +141,18 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	r.keys(t, decltest.Type("hello\r")...)
 	r.s.WaitForText(t, "heard-hello")
 
-	// Hidden, it lives on: SPC ~ again shows the same agent, not a new one.
+	// Hidden, it lives on: SPC g again shows the same agent, not a new one.
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
 	if !r.agentTerm().Running() {
 		t.Fatal("the agent stopped while hidden")
 	}
-	r.leader(t, '~')
+	r.leader(t, 'g')
 	r.s.WaitForText(t, "heard-hello")
 	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
 
-	// It exits: the notifications say so, and the next SPC ~ starts the default again.
+	// It exits: the notifications say so, and the next SPC g starts the default again.
 	r.keys(t, decltest.Type("exit 3\r")...)
 	r.s.WaitFor(t, "the exit in the notifications", func(string) bool { return r.noticed("fake exited (3)") })
 	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "" {
@@ -163,7 +163,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.keys(t, key(' '))
-	r.s.WaitForText(t, "~  the agent")
+	r.s.WaitForText(t, "g  the agent")
 	r.keys(t, esc())
 }
 
@@ -182,7 +182,7 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 }
 
 // A profile whose program is not installed is the shell's to report: its 127 says the command was
-// not found, and the next SPC ~ tries again.
+// not found, and the next SPC g tries again.
 func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
@@ -194,7 +194,7 @@ func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	}
 }
 
-// With no profile SPC ~ opens the profiles: the first added becomes the default, a name another has
+// With no profile SPC g opens the profiles: the first added becomes the default, a name another has
 // is refused, an edit renames the default with it, and a removal leaves none. All of it is kept.
 func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
@@ -213,7 +213,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 		r.h.saveAgent("codex", "codex")
 		return true
 	})
-	r.s.WaitForText(t, "SPC ~ opens claude")
+	r.s.WaitForText(t, "SPC g opens claude")
 	onLoop(r, func() bool {
 		r.h.startAddAgent()
 		r.h.closeDialog("agentEdit")
@@ -235,18 +235,18 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 		r.h.saveAgent("claude-opus", "claude --model opus")
 		return true
 	})
-	r.s.WaitForText(t, "SPC ~ opens claude-opus")
+	r.s.WaitForText(t, "SPC g opens claude-opus")
 	d.waitStored(t, "claude-opus", `[{"name":"claude-opus","command":"claude --model opus"},{"name":"codex","command":"codex"}]`)
 
 	onLoop(r, func() bool { r.h.makeAgentDefault(1); return true })
-	r.s.WaitForText(t, "SPC ~ opens codex")
+	r.s.WaitForText(t, "SPC g opens codex")
 	onLoop(r, func() bool { r.h.removeAgent(1); return true })
-	r.s.WaitForText(t, "Make default marks the one SPC ~ opens")
+	r.s.WaitForText(t, "Make default marks the one SPC g opens")
 	d.waitStored(t, "", `[{"name":"claude-opus","command":"claude --model opus"}]`)
-	// Profiles but no default: SPC ~ asks for one.
+	// Profiles but no default: SPC g asks for one.
 	onLoop(r, func() bool { r.h.closeDialog("agentProfiles"); r.h.toggleAgent(); return true })
 	r.s.WaitFor(t, "the profiles, to make one the default", func(sc string) bool {
-		return strings.Contains(sc, "Make default marks the one SPC ~ opens") && !onLoop(r, func() bool { return r.h.panelOpen["agent"] })
+		return strings.Contains(sc, "Make default marks the one SPC g opens") && !onLoop(r, func() bool { return r.h.panelOpen["agent"] })
 	})
 	again := attached(t, d)
 	if n := onLoop(again, func() int { return len(again.h.prefs.agents) }); n != 1 {
@@ -296,26 +296,63 @@ func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 	}
 }
 
-// The agent's panel is kept where its grip leaves it.
+// The agent's panel is kept where its grip leaves it, for the place it opens from: the top until
+// the user chooses another.
 func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.panelResized("agent", 60, 70); return true })
 	r.s.WaitFor(t, "kept", func(string) bool {
 		got, _ := d.db.Preferences(context.Background())
-		return got["tui.agent.center.size"] == "60" && got["tui.agent.center.length"] == "70"
+		return got["tui.agent.top.size"] == "60" && got["tui.agent.top.length"] == "70"
 	})
 	again := attached(t, d)
 	if g := onLoop(again, func() [2]int {
-		s, l := again.h.prefs.sideGeometry("agent", agentEdge)
+		s, l := again.h.prefs.agentGeometry("top")
 		return [2]int{s, l}
 	}); g != [2]int{60, 70} {
 		t.Errorf("a new TUI sizes the agent %v, want the kept 60 by 70", g)
 	}
-	if g := onLoop(r, func() [2]int {
-		s, l := (prefs{}).sideGeometry("agent", agentEdge)
-		return [2]int{s, l}
-	}); g != [2]int{agentDefaultSize, agentDefaultLength} {
-		t.Errorf("before a drag the agent is %v, want 80 by 80", g)
+	for _, tc := range []struct {
+		place string
+		want  [2]int
+	}{{"top", [2]int{50, 100}}, {"left", [2]int{50, 100}}, {"center", [2]int{80, 80}}} {
+		s, l := (prefs{}).agentGeometry(tc.place)
+		if g := [2]int{s, l}; g != tc.want {
+			t.Errorf("before a drag the agent at %s is %v, want %v", tc.place, g, tc.want)
+		}
+	}
+}
+
+// The agent opens at the top by default; Preferences moves it, the choice is kept, and a size set
+// at one place does not follow it to another.
+func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
+	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
+	if e := onLoop(r, func() string { return r.h.prefs.agentEdge }); e != "top" {
+		t.Fatalf("the agent opens at %q by default, want top", e)
+	}
+	onLoop(r, func() bool { r.h.setAgentSize(nearest(termSizes, 70)); return true })
+	onLoop(r, func() bool { r.h.setAgentLength(nearest(termLengths, 60)); return true })
+	onLoop(r, func() bool { r.h.setAgentEdge(indexOf(agentEdges, "center")); return true })
+	onLoop(r, func() bool {
+		r.h.setAgentEdge(len(agentEdges))
+		r.h.setAgentSize(-1)
+		r.h.setAgentLength(99)
+		return true
+	}) // out of range: ignored
+	r.s.WaitFor(t, "kept", func(string) bool {
+		got, _ := d.db.Preferences(context.Background())
+		return got["tui.agent.edge"] == "center" && got["tui.agent.top.size"] == "70" && got["tui.agent.top.length"] == "60"
+	})
+	src := func(name string) string { v, _ := r.h.p.Tree().Source(name); return v.Raw }
+	got := onLoop(r, func() [3]string {
+		return [3]string{src("App.agentEdge"), src("App.agentSize"), src("App.agentEdgeIndex")}
+	})
+	if got != [3]string{"center", "80", "4"} {
+		t.Errorf("after choosing the centre the document reads %v, want center at its own 80%%", got)
+	}
+	again := attached(t, d)
+	if e := onLoop(again, func() string { return again.h.prefs.agentEdge }); e != "center" {
+		t.Errorf("a new TUI opens the agent at %q, want the chosen center", e)
 	}
 }
 
@@ -350,4 +387,16 @@ func TestAnAgentsAutodocWithoutAConfigIsTheBuildAlone(t *testing.T) {
 	if got, want := agentWrapper("/opt/auto doc", ""), "exec '/opt/auto doc' \"$@\"\n"; !strings.HasSuffix(got, want) || strings.Contains(got, "--config") {
 		t.Fatalf("the wrapper is\n%s\nwant it to end %q, with no --config", got, want)
 	}
+}
+
+// SPC G opens Agent profiles, and the card names it beside SPC g, the agent.
+func TestSpaceShiftGOpensAgentProfiles(t *testing.T) {
+	_, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "G  agent profiles")
+	r.keys(t, esc())
+	r.leader(t, 'G')
+	r.s.WaitFor(t, "the dialog, not the card", func(sc string) bool {
+		return !strings.Contains(sc, "SPC — commands") && strings.Contains(sc, "┌ agent profiles")
+	})
 }
