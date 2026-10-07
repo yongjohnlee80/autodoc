@@ -87,9 +87,11 @@ type prefs struct {
 	searchStages stageChoice
 	// panelGeo are the explorer's and the links' dragged sizes, by preference name (panelsize.go)
 	panelGeo map[string]int
-	// agents are the agent terminal's profiles, and agentDefault the one SPC ~ opens (agent.go)
+	// agents are the agent terminal's profiles, and agentDefault the one SPC g opens (agent.go)
 	agents       []agentProfile
 	agentDefault string
+	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
+	agentEdge string
 	// recent are the files opened last, newest first (recent.go)
 	recent []recentDoc
 }
@@ -97,7 +99,8 @@ type prefs struct {
 func defaultPrefs() prefs {
 	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
 		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
-		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}, searchStages: allStagesChecked()}
+		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}, searchStages: allStagesChecked(),
+		agentEdge: defaultAgentEdge}
 }
 
 // edges are the four a panel opens from, in the order the Preferences dialog offers them.
@@ -182,6 +185,7 @@ func prefsOf(m map[string]any) prefs {
 		}
 	}
 	readTermPrefs(&p, m)
+	readAgentPrefs(&p, m)
 	if s, ok := str(prefAgentProfiles); ok {
 		p.agents = agentProfilesOf(s)
 	}
@@ -209,6 +213,9 @@ func panelLength(edge string) int {
 func prefState(p prefs) map[string]any {
 	m := termState(p)
 	for k, v := range panelState(p) {
+		m[k] = v
+	}
+	for k, v := range agentState(p) {
 		m[k] = v
 	}
 	for k, v := range map[string]any{
@@ -503,6 +510,7 @@ func (h *Host) syncPrefDialog() {
 	h.set("App.toastSecondsIndex", h.prefs.toastSeconds-1)
 	h.set("App.statusShownIndex", boolIndex(h.prefs.statusOn))
 	h.syncTermDialog()
+	h.syncAgentDialog()
 }
 
 func (h *Host) setMenuHiddenIndex(i int) {

@@ -32,9 +32,9 @@ func (h *Host) listAgents() {
 	case len(rows) == 0:
 		h.set("App.agentProfilesStatus", "no profiles yet: Add… one, a name and the command that starts the agent")
 	case h.prefs.agentDefault == "":
-		h.set("App.agentProfilesStatus", "Make default marks the one SPC ~ opens")
+		h.set("App.agentProfilesStatus", "Make default marks the one SPC g opens")
 	default:
-		h.set("App.agentProfilesStatus", "SPC ~ opens "+h.prefs.agentDefault+" · {root} and {workspace} in a command are filled in")
+		h.set("App.agentProfilesStatus", "SPC g opens "+h.prefs.agentDefault+" · {root} and {workspace} in a command are filled in")
 	}
 }
 
@@ -132,14 +132,14 @@ func (h *Host) removeAgent(i int) {
 	h.say("removed the agent profile " + a.Name)
 }
 
-// makeAgentDefault marks profile i the one SPC ~ opens.
+// makeAgentDefault marks profile i the one SPC g opens.
 func (h *Host) makeAgentDefault(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
 		return
 	}
 	h.keepAgents(h.prefs.agents, a.Name)
-	h.say("SPC ~ opens " + a.Name)
+	h.say("SPC g opens " + a.Name)
 }
 
 // useAgent starts profile i now. Another running is stopped first, after asking.

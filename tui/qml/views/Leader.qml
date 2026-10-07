@@ -18,8 +18,8 @@ Dialog {
     Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleLinks() } }
     Shortcut { sequence: "`"; onActivated: { leader.close(); App.toggleTerminal() } }
     Shortcut { sequence: "r"; onActivated: { leader.close(); App.openRecent() } }
-    Shortcut { sequence: "~"; onActivated: { leader.close(); App.toggleAgent() } }
-    Shortcut { sequence: "g"; onActivated: { leader.close(); App.openAgentProfiles() } }
+    Shortcut { sequence: "g"; onActivated: { leader.close(); App.toggleAgent() } }
+    Shortcut { sequence: "Shift+G"; onActivated: { leader.close(); App.openAgentProfiles() } }
     Shortcut { sequence: "p"; onActivated: { leader.close(); pluginKeys.open() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
     Shortcut { sequence: "m"; onActivated: { leader.close(); App.leaderMenuBar() } }

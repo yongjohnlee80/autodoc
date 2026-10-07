@@ -12,7 +12,7 @@ import (
 )
 
 // THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page (ADR 1791213400):
-// SPC ~, View › Agent. The user keeps profiles, each a name and the command that starts the agent
+// SPC g, View › Agent. The user keeps profiles, each a name and the command that starts the agent
 // (claude, codex --model o4, agy, opencode, …), and marks one the default: the key opens it. One
 // agent runs at a time; it keeps running while hidden. The agent works in AutoDoc's own folder for
 // the workspace (Options.AgentDir), never the workspace's: there AutoDoc writes AGENTS.md and
@@ -64,7 +64,7 @@ func (p prefs) agentProfile(name string) (agentProfile, bool) {
 	return agentProfile{}, false
 }
 
-// toggleAgent is SPC ~: the agent running shown or hidden; none running, the default started;
+// toggleAgent is SPC g: the agent running shown or hidden; none running, the default started;
 // no default, the profiles, which say what to do.
 func (h *Host) toggleAgent() {
 	if h.panelOpen["agent"] {
@@ -131,7 +131,7 @@ func (h *Host) stopAgent() {
 	h.agentRunning = ""
 }
 
-// agentExited is the agent's program ending: the next SPC ~ starts the default again. The shell's
+// agentExited is the agent's program ending: the next SPC g starts the default again. The shell's
 // 127 and 126 are its command not found and not runnable: the profile's command is wrong.
 func (h *Host) agentExited(code int) {
 	name := h.agentRunning
@@ -144,7 +144,7 @@ func (h *Host) agentExited(code int) {
 		why := map[int]string{127: "was not found", 126: "could not run"}[code]
 		h.notify(fmt.Sprintf("the agent %s's command %s (%d): check it in Options › Agent profiles…", name, why, code))
 	default:
-		h.notify(fmt.Sprintf("the agent %s exited (%d): SPC ~ starts the default again", name, code))
+		h.notify(fmt.Sprintf("the agent %s exited (%d): SPC g starts the default again", name, code))
 	}
 }
 
