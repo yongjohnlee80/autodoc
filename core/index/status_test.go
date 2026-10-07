@@ -170,3 +170,35 @@ func TestStatusIsComputedOnceForItsWaiters(t *testing.T) {
 		t.Errorf("the first caller saw %d documents (want 1), the waiter %d (want 2: the commit it waited past)", s1.Docs, s2.Docs)
 	}
 }
+
+// TestAStatusThatCannotReadSaysSo: a read of any count failing fails the status, rather than
+// answering with a count missing, and the next status after the store is whole answers again. Each
+// read is broken in turn: the documents, the jobs, the unparsed frontmatter, the diagnostics.
+func TestAStatusThatCannotReadSaysSo(t *testing.T) {
+	e := newEnv(t, Options{})
+	e.put("x.md", "zebra\n")
+	for _, c := range []struct {
+		name string
+		brk  func() (undo func())
+	}{
+		{"the documents", func() func() { return e.renamed("document") }},
+		{"the jobs", func() func() { return e.renamed("index_job") }},
+		{"the unparsed frontmatter", func() func() {
+			e.exec(`ALTER TABLE document RENAME COLUMN frontmatter_error TO frontmatter_error_aside`)
+			return func() { e.exec(`ALTER TABLE document RENAME COLUMN frontmatter_error_aside TO frontmatter_error`) }
+		}},
+		{"the diagnostics", func() func() { return e.renamed("doc_diagnostic") }},
+	} {
+		undo := c.brk()
+		e.ix.statusTurn <- struct{}{}
+		e.ix.statusCache = nil // computed, not kept
+		<-e.ix.statusTurn
+		if _, err := e.ix.Status(context.Background()); err == nil {
+			t.Errorf("%s unreadable: the status answered", c.name)
+		}
+		undo()
+		if st := e.freshStatus(); st.Docs != 1 {
+			t.Errorf("%s restored: %d documents, want 1", c.name, st.Docs)
+		}
+	}
+}
