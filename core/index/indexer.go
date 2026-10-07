@@ -63,6 +63,11 @@ type Options struct {
 	beforePublish func()
 	// noGC (tests only) keeps dead chunks, to show they are never alive before GC takes them.
 	noGC bool
+	// onStatusCompute, when set (tests only), is told each time a status is computed, not reused.
+	onStatusCompute func()
+	// betweenStatusReads, when set (tests only), runs inside a status computation's read
+	// transaction, after the counts and before the coverage.
+	betweenStatusReads func()
 	// onCommit, when set (tests only), is told how long each batch's transaction held the writer.
 	onCommit func(time.Duration)
 	// Provider embeds chunks for semantic search (nil: lexical only). Its model is the target: the
@@ -121,6 +126,11 @@ type Indexer struct {
 	// provider). Both are built once, by Options.NewSearcher, each with and without the rank stage.
 	words, hybrid searchers
 	ready         chan struct{} // model row committed before the queue embeds
+	// statusTurn lets one status computation run at a time; statusCache, under it, is the last one
+	// (status.go)
+	statusTurn    chan struct{}
+	statusCache   *statusSnap
+	statusWaiting atomic.Int32 // calls waiting for the turn, for tests
 
 	parses int64 // prepared documents that were parsed, for tests (atomic via mu)
 
@@ -190,7 +200,8 @@ func NewIndexer(store *Store, fsys vfs.FS, opts Options) *Indexer {
 	ix := &Indexer{store: store, fsys: fsys, opts: opts, kinds: opts.Registrations.Kinds(), touched: map[string]bool{},
 		signal: make(chan struct{}, 1), jobs: map[string]*job{}, unpersisted: map[string]bool{},
 		results: make(chan *prepared, 2*opts.Workers),
-		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{}), reclaims: make(chan string, 64)}
+		work:    make(chan workItem), ops: make(chan op), ready: make(chan struct{}), reclaims: make(chan string, 64),
+		statusTurn: make(chan struct{}, 1)}
 	if opts.Provider != nil {
 		ix.sem = newSemantic(opts.Provider)
 	}
@@ -959,7 +970,8 @@ func (s *Store) upsertDoc(tx *store.Tx, p *prepared, now time.Time) (int64, erro
 }
 
 // deleteDoc removes a document and logs the delete. Its chunks, tags, aliases, names and links go
-// with it by the schema's cascade, and its chunks' full-text entries by the delete trigger.
+// with it by the schema's cascade, and its chunks' full-text entries by the delete trigger; the
+// vectors of the texts no other chunk has go too.
 func (s *Store) deleteDoc(tx *store.Tx, path string, now time.Time) (int64, error) {
 	d, err := s.sc.Documents(tx).With(store.DocPath, path).Get(store.DocID, store.DocActiveGen)
 	if errors.Is(err, dao.ErrNoRows) {
@@ -972,7 +984,19 @@ func (s *Store) deleteDoc(tx *store.Tx, path string, now time.Time) (int64, erro
 	if err != nil {
 		return 0, err
 	}
+	chunks, err := s.sc.Chunks(tx).With(store.ChunkDoc, d.ID).Select(store.ChunkTextHash)
+	if err != nil {
+		return 0, err
+	}
 	if err := s.sc.Documents(tx).With(store.DocID, d.ID).Delete(); err != nil {
+		return 0, err
+	}
+	// its texts' vectors go with the last chunk that has them (ADR 1791329335)
+	texts := make([][]byte, len(chunks))
+	for i, c := range chunks {
+		texts[i] = c.TextHash
+	}
+	if _, err := s.dropOrphans(tx, texts); err != nil {
 		return 0, err
 	}
 	// the links that reached it, and those under any name it answered to, resolve again: to another
@@ -1019,30 +1043,36 @@ func (s *Store) replaceValues(tx *store.Tx, set dao.DAO[*store.DocValue, store.D
 	return b.Flush()
 }
 
-// gc deletes up to 1000 dead chunks (their full-text entries with them, by the delete trigger)
-// and prunes the change log, reporting whether dead chunks remain. Dead rows still count in BM25's
-// statistics until they go, so this runs whenever the writer is idle.
+// gc deletes up to 1000 dead chunks (their full-text entries with them, by the delete trigger), and
+// the vectors of the texts no chunk has any more (ADR 1791329335), and prunes the change log,
+// reporting whether dead chunks remain. Dead rows still count in BM25's statistics until they go, so
+// this runs whenever the writer is idle.
 func (x *Indexer) gc(ctx context.Context) (bool, error) {
 	s := x.store
 	var dead []int64
+	var texts [][]byte
 	more := false
 	err := s.db.Write(ctx, func(tx *store.Tx) error {
 		rows, err := s.sc.Chunks(tx).Join(store.JoinDocument).WithPredicate(dao.IsNotNull(`"chunk"."gen_to"`)).
 			WithPredicate(dao.Cmp(dao.T("chunk", "gen_to"), dao.OpLte, dao.T("document", "active_gen"))).
-			Limit(1001).Select(store.ChunkID)
+			Limit(1001).Select(store.ChunkID, store.ChunkTextHash)
 		if err != nil {
 			return err
 		}
+		if more = len(rows) > 1000; more {
+			rows = rows[:1000]
+		}
 		for _, r := range rows {
 			dead = append(dead, r.ID)
-		}
-		if more = len(dead) > 1000; more {
-			dead = dead[:1000]
+			texts = append(texts, r.TextHash)
 		}
 		for part := range inParts(dead) {
 			if err := s.sc.Chunks(tx).With(store.ChunkID, part...).Delete(); err != nil {
 				return err
 			}
+		}
+		if _, err := s.dropOrphans(tx, texts); err != nil {
+			return err
 		}
 		if err := s.pruneChanges(tx, x.opts.Now()); err != nil {
 			return err
