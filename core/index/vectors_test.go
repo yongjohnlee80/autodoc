@@ -534,3 +534,55 @@ func TestAFailedVectorDeleteRollsBackItsChunks(t *testing.T) {
 		return !ok && dead() == 0 && e.vectorsFor(zebra, "") == 0 && e.vectorsFor(hippo, "") == 0
 	})
 }
+
+// TestGCTakesMoreThanOneBatch: 1,001 dead chunks take two gc transactions of at most 1,000, and the
+// vectors of their texts go with them, in each.
+func TestGCTakesMoreThanOneBatch(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	var before, after strings.Builder
+	for i := 0; i < 1001; i++ {
+		fmt.Fprintf(&before, "# s%d\n\nold%d\n\n", i, i)
+		fmt.Fprintf(&after, "# s%d\n\nnew%d\n\n", i, i)
+	}
+	e.put("big.md", before.String())
+	e.ready()
+	old := e.textsOf("big.md")
+	e.put("big.md", after.String())
+	e.eventually("gc took every dead chunk", func() bool {
+		var dead int
+		_ = scanOne(context.Background(), e.raw, &dead, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
+		return dead == 0
+	})
+	left := 0
+	for _, h := range old {
+		left += e.vectorsFor(h, "")
+	}
+	if left != 0 {
+		t.Errorf("%d of the %d replaced texts' vectors left after gc", left, len(old))
+	}
+}
+
+// TestARemovalWhoseChunksCannotBeReadIsRetried: a removal that cannot read its chunks' texts writes
+// nothing (the document stays, with its vectors) and runs again once they can be read.
+func TestARemovalWhoseChunksCannotBeReadIsRetried(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("x.md", "zebra\n")
+	e.ready()
+	zebra := e.textsOf("x.md")[0]
+	e.exec(`ALTER TABLE chunk RENAME COLUMN text_hash TO text_hash_aside`)
+	if err := e.fsys.Remove(context.Background(), "x.md"); err != nil {
+		t.Fatal(err)
+	}
+	e.ix.Touch("x.md")
+	time.Sleep(200 * time.Millisecond) // the writer tries, and fails, several times
+	if _, ok := e.store.Version("x.md"); !ok {
+		t.Error("the removal went through without its chunks' texts")
+	}
+	e.exec(`ALTER TABLE chunk RENAME COLUMN text_hash_aside TO text_hash`)
+	e.eventually("the removal once the texts can be read", func() bool {
+		_, ok := e.store.Version("x.md")
+		return !ok && e.vectorsFor(zebra, "") == 0
+	})
+}
