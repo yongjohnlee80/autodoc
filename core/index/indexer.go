@@ -390,7 +390,7 @@ func (x *Indexer) writer(ctx context.Context) error {
 			}
 			continue
 		case o := <-x.ops:
-			o.done <- x.runOp(ctx, o.fn)
+			o.done <- x.runOp(ctx, o.ctx, o.fn)
 			continue
 		case <-ticker.C:
 		}
@@ -1114,13 +1114,14 @@ func (x *Indexer) Parses() int64 {
 
 // op is a write other than a document's, run by the writer in a transaction of its own.
 type op struct {
+	ctx  context.Context // the caller's: its end cancels the op's transaction too
 	fn   func(context.Context, *store.Tx) error
 	done chan error
 }
 
 // do runs fn in the writer, as its own transaction, and waits for it.
 func (x *Indexer) do(ctx context.Context, fn func(context.Context, *store.Tx) error) error {
-	o := op{fn: fn, done: make(chan error, 1)}
+	o := op{ctx: ctx, fn: fn, done: make(chan error, 1)}
 	select {
 	case x.ops <- o:
 	case <-ctx.Done():
@@ -1128,18 +1129,27 @@ func (x *Indexer) do(ctx context.Context, fn func(context.Context, *store.Tx) er
 	}
 	// once the writer holds fn, its answer is awaited even past ctx: fn writes its caller's variables
 	// (a reclaim's or a sweep's counts and cursor), and a caller gone on ctx.Done would read them while
-	// the writer still runs it. The writer answers every op it takes, at once, and under a cancelled
-	// ctx its transaction fails fast.
+	// the writer still runs it. The writer answers every op it takes, and runs it under a context that
+	// ctx's end cancels too (runOp), so the wait is the op's own cancellation, not its whole run.
 	return <-o.done
 }
 
-func (x *Indexer) runOp(ctx context.Context, fn func(context.Context, *store.Tx) error) error {
+// runOp runs fn as one transaction under a context that ends with the writer's (ctx) or the
+// caller's (caller), then publishes the commit under the writer's alone: a commit made is the
+// writer's to publish, whoever asked for it.
+func (x *Indexer) runOp(ctx, caller context.Context, fn func(context.Context, *store.Tx) error) error {
 	s := x.store
-	err := s.db.Write(ctx, func(tx *store.Tx) error {
+	opCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if caller != nil {
+		stop := context.AfterFunc(caller, cancel)
+		defer stop()
+	}
+	err := s.db.Write(opCtx, func(tx *store.Tx) error {
 		if _, err := s.bumpSeq(tx); err != nil {
 			return err
 		}
-		return fn(ctx, tx)
+		return fn(opCtx, tx)
 	})
 	if err != nil {
 		return err

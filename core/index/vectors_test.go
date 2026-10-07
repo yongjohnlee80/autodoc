@@ -613,10 +613,79 @@ func TestDoAwaitsAnOpItsWriterTook(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 	close(release)
-	if err := <-returned; err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatal(err)
-	}
+	<-returned // its transaction was cancelled with the caller (TestACallersCancelReachesItsOp)
 	if !wrote {
 		t.Error("the op's write is not visible to its caller")
+	}
+}
+
+// TestACallersCancelReachesItsOp (Lector #58 r1): the writer runs an op under a context the caller's
+// end cancels too, so a claimed op stops when its caller goes, and do returns once the writer has
+// answered: an op waiting in its own callback, and one whose transaction waits for the store's one
+// write connection, which another write holds (another workspace's writer, a store-level sweep).
+// The writer goes on serving. A lock held by another process is waited for in SQLite's busy
+// handler, which no context reaches: that wait is bounded by busy_timeout (5 s), not by the caller.
+func TestACallersCancelReachesItsOp(t *testing.T) {
+	e := newEnv(t, Options{})
+	await := func(what string, returned chan error) {
+		t.Helper()
+		select {
+		case err := <-returned:
+			if !errors.Is(err, context.Canceled) {
+				t.Errorf("%s: do returned %v, want the caller's cancellation", what, err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: the caller's cancel did not reach the op", what)
+		}
+	}
+
+	// in the op's callback
+	ctx, cancel := context.WithCancel(context.Background())
+	entered := make(chan struct{})
+	returned := make(chan error, 1)
+	go func() {
+		returned <- e.ix.do(ctx, func(opCtx context.Context, _ *store.Tx) error {
+			close(entered)
+			<-opCtx.Done()
+			return opCtx.Err()
+		})
+	}()
+	<-entered
+	cancel()
+	await("an op in its callback", returned)
+
+	// in its transaction, waiting for the store's write connection, which another write holds
+	holding, unhold := make(chan struct{}), make(chan struct{})
+	held := make(chan error, 1)
+	go func() {
+		held <- e.db.Write(context.Background(), func(tx *store.Tx) error {
+			if _, err := e.store.commitSeq(tx); err != nil { // a statement: the transaction takes the connection
+				return err
+			}
+			close(holding)
+			<-unhold
+			return nil
+		})
+	}()
+	<-holding
+	ctx, cancel = context.WithCancel(context.Background())
+	ran := make(chan struct{}, 1)
+	go func() {
+		returned <- e.ix.do(ctx, func(context.Context, *store.Tx) error { ran <- struct{}{}; return nil })
+	}()
+	time.Sleep(100 * time.Millisecond) // the op is claimed and waits for the connection
+	cancel()
+	await("an op waiting for the write connection", returned)
+	close(unhold)
+	if err := <-held; err != nil {
+		t.Fatal(err)
+	}
+	if len(ran) != 0 {
+		t.Error("the cancelled op ran once the connection was free")
+	}
+
+	// the writer serves the next op
+	if err := e.ix.do(context.Background(), func(context.Context, *store.Tx) error { return nil }); err != nil {
+		t.Errorf("the op after: %v", err)
 	}
 }
