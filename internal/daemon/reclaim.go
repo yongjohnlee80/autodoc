@@ -15,7 +15,8 @@ import (
 // open, every stored workspace keeps only its active model's and its target's vectors: a workspace
 // an indexer runs is swept through it (its Sweep waits for setupModels, so the target it fills is
 // recorded first); one with no indexer (no provider, or its root unavailable) through the store.
-// It runs in the background, while the daemon serves. Then, once, a store not yet in incremental
+// It runs in the background, while the daemon serves. Each workspace's vectors whose text no chunk
+// has go next (ADR 1791329335 §2.4). Then, once, a store not yet in incremental
 // auto-vacuum mode is compacted into it, behind its free-space check: refused for want of room, it is
 // said, and tried again at the next start. It is compacted only once every workspace has swept: a
 // compaction while one still holds its leftovers would leave them out of the one rewrite that
@@ -49,6 +50,17 @@ func (m *Workspaces) SweepModels(ctx context.Context) {
 			logger.Info(m.opts.Log, logger.Fields{"event": "models.reclaimed", "workspace": w.Name, "models": len(got), "vectors": vectors})
 			m.notice(ctx, store.Event{Kind: "models.reclaimed", Workspace: w.Name, Detail: detail})
 		}
+		orphans, err := m.sweepOrphansOne(ctx, w.ID, w.Name)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			logger.Warning(m.opts.Log, err, logger.Fields{"event": "embedding.orphans.sweep_failed", "workspace": w.Name})
+			swept = false
+			continue
+		}
+		// after the first start on a build that keeps them collected, anything but 0 is a missed path
+		logger.Info(m.opts.Log, logger.Fields{"event": "embedding.orphans.swept", "workspace": w.Name, "vectors": orphans})
 	}
 	if !swept {
 		logger.Info(m.opts.Log, logger.Fields{"event": "store.compact.deferred", "why": "a workspace's sweep failed; the next start sweeps it, then compacts"})
@@ -87,6 +99,22 @@ func (m *Workspaces) sweepOne(ctx context.Context, id int64, name string) ([]ind
 		return s.w.Index.Sweep(sctx)
 	}
 	return index.SweepStore(ctx, m.db, id)
+}
+
+// sweepOrphansOne deletes workspace id's vectors whose text no chunk has (ADR 1791329335 §2.4):
+// through its indexer when one runs, else through the store.
+func (m *Workspaces) sweepOrphansOne(ctx context.Context, id int64, name string) (int, error) {
+	m.mu.Lock()
+	s := m.served[name]
+	m.mu.Unlock()
+	if s != nil && s.w != nil && s.w.Index != nil && s.ctx != nil {
+		sctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		stop := context.AfterFunc(s.ctx, cancel)
+		defer stop()
+		return s.w.Index.SweepOrphans(sctx)
+	}
+	return index.SweepOrphansStore(ctx, m.db, id)
 }
 
 // convert compacts a store not yet in incremental auto-vacuum mode, once.

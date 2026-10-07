@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -115,6 +116,9 @@ type semantic struct {
 	fillDone    bool
 
 	snapshotScans, fallbackScans atomic.Int64 // for tests: which path queries took
+	// beforeFetch, when set (tests only), runs inside a semantic query's read transaction before it
+	// validates and rescores its first candidates.
+	beforeFetch func()
 }
 
 func newSemantic(target embed.Provider) *semantic {
@@ -234,7 +238,8 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 	if docs != nil && len(docs) == 0 {
 		return nil
 	}
-	if docs == nil {
+	all := docs == nil
+	if all {
 		all, err := s.sc.Documents(tx).Select(store.DocID)
 		if err != nil {
 			return err
@@ -251,20 +256,34 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 	if fp == "" {
 		unready = docs
 	} else {
-		have, err := s.embeddedTexts(tx, fp)
-		if err != nil {
-			return err
-		}
-		missing := map[int64]bool{}
+		var chunks []*store.Chunk
 		for part := range inParts(docs) {
 			rows, err := alive(s.sc.Chunks(tx)).With(store.ChunkDoc, part...).Select(store.ChunkDoc, store.ChunkTextHash)
 			if err != nil {
 				return err
 			}
-			for _, r := range rows {
-				if !have[string(r.TextHash)] {
-					missing[r.DocID] = true
-				}
+			chunks = append(chunks, rows...)
+		}
+		// every document: the model's every vector, read once; a few documents (a batch of vectors):
+		// only their texts, looked up by key, so the cost follows the batch, not the workspace's
+		// vectors (ADR 1791329335 §2.6)
+		var have map[string]bool
+		if all {
+			have, err = s.embeddedTexts(tx, fp)
+		} else {
+			hashes := make([][]byte, len(chunks))
+			for i, c := range chunks {
+				hashes[i] = c.TextHash
+			}
+			have, err = s.embeddedAmong(tx, fp, hashes)
+		}
+		if err != nil {
+			return err
+		}
+		missing := map[int64]bool{}
+		for _, r := range chunks {
+			if !have[string(r.TextHash)] {
+				missing[r.DocID] = true
 			}
 		}
 		for _, d := range docs {
@@ -283,6 +302,21 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 		}
 	}
 	return nil
+}
+
+// embeddedAmong is the subset of hashes with a vector under model fp, each looked up by key.
+func (s *Store) embeddedAmong(tx *store.Tx, fp string, hashes [][]byte) (map[string]bool, error) {
+	out := make(map[string]bool, len(hashes))
+	for part := range hashParts(hashes) {
+		rows, err := s.sc.Embeddings(tx).With(store.EmbModel, fp).With(store.EmbTextHash, part...).Select(store.EmbTextHash)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range rows {
+			out[string(r.TextHash)] = true
+		}
+	}
+	return out, nil
 }
 
 // embeddedTexts is the set of text hashes with a vector under model fp.
@@ -335,9 +369,15 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 		if vb.fp != m.active() && vb.fp != m.target.Model().Fingerprint() {
 			return nil // a late batch of a retired model: reclaimed, never stored again
 		}
-		if len(vb.items) > 0 {
+		// a text no chunk has any more was replaced while the provider embedded it: its vector would
+		// only be an orphan (ADR 1791329335)
+		items, err := s.withChunks(tx, vb.items)
+		if err != nil {
+			return err
+		}
+		if len(items) > 0 {
 			b := s.sc.EmbeddingBatch(tx).SkipConflicts()
-			for _, it := range vb.items {
+			for _, it := range items {
 				b.Add(map[store.EmbeddingField]any{store.EmbTextHash: it.textHash, store.EmbModel: vb.fp,
 					store.EmbBits: vector.EncodeBits(vector.SignBits(it.vec)), store.EmbF32: vector.EncodeFloats(it.vec)})
 			}
@@ -347,9 +387,9 @@ func (x *Indexer) commitVectors(ctx context.Context, vb vecBatch) error {
 		}
 		active := m.active()
 		switch {
-		case vb.fp == active && len(vb.items) > 0:
+		case vb.fp == active && len(items) > 0:
 			var err error
-			if changed, err = s.docsWithText(tx, vb.items); err != nil {
+			if changed, err = s.docsWithText(tx, items); err != nil {
 				return err
 			}
 			return s.setReady(tx, changed)
@@ -425,13 +465,19 @@ func (s *Store) docsWithText(tx *store.Tx, items []vecItem) ([]int64, error) {
 	for i, it := range items {
 		hashes[i] = it.textHash
 	}
-	rows, err := dao.SelectDistinct(s.sc.Chunks(tx).With(store.ChunkTextHash, hashes...), store.ChunkDoc)
+	// not SELECT DISTINCT doc_id: without statistics SQLite would take chunk_doc for its order, and
+	// scan the workspace's chunks; a plain select looks each text up in chunk_text (ADR 1791329335)
+	rows, err := s.sc.Chunks(tx).With(store.ChunkTextHash, hashes...).Select(store.ChunkDoc)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]int64, len(rows))
-	for i, r := range rows {
-		out[i] = r.DocID
+	out := make([]int64, 0, len(rows))
+	seen := make(map[int64]bool, len(rows))
+	for _, r := range rows {
+		if !seen[r.DocID] {
+			seen[r.DocID] = true
+			out = append(out, r.DocID)
+		}
 	}
 	return out, nil
 }
@@ -931,6 +977,9 @@ func (s *Store) semanticHits(tx *store.Tx, m *semantic, fp string, qvec []float3
 	}
 	order := vector.Nearest(codes, vector.SignBits(qvec), cmp.Compare[int64])
 	fetch := func(ids []int64) ([]vector.Vec[search.Candidate[int64]], error) {
+		if m.beforeFetch != nil {
+			m.beforeFetch()
+		}
 		in := make([]any, len(ids))
 		for i, id := range ids {
 			in[i] = id
@@ -1010,46 +1059,43 @@ func (x *Indexer) Status(ctx context.Context) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st, err := x.store.Status(ctx)
-	if err != nil {
-		return st, err
+	m := x.sem
+	var es EmbeddingStatus
+	measured := "" // the model the coverage is of: the target while it fills, else the active one
+	if m != nil {
+		es = EmbeddingStatus{Provider: m.target.Name(), Model: m.active(), Semantic: SemanticReady}
+		if m.switching() {
+			es.Target = m.target.Model().Fingerprint()
+		}
+		measured = es.Model
+		if es.Target != "" {
+			measured = es.Target
+		}
 	}
+	snap, err := x.statusSnapshot(ctx, measured)
+	if err != nil {
+		return Status{}, err
+	}
+	st := snap.st
+	// the kept snapshot is shared: its lists are copied, never handed out
+	st.UnparsedFrontmatter, st.Failing = slices.Clone(st.UnparsedFrontmatter), slices.Clone(st.Failing)
 	current, stale, unchecked := h.counts()
 	st.Held, st.HeldStale, st.HeldUnchecked = current+stale+unchecked, stale, unchecked
-	if x.sem == nil {
+	if m == nil {
 		return st, nil
 	}
-	m := x.sem
-	es := EmbeddingStatus{Provider: m.target.Name(), Model: m.active(), Semantic: SemanticReady}
-	if m.switching() {
-		es.Target = m.target.Model().Fingerprint()
-	}
-	refusedFP := es.Model
+	refusedFP := measured
+	es.Texts = snap.texts
 	if es.Target != "" {
-		refusedFP = es.Target
+		es.TargetPending, es.TargetRefused = snap.missing, len(m.skip(es.Target))
+	} else {
+		es.Pending = snap.missing
 	}
-	s := x.store
-	if err := s.read(ctx, func(tx *store.Tx) error {
-		texts, missing, err := s.textCoverage(tx, refusedFP)
-		if err != nil {
-			return err
-		}
-		es.Texts = texts
-		if es.Target != "" {
-			es.TargetPending, es.TargetRefused = missing[0], len(m.skip(es.Target))
-		} else {
-			es.Pending = missing[0]
-		}
-		unready, err := s.sc.Documents(tx).With(store.DocSemanticReady, int64(0)).Exists()
-		switch {
-		case es.Target != "":
-			es.Semantic = SemanticSwitching
-		case unready:
-			es.Semantic = SemanticPartial
-		}
-		return err
-	}); err != nil {
-		return st, err
+	switch {
+	case es.Target != "":
+		es.Semantic = SemanticSwitching
+	case snap.unready:
+		es.Semantic = SemanticPartial
 	}
 	m.mu.Lock()
 	if m.lastErr != nil {

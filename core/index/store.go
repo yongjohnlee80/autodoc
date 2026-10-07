@@ -311,45 +311,59 @@ type JobError struct {
 func (s *Store) Status(ctx context.Context) (Status, error) {
 	var st Status
 	err := s.read(ctx, func(tx *store.Tx) error {
-		var err error
-		if st.Cursor, err = s.head(tx); err != nil {
+		if err := s.logBounds(tx, &st); err != nil {
 			return err
 		}
-		if st.OldestRetained, err = s.oldestRetained(tx); err != nil {
-			return err
-		}
-		n, err := s.sc.Documents(tx).Count()
+		n, err := alive(s.sc.Chunks(tx)).Count()
 		if err != nil {
-			return err
-		}
-		st.Docs = int64(n)
-		if n, err = alive(s.sc.Chunks(tx)).Count(); err != nil {
 			return err
 		}
 		st.Chunks = int64(n)
-		if n, err = s.sc.Jobs(tx).Count(); err != nil {
-			return err
-		}
-		st.PendingJobs = int64(n)
-		docs, err := s.sc.Documents(tx).WithPredicate(dao.IsNotNull(`"document"."frontmatter_error"`)).
-			OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath)
-		if err != nil {
-			return err
-		}
-		for _, d := range docs {
-			st.UnparsedFrontmatter = append(st.UnparsedFrontmatter, d.Path)
-		}
-		if st.Diagnosed, err = countDiagnosed(s.sc.Diagnostics(tx)); err != nil {
-			return err
-		}
-		jobs, err := s.sc.Jobs(tx).WithPredicate(dao.IsNotNull(`"index_job"."last_error"`)).
-			OrderBy(dao.Asc(store.ByPath)).Select(store.JobPath, store.JobAttempts, store.JobLastError)
-		for _, j := range jobs {
-			st.Failing = append(st.Failing, JobError{Path: j.Path, Attempts: int(j.Attempts), Err: deref(j.LastError)})
-		}
-		return err
+		return s.counts(tx, &st)
 	})
 	return st, err
+}
+
+// logBounds reads the change log's head and its oldest retained seq into st: what gc's pruning moves
+// without a commit_seq, so a cached status reads them every time.
+func (s *Store) logBounds(tx *store.Tx, st *Status) error {
+	var err error
+	if st.Cursor, err = s.head(tx); err != nil {
+		return err
+	}
+	st.OldestRetained, err = s.oldestRetained(tx)
+	return err
+}
+
+// counts reads into st every count but the alive chunks': the documents, the jobs, the unparsed
+// frontmatter, the diagnosed and the failing jobs.
+func (s *Store) counts(tx *store.Tx, st *Status) error {
+	n, err := s.sc.Documents(tx).Count()
+	if err != nil {
+		return err
+	}
+	st.Docs = int64(n)
+	if n, err = s.sc.Jobs(tx).Count(); err != nil {
+		return err
+	}
+	st.PendingJobs = int64(n)
+	docs, err := s.sc.Documents(tx).WithPredicate(dao.IsNotNull(`"document"."frontmatter_error"`)).
+		OrderBy(dao.Asc(store.ByPath)).Select(store.DocPath)
+	if err != nil {
+		return err
+	}
+	for _, d := range docs {
+		st.UnparsedFrontmatter = append(st.UnparsedFrontmatter, d.Path)
+	}
+	if st.Diagnosed, err = countDiagnosed(s.sc.Diagnostics(tx)); err != nil {
+		return err
+	}
+	jobs, err := s.sc.Jobs(tx).WithPredicate(dao.IsNotNull(`"index_job"."last_error"`)).
+		OrderBy(dao.Asc(store.ByPath)).Select(store.JobPath, store.JobAttempts, store.JobLastError)
+	for _, j := range jobs {
+		st.Failing = append(st.Failing, JobError{Path: j.Path, Attempts: int(j.Attempts), Err: deref(j.LastError)})
+	}
+	return err
 }
 
 // alive narrows a chunk query to the chunks alive at their document's active generation: gen_from
