@@ -886,7 +886,10 @@ func newTables(c dao.DataConn) *tables {
 				EmbBits:      col("embedding", EmbBits, func(e *Embedding) any { return &e.Bits }),
 				EmbF32:       col("embedding", EmbF32, func(e *Embedding) any { return &e.F32 }),
 			}),
-			dao.Conflict[*Embedding, EmbeddingField, noSort, string](EmbWorkspace, EmbTextHash, EmbModel)),
+			dao.Conflict[*Embedding, EmbeddingField, noSort, string](EmbWorkspace, EmbTextHash, EmbModel),
+			// a model's vectors in key order, as embedding_workspace_model_text holds them: the
+			// start sweep's cursor (ADR 1791329335 §2.4)
+			dao.SortMap[*Embedding, EmbeddingField, noSort, string](map[noSort]string{ByKey: `"embedding"."text_hash"`})),
 		jobs: dao.New[*Job, JobField, noSort, string](c,
 			dao.Table[*Job, JobField, noSort, string]("index_job"),
 			dao.Fields[*Job, JobField, noSort, string](map[JobField]dao.Field[*Job]{
