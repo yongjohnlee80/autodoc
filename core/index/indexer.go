@@ -1126,12 +1126,11 @@ func (x *Indexer) do(ctx context.Context, fn func(context.Context, *store.Tx) er
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	select {
-	case err := <-o.done:
-		return err
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	// once the writer holds fn, its answer is awaited even past ctx: fn writes its caller's variables
+	// (a reclaim's or a sweep's counts and cursor), and a caller gone on ctx.Done would read them while
+	// the writer still runs it. The writer answers every op it takes, at once, and under a cancelled
+	// ctx its transaction fails fast.
+	return <-o.done
 }
 
 func (x *Indexer) runOp(ctx context.Context, fn func(context.Context, *store.Tx) error) error {

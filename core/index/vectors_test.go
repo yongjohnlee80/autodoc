@@ -586,3 +586,37 @@ func TestARemovalWhoseChunksCannotBeReadIsRetried(t *testing.T) {
 		return !ok && e.vectorsFor(zebra, "") == 0
 	})
 }
+
+// TestDoAwaitsAnOpItsWriterTook: a caller whose ctx ends while the writer runs its op waits for the
+// op, since the op writes the caller's variables (a reclaim's or a sweep's counts and cursor); before,
+// do returned on ctx.Done, and the caller read them under the writer (a race -race caught).
+func TestDoAwaitsAnOpItsWriterTook(t *testing.T) {
+	e := newEnv(t, Options{})
+	ctx, cancel := context.WithCancel(context.Background())
+	entered, release := make(chan struct{}), make(chan struct{})
+	wrote := false
+	returned := make(chan error, 1)
+	go func() {
+		returned <- e.ix.do(ctx, func(context.Context, *store.Tx) error {
+			close(entered)
+			<-release
+			wrote = true
+			return nil
+		})
+	}()
+	<-entered
+	cancel()
+	select {
+	case <-returned:
+		close(release) // let the writer finish, so the env stops
+		t.Fatal("do returned while the writer still ran its op")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	if err := <-returned; err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if !wrote {
+		t.Error("the op's write is not visible to its caller")
+	}
+}
