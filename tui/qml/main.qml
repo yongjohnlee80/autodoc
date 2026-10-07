@@ -16,6 +16,10 @@ import autodoc.dialogs 1.0        // the pickers, the file, workspace, preferenc
 import autodoc.views 1.0          // Help, About, the leader card
 
 Window {
+    // below this, the screen asks to be enlarged, with Quit: a terminal's classic width, and a
+    // short pane's height
+    minimumWidth: 80
+    minimumHeight: 20
     color: Theme.app.backdrop       // the screen around the page: a dimmed tone of the page's own
     palette.window: Theme.app.window
     palette.windowText: Theme.app.windowText
@@ -185,6 +189,7 @@ Window {
         Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
         Editor {
             id: editor
+            contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
             Layout.fillHeight: true
             focus: true
             palette.highlight: Theme.document.selection
