@@ -121,9 +121,11 @@ func TestStatusIsComputedOnceForItsWaiters(t *testing.T) {
 	var computed atomic.Int64
 	gate := make(chan struct{})
 	var gated atomic.Bool
+	var parked atomic.Int64 // computations stopped at the gate
 	a := newFake("m", "a")
 	e := newEnv(t, Options{Provider: a, onStatusCompute: func() { computed.Add(1) }, betweenStatusReads: func() {
 		if gated.Load() {
+			parked.Add(1)
 			<-gate
 		}
 	}})
@@ -155,10 +157,13 @@ func TestStatusIsComputedOnceForItsWaiters(t *testing.T) {
 	// a waiter whose seq moved while it waited computes again
 	gate = make(chan struct{})
 	bump()
+	before = parked.Load()
 	gated.Store(true)
 	first := make(chan Status, 1)
 	go func() { first <- e.status() }()
-	e.eventually("the first computation under way", func() bool { return len(e.ix.statusTurn) == 1 })
+	// parked, not only holding the turn: a computation not yet at the gate when it opens would
+	// finish before the commit below, and the waiter would rightly reuse its answer
+	e.eventually("the first computation parked at the gate", func() bool { return parked.Load() > before })
 	second := make(chan Status, 1)
 	go func() { second <- e.status() }()
 	e.eventually("the second caller waiting", func() bool { return e.ix.statusWaiting.Load() == 1 })
