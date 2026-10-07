@@ -264,11 +264,12 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 			}
 			chunks = append(chunks, rows...)
 		}
-		// every document: the model's every vector, read once; a few documents (a batch of vectors):
-		// only their texts, looked up by key, so the cost follows the batch, not the workspace's
-		// vectors (ADR 1791329335 §2.6)
+		// a few documents (a batch of vectors): only their texts, looked up by key, so the cost follows
+		// the batch, not the workspace's vectors (ADR 1791329335 §2.6). Every document, or documents
+		// with more sections than one lookup list holds (one large file): the model's every vector,
+		// read once through its index, which is then the cheaper read.
 		var have map[string]bool
-		if all {
+		if all || len(chunks) > readinessLookups {
 			have, err = s.embeddedTexts(tx, fp)
 		} else {
 			hashes := make([][]byte, len(chunks))
@@ -303,6 +304,10 @@ func (s *Store) setReady(tx *store.Tx, docs []int64) error {
 	}
 	return nil
 }
+
+// readinessLookups is the most sections whose vectors setReady looks up by key; past it, it reads the
+// model's every vector (a variable, so a test can take either path).
+var readinessLookups = inPart
 
 // embeddedAmong is the subset of hashes with a vector under model fp, each looked up by key.
 func (s *Store) embeddedAmong(tx *store.Tx, fp string, hashes [][]byte) (map[string]bool, error) {

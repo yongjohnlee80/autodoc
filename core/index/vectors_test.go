@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
 
@@ -470,13 +471,19 @@ func TestABatchsReadinessLooksUpOnlyItsTexts(t *testing.T) {
 	for id := range all {
 		ids = append(ids, id)
 	}
-	for _, pick := range [][]int64{ids[:3], ids[3:], ids} {
-		some := readiness(pick)
-		for _, id := range pick {
-			if some[id] != all[id] {
-				t.Errorf("document %d: ready %d by its own texts, %d from every vector", id, some[id], all[id])
+	// both reads: by key, and (past readinessLookups sections) the model's every vector
+	for _, bound := range []int{inPart, 0} {
+		old := readinessLookups
+		readinessLookups = bound
+		for _, pick := range [][]int64{ids[:3], ids[3:], ids} {
+			some := readiness(pick)
+			for _, id := range pick {
+				if some[id] != all[id] {
+					t.Errorf("bound %d, document %d: ready %d by its own texts, %d from every vector", bound, id, some[id], all[id])
+				}
 			}
 		}
+		readinessLookups = old
 	}
 	unready := 0
 	for _, v := range all {
@@ -487,4 +494,43 @@ func TestABatchsReadinessLooksUpOnlyItsTexts(t *testing.T) {
 	if unready != 3 {
 		t.Errorf("%d documents unready, want the 3 missing a vector under the active model", unready)
 	}
+}
+
+// TestAFailedVectorDeleteRollsBackItsChunks (§2.3): the vectors go in the transaction that deletes
+// their last chunk, so a refused vector delete keeps the chunk too: gc's dead chunk stays dead and
+// counted, a removed document stays indexed, both with their vectors. Once the failure lifts, both
+// go with their vectors.
+func TestAFailedVectorDeleteRollsBackItsChunks(t *testing.T) {
+	a := newFake("m", "a")
+	e := newEnv(t, Options{Provider: a})
+	e.put("x.md", "zebra\n", "y.md", "hippo\n")
+	e.ready()
+	zebra, hippo := e.textsOf("x.md")[0], e.textsOf("y.md")[0]
+	dead := func() int {
+		var n int
+		_ = scanOne(context.Background(), e.raw, &n, "SELECT COUNT(*) FROM chunk WHERE gen_to IS NOT NULL")
+		return n
+	}
+	settle := func() { time.Sleep(200 * time.Millisecond) } // gc and the writer try, and fail, several times
+
+	undo := e.failWrites("embedding", "DELETE")
+	e.put("y.md", "lion\n") // the edit commits: it deletes no vector
+	settle()
+	if dead() != 1 || e.vectorsFor(hippo, "") != 1 {
+		t.Errorf("gc with the vector delete refused: %d dead chunks (want 1), %d vectors (want 1)", dead(), e.vectorsFor(hippo, ""))
+	}
+	if err := e.fsys.Remove(context.Background(), "x.md"); err != nil {
+		t.Fatal(err)
+	}
+	e.ix.Touch("x.md")
+	settle()
+	if _, ok := e.store.Version("x.md"); !ok || e.vectorsFor(zebra, "") != 1 {
+		t.Errorf("the removal with the vector delete refused: indexed %v (want true), %d vectors (want 1)", ok, e.vectorsFor(zebra, ""))
+	}
+
+	undo()
+	e.eventually("the removal and gc once the failure lifts", func() bool {
+		_, ok := e.store.Version("x.md")
+		return !ok && dead() == 0 && e.vectorsFor(zebra, "") == 0 && e.vectorsFor(hippo, "") == 0
+	})
 }
