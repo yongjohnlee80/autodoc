@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/dao"
+
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -358,20 +360,46 @@ func TestAQueryHeldAcrossTheDeletionRescoresFromWhatItRead(t *testing.T) {
 	}
 }
 
-// TestTheLookupsUseChunkText: the plans of the statements the writer runs for each check use
-// chunk_text, not a scan of the workspace's chunks through chunk_doc (no ANALYZE statistics, as in a
-// fresh store).
+// sqlCapture keeps the SQL and arguments of every statement it sees, as rendered.
+type sqlCapture struct {
+	dao.NopHook
+	stmts []dao.QueryInfo
+}
+
+func (c *sqlCapture) BeforeExec(_ context.Context, q *dao.QueryInfo) error {
+	c.stmts = append(c.stmts, *q)
+	return nil
+}
+
+// TestTheLookupsUseChunkText: the statements the writer renders for its checks, captured from dao,
+// are planned through chunk_text, not a scan of the workspace's chunks through chunk_doc (no ANALYZE
+// statistics, as in every store): referencedTexts (gc, removal, a vector batch, the start pass) and
+// docsWithText (a vector batch's documents).
 func TestTheLookupsUseChunkText(t *testing.T) {
 	e := newEnv(t, Options{})
-	for _, q := range []string{
-		// referencedTexts: SELECT DISTINCT text_hash
-		`SELECT DISTINCT "chunk"."text_hash" FROM "chunk" WHERE "chunk"."workspace_id" = ? AND "chunk"."text_hash" IN (?, ?)`,
-		// docsWithText: a plain select of doc_id (DISTINCT doc_id would take chunk_doc for its order)
-		`SELECT "chunk"."doc_id" FROM "chunk" WHERE "chunk"."workspace_id" = ? AND "chunk"."text_hash" IN (?, ?)`,
+	ctx := context.Background()
+	for name, run := range map[string]func(*Store, *store.Tx) error{
+		"referencedTexts": func(s *Store, tx *store.Tx) error {
+			_, err := s.referencedTexts(tx, [][]byte{[]byte("a"), []byte("b")})
+			return err
+		},
+		"docsWithText": func(s *Store, tx *store.Tx) error {
+			_, err := s.docsWithText(tx, []vecItem{{textHash: []byte("a")}, {textHash: []byte("b")}})
+			return err
+		},
 	} {
-		rows, err := e.raw.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+q, e.ws, []byte("a"), []byte("b"))
+		capture := &sqlCapture{}
+		s := &Store{db: e.db, sc: e.db.Workspace(e.ws).WithHooks(capture)}
+		if err := e.db.Read(ctx, func(tx *store.Tx) error { return run(s, tx) }); err != nil {
+			t.Fatal(name, err)
+		}
+		if len(capture.stmts) != 1 {
+			t.Fatalf("%s rendered %d statements, want 1", name, len(capture.stmts))
+		}
+		q := capture.stmts[0]
+		rows, err := e.raw.QueryContext(ctx, "EXPLAIN QUERY PLAN "+q.SQL, q.Args...)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatal(name, err)
 		}
 		var plan []string
 		for rows.Next() {
@@ -384,7 +412,7 @@ func TestTheLookupsUseChunkText(t *testing.T) {
 		}
 		rows.Close()
 		if !strings.Contains(strings.Join(plan, "\n"), "INDEX chunk_text") {
-			t.Errorf("%s:\n%s", q, strings.Join(plan, "\n"))
+			t.Errorf("%s: %s\n%s", name, q.SQL, strings.Join(plan, "\n"))
 		}
 	}
 }
