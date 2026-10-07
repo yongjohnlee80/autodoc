@@ -45,6 +45,12 @@ func (s *Store) Workspace(id int64) *Scope {
 	return &Scope{id: id, hook: dao.WithHooks(scopeHook{ws: id})}
 }
 
+// WithHooks is the scope with more hooks on its statements, after the workspace's own: a test's
+// view of the SQL the scope renders.
+func (sc *Scope) WithHooks(hs ...dao.Hook) *Scope {
+	return &Scope{id: sc.id, hook: dao.WithHooks(append([]dao.Hook{scopeHook{ws: sc.id}}, hs...)...)}
+}
+
 // ID is the scope's workspace.
 func (sc *Scope) ID() int64 { return sc.id }
 
