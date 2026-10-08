@@ -218,6 +218,14 @@ terminal, as below; where it cannot, it shows the block's source and why.
   does not move, from the side the editor's preferences name; `Escape` or its key again closes
   it. `SPC j` numbers the first nine related files (a digit opens one); `SPC b` goes back to the
   file opened before; the page's right-click menu has both.
+- **Every panel moves and resizes**: the explorer, the relations, the terminal, the agent and the
+  HTML preview. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
+  with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
+  `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
+  keeps it and `Esc` puts it back. A panel opens where it was left, kept in the store as
+  percentages of the window; its side in the preferences says only where it first appears.
+  `Go › Reset panel layout` docks every panel at its side again, as choosing a new side does for
+  one. A terminal may keep `Alt`+click for itself; the keys always work.
 - **Files anywhere.** `File › Open file…` (`SPC f`) opens any file on this machine's disk in a
   file dialog with a preview; `File › New file…` (`Ctrl+N`, `SPC n`) makes one in any folder.
   A file inside a workspace's folder opens as that workspace's file. Any other is in no
@@ -272,7 +280,10 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
-| `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
+| `SPC L` | arrange the panel with the keyboard: move and resize it (`Go › Arrange panel…`) |
+| `Shift+F10`, the Menu key, `SPC .` | the page's right-click menu, at the cursor (the Menu key where the terminal sends it) |
+| `Ctrl+=`, `Ctrl+-`, `Ctrl+0` | in the GUI, zoom in, out, and back to 100 % |
+| `F1`, `SPC T`, `F10`, `Ctrl+Q` | help, the tutorial (`Help › Tutorial…`), the menu bar, quit |
 
 **Options** is the menu for the editor:
 
@@ -281,6 +292,10 @@ terminal, as below; where it cannot, it shows the block's source and why.
 - **Theme:** Dark, Light, Mono, Retro or Sepia (a reader's warm paper and brown ink).
 - **Editor preferences…** (`SPC ,`): the editor mode, the page's width (applied as it is typed), the
   theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
+- **Fonts and zoom…** (the GUI's): the cell font everything on the grid is drawn in and its size,
+  the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
+  applies at once. **Zoom in**, **Zoom out** and **Actual size** are below it. A terminal's own
+  settings choose its font, so there these hide.
 
 **System**, right of Options, is the menu for the backend:
 
@@ -340,7 +355,8 @@ autodoc --gui kb            # in workspace kb
 `--gui` runs the same screen as `--ui` in a native window (golib's `gui`, on Gio): the same
 keys, menus, dialogs and panels. Buttons, check boxes, text fields, tabs and scrollbars are
 drawn natively, in the theme's colours, and a dialog dims what is behind it. The window can
-be resized freely; below 80 × 20 cells it asks to be enlarged.
+be resized freely; below 80 × 20 cells it asks to be enlarged. `Options › Fonts and zoom…`
+chooses the fonts it draws in, and `Ctrl+=` and `Ctrl+-` zoom everything in it together.
 
 **`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
 It shows the note's export drawn natively, with proportional text and the export's own styles, so
