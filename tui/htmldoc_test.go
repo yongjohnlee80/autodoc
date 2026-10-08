@@ -143,3 +143,39 @@ func TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut(t *testing.T) {
 		t.Errorf("after Cancel: workspace %q, file %s:%s open %v; want kb with a.md as it was", ws, f.ws, f.path, f.open)
 	}
 }
+
+// TestAPagesResourcesComeFromItsWorkspace: a workspace file's stylesheets and images are read from
+// the workspace's folder, against the file's own; an outside file's from its own folder alone; a
+// refused one is said once a page, with what to do.
+func TestAPagesResourcesComeFromItsWorkspace(t *testing.T) {
+	r, kb := runHTML(t)
+	at := func(ws, p string) [2]string {
+		return onLoop(r, func() [2]string { a, b := r.h.resourcesFor(ws, p); return [2]string{a, b} })
+	}
+	if got := at("kb", "Aesop/page.html"); got != [2]string{kb, "Aesop"} {
+		t.Errorf("a workspace file's: %q, want %q and Aesop", got, kb)
+	}
+	if got := at("kb", "top.html"); got != [2]string{kb, ""} {
+		t.Errorf("a file at the workspace's root: %q", got)
+	}
+	if got := at("", "/elsewhere/site/page.html"); got != [2]string{"/elsewhere/site", ""} {
+		t.Errorf("an outside file's: %q, want its own folder and no base", got)
+	}
+	r.h.p.Post(func() {
+		r.h.refusedNoted = false
+		r.h.resourceRefused("../assets/archive.css")
+		r.h.resourceRefused("../assets/x.svg")
+	})
+	r.s.WaitForText(t, "add the folder as a workspace")
+	if n := onLoop(r, func() int {
+		c := 0
+		for _, m := range r.h.notices {
+			if strings.Contains(m.text, "add the folder as a workspace") {
+				c++
+			}
+		}
+		return c
+	}); n != 1 {
+		t.Errorf("said %d times, want once a page", n)
+	}
+}

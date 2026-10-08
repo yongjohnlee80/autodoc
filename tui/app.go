@@ -201,7 +201,9 @@ type Host struct {
 	nativeViews func() bool   // whether the backend draws native views (--gui); tests stand in for a GUI
 	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
 	htmlAsk     *htmlOpen     // the HTML file the open question is about (OpenHTML.qml)
-	pageDir     string        // the folder the page's images load from (htmldoc.go)
+	pageDir     string        // the root and base the page's resources load from (htmldoc.go)
+	// refusedNoted: the open page's refused resource was said (resourceRefused)
+	refusedNoted bool
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
 	// test's process, so its test waits on the daemon instead
 	awaitExit func(ctx context.Context, pid int64) bool
