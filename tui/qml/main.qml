@@ -209,6 +209,9 @@ Window {
             onTextChanged: App.edited()
             onCursorPositionChanged: App.cursorMoved()
             SyntaxHighlighter { definition: App.syntaxDefinition }
+            // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
+            // terminal's Editor has no Rendered view and ignores it
+            MarkdownRenderer {}
         }
         }
     }
