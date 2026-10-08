@@ -26,6 +26,7 @@ Window {
     palette.button: Theme.app.button
     palette.buttonText: Theme.app.buttonText
     palette.highlight: Theme.app.highlight
+    palette.accent: Theme.menu.accent    // the access keys' colour: the menu bar's, and the dialogs' buttons'
     palette.highlightedText: Theme.app.highlightedText
     palette.base: Theme.app.base
     palette.text: Theme.app.text
@@ -101,6 +102,7 @@ Window {
             MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "&Links"; onTriggered: App.toggleLinks() }
+            MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
@@ -122,7 +124,6 @@ Window {
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
             MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
-            MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
