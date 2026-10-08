@@ -23,6 +23,17 @@ local autodoc = require("autodoc")
 local session = require("autodoc.session")
 local host = require("autodoc.views.host")
 
+---popup_rows are the right-click menu's AutoDoc rows, by name.
+local function popup_rows()
+  local out = {}
+  for _, m in ipairs(vim.fn.menu_get("PopUp", "n")) do
+    for _, sub in ipairs(m.submenus or {}) do
+      if vim.startswith(sub.name, "AutoDoc:") then out[#out + 1] = sub.name end
+    end
+  end
+  return out
+end
+
 t.section("setup without keys", function()
   local kbm = package.loaded["auto-core.kb"] or select(2, pcall(require, "auto-core.kb"))
   if type(kbm) == "table" and kbm._reset_for_tests then kbm._reset_for_tests() end
@@ -31,12 +42,13 @@ t.section("setup without keys", function()
   t.ok(provided["KB_OPERATIONS.md"] and provided["KB_OPERATIONS.md"].version == require("autodoc.kb.version").autodoc,
     "setup hands this build's managed KB documents to auto-core", vim.inspect(vim.tbl_keys(provided)))
   for _, c in ipairs({ "AutodocDrawer", "AutodocSearch", "AutodocSelect", "AutodocKbMigrate", "AutodocFiles",
-    "AutodocRecent", "AutodocBacklinks", "AutodocMaintenance", "AutodocLinkKb" }) do
+    "AutodocRecent", "AutodocBacklinks", "AutodocRelations", "AutodocBack", "AutodocMaintenance", "AutodocLinkKb" }) do
     t.ok(vim.fn.exists(":" .. c) == 2, ":" .. c .. " exists")
   end
   t.eq(package.loaded["autodoc.kb.migrate"], nil, "the migration's module is not loaded by setup")
   t.eq(vim.fn.getcompletion("AutodocKbMigrate --ap", "cmdline"), { "--apply" }, ":AutodocKbMigrate completes its flags")
   t.eq(vim.fn.maparg("<leader>fk", "n"), "", "no <leader>fk unless opts.keys")
+  t.eq(popup_rows(), {}, "nor the right-click menu's rows")
   t.ok(vim.fn.exists(":AutodocPreviewFind") == 2,
     "the preview's commands are set up too")
   t.eq(vim.fn.maparg("<leader>mp", "n"), "", "and its keys are not mapped")
@@ -64,7 +76,8 @@ t.section("setup with keys", function()
     ["<leader>fk"] = "autodoc: search the selected KB",
     ["<leader>mF"] = "autodoc: find a KB document by name",
     ["<leader>mr"] = "autodoc: recent KB files",
-    ["<leader>ml"] = "autodoc: what links to this file",
+    ["<leader>ml"] = "autodoc: what this file is connected to",
+    ["<leader>mo"] = "autodoc: back to the document opened before",
     ["<leader>mk"] = "autodoc: the kb drawer",
     ["<leader>mw"] = "autodoc: choose the KB to search",
     ["<leader>mX"] = "autodoc: maintenance",
@@ -73,6 +86,7 @@ t.section("setup with keys", function()
     local m = vim.fn.maparg(lhs, "n", false, true)
     t.eq(m.desc, desc, lhs .. " is the KB group's")
   end
+  t.eq(popup_rows(), { "AutoDoc: Go to related…", "AutoDoc: Back" }, "the right-click menu has the relations' rows, following opts.keys")
   local pm = vim.fn.maparg("<leader>mp", "n", false, true)
   t.ok(pm.desc ~= nil and pm.desc:find("autodoc preview", 1, true) ~= nil, "the preview's find is <leader>mp, following opts.keys", vim.inspect(pm))
   local slot = vim.fn.maparg("<leader>m1", "n", false, true)

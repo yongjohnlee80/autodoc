@@ -14,6 +14,15 @@
 ---  ▼ Reranker (1)
 ---    ● bge  BAAI/bge-reranker-v2-m3 · in use · window 50
 ---    ○ none   search is not re-ranked
+---  ▼ Relations (3)          the KB file in the editor's (autodoc.relations, the TUI's SPC l)
+---    global-kb · adrs/0203.md
+---    superseded by (1)
+---      adrs/1791.md
+---
+---**The Relations section follows the editor.** Entering a KB file's buffer reads what it is
+---connected to (graph.links, graph.backlinks, graph.unresolved; graph.neighborhood at depth 2,
+---`d`); another file's rows go at once, so they are never shown for this one. <CR> opens a row,
+---and the document left behind goes on `<leader>mo`'s history.
 ---
 ---**The todos drawer's pattern:** a fixed section table, `▼/▶ Header (count)`, collapse state
 ---persisted in `auto-core.state` namespace `autodoc.ui`, and ONE keymap set whose handlers
@@ -49,6 +58,8 @@ local M = {}
 M.POLL_MS = 2000
 -- One page of index.documents / index.changes / sys.events.
 M.PAGE = 500
+-- How long after a KB file is written its relations are read again (its index is touched first).
+M.RELATIONS_AFTER_WRITE_MS = 400
 
 M.STATE_NS = "autodoc.ui"
 
@@ -56,6 +67,7 @@ M.SECTIONS = {
   { key = "kb", title = "Knowledge Base" },
   { key = "embedding", title = "Embedding Models" },
   { key = "ranker", title = "Reranker" },
+  { key = "relations", title = "Relations" },
 }
 
 local CODE_CURSOR_EXPIRED = -32063
@@ -295,6 +307,10 @@ M.HELP = {
   "  <CR> on the Reranker's none: search is not re-ranked",
   "  w     the reranker's window",
   "",
+  "  Relations (the KB file in the editor)",
+  "  <CR>  open it (<leader>mo goes back)",
+  "  d     the documents two links away, or not",
+  "",
   "  ▼/▶ headers: <CR> folds a section",
   "  R     refresh       ?  this help",
 }
@@ -336,6 +352,8 @@ function M.new(profile)
     dirs = {},          -- "ws\0rel" -> true (open folders)
     trees = {},         -- workspace -> { docs, cursor, loading, error }
     events_cursor = nil,
+    -- the Relations section: the KB file it is of (nil: none), its rows, and whether at depth 2
+    rel = { ref = nil, rows = nil, neighbours = nil, loading = false, err = nil, deep = false, why = nil },
     timer = nil,
     subs = {},
   }
@@ -375,7 +393,7 @@ function M.new(profile)
     end)
   end
 
-  local load_tree
+  local load_tree, follow_editor -- forward
 
   local function load_workspaces()
     request("workspaces", "workspace.list", {}, function(list, err)
@@ -386,6 +404,7 @@ function M.new(profile)
       st.ws_err = nil
       st.workspaces = list or {}
       session().remember_workspaces(st.workspaces)
+      if not st.rel.ref and not st.rel.why then follow_editor() end -- the KBs are known now
       local names = {}
       for _, w in ipairs(st.workspaces) do
         names[w.name] = true
@@ -414,6 +433,55 @@ function M.new(profile)
       st.rankers, st.rank_err = (not err) and res or nil, err and err.message or nil
       rerender()
     end)
+  end
+
+  local function relations() return require("autodoc.relations") end
+
+  ---load_relations reads what ref is connected to. Another file's rows go at once: until ref's are
+  ---read the section has none, never the last file's.
+  local function load_relations(ref)
+    local cur = st.rel
+    if cur.ref and cur.ref.ws == ref.ws and cur.ref.rel == ref.rel then
+      cur.loading = true
+    else
+      st.rel = { ref = ref, deep = cur.deep, loading = true }
+    end
+    local mine = st.rel
+    relations().load(ref.ws, ref.rel, mine.deep, function(rows, n, err)
+      if st.rel ~= mine then return end
+      mine.loading = false
+      if err then
+        mine.err = err.message
+      else
+        mine.rows, mine.neighbours, mine.err = rows, n, nil
+      end
+      rerender()
+    end, function(method, params, cb) request("relations", method, params, cb) end)
+    rerender()
+  end
+
+  ---follow points the Relations section at the file in buf: a KB file's relations, or why there
+  ---are none. A buffer that is no file (a panel, a picker, help) leaves the section as it is.
+  local function follow(buf)
+    if not (buf and vim.api.nvim_buf_is_valid(buf)) or vim.bo[buf].buftype ~= "" or vim.api.nvim_buf_get_name(buf) == "" then
+      return
+    end
+    local ref = relations().current(buf)
+    if not ref then
+      if not session().is_ready() or #session().cached_workspaces() == 0 then return end -- not known yet
+      st.seq.relations = (st.seq.relations or 0) + 1 -- a read in flight is of another file
+      st.rel = { deep = st.rel.deep, why = "the file in the editor is in no KB AutoDoc serves" }
+      return rerender()
+    end
+    local cur = st.rel
+    if cur.ref and cur.ref.ws == ref.ws and cur.ref.rel == ref.rel and (cur.rows or cur.loading) then return end
+    load_relations(ref)
+  end
+
+  ---follow_editor follows the file of the editor window (the one a <CR> opens into).
+  follow_editor = function()
+    local w = profile.editor_target_winid and profile.editor_target_winid() or nil
+    if w then follow(vim.api.nvim_win_get_buf(w)) end
   end
 
   ---load_tree lists a KB's documents (sort path, paged until done). The change cursor is read
@@ -531,6 +599,7 @@ function M.new(profile)
       for name in pairs(st.expanded) do
         if not st.trees[name] then load_tree(name) end
       end
+      if st.rel.ref then load_relations(st.rel.ref) else follow_editor() end
       rerender()
     end)
     rerender()
@@ -623,6 +692,8 @@ function M.new(profile)
         count = st.workspaces and #st.workspaces or nil
       elseif sec.key == "embedding" then
         count = st.providers and #(st.providers.providers or {}) or nil
+      elseif sec.key == "relations" then
+        count = st.rel.why and 0 or st.rel.neighbours
       else
         count = st.rankers and #(st.rankers.rankers or {}) or nil
       end
@@ -675,6 +746,34 @@ function M.new(profile)
                   end
                 end
                 draw(M.build_tree(tree.docs), 3)
+              end
+            end
+          end
+        elseif sec.key == "relations" then
+          local rl = st.rel
+          if rl.why then
+            msg("relations", 2, "(" .. rl.why .. ")")
+          elseif not rl.ref then
+            msg("relations", 2, "(open a KB file: what it is connected to shows here)")
+          else
+            local head = "  " .. rl.ref.ws .. " · " .. rl.ref.rel
+            row({ kind = "rel_file", section = "relations", ws = rl.ref.ws, path = rl.ref.rel },
+              head .. (rl.deep and "   depth 2 · d" or "   d: depth 2"), HL.selected, #head)
+            if rl.err then
+              msg("relations", 4, rl.err, HL.error)
+            elseif not rl.rows then
+              msg("relations", 4, "reading…")
+            elseif #rl.rows == 0 then
+              msg("relations", 4, "(nothing links with it)")
+            end
+            for _, r in ipairs(rl.rows or {}) do
+              if r.kind == "heading" then
+                row({ kind = "rel_heading", section = "relations" }, "    " .. r.text, HL.dir)
+              elseif r.kind == "unresolved" then
+                row({ kind = "rel_unresolved", section = "relations" }, "      " .. r.text, HL.error)
+              else
+                row({ kind = "rel_doc", section = "relations", ws = r.ws, path = r.path },
+                  (r.kind == "beyond" and "        " or "      ") .. r.text, r.kind == "beyond" and HL.dim or HL.item)
               end
             end
           end
@@ -1181,6 +1280,8 @@ function M.new(profile)
       return rerender()
     elseif r.kind == "doc" then
       return open_doc(r)
+    elseif r.kind == "rel_doc" then
+      return relations().open(r.ws, r.path)
     elseif r.kind == "provider" or r.kind == "ranker" then
       return use_model(r)
     elseif r.kind == "no_ranker" then
@@ -1199,6 +1300,11 @@ function M.new(profile)
   end
   actions["d"] = function(r)
     if not r then return end
+    if r.section == "relations" then
+      st.rel.deep = not st.rel.deep
+      if st.rel.ref then load_relations(st.rel.ref) else rerender() end
+      return
+    end
     if r.kind == "workspace" then return remove_ws(r) end
     if r.kind == "provider" or r.kind == "ranker" then return remove_model(r) end
   end
@@ -1214,7 +1320,7 @@ function M.new(profile)
 
   local DESC = {
     ["<CR>"] = "toggle / open / use", s = "select the KB to search", P = "make the KB primary",
-    A = "add a location", r = "rename the KB", e = "edit", d = "remove", a = "add",
+    A = "add a location", r = "rename the KB", e = "edit", d = "remove · relations: depth 2", a = "add",
     w = "reranker window", R = "refresh", ["?"] = "help",
   }
 
@@ -1272,6 +1378,20 @@ function M.new(profile)
     vim.api.nvim_create_autocmd("BufWinLeave", { group = group, buffer = b, callback = function()
       vim.schedule(function() if not visible() then stop_polling() end end)
     end })
+    -- the Relations section follows the editor's KB file while the drawer is on screen
+    vim.api.nvim_create_autocmd("BufEnter", { group = group, callback = function(ev)
+      if ev.buf == b or not visible() then return end
+      vim.schedule(function() if not st.disposed then follow(ev.buf) end end)
+    end })
+    vim.api.nvim_create_autocmd("BufWritePost", { group = group, callback = function(ev)
+      local ref = st.rel.ref
+      if not (ref and visible()) then return end
+      local mine = relations().current(ev.buf)
+      if mine and mine.ws == ref.ws and mine.rel == ref.rel then
+        -- the write is indexed at once (session.on_write); its links are read after it
+        vim.defer_fn(function() if not st.disposed and st.rel.ref == ref then load_relations(ref) end end, M.RELATIONS_AFTER_WRITE_MS)
+      end
+    end })
     subscribe()
     render()
     refresh_all()
@@ -1287,6 +1407,7 @@ function M.new(profile)
 
   function view:on_focus(_winid, b)
     if not vim.api.nvim_buf_is_valid(b) then return end
+    follow_editor() -- the editor may have moved on while the drawer was hidden
     render()
     vim.schedule(start_polling)
   end
@@ -1313,6 +1434,8 @@ function M.new(profile)
   view._refresh = refresh_all
   view._request = request
   view._load_providers = load_providers
+  view._follow = follow
+  view._rel = function() return st.rel end
   view._sub_count = function() local n = 0 for _ in pairs(st.subs) do n = n + 1 end return n end
 
   return view
