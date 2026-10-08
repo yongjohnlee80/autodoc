@@ -56,7 +56,7 @@ THE PANELS
   that link to this one. Each opens over the page from its side (Preferences sets which), and
   Escape or its key again closes it. Enter on a file opens it.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
-  Preferences sets another edge or the centre: the default of Options › Agent profiles… (SPC G),
+  Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
   It starts in AutoDoc's own folder for the workspace, told about the workspace in AGENTS.md and
   CLAUDE.md there, and keeps running while hidden; Use in the profiles starts another.

@@ -140,10 +140,17 @@ func (h *Host) agentExited(code int) {
 		return
 	}
 	switch code {
+	case 0:
+		// a clean exit (the user quit the agent): its panel goes with it
+		if h.panelOpen["agent"] {
+			h.keep(h.p.Call("agent", "close"))
+		}
+		h.notify(fmt.Sprintf("the agent %s exited: SPC g starts the default again", name))
 	case 127, 126:
 		why := map[int]string{127: "was not found", 126: "could not run"}[code]
-		h.notify(fmt.Sprintf("the agent %s's command %s (%d): check it in Options › Agent profiles…", name, why, code))
+		h.notify(fmt.Sprintf("the agent %s's command %s (%d): check it in System › Agent profiles…", name, why, code))
 	default:
+		// a failure: the panel stays, with what the agent printed before it ended
 		h.notify(fmt.Sprintf("the agent %s exited (%d): SPC g starts the default again", name, code))
 	}
 }
