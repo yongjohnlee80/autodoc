@@ -125,3 +125,21 @@ func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 		}
 	}
 }
+
+// TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut: the question comes before its workspace is
+// entered, so Cancel leaves the workspace and the open file as they were (Lector, #76 r0).
+func TestCancellingAnHTMLFileInAnotherWorkspaceStaysPut(t *testing.T) {
+	r, kb, _, _ := runOutside(t)
+	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
+	r.waitOpen(t, "kb", "a.md")
+	r.h.p.Post(func() { r.h.openRef(fileRef{"notes", "page.html"}, true, nil) })
+	r.s.WaitForText(t, "open an HTML file")
+	if ws := onLoop(r, func() string { return r.h.ws }); ws != "kb" {
+		t.Fatalf("the question was asked in %q, after entering the other workspace", ws)
+	}
+	r.h.p.Post(func() { r.h.openHTMLAs("cancel") })
+	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "open an HTML file") })
+	if ws, f := onLoop(r, func() string { return r.h.ws }), r.file(); ws != "kb" || !f.open || f.ws != "kb" || f.path != "a.md" {
+		t.Errorf("after Cancel: workspace %q, file %s:%s open %v; want kb with a.md as it was", ws, f.ws, f.path, f.open)
+	}
+}
