@@ -6,14 +6,32 @@ LDFLAGS := -s -w -X main.version=$(VERSION)
 # LDFLAGS instead. CI clones normally and is unaffected.
 export GOFLAGS := -buildvcs=false
 
-.PHONY: build test race vet fmt cover test-lua clean
+.PHONY: build build-gui test race vet fmt cover test-lua clean
 
-# cgo on macOS only: golib watches the workspace roots with FSEvents there, which needs it (the
-# Command Line Tools). Elsewhere the binary stays static; modernc SQLite needs no cgo.
-CGO := $(if $(filter Darwin,$(shell uname -s)),1,0)
+# `make build` is the TUI. On Linux it is static, with no cgo: modernc SQLite needs none.
+# `make build-gui` adds the GUI (--gui, golib/gui on Gio), the only thing that needs cgo, and on
+# Linux the window system's development libraries (GUI_LIBS, as pkg-config names them).
+# macOS builds with cgo either way, since golib watches the workspace roots with FSEvents there
+# (the Command Line Tools), so there `make build` is `make build-gui`: the GUI costs nothing more.
+GUI_LIBS := egl wayland-egl wayland-client wayland-cursor x11 xkbcommon xkbcommon-x11 x11-xcb xcursor xfixes vulkan
 
+ifeq ($(shell uname -s),Darwin)
+build: build-gui
+else
 build:
-	CGO_ENABLED=$(CGO) go build -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
+endif
+
+build-gui:
+	@if [ "$$(uname -s)" = Linux ] && ! pkg-config --exists $(GUI_LIBS); then \
+		echo "make build-gui: missing the window system's development libraries:"; \
+		for l in $(GUI_LIBS); do pkg-config --exists $$l || echo "  $$l"; done; \
+		echo "Debian/Ubuntu: libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev"; \
+		echo "Arch: wayland libx11 libxkbcommon libxkbcommon-x11 libxcursor libxfixes mesa vulkan-headers"; \
+		echo "Or make build: the TUI alone, static."; \
+		exit 1; \
+	fi
+	CGO_ENABLED=1 go build -tags gui -trimpath -ldflags "$(LDFLAGS)" -o bin/autodoc ./cmd/autodoc
 
 test:
 	go test ./...

@@ -10,23 +10,34 @@ permissions:
   contents: write
 
 jobs:
-  # Linux builds static, from Ubuntu. macOS builds with cgo, on a Mac: golib watches the workspace
-  # roots with FSEvents there, which needs cgo and the SDK; the binary needs only macOS itself to run.
+  # Linux builds static, the TUI alone, from Ubuntu. A Linux "-gui" build adds the GUI (--gui):
+  # cgo, against the window system's libraries, which it then needs to run; built natively on each
+  # architecture's runner. macOS builds with cgo, on a Mac: golib watches the workspace roots with
+  # FSEvents there, which needs cgo and the SDK, so its one build carries the GUI too, and needs
+  # only macOS itself to run.
   build:
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - { goos: linux,  goarch: amd64, runner: ubuntu-latest, cgo: "0" }
-          - { goos: linux,  goarch: arm64, runner: ubuntu-latest, cgo: "0" }
-          - { goos: darwin, goarch: amd64, runner: macos-latest,  cgo: "1" }
-          - { goos: darwin, goarch: arm64, runner: macos-latest,  cgo: "1" }
+          - { goos: linux,  goarch: amd64, runner: ubuntu-latest,    cgo: "0", tags: "",    suffix: "" }
+          - { goos: linux,  goarch: arm64, runner: ubuntu-latest,    cgo: "0", tags: "",    suffix: "" }
+          - { goos: linux,  goarch: amd64, runner: ubuntu-latest,    cgo: "1", tags: "gui", suffix: "-gui" }
+          - { goos: linux,  goarch: arm64, runner: ubuntu-24.04-arm, cgo: "1", tags: "gui", suffix: "-gui" }
+          - { goos: darwin, goarch: amd64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }
+          - { goos: darwin, goarch: arm64, runner: macos-latest,     cgo: "1", tags: "gui", suffix: "" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: the window system's libraries (Linux GUI)
+        if: matrix.goos == 'linux' && matrix.tags == 'gui'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev
       - name: build
         env:
           CGO_ENABLED: ${{ matrix.cgo }}
@@ -34,15 +45,15 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           VERSION="${GITHUB_REF_NAME}"
-          OUT="autodoc-${VERSION}-${GOOS}-${GOARCH}"
+          OUT="autodoc-${VERSION}-${GOOS}-${GOARCH}${{ matrix.suffix }}"
           # -s -w: no symbol table or DWARF; stack traces keep their function
           # names. -trimpath keeps the runner's paths out of the binary.
-          go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" ./cmd/autodoc
+          go build -tags "${{ matrix.tags }}" -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" ./cmd/autodoc
           tar czf "${OUT}.tar.gz" "${OUT}"
           shasum -a 256 "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256" # on Ubuntu and macOS alike
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
           path: |
             *.tar.gz
             *.tar.gz.sha256

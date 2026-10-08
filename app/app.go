@@ -110,6 +110,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.SetOutput(stderr)
 	serve := fs.Bool("serve", false, "run the daemon")
 	ui := fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
+	gui := fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
 	dev := fs.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
 	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	showVersion := fs.Bool("version", false, "print the version")
@@ -128,8 +129,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		}
 		return 2
 	}
-	if fs.NArg() > 0 && !((*ui || *call != "" || *exportFormat != "") && fs.NArg() == 1) {
-		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --call and --export take one argument)")
+	if fs.NArg() > 0 && !((*ui || *gui || *call != "" || *exportFormat != "") && fs.NArg() == 1) {
+		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --gui, --call and --export take one argument)")
 		return 2
 	}
 	if (*ensure || *restart) && !*printEndpoint {
@@ -184,11 +185,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}
-	case *ui:
+	case *ui || *gui:
 		// SIGTERM only: the terminal's own keys (ctrl-c among them) are the TUI's
 		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
 		defer stop()
-		if err := runUI(ctx, *configPath, *dev, fs.Arg(0), b); err != nil && !errors.Is(err, context.Canceled) {
+		if err := runUI(ctx, *configPath, *dev, fs.Arg(0), *gui, b); err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintln(stderr, "autodoc:", err)
 			return 1
 		}

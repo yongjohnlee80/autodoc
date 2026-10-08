@@ -108,6 +108,9 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		// first line as one) and says why
 		{[]string{"--config", bad, "--print-endpoint"}, 1, "", "config: invalid"},
 		{[]string{"--export", "html", "--output", filepath.Join(t.TempDir(), "x.html"), filepath.Join(t.TempDir(), "missing.md")}, 1, "", "autodoc:"},
+		// a build without the gui tag (this test's) says so, and how to get one
+		{[]string{"--gui"}, 1, "", "built without the GUI"},
+		{[]string{"--gui", "kb", "extra"}, 2, "", "only --ui, --gui, --call and --export take one argument"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, Options{Version: "v1.2.3"}, &stdout, &stderr)
