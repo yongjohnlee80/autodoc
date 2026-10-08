@@ -274,3 +274,42 @@ func screenCell(t *testing.T, r *running, text string) (int, int) {
 	t.Fatalf("%q is not on the screen:\n%s", text, r.s)
 	return 0, 0
 }
+
+// The GUI keeps its own theme (gui.theme, sepia until chosen) and the terminal its own
+// (tui.theme, dark): choosing one in a window leaves the terminal's as it was.
+func TestTheGUIKeepsItsOwnTheme(t *testing.T) {
+	if got := prefsFor(map[string]any{"tui.theme": "retro"}, true).theme; got != "sepia" {
+		t.Errorf("the GUI's theme with only the terminal's set: %q, want sepia", got)
+	}
+	if got := prefsFor(map[string]any{"tui.theme": "retro", "gui.theme": "light"}, true).theme; got != "light" {
+		t.Errorf("the GUI's theme: %q, want its own, light", got)
+	}
+	if got := prefsFor(map[string]any{"gui.theme": "light"}, false).theme; got != "dark" {
+		t.Errorf("the terminal's theme with only the GUI's set: %q, want dark", got)
+	}
+
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n"}})
+	g := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
+	g.s.WaitForText(t, "connected — autodoc v-test")
+	if th := onLoop(g, func() string { return g.h.theme }); th != "sepia" {
+		t.Fatalf("a window starts in %q, want sepia", th)
+	}
+	onLoop(g, func() bool { g.h.useTheme("mono"); return true })
+	g.s.WaitFor(t, "the GUI's theme kept", func(string) bool {
+		return onLoop(g, func() string { return g.h.theme }) == "mono"
+	})
+
+	// the store has the window's choice: the next window starts in it
+	g2 := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
+	g2.s.WaitForText(t, "connected — autodoc v-test")
+	g2.s.WaitFor(t, "the next window in the kept mono", func(string) bool {
+		return onLoop(g2, func() string { return g2.h.theme }) == "mono"
+	})
+	// and the terminal, which reads the same store, keeps its own: still dark once it has read it
+	tr := runTUI(t, NewSession(d.sock, nil), Options{})
+	tr.s.WaitForText(t, "connected — autodoc v-test")
+	time.Sleep(300 * time.Millisecond) // a wrong read would switch it by now; g2 read in less
+	if th := onLoop(tr, func() string { return tr.h.theme }); th != "dark" {
+		t.Fatalf("the terminal after the window chose mono: %q, want its own dark", th)
+	}
+}

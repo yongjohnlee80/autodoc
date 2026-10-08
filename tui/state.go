@@ -69,11 +69,12 @@ func (h *Host) state() map[string]any {
 		"App.jumpText":             "",
 
 		// the search picker
-		"App.hits":               h.hits,
-		"App.hitsTitle":          "hits",
-		"App.searchPreviewTitle": "",
-		"App.searchPreviewText":  "",
-		"App.searchPreviewAt":    0,
+		"App.hits":                  h.hits,
+		"App.hitsTitle":             "hits",
+		"App.searchPreviewTitle":    "",
+		"App.searchPreviewText":     "",
+		"App.searchPreviewRendered": false,
+		"App.searchPreviewAt":       0,
 		// the outline picker (outline.go)
 		"App.outlineRows":         h.outlineList,
 		"App.outlineStatus":       "headings",

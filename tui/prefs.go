@@ -15,7 +15,10 @@ import (
 
 // The TUI's preferences, by the names the store keeps them under.
 const (
-	prefTheme    = "tui.theme"
+	prefTheme = "tui.theme"
+	// the GUI's theme, kept apart from the terminal's: a light page in a window, a dark one among
+	// the terminal's tools, each kept as chosen
+	prefGUITheme = "gui.theme"
 	prefMenuHide = "tui.menu.autohide"
 	prefStatus   = "tui.status.shown"
 	prefExplorer = "tui.explorer.edge"
@@ -57,10 +60,11 @@ var keymapLabels = []string{"Vim (modal)", "Text (modeless)"}
 // The defaults: a blank page, the menu hidden until F10 or an Alt+letter, the explorer on the
 // left, the links on the right, a page 120 columns wide.
 const (
-	defaultTheme = "dark"
-	defaultRuler = 120
-	minRuler     = 40
-	maxRuler     = 400
+	defaultTheme    = "dark"
+	defaultGUITheme = "sepia"
+	defaultRuler    = 120
+	minRuler        = 40
+	maxRuler        = 400
 )
 
 // prefs are the preferences as the TUI uses them.
@@ -96,8 +100,16 @@ type prefs struct {
 	recent []recentDoc
 }
 
-func defaultPrefs() prefs {
-	return prefs{theme: defaultTheme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
+func defaultPrefs() prefs { return defaultPrefsFor(false) }
+
+// defaultPrefsFor are the defaults of the terminal's UI, or of the GUI's: they differ in the
+// theme alone.
+func defaultPrefsFor(gui bool) prefs {
+	theme := defaultTheme
+	if gui {
+		theme = defaultGUITheme
+	}
+	return prefs{theme: theme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
 		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
 		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}, searchStages: allStagesChecked(),
 		agentEdge: defaultAgentEdge}
@@ -117,10 +129,14 @@ func isEdge(s string) bool {
 
 // prefsOf reads the store's preferences over the defaults; a value the TUI cannot use is the
 // default's.
-func prefsOf(m map[string]any) prefs {
-	p := defaultPrefs()
+func prefsOf(m map[string]any) prefs { return prefsFor(m, false) }
+
+// prefsFor reads the store's preferences for the terminal's UI or the GUI's: the same but the
+// theme, each its own (themePref).
+func prefsFor(m map[string]any, gui bool) prefs {
+	p := defaultPrefsFor(gui)
 	str := func(k string) (string, bool) { s, ok := m[k].(string); return s, ok && s != "" }
-	if s, ok := str(prefTheme); ok {
+	if s, ok := str(themePref(gui)); ok {
 		p.theme = s
 	}
 	if s, ok := str(prefMenuHide); ok {
@@ -259,7 +275,7 @@ func (h *Host) loadPrefs() {
 			h.failed("preferences", a.err)
 			return
 		}
-		h.applyPrefs(prefsOf(a.m))
+		h.applyPrefs(prefsFor(a.m, h.gui))
 	})
 }
 
@@ -445,7 +461,15 @@ func (h *Host) useTheme(name string) {
 		h.say("no theme " + strconv.Quote(name))
 		return
 	}
-	h.setPref(prefTheme, name, func(p *prefs) { p.theme = name })
+	h.setPref(themePref(h.gui), name, func(p *prefs) { p.theme = name })
+}
+
+// themePref is the preference the theme is kept under: the GUI's, or the terminal's.
+func themePref(gui bool) string {
+	if gui {
+		return prefGUITheme
+	}
+	return prefTheme
 }
 
 func (h *Host) setThemeIndex(i int) {

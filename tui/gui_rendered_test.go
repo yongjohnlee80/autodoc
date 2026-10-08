@@ -81,3 +81,29 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 		t.Fatalf("Ctrl+T on a rendered note gives %v, want Raw", m)
 	}
 }
+
+// The search's preview has a Rendered view for a Markdown hit, as the editor does: a note's
+// preview offers it; a Go file's does not. The preview binds App.searchPreviewRendered.
+func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{
+		"kb": {"a.md", "# Alpha\n\n- one\n", "a.go", goWithAHashLine},
+	}, daemonOpts{goChunker: wholeGo{}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	onLoop(r, func() bool { r.h.openSearch(); return true })
+	show := func(p, want string) {
+		t.Helper()
+		onLoop(r, func() bool { r.h.preview("search", p, 0); return true })
+		r.s.WaitFor(t, p+"'s preview: rendered "+want, func(string) bool {
+			return onLoop(r, func() bool {
+				v, _ := r.h.p.Tree().Source("App.searchPreviewRendered")
+				title, _ := r.h.p.Tree().Source("App.searchPreviewTitle")
+				return v.Raw == want && title.Raw == p
+			})
+		})
+	}
+	show("a.md", "true")
+	show("a.go", "false")
+	show("a.md", "true")
+}

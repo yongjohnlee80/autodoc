@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/parse/markdown"
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -302,6 +303,9 @@ func (h *Host) preview(picker, p string, at int) {
 		if seq != h.previewSeq || ep != h.epoch {
 			return
 		}
+		if picker == "search" {
+			h.previewRendered(p, a.err == nil)
+		}
 		if a.err != nil {
 			why := wireMessage(a.err)
 			if picker == "search" && h.previewHeld {
@@ -313,6 +317,16 @@ func (h *Host) preview(picker, p string, at int) {
 		}
 		h.showPreview(picker, p, a.text, at)
 	})
+}
+
+// previewRendered gives the search's preview its Rendered view for a hit read as Markdown, as
+// setRendered does the editor's: a note or a derived document; code, YAML and plain text stay
+// Raw. read is false when the hit could not be read, which shows no text to render.
+// The preview binds App.searchPreviewRendered to its renderedEnabled: an id inside the picker's
+// own file is not the host's to look up.
+func (h *Host) previewRendered(p string, read bool) {
+	k := h.kinds.Of(p, h.textExtensions())
+	h.set("App.searchPreviewRendered", read && (k == kind.Markdown || kind.Of(p, nil) == kind.Derived))
 }
 
 // showPreview puts text in a picker's preview, the cursor at byte at: the position is moved away

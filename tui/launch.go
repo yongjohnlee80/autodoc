@@ -23,6 +23,8 @@ import (
 type LaunchOptions struct {
 	// ConfigPath is the config file; "" is the default (config.DefaultPath).
 	ConfigPath string
+	// GUI is set by --gui: the UI is in a window (Options.GUI).
+	GUI bool
 	// Dev reads the QML from that directory and follows it as it is edited (Options.Dev).
 	Dev string
 	// Workspace is the one to open, which the daemon must have; "" is the one last entered.
@@ -116,6 +118,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		installed = InstalledVersion
 	}
 	host, err := New(session, Options{
+		GUI:       o.GUI,
 		About:     about,
 		App:       []tuicore.AppOption{tuicore.WithBackend(backend)},
 		Dev:       o.Dev,

@@ -53,6 +53,7 @@ type Host struct {
 	session *Session
 	editor  editorWidget       // main.qml's Editor, terminal or native (editor.go)
 	core    *widget.EditorCore // its core: the text, the cursor and the modes
+	gui     bool               // in a window (Options.GUI): the theme kept is gui.theme
 	ctx     context.Context
 	cancel  context.CancelFunc
 
@@ -252,6 +253,9 @@ type Host struct {
 type Options struct {
 	// About is the build and location text of Help › About.
 	About string
+	// GUI is set when the UI runs in a window (--gui): its theme is kept apart from the
+	// terminal's (gui.theme), sepia until one is chosen.
+	GUI bool
 	// App are options for the tui.App: the backend, above all.
 	App []tuicore.AppOption
 	// Dev is a directory holding main.qml, dialogs/ and views/ (this package's qml/). Set, the QML is
@@ -315,7 +319,8 @@ func newHost(session *Session, opt Options) *Host {
 		explorer:       tuidecl.NewTreeListModel("key", "label"),
 		explorerPaths:  map[string][]string{},
 		openAt:         -1,
-		prefs:          defaultPrefs(),
+		prefs:          defaultPrefsFor(opt.GUI),
+		gui:            opt.GUI,
 		panelOpen:      map[string]bool{},
 		termRestore:    true,
 		relationsModel: tuidecl.NewListModel("key", "label"),
@@ -364,6 +369,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		src = opt.Layout
 		if src == nil {
 			src = layout
+			if opt.GUI { // the window starts in its own default, not the terminal's
+				src = themeImport.ReplaceAll(src, []byte("import autodoc.theme."+defaultGUITheme+" "+moduleVersion))
+			}
 		}
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
 	}
