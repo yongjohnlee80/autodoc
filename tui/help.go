@@ -94,6 +94,9 @@ WHAT A KEY NEEDS
   PgUp/PgDn, [ ], Home/End, the wheel) and Zoom in / Zoom out redraw it. Otherwise a diagram
   shows its source and HTML opens in the browser, and the preview says which was missing.
   View › Image previews off compares the two on the same file.
+  Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
+  natively, live as you type, following the cursor, its text selectable, its links opening
+  notes, files and the browser.
   field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
   names a file's frontmatter problems, only once the workspace has a schema: Manage… › Edit…
   names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.

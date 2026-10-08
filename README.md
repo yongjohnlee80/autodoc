@@ -326,6 +326,17 @@ keys, menus, dialogs and panels. Buttons, check boxes, text fields, tabs and scr
 drawn natively, in the theme's colours, and a dialog dims what is behind it. The window can
 be resized freely; below 80 × 20 cells it asks to be enlarged.
 
+**`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
+It shows the note's export drawn natively, with proportional text and the export's own styles, so
+it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).
+
+- **Live:** it follows edits after a moment of quiet, unsaved ones included.
+- **Follows the cursor:** the block under the editor's cursor comes to the pane's top.
+- **Images** load from the note's folder only.
+- **Links:** a click on a link opens what it names:
+  - a note or a file, in the editor;
+  - a web or mail address, in the browser.
+
 The GUI needs cgo, and it is the only part that does:
 
 - **macOS:** `make build` includes it. The release binary has it too. (cgo is already needed on
