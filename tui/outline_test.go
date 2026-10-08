@@ -29,7 +29,7 @@ func TestTheBreadcrumbFollowsTheCursor(t *testing.T) {
 	r.s.WaitFor(t, "the crumb at the first heading", func(string) bool {
 		return strings.Contains(r.frameTitle(), "guide.md › Guide")
 	})
-	r.h.p.Post(func() { r.h.editor.SetLine(10, 0) }) // "apt", under Linux
+	r.h.p.Post(func() { r.h.core.SetLine(10, 0) }) // "apt", under Linux
 	r.s.WaitFor(t, "the crumb under Linux", func(string) bool {
 		return strings.Contains(r.frameTitle(), "guide.md › Guide › Setup › Linux")
 	})
@@ -60,7 +60,7 @@ func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
 	r.s.WaitForText(t, "headings (1 of 5)")
 	r.keys(t, enter())
 	r.s.WaitFor(t, "the cursor on Usage's line as it is now", func(string) bool {
-		row := onLoop(r, func() int { a, _ := r.h.editor.Line(); return a })
+		row := onLoop(r, func() int { a, _ := r.h.core.Line(); return a })
 		return row == 16 // "## Usage" is line 17 of the edited text (0-based 16)
 	})
 	if !r.file().dirty {
@@ -81,7 +81,7 @@ func TestYAMLAndTextBreadcrumbs(t *testing.T) {
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.openPath("conf.yaml") })
 	r.waitFile(t, "conf.yaml")
-	r.h.p.Post(func() { r.h.editor.SetLine(2, 6) })
+	r.h.p.Post(func() { r.h.core.SetLine(2, 6) })
 	r.s.WaitFor(t, "the key path", func(string) bool {
 		return strings.Contains(r.frameTitle(), "conf.yaml › server › database › host")
 	})

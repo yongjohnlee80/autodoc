@@ -51,7 +51,8 @@ import (
 type Host struct {
 	p       *tuidecl.Program
 	session *Session
-	editor  *widget.Editor
+	editor  editorWidget       // main.qml's Editor, terminal or native (editor.go)
+	core    *widget.EditorCore // its core: the text, the cursor and the modes
 	ctx     context.Context
 	cancel  context.CancelFunc
 
@@ -333,10 +334,11 @@ func newHost(session *Session, opt Options) *Host {
 func (h *Host) attach(p *tuidecl.Program) error {
 	h.p = p
 	var ok bool
-	if h.editor, ok = tuidecl.FindAs[*widget.Editor](p, "editor"); !ok {
+	if h.editor, ok = tuidecl.FindAs[editorWidget](p, "editor"); !ok {
 		return errors.New("main.qml declares no Editor with id: editor")
 	}
-	widget.WithContextMenu(h.editorMenu)(h.editor) // the stock rows, then related documents and back
+	h.core = h.editor.Core()
+	h.installEditorMenu() // the stock rows, then related documents and back
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)

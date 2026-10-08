@@ -146,11 +146,11 @@ func (h *Host) showFind() {
 		// text changes, and the find's words are not its text
 		switch h.outlineKind() {
 		case kind.Text:
-			h.editor.SetHighlighter(h.textHighlighter())
+			h.core.SetHighlighter(h.textHighlighter())
 		case kind.YAML:
-			h.editor.SetHighlighter(h.yamlHighlighter())
+			h.core.SetHighlighter(h.yamlHighlighter())
 		default:
-			h.editor.SetHighlighter(h.pageHighlighter())
+			h.core.SetHighlighter(h.pageHighlighter())
 		}
 	}
 	if h.findChip == nil {
@@ -212,8 +212,8 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	cur := -1
 	switch f.target {
 	case findPage:
-		rows = h.editor.Lines()
-		cur, _ = h.editor.Line()
+		rows = h.core.Lines()
+		cur, _ = h.core.Line()
 	case findExplorer:
 		rows, at = h.explorerLoaded()
 		for i, ix := range at {
@@ -260,7 +260,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	row := hits[selected]
 	switch f.target {
 	case findPage:
-		h.editor.SetLine(row, cols[row])
+		h.core.SetLine(row, cols[row])
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	case findExplorer:
 		h.keep(h.p.Call(panels["explorer"], "setCurrentIndex", at[row]))

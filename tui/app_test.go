@@ -341,7 +341,7 @@ func onLoop[T any](r *running, read func() T) T {
 }
 
 func (r *running) file() openedFile   { return onLoop(r, func() openedFile { return r.h.file }) }
-func (r *running) editorText() string { return onLoop(r, r.h.editor.Value) }
+func (r *running) editorText() string { return onLoop(r, r.h.core.Value) }
 
 func (r *running) waitFile(t *testing.T, p string) {
 	t.Helper()
@@ -375,7 +375,7 @@ func TestSearchesOpensEditsSaves(t *testing.T) {
 	r.keys(t, enter())
 	r.waitFile(t, "a.md")
 	// the hit is the Birds section's text: the cursor opens on it, not on the file's first line
-	if line := onLoop(r, func() string { l, _ := r.h.editor.Line(); return r.h.editor.Lines()[l] }); line != "kestrel notes" {
+	if line := onLoop(r, func() string { l, _ := r.h.core.Line(); return r.h.core.Lines()[l] }); line != "kestrel notes" {
 		t.Errorf("the cursor opened on %q, not on the hit", line)
 	}
 	r.typeInEditor(t, "EDITED ")
@@ -749,7 +749,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	// the keys are the loop's to process: release the save only once the editor holds the edit and
 	// is back in Normal mode (its own mode: the status line repaints after it)
 	r.s.WaitFor(t, "the newer edit in the editor", func(string) bool {
-		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.editor.Mode() == widget.ModeNormal })
+		return strings.Contains(r.editorText(), "Y") && onLoop(r, func() bool { return r.h.core.Mode() == widget.ModeNormal })
 	})
 	holding.Store(false)
 	close(release)

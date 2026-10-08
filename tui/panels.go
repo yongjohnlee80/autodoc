@@ -65,7 +65,7 @@ func (h *Host) movePane(dir string) {
 	}
 	app := h.p.App()
 	if c, ok := h.p.Find("editor"); ok && app.FocusWithin(c) {
-		if h.editor.Mode() != widget.ModeNormal {
+		if h.core.Mode() != widget.ModeNormal {
 			return // Insert mode: the editor's keys, not a move
 		}
 		for name, at := range h.panelEdges() {

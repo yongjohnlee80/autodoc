@@ -340,7 +340,7 @@ func TestPanesMoveInNormalModeOnly(t *testing.T) {
 
 	r.keys(t, key('i'))
 	r.s.WaitFor(t, "Insert mode", func(string) bool {
-		return onLoop(r, func() bool { return r.h.editor.Mode().String() == "INSERT" })
+		return onLoop(r, func() bool { return r.h.core.Mode().String() == "INSERT" })
 	})
 	r.keys(t, decltest.Ctrl('h'))
 	r.keys(t, decltest.Type("z")...) // a key after it, so the Ctrl+H has been handled
@@ -1022,8 +1022,8 @@ func TestAHitOpensWhereItIsAfterJoinedCharacters(t *testing.T) {
 	r.s.WaitForText(t, "hits (1)")
 	r.keys(t, enter())
 	r.waitFile(t, "a.md")
-	at := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} })
-	line := onLoop(r, func() string { return r.h.editor.Lines()[at[0]] })
+	at := onLoop(r, func() [2]int { l, c := r.h.core.Line(); return [2]int{l, c} })
+	line := onLoop(r, func() string { return r.h.core.Lines()[at[0]] })
 	if !strings.HasPrefix(line, "kestrel") && !strings.HasPrefix(line, "## Birds") || at[1] != 0 {
 		t.Errorf("the cursor opened at line %d col %d (%q), not at the hit's start", at[0], at[1], line)
 	}
@@ -1044,7 +1044,7 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 	if got := r.editorText(); got != "first thoughts\nsecond line" || !r.file().dirty {
 		t.Fatalf("after closing the picker: %q, dirty %v", got, r.file().dirty)
 	}
-	before := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} })
+	before := onLoop(r, func() [2]int { l, c := r.h.core.Line(); return [2]int{l, c} })
 	r.keys(t, decltest.Ctrl('s'))
 	r.s.WaitForText(t, "save the draft")
 	r.keys(t, decltest.Type("ideas/draft")...)
@@ -1053,7 +1053,7 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 	if got := d.read(t, "kb", "ideas/draft.md"); got != "first thoughts\nsecond line" {
 		t.Fatalf("the note holds %q, want the draft", got)
 	}
-	if after := onLoop(r, func() [2]int { l, c := r.h.editor.Line(); return [2]int{l, c} }); after != before {
+	if after := onLoop(r, func() [2]int { l, c := r.h.core.Line(); return [2]int{l, c} }); after != before {
 		t.Errorf("the cursor moved from %v to %v when the draft became a note", before, after)
 	}
 }
@@ -1757,7 +1757,7 @@ func TestFindInThePanes(t *testing.T) {
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
-	line := func() int { return onLoop(r, func() int { l, _ := r.h.editor.Line(); return l }) }
+	line := func() int { return onLoop(r, func() int { l, _ := r.h.core.Line(); return l }) }
 	r.keys(t, key('/'))
 	r.s.WaitForText(t, "find in the page — n next, N previous")
 	r.keys(t, decltest.Type("KESTREL")...) // case-blind
@@ -1766,7 +1766,7 @@ func TestFindInThePanes(t *testing.T) {
 	if l := line(); l != 0 {
 		t.Fatalf("the first find put the cursor on line %d, want 0", l)
 	}
-	if c := onLoop(r, func() int { _, c := r.h.editor.Line(); return c }); c != 4 {
+	if c := onLoop(r, func() int { _, c := r.h.core.Line(); return c }); c != 4 {
 		t.Errorf("the cursor at column %d, want 4 (the word's start)", c)
 	}
 	r.keys(t, key('n'))

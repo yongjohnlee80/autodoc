@@ -55,7 +55,7 @@ func (x *restarted) restart(t *testing.T, notes map[string][]string, keep bool) 
 }
 
 func (r *running) cursor() [2]int {
-	return onLoop(r, func() [2]int { a, b := r.h.editor.Line(); return [2]int{a, b} })
+	return onLoop(r, func() [2]int { a, b := r.h.core.Line(); return [2]int{a, b} })
 }
 
 // TestUnsavedEditsSurviveAReconnect: a file with unsaved edits stays open over a restart of its
@@ -67,7 +67,7 @@ func TestUnsavedEditsSurviveAReconnect(t *testing.T) {
 	x.r.h.p.Post(func() { x.r.h.openPath("a.md") })
 	x.r.waitFile(t, "a.md")
 	// On the loop before the keys: they come by the terminal's queue, a Post by another, unordered.
-	onLoop(x.r, func() bool { x.r.h.editor.SetLine(4, 0); return true })
+	onLoop(x.r, func() bool { x.r.h.core.SetLine(4, 0); return true })
 	x.r.typeOnPage(t, "unsaved ")
 	text, at := x.r.editorText(), x.r.cursor()
 	reads := x.reads.Load()
@@ -117,7 +117,7 @@ func TestACleanFileSurvivesAReconnectAndIsReadAgain(t *testing.T) {
 	x := onARestartableDaemon(t, notes)
 	x.r.h.p.Post(func() { x.r.h.openPath("a.md") })
 	x.r.waitFile(t, "a.md")
-	x.r.h.p.Post(func() { x.r.h.editor.SetLine(2, 0) })
+	x.r.h.p.Post(func() { x.r.h.core.SetLine(2, 0) })
 	x.r.s.WaitFor(t, "the cursor", func(string) bool { return x.r.cursor() == [2]int{2, 0} })
 	x.d.stop()
 	x.d.write(t, "kb", "a.md", "# A\n\nfirst, changed while the backend was away\n\nsecond\n")
