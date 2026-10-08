@@ -90,6 +90,10 @@ func htmlPreviewFile(content []byte) (string, error) {
 }
 
 func (h *Host) previewHTML() {
+	if h.native() {
+		h.openHTMLPane() // a GUI window shows the page natively, beside the editor (htmlpane.go)
+		return
+	}
 	if h.file.open && filepath.Ext(h.file.path) != ".md" {
 		h.notify("HTML preview currently accepts Markdown files")
 		return

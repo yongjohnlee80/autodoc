@@ -362,6 +362,7 @@ func (h *Host) edited() {
 	h.feedEdited()
 	h.validateSoon()
 	h.outlineSoon()
+	h.htmlPaneSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
 }
 
