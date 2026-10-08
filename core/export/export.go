@@ -39,7 +39,7 @@ var palettes = map[string]palette{
 	"dark":  {"#1c1c1c", "#d0d0d0", "#87afd7", "#8a8a8a", "#303030", "#585858", "dark"},
 	"light": {"#f6f2e7", "#2e2a24", "#2f5f8f", "#7a7163", "#ebe6d9", "#b3aa96", "light"},
 	"sepia": {"#e6d9b9", "#5b4636", "#8a5a2b", "#8c7656", "#dacca9", "#b5a380", "light"},
-	"retro": {"#0000aa", "#ffff55", "#ffffff", "#aaaaaa", "#00007a", "#555555", "dark"},
+	"retro": {"#000070", "#ffff55", "#ffffff", "#aaaaaa", "#00005a", "#555555", "dark"},
 	"mono":  {"#ffffff", "#000000", "#000000", "#555555", "#eeeeee", "#888888", "light"},
 }
 
