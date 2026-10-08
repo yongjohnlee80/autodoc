@@ -51,7 +51,7 @@ func TestADraggedPanelKeepsItsSize(t *testing.T) {
 
 	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal 30% high", func(sc string) bool { row, _ := frameAt(sc); return row == 21 })
-	dragGrip(t, r, "◥", 0, -6)
+	dragGrip(t, r, "□", 0, -6)
 	r.s.WaitFor(t, "the terminal 50% high", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 	stored("tui.terminal.bottom.size", "50")
 	if got := onLoop(r, func() int { return r.h.prefs.termSize["bottom"] }); got != 50 {
@@ -60,14 +60,14 @@ func TestADraggedPanelKeepsItsSize(t *testing.T) {
 	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
 
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
-	dragGrip(t, r, "◢", 10, 0)
-	r.s.WaitFor(t, "the explorer 40% wide", func(string) bool { x, _, ok := gripAt(r, "◢"); return ok && x == 39 })
+	dragGrip(t, r, "□", 10, 0)
+	r.s.WaitFor(t, "the explorer 40% wide", func(string) bool { x, _, ok := gripAt(r, "□"); return ok && x == 39 })
 	stored("tui.explorer.left.size", "40")
 
 	again := attached(t, d)
 	onLoop(again, func() bool { again.h.togglePanel("explorer"); return true })
 	again.s.WaitFor(t, "the explorer 40% wide in a new TUI", func(string) bool {
-		x, _, ok := gripAt(again, "◢")
+		x, _, ok := gripAt(again, "□")
 		return ok && x == 39
 	})
 	onLoop(again, func() bool { again.h.togglePanel("explorer"); again.h.toggleTerminal(); return true })

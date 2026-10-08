@@ -244,6 +244,9 @@ Window {
         onClosed: App.panelClosed("explorer")
         Frame {
             title: "explorer"
+            // on the page's colour, as the list in it is: a frame's own window tone would show as
+            // a band beside its border, which the GUI draws as a thin line through the cell
+            palette.window: Theme.document.base
             TreeView {
                 id: explorerTree
                 palette.highlight: Theme.document.highlight
@@ -268,6 +271,9 @@ Window {
         onClosed: App.panelClosed("links")
         Frame {
             title: App.relationsTitle
+            // on the page's colour, as the list in it is: a frame's own window tone would show as
+            // a band beside its border, which the GUI draws as a thin line through the cell
+            palette.window: Theme.document.base
             ListView {
                 id: linksList
                 palette.highlight: Theme.document.highlight
@@ -298,6 +304,9 @@ Window {
                 id: terminalView
                 dir: App.terminalDir
                 vimKeys: App.keymapVim
+                // a program's colours raised until they read on the page: ls's yellow and a
+                // prompt's cyan are written for a dark terminal, and wash out on a light theme
+                minimumContrast: 4.5
                 onExited: App.terminalExited(code)
             }
         }
@@ -320,6 +329,9 @@ Window {
             Terminal {
                 id: agentView
                 vimKeys: App.keymapVim
+                // a program's colours raised until they read on the page: ls's yellow and a
+                // prompt's cyan are written for a dark terminal, and wash out on a light theme
+                minimumContrast: 4.5
                 onExited: App.agentExited(code)
             }
         }
