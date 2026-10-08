@@ -17,7 +17,7 @@ import (
 // second ring (graph.neighborhood at depth 2) under each first-ring document; the unresolved
 // relations and supersession cycles close the list. SPC j is a card of the first nine neighbours,
 // a digit each; SPC b goes back to the document opened before. The editor's right-click menu has
-// both ("Go to related…", "Back").
+// "Go to link", on a link, and "Back".
 
 // relSection is one heading of the drawer: links out of the document of the kinds out, and links
 // into it of the kinds in.
@@ -190,7 +190,7 @@ func (h *Host) showRelations(ws, p string, r relations) {
 			rows = append(rows, relRow{label: "  " + u})
 		}
 	}
-	h.relRows, h.relFor = rows, fileRef{ws, p}
+	h.relRows, h.relFor, h.relOut = rows, fileRef{ws, p}, r.out
 	list := make([]rowOf, len(rows))
 	for i, row := range rows {
 		list[i] = rowOf{"key": fmt.Sprint(i), "label": row.label}
@@ -210,7 +210,7 @@ func (h *Host) showRelations(ws, p string, r relations) {
 
 // clearRelations empties the drawer, saying why when a file is open.
 func (h *Host) clearRelations(why string) {
-	h.relRows, h.relFor = nil, fileRef{}
+	h.relRows, h.relFor, h.relOut = nil, fileRef{}, nil
 	h.relationsModel.Reset(nil)
 	h.set("App.relationsTitle", why)
 }
@@ -329,11 +329,17 @@ func (h *Host) goBack() {
 // Its rows act on the core, so every editor widget runs them (installEditorMenu).
 func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
 	items := widget.CoreContextItems(c)
-	related := widget.NewCommand("autodoc.related", "Go to related…", widget.CoreMenuAction{ID: "autodoc.related",
-		Run: func(*widget.EditorCore) { h.openJumpCard() }})
-	related.Enabled = len(h.jumpRows()) > 0
+	l, onLink := linkAt([]byte(c.Value()), h.cursorBytes())
+	link := widget.NewCommand("autodoc.link", "Go to link", widget.CoreMenuAction{ID: "autodoc.link",
+		Run: func(*widget.EditorCore) { h.goToLink(l) }})
+	link.Enabled = onLink
 	back := widget.NewCommand("autodoc.back", "Back", widget.CoreMenuAction{ID: "autodoc.back",
 		Run: func(*widget.EditorCore) { h.goBack() }})
 	back.Enabled = len(h.history) > 0
-	return append(items, widget.NewSeparator("autodoc.sep.relations"), related, back)
+	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
+	diagram := widget.NewCommand("autodoc.diagram", "View diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
+		Run: func(*widget.EditorCore) { h.previewDiagram() }})
+	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes())
+	return append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
+		widget.NewSeparator("autodoc.sep.relations"), link, back)
 }

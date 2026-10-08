@@ -1,6 +1,6 @@
-// JumpCard.qml — SPC j and the editor's right-click "Go to related…": the open document's first
-// nine neighbours from the Relations drawer, a digit each (relations.go). As the leader card, its
-// body is TEXT, nothing focusable, so every digit reaches its Shortcut. Esc closes it.
+// JumpCard.qml — SPC j: the open document's first nine neighbours from the Relations drawer, a
+// digit each (relations.go). As the leader card, its body is TEXT, nothing focusable, so every
+// digit reaches its Shortcut. Esc closes it.
 Dialog {
     id: jumpCard
     title: "related documents"
