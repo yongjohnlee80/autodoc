@@ -106,7 +106,11 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.findAgainPrevious": none(func() { h.findAgain(-1) }),
 		"App.clearFind":         none(h.clearFind),
 		"App.findPrevious":      none(h.findPrevious),
-		"App.openBacklink":      oneNumber("App.openBacklink", "a row", h.openBacklink),
+		"App.openRelation":      oneNumber("App.openRelation", "a row", h.openRelation),
+		"App.relationsDepth":    none(h.relationsDepth),
+		"App.openJumpCard":      none(h.openJumpCard),
+		"App.jumpTo":            oneNumber("App.jumpTo", "1 to 9", h.jumpTo),
+		"App.goBack":            none(h.goBack),
 
 		// the workspaces
 		"App.pickWorkspace":            none(h.pickWorkspace),

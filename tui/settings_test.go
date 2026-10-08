@@ -529,13 +529,13 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 	}
 }
 
-// The links panel's backlinks for a workspace that is gone: the failure is said, not swallowed.
-func TestBacklinksOfAWorkspaceGoneSaySo(t *testing.T) {
+// The Relations drawer's relations for a workspace that is gone: the failure is said, not swallowed.
+func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.ws = "gone"; r.h.loadBacklinks("a.md") })
-	r.waitNoticed(t, "backlinks: no such workspace")
+	r.h.p.Post(func() { r.h.loadRelations("gone", "a.md") })
+	r.waitNoticed(t, "relations: no such workspace")
 }
 
 // Find › Find previous (its command, as the menu runs it) with nothing found yet says so.

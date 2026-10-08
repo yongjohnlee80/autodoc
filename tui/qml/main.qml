@@ -68,6 +68,8 @@ Window {
     Shortcut { sequence: "/"; onActivated: App.openFind() }
     Shortcut { sequence: "n"; onActivated: App.findNext() }
     Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
+    // d in the Relations drawer shows the second ring, or hides it (relations.go); elsewhere nothing
+    Shortcut { sequence: "d"; onActivated: App.relationsDepth() }
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
@@ -262,16 +264,16 @@ Window {
         onOpened: App.panelOpened("links")
         onClosed: App.panelClosed("links")
         Frame {
-            title: App.linksTitle
+            title: App.relationsTitle
             ListView {
                 id: linksList
                 palette.highlight: Theme.document.highlight
                 palette.highlightedText: Theme.document.highlightedText
-                model: App.backlinks
+                model: App.relations
                 textRole: "label"
                 currentIndex: App.linksIndex
                 onCurrentIndexChanged: App.linksMoved(index)
-                onActivated: App.openBacklink(index)
+                onActivated: App.openRelation(index)
             }
         }
     }
@@ -358,6 +360,7 @@ Window {
     PurgeModel { id: purgeModel }
     ConfirmQuit { id: confirmQuit }
     Leader { id: leader }
+    JumpCard { id: jumpCard }
     PluginKeys { id: pluginKeys }
     Help { id: help }
     About { id: about }
