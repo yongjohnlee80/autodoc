@@ -64,48 +64,66 @@ func fileErr(err error) error {
 func isText(b []byte) bool { return utf8.Valid(b) && bytes.IndexByte(b, 0) < 0 }
 
 func (s *Server) registerFiles() {
-	s.handle("file.read", s.local("file.read", 1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if s.files == nil {
-			return nil, errNoFiles
+	// file.read_raw and file.write_raw are file.read and file.write on an HTML file's own bytes,
+	// where the plain verbs give its derived text and refuse a write (core/docs ReadRaw, WriteRaw).
+	fileRead := func(raw bool) verbFunc {
+		return func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+			if s.files == nil {
+				return nil, errNoFiles
+			}
+			_, name, err := argAbs(p, 0)
+			if err != nil {
+				return nil, err
+			}
+			read := s.files.Read
+			if raw {
+				read = s.files.ReadRaw
+			}
+			d, err := read(ctx, name)
+			if err != nil {
+				return nil, fileErr(err)
+			}
+			if !isText(d.Content) {
+				return nil, errNotText
+			}
+			return map[string]any{"content": d.Content, "version": string(d.Version)}, nil
 		}
-		_, name, err := argAbs(p, 0)
-		if err != nil {
-			return nil, err
+	}
+	fileWrite := func(raw bool) verbFunc {
+		return func(ctx context.Context, _ *Workspace, p []any) (any, error) {
+			if s.files == nil {
+				return nil, errNoFiles
+			}
+			_, name, err := argAbs(p, 0)
+			if err != nil {
+				return nil, err
+			}
+			content, err := argBytes(p, 1, "content")
+			if err != nil {
+				return nil, err
+			}
+			want, err := argStr(p, 2, "version")
+			if err != nil {
+				return nil, err
+			}
+			if !isText(content) {
+				return nil, errNotText
+			}
+			write := s.files.Write
+			if raw {
+				write = s.files.WriteRaw
+			}
+			v, err := write(ctx, name, content, vfs.Version(want))
+			if err != nil {
+				return nil, fileErr(err)
+			}
+			return map[string]any{"version": string(v)}, nil
 		}
-		d, err := s.files.Read(ctx, name)
-		if err != nil {
-			return nil, fileErr(err)
-		}
-		if !isText(d.Content) {
-			return nil, errNotText
-		}
-		return map[string]any{"content": d.Content, "version": string(d.Version)}, nil
-	}))
-	s.handle("file.write", s.local("file.write", 3, 3, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if s.files == nil {
-			return nil, errNoFiles
-		}
-		_, name, err := argAbs(p, 0)
-		if err != nil {
-			return nil, err
-		}
-		content, err := argBytes(p, 1, "content")
-		if err != nil {
-			return nil, err
-		}
-		want, err := argStr(p, 2, "version")
-		if err != nil {
-			return nil, err
-		}
-		if !isText(content) {
-			return nil, errNotText
-		}
-		v, err := s.files.Write(ctx, name, content, vfs.Version(want))
-		if err != nil {
-			return nil, fileErr(err)
-		}
-		return map[string]any{"version": string(v)}, nil
-	}))
+	}
+	s.handle("file.read", s.local("file.read", 1, 1, fileRead(false)))
+	s.handle("file.read_raw", s.local("file.read_raw", 1, 1, fileRead(true)))
+	s.handle("file.write", s.local("file.write", 3, 3, fileWrite(false)))
+	s.handle("file.write_raw", s.local("file.write_raw", 3, 3, fileWrite(true)))
 	// file.locate is the workspace that serves abs, with its path there; nil when none does. The
 	// most specific root wins, and a file the workspace does not index (excluded, or a format it
 	// does not read) is in none.

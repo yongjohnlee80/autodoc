@@ -646,37 +646,55 @@ func (s *Server) register() {
 		return out, nil
 	}, true))
 
-	s.handle("doc.read", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
+	// doc.read_raw and doc.write_raw are doc.read and doc.write on an HTML file's own bytes, where
+	// the plain verbs give its derived text and refuse a write (core/docs ReadRaw, WriteRaw).
+	docRead := func(raw bool) verbFunc {
+		return func(ctx context.Context, w *Workspace, p []any) (any, error) {
+			path, err := argStr(p, 1, "path")
+			if err != nil {
+				return nil, err
+			}
+			read := w.Docs.Read
+			if raw {
+				read = w.Docs.ReadRaw
+			}
+			d, err := read(ctx, path)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"content": d.Content, "version": string(d.Version)}, nil
 		}
-		d, err := w.Docs.Read(ctx, path)
-		if err != nil {
-			return nil, err
+	}
+	docWrite := func(raw bool) verbFunc {
+		return func(ctx context.Context, w *Workspace, p []any) (any, error) {
+			path, err := argStr(p, 1, "path")
+			if err != nil {
+				return nil, err
+			}
+			content, err := argBytes(p, 2, "content")
+			if err != nil {
+				return nil, err
+			}
+			want, err := argStr(p, 3, "version")
+			if err != nil {
+				return nil, err
+			}
+			write := w.Docs.Write
+			if raw {
+				write = w.Docs.WriteRaw
+			}
+			v, err := write(ctx, path, content, vfs.Version(want))
+			if err != nil {
+				return nil, err
+			}
+			touch(w, path) // indexed now, not when a watch or a poll gets to it
+			return map[string]any{"version": string(v)}, nil
 		}
-		return map[string]any{"content": d.Content, "version": string(d.Version)}, nil
-	}, true))
-	s.handle("doc.write", s.verb(4, 4, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
-		}
-		content, err := argBytes(p, 2, "content")
-		if err != nil {
-			return nil, err
-		}
-		want, err := argStr(p, 3, "version")
-		if err != nil {
-			return nil, err
-		}
-		v, err := w.Docs.Write(ctx, path, content, vfs.Version(want))
-		if err != nil {
-			return nil, err
-		}
-		touch(w, path) // indexed now, not when a watch or a poll gets to it
-		return map[string]any{"version": string(v)}, nil
-	}, true))
+	}
+	s.handle("doc.read", s.verb(2, 2, docRead(false), true))
+	s.handle("doc.read_raw", s.verb(2, 2, docRead(true), true))
+	s.handle("doc.write", s.verb(4, 4, docWrite(false), true))
+	s.handle("doc.write_raw", s.verb(4, 4, docWrite(true), true))
 	// doc.outline is a saved file's headings, with the version they were read at, for a client to
 	// navigate by (ADR 0212 §6). A document of another kind has none.
 	s.handle("doc.outline", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
@@ -769,6 +787,9 @@ func touch(w *Workspace, paths ...string) {
 		w.Index.Touch(p)
 	}
 }
+
+// verbFunc is a verb's body: its workspace (nil for one that names none) and its params.
+type verbFunc = func(context.Context, *Workspace, []any) (any, error)
 
 // verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
 // first when ws is set, and maps the errors.

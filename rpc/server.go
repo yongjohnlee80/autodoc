@@ -65,7 +65,10 @@ import (
 // refuses the active model and the target saying what to do instead. Protocol 17 is ADR 1791430651:
 // file.read, file.write and file.locate, a local peer's files outside every workspace. Protocol 18
 // adds graph.resolve: where a link as written reaches, for an editor following one not yet indexed.
-const Protocol int64 = 18
+// Protocol 19 is ADR 1791474356: doc.read_raw, doc.write_raw, file.read_raw and file.write_raw, an
+// HTML file's own bytes where doc.read and file.read give its derived text; a session below 19 sees
+// them as unknown methods.
+const Protocol int64 = 19
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -80,7 +83,8 @@ const TUIName = "autodoc-tui"
 
 // verbSince is the protocol each verb arrived in, for the verbs newer than MinProtocol.
 var verbSince = map[string]int64{"index.documents": 13,
-	"file.read": 17, "file.write": 17, "file.locate": 17, "graph.resolve": 18}
+	"file.read": 17, "file.write": 17, "file.locate": 17, "graph.resolve": 18,
+	"doc.read_raw": 19, "doc.write_raw": 19, "file.read_raw": 19, "file.write_raw": 19}
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
