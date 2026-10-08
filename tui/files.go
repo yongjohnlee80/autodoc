@@ -245,10 +245,14 @@ func (h *Host) show(ws, p, content, version string) {
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
 // again whenever the daemon's registrations arrive, which a read may have beaten.
+//
 //   - A derived format's file is a derived document, read-only and badged, whatever the registrations
 //     say or whether they have come: no build reads one but by its deriver, and none writes one.
+//
 //   - Its highlighting, outline and frontmatter check follow the daemon's kinds as last known: a
 //     registered file's change from Markdown to plain text when they come.
+//
+//   - Its Rendered view, where the editor has one, only for a file read as Markdown.
 //
 // Unsaved text stays as it is: only how it is read changes.
 func (h *Host) readPage() {
@@ -258,7 +262,14 @@ func (h *Host) readPage() {
 		h.file.derived = kind.Label(p)
 	}
 	h.core.SetReadOnly(h.file.derived != "")
-	switch h.kinds.Of(p, h.textExtensions()) { // the daemon's registrations: it is the one indexing
+	k := h.kinds.Of(p, h.textExtensions()) // the daemon's registrations: it is the one indexing
+	// The Rendered view draws Markdown, so only a file read as Markdown has one: a note, or a derived
+	// document, whose text is Markdown. Code, YAML and plain text stay Raw, and the key that switches
+	// views does nothing there. Only an editor with a Rendered view answers (the GUI's).
+	if rs, ok := h.editor.(renderedSwitch); ok {
+		rs.SetRenderedEnabled(k == kind.Markdown || h.file.derived != "")
+	}
+	switch k {
 	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
 	case kind.YAML:
