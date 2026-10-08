@@ -12,7 +12,9 @@ Dialog {
     Shortcut { sequence: "Space"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "o"; onActivated: { leader.close(); App.openPicker() } }
     Shortcut { sequence: "f"; onActivated: { leader.close(); App.openFileDialog() } }
-    Shortcut { sequence: "c"; onActivated: { leader.close(); App.openOutline() } }
+    Shortcut { sequence: "Shift+O"; onActivated: { leader.close(); App.openOutline() } }
+    Shortcut { sequence: "d"; onActivated: { leader.close(); App.previewDiagram() } }
+    Shortcut { sequence: "Shift+H"; onActivated: { leader.close(); App.previewHTML() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newFile() } }
     Shortcut { sequence: "s"; onActivated: { leader.close(); App.save() } }
     Shortcut { sequence: "e"; onActivated: { leader.close(); App.toggleExplorer() } }
@@ -34,6 +36,5 @@ Dialog {
     Shortcut { sequence: "?"; onActivated: { leader.close(); help.open() } }
     Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }
     Shortcut { sequence: "Shift+A"; onActivated: { leader.close(); about.open() } }
-    Shortcut { sequence: "Shift+O"; onActivated: { leader.close(); App.openWithDefaultApp() } }
     Shortcut { sequence: "Shift+Q"; onActivated: { leader.close(); App.quit() } }
 }

@@ -56,7 +56,7 @@ const openerGrace = 2 * time.Second
 // kind: a PDF in its reader, for the diagrams and layout its derived text cannot show.
 func (h *Host) openWithDefaultApp() {
 	if !h.file.open {
-		h.notify("no file is open: open one, then SPC O opens it with its default app")
+		h.notify("no file is open: open one, then File › Open with Default App opens it")
 		return
 	}
 	full := h.diskPath()

@@ -98,7 +98,7 @@ Window {
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
             MenuSeparator {}
             MenuItem { text: "Preview &HTML"; onTriggered: App.previewHTML() }
-            MenuItem { text: "Preview Mermaid &diagram…"; onTriggered: App.previewDiagram() }
+            MenuItem { text: "Preview &Mermaid diagram…"; onTriggered: App.previewDiagram() }
             MenuItem { text: "Open with Default &App"; onTriggered: App.openWithDefaultApp() }
             MenuSeparator {}
             MenuItem { text: "E&xit"; onTriggered: App.quit() }

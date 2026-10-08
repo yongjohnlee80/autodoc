@@ -1,4 +1,4 @@
-// OutlinePicker.qml — Go › Outline (SPC c): the picker's layout over the note's headings, as the
+// OutlinePicker.qml — Go › Outline (SPC O): the picker's layout over the note's headings, as the
 // editor's text has them, saved or not. On the left a filter, then the headings, indented by
 // level; on the right the note at the heading under the cursor. Enter jumps there; q closes,
 // outside the field. Ctrl+h/j/k/l move between the parts.

@@ -229,7 +229,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
 - **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
   (`guide.md › Setup › Linux`), the key path in YAML (`conf.yaml › server › database`). Plain text
-  has none. **The outline** (`SPC c`, `Go › Outline…`) lists a Markdown file's headings, as the
+  has none. **The outline** (`SPC O`, `Go › Outline…`) lists a Markdown file's headings, as the
   editor's text has them, saved or not; Enter jumps to the one under the cursor.
 - **Previews** (`File › Preview Mermaid diagram`, `Preview HTML`) are images in the terminal where
   they can be: `View › Image previews` on, a terminal that confirms kitty's graphics protocol
@@ -244,7 +244,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 - **A derived document is read-only.** A DOCX or an HTML file, or a PDF where the daemon's build
   derives one (see [Builds of your own](#builds-of-your-own)), opens as its derived text in a
   read-only page, the frame and the status line badged `[HTML · read-only]`. Motions, find, copy and the outline
-  over its headings work; edits and saves do not. `SPC O` opens the file itself in the desktop's
+  over its headings work; edits and saves do not. `File › Open with Default App` opens the file itself in the desktop's
   viewer, for its diagrams and layout.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
@@ -259,12 +259,13 @@ terminal, as below; where it cannot, it shows the block's source and why.
 
 | Key | Does |
 | --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `c`, `k`, `,`, `a` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `a` …) |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
 | `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, related files by digit, back |
-| `SPC O` | open the file with the desktop's default app (`File › Open with Default App`): `xdg-open`, or `open` on a Mac |
+| `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |
+| `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |

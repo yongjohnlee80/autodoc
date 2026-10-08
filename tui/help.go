@@ -19,8 +19,11 @@ const helpText = `KEYS
               search, links, backlinks, frontmatter check or embeddings (the status line says so)
   SPC r       the recent files, the newest first, of every workspace (File › Recent files…);
               one of another workspace opens there
-  SPC O       open the file with the desktop's default app (File › Open with Default App): a PDF
-              in its reader, for what its derived text cannot show
+  SPC d       view the Mermaid diagram at the cursor (File › Preview Mermaid diagram…; the
+              editor's right-click View diagram)
+  SPC H       preview the note as HTML (File › Preview HTML)
+  File › Open with Default App  the file in the desktop's default app: a PDF in its reader, for
+              what its derived text cannot show
   Ctrl+N      new file, in any folder (File › New file…; SPC n); .md added when it has none
   Ctrl+S      save the file
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
@@ -41,12 +44,12 @@ THE PAGE
   draft: type, and Ctrl+S names and saves it. The status line (SPC t) shows the mode, the file,
   and [+] while it has unsaved changes, and on its right what the page says (a find's result).
   The page's frame shows where the cursor is: the headings above it in Markdown, the key path in
-  YAML. SPC c (Go › Outline…) lists the file's headings, unsaved ones too; Enter jumps there.
+  YAML. SPC O (Go › Outline…) lists the file's headings, unsaved ones too; Enter jumps there.
   Long lines wrap at the page's width, and line numbers can show: View › Wrap long lines, Line
   numbers, or Preferences.
   A PDF or DOCX opens as its derived text, read-only, where the daemon's build derives it: the
   frame and the status line say [PDF · read-only]. Motions, find, copy and the outline work;
-  edits and saves do not. SPC O opens the original. A long one shows as much as one read
+  edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
 
 NOTIFICATIONS
@@ -62,7 +65,8 @@ THE PANELS
   reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
   its key again closes it. Enter on a file opens it; the relations stay open.
   SPC j numbers the first nine related files: a digit opens one. SPC b goes back to the file
-  opened before. The page's right-click menu has both: Go to related…, Back.
+  opened before. The page's right-click menu has Go to link (on a link: the document it names)
+  and Back.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
@@ -118,10 +122,10 @@ w  switch workspace       g  AI agent
 W  manage workspaces      m  show/focus or hide the menu
 ?  help                   k  the editor mode (Vim, Text)
 h  notifications          ,  editor preferences
-c  the file's outline     a  search models
-O  the default app        A  about
+O  the file's outline     a  search models
+d  view the diagram       A  about
 G  agent profiles         Q  quit
-p  plugin commands`
+p  plugin commands        H  preview HTML`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.
