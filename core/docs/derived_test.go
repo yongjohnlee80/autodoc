@@ -205,3 +205,67 @@ func TestAnHTMLPageReadsAsItsContent(t *testing.T) {
 		}
 	})
 }
+
+// TestRawReadsAndWritesAnHTMLFile: ReadRaw gives an HTML file's own bytes and WriteRaw saves new
+// ones at their version, where Read derives its text and Write refuses it; a stale version is a
+// conflict. Any other derived format is refused raw, before anything is read or written: a DOCX,
+// and a PDF whose bytes are ASCII text, which a byte test alone would let through, are left as
+// they were though the write names their current version. A document that is not derived reads and
+// writes raw as it does plainly.
+func TestRawReadsAndWritesAnHTMLFile(t *testing.T) {
+	roots(t, func(t *testing.T, fsys vfs.FS) {
+		ctx := context.Background()
+		const page = "<h1>Title</h1><p>body</p>\n"
+		for name, body := range map[string]string{"page.html": page, "manual.pdf": "%PDF body\n", "a.md": "# a\n"} {
+			if _, err := fsys.WriteFile(ctx, name, strings.NewReader(body)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		docs := deriving(t, fsys, registrations.Documents(derived.MaxContainer, derived.MaxText))
+		pdfs := deriving(t, fsys, &pdfText{})
+
+		raw, err := docs.ReadRaw(ctx, "page.html")
+		if err != nil || string(raw.Content) != page {
+			t.Fatalf("ReadRaw: %q, %v; want the page's bytes", raw.Content, err)
+		}
+		if got, err := docs.Read(ctx, "page.html"); err != nil || strings.Contains(string(got.Content), "<h1>") {
+			t.Fatalf("Read: %q, %v; want the derived text", got.Content, err)
+		}
+		if _, err := docs.Write(ctx, "page.html", []byte("<p>x</p>"), raw.Version); !errors.Is(err, ErrReadOnly) {
+			t.Fatalf("Write of an HTML file: %v, want read-only", err)
+		}
+		v, err := docs.WriteRaw(ctx, "page.html", []byte("<p>edited</p>\n"), raw.Version)
+		if err != nil || content(t, fsys, "page.html") != "<p>edited</p>\n" {
+			t.Fatalf("WriteRaw: %v; the file holds %q", err, content(t, fsys, "page.html"))
+		}
+		var conflict *vfs.ConflictError
+		if _, err := docs.WriteRaw(ctx, "page.html", []byte("<p>late</p>"), raw.Version); !errors.As(err, &conflict) {
+			t.Fatalf("WriteRaw at a stale version: %v, want a conflict", err)
+		}
+		if _, err := docs.WriteRaw(ctx, "page.html", []byte("bad\x00"), v); !errors.Is(err, ErrNotEligible) {
+			t.Fatalf("WriteRaw of bytes that are not text: %v", err)
+		}
+
+		pdf, err := pdfs.Read(ctx, "manual.pdf")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pdfs.ReadRaw(ctx, "manual.pdf"); !errors.Is(err, ErrNotEligible) {
+			t.Errorf("ReadRaw of an ASCII PDF: %v, want refused", err)
+		}
+		if _, err := pdfs.WriteRaw(ctx, "manual.pdf", []byte("plain text"), pdf.Version); !errors.Is(err, ErrNotEligible) {
+			t.Errorf("WriteRaw over a PDF at its version: %v, want refused", err)
+		}
+		if content(t, fsys, "manual.pdf") != "%PDF body\n" {
+			t.Errorf("the PDF changed: %q", content(t, fsys, "manual.pdf"))
+		}
+
+		md, err := docs.ReadRaw(ctx, "a.md")
+		if err != nil || string(md.Content) != "# a\n" {
+			t.Fatalf("ReadRaw of a note: %q, %v", md.Content, err)
+		}
+		if _, err := docs.WriteRaw(ctx, "a.md", []byte("# b\n"), md.Version); err != nil || content(t, fsys, "a.md") != "# b\n" {
+			t.Fatalf("WriteRaw of a note: %v", err)
+		}
+	})
+}

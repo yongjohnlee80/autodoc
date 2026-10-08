@@ -128,6 +128,44 @@ func (d *Docs) Read(ctx context.Context, path string) (Doc, error) {
 	if d.derives(path) {
 		return d.readDerived(ctx, path)
 	}
+	return d.readBytes(ctx, path)
+}
+
+// ReadRaw is Read without deriving: the file's own bytes and their version, for a derived format
+// whose source is text (kind.RawText: HTML), so it can be edited. Any other document reads as Read
+// reads it; any other derived format is refused, whatever its bytes.
+func (d *Docs) ReadRaw(ctx context.Context, path string) (Doc, error) {
+	if err := d.check(path, false); err != nil {
+		return Doc{}, err
+	}
+	if err := d.rawRefused(path); err != nil {
+		return Doc{}, err
+	}
+	doc, err := d.readBytes(ctx, path)
+	if err != nil {
+		return Doc{}, err
+	}
+	if d.derives(path) && !textBytes(doc.Content) {
+		return Doc{}, fmt.Errorf("%w: %s is not UTF-8 text", ErrNotEligible, path)
+	}
+	return doc, nil
+}
+
+// rawRefused refuses raw access to a derived format kind.RawText does not name (a DOCX, a PDF, even
+// one whose bytes are ASCII): the policy is the format, checked before any read or write.
+func (d *Docs) rawRefused(path string) error {
+	if d.derives(path) && !kind.RawText(path) {
+		return fmt.Errorf("%w: %s has no raw text", ErrNotEligible, path)
+	}
+	return nil
+}
+
+// textBytes reports whether b is text: UTF-8 with no NUL.
+func textBytes(b []byte) bool { return utf8.Valid(b) && bytes.IndexByte(b, 0) < 0 }
+
+// readBytes reads the file at path, stat'ed before and after and read again when it changed in
+// between, so the version never names other bytes than the ones returned.
+func (d *Docs) readBytes(ctx context.Context, path string) (Doc, error) {
 	for attempt := 0; ; attempt++ {
 		before, err := d.fsys.Stat(ctx, path)
 		if err != nil {
@@ -171,6 +209,27 @@ func (d *Docs) Write(ctx context.Context, path string, content []byte, want vfs.
 	if err := d.check(path, true); err != nil {
 		return "", err
 	}
+	return d.write(ctx, path, content, want)
+}
+
+// WriteRaw is Write that admits a derived format whose source is text (kind.RawText: HTML), with
+// text bytes: the file's own bytes, edited. Any other derived format is refused before anything is
+// written, whatever the version: an existing PDF is never replaced.
+func (d *Docs) WriteRaw(ctx context.Context, path string, content []byte, want vfs.Version) (vfs.Version, error) {
+	if err := d.check(path, !d.derives(path)); err != nil {
+		return "", err
+	}
+	if err := d.rawRefused(path); err != nil {
+		return "", err
+	}
+	if d.derives(path) && !textBytes(content) {
+		return "", fmt.Errorf("%w: %s is not UTF-8 text", ErrNotEligible, path)
+	}
+	return d.write(ctx, path, content, want)
+}
+
+// write is Write's body, after the checks.
+func (d *Docs) write(ctx context.Context, path string, content []byte, want vfs.Version) (vfs.Version, error) {
 	if len(content) > MaxSize {
 		return "", fmt.Errorf("%w: %d bytes", ErrTooLarge, len(content))
 	}

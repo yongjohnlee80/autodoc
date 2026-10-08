@@ -41,6 +41,11 @@ func (k Kind) String() string {
 // Pro build's .pdf.
 var DerivedExtensions = []string{".doc", ".docx", ".htm", ".html", ".odt", ".pdf"}
 
+// RawText reports whether a derived format's source is itself text a person edits: HTML. Raw access
+// to a file's own bytes (core/docs' ReadRaw and WriteRaw) is for these formats alone, whatever
+// another format's bytes look like: a PDF may be ASCII, and is still no source to edit.
+func RawText(p string) bool { e := Ext(p); return e == ".html" || e == ".htm" }
+
 // Ext is a path's extension, lowercased: ".MD" and ".md" are one kind.
 func Ext(p string) string { return strings.ToLower(path.Ext(p)) }
 
