@@ -167,7 +167,7 @@ The screen is a page and nothing else: the file, 120 columns wide and centred, t
 right edge. With no file open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
 names and saves it as a file. Everything else comes when it is asked for:
 
-`File › Preview HTML in browser` renders the current Markdown editor buffer (including unsaved
+`File › Preview HTML` (in a terminal; the GUI opens [a pane](#the-gui) instead) renders the current Markdown editor buffer (including unsaved
 edits) into an offline, light/dark themed cache file and opens it with the system browser. A
 browser-launch error is reported in the TUI. Export a Markdown file without the daemon with
 `autodoc --export=html --theme=light --output=/path/page.html /path/page.md` or use
