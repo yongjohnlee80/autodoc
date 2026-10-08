@@ -160,6 +160,10 @@ func (h *Host) renderPreview(fallback func(why string)) {
 	h.withImageCells(pv.dialog, fallback, func(img *widget.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
 		gen, rasterize := h.previewGen, h.rasterizer()
+		// a spinner while the page renders (a headless browser takes a moment), where the Image has
+		// no picture yet; a zoom keeps the picture it has until the new one comes
+		img.SetLoadingText(map[bool]string{true: "drawing the diagram…", false: "rendering the page…"}[pv.dialog == "diagram"])
+		img.SetLoading(true)
 		// a page taller than a terminal shows an image (widget.MaxImagePixels) is cut into strips
 		// here, off the loop: a long file's page, whole, shows nothing at all
 		do(h, func(ctx context.Context) answerOf[widget.Strips] {
@@ -174,6 +178,7 @@ func (h *Host) renderPreview(fallback func(why string)) {
 			if gen != h.previewGen {
 				return // closed, or another preview since
 			}
+			img.SetLoading(false)
 			if a.err != nil {
 				fallback("the image failed: " + a.err.Error())
 				return

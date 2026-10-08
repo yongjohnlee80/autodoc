@@ -511,3 +511,35 @@ func tallPage(t *testing.T, w, h int) []byte {
 	}
 	return b.Bytes()
 }
+
+// While the page renders, the preview's Image says so with a spinner and "rendering the page…";
+// the picture, when it comes, ends it.
+func TestThePreviewSpinsWhileThePageRenders(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# A page\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	release := make(chan struct{})
+	onLoop(r, func() bool {
+		r.h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		r.h.browser = func(context.Context, string) error { return nil }
+		r.h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			<-release // the headless browser, taking its moment
+			return tallPage(t, p.Width, p.MinHeight), nil
+		}
+		return true
+	})
+	r.h.p.Post(func() { r.h.openPath("n.md") })
+	r.waitFile(t, "n.md")
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitForText(t, "rendering the page…")
+	loading := func() bool {
+		return onLoop(r, func() bool { img, ok := imageUnder(r.h.p, "htmlPreview"); return ok && img.Loading() })
+	}
+	if !loading() {
+		t.Fatal("the Image is not loading while the page renders")
+	}
+	close(release)
+	r.placedImage(t)
+	r.s.WaitFor(t, "the spinner gone", func(sc string) bool { return !loading() && !strings.Contains(sc, "rendering the page…") })
+}
