@@ -25,6 +25,7 @@ import (
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/rank"
 
+	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
 
@@ -33,14 +34,16 @@ type Options struct {
 	// Version is the build's, stamped in its main package: --version prints it, the daemon reports
 	// it, and the TUI compares it with the installed binary's, so it must be real.
 	Version string
-	// Chunkers are the build's own chunkers, by lower-case extension with its dot (".go"): a file
-	// of one is indexed by it, as kind.Registered (ADR 0216 §1.2-1.3). Main refuses a malformed or
-	// built-in extension, a Pro format's, and a version outside document.indexer's charset. nil:
-	// none, the community build.
+	// Chunkers are the build's own chunkers, by lower-case extension with its dot: a file of one is
+	// indexed by it, as kind.Registered (ADR 0216 §1.2-1.3). They are added to golib's code
+	// chunkers (.go, .ts, .tsx, .js, .jsx, .mjs, .py, .rs), which every build has. Main refuses one
+	// of those extensions, a malformed or built-in one, a derived format's, and a version outside
+	// document.indexer's charset. nil: golib's alone, the community build.
 	Chunkers map[string]search.Chunker
-	// Deriver makes text of the build's Pro document formats (ADR 0216 §1.8), its formats and their
-	// identities read once, at entry: a file of one is indexed from its derived text, and doc.read
-	// serves that text, read-only. nil: none.
+	// Deriver adds formats beside .docx, .htm and .html, which every build derives (ADR 0216 §1.8):
+	// its formats and their identities are read once, at entry; a file of one is indexed from its
+	// derived text, and doc.read serves that text, read-only. A format every build derives is
+	// refused. nil: none, the community build.
 	Deriver Deriver
 	// Rank is the build's search ranking (ADR 0215 §3): its own ranker, the texts the ranker reads,
 	// and whether a search answers ranked or not at all. The zero value: the stored ranker models,
@@ -97,7 +100,11 @@ func Main(ctx context.Context, args []string, o Options) int {
 }
 
 func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer) int {
-	reg, err := registrations.New(o.Chunkers, o.Deriver)
+	chunkers, err := registrations.Builtin(o.Chunkers)
+	var reg *registrations.Table
+	if err == nil {
+		reg, err = registrations.New(chunkers, registrations.Documents(derived.MaxContainer, derived.MaxText), o.Deriver)
+	}
 	if err == nil {
 		err = o.Rank.check()
 	}

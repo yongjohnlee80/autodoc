@@ -181,3 +181,27 @@ func (s sized) Stat(ctx context.Context, name string) (vfs.FileInfo, error) {
 	fi.Size = s.size
 	return fi, err
 }
+
+// TestAnHTMLPageReadsAsItsContent: every build derives HTML; doc.read serves the page's content,
+// without its script or chrome, and the page is read-only.
+func TestAnHTMLPageReadsAsItsContent(t *testing.T) {
+	roots(t, func(t *testing.T, fsys vfs.FS) {
+		ctx := context.Background()
+		page := `<html><head><script>exfiltrate()</script></head><body><nav>menubar</nav><main><h1>Kestrel</h1><p>hovers</p></main></body></html>`
+		if _, err := fsys.WriteFile(ctx, "page.html", strings.NewReader(page)); err != nil {
+			t.Fatal(err)
+		}
+		docs := deriving(t, fsys, registrations.Documents(derived.MaxContainer, derived.MaxText))
+		got, err := docs.Read(ctx, "page.html")
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(got.Content)
+		if !strings.Contains(text, "# Kestrel") || strings.Contains(text, "exfiltrate") || strings.Contains(text, "menubar") {
+			t.Fatalf("page.html read as %q", text)
+		}
+		if _, err := docs.Write(ctx, "page.html", []byte("<p>x</p>"), got.Version); !errors.Is(err, ErrReadOnly) {
+			t.Fatalf("write: %v", err)
+		}
+	})
+}
