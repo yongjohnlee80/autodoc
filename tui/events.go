@@ -188,7 +188,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 // becomes the untitled draft (its path names a workspace that no longer exists), and the next
 // workspace entered keeps it instead of starting a blank page.
 func (h *Host) keepDraftOnLeave() {
-	if !h.file.dirty {
+	if !h.file.dirty || h.file.outside() { // an outside file is in no workspace: it stays as it is
 		return
 	}
 	h.file.open, h.file.path, h.file.version = false, "", ""

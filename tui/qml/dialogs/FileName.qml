@@ -1,4 +1,4 @@
-// FileName.qml — File › New note (Ctrl+N): the picker's layout. On the left the new note's path
+// FileName.qml — naming the untitled draft (Ctrl+S on it): the picker's layout. On the left its path
 // (".md" is added when it has none), then the workspace's notes under it, Enter on one taking its
 // folder; on the right the note under the cursor. Create makes the note; a refused path opens it
 // again with the reason under the path (App.fileNameError).
@@ -6,7 +6,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 92
     maxHeightPercent: 90
-    title: "new file"
+    title: "name the draft"
     dim: false
     Split {
         orientation: Tui.Horizontal

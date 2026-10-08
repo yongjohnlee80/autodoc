@@ -29,11 +29,19 @@ import (
 // find, copy and the outline work, edits and saves do not. SPC O (File › Open in System Viewer)
 // opens the original in the desktop's own viewer.
 //
+// A FILE OUTSIDE EVERY WORKSPACE (ADR 1791430651) is opened by File › Open file… (SPC f) or made by
+// File › New file… (SPC n): its workspace is "" and its path absolute, and the daemon reads and
+// writes it with file.read and file.write, versions and conflicts as a workspace file's. A file
+// inside a workspace's root opens as that workspace's (file.locate). An outside file stays open
+// when the workspace changes, and has no search, links, backlinks or frontmatter check: the
+// status line badges it.
+//
 // THE PAGE IS ALWAYS WRITABLE. With no file open, what is typed is an untitled draft: unsaved work
 // like a file's, guarded the same way; saving it asks for its path in the new-file picker, creates
 // the file with the draft's text, and opens it there, the cursor where it was.
 
 type openedFile struct {
+	ws      string // the workspace the file is in; "" for one outside every workspace, path absolute
 	path    string
 	version string // the version the editor's text was read or written at
 	open    bool
@@ -56,13 +64,47 @@ func (n openedFile) name() string {
 	return untitled
 }
 
+// outside reports whether the open file is outside every workspace.
+func (n openedFile) outside() bool { return n.open && n.ws == "" }
+
 // title is the file's name as the page and the status line show it: a derived document's carries
-// its read-only badge.
+// its read-only badge, an outside file's that it is in no workspace.
 func (n openedFile) title() string {
-	if n.open && n.derived != "" {
-		return n.path + "  [" + n.derived + " · read-only]"
+	badges := []string{}
+	if n.outside() {
+		badges = append(badges, outsideBadge)
 	}
-	return n.name()
+	if n.open && n.derived != "" {
+		badges = append(badges, n.derived+" · read-only")
+	}
+	if len(badges) == 0 {
+		return n.name()
+	}
+	return n.name() + "  [" + strings.Join(badges, " · ") + "]"
+}
+
+// outsideBadge marks a file outside every workspace; outsideLimits says what that costs.
+const (
+	outsideBadge  = "no workspace"
+	outsideLimits = "it is in no workspace: no search, links, backlinks, frontmatter check or embeddings"
+)
+
+// readFile is doc.read of p in workspace ws, or file.read of the absolute p when ws is "".
+func (h *Host) readFile(ctx context.Context, ws, p string) (any, error) {
+	if ws == "" {
+		res, err := h.call(ctx, "file.read", p)
+		return res, localOnly(err)
+	}
+	return h.call(ctx, "doc.read", ws, p)
+}
+
+// writeFile is doc.write of p in workspace ws, or file.write of the absolute p when ws is "".
+func (h *Host) writeFile(ctx context.Context, ws, p string, content []byte, want string) (any, error) {
+	if ws == "" {
+		res, err := h.call(ctx, "file.write", p, content, want)
+		return res, localOnly(err)
+	}
+	return h.call(ctx, "doc.write", ws, p, content, want)
 }
 
 // guard runs then, asking first when the file has unsaved changes.
@@ -98,11 +140,11 @@ func (h *Host) unsaved(answer string) {
 
 // openPath opens a file, asking first over unsaved changes.
 func (h *Host) openPath(p string) {
-	if p == h.file.path && h.file.open && !h.file.dirty {
+	if p == h.file.path && h.file.ws == h.ws && h.file.open && !h.file.dirty {
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
-	h.guard("open "+p, func() { h.load(p) })
+	h.guard("open "+p, func() { h.load(h.ws, p) })
 }
 
 // reload reads the file again from disk, asking first over unsaved changes.
@@ -110,22 +152,23 @@ func (h *Host) reload() {
 	if !h.file.open {
 		return
 	}
-	h.guard("reload it", func() { h.load(h.file.path) })
+	h.guard("reload it", func() { h.load(h.file.ws, h.file.path) })
 }
 
-// load reads p into the editor. Reading the open file again yields to a save that lands while it is
-// read: the page is then what the disk holds, and the read is older.
-func (h *Host) load(p string) {
+// load reads p of workspace ws ("" for the absolute path of a file outside every workspace) into
+// the editor. Reading the open file again yields to a save that lands while it is read: the page is
+// then what the disk holds, and the read is older.
+func (h *Host) load(ws, p string) {
 	h.file.gen++
-	gen, ep, ws := h.file.gen, h.epoch, h.ws
-	again, read := h.file.open && h.file.path == p, h.file.version
+	gen, ep := h.file.gen, h.epoch
+	again, read := h.file.open && h.file.ws == ws && h.file.path == p, h.file.version
 	type answer struct {
 		content, version string
 		err              error
 	}
 	h.say("opening " + p + "…")
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "doc.read", ws, p)
+		res, err := h.readFile(ctx, ws, p)
 		if err != nil {
 			return answer{err: err}
 		}
@@ -144,15 +187,18 @@ func (h *Host) load(p string) {
 			h.failed("open "+p, a.err)
 			return
 		}
-		h.show(p, a.content, a.version)
+		h.show(ws, p, a.content, a.version)
 		h.noteRecent(ws, p)
 		h.say("opened " + p)
+		if ws == "" {
+			h.notify(p + ": " + outsideLimits)
+		}
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	})
 }
 
-// show puts a file's text in the editor, clean.
-func (h *Host) show(p, content, version string) {
+// show puts a file's text in the editor, clean: p of workspace ws, or outside every one ("").
+func (h *Host) show(ws, p, content, version string) {
 	h.editor.SetValue(content) // reports no textChanged: only typing does
 	h.syncPageWidth()
 	if at := h.openAt; at >= 0 {
@@ -160,11 +206,13 @@ func (h *Host) show(p, content, version string) {
 		h.openAt = -1
 		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
-	h.file.path, h.file.version, h.file.open, h.file.dirty = p, version, true, false
+	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
 	h.feedEdited() // another note: a new version
 	h.readPage()
 	h.backlinks.Reset(nil)
-	h.loadBacklinks(p)
+	if ws != "" {
+		h.loadBacklinks(p)
+	}
 }
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
@@ -201,13 +249,17 @@ func (h *Host) readPage() {
 // is gone, closed, after asking over unsaved changes, whose save writes it anew. A save that lands
 // while it reads moves the page's version on, and the read, older, is dropped.
 func (h *Host) recheckFile() {
-	gen, ep, ws, p, read := h.file.gen, h.epoch, h.ws, h.file.path, h.file.version
+	gen, ep, ws, p, read := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.version
+	where := "the workspace"
+	if ws == "" {
+		where = "disk"
+	}
 	type answer struct {
 		content, version string
 		err              error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "doc.read", ws, p)
+		res, err := h.readFile(ctx, ws, p)
 		if err != nil {
 			return answer{err: err}
 		}
@@ -222,11 +274,11 @@ func (h *Host) recheckFile() {
 		case code(a.err) == rpc.CodeNotFound, code(a.err) == golibrpc.CodeInvalidParams:
 			if !h.file.dirty {
 				h.closeFile()
-				h.notify(p + " is gone from the workspace: closed")
+				h.notify(p + " is gone from " + where + ": closed")
 				return
 			}
 			h.file.version = "" // gone: a save writes it anew
-			h.guard("close it: it is gone from the workspace", h.closeFile)
+			h.guard("close it: it is gone from "+where, h.closeFile)
 		case a.err != nil:
 			h.failed("check "+p, a.err)
 		case a.version == h.file.version:
@@ -234,7 +286,7 @@ func (h *Host) recheckFile() {
 			h.notify(p + " changed on disk while the backend was away: a save asks before it overwrites it")
 		default:
 			row, col := h.editor.Line()
-			h.show(p, a.content, a.version)
+			h.show(ws, p, a.content, a.version)
 			h.editor.SetLine(row, col)
 			h.notify("read " + p + " again: it changed on disk while the backend was away")
 		}
@@ -339,7 +391,7 @@ func (h *Host) cursorBytes() int {
 // holds what was written, its version is adopted; otherwise someone wrote after it, which is a
 // conflict. It is never sent again blindly.
 func (h *Host) write(content, want string, after func()) {
-	gen, ep, ws, p := h.file.gen, h.epoch, h.ws, h.file.path
+	gen, ep, ws, p := h.file.gen, h.epoch, h.file.ws, h.file.path
 	type answer struct {
 		version string
 		err     error
@@ -348,14 +400,14 @@ func (h *Host) write(content, want string, after func()) {
 	}
 	h.say("saving " + p + "…")
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "doc.write", ws, p, []byte(content), want)
+		res, err := h.writeFile(ctx, ws, p, []byte(content), want)
 		if err == nil {
 			return answer{version: str(asMap(res), "version")}
 		}
 		if code(err) != rpc.CodeCommitted {
 			return answer{err: err}
 		}
-		back, rerr := h.call(ctx, "doc.read", ws, p)
+		back, rerr := h.readFile(ctx, ws, p)
 		if rerr != nil {
 			return answer{err: err, readErr: rerr}
 		}
@@ -403,7 +455,7 @@ func (h *Host) conflict(answer string) {
 	case "reload":
 		// the file stays unsaved until the disk's version is in the editor: a failed read keeps the
 		// edits guarded
-		h.load(h.file.path)
+		h.load(h.file.ws, h.file.path)
 	case "overwrite":
 		h.overwrite()
 	default:
@@ -414,14 +466,14 @@ func (h *Host) conflict(answer string) {
 // overwrite writes the editor's text over whatever version is on disk now: it reads the version
 // first, so the write is still conditional (a third writer in between is still a conflict).
 func (h *Host) overwrite() {
-	gen, ep, ws, p := h.file.gen, h.epoch, h.ws, h.file.path
+	gen, ep, ws, p := h.file.gen, h.epoch, h.file.ws, h.file.path
 	type answer struct {
 		version string
 		gone    bool
 		err     error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "doc.read", ws, p)
+		res, err := h.readFile(ctx, ws, p)
 		if code(err) == rpc.CodeNotFound {
 			return answer{gone: true}
 		}
@@ -440,20 +492,6 @@ func (h *Host) overwrite() {
 			// gone: a create ("") writes it back
 			h.write(h.editor.Value(), a.version, nil)
 		}
-	})
-}
-
-// newFileHelp is the new-file picker's line under its path.
-const newFileHelp = "a path in the workspace; .md is added when it has none · Enter on a file takes its folder"
-
-// newFile asks for a new file's path, asking first over unsaved changes.
-func (h *Host) newFile() {
-	h.guard("start a new file", func() {
-		h.draft = nil
-		h.set("App.fileNameError", newFileHelp)
-		h.setField("App.newFilePath", "")
-		h.newFileFilter("")
-		h.open("fileName")
 	})
 }
 
@@ -504,7 +542,7 @@ func (h *Host) createFile(name string) {
 			h.openAt = h.cursorBytes()
 			h.setDirty(false) // written: the load below finds it saved
 		}
-		h.load(name)
+		h.load(ws, name)
 		h.listFiles()
 		h.loadWorkspaces() // the explorer lists it
 		if draft != nil && draft.then != nil {

@@ -74,7 +74,11 @@ func (h *Host) listRecent() {
 	}
 	rows := make([]rowOf, len(h.recentRows))
 	for i, d := range h.recentRows {
-		rows[i] = rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": d.Workspace, "path": d.Path}
+		label := d.Workspace
+		if label == "" {
+			label = "(" + outsideBadge + ")"
+		}
+		rows[i] = rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
 	}
 	h.recentModel.Reset(rows)
 	if len(rows) == 0 {
@@ -85,6 +89,9 @@ func (h *Host) listRecent() {
 }
 
 func (h *Host) recentListed(d recentDoc) bool {
+	if d.Workspace == "" {
+		return true // a file outside every workspace: opening it says when it is gone
+	}
 	if !slices.ContainsFunc(h.wsList, func(w wsInfo) bool { return w.name == d.Workspace }) {
 		return false
 	}

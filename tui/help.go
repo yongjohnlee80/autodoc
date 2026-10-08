@@ -13,12 +13,15 @@ const helpText = `KEYS
               n and N find it again, forward and back. In the page its words are marked, and
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
-  Ctrl+O      open a file: a filter over the workspace's files, with a preview
+  Ctrl+O      open a document: a filter over the workspace's files, with a preview
+  SPC f       open a file anywhere on the disk (File › Open file…), with a preview: one in a
+              workspace's folder opens there; any other is in no workspace, so it has no
+              search, links, backlinks, frontmatter check or embeddings (the status line says so)
   SPC r       the recent files, the newest first, of every workspace (File › Recent files…);
               one of another workspace opens there
   SPC O       open the file in the desktop's own viewer (File › Open in System Viewer): a PDF
               in its reader, for what its derived text cannot show
-  Ctrl+N      new file: a path in the workspace, .md added when it has none
+  Ctrl+N      new file, in any folder (File › New file…; SPC n); .md added when it has none
   Ctrl+S      save the file
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
@@ -98,7 +101,8 @@ WHAT A KEY NEEDS
 
 // leaderText is the leader card's body, a key a line, as its Shortcuts are (views/Leader.qml).
 const leaderText = `/  search (or SPC again)  e  the explorer
-o  open a file            l  the links
+o  open a document        l  the links
+f  open a file anywhere   b  back
 n  new file               ` + "`" + `  the terminal
 s  save                   t  the status line
 r  recent files           g  AI agent

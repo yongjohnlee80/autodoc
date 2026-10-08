@@ -72,9 +72,11 @@ func (h *Host) loadWorkspaces() {
 		}
 		if pick < 0 {
 			h.ws, h.filesAll = "", nil
-			if h.keepDraft {
+			switch {
+			case h.keepDraft:
 				h.keepDraft = false
-			} else {
+			case h.file.outside(): // in no workspace: it stays open
+			default:
 				h.closeFile()
 			}
 			h.setWhere("autodoc · no workspace")
@@ -163,8 +165,8 @@ func (h *Host) enter(name string) {
 	switch {
 	case h.keepDraft:
 		h.keepDraft = false // the draft a removed workspace left stays on the page (events.go)
-	case again && h.file.open:
-		h.recheckFile()
+	case again && h.file.open, h.file.outside():
+		h.recheckFile() // an outside file stays open in any workspace
 	case again: // the untitled draft, or the empty page, stays
 	default:
 		h.closeFile()
@@ -331,7 +333,9 @@ func (h *Host) removeWorkspaceConfirmed() {
 			}
 			if h.ws == name {
 				h.ws, h.entered = "", false
-				h.closeFile()
+				if !h.file.outside() {
+					h.closeFile()
+				}
 			}
 			h.notify("deleted workspace " + name + " (its files stay)")
 			h.loadWorkspaces()
