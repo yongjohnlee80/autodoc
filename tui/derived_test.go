@@ -65,7 +65,7 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	}
 	r.leader(t, 'O')
 	if p := <-opened; p != "/kb/manual.pdf" {
-		t.Fatalf("the system viewer opened %q", p)
+		t.Fatalf("the default app opened %q", p)
 	}
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.waitFile(t, "a.md")
@@ -78,8 +78,8 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 // TestTheSystemViewerNeedsAFile: with no file open, SPC O says what it needs.
 func TestTheSystemViewerNeedsAFile(t *testing.T) {
 	r := attached(t, startDaemon(t, kbNotes))
-	r.h.p.Post(r.h.openSystemViewer)
-	r.waitNoticed(t, "no file is open: open one, then SPC O opens it in the system viewer")
+	r.h.p.Post(r.h.openWithDefaultApp)
+	r.waitNoticed(t, "no file is open: open one, then SPC O opens it with its default app")
 }
 
 // wholeGo is a build's chunker for .go in tests: the file, one chunk.

@@ -19,7 +19,7 @@ const helpText = `KEYS
               search, links, backlinks, frontmatter check or embeddings (the status line says so)
   SPC r       the recent files, the newest first, of every workspace (File › Recent files…);
               one of another workspace opens there
-  SPC O       open the file in the desktop's own viewer (File › Open in System Viewer): a PDF
+  SPC O       open the file with the desktop's default app (File › Open with Default App): a PDF
               in its reader, for what its derived text cannot show
   Ctrl+N      new file, in any folder (File › New file…; SPC n); .md added when it has none
   Ctrl+S      save the file
@@ -31,7 +31,7 @@ const helpText = `KEYS
               keys there), and F10 may need Fn
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
-  SPC h       the notifications' history (View › Notifications…)
+  SPC h       the notifications' history (Go › Notifications…)
   F1          this help;  Ctrl+Q quit
 
 THE PAGE
@@ -68,7 +68,7 @@ THE PANELS
   each profile a name and the command that starts it (claude, codex…).
   It starts in AutoDoc's own folder for the workspace, told about the workspace in AGENTS.md and
   CLAUDE.md there, and keeps running while hidden; Use in the profiles starts another.
-  The terminal (SPC ` + "`" + `, View › Terminal) runs your shell in the workspace's folder, at the bottom
+  The terminal (SPC ` + "`" + `, Go › Terminal) runs your shell in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   It starts the first time it opens, and keeps running while hidden. Every key goes to the
   shell; Ctrl+\ Ctrl+n leaves for Normal mode, where h j k l, w b e, gg G, Ctrl+u/d/b/f, / and ?
@@ -116,7 +116,7 @@ W  manage workspaces      m  show/focus or hide the menu
 ?  help                   k  the editor mode (Vim, Text)
 h  notifications          ,  editor preferences
 c  the file's outline     a  search models
-O  the system viewer      A  about
+O  the default app        A  about
 G  agent profiles         Q  quit
 p  plugin commands`
 

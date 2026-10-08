@@ -97,7 +97,7 @@ Window {
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
             MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
             MenuItem { text: "Preview Mermaid &diagram…"; onTriggered: App.previewDiagram() }
-            MenuItem { text: "Open in System &Viewer"; onTriggered: App.openSystemViewer() }
+            MenuItem { text: "Open with Default &App"; onTriggered: App.openWithDefaultApp() }
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
@@ -106,6 +106,8 @@ Window {
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "&Links"; onTriggered: App.toggleLinks() }
             MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
+            MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
+            MenuItem { text: "&Notifications…"; onTriggered: App.openNotices() }
             MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
@@ -126,8 +128,6 @@ Window {
             MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
-            MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
-            MenuItem { text: "N&otifications…"; onTriggered: App.openNotices() }
         }
         Menu {
             title: "&Options"

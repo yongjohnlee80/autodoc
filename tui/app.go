@@ -304,7 +304,7 @@ func newHost(session *Session, opt Options) *Host {
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath,
 		awaitExit:      awaitExit,
-		browser:        openDefaultBrowser,
+		browser:        openDefaultApp,
 		picker:         tuidecl.NewListModel("key", "path"),
 		outlineList:    tuidecl.NewListModel("key", "heading", "line"),
 		wsProviders:    tuidecl.NewListModel("key", "label"),

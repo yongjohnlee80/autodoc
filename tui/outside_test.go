@@ -222,13 +222,13 @@ func TestTheSystemViewerOpensAnOutsideFileAtItsPath(t *testing.T) {
 		r.h.openAbsolute(abs)
 	})
 	r.waitOpen(t, "", abs)
-	r.h.p.Post(r.h.openSystemViewer)
+	r.h.p.Post(r.h.openWithDefaultApp)
 	if p := <-opened; p != abs {
 		t.Errorf("the viewer was given %q, want %q", p, abs)
 	}
-	r.h.p.Post(func() { fail = true; r.h.openSystemViewer() })
+	r.h.p.Post(func() { fail = true; r.h.openWithDefaultApp() })
 	<-opened
-	r.waitKeptNotice(t, "open in the system viewer: no viewer")
+	r.waitKeptNotice(t, "open with the default app: no viewer")
 }
 
 // waitKeptNotice waits for text in the notifications' history (SPC h): a toast with a long path
