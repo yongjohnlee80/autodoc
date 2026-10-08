@@ -161,6 +161,25 @@ func (h *Host) openPath(p string) { h.openRef(fileRef{h.ws, p}, true, nil) }
 // history (SPC b) when remember is set; going back does not set it. proceed, when not nil, runs
 // once the open goes ahead — after the unsaved question's Save or Discard, never after its Stay.
 func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
+	// an HTML file asks how to open it before anything else: entering its workspace closes the
+	// file open now, which Cancel must leave as it is
+	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {
+		h.askHTML(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw) })
+		return
+	}
+	h.openRefAs(ref, remember, proceed, nil)
+}
+
+// openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
+// is no question (load asks for one that is).
+func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool) {
+	open := func(prev *fileRef) {
+		if raw != nil {
+			h.loadAs(ref.ws, ref.path, prev, *raw)
+			return
+		}
+		h.load(ref.ws, ref.path, prev)
+	}
 	goAhead := func() {
 		if proceed != nil {
 			proceed()
@@ -177,7 +196,7 @@ func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
 			goAhead()
 			prev := leaving() // before entering closes the file
 			h.enter(ref.ws)
-			h.load(ref.ws, ref.path, prev)
+			open(prev)
 		})
 		return
 	}
@@ -186,7 +205,7 @@ func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
-	h.guard("open "+ref.path, func() { goAhead(); h.load(ref.ws, ref.path, leaving()) })
+	h.guard("open "+ref.path, func() { goAhead(); open(leaving()) })
 }
 
 // reload reads the file again from disk, asking first over unsaved changes.
@@ -208,18 +227,20 @@ func (h *Host) reload() {
 func (h *Host) load(ws, p string, prev *fileRef) {
 	again := h.file.open && h.file.ws == ws && h.file.path == p
 	if !again && kind.RawText(p) {
-		h.htmlAsk = &htmlOpen{ws: ws, p: p, prev: prev}
-		h.set("App.htmlOpenQuestion", "Open "+filepath.Base(p)+" simplified, its text read-only, or raw, its HTML to edit?")
-		h.open("openHTML")
+		h.askHTML(p, func(raw bool) { h.loadAs(ws, p, prev, raw) })
 		return
 	}
 	h.loadAs(ws, p, prev, again && h.file.raw)
 }
 
-// htmlOpen is the HTML file the open question is about.
-type htmlOpen struct {
-	ws, p string
-	prev  *fileRef
+// htmlOpen is the open question: what opens the HTML file once it is answered.
+type htmlOpen struct{ then func(raw bool) }
+
+// askHTML asks how to open the HTML file p, then runs then with the answer; Cancel runs nothing.
+func (h *Host) askHTML(p string, then func(raw bool)) {
+	h.htmlAsk = &htmlOpen{then: then}
+	h.set("App.htmlOpenQuestion", "Open "+filepath.Base(p)+" simplified, its text read-only, or raw, its HTML to edit?")
+	h.open("openHTML")
 }
 
 // openHTMLAs is the open question's answer: "simplified", "raw", or "cancel", which leaves the page
@@ -233,9 +254,9 @@ func (h *Host) openHTMLAs(how string) {
 	}
 	switch how {
 	case "simplified":
-		h.loadAs(ask.ws, ask.p, ask.prev, false)
+		ask.then(false)
 	case "raw":
-		h.loadAs(ask.ws, ask.p, ask.prev, true)
+		ask.then(true)
 	}
 }
 
