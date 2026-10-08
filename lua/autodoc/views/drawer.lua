@@ -22,7 +22,9 @@
 ---**The Relations section follows the editor.** Entering a KB file's buffer reads what it is
 ---connected to (graph.links, graph.backlinks, graph.unresolved; graph.neighborhood at depth 2,
 ---`d`); another file's rows go at once, so they are never shown for this one. <CR> opens a row,
----and the document left behind goes on `<leader>mo`'s history.
+---and the document left behind goes on `<leader>mo`'s history. It follows the KB's change feed as
+---the trees do: the cursor is read before the relations, and any change after it (this file's
+---save once indexed, a link added in another file, an edit outside Neovim) reads them again.
 ---
 ---**The todos drawer's pattern:** a fixed section table, `▼/▶ Header (count)`, collapse state
 ---persisted in `auto-core.state` namespace `autodoc.ui`, and ONE keymap set whose handlers
@@ -58,8 +60,6 @@ local M = {}
 M.POLL_MS = 2000
 -- One page of index.documents / index.changes / sys.events.
 M.PAGE = 500
--- How long after a KB file is written its relations are read again (its index is touched first).
-M.RELATIONS_AFTER_WRITE_MS = 400
 
 M.STATE_NS = "autodoc.ui"
 
@@ -438,7 +438,9 @@ function M.new(profile)
   local function relations() return require("autodoc.relations") end
 
   ---load_relations reads what ref is connected to. Another file's rows go at once: until ref's are
-  ---read the section has none, never the last file's.
+  ---read the section has none, never the last file's. The KB's change cursor is read FIRST, so a
+  ---change indexed while the relations are read is still seen by the next poll (read twice is
+  ---harmless).
   local function load_relations(ref)
     local cur = st.rel
     if cur.ref and cur.ref.ws == ref.ws and cur.ref.rel == ref.rel then
@@ -447,17 +449,39 @@ function M.new(profile)
       st.rel = { ref = ref, deep = cur.deep, loading = true }
     end
     local mine = st.rel
-    relations().load(ref.ws, ref.rel, mine.deep, function(rows, n, err)
+    local function req(method, params, cb) request("relations", method, params, cb) end
+    req("index.status", { ref.ws }, function(stat, serr)
       if st.rel ~= mine then return end
-      mine.loading = false
-      if err then
-        mine.err = err.message
-      else
-        mine.rows, mine.neighbours, mine.err = rows, n, nil
-      end
-      rerender()
-    end, function(method, params, cb) request("relations", method, params, cb) end)
+      mine.cursor = not serr and type(stat) == "table" and stat.cursor or nil
+      relations().load(ref.ws, ref.rel, mine.deep, function(rows, n, err)
+        if st.rel ~= mine then return end
+        mine.loading = false
+        if err then
+          mine.err = err.message
+        else
+          mine.rows, mine.neighbours, mine.err = rows, n, nil
+        end
+        rerender()
+      end, req)
+    end)
     rerender()
+  end
+
+  ---pull_relations is the Relations section's share of a poll: any change in its KB since the
+  ---cursor reads the relations again, since a link into this file can come from any file. An
+  ---expired cursor reads them again too.
+  local function pull_relations()
+    local mine = st.rel
+    if not (mine.ref and mine.cursor ~= nil) or mine.loading then return end
+    request("relchanges", "index.changes", { mine.ref.ws, mine.cursor, M.PAGE }, function(res, err)
+      if st.rel ~= mine or mine.loading then return end
+      if err then
+        if err.code == CODE_CURSOR_EXPIRED then load_relations(mine.ref) end
+        return
+      end
+      if #(res.changes or {}) > 0 then return load_relations(mine.ref) end
+      mine.cursor = res.cursor
+    end)
   end
 
   ---follow points the Relations section at the file in buf: a KB file's relations, or why there
@@ -641,6 +665,7 @@ function M.new(profile)
       local tree = st.trees[name]
       if tree and not tree.loading and tree.cursor then pull_changes(name, tree) end
     end
+    pull_relations()
     for _, w in ipairs(st.workspaces or {}) do load_status(w.name) end
   end
 
@@ -1383,15 +1408,7 @@ function M.new(profile)
       if ev.buf == b or not visible() then return end
       vim.schedule(function() if not st.disposed then follow(ev.buf) end end)
     end })
-    vim.api.nvim_create_autocmd("BufWritePost", { group = group, callback = function(ev)
-      local ref = st.rel.ref
-      if not (ref and visible()) then return end
-      local mine = relations().current(ev.buf)
-      if mine and mine.ws == ref.ws and mine.rel == ref.rel then
-        -- the write is indexed at once (session.on_write); its links are read after it
-        vim.defer_fn(function() if not st.disposed and st.rel.ref == ref then load_relations(ref) end end, M.RELATIONS_AFTER_WRITE_MS)
-      end
-    end })
+
     subscribe()
     render()
     refresh_all()
