@@ -205,9 +205,9 @@ func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
 	r.waitKeptNotice(t, abs+" is gone from disk: closed")
 }
 
-// TestTheSystemViewerOpensAnOutsideFileAtItsPath: SPC O hands the desktop the absolute path, and
+// TestTheDefaultAppOpensAnOutsideFileAtItsPath: SPC O hands the desktop the absolute path, and
 // says so when the desktop cannot open it.
-func TestTheSystemViewerOpensAnOutsideFileAtItsPath(t *testing.T) {
+func TestTheDefaultAppOpensAnOutsideFileAtItsPath(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	opened := make(chan string, 2)
 	fail := false

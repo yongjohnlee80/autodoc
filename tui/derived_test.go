@@ -75,8 +75,8 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	}
 }
 
-// TestTheSystemViewerNeedsAFile: with no file open, SPC O says what it needs.
-func TestTheSystemViewerNeedsAFile(t *testing.T) {
+// TestTheDefaultAppNeedsAFile: with no file open, SPC O says what it needs.
+func TestTheDefaultAppNeedsAFile(t *testing.T) {
 	r := attached(t, startDaemon(t, kbNotes))
 	r.h.p.Post(r.h.openWithDefaultApp)
 	r.waitNoticed(t, "no file is open: open one, then SPC O opens it with its default app")

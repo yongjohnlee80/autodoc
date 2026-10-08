@@ -1,4 +1,4 @@
-// Notifications.qml — View › Notifications… (SPC h): every notification the toasts showed, newest
+// Notifications.qml — Go › Notifications… (SPC h): every notification the toasts showed, newest
 // first, with the time it came. Clear empties the history.
 Dialog {
     closeOnQ: true
