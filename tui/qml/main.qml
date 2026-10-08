@@ -88,7 +88,8 @@ Window {
         Menu {
             title: "&File"
             MenuItem { text: "&New file…"; onTriggered: App.newFile() }
-            MenuItem { text: "&Open file…"; onTriggered: App.openPicker() }
+            MenuItem { text: "Open &document…"; onTriggered: App.openPicker() }
+            MenuItem { text: "&Open file…"; onTriggered: App.openFileDialog() }
             MenuItem { text: "Recen&t files…"; onTriggered: App.openRecent() }
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
@@ -324,6 +325,8 @@ Window {
     FileOpen { id: fileOpen }
     OutlinePicker { id: outlinePicker }
     FileName { id: fileName }
+    OpenAnyFile { id: openAnyFile }
+    NewAnyFile { id: newAnyFile }
     UnsavedFile { id: unsavedFile }
     FileConflict { id: fileConflict }
     WorkspacePicker { id: workspacePicker }

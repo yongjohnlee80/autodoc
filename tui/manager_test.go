@@ -15,6 +15,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
+	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
@@ -87,7 +88,8 @@ func startManagedRanking(t *testing.T, roots map[string]string, o serving.Option
 	emb := serving.NewEmbedding(db, ws, nil)
 	emb.Start(ctx)
 	srv := rpc.New(ws, "v-test", rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
-		rpc.WithRegistrations(o.Registrations.Tables()), rpc.WithRankers(ranking))
+		rpc.WithRegistrations(o.Registrations.Tables()), rpc.WithRankers(ranking),
+		rpc.WithFiles(diskFiles(t, docs.WithRegistrations(o.Registrations.Kinds()), docs.WithDeriver(o.Registrations))))
 	done := make(chan struct{})
 	go func() { _ = srv.Run(ctx); close(done) }()
 	t.Cleanup(func() {

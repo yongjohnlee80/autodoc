@@ -88,7 +88,7 @@ func (h *Host) document() plugin.Document {
 		return d
 	}
 	if h.file.open {
-		d.Path = h.file.path
+		d.Workspace, d.Path = h.file.ws, h.file.path // "" and absolute for a file outside every workspace
 	}
 	d.Text = h.editor.Value()
 	row, col := h.editor.Line()

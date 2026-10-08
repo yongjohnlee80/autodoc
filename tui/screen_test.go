@@ -1172,9 +1172,9 @@ func TestTheLeaderCardListsACommandARow(t *testing.T) {
 	r := attached(t, d)
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "SPC — commands")
-	search, open, quit := screenRow(r, "search"), screenRow(r, "open a file"), screenRow(r, "quit")
+	search, open, quit := screenRow(r, "search"), screenRow(r, "open a document"), screenRow(r, "quit")
 	if !(search >= 0 && open == search+1 && quit > open) {
-		t.Fatalf("rows: search %d, open a file %d, quit %d; want one command a row\n%s", search, open, quit, r.s)
+		t.Fatalf("rows: search %d, open a document %d, quit %d; want one command a row\n%s", search, open, quit, r.s)
 	}
 }
 

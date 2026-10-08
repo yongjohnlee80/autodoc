@@ -84,7 +84,7 @@ func (h *Host) validateNow(gen uint64) {
 	if !h.file.open {
 		p = untitled + ".md"
 	}
-	if h.ws == "" || h.kinds.Of(p, h.textExtensions()) != kind.Markdown {
+	if h.ws == "" || h.file.outside() || h.kinds.Of(p, h.textExtensions()) != kind.Markdown {
 		h.showDiagnostics(nil)
 		return
 	}
@@ -142,6 +142,9 @@ func (h *Host) clearDiagnostics() {
 
 // textExtensions are the active workspace's own plain-text extensions.
 func (h *Host) textExtensions() []string {
+	if h.file.outside() {
+		return nil // in no workspace: the built-in kinds and the build's registrations alone
+	}
 	if w, ok := h.activeWorkspaceInfo(); ok {
 		return w.textExtensions
 	}

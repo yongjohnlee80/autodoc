@@ -16,7 +16,7 @@ func (h *Host) togglePanel(name string) {
 		h.keep(h.p.Call(name, "close"))
 		return
 	}
-	if name == "links" && h.file.open {
+	if name == "links" && h.file.open && !h.file.outside() {
 		h.loadBacklinks(h.file.path)
 	}
 	h.keep(h.p.Call(name, "open"))

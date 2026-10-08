@@ -11,6 +11,7 @@ Dialog {
     Shortcut { sequence: "/"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "Space"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "o"; onActivated: { leader.close(); App.openPicker() } }
+    Shortcut { sequence: "f"; onActivated: { leader.close(); App.openFileDialog() } }
     Shortcut { sequence: "c"; onActivated: { leader.close(); App.openOutline() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newFile() } }
     Shortcut { sequence: "s"; onActivated: { leader.close(); App.save() } }

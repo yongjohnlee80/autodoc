@@ -30,12 +30,11 @@ func (h *Host) openSystemViewer() {
 		h.notify("no file is open: open one, then SPC O opens it in the system viewer")
 		return
 	}
-	root := h.workspaceRoot()
-	if root == "" {
+	full := h.diskPath()
+	if full == "" {
 		h.notify("the workspace's folder is not known yet: try again once it is listed")
 		return
 	}
-	full := filepath.Join(root, filepath.FromSlash(h.file.path))
 	do(h, func(ctx context.Context) error { return h.browser(ctx, full) }, func(err error) {
 		if err != nil {
 			h.notify("open in the system viewer: " + err.Error())
@@ -43,16 +42,6 @@ func (h *Host) openSystemViewer() {
 		}
 		h.say("opened " + h.file.path + " in the system viewer")
 	})
-}
-
-// workspaceRoot is the open workspace's folder, "" until the workspace is listed.
-func (h *Host) workspaceRoot() string {
-	for _, w := range h.wsList {
-		if w.name == h.ws {
-			return w.root
-		}
-	}
-	return ""
 }
 
 func htmlPreviewFile(content []byte) (string, error) {
@@ -80,8 +69,8 @@ func (h *Host) previewHTML() {
 	// the page is written to the cache: its relative links are read from the file's own folder, so
 	// they reach the files beside it. An untitled draft's are written as it has them
 	var options export.Options
-	if root := h.workspaceRoot(); h.file.open && root != "" {
-		options.Base = filepath.Dir(filepath.Join(root, filepath.FromSlash(h.file.path)))
+	if full := h.diskPath(); full != "" {
+		options.Base = filepath.Dir(full)
 	}
 	image, why := h.imageMode()
 	h.say("opening HTML preview…")

@@ -88,7 +88,7 @@ func (h *Host) state() map[string]any {
 		// the new-file picker
 		"App.newFiles":        h.newList,
 		"App.newFilePath":     "",
-		"App.fileNameError":   newFileHelp,
+		"App.fileNameError":   draftHelp,
 		"App.newPreviewTitle": "",
 		"App.newPreviewText":  "",
 		"App.newPreviewAt":    0,

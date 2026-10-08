@@ -208,7 +208,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg)}
+	opts := []rpc.Option{rpc.WithListener(ln), rpc.WithPreferences(db), rpc.WithRegistrations(o.reg), rpc.WithFiles(diskFiles(t, docOpts...))}
 	if o.emb != nil {
 		opts = append(opts, rpc.WithEmbeddings(o.emb))
 	}
@@ -327,7 +327,7 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
 	r.keys(t, decltest.Ctrl('o'))
-	r.s.WaitForText(t, "open a file")
+	r.s.WaitForText(t, "open a document")
 	r.keys(t, decltest.Type(p)...)
 	r.s.WaitFor(t, "the filter applied", func(sc string) bool { return strings.Contains(sc, "1 of ") })
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab}, enter())
@@ -496,26 +496,6 @@ func TestQuitOverUnsavedAsks(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("did not quit")
 	}
-}
-
-// TestNewFile: Ctrl+N names a file, which is created (".md" added) and opened; an existing name asks
-// again, saying so.
-func TestNewFile(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
-	r := attached(t, d)
-	r.keys(t, decltest.Ctrl('n'))
-	r.s.WaitForText(t, "new file")
-	r.keys(t, decltest.Type("fresh/idea")...)
-	r.keys(t, enter())
-	r.waitFile(t, "fresh/idea.md")
-	if got := d.read(t, "kb", "fresh/idea.md"); got != "" {
-		t.Errorf("the new file holds %q", got)
-	}
-	r.keys(t, decltest.Ctrl('n'))
-	r.s.WaitForText(t, "new file")
-	r.keys(t, decltest.Type("a")...)
-	r.keys(t, enter())
-	r.s.WaitForText(t, "a.md exists")
 }
 
 // TestCommittedIsReadBack: a save the daemon reports as landed-then-failed is read back, and adopted
