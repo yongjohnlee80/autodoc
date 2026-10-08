@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -357,4 +358,22 @@ func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 
 	r.h.p.Post(func() { r.h.goToLink(cursorLink{raw: "[[missing-one]]", dest: "missing-one", wiki: true}) })
 	r.waitNoticed(t, "[[missing-one]] names no document in this workspace")
+}
+
+// An answer that comes after another file opened is the old file's: dropped, not followed from the
+// new one.
+func TestGoToLinkDropsAnAnswerForAFileNoLongerOpen(t *testing.T) {
+	r := attached(t, startDaemon(t, relationsKB))
+	r.h.p.Post(func() { r.h.openPath("new.md") })
+	r.waitFile(t, "new.md")
+	// asked in new.md, and doc.md opened in the same turn of the loop: the answer comes after
+	r.h.p.Post(func() {
+		r.h.goToLink(cursorLink{raw: "[[far]]", dest: "far", wiki: true})
+		r.h.openPath("doc.md")
+	})
+	r.waitFile(t, "doc.md")
+	time.Sleep(300 * time.Millisecond) // the answer's time to arrive, were it followed
+	if p := onLoop(r, func() string { return r.h.file.path }); p != "doc.md" {
+		t.Fatalf("the late answer opened %s from doc.md", p)
+	}
 }
