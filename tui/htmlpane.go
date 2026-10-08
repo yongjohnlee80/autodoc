@@ -27,7 +27,9 @@ const htmlPaneDelay = 150 * time.Millisecond
 
 // htmlPaneState is the pane's: whether it shows the open note, and the latest render.
 type htmlPaneState struct {
-	gen uint64 // numbers the renders; a later one supersedes an earlier
+	gen    uint64 // numbers the renders; a later one supersedes an earlier
+	dir    string // the folder the page's images load from
+	dirSet bool   // dir has been given to the view
 }
 
 // native reports whether the backend draws native views: a GUI window (--gui).
@@ -100,10 +102,15 @@ func (h *Host) renderHTMLPane() {
 		if !ok {
 			return
 		}
-		if dir != "" {
-			v.SetImageResolver(widget.DirImages(dir))
-		} else {
-			v.SetImageResolver(nil)
+		// a new resolver drops the page's images, so it is set before the page, and only for another
+		// folder: at each render it would decode every image again
+		if !h.htmlPane.dirSet || dir != h.htmlPane.dir {
+			h.htmlPane.dir, h.htmlPane.dirSet = dir, true
+			if dir != "" {
+				v.SetImageResolver(widget.DirImages(dir))
+			} else {
+				v.SetImageResolver(nil)
+			}
 		}
 		v.SetHTML(a.v)
 		h.followCursorInPane()
