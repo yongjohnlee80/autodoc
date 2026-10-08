@@ -223,7 +223,7 @@ Window {
             SyntaxHighlighter { definition: App.syntaxDefinition }
             // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
             // terminal's Editor has no Rendered view and ignores it
-            MarkdownRenderer {}
+            MarkdownRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
         }
         }
     }
