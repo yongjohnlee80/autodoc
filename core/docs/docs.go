@@ -100,13 +100,13 @@ func (d *Docs) Derived(path string) bool { return d.derives(path) }
 // derives reports whether path is a format the build derives.
 func (d *Docs) derives(path string) bool {
 	_, ok := d.reg.Format(kind.Ext(path))
-	return ok && d.kindOf(path) == kind.Pro
+	return ok && d.kindOf(path) == kind.Derived
 }
 
-// check refuses a path the workspace does not index, a Pro format the build does not derive, and
+// check refuses a path the workspace does not index, a derived format the build does not derive, and
 // a change (write) to one it does.
 func (d *Docs) check(path string, write bool) error {
-	if d.kindOf(path) == kind.Pro && !d.derives(path) {
+	if d.kindOf(path) == kind.Derived && !d.derives(path) {
 		return fmt.Errorf("%w: %s", ErrNotEligible, path)
 	}
 	if d.eligible != nil && !d.eligible(path) {

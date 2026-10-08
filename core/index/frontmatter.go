@@ -44,7 +44,7 @@ func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string, 
 		if _, v, ok := x.opts.Registrations.Chunker(p); ok {
 			return registeredVersion(kind.Ext(p), v, tokens)
 		}
-	case kind.Pro:
+	case kind.Derived:
 		if f, ok := x.opts.Registrations.Format(kind.Ext(p)); ok {
 			return derivedVersion(kind.Ext(p), f.ID, f.Version, indexerVersion(tokens))
 		}

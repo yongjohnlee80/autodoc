@@ -675,7 +675,7 @@ func (s *Server) register() {
 		if w.Index != nil {
 			k = w.Index.Kind(path)
 		}
-		if k == kind.Pro {
+		if k == kind.Derived {
 			k = kind.Markdown // read, so derived: its text is Markdown
 		}
 		hs := outline.Read(d.Content, k, "").Headings()

@@ -31,7 +31,7 @@ func TestMainRefusesARegistrationNamingIt(t *testing.T) {
 		{".a-very-long-extension", ver("1"), "a dot and 1 to 16"},
 		{".md", ver("1"), "built-in"},
 		{".yml", ver("1"), "built-in"},
-		{".pdf", ver("1"), "Pro document format"},
+		{".pdf", ver("1"), "derived document format"},
 		{".go", nil, "no chunker"},
 		{".go", ver(""), "version"},
 		{".go", ver("code@1"), "version"},

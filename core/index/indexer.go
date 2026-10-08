@@ -534,9 +534,9 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		}
 		return p
 	}
-	derives := k == kind.Pro && x.kinds.Readable(w.path)
-	if k == kind.Pro && !derives {
-		p.delete = true // a build without its deriver never reads a Pro document format, whatever a glob admits
+	derives := k == kind.Derived && x.kinds.Readable(w.path)
+	if k == kind.Derived && !derives {
+		p.delete = true // a build without its deriver never reads a derived document format, whatever a glob admits
 		return p
 	}
 	if !w.force {
@@ -777,7 +777,7 @@ func tooLarge(path string, limit int64) error {
 	return fmt.Errorf("index: %s is over %d bytes", path, limit)
 }
 
-// prepareDerived makes the text of a Pro document through the build's deriver and chunks it as
+// prepareDerived makes the text of a derived document through the build's deriver and chunks it as
 // Markdown. Its text is bounded apart from its file (derived.MaxText), refused by its stated size
 // before it is read. Two kinds of failure are told apart:
 //   - the deriver's own (derived.ErrDeriverFailed: an error, a second miss, a panic, no text, or a

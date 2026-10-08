@@ -14,7 +14,7 @@ import (
 // Deriver makes text of a build's document formats (ADR 0216 §1.8): a Pro build adapts autorag's
 // derive.Cache. The indexer and doc.read call it through core/derived.
 type Deriver interface {
-	// Formats are the formats it reads: lower-case extensions with their dot, each a Pro format.
+	// Formats are the formats it reads: lower-case extensions with their dot, each a derived format.
 	Formats() []string
 	// Describe is the identity format's text is made under, known without extracting. It is read
 	// once, at entry, and frozen.
@@ -35,7 +35,7 @@ type Derived struct {
 	ID, Version string
 }
 
-// addDeriver validates d and freezes its formats into t: each a Pro format, not a registered
+// addDeriver validates d and freezes its formats into t: each a derived format, not a registered
 // chunker's, described once by an id (ValidDeriverID) and a version (ValidVersion).
 func (t *Table) addDeriver(d Deriver) error {
 	formats := d.Formats()
@@ -46,8 +46,8 @@ func (t *Table) addDeriver(d Deriver) error {
 		switch {
 		case !kind.ValidExtension(f):
 			return &Error{f, "a format is a dot and 1 to 16 lower-case letters, digits, _, + or -"}
-		case !slices.Contains(kind.ProExtensions, f):
-			return &Error{f, "not a Pro document format"}
+		case !slices.Contains(kind.DerivedExtensions, f):
+			return &Error{f, "not a derived document format"}
 		}
 		if _, dup := t.formats[f]; dup {
 			return &Error{f, "named twice"}

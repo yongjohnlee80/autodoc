@@ -1,7 +1,7 @@
 // Package kind is how AutoDoc reads a file, decided by its extension and never by sniffing its
 // content (ADR 0212 §4): Markdown, plain text, YAML, a registered chunker's (ADR 0216 §1.3), or a
-// Pro-only document format that Community never reads. The indexer, the document API and the
-// editor all ask here, so they agree.
+// derived document format, read only as the text a build's deriver makes of it. The indexer, the
+// document API and the editor all ask here, so they agree.
 package kind
 
 import (
@@ -18,7 +18,7 @@ const (
 	Markdown   Kind = iota // the default: any eligible file without another kind
 	Text                   // UTF-8 plain text: literal paragraphs, no Markdown structure
 	YAML                   // a YAML document: key-path chunks
-	Pro                    // a binary document format only AutoDoc Pro's extractors read
+	Derived                // a document format read only as its derived text: DOCX, HTML, a Pro build's PDF
 	Registered             // UTF-8 text a chunker the build registered reads, such as source code (ADR 0216)
 )
 
@@ -28,16 +28,17 @@ func (k Kind) String() string {
 		return "text"
 	case YAML:
 		return "yaml"
-	case Pro:
-		return "pro"
+	case Derived:
+		return "derived"
 	case Registered:
 		return "registered"
 	}
 	return "markdown"
 }
 
-// ProExtensions are the binary document formats Community refuses (AutoDoc 02/03 own them).
-var ProExtensions = []string{".doc", ".docx", ".odt", ".pdf"}
+// DerivedExtensions are the formats read only as derived text, through a deriver that names
+// them; a build without one never reads them.
+var DerivedExtensions = []string{".doc", ".docx", ".odt", ".pdf"}
 
 // Ext is a path's extension, lowercased: ".MD" and ".md" are one kind.
 func Ext(p string) string { return strings.ToLower(path.Ext(p)) }
@@ -47,7 +48,7 @@ func Ext(p string) string { return strings.ToLower(path.Ext(p)) }
 func Of(p string, text []string) Kind { return Registrations{}.Of(p, text) }
 
 // Registrations are the extensions a build's registrations read, lowercased with
-// their dot: its chunkers' (Chunked), and the Pro formats its deriver makes text of (Derived). The
+// their dot: its chunkers' (Chunked), and the derived formats its derivers make text of (Derived). The
 // zero value is a build with none.
 type Registrations struct{ Chunked, Derived []string }
 
@@ -62,8 +63,8 @@ func (r Registrations) Of(p string, text []string) Kind {
 		return YAML
 	}
 	switch {
-	case slices.Contains(ProExtensions, ext):
-		return Pro
+	case slices.Contains(DerivedExtensions, ext):
+		return Derived
 	case slices.Contains(r.Chunked, ext):
 		return Registered
 	case slices.Contains(text, ext):
@@ -72,11 +73,11 @@ func (r Registrations) Of(p string, text []string) Kind {
 	return Markdown
 }
 
-// Readable reports whether path is a Pro format the build derives: still kind Pro, never written,
+// Readable reports whether path is a derived format the build derives: kind Derived, never written,
 // but its derived text can be read.
 func (r Registrations) Readable(p string) bool { return slices.Contains(r.Derived, Ext(p)) }
 
-// Label is how a reader names a Pro format's kind: its extension, upper-case, without the dot
+// Label is how a reader names a derived format's kind: its extension, upper-case, without the dot
 // ("PDF", "DOCX").
 func Label(p string) string { return strings.ToUpper(strings.TrimPrefix(Ext(p), ".")) }
 
@@ -84,7 +85,7 @@ func Label(p string) string { return strings.ToUpper(strings.TrimPrefix(Ext(p), 
 func (k Kind) IsText() bool { return k == Text || k == YAML || k == Registered }
 
 // ErrExtension is a custom text extension that cannot be one: malformed, a built-in kind's, or a
-// Pro document format's (which stays unavailable whatever a workspace says).
+// derived document format's (which is read only as derived text, whatever a workspace says).
 type ErrExtension struct{ Ext, Why string }
 
 func (e *ErrExtension) Error() string { return fmt.Sprintf("kind: %q: %s", e.Ext, e.Why) }
@@ -111,7 +112,7 @@ func ValidExtension(e string) bool {
 }
 
 // TextExtensions normalizes a workspace's own plain-text extensions: each lowercased with its dot,
-// 1 to 16 letters, digits, '_', '+' or '-' after it, none a built-in kind's or a Pro format's, in
+// 1 to 16 letters, digits, '_', '+' or '-' after it, none a built-in kind's or a derived format's, in
 // the order given without repeats. They are plain text by declaration: nothing is sniffed.
 func TextExtensions(in []string) ([]string, error) {
 	out := []string{}
@@ -126,8 +127,8 @@ func TextExtensions(in []string) ([]string, error) {
 		switch {
 		case !ValidExtension(e):
 			return nil, &ErrExtension{raw, "an extension is a dot and 1 to 16 letters, digits, _, + or -"}
-		case slices.Contains(ProExtensions, e):
-			return nil, &ErrExtension{raw, "a Pro document format, unavailable in Community"}
+		case slices.Contains(DerivedExtensions, e):
+			return nil, &ErrExtension{raw, "a derived document format, read as its derived text"}
 		case slices.Contains(builtIn, e):
 			return nil, &ErrExtension{raw, "already a built-in kind"}
 		}

@@ -30,8 +30,8 @@ func (e *Error) Error() string { return fmt.Sprintf("registrations: %q: %s", e.N
 // New validates chunkers, keyed by lower-case extension with its dot, and a deriver, and freezes
 // them: each chunker's version and each format's identity is read here, once, so no document
 // records an identity its text was not made under. It refuses an extension that is malformed,
-// upper-case, a built-in kind's or a Pro format's, a version outside the identity charset
-// (ValidVersion), and a deriver's format that is not a Pro format or whose identity is outside it.
+// upper-case, a built-in kind's or a derived format's, a version outside the identity charset
+// (ValidVersion), and a deriver's format that is not a derived format or whose identity is outside it.
 // No chunkers and no deriver is the nil Table.
 func New(chunkers map[string]search.Chunker, d Deriver) (*Table, error) {
 	if len(chunkers) == 0 && d == nil {
@@ -45,8 +45,8 @@ func New(chunkers map[string]search.Chunker, d Deriver) (*Table, error) {
 			return nil, &Error{ext, "an extension is a dot and 1 to 16 lower-case letters, digits, _, + or -"}
 		case kind.IsBuiltIn(ext):
 			return nil, &Error{ext, "a built-in kind's extension"}
-		case slices.Contains(kind.ProExtensions, ext):
-			return nil, &Error{ext, "a Pro document format's extension"}
+		case slices.Contains(kind.DerivedExtensions, ext):
+			return nil, &Error{ext, "a derived document format's extension"}
 		case c == nil:
 			return nil, &Error{ext, "no chunker"}
 		}
@@ -135,7 +135,7 @@ func (t *Table) Formats() []string {
 }
 
 // Kinds are the extensions the registrations give a kind (kind.Registrations): the chunkers', and
-// the deriver's formats, which stay kind.Pro and become readable.
+// the deriver's formats, which stay kind.Derived and become readable.
 func (t *Table) Kinds() kind.Registrations {
 	return kind.Registrations{Chunked: t.Extensions(), Derived: t.Formats()}
 }

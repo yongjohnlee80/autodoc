@@ -204,7 +204,7 @@ func heldBy(s string, reg *registrations.Table) (ext, what string) {
 		}
 	case Derived:
 		// a build that derives the format makes the text again, under its own identity, as a
-		// chunker of another version cuts again; one that does not would delete it as kind Pro
+		// chunker of another version cuts again; one that does not would delete it as kind Derived
 		if _, ok := reg.Format(id.Ext); !ok {
 			return id.Ext, "deriver"
 		}
