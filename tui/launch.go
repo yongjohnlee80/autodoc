@@ -54,6 +54,10 @@ type LaunchOptions struct {
 	// ProgramOptions are added to the program's own (Options.ProgramOptions): a build's choice of
 	// how the document runs, such as the native style a window build passes. nil: none.
 	ProgramOptions []tuidecl.ProgramOption
+	// Fonts, FontFamilies and DefaultCellFont are the window's fonts (Options.Fonts): --gui's.
+	Fonts           FontControl
+	FontFamilies    func(mono bool) []string
+	DefaultCellFont string
 }
 
 // Launch runs AutoDoc's TUI until it quits or ctx ends: it reads the config, attaches to the daemon
@@ -125,13 +129,16 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Layout:    o.Layout,
 		Workspace: workspace,
 		// a convenience for the next start: nothing depends on it being written
-		Remember:       func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
-		Installed:      installed,
-		Plugins:        plugins,
-		Registrations:  o.Registrations,
-		AgentDir:       filepath.Join(stateDir, "agent"),
-		ConfigPath:     configPath,
-		ProgramOptions: o.ProgramOptions,
+		Remember:        func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
+		Installed:       installed,
+		Plugins:         plugins,
+		Registrations:   o.Registrations,
+		AgentDir:        filepath.Join(stateDir, "agent"),
+		ConfigPath:      configPath,
+		ProgramOptions:  o.ProgramOptions,
+		Fonts:           o.Fonts,
+		FontFamilies:    o.FontFamilies,
+		DefaultCellFont: o.DefaultCellFont,
 	})
 	if err != nil {
 		return err

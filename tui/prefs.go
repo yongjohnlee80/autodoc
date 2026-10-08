@@ -94,6 +94,9 @@ type prefs struct {
 	// panelFloat are the panels moved or resized off their edges: x, y, w, h in percent of the
 	// Window (panelfloat.go)
 	panelFloat map[string][4]int
+	// the GUI's fonts and zoom (fonts.go): "" and 0 are the window's defaults
+	cellFont, proseFont string
+	fontSize, zoom      int
 	// agents are the agent terminal's profiles, and agentDefault the one SPC g opens (agent.go)
 	agents       []agentProfile
 	agentDefault string
@@ -216,6 +219,7 @@ func prefsFor(m map[string]any, gui bool) prefs {
 	}
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
+	readFontPrefs(&p, m)
 	return p
 }
 
@@ -239,6 +243,9 @@ func prefState(p prefs) map[string]any {
 		m[k] = v
 	}
 	for k, v := range floatState(p.panelFloat) {
+		m[k] = v
+	}
+	for k, v := range fontState(p) {
 		m[k] = v
 	}
 	for k, v := range map[string]any{
@@ -293,6 +300,7 @@ func (h *Host) applyPrefs(p prefs) {
 	}
 	h.set("App.statusShown", h.statusShown())
 	h.syncPageWidth()
+	h.applyFonts(p)
 	h.syncPrefDialog()
 	h.applyToastPrefs()
 	h.syncStages(true)

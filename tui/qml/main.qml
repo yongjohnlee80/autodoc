@@ -73,6 +73,10 @@ Window {
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
+    // the window's zoom (fonts.go); nothing in a terminal
+    Shortcut { sequence: "Ctrl+="; onActivated: App.zoomWindow("in") }
+    Shortcut { sequence: "Ctrl+-"; onActivated: App.zoomWindow("out") }
+    Shortcut { sequence: "Ctrl+0"; onActivated: App.setZoom(100) }
     // ? is the Vim keys' card, in Normal mode (the Text mode types it); ? again closes it
     Shortcut { sequence: "?"; onActivated: App.toggleVimKeys() }
 
@@ -160,6 +164,11 @@ Window {
             }
             MenuSeparator {}
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
+            // the window's fonts and zoom (fonts.go): a terminal draws in its own, and hides these
+            MenuItem { text: "&Fonts and zoom…"; visible: App.gui; onTriggered: App.openFonts() }
+            MenuItem { text: "Zoom &in  (Ctrl+=)"; visible: App.gui; onTriggered: App.zoomWindow("in") }
+            MenuItem { text: "Zoom &out  (Ctrl+-)"; visible: App.gui; onTriggered: App.zoomWindow("out") }
+            MenuItem { text: "&Actual size  (Ctrl+0)"; visible: App.gui; onTriggered: App.setZoom(100) }
         }
         Menu {
             title: "&Plugins"
@@ -186,6 +195,7 @@ Window {
         Menu {
             title: "&Help"
             align: Tui.Right
+            MenuItem { text: "&Tutorial…"; onTriggered: App.openTutorial() }
             MenuItem { text: "&Keys"; onTriggered: help.open() }
             MenuItem { text: "&About"; onTriggered: about.open() }
         }
@@ -424,6 +434,7 @@ Window {
     PluginManager { id: pluginManager }
     PluginRemove { id: pluginRemove }
     Preferences { id: preferences }
+    Fonts { id: fonts }
     Diagram { id: diagram }
     HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }
@@ -447,6 +458,7 @@ Window {
     PluginKeys { id: pluginKeys }
     Help { id: help }
     Arrange { id: arrange }
+    Tutorial { id: tutorial }
     About { id: about }
     Notifications { id: notifications }
 }

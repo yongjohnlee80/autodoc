@@ -340,6 +340,10 @@ func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
 	diagram := widget.NewCommand("autodoc.diagram", "View diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
 		Run: func(*widget.EditorCore) { h.previewDiagram() }})
 	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes())
-	return append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
+	items = append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
 		widget.NewSeparator("autodoc.sep.relations"), link, back)
+	if h.fonts != nil { // the window's zoom; a terminal's is its own
+		items = append(items, widget.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
+	}
+	return items
 }
