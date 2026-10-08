@@ -16,7 +16,8 @@
 //	search.go     the workspace's files, as the pickers filter them
 //	pickers.go    the search, open and new-file pickers, and their previews
 //	explorer.go   the explorer: every workspace's folders and files, as a tree
-//	links.go      the backlinks panel
+//	relations.go  the Relations drawer, the jump card and back (SPC l, j, b)
+//	outside.go    files outside every workspace: Open file…, New file…
 //	panels.go     the panels' drawers, and moving between them and the page
 //	progress.go   the daemon's work left, on the status line
 //	prefs.go      the preferences, kept in the daemon's store
@@ -62,7 +63,7 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	picker, backlinks, workspaces, managed            *tuidecl.ListModel
+	picker, relationsModel, workspaces, managed       *tuidecl.ListModel
 	outlineList, wsProviders                          *tuidecl.ListModel
 	hits, newList, providers, providerModels, rankers *tuidecl.ListModel
 	vectors                                           *tuidecl.ListModel // the workspace's models (vectors.go)
@@ -92,6 +93,10 @@ type Host struct {
 	find       findState
 	explorerAt []string // the explorer's row under its cursor, by its keys
 	linksAt    int
+	// the Relations drawer (relations.go): its rows, whether it shows depth 2, and back's history
+	relRows []relRow
+	relDeep bool
+	history []fileRef
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs                          prefs
@@ -308,7 +313,7 @@ func newHost(session *Session, opt Options) *Host {
 		prefs:          defaultPrefs(),
 		panelOpen:      map[string]bool{},
 		termRestore:    true,
-		backlinks:      tuidecl.NewListModel("key", "label"),
+		relationsModel: tuidecl.NewListModel("key", "label"),
 		noticeList:     tuidecl.NewListModel("key", "when", "text"),
 		workspaces:     tuidecl.NewListModel("key", "label"),
 		managed:        tuidecl.NewListModel("key", "name", "state", "root"),
@@ -330,6 +335,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	if h.editor, ok = tuidecl.FindAs[*widget.Editor](p, "editor"); !ok {
 		return errors.New("main.qml declares no Editor with id: editor")
 	}
+	widget.WithContextMenu(h.editorMenu)(h.editor) // the stock rows, then related documents and back
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)

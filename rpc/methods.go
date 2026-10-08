@@ -171,6 +171,7 @@ var publicErrs = []struct {
 	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"},
 	{edition.ErrDatabases, CodeUnsupported, "this edition has no database settings"},
 	{errFixed, CodeUnsupported, "this server's set of workspaces is fixed"},
+	{errNoFiles, CodeUnsupported, "this server serves no files outside its workspaces"},
 	{derived.ErrDeriverFailed, CodeUnsupported, "this document's text could not be made now: try again later, or open it in its own viewer"},
 	{derived.ErrRefused, CodeUnsupported, "this document's text could not be derived: open it in its own viewer"},
 	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},

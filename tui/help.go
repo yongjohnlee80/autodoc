@@ -9,7 +9,7 @@ const helpText = `KEYS
               the file on the right at the hit; beneath, a checkbox per stage it can run
               (Lexical; Semantic with a model in use; Rerank, naming the ranker, with one in
               use): a change searches again, and one of Lexical and Semantic stays checked
-  /           find a word in the pane with the keyboard (the page, the explorer, the links);
+  /           find a word in the pane with the keyboard (the page, the explorer, the relations);
               n and N find it again, forward and back. In the page its words are marked, and
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
@@ -55,9 +55,14 @@ NOTIFICATIONS
   progress stays until it ends. Preferences sets the corner and the seconds; SPC h lists them.
 
 THE PANELS
-  The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are the files
-  that link to this one. Each opens over the page from its side (Preferences sets which), and
-  Escape or its key again closes it. Enter on a file opens it.
+  The explorer (SPC e) is every workspace's folders and files; the relations (SPC l) are what
+  this file is connected to, by kind: superseded by, supersedes, sources, cited by, amends,
+  amended by, related, adr, its links and its backlinks, then what names nothing and the
+  supersession loops. d in the relations shows the files two links away, under the one that
+  reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
+  its key again closes it. Enter on a file opens it; the relations stay open.
+  SPC j numbers the first nine related files: a digit opens one. SPC b goes back to the file
+  opened before. The page's right-click menu has both: Go to related…, Back.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
@@ -101,18 +106,19 @@ WHAT A KEY NEEDS
 
 // leaderText is the leader card's body, a key a line, as its Shortcuts are (views/Leader.qml).
 const leaderText = `/  search (or SPC again)  e  the explorer
-o  open a document        l  the links
-f  open a file anywhere   b  back
-n  new file               ` + "`" + `  the terminal
-s  save                   t  the status line
-r  recent files           g  AI agent
-w  switch workspace       m  show/focus or hide the menu
-W  manage workspaces      k  the editor mode (Vim, Text)
-?  help                   ,  editor preferences
-h  notifications          a  search models
-c  the file's outline     A  about
-O  the system viewer      Q  quit
-G  agent profiles         p  plugin commands`
+o  open a document        l  the relations
+f  open a file anywhere   j  related files, by digit
+n  new file               b  back
+s  save                   ` + "`" + `  the terminal
+r  recent files           t  the status line
+w  switch workspace       g  AI agent
+W  manage workspaces      m  show/focus or hide the menu
+?  help                   k  the editor mode (Vim, Text)
+h  notifications          ,  editor preferences
+c  the file's outline     a  search models
+O  the system viewer      A  about
+G  agent profiles         Q  quit
+p  plugin commands`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

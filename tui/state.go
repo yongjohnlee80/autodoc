@@ -64,8 +64,9 @@ func (h *Host) state() map[string]any {
 		"App.diagnosticsShown":     false,
 		"App.diagnosticsLine":      "",
 		"App.syntaxDefinition":     "Markdown (find)",
-		"App.backlinks":            h.backlinks,
-		"App.linksTitle":           "backlinks",
+		"App.relations":            h.relationsModel,
+		"App.relationsTitle":       "relations",
+		"App.jumpText":             "",
 
 		// the search picker
 		"App.hits":               h.hits,

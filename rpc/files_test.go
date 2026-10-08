@@ -149,6 +149,22 @@ func TestFileVerbsNeedProtocol17(t *testing.T) {
 	}
 }
 
+// TestFileVerbsOnAServerWithoutFiles: a server given no WithFiles says so; file.locate, which
+// needs none, still answers.
+func TestFileVerbsOnAServerWithoutFiles(t *testing.T) {
+	r := serve(t)
+	cli := r.dial(true)
+	abs := filepath.Join(t.TempDir(), "a.md")
+	for _, c := range [][]any{{"file.read", abs}, {"file.write", abs, []byte("x"), ""}} {
+		if err := callErr(cli, c[0].(string), c[1:]...); code(err) != CodeUnsupported || !strings.Contains(err.Error(), "no files outside") {
+			t.Errorf("%s without files: %v, want unsupported", c[0], err)
+		}
+	}
+	if got := call(t, cli, "file.locate", "/roots/kb/a.md"); !reflect.DeepEqual(got, map[string]any{"workspace": "kb", "path": "a.md"}) {
+		t.Errorf("file.locate without files = %v", got)
+	}
+}
+
 // TestFileLocateFindsTheWorkspaceThatServesAPath: the most specific root holding the path wins; a
 // path outside every root, a root itself, a sibling sharing a root's prefix, a file the workspace
 // excludes, and a workspace that could not open (Err, whatever else it has) are in none (ADR 1791430651 §5.4).

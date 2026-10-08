@@ -20,7 +20,7 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `core/embed` | the embedding providers' clients: Ollama, or any OpenAI-compatible endpoint, metered |
 | `core/docs` | reads and writes files for AutoDoc's own apps, conditional on the version the writer read |
 | `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
-| `tui` | the terminal UI: search, the files, a Vim-keyed editor, backlinks; its screen written in QML |
+| `tui` | the terminal UI: search, the files, a Vim-keyed editor, the relations drawer; its screen written in QML |
 | `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
 | `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON; a main hands it its version (ADR 0216) |
@@ -193,9 +193,21 @@ terminal, as below; where it cannot, it shows the block's source and why.
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
   and `U` are dead keys there, so their menus need `F10`), and `F10` may need `Fn`.
-- **The explorer** (`SPC e`): every workspace's folders and files, as a tree. **The links**
-  (`SPC l`): the files linking to this one. Each opens over the page, which does not move, from
-  the side the editor's preferences name; `Escape` or its key again closes it.
+- **The explorer** (`SPC e`): every workspace's folders and files, as a tree. **The relations**
+  (`SPC l`): what this file is connected to, by kind and direction (superseded by, supersedes,
+  sources, cited by, amends, amended by, related, adr, links, backlinks), then the relations that
+  name nothing and the supersession loops; `d` there adds the files two links away, under the one
+  that reaches them. `Enter` opens a row and the drawer stays. Each opens over the page, which
+  does not move, from the side the editor's preferences name; `Escape` or its key again closes
+  it. `SPC j` numbers the first nine related files (a digit opens one); `SPC b` goes back to the
+  file opened before; the page's right-click menu has both.
+- **Files anywhere.** `File › Open file…` (`SPC f`) opens any file on this machine's disk in a
+  file dialog with a preview; `File › New file…` (`Ctrl+N`, `SPC n`) makes one in any folder.
+  A file inside a workspace's folder opens as that workspace's file. Any other is in no
+  workspace: it edits, saves (a change on disk since it was read asks first), exports and
+  reaches the plugins, but has no search, relations or frontmatter check, and the status line
+  badges it `[no workspace]`. It stays open when the workspace changes. `File › Open document…`
+  (`Ctrl+O`, `SPC o`) is the fast picker over the workspace's own files.
 - **The status line** (`SPC t`): the editor's mode, the workspace, and the file, with `[+]` while
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
 - **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
@@ -219,7 +231,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
   viewer, for its diagrams and layout.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
-- **The pickers** (search, open, new file, add a workspace) share one layout: the fields over the
+- **The pickers** (search, open a document, add a workspace) share one layout: the fields over the
   list on the left, the file under the cursor on the right, the buttons beneath. The search runs
   as it is typed and refreshes its open query after a model or workspace transition; its preview
   is at the hit, the words marked. Under it, a checkbox for each stage the search can run:
@@ -232,8 +244,9 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | --- | --- |
 | `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `c`, `k`, `,`, `a` …) |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
-| `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
-| `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a file, new file, save |
+| `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
+| `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
+| `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, related files by digit, back |
 | `SPC O` | open the file in the desktop's own viewer (`File › Open in System Viewer`): `xdg-open`, or `open` on a Mac |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |

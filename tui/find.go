@@ -14,7 +14,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// FIND — / in the page, the explorer or the links, as AutoDB's: a word or phrase in the pane that
+// FIND — / in the page, the explorer or the relations, as AutoDB's: a word or phrase in the pane that
 // has the keyboard. The cursor moves to the next row holding it; n and N go to the next and the
 // previous. It is a literal, case-blind match, read afresh from the pane at every jump. The
 // workspace's search (by words and meaning, across every file) is Ctrl+G, SPC / or SPC SPC.
@@ -31,7 +31,7 @@ import (
 const (
 	findPage     = "page"
 	findExplorer = "explorer"
-	findLinks    = "links"
+	findLinks    = "relations"
 )
 
 type findState struct {
@@ -56,7 +56,7 @@ func (h *Host) findTarget() string {
 func (h *Host) openFind() {
 	target := h.findTarget()
 	if target == "" {
-		h.say("find: put the keyboard in the page, the explorer or the links first")
+		h.say("find: put the keyboard in the page, the explorer or the relations first")
 		return
 	}
 	h.askFind(target)
@@ -223,8 +223,8 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 			}
 		}
 	case findLinks:
-		for i := range h.backlinks.Len() {
-			rows = append(rows, h.backlinks.At(i)["label"].(string))
+		for i := range h.relationsModel.Len() {
+			rows = append(rows, h.relationsModel.At(i)["label"].(string))
 		}
 		cur = h.linksAt
 	}

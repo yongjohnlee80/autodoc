@@ -123,13 +123,7 @@ func (h *Host) openAbsolute(abs string) {
 
 // openOutside opens the absolute path abs, a file outside every workspace, asking first over
 // unsaved changes.
-func (h *Host) openOutside(abs string) {
-	if h.file.outside() && h.file.path == abs && !h.file.dirty {
-		h.keep(h.p.Call("editor", "forceActiveFocus"))
-		return
-	}
-	h.guard("open "+abs, func() { h.load("", abs) })
-}
+func (h *Host) openOutside(abs string) { h.openRef(fileRef{"", abs}, true) }
 
 // createAbsolute creates an empty file at abs (".md" added when it has no extension), chosen in
 // the save dialog, and opens it: in its workspace when one would index it, else outside every
@@ -172,7 +166,7 @@ func (h *Host) createAbsolute(abs string) {
 			return
 		}
 		if a.at.ws == "" {
-			h.load("", abs)
+			h.openOutside(abs)
 			return
 		}
 		h.openIn(a.at.ws, a.at.path)

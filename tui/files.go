@@ -138,13 +138,32 @@ func (h *Host) unsaved(answer string) {
 	}
 }
 
-// openPath opens a file, asking first over unsaved changes.
-func (h *Host) openPath(p string) {
-	if p == h.file.path && h.file.ws == h.ws && h.file.open && !h.file.dirty {
+// openPath opens a file of the workspace in use, asking first over unsaved changes.
+func (h *Host) openPath(p string) { h.openRef(fileRef{h.ws, p}, true) }
+
+// openRef opens ref, asking first over unsaved changes: in the workspace in use, outside every
+// workspace (ws ""), or in another workspace, entering it. The document left behind goes on the
+// history (SPC b) when remember is set; going back does not set it.
+func (h *Host) openRef(ref fileRef, remember bool) {
+	leaving := func() *fileRef {
+		if !remember || !h.file.open {
+			return nil
+		}
+		return &fileRef{h.file.ws, h.file.path}
+	}
+	if ref.ws != "" && ref.ws != h.ws {
+		h.guard("open "+path.Base(ref.path)+" in "+ref.ws, func() {
+			prev := leaving() // before entering closes the file
+			h.enter(ref.ws)
+			h.load(ref.ws, ref.path, prev)
+		})
+		return
+	}
+	if h.file.open && h.file.ws == ref.ws && h.file.path == ref.path && !h.file.dirty {
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
-	h.guard("open "+p, func() { h.load(h.ws, p) })
+	h.guard("open "+ref.path, func() { h.load(ref.ws, ref.path, leaving()) })
 }
 
 // reload reads the file again from disk, asking first over unsaved changes.
@@ -152,13 +171,14 @@ func (h *Host) reload() {
 	if !h.file.open {
 		return
 	}
-	h.guard("reload it", func() { h.load(h.file.ws, h.file.path) })
+	h.guard("reload it", func() { h.load(h.file.ws, h.file.path, nil) })
 }
 
 // load reads p of workspace ws ("" for the absolute path of a file outside every workspace) into
-// the editor. Reading the open file again yields to a save that lands while it is read: the page is
-// then what the disk holds, and the read is older.
-func (h *Host) load(ws, p string) {
+// the editor; once it is shown, prev (when not nil, and another document) goes on the history.
+// Reading the open file again yields to a save that lands while it is read: the page is then what
+// the disk holds, and the read is older.
+func (h *Host) load(ws, p string, prev *fileRef) {
 	h.file.gen++
 	gen, ep := h.file.gen, h.epoch
 	again, read := h.file.open && h.file.ws == ws && h.file.path == p, h.file.version
@@ -187,6 +207,9 @@ func (h *Host) load(ws, p string) {
 			h.failed("open "+p, a.err)
 			return
 		}
+		if prev != nil && *prev != (fileRef{ws, p}) {
+			h.rememberLeft(*prev)
+		}
 		h.show(ws, p, a.content, a.version)
 		h.noteRecent(ws, p)
 		h.say("opened " + p)
@@ -209,10 +232,7 @@ func (h *Host) show(ws, p, content, version string) {
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
 	h.feedEdited() // another note: a new version
 	h.readPage()
-	h.backlinks.Reset(nil)
-	if ws != "" {
-		h.loadBacklinks(p)
-	}
+	h.relationsOfOpenFile()
 }
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
@@ -305,8 +325,7 @@ func (h *Host) closeFile() {
 	h.set("App.fileTitle", untitled)
 	h.set("App.syntaxDefinition", "Markdown (find)")
 	h.set("App.statusCenter", "")
-	h.backlinks.Reset(nil)
-	h.set("App.linksTitle", "backlinks")
+	h.clearRelations("relations")
 	h.clearDiagnostics()
 	h.feedEdited()
 }
@@ -455,7 +474,7 @@ func (h *Host) conflict(answer string) {
 	case "reload":
 		// the file stays unsaved until the disk's version is in the editor: a failed read keeps the
 		// edits guarded
-		h.load(h.file.ws, h.file.path)
+		h.load(h.file.ws, h.file.path, nil)
 	case "overwrite":
 		h.overwrite()
 	default:
@@ -542,7 +561,7 @@ func (h *Host) createFile(name string) {
 			h.openAt = h.cursorBytes()
 			h.setDirty(false) // written: the load below finds it saved
 		}
-		h.load(ws, name)
+		h.load(ws, name, nil)
 		h.listFiles()
 		h.loadWorkspaces() // the explorer lists it
 		if draft != nil && draft.then != nil {

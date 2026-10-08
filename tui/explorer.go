@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"path"
 	"slices"
 	"sort"
 	"strings"
@@ -191,17 +190,4 @@ func (h *Host) explorerActivated(ix tuidecl.Index) error {
 
 // openIn opens file p of workspace ws, entering ws first when it is not the one in use; either
 // way, unsaved changes are asked about first.
-func (h *Host) openIn(ws, p string) {
-	if ws == "" {
-		h.openOutside(p)
-		return
-	}
-	if ws == h.ws {
-		h.openPath(p)
-		return
-	}
-	h.guard("open "+path.Base(p)+" in "+ws, func() {
-		h.enter(ws)
-		h.load(ws, p)
-	})
-}
+func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true) }

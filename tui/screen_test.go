@@ -258,9 +258,9 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "explorer") })
 
 	r.leader(t, 'l')
-	r.s.WaitForText(t, "backlinks (1)")
+	r.s.WaitForText(t, "relations (1)")
 	for i, row := range strings.Split(r.s.String(), "\n") {
-		if !strings.Contains(row, "backlinks (1)") {
+		if !strings.Contains(row, "relations (1)") { // the drawer's top border, its title
 			continue
 		}
 		if i < 15 {
@@ -1813,13 +1813,13 @@ func TestFindInThePanes(t *testing.T) {
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "backlinks (2)")
 	r.keys(t, key('/'))
-	r.s.WaitForText(t, "find in the links")
+	r.s.WaitForText(t, "find in the relations")
 	r.keys(t, decltest.Ctrl('u'))
 	r.keys(t, decltest.Type("x.md")...)
 	r.keys(t, enter())
-	r.s.WaitForText(t, `find "x.md": 1 of 1 in the links`)
-	if at := onLoop(r, func() int { return r.h.linksAt }); at != 1 {
-		t.Fatalf("the links' cursor is on row %d, want 1 (x.md)", at)
+	r.s.WaitForText(t, `find "x.md": 1 of 1 in the relations`)
+	if at := onLoop(r, func() int { return r.h.linksAt }); at != 2 {
+		t.Fatalf("the links' cursor is on row %d, want 2 (x.md, under the heading and b.md)", at)
 	}
 	r.keys(t, enter()) // Enter on the row found opens it: the view's own cursor is there
 	r.waitFile(t, "x.md")
