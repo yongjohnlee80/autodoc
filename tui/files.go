@@ -241,6 +241,7 @@ func (h *Host) show(ws, p, content, version string) {
 	h.feedEdited() // another note: a new version
 	h.readPage()
 	h.relationsOfOpenFile()
+	h.htmlPaneNoteChanged()
 }
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
@@ -354,6 +355,7 @@ func (h *Host) closeFile() {
 	h.clearRelations("relations")
 	h.clearDiagnostics()
 	h.feedEdited()
+	h.htmlPaneNoteChanged()
 }
 
 // edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.

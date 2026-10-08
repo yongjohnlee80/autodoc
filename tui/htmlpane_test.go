@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -114,6 +115,46 @@ func TestThePanesLinks(t *testing.T) {
 	}
 	r.h.p.Post(func() { r.h.htmlLink("file://" + filepath.ToSlash(filepath.Join(kb, "a.md"))) })
 	r.waitOpen(t, "kb", "a.md")
+}
+
+// TestThePaneFollowsTheOpenNote: with the pane open, another note opened shows its page at once
+// (no typing reports it), a render of the old note still on its way never lands over it, the draft
+// after a close shows an empty page, and a file that is not Markdown closes the pane.
+func TestThePaneFollowsTheOpenNote(t *testing.T) {
+	r, kb := runPane(t)
+	if err := os.WriteFile(filepath.Join(kb, "c.yaml"), []byte("k: v\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(r.h.previewHTML)
+	r.s.WaitFor(t, "a's page", func(string) bool { return strings.Contains(r.paneSource(), ">Heading</h1>") })
+
+	// a's render on its way when b opens
+	r.h.p.Post(func() {
+		r.h.renderHTMLPane()
+		r.h.openAbsolute(filepath.Join(kb, "b.md"))
+	})
+	r.waitOpen(t, "kb", "b.md")
+	r.s.WaitFor(t, "b's page", func(string) bool {
+		s := r.paneSource()
+		return strings.Contains(s, ">B</h1>") && !strings.Contains(s, "Heading")
+	})
+	time.Sleep(2 * htmlPaneDelay) // anything of a's still landing would have by now
+	if s := r.paneSource(); !strings.Contains(s, ">B</h1>") {
+		t.Fatalf("a's page landed over b's: %q", s)
+	}
+
+	r.h.p.Post(r.h.closeFile)
+	r.s.WaitFor(t, "the draft's empty page", func(string) bool {
+		s := r.paneSource()
+		return s != "" && !strings.Contains(s, ">B</h1>")
+	})
+	if !onLoop(r, r.h.htmlPaneShown) {
+		t.Fatal("closing the note closed the pane")
+	}
+
+	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "c.yaml")) })
+	r.waitOpen(t, "kb", "c.yaml")
+	r.s.WaitFor(t, "the pane closed on YAML", func(string) bool { return !onLoop(r, r.h.htmlPaneShown) })
 }
 
 var _ = widget.DirImages

@@ -45,11 +45,28 @@ func (h *Host) htmlView() (*widget.HTMLView, bool) {
 
 // openHTMLPane shows the open note in the pane beside the editor.
 func (h *Host) openHTMLPane() {
-	if h.file.open && filepath.Ext(h.file.path) != ".md" {
+	if !h.previewable() {
 		h.notify("HTML preview currently accepts Markdown files")
 		return
 	}
 	h.keep(h.p.Call("htmlPane", "open"))
+	h.renderHTMLPane()
+}
+
+// previewable reports whether the editor holds Markdown: a .md file, or the draft.
+func (h *Host) previewable() bool { return !h.file.open || filepath.Ext(h.file.path) == ".md" }
+
+// htmlPaneNoteChanged is another note in the editor, opened or closed for the draft, which no
+// typing reports: an open pane shows the new note at once (its render supersedes the old note's
+// still on its way), or closes when it is not Markdown.
+func (h *Host) htmlPaneNoteChanged() {
+	if !h.htmlPaneShown() {
+		return
+	}
+	if !h.previewable() {
+		h.keep(h.p.Call("htmlPane", "close"))
+		return
+	}
 	h.renderHTMLPane()
 }
 
