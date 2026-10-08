@@ -68,6 +68,7 @@ func (h *Host) setAgentEdge(i int) {
 	if i >= 0 && i < len(agentEdges) {
 		e := agentEdges[i]
 		h.setPref(prefAgentEdge, e, func(p *prefs) { p.agentEdge = e })
+		h.dockPanel("agent")
 		h.syncAgentDialog() // the size and length shown are the new place's
 	}
 }

@@ -36,5 +36,6 @@ Dialog {
     Shortcut { sequence: "?"; onActivated: { leader.close(); help.open() } }
     Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }
     Shortcut { sequence: "Shift+A"; onActivated: { leader.close(); about.open() } }
+    Shortcut { sequence: "Shift+L"; onActivated: { leader.close(); App.arrangePanel() } }
     Shortcut { sequence: "Shift+Q"; onActivated: { leader.close(); App.quit() } }
 }

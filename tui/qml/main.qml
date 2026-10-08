@@ -116,6 +116,9 @@ Window {
             MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
             MenuSeparator {}
+            MenuItem { text: "A&rrange panel…"; onTriggered: App.arrangePanel() }
+            MenuItem { text: "Reset panel la&yout"; onTriggered: App.resetPanelLayout() }
+            MenuSeparator {}
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
@@ -252,7 +255,13 @@ Window {
         edge: App.explorerEdge
         size: App.explorerSize
         length: App.explorerLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.explorerFloating
+        floatX: App.explorerX; floatY: App.explorerY; floatWidth: App.explorerW; floatHeight: App.explorerH
+        onPlaced: App.panelPlaced("explorer", x, y, width, height)
         minimumSize: 15
         onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
@@ -281,7 +290,11 @@ Window {
         edge: Tui.Right
         size: 50
         length: 100
-        resizable: true
+        movable: true
+        windowResize: true
+        floating: App.htmlPaneFloating
+        floatX: App.htmlPaneX; floatY: App.htmlPaneY; floatWidth: App.htmlPaneW; floatHeight: App.htmlPaneH
+        onPlaced: App.panelPlaced("htmlPane", x, y, width, height)
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
@@ -300,7 +313,13 @@ Window {
         edge: App.linksEdge
         size: App.linksSize
         length: App.linksLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.linksFloating
+        floatX: App.linksX; floatY: App.linksY; floatWidth: App.linksW; floatHeight: App.linksH
+        onPlaced: App.panelPlaced("links", x, y, width, height)
         minimumSize: 15
         onResized: App.panelResized("links", size, length)
         onOpened: App.panelOpened("links")
@@ -330,7 +349,13 @@ Window {
         edge: App.terminalEdge
         size: App.terminalSize
         length: App.terminalLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.terminalFloating
+        floatX: App.terminalX; floatY: App.terminalY; floatWidth: App.terminalW; floatHeight: App.terminalH
+        onPlaced: App.panelPlaced("terminal", x, y, width, height)
         onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
@@ -356,7 +381,13 @@ Window {
         edge: App.agentEdge
         size: App.agentSize
         length: App.agentLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.agentFloating
+        floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
+        onPlaced: App.panelPlaced("agent", x, y, width, height)
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)
@@ -415,6 +446,7 @@ Window {
     JumpCard { id: jumpCard }
     PluginKeys { id: pluginKeys }
     Help { id: help }
+    Arrange { id: arrange }
     About { id: about }
     Notifications { id: notifications }
 }

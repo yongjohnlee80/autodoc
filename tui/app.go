@@ -115,6 +115,8 @@ type Host struct {
 	registrationRestart, restartAccepted   bool
 	previewHeld                            bool // the search preview's hit is of a held document
 	panelOpen                              map[string]bool
+	lastPanel                              string        // the panel opened last (Arrange panel)
+	arrange                                *arrangeState // an arrangement in progress (arrange.go)
 	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
 	// opened; whether its closing gives the keyboard back
 	termStarted, termRestore bool

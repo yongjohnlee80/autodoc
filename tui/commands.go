@@ -53,6 +53,12 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.switchAgentConfirmed": none(h.switchAgentConfirmed),
 		"App.agentExited":          oneNumber("App.agentExited", "an exit code", h.agentExited),
 		"App.panelResized":         stringAndTwoNumbers("App.panelResized", "a panel and its size and length", h.panelResized),
+		"App.panelPlaced":          stringAndFourNumbers("App.panelPlaced", "a panel and its x, y, width and height", h.panelPlaced),
+		"App.arrangePanel":         none(h.arrangePanel),
+		"App.arrangeStep":          oneString("App.arrangeStep", "a step", h.arrangeStep),
+		"App.arrangeKeep":          none(h.arrangeKeep),
+		"App.arrangeCancel":        none(h.arrangeCancel),
+		"App.resetPanelLayout":     none(h.resetPanelLayout),
 		"App.toggleSearchStage":    oneString("App.toggleSearchStage", "lexical, semantic or rerank", h.toggleSearchStage),
 		"App.previewHit":           oneNumber("App.previewHit", "a row", h.previewHit),
 		"App.openHit":              oneNumber("App.openHit", "a row", h.openHit),
@@ -292,6 +298,24 @@ func stringAndTwoNumbers(name, what string, fn func(string, int, int)) decl.Hand
 			return fmt.Errorf("%s takes %s, not %s and %s", name, what, args[1].Raw, args[2].Raw)
 		}
 		fn(args[0].Raw, a, b)
+		return nil
+	}
+}
+
+func stringAndFourNumbers(name, what string, fn func(string, int, int, int, int)) decl.HandlerFunc {
+	return func(args []qml.SpecValue) error {
+		if len(args) != 5 || args[0].Kind != qml.SpecValueString {
+			return fmt.Errorf("%s takes %s", name, what)
+		}
+		var n [4]int
+		for i, a := range args[1:] {
+			v, err := strconv.Atoi(a.Raw)
+			if a.Kind != qml.SpecValueNumber || err != nil {
+				return fmt.Errorf("%s takes %s, not %s", name, what, a.Raw)
+			}
+			n[i] = v
+		}
+		fn(args[0].Raw, n[0], n[1], n[2], n[3])
 		return nil
 	}
 }

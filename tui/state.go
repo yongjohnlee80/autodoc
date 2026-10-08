@@ -266,8 +266,9 @@ func (h *Host) state() map[string]any {
 		"App.workspaceIndex": 0,
 		"App.removeQuestion": "",
 
-		"App.helpText":  helpText,
-		"App.aboutText": h.aboutText(),
+		"App.helpText":     helpText,
+		"App.arrangeTitle": "arrange a panel",
+		"App.aboutText":    h.aboutText(),
 	}
 	for k, v := range themeState(h.theme) {
 		st[k] = v
