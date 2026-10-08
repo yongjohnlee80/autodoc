@@ -190,7 +190,7 @@ func (h *Host) showRelations(ws, p string, r relations) {
 			rows = append(rows, relRow{label: "  " + u})
 		}
 	}
-	h.relRows = rows
+	h.relRows, h.relFor = rows, fileRef{ws, p}
 	list := make([]rowOf, len(rows))
 	for i, row := range rows {
 		list[i] = rowOf{"key": fmt.Sprint(i), "label": row.label}
@@ -210,7 +210,7 @@ func (h *Host) showRelations(ws, p string, r relations) {
 
 // clearRelations empties the drawer, saying why when a file is open.
 func (h *Host) clearRelations(why string) {
-	h.relRows = nil
+	h.relRows, h.relFor = nil, fileRef{}
 	h.relationsModel.Reset(nil)
 	h.set("App.relationsTitle", why)
 }
@@ -223,6 +223,11 @@ func (h *Host) relationsOfOpenFile() {
 	case h.file.outside():
 		h.clearRelations("relations · " + outsideBadge) // it is in no workspace's graph
 	default:
+		// another document's rows go at once: until this one's are read, the drawer, the card and
+		// the right-click menu have none rather than the last document's
+		if cur := (fileRef{h.file.ws, h.file.path}); h.relFor != cur {
+			h.clearRelations("relations · reading…")
+		}
 		h.loadRelations(h.file.ws, h.file.path)
 	}
 }
