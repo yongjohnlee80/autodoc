@@ -590,6 +590,23 @@ func (s *Server) register() {
 	}
 	s.handle("graph.links", links(false))
 	s.handle("graph.backlinks", links(true))
+	// graph.resolve: where one link, as written in the file at from, reaches now — saved or not, as
+	// the index will resolve it (Protocol 18)
+	s.handle("graph.resolve", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
+		from, err := argStr(p, 1, "from")
+		if err != nil {
+			return nil, err
+		}
+		raw, err := argStr(p, 2, "raw")
+		if err != nil {
+			return nil, err
+		}
+		path, reason, err := w.Index.ResolveLink(ctx, from, raw)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"path": path, "reason": reason}, nil
+	}, true))
 	s.handle("graph.neighborhood", s.verb(3, 4, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		path, err := argStr(p, 1, "path")
 		if err != nil {

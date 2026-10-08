@@ -197,12 +197,12 @@ func TestVerbsArePinned(t *testing.T) {
 		"embedding.add", "embedding.cancel_switch", "embedding.log", "embedding.model_context", "embedding.models", "embedding.providers", "embedding.remove",
 		"embedding.update", "embedding.usage", "embedding.use",
 		"file.locate", "file.read", "file.write",
-		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.unresolved",
+		"graph.backlinks", "graph.links", "graph.neighborhood", "graph.resolve", "graph.unresolved",
 		"index.changes", "index.documents", "index.list", "index.models", "index.purge_model", "index.reindex", "index.status",
 		"preference.list", "preference.set",
 		"ranker.add", "ranker.list", "ranker.log", "ranker.models", "ranker.remove", "ranker.update", "ranker.usage", "ranker.use", "ranker.window",
 		"search.query", "sys.capabilities", "sys.events", "sys.hello", "sys.shutdown", "workspace.add", "workspace.configure", "workspace.embedding_policy", "workspace.focus", "workspace.list", "workspace.remove", "workspace.rename", "workspace.section_size", "workspace.set_patterns", "workspace.set_provider", "workspace.set_schema", "workspace.set_text_extensions"}
-	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 17 || MinProtocol != 12 {
+	if got := New(Fixed(), "v").Verbs(); !reflect.DeepEqual(got, want) || Protocol != 18 || MinProtocol != 12 {
 		t.Errorf("verbs %q at protocol %d: bump Protocol with the list", got, Protocol)
 	}
 }

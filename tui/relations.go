@@ -190,7 +190,7 @@ func (h *Host) showRelations(ws, p string, r relations) {
 			rows = append(rows, relRow{label: "  " + u})
 		}
 	}
-	h.relRows, h.relFor, h.relOut = rows, fileRef{ws, p}, r.out
+	h.relRows, h.relFor = rows, fileRef{ws, p}
 	list := make([]rowOf, len(rows))
 	for i, row := range rows {
 		list[i] = rowOf{"key": fmt.Sprint(i), "label": row.label}
@@ -210,7 +210,7 @@ func (h *Host) showRelations(ws, p string, r relations) {
 
 // clearRelations empties the drawer, saying why when a file is open.
 func (h *Host) clearRelations(why string) {
-	h.relRows, h.relFor, h.relOut = nil, fileRef{}, nil
+	h.relRows, h.relFor = nil, fileRef{}
 	h.relationsModel.Reset(nil)
 	h.set("App.relationsTitle", why)
 }

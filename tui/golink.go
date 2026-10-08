@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+
 	"github.com/yongjohnlee80/golib/parse/markdown"
 )
 
@@ -40,19 +42,31 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 	return found, ok
 }
 
-// goToLink opens what the link under the cursor names: the document the daemon resolved it to, in
-// this workspace; else a web or mail address in the browser, or a Markdown link's file beside the
-// note, as the HTML pane opens them. A wikilink the daemon did not resolve says so.
+// goToLink opens what the link under the cursor names: the document the daemon resolves it to now
+// (graph.resolve: as the index will, so a link just typed, saved or not, goes where it will lead);
+// else a web or mail address in the browser, or a Markdown link's file, as the HTML pane opens
+// them. A link to no document, or to several, says so.
 func (h *Host) goToLink(l cursorLink) {
-	for _, e := range h.relOut {
-		if e.raw == l.raw && e.resolved {
-			h.openIn(h.relFor.ws, e.path)
-			return
-		}
-	}
-	if l.wiki {
-		h.notify(l.raw + " names no document in this workspace")
+	if !h.file.open || h.file.outside() { // in no workspace's graph: the link as written
+		h.htmlLink(l.dest)
 		return
 	}
-	h.htmlLink(l.dest)
+	ws, from := h.file.ws, h.file.path
+	do(h, func(ctx context.Context) answerOf[map[string]any] {
+		res, err := h.call(ctx, "graph.resolve", ws, from, l.raw)
+		return answerOf[map[string]any]{v: asMap(res), err: err}
+	}, func(a answerOf[map[string]any]) {
+		switch path, reason := str(a.v, "path"), str(a.v, "reason"); {
+		case a.err != nil:
+			h.notify("go to link: " + a.err.Error())
+		case path != "":
+			h.openIn(ws, path)
+		case reason == "ambiguous":
+			h.notify(l.raw + " names several documents: rename one, or write its path")
+		case reason != "" || l.wiki:
+			h.notify(l.raw + " names no document in this workspace")
+		default:
+			h.htmlLink(l.dest)
+		}
+	})
 }
