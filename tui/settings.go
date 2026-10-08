@@ -26,7 +26,7 @@ import (
 // refusal opens the dialog again as it was typed, the reason on its help line.
 
 // daemonsProvider is the first provider choice: no provider of its own.
-const daemonsProvider = "the daemon's (System › AI models)"
+const daemonsProvider = "the daemon's (System › Search models)"
 
 // The choosers' rows, in the order their indices are read.
 var (

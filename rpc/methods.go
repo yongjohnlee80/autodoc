@@ -168,7 +168,7 @@ var publicErrs = []struct {
 	{index.ErrEmbedFailed, CodeEmbedFailed, "the query could not be embedded"},
 	{index.ErrSwitching, CodeSwitching, "a new model is filling: search by words until it is ready"},
 	// before ErrUnsupported, which it is: the same code, but a message that says what is missing
-	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › AI models"},
+	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"},
 	{edition.ErrDatabases, CodeUnsupported, "this edition has no database settings"},
 	{errFixed, CodeUnsupported, "this server's set of workspaces is fixed"},
 	{derived.ErrDeriverFailed, CodeUnsupported, "this document's text could not be made now: try again later, or open it in its own viewer"},

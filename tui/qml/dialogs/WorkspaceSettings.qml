@@ -79,7 +79,7 @@ Dialog {
                         Text { text: "embedding" }
                         ComboBox { id: sPolicy; model: App.policies; textRole: "label"; currentIndex: App.settingsPolicyIndex }
                         Text { text: "" }
-                        Text { text: "embedding provider (added in System › AI models)" }
+                        Text { text: "embedding provider (added in System › Search models)" }
                         ComboBox { id: sProvider; model: App.wsProviders; textRole: "label"; currentIndex: App.wsProviderIndex }
                         Text { text: App.settingsProviderState; wrapMode: Tui.WordWrap }
                     }

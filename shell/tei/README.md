@@ -77,7 +77,7 @@ environment, so anyone who can run `docker` on the machine can read it (`docker 
 
 ## Using it from AutoDoc
 
-Once AutoDoc's ranker models are available (System › AI models…, the **Ranker Models** tab), add
+Once AutoDoc's ranker models are available (System › Search models…, the **Ranker Models** tab), add
 a ranker of kind **TEI** with the base URL `http://127.0.0.1:18080` and no API key, then **Use**
 it. AutoDoc checks that the server is a reranker before switching to it, and re-ranks the top
 candidates of every worded search with it.

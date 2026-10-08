@@ -1,4 +1,4 @@
-// AIModels.qml — System › AI models… (SPC a), in two tabs. Embedding Models: the providers semantic
+// AIModels.qml — System › Search models… (SPC a), in two tabs. Embedding Models: the providers semantic
 // search can use. Ranker Models: the rankers search's second stage can use (ADR 0215), and the
 // window of top candidates the one in use ranks. On each, the list and which is in use on the left;
 // on the right, the one under the cursor's usage by day and its latest calls. Add…, Edit…, Use and
@@ -7,7 +7,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 94
     maxHeightPercent: 92
-    title: "AI models"
+    title: "Search models"
     dim: false
     TabView {
         id: aiTabs

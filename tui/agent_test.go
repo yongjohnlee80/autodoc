@@ -163,7 +163,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.keys(t, key(' '))
-	r.s.WaitForText(t, "g  the agent")
+	r.s.WaitForText(t, "g  AI agent")
 	r.keys(t, esc())
 }
 

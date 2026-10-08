@@ -161,7 +161,7 @@ Window {
         }
         Menu {
             title: "&System"
-            MenuItem { text: "&AI models…"; onTriggered: App.openAIModels() }
+            MenuItem { text: "&Search models…"; onTriggered: App.openAIModels() }
             MenuItem { text: "A&gent profiles…"; onTriggered: App.openAgentProfiles() }
             MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
         }
