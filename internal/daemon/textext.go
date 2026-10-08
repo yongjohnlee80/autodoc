@@ -100,13 +100,14 @@ func (m *Workspaces) textExtensions(exts []string) ([]string, error) {
 		return nil, err
 	}
 	if c := m.opts.Registrations.Collisions(norm); len(c) > 0 {
-		return nil, &kind.ErrExtension{Ext: c[0], Why: "this build reads it with a registered chunker"}
+		return nil, &kind.ErrExtension{Ext: c[0], Why: "this build reads it with a registered chunker or as a derived document"}
 	}
 	return norm, nil
 }
 
 // noteCollisions logs, once for each change, a workspace's stored text extensions that a
-// registration of this build reads instead. They do not stop it: the registration wins, and
+// registration of this build reads instead: a chunker's, or a derived format's (.html is read as
+// an HTML document, not as text). They do not stop it: the registration wins, and
 // workspace.list names them.
 func (m *Workspaces) noteCollisions(id int64, name string, stored []string) {
 	c := m.opts.Registrations.Collisions(stored)
@@ -117,6 +118,6 @@ func (m *Workspaces) noteCollisions(id int64, name string, stored []string) {
 	m.mu.Unlock()
 	if len(c) > 0 && !seen {
 		logger.Warning(m.opts.Log, nil, logger.Fields{"event": "workspace.text_collision", "workspace": name, "extensions": key,
-			"message": "these text extensions are read by this build's registered chunkers instead"})
+			"message": "these text extensions are read by this build's registered chunkers or derivers instead"})
 	}
 }

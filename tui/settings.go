@@ -166,12 +166,35 @@ func typeIndex(m wsfilter.Matcher, exts ...string) int {
 	return 0
 }
 
+// asText are the stored text extensions still read as text, and those now read as derived
+// documents instead (.html, once a text type, is an HTML document): the Edit tab offers only the
+// first, and says why the others went (ADR 1791429611 §4.6a).
+func asText(stored []string) (text, derived []string) {
+	for _, e := range stored {
+		if slices.Contains(kind.DerivedExtensions, e) {
+			derived = append(derived, e)
+		} else {
+			text = append(text, e)
+		}
+	}
+	return text, derived
+}
+
+// textsNote says which stored text types the Edit tab dropped, and why; "" for none.
+func textsNote(derived []string) string {
+	if len(derived) == 0 {
+		return ""
+	}
+	return strings.Join(derived, ", ") + ": now read as documents, not text; dropped from your text types, still included"
+}
+
 // form is the dialog filled from the base: what Save would send nothing for.
 func (b settingsBase) form() settingsForm {
 	w := b.w
 	m := wsfilter.NewMatcher(w.include, w.exclude)
+	text, _ := asText(w.textExtensions)
 	f := settingsForm{
-		name: w.name, root: w.root, schema: w.schema.path, texts: strings.Join(w.textExtensions, ", "),
+		name: w.name, root: w.root, schema: w.schema.path, texts: strings.Join(text, ", "),
 		include: strings.Join(w.include, "; "), exclude: strings.Join(w.exclude, "; "),
 		md: typeIndex(m, "md"), txt: typeIndex(m, "txt"), yaml: typeIndex(m, "yaml", "yml"),
 		code:     strings.Join(registeredOn(m, b.registered), ", "),
@@ -313,7 +336,10 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 	}
 	if !slices.Equal(texts, w.textExtensions) {
 		out["text_extensions"] = anyStrings(texts)
-		include, exclude = setTextTypes(include, exclude, w.textExtensions, texts)
+		// a derived format dropped from the text types keeps its include: it is still indexed,
+		// as a document
+		was, _ := asText(w.textExtensions)
+		include, exclude = setTextTypes(include, exclude, was, texts)
 	}
 	code, err := b.codeTypes(f.code)
 	if err != nil {
@@ -573,6 +599,9 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 		}
 	}
 	h.set("App.settingsProviderState", providerState)
+	_, dropped := asText(w.textExtensions)
+	h.set("App.settingsTextsNote", textsNote(dropped))
+	h.set("App.settingsTextsNoted", len(dropped) > 0)
 	h.set("App.settingsCodeOffered", len(base.registered) > 0)
 	h.set("App.settingsCodeLabel", "code types this backend reads: "+strings.Join(base.registered, ", ")+
 		" (comma-separated; on adds "+strings.Join(codeExcludes, ", ")+" to the excludes)")

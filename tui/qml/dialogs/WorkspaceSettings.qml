@@ -53,6 +53,7 @@ Dialog {
                         ComboBox { id: sYaml; model: App.yesNo; textRole: "label"; currentIndex: App.settingsYamlIndex }
                         Text { text: "your text types (comma-separated: .log, .rst)" }
                         TextField { id: sTexts; text: App.settingsTexts }
+                        Text { text: App.settingsTextsNote; visible: App.settingsTextsNoted; wrapMode: Tui.WordWrap }
                         Text { text: App.settingsCodeLabel; visible: App.settingsCodeOffered; wrapMode: Tui.WordWrap }
                         TextField { id: sCode; text: App.settingsCode; visible: App.settingsCodeOffered }
                         Text { text: "include globs (semicolon-separated; blank matches no files)" }

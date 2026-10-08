@@ -219,6 +219,8 @@ func (h *Host) state() map[string]any {
 		"App.settingsTexts":         "",
 		"App.settingsCode":          "",
 		"App.settingsCodeOffered":   false,
+		"App.settingsTextsNote":     "",
+		"App.settingsTextsNoted":    false,
 		"App.settingsCodeLabel":     "",
 		"App.settingsInclude":       "",
 		"App.settingsExclude":       "",

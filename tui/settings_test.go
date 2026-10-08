@@ -571,3 +571,30 @@ func TestZoomWithNoImagePreviewDoesNothing(t *testing.T) {
 		t.Error("an image was placed")
 	}
 }
+
+// A text type a build before this one stored that is now a derived format (.html): the Edit tab
+// leaves it out of the field and says why, and a save of an unrelated setting succeeds, storing
+// the other text types and keeping .html's include, since HTML is still indexed, as a document
+// (ADR 1791429611 §4.6a).
+func TestAStoredHTMLTextTypeDoesNotBlockASave(t *testing.T) {
+	w := kbInfo()
+	w.textExtensions = []string{".html", ".log"}
+	w.include = append(w.include, "**/*.html", "**/*.log")
+	b := baseFor(w)
+	f := b.form()
+	if f.texts != ".log" {
+		t.Fatalf("the text field %q, want .log alone", f.texts)
+	}
+	if n := textsNote([]string{".html"}); !strings.Contains(n, ".html") || !strings.Contains(n, "still included") {
+		t.Fatalf("note %q", n)
+	}
+	f.name = "docs"
+	got, err := b.changes(f)
+	if err != nil {
+		t.Fatalf("a save with .html stored: %v", err)
+	}
+	want := map[string]any{"name": "docs", "text_extensions": []any{".log"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sent %v, want %v: .html's include kept, the rules unchanged", got, want)
+	}
+}
