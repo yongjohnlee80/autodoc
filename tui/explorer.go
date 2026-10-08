@@ -190,4 +190,4 @@ func (h *Host) explorerActivated(ix tuidecl.Index) error {
 
 // openIn opens file p of workspace ws, entering ws first when it is not the one in use; either
 // way, unsaved changes are asked about first.
-func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true) }
+func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true, nil) }

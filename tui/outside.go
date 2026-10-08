@@ -123,7 +123,7 @@ func (h *Host) openAbsolute(abs string) {
 
 // openOutside opens the absolute path abs, a file outside every workspace, asking first over
 // unsaved changes.
-func (h *Host) openOutside(abs string) { h.openRef(fileRef{"", abs}, true) }
+func (h *Host) openOutside(abs string) { h.openRef(fileRef{"", abs}, true, nil) }
 
 // createAbsolute creates an empty file at abs (".md" added when it has no extension), chosen in
 // the save dialog, and opens it: in its workspace when one would index it, else outside every

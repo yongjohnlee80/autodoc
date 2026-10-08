@@ -139,12 +139,18 @@ func (h *Host) unsaved(answer string) {
 }
 
 // openPath opens a file of the workspace in use, asking first over unsaved changes.
-func (h *Host) openPath(p string) { h.openRef(fileRef{h.ws, p}, true) }
+func (h *Host) openPath(p string) { h.openRef(fileRef{h.ws, p}, true, nil) }
 
 // openRef opens ref, asking first over unsaved changes: in the workspace in use, outside every
 // workspace (ws ""), or in another workspace, entering it. The document left behind goes on the
-// history (SPC b) when remember is set; going back does not set it.
-func (h *Host) openRef(ref fileRef, remember bool) {
+// history (SPC b) when remember is set; going back does not set it. proceed, when not nil, runs
+// once the open goes ahead — after the unsaved question's Save or Discard, never after its Stay.
+func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
+	goAhead := func() {
+		if proceed != nil {
+			proceed()
+		}
+	}
 	leaving := func() *fileRef {
 		if !remember || !h.file.open {
 			return nil
@@ -153,6 +159,7 @@ func (h *Host) openRef(ref fileRef, remember bool) {
 	}
 	if ref.ws != "" && ref.ws != h.ws {
 		h.guard("open "+path.Base(ref.path)+" in "+ref.ws, func() {
+			goAhead()
 			prev := leaving() // before entering closes the file
 			h.enter(ref.ws)
 			h.load(ref.ws, ref.path, prev)
@@ -160,10 +167,11 @@ func (h *Host) openRef(ref fileRef, remember bool) {
 		return
 	}
 	if h.file.open && h.file.ws == ref.ws && h.file.path == ref.path && !h.file.dirty {
+		goAhead()
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
-	h.guard("open "+ref.path, func() { h.load(ref.ws, ref.path, leaving()) })
+	h.guard("open "+ref.path, func() { goAhead(); h.load(ref.ws, ref.path, leaving()) })
 }
 
 // reload reads the file again from disk, asking first over unsaved changes.

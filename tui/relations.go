@@ -300,16 +300,21 @@ func (h *Host) rememberLeft(prev fileRef) {
 	}
 }
 
-// goBack is SPC b: the document opened before this one, which is not remembered again.
+// goBack is SPC b: the document opened before this one, which is not remembered again. Its entry
+// leaves the history only once the open goes ahead: Stay at the unsaved question keeps it.
 func (h *Host) goBack() {
 	cur := fileRef{h.file.ws, h.file.path}
-	for len(h.history) > 0 {
-		prev := h.history[len(h.history)-1]
-		h.history = h.history[:len(h.history)-1]
+	for n := len(h.history); n > 0; n = len(h.history) {
+		prev := h.history[n-1]
 		if h.file.open && prev == cur {
+			h.history = h.history[:n-1] // the page already: nothing to go back to there
 			continue
 		}
-		h.openRef(prev, false)
+		h.openRef(prev, false, func() {
+			if k := len(h.history); k > 0 && h.history[k-1] == prev {
+				h.history = h.history[:k-1]
+			}
+		})
 		return
 	}
 	h.notify("nothing to go back to: SPC b returns to the documents opened before this one")
