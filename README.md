@@ -32,7 +32,8 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | --- | --- |
 | macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
 | Linux, macOS | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` |
-| Any, with Go 1.25+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Any, with Go 1.25+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (the TUI) |
+| Linux, macOS, with Go 1.25+, with the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
 | Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
 
@@ -48,6 +49,16 @@ Without them the build stops at `xcrun: error: invalid active developer path`. E
 or build without cgo — `CGO_ENABLED=0 go install …` — and the daemon polls the roots instead of
 watching them: it works, but a change is noticed only after a scan of the root. On Linux,
 `go install` needs no C compiler (the daemon uses inotify, and the store is pure Go).
+
+**The GUI with `go install`** needs `-tags gui`, on every platform: without it, `go install` builds
+the TUI alone, and `autodoc --gui` says so. With it, the build uses cgo, so it needs a C compiler
+and, on Linux, the window system's development libraries ([The GUI](#the-gui) lists them):
+
+```sh
+GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
+```
+
+`GOBIN` puts the binary in `~/.local/bin` (keep it on your `PATH`) rather than in `$(go env GOPATH)/bin`.
 
 ## Configuration
 
@@ -341,6 +352,7 @@ The GUI needs cgo, and it is the only part that does:
 
 - **macOS:** `make build` includes it. The release binary has it too. (cgo is already needed on
   macOS, for the FSEvents watcher.)
+- **`go install`:** add `-tags gui` (see [Install](#install)).
 - **Linux:** `make build` is the static TUI alone, with no cgo. `make build-gui` adds the GUI,
   which needs the window system's development libraries:
   - Debian/Ubuntu: `libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev
