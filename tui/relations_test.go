@@ -98,7 +98,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 }
 
 // TestJumpCardAndBack: SPC j numbers the neighbours, a digit opens one; SPC b returns, and
-// returns no further than the first document; the right-click menu has both.
+// returns no further than the first document; the right-click menu has Back.
 func TestJumpCardAndBack(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
@@ -120,17 +120,12 @@ func TestJumpCardAndBack(t *testing.T) {
 	r.leader(t, 'b')
 	r.s.WaitForText(t, "nothing to go back to")
 
-	// the right-click menu: Go to related… opens the card, Back goes back
+	// the right-click menu: Back goes back
 	r.leader(t, 'j')
 	r.s.WaitForText(t, "related documents")
 	r.keys(t, key('1'))
 	r.waitFile(t, "new.md")
 	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own, not doc.md's
-	r.menuRow(t, "Go to related…")
-	r.s.WaitForText(t, "related documents")
-	r.s.WaitForText(t, "1  supersedes     doc.md")
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
-	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "related documents") })
 	r.menuRow(t, "Back")
 	r.waitFile(t, "doc.md")
 }
@@ -268,4 +263,97 @@ func TestRelationsEdges(t *testing.T) {
 	if h := onLoop(r, func() int { return len(r.h.history) }); h != 0 {
 		t.Errorf("history after going back past the page: %d entries, want none", h)
 	}
+}
+
+// The editor's right-click menu has View diagram, enabled when the file has a Mermaid block to
+// show, as File › Preview Mermaid diagram does.
+func TestTheEditorMenuViewsTheDiagram(t *testing.T) {
+	r := attached(t, startDaemon(t, map[string][]string{"kb": {
+		"a.md", "# A\n",
+		"d.md", "# D\n\n```mermaid\nflowchart LR\n  A --> B\n```\n",
+	}}))
+	// item is View diagram's row in p's menu: whether there is one, and whether it is enabled
+	item := func(p string) (found, on bool) {
+		r.h.p.Post(func() { r.h.openPath(p) })
+		r.waitFile(t, p)
+		got := onLoop(r, func() [2]bool {
+			for _, it := range r.h.editorMenu(r.h.core) {
+				if it.ID == "autodoc.diagram" {
+					return [2]bool{true, it.Enabled}
+				}
+			}
+			return [2]bool{}
+		})
+		return got[0], got[1]
+	}
+	if found, on := item("a.md"); !found || on {
+		t.Errorf("a.md, no diagram: View diagram found %v, enabled %v; want found, disabled", found, on)
+	}
+	if found, on := item("d.md"); !found || !on {
+		t.Errorf("d.md, a diagram: View diagram found %v, enabled %v; want found, enabled", found, on)
+	}
+}
+
+// linkAt finds the link the cursor is on, of each kind, and nothing elsewhere.
+func TestLinkAtTheCursor(t *testing.T) {
+	src := "see [the doc](doc.md) and [[far|Far away]], <https://example.com>, [[#Heading]].\n"
+	at := func(s string) int { return strings.Index(src, s) }
+	for _, c := range []struct {
+		at        int
+		raw, dest string
+		wiki, ok  bool
+	}{
+		{at("the doc"), "[the doc](doc.md)", "doc.md", false, true},
+		{at("Far away"), "[[far|Far away]]", "far", true, true},
+		{at("example"), "<https://example.com>", "https://example.com", false, true},
+		{at("see"), "", "", false, false},
+		{at("Heading"), "", "", false, false}, // a heading of this note names no document
+	} {
+		l, ok := linkAt([]byte(src), c.at)
+		if ok != c.ok || (ok && (l.raw != c.raw || l.dest != c.dest || l.wiki != c.wiki)) {
+			t.Errorf("at %d: %+v %v, want %q %q wiki %v %v", c.at, l, ok, c.raw, c.dest, c.wiki, c.ok)
+		}
+	}
+}
+
+// Go to link, on the right-click menu, is there only on a link, and opens the document the
+// daemon resolved it to; a wikilink to no document says so.
+func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
+	r := attached(t, startDaemon(t, relationsKB))
+	r.h.p.Post(func() { r.h.openPath("new.md") })
+	r.waitFile(t, "new.md")
+	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"})
+	row := func(line, col int) (bool, cursorLink) {
+		got := onLoop(r, func() [2]any {
+			r.h.core.SetLine(line, col)
+			l, _ := linkAt([]byte(r.h.core.Value()), r.h.cursorBytes())
+			for _, it := range r.h.editorMenu(r.h.core) {
+				if it.ID == "autodoc.link" {
+					return [2]any{it.Enabled, l}
+				}
+			}
+			return [2]any{false, l}
+		})
+		return got[0].(bool), got[1].(cursorLink)
+	}
+	if on, _ := row(0, 2); on {
+		t.Error("Go to link is enabled on the heading")
+	}
+	on, l := row(2, 3)
+	if !on {
+		t.Fatal("Go to link is not enabled on [[far]]")
+	}
+	r.h.p.Post(func() { r.h.goToLink(l) })
+	r.waitFile(t, "far.md")
+
+	r.h.p.Post(func() { r.h.openPath("doc.md") })
+	r.waitFile(t, "doc.md")
+	r.s.WaitFor(t, "doc's relations", func(string) bool { return len(r.relationLabels()) > 0 })
+	missing := onLoop(r, func() cursorLink {
+		src := r.h.core.Value()
+		l, _ := linkAt([]byte(src), strings.Index(src, "missing-one"))
+		return l
+	})
+	r.h.p.Post(func() { r.h.goToLink(missing) })
+	r.waitNoticed(t, "[[missing-one]] names no document in this workspace")
 }
