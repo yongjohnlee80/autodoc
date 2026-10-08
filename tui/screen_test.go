@@ -1837,7 +1837,9 @@ func TestFindInThePanes(t *testing.T) {
 func (r *running) waitNoticed(t *testing.T, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notification "+text, func(sc string) bool {
-		flat := strings.Join(strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ").Replace(sc)), " ")
+		// a toast's frame, and the page frame's corners a long toast's line may land on
+		flat := strings.Join(strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ",
+			"┌", " ", "┐", " ", "└", " ", "┘", " ").Replace(sc)), " ")
 		return strings.Contains(flat, text)
 	})
 }

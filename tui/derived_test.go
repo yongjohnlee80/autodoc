@@ -30,7 +30,7 @@ const manualPDF = "# Manual\n\n## Setup\n\nkestrel\n"
 
 // TestADerivedDocumentOpensReadOnly: a PDF the daemon's build derives opens as its text, badged
 // read-only on the frame and the status line; keys that edit change nothing, a save writes nothing
-// and says why, the outline has its headings, and SPC O opens the file itself in the system
+// and says why, the outline has its headings, and File › Open with Default App opens the file itself in the system
 // viewer. A Markdown file opened next is writable again.
 func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
@@ -56,14 +56,14 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 		t.Fatalf("keys edited a derived document: %q, dirty %v", r.editorText(), r.file().dirty)
 	}
 	r.h.p.Post(r.h.save)
-	r.waitNoticed(t, "manual.pdf is read-only: its text is derived from the PDF; SPC O opens the original")
+	r.waitNoticed(t, "manual.pdf is read-only: its text is derived from the PDF; File › Open with Default App opens the original")
 	if got := d.read(t, "kb", "manual.pdf"); got != manualPDF {
 		t.Fatalf("the PDF was written: %q", got)
 	}
 	if n := onLoop(r, func() int { return len(r.h.outline.Headings()) }); n != 2 {
 		t.Fatalf("the outline has %d headings, want the derived text's 2", n)
 	}
-	r.leader(t, 'O')
+	r.h.p.Post(r.h.openWithDefaultApp) // File › Open with Default App
 	if p := <-opened; p != "/kb/manual.pdf" {
 		t.Fatalf("the default app opened %q", p)
 	}
@@ -75,11 +75,11 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	}
 }
 
-// TestTheDefaultAppNeedsAFile: with no file open, SPC O says what it needs.
+// TestTheDefaultAppNeedsAFile: with no file open, Open with Default App says what it needs.
 func TestTheDefaultAppNeedsAFile(t *testing.T) {
 	r := attached(t, startDaemon(t, kbNotes))
 	r.h.p.Post(r.h.openWithDefaultApp)
-	r.waitNoticed(t, "no file is open: open one, then SPC O opens it with its default app")
+	r.waitNoticed(t, "no file is open: open one, then File › Open with Default App opens it")
 }
 
 // wholeGo is a build's chunker for .go in tests: the file, one chunk.

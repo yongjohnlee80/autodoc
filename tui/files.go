@@ -26,8 +26,8 @@ import (
 //
 // A DERIVED DOCUMENT IS READ, NEVER WRITTEN. A PDF or a DOCX the daemon's build derives opens as
 // its derived text in a read-only editor, badged with its kind ("[PDF · read-only]"): motions,
-// find, copy and the outline work, edits and saves do not. SPC O (File › Open with Default App)
-// opens the original with the desktop's default app.
+// find, copy and the outline work, edits and saves do not. File › Open with Default App opens the
+// original with the desktop's default app.
 //
 // A FILE OUTSIDE EVERY WORKSPACE (ADR 1791430651) is opened by File › Open file… (SPC f) or made by
 // File › New file… (SPC n): its workspace is "" and its path absolute, and the daemon reads and
@@ -391,7 +391,7 @@ func (h *Host) save() {
 		return
 	}
 	if h.file.derived != "" {
-		h.notify(h.file.path + " is read-only: its text is derived from the " + h.file.derived + "; SPC O opens the original")
+		h.notify(h.file.path + " is read-only: its text is derived from the " + h.file.derived + "; File › Open with Default App opens the original")
 		return
 	}
 	h.write(h.core.Value(), h.file.version, nil)
