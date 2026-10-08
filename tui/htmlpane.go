@@ -107,7 +107,6 @@ func (h *Host) renderHTMLPane() {
 		// folder: at each render it would decode every image again
 		if key := root + "\x00" + base; !h.htmlPane.dirSet || key != h.htmlPane.dir {
 			h.htmlPane.dir, h.htmlPane.dirSet = key, true
-			h.refusedNoted = false
 			v.SetOnRefused(h.resourceRefused)
 			if dir != "" {
 				v.SetImageResolver(widget.DirResources(root, base))

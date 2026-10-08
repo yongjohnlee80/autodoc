@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"net/url"
 	"path"
 	"path/filepath"
+	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -35,6 +37,7 @@ func (h *Host) pageView() (*widget.HTMLView, bool) {
 // the editor is given the file's text, and points its images at the file's folder when that
 // changes.
 func (h *Host) documentFor(ws, p string, raw bool) {
+	h.refusedNoted = false // another document: what its page refuses is said again
 	on := raw && h.native()
 	switch {
 	case h.docSwitch != nil:
@@ -53,7 +56,6 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 	}
 	if root, base := h.resourcesFor(ws, p); root+"\x00"+base != h.pageDir {
 		h.pageDir = root + "\x00" + base
-		h.refusedNoted = false
 		v.SetImageResolver(widget.DirResources(root, base))
 	}
 }
@@ -75,13 +77,32 @@ func (h *Host) resourcesFor(ws, p string) (root, base string) {
 }
 
 // resourceRefused is a page's report of a stylesheet or image its resolver refused: said once per
-// page, with what to do about it.
+// document, saying why.
 func (h *Host) resourceRefused(src string) {
 	if h.refusedNoted {
 		return
 	}
 	h.refusedNoted = true
-	h.notify("resources outside this file's folder are not loaded (" + src + "): add the folder as a workspace")
+	h.notify(refusalNotice(src, h.file.ws))
+}
+
+// refusalNotice says why a page's src was not loaded: a web or file: address, an absolute path, a
+// path out of the workspace (ws), or out of a file's own folder outside every workspace, which is
+// the one adding the folder as a workspace answers.
+func refusalNotice(src, ws string) string {
+	src = strings.TrimSpace(src)
+	u, err := url.Parse(src)
+	switch {
+	case err != nil:
+		return "a resource the page names is not loaded: " + src
+	case u.Scheme != "" || u.Host != "" || strings.HasPrefix(src, "//"):
+		return "web and file: addresses in a page are not loaded (" + src + ")"
+	case strings.HasPrefix(u.Path, "/"):
+		return "absolute paths in a page are not loaded (" + src + ")"
+	case ws != "":
+		return "resources outside the workspace " + ws + " are not loaded (" + src + ")"
+	}
+	return "resources outside this file's folder are not loaded (" + src + "): add the folder as a workspace"
 }
 
 // linkPage gives the page its links, once the editor is built: they open as the preview pane's do,

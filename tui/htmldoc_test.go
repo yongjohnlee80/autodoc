@@ -161,21 +161,50 @@ func TestAPagesResourcesComeFromItsWorkspace(t *testing.T) {
 	if got := at("", "/elsewhere/site/page.html"); got != [2]string{"/elsewhere/site", ""} {
 		t.Errorf("an outside file's: %q, want its own folder and no base", got)
 	}
+	said := func(part string) int {
+		return onLoop(r, func() int {
+			c := 0
+			for _, m := range r.h.notices {
+				if strings.Contains(m.text, part) {
+					c++
+				}
+			}
+			return c
+		})
+	}
+	// an outside file's page: twice refused, said once; another document in the same folder, said
+	// again
 	r.h.p.Post(func() {
-		r.h.refusedNoted = false
+		r.h.file.ws = ""
+		r.h.documentFor("", "/site/a.html", false)
 		r.h.resourceRefused("../assets/archive.css")
 		r.h.resourceRefused("../assets/x.svg")
 	})
 	r.s.WaitForText(t, "add the folder as a workspace")
-	if n := onLoop(r, func() int {
-		c := 0
-		for _, m := range r.h.notices {
-			if strings.Contains(m.text, "add the folder as a workspace") {
-				c++
-			}
+	if n := said("add the folder as a workspace"); n != 1 {
+		t.Errorf("one page: said %d times, want once", n)
+	}
+	r.h.p.Post(func() {
+		r.h.documentFor("", "/site/b.html", false)
+		r.h.resourceRefused("../assets/archive.css")
+	})
+	r.s.WaitFor(t, "said for the second page", func(string) bool { return said("add the folder as a workspace") == 2 })
+}
+
+// TestRefusalNoticesSayWhy: a refused resource's notice says why, and gives the workspace advice
+// only where adding a folder as a workspace would let it load.
+func TestRefusalNoticesSayWhy(t *testing.T) {
+	for _, c := range []struct{ src, ws, want, not string }{
+		{"https://example.com/a.css", "", "web and file: addresses", "workspace"},
+		{"file:///etc/a.css", "kb", "web and file: addresses", "workspace"},
+		{"//cdn.example/a.js", "", "web and file: addresses", "workspace"},
+		{"/abs/a.png", "", "absolute paths", "workspace"},
+		{"../../outside.png", "kb", "outside the workspace kb", "add the folder"},
+		{"../assets/a.css", "", "add the folder as a workspace", ""},
+	} {
+		got := refusalNotice(c.src, c.ws)
+		if !strings.Contains(got, c.want) || c.not != "" && strings.Contains(got, c.not) || !strings.Contains(got, c.src) {
+			t.Errorf("%q in %q: %q, want it to say %q (and not %q)", c.src, c.ws, got, c.want, c.not)
 		}
-		return c
-	}); n != 1 {
-		t.Errorf("said %d times, want once a page", n)
 	}
 }
