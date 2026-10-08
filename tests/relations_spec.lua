@@ -177,6 +177,27 @@ t.section("the drawer's Relations section follows the editor", function()
   t.ok(#vim.tbl_filter(function(r) return r.kind == "rel_doc" end, rel_rows()) == 0, "and lists nothing")
 end)
 
+t.section("the section follows the KB's change feed, not a timer", function()
+  edit(kb .. "/doc.md")
+  t.ok(t.wait(10000, function() return vim.deep_equal(rel_texts(), DOC) end), "doc.md's relations")
+  -- a link into doc.md added outside Neovim: no write here, it is indexed on the daemon's own time
+  write(kb .. "/body.md", { "# Body", "", "back to [[doc]]" })
+  t.ok(t.wait(10000, function()
+    local got = rel_texts()
+    return vim.tbl_contains(got, "backlinks (1)") and got[#got - 3] == "body.md"
+  end), "another file's new link shows as a backlink once indexed", vim.inspect(rel_texts()))
+  -- this file saved: its new link shows once the write is indexed
+  vim.api.nvim_buf_set_lines(0, -1, -1, false, { "", "and [[far]]" })
+  vim.cmd("write")
+  t.ok(t.wait(10000, function() return vim.tbl_contains(rel_texts(), "links (2)") and vim.tbl_contains(rel_texts(), "far.md") end),
+    "a saved link shows once indexed", vim.inspect(rel_texts()))
+  -- put the fixture back for the sections after this one
+  write(kb .. "/body.md", files["body.md"])
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, files["doc.md"])
+  vim.cmd("write")
+  t.ok(t.wait(10000, function() return vim.deep_equal(rel_texts(), DOC) end), "and back to doc.md's own", vim.inspect(rel_texts()))
+end)
+
 t.section("<CR> opens a relation, d is depth 2, and back returns", function()
   relations._reset_for_tests()
   edit(kb .. "/doc.md")
