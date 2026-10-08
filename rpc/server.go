@@ -62,8 +62,9 @@ import (
 // diagnoses, each with its diagnostics; a session below 15 is refused the option. Protocol 16 is
 // ADR 1791284787: embedding.cancel_switch deletes the partial target's vectors and embedding.remove
 // the removed provider's model's, so a session below 16 is refused those two verbs; index.purge_model
-// refuses the active model and the target saying what to do instead.
-const Protocol int64 = 16
+// refuses the active model and the target saying what to do instead. Protocol 17 is ADR 1791430651:
+// file.read, file.write and file.locate, a local peer's files outside every workspace.
+const Protocol int64 = 17
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -77,7 +78,8 @@ const MinProtocol int64 = 12
 const TUIName = "autodoc-tui"
 
 // verbSince is the protocol each verb arrived in, for the verbs newer than MinProtocol.
-var verbSince = map[string]int64{"index.documents": 13}
+var verbSince = map[string]int64{"index.documents": 13,
+	"file.read": 17, "file.write": 17, "file.locate": 17}
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -210,6 +212,7 @@ type Preferences interface {
 // Server is the API over the daemon's workspaces.
 type Server struct {
 	reg         registrations.Tables // the build's registrations, sys.capabilities reports them
+	files       *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
 	rpc         *golibrpc.Server
 	workspaces  Workspaces
 	preferences Preferences
@@ -233,6 +236,7 @@ type options struct {
 	rankers     Rankers
 	events      Events
 	reg         registrations.Tables
+	files       *docs.Docs
 	storeID     string
 }
 
@@ -271,7 +275,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, storeID: o.storeID,
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID,
 		verbs: map[string]bool{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {

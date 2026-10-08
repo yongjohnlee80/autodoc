@@ -90,6 +90,9 @@ type Doc struct {
 	Version vfs.Version
 }
 
+// Admits reports whether path is a document of these: eligible, and a format the build reads.
+func (d *Docs) Admits(path string) bool { return d.check(path, false) == nil }
+
 // Derived reports whether path is a format the build derives: Read returns text derived from the
 // file, not the file's own bytes.
 func (d *Docs) Derived(path string) bool { return d.derives(path) }

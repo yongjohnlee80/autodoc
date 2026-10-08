@@ -226,6 +226,7 @@ func (s *Server) register() {
 	s.registerEmbeddings()
 	s.registerRankers()
 	s.registerEvents()
+	s.registerFiles()
 	s.configureVerbs()
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
