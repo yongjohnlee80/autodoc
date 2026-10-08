@@ -28,10 +28,10 @@ func TestCommunityIndexerDoesNotReadProDocumentsThroughBroadGlobs(t *testing.T) 
 		env.write(path, "binary-looking contents")
 		prepared := env.ix.prepare(context.Background(), workItem{path: path})
 		if !prepared.delete || prepared.err != nil {
-			t.Errorf("Pro-only format %q was not rejected: %+v", path, prepared)
+			t.Errorf("derived-only format %q was not rejected: %+v", path, prepared)
 		}
 		if got := env.fault.openCount(path); got != 0 {
-			t.Errorf("Pro-only format %q was read %d times", path, got)
+			t.Errorf("derived-only format %q was read %d times", path, got)
 		}
 	}
 }

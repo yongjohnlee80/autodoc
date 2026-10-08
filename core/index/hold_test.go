@@ -174,7 +174,7 @@ func TestADaemonWithTheChunkerUpgrades(t *testing.T) {
 	e.eventually("a.go cut by its chunker", func() bool { return e.indexerOf("a.go") == "c.go@fake-1.s3.t512" })
 }
 
-// TestADerivedDocumentIsHeldNotDeleted: a community daemon deletes a Pro format's file it never
+// TestADerivedDocumentIsHeldNotDeleted: a community daemon deletes a derived format's file it never
 // read, but one a deriver made text of is held, not deleted: the hold is decided before the kind.
 func TestADerivedDocumentIsHeldNotDeleted(t *testing.T) {
 	ctx := context.Background()

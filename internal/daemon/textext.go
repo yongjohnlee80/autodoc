@@ -41,7 +41,7 @@ func (m *Workspaces) textExtensionsFor(id int64) *textExtensions {
 
 // SetTextExtensions replaces a workspace's own plain-text extensions and answers them normalized.
 // A file whose extension joined or left the list is read again as its new kind; which files are
-// indexed is still the patterns'. A Pro format's, a built-in kind's or a registration's extension
+// indexed is still the patterns'. A derived format's, a built-in kind's or a registration's extension
 // is refused.
 func (m *Workspaces) SetTextExtensions(ctx context.Context, name string, exts []string) ([]string, error) {
 	norm, err := m.textExtensions(exts)

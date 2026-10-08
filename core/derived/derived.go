@@ -1,4 +1,4 @@
-// Package derived makes a Pro document's text through the build's deriver, for the indexer and the
+// Package derived makes a derived document's text through the build's deriver, for the indexer and the
 // document API alike: the file is read at offsets, a cache's eviction miss is retried once, and a
 // text made under another identity than the frozen one is refused.
 //

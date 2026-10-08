@@ -169,7 +169,7 @@ func (h *Host) show(p, content, version string) {
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
 // again whenever the daemon's registrations arrive, which a read may have beaten.
-//   - A Pro format's file is a derived document, read-only and badged, whatever the registrations
+//   - A derived format's file is a derived document, read-only and badged, whatever the registrations
 //     say or whether they have come: no build reads one but by its deriver, and none writes one.
 //   - Its highlighting, outline and frontmatter check follow the daemon's kinds as last known: a
 //     registered file's change from Markdown to plain text when they come.
@@ -178,7 +178,7 @@ func (h *Host) show(p, content, version string) {
 func (h *Host) readPage() {
 	p := h.file.path
 	h.file.derived = ""
-	if kind.Of(p, nil) == kind.Pro {
+	if kind.Of(p, nil) == kind.Derived {
 		h.file.derived = kind.Label(p)
 	}
 	h.editor.SetReadOnly(h.file.derived != "")

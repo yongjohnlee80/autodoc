@@ -12,7 +12,7 @@ func TestOf(t *testing.T) {
 		"a.md": Markdown, "a.MD": Markdown, "README": Markdown, "x.adoc": Markdown,
 		"n.txt": Text, "n.TXT": Text, "app.log": Text, "doc.rst": Text,
 		"c.yaml": YAML, "c.YML": YAML,
-		"r.pdf": Pro, "r.DOCX": Pro, "r.doc": Pro, "r.odt": Pro,
+		"r.pdf": Derived, "r.DOCX": Derived, "r.doc": Derived, "r.odt": Derived,
 	} {
 		if got := Of(p, text); got != want {
 			t.Errorf("Of(%s) = %v, want %v", p, got, want)
@@ -51,7 +51,7 @@ func TestARegistrationReadsItsExtension(t *testing.T) {
 		{"notes.md", nil, Markdown},
 		{"a.txt", nil, Text},
 		{"a.yaml", nil, YAML},
-		{"a.pdf", nil, Pro},
+		{"a.pdf", nil, Derived},
 		{"a.log", []string{".log"}, Text},
 		{"a.py", nil, Markdown},
 	} {
@@ -67,12 +67,12 @@ func TestARegistrationReadsItsExtension(t *testing.T) {
 	}
 }
 
-// TestADerivedFormatIsReadable: a format the build derives stays kind Pro, and is readable; one it
+// TestADerivedFormatIsReadable: a format the build derives stays kind Derived, and is readable; one it
 // does not derive is not.
 func TestADerivedFormatIsReadable(t *testing.T) {
 	r := Registrations{Derived: []string{".pdf"}}
-	if r.Of("manual.PDF", nil) != Pro || !r.Readable("manual.PDF") {
-		t.Fatal("a derived PDF is not a readable Pro document")
+	if r.Of("manual.PDF", nil) != Derived || !r.Readable("manual.PDF") {
+		t.Fatal("a derived PDF is not a readable derived document")
 	}
 	if r.Readable("letter.docx") {
 		t.Fatal("a format the build does not derive is readable")

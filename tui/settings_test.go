@@ -278,7 +278,7 @@ func TestTheSettingsSchema(t *testing.T) {
 	r.s.WaitForText(t, "line 3:")
 }
 
-// Your own text types: declared and admitted in one save, refused for a Pro format with the
+// Your own text types: declared and admitted in one save, refused for a derived format with the
 // format named, and their include dropped when removed.
 func TestTheSettingsTextTypes(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "n.md", "# Notes\n")})
@@ -293,7 +293,7 @@ func TestTheSettingsTextTypes(t *testing.T) {
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.texts = ".log, .pdf" })
 	r.s.WaitForText(t, "not saved:")
-	r.s.WaitForText(t, "Pro document format")
+	r.s.WaitForText(t, "derived document format")
 	r.openSettings(t, "kb", 0)
 	r.saveForm(func(f *settingsForm) { f.texts = "" })
 	r.s.WaitFor(t, ".log removed with its include", func(string) bool {
