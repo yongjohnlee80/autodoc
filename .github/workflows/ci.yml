@@ -139,8 +139,35 @@ jobs:
           CGO_ENABLED=1 GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
           CGO_ENABLED=1 GOARCH=amd64 go build -o /dev/null ./cmd/autodoc
 
+      # the release's macOS build carries the GUI (--gui): golib/gui on Gio, with cgo
+      - name: build both arches with the GUI
+        run: |
+          CGO_ENABLED=1 GOARCH=arm64 go build -tags gui -o /dev/null ./cmd/autodoc
+          CGO_ENABLED=1 GOARCH=amd64 go build -tags gui -o /dev/null ./cmd/autodoc
+
       - name: test the follower and the daemon (FSEvents)
         run: CGO_ENABLED=1 go test -race -count=2 -timeout 20m ./core/... ./rpc/...
+
+  # The Linux GUI build (make build-gui, the release's -gui artifacts): cgo against the window
+  # system's libraries. The static TUI build is the job above's.
+  gui-linux:
+    name: Linux GUI (cgo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: the window system's libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev
+      - name: make build-gui
+        run: make build-gui && ./bin/autodoc --version
+      - name: vet with the GUI
+        run: go vet -tags gui ./app/ ./cmd/...
 
   coverage:
     name: coverage policy
@@ -205,7 +232,8 @@ jobs:
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
       # covercheck is golib's, at the version go.mod requires: no install step
-      # and nothing outside the module graph.
+      # and nothing outside the module graph. app/gui_on.go builds only with the gui tag, which the
+      # coverage run (cgo-free) never sets: its build is the gui-linux and macOS jobs'.
       - name: enforce coverage policy
         id: coverage_policy
         continue-on-error: true
@@ -220,6 +248,7 @@ jobs:
             --maximum-total-regression 1 \
             --maximum-file-regression 1 \
             --require-changed-files \
+            --exclude '^app/gui_on\.go$' \
             --format markdown > "$RUNNER_TEMP/coverage-report.md"
           status=$?
           cat "$RUNNER_TEMP/coverage-report.md" >> "$GITHUB_STEP_SUMMARY"

@@ -27,6 +27,22 @@ function M.platform(uname)
   return os_name .. "-" .. arch
 end
 
+---flavour is the release asset's suffix for this machine: "-gui" on Linux with a graphical session
+---(WAYLAND_DISPLAY or DISPLAY set), the build that carries --gui and needs the window system's
+---libraries, which a desktop has; "" elsewhere: macOS's one build carries the GUI, and a Linux with
+---no display takes the static TUI. AUTODOC_GUI=1 or 0 chooses instead.
+---@param platform string? M.platform()'s
+---@param getenv (fun(name: string): string?)? os.getenv's shape (a test seam)
+function M.flavour(platform, getenv)
+  getenv = getenv or os.getenv
+  if not platform or not platform:match("^linux%-") then return "" end
+  local choice = getenv("AUTODOC_GUI")
+  if choice == "1" then return "-gui" end
+  if choice == "0" then return "" end
+  if (getenv("WAYLAND_DISPLAY") or "") ~= "" or (getenv("DISPLAY") or "") ~= "" then return "-gui" end
+  return ""
+end
+
 ---asset is the release asset's name and URL for tag on platform.
 ---@param tag string
 ---@param platform string
@@ -114,6 +130,19 @@ function M.download(dir, tag, log)
   for _, tool in ipairs({ "curl", "tar" }) do
     if vim.fn.executable(tool) ~= 1 then return false, tool .. " is not installed" end
   end
+  local flavour = M.flavour(platform)
+  local ok, err = M.fetch(dir, tag, platform .. flavour, log)
+  if not ok and flavour ~= "" then
+    -- a release from before the GUI builds, or one without this one: the static TUI still serves
+    log("no GUI build (" .. tostring(err) .. "); installing the TUI build")
+    ok, err = M.fetch(dir, tag, platform, log)
+  end
+  return ok, err
+end
+
+---fetch installs tag's asset for platform (an os-arch, with its flavour) into dir/bin/autodoc.
+---@return boolean ok, string|nil err
+function M.fetch(dir, tag, platform, log)
   local name, url = M.asset(tag, platform)
   local tmp = vim.fn.tempname()
   vim.fn.mkdir(tmp, "p")

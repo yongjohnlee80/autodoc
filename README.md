@@ -295,6 +295,35 @@ workspace is no longer served, its unsaved text stays as the untitled draft.
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
 
+## The GUI
+
+```sh
+autodoc --gui               # the TUI in a window of its own, attached to the daemon as --ui is
+autodoc --gui kb            # in workspace kb
+```
+
+`--gui` runs the same screen as `--ui` in a native window (golib's `gui`, on Gio): the same
+keys, menus, dialogs and panels. Buttons, check boxes, text fields, tabs and scrollbars are
+drawn natively, in the theme's colours, and a dialog dims what is behind it. The window can
+be resized freely; below 80 × 20 cells it asks to be enlarged.
+
+The GUI needs cgo, and it is the only part that does:
+
+- **macOS:** `make build` includes it. The release binary has it too. (cgo is already needed on
+  macOS, for the FSEvents watcher.)
+- **Linux:** `make build` is the static TUI alone, with no cgo. `make build-gui` adds the GUI,
+  which needs the window system's development libraries:
+  - Debian/Ubuntu: `libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev
+    libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev`;
+  - Arch: `wayland libx11 libxkbcommon libxkbcommon-x11 libxcursor libxfixes mesa vulkan-headers`.
+
+  The releases carry both: `autodoc-<tag>-linux-<arch>` (static, the TUI) and
+  `autodoc-<tag>-linux-<arch>-gui`. The Neovim plugin's `build.lua` installs the `-gui` one when
+  it runs in a graphical session (`WAYLAND_DISPLAY` or `DISPLAY`), else the static one;
+  `AUTODOC_GUI=1` or `0` chooses.
+
+A build without the GUI says so when asked for `--gui`, and how to get one.
+
 ## Neovim
 
 The repository is also a Neovim plugin (Neovim 0.12+). It talks to the same daemon over its

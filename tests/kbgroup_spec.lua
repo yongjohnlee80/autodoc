@@ -229,6 +229,15 @@ t.section("install: the release binary", function()
   t.eq(install.parse_sha256(string.rep("a", 64) .. "  autodoc.tar.gz\n"), string.rep("a", 64), "a shasum line")
   t.eq(install.parse_sha256("deadbeef  x"), nil, "a short sum is none")
 
+  -- the GUI build on a Linux desktop, the static TUI on a Linux without a display, macOS's one build
+  local env = function(vars) return function(k) return vars[k] end end
+  t.eq(install.flavour("linux-amd64", env({ WAYLAND_DISPLAY = "wayland-1" })), "-gui", "Linux on Wayland: the GUI build")
+  t.eq(install.flavour("linux-arm64", env({ DISPLAY = ":0" })), "-gui", "Linux on X11: the GUI build")
+  t.eq(install.flavour("linux-amd64", env({})), "", "Linux with no display: the static TUI")
+  t.eq(install.flavour("linux-amd64", env({ DISPLAY = ":0", AUTODOC_GUI = "0" })), "", "AUTODOC_GUI=0 keeps the TUI")
+  t.eq(install.flavour("linux-amd64", env({ AUTODOC_GUI = "1" })), "-gui", "AUTODOC_GUI=1 asks for the GUI")
+  t.eq(install.flavour("darwin-arm64", env({ AUTODOC_GUI = "1" })), "", "macOS: one build, the GUI in it")
+
   -- a release laid out as GitHub serves it, under a file:// base
   local plat = assert(install.platform())
   local rel = t.tmp("release")
@@ -245,7 +254,9 @@ t.section("install: the release binary", function()
   local dir = t.tmp("plugin")
   vim.fn.mkdir(dir .. "/bin", "p")
   vim.fn.writefile({ "old" }, dir .. "/bin/autodoc")
-  -- inside a coroutine, as a lazy build task or :AutodocMaintenance runs it
+  -- inside a coroutine, as a lazy build task or :AutodocMaintenance runs it; the TUI build, whatever
+  -- display this test runs under
+  vim.env.AUTODOC_GUI = "0"
   local ok, err, finished
   coroutine.wrap(function()
     ok, err = install.download(dir, "v9.9.9", function() end)
