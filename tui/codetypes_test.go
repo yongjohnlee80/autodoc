@@ -113,10 +113,34 @@ func TestTheEditTabOffersOnlyTheDaemonsTypes(t *testing.T) {
 			r.h.p.Post(func() { r.h.closeDialog("registrations") }) // the community daemon's offer
 			r.s.WaitFor(t, "no offer open", func(sc string) bool { return !strings.Contains(sc, regQuestion) })
 			r.openSettings(t, "kb", 0)
-			has := strings.Contains(flat(r.s.String()), "code types this backend reads: .go, .rs")
+			has := strings.Contains(flat(r.s.String()), "code: .go, .rs")
 			if has != c.shows {
 				t.Fatalf("the code types shown: %v, want %v\n%s", has, c.shows, r.s.String())
 			}
 		})
 	}
+}
+
+// TestTheEditTabOffersTheDaemonsDocuments: an every-build daemon (golib's code chunkers and
+// Documents) shows the Documents row, and the formats it does not read on their own line.
+func TestTheEditTabOffersTheDaemonsDocuments(t *testing.T) {
+	chunkers, err := registrations.Builtin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, err := registrations.New(chunkers, registrations.Documents(250<<20, 16<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := startManagedWith(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, serving.Options{Registrations: reg})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Registrations: reg.Tables()})
+	r.s.WaitFor(t, "the daemon's kinds and the files", func(string) bool {
+		return onLoop(r, func() bool { return len(r.h.kinds.Derived) > 0 }) && len(r.listed()) > 0
+	})
+	r.openSettings(t, "kb", 0)
+	r.s.WaitFor(t, "the Documents row", func(sc string) bool {
+		f := flat(sc)
+		return strings.Contains(f, "documents: .docx, .htm, .html") && strings.Contains(f, "☐ .doc, .odt, .pdf · not read here") &&
+			strings.Contains(f, "exclude globs")
+	})
 }

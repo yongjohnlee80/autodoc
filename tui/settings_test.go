@@ -434,7 +434,7 @@ func TestALateSettingsOpenNeverOpensAfterTheManagerCloses(t *testing.T) {
 }
 
 // Options › Preferences › File types… opens the workspace in use on its Edit tab, with the file
-// types and the Pro boundary.
+// types and the document formats this backend does not read (a daemon with no derivers here).
 func TestFileTypesOpenTheEditTab(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
@@ -443,7 +443,7 @@ func TestFileTypesOpenTheEditTab(t *testing.T) {
 	r.s.WaitFor(t, "the Edit tab", func(sc string) bool {
 		return strings.Contains(sc, "workspace settings · kb") && strings.Contains(sc, "Markdown (.md)") &&
 			strings.Contains(sc, "Plain text (.txt)") && strings.Contains(sc, "YAML (.yaml, .yml)") &&
-			strings.Contains(sc, "Pro: .doc, .docx, .odt, .pdf")
+			strings.Contains(sc, "☐ .doc, .docx, .htm, .html, .odt, .pdf ·")
 	})
 }
 
@@ -596,5 +596,40 @@ func TestAStoredHTMLTextTypeDoesNotBlockASave(t *testing.T) {
 	want := map[string]any{"name": "docs", "text_extensions": []any{".log"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("sent %v, want %v: .html's include kept, the rules unchanged", got, want)
+	}
+}
+
+// The Documents row: the formats the daemon derives, turned on by an include alone (no code
+// excludes), off by dropping it; one the daemon does not read is refused, naming what it reads.
+func TestTheSettingsDocumentTypes(t *testing.T) {
+	b := baseFor(kbInfo())
+	b.derived = []string{".docx", ".htm", ".html"}
+	f := b.form()
+	if f.docs != "" {
+		t.Fatalf("docs %q before any is on", f.docs)
+	}
+	f.docs = "html, .docx"
+	got, err := b.changes(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"include": []any{"**/*.md", "**/*.txt", "**/*.yaml", "**/*.yml", "**/*.html", "**/*.docx"}, "exclude": []any{".git/**"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("on: sent %v, want %v", got, want)
+	}
+	w := kbInfo()
+	w.include = append(w.include, "**/*.html")
+	b.w = w
+	f = b.form()
+	if f.docs != ".html" {
+		t.Fatalf("docs %q, want .html on", f.docs)
+	}
+	f.docs = ""
+	if got, err := b.changes(f); err != nil || !reflect.DeepEqual(got["include"], []any{"**/*.md", "**/*.txt", "**/*.yaml", "**/*.yml"}) {
+		t.Fatalf("off: sent %v, %v", got, err)
+	}
+	f.docs = ".pdf"
+	if _, err := b.changes(f); err == nil || !strings.Contains(err.Error(), "documents: this backend reads no .pdf; it reads .docx, .htm, .html") {
+		t.Fatalf("an unread format: %v", err)
 	}
 }
