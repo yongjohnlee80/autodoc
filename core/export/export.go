@@ -115,6 +115,9 @@ type Options struct {
 	// of the file it names there, so the page's links reach their files wherever it is written. ""
 	// writes every link as the source has it.
 	Base string
+	// SourceSpans puts each block element's source bytes on it (data-src="start-end"), for a
+	// view that follows the editor: the GUI's native HTML preview scrolls to the cursor's block.
+	SourceSpans bool
 }
 
 // Render is RenderWith without options: every link as the source has it.
@@ -159,7 +162,11 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 			}
 		})
 		var body bytes.Buffer
-		if err := markdownhtml.Render(&body, document); err != nil {
+		var renderOpts []markdownhtml.Option
+		if options.SourceSpans {
+			renderOpts = append(renderOpts, markdownhtml.SourceSpans())
+		}
+		if err := markdownhtml.Render(&body, document, renderOpts...); err != nil {
 			return nil, err
 		}
 		diagrams := false
