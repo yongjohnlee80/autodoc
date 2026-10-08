@@ -82,10 +82,11 @@ func (h *Host) renderHTMLPane() {
 	gen := h.htmlPane.gen
 	source, theme := []byte(h.core.Value()), h.exportTheme()
 	options := export.Options{SourceSpans: true}
-	dir := ""
+	dir, root, base := "", "", ""
 	if full := h.diskPath(); full != "" {
 		dir = filepath.Dir(full)
 		options.Base = dir
+		root, base = h.resourcesFor(h.file.ws, h.file.path)
 	}
 	do(h, func(context.Context) answerOf[[]byte] {
 		page, err := export.RenderWith(source, export.HTML, theme, options)
@@ -104,10 +105,12 @@ func (h *Host) renderHTMLPane() {
 		}
 		// a new resolver drops the page's images, so it is set before the page, and only for another
 		// folder: at each render it would decode every image again
-		if !h.htmlPane.dirSet || dir != h.htmlPane.dir {
-			h.htmlPane.dir, h.htmlPane.dirSet = dir, true
+		if key := root + "\x00" + base; !h.htmlPane.dirSet || key != h.htmlPane.dir {
+			h.htmlPane.dir, h.htmlPane.dirSet = key, true
+			h.refusedNoted = false
+			v.SetOnRefused(h.resourceRefused)
 			if dir != "" {
-				v.SetImageResolver(widget.DirImages(dir))
+				v.SetImageResolver(widget.DirResources(root, base))
 			} else {
 				v.SetImageResolver(nil)
 			}

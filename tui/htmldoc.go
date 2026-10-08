@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path"
 	"path/filepath"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -50,10 +51,37 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 	if !ok {
 		return
 	}
-	if dir := filepath.Dir(h.pathOnDisk(ws, p)); dir != h.pageDir {
-		h.pageDir = dir
-		v.SetImageResolver(widget.DirImages(dir))
+	if root, base := h.resourcesFor(ws, p); root+"\x00"+base != h.pageDir {
+		h.pageDir = root + "\x00" + base
+		h.refusedNoted = false
+		v.SetImageResolver(widget.DirResources(root, base))
 	}
+}
+
+// resourcesFor is where a page's stylesheets and images are read from (ADR 1791488696 §4.1): a
+// workspace file's from the workspace's folder, its paths read against its own folder, so a corpus
+// reaches its shared ../assets; a file outside every workspace's from its own folder alone, where
+// ../ is refused. Adding a folder as a workspace is how a user lets its pages reach above
+// themselves.
+func (h *Host) resourcesFor(ws, p string) (root, base string) {
+	if ws == "" {
+		return filepath.Dir(p), ""
+	}
+	root = h.rootOf(ws)
+	if base = path.Dir(p); base == "." {
+		base = ""
+	}
+	return root, base
+}
+
+// resourceRefused is a page's report of a stylesheet or image its resolver refused: said once per
+// page, with what to do about it.
+func (h *Host) resourceRefused(src string) {
+	if h.refusedNoted {
+		return
+	}
+	h.refusedNoted = true
+	h.notify("resources outside this file's folder are not loaded (" + src + "): add the folder as a workspace")
 }
 
 // linkPage gives the page its links, once the editor is built: they open as the preview pane's do,
@@ -61,5 +89,6 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 func (h *Host) linkPage() {
 	if v, ok := h.pageView(); ok {
 		v.SetOnLink(h.htmlLink)
+		v.SetOnRefused(h.resourceRefused)
 	}
 }
