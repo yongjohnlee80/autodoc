@@ -359,7 +359,16 @@ between the HTML, which you edit, and the page, which is read-only. On the page:
 - `j`/`k` or the arrows scroll a line, `Ctrl+D`/`Ctrl+U` half a page, `Space`/`PgDn`/`PgUp` a page,
   and `g`/`G` (or `Home`/`End`) go to the ends;
 - a drag selects and `y` or `Ctrl+C` copies;
-- links open as the preview pane's do, and images load from the file's folder.
+- links open as the preview pane's do.
+
+The page is drawn with its own stylesheets, linked or inline, and its images, SVG included. CSS
+layout, flex, grid and `<details>` work; JavaScript and form controls do not run.
+
+- **In a workspace,** a file's stylesheets and images load from anywhere in that workspace, so a
+  site whose pages share `../assets` shows them.
+- **Outside every workspace,** they load from the file's own folder only.
+  - A refused stylesheet or image is said once, in a notification.
+  - Add the site's folder as a workspace to let its pages reach above themselves.
 
 The GUI needs cgo, and it is the only part that does:
 

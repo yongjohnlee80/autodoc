@@ -54,7 +54,8 @@ THE PAGE
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
   itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
-  files or the browser.
+  files or the browser. Its stylesheets and images load from its workspace (a file outside every
+  workspace: its own folder only; add the folder as a workspace for a site sharing ../assets).
 
 NOTIFICATIONS
   What happens (a save, the connection, indexing) is a notification in a corner, saying how long
