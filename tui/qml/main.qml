@@ -93,22 +93,29 @@ Window {
             MenuItem { text: "Open &document…"; onTriggered: App.openPicker() }
             MenuItem { text: "&Open file…"; onTriggered: App.openFileDialog() }
             MenuItem { text: "Recen&t files…"; onTriggered: App.openRecent() }
+            MenuSeparator {}
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
+            MenuSeparator {}
             MenuItem { text: "Preview &HTML in browser"; onTriggered: App.previewHTML() }
             MenuItem { text: "Preview Mermaid &diagram…"; onTriggered: App.previewDiagram() }
             MenuItem { text: "Open with Default &App"; onTriggered: App.openWithDefaultApp() }
+            MenuSeparator {}
             MenuItem { text: "E&xit"; onTriggered: App.quit() }
         }
         Menu {
             title: "&Go"
             MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
+            MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
+            MenuSeparator {}
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "&Links"; onTriggered: App.toggleLinks() }
+            MenuItem { text: "&Notifications…"; onTriggered: App.openNotices() }
+            MenuSeparator {}
+            // the panels that stay open, checked while they show
             MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
-            MenuItem { text: "&Notifications…"; onTriggered: App.openNotices() }
-            MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
+            MenuSeparator {}
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
@@ -119,14 +126,17 @@ Window {
             MenuItem { text: "Find &next"; onTriggered: App.findAgainNext() }
             MenuItem { text: "Find &previous"; onTriggered: App.findAgainPrevious() }
             MenuItem { text: "&Clear find"; onTriggered: App.clearFind() }
+            MenuSeparator {}
             MenuItem { text: "&Search files…"; onTriggered: App.openSearch() }
         }
         Menu {
             title: "&View"
             MenuItem { text: "&Status line"; checkable: true; checked: App.statusShown; onTriggered: App.toggleStatusLine() }
             MenuItem { text: "&Hide the menu bar"; checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
+            MenuSeparator {}
             MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
+            MenuSeparator {}
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
         }
         Menu {
@@ -145,6 +155,7 @@ Window {
                 MenuItem { text: "&Retro"; group: "theme"; checked: App.themeRetro; onTriggered: App.useTheme("retro") }
                 MenuItem { text: "&Sepia"; group: "theme"; checked: App.themeSepia; onTriggered: App.useTheme("sepia") }
             }
+            MenuSeparator {}
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
         }
         Menu {
@@ -166,6 +177,7 @@ Window {
             title: "&System"
             MenuItem { text: "&Search models…"; onTriggered: App.openAIModels() }
             MenuItem { text: "A&gent profiles…"; onTriggered: App.openAgentProfiles() }
+            MenuSeparator {}
             MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
         }
         Menu {
