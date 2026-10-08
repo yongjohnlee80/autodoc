@@ -277,6 +277,9 @@ type Options struct {
 	// ConfigPath is the config file the TUI runs on: the agent's autodoc runs on it too, so it
 	// reaches the TUI's store (agent.go). "" is the default config.
 	ConfigPath string
+	// ProgramOptions come after the program's own options (options): a build's choice of how
+	// the document runs, such as tuidecl.WithStyle for the window's native widgets. nil: none.
+	ProgramOptions []tuidecl.ProgramOption
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -366,7 +369,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	h.layoutSrc = src
 	h.theme = themeOf(src)
-	return append(opts,
+	opts = append(opts,
 		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()},
 			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()},
 			highlight.Definition{Name: "Plain text (find)", Highlighter: h.textHighlighter()},
@@ -376,7 +379,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.ErrorSink(h.keep),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
-		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit)}, opt.App...)...))
+		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit)}, opt.App...)...),
+	)
+	return append(opts, opt.ProgramOptions...)
 }
 
 // Run runs the program until it quits; the session and every background call end with it.
