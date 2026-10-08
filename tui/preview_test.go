@@ -81,8 +81,8 @@ func TestTheDiagramPreviewIsAnImageWhereItCanBe(t *testing.T) {
 	r.h.p.Post(func() { r.h.previewDiagram() })
 	r.s.WaitForText(t, "drawn offline by mermaid")
 	img := r.placedImage(t)
-	if got := pixel(t, img, 0, 0); got != "#f4ecd8" {
-		t.Fatalf("the image's corner is %s, want sepia's paper #f4ecd8", got)
+	if got := pixel(t, img, 0, 0); got != "#e6d9b9" {
+		t.Fatalf("the image's corner is %s, want sepia's paper #e6d9b9", got)
 	}
 	if strings.Contains(r.s.String(), "flowchart LR") {
 		t.Fatal("the source shows beside the image")

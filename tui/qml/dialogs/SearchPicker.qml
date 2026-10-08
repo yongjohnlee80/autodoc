@@ -50,7 +50,11 @@ Dialog {
                     readOnly: true
                     text: App.searchPreviewText
                     cursorPosition: App.searchPreviewAt
+                    renderedEnabled: App.searchPreviewRendered
                     SyntaxHighlighter { definition: "Markdown (search)" }
+                    // its Rendered view (Ctrl+T, or the title bar's switch), for a Markdown hit: the
+                    // GUI's Editor draws it; the terminal's has none and ignores it
+                    MarkdownRenderer {}
                 }
             }
         }

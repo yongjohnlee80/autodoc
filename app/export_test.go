@@ -37,7 +37,7 @@ func TestExportThroughTheCommandLine(t *testing.T) {
 	if code, msg := runMain(t, nil, "--export", "html", "--output", out, "--theme", "sepia", src); code != 0 {
 		t.Fatalf("exit %d: %s", code, msg)
 	}
-	if b, err := os.ReadFile(out); err != nil || !strings.Contains(string(b), "#f4ecd8") {
+	if b, err := os.ReadFile(out); err != nil || !strings.Contains(string(b), "#e6d9b9") {
 		t.Fatalf("export = %.80q, %v", b, err)
 	}
 	if code, msg := runMain(t, nil, "--export", "html", "--output", out, "--theme", "neon", src); code != 1 || !strings.Contains(msg, "autodoc:") {
