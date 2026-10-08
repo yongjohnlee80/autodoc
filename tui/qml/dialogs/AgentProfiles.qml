@@ -1,4 +1,4 @@
-// AgentProfiles.qml — Options › Agent profiles…: the ways to start an agent, each a name and the
+// AgentProfiles.qml — System › Agent profiles…: the ways to start an agent, each a name and the
 // command that starts it, the default marked ●, the one running ▶. SPC ~ opens the default; Use
 // starts another now, asking first when one is running (agent.go, agentprofiles.go).
 Dialog {

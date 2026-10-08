@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// THE AGENT PROFILES — Options › Agent profiles…: the profiles, each a name and a command, the
+// THE AGENT PROFILES — System › Agent profiles…: the profiles, each a name and a command, the
 // default marked; Add…, Edit…, Make default, Use and Remove…. A refused save opens the form again,
 // saying why.
 

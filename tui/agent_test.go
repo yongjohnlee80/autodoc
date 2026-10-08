@@ -16,7 +16,7 @@ import (
 
 // agent_test.go: the agent — SPC g starts the default profile's command in AutoDoc's own folder for
 // the workspace, told about it; hidden, it keeps running; the profiles are added, edited, made the
-// default and removed in Options › Agent profiles…, and Use switches, asking first.
+// default and removed in System › Agent profiles…, and Use switches, asking first.
 
 // fakeAgent is an agent CLI that writes where it started, with what, what it was told, and which
 // autodoc it calls, to report (the screen wraps long paths), calls it, then echoes what it is sent
@@ -187,7 +187,7 @@ func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
 	onLoop(r, func() bool { r.h.toggleAgent(); return true })
 	r.s.WaitFor(t, "not found", func(string) bool {
-		return r.noticed("the agent gone's command was not found (127): check it in Options › Agent profiles…")
+		return r.noticed("the agent gone's command was not found (127): check it in System › Agent profiles…")
 	})
 	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "" {
 		t.Fatalf("after its command was not found %q is running", n)
@@ -399,4 +399,20 @@ func TestSpaceShiftGOpensAgentProfiles(t *testing.T) {
 	r.s.WaitFor(t, "the dialog, not the card", func(sc string) bool {
 		return !strings.Contains(sc, "SPC — commands") && strings.Contains(sc, "┌ agent profiles")
 	})
+}
+
+// A clean exit (the user quits the agent) closes its panel; a failure leaves it, with what the
+// agent printed (TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace exits with 3).
+func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	r.leader(t, 'g')
+	r.s.WaitForText(t, "agent · fake")
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.keys(t, decltest.Type("exit 0\r")...)
+	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
+	r.s.WaitFor(t, "the exit in the notifications", func(string) bool { return r.noticed("fake exited:") })
+	if open := onLoop(r, func() bool { return r.h.panelOpen["agent"] }); open {
+		t.Fatal("the agent's panel is still open after a clean exit")
+	}
 }
