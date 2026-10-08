@@ -179,8 +179,8 @@ recur. For a precise one (a name, an error text), search the exact words with
 
 ## The other verbs
 
-Every verb but `workspace.*`, `preference.*`, `embedding.*`, `ranker.*` and `sys.*` takes the
-workspace's name first.
+Every verb but `workspace.*`, `preference.*`, `embedding.*`, `ranker.*`, `file.*` and `sys.*` takes
+the workspace's name first.
 
 | verb | parameters | answers |
 | --- | --- | --- |
@@ -194,6 +194,9 @@ workspace's name first.
 | `doc.read` | workspace, path | `{content, version}`: the file's text, and its version. A PDF or DOCX a build derives answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a `---` rule, begins `[autodoc: truncated]`: that line is AutoDoc's, not the document's, so stop quoting before it |
 | `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown file's headings in order, with the version they were read at; other kinds have none |
 | `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule `unknown_type`); only Markdown has frontmatter |
+| `file.read` | absolute path | `{content, version}` of a UTF-8 text file anywhere on the daemon's disk, as `doc.read`. On the unix socket only (-32001 over TCP); a relative or unclean path, or a file that is not text, is InvalidParams. Protocol 17 |
+| `file.write` | absolute path, content, version | `{version}`, as `doc.write`: at `version`, or `""` to create the file and its folders. Unix socket only. Protocol 17 |
+| `file.locate` | absolute path | `{workspace, path}`: the workspace that indexes the file (the most specific root), its path there; `nil` for none. Unix socket only. Protocol 17 |
 | `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every file in path order, after `after` (`""` from the start) |
 | `index.documents` | workspace, options? | `{docs: [{path, generation, title, updated, indexed_at, fields}], more, next}`: the files with their frontmatter, most recently updated first. Options: `sort` (`updated`, `path` or `indexed`), `fields` (the frontmatter fields to return; default `title`, `type`, `status`, `updated`, `tags`, `abstract`), `tags` (every one), `paths` (folders or files), `facets` (as search's), `missing` (files that lack one of these fields), `after` (the previous page's `next`), `limit` (up to 500, default 100). `updated` is the frontmatter's, else when the index last read a change to the file. Protocol 13 |
 | `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, held, held_stale, held_unchecked, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts files whose frontmatter has a problem; `held` the files another build indexed that this one holds (see `hold` above), `held_stale` and `held_unchecked` among them |
@@ -207,7 +210,7 @@ workspace's name first.
 | `sys.capabilities` | — | `{databases, registrations, ranker, verbs}`: `verbs` is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build, and `ranker`, `{supplied, model}`: whether the build supplies its own ranker |
 | `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema, database settings (`workspace.databases`, never a connection) or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
 
-Writing files (`doc.write`, `doc.rename`, `doc.remove`), changing workspaces and choosing the
+Writing files (`doc.write`, `doc.rename`, `doc.remove`, `file.write`), changing workspaces and choosing the
 embedding model or the ranker (`ranker.add`, `update`, `remove`, `use`, `window`) are for the user's
 tools, not an agent's search. Do not call them unless the user
 asks you to change their files through AutoDoc.
