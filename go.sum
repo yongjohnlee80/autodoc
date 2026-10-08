@@ -61,6 +61,8 @@ github.com/yongjohnlee80/golib/gui v0.1.4 h1:GWHRDyrfHUVBQDVjm49s23Pko0aaui+pasf
 github.com/yongjohnlee80/golib/gui v0.1.4/go.mod h1:4rwpQmqaUI35C/UjXuibYl4qHXiouX/aZBiufRKSa9c=
 github.com/yongjohnlee80/golib/gui v0.1.7 h1:iwyZi+jgwU3Ppiu9O5oBQ2awp+lvM8+Ckl7m0owMfbg=
 github.com/yongjohnlee80/golib/gui v0.1.7/go.mod h1:SkD4AjOTLYgNeut7RPF4pUwsJ7GviMonbDFSAcAff+s=
+github.com/yongjohnlee80/golib/gui v0.1.8 h1:c+dQVao2ELnnjYSl3ioU8nAPw38MmQW4xfE7+E1Xzdk=
+github.com/yongjohnlee80/golib/gui v0.1.8/go.mod h1:SkD4AjOTLYgNeut7RPF4pUwsJ7GviMonbDFSAcAff+s=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 h1:R84qjqJb5nVJMxqWYb3np9L5ZsaDtB+a39EqjV0JSUM=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0/go.mod h1:S9Xr4PYopiDyqSyp5NjCrhFrqg6A5zA2E/iPHPhqnS8=
 golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 h1:tMSqXTK+AQdW3LpCbfatHSRPHeW6+2WuxaVQuHftn80=
