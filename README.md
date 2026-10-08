@@ -47,8 +47,8 @@ nothing answers.
 system's FSEvents: it needs the Command Line Tools (`xcode-select --install`; not the whole of Xcode).
 Without them the build stops at `xcrun: error: invalid active developer path`. Either install them,
 or build without cgo — `CGO_ENABLED=0 go install …` — and the daemon polls the roots instead of
-watching them: it works, but a change is noticed only after a scan of the root. On Linux,
-`go install` needs no C compiler (the daemon uses inotify, and the store is pure Go).
+watching them: it works, but a change is noticed only after a scan of the root. On Linux, the
+TUI's `go install` needs no C compiler (the daemon uses inotify, and the store is pure Go).
 
 **The GUI with `go install`** needs `-tags gui`, on every platform: without it, `go install` builds
 the TUI alone, and `autodoc --gui` says so. With it, the build uses cgo, so it needs a C compiler
