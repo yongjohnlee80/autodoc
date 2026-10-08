@@ -179,9 +179,10 @@ type Host struct {
 	// kitty graphics answer in tests, and rasterizeOverride the headless browser
 	previewGen        uint64
 	htmlPreviewPath   string
-	diagramImage      bool       // the Mermaid preview is an image, not its fallback
-	diagramHelpText   string     // what the Mermaid preview's help line says
-	imagePreview      previewing // the image preview open, to zoom it (preview.go)
+	diagramImage      bool          // the Mermaid preview is an image, not its fallback
+	diagramHelpText   string        // what the Mermaid preview's help line says
+	imagePreview      previewing    // the image preview open, to zoom it (preview.go)
+	htmlPane          htmlPaneState // the native HTML preview beside the editor, under --gui (htmlpane.go)
 	graphicsOverride  func() tuicore.Tri
 	rasterizeOverride func(context.Context, []byte, widget.Page) ([]byte, error)
 	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
@@ -197,6 +198,7 @@ type Host struct {
 	remember    func(name string)
 	installed   func() (string, error) // Options.Installed
 	browser     func(context.Context, string) error
+	nativeViews func() bool // whether the backend draws native views (--gui); tests stand in for a GUI
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
 	// test's process, so its test waits on the daemon instead
 	awaitExit func(ctx context.Context, pid int64) bool

@@ -62,6 +62,7 @@ func (h *Host) outlineSoon() {
 func (h *Host) cursorMoved() {
 	h.showCrumb()
 	h.feedSoon()
+	h.followCursorInPane()
 }
 
 // showCrumb titles the page with the file's name and the breadcrumb at the cursor.

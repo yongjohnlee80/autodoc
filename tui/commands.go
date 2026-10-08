@@ -130,6 +130,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.previewHeading":           oneNumber("App.previewHeading", "a row", h.previewHeading),
 		"App.jumpToHeading":            oneNumber("App.jumpToHeading", "a row", h.jumpToHeading),
 		"App.cursorMoved":              none(h.cursorMoved),
+		"App.htmlLink":                 oneString("App.htmlLink", "a link's target", h.htmlLink),
 		"App.startRemoveWorkspace":     oneNumber("App.startRemoveWorkspace", "a row", h.startRemoveWorkspace),
 		"App.removeWorkspaceConfirmed": none(h.removeWorkspaceConfirmed),
 

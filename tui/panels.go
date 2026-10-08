@@ -8,7 +8,7 @@ import "github.com/yongjohnlee80/golib/tui/widget"
 // they are the editor's.
 
 // The panels, by the document's ids: the drawer, and what in it takes the keyboard.
-var panels = map[string]string{"explorer": "explorerTree", "links": "linksList", "terminal": "terminalView", "agent": "agentView"}
+var panels = map[string]string{"explorer": "explorerTree", "links": "linksList", "terminal": "terminalView", "agent": "agentView", "htmlPane": "htmlView"}
 
 // togglePanel opens or closes a panel; open, it has the keyboard.
 func (h *Host) togglePanel(name string) {

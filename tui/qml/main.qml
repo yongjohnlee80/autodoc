@@ -270,6 +270,27 @@ Window {
             }
         }
     }
+    // the native HTML preview (File › Preview HTML under --gui): the note's page beside the editor,
+    // live as it is edited and following the cursor (htmlpane.go); a terminal never opens it
+    Drawer {
+        id: htmlPane
+        modal: false
+        edge: Tui.Right
+        size: 50
+        length: 100
+        resizable: true
+        minimumSize: 20
+        onOpened: App.panelOpened("htmlPane")
+        onClosed: App.panelClosed("htmlPane")
+        Frame {
+            title: "preview"
+            palette.window: Theme.document.base
+            HTMLView {
+                id: htmlView
+                onLinkActivated: App.htmlLink(href)
+            }
+        }
+    }
     Drawer {
         id: links
         modal: false
