@@ -17,7 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// terminal_test.go: the terminal pane — SPC ` and View › Terminal, a shell in the workspace's folder,
+// terminal_test.go: the terminal pane — SPC ` and Go › Terminal, a shell in the workspace's folder,
 // the keyboard in and back out, its place and size from the preferences.
 
 // runShellTUI runs the TUI with /bin/sh as the user's shell, so the cells do not depend on the

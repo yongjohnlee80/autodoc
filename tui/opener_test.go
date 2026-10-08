@@ -17,7 +17,7 @@ func TestTheOpenerLeavesTheAppRunning(t *testing.T) {
 	mark := filepath.Join(t.TempDir(), "survived")
 	start := time.Now()
 	// the "app": runs past the grace, then marks that it was not killed
-	err := startOpener(context.Background(), "sh", "-c", "sleep 3; touch "+mark)
+	err := startOpener(context.Background(), "sh", "-c", `sleep 3; touch "$1"`, "sh", mark)
 	if err != nil {
 		t.Fatalf("a running app reported %v", err)
 	}
