@@ -263,12 +263,7 @@ func (h *Host) readPage() {
 	}
 	h.core.SetReadOnly(h.file.derived != "")
 	k := h.kinds.Of(p, h.textExtensions()) // the daemon's registrations: it is the one indexing
-	// The Rendered view draws Markdown, so only a file read as Markdown has one: a note, or a derived
-	// document, whose text is Markdown. Code, YAML and plain text stay Raw, and the key that switches
-	// views does nothing there. Only an editor with a Rendered view answers (the GUI's).
-	if rs, ok := h.editor.(renderedSwitch); ok {
-		rs.SetRenderedEnabled(k == kind.Markdown || h.file.derived != "")
-	}
+	h.setRendered(k == kind.Markdown || h.file.derived != "")
 	switch k {
 	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
@@ -280,6 +275,17 @@ func (h *Host) readPage() {
 	h.setDirty(h.file.dirty) // the status line's title carries the badge
 	h.validateSoon()
 	h.refreshOutline() // and the frame's
+}
+
+// setRendered gives the editor its Rendered view, or withholds it. The view draws Markdown, so
+// only a page read as Markdown has one: a note, a derived document (its text is Markdown), or the
+// untitled draft. Code, YAML and plain text stay Raw, and the key that switches views does nothing
+// there. Called at each change of document: load (through readPage) and closeFile, the two places
+// that set the editor's text. Only an editor with a Rendered view answers (the GUI's).
+func (h *Host) setRendered(on bool) {
+	if rs, ok := h.editor.(renderedSwitch); ok {
+		rs.SetRenderedEnabled(on)
+	}
 }
 
 // recheckFile checks the open file against the disk on a new connection, which may have missed a
@@ -343,6 +349,7 @@ func (h *Host) closeFile() {
 	h.outlineGen++
 	h.set("App.fileTitle", untitled)
 	h.set("App.syntaxDefinition", "Markdown (find)")
+	h.setRendered(true) // the draft is Markdown, whatever the file before it was
 	h.set("App.statusCenter", "")
 	h.clearRelations("relations")
 	h.clearDiagnostics()

@@ -11,8 +11,9 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// The Rendered view follows the open file's kind: a note renders, a Go file opened after it is
-// Raw and Ctrl+T does nothing there, and a note opened again renders on Ctrl+T. No window opens.
+// The Rendered view follows the page's kind: a note renders; a Go file opened after it is Raw and
+// Ctrl+T does nothing there; the draft left by closing it renders; and a note opened from the
+// rendered draft keeps the view, Ctrl+T switching it back. No window opens.
 func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{
 		"kb": {"a.md", "# Alpha\n\n## a heading\n", "a.go", goWithAHashLine, "b.md", "# Bravo\n"},
@@ -59,10 +60,24 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 		t.Fatalf("Ctrl+T on a Go file gives %v, want Raw: its # line must not render as a heading", m)
 	}
 
-	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
-	r.waitFile(t, "b.md")
+	// closing the Go file leaves the untitled draft, which is Markdown: Ctrl+T renders it
+	onLoop(r, func() bool { r.h.closeFile(); return true })
+	r.s.WaitFor(t, "the draft", func(string) bool { return !r.file().open })
+	onLoop(r, func() bool { r.h.core.SetValue("# Draft heading\nmore\n"); return true })
 	ctrlT()
 	if m := mode(); m != guiwidget.Rendered {
-		t.Fatalf("a note opened again: Ctrl+T gives %v, want Rendered", m)
+		t.Fatalf("the draft after a Go file: Ctrl+T gives %v, want Rendered", m)
+	}
+
+	// a note opened from the rendered draft keeps the view chosen: Markdown to Markdown, the view
+	// is the user's; Ctrl+T switches it back
+	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
+	r.waitFile(t, "b.md")
+	if m := mode(); m != guiwidget.Rendered {
+		t.Fatalf("a note opened from the rendered draft is %v, want Rendered (the view kept)", m)
+	}
+	ctrlT()
+	if m := mode(); m != guiwidget.Raw {
+		t.Fatalf("Ctrl+T on a rendered note gives %v, want Raw", m)
 	}
 }
