@@ -51,6 +51,10 @@ THE PAGE
   frame and the status line say [PDF · read-only]. Motions, find, copy and the outline work;
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
+  An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
+  itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
+  the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,
+  files or the browser.
 
 NOTIFICATIONS
   What happens (a save, the connection, indexing) is a notification in a corner, saying how long

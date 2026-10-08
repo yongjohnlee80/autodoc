@@ -246,6 +246,10 @@ terminal, as below; where it cannot, it shows the block's source and why.
   read-only page, the frame and the status line badged `[HTML · read-only]`. Motions, find, copy and the outline
   over its headings work; edits and saves do not. `File › Open with Default App` opens the file itself in the desktop's
   viewer, for its diagrams and layout.
+- **An HTML file asks how to open it.**
+  - **Simplified** (`Enter`) is the derived text above, read-only.
+  - **Raw** is the HTML itself, edited and saved like any file; reading it again keeps it raw.
+  - In the GUI, a raw file's Rendered view (`Ctrl+T`) is its page, drawn natively.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
 - **The pickers** (search, open a document, add a workspace) share one layout: the fields over the
@@ -348,6 +352,14 @@ it matches `autodoc --export html`. The text in it can be selected and copied (`
 - **Links:** a click on a link opens what it names:
   - a note or a file, in the editor;
   - a web or mail address, in the browser.
+
+**An HTML file opened Raw** has its page as the editor's Rendered view in the GUI: `Ctrl+T` flips
+between the HTML, which you edit, and the page, which is read-only. On the page:
+
+- `j`/`k` or the arrows scroll a line, `Ctrl+D`/`Ctrl+U` half a page, `Space`/`PgDn`/`PgUp` a page,
+  and `g`/`G` (or `Home`/`End`) go to the ends;
+- a drag selects and `y` or `Ctrl+C` copies;
+- links open as the preview pane's do, and images load from the file's folder.
 
 The GUI needs cgo, and it is the only part that does:
 
