@@ -86,11 +86,17 @@ Add…, Edit… or Advanced…; Ctrl+PageUp and Ctrl+PageDown switch tabs, and E
   include and exclude lists, semicolon-separated root-relative patterns (a blank include matches no
   files). Markdown, plain text and YAML are toggled here, and your own text types (`.log`, `.rst`,
   …) are entered here: each is read as UTF-8 plain text by declaration (never sniffed) and admitted
-  with an include unless the rules already admit it. `.doc`, `.docx`, `.odt`, and `.pdf` are
-  Pro-only and unavailable in Community, even if a broad include glob names them, and cannot be
-  declared as text; a build with a deriver for one indexes it once an include names it (see
-  [Builds of your own](#builds-of-your-own)). `Options › Editor preferences… › File types…` opens this tab for the workspace
-  in use.
+  with an include unless the rules already admit it. **Code** (`.go`, `.ts`, `.tsx`, `.js`, `.jsx`,
+  `.mjs`, `.py`, `.rs`) and **documents** (`.docx`, `.htm`, `.html`) are turned on in their own
+  rows: every build reads them. Code is cut a chunk per declaration and embedded by its signature
+  and doc comment; turning it on also writes `vendor/**`, `target/**`, `dist/**` and `build/**` to
+  the excludes. A document is read as its text: a DOCX's paragraphs, headings, lists and tables; an
+  HTML page's content, without its scripts, styles, navigation or footer (only its `main` or
+  `article` when it has one). `.doc`, `.odt` and `.pdf` are read only by a build with a deriver for
+  them (see [Builds of your own](#builds-of-your-own)). None of these can be declared as text: a
+  text type a build before this one stored for `.html` is dropped from the field with a note, and
+  HTML stays included, as a document. `Options › Editor preferences… › File types…` opens this tab
+  for the workspace in use.
 - **Advanced**: the section size, the embedding policy and the embedding provider; and, where the
   edition offers them, the databases: a **source** (postgres or sqlite) that the workspace's `.view`
   files read, with the arguments they take, and the **destination** its index is kept in, the local
@@ -212,9 +218,9 @@ terminal, as below; where it cannot, it shows the block's source and why.
   preview says which was missing; turning `Image previews` off compares the two on the same file.
   Both follow the active theme's colours (light, dark, sepia, retro, mono), as
   `autodoc --export html --theme …` does.
-- **A derived document is read-only.** Where the daemon's build derives PDFs or DOCX files (see
-  [Builds of your own](#builds-of-your-own)), one opens as its derived text in a read-only page,
-  the frame and the status line badged `[PDF · read-only]`. Motions, find, copy and the outline
+- **A derived document is read-only.** A DOCX or an HTML file, or a PDF where the daemon's build
+  derives one (see [Builds of your own](#builds-of-your-own)), opens as its derived text in a
+  read-only page, the frame and the status line badged `[HTML · read-only]`. Motions, find, copy and the outline
   over its headings work; edits and saves do not. `SPC O` opens the file itself in the desktop's
   viewer, for its diagrams and layout.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
@@ -695,22 +701,25 @@ They are small beside a chat model and run alongside one.
 
 ## Builds of your own
 
-`cmd/autodoc` is the community build: `app.Main` with nothing registered. Another main can hand
-`app.Main` its own chunkers and a deriver (ADR 0216):
+`cmd/autodoc` is the community build: `app.Main` with nothing of its own. Every build, the community
+one included, has golib's code chunkers (`search/chunk/code`) and derives `.docx`, `.htm` and
+`.html` (golib's `extract/docx` and `extract/html`; ADR 1791429611). Another main can hand `app.Main`
+more chunkers and a deriver (ADR 0216):
 
 ```go
 func main() {
 	os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
-		Version:  version,                                     // -X main.version, as cmd/autodoc's
-		Chunkers: map[string]search.Chunker{".go": goChunker}, // golib's search.Chunker, by extension
-		Deriver:  pdfDeriver,                                  // Pro formats' text, read-only
-		Rank:     app.Rank{Ranker: slmRanker, Window: 20},     // golib's rank.Ranker: the only one in use
+		Version:  version,                                       // -X main.version, as cmd/autodoc's
+		Chunkers: map[string]search.Chunker{".zig": zigChunker}, // golib's search.Chunker, by extension
+		Deriver:  pdfDeriver,                                    // more formats' text, read-only
+		Rank:     app.Rank{Ranker: slmRanker, Window: 20},       // golib's rank.Ranker: the only one in use
 	}))
 }
 ```
 
-- **They are checked once, at the start.** An extension that is upper-case, built in (`.md`, `.txt`,
-  `.yaml`, `.yml`) or a Pro format, or a version outside `[A-Za-z0-9._+-]{1,32}` (a deriver's id
+- **They are checked once, at the start.** A chunker's extension that is upper-case, built in (`.md`,
+  `.txt`, `.yaml`, `.yml`), one of golib's code types or a derived format; a deriver's format that
+  every build already derives (`.docx`, `.htm`, `.html`); or a version outside `[A-Za-z0-9._+-]{1,32}` (a deriver's id
   may hold `/` too, up to 64), stops the binary, naming it. Each version is read once.
 - **A registered file is code, read as text.** Its kind is the chunker's, after the built-in kinds and
   before the workspace's own text types (one of which naming it is refused). Its chunks keep the
