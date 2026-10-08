@@ -95,6 +95,7 @@ type Host struct {
 	linksAt    int
 	// the Relations drawer (relations.go): its rows, whether it shows depth 2, and back's history
 	relRows []relRow
+	relFor  fileRef // the document relRows are of; the zero fileRef when they are of none
 	relDeep bool
 	history []fileRef
 

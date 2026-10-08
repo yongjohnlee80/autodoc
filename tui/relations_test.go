@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -114,7 +115,7 @@ func TestJumpCardAndBack(t *testing.T) {
 	r.s.WaitForText(t, "related documents")
 	r.keys(t, key('1'))
 	r.waitFile(t, "new.md")
-	r.s.WaitFor(t, "new's relations", func(string) bool { return len(r.relationLabels()) > 0 })
+	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own, not doc.md's
 	r.menuRow(t, "Go to related…")
 	r.s.WaitForText(t, "related documents")
 	r.s.WaitForText(t, "1  supersedes     doc.md")
@@ -176,4 +177,36 @@ func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
 	if hist := onLoop(r, func() []fileRef { return append([]fileRef(nil), r.h.history...) }); len(hist) != 0 {
 		t.Errorf("history after going back: %v, want it spent", hist)
 	}
+}
+
+// TestTheJumpCardIsTheOpenDocuments: until the new document's relations are read, the card has
+// none — never the previous document's — and once they are, it has the new one's.
+func TestTheJumpCardIsTheOpenDocuments(t *testing.T) {
+	d := startDaemon(t, relationsKB)
+	sess := NewSession(d.sock, nil)
+	hold := make(chan struct{})
+	var once sync.Once
+	release := func() { once.Do(func() { close(hold) }) }
+	t.Cleanup(release)
+	sess.beforeCall = func(method string, params []any) {
+		if method == "graph.links" && len(params) > 1 && params[1] == "new.md" {
+			<-hold
+		}
+	}
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.openByPicker(t, "doc.md")
+	r.waitFile(t, "doc.md")
+	r.s.WaitFor(t, "doc's relations", func(string) bool { return slices.Equal(r.relationLabels(), docRelations) })
+	r.leader(t, 'j')
+	r.s.WaitForText(t, "related documents")
+	r.keys(t, key('1'))
+	r.waitFile(t, "new.md") // its relations held
+	r.leader(t, 'j')
+	r.waitKeptNotice(t, "no related documents: SPC l shows what new.md links with")
+	release()
+	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"})
+	r.leader(t, 'j')
+	r.s.WaitForText(t, "1  supersedes     doc.md")
 }
