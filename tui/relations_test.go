@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -13,10 +14,11 @@ import (
 // kind and direction, depth 2, the unresolved and the cycles; the jump card; back; and the editor's
 // right-click rows.
 
-// relationsKB is doc.md and what it is connected to: every relation kind out of it, two into it, a
-// body link, one that names nothing, a supersession loop with loop.md, and far.md two links away.
+// relationsKB is doc.md and what it is connected to: every relation kind out of it, two into it,
+// three body links, one that names nothing, a supersession loop with loop.md, and two links away
+// far.md (new.md links to it) and hub.md (it links to src.md): ten neighbours, one past the card.
 var relationsKB = map[string][]string{"kb": {
-	"doc.md", "---\nsuperseded_by: [new.md]\nsupersedes: [loop.md]\nsources: [src.md]\namends: [base.md]\nrelated: [rel.md]\n---\n# Doc\n\nsee [[body]] and [[missing-one]]\n",
+	"doc.md", "---\nsuperseded_by: [new.md]\nsupersedes: [loop.md]\nsources: [src.md]\namends: [base.md]\nrelated: [rel.md]\n---\n# Doc\n\nsee [[body]], [[body2]], [[body3]] and [[missing-one]]\n",
 	"new.md", "# New\n\n[[far]]\n",
 	"far.md", "# Far\n",
 	"loop.md", "---\nsupersedes: [doc.md]\n---\n# Loop\n",
@@ -26,6 +28,9 @@ var relationsKB = map[string][]string{"kb": {
 	"base.md", "# Base\n",
 	"rel.md", "# Rel\n",
 	"body.md", "# Body\n",
+	"body2.md", "# Body 2\n",
+	"body3.md", "# Body 3\n",
+	"hub.md", "# Hub\n\n[[src]]\n",
 }}
 
 func (r *running) relationLabels() []string {
@@ -51,7 +56,7 @@ var docRelations = []string{
 	"cited by (1)", "  citer.md",
 	"amends (1)", "  base.md",
 	"related (1)", "  rel.md",
-	"links (1)", "  body.md",
+	"links (3)", "  body.md", "  body2.md", "  body3.md",
 	"unresolved (2)", "  [[missing-one]]  (wikilink, names no document)", "  loop.md  (supersession goes round a loop)",
 }
 
@@ -71,13 +76,14 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
 	r.leader(t, 'l')
 	r.waitRelations(t, docRelations)
-	r.s.WaitForText(t, "relations (8)")
+	r.s.WaitForText(t, "relations (10)")
 	if onLoop(r, func() bool { return r.h.relDeep }) {
 		t.Fatal("d in the explorer turned the drawer's depth 2 on")
 	}
 
 	r.keys(t, key('d'))
 	deep := slices.Insert(slices.Clone(docRelations), 2, "    › far.md  (wikilink →)")
+	deep = slices.Insert(deep, slices.Index(deep, "  src.md")+1, "    › hub.md  (← wikilink)") // it links to src.md
 	r.waitRelations(t, deep)
 	r.s.WaitForText(t, "depth 2")
 	r.keys(t, key('d'))
@@ -102,6 +108,10 @@ func TestJumpCardAndBack(t *testing.T) {
 	r.leader(t, 'j')
 	r.s.WaitForText(t, "related documents")
 	r.s.WaitForText(t, "3  supersedes     old.md")
+	r.s.WaitForText(t, "9  links          body2.md") // ten neighbours: the card holds nine
+	if strings.Contains(r.s.String(), "body3.md") {
+		t.Error("the card holds a tenth neighbour")
+	}
 	r.keys(t, key('3'))
 	r.waitFile(t, "old.md")
 
@@ -209,4 +219,53 @@ func TestTheJumpCardIsTheOpenDocuments(t *testing.T) {
 	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"})
 	r.leader(t, 'j')
 	r.s.WaitForText(t, "1  supersedes     doc.md")
+}
+
+// TestRelationsEdges: with no file open the drawer is empty; Enter on a heading opens nothing; the
+// history keeps one copy of a document at its top and the last 32; back skips the page already
+// open.
+func TestRelationsEdges(t *testing.T) {
+	d := startDaemon(t, relationsKB)
+	r := attached(t, d)
+	r.leader(t, 'l')
+	r.s.WaitFor(t, "an empty drawer", func(string) bool { return len(r.relationLabels()) == 0 })
+	r.keys(t, esc())
+
+	r.openByPicker(t, "doc.md")
+	r.waitFile(t, "doc.md")
+	r.s.WaitFor(t, "doc's relations", func(string) bool { return slices.Equal(r.relationLabels(), docRelations) })
+	gen := r.file().gen
+	if g := onLoop(r, func() uint64 { r.h.openRelation(0); return r.h.file.gen }); g != gen {
+		t.Errorf("Enter on the heading %q opened something", docRelations[0])
+	}
+
+	hist := onLoop(r, func() []fileRef {
+		r.h.history = nil
+		a := fileRef{"kb", "a.md"}
+		r.h.rememberLeft(a)
+		r.h.rememberLeft(a)
+		for i := range maxHistory + 5 {
+			r.h.rememberLeft(fileRef{"kb", fmt.Sprintf("n%d.md", i)})
+		}
+		return append([]fileRef(nil), r.h.history...)
+	})
+	if len(hist) != maxHistory || hist[len(hist)-1].path != fmt.Sprintf("n%d.md", maxHistory+4) {
+		t.Errorf("history %d long ending %v, want the last %d", len(hist), hist[len(hist)-1], maxHistory)
+	}
+	two := onLoop(r, func() []fileRef {
+		r.h.history = nil
+		r.h.rememberLeft(fileRef{"kb", "a.md"})
+		r.h.rememberLeft(fileRef{"kb", "a.md"})
+		return append([]fileRef(nil), r.h.history...)
+	})
+	if len(two) != 1 {
+		t.Errorf("leaving a.md twice in a row: %v, want it once", two)
+	}
+
+	// the page itself on top (old.md, then doc.md): back goes to old.md, past it
+	r.h.p.Post(func() { r.h.history = []fileRef{{"kb", "old.md"}, {"kb", "doc.md"}}; r.h.goBack() })
+	r.waitFile(t, "old.md")
+	if h := onLoop(r, func() int { return len(r.h.history) }); h != 0 {
+		t.Errorf("history after going back past the page: %d entries, want none", h)
+	}
 }
