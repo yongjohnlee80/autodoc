@@ -144,3 +144,11 @@ func docxOf(t *testing.T, para string) []byte {
 	}
 	return b.Bytes()
 }
+
+// TestADerivedFormatCollidesWithAStoredTextType: a stored text type the build derives is a
+// collision, as a registered chunker's is.
+func TestADerivedFormatCollidesWithAStoredTextType(t *testing.T) {
+	if got := community(t).Collisions([]string{".log", ".html", ".go"}); strings.Join(got, " ") != ".html .go" {
+		t.Fatalf("collisions %v", got)
+	}
+}

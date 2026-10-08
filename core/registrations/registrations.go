@@ -154,7 +154,9 @@ func (t *Table) Collisions(text []string) []string {
 	}
 	var out []string
 	for _, e := range text {
-		if _, ok := t.versions[e]; ok {
+		_, chunked := t.versions[e]
+		_, derived := t.formats[e]
+		if chunked || derived {
 			out = append(out, e)
 		}
 	}

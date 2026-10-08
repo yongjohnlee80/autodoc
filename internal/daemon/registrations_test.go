@@ -132,3 +132,43 @@ func TestAStoredCollisionDoesNotStopTheStart(t *testing.T) {
 		t.Fatalf("the collision was logged %d times, want once:\n%s", n, log.String())
 	}
 }
+
+// TestAStoredHTMLTextTypeIsADocumentNow: .html, which a build before ADR 1791429611 let a
+// workspace declare as plain text, is a derived format now. The daemon still starts; workspace.list
+// names the collision; .html is read as a document and .log stays text; a new .htm is refused.
+func TestAStoredHTMLTextTypeIsADocumentNow(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "autodoc.db")
+	root := t.TempDir()
+	before, closeBefore := openOn(t, path, Options{})
+	if _, err := before.Add(ctx, config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.html", "**/*.log"}}); err != nil {
+		t.Fatal(err)
+	}
+	// as the earlier build stored it: kind.TextExtensions refuses .html now, so the store is written
+	if err := before.db.SetWorkspaceTextExtensions(ctx, mustID(t, before, "kb"), []string{".html", ".log"}); err != nil {
+		t.Fatal(err)
+	}
+	closeBefore()
+	documents, err := registrations.New(nil, registrations.Documents(250<<20, 16<<20))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var log bytes.Buffer
+	m, _ := openOn(t, path, Options{Registrations: documents, Log: logger.New(logger.WithWriter(&log))})
+	w, ok := m.Get("kb")
+	if !ok || w.Err != nil {
+		t.Fatalf("kb: %v, %v", ok, w)
+	}
+	if got := w.TextCollisions(); !reflect.DeepEqual(got, []string{".html"}) {
+		t.Fatalf("collisions %v", got)
+	}
+	if w.Index.Kind("page.html") != kind.Derived || w.Index.Kind("app.log") != kind.Text {
+		t.Fatal(".html is not read as a document, or .log went with it")
+	}
+	if !strings.Contains(log.String(), "workspace.text_collision") {
+		t.Fatalf("the collision was not logged:\n%s", log.String())
+	}
+	if _, err := m.SetTextExtensions(ctx, "kb", []string{".log", ".htm"}); err == nil || !strings.Contains(err.Error(), "derived document format") {
+		t.Fatalf("a new .htm text type: %v", err)
+	}
+}
