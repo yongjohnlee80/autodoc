@@ -49,10 +49,10 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/yongjohnlee80/golib v0.6.55 h1:75EIMCCaEDH+j4Ppov8PLjue+/0jYj9VOhCPxh9bvGA=
-github.com/yongjohnlee80/golib v0.6.55/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
-github.com/yongjohnlee80/golib/gui v0.1.16 h1:Rea3c3Qa9hm1g/f0ZSMiNrLZOccUYA6lb5ujPv2Rz7k=
-github.com/yongjohnlee80/golib/gui v0.1.16/go.mod h1:hUvDybPmsCJzdGPGZplEjmp+ZnoLUhy5ueJqcriaiZo=
+github.com/yongjohnlee80/golib v0.6.57 h1:9WFS8y2uFCsuZuB3+7FLONCfPSihCdqbKVGdgFAX0wg=
+github.com/yongjohnlee80/golib v0.6.57/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
+github.com/yongjohnlee80/golib/gui v0.1.17 h1:cV4QOXVYewJklnLucJT2LA3medlvp7hZQklBY+k50ls=
+github.com/yongjohnlee80/golib/gui v0.1.17/go.mod h1:SL5/9yv4LS0OYc/p+kjpztVd3H9dNTXE58O5wyFxQoA=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 h1:R84qjqJb5nVJMxqWYb3np9L5ZsaDtB+a39EqjV0JSUM=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0/go.mod h1:S9Xr4PYopiDyqSyp5NjCrhFrqg6A5zA2E/iPHPhqnS8=
 golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 h1:tMSqXTK+AQdW3LpCbfatHSRPHeW6+2WuxaVQuHftn80=
