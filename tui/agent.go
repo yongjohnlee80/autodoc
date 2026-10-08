@@ -12,7 +12,7 @@ import (
 )
 
 // THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page (ADR 1791213400):
-// SPC g, View › Agent. The user keeps profiles, each a name and the command that starts the agent
+// SPC g, Go › Agent. The user keeps profiles, each a name and the command that starts the agent
 // (claude, codex --model o4, agy, opencode, …), and marks one the default: the key opens it. One
 // agent runs at a time; it keeps running while hidden. The agent works in AutoDoc's own folder for
 // the workspace (Options.AgentDir), never the workspace's: there AutoDoc writes AGENTS.md and
