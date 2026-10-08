@@ -36,3 +36,7 @@ func (h *Host) installEditorMenu() {
 		e.SetContextMenuRows(h.editorMenu)
 	}
 }
+
+// renderedSwitch is an editor whose Rendered view the host can withhold: golib's gui Editor. A plain
+// bool, so this package names no gui type.
+type renderedSwitch interface{ SetRenderedEnabled(on bool) }
