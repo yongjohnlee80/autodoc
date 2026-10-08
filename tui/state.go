@@ -254,6 +254,7 @@ func (h *Host) state() map[string]any {
 		"App.settingsViewArgs":      "",
 
 		"App.unsavedQuestion":  "",
+		"App.htmlOpenQuestion": "",
 		"App.conflictQuestion": "",
 		"App.quitQuestion":     "The file has unsaved changes. Quit, and lose them?",
 		"App.workspaces":       h.workspaces,

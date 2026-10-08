@@ -23,7 +23,7 @@ func TestHTMLPreviewOpensTheThemedFileInBrowser(t *testing.T) {
 			opened <- path
 			return nil
 		}
-		r.h.show("kb", "n.md", "# Unsaved heading\n\n[other](other.md#s)\n", "version")
+		r.h.show("kb", "n.md", "# Unsaved heading\n\n[other](other.md#s)\n", "version", false)
 		r.h.previewHTML()
 	})
 	select {
