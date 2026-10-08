@@ -198,6 +198,32 @@ t.section("the section follows the KB's change feed, not a timer", function()
   t.ok(t.wait(10000, function() return vim.deep_equal(rel_texts(), DOC) end), "and back to doc.md's own", vim.inspect(rel_texts()))
 end)
 
+t.section("a failed cursor read is retried, so the feed is followed after all", function()
+  edit(kb .. "/doc.md")
+  t.ok(t.wait(10000, function() return vim.deep_equal(rel_texts(), DOC) end), "doc.md's relations")
+  -- index.status fails once: the rows still load, the cursor is missing
+  local real, failed = session.request, false
+  session.request = function(method, params, cb)
+    if method == "index.status" and params[1] == "kb" and not failed then
+      failed = true
+      return vim.schedule(function() cb(nil, { message = "a status failure" }) end)
+    end
+    return real(method, params, cb)
+  end
+  view._dispatch("d", rel_rows()[1]) -- depth 2: a reload, whose status read fails
+  t.ok(t.wait(10000, function() return failed and vim.tbl_contains(rel_texts(), "› far.md  (wikilink →)") end),
+    "the relations load without the cursor")
+  t.ok(t.wait(5000, function() return view._rel().cursor ~= nil end), "a later poll reads the cursor again")
+  session.request = real
+  write(kb .. "/body.md", { "# Body", "", "back to [[doc]]" })
+  t.ok(t.wait(10000, function() return vim.tbl_contains(rel_texts(), "backlinks (1)") end),
+    "and the feed is followed: another file's new link shows", vim.inspect(rel_texts()))
+  write(kb .. "/body.md", files["body.md"])
+  t.ok(t.wait(10000, function() return not vim.tbl_contains(rel_texts(), "backlinks (1)") end), "the fixture back")
+  view._dispatch("d", rel_rows()[1])
+  t.ok(t.wait(10000, function() return vim.deep_equal(rel_texts(), DOC) end), "depth 1 again")
+end)
+
 t.section("<CR> opens a relation, d is depth 2, and back returns", function()
   relations._reset_for_tests()
   edit(kb .. "/doc.md")

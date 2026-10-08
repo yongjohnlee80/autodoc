@@ -469,10 +469,13 @@ function M.new(profile)
 
   ---pull_relations is the Relations section's share of a poll: any change in its KB since the
   ---cursor reads the relations again, since a link into this file can come from any file. An
-  ---expired cursor reads them again too.
+  ---expired cursor, or none (its read failed), reads them again too.
   local function pull_relations()
     local mine = st.rel
-    if not (mine.ref and mine.cursor ~= nil) or mine.loading then return end
+    if not mine.ref or mine.loading then return end
+    -- the cursor's read failed: read it, and the relations after it, again (a cursor read alone
+    -- would miss what changed since the relations were read)
+    if mine.cursor == nil then return load_relations(mine.ref) end
     request("relchanges", "index.changes", { mine.ref.ws, mine.cursor, M.PAGE }, function(res, err)
       if st.rel ~= mine or mine.loading then return end
       if err then
