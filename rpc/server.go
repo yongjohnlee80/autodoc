@@ -63,8 +63,9 @@ import (
 // ADR 1791284787: embedding.cancel_switch deletes the partial target's vectors and embedding.remove
 // the removed provider's model's, so a session below 16 is refused those two verbs; index.purge_model
 // refuses the active model and the target saying what to do instead. Protocol 17 is ADR 1791430651:
-// file.read, file.write and file.locate, a local peer's files outside every workspace.
-const Protocol int64 = 17
+// file.read, file.write and file.locate, a local peer's files outside every workspace. Protocol 18
+// adds graph.resolve: where a link as written reaches, for an editor following one not yet indexed.
+const Protocol int64 = 18
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -79,7 +80,7 @@ const TUIName = "autodoc-tui"
 
 // verbSince is the protocol each verb arrived in, for the verbs newer than MinProtocol.
 var verbSince = map[string]int64{"index.documents": 13,
-	"file.read": 17, "file.write": 17, "file.locate": 17}
+	"file.read": 17, "file.write": 17, "file.locate": 17, "graph.resolve": 18}
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"

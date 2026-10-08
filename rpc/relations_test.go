@@ -159,3 +159,30 @@ func TestSearchDemotesOnRequest(t *testing.T) {
 		t.Errorf("an unknown retrieval option: %v, want invalid params", err)
 	}
 }
+
+// graph.resolve answers where a link as written reaches, one no file holds yet included; a session
+// below protocol 18 does not have it.
+func TestGraphResolveFollowsALinkAsWritten(t *testing.T) {
+	r := relationRig(t)
+	cur, _, err := helloAs(r, Protocol, "a-new-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for raw, want := range map[string]map[string]any{
+		"[[c]]":                    {"path": "c.md", "reason": ""},
+		"[[C|see c]]":              {"path": "c.md", "reason": ""}, // in no file: an editor's unsaved link
+		"[[gone]]":                 {"path": "", "reason": "missing"},
+		"[w](https://example.com)": {"path": "", "reason": ""},
+	} {
+		if got := call(t, cur, "graph.resolve", "kb", "a.md", raw); !reflect.DeepEqual(got, want) {
+			t.Errorf("graph.resolve %s: %v, want %v", raw, got, want)
+		}
+	}
+	old, _, err := helloAs(r, 17, "an-older-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := callErr(old, "graph.resolve", "kb", "a.md", "[[c]]"); code(err) != golibrpc.CodeMethodNotFound {
+		t.Errorf("graph.resolve at protocol 17: %v, want an unknown method", err)
+	}
+}

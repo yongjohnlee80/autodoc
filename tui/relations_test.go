@@ -317,12 +317,12 @@ func TestLinkAtTheCursor(t *testing.T) {
 }
 
 // Go to link, on the right-click menu, is there only on a link, and opens the document the
-// daemon resolved it to; a wikilink to no document says so.
+// daemon resolves it to now: one just typed, unsaved, too. A wikilink to no document says so.
 func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 	r := attached(t, startDaemon(t, relationsKB))
 	r.h.p.Post(func() { r.h.openPath("new.md") })
 	r.waitFile(t, "new.md")
-	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"})
+	// row puts the cursor at line, col and reads the menu's Go to link: enabled, and its link
 	row := func(line, col int) (bool, cursorLink) {
 		got := onLoop(r, func() [2]any {
 			r.h.core.SetLine(line, col)
@@ -346,14 +346,15 @@ func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 	r.h.p.Post(func() { r.h.goToLink(l) })
 	r.waitFile(t, "far.md")
 
-	r.h.p.Post(func() { r.h.openPath("doc.md") })
-	r.waitFile(t, "doc.md")
-	r.s.WaitFor(t, "doc's relations", func(string) bool { return len(r.relationLabels()) > 0 })
-	missing := onLoop(r, func() cursorLink {
-		src := r.h.core.Value()
-		l, _ := linkAt([]byte(src), strings.Index(src, "missing-one"))
-		return l
-	})
-	r.h.p.Post(func() { r.h.goToLink(missing) })
+	// a link typed into far.md and not saved: the index has never seen it
+	onLoop(r, func() bool { r.h.core.SetValue("# Far\n\nsee [[Body2|the second]]\n"); return true })
+	on, l = row(2, 7)
+	if !on {
+		t.Fatal("Go to link is not enabled on the unsaved [[Body2|the second]]")
+	}
+	r.h.p.Post(func() { r.h.goToLink(l) })
+	r.waitFile(t, "body2.md")
+
+	r.h.p.Post(func() { r.h.goToLink(cursorLink{raw: "[[missing-one]]", dest: "missing-one", wiki: true}) })
 	r.waitNoticed(t, "[[missing-one]] names no document in this workspace")
 }
