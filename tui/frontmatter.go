@@ -88,7 +88,7 @@ func (h *Host) validateNow(gen uint64) {
 		h.showDiagnostics(nil)
 		return
 	}
-	ws, ep, text := h.ws, h.epoch, h.editor.Value()
+	ws, ep, text := h.ws, h.epoch, h.core.Value()
 	do(h, func(ctx context.Context) answerOf[[]fmDiagnostic] {
 		res, err := h.call(ctx, "doc.validate", ws, p, []byte(text))
 		if err != nil {

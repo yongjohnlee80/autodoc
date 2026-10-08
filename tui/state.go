@@ -310,7 +310,7 @@ func (h *Host) set(name string, v any) { h.keep(h.p.Set(name, v)) }
 // setWhere is the status line's left: the editor's mode, then where the TUI is attached.
 func (h *Host) setWhere(where string) {
 	h.where = where
-	h.set("App.statusLeft", h.editor.Mode().String()+"  "+where)
+	h.set("App.statusLeft", h.core.Mode().String()+"  "+where)
 }
 
 // open opens a dialog the layout declares, by id.

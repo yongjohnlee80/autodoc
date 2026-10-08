@@ -1220,7 +1220,7 @@ func TestTheDocumentFeed(t *testing.T) {
 	r.keys(t, key('i'), key('h'), key('é'), key('l'), key('l'), key('o'), esc())
 	// the keys are injected, not yet all handled: the version is read once the editor has them all
 	r.s.WaitFor(t, "the burst typed", func(string) bool {
-		return onLoop(r, func() bool { return r.h.editor.Value() == "héllo" && r.h.editor.Mode().String() == "NORMAL" })
+		return onLoop(r, func() bool { return r.h.core.Value() == "héllo" && r.h.core.Mode().String() == "NORMAL" })
 	})
 	got := docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.feedVersion }))))
 	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst

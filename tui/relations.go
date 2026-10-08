@@ -326,13 +326,14 @@ func (h *Host) goBack() {
 }
 
 // editorMenu is the editor's right-click menu: the stock rows, then the related documents and back.
-func (h *Host) editorMenu(e *widget.Editor) []widget.MenuItemModel {
-	items := widget.EditorContextItems(e)
-	related := widget.NewCommand("autodoc.related", "Go to related…", widget.EditorMenuAction{ID: "autodoc.related",
-		Run: func(*widget.Editor) { h.openJumpCard() }})
+// Its rows act on the core, so every editor widget runs them (installEditorMenu).
+func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
+	items := widget.CoreContextItems(c)
+	related := widget.NewCommand("autodoc.related", "Go to related…", widget.CoreMenuAction{ID: "autodoc.related",
+		Run: func(*widget.EditorCore) { h.openJumpCard() }})
 	related.Enabled = len(h.jumpRows()) > 0
-	back := widget.NewCommand("autodoc.back", "Back", widget.EditorMenuAction{ID: "autodoc.back",
-		Run: func(*widget.Editor) { h.goBack() }})
+	back := widget.NewCommand("autodoc.back", "Back", widget.CoreMenuAction{ID: "autodoc.back",
+		Run: func(*widget.EditorCore) { h.goBack() }})
 	back.Enabled = len(h.history) > 0
 	return append(items, widget.NewSeparator("autodoc.sep.relations"), related, back)
 }

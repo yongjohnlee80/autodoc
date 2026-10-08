@@ -129,7 +129,7 @@ func (h *Host) unsaved(answer string) {
 			h.nameDraft(then) // the draft has no path yet: name it, then go on
 			return
 		}
-		h.write(h.editor.Value(), h.file.version, then)
+		h.write(h.core.Value(), h.file.version, then)
 	case "discard":
 		h.setDirty(false)
 		if then != nil {
@@ -235,7 +235,7 @@ func (h *Host) show(ws, p, content, version string) {
 	if at := h.openAt; at >= 0 {
 		// opened from a search hit: the cursor at its section
 		h.openAt = -1
-		h.editor.SetCursorPosition(cursorAt(content, min(at, len(content))))
+		h.core.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
 	h.feedEdited() // another note: a new version
@@ -257,7 +257,7 @@ func (h *Host) readPage() {
 	if kind.Of(p, nil) == kind.Derived {
 		h.file.derived = kind.Label(p)
 	}
-	h.editor.SetReadOnly(h.file.derived != "")
+	h.core.SetReadOnly(h.file.derived != "")
 	switch h.kinds.Of(p, h.textExtensions()) { // the daemon's registrations: it is the one indexing
 	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
@@ -313,9 +313,9 @@ func (h *Host) recheckFile() {
 		case h.file.dirty:
 			h.notify(p + " changed on disk while the backend was away: a save asks before it overwrites it")
 		default:
-			row, col := h.editor.Line()
+			row, col := h.core.Line()
 			h.show(ws, p, a.content, a.version)
-			h.editor.SetLine(row, col)
+			h.core.SetLine(row, col)
 			h.notify("read " + p + " again: it changed on disk while the backend was away")
 		}
 	})
@@ -327,7 +327,7 @@ func (h *Host) closeFile() {
 	h.editor.SetValue("")
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
-	h.editor.SetReadOnly(false)
+	h.core.SetReadOnly(false)
 	h.outline, h.outlineRows = nil, nil
 	h.outlineGen++
 	h.set("App.fileTitle", untitled)
@@ -373,7 +373,7 @@ func (h *Host) save() {
 		h.notify(h.file.path + " is read-only: its text is derived from the " + h.file.derived + "; SPC O opens the original")
 		return
 	}
-	h.write(h.editor.Value(), h.file.version, nil)
+	h.write(h.core.Value(), h.file.version, nil)
 }
 
 // nameDraft opens the new-file picker to save the draft under a path; then runs once it is saved
@@ -394,8 +394,8 @@ const draftHelp = "save the draft: a path in the workspace; .md is added when it
 
 // cursorBytes is the editor's cursor as a byte offset of its text, for the file the draft becomes.
 func (h *Host) cursorBytes() int {
-	row, col := h.editor.Line()
-	lines := h.editor.Lines()
+	row, col := h.core.Line()
+	lines := h.core.Lines()
 	at := 0
 	for i := 0; i < row && i < len(lines); i++ {
 		at += len(lines[i]) + 1
@@ -449,7 +449,7 @@ func (h *Host) write(content, want string, after func()) {
 		case a.err == nil, code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
 			h.file.version = a.version
 			// typing during the save leaves the file unsaved: what is on disk is what was written
-			newer := h.editor.Value() != content
+			newer := h.core.Value() != content
 			h.setDirty(newer)
 			h.notify("saved " + p)
 			switch {
@@ -517,7 +517,7 @@ func (h *Host) overwrite() {
 			h.failed("overwrite "+p, a.err)
 		default:
 			// gone: a create ("") writes it back
-			h.write(h.editor.Value(), a.version, nil)
+			h.write(h.core.Value(), a.version, nil)
 		}
 	})
 }
@@ -539,7 +539,7 @@ func (h *Host) createFile(name string) {
 	draft := h.draft
 	content := []byte{}
 	if draft != nil {
-		content = []byte(h.editor.Value())
+		content = []byte(h.core.Value())
 	}
 	ep, ws, gen := h.epoch, h.ws, h.file.gen
 	do(h, func(ctx context.Context) error {

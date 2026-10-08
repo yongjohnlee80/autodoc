@@ -43,7 +43,7 @@ func (h *Host) refreshOutline() {
 	if h.file.open {
 		title = strings.TrimSuffix(path.Base(h.file.path), path.Ext(h.file.path))
 	}
-	h.outline = outline.Read([]byte(h.editor.Value()), h.outlineKind(), title)
+	h.outline = outline.Read([]byte(h.core.Value()), h.outlineKind(), title)
 	h.showCrumb()
 }
 
@@ -71,8 +71,8 @@ func (h *Host) showCrumb() {
 		h.set("App.fileTitle", name)
 		return
 	}
-	row, col := h.editor.Line()
-	lines := h.editor.Lines()
+	row, col := h.core.Line()
+	lines := h.core.Lines()
 	byteCol := 0
 	if row < len(lines) {
 		byteCol = clusterBytes(lines[row], col)
@@ -138,7 +138,7 @@ func (h *Host) outlineFilter(text string) {
 	if len(rows) > 0 {
 		h.previewHeading(0)
 	} else {
-		h.showPreview("outline", h.file.name(), h.editor.Value(), 0)
+		h.showPreview("outline", h.file.name(), h.core.Value(), 0)
 	}
 }
 
@@ -146,7 +146,7 @@ func (h *Host) outlineFilter(text string) {
 func (h *Host) previewHeading(i int) {
 	if i >= 0 && i < len(h.outlineRows) {
 		hd := h.outlineRows[i]
-		h.showPreview("outline", h.file.name()+crumbSep+hd.Text, h.editor.Value(), hd.Byte)
+		h.showPreview("outline", h.file.name()+crumbSep+hd.Text, h.core.Value(), hd.Byte)
 	}
 }
 
@@ -157,7 +157,7 @@ func (h *Host) jumpToHeading(i int) {
 	}
 	hd := h.outlineRows[i]
 	h.closeDialog("outlinePicker")
-	h.editor.SetLine(hd.Line-1, 0)
+	h.core.SetLine(hd.Line-1, 0)
 	h.keep(h.p.Call("editor", "forceActiveFocus"))
 	h.showCrumb()
 }

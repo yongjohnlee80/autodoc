@@ -65,7 +65,7 @@ func (h *Host) previewHTML() {
 		h.notify("HTML preview currently accepts Markdown files")
 		return
 	}
-	source, theme := []byte(h.editor.Value()), h.exportTheme()
+	source, theme := []byte(h.core.Value()), h.exportTheme()
 	// the page is written to the cache: its relative links are read from the file's own folder, so
 	// they reach the files beside it. An untitled draft's are written as it has them
 	var options export.Options

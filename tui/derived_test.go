@@ -47,7 +47,7 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	r.s.WaitFor(t, "the badge on the frame and the status line", func(sc string) bool {
 		return strings.Contains(r.frameTitle(), "manual.pdf  [PDF · read-only] › Manual") && strings.Count(sc, "[PDF · read-only]") == 2
 	})
-	if !onLoop(r, r.h.editor.ReadOnly) || r.editorText() != manualPDF {
+	if !onLoop(r, r.h.core.ReadOnly) || r.editorText() != manualPDF {
 		t.Fatalf("the editor is not a read-only view of the derived text: %q", r.editorText())
 	}
 	r.keys(t, key('x'), key('d'), key('d'), key('i'))
@@ -70,7 +70,7 @@ func TestADerivedDocumentOpensReadOnly(t *testing.T) {
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.waitFile(t, "a.md")
 	r.s.WaitFor(t, "the badge gone", func(sc string) bool { return !strings.Contains(sc, "· read-only]") })
-	if onLoop(r, r.h.editor.ReadOnly) {
+	if onLoop(r, r.h.core.ReadOnly) {
 		t.Fatal("a Markdown file opened after a derived one is read-only")
 	}
 }
@@ -138,8 +138,8 @@ func TestADerivedPageIsReadOnlyBeforeTheRegistrationsCome(t *testing.T) {
 	if onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") }) {
 		t.Fatal("the registrations came before the read: the cell observes nothing")
 	}
-	if !onLoop(r, r.h.editor.ReadOnly) || !strings.Contains(r.frameTitle(), "[PDF · read-only]") || r.headings() != 2 {
-		t.Fatalf("before the registrations: read-only %v, frame %q, %d headings", onLoop(r, r.h.editor.ReadOnly), r.frameTitle(), r.headings())
+	if !onLoop(r, r.h.core.ReadOnly) || !strings.Contains(r.frameTitle(), "[PDF · read-only]") || r.headings() != 2 {
+		t.Fatalf("before the registrations: read-only %v, frame %q, %d headings", onLoop(r, r.h.core.ReadOnly), r.frameTitle(), r.headings())
 	}
 	r.keys(t, key('x'), key('d'), key('d'), key('i'), key('z'), esc())
 	if r.editorText() != manualPDF || r.file().dirty {
@@ -151,7 +151,7 @@ func TestADerivedPageIsReadOnlyBeforeTheRegistrationsCome(t *testing.T) {
 	r.s.WaitFor(t, "the registrations", func(string) bool {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
-	if !onLoop(r, r.h.editor.ReadOnly) || !strings.Contains(r.frameTitle(), "[PDF · read-only]") {
+	if !onLoop(r, r.h.core.ReadOnly) || !strings.Contains(r.frameTitle(), "[PDF · read-only]") {
 		t.Fatal("the page became writable once the registrations came")
 	}
 }
@@ -167,8 +167,8 @@ func TestARegisteredPageReadsByTheRegistrationsWhenTheyCome(t *testing.T) {
 	r.s.WaitFor(t, "the files listed, the registrations not", func(string) bool { return len(r.listed()) > 0 })
 	r.h.p.Post(func() { r.h.openPath("a.go") })
 	r.waitFile(t, "a.go")
-	if onLoop(r, r.h.editor.ReadOnly) || r.headings() != 1 {
-		t.Fatalf("before the registrations: read-only %v, %d headings", onLoop(r, r.h.editor.ReadOnly), r.headings())
+	if onLoop(r, r.h.core.ReadOnly) || r.headings() != 1 {
+		t.Fatalf("before the registrations: read-only %v, %d headings", onLoop(r, r.h.core.ReadOnly), r.headings())
 	}
 	release()
 	r.s.WaitFor(t, "the page read as registered", func(string) bool { return r.headings() == 0 })

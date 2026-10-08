@@ -90,10 +90,10 @@ func (h *Host) document() plugin.Document {
 	if h.file.open {
 		d.Workspace, d.Path = h.file.ws, h.file.path // "" and absolute for a file outside every workspace
 	}
-	d.Text = h.editor.Value()
-	row, col := h.editor.Line()
+	d.Text = h.core.Value()
+	row, col := h.core.Line()
 	d.Cursor = plugin.Position{Line: row + 1, Col: col + 1}
-	if r, c, er, ec, ok := h.editor.SelectionRange(); ok {
+	if r, c, er, ec, ok := h.core.SelectionRange(); ok {
 		d.Selection = []plugin.Range{{Start: plugin.Position{Line: r + 1, Col: c + 1},
 			End: plugin.Position{Line: er + 1, Col: ec + 1}}}
 	}
