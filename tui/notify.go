@@ -8,7 +8,7 @@ import (
 )
 
 // NOTIFICATIONS — what the TUI tells: toasts stacked in a corner over the page (golib's Toasts),
-// each saying how long ago it came, and the history of them (View › Notifications…, SPC h).
+// each saying how long ago it came, and the history of them (Go › Notifications…, SPC h).
 //
 // Two kinds of message, by what they are about:
 //
@@ -123,7 +123,7 @@ func (h *Host) keepNotice(msg string) {
 	}
 }
 
-// openNotices is View › Notifications…: every notification kept, newest first.
+// openNotices is Go › Notifications…: every notification kept, newest first.
 func (h *Host) openNotices() {
 	h.historyOpen = true
 	h.showNotices()

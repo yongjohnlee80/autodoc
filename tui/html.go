@@ -13,21 +13,50 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/export"
 )
 
-func openDefaultBrowser(ctx context.Context, path string) error {
+// openDefaultApp hands path to the desktop's default app for its kind (an HTML file to the
+// browser, a PDF to its reader): xdg-open, or open on a Mac.
+//
+// The opener is started in a session of its own and never killed. Where no desktop environment
+// runs one (Hyprland, sway), xdg-open starts the app itself and returns only when it closes, so a
+// timeout that killed it closed the app it had just opened. An opener that fails at once (no app
+// for the kind) is an error; one still running after openerGrace is the app, left running, its
+// exit collected when it comes.
+func openDefaultApp(ctx context.Context, path string) error {
 	command := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		command = "open"
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, command, path).Run()
+	return startOpener(ctx, command, path)
 }
 
-// openSystemViewer opens the open file itself, on disk, in the desktop's own viewer: a PDF in its
-// reader, for the diagrams and layout its derived text cannot show.
-func (h *Host) openSystemViewer() {
+// startOpener runs command on path as openDefaultApp says: detached, an early failure returned,
+// a command still running after openerGrace left running.
+func startOpener(ctx context.Context, command string, args ...string) error {
+	cmd := exec.Command(command, args...)
+	cmd.SysProcAttr = detached()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(openerGrace):
+		return nil
+	case <-ctx.Done():
+		return nil
+	}
+}
+
+// openerGrace is how long an opener has to fail before it is taken to be running the app.
+const openerGrace = 2 * time.Second
+
+// openWithDefaultApp opens the open file itself, on disk, with the desktop's default app for its
+// kind: a PDF in its reader, for the diagrams and layout its derived text cannot show.
+func (h *Host) openWithDefaultApp() {
 	if !h.file.open {
-		h.notify("no file is open: open one, then SPC O opens it in the system viewer")
+		h.notify("no file is open: open one, then SPC O opens it with its default app")
 		return
 	}
 	full := h.diskPath()
@@ -37,10 +66,10 @@ func (h *Host) openSystemViewer() {
 	}
 	do(h, func(ctx context.Context) error { return h.browser(ctx, full) }, func(err error) {
 		if err != nil {
-			h.notify("open in the system viewer: " + err.Error())
+			h.notify("open with the default app: " + err.Error())
 			return
 		}
-		h.say("opened " + h.file.path + " in the system viewer")
+		h.say("opened " + h.file.path + " with its default app")
 	})
 }
 

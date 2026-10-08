@@ -301,7 +301,7 @@ func excerpt(t registrations.Derived, label string) ([]byte, error) {
 			whole = fmt.Sprintf("more than %d bytes", MaxSize) // its stated size was short
 		}
 		return fmt.Sprintf("\n\n---\n\n%s the first %d of %s of text derived from this %s, as much as one read "+
-			"carries; open the original in its system viewer for the rest.\n", TruncatedMark, shown, whole, label)
+			"carries; open the original with its default app for the rest.\n", TruncatedMark, shown, whole, label)
 	}
 	room := MaxSize - len(note(MaxSize))
 	cut := cleanCut(b, room)

@@ -5,7 +5,7 @@ import (
 	"strconv"
 )
 
-// THE TERMINAL — a shell in a drawer over the page (SPC `, View › Terminal): at the bottom, or the
+// THE TERMINAL — a shell in a drawer over the page (SPC `, Go › Terminal): at the bottom, or the
 // top, a side, or centred, as its preference says, each place with its own size. It starts in the
 // workspace's folder the first time it opens and keeps running while hidden. Opening it gives it
 // the keyboard; hiding it gives the keyboard back to the pane that had it, and hiding it while
@@ -181,7 +181,7 @@ func withEntry(m map[string]int, k string, v int) map[string]int {
 	return out
 }
 
-// toggleTerminal is SPC ` and View › Terminal. Opening it the first time starts the shell, in
+// toggleTerminal is SPC ` and Go › Terminal. Opening it the first time starts the shell, in
 // the workspace's folder; opening it remembers which pane had the keyboard, for hiding it to give
 // it back.
 func (h *Host) toggleTerminal() {

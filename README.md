@@ -253,7 +253,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
 | `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, related files by digit, back |
-| `SPC O` | open the file in the desktop's own viewer (`File › Open in System Viewer`): `xdg-open`, or `open` on a Mac |
+| `SPC O` | open the file with the desktop's default app (`File › Open with Default App`): `xdg-open`, or `open` on a Mac |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit |
@@ -289,7 +289,7 @@ one waits for, or that its setting paused embedding. An optional `[embedding_que
 a corner as a toast, saying how long ago it came ("now", "15s ago"). Up to three show at once, the
 newest nearest the corner; the rest wait and show in turn. A finished one stays 3 seconds (1 to 10
 in Preferences), a task's progress stays until the task ends, and Preferences moves them to any
-corner. View › Notifications… (`SPC h`) lists every one, with its time. What the page says — a
+corner. Go › Notifications… (`SPC h`) lists every one, with its time. What the page says — a
 find's result, the editor mode — is the status line's, not a notification.
 
 **The page** wraps long lines at its width, and can number its lines in a dimmed gutter: View ›
