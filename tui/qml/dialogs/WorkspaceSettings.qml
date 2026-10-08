@@ -45,22 +45,33 @@ Dialog {
                     Layout.fillWidth: true
                     Flex {
                         direction: Tui.Vertical
-                        Text { text: "Markdown (.md)" }
-                        ComboBox { id: sMd; model: App.yesNo; textRole: "label"; currentIndex: App.settingsMdIndex }
-                        Text { text: "Plain text (.txt)" }
-                        ComboBox { id: sTxt; model: App.yesNo; textRole: "label"; currentIndex: App.settingsTxtIndex }
-                        Text { text: "YAML (.yaml, .yml)" }
-                        ComboBox { id: sYaml; model: App.yesNo; textRole: "label"; currentIndex: App.settingsYamlIndex }
+                        Flex {
+                            direction: Tui.Horizontal
+                            Text { text: "Markdown (.md)      " }
+                            ComboBox { id: sMd; model: App.yesNo; textRole: "label"; currentIndex: App.settingsMdIndex }
+                        }
+                        Flex {
+                            direction: Tui.Horizontal
+                            Text { text: "Plain text (.txt)   " }
+                            ComboBox { id: sTxt; model: App.yesNo; textRole: "label"; currentIndex: App.settingsTxtIndex }
+                        }
+                        Flex {
+                            direction: Tui.Horizontal
+                            Text { text: "YAML (.yaml, .yml)  " }
+                            ComboBox { id: sYaml; model: App.yesNo; textRole: "label"; currentIndex: App.settingsYamlIndex }
+                        }
                         Text { text: "your text types (comma-separated: .log, .rst)" }
                         TextField { id: sTexts; text: App.settingsTexts }
                         Text { text: App.settingsTextsNote; visible: App.settingsTextsNoted; wrapMode: Tui.WordWrap }
                         Text { text: App.settingsCodeLabel; visible: App.settingsCodeOffered; wrapMode: Tui.WordWrap }
                         TextField { id: sCode; text: App.settingsCode; visible: App.settingsCodeOffered }
+                        Text { text: App.settingsDocsLabel; visible: App.settingsDocsOffered; wrapMode: Tui.WordWrap }
+                        TextField { id: sDocs; text: App.settingsDocs; visible: App.settingsDocsOffered }
                         Text { text: "include globs (semicolon-separated; blank matches no files)" }
                         TextField { id: sInclude; text: App.settingsInclude }
                         Text { text: "exclude globs (semicolon-separated)" }
                         TextField { id: sExclude; text: App.settingsExclude }
-                        Text { text: "☐ Pro: .doc, .docx, .odt, .pdf · unavailable in Community" }
+                        Text { text: App.settingsUnreadLine; visible: App.settingsUnreadShown; wrapMode: Tui.WordWrap }
                     }
                 }
             }
@@ -127,5 +138,5 @@ Dialog {
     onAccepted: App.saveSettings(sName.text, sRoot.text, sSchema.text, sTexts.text, sInclude.text, sExclude.text,
         sMd.currentIndex, sTxt.currentIndex, sYaml.currentIndex, sSection.text, sPolicy.currentIndex, sProvider.currentIndex,
         sDest.currentIndex, sDestDSN.text, sDestSchema.text, sIndex.currentIndex,
-        sSource.currentIndex, sSrcDSN.text, sSrcSchema.text, sViewArgs.text, sCode.text)
+        sSource.currentIndex, sSrcDSN.text, sSrcSchema.text, sViewArgs.text, sCode.text, sDocs.text)
 }

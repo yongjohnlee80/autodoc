@@ -133,6 +133,7 @@ func parseViewArgs(text string) (map[string]any, error) {
 type settingsForm struct {
 	name, root, schema, texts, include, exclude string
 	code                                        string // the daemon's registered types turned on
+	docs                                        string // the daemon's derived formats turned on
 	md, txt, yaml                               int    // 0 yes, 1 no
 	section                                     string
 	policy, provider                            int
@@ -153,6 +154,9 @@ type settingsBase struct {
 	// registered are the extensions the daemon's chunkers read (ADR 0216 §1.9): the Edit tab offers
 	// each beside the built-in types
 	registered []string
+	// derived are the formats the daemon reads as documents (.docx, .html; a Pro build's .pdf): the
+	// Edit tab's Documents row (ADR 1791429611 §4.7)
+	derived []string
 }
 
 // typeIndex is a file type's chooser as the rules have it: 0 when a file of each extension at the
@@ -198,6 +202,7 @@ func (b settingsBase) form() settingsForm {
 		include: strings.Join(w.include, "; "), exclude: strings.Join(w.exclude, "; "),
 		md: typeIndex(m, "md"), txt: typeIndex(m, "txt"), yaml: typeIndex(m, "yaml", "yml"),
 		code:     strings.Join(registeredOn(m, b.registered), ", "),
+		docs:     strings.Join(registeredOn(m, b.derived), ", "),
 		section:  strconv.FormatInt(w.sectionTokens, 10),
 		policy:   max(slices.Index(policyChoices, w.embeddingPolicy), 0),
 		provider: max(slices.Index(b.providers, w.provider), 0),
@@ -259,6 +264,18 @@ var codeExcludes = []string{"vendor/**", "target/**", "dist/**", "build/**"}
 // setCodeTypes applies the registered types whose state changed: one turned on is included, no
 // longer excluded, and brings codeExcludes; one turned off loses its include.
 func setCodeTypes(include, exclude, was, now []string) ([]string, []string) {
+	return setTypes(include, exclude, was, now, codeExcludes)
+}
+
+// setDocTypes applies the document formats whose state changed, as setCodeTypes does but with no
+// excludes: a document is not a code repository's build output.
+func setDocTypes(include, exclude, was, now []string) ([]string, []string) {
+	return setTypes(include, exclude, was, now, nil)
+}
+
+// setTypes applies the types whose state changed: one turned on is included, no longer excluded,
+// and brings extra to the excludes; one turned off loses its include.
+func setTypes(include, exclude, was, now, extra []string) ([]string, []string) {
 	for _, e := range now {
 		if slices.Contains(was, e) {
 			continue
@@ -268,7 +285,7 @@ func setCodeTypes(include, exclude, was, now []string) ([]string, []string) {
 		if !slices.Contains(include, pattern) {
 			include = append(include, pattern)
 		}
-		for _, x := range codeExcludes {
+		for _, x := range extra {
 			if !slices.Contains(exclude, x) {
 				exclude = append(exclude, x)
 			}
@@ -348,6 +365,13 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 	if was := registeredOn(wsfilter.NewMatcher(w.include, w.exclude), b.registered); !slices.Equal(was, code) {
 		include, exclude = setCodeTypes(include, exclude, was, code)
 	}
+	docs, err := offeredTypes("documents", f.docs, b.derived)
+	if err != nil {
+		return nil, err
+	}
+	if was := registeredOn(wsfilter.NewMatcher(w.include, w.exclude), b.derived); !slices.Equal(was, docs) {
+		include, exclude = setDocTypes(include, exclude, was, docs)
+	}
 	if !slices.Equal(include, w.include) || !slices.Equal(exclude, w.exclude) {
 		out["include"], out["exclude"] = anyStrings(include), anyStrings(exclude)
 	}
@@ -373,14 +397,19 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 
 // codeTypes reads the registered types typed, each one the daemon's.
 func (b settingsBase) codeTypes(typed string) ([]string, error) {
+	return offeredTypes("code types", typed, b.registered)
+}
+
+// offeredTypes reads the extensions typed in a row named what, each one of offered.
+func offeredTypes(what, typed string, offered []string) ([]string, error) {
 	var out []string
 	for _, t := range strings.FieldsFunc(typed, func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
 		e := strings.ToLower(t)
 		if !strings.HasPrefix(e, ".") {
 			e = "." + e
 		}
-		if !slices.Contains(b.registered, e) {
-			return nil, fmt.Errorf("code types: this backend reads no %s; it reads %s", e, orNone(strings.Join(b.registered, ", ")))
+		if !slices.Contains(offered, e) {
+			return nil, fmt.Errorf("%s: this backend reads no %s; it reads %s", what, e, orNone(strings.Join(offered, ", ")))
 		}
 		if !slices.Contains(out, e) {
 			out = append(out, e)
@@ -479,7 +508,7 @@ func (h *Host) startAddWorkspace() {
 		w := wsInfo{name: "untitled", root: homeDir(), include: config.DefaultInclude, exclude: config.DefaultExclude,
 			sectionTokens: store.SectionTokensDefault, embeddingPolicy: store.EmbeddingAlways,
 			db: databasesInfo{destination: store.DestinationLocal}}
-		h.showSettings(settingsBase{w: w, adding: true, providers: providers, databases: databases, registered: h.kinds.Chunked}, 0, "")
+		h.showSettings(settingsBase{w: w, adding: true, providers: providers, databases: databases, registered: h.kinds.Chunked, derived: h.kinds.Derived}, 0, "")
 	})
 }
 
@@ -508,7 +537,7 @@ func (h *Host) openActiveSettings() {
 func (h *Host) openSettings(name string, tab int) {
 	h.withCurrent(name, h.settingsExtras, func(w wsInfo, more any) {
 		x, _ := more.(settingsExtras)
-		h.showSettings(settingsBase{w: w, providers: withOwnProvider(x.providers, w.provider), databases: x.databases, registered: h.kinds.Chunked}, tab, "")
+		h.showSettings(settingsBase{w: w, providers: withOwnProvider(x.providers, w.provider), databases: x.databases, registered: h.kinds.Chunked, derived: h.kinds.Derived}, tab, "")
 	})
 }
 
@@ -602,9 +631,20 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	_, dropped := asText(w.textExtensions)
 	h.set("App.settingsTextsNote", textsNote(dropped))
 	h.set("App.settingsTextsNoted", len(dropped) > 0)
+	h.set("App.settingsDocsOffered", len(base.derived) > 0)
+	h.set("App.settingsDocsLabel", "documents: "+strings.Join(base.derived, ", "))
+	var unread []string
+	for _, e := range kind.DerivedExtensions {
+		if !slices.Contains(base.derived, e) {
+			unread = append(unread, e)
+		}
+	}
+	h.set("App.settingsUnreadShown", len(unread) > 0)
+	h.set("App.settingsUnreadLine", "☐ "+strings.Join(unread, ", ")+" · not read here")
 	h.set("App.settingsCodeOffered", len(base.registered) > 0)
-	h.set("App.settingsCodeLabel", "code types this backend reads: "+strings.Join(base.registered, ", ")+
-		" (comma-separated; on adds "+strings.Join(codeExcludes, ", ")+" to the excludes)")
+	// short, so the files frame fits: the excludes code brings are written where the user sees
+	// them, in the exclude field
+	h.set("App.settingsCodeLabel", "code: "+strings.Join(base.registered, ", "))
 	h.set("App.settingsDestState", "stored: "+w.db.destConn.where()+" · a blank DSN keeps it")
 	h.set("App.settingsSourceState", "stored: "+w.db.source.where()+" · a blank DSN keeps it")
 	h.fillSettings(f)
@@ -618,7 +658,7 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 // fillSettings puts f in the dialog's fields and choosers.
 func (h *Host) fillSettings(f settingsForm) {
 	for k, v := range map[string]string{"App.settingsName": f.name, "App.settingsRoot": f.root, "App.settingsSchema": f.schema,
-		"App.settingsTexts": f.texts, "App.settingsCode": f.code, "App.settingsInclude": f.include, "App.settingsExclude": f.exclude,
+		"App.settingsTexts": f.texts, "App.settingsCode": f.code, "App.settingsDocs": f.docs, "App.settingsInclude": f.include, "App.settingsExclude": f.exclude,
 		"App.settingsSection": f.section, "App.settingsDestDSN": f.destDSN, "App.settingsDestSchema": f.destSchema,
 		"App.settingsSrcDSN": f.srcDSN, "App.settingsSrcSchema": f.srcSchema, "App.settingsViewArgs": f.viewArgs} {
 		h.setField(k, v)
@@ -764,9 +804,10 @@ func (h *Host) saved(name string, c map[string]any) {
 
 // settingsArgs reads App.saveSettings' arguments, in the dialog's order: name, root, schema, text
 // types, include, exclude, the three file types, section, policy, provider, destination, its DSN
-// and schema, vector index, source, its DSN and schema, view args, the registered types on.
+// and schema, vector index, source, its DSN and schema, view args, the registered types on, the
+// document formats on.
 func settingsArgs(fn func(settingsForm)) func([]qml.SpecValue) error {
-	const want = 21
+	const want = 22
 	return func(args []qml.SpecValue) error {
 		if len(args) != want {
 			return fmt.Errorf("App.saveSettings takes the dialog's %d fields, and was given %d", want, len(args))
@@ -782,7 +823,7 @@ func settingsArgs(fn func(settingsForm)) func([]qml.SpecValue) error {
 		fn(settingsForm{name: s(0), root: s(1), schema: s(2), texts: s(3), include: s(4), exclude: s(5),
 			md: n(6), txt: n(7), yaml: n(8), section: s(9), policy: n(10), provider: n(11),
 			dest: n(12), destDSN: s(13), destSchema: s(14), index: n(15), src: n(16), srcDSN: s(17), srcSchema: s(18), viewArgs: s(19),
-			code: s(20)})
+			code: s(20), docs: s(21)})
 		return nil
 	}
 }
