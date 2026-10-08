@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/term"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
@@ -48,6 +49,9 @@ type LaunchOptions struct {
 	// Registrations are this binary's own (ADR 0216): the daemon's are compared with them
 	// (Options.Registrations). The zero value is the community build's.
 	Registrations registrations.Tables
+	// ProgramOptions are added to the program's own (Options.ProgramOptions): a build's choice of
+	// how the document runs, such as the native style a window build passes. nil: none.
+	ProgramOptions []tuidecl.ProgramOption
 }
 
 // Launch runs AutoDoc's TUI until it quits or ctx ends: it reads the config, attaches to the daemon
@@ -118,12 +122,13 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Layout:    o.Layout,
 		Workspace: workspace,
 		// a convenience for the next start: nothing depends on it being written
-		Remember:      func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
-		Installed:     installed,
-		Plugins:       plugins,
-		Registrations: o.Registrations,
-		AgentDir:      filepath.Join(stateDir, "agent"),
-		ConfigPath:    configPath,
+		Remember:       func(name string) { _ = os.WriteFile(last, []byte(name+"\n"), 0o600) },
+		Installed:      installed,
+		Plugins:        plugins,
+		Registrations:  o.Registrations,
+		AgentDir:       filepath.Join(stateDir, "agent"),
+		ConfigPath:     configPath,
+		ProgramOptions: o.ProgramOptions,
 	})
 	if err != nil {
 		return err
