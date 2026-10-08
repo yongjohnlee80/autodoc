@@ -85,5 +85,6 @@ func (h *Host) movePane(dir string) {
 }
 
 func (h *Host) panelEdges() map[string]string {
-	return map[string]string{"explorer": h.prefs.explorerEdge, "links": h.prefs.linkEdge, "terminal": h.prefs.termEdge}
+	return map[string]string{"explorer": h.prefs.explorerEdge, "links": h.prefs.linkEdge, "terminal": h.prefs.termEdge,
+		"htmlPane": "right"} // the HTML preview's drawer is at the right edge (main.qml)
 }

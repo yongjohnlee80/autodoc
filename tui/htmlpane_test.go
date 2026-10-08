@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -155,6 +156,19 @@ func TestThePaneFollowsTheOpenNote(t *testing.T) {
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "c.yaml")) })
 	r.waitOpen(t, "kb", "c.yaml")
 	r.s.WaitFor(t, "the pane closed on YAML", func(string) bool { return !onLoop(r, r.h.htmlPaneShown) })
+}
+
+// TestThePaneTakesTheKeyboardByCtrlL: the pane is at the right edge, so Ctrl+l from the page in
+// Normal mode gives it the keyboard and Ctrl+h gives it back.
+func TestThePaneTakesTheKeyboardByCtrlL(t *testing.T) {
+	r, _ := runPane(t)
+	r.h.p.Post(r.h.previewHTML)
+	r.s.WaitFor(t, "the pane open", func(string) bool { return onLoop(r, r.h.htmlPaneShown) })
+	r.s.WaitFor(t, "the page has the keyboard", func(string) bool { return r.focused("editor") })
+	r.keys(t, decltest.Ctrl('l'))
+	r.s.WaitFor(t, "to the pane", func(string) bool { return r.focused("htmlView") })
+	r.keys(t, decltest.Ctrl('h'))
+	r.s.WaitFor(t, "back to the page", func(string) bool { return r.focused("editor") })
 }
 
 var _ = widget.DirImages
