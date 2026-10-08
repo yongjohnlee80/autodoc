@@ -11,8 +11,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
-// Deriver makes text of a build's document formats (ADR 0216 §1.8): a Pro build adapts autorag's
-// derive.Cache. The indexer and doc.read call it through core/derived.
+// Deriver makes text of a build's document formats (ADR 0216 §1.8): every build has Documents, and
+// a Pro build adds one that adapts autorag's derive.Cache. The indexer and doc.read call them
+// through core/derived, as one (byFormat).
 type Deriver interface {
 	// Formats are the formats it reads: lower-case extensions with their dot, each a derived format.
 	Formats() []string
@@ -60,8 +61,8 @@ func (t *Table) addDeriver(d Deriver) error {
 			return &Error{f, fmt.Sprintf("deriver version %q: 1 to 32 letters, digits, '.', '_', '+' or '-'", version)}
 		}
 		t.formats[f] = Format{ID: id, Version: version}
+		t.byFormat[f] = d
 	}
-	t.deriver = d
 	return nil
 }
 

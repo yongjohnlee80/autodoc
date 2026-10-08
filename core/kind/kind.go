@@ -36,9 +36,10 @@ func (k Kind) String() string {
 	return "markdown"
 }
 
-// DerivedExtensions are the formats read only as derived text, through a deriver that names
-// them; a build without one never reads them.
-var DerivedExtensions = []string{".doc", ".docx", ".odt", ".pdf"}
+// DerivedExtensions are the formats read only as derived text. Every build derives .docx, .htm
+// and .html (core/registrations' Documents); the rest need a deriver that names them, such as a
+// Pro build's .pdf.
+var DerivedExtensions = []string{".doc", ".docx", ".htm", ".html", ".odt", ".pdf"}
 
 // Ext is a path's extension, lowercased: ".MD" and ".md" are one kind.
 func Ext(p string) string { return strings.ToLower(path.Ext(p)) }

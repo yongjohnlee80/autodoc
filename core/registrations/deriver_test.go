@@ -49,8 +49,12 @@ func TestADeriverIsFrozenAtEntry(t *testing.T) {
 	if f, ok := tab.Format(".pdf"); !ok || f != (Format{"autorag/pdf", "1"}) {
 		t.Fatalf(".pdf: %+v, %v; want the frozen identity", f, ok)
 	}
-	if got := tab.Formats(); strings.Join(got, " ") != ".docx .pdf" || tab.Deriver() != d {
+	if got := tab.Formats(); strings.Join(got, " ") != ".docx .pdf" {
 		t.Fatalf("formats %q", got)
+	}
+	// the table's deriver is the derivers as one: a .pdf goes to the deriver that named it
+	if _, err := tab.Deriver().Derive(context.Background(), "m.pdf", nil, 0); err == nil || err.Error() != "unused" {
+		t.Fatalf("Derive(m.pdf) reached %v, want the deriver that named .pdf", err)
 	}
 	tabs := tab.Tables()
 	if tabs.Formats[".docx"] != (Format{"autorag/docx", "1+a"}) || tabs.Chunkers[".go"] != "1" {

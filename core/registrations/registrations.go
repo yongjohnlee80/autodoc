@@ -18,8 +18,9 @@ import (
 type Table struct {
 	chunkers search.Chunkers
 	versions map[string]string // a chunker's Version(), by extension, read once
-	formats  map[string]Format // the deriver's identity, by format, described once (deriver.go)
-	deriver  Deriver
+	formats  map[string]Format // each format's identity, described once (deriver.go)
+	byFormat byFormat          // the deriver that named each format
+	deriver  Deriver           // byFormat, or nil without derivers
 }
 
 // Error is a registration Main refuses, naming the offender.
@@ -27,17 +28,19 @@ type Error struct{ Name, Why string }
 
 func (e *Error) Error() string { return fmt.Sprintf("registrations: %q: %s", e.Name, e.Why) }
 
-// New validates chunkers, keyed by lower-case extension with its dot, and a deriver, and freezes
+// New validates chunkers, keyed by lower-case extension with its dot, and derivers, and freezes
 // them: each chunker's version and each format's identity is read here, once, so no document
 // records an identity its text was not made under. It refuses an extension that is malformed,
 // upper-case, a built-in kind's or a derived format's, a version outside the identity charset
-// (ValidVersion), and a deriver's format that is not a derived format or whose identity is outside it.
-// No chunkers and no deriver is the nil Table.
-func New(chunkers map[string]search.Chunker, d Deriver) (*Table, error) {
-	if len(chunkers) == 0 && d == nil {
+// (ValidVersion), a deriver's format that is not a derived format or whose identity is outside it,
+// and a format two derivers name. A nil deriver is skipped. No chunkers and no deriver is the nil
+// Table.
+func New(chunkers map[string]search.Chunker, ds ...Deriver) (*Table, error) {
+	ds = slices.DeleteFunc(slices.Clone(ds), func(d Deriver) bool { return d == nil })
+	if len(chunkers) == 0 && len(ds) == 0 {
 		return nil, nil
 	}
-	t := &Table{versions: map[string]string{}, formats: map[string]Format{}}
+	t := &Table{versions: map[string]string{}, formats: map[string]Format{}, byFormat: byFormat{}}
 	for _, ext := range slices.Sorted(maps.Keys(chunkers)) {
 		c := chunkers[ext]
 		switch {
@@ -59,10 +62,13 @@ func New(chunkers map[string]search.Chunker, d Deriver) (*Table, error) {
 		}
 		t.versions[ext] = v
 	}
-	if d != nil {
+	for _, d := range ds {
 		if err := t.addDeriver(d); err != nil {
 			return nil, err
 		}
+	}
+	if len(t.byFormat) > 0 {
+		t.deriver = t.byFormat
 	}
 	return t, nil
 }
