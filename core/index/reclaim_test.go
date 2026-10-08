@@ -256,7 +256,7 @@ func TestAReadOpenAcrossTheFlipKeepsTheOldVectors(t *testing.T) {
 	}
 }
 
-// TestPurgeSaysWhatToDoInstead (§2.4): purging the active model is refused, pointing at AI models,
+// TestPurgeSaysWhatToDoInstead (§2.4): purging the active model is refused, pointing at Search models,
 // and deletes nothing; an inactive model is reclaimed at once.
 func TestPurgeSaysWhatToDoInstead(t *testing.T) {
 	a := newFake("m", "a")
@@ -266,7 +266,7 @@ func TestPurgeSaysWhatToDoInstead(t *testing.T) {
 	fpA := a.Model().Fingerprint()
 	kept, _ := e.vectorsOf(fpA)
 	err := e.ix.PurgeModel(context.Background(), fpA)
-	if !errors.Is(err, ErrModelInUse) || !strings.Contains(err.Error(), "m is the active model: choose another model, or remove its provider in AI models") {
+	if !errors.Is(err, ErrModelInUse) || !strings.Contains(err.Error(), "m is the active model: choose another model, or remove its provider in Search models") {
 		t.Errorf("purging the active model: %v", err)
 	}
 	if n, row := e.vectorsOf(fpA); n != kept || !row {

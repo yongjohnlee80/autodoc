@@ -489,7 +489,7 @@ func TestTheProviderForm(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.leader(t, 'a') // System › AI models
+	r.leader(t, 'a') // System › Search models
 	r.s.WaitForText(t, "embedding providers")
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "add an embedding provider")
@@ -890,7 +890,7 @@ func TestAProviderInUse(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
 	r.s.WaitFor(t, "the status line's red mark", func(string) bool { return r.semanticMark() == "red lexical search" })
-	r.leader(t, 'a') // System › AI models
+	r.leader(t, 'a') // System › Search models
 	r.s.WaitForText(t, "semantic search off")
 	r.keys(t, key('u')) // the first row: local
 	r.s.WaitForText(t, "semantic search with local")
@@ -1116,7 +1116,7 @@ func TestTheOptionsMenu(t *testing.T) {
 	r.s.WaitFor(t, "the Options menu", func(sc string) bool {
 		return strings.Contains(sc, "Editor mode") && strings.Contains(sc, "Editor preferences…")
 	})
-	if sc := r.s.String(); strings.Contains(sc, "AI models…") || strings.Contains(sc, "Restart backend…") {
+	if sc := r.s.String(); strings.Contains(sc, "Search models…") || strings.Contains(sc, "Restart backend…") {
 		t.Fatalf("Options still has the system's items:\n%s", sc)
 	}
 	bar := strings.Split(r.s.String(), "\n")[0]
@@ -1126,12 +1126,12 @@ func TestTheOptionsMenu(t *testing.T) {
 	r.keys(t, esc(), esc())
 	r.keys(t, decltest.Alt('s'))
 	r.s.WaitFor(t, "the System menu", func(sc string) bool {
-		return strings.Contains(sc, "AI models…") && strings.Contains(sc, "Restart backend…") && !strings.Contains(sc, "Editor mode")
+		return strings.Contains(sc, "Search models…") && strings.Contains(sc, "Restart backend…") && !strings.Contains(sc, "Editor mode")
 	})
-	r.keys(t, key('a')) // AI models
+	r.keys(t, key('s')) // &Search models
 	r.s.WaitForText(t, "embedding providers")
 	r.keys(t, esc())
-	r.s.WaitFor(t, "AI models closed", func(sc string) bool { return !strings.Contains(sc, "embedding providers") })
+	r.s.WaitFor(t, "Search models closed", func(sc string) bool { return !strings.Contains(sc, "embedding providers") })
 	r.keys(t, decltest.Alt('f'))
 	r.s.WaitForText(t, "Reload from disk")
 	if sc := r.s.String(); strings.Contains(sc, "Preferences…") || strings.Contains(sc, "Restart backend…") {
@@ -1484,7 +1484,7 @@ func TestVectorsListsTheModelsAndPurgesAnUnusedOne(t *testing.T) {
 		t.Fatalf("old's room:\n%s", sc)
 	}
 	r.h.p.Post(func() { r.h.startPurge(0) })
-	r.s.WaitForText(t, "other is the active model: choose another model, or remove its provider in AI models")
+	r.s.WaitForText(t, "other is the active model: choose another model, or remove its provider in Search")
 	r.h.p.Post(func() { r.h.startPurge(1) })
 	r.s.WaitForText(t, "purge the model?")
 	r.keys(t, key('y'))

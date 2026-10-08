@@ -47,10 +47,10 @@ func nextTab() tuicore.Event {
 	return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyPageDown, Mods: tuicore.ModCtrl}
 }
 
-// rankerTabOpen opens AI models on its Ranker Models tab.
+// rankerTabOpen opens Search models on its Ranker Models tab.
 func rankerTabOpen(t *testing.T, r *running) {
 	t.Helper()
-	r.leader(t, 'a') // System › AI models: on the tab it was left on
+	r.leader(t, 'a') // System › Search models: on the tab it was left on
 	if onLoop(r, func() int { return r.h.aiTab }) != rankerTab {
 		r.s.WaitForText(t, "embedding providers")
 		r.keys(t, nextTab())
@@ -92,7 +92,7 @@ func TestTheRankerModelsTab(t *testing.T) {
 		t.Errorf("Words only reached the embedding tab: the provider in use is %q", p[store.PrefProvider])
 	}
 	r.keys(t, key('q'))
-	r.s.WaitFor(t, "AI models closed", func(sc string) bool { return !strings.Contains(sc, "rankers") })
+	r.s.WaitFor(t, "Search models closed", func(sc string) bool { return !strings.Contains(sc, "rankers") })
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "search: words")
 	r.h.p.Post(func() { r.h.searchLive("kestrel") })
@@ -151,7 +151,7 @@ func TestABuildsRankerIsShownReadOnly(t *testing.T) {
 		t.Errorf("a choice was asked of the daemon under the build's ranker:\n%s", sc)
 	}
 	r.keys(t, key('q'))
-	r.s.WaitFor(t, "AI models closed", func(sc string) bool { return !strings.Contains(sc, "rankers") })
+	r.s.WaitFor(t, "Search models closed", func(sc string) bool { return !strings.Contains(sc, "rankers") })
 	r.h.p.Post(r.h.openSearch)
 	r.s.WaitForText(t, "[x] Rerank (slm-ranker)") // the search's box names the build's ranker
 }

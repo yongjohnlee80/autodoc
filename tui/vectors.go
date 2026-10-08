@@ -9,9 +9,9 @@ import (
 	"github.com/yongjohnlee80/golib/search/embed"
 )
 
-// VECTORS — AI models › Vectors…: the workspace's models, each with the room its vectors take (the
+// VECTORS — Search models › Vectors…: the workspace's models, each with the room its vectors take (the
 // float32 vectors, the 1-bit codes and the rows' keys), and a purge for one no longer used. And
-// AI models › Cancel indexing: a model switch goes back to the model still active; embedding
+// Search models › Cancel indexing: a model switch goes back to the model still active; embedding
 // outside a switch stops, keeping what it made.
 
 // vectorRow is one of the workspace's models as index.models says.
@@ -112,7 +112,7 @@ func (h *Host) startPurge(i int) {
 	}
 	r := h.vectorList[i]
 	if r.state != "unused" {
-		what := "the active model: choose another model, or remove its provider in AI models"
+		what := "the active model: choose another model, or remove its provider in Search models"
 		if r.state != "active" {
 			what = "the switch's target: cancel the switch"
 		}

@@ -76,7 +76,7 @@ WHAT A KEY NEEDS
   keep editing, reload the disk's version, or overwrite it with yours.
   A path must be one the workspace indexes (new workspaces include Markdown, text and YAML); others
   are refused.
-  Semantic search needs an embedding provider, chosen in System › AI models (SPC a): a local Ollama with
+  Semantic search needs an embedding provider, chosen in System › Search models (SPC a): a local Ollama with
   an embedding model, Ollama Cloud, or an OpenAI-compatible endpoint. Without one, search is by
   words, and the hits say "semantic off". The status line's mark names the model searching, and
   a change of model clears the search, its words and hits, to start afresh.
@@ -101,11 +101,11 @@ const leaderText = `/  search (or SPC again)  e  the explorer
 o  open a file            l  the links
 n  new file               ` + "`" + `  the terminal
 s  save                   t  the status line
-r  recent files           g  the agent
+r  recent files           g  AI agent
 w  switch workspace       m  show/focus or hide the menu
 W  manage workspaces      k  the editor mode (Vim, Text)
 ?  help                   ,  editor preferences
-h  notifications          a  AI models
+h  notifications          a  search models
 c  the file's outline     A  about
 O  the system viewer      Q  quit
 G  agent profiles         p  plugin commands`

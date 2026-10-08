@@ -102,7 +102,7 @@ Save sends what changed in one `workspace.configure`, which saves all of it or n
 setting leaves every setting as it was, and the dialog opens again as it was typed with the reason.
 
 **Nor are the embedding providers.** They are kept in the store too, their API keys sealed, and
-added and chosen in the TUI's AI models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
+added and chosen in the TUI's Search models dialog (see [Semantic search](#semantic-search-and-embedding-models)).
 A config file with an `[embedding]` section is refused with a message saying so.
 
 ## The daemon
@@ -249,7 +249,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 
 **System**, right of Options, is the menu for the backend:
 
-- **AI models…** (`SPC a`): two tabs. **Embedding Models** has the embedding providers on the
+- **Search models…** (`SPC a`): two tabs. **Embedding Models** has the embedding providers on the
   left, and the one under the cursor's usage by day and latest calls on the right (see below).
   **Ranker Models** has the rankers the same way, the one in use and how many candidates it
   ranks (`Window…`). Add…, Edit…, Use and Remove… act on the tab that is open.
@@ -258,7 +258,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
   starts. Indexing and embedding carry on where they stopped. A TUI built with more registrations
   than the daemon (below) offers this once a session; see [Builds of your own](#builds-of-your-own).
 
-The preferences and the AI models are kept in the daemon's store, so they are the same whichever
+The preferences and the search models are kept in the daemon's store, so they are the same whichever
 workspace is open. **Embedding is scheduled across the daemon**: the open TUI workspace has first
 turn, then recently searched workspaces, while background work gets regular turns. A workspace's
 embedding setting (Manage workspaces › Advanced…) chooses `always` (default), `when opened` (continues
@@ -570,7 +570,7 @@ float vectors, and its results are fused with BM25 by reciprocal rank.
 
 **A ranker can re-order the top hits** (ADR 0215). It is a cross-encoder that reads the query
 beside each candidate's text (its chunk's breadcrumb and body) and scores them. Add one in
-`AI models… › Ranker Models` and Use it: a [TEI](https://github.com/huggingface/text-embeddings-inference)
+`Search models… › Ranker Models` and Use it: a [TEI](https://github.com/huggingface/text-embeddings-inference)
 server of a re-ranker (`BAAI/bge-reranker-v2-m3`, say), or a Cohere-style rerank API.
 
 - **It ranks the top window** of what words and meaning found: 40 by default, 10 to 100. A wider
@@ -642,8 +642,8 @@ whose vectors are closest are the matches.
   store once, when there is free space for it: about twice the store. `autodoc --compact` does it
   again with the daemon stopped.
 
-**Providers.** Semantic search is off until a provider is chosen in the TUI's AI models
-(`System › AI models…`). A
+**Providers.** Semantic search is off until a provider is chosen in the TUI's Search models
+(`System › Search models…`). A
 provider is one of three kinds, with the model it embeds with:
 
 - **Ollama (local):** a server on this machine or the network, `http://localhost:11434` by

@@ -925,7 +925,7 @@ func (x *Indexer) Models(ctx context.Context) ([]ModelInfo, error) {
 
 // PurgeModel reclaims a model no longer used, at once rather than at the next start
 // (index.purge_model; ADR 1791284787 §2.4). The active model and the target are refused, saying
-// what to do instead: a workspace's active model goes with its provider, in AI models, and a
+// what to do instead: a workspace's active model goes with its provider, in Search models, and a
 // switch's target with the switch's cancel.
 func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 	var active, target string
@@ -942,7 +942,7 @@ func (x *Indexer) PurgeModel(ctx context.Context, fp string) error {
 		}
 		switch {
 		case m.Active == 1 || fp == active:
-			return fmt.Errorf("%w: %s is the active model: choose another model, or remove its provider in AI models",
+			return fmt.Errorf("%w: %s is the active model: choose another model, or remove its provider in Search models",
 				ErrModelInUse, embed.ModelName(fp))
 		case m.Target == 1 || fp == target:
 			return fmt.Errorf("%w: %s is the switch's target: cancel the switch", ErrModelInUse, embed.ModelName(fp))
