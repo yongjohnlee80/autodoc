@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"path/filepath"
 	"strings"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -49,6 +50,9 @@ type openedFile struct {
 	gen     uint64 // numbers the opens; the latest wins
 	// derived is the kind of a derived document ("PDF"), open read-only; "" for a file of text
 	derived string
+	// raw is an HTML file opened Raw (ADR 1791474356): its own bytes, editable, read and written
+	// through the *_raw verbs; false for one opened Simplified, as its derived text
+	raw bool
 	// then is what the unsaved question guards: run after save or discard, dropped by stay.
 	then func()
 }
@@ -90,21 +94,32 @@ const (
 )
 
 // readFile is doc.read of p in workspace ws, or file.read of the absolute p when ws is "".
-func (h *Host) readFile(ctx context.Context, ws, p string) (any, error) {
+// raw reads an HTML file's own bytes (doc.read_raw, file.read_raw) where the plain verbs give its
+// derived text.
+func (h *Host) readFile(ctx context.Context, ws, p string, raw bool) (any, error) {
+	suffix := ""
+	if raw {
+		suffix = "_raw"
+	}
 	if ws == "" {
-		res, err := h.call(ctx, "file.read", p)
+		res, err := h.call(ctx, "file.read"+suffix, p)
 		return res, localOnly(err)
 	}
-	return h.call(ctx, "doc.read", ws, p)
+	return h.call(ctx, "doc.read"+suffix, ws, p)
 }
 
 // writeFile is doc.write of p in workspace ws, or file.write of the absolute p when ws is "".
-func (h *Host) writeFile(ctx context.Context, ws, p string, content []byte, want string) (any, error) {
+// raw writes an HTML file's own bytes (doc.write_raw, file.write_raw), which the plain verbs refuse.
+func (h *Host) writeFile(ctx context.Context, ws, p string, content []byte, want string, raw bool) (any, error) {
+	suffix := ""
+	if raw {
+		suffix = "_raw"
+	}
 	if ws == "" {
-		res, err := h.call(ctx, "file.write", p, content, want)
+		res, err := h.call(ctx, "file.write"+suffix, p, content, want)
 		return res, localOnly(err)
 	}
-	return h.call(ctx, "doc.write", ws, p, content, want)
+	return h.call(ctx, "doc.write"+suffix, ws, p, content, want)
 }
 
 // guard runs then, asking first when the file has unsaved changes.
@@ -186,7 +201,46 @@ func (h *Host) reload() {
 // the editor; once it is shown, prev (when not nil, and another document) goes on the history.
 // Reading the open file again yields to a save that lands while it is read: the page is then what
 // the disk holds, and the read is older.
+//
+// An HTML file it is not reading again asks first how to open it (ADR 1791474356): Simplified, its
+// derived text read-only as any derived document, or Raw, its own bytes, editable. Read again (a
+// reload, a conflict's), it keeps the way it was opened.
 func (h *Host) load(ws, p string, prev *fileRef) {
+	again := h.file.open && h.file.ws == ws && h.file.path == p
+	if !again && kind.RawText(p) {
+		h.htmlAsk = &htmlOpen{ws: ws, p: p, prev: prev}
+		h.set("App.htmlOpenQuestion", "Open "+filepath.Base(p)+" simplified, its text read-only, or raw, its HTML to edit?")
+		h.open("openHTML")
+		return
+	}
+	h.loadAs(ws, p, prev, again && h.file.raw)
+}
+
+// htmlOpen is the HTML file the open question is about.
+type htmlOpen struct {
+	ws, p string
+	prev  *fileRef
+}
+
+// openHTMLAs is the open question's answer: "simplified", "raw", or "cancel", which leaves the page
+// as it was.
+func (h *Host) openHTMLAs(how string) {
+	h.closeDialog("openHTML")
+	ask := h.htmlAsk
+	h.htmlAsk = nil
+	if ask == nil {
+		return
+	}
+	switch how {
+	case "simplified":
+		h.loadAs(ask.ws, ask.p, ask.prev, false)
+	case "raw":
+		h.loadAs(ask.ws, ask.p, ask.prev, true)
+	}
+}
+
+// loadAs is load, raw or not.
+func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
 	h.file.gen++
 	gen, ep := h.file.gen, h.epoch
 	again, read := h.file.open && h.file.ws == ws && h.file.path == p, h.file.version
@@ -196,7 +250,7 @@ func (h *Host) load(ws, p string, prev *fileRef) {
 	}
 	h.say("opening " + p + "…")
 	do(h, func(ctx context.Context) answer {
-		res, err := h.readFile(ctx, ws, p)
+		res, err := h.readFile(ctx, ws, p, raw)
 		if err != nil {
 			return answer{err: err}
 		}
@@ -218,7 +272,7 @@ func (h *Host) load(ws, p string, prev *fileRef) {
 		if prev != nil && *prev != (fileRef{ws, p}) {
 			h.rememberLeft(*prev)
 		}
-		h.show(ws, p, a.content, a.version)
+		h.show(ws, p, a.content, a.version, raw)
 		h.noteRecent(ws, p)
 		h.say("opened " + p)
 		if ws == "" {
@@ -229,7 +283,8 @@ func (h *Host) load(ws, p string, prev *fileRef) {
 }
 
 // show puts a file's text in the editor, clean: p of workspace ws, or outside every one ("").
-func (h *Host) show(ws, p, content, version string) {
+func (h *Host) show(ws, p, content, version string, raw bool) {
+	h.documentFor(ws, p, raw)  // before the text: a page shown for the last file must not get this one's
 	h.editor.SetValue(content) // reports no textChanged: only typing does
 	h.syncPageWidth()
 	if at := h.openAt; at >= 0 {
@@ -238,6 +293,7 @@ func (h *Host) show(ws, p, content, version string) {
 		h.core.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
+	h.file.raw = raw
 	h.feedEdited() // another note: a new version
 	h.readPage()
 	h.relationsOfOpenFile()
@@ -259,12 +315,21 @@ func (h *Host) show(ws, p, content, version string) {
 func (h *Host) readPage() {
 	p := h.file.path
 	h.file.derived = ""
-	if kind.Of(p, nil) == kind.Derived {
+	if kind.Of(p, nil) == kind.Derived && !h.file.raw {
 		h.file.derived = kind.Label(p)
 	}
 	h.core.SetReadOnly(h.file.derived != "")
 	k := h.kinds.Of(p, h.textExtensions()) // the daemon's registrations: it is the one indexing
-	h.setRendered(k == kind.Markdown || h.file.derived != "")
+	// a raw HTML file's Rendered view is its page (documentFor), where there is one: the GUI's
+	h.setRendered(k == kind.Markdown || h.file.derived != "" || h.file.raw && h.native())
+	switch {
+	case h.file.raw:
+		h.set("App.syntaxDefinition", "Plain text (find)")
+		h.setDirty(h.file.dirty)
+		h.validateSoon()
+		h.refreshOutline()
+		return
+	}
 	switch k {
 	case kind.Text, kind.Registered:
 		h.set("App.syntaxDefinition", "Plain text (find)")
@@ -295,7 +360,7 @@ func (h *Host) setRendered(on bool) {
 // is gone, closed, after asking over unsaved changes, whose save writes it anew. A save that lands
 // while it reads moves the page's version on, and the read, older, is dropped.
 func (h *Host) recheckFile() {
-	gen, ep, ws, p, read := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.version
+	gen, ep, ws, p, read, raw := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.version, h.file.raw
 	where := "the workspace"
 	if ws == "" {
 		where = "disk"
@@ -305,7 +370,7 @@ func (h *Host) recheckFile() {
 		err              error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.readFile(ctx, ws, p)
+		res, err := h.readFile(ctx, ws, p, raw)
 		if err != nil {
 			return answer{err: err}
 		}
@@ -332,7 +397,7 @@ func (h *Host) recheckFile() {
 			h.notify(p + " changed on disk while the backend was away: a save asks before it overwrites it")
 		default:
 			row, col := h.core.Line()
-			h.show(ws, p, a.content, a.version)
+			h.show(ws, p, a.content, a.version, raw)
 			h.core.SetLine(row, col)
 			h.notify("read " + p + " again: it changed on disk while the backend was away")
 		}
@@ -342,6 +407,7 @@ func (h *Host) recheckFile() {
 // closeFile empties the editor: no file is open, and the page is a new draft.
 func (h *Host) closeFile() {
 	h.file.gen++
+	h.documentFor("", "", false)
 	h.editor.SetValue("")
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
@@ -439,7 +505,7 @@ func (h *Host) cursorBytes() int {
 // holds what was written, its version is adopted; otherwise someone wrote after it, which is a
 // conflict. It is never sent again blindly.
 func (h *Host) write(content, want string, after func()) {
-	gen, ep, ws, p := h.file.gen, h.epoch, h.file.ws, h.file.path
+	gen, ep, ws, p, raw := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.raw
 	type answer struct {
 		version string
 		err     error
@@ -448,14 +514,14 @@ func (h *Host) write(content, want string, after func()) {
 	}
 	h.say("saving " + p + "…")
 	do(h, func(ctx context.Context) answer {
-		res, err := h.writeFile(ctx, ws, p, []byte(content), want)
+		res, err := h.writeFile(ctx, ws, p, []byte(content), want, raw)
 		if err == nil {
 			return answer{version: str(asMap(res), "version")}
 		}
 		if code(err) != rpc.CodeCommitted {
 			return answer{err: err}
 		}
-		back, rerr := h.readFile(ctx, ws, p)
+		back, rerr := h.readFile(ctx, ws, p, raw)
 		if rerr != nil {
 			return answer{err: err, readErr: rerr}
 		}
@@ -514,14 +580,14 @@ func (h *Host) conflict(answer string) {
 // overwrite writes the editor's text over whatever version is on disk now: it reads the version
 // first, so the write is still conditional (a third writer in between is still a conflict).
 func (h *Host) overwrite() {
-	gen, ep, ws, p := h.file.gen, h.epoch, h.file.ws, h.file.path
+	gen, ep, ws, p, raw := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.raw
 	type answer struct {
 		version string
 		gone    bool
 		err     error
 	}
 	do(h, func(ctx context.Context) answer {
-		res, err := h.readFile(ctx, ws, p)
+		res, err := h.readFile(ctx, ws, p, raw)
 		if code(err) == rpc.CodeNotFound {
 			return answer{gone: true}
 		}

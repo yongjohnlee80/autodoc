@@ -32,6 +32,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.edited":             none(h.edited),
 		"App.syncMode":           none(h.syncMode),
 		"App.unsaved":            oneString("App.unsaved", "save, discard or stay", h.unsaved),
+		"App.openHTMLAs":         oneString("App.openHTMLAs", "simplified, raw or cancel", h.openHTMLAs),
 		"App.conflict":           oneString("App.conflict", "keep, reload or overwrite", h.conflict),
 
 		// the pickers

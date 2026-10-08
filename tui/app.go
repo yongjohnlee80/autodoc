@@ -198,7 +198,10 @@ type Host struct {
 	remember    func(name string)
 	installed   func() (string, error) // Options.Installed
 	browser     func(context.Context, string) error
-	nativeViews func() bool // whether the backend draws native views (--gui); tests stand in for a GUI
+	nativeViews func() bool   // whether the backend draws native views (--gui); tests stand in for a GUI
+	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
+	htmlAsk     *htmlOpen     // the HTML file the open question is about (OpenHTML.qml)
+	pageDir     string        // the folder the page's images load from (htmldoc.go)
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
 	// test's process, so its test waits on the daemon instead
 	awaitExit func(ctx context.Context, pid int64) bool
@@ -349,6 +352,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	}
 	h.core = h.editor.Core()
 	h.installEditorMenu() // the stock rows, then related documents and back
+	h.linkPage()          // a raw HTML file's page opens its links as the preview pane does
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)

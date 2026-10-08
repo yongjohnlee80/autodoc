@@ -57,17 +57,23 @@ func (h *Host) browseFolder() string {
 // diskPath is the open file's absolute path on disk; "" when none is open, or its workspace's
 // root is not known yet.
 func (h *Host) diskPath() string {
-	switch {
-	case !h.file.open:
+	if !h.file.open {
 		return ""
-	case h.file.ws == "":
-		return h.file.path
 	}
-	root := h.rootOf(h.file.ws)
+	return h.pathOnDisk(h.file.ws, h.file.path)
+}
+
+// pathOnDisk is p of workspace ws on this machine's disk: p itself outside every workspace (""),
+// else under the workspace's folder; "" until the workspace is listed.
+func (h *Host) pathOnDisk(ws, p string) string {
+	if ws == "" {
+		return p
+	}
+	root := h.rootOf(ws)
 	if root == "" {
 		return ""
 	}
-	return filepath.Join(root, filepath.FromSlash(h.file.path))
+	return filepath.Join(root, filepath.FromSlash(p))
 }
 
 // rootOf is workspace ws's folder, "" until it is listed.
@@ -151,7 +157,7 @@ func (h *Host) createAbsolute(abs string) {
 		if ws == "" {
 			p = abs
 		}
-		_, err := h.writeFile(ctx, ws, p, []byte{}, "")
+		_, err := h.writeFile(ctx, ws, p, []byte{}, "", false)
 		return answer{at: at, err: err}
 	}, func(a answer) {
 		if ep != h.epoch {

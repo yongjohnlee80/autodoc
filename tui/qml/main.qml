@@ -224,6 +224,9 @@ Window {
             // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
             // terminal's Editor has no Rendered view and ignores it
             MarkdownRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
+            // the Rendered view of an HTML file opened raw: its page, drawn natively (htmldoc.go
+            // turns it on for that file and off for any other); a terminal ignores it
+            HTMLDocumentView {}
         }
         }
     }
@@ -378,6 +381,7 @@ Window {
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }
     UnsavedFile { id: unsavedFile }
+    OpenHTML { id: openHTML }
     FileConflict { id: fileConflict }
     WorkspacePicker { id: workspacePicker }
     WorkspaceManager { id: workspaceManager }
