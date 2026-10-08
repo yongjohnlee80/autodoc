@@ -10,11 +10,13 @@
 ---    preview = {},  -- the preview's options (autodoc.preview.config); false leaves it off
 ---    offer_restart = true, -- offer to restart a daemon older than this plugin (once per daemon)
 ---    offer_link = true, -- offer a workspace for a primary KB auto-core knows by its root alone
+---    popup = nil,   -- the right-click menu's "Go to related…" and "Back"; nil follows keys
 ---  })
 ---
 ---Commands: `:AutodocDrawer` (toggle the kb drawer), `:AutodocSearch [query]` (search the
 ---selected KB), `:AutodocFiles` (a document by name), `:AutodocRecent` (the files opened last,
----shared with the TUI), `:AutodocBacklinks` (what links to this file), `:AutodocSelect
+---shared with the TUI), `:AutodocRelations` (what this file is connected to, by kind),
+---`:AutodocBack` (the document opened before), `:AutodocBacklinks` (what links to it), `:AutodocSelect
 ---[workspace]` (choose the KB to search), `:AutodocMaintenance [restart|install|versions]`, and
 ---`:AutodocKbMigrate` (move a KB to the v2 layout: a dry run, then --apply / --undo / --forget), and
 ---`:AutodocLinkKb` (link the project's primary KB to an AutoDoc workspace, adding one if none serves it).
@@ -23,7 +25,8 @@
 ---  <leader>mf   search the selected KB: lexical + semantic + rerank (:AutodocSearch)
 ---  <leader>mF   find a document of the selected KB by name (:AutodocFiles)
 ---  <leader>mr   recent files, newest first, across KBs (:AutodocRecent)
----  <leader>ml   the documents linking to this file (:AutodocBacklinks)
+---  <leader>ml   what this file is connected to, by kind: relations, links, backlinks (:AutodocRelations)
+---  <leader>mo   back to the document opened before (:AutodocBack)
 ---  <leader>mk   the kb drawer (:AutodocDrawer)
 ---  <leader>mw   choose the KB to search (:AutodocSelect)
 ---  <leader>mX   maintenance: restart the daemon, install the binary, versions
@@ -50,7 +53,8 @@ M.KEYS = {
   { "<leader>mf", search, "autodoc: search the selected KB" },
   { "<leader>mF", function() require("autodoc.finders").files() end, "autodoc: find a KB document by name" },
   { "<leader>mr", function() require("autodoc.finders").recent() end, "autodoc: recent KB files" },
-  { "<leader>ml", function() require("autodoc.finders").backlinks() end, "autodoc: what links to this file" },
+  { "<leader>ml", function() require("autodoc.relations").pick() end, "autodoc: what this file is connected to" },
+  { "<leader>mo", function() require("autodoc.relations").back() end, "autodoc: back to the document opened before" },
   { "<leader>mk", toggle_drawer, "autodoc: the kb drawer" },
   { "<leader>mw", function() vim.cmd("AutodocSelect") end, "autodoc: choose the KB to search" },
   { "<leader>mX", function() require("autodoc.maintenance").run() end, "autodoc: maintenance" },
@@ -94,6 +98,10 @@ local function create_commands()
     { desc = "autodoc: the KB files opened last, shared with the TUI" })
   vim.api.nvim_create_user_command("AutodocBacklinks", function() finders().backlinks() end,
     { desc = "autodoc: the documents linking to this file" })
+  vim.api.nvim_create_user_command("AutodocRelations", function() require("autodoc.relations").pick() end,
+    { desc = "autodoc: what this file is connected to, by kind" })
+  vim.api.nvim_create_user_command("AutodocBack", function() require("autodoc.relations").back() end,
+    { desc = "autodoc: back to the document opened before" })
   vim.api.nvim_create_user_command("AutodocMaintenance", function(c) require("autodoc.maintenance").run(c.args) end, {
     nargs = "?",
     complete = function(lead)
@@ -125,6 +133,8 @@ end
 
 function M.setup(opts)
   _options = vim.tbl_extend("force", { bin = nil, config = nil, keys = false, preview = {}, offer_restart = true, offer_link = true }, opts or {})
+  local popup = _options.popup
+  if popup == nil then popup = _options.keys == true end
   local session = require("autodoc.session")
   session.configure(_options)
   require("autodoc.verbs").register()
@@ -140,6 +150,7 @@ function M.setup(opts)
   if _options.keys then
     for _, k in ipairs(M.KEYS) do vim.keymap.set("n", k[1], k[2], { desc = k[3] }) end
   end
+  if popup then require("autodoc.relations").popup() end
   _augroup = vim.api.nvim_create_augroup("autodoc", { clear = true })
   vim.api.nvim_create_autocmd("BufWritePost", {
     group = _augroup,

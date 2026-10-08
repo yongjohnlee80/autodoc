@@ -380,7 +380,8 @@ that command when they differ.
 | `<leader>mf` | `:AutodocSearch [query]` | search the selected KB (also `<leader>fk`) |
 | `<leader>mF` | `:AutodocFiles` | a document of the selected KB by name |
 | `<leader>mr` | `:AutodocRecent` | the files opened last, newest first, across KBs |
-| `<leader>ml` | `:AutodocBacklinks` | the documents linking to this file |
+| `<leader>ml` | `:AutodocRelations` | what this file is connected to, by kind (`:AutodocBacklinks`: the documents linking to it) |
+| `<leader>mo` | `:AutodocBack` | back to the document opened before |
 | `<leader>mk` | `:AutodocDrawer` | the kb drawer |
 | `<leader>mw` | `:AutodocSelect [workspace]` | choose the KB to search |
 | `<leader>mX` | `:AutodocMaintenance [restart\|install\|versions]` | restart the daemon, install the binary again, versions |
@@ -401,7 +402,16 @@ speak.
   [auto-finder.nvim](https://github.com/yongjohnlee80/auto-finder.nvim) installed it opens in
   auto-finder's panel; otherwise in its own. `?` shows its keys: `s` selects the KB to search, `P`
   makes a KB this project's primary (stored by auto-core, and only after you confirm), and `A`
-  adds a location, offering to scaffold the KB layout when the folder has no `AGENTS.md`.
+  adds a location, offering to scaffold the KB layout when the folder has no `AGENTS.md`. Its
+  **Relations** section follows the KB file in the editor, as the TUI's `SPC l` drawer does:
+  superseded by, supersedes, sources, cited by, amends, amended by, related, adr, links and
+  backlinks, then the relations that name nothing and the supersession loops. `<CR>` opens a row,
+  and `d` adds the files two links away.
+- **Relations and back.** `:AutodocRelations` (`<leader>ml`) lists what the current file is
+  connected to in a picker, each row showing its kind. Opening one, from the picker or the drawer,
+  remembers the file you left: `:AutodocBack` (`<leader>mo`) returns to it, as the TUI's `SPC b`
+  does. With `keys = true` (or `popup = true`), the right-click menu has **AutoDoc: Go to
+  related…** and **AutoDoc: Back** on a KB file.
 - **Linking the primary KB.** auto-core's first-run import records the project's primary KB by its
   root alone. auto-agents gives a spawned agent `$AUTODOC_WORKSPACE` only when that record names a
   workspace. So when the workspaces are first listed and the primary names none, the plugin offers to
@@ -418,7 +428,8 @@ speak.
 - **By name, recent, and links.** `:AutodocFiles` lists every document of the selected KB, for the
   picker to match by name. `:AutodocRecent` lists the files opened last. The TUI keeps the same list
   (its `tui.recent` preference), and a KB file you open in Neovim joins it while a session is up.
-  `:AutodocBacklinks` lists the documents that link to the current file.
+  `:AutodocBacklinks` lists the documents that link to the current file; `:AutodocRelations`
+  lists them with every other relation.
 - **The preview** renders Markdown in six floating slots, and replaces md-harpoon.nvim. Use
   `:AutodocPreviewRender <slot>`, `:AutodocPreviewRenderPath <slot> <path>`,
   `:AutodocPreviewFind` (`<leader>mp`), `:AutodocPreviewFocus <slot>`, `:AutodocPreviewCloseAll`, and

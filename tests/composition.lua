@@ -90,6 +90,17 @@ t.section("C2: auto-finder hosts the drawer", function()
   t.ok(t.wait(10000, function() return find_row(view, function(r) return r.kind == "dir" and r.ws == "kb" and r.rel == "adrs" end) ~= nil end),
     "expanded on auto-finder, it lists the KB's folders")
 
+  -- the Relations section, in auto-finder's kb section: it follows the KB file in the editor
+  local editor = panel.editor_target_winid()
+  t.ok(editor ~= nil, "an editor window beside auto-finder")
+  if editor then
+    vim.api.nvim_set_current_win(editor)
+    vim.cmd("edit " .. vim.fn.fnameescape(vim.fs.normalize(kb) .. "/adrs/0001-first.md"))
+    t.ok(t.wait(10000, function()
+      return find_row(view, function(r) return r.kind == "rel_file" and r.ws == "kb" and r.path == "adrs/0001-first.md" end) ~= nil and not view._rel().loading
+    end), "its Relations section follows adrs/0001-first.md, opened in the editor, and reads it")
+  end
+
   vim.cmd("AutodocDrawer")
   t.ok(host.owner() == nil, ":AutodocDrawer toggles the drawer auto-finder hosts: closed")
   vim.cmd("AutodocDrawer")
