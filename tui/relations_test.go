@@ -148,3 +148,32 @@ func TestAnOutsideFileHasNoRelations(t *testing.T) {
 	r.leader(t, 'j')
 	r.s.WaitForText(t, "no related documents")
 }
+
+// TestBackKeepsItsDocumentWhenStayIsChosen: back over unsaved changes asks first; Stay keeps the
+// page and the history as they were, so back again asks again, and Discard then goes back.
+func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
+	d := startDaemon(t, relationsKB)
+	r := attached(t, d)
+	r.openByPicker(t, "doc.md")
+	r.waitFile(t, "doc.md")
+	r.s.WaitFor(t, "doc's relations", func(string) bool { return len(r.relationLabels()) > 0 })
+	r.leader(t, 'j')
+	r.s.WaitForText(t, "related documents")
+	r.keys(t, key('1'))
+	r.waitFile(t, "new.md")
+	r.typeInEditor(t, "edit ")
+	r.leader(t, 'b')
+	r.s.WaitForText(t, "Save them before")
+	r.h.p.Post(func() { r.h.unsaved("stay") }) // the dialog's Stay
+	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "Save them before") })
+	if f := r.file(); f.path != "new.md" || !f.dirty {
+		t.Fatalf("Stay left %s (dirty %v), want new.md unsaved", f.path, f.dirty)
+	}
+	r.leader(t, 'b')
+	r.s.WaitForText(t, "Save them before")
+	r.h.p.Post(func() { r.h.unsaved("discard") })
+	r.waitFile(t, "doc.md")
+	if hist := onLoop(r, func() []fileRef { return append([]fileRef(nil), r.h.history...) }); len(hist) != 0 {
+		t.Errorf("history after going back: %v, want it spent", hist)
+	}
+}

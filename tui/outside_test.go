@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,7 +132,6 @@ func TestNewFileInAnyFolder(t *testing.T) {
 	fresh := filepath.Join(filepath.Dir(abs), "fresh", "idea")
 	r.keys(t, decltest.Ctrl('n'))
 	r.s.WaitForText(t, "new file")
-	r.keys(t, decltest.Ctrl('u')) // the name field keeps the last name typed (golib's save view)
 	r.keys(t, decltest.Type(fresh)...)
 	r.keys(t, enter())
 	r.waitOpen(t, "", fresh+".md")
@@ -139,13 +140,11 @@ func TestNewFileInAnyFolder(t *testing.T) {
 	}
 	r.keys(t, decltest.Ctrl('n'))
 	r.s.WaitForText(t, "new file")
-	r.keys(t, decltest.Ctrl('u')) // the name field keeps the last name typed (golib's save view)
 	r.keys(t, decltest.Type(filepath.Join(kb, "made"))...)
 	r.keys(t, enter())
 	r.waitOpen(t, "kb", "made.md")
 	r.keys(t, decltest.Ctrl('n'))
 	r.s.WaitForText(t, "new file")
-	r.keys(t, decltest.Ctrl('u')) // the name field keeps the last name typed (golib's save view)
 	r.keys(t, decltest.Type(abs)...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, "exists")
@@ -176,4 +175,74 @@ func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {
 	if localOnly(other) != error(other) {
 		t.Error("another error was rewritten")
 	}
+}
+
+// TestReopeningTheOpenOutsideFileKeepsThePage: opening the file already open, unchanged, does not
+// read it again.
+func TestReopeningTheOpenOutsideFileKeepsThePage(t *testing.T) {
+	r, _, _, abs := runOutside(t)
+	r.h.p.Post(func() { r.h.openAbsolute(abs) })
+	r.waitOpen(t, "", abs)
+	gen := r.file().gen
+	// openOutside is where Open file… lands once file.locate answers; a load would number a new
+	// open at once, on the loop
+	if g := onLoop(r, func() uint64 { r.h.openOutside(abs); return r.h.file.gen }); g != gen {
+		t.Errorf("reopening read the file again (gen %d -> %d)", gen, g)
+	}
+}
+
+// TestAnOutsideFileGoneFromDiskIsClosedOnRecheck: a reconnect's recheck finds it deleted, and
+// closes it, saying it is gone from disk (not "from the workspace").
+func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
+	r, _, _, abs := runOutside(t)
+	r.h.p.Post(func() { r.h.openAbsolute(abs) })
+	r.waitOpen(t, "", abs)
+	if err := os.Remove(abs); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.enter(r.h.ws) }) // a reconnect enters the workspace again
+	r.s.WaitFor(t, "closed", func(string) bool { return !r.file().open })
+	r.waitKeptNotice(t, abs+" is gone from disk: closed")
+}
+
+// TestTheSystemViewerOpensAnOutsideFileAtItsPath: SPC O hands the desktop the absolute path, and
+// says so when the desktop cannot open it.
+func TestTheSystemViewerOpensAnOutsideFileAtItsPath(t *testing.T) {
+	r, _, _, abs := runOutside(t)
+	opened := make(chan string, 2)
+	fail := false
+	r.h.p.Post(func() {
+		r.h.browser = func(_ context.Context, p string) error {
+			opened <- p
+			if fail {
+				return errors.New("no viewer")
+			}
+			return nil
+		}
+		r.h.openAbsolute(abs)
+	})
+	r.waitOpen(t, "", abs)
+	r.h.p.Post(r.h.openSystemViewer)
+	if p := <-opened; p != abs {
+		t.Errorf("the viewer was given %q, want %q", p, abs)
+	}
+	r.h.p.Post(func() { fail = true; r.h.openSystemViewer() })
+	<-opened
+	r.waitKeptNotice(t, "open in the system viewer: no viewer")
+}
+
+// waitKeptNotice waits for text in the notifications' history (SPC h): a toast with a long path
+// wraps on the screen.
+func (r *running) waitKeptNotice(t *testing.T, text string) {
+	t.Helper()
+	r.s.WaitFor(t, "the notice "+text, func(string) bool {
+		return onLoop(r, func() bool {
+			for _, n := range r.h.notices {
+				if n.text == text {
+					return true
+				}
+			}
+			return false
+		})
+	})
 }
