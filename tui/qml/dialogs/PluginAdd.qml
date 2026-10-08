@@ -12,7 +12,7 @@ Dialog {
         TextField {
             id: pluginUrl
             text: App.pluginUrl
-            placeholderText: "https://github.com/owner/autodoc-tetris"
+            placeholderText: "https://github.com/yongjohnlee80/autodoc-tetris"
             onAccepted: App.addPlugin(text)
         }
         Text { wrapMode: Tui.WordWrap; text: App.pluginRisk }

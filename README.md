@@ -478,7 +478,7 @@ Saving a file in a KB reindexes it at once, without waiting for the daemon's wat
 ## Plugins
 
 A plugin is a program AutoDoc runs in a dialog over the page, from the **Plugins** menu. It draws
-into the dialog, and it gets every key but Esc, which closes it. The first one is
+into the dialog, and it gets every key but Esc, which closes it. The first one is AutoTetris,
 [autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris).
 
 **Adding one.** **Plugins › Add from a git URL…** takes the plugin's repository, which holds a
@@ -493,7 +493,7 @@ into the dialog, and it gets every key but Esc, which closes it. The first one i
 
 **Managing them.** **Plugins › Manage plugins…** lists each plugin with its source, commit and
 placement.
-- **Place** moves the plugin's dialog to the next placement it is designed for (Tetris: right or
+- **Place** moves the plugin's dialog to the next placement it is designed for (AutoTetris: right or
   left), and keeps the choice.
 - **Update…** fetches the source and asks the same question about the new commit's build.
 - **Remove…** deletes the plugin's directory.

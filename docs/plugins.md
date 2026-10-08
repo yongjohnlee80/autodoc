@@ -22,7 +22,7 @@ AutoDoc code at all.
 
 ```toml
 name     = "tetris"                   # unique: lower-case letters, digits and -
-title    = "Tetris"                   # the menu entry and the dialog's title
+title    = "AutoTetris"               # the menu entry and the dialog's title
 kind     = "dialog"                   # "dialog", or "service" (protocol 2)
 protocol = 1                          # the plugin protocol it speaks
 command  = ["./bin/autodoc-tetris"]   # argv: a bare name on PATH, or a path from this directory
