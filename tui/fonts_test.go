@@ -144,10 +144,24 @@ func TestTheTutorialPagesStopAtTheEnds(t *testing.T) {
 	}
 }
 
-// TestSpacePeriodOpensTheRightClickMenu: SPC . opens the page's right-click menu at the cursor.
+// TestSpacePeriodOpensTheRightClickMenu: SPC . opens the page's right-click menu at the cursor, and
+// the menu, not the page, has the keyboard.
 func TestSpacePeriodOpensTheRightClickMenu(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	r.leader(t, '.')
 	r.s.WaitForText(t, "View diagram")
+	// the menu has the keyboard, not the page the leader card gave it back to: Escape closes it
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the menu closed by Escape", func(sc string) bool { return !strings.Contains(sc, "View diagram") })
+}
+
+// TestTheFontsDialogShowsTheDefaultAtFirst: with no font chosen yet, the choosers read "(the
+// default)" the first time the dialog opens, not a blank field.
+func TestTheFontsDialogShowsTheDefaultAtFirst(t *testing.T) {
+	fonts := &fakeFonts{}
+	_, r := runWindowTUI(t, nil, fonts)
+	onLoop(r, func() bool { r.h.openFonts(); return true })
+	r.s.WaitForText(t, "fonts and zoom")
+	r.s.WaitFor(t, "both choosers at (the default)", func(sc string) bool { return strings.Count(sc, "(the default)") == 2 })
 }

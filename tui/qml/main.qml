@@ -166,6 +166,8 @@ Window {
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
             // the window's fonts and zoom (fonts.go): a terminal draws in its own, and hides these
             MenuItem { text: "&Fonts and zoom…"; visible: App.gui; onTriggered: App.openFonts() }
+            // golib draws no separator with nothing after it: in a terminal, where these hide, none
+            MenuSeparator {}
             MenuItem { text: "Zoom &in  (Ctrl+=)"; visible: App.gui; onTriggered: App.zoomWindow("in") }
             MenuItem { text: "Zoom &out  (Ctrl+-)"; visible: App.gui; onTriggered: App.zoomWindow("out") }
             MenuItem { text: "&Actual size  (Ctrl+0)"; visible: App.gui; onTriggered: App.setZoom(100) }

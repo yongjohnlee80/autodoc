@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -118,6 +119,14 @@ func (h *Host) familyList(mono bool) []string {
 		return nil
 	}
 	return h.families(mono)
+}
+
+// fontModel is a family chooser's model before the families are listed: the default alone, so the
+// chooser shows "(the default)" from the start, not a blank field waiting for Options › Fonts.
+func fontModel() *tuidecl.ListModel {
+	m := tuidecl.NewListModel("key", "label")
+	m.Reset(fontRows([]string{""}))
+	return m
 }
 
 // fontRows are a family chooser's rows: the default first, then each family.
