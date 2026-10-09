@@ -330,14 +330,14 @@ func (h *Host) goBack() {
 func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
 	items := widget.CoreContextItems(c)
 	l, onLink := linkAt([]byte(c.Value()), h.cursorBytes())
-	link := widget.NewCommand("autodoc.link", "Go to link", widget.CoreMenuAction{ID: "autodoc.link",
+	link := menuCommand("autodoc.link", "&Go to link", widget.CoreMenuAction{ID: "autodoc.link",
 		Run: func(*widget.EditorCore) { h.goToLink(l) }})
 	link.Enabled = onLink
-	back := widget.NewCommand("autodoc.back", "Back", widget.CoreMenuAction{ID: "autodoc.back",
+	back := menuCommand("autodoc.back", "&Back", widget.CoreMenuAction{ID: "autodoc.back",
 		Run: func(*widget.EditorCore) { h.goBack() }})
 	back.Enabled = len(h.history) > 0
 	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
-	diagram := widget.NewCommand("autodoc.diagram", "View diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
+	diagram := menuCommand("autodoc.diagram", "View &diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
 		Run: func(*widget.EditorCore) { h.previewDiagram() }})
 	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes())
 	items = append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,

@@ -7,8 +7,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // fakeFonts records what the window is told, as golib's gui.Backend would take it.
@@ -164,4 +166,37 @@ func TestTheFontsDialogShowsTheDefaultAtFirst(t *testing.T) {
 	onLoop(r, func() bool { r.h.openFonts(); return true })
 	r.s.WaitForText(t, "fonts and zoom")
 	r.s.WaitFor(t, "both choosers at (the default)", func(sc string) bool { return strings.Count(sc, "(the default)") == 2 })
+}
+
+// TestTheRightClickRowsHaveAccessKeysButNotHJKL: AutoDoc's rows in the page's right-click menu
+// each have an access key, none twice in a level, and none of h j k l, which move the cursor there.
+func TestTheRightClickRowsHaveAccessKeysButNotHJKL(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	rows := onLoop(r, func() []widget.MenuItemModel {
+		r.h.fonts = &fakeFonts{} // the GUI's rows too: the Zoom
+		defer func() { r.h.fonts = nil }()
+		return r.h.editorMenu(r.h.core)
+	})
+	var check func(level []widget.MenuItemModel)
+	check = func(level []widget.MenuItemModel) {
+		seen := map[rune]string{}
+		for _, row := range level {
+			if row.Kind == widget.ItemKindSeparator || !strings.HasPrefix(string(row.ID), "autodoc.") {
+				continue
+			}
+			k := unicode.ToLower(row.Hotkey)
+			switch {
+			case k == 0:
+				t.Errorf("%q has no access key", row.Label)
+			case strings.ContainsRune("hjkl", k):
+				t.Errorf("%q takes %q, which moves the menu's cursor", row.Label, k)
+			case seen[k] != "":
+				t.Errorf("%q and %q both take %q", seen[k], row.Label, k)
+			}
+			seen[k] = row.Label
+			check(row.Children)
+		}
+	}
+	check(rows)
 }

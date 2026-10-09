@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strconv"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -199,14 +200,16 @@ func (h *Host) zoomStep(dir int) {
 func (h *Host) zoomMenu() widget.MenuItemModel {
 	rows := make([]widget.MenuItemModel, len(zoomSteps))
 	for i, pct := range zoomSteps {
-		label := strconv.Itoa(pct) + "%"
+		label := "&" + strconv.Itoa(i+1) + ". " + strconv.Itoa(pct) + "%" // a digit each, as Editor mode's rows
 		if pct == zoomOf(h.prefs) {
-			label = "• " + label
+			label += " •"
 		}
-		rows[i] = widget.NewCommand(widget.ItemID("autodoc.zoom."+strconv.Itoa(pct)), label,
+		rows[i] = menuCommand(widget.ItemID("autodoc.zoom."+strconv.Itoa(pct)), label,
 			widget.CoreMenuAction{ID: "autodoc.zoom", Run: func(*widget.EditorCore) { h.setZoom(pct) }})
 	}
-	return widget.NewSubmenu("autodoc.zoom", "Zoom", rows)
+	zoom := widget.NewSubmenu("autodoc.zoom", "Zoom", rows)
+	zoom.Label, zoom.Hotkey, zoom.HotkeyIdx = tuicore.ParseMnemonic("&Zoom")
+	return zoom
 }
 
 func fontSizeLabels() []string {
@@ -223,4 +226,14 @@ func zoomLabels() []string {
 		out[i] = strconv.Itoa(n) + "%"
 	}
 	return out
+}
+
+// menuCommand is a right-click row whose text marks its access key with &, as the menu bar's do.
+// Its key is never h, j, k or l: in the menu those move as the arrows do, and a row's own key
+// would win over them.
+func menuCommand(id widget.ItemID, text string, action tuicore.Action) widget.MenuItemModel {
+	label, key, at := tuicore.ParseMnemonic(text)
+	row := widget.NewCommand(id, label, action)
+	row.Hotkey, row.HotkeyIdx = key, at
+	return row
 }
