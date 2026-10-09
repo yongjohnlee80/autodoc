@@ -460,6 +460,20 @@ func (m *marks) load() []string {
 // searchHighlighter is Markdown's, with the search's words marked over it (the Alert style).
 func (h *Host) searchHighlighter() highlight.Highlighter { return markedHighlighter(&h.marks) }
 
+func (h *Host) searchDefinition() highlight.Definition {
+	d := markdown.Definition()
+	d.Name = "Markdown (search)"
+	d.Extensions = nil
+	d.Aliases = nil
+	factory := d.SourceFactory
+	d.SourceFactory = func(catalog *highlight.Catalog) highlight.Source {
+		source := factory(catalog)
+		source.Highlighter = markedHighlighterWith(&h.marks, source.Highlighter)
+		return source
+	}
+	return d
+}
+
 // markedHighlighter is Markdown's, with the words in m marked over it (the Alert style), read
 // afresh on every line: the preview's for the search's words, the page's for the find's.
 func markedHighlighter(m *marks) highlight.Highlighter {
@@ -469,45 +483,49 @@ func markedHighlighter(m *marks) highlight.Highlighter {
 func markedHighlighterWith(m *marks, base highlight.Highlighter) highlight.Highlighter {
 	return highlight.HighlighterFunc(func(line string, prev highlight.State) ([]highlight.Span, highlight.State) {
 		spans, next := base.HighlightBlock(line, prev)
-		terms := m.load()
-		if len(terms) == 0 || line == "" {
-			return spans, next
-		}
-		styles := make([]highlight.Style, len(line))
-		for _, s := range spans {
-			for i := s.Start; i < s.End && i < len(styles); i++ {
-				styles[i] = s.Style
-			}
-		}
-		marked := false
-		for i := 0; i < len(line); {
-			for _, t := range terms {
-				if end := foldAt(line, i, t); end > i {
-					for j := i; j < end; j++ {
-						styles[j] = highlight.Alert
-					}
-					marked = true
-				}
-			}
-			_, n := utf8.DecodeRuneInString(line[i:])
-			i += n
-		}
-		if !marked {
-			return spans, next
-		}
-		var out []highlight.Span
-		for i := 0; i < len(styles); {
-			j := i
-			for j < len(styles) && styles[j] == styles[i] {
-				j++
-			}
-			if styles[i] != highlight.Normal {
-				out = append(out, highlight.Span{Start: i, End: j, Style: styles[i]})
-			}
-			i = j
-		}
-		return out, next
+		return markedSpans(m, line, spans), next
 	})
+}
+
+func markedSpans(m *marks, line string, spans []highlight.Span) []highlight.Span {
+	terms := m.load()
+	if len(terms) == 0 || line == "" {
+		return spans
+	}
+	styles := make([]highlight.Style, len(line))
+	for _, s := range spans {
+		for i := s.Start; i < s.End && i < len(styles); i++ {
+			styles[i] = s.Style
+		}
+	}
+	marked := false
+	for i := 0; i < len(line); {
+		for _, t := range terms {
+			if end := foldAt(line, i, t); end > i {
+				for j := i; j < end; j++ {
+					styles[j] = highlight.Alert
+				}
+				marked = true
+			}
+		}
+		_, n := utf8.DecodeRuneInString(line[i:])
+		i += n
+	}
+	if !marked {
+		return spans
+	}
+	var out []highlight.Span
+	for i := 0; i < len(styles); {
+		j := i
+		for j < len(styles) && styles[j] == styles[i] {
+			j++
+		}
+		if styles[i] != highlight.Normal {
+			out = append(out, highlight.Span{Start: i, End: j, Style: styles[i]})
+		}
+		i = j
+	}
+	return out
 }
 
 // foldAt is where term t (lower case) ends when it matches s from byte i, case aside; -1 when it

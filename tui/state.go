@@ -63,7 +63,7 @@ func (h *Host) state() map[string]any {
 		"App.wsProviderIndex":      0,
 		"App.diagnosticsShown":     false,
 		"App.diagnosticsLine":      "",
-		"App.syntaxDefinition":     "Markdown (find)",
+		"App.syntaxDefinition":     "Markdown",
 		"App.relations":            h.relationsModel,
 		"App.relationsTitle":       "relations",
 		"App.jumpText":             "",

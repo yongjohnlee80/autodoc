@@ -345,19 +345,28 @@ func (h *Host) readPage() {
 	h.setRendered(k == kind.Markdown || h.file.derived != "" || h.file.raw && h.native())
 	switch {
 	case h.file.raw:
-		h.set("App.syntaxDefinition", "Plain text (find)")
+		h.set("App.syntaxDefinition", "Plain text")
 		h.setDirty(h.file.dirty)
 		h.validateSoon()
 		h.refreshOutline()
 		return
 	}
+	if h.file.derived == "" {
+		if d, ok := h.p.SourceLanguages().DefinitionForFileName(p); ok && !d.DocumentAdapter {
+			h.set("App.syntaxDefinition", d.Name)
+			h.setDirty(h.file.dirty)
+			h.validateSoon()
+			h.refreshOutline()
+			return
+		}
+	}
 	switch k {
 	case kind.Text, kind.Registered:
-		h.set("App.syntaxDefinition", "Plain text (find)")
+		h.set("App.syntaxDefinition", "Plain text")
 	case kind.YAML:
-		h.set("App.syntaxDefinition", "YAML (find)")
+		h.set("App.syntaxDefinition", "YAML")
 	default:
-		h.set("App.syntaxDefinition", "Markdown (find)")
+		h.set("App.syntaxDefinition", "Markdown")
 	}
 	h.setDirty(h.file.dirty) // the status line's title carries the badge
 	h.validateSoon()
@@ -436,7 +445,7 @@ func (h *Host) closeFile() {
 	h.outline, h.outlineRows = nil, nil
 	h.outlineGen++
 	h.set("App.fileTitle", untitled)
-	h.set("App.syntaxDefinition", "Markdown (find)")
+	h.set("App.syntaxDefinition", "Markdown")
 	h.setRendered(true) // the draft is Markdown, whatever the file before it was
 	h.set("App.statusCenter", "")
 	h.clearRelations("relations")
