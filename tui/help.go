@@ -38,7 +38,8 @@ const helpText = `KEYS
   F1          this help (Help › Keys); SPC T the tutorial (Help › Tutorial…);  Ctrl+Q quit
   Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
   Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and
-              zoom… chooses the fonts too); a terminal's own settings choose its font
+              zoom… chooses the fonts too); a terminal's own settings choose its font. Zoom
+              stops before the window would be smaller than 80 × 20: enlarge it to zoom on
 
 THE PAGE
   The file is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the

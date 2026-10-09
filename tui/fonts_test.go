@@ -15,16 +15,50 @@ import (
 
 // fakeFonts records what the window is told, as golib's gui.Backend would take it.
 type fakeFonts struct {
-	mu    sync.Mutex
-	calls []string
+	mu         sync.Mutex
+	calls      []string
+	grid       tuicore.Size // the window's grid at 14 and 100%; zero: unknown, so every size fits
+	size, zoom float32      // what it was last told; 0: its defaults
+	// lag: Size answers at what it was told before the last change, as a window that has not
+	// drawn a frame since
+	lag            bool
+	drawnS, drawnZ float32
 }
 
 func (f *fakeFonts) SetFont(typeface string, size float32) {
+	f.mu.Lock()
+	f.drawnS, f.drawnZ = f.size, f.zoom
+	f.size = size
+	f.mu.Unlock()
 	f.add(fmt.Sprintf("font %s %v", typeface, size))
 }
 func (f *fakeFonts) SetProseFont(family string) { f.add("prose " + family) }
-func (f *fakeFonts) SetZoom(pct int)            { f.add(fmt.Sprintf("zoom %d", pct)) }
-func (f *fakeFonts) add(c string)               { f.mu.Lock(); f.calls = append(f.calls, c); f.mu.Unlock() }
+func (f *fakeFonts) SetZoom(pct int) {
+	f.mu.Lock()
+	f.drawnS, f.drawnZ = f.size, f.zoom
+	f.zoom = float32(pct)
+	f.mu.Unlock()
+	f.add(fmt.Sprintf("zoom %d", pct))
+}
+
+// Size is the grid as a window draws it: it shrinks as the cells grow.
+func (f *fakeFonts) Size() (tuicore.Size, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	size, zoom := f.size, f.zoom
+	if f.lag {
+		size, zoom = f.drawnS, f.drawnZ
+	}
+	if size == 0 {
+		size = defaultFontSize
+	}
+	if zoom == 0 {
+		zoom = 100
+	}
+	scale := float32(defaultFontSize*100) / (size * zoom)
+	return tuicore.Size{W: int(float32(f.grid.W) * scale), H: int(float32(f.grid.H) * scale)}, nil
+}
+func (f *fakeFonts) add(c string) { f.mu.Lock(); f.calls = append(f.calls, c); f.mu.Unlock() }
 func (f *fakeFonts) all() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -199,4 +233,49 @@ func TestTheRightClickRowsHaveAccessKeysButNotHJKL(t *testing.T) {
 		}
 	}
 	check(rows)
+}
+
+// TestZoomStopsBeforeTheScreenIsTooSmall: a zoom or a size that would leave the window under its
+// minimum (80 × 20) is refused and said, so the too-small screen, with only its Quit, never comes
+// of it; a stored zoom the window cannot hold is drawn at the largest step it can.
+func TestZoomStopsBeforeTheScreenIsTooSmall(t *testing.T) {
+	// 120 × 40 at 100%: 125% leaves 96 columns, 150% would leave 80, which a cell's rounding could
+	// take under the minimum
+	fonts := &fakeFonts{grid: tuicore.Size{W: 120, H: 40}}
+	d, r := runWindowTUI(t, map[string]string{"gui.zoom": "200"}, fonts)
+	r.s.WaitFor(t, "drawn at 125%", func(string) bool { return slices.Contains(fonts.all(), "zoom 125") })
+	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "drawn at 125%") {
+		t.Errorf("the clamp said %q", said)
+	}
+	storedPref(t, d, r, "gui.zoom", "200") // the store keeps the choice, for a larger window
+
+	onLoop(r, func() bool { r.h.setZoom(150); return true })
+	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "too large for this window") {
+		t.Errorf("zoom 150%% at 120 × 40 said %q", said)
+	}
+	if slices.Contains(fonts.all(), "zoom 150") {
+		t.Error("the window was told a zoom it cannot hold")
+	}
+	onLoop(r, func() bool { r.h.setZoom(100); return true }) // smaller always goes
+	r.s.WaitFor(t, "back at 100%", func(string) bool { return slices.Contains(fonts.all(), "zoom 100") })
+
+	onLoop(r, func() bool { r.h.setFontSizeIndex(len(fontSizes) - 1); return true }) // 24 at 100%: 70 columns
+	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "size 24 is too large") {
+		t.Errorf("size 24 at 120 × 40 said %q", said)
+	}
+}
+
+// TestTwoQuickZoomsAreJudgedByTheWindowDrawn: a second Ctrl+= before the window has drawn the
+// first is judged by the grid the window still has, not the one it will have.
+func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
+	fonts := &fakeFonts{grid: tuicore.Size{W: 120, H: 40}, lag: true}
+	d, r := runWindowTUI(t, nil, fonts)
+	r.s.WaitFor(t, "the fonts told", func(string) bool { return len(fonts.all()) > 0 })
+	onLoop(r, func() bool { r.h.zoomStep(1); return true }) // 125%: 96 columns
+	storedPref(t, d, r, "gui.zoom", "125")
+	// the window still reports 120 × 40, drawn at 100%: 150% would leave 80 columns
+	onLoop(r, func() bool { r.h.zoomStep(1); return true })
+	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "zoom 150% is too large") {
+		t.Errorf("a second quick Ctrl+= said %q", said)
+	}
 }

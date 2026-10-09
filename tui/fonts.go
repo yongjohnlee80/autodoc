@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 
@@ -22,6 +23,8 @@ type FontControl interface {
 	SetFont(typeface string, size float32)
 	SetProseFont(family string)
 	SetZoom(pct int)
+	// Size is the window's grid now, in cells, at the size and zoom last applied.
+	Size() (tuicore.Size, error)
 }
 
 const (
@@ -74,7 +77,9 @@ type appliedFonts struct {
 	set         bool
 }
 
-// applyFonts tells the window the fonts p chooses, those that changed.
+// applyFonts tells the window the fonts p chooses, those that changed. A zoom the window cannot
+// hold (a stored 200% on a smaller screen) is drawn at the largest step it can, and said; the
+// store keeps the choice for a window that can.
 func (h *Host) applyFonts(p prefs) {
 	if h.fonts == nil {
 		return
@@ -86,7 +91,17 @@ func (h *Host) applyFonts(p prefs) {
 	if want.size == 0 {
 		want.size = defaultFontSize
 	}
+	if !h.fontsFit(want.size, want.zoom) {
+		chosen := want.zoom
+		for want.zoom > zoomSteps[0] && !h.fontsFit(want.size, want.zoom) {
+			want.zoom = zoomSteps[max(slices.Index(zoomSteps, want.zoom), 1)-1]
+		}
+		h.notify(fmt.Sprintf("zoom %d%% does not fit this window: drawn at %d%%", chosen, want.zoom))
+	}
 	was := h.fontsApplied
+	if grid, err := h.fonts.Size(); err == nil && want != was {
+		h.fontsGrid = measuredGrid{grid: grid, at: was} // the window catches up a frame later
+	}
 	if !was.set || want.cell != was.cell || want.size != was.size {
 		h.fonts.SetFont(want.cell, float32(want.size))
 	}
@@ -160,16 +175,59 @@ func (h *Host) setProseFontIndex(i int) {
 func (h *Host) setFontSizeIndex(i int) {
 	if i >= 0 && i < len(fontSizes) {
 		n := fontSizes[i]
+		if h.fonts != nil && n > h.fontsApplied.size && !h.fontsFit(n, h.fontsApplied.zoom) {
+			h.notify(h.tooLarge(fmt.Sprintf("size %d", n)))
+			h.set("App.fontSizeIndex", max(slices.Index(fontSizes, h.fontsApplied.size), 0))
+			return
+		}
 		h.setPref(prefFontSize, strconv.Itoa(n), func(p *prefs) { p.fontSize = n })
 	}
 }
 
-// setZoom sets the zoom to a step; one that is not a step is ignored.
+// setZoom sets the zoom to a step; one that is not a step is ignored, and so is one larger than the
+// window can hold, which would leave only the too-small screen and its Quit.
 func (h *Host) setZoom(pct int) {
 	if h.fonts == nil || !slices.Contains(zoomSteps, pct) {
 		return
 	}
+	if pct > h.fontsApplied.zoom && !h.fontsFit(h.fontsApplied.size, pct) {
+		h.notify(h.tooLarge(fmt.Sprintf("zoom %d%%", pct)))
+		return
+	}
 	h.setPref(prefZoom, strconv.Itoa(pct), func(p *prefs) { p.zoom = pct })
+}
+
+// fontsFit reports whether the window would still hold the screen's minimum (80 × 20, main.qml)
+// with the cells at size and pct: the grid shrinks as the cells grow, in proportion near enough,
+// and a cell is kept spare for the rounding. Unknown sizes fit: nothing to judge by.
+func (h *Host) fontsFit(size, pct int) bool {
+	grid, err := h.fonts.Size()
+	now := h.fontsApplied
+	if err != nil || grid.W <= 0 || grid.H <= 0 || h.p == nil {
+		return true
+	}
+	if grid == h.fontsGrid.grid {
+		now = h.fontsGrid.at // the window has not drawn the last change yet: its grid is the one before
+	}
+	if !now.set { // the window opened at its own defaults
+		now.size, now.zoom = defaultFontSize, 100
+	}
+	scale := float64(now.size*now.zoom) / float64(size*pct)
+	min := h.p.App().MinimumSize()
+	return (min.W <= 0 || int(float64(grid.W)*scale) > min.W) && (min.H <= 0 || int(float64(grid.H)*scale) > min.H)
+}
+
+// measuredGrid is the window's grid as it was when fonts were last changed, and the fonts it was
+// drawn at: until the window reports another grid, it is still that one.
+type measuredGrid struct {
+	grid tuicore.Size
+	at   appliedFonts
+}
+
+// tooLarge says why a size was refused.
+func (h *Host) tooLarge(what string) string {
+	min := h.p.App().MinimumSize()
+	return fmt.Sprintf("%s is too large for this window: it would be smaller than %d × %d; enlarge the window first", what, min.W, min.H)
 }
 
 func (h *Host) setZoomIndex(i int) {
