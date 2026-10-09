@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // relations_test.go: the Relations drawer (ADR 1791430651 §4.4) — each relation in its section by
@@ -293,6 +294,8 @@ func TestTheEditorMenuViewsTheDiagram(t *testing.T) {
 	if found, on := item("d.md"); !found || !on {
 		t.Errorf("d.md, a diagram: View diagram found %v, enabled %v; want found, enabled", found, on)
 	}
+	r.menuRow(t, "View diagram")
+	r.s.WaitForText(t, "Diagram source")
 }
 
 // linkAt finds the link the cursor is on, of each kind, and nothing elsewhere.
@@ -344,7 +347,17 @@ func TestGoToLinkOpensTheLinkedDocument(t *testing.T) {
 	if !on {
 		t.Fatal("Go to link is not enabled on [[far]]")
 	}
-	r.h.p.Post(func() { r.h.goToLink(l) })
+	if !onLoop(r, func() bool {
+		for _, item := range r.h.editorMenu(r.h.core) {
+			if item.ID == "autodoc.link" {
+				item.Action.(widget.CoreMenuAction).Run(r.h.core)
+				return true
+			}
+		}
+		return false
+	}) {
+		t.Fatal("Go to link is absent from the editor menu")
+	}
 	r.waitFile(t, "far.md")
 
 	// a link typed into far.md and not saved: the index has never seen it

@@ -37,6 +37,17 @@ func runTUIWithShell(t *testing.T, shell string, prefs map[string]string) (*daem
 	return d, attached(t, d)
 }
 
+func TestTerminalStoredLengthAppliesOnlyToItsEdge(t *testing.T) {
+	p := prefs{termSize: map[string]int{}, termLength: map[string]int{}}
+	readTermPrefs(&p, map[string]any{prefTermPrefix + "bottom" + prefTermLength: "60"})
+	if size, length := p.termGeometry("bottom"); size != 30 || length != 60 {
+		t.Errorf("bottom geometry = %d × %d, want 30 × 60", size, length)
+	}
+	if size, length := p.termGeometry("center"); size != 70 || length != 70 {
+		t.Errorf("center geometry = %d × %d, want 70 × 70", size, length)
+	}
+}
+
 func (r *running) terminal() *widget.Terminal {
 	return onLoop(r, func() *widget.Terminal {
 		c, _ := r.h.p.Find("terminalView")

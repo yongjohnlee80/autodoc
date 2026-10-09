@@ -104,11 +104,13 @@ func TestArrangingAPanelIsOneChange(t *testing.T) {
 // TestResetAndANewEdgeDockThePanels: Go › Reset panel layout forgets every floating panel, and a
 // new edge in Preferences forgets that panel's.
 func TestResetAndANewEdgeDockThePanels(t *testing.T) {
-	d, r := runShellTUI(t, map[string]string{"tui.explorer.float": "50,25,30,50", "tui.links.float": "10,10,30,50"})
+	d, r := runShellTUI(t, map[string]string{"tui.explorer.float": "50,25,30,50", "tui.links.float": "10,10,30,50", "tui.terminal.float": "0,50,100,30"})
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	r.s.WaitFor(t, "the explorer floating mid-screen", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c >= 45 })
 	onLoop(r, func() bool { r.h.setExplorerEdge(1); return true }) // right
 	storedPref(t, d, r, "tui.explorer.float", "")
+	onLoop(r, func() bool { r.h.setTerminalEdge(indexOf(termEdges, "top")); return true })
+	storedPref(t, d, r, "tui.terminal.float", "")
 	if got := onLoop(r, func() bool { _, ok := r.h.prefs.panelFloat["links"]; return ok }); !got {
 		t.Fatal("a new edge for the explorer docked the links too")
 	}
@@ -168,4 +170,12 @@ func TestArrangingMovesAPanelOnAWideScreen(t *testing.T) {
 	again.s.WaitFor(t, "the notes listed", func(string) bool { return len(again.listed()) > 0 })
 	onLoop(again, func() bool { again.h.togglePanel("explorer"); return true })
 	again.s.WaitFor(t, "four columns right in a new TUI", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+4 })
+}
+
+// TestTheTerminalOpensAtItsStoredSize: a size kept for the terminal's edge (Preferences, or a drag
+// before panels floated) is read when a TUI attaches, and the terminal opens at it, docked.
+func TestTheTerminalOpensAtItsStoredSize(t *testing.T) {
+	_, r := runShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
+	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	r.s.WaitFor(t, "the terminal 50% high", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 }
