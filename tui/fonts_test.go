@@ -19,15 +19,21 @@ type fakeFonts struct {
 	calls      []string
 	grid       tuicore.Size // the window's grid at 14 and 100%; zero: unknown, so every size fits
 	size, zoom float32      // what it was last told; 0: its defaults
-	// lag: Size answers at what it was told before the last change, as a window that has not
-	// drawn a frame since
+	// lag: the window draws only on frame(), always at the latest it was told, as Gio's frame loads
+	// the latest font state; until then Size answers at what it last drew
 	lag            bool
 	drawnS, drawnZ float32
 }
 
-func (f *fakeFonts) SetFont(typeface string, size float32) {
+// frame draws what the window was last told.
+func (f *fakeFonts) frame() {
 	f.mu.Lock()
 	f.drawnS, f.drawnZ = f.size, f.zoom
+	f.mu.Unlock()
+}
+
+func (f *fakeFonts) SetFont(typeface string, size float32) {
+	f.mu.Lock()
 	f.size = size
 	f.mu.Unlock()
 	f.add(fmt.Sprintf("font %s %v", typeface, size))
@@ -35,7 +41,6 @@ func (f *fakeFonts) SetFont(typeface string, size float32) {
 func (f *fakeFonts) SetProseFont(family string) { f.add("prose " + family) }
 func (f *fakeFonts) SetZoom(pct int) {
 	f.mu.Lock()
-	f.drawnS, f.drawnZ = f.size, f.zoom
 	f.zoom = float32(pct)
 	f.mu.Unlock()
 	f.add(fmt.Sprintf("zoom %d", pct))
@@ -271,6 +276,7 @@ func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 	fonts := &fakeFonts{grid: tuicore.Size{W: 120, H: 40}, lag: true}
 	d, r := runWindowTUI(t, nil, fonts)
 	r.s.WaitFor(t, "the fonts told", func(string) bool { return len(fonts.all()) > 0 })
+	fonts.frame()                                           // the window drew its fonts at 100%
 	onLoop(r, func() bool { r.h.zoomStep(1); return true }) // 125%: 96 columns
 	storedPref(t, d, r, "gui.zoom", "125")
 	// the window still reports 120 × 40, drawn at 100%: 150% would leave 80 columns
@@ -278,4 +284,29 @@ func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "zoom 150% is too large") {
 		t.Errorf("a second quick Ctrl+= said %q", said)
 	}
+}
+
+// TestThreeQuickZoomsAreJudgedByTheWindowDrawn: several Ctrl+= before the window has drawn any of
+// them all judge by the grid it still has, drawn at 100%, so the step that would leave it under 80
+// columns is refused (Lector's #79 r2: 130 columns, 175% is 74). And a frame drawn between two of
+// them is drawn at the latest told, which the next step judges by.
+func TestThreeQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
+	fonts := &fakeFonts{grid: tuicore.Size{W: 130, H: 40}, lag: true}
+	d, r := runWindowTUI(t, nil, fonts)
+	r.s.WaitFor(t, "the fonts told", func(string) bool { return len(fonts.all()) > 0 })
+	fonts.frame() // the window drew its fonts at 100%
+	onLoop(r, func() bool { r.h.zoomStep(1); r.h.zoomStep(1); r.h.zoomStep(1); return true })
+	storedPref(t, d, r, "gui.zoom", "150")
+	if slices.Contains(fonts.all(), "zoom 175") {
+		t.Errorf("accepted 175%% after three quick zooms: 74 columns of 130; told %v", fonts.all())
+	}
+
+	// a frame now draws 150%: the next step judges by that grid, 86 columns, and 175% is refused
+	fonts.frame()
+	onLoop(r, func() bool { r.h.zoomStep(1); return true })
+	if slices.Contains(fonts.all(), "zoom 175") {
+		t.Errorf("accepted 175%% after the window drew 150%%: told %v", fonts.all())
+	}
+	onLoop(r, func() bool { r.h.zoomStep(-1); return true }) // and smaller goes
+	storedPref(t, d, r, "gui.zoom", "125")
 }

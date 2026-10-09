@@ -99,8 +99,11 @@ func (h *Host) applyFonts(p prefs) {
 		h.notify(fmt.Sprintf("zoom %d%% does not fit this window: drawn at %d%%", chosen, want.zoom))
 	}
 	was := h.fontsApplied
-	if grid, err := h.fonts.Size(); err == nil && want != was {
-		h.fontsGrid = measuredGrid{grid: grid, at: was} // the window catches up a frame later
+	if grid, err := h.fonts.Size(); err == nil && want != was && grid != h.fontsGrid.grid {
+		// The window has drawn a new grid since the last change, so it is drawn at what it was last
+		// told (was). While it reports the same grid, it has not drawn since, and that grid stays with
+		// the fonts it was drawn at: several quick changes all judge by the grid the window has.
+		h.fontsGrid = measuredGrid{grid: grid, at: was}
 	}
 	if !was.set || want.cell != was.cell || want.size != was.size {
 		h.fonts.SetFont(want.cell, float32(want.size))
