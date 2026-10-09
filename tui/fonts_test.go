@@ -13,57 +13,74 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// fakeFonts records what the window is told, as golib's gui.Backend would take it.
+// fakeFonts records what the window is told, as golib's gui.Backend would take it, and answers its
+// grid as a window does: at the generation of the fonts its last frame measured.
 type fakeFonts struct {
-	mu         sync.Mutex
-	calls      []string
-	grid       tuicore.Size // the window's grid at 14 and 100%; zero: unknown, so every size fits
-	size, zoom float32      // what it was last told; 0: its defaults
-	// lag: the window draws only on frame(), always at the latest it was told, as Gio's frame loads
-	// the latest font state; until then Size answers at what it last drew
-	lag            bool
-	drawnS, drawnZ float32
+	mu    sync.Mutex
+	calls []string
+	grid  tuicore.Size // the window's grid at 14 and 100%; zero: unknown, so every size fits
+	// every Set* starts a generation; states is what each one is drawn at
+	gen    uint64
+	states map[uint64][2]float32
+	// lag: the window publishes a frame only on frame() or publish(), not at each change, so its
+	// grid can be of an earlier generation than the fonts last set
+	lag   bool
+	shown uint64
 }
 
-// frame draws what the window was last told.
-func (f *fakeFonts) frame() {
+func (f *fakeFonts) set(size, zoom float32, call string) {
 	f.mu.Lock()
-	f.drawnS, f.drawnZ = f.size, f.zoom
+	cur := f.states[f.gen]
+	if cur == [2]float32{} {
+		cur = [2]float32{defaultFontSize, 100}
+	}
+	if size > 0 {
+		cur[0] = size
+	}
+	if zoom > 0 {
+		cur[1] = zoom
+	}
+	if f.states == nil {
+		f.states = map[uint64][2]float32{}
+	}
+	f.gen++
+	f.states[f.gen] = cur
+	if !f.lag {
+		f.shown = f.gen
+	}
+	f.calls = append(f.calls, call)
 	f.mu.Unlock()
 }
 
 func (f *fakeFonts) SetFont(typeface string, size float32) {
-	f.mu.Lock()
-	f.size = size
-	f.mu.Unlock()
-	f.add(fmt.Sprintf("font %s %v", typeface, size))
+	f.set(size, 0, fmt.Sprintf("font %s %v", typeface, size))
 }
-func (f *fakeFonts) SetProseFont(family string) { f.add("prose " + family) }
-func (f *fakeFonts) SetZoom(pct int) {
+func (f *fakeFonts) SetProseFont(family string) { f.set(0, 0, "prose "+family) }
+func (f *fakeFonts) SetZoom(pct int)            { f.set(0, float32(pct), fmt.Sprintf("zoom %d", pct)) }
+
+// frame publishes a frame measured at the fonts last set; publish, one measured at generation g:
+// loaded before a later change and published after it.
+func (f *fakeFonts) frame() { f.mu.Lock(); f.shown = f.gen; f.mu.Unlock() }
+func (f *fakeFonts) publish(g uint64) {
 	f.mu.Lock()
-	f.zoom = float32(pct)
+	f.shown = g
 	f.mu.Unlock()
-	f.add(fmt.Sprintf("zoom %d", pct))
 }
 
-// Size is the grid as a window draws it: it shrinks as the cells grow.
-func (f *fakeFonts) Size() (tuicore.Size, error) {
+func (f *fakeFonts) FontGeneration() uint64 { f.mu.Lock(); defer f.mu.Unlock(); return f.gen }
+
+// Grid is the grid as the window drew it at the generation shown: it shrinks as the cells grow.
+func (f *fakeFonts) Grid() (tuicore.Size, uint64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	size, zoom := f.size, f.zoom
-	if f.lag {
-		size, zoom = f.drawnS, f.drawnZ
+	st, ok := f.states[f.shown]
+	if !ok {
+		st = [2]float32{defaultFontSize, 100}
 	}
-	if size == 0 {
-		size = defaultFontSize
-	}
-	if zoom == 0 {
-		zoom = 100
-	}
-	scale := float32(defaultFontSize*100) / (size * zoom)
-	return tuicore.Size{W: int(float32(f.grid.W) * scale), H: int(float32(f.grid.H) * scale)}, nil
+	scale := float32(defaultFontSize*100) / (st[0] * st[1])
+	return tuicore.Size{W: int(float32(f.grid.W) * scale), H: int(float32(f.grid.H) * scale)}, f.shown
 }
-func (f *fakeFonts) add(c string) { f.mu.Lock(); f.calls = append(f.calls, c); f.mu.Unlock() }
+
 func (f *fakeFonts) all() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -309,4 +326,23 @@ func TestThreeQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.zoomStep(-1); return true }) // and smaller goes
 	storedPref(t, d, r, "gui.zoom", "125")
+}
+
+// TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts: a frame loads the fonts at 125%, the zoom goes
+// to 150%, and the frame publishes its 125% grid after; that grid is judged by 125%, its own, so 175%
+// (74 columns of 130) is refused (Lector's #79 r3).
+func TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts(t *testing.T) {
+	fonts := &fakeFonts{grid: tuicore.Size{W: 130, H: 40}, lag: true}
+	d, r := runWindowTUI(t, nil, fonts)
+	r.s.WaitFor(t, "the fonts told", func(string) bool { return len(fonts.all()) > 0 })
+	fonts.frame()
+	onLoop(r, func() bool { r.h.zoomStep(1); return true }) // 125%
+	at125 := fonts.FontGeneration()
+	onLoop(r, func() bool { r.h.zoomStep(1); return true }) // 150%
+	storedPref(t, d, r, "gui.zoom", "150")
+	fonts.publish(at125) // the frame that loaded 125% publishes now
+	onLoop(r, func() bool { r.h.zoomStep(1); return true })
+	if slices.Contains(fonts.all(), "zoom 175") {
+		t.Errorf("accepted 175%% after an older 125%% frame published after the 150%% request: told %v", fonts.all())
+	}
 }

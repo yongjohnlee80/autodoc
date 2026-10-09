@@ -23,8 +23,10 @@ type FontControl interface {
 	SetFont(typeface string, size float32)
 	SetProseFont(family string)
 	SetZoom(pct int)
-	// Size is the window's grid now, in cells, at the size and zoom last applied.
-	Size() (tuicore.Size, error)
+	// Grid is the window's grid now, in cells, with the generation of the fonts that measured it;
+	// FontGeneration is the generation of the fonts last set (golib's gui.Backend has both).
+	Grid() (tuicore.Size, uint64)
+	FontGeneration() uint64
 }
 
 const (
@@ -99,20 +101,28 @@ func (h *Host) applyFonts(p prefs) {
 		h.notify(fmt.Sprintf("zoom %d%% does not fit this window: drawn at %d%%", chosen, want.zoom))
 	}
 	was := h.fontsApplied
-	if grid, err := h.fonts.Size(); err == nil && want != was && grid != h.fontsGrid.grid {
-		// The window has drawn a new grid since the last change, so it is drawn at what it was last
-		// told (was). While it reports the same grid, it has not drawn since, and that grid stays with
-		// the fonts it was drawn at: several quick changes all judge by the grid the window has.
-		h.fontsGrid = measuredGrid{grid: grid, at: was}
+	// what a grid of each generation is drawn at: every call below starts one, and a frame may
+	// measure any of them, the ones between included
+	cur := was
+	if !was.set {
+		cur = appliedFonts{size: defaultFontSize, zoom: 100} // the window's own, at its first generation
+		h.fontGens = map[uint64]appliedFonts{h.fonts.FontGeneration(): cur}
 	}
+	told := func() { h.fontGens[h.fonts.FontGeneration()] = cur }
 	if !was.set || want.cell != was.cell || want.size != was.size {
 		h.fonts.SetFont(want.cell, float32(want.size))
+		cur.cell, cur.size = want.cell, want.size
+		told()
 	}
 	if !was.set && want.prose != "" || was.set && want.prose != was.prose {
 		h.fonts.SetProseFont(want.prose)
+		cur.prose = want.prose
+		told()
 	}
 	if !was.set && want.zoom != 100 || was.set && want.zoom != was.zoom {
 		h.fonts.SetZoom(want.zoom)
+		cur.zoom = want.zoom
+		told()
 	}
 	h.fontsApplied = want
 }
@@ -202,29 +212,34 @@ func (h *Host) setZoom(pct int) {
 
 // fontsFit reports whether the window would still hold the screen's minimum (80 × 20, main.qml)
 // with the cells at size and pct: the grid shrinks as the cells grow, in proportion near enough,
-// and a cell is kept spare for the rounding. Unknown sizes fit: nothing to judge by.
+// and a cell is kept spare for the rounding.
+//
+// The grid is judged by the fonts that measured it, by its generation: the window may still report
+// a grid of fonts set before the last change, measured before it and published after. A
+// generation not recorded is judged by the smallest fonts recorded, which predicts the fewest
+// columns. Before the window's first frame there is nothing to judge by, and it fits.
 func (h *Host) fontsFit(size, pct int) bool {
-	grid, err := h.fonts.Size()
-	now := h.fontsApplied
-	if err != nil || grid.W <= 0 || grid.H <= 0 || h.p == nil {
+	grid, gen := h.fonts.Grid()
+	if grid.W <= 0 || grid.H <= 0 || h.p == nil {
 		return true
 	}
-	if grid == h.fontsGrid.grid {
-		now = h.fontsGrid.at // the window has not drawn the last change yet: its grid is the one before
+	now, ok := h.fontGens[gen]
+	if !ok {
+		now = appliedFonts{size: defaultFontSize, zoom: 100}
+		for _, f := range h.fontGens {
+			if f.size*f.zoom < now.size*now.zoom {
+				now = f
+			}
+		}
 	}
-	if !now.set { // the window opened at its own defaults
-		now.size, now.zoom = defaultFontSize, 100
+	for g := range h.fontGens { // what the window will not report again
+		if g < gen {
+			delete(h.fontGens, g)
+		}
 	}
 	scale := float64(now.size*now.zoom) / float64(size*pct)
 	min := h.p.App().MinimumSize()
 	return (min.W <= 0 || int(float64(grid.W)*scale) > min.W) && (min.H <= 0 || int(float64(grid.H)*scale) > min.H)
-}
-
-// measuredGrid is the window's grid as it was when fonts were last changed, and the fonts it was
-// drawn at: until the window reports another grid, it is still that one.
-type measuredGrid struct {
-	grid tuicore.Size
-	at   appliedFonts
 }
 
 // tooLarge says why a size was refused.

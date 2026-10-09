@@ -121,8 +121,8 @@ type Host struct {
 	families                               func(mono bool) []string
 	defaultCellFont                        string
 	fontsApplied                           appliedFonts
-	fontsGrid                              measuredGrid // the grid before the last change (fontsFit)
-	cellFonts, proseFonts                  []string     // the Fonts dialog's choices, "" the default first
+	fontGens                               map[uint64]appliedFonts // the fonts set at each generation, for the grid's (fontsFit)
+	cellFonts, proseFonts                  []string                // the Fonts dialog's choices, "" the default first
 	cellFontModel, proseFontModel          *tuidecl.ListModel
 	arrange                                *arrangeState // an arrangement in progress (arrange.go)
 	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
