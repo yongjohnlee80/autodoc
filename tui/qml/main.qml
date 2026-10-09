@@ -219,8 +219,8 @@ Window {
         // shown only while something is wrong, and never in the way of a save
         Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
         Editor {
-	            id: editor
-	            autoIndent: true
+            id: editor
+            autoIndent: true
             contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
             Layout.fillHeight: true
             focus: true
