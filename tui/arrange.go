@@ -14,8 +14,8 @@ import (
 // arrangeState is an arrangement in progress.
 type arrangeState struct {
 	panel string
-	begin *[4]int // its floating rectangle when it began; nil: it was docked
-	rect  *[4]int // where the last step left it; nil until a step lands
+	begin *[4]float64 // its floating rectangle when it began; nil: it was docked
+	rect  *[4]float64 // where the last step left it; nil until a step lands
 }
 
 // arrangeSteps are the keys' steps, in cells: a move, or a resize.

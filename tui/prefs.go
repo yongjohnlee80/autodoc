@@ -93,7 +93,7 @@ type prefs struct {
 	panelGeo map[string]int
 	// panelFloat are the panels moved or resized off their edges: x, y, w, h in percent of the
 	// Window (panelfloat.go)
-	panelFloat map[string][4]int
+	panelFloat map[string][4]float64
 	// the GUI's fonts and zoom (fonts.go): "" and 0 are the window's defaults
 	cellFont, proseFont string
 	fontSize, zoom      int

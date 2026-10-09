@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -17,7 +16,8 @@ var floatPanels = []string{"explorer", "links", "terminal", "agent", "htmlPane"}
 
 func floatPref(panel string) string { return "tui." + panel + ".float" }
 
-// readPanelFloats reads each panel's floating rectangle: four percentages, the size at least 5.
+// readPanelFloats reads each panel's floating rectangle: four percentages (to a hundredth, as the
+// drawer reports them), the size at least 5.
 func readPanelFloats(p *prefs, m map[string]any) {
 	for _, panel := range floatPanels {
 		s, _ := m[floatPref(panel)].(string)
@@ -28,15 +28,15 @@ func readPanelFloats(p *prefs, m map[string]any) {
 }
 
 // parseFloat reads "x,y,w,h".
-func parseFloat(s string) ([4]int, bool) {
-	var r [4]int
+func parseFloat(s string) ([4]float64, bool) {
+	var r [4]float64
 	parts := strings.Split(s, ",")
 	if len(parts) != 4 {
 		return r, false
 	}
 	for i, part := range parts {
-		n, err := strconv.Atoi(strings.TrimSpace(part))
-		if err != nil || n < 0 || n > 100 {
+		n, err := strconv.ParseFloat(strings.TrimSpace(part), 64)
+		if err != nil || !(n >= 0 && n <= 100) {
 			return r, false
 		}
 		r[i] = n
@@ -44,12 +44,19 @@ func parseFloat(s string) ([4]int, bool) {
 	return r, r[2] >= 5 && r[3] >= 5
 }
 
-func formatFloat(r [4]int) string { return fmt.Sprintf("%d,%d,%d,%d", r[0], r[1], r[2], r[3]) }
+// formatFloat is r as stored: each percentage as short as it reads ("50", "0.4").
+func formatFloat(r [4]float64) string {
+	parts := make([]string, 4)
+	for i, v := range r {
+		parts[i] = strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return strings.Join(parts, ",")
+}
 
 // withFloat is m with panel's rectangle r, or without it when r is nil: a new map, as the prefs
 // are values.
-func withFloat(m map[string][4]int, panel string, r *[4]int) map[string][4]int {
-	out := make(map[string][4]int, len(m)+1)
+func withFloat(m map[string][4]float64, panel string, r *[4]float64) map[string][4]float64 {
+	out := make(map[string][4]float64, len(m)+1)
 	for k, v := range m {
 		out[k] = v
 	}
@@ -63,12 +70,12 @@ func withFloat(m map[string][4]int, panel string, r *[4]int) map[string][4]int {
 
 // floatState is what the document reads of a panel's placement: App.<panel>Floating, and its
 // rectangle App.<panel>X, Y, W and H (a docked panel's are where it would float: the middle).
-func floatState(m map[string][4]int) map[string]any {
+func floatState(m map[string][4]float64) map[string]any {
 	st := map[string]any{}
 	for _, panel := range floatPanels {
 		r, ok := m[panel]
 		if !ok {
-			r = [4]int{25, 25, 50, 50}
+			r = [4]float64{25, 25, 50, 50}
 		}
 		st["App."+panel+"Floating"] = ok
 		for i, k := range []string{"X", "Y", "W", "H"} {
@@ -80,8 +87,8 @@ func floatState(m map[string][4]int) map[string]any {
 
 // panelPlaced is a panel's move or resize ended: it floats there. While that panel is being
 // arranged the rectangle is only shown, and kept when the arrangement is (arrange.go).
-func (h *Host) panelPlaced(panel string, x, y, w, ht int) {
-	r := [4]int{x, y, w, ht}
+func (h *Host) panelPlaced(panel string, x, y, w, ht float64) {
+	r := [4]float64{x, y, w, ht}
 	if a := h.arrange; a != nil && a.panel == panel {
 		a.rect = &r
 		h.showFloat(panel, &r)
@@ -91,7 +98,7 @@ func (h *Host) panelPlaced(panel string, x, y, w, ht int) {
 }
 
 // showFloat sets what the document reads of panel's placement, with nothing stored.
-func (h *Host) showFloat(panel string, r *[4]int) {
+func (h *Host) showFloat(panel string, r *[4]float64) {
 	h.set("App."+panel+"Floating", r != nil)
 	if r != nil {
 		for i, k := range []string{"X", "Y", "W", "H"} {

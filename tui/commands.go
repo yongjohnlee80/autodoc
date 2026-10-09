@@ -312,14 +312,15 @@ func stringAndTwoNumbers(name, what string, fn func(string, int, int)) decl.Hand
 	}
 }
 
-func stringAndFourNumbers(name, what string, fn func(string, int, int, int, int)) decl.HandlerFunc {
+// stringAndFourNumbers is a name and four numbers, fractions allowed: a panel's placement.
+func stringAndFourNumbers(name, what string, fn func(string, float64, float64, float64, float64)) decl.HandlerFunc {
 	return func(args []qml.SpecValue) error {
 		if len(args) != 5 || args[0].Kind != qml.SpecValueString {
 			return fmt.Errorf("%s takes %s", name, what)
 		}
-		var n [4]int
+		var n [4]float64
 		for i, a := range args[1:] {
-			v, err := strconv.Atoi(a.Raw)
+			v, err := strconv.ParseFloat(a.Raw, 64)
 			if a.Kind != qml.SpecValueNumber || err != nil {
 				return fmt.Errorf("%s takes %s, not %s", name, what, a.Raw)
 			}

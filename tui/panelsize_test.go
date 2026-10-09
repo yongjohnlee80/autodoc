@@ -140,3 +140,25 @@ func TestPanelResizedTakesANameAndTwoWholeNumbers(t *testing.T) {
 		}
 	}
 }
+
+// TestArrangingMovesAPanelOnAWideScreen: at 500 columns a step of two is under a percent of the
+// screen; it moves the panel all the same, each time, and Enter keeps it to a hundredth of a percent.
+func TestArrangingMovesAPanelOnAWideScreen(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 500, 40)
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	var col0 int
+	r.s.WaitFor(t, "the explorer", func(sc string) bool { var row int; row, col0 = panelAt(sc, "explorer"); return row >= 0 })
+	onLoop(r, func() bool { r.h.arrangePanel(); return true })
+	r.s.WaitForText(t, "arrange the explorer")
+	r.keys(t, key('l'))
+	r.s.WaitFor(t, "two columns right", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+2 })
+	r.keys(t, key('l'))
+	r.s.WaitFor(t, "four columns right", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+4 })
+	r.keys(t, enter())
+	r.s.WaitFor(t, "kept at 0.8%", func(string) bool {
+		m, _ := d.db.Preferences(context.Background())
+		return strings.HasPrefix(m["tui.explorer.float"], "0.8,")
+	})
+}
