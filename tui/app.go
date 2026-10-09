@@ -115,6 +115,16 @@ type Host struct {
 	registrationRestart, restartAccepted   bool
 	previewHeld                            bool // the search preview's hit is of a held document
 	panelOpen                              map[string]bool
+	lastPanel                              string      // the panel opened last (Arrange panel)
+	tutorialAt                             int         // the tutorial's page shown (tutorial.go)
+	fonts                                  FontControl // the window's fonts; nil in a terminal (fonts.go)
+	families                               func(mono bool) []string
+	defaultCellFont                        string
+	fontsApplied                           appliedFonts
+	fontGens                               map[uint64]appliedFonts // the fonts set at each generation, for the grid's (fontsFit)
+	cellFonts, proseFonts                  []string                // the Fonts dialog's choices, "" the default first
+	cellFontModel, proseFontModel          *tuidecl.ListModel
+	arrange                                *arrangeState // an arrangement in progress (arrange.go)
 	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
 	// opened; whether its closing gives the keyboard back
 	termStarted, termRestore bool
@@ -291,6 +301,11 @@ type Options struct {
 	// ProgramOptions come after the program's own options (options): a build's choice of how
 	// the document runs, such as tuidecl.WithStyle for the window's native widgets. nil: none.
 	ProgramOptions []tuidecl.ProgramOption
+	// Fonts are the window's fonts (--gui's backend); nil in a terminal. FontFamilies lists the
+	// installed families, and DefaultCellFont is the cell font the window draws in by default.
+	Fonts           FontControl
+	FontFamilies    func(mono bool) []string
+	DefaultCellFont string
 }
 
 // New builds the program over session. Nothing runs, and nothing dials, until Run.
@@ -310,35 +325,40 @@ func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath,
-		awaitExit:      awaitExit,
-		browser:        openDefaultApp,
-		picker:         tuidecl.NewListModel("key", "path"),
-		outlineList:    tuidecl.NewListModel("key", "heading", "line"),
-		wsProviders:    tuidecl.NewListModel("key", "label"),
-		hits:           tuidecl.NewListModel("key", "hit", "path", "section"),
-		newList:        tuidecl.NewListModel("key", "path"),
-		providers:      tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
-		providerModels: tuidecl.NewListModel("key", "name"),
-		agentRows:      tuidecl.NewListModel("key", "default", "name", "command"),
-		recentModel:    tuidecl.NewListModel("key", "workspace", "path"),
-		rankers:        tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
-		vectors:        tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
-		explorer:       tuidecl.NewTreeListModel("key", "label"),
-		explorerPaths:  map[string][]string{},
-		openAt:         -1,
-		prefs:          defaultPrefsFor(opt.GUI),
-		gui:            opt.GUI,
-		panelOpen:      map[string]bool{},
-		termRestore:    true,
-		relationsModel: tuidecl.NewListModel("key", "label"),
-		noticeList:     tuidecl.NewListModel("key", "when", "text"),
-		workspaces:     tuidecl.NewListModel("key", "label"),
-		managed:        tuidecl.NewListModel("key", "name", "state", "root"),
-		pluginOpt:      opt.Plugins,
-		pluginRows:     tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
-		pluginKeyRows:  tuidecl.NewListModel("key", "target"),
-		managedPlugins: tuidecl.NewListModel("key", "name", "place", "commit", "source"),
-		running:        map[string]*pluginRun{}}
+		awaitExit:       awaitExit,
+		browser:         openDefaultApp,
+		picker:          tuidecl.NewListModel("key", "path"),
+		outlineList:     tuidecl.NewListModel("key", "heading", "line"),
+		wsProviders:     tuidecl.NewListModel("key", "label"),
+		hits:            tuidecl.NewListModel("key", "hit", "path", "section"),
+		newList:         tuidecl.NewListModel("key", "path"),
+		providers:       tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
+		providerModels:  tuidecl.NewListModel("key", "name"),
+		agentRows:       tuidecl.NewListModel("key", "default", "name", "command"),
+		recentModel:     tuidecl.NewListModel("key", "workspace", "path"),
+		cellFontModel:   fontModel(),
+		proseFontModel:  fontModel(),
+		fonts:           opt.Fonts,
+		families:        opt.FontFamilies,
+		defaultCellFont: opt.DefaultCellFont,
+		rankers:         tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
+		vectors:         tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
+		explorer:        tuidecl.NewTreeListModel("key", "label"),
+		explorerPaths:   map[string][]string{},
+		openAt:          -1,
+		prefs:           defaultPrefsFor(opt.GUI),
+		gui:             opt.GUI,
+		panelOpen:       map[string]bool{},
+		termRestore:     true,
+		relationsModel:  tuidecl.NewListModel("key", "label"),
+		noticeList:      tuidecl.NewListModel("key", "when", "text"),
+		workspaces:      tuidecl.NewListModel("key", "label"),
+		managed:         tuidecl.NewListModel("key", "name", "state", "root"),
+		pluginOpt:       opt.Plugins,
+		pluginRows:      tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
+		pluginKeyRows:   tuidecl.NewListModel("key", "target"),
+		managedPlugins:  tuidecl.NewListModel("key", "name", "place", "commit", "source"),
+		running:         map[string]*pluginRun{}}
 	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
 	return h

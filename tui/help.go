@@ -35,7 +35,11 @@ const helpText = `KEYS
   SPC k       the editor mode: Vim (modal) or Text (modeless, an ordinary text editor's keys)
   ?           the Vim keys' card, at the bottom right (Normal mode); ? again closes it
   SPC h       the notifications' history (Go › Notifications…)
-  F1          this help;  Ctrl+Q quit
+  F1          this help (Help › Keys); SPC T the tutorial (Help › Tutorial…);  Ctrl+Q quit
+  Shift+F10, the Menu key, SPC .  the page's right-click menu, at the cursor
+  Ctrl+= Ctrl+- Ctrl+0  in the GUI's window, zoom in, out, and back to 100% (Options › Fonts and
+              zoom… chooses the fonts too); a terminal's own settings choose its font. Zoom
+              stops before the window would be smaller than 80 × 20: enlarge it to zoom on
 
 THE PAGE
   The file is a page 120 columns wide, centred, the ruler at its edge (Preferences sets the
@@ -85,6 +89,12 @@ THE PANELS
   editor mode, Esc leaves too, except in a full-screen program (vim, less), which needs it.
   Escape in Normal mode, or SPC ` + "`" + ` again, hides it; the keyboard goes back where it was. When
   the shell exits the pane says so, and Enter starts another.
+  Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
+  with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
+  arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It
+  opens where it was left from then on. Go › Reset panel layout docks every panel at its edge
+  again, as a new edge in Preferences does for one. A terminal may keep Alt+click for itself;
+  the keys always work.
 
 WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
@@ -130,7 +140,9 @@ h  notifications          ,  editor preferences
 O  the file's outline     a  search models
 d  view the diagram       A  about
 G  agent profiles         Q  quit
-p  plugin commands        H  preview HTML`
+p  plugin commands        H  preview HTML
+.  the right-click menu   L  arrange a panel
+T  the tutorial`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.

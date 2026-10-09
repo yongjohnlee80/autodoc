@@ -9,69 +9,113 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
-// gripAt is where a panel's corner grip is drawn, ok false when nowhere.
-func gripAt(r *running, glyph string) (x, y int, ok bool) {
-	for y, row := range r.s.Backend.Snapshot() {
-		for x, c := range row {
-			if c.Content == glyph {
-				return x, y, true
-			}
+// panelAt is where a panel's frame starts, its title's "┌ title": row and column, -1 when not shown.
+func panelAt(screen, title string) (row, column int) {
+	for y, l := range strings.Split(screen, "\n") {
+		if c := col(l, "┌ "+title); c >= 0 {
+			return y, c
 		}
 	}
-	return 0, 0, false
+	return -1, -1
 }
 
-func dragGrip(t *testing.T, r *running, glyph string, dx, dy int) {
+// altDrag drags with Alt held from (x, y) by (dx, dy): the left button moves a panel, the right
+// one resizes it.
+func altDrag(t *testing.T, r *running, button tuicore.MouseButton, x, y, dx, dy int) {
 	t.Helper()
-	var x, y int
-	r.s.WaitFor(t, "the grip "+glyph, func(string) bool {
-		var ok bool
-		x, y, ok = gripAt(r, glyph)
-		return ok
-	})
-	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
-		tuicore.MouseEvent{Kind: tuicore.MouseMotion, X: x + dx, Y: y + dy},
-		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x + dx, Y: y + dy})
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: button, Mods: tuicore.ModAlt, X: x, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseMotion, Button: button, X: x + dx, Y: y + dy},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: button, X: x + dx, Y: y + dy})
 }
 
-// TestADraggedPanelKeepsItsSize: the terminal at the bottom, dragged by its top-right grip from 30%
-// to 50% of the rows, and the explorer at the left, dragged by its bottom-right grip from 30% to
-// 40% of the columns, each keep the size for their edge in the store, and a TUI attached after
-// opens them at it (ADR 1791213315).
-func TestADraggedPanelKeepsItsSize(t *testing.T) {
-	d, r := runShellTUI(t, nil)
-	ctx := context.Background()
-	stored := func(name, want string) {
-		t.Helper()
-		r.s.WaitFor(t, name+" = "+want, func(string) bool {
-			m, err := d.db.Preferences(ctx)
-			return err == nil && m[name] == want
-		})
-	}
+// storedPref waits for the store's preference name to be want ("" for unset).
+func storedPref(t *testing.T, d *daemon, r *running, name, want string) {
+	t.Helper()
+	r.s.WaitFor(t, name+" = "+want, func(string) bool {
+		m, err := d.db.Preferences(context.Background())
+		return err == nil && m[name] == want
+	})
+}
 
+// TestADraggedPanelFloatsWhereItIsLeft: the terminal at the bottom, Alt-dragged up six rows, floats
+// there, and the explorer at the left, Alt-right-dragged ten columns wider, floats at its new size;
+// the store keeps each as percentages of the Window, and a TUI attached after opens them there
+// (ADR 1791500773). No corner grip is drawn.
+func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
+	d, r := runShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal 30% high", func(sc string) bool { row, _ := frameAt(sc); return row == 21 })
-	dragGrip(t, r, "□", 0, -6)
-	r.s.WaitFor(t, "the terminal 50% high", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
-	stored("tui.terminal.bottom.size", "50")
-	if got := onLoop(r, func() int { return r.h.prefs.termSize["bottom"] }); got != 50 {
-		t.Errorf("the terminal's size held is %d, want 50", got)
+	if strings.Contains(r.s.String(), "□") {
+		t.Error("a corner grip is drawn")
 	}
+	altDrag(t, r, tuicore.MouseLeft, 50, 25, 0, -6)
+	r.s.WaitFor(t, "the terminal six rows up", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
+	storedPref(t, d, r, "tui.terminal.float", "0,50,100,30")
 	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
 
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
-	dragGrip(t, r, "□", 10, 0)
-	r.s.WaitFor(t, "the explorer 40% wide", func(string) bool { x, _, ok := gripAt(r, "□"); return ok && x == 39 })
-	stored("tui.explorer.left.size", "40")
+	r.s.WaitFor(t, "the explorer", func(sc string) bool { row, _ := panelAt(sc, "explorer"); return row >= 0 })
+	altDrag(t, r, tuicore.MouseRight, 20, 10, 10, 0)
+	r.s.WaitFor(t, "the explorer floating 40% wide", func(string) bool {
+		m, _ := d.db.Preferences(context.Background())
+		f, ok := parseFloat(m["tui.explorer.float"])
+		return ok && f[0] == 0 && f[2] == 40
+	})
 
 	again := attached(t, d)
-	onLoop(again, func() bool { again.h.togglePanel("explorer"); return true })
-	again.s.WaitFor(t, "the explorer 40% wide in a new TUI", func(string) bool {
-		x, _, ok := gripAt(again, "□")
-		return ok && x == 39
+	onLoop(again, func() bool { again.h.toggleTerminal(); return true })
+	again.s.WaitFor(t, "the terminal floating six rows up in a new TUI", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
+}
+
+// TestArrangingAPanelIsOneChange: SPC L's steps move the panel at once and store nothing; Escape
+// puts it back where it was, still open; Enter keeps the steps, written once.
+func TestArrangingAPanelIsOneChange(t *testing.T) {
+	d, r := runShellTUI(t, nil)
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	var row0, col0 int
+	r.s.WaitFor(t, "the explorer", func(sc string) bool { row0, col0 = panelAt(sc, "explorer"); return row0 >= 0 })
+
+	onLoop(r, func() bool { r.h.arrangePanel(); return true }) // SPC L, with the explorer's tree focused
+	r.s.WaitForText(t, "arrange the explorer")
+	r.keys(t, key('l'), key('l'))
+	r.s.WaitFor(t, "four columns right", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+4 })
+	if m, _ := d.db.Preferences(context.Background()); m["tui.explorer.float"] != "" {
+		t.Fatalf("a step was stored: %v", m["tui.explorer.float"])
+	}
+	r.keys(t, esc())
+	r.s.WaitFor(t, "back at its edge, open", func(sc string) bool { row, c := panelAt(sc, "explorer"); return row == row0 && c == col0 })
+	if m, _ := d.db.Preferences(context.Background()); m["tui.explorer.float"] != "" {
+		t.Errorf("Escape stored %v", m["tui.explorer.float"])
+	}
+
+	onLoop(r, func() bool { r.h.arrangePanel(); return true })
+	r.s.WaitForText(t, "arrange the explorer")
+	r.keys(t, key('j'), key('L'), enter())
+	r.s.WaitFor(t, "a row down", func(sc string) bool { row, _ := panelAt(sc, "explorer"); return row == row0+1 })
+	r.s.WaitFor(t, "kept once", func(string) bool {
+		m, _ := d.db.Preferences(context.Background())
+		return strings.HasPrefix(m["tui.explorer.float"], "0,")
 	})
-	onLoop(again, func() bool { again.h.togglePanel("explorer"); again.h.toggleTerminal(); return true })
-	again.s.WaitFor(t, "the terminal 50% high in a new TUI", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
+	if got := onLoop(r, func() bool { return r.h.arrange == nil }); !got {
+		t.Error("the arrangement did not end")
+	}
+}
+
+// TestResetAndANewEdgeDockThePanels: Go › Reset panel layout forgets every floating panel, and a
+// new edge in Preferences forgets that panel's.
+func TestResetAndANewEdgeDockThePanels(t *testing.T) {
+	d, r := runShellTUI(t, map[string]string{"tui.explorer.float": "50,25,30,50", "tui.links.float": "10,10,30,50", "tui.terminal.float": "0,50,100,30"})
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	r.s.WaitFor(t, "the explorer floating mid-screen", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c >= 45 })
+	onLoop(r, func() bool { r.h.setExplorerEdge(1); return true }) // right
+	storedPref(t, d, r, "tui.explorer.float", "")
+	onLoop(r, func() bool { r.h.setTerminalEdge(indexOf(termEdges, "top")); return true })
+	storedPref(t, d, r, "tui.terminal.float", "")
+	if got := onLoop(r, func() bool { _, ok := r.h.prefs.panelFloat["links"]; return ok }); !got {
+		t.Fatal("a new edge for the explorer docked the links too")
+	}
+	onLoop(r, func() bool { r.h.resetPanelLayout(); return true })
+	storedPref(t, d, r, "tui.links.float", "")
 }
 
 // App.panelResized takes a panel's name and two whole numbers, and refuses anything else, naming it.
@@ -97,4 +141,41 @@ func TestPanelResizedTakesANameAndTwoWholeNumbers(t *testing.T) {
 			t.Errorf("%v: err %v (want %q), called with %v", c.args, err, c.says, got)
 		}
 	}
+}
+
+// TestArrangingMovesAPanelOnAWideScreen: at 500 columns a step of two is under a percent of the
+// screen; it moves the panel all the same, each time, and Enter keeps it to a hundredth of a percent,
+// which a TUI attached after reads back to the same column.
+func TestArrangingMovesAPanelOnAWideScreen(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 500, 40)
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	var col0 int
+	r.s.WaitFor(t, "the explorer", func(sc string) bool { var row int; row, col0 = panelAt(sc, "explorer"); return row >= 0 })
+	onLoop(r, func() bool { r.h.arrangePanel(); return true })
+	r.s.WaitForText(t, "arrange the explorer")
+	r.keys(t, key('l'))
+	r.s.WaitFor(t, "two columns right", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+2 })
+	r.keys(t, key('l'))
+	r.s.WaitFor(t, "four columns right", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+4 })
+	r.keys(t, enter())
+	r.s.WaitFor(t, "kept at 0.8%", func(string) bool {
+		m, _ := d.db.Preferences(context.Background())
+		return strings.HasPrefix(m["tui.explorer.float"], "0.8,")
+	})
+
+	// read back: a TUI attached after opens it at the same column
+	again := runTUISized(t, NewSession(d.sock, nil), Options{}, 500, 40)
+	again.s.WaitFor(t, "the notes listed", func(string) bool { return len(again.listed()) > 0 })
+	onLoop(again, func() bool { again.h.togglePanel("explorer"); return true })
+	again.s.WaitFor(t, "four columns right in a new TUI", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c == col0+4 })
+}
+
+// TestTheTerminalOpensAtItsStoredSize: a size kept for the terminal's edge (Preferences, or a drag
+// before panels floated) is read when a TUI attaches, and the terminal opens at it, docked.
+func TestTheTerminalOpensAtItsStoredSize(t *testing.T) {
+	_, r := runShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
+	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	r.s.WaitFor(t, "the terminal 50% high", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 }

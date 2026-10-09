@@ -266,7 +266,15 @@ func (h *Host) state() map[string]any {
 		"App.workspaceIndex": 0,
 		"App.removeQuestion": "",
 
-		"App.helpText":  helpText,
+		"App.helpText":      helpText,
+		"App.arrangeTitle":  "arrange a panel",
+		"App.tutorialTitle": "", "App.tutorialText": "", "App.tutorialBack": false, "App.tutorialNext": true,
+		"App.gui":           h.gui,
+		"App.cellFonts":     h.cellFontModel,
+		"App.proseFonts":    h.proseFontModel,
+		"App.fontSizes":     choices(fontSizeLabels()...),
+		"App.zoomSteps":     choices(zoomLabels()...),
+		"App.cellFontIndex": 0, "App.proseFontIndex": 0,
 		"App.aboutText": h.aboutText(),
 	}
 	for k, v := range themeState(h.theme) {

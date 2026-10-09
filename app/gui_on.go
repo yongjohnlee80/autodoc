@@ -20,7 +20,8 @@ import (
 // ends the process when the UI quits: it never returns.
 func runGUI(ctx context.Context, o tui.LaunchOptions) error {
 	gui.Main(func() error {
-		o.Backend = gui.NewBackend(gui.WithTitle("AutoDoc"))
+		b := gui.NewBackend(gui.WithTitle("AutoDoc"))
+		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
 		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native()))
 		if err := tui.Launch(ctx, o); err != nil && !errors.Is(err, context.Canceled) {

@@ -27,6 +27,7 @@ func (h *Host) togglePanel(name string) {
 // inside one closes it).
 func (h *Host) panelOpened(name string) {
 	h.panelOpen[name] = true
+	h.lastPanel = name
 	h.showFind() // a drawer at the right edge hides "finding …"
 	if name == "terminal" {
 		h.set("App.terminalShown", true)

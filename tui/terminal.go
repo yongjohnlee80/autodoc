@@ -149,6 +149,7 @@ func (h *Host) setTerminalEdge(i int) {
 	if i >= 0 && i < len(termEdges) {
 		e := termEdges[i]
 		h.setPref(prefTermEdge, e, func(p *prefs) { p.termEdge = e })
+		h.dockPanel("terminal")
 	}
 }
 

@@ -73,6 +73,10 @@ Window {
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
+    // the window's zoom (fonts.go); nothing in a terminal
+    Shortcut { sequence: "Ctrl+="; onActivated: App.zoomWindow("in") }
+    Shortcut { sequence: "Ctrl+-"; onActivated: App.zoomWindow("out") }
+    Shortcut { sequence: "Ctrl+0"; onActivated: App.setZoom(100) }
     // ? is the Vim keys' card, in Normal mode (the Text mode types it); ? again closes it
     Shortcut { sequence: "?"; onActivated: App.toggleVimKeys() }
 
@@ -116,6 +120,9 @@ Window {
             MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
             MenuSeparator {}
+            MenuItem { text: "A&rrange panel…"; onTriggered: App.arrangePanel() }
+            MenuItem { text: "Reset panel la&yout"; onTriggered: App.resetPanelLayout() }
+            MenuSeparator {}
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
         }
@@ -157,6 +164,13 @@ Window {
             }
             MenuSeparator {}
             MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
+            // the window's fonts and zoom (fonts.go): a terminal draws in its own, and hides these
+            MenuItem { text: "&Fonts and zoom…"; visible: App.gui; onTriggered: App.openFonts() }
+            // golib draws no separator with nothing after it: in a terminal, where these hide, none
+            MenuSeparator {}
+            MenuItem { text: "Zoom &in  (Ctrl+=)"; visible: App.gui; onTriggered: App.zoomWindow("in") }
+            MenuItem { text: "Zoom &out  (Ctrl+-)"; visible: App.gui; onTriggered: App.zoomWindow("out") }
+            MenuItem { text: "&Actual size  (Ctrl+0)"; visible: App.gui; onTriggered: App.setZoom(100) }
         }
         Menu {
             title: "&Plugins"
@@ -183,6 +197,7 @@ Window {
         Menu {
             title: "&Help"
             align: Tui.Right
+            MenuItem { text: "&Tutorial…"; onTriggered: App.openTutorial() }
             MenuItem { text: "&Keys"; onTriggered: help.open() }
             MenuItem { text: "&About"; onTriggered: about.open() }
         }
@@ -252,7 +267,13 @@ Window {
         edge: App.explorerEdge
         size: App.explorerSize
         length: App.explorerLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.explorerFloating
+        floatX: App.explorerX; floatY: App.explorerY; floatWidth: App.explorerW; floatHeight: App.explorerH
+        onPlaced: App.panelPlaced("explorer", x, y, width, height)
         minimumSize: 15
         onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
@@ -281,7 +302,11 @@ Window {
         edge: Tui.Right
         size: 50
         length: 100
-        resizable: true
+        movable: true
+        windowResize: true
+        floating: App.htmlPaneFloating
+        floatX: App.htmlPaneX; floatY: App.htmlPaneY; floatWidth: App.htmlPaneW; floatHeight: App.htmlPaneH
+        onPlaced: App.panelPlaced("htmlPane", x, y, width, height)
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
@@ -300,7 +325,13 @@ Window {
         edge: App.linksEdge
         size: App.linksSize
         length: App.linksLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.linksFloating
+        floatX: App.linksX; floatY: App.linksY; floatWidth: App.linksW; floatHeight: App.linksH
+        onPlaced: App.panelPlaced("links", x, y, width, height)
         minimumSize: 15
         onResized: App.panelResized("links", size, length)
         onOpened: App.panelOpened("links")
@@ -330,7 +361,13 @@ Window {
         edge: App.terminalEdge
         size: App.terminalSize
         length: App.terminalLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.terminalFloating
+        floatX: App.terminalX; floatY: App.terminalY; floatWidth: App.terminalW; floatHeight: App.terminalH
+        onPlaced: App.panelPlaced("terminal", x, y, width, height)
         onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
@@ -356,7 +393,13 @@ Window {
         edge: App.agentEdge
         size: App.agentSize
         length: App.agentLength
-        resizable: true
+        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
+        // Alt/Option-right drag resizes it; until then it is at its edge
+        movable: true
+        windowResize: true
+        floating: App.agentFloating
+        floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
+        onPlaced: App.panelPlaced("agent", x, y, width, height)
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)
@@ -393,6 +436,7 @@ Window {
     PluginManager { id: pluginManager }
     PluginRemove { id: pluginRemove }
     Preferences { id: preferences }
+    Fonts { id: fonts }
     Diagram { id: diagram }
     HtmlPreview { id: htmlPreview }
     AIModels { id: aiModels }
@@ -415,6 +459,8 @@ Window {
     JumpCard { id: jumpCard }
     PluginKeys { id: pluginKeys }
     Help { id: help }
+    Arrange { id: arrange }
+    Tutorial { id: tutorial }
     About { id: about }
     Notifications { id: notifications }
 }
