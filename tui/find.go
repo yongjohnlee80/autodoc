@@ -5,13 +5,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
 	"github.com/yongjohnlee80/golib/tui/widget"
-
-	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // FIND — / in the page, the explorer or the relations, as AutoDB's: a word or phrase in the pane that
@@ -109,30 +106,6 @@ func (h *Host) clearFind() {
 	h.say("find cleared")
 }
 
-// pageHighlighter is the page's highlighter: Markdown, the find's words marked over it.
-func (h *Host) pageHighlighter() highlight.Highlighter {
-	if h.findHL == nil {
-		h.findHL = markedHighlighter(&h.findMarks)
-	}
-	return h.findHL
-}
-
-func (h *Host) textHighlighter() highlight.Highlighter {
-	if h.textFindHL == nil {
-		h.textFindHL = markedHighlighterWith(&h.findMarks, highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) {
-			return nil, 0
-		}))
-	}
-	return h.textFindHL
-}
-
-func (h *Host) yamlHighlighter() highlight.Highlighter {
-	if h.yamlFindHL == nil {
-		h.yamlFindHL = markedHighlighterWith(&h.findMarks, yamlSyntaxHighlighter())
-	}
-	return h.yamlFindHL
-}
-
 // showFind brings the page's marks and "finding …" up to date with the find: marked and shown while
 // one is on, in the page; gone when it ends.
 func (h *Host) showFind() {
@@ -142,16 +115,7 @@ func (h *Host) showFind() {
 	}
 	if !slices.Equal(terms, h.findMarks.load()) {
 		h.findMarks.Store(terms)
-		// set again so the page highlights every line afresh: it keeps a line's colours until its
-		// text changes, and the find's words are not its text
-		switch h.outlineKind() {
-		case kind.Text:
-			h.core.SetHighlighter(h.textHighlighter())
-		case kind.YAML:
-			h.core.SetHighlighter(h.yamlHighlighter())
-		default:
-			h.core.SetHighlighter(h.pageHighlighter())
-		}
+		h.core.InvalidateHighlightPaint()
 	}
 	if h.findChip == nil {
 		return

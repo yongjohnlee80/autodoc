@@ -85,11 +85,8 @@ type Host struct {
 	searchWaitToast     bool
 	previewSeq          uint64
 	marks               marks
-	findMarks           marks                 // the page find's words, as the page's highlighter marks them (find.go)
-	findHL              highlight.Highlighter // the page's: Markdown, the find's words marked over it
-	textFindHL          highlight.Highlighter
-	yamlFindHL          highlight.Highlighter
-	openAt              int // where the next file opened puts the cursor, a byte offset; -1 for its start
+	findMarks           marks // the page find's words, as the page's highlighter marks them (find.go)
+	openAt              int   // where the next file opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find       findState
@@ -373,6 +370,9 @@ func (h *Host) attach(p *tuidecl.Program) error {
 		return errors.New("main.qml declares no Editor with id: editor")
 	}
 	h.core = h.editor.Core()
+	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
+		return markedSpans(&h.findMarks, line, semantic)
+	})
 	h.installEditorMenu() // the stock rows, then related documents and back
 	h.linkPage()          // a raw HTML file's page opens its links as the preview pane does
 	p.Post(h.attachToasts)
@@ -406,10 +406,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	h.layoutSrc = src
 	h.theme = themeOf(src)
 	opts = append(opts,
-		tuidecl.Highlighters(highlight.Definition{Name: "Markdown (search)", Highlighter: h.searchHighlighter()},
-			highlight.Definition{Name: "Markdown (find)", Highlighter: h.pageHighlighter()},
-			highlight.Definition{Name: "Plain text (find)", Highlighter: h.textHighlighter()},
-			highlight.Definition{Name: "YAML (find)", Highlighter: h.yamlHighlighter()}),
+		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
 		tuidecl.Sources(h.state()),
 		tuidecl.Handlers(h.commands()),
 		tuidecl.ErrorSink(h.keep),

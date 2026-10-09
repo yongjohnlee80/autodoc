@@ -4,3 +4,7 @@
 
 # coverage profiles (make cover, CI)
 /coverage.out
+
+# Local producer worktree linkage; never a released dependency.
+go.work
+go.work.sum
