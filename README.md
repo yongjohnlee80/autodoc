@@ -364,6 +364,10 @@ drawn natively, in the theme's colours, and a dialog dims what is behind it. The
 be resized freely; below 80 × 20 cells it asks to be enlarged. `Options › Fonts and zoom…`
 chooses the fonts it draws in, and `Ctrl+=` and `Ctrl+-` zoom everything in it together.
 
+On macOS, holding a letter repeats it instead of opening the accent picker, so holding `j` or
+`k` continues moving through the document. AutoDoc sets this preference for its GUI process at
+startup; no `defaults` command is needed, and other apps and saved preferences are unaffected.
+
 **`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
 It shows the note's export drawn natively, with proportional text and the export's own styles, so
 it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).

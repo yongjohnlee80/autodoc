@@ -19,6 +19,7 @@ import (
 // Gio needs the process's main thread for windows (macOS requires it), so gui.Main takes it and
 // ends the process when the UI quits: it never returns.
 func runGUI(ctx context.Context, o tui.LaunchOptions) error {
+	configureGUIPreferences()
 	gui.Main(func() error {
 		b := gui.NewBackend(gui.WithTitle("AutoDoc"))
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
