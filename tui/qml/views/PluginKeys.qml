@@ -5,11 +5,11 @@
 // command runs. Esc closes it.
 Dialog {
     id: pluginKeys
-    closeOnQ: true
     title: "SPC p — plugin commands"
     dim: false
     helpText: "a key runs its command · q or Esc closes"
     Text { text: App.pluginKeysText; wrapMode: Tui.WordWrap }
+    Shortcut { sequence: "q"; onActivated: pluginKeys.close() }
     Repeater {
         model: App.pluginKeys
         Shortcut { sequence: model.key; onActivated: { pluginKeys.close(); App.pluginEntry(model.target) } }
