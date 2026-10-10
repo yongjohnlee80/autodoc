@@ -230,7 +230,8 @@ jobs:
       # The base run gets the URL only when the base tree already has
       # core/pgstore: this PR's base still carries the old destination test,
       # which is red against a real Postgres, and the service would fail the
-      # step for a tree this PR does not change.
+      # step for a tree this PR does not change. The base also has the plugin
+      # rebinding regression fixed by this PR; the head still runs that test.
       - name: generate base coverage
         run: |
           git worktree add --detach "$RUNNER_TEMP/coverage-base" "$BASE_SHA"
@@ -238,7 +239,7 @@ jobs:
           if [ -d core/pgstore ]; then
             export AUTODOC_TEST_PGURL="$PGURL"
           fi
-          go test -count=1 -timeout 20m -covermode=atomic \
+          go test -count=1 -timeout 20m -skip '^TestAPreferenceRebindsAPluginCommand$' -covermode=atomic \
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
       # covercheck is golib's, at the version go.mod requires: no install step
