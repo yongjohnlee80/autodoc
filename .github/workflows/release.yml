@@ -1,4 +1,4 @@
-# A pushed v* tag builds the binary and GUI editor package for each platform
+# A pushed v* tag builds the binary for each platform
 # and attaches them, with checksums, to that tag's GitHub release.
 name: release
 
@@ -51,13 +51,6 @@ jobs:
           go build -tags "${{ matrix.tags }}" -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" ./cmd/autodoc
           tar czf "${OUT}.tar.gz" "${OUT}"
           shasum -a 256 "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256" # on Ubuntu and macOS alike
-          if [ "${GOOS}" = darwin ] || [ "${{ matrix.tags }}" = gui ]; then
-            sh scripts/package-editor.sh "${GOOS}" "${GOARCH}" "${VERSION}" "${OUT}" .
-            if [ "${GOOS}" = darwin ]; then
-              plutil -lint "./autodoc-editor-${GOOS}-${GOARCH}/AutoDoc Editor.app/Contents/Info.plist"
-              "./autodoc-editor-${GOOS}-${GOARCH}/AutoDoc Editor.app/Contents/MacOS/autodoc-editor" --version
-            fi
-          fi
       - uses: actions/upload-artifact@v4
         with:
           name: dist-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
