@@ -1,6 +1,6 @@
 // ConfirmQuit.qml — quitting over unsaved changes asks first. The answers name both outcomes.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: "quit autodoc?"

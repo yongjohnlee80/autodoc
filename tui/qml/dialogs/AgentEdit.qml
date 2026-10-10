@@ -2,7 +2,7 @@
 // agent, run by the shell as written; {root} and {workspace} in it are filled in. A refusal opens
 // it again with the reason on its help line.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 90
     maxHeightPercent: 80
     title: App.agentFormTitle

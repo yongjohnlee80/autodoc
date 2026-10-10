@@ -315,6 +315,51 @@ func key(r rune) tuicore.Event {
 	return decltest.Rune(r)
 }
 
+func TestQClosesNavigationPanelsAndCards(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})
+	r := attached(t, d)
+	for _, panel := range []struct {
+		key   rune
+		title string
+	}{{'e', "┌ explorer"}, {'l', "relations"}} {
+		r.leader(t, panel.key)
+		r.s.WaitForText(t, panel.title)
+		r.keys(t, key('q'))
+		r.s.WaitFor(t, "q closed "+panel.title, func(sc string) bool { return !strings.Contains(sc, panel.title) })
+	}
+	for _, card := range []struct {
+		key   rune
+		title string
+	}{{'T', "1 of"}, {'j', "related documents"}, {'p', "SPC p — plugin commands"}} {
+		r.leader(t, card.key)
+		r.s.WaitForText(t, card.title)
+		r.keys(t, key('q'))
+		r.s.WaitFor(t, "q closed "+card.title, func(sc string) bool { return !strings.Contains(sc, card.title) })
+	}
+	r.keys(t, key(' '))
+	r.s.WaitForText(t, "SPC — commands")
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "q closed the leader", func(sc string) bool { return !strings.Contains(sc, "SPC — commands") })
+	r.leader(t, 'e')
+	r.s.WaitForText(t, "┌ explorer")
+	r.leader(t, 'L')
+	r.s.WaitForText(t, "Enter keeps")
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "q cancelled arrangement", func(sc string) bool { return !strings.Contains(sc, "Enter keeps") })
+}
+
+func TestQTypesInAFocusedDialogField(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"note.md", "# Note\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool { r.h.open("pluginAdd"); return true })
+	r.s.WaitForText(t, "add a plugin")
+	r.keys(t, key('q'))
+	r.s.WaitForText(t, "add a plugin")
+	r.s.WaitForText(t, "q")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "Escape closed the form", func(sc string) bool { return !strings.Contains(sc, "add a plugin") })
+}
+
 // typeInEditor types text in Insert mode and goes back to Normal.
 func (r *running) typeInEditor(t *testing.T, text string) {
 	t.Helper()

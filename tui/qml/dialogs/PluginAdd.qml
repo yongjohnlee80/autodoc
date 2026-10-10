@@ -1,7 +1,7 @@
 // PluginAdd.qml — Plugins › Add from a git URL…: the repository holding the plugin. Cloning it
 // runs nothing: PluginConfirm asks first, saying what would run, and at whose risk.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 60
     title: "add a plugin"

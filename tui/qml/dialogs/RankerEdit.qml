@@ -4,7 +4,7 @@
 // opens it again with the reason on its help line: an edit of the ranker in use is set up and
 // probed before it is saved.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 90
     maxHeightPercent: 90
     title: App.rankerFormTitle

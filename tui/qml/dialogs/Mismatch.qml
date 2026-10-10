@@ -1,5 +1,5 @@
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: "backend version mismatch"

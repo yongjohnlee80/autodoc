@@ -43,6 +43,23 @@ Xcode. `go install` builds from the tagged source, and `autodoc --version` then 
 version, as a release binary does. Start it with `autodoc --ui`: the TUI starts the daemon when
 nothing answers.
 
+The GUI release also provides `autodoc-editor` packages. On macOS, the
+`autodoc-editor-v…-darwin-….tar.gz` archive contains `AutoDoc Editor.app`; put it in
+`/Applications` (or `~/Applications`) to launch it from Finder without a terminal. On Linux, the
+`autodoc-editor-v…-linux-….tar.gz` archive contains the GUI binary and a desktop entry:
+
+```sh
+install -Dm755 autodoc-editor ~/.local/bin/autodoc-editor
+install -Dm644 autodoc-editor.desktop ~/.local/share/applications/autodoc-editor.desktop
+```
+
+The Linux launcher opens a GUI window with `Terminal=false`; it needs the same runtime graphics
+libraries as the `-gui` release binary. `autodoc-editor` is the same AutoDoc executable with GUI
+mode as its no-argument default: explicit `--serve`, `--version`, and other CLI modes still work.
+The macOS app is not yet Developer ID signed or notarized, so macOS may require confirmation through
+the system's security dialog. The Homebrew tap's app cask and Linux editor formula will be available
+after their release assets are published and the tap is updated.
+
 **`go install` on macOS** compiles with cgo, because the daemon watches workspace roots with the
 system's FSEvents: it needs the Command Line Tools (`xcode-select --install`; not the whole of Xcode).
 Without them the build stops at `xcrun: error: invalid active developer path`. Either install them,

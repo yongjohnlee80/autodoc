@@ -5,9 +5,10 @@
 // command runs. Esc closes it.
 Dialog {
     id: pluginKeys
+    closeOnQ: true
     title: "SPC p — plugin commands"
     dim: false
-    helpText: "a key runs its command · Esc closes"
+    helpText: "a key runs its command · q or Esc closes"
     Text { text: App.pluginKeysText; wrapMode: Tui.WordWrap }
     Repeater {
         model: App.pluginKeys

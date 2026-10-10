@@ -4,9 +4,10 @@
 // its command runs, so what the command opens is not under it. Esc closes it.
 Dialog {
     id: leader
+    closeOnQ: true
     title: "SPC — commands"
     dim: false
-    helpText: "a key runs its command · Esc closes"
+    helpText: "a key runs its command · q or Esc closes"
     Text { text: App.leaderText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: "/"; onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: "Space"; onActivated: { leader.close(); App.openSearch() } }

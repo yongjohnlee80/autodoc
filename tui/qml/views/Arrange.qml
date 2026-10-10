@@ -4,9 +4,10 @@
 // once; Enter keeps them, Esc (or closing it any other way) puts the panel back as it was.
 Dialog {
     id: arrange
+    closeOnQ: true
     title: App.arrangeTitle
     dim: false
-    helpText: "Enter keeps · Esc puts it back"
+    helpText: "Enter keeps · q or Esc puts it back"
     onClosed: App.arrangeCancel()
     Text { text: "h j k l, arrows   move it\nH J K L, Shift+arrows   resize it"; wrapMode: Tui.WordWrap }
     Shortcut { sequence: "h"; onActivated: App.arrangeStep("left") }

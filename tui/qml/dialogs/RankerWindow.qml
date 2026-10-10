@@ -1,7 +1,7 @@
 // RankerWindow.qml — how many of the top candidates the ranker in use ranks. One outside the bounds
 // opens it again with the reason on its help line.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: "the ranker's window"

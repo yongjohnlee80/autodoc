@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"runtime/debug"
 
 	"github.com/yongjohnlee80/autodoc/app"
@@ -33,5 +34,12 @@ func moduleVersion(stamped string, info *debug.BuildInfo) string {
 var exit = os.Exit
 
 func main() {
-	exit(app.Main(context.Background(), os.Args[1:], app.Options{Version: version}))
+	exit(app.Main(context.Background(), launchArgs(filepath.Base(os.Args[0]), os.Args[1:]), app.Options{Version: version}))
+}
+
+func launchArgs(name string, args []string) []string {
+	if name == "autodoc-editor" && len(args) == 0 {
+		return []string{"--gui"}
+	}
+	return args
 }

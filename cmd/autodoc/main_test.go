@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -61,5 +62,23 @@ func TestMainExitsWithAppMainsCode(t *testing.T) {
 	main()
 	if code != 2 {
 		t.Fatalf("a usage error exited %d", code)
+	}
+}
+
+func TestEditorExecutableDefaultsToGUIWithoutChangingExplicitModes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"autodoc", nil, nil},
+		{"autodoc-editor", nil, []string{"--gui"}},
+		{"autodoc-editor", []string{"--serve"}, []string{"--serve"}},
+		{"autodoc-editor", []string{"--version"}, []string{"--version"}},
+		{"autodoc-editor", []string{"--gui", "kb"}, []string{"--gui", "kb"}},
+	} {
+		if got := launchArgs(tc.name, tc.args); !slices.Equal(got, tc.want) {
+			t.Errorf("%s %v: args = %v, want %v", tc.name, tc.args, got, tc.want)
+		}
 	}
 }
