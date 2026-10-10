@@ -32,11 +32,16 @@ Dialog {
                     Text { text: "theme" }
                     ComboBox { model: App.themes; textRole: "label"; currentIndex: App.themeIndex; onActivated: App.setThemeIndex(index) }
                     Text { text: "" }
-                    Text { text: "wrap long lines" }
-                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.wrapIndex; onActivated: App.setWrapIndex(index) }
+                    Text { text: "wrap long lines · line numbers" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.wrapIndex; onActivated: App.setWrapIndex(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.lineNumbersIndex; onActivated: App.setLineNumbersIndex(index) }
+                    }
                     Text { text: "" }
-                    Text { text: "line numbers" }
-                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.lineNumbersIndex; onActivated: App.setLineNumbersIndex(index) }
+                    Text { text: "indentation marks" }
+                    ComboBox { model: App.indentMarkModes; textRole: "label"; currentIndex: App.indentMarksIndex; onActivated: App.setIndentMarksIndex(index) }
                     Text { text: "" }
                     Text { text: "image previews (kitty graphics)" }
                     ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.imagesIndex; onActivated: App.setImagesIndex(index) }

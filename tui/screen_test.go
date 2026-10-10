@@ -1270,12 +1270,19 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	post(func() { r.h.setLineNumbersIndex(0) }) // yes
 	stored("tui.editor.linenumbers", "true")
 	post(func() { r.h.setLineNumbersIndex(5) }) // no such row: nothing
+	post(func() { r.h.setIndentMarksIndex(1) }) // the cursor's line
+	stored("tui.editor.indentmarks", "cursorLine")
+	post(func() { r.h.setIndentMarks("all") })
+	stored("tui.editor.indentmarks", "all")
+	post(func() { r.h.setIndentMarksIndex(3) }) // no such row: nothing
+	post(func() { r.h.setIndentMarks("tabs") })
+	r.s.WaitForText(t, `no indentation marks "tabs"`)
 	post(func() { r.h.setToastCorner(indexOf(corners, "top-right")) })
 	stored("tui.toast.corner", "top-right")
 	post(func() { r.h.setToastSeconds(9) }) // row 9: ten seconds
 	stored("tui.toast.seconds", "10")
 	post(func() { r.h.setToastSeconds(10) }) // eleven: out of range, nothing
-	if p := onLoop(r, func() prefs { return r.h.prefs }); p.toastSeconds != 10 || !p.lineNumbers || p.wrap {
+	if p := onLoop(r, func() prefs { return r.h.prefs }); p.toastSeconds != 10 || !p.lineNumbers || p.wrap || p.indentMarks != "all" {
 		t.Fatalf("after the choosers: %+v", p)
 	}
 	// the menu bar shown, the toasts at the top keep its row clear; hidden, they take it
@@ -1293,12 +1300,12 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 // value the TUI cannot use is the default's.
 func TestThePreferencesAreReadWithTheirDefaults(t *testing.T) {
 	p := prefsOf(map[string]any{"tui.editor.wrap": "false", "tui.editor.linenumbers": "true",
-		"tui.toast.corner": "top-left", "tui.toast.seconds": "7"})
-	if p.wrap || !p.lineNumbers || p.toastCorner != "top-left" || p.toastSeconds != 7 {
+		"tui.toast.corner": "top-left", "tui.toast.seconds": "7", "tui.editor.indentmarks": "cursorLine"})
+	if p.wrap || !p.lineNumbers || p.toastCorner != "top-left" || p.toastSeconds != 7 || p.indentMarks != "cursorLine" {
 		t.Fatalf("read %+v", p)
 	}
-	d := prefsOf(map[string]any{"tui.toast.corner": "middle", "tui.toast.seconds": "11"})
-	if !d.wrap || d.lineNumbers || d.toastCorner != "bottom-right" || d.toastSeconds != defaultToastSeconds {
+	d := prefsOf(map[string]any{"tui.toast.corner": "middle", "tui.toast.seconds": "11", "tui.editor.indentmarks": "tabs"})
+	if !d.wrap || d.lineNumbers || d.toastCorner != "bottom-right" || d.toastSeconds != defaultToastSeconds || d.indentMarks != "off" {
 		t.Fatalf("unusable values: %+v, want the defaults", d)
 	}
 	if z := prefsOf(map[string]any{"tui.toast.seconds": "0"}); z.toastSeconds != defaultToastSeconds {
@@ -1998,6 +2005,21 @@ func TestThePageHoldsTheRulersColumnsWithTheLineNumbers(t *testing.T) {
 	r.s.WaitFor(t, "narrower", func(sc string) bool {
 		top := strings.Split(sc, "\n")[0]
 		return col(top, "┐")-col(top, "┌")+1 == 62
+	})
+}
+
+// TestTheIndentationMarksReachTheEditor: the kept choice draws a line's leading spaces as dimmed
+// marks, on every line; off, they are spaces again.
+func TestTheIndentationMarksReachTheEditor(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"ind.md", "flat\n    deep\n"}},
+		daemonOpts{prefs: map[string]string{"tui.editor.indentmarks": "all"}})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 160, 20)
+	r.ready(t)
+	r.h.p.Post(func() { r.h.openPath("ind.md") })
+	r.s.WaitForText(t, "····deep") // the cursor on the first line: marked because every line is
+	r.h.p.Post(func() { r.h.setIndentMarks("off") })
+	r.s.WaitFor(t, "the marks gone", func(sc string) bool {
+		return strings.Contains(sc, "    deep") && !strings.Contains(sc, "·deep")
 	})
 }
 

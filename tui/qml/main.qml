@@ -143,6 +143,12 @@ Window {
             MenuSeparator {}
             MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
             MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
+            Menu {
+                title: "Indentation &marks"
+                MenuItem { text: "&1. Off";                  group: "indentMarks"; checked: App.indentMarksOff;        onTriggered: App.setIndentMarks("off") }
+                MenuItem { text: "&2. On the cursor's line"; group: "indentMarks"; checked: App.indentMarksCursorLine; onTriggered: App.setIndentMarks("cursorLine") }
+                MenuItem { text: "&3. On every line";        group: "indentMarks"; checked: App.indentMarksAll;        onTriggered: App.setIndentMarks("all") }
+            }
             MenuSeparator {}
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
         }
@@ -230,6 +236,8 @@ Window {
             ruler: App.rulerColumn
             wrap: App.editorWrap
             lineNumbers: App.lineNumbers
+            // a line's leading spaces as a dimmed ·, its tabs as →: off, the cursor's line, or all
+            indentMarks: App.indentMarks
             // the theme's accent for the cursor, and its dim tone for the line numbers
             cursorColor: Theme.document.cursor
             lineNumberColor: Theme.document.lineNumber

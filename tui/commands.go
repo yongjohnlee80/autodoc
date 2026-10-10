@@ -179,6 +179,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.openPreviewInBrowser": none(h.openPreviewInBrowser),
 		"App.previewClosed":        none(h.previewClosed),
 		"App.setLineNumbersIndex":  oneNumber("App.setLineNumbersIndex", "a row", h.setLineNumbersIndex),
+		"App.setIndentMarks":       oneString("App.setIndentMarks", "off, cursorLine or all", h.setIndentMarks),
+		"App.setIndentMarksIndex":  oneNumber("App.setIndentMarksIndex", "a row", h.setIndentMarksIndex),
 		"App.setToastCorner":       oneNumber("App.setToastCorner", "a row", h.setToastCorner),
 		"App.setToastSeconds":      oneNumber("App.setToastSeconds", "a row", h.setToastSeconds),
 		"App.setMenuHiddenIndex":   oneNumber("App.setMenuHiddenIndex", "a row", h.setMenuHiddenIndex),

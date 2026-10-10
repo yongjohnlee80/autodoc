@@ -27,6 +27,7 @@ const (
 	prefKeymap   = "tui.editor.keymap"
 	prefWrap     = "tui.editor.wrap"
 	prefNumbers  = "tui.editor.linenumbers"
+	prefIndent   = "tui.editor.indentmarks"
 	prefImages   = "tui.preview.images"
 	prefCorner   = "tui.toast.corner"
 	prefSeconds  = "tui.toast.seconds"
@@ -57,6 +58,13 @@ var keysetOf = map[string]string{"vim": "vim", "text": "standard"}
 // keymapLabels are the keymaps as the choosers and the menu offer them.
 var keymapLabels = []string{"Vim (modal)", "Text (modeless)"}
 
+// The indentation marks, by the names the store keeps them under (the editor's own: off, the
+// cursor's line while the editor has the focus, or every line), and as the choosers offer them. A
+// line's leading spaces show as a dimmed "·" and its leading tabs as "→", as Vim's listchars do.
+var indentMarks = []string{"off", "cursorLine", "all"}
+
+var indentMarkLabels = []string{"off", "on the cursor's line", "on every line"}
+
 // The defaults: a blank page, the menu hidden until F10 or an Alt+letter, the explorer on the
 // left, the links on the right, a page 120 columns wide.
 const (
@@ -75,6 +83,7 @@ type prefs struct {
 	ruler                  int
 	keymap                 string
 	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
+	indentMarks            string // which lines show their indentation as marks (indentMarks)
 	images                 bool   // previews as images where the terminal draws them (preview.go)
 	toastCorner            string // where the notifications stack
 	toastSeconds           int    // how long a finished one stays
@@ -116,7 +125,7 @@ func defaultPrefsFor(gui bool) prefs {
 		theme = defaultGUITheme
 	}
 	return prefs{theme: theme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
-		wrap: true, images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
+		wrap: true, indentMarks: "off", images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
 		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}, searchStages: allStagesChecked(),
 		agentEdge: defaultAgentEdge}
 }
@@ -165,6 +174,9 @@ func prefsFor(m map[string]any, gui bool) prefs {
 	}
 	if s, ok := str(prefNumbers); ok {
 		p.lineNumbers = s == "true"
+	}
+	if s, ok := str(prefIndent); ok && slices.Contains(indentMarks, s) {
+		p.indentMarks = s
 	}
 	if s, ok := str(prefImages); ok {
 		p.images = s != "false"
@@ -257,6 +269,7 @@ func prefState(p prefs) map[string]any {
 		"App.linksEdge":     p.linkEdge,
 		"App.editorWrap":    p.wrap,
 		"App.lineNumbers":   p.lineNumbers,
+		"App.indentMarks":   p.indentMarks,
 		"App.imagePreviews": p.images,
 		// the page: the ruler's columns of text (editable columns: the line numbers' gutter is added
 		// to them, syncPageWidth), and its border, whose right edge is the first column past them
@@ -264,6 +277,10 @@ func prefState(p prefs) map[string]any {
 		// scrolled past the page's edge still shows where it is
 		"App.rulerColumn": p.ruler + 1,
 		"App.rulerText":   strconv.Itoa(p.ruler),
+		// View › Indentation marks' radio set
+		"App.indentMarksOff":        p.indentMarks == "off",
+		"App.indentMarksCursorLine": p.indentMarks == "cursorLine",
+		"App.indentMarksAll":        p.indentMarks == "all",
 	} {
 		m[k] = v
 	}
@@ -424,6 +441,21 @@ func (h *Host) setLineNumbersIndex(i int) {
 	}
 }
 
+// setIndentMarks is View › Indentation marks: which lines show their indentation, kept.
+func (h *Host) setIndentMarks(name string) {
+	if !slices.Contains(indentMarks, name) {
+		h.say("no indentation marks " + strconv.Quote(name))
+		return
+	}
+	h.setPref(prefIndent, name, func(p *prefs) { p.indentMarks = name })
+}
+
+func (h *Host) setIndentMarksIndex(i int) {
+	if i >= 0 && i < len(indentMarks) {
+		h.setIndentMarks(indentMarks[i])
+	}
+}
+
 // setToastCorner is the Preferences dialog's corner for the notifications.
 func (h *Host) setToastCorner(i int) {
 	if i >= 0 && i < len(corners) {
@@ -546,6 +578,7 @@ func (h *Host) syncPrefDialog() {
 	h.set("App.menuHiddenIndex", boolIndex(h.prefs.menuHidden))
 	h.set("App.wrapIndex", boolIndex(h.prefs.wrap))
 	h.set("App.lineNumbersIndex", boolIndex(h.prefs.lineNumbers))
+	h.set("App.indentMarksIndex", indexOf(indentMarks, h.prefs.indentMarks))
 	h.set("App.imagesIndex", boolIndex(h.prefs.images))
 	h.set("App.toastCornerIndex", indexOf(corners, h.prefs.toastCorner))
 	h.set("App.toastSecondsIndex", h.prefs.toastSeconds-1)

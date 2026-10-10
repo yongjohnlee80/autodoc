@@ -120,6 +120,8 @@ func (h *Host) state() map[string]any {
 		"App.statusShownIndex":    1,
 		"App.wrapIndex":           0,
 		"App.lineNumbersIndex":    1,
+		"App.indentMarkModes":     choices(indentMarkLabels...),
+		"App.indentMarksIndex":    0,
 		"App.corners":             choices(cornerLabels...),
 		"App.toastCornerIndex":    0,
 		"App.toastSeconds":        choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
