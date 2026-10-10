@@ -88,7 +88,7 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 	entries := slices.Clone(h.pluginList)
 	slices.SortStableFunc(entries, func(a, b pluginEntry) int { return strings.Compare(a.m.Name, b.m.Name) })
 	out := map[string]pluginBinding{}
-	taken := map[string]string{}
+	taken := map[string]string{"q": "close card"}
 	var rows []tuidecl.Row
 	var bound, unbound []string
 	for _, e := range entries {
@@ -127,6 +127,7 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 			out[e.m.Name+"."+c.ID] = b
 		}
 	}
+	rows = append(rows, tuidecl.Row{"key": "q", "target": ""})
 	h.pluginKeyRows.Reset(rows)
 	text := "no plugin commands yet"
 	if lines := append(bound, unbound...); len(lines) > 0 {
