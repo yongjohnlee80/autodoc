@@ -249,8 +249,9 @@ type Host struct {
 	// (pluginfeed.go)
 	feedVersion, feedGen int
 	// pluginKeyRows are the SPC p card's letters: each command's, as bound (plugincmds.go)
-	pluginKeyRows *tuidecl.ListModel
-	running       map[string]*pluginRun
+	pluginKeyRows    *tuidecl.ListModel
+	pluginKeyTargets map[string]string
+	running          map[string]*pluginRun
 	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, the manager's
 	// rows, and the directory PluginRemove asks about
 	pendingPlugin  *pluginChange
