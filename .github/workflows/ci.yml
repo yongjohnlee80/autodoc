@@ -54,6 +54,16 @@ jobs:
 
       - run: go build ./...
 
+      - name: editor package layouts
+        run: |
+          stage=$(mktemp -d)
+          sh scripts/package-editor.sh linux amd64 v0.0.0 /bin/true "$stage"
+          tar tzf "$stage/autodoc-editor-v0.0.0-linux-amd64.tar.gz" | grep -Fx autodoc-editor
+          tar tzf "$stage/autodoc-editor-v0.0.0-linux-amd64.tar.gz" | grep -Fx autodoc-editor.desktop
+          sh scripts/package-editor.sh darwin arm64 v0.0.0 /bin/true "$stage"
+          tar tzf "$stage/autodoc-editor-v0.0.0-darwin-arm64.tar.gz" | grep -Fx "AutoDoc Editor.app/Contents/Info.plist"
+          tar tzf "$stage/autodoc-editor-v0.0.0-darwin-arm64.tar.gz" | grep -Fx "AutoDoc Editor.app/Contents/MacOS/autodoc-editor"
+
       # The community module never names the private one: no require, no import, in the code or
       # its tests. A commercial client builds on AutoDoc's public packages from its own module.
       - name: no private module

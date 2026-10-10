@@ -1,7 +1,7 @@
 // WorkspaceRemove.qml — deleting a workspace asks first, and says what goes (its index) and what
 // stays (its files). No answer is a default: Enter alone deletes nothing.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: "delete the workspace?"

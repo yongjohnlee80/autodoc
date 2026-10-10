@@ -1,7 +1,7 @@
 // PluginRemove.qml — removing a plugin asks first, and says what goes: its directory, with what its
 // build made. No answer is a default: Enter alone removes nothing.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: "remove the plugin?"

@@ -1,9 +1,10 @@
 // Tutorial.qml — Help › Tutorial… (SPC T): a page at a time (tutorial.go), Markdown shown Rendered
 // in the GUI's window (a terminal's Editor stays Raw, as the source reads), read-only, with Previous
 // and Next (not B for Back: the page's Editor takes b, a word back). At most 80% of the window's
-// height. Esc closes it.
+// height. q or Esc closes it.
 Dialog {
     id: tutorial
+    closeOnQ: true
     title: App.tutorialTitle
     width: 84
     maxHeightPercent: 80

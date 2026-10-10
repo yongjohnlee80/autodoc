@@ -3,7 +3,7 @@
 // window, for an Ollama kind, and its API key, for a kind that takes one. A key is sealed in the store and never shown again. A refusal
 // opens it again with the reason on its help line.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     // inside Preferences, which it opens over: smaller, so its border is not read as that one's
     maxWidthPercent: 95
     maxHeightPercent: 95

@@ -2,7 +2,7 @@
 // its build runs and what it starts, and that it is the user's risk. No answer is a default: Enter
 // alone runs nothing, and a refusal throws the clone away.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     maxWidthPercent: 85
     maxHeightPercent: 85
     title: App.pluginConfirmTitle

@@ -3,9 +3,10 @@
 // digit reaches its Shortcut. Esc closes it.
 Dialog {
     id: jumpCard
+    closeOnQ: true
     title: "related documents"
     dim: false
-    helpText: "1–9 opens one · Esc closes"
+    helpText: "1–9 opens one · q or Esc closes"
     Text { text: App.jumpText; wrapMode: Tui.WordWrap }
     Shortcut { sequence: "1"; onActivated: App.jumpTo(1) }
     Shortcut { sequence: "2"; onActivated: App.jumpTo(2) }

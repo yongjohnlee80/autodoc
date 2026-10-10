@@ -265,6 +265,7 @@ Window {
     Drawer {
         id: explorer
         modal: false
+        closeOnQ: true
         edge: App.explorerEdge
         size: App.explorerSize
         length: App.explorerLength
@@ -323,6 +324,7 @@ Window {
     Drawer {
         id: links
         modal: false
+        closeOnQ: true
         edge: App.linksEdge
         size: App.linksSize
         length: App.linksLength

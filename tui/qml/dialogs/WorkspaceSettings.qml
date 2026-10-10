@@ -5,7 +5,7 @@
 // opens again as it was typed, the reason on its help line. Adding a workspace uses it too, with
 // the root typed or browsed to. Enter in a field saves, as Save does.
 Dialog {
-    closeOnQ: false
+    closeOnQ: true
     standardButtons: Dialog.Save | Dialog.Cancel
     defaultButton: Dialog.Save
     maxWidthPercent: 95
