@@ -88,8 +88,9 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 	entries := slices.Clone(h.pluginList)
 	slices.SortStableFunc(entries, func(a, b pluginEntry) int { return strings.Compare(a.m.Name, b.m.Name) })
 	out := map[string]pluginBinding{}
-	taken := map[string]string{}
+	taken := map[string]string{"q": "close card"}
 	var rows []tuidecl.Row
+	targets := map[string]string{}
 	var bound, unbound []string
 	for _, e := range entries {
 		if e.reason != "" {
@@ -119,6 +120,7 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 				b.letter = letter
 				taken[letter] = e.m.Name
 				rows = append(rows, tuidecl.Row{"key": letter, "target": pluginTarget(e.key(), targetCommand, c.ID)})
+				targets[letter] = pluginTarget(e.key(), targetCommand, c.ID)
 				bound = append(bound, letter+"  "+label)
 			}
 			if b.letter == "" {
@@ -127,6 +129,7 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 			out[e.m.Name+"."+c.ID] = b
 		}
 	}
+	h.pluginKeyTargets = targets
 	h.pluginKeyRows.Reset(rows)
 	text := "no plugin commands yet"
 	if lines := append(bound, unbound...); len(lines) > 0 {
@@ -136,6 +139,13 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 		h.set("App.pluginKeysText", text)
 	}
 	return out
+}
+
+func (h *Host) pluginKey(letter string) {
+	if target := h.pluginKeyTargets[letter]; target != "" {
+		h.closeDialog("pluginKeys")
+		h.pluginEntry(target)
+	}
 }
 
 // pluginEntry is a Plugins menu row or a SPC p letter, chosen: its target.

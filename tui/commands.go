@@ -83,6 +83,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		// the plugins
 		"App.openPlugin":            oneString("App.openPlugin", "a plugin", h.openPlugin),
 		"App.pluginEntry":           oneString("App.pluginEntry", "a plugin's menu row or letter", h.pluginEntry),
+		"App.pluginKey":             oneString("App.pluginKey", "a plugin command letter", h.pluginKey),
 		"App.startAddPlugin":        none(h.startAddPlugin),
 		"App.addPlugin":             oneString("App.addPlugin", "a git URL", h.addPlugin),
 		"App.pluginConfirmed":       none(h.pluginConfirmed),
