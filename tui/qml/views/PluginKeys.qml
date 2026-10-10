@@ -10,7 +10,7 @@ Dialog {
     helpText: "a key runs its command · q or Esc closes"
     Text { text: App.pluginKeysText; wrapMode: Tui.WordWrap }
     Shortcut { sequence: "q"; onActivated: pluginKeys.close() }
-+    Shortcut { sequence: "a"; onActivated: App.pluginKey("a") }
+    Shortcut { sequence: "a"; onActivated: App.pluginKey("a") }
     Shortcut { sequence: "b"; onActivated: App.pluginKey("b") }
     Shortcut { sequence: "c"; onActivated: App.pluginKey("c") }
     Shortcut { sequence: "d"; onActivated: App.pluginKey("d") }
