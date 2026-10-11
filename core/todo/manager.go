@@ -468,14 +468,12 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 		return Opened{}, err
 	}
 	made := false
-	if fsys, _, err := m.disk.Open(ctx, w.rec.Path); err != nil {
-		if !errors.Is(err, vfs.ErrNotExist) {
-			return Opened{}, err
-		}
+	fsys, _, err := m.disk.Open(ctx, w.rec.Path)
+	if errors.Is(err, vfs.ErrNotExist) {
 		parent, base := path.Split(w.rec.Path)
-		pfs, _, err := m.disk.Open(ctx, path.Clean(parent))
-		if err != nil {
-			return Opened{}, fmt.Errorf("%w: the store's parent directory: %w", ErrNotAStore, err)
+		pfs, _, perr := m.disk.Open(ctx, path.Clean(parent))
+		if perr != nil {
+			return Opened{}, fmt.Errorf("%w: the store's parent directory: %w", ErrNotAStore, perr)
 		}
 		err = pfs.MkdirAll(ctx, base)
 		pfs.Close()
@@ -483,23 +481,28 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 			return Opened{}, err
 		}
 		made = true
-	} else {
-		fsys.Close()
+		fsys, _, err = m.disk.Open(ctx, w.rec.Path)
 	}
+	if err != nil {
+		return Opened{}, err
+	}
+	// the buckets first: a SetDir directory with none is not a store until they exist
+	for _, b := range Statuses {
+		if _, err := fsys.Stat(ctx, b); errors.Is(err, vfs.ErrNotExist) {
+			if err := fsys.MkdirAll(ctx, b); err != nil {
+				fsys.Close()
+				return Opened{}, err
+			}
+			made = true
+		}
+	}
+	fsys.Close()
 	st, err := m.open(ctx, w)
 	if err != nil {
 		return Opened{}, err
 	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	for _, b := range Statuses {
-		if _, err := st.fsys.Stat(ctx, b); errors.Is(err, vfs.ErrNotExist) {
-			if err := st.fsys.MkdirAll(ctx, b); err != nil {
-				return Opened{}, err
-			}
-			made = true
-		}
-	}
 	if err := st.mark(ctx, m.now()); err != nil {
 		return Opened{}, err
 	}

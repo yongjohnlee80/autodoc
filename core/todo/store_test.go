@@ -462,3 +462,24 @@ func walk(t *testing.T, e *env, dir string, fn func(string)) {
 		}
 	}
 }
+
+// Scaffold makes a store of the existing, empty directory SetDir chose: it has no buckets yet, so
+// it is not a store until Scaffold creates them.
+func TestScaffoldAnEmptyOverride(t *testing.T) {
+	e := claimed(t)
+	e.disk.MkdirAll("/plain")
+	if _, err := e.m.SetDir(ctx, kb, "/plain"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.m.List(ctx, kb, todo.ListOpts{}); !is(err, todo.ErrNotAStore) {
+		t.Errorf("before the scaffold: %v", err)
+	}
+	e.must(e.m.Claim(ctx, kb))
+	o, err := e.m.Scaffold(ctx, kb)
+	if err != nil || !o.Scaffolded || !e.exists("/plain/.autodoc-owner") {
+		t.Fatalf("scaffold: %+v %v", o, err)
+	}
+	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "t"}); err != nil {
+		t.Error(err)
+	}
+}
