@@ -8,6 +8,7 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -35,40 +36,6 @@ const sessClient = "client"
 // maxEvents bounds one sys.events page.
 const maxEvents = 500
 
-// eventSpec is what a verb's success logs: the kind, and which parameters name the workspace and
-// the detail (-1 for none); or, for a verb that changes several things at once, expand, the events
-// its parameters make, one for each thing.
-type eventSpec struct {
-	kind              string
-	workspace, detail int
-	expand            func(params []any) []store.Event
-}
-
-// eventsOf are the verbs that log an event, by name.
-var eventsOf = map[string]eventSpec{
-	"workspace.add":                 {"workspace.added", 0, -1, nil},
-	"workspace.rename":              {"workspace.renamed", 0, 1, nil},
-	"workspace.remove":              {"workspace.removed", 0, -1, nil},
-	"workspace.set_patterns":        {"workspace.patterns", 0, -1, nil},
-	"workspace.set_schema":          {"workspace.schema", 0, -1, nil},
-	"workspace.set_text_extensions": {"workspace.text_extensions", 0, -1, nil},
-	"workspace.section_size":        {"workspace.section_size", 0, -1, nil},
-	"workspace.embedding_policy":    {"workspace.embedding_policy", 0, 1, nil},
-	"workspace.set_provider":        {"workspace.provider", 0, 1, nil},
-	"workspace.configure":           {expand: configureEvents},
-	"preference.set":                {"preference.changed", -1, 0, nil},
-	"embedding.use":                 {"embedding.switched", -1, 0, nil},
-	"embedding.cancel_switch":       {"embedding.cancelled", -1, -1, nil},
-	"embedding.add":                 {"embedding.providers", -1, -1, nil},
-	"embedding.update":              {"embedding.providers", -1, 0, nil},
-	"embedding.remove":              {"embedding.providers", -1, 0, nil},
-	"ranker.use":                    {"ranker.switched", -1, 0, nil},
-	"ranker.window":                 {"ranker.switched", -1, 0, nil},
-	"ranker.add":                    {"ranker.providers", -1, -1, nil},
-	"ranker.update":                 {"ranker.providers", -1, 0, nil},
-	"ranker.remove":                 {"ranker.providers", -1, 0, nil},
-}
-
 // newClientToken is a session's token: the client's own name and a random suffix.
 func newClientToken(name string) string {
 	if name == "" {
@@ -87,29 +54,19 @@ func clientOf(sess *golibrpc.Session) string {
 	return c
 }
 
-// logged wraps a verb's handler: once it succeeds, the event its spec names is logged. A log that
-// fails is reported in the server's log and does not fail the verb, which has taken effect.
-func (s *Server) logged(spec eventSpec, h golibrpc.Handler) golibrpc.Handler {
+// logged wraps a verb's handler: once it succeeds, the events its contract names are logged, with
+// the session's client token. A log that fails is reported in the server's log and does not fail
+// the verb, which has taken effect.
+func (s *Server) logged(v module.Verb, h golibrpc.Handler) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		out, err := h(ctx, req)
 		if err != nil || s.events == nil {
 			return out, err
 		}
-		events := []store.Event{{Kind: spec.kind}}
-		if spec.expand != nil {
-			events = spec.expand(req.Params)
-		} else {
-			if spec.workspace >= 0 && spec.workspace < len(req.Params) {
-				events[0].Workspace, _ = req.Params[spec.workspace].(string)
-			}
-			if spec.detail >= 0 && spec.detail < len(req.Params) {
-				events[0].Detail, _ = req.Params[spec.detail].(string)
-			}
-		}
-		for _, e := range events {
-			e.Client = clientOf(req.Session)
-			if _, lerr := s.events.AppendEvent(context.WithoutCancel(ctx), e); lerr != nil {
-				logger.Warning(s.log, lerr, "logging event "+e.Kind)
+		for _, e := range v.EventsOf(ctx, req.Params, out) {
+			se := store.Event{Kind: e.Kind, Workspace: e.Workspace, Detail: e.Detail, Client: clientOf(req.Session)}
+			if _, lerr := s.events.AppendEvent(context.WithoutCancel(ctx), se); lerr != nil {
+				logger.Warning(s.log, lerr, "logging event "+se.Kind)
 			}
 		}
 		return out, nil

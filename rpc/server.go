@@ -28,6 +28,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -80,11 +81,6 @@ const MinProtocol int64 = 12
 // TUIName is the name the TUI says hello with. It is admitted at this build's Protocol only: the
 // TUI is the same binary as its daemon, and a mismatch is its cue to offer a restart.
 const TUIName = "autodoc-tui"
-
-// verbSince is the protocol each verb arrived in, for the verbs newer than MinProtocol.
-var verbSince = map[string]int64{"index.documents": 13,
-	"file.read": 17, "file.write": 17, "file.locate": 17, "graph.resolve": 18,
-	"doc.read_raw": 19, "doc.write_raw": 19, "file.read_raw": 19, "file.write_raw": 19}
 
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
@@ -228,7 +224,9 @@ type Server struct {
 	version     string
 	instance    string
 	storeID     string // the store's identity (store.Identity), "" when not set
-	verbs       map[string]bool
+	verbs       map[string]verb
+	legacy      map[string]verb // rpc's own contracts, until register gives each its handler
+	moduleErrs  []module.PublicError
 	stop        chan struct{}
 	stopOnce    sync.Once
 }
@@ -243,6 +241,7 @@ type options struct {
 	reg         registrations.Tables
 	files       *docs.Docs
 	storeID     string
+	modules     []module.Module
 }
 
 // Option configures a Server.
@@ -281,27 +280,55 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
 		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID,
-		verbs: map[string]bool{}, stop: make(chan struct{})}
+		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
 		ropts = append(ropts, golibrpc.WithListener(o.listener))
 	}
 	s.rpc = golibrpc.New(msgpackrpc.New(decodeLimits()), ropts...)
+	for _, v := range legacyVerbs() {
+		s.legacy[v.Verb] = v
+	}
 	s.register()
+	for name := range s.legacy {
+		if _, ok := s.verbs[name]; !ok {
+			panic("rpc: " + name + " has a contract and no handler")
+		}
+	}
+	s.registerModules(o.modules)
 	return s
 }
 
-// handle registers a verb; a second registration of one name panics at start (golib's Handle
-// would silently replace the first).
+// handle registers one of rpc's own verbs with its contract's row (contracts.go); a verb with no
+// row panics at start.
 func (s *Server) handle(method string, h golibrpc.Handler) {
-	if s.verbs[method] {
-		panic("rpc: duplicate method registration: " + method)
+	v, ok := s.legacy[method]
+	if !ok {
+		panic("rpc: " + method + " has no contract")
 	}
-	s.verbs[method] = true
-	if spec, ok := eventsOf[method]; ok {
-		h = s.logged(spec, h)
+	v.h = h
+	s.add(v)
+}
+
+// add registers v. A contract that does not check, or a second registration of one name, panics at
+// start (golib's Handle would silently replace the first). A verb that logs is wrapped to log its
+// events; a module's result is carried by module.Wire once they are logged.
+func (s *Server) add(v verb) {
+	if err := v.Check(); err != nil {
+		panic("rpc: " + err.Error())
 	}
-	s.rpc.Handle(method, h)
+	if _, dup := s.verbs[v.Verb]; dup {
+		panic("rpc: duplicate method registration: " + v.Verb)
+	}
+	s.verbs[v.Verb] = v
+	h := v.h
+	if mv := v.module(); mv.Logs() {
+		h = s.logged(mv, h)
+	}
+	if v.owner != "" {
+		h = s.wired(h)
+	}
+	s.rpc.Handle(v.Verb, h)
 }
 
 // Verbs lists the registered verbs, sorted.
@@ -348,7 +375,7 @@ func (s *Server) gate(sess *golibrpc.Session, method string) error {
 	if ok, _ := sess.Value(sessHello).(bool); !ok {
 		return &golibrpc.Error{Code: CodeHandshakeRequired, Message: "handshake required: call sys.hello first"}
 	}
-	if since := verbSince[method]; since > sessionProtocol(sess) {
+	if since := s.verbs[method].Since; since > sessionProtocol(sess) {
 		return &golibrpc.Error{Code: golibrpc.CodeMethodNotFound,
 			Message: fmt.Sprintf("unknown method: %s (it needs protocol %d)", method, since)}
 	}
@@ -373,7 +400,7 @@ func admits(proto int64, name string) bool {
 func (s *Server) verbsAt(p int64) []string {
 	out := []string{}
 	for _, v := range s.Verbs() {
-		if verbSince[v] <= p {
+		if s.verbs[v].Since <= p {
 			out = append(out, v)
 		}
 	}

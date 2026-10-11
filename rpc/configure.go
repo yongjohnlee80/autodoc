@@ -9,6 +9,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -195,12 +196,12 @@ func databasesMap(d Databases) map[string]any {
 // for that verb. A rename comes first, with the new name; what follows is about the workspace under
 // it. The database settings are one event, workspace.databases, whose detail is empty: a
 // connection is never in the log.
-func configureEvents(p []any) []store.Event {
+func configureEvents(_ context.Context, p []any, _ any) []module.Event {
 	name, _ := p[0].(string)
 	m, _ := p[1].(map[string]any)
-	var out []store.Event
+	var out []module.Event
 	if to, ok := m["name"].(string); ok && to != name {
-		out = append(out, store.Event{Kind: "workspace.renamed", Workspace: name, Detail: to})
+		out = append(out, module.Event{Kind: "workspace.renamed", Workspace: name, Detail: to})
 		name = to
 	}
 	for _, f := range []struct {
@@ -220,7 +221,7 @@ func configureEvents(p []any) []store.Event {
 		if !slices.ContainsFunc(f.keys, func(k string) bool { _, ok := m[k]; return ok }) {
 			continue
 		}
-		e := store.Event{Kind: f.kind, Workspace: name}
+		e := module.Event{Kind: f.kind, Workspace: name}
 		if f.detail != "" {
 			e.Detail, _ = m[f.detail].(string)
 		}
