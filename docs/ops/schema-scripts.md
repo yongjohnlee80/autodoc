@@ -83,6 +83,12 @@ A new workspace-owned table follows the same rule.
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
 | `event` | a configuration or lifecycle change, daemon-wide, with the client that made it; the last 1000 kept (000009) | `seq` |
+| `todo_store` | a todo store, by its stable id: its path now, and its claim (000017) | `id` |
+| `todo_root` | a project root the todo system knows: its store override, registration and `$KB_ROOT` (000017) | `root` |
+| `todo_var` | a user's todo ref variable (000017) | `name` |
+| `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017) | `seq` |
+| `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017) | `(store, path)` |
+| `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017) | `(store, name)` |
 
 Each script says, in its comments, what every table and column is for.
 
