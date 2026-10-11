@@ -241,6 +241,7 @@ type Host struct {
 	recoveryQueue  []recovered
 	pendingRestore *recovered
 	restoreWaiting bool       // a restore is under way: its open, or the unsaved question before it
+	restoredCopy   *fileRef   // the copy whose text is in the editor, unsaved: kept until saved or discarded
 	draft          *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,

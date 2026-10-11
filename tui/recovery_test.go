@@ -125,9 +125,40 @@ func TestACopyWhoseFileIsGoneBecomesTheDraft(t *testing.T) {
 	if f := r.file(); f.open || !f.dirty {
 		t.Fatalf("the draft: open %v, dirty %v", f.open, f.dirty)
 	}
-	if got := readRecovery(dir); len(got) != 1 || got[0].Path != "a.md" {
-		t.Fatalf("copies left: %+v; the restored one goes, a.md's stays", got)
+	// the restored text is unsaved: its copy stays until it is saved or discarded
+	if got := readRecovery(dir); len(got) != 2 {
+		t.Fatalf("copies left: %+v; want both", got)
 	}
+	r.keys(t, key('l')) // a.md: Later
+	r.s.WaitFor(t, "the question gone", func(sc string) bool { return !strings.Contains(sc, "had unsaved changes") })
+	// an unasked exit now keeps the draft's text as the draft's copy, replacing gone.md's
+	if err := onLoop(r, r.h.keepRecovery); err != nil {
+		t.Fatal(err)
+	}
+	got := readRecovery(dir)
+	if len(got) != 2 || got[0].Path != "" || got[0].Text != "the lost text\n" || got[1].Path != "a.md" {
+		t.Fatalf("after an unasked exit: %+v; want the draft's copy and a.md's", got)
+	}
+}
+
+// A restored copy stays until its text is discarded; then it goes.
+func TestARestoredCopyStaysUntilDiscarded(t *testing.T) {
+	dir := t.TempDir()
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "gone.md", Text: "lost\n", Saved: time.Now()})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "gone.md had unsaved changes")
+	r.keys(t, key('r'))
+	r.s.WaitFor(t, "the draft restored", func(string) bool { return r.editorText() == "lost\n" })
+	if len(readRecovery(dir)) != 1 {
+		t.Fatal("the copy went with the text still unsaved")
+	}
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.openByPicker(t, "a.md")
+	r.s.WaitForText(t, "Save them before you open a.md?")
+	r.keys(t, key('d'))
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "the copy discarded", func(string) bool { return len(readRecovery(dir)) == 0 })
 }
 
 // Restoring the copy of the document open now puts its text in at once.
@@ -170,8 +201,9 @@ func TestStayBeforeARestoreKeepsTheCopy(t *testing.T) {
 	if waiting := onLoop(r, func() bool { return r.h.restoreWaiting || r.h.pendingRestore != nil }); waiting {
 		t.Fatal("Stay left the restore waiting")
 	}
-	if got := readRecovery(dir); len(got) != 1 || got[0].Path != "a.md" {
-		t.Fatalf("copies left: %+v; want a.md's, kept for the next start", got)
+	// a.md's copy kept for the next start; b.md's stays while its restored text is unsaved
+	if got := readRecovery(dir); len(got) != 2 {
+		t.Fatalf("copies left: %+v; want both", got)
 	}
 }
 

@@ -22,7 +22,10 @@ import (
 // per document, and the next start offers it back: Restore opens the file with the kept text,
 // unsaved; Discard deletes the copy; Later keeps it for the next start.
 //
-// A copy goes once its document is saved, or discarded in the unsaved question.
+// A copy goes only once its text is safe or deliberately thrown away: its document saved, or
+// discarded (the unsaved question's Discard, :q!). Restoring it puts the text back in the editor,
+// unsaved, and the copy stays until then (restoredCopy): a SIGKILL or a power loss before the save
+// must not lose it.
 
 // recovered is one kept document.
 type recovered struct {
@@ -89,6 +92,19 @@ func readRecovery(dir string) []recovered {
 	return out
 }
 
+// settleRecovery deletes the copies of the text in the editor, now that it is saved or discarded:
+// the document's own (ws, p) and the restored copy it came from, which may be another's (a copy
+// whose file was gone became the draft).
+func (h *Host) settleRecovery(ws, p string) {
+	h.dropRecovery(ws, p)
+	if r := h.restoredCopy; r != nil {
+		h.restoredCopy = nil
+		if *r != (fileRef{ws, p}) {
+			h.dropRecovery(r.ws, r.path)
+		}
+	}
+}
+
 // dropRecovery deletes a document's copy, if it has one.
 func (h *Host) dropRecovery(ws, p string) {
 	if h.recoveryDir == "" {
@@ -112,6 +128,10 @@ func (h *Host) keepRecovery() error {
 	r := recovered{WS: h.file.ws, Path: path, Text: h.core.Value(), Saved: time.Now()}
 	if err := writeRecovery(h.recoveryDir, r); err != nil {
 		return fmt.Errorf("keeping the unsaved text of %s: %w", h.file.name(), err)
+	}
+	// the copy just written holds the restored text now: the one it came from would be offered twice
+	if rc := h.restoredCopy; rc != nil && *rc != (fileRef{r.WS, r.Path}) {
+		h.dropRecovery(rc.ws, rc.path)
 	}
 	return nil
 }
@@ -230,8 +250,8 @@ func (h *Host) restoreSettled() {
 	h.p.Post(h.askRecovery)
 }
 
-// applyRecovered replaces the editor's text with the copy's, as one edit, and deletes the copy: the
-// text is in the editor now, unsaved, which every quit asks about and an unasked exit keeps again.
+// applyRecovered replaces the editor's text with the copy's, as one edit, unsaved. The copy stays
+// until the text is saved or discarded (settleRecovery).
 func (h *Host) applyRecovered(r recovered) {
 	end := widget.TextPos{Line: h.core.LineCount() - 1, Col: 1 << 30}
 	if _, err := h.core.Replace(widget.TextRange{To: end}, r.Text); err != nil {
@@ -239,7 +259,7 @@ func (h *Host) applyRecovered(r recovered) {
 		return
 	}
 	h.setDirty(true)
-	h.dropRecovery(r.WS, r.Path)
+	h.restoredCopy = &fileRef{r.WS, r.Path}
 	name := r.Path
 	if name == "" {
 		name = untitled

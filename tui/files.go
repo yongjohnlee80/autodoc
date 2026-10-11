@@ -146,7 +146,7 @@ func (h *Host) unsaved(answer string) {
 		}
 		h.write(h.core.Value(), h.file.version, then)
 	case "discard":
-		h.dropRecovery(h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
+		h.settleRecovery(h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
 		h.setDirty(false)
 		if then != nil {
 			then()
@@ -579,7 +579,7 @@ func (h *Host) write(content, want string, after func()) {
 			h.setDirty(newer)
 			if !newer {
 				h.core.MarkSaved() // the command line's x reads it
-				h.dropRecovery(ws, p)
+				h.settleRecovery(ws, p)
 			}
 			h.notify("saved " + p)
 			switch {
