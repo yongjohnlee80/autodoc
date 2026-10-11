@@ -36,7 +36,7 @@ import (
 
 // Protocol is the API's version. A client declares the one it was written for, which this build
 // serves from MinProtocol up; any change to the verbs, their parameters or their results bumps it
-// (TestVerbsArePinned holds the list). sys.hello and
+// (testdata/contracts.json holds the contracts). sys.hello and
 // sys.shutdown are frozen across protocols: a newer client stops an older daemon with them, by
 // declaring the daemon's number, to start the installed one in its place.
 //
@@ -68,8 +68,9 @@ import (
 // adds graph.resolve: where a link as written reaches, for an editor following one not yet indexed.
 // Protocol 19 is ADR 1791474356: doc.read_raw, doc.write_raw, file.read_raw and file.write_raw, an
 // HTML file's own bytes where doc.read and file.read give its derived text; a session below 19 sees
-// them as unknown methods.
-const Protocol int64 = 19
+// them as unknown methods. Protocol 20 is ADR 1791719881 and ADR 1791532020: sys.contracts, and the
+// todos.* verbs.
+const Protocol int64 = 20
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

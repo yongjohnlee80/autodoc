@@ -229,6 +229,7 @@ func (s *Server) register() {
 	s.registerEvents()
 	s.registerFiles()
 	s.configureVerbs()
+	s.registerContracts()
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {

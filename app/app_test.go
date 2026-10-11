@@ -48,8 +48,8 @@ func TestArguments(t *testing.T) {
 	}{
 		{[]string{"--version"}, 0, "autodoc " + testOptions.Version},
 		{[]string{"kb"}, 2, "unexpected arguments: [kb]"},
-		{[]string{"--serve", "kb"}, 2, "only --ui, --gui, --call and --export take one"},
-		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --ui, --gui, --call and --export take one"},
+		{[]string{"--serve", "kb"}, 2, "only --ui, --gui, --call, --export and --contracts take one"},
+		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --ui, --gui, --call, --export and --contracts take one"},
 		// refused before anything is dialled: exit 1, saying why
 		{[]string{"--config", "/nonexistent/autodoc.toml", "--call", "workspace.list", "{"}, 1, "--call: the parameters are not JSON"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
@@ -110,7 +110,7 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--export", "html", "--output", filepath.Join(t.TempDir(), "x.html"), filepath.Join(t.TempDir(), "missing.md")}, 1, "", "autodoc:"},
 		// a build without the gui tag (this test's) says so, and how to get one
 		{[]string{"--gui"}, 1, "", "built without the GUI"},
-		{[]string{"--gui", "kb", "extra"}, 2, "", "only --ui, --gui, --call and --export take one argument"},
+		{[]string{"--gui", "kb", "extra"}, 2, "", "only --ui, --gui, --call, --export and --contracts take one argument"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, Options{Version: "v1.2.3"}, &stdout, &stderr)

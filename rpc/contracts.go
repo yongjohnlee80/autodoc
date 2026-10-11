@@ -17,7 +17,7 @@ func optional(name, typ, doc string) module.Param {
 }
 
 // workspaceParam is the first param of a ScopeWorkspace verb.
-var workspaceParam = param("workspace", "string", "a name workspace.list answers")
+var workspaceParam = param("workspace", "string", "")
 
 // The kinds of event workspace.configure may log, one for each setting it changed (configureEvents).
 const configureKinds = "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | " +
@@ -54,6 +54,10 @@ func legacyVerbs() []verb {
 		c(module.Contract{Verb: "sys.capabilities", Since: 9, Scope: global, Audience: agent, Params: none,
 			Result: "{databases, registrations, ranker, verbs}",
 			Doc:    "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}."}),
+		c(module.Contract{Verb: "sys.contracts", Since: 20, Scope: global, Audience: agent,
+			Params: []module.Param{optional("filter", "string", "\"\" or \"*\" for every verb, \"domain.*\" for a domain's, or a verb's name")},
+			Result: "{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}",
+			Doc:    "These tables: the verbs this session may call, and the codes they may answer."}),
 		c(module.Contract{Verb: "sys.events", Since: 8, Scope: global, Audience: agent,
 			Params: []module.Param{param("since", "int", "a cursor; -1 answers the head alone"), param("limit", "int", "1 to 500")},
 			Result: "{cursor, events: [{seq, kind, workspace, client, detail, at}], more}",

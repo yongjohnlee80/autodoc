@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -143,7 +145,8 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	defer func() { _ = disk.Close() }()
 	files := docs.New(disk, nil, docs.WithRegistrations(b.reg.Kinds()), docs.WithDeriver(b.reg))
 	srv := rpc.New(ws, b.version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
-		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking), rpc.WithStoreID(storeID), rpc.WithFiles(files))
+		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking), rpc.WithStoreID(storeID), rpc.WithFiles(files),
+		rpc.WithModules(modules(&moduleDeps{store: db})...))
 	// the lease and the socket are both this process's now: say where it serves, beside the store
 	li := store.LeaseInfo{StoreID: storeID, StorePath: storePath, Addr: sock, PID: int64(os.Getpid()), Instance: srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
@@ -153,6 +156,40 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	defer func() { _ = store.RemoveLeaseInfo(storePath, srv.Instance()) }()
 	fmt.Fprintf(out, "autodoc %s serving msgpack-RPC on %s\n", b.version, sock)
 	return srv.Run(ctx)
+}
+
+// moduleDeps are what the modules' handlers use. nil builds the modules for their contracts alone
+// (--contracts), which never touch them.
+type moduleDeps struct {
+	store *store.Store
+}
+
+// modules are the daemon's core Modules, the one list of them: runServe serves them, and
+// --contracts and AGENTS.md's tables list them.
+func modules(*moduleDeps) []module.Module { return nil }
+
+// Contracts is the catalog of every verb this build serves, rpc's own and its modules', that filter
+// names ("" or "*" for all, "domain.*", or a verb), at this build's protocol: built in this process,
+// with no daemon. internal/contractsgen writes AGENTS.md's tables from it.
+func Contracts(filter string) rpc.Catalog {
+	return rpc.New(rpc.Fixed(), "", rpc.WithModules(modules(nil)...)).Catalog(rpc.Protocol, filter)
+}
+
+// writeContracts prints c as JSON, or as AGENTS.md's tables (md).
+func writeContracts(w io.Writer, c rpc.Catalog, format string) error {
+	switch format {
+	case "json":
+		b, err := json.MarshalIndent(c, "", "  ")
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(w, "%s\n", b)
+		return err
+	case "md":
+		_, err := io.WriteString(w, c.Markdown())
+		return err
+	}
+	return fmt.Errorf("--format %q: json or md", format)
 }
 
 // predecessorWait bounds how long a daemon waits for the one before it to let go of the store: its

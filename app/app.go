@@ -9,6 +9,10 @@
 //
 //	autodoc --call search.query '["kb", "a query", {"limit": 5}]'
 //
+// --contracts prints the verbs' contracts and the error codes, built in this process with no daemon:
+//
+//	autodoc --contracts [verb | domain.*] [--format json|md]
+//
 // The Web-UI (--web-ui) follows.
 package app
 
@@ -124,6 +128,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	dev := fs.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
 	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	showVersion := fs.Bool("version", false, "print the version")
+	contracts := fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
+	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text")
 	exportOutput := fs.String("output", "", "--export: destination file (required)")
@@ -139,8 +145,16 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		}
 		return 2
 	}
+	filter := ""
+	if *contracts && fs.NArg() > 0 {
+		// its one argument, and flags after it: autodoc --contracts todos.* --format md
+		filter = fs.Arg(0)
+		if err := fs.Parse(fs.Args()[1:]); err != nil {
+			return 2
+		}
+	}
 	if fs.NArg() > 0 && !((*ui || *gui || *call != "" || *exportFormat != "") && fs.NArg() == 1) {
-		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --gui, --call and --export take one argument)")
+		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --gui, --call, --export and --contracts take one argument)")
 		return 2
 	}
 	if (*ensure || *restart) && !*printEndpoint {
@@ -159,9 +173,22 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return 2
 		}
 	}
+	if !*contracts {
+		stray := false
+		fs.Visit(func(f *flag.Flag) { stray = stray || f.Name == "format" })
+		if stray {
+			fmt.Fprintln(stderr, "autodoc: --format is for --contracts")
+			return 2
+		}
+	}
 	switch {
 	case *showVersion:
 		fmt.Fprintln(stdout, "autodoc", b.version)
+	case *contracts:
+		if err := writeContracts(stdout, Contracts(filter), *format); err != nil {
+			fmt.Fprintln(stderr, "autodoc:", err)
+			return 2
+		}
 	case *compact:
 		if err := runCompact(ctx, *configPath, stdout); err != nil {
 			fmt.Fprintln(stderr, "autodoc:", err)

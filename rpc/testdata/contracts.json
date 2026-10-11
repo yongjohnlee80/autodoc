@@ -1,0 +1,1666 @@
+{
+  "protocol": 20,
+  "min_protocol": 12,
+  "verbs": [
+    {
+      "verb": "doc.outline",
+      "since": 8,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "result": "{version, headings: [{id, level, text, line, byte}]}",
+      "errors": [
+        -32060,
+        -32061,
+        -32065
+      ],
+      "doc": "A Markdown file's headings in order, with the version they were read at; other kinds have none."
+    },
+    {
+      "verb": "doc.read",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "result": "{content, version}",
+      "errors": [
+        -32060,
+        -32061,
+        -32065
+      ],
+      "doc": "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."
+    },
+    {
+      "verb": "doc.read_raw",
+      "since": 19,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "result": "{content, version}",
+      "errors": [
+        -32060,
+        -32061,
+        -32065
+      ],
+      "doc": "doc.read on an HTML file's own bytes, where doc.read gives its derived text."
+    },
+    {
+      "verb": "doc.remove",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "doc": "the version read"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32061,
+        -32062,
+        -32065
+      ]
+    },
+    {
+      "verb": "doc.rename",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "from",
+          "type": "string"
+        },
+        {
+          "name": "to",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32061,
+        -32062,
+        -32065
+      ]
+    },
+    {
+      "verb": "doc.validate",
+      "since": 8,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "bytes",
+          "doc": "the text, saved or not"
+        }
+      ],
+      "result": "{diagnostics: [{field, line, rule, message}]}",
+      "errors": [
+        -32060
+      ],
+      "doc": "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter."
+    },
+    {
+      "verb": "doc.write",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "bytes",
+          "doc": "binary, or a string"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "doc": "the version read; \"\" to create the file"
+        }
+      ],
+      "result": "{version}",
+      "errors": [
+        -32060,
+        -32061,
+        -32062,
+        -32066,
+        -32065
+      ],
+      "doc": "Writes the file at version; a stale version is a conflict."
+    },
+    {
+      "verb": "doc.write_raw",
+      "since": 19,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "type": "bytes",
+          "doc": "binary, or a string"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "doc": "the version read; \"\" to create the file"
+        }
+      ],
+      "result": "{version}",
+      "errors": [
+        -32060,
+        -32061,
+        -32062,
+        -32066,
+        -32065
+      ],
+      "doc": "doc.write on an HTML file's own bytes, which doc.write refuses."
+    },
+    {
+      "verb": "embedding.add",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "provider",
+          "type": "map",
+          "doc": "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"
+        }
+      ],
+      "result": "{name, kind, base_url, model, context, has_key}",
+      "errors": [
+        -32065,
+        -32062,
+        -32068
+      ],
+      "event": {
+        "kind": "embedding.providers"
+      }
+    },
+    {
+      "verb": "embedding.cancel_switch",
+      "since": 4,
+      "scope": "global",
+      "audience": "user",
+      "params": [],
+      "result": "{model}",
+      "errors": [
+        -32065
+      ],
+      "event": {
+        "kind": "embedding.cancelled"
+      },
+      "doc": "Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16)."
+    },
+    {
+      "verb": "embedding.log",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "result": "[{at, texts, tokens, millis, outcome}]",
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "doc": "A provider's recent calls."
+    },
+    {
+      "verb": "embedding.model_context",
+      "since": 5,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "stored provider",
+          "type": "string",
+          "doc": "\"\" for an unsaved one"
+        },
+        {
+          "name": "provider",
+          "type": "map",
+          "doc": "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"
+        }
+      ],
+      "result": "{maximum}",
+      "errors": [
+        -32065,
+        -32061,
+        -32068
+      ],
+      "doc": "The context window the provider's model reports, in tokens."
+    },
+    {
+      "verb": "embedding.models",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "provider",
+          "type": "any",
+          "doc": "a stored provider's name, or an unsaved one's spec"
+        },
+        {
+          "name": "spec",
+          "type": "map",
+          "optional": true,
+          "doc": "with a name: the edit asked about"
+        }
+      ],
+      "result": "[string]",
+      "errors": [
+        -32065,
+        -32061,
+        -32068
+      ],
+      "doc": "The models a provider offers."
+    },
+    {
+      "verb": "embedding.providers",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [],
+      "result": "{providers: [{name, kind, base_url, model, context, has_key}], active, error}",
+      "errors": [
+        -32065
+      ],
+      "doc": "The stored embedding providers, the one in use, and why the one chosen is not in use."
+    },
+    {
+      "verb": "embedding.remove",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "event": {
+        "kind": "embedding.providers",
+        "detail": "name"
+      },
+      "doc": "Deletes the provider and its model's vectors (refused below protocol 16)."
+    },
+    {
+      "verb": "embedding.update",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "provider",
+          "type": "map",
+          "doc": "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"
+        }
+      ],
+      "errors": [
+        -32065,
+        -32061,
+        -32062,
+        -32068
+      ],
+      "event": {
+        "kind": "embedding.providers",
+        "detail": "name"
+      }
+    },
+    {
+      "verb": "embedding.usage",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "days",
+          "type": "int"
+        }
+      ],
+      "result": "[{day, requests, texts, tokens, failures, limited}]",
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "doc": "A provider's usage by day."
+    },
+    {
+      "verb": "embedding.use",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32065,
+        -32061,
+        -32068
+      ],
+      "event": {
+        "kind": "embedding.switched",
+        "detail": "name"
+      },
+      "doc": "Switches the daemon's provider; the new model fills while the old one answers."
+    },
+    {
+      "verb": "file.locate",
+      "since": 17,
+      "scope": "local-peer",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "doc": "absolute and clean"
+        }
+      ],
+      "result": "{workspace, path} | nil",
+      "errors": [
+        -32001
+      ],
+      "doc": "The workspace that indexes the file (the most specific root) and its path there; nil for none."
+    },
+    {
+      "verb": "file.read",
+      "since": 17,
+      "scope": "local-peer",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "doc": "absolute and clean"
+        }
+      ],
+      "result": "{content, version}",
+      "errors": [
+        -32001,
+        -32061,
+        -32065
+      ],
+      "doc": "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."
+    },
+    {
+      "verb": "file.read_raw",
+      "since": 19,
+      "scope": "local-peer",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "doc": "absolute and clean"
+        }
+      ],
+      "result": "{content, version}",
+      "errors": [
+        -32001,
+        -32061,
+        -32065
+      ],
+      "doc": "file.read on an HTML file's own bytes."
+    },
+    {
+      "verb": "file.write",
+      "since": 17,
+      "scope": "local-peer",
+      "audience": "user",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "doc": "absolute and clean"
+        },
+        {
+          "name": "content",
+          "type": "bytes",
+          "doc": "UTF-8 text"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "doc": "the version read; \"\" to create the file and its folders"
+        }
+      ],
+      "result": "{version}",
+      "errors": [
+        -32001,
+        -32061,
+        -32062,
+        -32066,
+        -32065
+      ],
+      "doc": "As doc.write, on a file anywhere on the daemon's disk."
+    },
+    {
+      "verb": "file.write_raw",
+      "since": 19,
+      "scope": "local-peer",
+      "audience": "user",
+      "params": [
+        {
+          "name": "path",
+          "type": "string",
+          "doc": "absolute and clean"
+        },
+        {
+          "name": "content",
+          "type": "bytes",
+          "doc": "UTF-8 text"
+        },
+        {
+          "name": "version",
+          "type": "string",
+          "doc": "the version read; \"\" to create the file and its folders"
+        }
+      ],
+      "result": "{version}",
+      "errors": [
+        -32001,
+        -32061,
+        -32062,
+        -32066,
+        -32065
+      ],
+      "doc": "file.write on an HTML file's own bytes."
+    },
+    {
+      "verb": "graph.backlinks",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "options",
+          "type": "map",
+          "optional": true,
+          "doc": "{kinds} (protocol 14)"
+        }
+      ],
+      "result": "[{path, raw, anchor, kind, resolved}]",
+      "errors": [
+        -32060,
+        -32061
+      ],
+      "doc": "The files that link to it."
+    },
+    {
+      "verb": "graph.links",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "options",
+          "type": "map",
+          "optional": true,
+          "doc": "{kinds} (protocol 14)"
+        }
+      ],
+      "result": "[{path, raw, anchor, kind, resolved}]",
+      "errors": [
+        -32060,
+        -32061
+      ],
+      "doc": "The links the file makes."
+    },
+    {
+      "verb": "graph.neighborhood",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        },
+        {
+          "name": "depth",
+          "type": "int"
+        },
+        {
+          "name": "options",
+          "type": "map",
+          "optional": true,
+          "doc": "{kinds} (protocol 14)"
+        }
+      ],
+      "result": "{nodes, edges: [{src, dst, kind}]}",
+      "errors": [
+        -32060,
+        -32061
+      ],
+      "doc": "The files within depth links."
+    },
+    {
+      "verb": "graph.resolve",
+      "since": 18,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "from",
+          "type": "string",
+          "doc": "the file the link is written in"
+        },
+        {
+          "name": "raw",
+          "type": "string",
+          "doc": "the link as written"
+        }
+      ],
+      "result": "{path, reason}",
+      "errors": [
+        -32060
+      ],
+      "doc": "Where one link reaches now, saved or not, as the index resolves links: path \"\" with reason missing or ambiguous, or \"\" when raw is no link the index keeps (a URL, a heading of from)."
+    },
+    {
+      "verb": "graph.unresolved",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "options",
+          "type": "map",
+          "optional": true,
+          "doc": "{kinds} (protocol 14)"
+        }
+      ],
+      "result": "[{src, raw, reason}]",
+      "errors": [
+        -32060
+      ],
+      "doc": "Links that name no file."
+    },
+    {
+      "verb": "index.changes",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "since",
+          "type": "int",
+          "doc": "a cursor"
+        },
+        {
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "result": "{cursor, changes: [{path, op, generation}], more}",
+      "errors": [
+        -32060,
+        -32063
+      ],
+      "doc": "What changed after cursor since."
+    },
+    {
+      "verb": "index.documents",
+      "since": 13,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "opts",
+          "type": "map",
+          "optional": true,
+          "doc": "{sort, fields, tags, paths, facets, missing, diagnosed, after, limit}"
+        }
+      ],
+      "result": "{docs: [{path, generation, title, updated, indexed_at, fields, diagnostics?}], more, next}",
+      "errors": [
+        -32060
+      ],
+      "doc": "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100."
+    },
+    {
+      "verb": "index.list",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "after",
+          "type": "string",
+          "doc": "a path; \"\" from the start"
+        },
+        {
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "result": "{docs: [{path, generation, version}], more}",
+      "errors": [
+        -32060
+      ],
+      "doc": "Every file in path order, after after."
+    },
+    {
+      "verb": "index.models",
+      "since": 4,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        }
+      ],
+      "result": "[{fp, provider, name, dims, state, vectors, f32_bytes, bits_bytes, key_bytes}]",
+      "errors": [
+        -32060
+      ],
+      "doc": "The workspace's models and the room their vectors take."
+    },
+    {
+      "verb": "index.purge_model",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "model",
+          "type": "string",
+          "doc": "a model's fp, as index.models answers it"
+        }
+      ],
+      "errors": [
+        -32060
+      ],
+      "doc": "Deletes a model's vectors; the active model and the target are refused."
+    },
+    {
+      "verb": "index.reindex",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "path",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32061
+      ],
+      "doc": "Indexes one file again; a held file is refused, naming the way out."
+    },
+    {
+      "verb": "index.status",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        }
+      ],
+      "result": "{docs, chunks, pending_jobs, cursor, oldest_retained, diagnosed, failing, held, held_stale, held_unchecked, following, warming?, embeddings?, …}",
+      "errors": [
+        -32060
+      ],
+      "doc": "diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them."
+    },
+    {
+      "verb": "preference.list",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [],
+      "result": "{name: value}",
+      "errors": [
+        -32065
+      ],
+      "doc": "What clients keep between runs."
+    },
+    {
+      "verb": "preference.set",
+      "since": 3,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "value",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32065
+      ],
+      "event": {
+        "kind": "preference.changed",
+        "detail": "name"
+      },
+      "doc": "A preference that has a verb of its own (embedding.use, ranker.use, ranker.window) is refused."
+    },
+    {
+      "verb": "ranker.add",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "ranker",
+          "type": "map",
+          "doc": "{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"
+        }
+      ],
+      "result": "{name, kind, base_url, model, has_key}",
+      "errors": [
+        -32065,
+        -32062,
+        -32068
+      ],
+      "event": {
+        "kind": "ranker.providers"
+      }
+    },
+    {
+      "verb": "ranker.list",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [],
+      "result": "{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}",
+      "errors": [
+        -32065
+      ],
+      "doc": "The stored rankers (kind tei or rerank-api), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (\"\" for none), which is then the one in use."
+    },
+    {
+      "verb": "ranker.log",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "limit",
+          "type": "int"
+        }
+      ],
+      "result": "[{at, texts, tokens, millis, outcome}]",
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "doc": "A ranker's recent calls."
+    },
+    {
+      "verb": "ranker.models",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "ranker",
+          "type": "any",
+          "doc": "a stored ranker's name, or an unsaved one's spec"
+        },
+        {
+          "name": "spec",
+          "type": "map",
+          "optional": true,
+          "doc": "with a name: the edit asked about"
+        }
+      ],
+      "result": "[string]",
+      "errors": [
+        -32065,
+        -32061,
+        -32068
+      ],
+      "doc": "A TEI server's one model; none for a rerank-API endpoint, whose model is typed."
+    },
+    {
+      "verb": "ranker.remove",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "event": {
+        "kind": "ranker.providers",
+        "detail": "name"
+      }
+    },
+    {
+      "verb": "ranker.update",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "ranker",
+          "type": "map",
+          "doc": "{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"
+        }
+      ],
+      "errors": [
+        -32065,
+        -32061,
+        -32062,
+        -32068
+      ],
+      "event": {
+        "kind": "ranker.providers",
+        "detail": "name"
+      }
+    },
+    {
+      "verb": "ranker.usage",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "days",
+          "type": "int"
+        }
+      ],
+      "result": "[{day, requests, texts, tokens, failures, limited}]",
+      "errors": [
+        -32065,
+        -32061
+      ],
+      "doc": "A ranker's usage by day."
+    },
+    {
+      "verb": "ranker.use",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "doc": "\"\" for none"
+        }
+      ],
+      "errors": [
+        -32065,
+        -32061,
+        -32068
+      ],
+      "event": {
+        "kind": "ranker.switched",
+        "detail": "name"
+      },
+      "doc": "Refused while the build supplies its ranker."
+    },
+    {
+      "verb": "ranker.window",
+      "since": 11,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "window",
+          "type": "int",
+          "doc": "how many candidates it ranks, 10 to 100"
+        }
+      ],
+      "errors": [
+        -32065
+      ],
+      "event": {
+        "kind": "ranker.switched"
+      },
+      "doc": "Refused while the build supplies its ranker."
+    },
+    {
+      "verb": "search.query",
+      "since": 1,
+      "scope": "workspace",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "doc": "words, \"phrases\", a prefix*, field:value filters"
+        },
+        {
+          "name": "opts",
+          "type": "map",
+          "optional": true,
+          "doc": "{limit, stages, mode, tags, paths, facets, retrieval}"
+        }
+      ],
+      "result": "{hits: [{path, breadcrumb, snippet, byte_start, byte_end, line_start?, line_end?, relevance, score, via, rank_score?, superseded_by?, generation, hold}], mode_used, semantic, rank, stages, semantic_error?}",
+      "errors": [
+        -32060,
+        -32065,
+        -32067,
+        -32069,
+        -32070
+      ],
+      "doc": "The search, ranked: see search.query above."
+    },
+    {
+      "verb": "sys.capabilities",
+      "since": 9,
+      "scope": "global",
+      "audience": "agent",
+      "params": [],
+      "result": "{databases, registrations, ranker, verbs}",
+      "doc": "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}."
+    },
+    {
+      "verb": "sys.contracts",
+      "since": 20,
+      "scope": "global",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "filter",
+          "type": "string",
+          "optional": true,
+          "doc": "\"\" or \"*\" for every verb, \"domain.*\" for a domain's, or a verb's name"
+        }
+      ],
+      "result": "{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}",
+      "doc": "These tables: the verbs this session may call, and the codes they may answer."
+    },
+    {
+      "verb": "sys.events",
+      "since": 8,
+      "scope": "global",
+      "audience": "agent",
+      "params": [
+        {
+          "name": "since",
+          "type": "int",
+          "doc": "a cursor; -1 answers the head alone"
+        },
+        {
+          "name": "limit",
+          "type": "int",
+          "doc": "1 to 500"
+        }
+      ],
+      "result": "{cursor, events: [{seq, kind, workspace, client, detail, at}], more}",
+      "errors": [
+        -32065,
+        -32063
+      ],
+      "doc": "Configuration and lifecycle changes after cursor since, each with the token of the client that made it (\"\" for the daemon itself)."
+    },
+    {
+      "verb": "sys.hello",
+      "since": 1,
+      "scope": "global",
+      "audience": "internal",
+      "params": [
+        {
+          "name": "info",
+          "type": "map",
+          "optional": true,
+          "doc": "{protocol, name}; none, or no protocol, is a probe that admits nothing"
+        }
+      ],
+      "result": "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}",
+      "errors": [
+        -32020
+      ],
+      "doc": "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head."
+    },
+    {
+      "verb": "sys.shutdown",
+      "since": 1,
+      "scope": "local-peer",
+      "audience": "internal",
+      "params": [],
+      "errors": [
+        -32001
+      ],
+      "doc": "Stops the daemon. Frozen across protocols."
+    },
+    {
+      "verb": "workspace.add",
+      "since": 2,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "root",
+          "type": "string",
+          "doc": "an absolute directory"
+        },
+        {
+          "name": "include",
+          "type": "[]string",
+          "optional": true,
+          "doc": "globs"
+        },
+        {
+          "name": "exclude",
+          "type": "[]string",
+          "optional": true,
+          "doc": "globs"
+        }
+      ],
+      "result": "{name, root, state, …}",
+      "errors": [
+        -32062,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.added",
+        "workspace": "name"
+      },
+      "doc": "Adds a workspace and starts serving it; answers it as workspace.list does."
+    },
+    {
+      "verb": "workspace.configure",
+      "since": 9,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        },
+        {
+          "name": "settings",
+          "type": "map",
+          "doc": "any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32062,
+        -32061,
+        -32065,
+        -32068
+      ],
+      "event": {
+        "kind": "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval",
+        "workspace": "workspace name"
+      },
+      "doc": "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."
+    },
+    {
+      "verb": "workspace.embedding_policy",
+      "since": 6,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        },
+        {
+          "name": "embedding policy",
+          "type": "string",
+          "doc": "always, when opened or never"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.embedding_policy",
+        "workspace": "workspace name",
+        "detail": "embedding policy"
+      }
+    },
+    {
+      "verb": "workspace.focus",
+      "since": 6,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "doc": "Embeds this workspace's files first."
+    },
+    {
+      "verb": "workspace.list",
+      "since": 1,
+      "scope": "global",
+      "audience": "agent",
+      "params": [],
+      "result": "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]",
+      "doc": "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."
+    },
+    {
+      "verb": "workspace.remove",
+      "since": 2,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.removed",
+        "workspace": "name"
+      },
+      "doc": "Stops serving a workspace and deletes its index; its files stay."
+    },
+    {
+      "verb": "workspace.rename",
+      "since": 2,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "new name",
+          "type": "string"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32062,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.renamed",
+        "workspace": "name",
+        "detail": "new name"
+      }
+    },
+    {
+      "verb": "workspace.section_size",
+      "since": 5,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "name": "section size",
+          "type": "int",
+          "doc": "tokens; 0 for the default"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.section_size",
+        "workspace": "name"
+      }
+    },
+    {
+      "verb": "workspace.set_patterns",
+      "since": 7,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        },
+        {
+          "name": "include",
+          "type": "[]string",
+          "doc": "globs; empty matches no files"
+        },
+        {
+          "name": "exclude",
+          "type": "[]string",
+          "doc": "globs"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.patterns",
+        "workspace": "workspace name"
+      },
+      "doc": "Replaces the workspace's validated globs and reconciles it."
+    },
+    {
+      "verb": "workspace.set_provider",
+      "since": 8,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        },
+        {
+          "name": "provider",
+          "type": "string",
+          "doc": "a stored provider; \"\" for the daemon's"
+        }
+      ],
+      "errors": [
+        -32060,
+        -32061,
+        -32065,
+        -32068
+      ],
+      "event": {
+        "kind": "workspace.provider",
+        "workspace": "workspace name",
+        "detail": "provider"
+      },
+      "doc": "Gives the workspace a stored embedding provider of its own; it is set up first, and only that workspace re-embeds."
+    },
+    {
+      "verb": "workspace.set_schema",
+      "since": 8,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        },
+        {
+          "name": "schema path",
+          "type": "string",
+          "doc": "under the root, or absolute; \"\" for none"
+        }
+      ],
+      "result": "{path, active, fields, error, line}",
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.schema",
+        "workspace": "workspace name"
+      },
+      "doc": "Names the workspace's frontmatter schema file; answers its status."
+    },
+    {
+      "verb": "workspace.set_text_extensions",
+      "since": 8,
+      "scope": "global",
+      "audience": "user",
+      "params": [
+        {
+          "name": "workspace name",
+          "type": "string"
+        },
+        {
+          "name": "text extensions",
+          "type": "[]string",
+          "doc": "\".log\", …"
+        }
+      ],
+      "result": "[string]",
+      "errors": [
+        -32060,
+        -32065
+      ],
+      "event": {
+        "kind": "workspace.text_extensions",
+        "workspace": "workspace name"
+      },
+      "doc": "Declares the workspace's own plain-text extensions; answers them normalized. One the build reads with a registered chunker is refused."
+    }
+  ],
+  "errors": [
+    {
+      "code": -32001,
+      "name": "rpc.access_denied",
+      "next": "call it on the unix socket: it is for a local peer"
+    },
+    {
+      "code": -32020,
+      "name": "rpc.protocol_mismatch",
+      "next": "the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves"
+    },
+    {
+      "code": -32021,
+      "name": "rpc.handshake_required",
+      "next": "say sys.hello first"
+    },
+    {
+      "code": -32060,
+      "name": "rpc.no_such_workspace",
+      "next": "call workspace.list and use a listed name",
+      "messages": [
+        "no such workspace"
+      ]
+    },
+    {
+      "code": -32061,
+      "name": "rpc.not_found",
+      "next": "refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone",
+      "messages": [
+        "no such embedding provider",
+        "no such ranker",
+        "not found"
+      ]
+    },
+    {
+      "code": -32062,
+      "name": "rpc.conflict",
+      "next": "doc.read, then merge or retry; for a name, choose another",
+      "messages": [
+        "another workspace has this name or root",
+        "another ranker has this name",
+        "another embedding provider has this name",
+        "the document is not at that version"
+      ]
+    },
+    {
+      "code": -32063,
+      "name": "rpc.cursor_expired",
+      "next": "re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it",
+      "messages": [
+        "the event cursor is outside the retained log: take a snapshot and resume from the head",
+        "the change cursor is older than the retained log"
+      ]
+    },
+    {
+      "code": -32065,
+      "name": "rpc.unsupported",
+      "next": "this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages",
+      "messages": [
+        "this server keeps no preferences",
+        "this server keeps no embedding providers",
+        "this server keeps no event log",
+        "this server keeps no rankers",
+        "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models",
+        "this edition has no database settings",
+        "this server's set of workspaces is fixed",
+        "this server serves no files outside its workspaces",
+        "this document's text could not be made now: try again later, or open it in its own viewer",
+        "this document's text could not be derived: open it in its own viewer",
+        "the workspace's filesystem cannot do this"
+      ]
+    },
+    {
+      "code": -32066,
+      "name": "rpc.committed",
+      "next": "the write landed: doc.read and compare, never re-send",
+      "messages": [
+        "the write landed, then a follow-up step failed: read the document and compare"
+      ]
+    },
+    {
+      "code": -32067,
+      "name": "rpc.embed_failed",
+      "next": "retry later, or search with lexical among the stages",
+      "messages": [
+        "the query could not be embedded"
+      ]
+    },
+    {
+      "code": -32068,
+      "name": "rpc.provider_refused",
+      "next": "switch provider or ranker, or fix its key or base URL",
+      "messages": [
+        "the ranker's usage limit is reached",
+        "the ranker refused the key",
+        "the ranker has no such model",
+        "the server's model is not a re-ranker",
+        "the ranker did not answer: check its base URL, and that it is running",
+        "the ranker's answer is not one score for each text",
+        "the ranker refused the request",
+        "the request is over the size a ranker is sent",
+        "the store's keyslot does not open this provider's key",
+        "the store's keyslot file is readable by others: make it 0600",
+        "the provider's usage limit is reached: switch provider, or wait",
+        "the provider refused the key",
+        "the provider has no such model: List models shows the ones it has",
+        "the provider did not answer: check its base URL, and that it is running",
+        "the model gave no usable vectors: it may be a chat model, not an embedding model",
+        "the provider rejected the probe text"
+      ]
+    },
+    {
+      "code": -32069,
+      "name": "rpc.switching",
+      "next": "a new model is filling: search with lexical among the stages until it is ready",
+      "messages": [
+        "a new model is filling: search by words until it is ready"
+      ]
+    },
+    {
+      "code": -32070,
+      "name": "rpc.rank_unavailable",
+      "next": "retry later, or leave rerank out of the stages for an unranked answer",
+      "messages": [
+        "the ranker is unavailable: this build answers ranked results or none"
+      ]
+    },
+    {
+      "code": -32601,
+      "name": "rpc.method_not_found",
+      "next": "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call"
+    },
+    {
+      "code": -32602,
+      "name": "rpc.invalid_params",
+      "next": "the message says which param and why; check the verb's contract",
+      "messages": [
+        "embedding policy must be always, when opened, or never",
+        "a preference needs a name",
+        "this preference is set by its own verb: embedding.use, ranker.use or ranker.window",
+        "no model switch is under way",
+        "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api",
+        "this build supplies its ranker",
+        "a ranker's window is 10 to 100 candidates",
+        "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model",
+        "a provider's context window is 256 to 262144 tokens",
+        "an Ollama Cloud provider needs its API key",
+        "the root is not a directory",
+        "not a valid workspace: a name without a path separator, an absolute root, and valid patterns",
+        "a derived document is read-only: its text is served, its file never written",
+        "not a file of this workspace",
+        "the document is over the size limit",
+        "not a valid path in the workspace",
+        "unknown search mode",
+        "search stages must include lexical or semantic: a ranker only re-orders what they find",
+        "unknown search stage: the stages are lexical, semantic and rerank",
+        "a search stage is named twice",
+        "search stages and a search mode together: send one or the other",
+        "a facet filter names a field the workspace's schema does not declare",
+        "a facet filter's value is not of its field's type",
+        "the model is in use"
+      ]
+    },
+    {
+      "code": -32603,
+      "name": "rpc.internal",
+      "next": "a failure the daemon's log details: retry, or report it"
+    }
+  ]
+}
