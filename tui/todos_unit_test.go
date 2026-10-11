@@ -20,6 +20,9 @@ type scriptedCore struct {
 	files   []string
 	notes   []string
 	failed  []string
+	// deferred holds each Go's answer until deliver runs it: answers late and in any order
+	deferred bool
+	pending  []func()
 }
 
 func newScripted(ws string) *scriptedCore {
@@ -36,9 +39,30 @@ func (s *scriptedCore) OpenFile(abs string)    { s.files = append(s.files, abs) 
 func (s *scriptedCore) Failed(what string, err error) {
 	s.failed = append(s.failed, what+": "+err.Error())
 }
-func (s *scriptedCore) Ticket(*uint64, TicketScope) Ticket { return Ticket{} }
+
+// Ticket is the host's latest-wins rule over the sequence (there is no connection to move).
+func (s *scriptedCore) Ticket(seq *uint64, _ TicketScope) Ticket {
+	*seq++
+	n := *seq
+	return Ticket{current: func() bool { return *seq == n }}
+}
+
 func (s *scriptedCore) Go(fn func(context.Context) any, then func(any)) {
-	then(fn(context.Background()))
+	v := fn(context.Background())
+	if s.deferred {
+		s.pending = append(s.pending, func() { then(v) })
+		return
+	}
+	then(v)
+}
+
+// deliver runs the held answers, in the order given (indexes into pending at the call).
+func (s *scriptedCore) deliver(order ...int) {
+	held := s.pending
+	s.pending = nil
+	for _, i := range order {
+		held[i]()
+	}
 }
 func (s *scriptedCore) Call(_ context.Context, verb string, params ...any) (any, error) {
 	s.calls = append(s.calls, fmt.Sprint(verb, params))
@@ -249,5 +273,56 @@ func TestTodosTabsArchiveStoresAndFolders(t *testing.T) {
 	fresh.Entered("kb")
 	if fresh.at != "kb" {
 		t.Errorf("entered: %v", fresh.at)
+	}
+}
+
+// TestTodosAnswersDoNotCancelEachOther: opening asks for the stores and the store at once; each
+// answer arrives, in either order, and neither drops the other. Only a newer read of the same
+// kind makes an answer stale, and a stale answer's error is not shown.
+func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
+	for _, order := range [][]int{{0, 1}, {1, 0}} {
+		s := scriptedStore(true)
+		s.deferred = true
+		v := newTodos(s)
+		v.open() // held: [0] todos.stores, [1] todos.resolve
+		s.deliver(order...)
+		if len(v.stores) != 2 {
+			t.Errorf("order %v: the stores answer was dropped: %v", order, v.stores)
+		}
+		s.deliver(0) // the list the resolve asked for
+		if len(v.tasks[0]) != 1 {
+			t.Errorf("order %v: the open tasks were dropped", order)
+		}
+	}
+	// two reads of the store: the older answer is dropped, its error unseen
+	s := scriptedStore(true)
+	s.deferred = true
+	v := newTodos(s)
+	v.at, v.atLabel = "kb", "kb"
+	failing := true
+	s.answers["todos.resolve"] = func([]any) (any, error) {
+		if failing {
+			failing = false
+			return nil, errors.New("-32060 no such workspace")
+		}
+		return map[string]any{"store": "/kb/.todo-list", "claimed": true}, nil
+	}
+	v.load() // [0], fails
+	v.load() // [1]
+	s.deliver(1, 0)
+	if len(s.failed) != 0 {
+		t.Errorf("a stale answer's error was shown: %v", s.failed)
+	}
+	if !v.claimed {
+		t.Error("the latest read was not applied")
+	}
+	// a write is never dropped: two adds both land
+	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "x"}, nil }
+	s.pending = nil
+	v.addTitle("one")
+	v.addTitle("two")
+	s.deliver(1, 0)
+	if n := strings.Count(strings.Join(s.notes, "|"), "todos: added x"); n != 2 {
+		t.Errorf("%d adds answered, want 2: %v", n, s.notes)
 	}
 }

@@ -45,9 +45,11 @@ type todos struct {
 	stores   []map[string]any
 	cursor   int    // the row under the cursor in the tab shown
 	folderAs string // what the folder chosen is for: "load", "new" or "move"
-	seq      uint64 // the latest load: an older answer is dropped
-	detail   bool   // the details pane shows (i, o)
-	help     bool   // the keys show (?)
+	// the latest store read and the latest store list asked for: an older answer of either is
+	// dropped; the two never cancel each other, and a write's answer is never dropped
+	loadSeq, storesSeq uint64
+	detail             bool // the details pane shows (i, o)
+	help               bool // the keys show (?)
 
 	storesModel *tuidecl.ListModel
 	tabModels   [todoTabs]*tuidecl.ListModel
@@ -145,10 +147,14 @@ func (t *todos) open() {
 	t.load()
 }
 
-// call runs a todos verb off the loop and hands its answer to then on the loop, if it is still the
-// latest asked for.
-func (t *todos) call(verb string, params []any, then func(any)) {
-	tk := t.c.Ticket(&t.seq, TicketSession)
+// call runs a todos verb off the loop and hands its answer to then on the loop. With a sequence,
+// only the latest call of that sequence is answered, its error as well as its result; without
+// one (a write), every call is.
+func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
+	tk := Ticket{}
+	if seq != nil {
+		tk = t.c.Ticket(seq, TicketSession)
+	}
 	t.c.Go(func(ctx context.Context) any {
 		v, err := t.c.Call(ctx, verb, params...)
 		if err != nil {
@@ -156,13 +162,14 @@ func (t *todos) call(verb string, params []any, then func(any)) {
 		}
 		return answer{v}
 	}, func(v any) {
+		if !tk.Current() {
+			return
+		}
 		if err, ok := v.(error); ok {
 			t.c.Failed(verb, err)
 			return
 		}
-		if tk.Current() {
-			then(v.(answer).v)
-		}
+		then(v.(answer).v)
 	})
 }
 
@@ -182,7 +189,7 @@ func (t *todos) write(verb string, params []any, done func(any)) {
 	if t.readOnly() {
 		return
 	}
-	t.call(verb, params, func(v any) {
+	t.call(verb, params, nil, func(v any) {
 		if done != nil {
 			done(v)
 		}
@@ -192,7 +199,7 @@ func (t *todos) write(verb string, params []any, done func(any)) {
 
 // load reads the store's state and the tab shown.
 func (t *todos) load() {
-	t.call("todos.resolve", []any{t.at}, func(v any) {
+	t.call("todos.resolve", []any{t.at}, &t.loadSeq, func(v any) {
 		r := asMap(v)
 		t.store, t.claimed = str(r, "store"), r["claimed"] == true
 		title := "todos · " + t.atLabel
@@ -209,7 +216,7 @@ func (t *todos) loadTab() {
 	if t.tab == archivedTab && t.month != "" {
 		bucket = "archived/" + t.month
 	}
-	t.call("todos.list", []any{t.at, map[string]any{"buckets": []any{bucket}}}, func(v any) {
+	t.call("todos.list", []any{t.at, map[string]any{"buckets": []any{bucket}}}, &t.loadSeq, func(v any) {
 		l := asMap(v)
 		if t.tab == archivedTab && t.month == "" {
 			t.months = nil
@@ -416,7 +423,7 @@ func (t *todos) storeChosen(i int) {
 
 // loadStores lists the stores the daemon knows; the open one is marked.
 func (t *todos) loadStores() {
-	t.call("todos.stores", nil, func(v any) {
+	t.call("todos.stores", nil, &t.storesSeq, func(v any) {
 		t.stores = nil
 		rows := []rowOf{}
 		for i, x := range asList(v) {
@@ -462,15 +469,15 @@ func (t *todos) folderChosen(dir string) {
 	at := map[string]any{"root": dir}
 	switch t.folderAs {
 	case "load":
-		t.call("todos.register", []any{dir}, func(any) {
+		t.call("todos.register", []any{dir}, nil, func(any) {
 			t.at, t.atLabel, t.month = at, dir, ""
 			t.loadStores()
 			t.load()
 		})
 	case "new":
-		t.call("todos.register", []any{dir}, func(any) {
+		t.call("todos.register", []any{dir}, nil, func(any) {
 			t.at, t.atLabel, t.month = at, dir, ""
-			t.call("todos.resolve", []any{at}, func(v any) {
+			t.call("todos.resolve", []any{at}, nil, func(v any) {
 				t.claimed = asMap(v)["claimed"] == true
 				t.write("todos.scaffold", []any{at}, func(any) { t.c.Notify("todos: a new store in " + dir); t.loadStores() })
 			})
