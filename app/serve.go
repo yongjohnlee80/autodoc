@@ -148,7 +148,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	files := docs.New(disk, nil, docs.WithRegistrations(b.reg.Kinds()), docs.WithDeriver(b.reg))
 	srv := rpc.New(ws, b.version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking), rpc.WithStoreID(storeID), rpc.WithFiles(files),
-		rpc.WithModules(modules(&moduleDeps{store: db, workspaces: ws, log: log})...))
+		rpc.WithModules(modules(&moduleDeps{store: db, workspaces: ws, journal: db.TodoJournal(), log: log})...))
 	// the lease and the socket are both this process's now: say where it serves, beside the store
 	li := store.LeaseInfo{StoreID: storeID, StorePath: storePath, Addr: sock, PID: int64(os.Getpid()), Instance: srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
