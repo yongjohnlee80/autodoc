@@ -296,6 +296,13 @@ terminal, as below; where it cannot, it shows the block's source and why.
 - **Theme:** Dark, Light, Mono, Retro or Sepia (a reader's warm paper and brown ink).
 - **Editor preferences…** (`SPC ,`): the editor mode, the page's width (applied as it is typed), the
   theme, whether the menu bar hides and the status line shows, and the side each panel opens from.
+  Two more say what happens as AutoDoc starts. **Show About at startup** opens Help › About over the
+  page. **Look for a new version at startup** asks GitHub, once a start, for AutoDoc's latest
+  release (`api.github.com/repos/yongjohnlee80/autodoc/releases/latest`; nothing else is sent).
+  When it is newer than this one, About and a notification say so and how to update: `brew upgrade
+  autodoc`, `mise upgrade`, or the release's page. AutoDoc never downloads or installs anything
+  itself. A build that is not a release (`dev`, or a commit after a tag) does not look. Both are on
+  until you turn them off.
 - **Fonts and zoom…** (the GUI's): the cell font everything on the grid is drawn in and its size,
   the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
   applies at once. **Zoom in**, **Zoom out** and **Actual size** are below it. A zoom or a size

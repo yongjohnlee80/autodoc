@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -98,7 +99,9 @@ type daemonOpts struct {
 
 // testPrefs are the preferences a test's store starts with: the status line shown, since it says
 // what the TUI did.
-var testPrefs = map[string]string{"tui.status.shown": "true", "tui.toast.seconds": "1"}
+var testPrefs = map[string]string{"tui.status.shown": "true", "tui.toast.seconds": "1",
+	// no About over the page and no look for a release: a test asks for them itself
+	"tui.about.atstart": "false", "tui.update.check": "false"}
 
 // slowFS is memfs whose reads wait.
 type slowFS struct {
@@ -143,6 +146,13 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	prefs := o.prefs
 	if prefs == nil {
 		prefs = testPrefs
+	}
+	// a test's own preferences start quiet too, unless it names these itself
+	prefs = maps.Clone(prefs)
+	for _, k := range []string{prefAboutAt, prefUpdates} {
+		if _, set := prefs[k]; !set {
+			prefs[k] = "false"
+		}
 	}
 	for k, v := range prefs {
 		if err := db.SetPreference(ctx, k, v); err != nil {

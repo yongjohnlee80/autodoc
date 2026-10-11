@@ -73,9 +73,21 @@ func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	n := onLoop(r, func() [2]int { return [2]int{len(r.h.reg.state), len(r.h.reg.handlers)} })
-	want := onLoop(r, func() [2]int { return [2]int{len(r.h.state()), len(r.h.commands())} })
+	want := onLoop(r, func() [2]int {
+		var w [2]int
+		for _, f := range r.h.reg.features {
+			w[0] += len(f.State())
+			w[1] += len(f.Commands())
+		}
+		return w
+	})
 	if n != want {
-		t.Errorf("the registry has %v sources and commands, the host %v", n, want)
+		t.Errorf("the registry has %v sources and commands, its features %v", n, want)
+	}
+	for k := range onLoop(r, r.h.state) {
+		if _, ok := onLoop(r, func() map[string]any { return r.h.reg.state })[k]; !ok {
+			t.Errorf("the host's %s is not in the registry", k)
+		}
 	}
 }
 

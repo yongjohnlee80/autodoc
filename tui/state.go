@@ -57,6 +57,8 @@ func (h *Host) state() map[string]any {
 		"App.htmlPreviewTitle":     "HTML preview",
 		"App.htmlPreviewHelp":      "",
 		"App.imagesIndex":          0,
+		"App.aboutAtStartIndex":    0,
+		"App.updateCheckIndex":     0,
 		"App.diagramText":          "",
 		"App.diagramHelp":          "",
 		"App.wsProviders":          h.wsProviders,

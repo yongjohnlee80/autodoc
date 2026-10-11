@@ -20,6 +20,8 @@ Dialog {
         Text { text: "" }
         Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : "AUTHOR: "; font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutAuthor } }
         Text { text: App.aboutCustom ? "" : App.aboutLicence }
+        Text { text: App.aboutUpdateShown ? " " : "" }
+        Flex { direction: Tui.Horizontal; Text { text: App.aboutUpdateShown ? "UPDATE: " : ""; font.bold: true } Text { text: App.aboutUpdate; wrapMode: Tui.WordWrap } }
         Text { text: App.aboutError; wrapMode: Tui.WordWrap; font.italic: true }
     }
 }

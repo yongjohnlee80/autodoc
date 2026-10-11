@@ -27,6 +27,8 @@ type Feature interface {
 type (
 	// Connecter hears each new connection, after the host has loaded what every connection loads.
 	Connecter interface{ Connected() }
+	// Starter hears once that the program has started: its first preferences are applied.
+	Starter interface{ Started() }
 	// Enterer hears each workspace entered, the one in use again included.
 	Enterer interface{ Entered(ws string) }
 	// EventSink hears the daemon's events of the kinds it names (sys.events), on the loop.
@@ -84,6 +86,18 @@ func (r *registry) connected() {
 	}
 }
 
+// started tells the features that hear the start.
+func (r *registry) started() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if s, ok := f.(Starter); ok {
+			s.Started()
+		}
+	}
+}
+
 // entered tells the features that hear workspaces entered.
 func (r *registry) entered(ws string) {
 	if r == nil {
@@ -117,7 +131,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
-	return []Feature{legacy{h}}
+	return []Feature{legacy{h}, newStartup(core{h}, h.aboutInfo.Version)}
 }
 
 // legacy is the host as it is: everything not yet a feature of its own.
@@ -136,6 +150,8 @@ type Core interface {
 	Notify(msg string)
 	// Workspace is the workspace in use; "" before one is entered.
 	Workspace() string
+	// Prefs are the preferences in effect.
+	Prefs() prefs
 	// Call calls a daemon verb; it blocks, so only work Go runs calls it.
 	Call(ctx context.Context, verb string, params ...any) (any, error)
 	// Go runs fn off the loop and then on the loop with its result, as do does.
@@ -178,6 +194,7 @@ func (c core) Open(id string)         { c.h.open(id) }
 func (c core) Close(id string)        { c.h.closeDialog(id) }
 func (c core) Notify(msg string)      { c.h.notify(msg) }
 func (c core) Workspace() string      { return c.h.ws }
+func (c core) Prefs() prefs           { return c.h.prefs }
 func (c core) Call(ctx context.Context, verb string, params ...any) (any, error) {
 	return c.h.session.Call(ctx, verb, params...)
 }

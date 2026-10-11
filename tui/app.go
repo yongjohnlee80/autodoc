@@ -53,6 +53,7 @@ type Host struct {
 	p       *tuidecl.Program
 	session *Session
 	reg     *registry          // the features, merged (feature.go)
+	started bool               // the first preferences were applied: the program has started (applyPrefs)
 	editor  editorWidget       // main.qml's Editor, terminal or native (editor.go)
 	core    *widget.EditorCore // its core: the text, the cursor and the modes
 	gui     bool               // in a window (Options.GUI): the theme kept is gui.theme

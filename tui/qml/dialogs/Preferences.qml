@@ -69,11 +69,13 @@ Dialog {
                 Flex {
                     direction: Tui.Vertical
                     Layout.fillWidth: true
-                    Text { text: "hide the menu bar (F10 shows it)" }
-                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.menuHiddenIndex; onActivated: App.setMenuHiddenIndex(index) }
-                    Text { text: "" }
-                    Text { text: "show the status line" }
-                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.statusShownIndex; onActivated: App.setStatusShownIndex(index) }
+                    Text { text: "hide the menu bar (F10) · show the status line" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.menuHiddenIndex; onActivated: App.setMenuHiddenIndex(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.statusShownIndex; onActivated: App.setStatusShownIndex(index) }
+                    }
                     Text { text: "" }
                     Text { text: "the explorer opens from" }
                     ComboBox { model: App.edges; textRole: "label"; currentIndex: App.explorerEdgeIndex; onActivated: App.setExplorerEdge(index) }
@@ -96,6 +98,14 @@ Dialog {
                     Text { text: "" }
                     Text { text: "a notification stays" }
                     ComboBox { model: App.toastSeconds; textRole: "label"; currentIndex: App.toastSecondsIndex; onActivated: App.setToastSeconds(index) }
+                    Text { text: "" }
+                    Text { text: "at startup: About · look for updates" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.aboutAtStartIndex; onActivated: App.setAboutAtStartIndex(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.updateCheckIndex; onActivated: App.setUpdateCheckIndex(index) }
+                    }
                 }
                 Text { text: " " }
             }

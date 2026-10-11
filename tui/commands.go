@@ -177,6 +177,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.toggleLineNumbers":    none(h.toggleLineNumbers),
 		"App.setWrapIndex":         oneNumber("App.setWrapIndex", "a row", h.setWrapIndex),
 		"App.setImagesIndex":       oneNumber("App.setImagesIndex", "a row", h.setImagesIndex),
+		"App.setAboutAtStartIndex": oneNumber("App.setAboutAtStartIndex", "a row", h.setAboutAtStartIndex),
+		"App.setUpdateCheckIndex":  oneNumber("App.setUpdateCheckIndex", "a row", h.setUpdateCheckIndex),
 		"App.toggleImagePreviews":  none(h.toggleImagePreviews),
 		"App.openPreviewInBrowser": none(h.openPreviewInBrowser),
 		"App.previewClosed":        none(h.previewClosed),

@@ -30,6 +30,8 @@ const (
 	prefIndent   = "tui.editor.indentmarks"
 	prefImages   = "tui.preview.images"
 	prefCorner   = "tui.toast.corner"
+	prefAboutAt  = "tui.about.atstart"
+	prefUpdates  = "tui.update.check"
 	prefSeconds  = "tui.toast.seconds"
 	// a plugin's placement: tui.plugin.<name>.placement
 	prefPluginPrefix = "tui.plugin."
@@ -85,6 +87,8 @@ type prefs struct {
 	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
 	indentMarks            string // which lines show their indentation as marks (indentMarks)
 	images                 bool   // previews as images where the terminal draws them (preview.go)
+	aboutAtStart           bool   // About opens when the program starts (startup.go)
+	updateCheck            bool   // a newer release is looked for when the program starts (startup.go)
 	toastCorner            string // where the notifications stack
 	toastSeconds           int    // how long a finished one stays
 	// the terminal: the edge it opens from, and each edge's size and length the user set
@@ -125,7 +129,7 @@ func defaultPrefsFor(gui bool) prefs {
 		theme = defaultGUITheme
 	}
 	return prefs{theme: theme, menuHidden: true, explorerEdge: "left", linkEdge: "right", ruler: defaultRuler, keymap: "vim",
-		wrap: true, indentMarks: "off", images: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
+		wrap: true, indentMarks: "off", images: true, aboutAtStart: true, updateCheck: true, toastCorner: "bottom-right", toastSeconds: defaultToastSeconds,
 		termEdge: "bottom", termSize: map[string]int{}, termLength: map[string]int{}, searchStages: allStagesChecked(),
 		agentEdge: defaultAgentEdge}
 }
@@ -180,6 +184,12 @@ func prefsFor(m map[string]any, gui bool) prefs {
 	}
 	if s, ok := str(prefImages); ok {
 		p.images = s != "false"
+	}
+	if s, ok := str(prefAboutAt); ok {
+		p.aboutAtStart = s != "false"
+	}
+	if s, ok := str(prefUpdates); ok {
+		p.updateCheck = s != "false"
 	}
 	if s, ok := str(prefCorner); ok && slices.Contains(corners, s) {
 		p.toastCorner = s
@@ -324,6 +334,10 @@ func (h *Host) applyPrefs(p prefs) {
 	h.refreshPlugins() // the SPC p letters the user chose
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
+	}
+	if !h.started {
+		h.started = true // the first preferences of the run: the program has started
+		h.reg.started()
 	}
 }
 
@@ -580,6 +594,8 @@ func (h *Host) syncPrefDialog() {
 	h.set("App.lineNumbersIndex", boolIndex(h.prefs.lineNumbers))
 	h.set("App.indentMarksIndex", indexOf(indentMarks, h.prefs.indentMarks))
 	h.set("App.imagesIndex", boolIndex(h.prefs.images))
+	h.set("App.aboutAtStartIndex", boolIndex(h.prefs.aboutAtStart))
+	h.set("App.updateCheckIndex", boolIndex(h.prefs.updateCheck))
 	h.set("App.toastCornerIndex", indexOf(corners, h.prefs.toastCorner))
 	h.set("App.toastSecondsIndex", h.prefs.toastSeconds-1)
 	h.set("App.statusShownIndex", boolIndex(h.prefs.statusOn))
@@ -600,6 +616,20 @@ func (h *Host) setStatusShownIndex(i int) {
 }
 
 // boolIndex is a yes/no chooser's row: yes first.
+func (h *Host) setAboutAtStartIndex(i int) {
+	if i == 0 || i == 1 {
+		v := i == 0
+		h.setPref(prefAboutAt, strconv.FormatBool(v), func(p *prefs) { p.aboutAtStart = v })
+	}
+}
+
+func (h *Host) setUpdateCheckIndex(i int) {
+	if i == 0 || i == 1 {
+		v := i == 0
+		h.setPref(prefUpdates, strconv.FormatBool(v), func(p *prefs) { p.updateCheck = v })
+	}
+}
+
 func boolIndex(v bool) int {
 	if v {
 		return 0
