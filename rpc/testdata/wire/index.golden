@@ -1,0 +1,22 @@
+index.status ["kb"]
+  {chunks: <int>, cursor: <int>, diagnosed: int(0), docs: int(2), failing: [], following: <map>, held: int(0), held_stale: int(0), held_unchecked: int(0), oldest_retained: <int>, pending_jobs: <int>, unparsed_frontmatter: []}
+index.list ["kb", "", int(10)]
+  {docs: [{generation: <int>, path: "plan.md", version: <str>}, {generation: <int>, path: "target.md", version: <str>}], more: <bool>}
+index.changes ["kb", int(0), int(10)]
+  {changes: [{generation: <int>, op: "upsert", path: "plan.md"}, {generation: <int>, op: "upsert", path: "target.md"}], cursor: <int>, more: <bool>}
+index.documents ["kb"]
+  {docs: [{fields: {tags: ["kb"], type: "adr", updated: "2026-10-05"}, generation: <int>, indexed_at: <int>, path: "plan.md", title: "Plan", updated: "2026-10-05"}, {fields: {updated: "2026-01-01"}, generation: <int>, indexed_at: <int>, path: "target.md", title: "Target", updated: "2026-01-01"}], more: <bool>, next: <int>}
+index.documents ["kb", {diagnosed: bool(false), fields: ["type", "tags"], limit: int(1), sort: "path"}]
+  {docs: [{fields: {tags: ["kb"], type: "adr"}, generation: <int>, indexed_at: <int>, path: "plan.md", title: "Plan", updated: "2026-10-05"}], more: <bool>, next: <int>}
+index.documents ["kb", {diagnosed: bool(true)}]
+  {docs: [], more: <bool>, next: <int>}
+index.documents ["kb", {sort: "size"}]
+  error -32602 "index.documents: opts.sort is updated, path or indexed"
+index.documents ["kb", {after: int(-1)}]
+  error -32602 "index.documents: opts.after must be a non-negative integer"
+index.reindex ["kb", "plan.md"]
+  nil
+index.models ["kb"]
+  []
+index.purge_model ["kb", "nope"]
+  error -32061 "not found"

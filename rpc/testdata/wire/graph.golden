@@ -1,0 +1,20 @@
+graph.links ["kb", "plan.md"]
+  [{anchor: "", kind: "wikilink", path: "target.md", raw: "[[target]]", resolved: bool(true)}, {anchor: "", kind: "wikilink", path: "", raw: "[[nowhere]]", resolved: bool(false)}]
+graph.links ["kb", "plan.md", {kinds: ["body"]}]
+  []
+graph.links ["kb", "plan.md", "x"]
+  error -32602 "options must be a map"
+graph.backlinks ["kb", "plan.md"]
+  [{anchor: "", kind: "wikilink", path: "target.md", raw: "[[plan]]", resolved: bool(true)}]
+graph.neighborhood ["kb", "plan.md", int(1)]
+  {edges: [{dst: "target.md", kind: "wikilink", src: "plan.md"}, {dst: "plan.md", kind: "wikilink", src: "target.md"}], nodes: ["plan.md", "target.md"]}
+graph.neighborhood ["kb", "plan.md", int(1), {}]
+  {edges: [{dst: "target.md", kind: "wikilink", src: "plan.md"}, {dst: "plan.md", kind: "wikilink", src: "target.md"}], nodes: ["plan.md", "target.md"]}
+graph.unresolved ["kb"]
+  [{raw: "[[nowhere]]", reason: "missing", src: "plan.md"}]
+graph.unresolved ["kb", {kinds: "body"}]
+  error -32602 "kinds must be a list of strings"
+graph.resolve ["kb", "plan.md", "target"]
+  {path: "", reason: ""}
+graph.resolve ["kb", "plan.md", "nowhere"]
+  {path: "", reason: ""}

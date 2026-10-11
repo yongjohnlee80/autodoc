@@ -1,0 +1,20 @@
+ranker.list []
+  {active: "tei", error: "", rankers: [{base_url: "http://h:1", has_key: bool(true), kind: "tei", model: "", name: "tei"}], supplied: "", window: int(25)}
+ranker.add [{base_url: "https://api", key: "sk", kind: "rerank-api", model: "r3", name: "c"}]
+  {base_url: "https://api", has_key: bool(true), kind: "rerank-api", model: "r3", name: "c"}
+ranker.update ["c", {model: "r4"}]
+  nil
+ranker.remove ["c"]
+  nil
+ranker.use ["tei"]
+  nil
+ranker.window [int(30)]
+  nil
+ranker.models ["tei"]
+  ["BAAI/bge-reranker-v2-m3"]
+ranker.models [{base_url: "http://h", kind: "tei"}]
+  ["BAAI/bge-reranker-v2-m3"]
+ranker.usage ["tei", int(7)]
+  [{day: "2026-10-05", failures: int(0), limited: int(0), requests: int(3), texts: int(60), tokens: int(0)}]
+ranker.log ["tei", int(5)]
+  [{at: <int>, millis: int(900), outcome: "ok", texts: int(20), tokens: int(0)}]

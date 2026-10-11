@@ -1,0 +1,22 @@
+doc.read ["kb", "plan.md"]
+  {content: bin("---\ntype: adr\nupdated: 2026-10-05\ntags: [kb]\n---\n# Plan\n\nkestrel [[target]] and [[nowhere]]\n\n## Detail\n\nmore kestrel\n"), version: <str>}
+doc.read ["kb", "none.md"]
+  error -32061 "not found"
+doc.read_raw ["kb", "plan.md"]
+  {content: bin("---\ntype: adr\nupdated: 2026-10-05\ntags: [kb]\n---\n# Plan\n\nkestrel [[target]] and [[nowhere]]\n\n## Detail\n\nmore kestrel\n"), version: <str>}
+doc.outline ["kb", "plan.md"]
+  {headings: [{byte: int(49), id: "plan", level: int(1), line: int(6), text: "Plan"}, {byte: int(93), id: "detail", level: int(2), line: int(10), text: "Detail"}], version: <str>}
+doc.validate ["kb", "plan.md", bin("---\ntitle: x\n---\n# X\n")]
+  {diagnostics: [{field: "type", line: int(1), message: "type is required", rule: "required"}]}
+doc.validate ["kb", "plan.md", "---\ntype: adr\n---\n"]
+  {diagnostics: []}
+doc.write ["kb", "new.md", bin("# New\n"), ""]
+  {version: <str>}
+doc.write_raw ["kb", "new.md", bin("# Newer\n"), "m7"]
+  {version: <str>}
+doc.rename ["kb", "new.md", "newer.md"]
+  nil
+doc.remove ["kb", "newer.md", "stale"]
+  error -32062 "the document is not at that version"
+doc.remove ["kb", "newer.md", "m9"]
+  nil

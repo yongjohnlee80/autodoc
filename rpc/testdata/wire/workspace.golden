@@ -1,0 +1,28 @@
+workspace.list []
+  [{embedding_policy: "always", exclude: [], include: [], name: "broken", provider: "", root: "/roots/broken", section_tokens: int(0), state: "error", text_collisions: [], text_extensions: []}, {abstract_chunk: bool(false), databases: {destination: "sqlite", destination_connection: {database: "rag", engine: "postgres", has_password: bool(true), host: "db", schema: "", user: "me"}, uid: "u1", vector_index: "", view_args: {k: "v"}}, demote_superseded: bool(false), embedding_policy: "always", exclude: [".git/**"], include: ["**/*.md"], name: "kb", provider: "local", provider_error: "not set up", root: "/roots/kb", schema: {active: bool(true), error: "", fields: int(1), line: int(0), path: "schema.yaml"}, section_tokens: int(512), state: "ready", text_collisions: [], text_extensions: [".log"]}]
+workspace.add ["new", "/roots/new", ["**/*.md"], []]
+  {embedding_policy: "always", exclude: [], include: ["**/*.md"], name: "new", provider: "", root: "/roots/new", section_tokens: int(0), state: "ready", text_collisions: [], text_extensions: []}
+workspace.add ["new", "/roots/new"]
+  {embedding_policy: "always", exclude: [], include: [], name: "new", provider: "", root: "/roots/new", section_tokens: int(0), state: "ready", text_collisions: [], text_extensions: []}
+workspace.rename ["kb", "kb2"]
+  nil
+workspace.remove ["kb"]
+  nil
+workspace.set_patterns ["kb", ["**/*.md"], []]
+  nil
+workspace.set_provider ["kb", ""]
+  nil
+workspace.set_text_extensions ["kb", [".txt2"]]
+  [".log", ".txt2"]
+workspace.set_schema ["kb", "schema.yaml"]
+  {active: bool(true), error: "line 4: bad", fields: int(3), line: int(4), path: "schema.yaml"}
+workspace.section_size ["kb", int(256)]
+  nil
+workspace.focus ["kb"]
+  nil
+workspace.embedding_policy ["kb", "never"]
+  nil
+workspace.configure ["kb", {name: "kb", section_tokens: int(256)}]
+  nil
+workspace.configure ["kb", {nope: bool(true)}]
+  error -32602 "unknown settings [nope]"

@@ -322,6 +322,12 @@ func (s *Server) add(v verb) {
 		panic("rpc: duplicate method registration: " + v.Verb)
 	}
 	s.verbs[v.Verb] = v
+	s.rpc.Handle(v.Verb, s.chain(v))
+}
+
+// chain is the handler golib serves for v: its own, wrapped to log its events, and a module's
+// result carried by module.Wire once they are logged.
+func (s *Server) chain(v verb) golibrpc.Handler {
 	h := v.h
 	if mv := v.module(); mv.Logs() {
 		h = s.logged(mv, h)
@@ -329,7 +335,7 @@ func (s *Server) add(v verb) {
 	if v.owner != "" {
 		h = s.wired(h)
 	}
-	s.rpc.Handle(v.Verb, h)
+	return h
 }
 
 // Verbs lists the registered verbs, sorted.

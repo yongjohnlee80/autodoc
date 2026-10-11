@@ -1,0 +1,18 @@
+search.query ["kb", "kestrel"]
+  {hits: [{breadcrumb: "Plan > Detail", byte_end: int(116), byte_start: int(104), generation: <int>, hold: "", line_end: int(12), line_start: int(12), path: "plan.md", relevance: <float64>, score: <float64>, snippet: "more \x02kestrel\x03", via: ["lexical"]}, {breadcrumb: "Plan", byte_end: int(91), byte_start: int(57), generation: <int>, hold: "", line_end: int(8), line_start: int(8), path: "plan.md", relevance: <float64>, score: <float64>, snippet: "\x02kestrel\x03 [[target]] and [[nowhere]]", via: ["lexical"]}], mode_used: "lexical", rank: {error: "", model: "", state: "off"}, semantic: "off", stages: {performed: ["lexical"], requested: ["lexical", "semantic", "rerank"], skipped: {rerank: "no ranker is in use", semantic: "no embedding model is in use"}}}
+search.query ["kb", "kestrel", {limit: int(1), stages: ["lexical"]}]
+  {hits: [{breadcrumb: "Plan > Detail", byte_end: int(116), byte_start: int(104), generation: <int>, hold: "", line_end: int(12), line_start: int(12), path: "plan.md", relevance: <float64>, score: <float64>, snippet: "more \x02kestrel\x03", via: ["lexical"]}], mode_used: "lexical", rank: {error: "", model: "", state: "off"}, semantic: "off", stages: {performed: ["lexical"], requested: ["lexical"], skipped: {}}}
+search.query ["kb", "type:adr", {facets: {type: "adr"}, paths: ["plan.md"], tags: ["kb"]}]
+  error -32602 "a facet filter names a field the workspace's schema does not declare"
+search.query ["kb", "kestrel", {mode: "", retrieval: {abstract_chunk: bool(true)}}]
+  {hits: [{breadcrumb: "Plan > Detail", byte_end: int(116), byte_start: int(104), generation: <int>, hold: "", line_end: int(12), line_start: int(12), path: "plan.md", relevance: <float64>, score: <float64>, snippet: "more \x02kestrel\x03", via: ["lexical"]}, {breadcrumb: "Plan", byte_end: int(91), byte_start: int(57), generation: <int>, hold: "", line_end: int(8), line_start: int(8), path: "plan.md", relevance: <float64>, score: <float64>, snippet: "\x02kestrel\x03 [[target]] and [[nowhere]]", via: ["lexical"]}], mode_used: "lexical", rank: {error: "", model: "", state: "off"}, semantic: "off", stages: {performed: ["lexical"], requested: ["lexical", "semantic", "rerank"], skipped: {rerank: "no ranker is in use", semantic: "no embedding model is in use"}}}
+search.query ["kb", "kestrel", {fuzz: bool(true)}]
+  error -32602 "search.query: unknown option fuzz"
+search.query ["kb", "kestrel", {limit: "1"}]
+  error -32602 "search.query: opts.limit must be an integer"
+search.query ["kb", "kestrel", "opts"]
+  error -32602 "search.query: opts must be a map"
+search.query ["nope", "kestrel"]
+  error -32060 "no such workspace"
+search.query ["broken", "kestrel"]
+  error -32065 "this server's set of workspaces is fixed"

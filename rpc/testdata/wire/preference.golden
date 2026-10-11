@@ -1,0 +1,6 @@
+preference.list []
+  {tui.theme: "retro"}
+preference.set ["tui.theme", "light"]
+  nil
+preference.list []
+  {tui.theme: "light"}

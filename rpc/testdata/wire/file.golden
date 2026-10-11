@@ -1,0 +1,14 @@
+file.write ["/tmp/notes/a.md", "# A\n", ""]
+  {version: <str>}
+file.read ["/tmp/notes/a.md"]
+  {content: bin("# A\n"), version: <str>}
+file.read_raw ["/tmp/notes/a.md"]
+  {content: bin("# A\n"), version: <str>}
+file.write_raw ["/tmp/notes/a.md", bin("# A2\n"), "m7"]
+  {version: <str>}
+file.read ["notes/a.md"]
+  error -32602 "path must be an absolute, clean file path"
+file.locate ["/roots/kb/plan.md"]
+  {path: "plan.md", workspace: "kb"}
+file.locate ["/elsewhere/plan.md"]
+  nil

@@ -1,0 +1,28 @@
+embedding.providers []
+  {active: "local", error: "a last error", providers: [{base_url: "http://h:11434", context: int(2048), has_key: bool(false), kind: "ollama", model: "nomic", name: "local"}]}
+embedding.add [{base_url: "https://api", context: int(8192), key: "sk", kind: "openai", model: "te3", name: "cloud"}]
+  {base_url: "https://api", context: int(8192), has_key: bool(true), kind: "openai", model: "te3", name: "cloud"}
+embedding.add ["cloud"]
+  error -32602 "a provider must be a map"
+embedding.update ["cloud", {model: "te3-large"}]
+  nil
+embedding.remove ["cloud"]
+  nil
+embedding.use ["local"]
+  nil
+embedding.cancel_switch []
+  {model: "nomic"}
+embedding.models ["local"]
+  ["m-local", "k-"]
+embedding.models [{base_url: "http://h", kind: "ollama"}]
+  ["m-", "k-ollama"]
+embedding.models ["local", {kind: "ollama"}]
+  ["m-local", "k-ollama"]
+embedding.models [{kind: "ollama"}, {}]
+  error -32602 "embedding.models: a spec alone, or a name and a spec"
+embedding.model_context ["local", {kind: "ollama"}]
+  {maximum: int(8192)}
+embedding.usage ["local", int(7)]
+  [{day: "2026-10-05", failures: int(1), limited: int(0), requests: int(3), texts: int(60), tokens: int(900)}]
+embedding.log ["local", int(5)]
+  [{at: <int>, millis: int(900), outcome: "ok", texts: int(20), tokens: int(300)}]
