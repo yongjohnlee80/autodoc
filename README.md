@@ -400,6 +400,22 @@ its error in the prompt. Scripts get Lua's base, table, string and math librarie
 [`github.com/yongjohnlee80/autodoc/script`](script/README.md), which any program with a golib
 editor can import.
 
+A script calls the daemon too. Every verb it offers scripts is a function by its name, and
+`autodoc.call(verb, params, cb)` reaches any of them by name; the protocol's own (`sys.hello`,
+`sys.shutdown`) are refused. A call never waits: the answer comes to the callback later, as
+`cb(result, err)`, with `err` the daemon's code and message (`"-32061 not found"`).
+`autodoc --contracts` lists the verbs and their params.
+
+```lua
+autodoc.search.query("kb", "kestrel", {limit = 5}, function(res, err)
+  if err then autodoc.notify("search failed: " .. err) return end
+  autodoc.notify(#res.hits .. " hits")
+end)
+```
+
+Help › Tutorial… (SPC T) walks through it all, ending with a worked `:todo` command. Its pages are
+in [`tui/tutorial/`](tui/tutorial/): 07 to 09 are the scripting ones.
+
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
 
