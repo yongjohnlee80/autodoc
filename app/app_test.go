@@ -102,6 +102,8 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		// --ensure starts, and --restart replaces, the daemon --print-endpoint names: alone each is refused
 		{[]string{"--ensure"}, 2, "", "--ensure and --restart go with --print-endpoint"},
 		{[]string{"--restart"}, 2, "", "--ensure and --restart go with --print-endpoint"},
+		// --restart starts the daemon itself: the two are refused together, before any config is read
+		{[]string{"--config", bad, "--print-endpoint", "--ensure", "--restart"}, 2, "", "autodoc: --print-endpoint takes one of --ensure and --restart, not both\n"},
 		// --restart reads its config before it stops anything
 		{[]string{"--config", bad, "--print-endpoint", "--restart"}, 1, "", "config: invalid"},
 		// a --print-endpoint that cannot read its config prints no endpoint (a client reads stdout's

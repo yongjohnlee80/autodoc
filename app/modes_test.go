@@ -18,8 +18,10 @@ func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 		fs.Bool("b", false, "")
 		fs.Bool("c", false, "")
 		fs.String("x", "", "")
+		fs.Bool("y", false, "")
+		fs.Bool("z", false, "")
 		modes := []mode{
-			{flag: "a", run: func(string) int { return 10 }},
+			{flag: "a", oneOf: []string{"y", "z"}, run: func(string) int { return 10 }},
 			{flag: "b", arg: true, run: func(string) int { return 11 }},
 			{flag: "c", arg: true, flagsAfter: true, run: func(string) int { return 12 }},
 		}
@@ -42,6 +44,8 @@ func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 		{args: []string{"-x", "v", "-b"}, ok: true, run: 11},
 		{args: []string{"-a", "-b", "w"}, says: "autodoc: --a and --b are separate modes: give one\n"},
 		{args: []string{"-c", "f", "-a", "-b"}, says: "autodoc: --a, --b and --c are separate modes: give one\n"},
+		{args: []string{"-a", "-y"}, ok: true, run: 10},
+		{args: []string{"-a", "-z", "-y"}, says: "autodoc: --a takes one of --y and --z, not both\n"},
 		{args: nil, says: "Usage of t"},
 	} {
 		fs, out, modes, companions := table()

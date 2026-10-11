@@ -159,7 +159,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
-		{flag: "print-endpoint", run: func(string) int {
+		{flag: "print-endpoint", oneOf: []string{"ensure", "restart"}, run: func(string) int {
 			run := func() error { return runPrintEndpoint(ctx, *configPath, *ensure, stdout) }
 			if *restart {
 				run = func() error { return runRestart(ctx, *configPath, stdout) }

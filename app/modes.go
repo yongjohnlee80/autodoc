@@ -17,6 +17,8 @@ type mode struct {
 	arg bool
 	// flagsAfter: flags may follow the argument too (autodoc --contracts todos.* --format md)
 	flagsAfter bool
+	// oneOf are its flags that exclude each other: at most one is given
+	oneOf []string
 	// run runs the mode with its argument ("" for none) and is the process's exit code
 	run func(arg string) int
 }
@@ -104,9 +106,20 @@ func choose(fs *flag.FlagSet, args []string, modes []mode, companions []companio
 		return mode{}, "", 2, false
 	}
 	for _, m := range modes {
-		if asked(m) {
-			return m, arg, 0, true
+		if !asked(m) {
+			continue
 		}
+		var both []string
+		for _, f := range m.oneOf {
+			if given[f] {
+				both = append(both, "--"+f)
+			}
+		}
+		if len(both) > 1 {
+			fmt.Fprintf(fs.Output(), "autodoc: --%s takes one of %s, not both\n", m.flag, list(both))
+			return mode{}, "", 2, false
+		}
+		return m, arg, 0, true
 	}
 	fs.Usage()
 	return mode{}, "", 2, false
