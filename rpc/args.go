@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
-
-	"github.com/yongjohnlee80/autodoc/core/index"
 )
 
 // Positional parameters arrive in msgpack's vocabulary: int64, string, []byte, []any,
@@ -118,45 +116,6 @@ func needReclaim(ctx context.Context, verb string) error {
 		return invalid(fmt.Sprintf("%s deletes vectors since protocol %d", verb, reclaimSince))
 	}
 	return nil
-}
-
-// relationsSince is the protocol frontmatter relation links arrived in. A session below it sees the
-// body links alone: a new kind of link changes what a graph answer means.
-const relationsSince = 14
-
-// graphKinds is the kinds of link a graph verb answers with: the body kinds below relationsSince,
-// otherwise every kind, or those the optional {kinds} at p[i] names. Asking for kinds below
-// relationsSince is refused, not ignored, so an old client never takes an answer it did not ask for.
-func graphKinds(ctx context.Context, p []any, i int) ([]string, error) {
-	below := protocolOf(ctx) < relationsSince
-	if i < len(p) {
-		opts, ok := p[i].(map[string]any)
-		if !ok {
-			return nil, invalid("options must be a map")
-		}
-		if raw, ok := opts["kinds"]; ok {
-			if below {
-				return nil, invalid(fmt.Sprintf("kinds needs protocol %d", relationsSince))
-			}
-			list, ok := raw.([]any)
-			if !ok {
-				return nil, invalid("kinds must be a list of strings")
-			}
-			kinds := make([]string, 0, len(list))
-			for _, k := range list {
-				s, ok := k.(string)
-				if !ok {
-					return nil, invalid("kinds must be a list of strings")
-				}
-				kinds = append(kinds, s)
-			}
-			return kinds, nil
-		}
-	}
-	if below {
-		return index.BodyKinds, nil
-	}
-	return nil, nil
 }
 
 // optionMap is an options param its verb reads itself, so that a value that is not a map is refused

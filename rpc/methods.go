@@ -162,91 +162,9 @@ func (s *Server) register() {
 	s.own(s.workspaceVerbs()...)
 	s.own(s.searchVerbs()...)
 	s.own(s.indexVerbs()...)
+	s.own(s.graphVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
-	links := func(backlinks bool) golibrpc.Handler {
-		return s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-			path, err := argStr(p, 1, "path")
-			if err != nil {
-				return nil, err
-			}
-			kinds, err := graphKinds(ctx, p, 2)
-			if err != nil {
-				return nil, err
-			}
-			read := w.Index.Store().Links
-			if backlinks {
-				read = w.Index.Store().Backlinks
-			}
-			ls, err := read(ctx, path, kinds)
-			if err != nil {
-				return nil, err
-			}
-			out := make([]any, len(ls))
-			for i, l := range ls {
-				out[i] = map[string]any{"path": l.Path, "raw": l.Raw, "anchor": l.Anchor, "kind": l.Kind, "resolved": l.Resolved}
-			}
-			return out, nil
-		}, true)
-	}
-	s.handle("graph.links", links(false))
-	s.handle("graph.backlinks", links(true))
-	// graph.resolve: where one link, as written in the file at from, reaches now — saved or not, as
-	// the index will resolve it (Protocol 18)
-	s.handle("graph.resolve", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		from, err := argStr(p, 1, "from")
-		if err != nil {
-			return nil, err
-		}
-		raw, err := argStr(p, 2, "raw")
-		if err != nil {
-			return nil, err
-		}
-		path, reason, err := w.Index.ResolveLink(ctx, from, raw)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"path": path, "reason": reason}, nil
-	}, true))
-	s.handle("graph.neighborhood", s.verb(3, 4, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
-		}
-		depth, err := argInt(p, 2, "depth")
-		if err != nil {
-			return nil, err
-		}
-		kinds, err := graphKinds(ctx, p, 3)
-		if err != nil {
-			return nil, err
-		}
-		nb, err := w.Index.Store().Neighborhood(ctx, path, int(depth), kinds)
-		if err != nil {
-			return nil, err
-		}
-		edges := make([]any, len(nb.Edges))
-		for i, e := range nb.Edges {
-			edges[i] = map[string]any{"src": e.Src, "dst": e.Dst, "kind": e.Kind}
-		}
-		return map[string]any{"nodes": strs(nb.Nodes), "edges": edges}, nil
-	}, true))
-	s.handle("graph.unresolved", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		kinds, err := graphKinds(ctx, p, 1)
-		if err != nil {
-			return nil, err
-		}
-		us, err := w.Index.Store().Unresolved(ctx, kinds)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]any, len(us))
-		for i, u := range us {
-			out[i] = map[string]any{"src": u.Src, "raw": u.Raw, "reason": u.Reason}
-		}
-		return out, nil
-	}, true))
-
 	// doc.read_raw and doc.write_raw are doc.read and doc.write on an HTML file's own bytes, where
 	// the plain verbs give its derived text and refuse a write (core/docs ReadRaw, WriteRaw).
 	docRead := func(raw bool) verbFunc {

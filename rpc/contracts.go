@@ -75,27 +75,6 @@ func legacyVerbs() []verb {
 			Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},
 			events: configureEvents},
 
-		// graph
-		c(module.Contract{Verb: "graph.links", Since: 1, Scope: workspace, Audience: agent,
-			Params: []module.Param{workspaceParam, param("path", "string", ""), optional("options", "map", "{kinds} (protocol 14)")},
-			Result: "[{path, raw, anchor, kind, resolved}]", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
-			Doc: "The links the file makes."}),
-		c(module.Contract{Verb: "graph.backlinks", Since: 1, Scope: workspace, Audience: agent,
-			Params: []module.Param{workspaceParam, param("path", "string", ""), optional("options", "map", "{kinds} (protocol 14)")},
-			Result: "[{path, raw, anchor, kind, resolved}]", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
-			Doc: "The files that link to it."}),
-		c(module.Contract{Verb: "graph.neighborhood", Since: 1, Scope: workspace, Audience: agent,
-			Params: []module.Param{workspaceParam, param("path", "string", ""), param("depth", "int", ""), optional("options", "map", "{kinds} (protocol 14)")},
-			Result: "{nodes, edges: [{src, dst, kind}]}", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
-			Doc: "The files within depth links."}),
-		c(module.Contract{Verb: "graph.unresolved", Since: 1, Scope: workspace, Audience: agent,
-			Params: []module.Param{workspaceParam, optional("options", "map", "{kinds} (protocol 14)")},
-			Result: "[{src, raw, reason}]", Errors: []int64{CodeNoSuchWorkspace}, Doc: "Links that name no file."}),
-		c(module.Contract{Verb: "graph.resolve", Since: 18, Scope: workspace, Audience: agent,
-			Params: []module.Param{workspaceParam, param("from", "string", "the file the link is written in"), param("raw", "string", "the link as written")},
-			Result: "{path, reason}", Errors: []int64{CodeNoSuchWorkspace},
-			Doc: "Where one link reaches now, saved or not, as the index resolves links: path \"\" with reason missing or ambiguous, or \"\" when raw is no link the index keeps (a URL, a heading of from)."}),
-
 		// doc
 		c(module.Contract{Verb: "doc.read", Since: 1, Scope: workspace, Audience: agent,
 			Params: []module.Param{workspaceParam, param("path", "string", "")},
