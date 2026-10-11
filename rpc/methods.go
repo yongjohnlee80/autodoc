@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 
 	"github.com/yongjohnlee80/golib/errs"
@@ -25,71 +26,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
-// workspaceMap is a workspace as workspace.list and workspace.add report it.
-func workspaceMap(w *Workspace) map[string]any {
-	state := "ready"
-	if w.Err != nil {
-		state = "error"
-	}
-	tokens := w.SectionTokens
-	if w.SectionSize != nil {
-		tokens = w.SectionSize()
-	}
-	policy := w.EmbeddingPolicy
-	if w.EmbeddingMode != nil {
-		policy = w.EmbeddingMode()
-	}
-	if policy == "" {
-		policy = store.EmbeddingAlways
-	}
-	out := map[string]any{"name": w.Name, "root": w.Root, "state": state,
-		"include": anyList(w.Include), "exclude": anyList(w.Exclude), "section_tokens": int64(tokens), "embedding_policy": policy}
-	if w.Index != nil {
-		if r, err := w.Index.Store().Retrieval(context.Background()); err == nil {
-			out["abstract_chunk"], out["demote_superseded"] = r.AbstractChunk, r.DemoteSuperseded
-		}
-	}
-	if w.FrontmatterSchema != nil {
-		_, st := w.FrontmatterSchema()
-		out["schema"] = schemaMap(st)
-	}
-	var text []string
-	if w.TextExtensions != nil {
-		text = w.TextExtensions()
-	}
-	out["text_extensions"] = anyList(text)
-	var collisions []string
-	if w.TextCollisions != nil {
-		collisions = w.TextCollisions()
-	}
-	out["text_collisions"] = anyList(collisions)
-	out["provider"] = w.Provider.Override
-	if w.Provider.Err != "" {
-		out["provider_error"] = w.Provider.Err
-	}
-	if w.Databases != nil {
-		out["databases"] = databasesMap(w.Databases())
-	}
-	return out
-}
-
-// schemaMap is a workspace's schema status as workspace.list and workspace.set_schema report it.
-func schemaMap(st SchemaStatus) map[string]any {
-	return map[string]any{"path": st.Path, "active": st.Active, "fields": int64(st.Fields), "error": st.Err, "line": int64(st.Line)}
-}
-
 func diagnosticsList(ds []schema.Diagnostic) []any {
 	out := make([]any, len(ds))
 	for i, d := range ds {
 		out[i] = map[string]any{"field": d.Field, "line": int64(d.Line), "rule": d.Rule, "message": d.Message}
-	}
-	return out
-}
-
-func anyList(ss []string) []any {
-	out := make([]any, len(ss))
-	for i, s := range ss {
-		out[i] = s
 	}
 	return out
 }
@@ -211,7 +151,7 @@ func wireErr(err error) error {
 	}
 	var extErr *kind.ErrExtension
 	if errors.As(err, &extErr) {
-		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: extErr.Error()[len("kind: "):]}
+		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: fmt.Sprintf("%q: %s", extErr.Ext, extErr.Why)}
 	}
 	for _, pe := range publicErrs {
 		if errors.Is(err, pe.Err) {
@@ -229,186 +169,9 @@ func (s *Server) register() {
 	s.configureVerbs()
 	s.registerContracts()
 	s.own(s.preferenceVerbs()...)
+	s.own(s.workspaceVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
-	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
-		out := []any{}
-		for _, w := range s.workspaces.List() {
-			out = append(out, workspaceMap(w))
-		}
-		return out, nil
-	}, false))
-	s.handle("workspace.add", s.verb(2, 4, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		var c config.Workspace
-		var err error
-		if c.Name, err = argStr(p, 0, "name"); err != nil {
-			return nil, err
-		}
-		if c.Root, err = argStr(p, 1, "root"); err != nil {
-			return nil, err
-		}
-		if len(p) > 2 && p[2] != nil {
-			if c.Include, err = strList(p[2], "include"); err != nil {
-				return nil, err
-			}
-		}
-		if len(p) > 3 && p[3] != nil {
-			if c.Exclude, err = strList(p[3], "exclude"); err != nil {
-				return nil, err
-			}
-		}
-		w, err := s.workspaces.Add(ctx, c)
-		if err != nil {
-			return nil, err
-		}
-		return workspaceMap(w), nil
-	}, false))
-	s.handle("workspace.rename", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		to, err := argStr(p, 1, "new name")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.workspaces.Rename(ctx, name, to)
-	}, false))
-	s.handle("workspace.set_patterns", s.verb(3, 3, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		include, err := strList(p[1], "include")
-		if err != nil {
-			return nil, err
-		}
-		exclude, err := strList(p[2], "exclude")
-		if err != nil {
-			return nil, err
-		}
-		manager, ok := s.workspaces.(interface {
-			SetPatterns(context.Context, string, []string, []string) error
-		})
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		return nil, manager.SetPatterns(ctx, name, include, exclude)
-	}, false))
-	// workspace.set_provider makes a workspace embed with a stored provider of its own ("" for the
-	// daemon's): set up first, and only that workspace restarts (ADR 0212 §7).
-	s.handle("workspace.set_provider", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		provider, ok := p[1].(string)
-		if !ok {
-			return nil, invalid("provider must be a string (\"\" for the daemon's)")
-		}
-		manager, ok := s.workspaces.(interface {
-			SetProvider(context.Context, string, string) error
-		})
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		return nil, manager.SetProvider(ctx, name, provider)
-	}, false))
-	s.handle("workspace.set_text_extensions", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		exts, err := strList(p[1], "text extensions")
-		if err != nil {
-			return nil, err
-		}
-		manager, ok := s.workspaces.(interface {
-			SetTextExtensions(context.Context, string, []string) ([]string, error)
-		})
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		norm, err := manager.SetTextExtensions(ctx, name, exts)
-		if err != nil {
-			return nil, err
-		}
-		return anyList(norm), nil
-	}, false))
-	s.handle("workspace.set_schema", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		path, ok := p[1].(string)
-		if !ok {
-			return nil, invalid("schema path must be a string (\"\" for none)")
-		}
-		manager, ok := s.workspaces.(interface {
-			SetSchema(context.Context, string, string) (SchemaStatus, error)
-		})
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		st, err := manager.SetSchema(ctx, name, path)
-		if err != nil {
-			return nil, err
-		}
-		return schemaMap(st), nil
-	}, false))
-	s.handle("workspace.section_size", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		tokens, err := argInt(p, 1, "section size")
-		if err != nil {
-			return nil, err
-		}
-		manager, ok := s.workspaces.(interface {
-			SetSectionTokens(context.Context, string, int) error
-		})
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		return nil, manager.SetSectionTokens(ctx, name, int(tokens))
-	}, false))
-	s.handle("workspace.focus", s.verb(1, 1, func(_ context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		focus, ok := s.workspaces.(interface{ Focus(string) error })
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		return nil, focus.Focus(name)
-	}, false))
-	s.handle("workspace.embedding_policy", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		policy, err := argStr(p, 1, "embedding policy")
-		if err != nil {
-			return nil, err
-		}
-		set, ok := s.workspaces.(interface {
-			SetEmbeddingPolicy(context.Context, string, string) error
-		})
-		if !ok {
-			return nil, errs.ErrUnsupported
-		}
-		return nil, set.SetEmbeddingPolicy(ctx, name, policy)
-	}, false))
-	s.handle("workspace.remove", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.workspaces.Remove(ctx, name)
-	}, false))
-
 	s.handle("search.query", s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		q, err := argStr(p, 1, "query")
 		if err != nil {

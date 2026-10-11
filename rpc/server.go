@@ -225,6 +225,7 @@ type Server struct {
 	version     string
 	instance    string
 	storeID     string // the store's identity (store.Identity), "" when not set
+	setters     setters
 	verbs       map[string]verb
 	legacy      map[string]verb // rpc's own contracts, until register gives each its handler
 	moduleErrs  []module.PublicError
@@ -280,7 +281,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	var id [8]byte
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
-		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID,
+		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID, setters: settersOf(workspaces),
 		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {

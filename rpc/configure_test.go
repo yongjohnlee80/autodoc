@@ -15,6 +15,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/edition"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -211,13 +212,16 @@ func TestConfigureVerbs_OverTheWire(t *testing.T) {
 }
 
 // workspace.list reports a workspace's databases as where each connection points.
-func TestDatabasesMap(t *testing.T) {
-	got := databasesMap(Databases{UID: "u1", Destination: "postgres", VectorIndex: "hnsw",
+func TestDatabasesOf(t *testing.T) {
+	got, err := module.Wire(databasesOf(Databases{UID: "u1", Destination: "postgres", VectorIndex: "hnsw",
 		ViewArgs: map[string]any{"a": "b"},
 		Connections: []store.ConnectionSummary{
 			{Role: store.RoleSource, Engine: "postgres", Host: "src:5432", Database: "labels", User: "ro", HasPassword: true},
 			{Role: store.RoleDestination, Engine: "postgres", Host: "db", Database: "rag", Schema: "autodoc"},
-		}})
+		}}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	want := map[string]any{"uid": "u1", "destination": "postgres", "vector_index": "hnsw", "view_args": map[string]any{"a": "b"},
 		"source":                 map[string]any{"engine": "postgres", "host": "src:5432", "database": "labels", "user": "ro", "schema": "", "has_password": true},
 		"destination_connection": map[string]any{"engine": "postgres", "host": "db", "database": "rag", "user": "", "schema": "autodoc", "has_password": false},

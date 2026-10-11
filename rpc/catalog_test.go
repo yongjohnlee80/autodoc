@@ -215,7 +215,7 @@ func TestCatalogMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"Verbs at protocol 20; the daemon serves sessions from protocol 12.",
 		"\n### `graph`\n\n| verb | params | result | since | audience |\n",
-		"| `workspace.rename` | `name` string, `new name` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
+		"| `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
 		"| `file.locate` | `path` string (absolute and clean) |",
 		"| agent; unix socket only |",
 		"`workspace.renamed \\| workspace.patterns",

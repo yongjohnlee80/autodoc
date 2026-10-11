@@ -19,6 +19,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -102,6 +103,17 @@ func wireDump(v any, volatile map[string]bool) string {
 	}
 	dump(v)
 	return b.String()
+}
+
+// asWire is v as the encoder receives it, a map.
+func asWire(t *testing.T, v any) map[string]any {
+	t.Helper()
+	w, err := module.Wire(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := w.(map[string]any)
+	return m
 }
 
 // volatile are the keys whose values differ from run to run.

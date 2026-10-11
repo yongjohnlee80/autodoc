@@ -1262,11 +1262,11 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         },
         {
-          "name": "embedding policy",
+          "name": "policy",
           "type": "string",
           "doc": "always, when opened or never"
         }
@@ -1277,8 +1277,8 @@
       ],
       "event": {
         "kind": "workspace.embedding_policy",
-        "workspace": "workspace name",
-        "detail": "embedding policy"
+        "workspace": "workspace",
+        "detail": "policy"
       }
     },
     {
@@ -1288,7 +1288,7 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         }
       ],
@@ -1339,7 +1339,7 @@
           "type": "string"
         },
         {
-          "name": "new name",
+          "name": "to",
           "type": "string"
         }
       ],
@@ -1351,7 +1351,7 @@
       "event": {
         "kind": "workspace.renamed",
         "workspace": "name",
-        "detail": "new name"
+        "detail": "to"
       }
     },
     {
@@ -1361,13 +1361,13 @@
       "audience": "user",
       "params": [
         {
-          "name": "name",
+          "name": "workspace",
           "type": "string"
         },
         {
-          "name": "section size",
+          "name": "tokens",
           "type": "int",
-          "doc": "tokens; 0 for the default"
+          "doc": "0 for the default"
         }
       ],
       "errors": [
@@ -1376,7 +1376,7 @@
       ],
       "event": {
         "kind": "workspace.section_size",
-        "workspace": "name"
+        "workspace": "workspace"
       }
     },
     {
@@ -1386,7 +1386,7 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         },
         {
@@ -1406,7 +1406,7 @@
       ],
       "event": {
         "kind": "workspace.patterns",
-        "workspace": "workspace name"
+        "workspace": "workspace"
       },
       "doc": "Replaces the workspace's validated globs and reconciles it."
     },
@@ -1417,7 +1417,7 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         },
         {
@@ -1434,7 +1434,7 @@
       ],
       "event": {
         "kind": "workspace.provider",
-        "workspace": "workspace name",
+        "workspace": "workspace",
         "detail": "provider"
       },
       "doc": "Gives the workspace a stored embedding provider of its own; it is set up first, and only that workspace re-embeds."
@@ -1446,11 +1446,11 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         },
         {
-          "name": "schema path",
+          "name": "path",
           "type": "string",
           "doc": "under the root, or absolute; \"\" for none"
         }
@@ -1462,7 +1462,7 @@
       ],
       "event": {
         "kind": "workspace.schema",
-        "workspace": "workspace name"
+        "workspace": "workspace"
       },
       "doc": "Names the workspace's frontmatter schema file; answers its status."
     },
@@ -1473,11 +1473,11 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         },
         {
-          "name": "text extensions",
+          "name": "extensions",
           "type": "[]string",
           "doc": "\".log\", …"
         }
@@ -1489,7 +1489,7 @@
       ],
       "event": {
         "kind": "workspace.text_extensions",
-        "workspace": "workspace name"
+        "workspace": "workspace"
       },
       "doc": "Declares the workspace's own plain-text extensions; answers them normalized. One the build reads with a registered chunker is refused."
     }

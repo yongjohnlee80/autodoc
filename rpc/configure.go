@@ -171,26 +171,6 @@ func connectionSpecOf(key string, v any) (*store.ConnectionSpec, error) {
 	return &spec, nil
 }
 
-// databasesMap is a workspace's database settings as workspace.list reports them: each
-// connection by role, as where it points, never its DSN.
-func databasesMap(d Databases) map[string]any {
-	out := map[string]any{"uid": d.UID, "destination": d.Destination, "vector_index": d.VectorIndex}
-	args := map[string]any{}
-	for k, v := range d.ViewArgs {
-		args[k] = v
-	}
-	out["view_args"] = args
-	for _, c := range d.Connections {
-		key := c.Role
-		if key == store.RoleDestination {
-			key = "destination_connection"
-		}
-		out[key] = map[string]any{"engine": c.Engine, "host": c.Host, "database": c.Database, "user": c.User,
-			"schema": c.Schema, "has_password": c.HasPassword}
-	}
-	return out
-}
-
 // configureEvents are the events a workspace.configure that succeeded logs: one for each thing it
 // changed, of the kind that thing's own verb logs, so a client following the log does what it does
 // for that verb. A rename comes first, with the new name; what follows is about the workspace under
