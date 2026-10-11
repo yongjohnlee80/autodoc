@@ -356,10 +356,28 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 	return out, nil
 }
 
+// ClaimOpts is what the cutover's claim may do besides claiming. The zero value does nothing more.
+type ClaimOpts struct {
+	// LegacyWorkspace is the directory auto-core's $WORKSPACE meant when it wrote the store's refs:
+	// Neovim's project root, not the store's workspace. The claim rewrites each adr and review ref
+	// $WORKSPACE/<rest> that resolves under it and not under the store's own $WORKSPACE.
+	LegacyWorkspace string `json:"legacy_workspace,omitempty"`
+}
+
 // Claim lets the daemon write an At's store: the cutover. The claim is the daemon's record, by the
 // store's id, so it holds before the store's directory exists; the .autodoc-owner marker is
-// written whenever the directory exists, here or by Scaffold.
-func (m *Manager) Claim(ctx context.Context, at At) error {
+// written whenever the directory exists, here or by Scaffold. With a LegacyWorkspace, the claim
+// then rewrites the store's legacy $WORKSPACE refs once (cutover), archives included.
+func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
+	var o ClaimOpts
+	for _, x := range opts {
+		if x.LegacyWorkspace != "" {
+			o = x
+		}
+	}
+	if o.LegacyWorkspace != "" && (!path.IsAbs(o.LegacyWorkspace) || path.Clean(o.LegacyWorkspace) != o.LegacyWorkspace) {
+		return fmt.Errorf("%w: legacy_workspace %q is not a clean absolute path", ErrInvalid, o.LegacyWorkspace)
+	}
 	w, err := m.resolve(ctx, at)
 	if err != nil {
 		return err
@@ -381,7 +399,16 @@ func (m *Manager) Claim(ctx context.Context, at At) error {
 	if st, err := m.open(ctx, w); err == nil {
 		st.mu.Lock()
 		defer st.mu.Unlock()
-		return st.mark(ctx, m.now())
+		if err := st.mark(ctx, m.now()); err != nil {
+			return err
+		}
+		if o.LegacyWorkspace == "" {
+			return nil
+		}
+		if err := m.ready(ctx, st); err != nil {
+			return err
+		}
+		return m.cutover(ctx, st, w, o.LegacyWorkspace)
 	}
 	return nil // no directory yet: Scaffold writes the marker
 }

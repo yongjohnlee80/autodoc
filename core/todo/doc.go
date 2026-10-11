@@ -16,7 +16,9 @@
 // first file step, committed after its last, settled by recovery after a crash, so a change row
 // exists if and only if its file change happened. The default listing reads the active buckets
 // only, through a cache keyed by each file's vfs version; archives are read on request, a month at
-// a time, and never cached or rewritten by refresh.
+// a time, and never cached or rewritten by refresh, so an archived task's errors[] reflect the time
+// it was archived. The one pass that may rewrite archives is the cutover's, which a claim asks for
+// with ClaimOpts.
 //
 // A Manager is safe for concurrent use. One mutex per store serializes everything done to that
 // store, so a move and every multi-file change is atomic to the daemon's other clients; stores do

@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,9 @@ import (
 
 // TestReadingACopyNeverWrites is opt-in, with TestParityWithAStoreCopy: AUTODOC_TODO_PARITY_DIR
 // is a COPY of a real <root>/.todo-list, its root a copy of the workspace. Listing it, its archive
-// months and every task leaves every file's bytes and mtime as they were. Then it is claimed and
+// months and every task leaves every file's bytes and mtime as they were. With
+// AUTODOC_TODO_PARITY_LEGACY_WORKSPACE it is claimed with that legacy $WORKSPACE, twice: the counts
+// are what the cutover rewrites, and the second claim rewrites nothing. Then it is claimed and
 // refreshed twice: the first refresh's summary is what the daemon would change on its first run,
 // and the second changes nothing.
 func TestReadingACopyNeverWrites(t *testing.T) {
@@ -22,7 +25,8 @@ func TestReadingACopyNeverWrites(t *testing.T) {
 		t.Skip("AUTODOC_TODO_PARITY_DIR is not set to a copy of a .todo-list")
 	}
 	home, _ := os.UserHomeDir()
-	m := todo.New(todotest.Roots{"copy": filepath.Dir(dir)}, localDisk{}, todotest.NewJournal(), todo.WithHome(home), todo.WithEnv(os.Getenv))
+	j := todotest.NewJournal()
+	m := todo.New(todotest.Roots{"copy": filepath.Dir(dir)}, localDisk{}, j, todo.WithHome(home), todo.WithEnv(os.Getenv))
 	at := todo.At{Workspace: "copy"}
 	before := snapshotDir(t, dir)
 	l, err := m.List(ctx, at, todo.ListOpts{})
@@ -57,6 +61,9 @@ func TestReadingACopyNeverWrites(t *testing.T) {
 	}
 	if after := snapshotDir(t, dir); !sameDir(t, before, after) {
 		t.Fatal("reading the copy changed it")
+	}
+	if legacy := os.Getenv("AUTODOC_TODO_PARITY_LEGACY_WORKSPACE"); legacy != "" {
+		cutover(t, m, j, at, dir, legacy)
 	}
 	if os.Getenv("AUTODOC_TODO_PARITY_REFRESH") == "" {
 		return
@@ -107,4 +114,36 @@ func sameDir(t *testing.T, a, b map[string]fileState) bool {
 		}
 	}
 	return same
+}
+
+// cutover claims the copy with a legacy $WORKSPACE and reports what it rewrote, active and archived;
+// a second claim must rewrite nothing.
+func cutover(t *testing.T, m *todo.Manager, j *todotest.Journal, at todo.At, dir, legacy string) {
+	r, err := m.Resolve(ctx, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Claim(ctx, at, todo.ClaimOpts{LegacyWorkspace: legacy}); err != nil {
+		t.Fatal(err)
+	}
+	active, archived := 0, 0
+	for _, c := range j.Rows(r.StoreID) {
+		if c.Reason != "cutover: $WORKSPACE was "+legacy {
+			continue
+		}
+		if strings.HasPrefix(c.ToPath, "archived/") {
+			archived++
+		} else {
+			active++
+		}
+		t.Logf("CUTOVER %s %v", c.ToPath, c.Fields)
+	}
+	t.Logf("cutover rewrote %d tasks: %d active, %d archived", active+archived, active, archived)
+	rows, settled := len(j.Rows(r.StoreID)), snapshotDir(t, dir)
+	if err := m.Claim(ctx, at, todo.ClaimOpts{LegacyWorkspace: legacy}); err != nil {
+		t.Fatal(err)
+	}
+	if len(j.Rows(r.StoreID)) != rows || !sameDir(t, settled, snapshotDir(t, dir)) {
+		t.Error("a second cutover changed the copy")
+	}
 }

@@ -137,7 +137,31 @@ func (m *Manager) ready(ctx context.Context, st *store) error {
 		}
 	}
 	st.recovered = true
-	return nil
+	return m.baseline(ctx, st)
+}
+
+// baseline takes the first sight of a store's active buckets as its snapshot, logging no change,
+// before anything the daemon writes there: otherwise the files beside its first write would be
+// logged as added by hand. The caller holds st.mu.
+func (m *Manager) baseline(ctx context.Context, st *store) error {
+	rows, err := m.j.Snapshot(ctx, st.id)
+	if err != nil || len(rows) > 0 {
+		return err
+	}
+	if head, err := m.j.Head(ctx, st.id); err != nil || head > 0 {
+		return err
+	}
+	files, err := m.scanActive(ctx, st)
+	if err != nil {
+		return err
+	}
+	var base []SnapshotRow
+	for _, f := range files {
+		if f.bad == "" {
+			base = append(base, rowOf(f.task))
+		}
+	}
+	return m.j.Baseline(ctx, st.id, base)
 }
 
 // mark writes the owner marker when it is missing. The caller holds st.mu.

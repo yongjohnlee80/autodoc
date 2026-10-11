@@ -47,13 +47,23 @@ the timestamp shape, a file-safe id).
 | any status to any status; the same is a no-op | `Status` |
 | `completed` stamps `completed_at`; `archived` stamps `archived_at`, keeping `completed_at` only from `completed`; others clear both | `Status`, refresh |
 | completed for more than 28 days (calendar days) becomes archived, into `archived/YYYY/MM` of `archived_at` | `Refresh` |
-| assigning an open task moves it to in-progress (D1) | `Assign` |
+| assigning an open task moves it to in-progress (D1); creating one with an assignee is an assignment too, logged as an `assign` | `Assign`, `Add` |
 | `errors[]` for refs that do not resolve or exist and unknown `blocked` ids, `detected` kept | `Refresh` |
 | relative refs are the KB's (D2); absolute refs written as `$KB_ROOT`, `$WORKSPACE`, a user var or `$HOME`, longest prefix | `Add`, `Update`, `Refresh` |
 | ids `<date>-<slug>`; a caller's id is file-safe | `Add` |
 | managed fields, status and assignee refused by `Update` | `Update` |
 
-`Refresh` reads the active buckets only: archives are never rewritten by it.
+`Refresh` reads the active buckets only: archives are never rewritten by it, so an archived
+task's `errors[]` reflect the time it was archived.
+
+## Cutover
+
+`Claim(ctx, at, ClaimOpts{LegacyWorkspace: dir})` claims the store and then, once, rewrites the
+refs auto-core wrote against its own `$WORKSPACE` (Neovim's project root, `dir`): each `adr` or
+`review` ref `$WORKSPACE/<rest>` that the store's `$WORKSPACE` lacks and `dir` holds becomes that
+path, symbolized again (`$HOME/…` for a root under home). A ref that resolves nowhere stays. Each
+task is one journaled `refresh` change with the reason `cutover: $WORKSPACE was <dir>`. This pass
+reads archives too, because a claim asks for it explicitly; a second one rewrites nothing.
 
 ## Change log
 

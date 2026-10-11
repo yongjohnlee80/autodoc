@@ -78,6 +78,12 @@ func recoveryCases() []recoveryCase {
 			},
 			before: func(e *env) bool { return !e.exists(open("2026-10-11-new-one")) },
 			after:  func(e *env) bool { return e.exists(open("2026-10-11-new-one")) }},
+		{name: "create by assign", kind: todo.KindAssign,
+			setup: func(e *env) func() error {
+				return func() error { _, err := e.m.Add(ctx, kb, todo.Spec{Title: "theirs", Assignee: "agent:x"}); return err }
+			},
+			before: func(e *env) bool { return !e.exists(kbStore + "/in-progress/2026-10-11-theirs.md") },
+			after:  func(e *env) bool { return e.exists(kbStore + "/in-progress/2026-10-11-theirs.md") }},
 		{name: "in-place", kind: todo.KindUpdate,
 			setup: func(e *env) func() error {
 				seed(e, todo.Spec{Title: "t", ID: "t"})

@@ -172,7 +172,8 @@ func render(t Task) (Task, []byte, error) {
 	return back, content, nil
 }
 
-// Add creates a task in an At's store.
+// Add creates a task in an At's store. Creating with an assignee is an assignment: an open task
+// starts in-progress (D1), and its change is an assign, delivered as todos.assign's is.
 func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
 	w, st, err := m.writing(ctx, at)
 	if err != nil {
@@ -192,6 +193,9 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
 	status := spec.Status
 	if status == "" {
 		status = "open"
+	}
+	if spec.Assignee != "" && status == "open" {
+		status = "in-progress" // creating with an assignee is an assignment (D1)
 	}
 	if !validStatus(status) {
 		return Task{}, fmt.Errorf("%w: status %q", ErrInvalid, status)
@@ -222,7 +226,11 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
 	if err != nil {
 		return Task{}, err
 	}
-	return m.create(ctx, st, Change{ID: id, Kind: KindAdd, To: status}, back, content)
+	c := Change{ID: id, Kind: KindAdd, To: status}
+	if spec.Assignee != "" {
+		c = Change{ID: id, Kind: KindAssign, To: spec.Assignee} // delivered like todos.assign
+	}
+	return m.create(ctx, st, c, back, content)
 }
 
 // Patch changes hand-editable fields by name: title, description, priority, due, tags, adr,
