@@ -29,7 +29,7 @@ const kbStore = "/kb/.todo-list"
 type env struct {
 	t      *testing.T
 	disk   *todotest.Disk
-	j      *todotest.Journal
+	j      *todotest.Faulty
 	roots  todotest.Roots
 	mu     sync.Mutex
 	now    time.Time
@@ -39,7 +39,7 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	e := &env{t: t, disk: todotest.NewDisk(), j: todotest.NewJournal(), roots: todotest.Roots{"kb": "/kb"},
+	e := &env{t: t, disk: todotest.NewDisk(), j: todotest.NewFaulty(newJournal(t)), roots: todotest.Roots{"kb": "/kb"},
 		now: time.Date(2026, 10, 11, 10, 0, 0, 0, time.FixedZone("PDT", -7*3600))}
 	e.disk.WriteFile("/kb/AGENTS.md", []byte("# kb\n"))
 	e.disk.MkdirAll("/home/u")
