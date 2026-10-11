@@ -36,12 +36,34 @@
 // A type may narrow a common field (a smaller enum, required, its own default) but never change
 // its type, and one name has one type across the file. A document whose type the schema does not
 // name is checked against common alone, with a diagnostic.
+//
+// Either version may also say who writes a field, in what order a writer emits the fields, and
+// declare a list whose items are mappings:
+//
+//	version: 1
+//	strict: true
+//	order: [id, status, errors]  # optional: the order a writer emits fields in; each is declared
+//	frontmatter:
+//	  id:     {type: string, required: true, managed: true}  # only the file's owner writes it
+//	  status: {type: string, enum: [open, done], required: true}
+//	  errors:
+//	    type: list
+//	    item_type: map           # each item is a mapping of the fields below
+//	    fields:
+//	      code:    {type: string, enum: [not-found], required: true}
+//	      message: {type: string, required: true}
+//
+// managed is information for a writer (Field.Managed); validation does not change with it. Order
+// is Schema.Order. A map item is checked as a document's frontmatter is: its fields' types, enums
+// and required, and under strict its unknown keys. An item's fields are scalars or lists of
+// scalars: a map item holds no further map items, and its fields have no defaults.
 package schema
 
 import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -74,6 +96,7 @@ const (
 	Boolean Type = "boolean"
 	Date    Type = "date"
 	List    Type = "list"
+	Map     Type = "map" // a list's item_type only: each item is a mapping of declared fields
 )
 
 func (t Type) scalar() bool {
@@ -92,6 +115,8 @@ type Field struct {
 	Required bool
 	Enum     []string // facet values; empty: any value of the type
 	Default  []string // facet values a missing field answers with; nil when none
+	Managed  bool     // only the file's owner writes it: a writer refuses a client's change to it
+	Items    []Field  // ItemType Map: the fields of each item, in the schema's order
 	Line     int      // where the schema declares it
 }
 
@@ -104,6 +129,7 @@ type Schema struct {
 	// query filters by; a document is checked against its own type's fields.
 	Fields []Field
 	byName map[string]int
+	order  []string // the order a writer emits fields in; nil when the schema gives none
 	// Discriminator is the common field whose value picks a document's type; "" in version 1
 	Discriminator string
 	common        fieldSet            // version 1: every field
@@ -146,6 +172,15 @@ func (s *Schema) Field(name string) (Field, bool) {
 		return Field{}, false
 	}
 	return s.Fields[i], true
+}
+
+// Order is the order a writer emits the fields in, as the schema's order list gives it; nil when the
+// schema gives none. Every name in it is declared.
+func (s *Schema) Order() []string {
+	if s == nil || s.order == nil {
+		return nil
+	}
+	return append([]string(nil), s.order...)
 }
 
 // Error is a schema file that is not a valid schema: the line it is on (1-based; 0 when it is not
@@ -205,7 +240,7 @@ func (p parser) schema(root *pyaml.Node) (*Schema, error) {
 		return p.schemaV2(root)
 	}
 	s := &Schema{Version: 1, byName: map[string]int{}}
-	var version, fields *pyaml.Node
+	var version, fields, order *pyaml.Node
 	for _, pr := range root.Pairs {
 		key, err := p.key(pr.Key)
 		if err != nil {
@@ -222,8 +257,10 @@ func (p parser) schema(root *pyaml.Node) (*Schema, error) {
 			s.Strict = b
 		case "frontmatter":
 			fields = pr.Value
+		case "order":
+			order = pr.Value
 		default:
-			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict and frontmatter)", key)
+			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, order and frontmatter)", key)
 		}
 	}
 	if version == nil {
@@ -241,7 +278,37 @@ func (p parser) schema(root *pyaml.Node) (*Schema, error) {
 		return nil, err
 	}
 	s.Fields, s.byName, s.common = set.fields, set.byName, set
+	if s.order, err = p.order(order, s); err != nil {
+		return nil, err
+	}
 	return s, nil
+}
+
+// order reads the order list: field names the schema declares, each once. A nil node is no order.
+func (p parser) order(n *pyaml.Node, s *Schema) ([]string, error) {
+	if n == nil {
+		return nil, nil
+	}
+	if n.Kind != pyaml.KindSequence {
+		return nil, p.fail(n, "order must be a list of field names")
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, it := range n.Items {
+		name, ok := p.value(it).(string)
+		if !ok {
+			return nil, p.fail(it, "order: a field name must be a string")
+		}
+		if !s.Declared(name) {
+			return nil, p.fail(it, "order: %q is not a declared field", name)
+		}
+		if seen[name] {
+			return nil, p.fail(it, "order: %q is named twice", name)
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out, nil
 }
 
 // version is the schema's version as written, or 0 when it does not write one as an integer; the
@@ -259,7 +326,7 @@ func (p parser) version(root *pyaml.Node) int64 {
 // schemaV2 reads a version 2 schema: common, and each type's fields merged over it.
 func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 	s := &Schema{Version: 2, byName: map[string]int{}}
-	var disc, common, types *pyaml.Node
+	var disc, common, types, order *pyaml.Node
 	for _, pr := range root.Pairs {
 		key, err := p.key(pr.Key)
 		if err != nil {
@@ -279,10 +346,12 @@ func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 			common = pr.Value
 		case "types":
 			types = pr.Value
+		case "order":
+			order = pr.Value
 		case "frontmatter":
 			return nil, p.fail(pr.Key, "a version 2 schema declares its fields under common and types, not frontmatter")
 		default:
-			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, discriminator, common and types)", key)
+			return nil, p.fail(pr.Key, "unknown key %q (the keys are version, strict, discriminator, common, types and order)", key)
 		}
 	}
 	if common == nil {
@@ -314,30 +383,41 @@ func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 		s.Fields = append(s.Fields, f)
 	}
 	s.types = map[string]fieldSet{}
-	if p.value(types) == nil {
-		return s, nil // no types, or "types:" with nothing under it: every document is common's
+	if p.value(types) != nil {
+		if err := p.typesV2(s, types, df, set, &declared); err != nil {
+			return nil, err
+		}
 	}
+	if s.order, err = p.order(order, s); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// typesV2 reads a version 2 schema's types, each merged over common (set).
+func (p parser) typesV2(s *Schema, types *pyaml.Node, df Field, set fieldSet, declared *int) error {
+	name := s.Discriminator
 	if types.Kind != pyaml.KindMapping {
-		return nil, p.fail(types, "types must be a mapping of %s values to their fields", name)
+		return p.fail(types, "types must be a mapping of %s values to their fields", name)
 	}
 	for _, pr := range types.Pairs {
 		typ, err := p.key(pr.Key)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if strings.TrimSpace(typ) == "" {
-			return nil, p.fail(pr.Key, "a type needs a name")
+			return p.fail(pr.Key, "a type needs a name")
 		}
 		if _, dup := s.types[typ]; dup {
-			return nil, p.fail(pr.Key, "type %q is declared twice", typ)
+			return p.fail(pr.Key, "type %q is declared twice", typ)
 		}
 		if outsideEnum(df, []string{typ}) != "" {
-			return nil, p.fail(pr.Key, "type %q is not one of %s's enum, so no document can have it", typ, name)
+			return p.fail(pr.Key, "type %q is not one of %s's enum, so no document can have it", typ, name)
 		}
 		where := "types." + typ
-		own, optional, err := p.fields(pr.Value, where, &declared)
+		own, optional, err := p.fields(pr.Value, where, declared)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		for _, f := range own.fields {
 			u, ok := s.Field(f.Name)
@@ -346,18 +426,18 @@ func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 				s.Fields = append(s.Fields, f)
 				continue
 			}
-			if u.Type != f.Type || u.ItemType != f.ItemType {
-				return nil, &Error{Line: f.Line, Msg: fmt.Sprintf("field %q: %s declares it %s, but line %d declares it %s (a field has one type in every document type)",
+			if u.Type != f.Type || u.ItemType != f.ItemType || !sameItems(u.Items, f.Items) {
+				return &Error{Line: f.Line, Msg: fmt.Sprintf("field %q: %s declares it %s, but line %d declares it %s (a field has one type in every document type)",
 					f.Name, where, f.kind(), u.Line, u.kind())}
 			}
 		}
 		merged, err := merge(set, own, optional, where)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		s.types[typ] = merged
 	}
-	return s, nil
+	return nil
 }
 
 // merge is common with a type's own fields over it. A type narrows a common field and never widens
@@ -386,6 +466,7 @@ func merge(common, own fieldSet, optional map[string]bool, where string) (fieldS
 			return m, &Error{Line: o.Line, Msg: fmt.Sprintf("field %q: %s cannot make a field common requires optional", c.Name, where)}
 		}
 		f.Required = c.Required || o.Required
+		f.Managed = c.Managed || o.Managed
 		if o.Default != nil {
 			if f.Required {
 				return m, &Error{Line: o.Line, Msg: fmt.Sprintf("field %q: a required field has no default (it must be written)", c.Name)}
@@ -434,7 +515,7 @@ func (p parser) fields(n *pyaml.Node, where string, declared *int) (fieldSet, ma
 		if _, dup := set.byName[name]; dup {
 			return set, nil, p.fail(pr.Key, "field %q is declared twice", name)
 		}
-		f, wroteRequired, err := p.field(name, pr.Key, pr.Value)
+		f, wroteRequired, err := p.field(name, pr.Key, pr.Value, declared)
 		if err != nil {
 			return set, nil, err
 		}
@@ -446,13 +527,14 @@ func (p parser) fields(n *pyaml.Node, where string, declared *int) (fieldSet, ma
 	return set, optional, nil
 }
 
-// field reads one declaration, and whether it writes required at all.
-func (p parser) field(name string, at, decl *pyaml.Node) (Field, bool, error) {
+// field reads one declaration, and whether it writes required at all. declared counts a map item's
+// fields too.
+func (p parser) field(name string, at, decl *pyaml.Node, declared *int) (Field, bool, error) {
 	f, wroteRequired := Field{Name: name, Line: p.line(at), ItemType: String}, false
 	if decl.Kind != pyaml.KindMapping {
 		return f, false, p.fail(decl, "field %q: the declaration must be a mapping with a type", name)
 	}
-	var enum, def *pyaml.Node
+	var enum, def, items *pyaml.Node
 	for _, pr := range decl.Pairs {
 		key, err := p.key(pr.Key)
 		if err != nil {
@@ -462,7 +544,7 @@ func (p parser) field(name string, at, decl *pyaml.Node) (Field, bool, error) {
 		case "type", "item_type":
 			s, ok := p.value(pr.Value).(string)
 			t := Type(s)
-			if !ok || (!t.scalar() && t != List) || (key == "item_type" && t == List) {
+			if !ok || (key == "type" && !t.scalar() && t != List) || (key == "item_type" && !t.scalar() && t != Map) {
 				return f, false, p.fail(pr.Value, "field %q: %s must be one of %s", name, key, typeNames(key == "type"))
 			}
 			if key == "type" {
@@ -480,12 +562,26 @@ func (p parser) field(name string, at, decl *pyaml.Node) (Field, bool, error) {
 			enum = pr.Value
 		case "default":
 			def = pr.Value
+		case "managed":
+			b, err := p.boolean(pr.Value, "field "+strconv.Quote(name)+": managed")
+			if err != nil {
+				return f, false, err
+			}
+			f.Managed = b
+		case "fields":
+			items = pr.Value
 		default:
-			return f, false, p.fail(pr.Key, "field %q: unknown key %q (the keys are type, item_type, required, enum and default)", name, key)
+			return f, false, p.fail(pr.Key, "field %q: unknown key %q (the keys are type, item_type, required, enum, default, managed and fields)", name, key)
 		}
 	}
 	if f.Type == "" {
 		return f, false, p.fail(decl, "field %q needs a type", name)
+	}
+	if f.Type == List && f.ItemType == Map {
+		return p.mapItems(f, wroteRequired, decl, enum, def, items, declared)
+	}
+	if items != nil {
+		return f, false, p.fail(items, "field %q: fields declares a map item's fields, for type: list with item_type: map", name)
 	}
 	itemType := f.Type
 	if f.Type == List {
@@ -531,6 +627,53 @@ func (p parser) field(name string, at, decl *pyaml.Node) (Field, bool, error) {
 	return f, wroteRequired, nil
 }
 
+// mapItems finishes a list of map items: its items' fields, each a scalar or a list of scalars with
+// no default. The list itself has no enum and no default.
+func (p parser) mapItems(f Field, wroteRequired bool, decl, enum, def, items *pyaml.Node, declared *int) (Field, bool, error) {
+	switch {
+	case enum != nil:
+		return f, false, p.fail(enum, "field %q: a list of map items has no enum (its items' fields may)", f.Name)
+	case def != nil:
+		return f, false, p.fail(def, "field %q: a list of map items has no default", f.Name)
+	case items == nil:
+		return f, false, p.fail(decl, "field %q: item_type: map needs fields, the mapping of an item's fields", f.Name)
+	}
+	where := "field " + strconv.Quote(f.Name) + ": fields"
+	set, _, err := p.fields(items, where, declared)
+	if err != nil {
+		return f, false, err
+	}
+	if len(set.fields) == 0 {
+		return f, false, p.fail(items, "%s declares no fields", where)
+	}
+	for _, it := range set.fields {
+		if it.ItemType == Map {
+			return f, false, &Error{Line: it.Line, Msg: fmt.Sprintf("field %q: item field %q: a map item holds no further map items", f.Name, it.Name)}
+		}
+		if it.Default != nil {
+			return f, false, &Error{Line: it.Line, Msg: fmt.Sprintf("field %q: item field %q: an item's field has no default", f.Name, it.Name)}
+		}
+	}
+	f.Items = set.fields
+	return f, wroteRequired, nil
+}
+
+// sameItems reports two map items' declarations equal, so a version 2 type cannot redeclare a list
+// of map items differently.
+func sameItems(a, b []Field) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		x, y := a[i], b[i]
+		if x.Name != y.Name || x.Type != y.Type || x.ItemType != y.ItemType || x.Required != y.Required ||
+			x.Managed != y.Managed || !slices.Equal(x.Enum, y.Enum) {
+			return false
+		}
+	}
+	return true
+}
+
 // kind is the field's type as a schema error names it: "string", or "list of integer".
 func (f Field) kind() string {
 	if f.Type == List {
@@ -543,7 +686,7 @@ func typeNames(withList bool) string {
 	if withList {
 		return "string, integer, number, boolean, date or list"
 	}
-	return "string, integer, number, boolean or date"
+	return "string, integer, number, boolean, date or map"
 }
 
 func (p parser) key(n *pyaml.Node) (string, error) {
@@ -728,6 +871,8 @@ func article(t Type) string {
 		return "a date (YYYY-MM-DD)"
 	case List:
 		return "a list"
+	case Map:
+		return "a mapping"
 	}
 	return "a " + string(t)
 }

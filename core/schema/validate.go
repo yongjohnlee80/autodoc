@@ -123,6 +123,10 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 				continue // "field:" with no value is a missing field: required, or its default
 			}
 			written[name] = true
+			if f.ItemType == Map {
+				r.Diagnostics = append(r.Diagnostics, s.items(f, pr.Value, tags, lineOf)...)
+				continue
+			}
 			vals, why := typed(f, v)
 			if why != "" {
 				r.Diagnostics = append(r.Diagnostics, Diagnostic{Field: name, Line: lineOf(pr.Value), Rule: RuleType,
@@ -159,6 +163,73 @@ func (s *Schema) Validate(fm []byte, present bool) Result {
 		}
 	}
 	return r
+}
+
+// items checks a list of map items: each item a mapping, its fields typed, within their enums,
+// the required ones written, and under a strict schema no key its declaration does not name. A map
+// item gives no facets.
+func (s *Schema) items(f Field, n *pyaml.Node, tags yaml.Tags, lineOf func(*pyaml.Node) int) []Diagnostic {
+	var out []Diagnostic
+	diag := func(at *pyaml.Node, rule, format string, args ...any) {
+		out = append(out, Diagnostic{Field: f.Name, Line: lineOf(at), Rule: rule, Message: fmt.Sprintf(format, args...)})
+	}
+	n = target(n)
+	if n.Kind != pyaml.KindSequence {
+		diag(n, RuleType, "%s is %s, not a list of mappings", f.Name, kindOf(nodeValue(n, tags)))
+		return out
+	}
+	for i, it := range n.Items {
+		it = target(it)
+		if it.Kind != pyaml.KindMapping {
+			diag(it, RuleType, "%s item %d is %s, not a mapping", f.Name, i+1, kindOf(nodeValue(it, tags)))
+			continue
+		}
+		written := map[string]bool{}
+		for _, pr := range it.Pairs {
+			key, ok := nodeValue(pr.Key, tags).(string)
+			var decl Field
+			found := false
+			for _, d := range f.Items {
+				if ok && d.Name == key {
+					decl, found = d, true
+					break
+				}
+			}
+			if !found {
+				if s.Strict {
+					diag(pr.Key, RuleUnknown, "%s item %d: %s is not a field of its items", f.Name, i+1, strconv.Quote(key))
+				}
+				continue
+			}
+			v := nodeValue(pr.Value, tags)
+			if v == nil {
+				continue
+			}
+			written[key] = true
+			vals, why := typed(decl, v)
+			if why != "" {
+				diag(pr.Value, RuleType, "%s item %d: %s %s", f.Name, i+1, key, why)
+				continue
+			}
+			if bad := outsideEnum(decl, vals); bad != "" {
+				diag(pr.Value, RuleEnum, "%s item %d: %s: %s is not one of %v", f.Name, i+1, key, strconv.Quote(bad), decl.Enum)
+			}
+		}
+		for _, d := range f.Items {
+			if d.Required && !written[d.Name] {
+				diag(it, RuleRequired, "%s item %d: %s is required", f.Name, i+1, d.Name)
+			}
+		}
+	}
+	return out
+}
+
+// target is the node an alias stands for, or n itself.
+func target(n *pyaml.Node) *pyaml.Node {
+	for n != nil && n.Kind == pyaml.KindAlias && n.Target != nil {
+		n = n.Target
+	}
+	return n
 }
 
 // fieldsFor is the fields a document is checked against: a version 1 schema's, or a version 2
