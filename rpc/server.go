@@ -332,6 +332,9 @@ func (s *Server) add(v verb) {
 // carried by module.Wire once they are logged.
 func (s *Server) chain(v verb) golibrpc.Handler {
 	h := v.h
+	if v.Verb == "sys.hello" {
+		h = helloAnswered(h)
+	}
 	if mv := v.module(); mv.Logs() {
 		h = s.logged(mv, h)
 	}
@@ -371,12 +374,19 @@ func (s *Server) Addr() string { return s.rpc.Addr() }
 // Instance is this process's instance id, as sys.hello answers it.
 func (s *Server) Instance() string { return s.instance }
 
-// gate admits only sys.hello until a compatible hello was said, and nothing after a mismatch.
+// gate admits only sys.hello until a compatible hello was said, and nothing after a mismatch. A
+// request behind a hello still being answered waits for it (hello.go).
 func (s *Server) gate(sess *golibrpc.Session, method string) error {
+	if method != "sys.hello" {
+		if ok, _ := sess.Value(sessHello).(bool); !ok {
+			awaitHellos(sess)
+		}
+	}
 	if refused, _ := sess.Value(sessRefused).(bool); refused {
 		return &golibrpc.Error{Code: CodeProtocolMismatch, Message: "protocol mismatch: reconnect with a compatible client"}
 	}
 	if method == "sys.hello" {
+		pendingHellos(sess).add()
 		return nil
 	}
 	if ok, _ := sess.Value(sessHello).(bool); !ok {

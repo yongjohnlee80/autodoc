@@ -136,7 +136,9 @@ One SQLite file (`autodoc.db`), one writer connection. Migrations are
 
 ## 7. Concurrency
 
-- **The daemon:** golib serves each request on its own goroutine. The todo system holds one
+- **The daemon:** golib serves each request on its own goroutine. A session's first requests are
+  serialized behind its `sys.hello`: the gate, on the connection's read loop, waits for a hello still
+  being answered (`rpc/hello.go`). The todo system holds one
   mutex per store, and SQLite's single writer serializes the store.
 - **The TUI:** one loop. Daemon calls run off it (`Core.Go`) and come back on it; an answer
   that is no longer the latest is dropped (`Ticket`).

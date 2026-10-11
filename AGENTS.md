@@ -32,7 +32,8 @@ A program that speaks msgpack-rpc itself can dial the socket directly. Find the 
 when nothing answers), never by rules of your own. The first call on a connection must be
 `sys.hello` with `{"protocol": 20, "name": "<your client>"}`: the protocol your client was written
 for. The daemon serves every protocol from `min_protocol` (12) to its own (20); another is
-refused, and so is every verb until the hello succeeds. A session keeps the protocol it declared: a
+refused, and so is every verb until the hello succeeds. A verb may be written right behind the
+hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
 and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
 `verbs` the session may call. The name `autodoc-tui` is admitted at the daemon's own protocol only.
