@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"net"
 	"reflect"
 	"regexp"
@@ -151,5 +152,26 @@ func TestArityIsTheContracts(t *testing.T) {
 		if lo != v.Required() || hi != len(v.Params) {
 			t.Errorf("%s checks %d to %d params (%q), its contract %d to %d", name, lo, hi, msg, v.Required(), len(v.Params))
 		}
+	}
+}
+
+// failingEvents is an event log that cannot be written.
+type failingEvents struct{ recordedEvents }
+
+func (*failingEvents) AppendEvent(context.Context, store.Event) (int64, error) {
+	return 0, errors.New("the log is full")
+}
+
+// TestALogThatFailsDoesNotFailTheVerb: a verb that took effect answers its result even when its
+// event cannot be logged; a call with no session logs no client token.
+func TestALogThatFailsDoesNotFailTheVerb(t *testing.T) {
+	s := New(Fixed(), "v", WithEvents(&failingEvents{}))
+	ok := func(context.Context, *golibrpc.Request) (any, error) { return "done", nil }
+	out, err := s.logged(s.verbs["preference.set"].module(), ok)(context.Background(), &golibrpc.Request{Params: []any{"a", "b"}})
+	if out != "done" || err != nil {
+		t.Errorf("a verb whose event failed: %v, %v", out, err)
+	}
+	if c := clientOf(nil); c != "" {
+		t.Errorf("no session's client is %q", c)
 	}
 }

@@ -53,3 +53,20 @@ func TestRewrite(t *testing.T) {
 		t.Error("a missing file was rewritten")
 	}
 }
+
+// TestRun: -agents names the file run rewrites, and a flag it does not know is refused.
+func TestRun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AGENTS.md")
+	if err := os.WriteFile(path, []byte(start+"\n"+end+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"-agents", path}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "### `graph`") {
+		t.Errorf("run wrote %s", got)
+	}
+	if err := run([]string{"-nope"}); err == nil {
+		t.Error("an unknown flag was taken")
+	}
+}

@@ -20,12 +20,20 @@ const (
 )
 
 func main() {
-	agents := flag.String("agents", "AGENTS.md", "the file whose tables to rewrite")
-	flag.Parse()
-	if err := rewrite(*agents, app.Contracts("").Markdown()); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "contractsgen:", err)
 		os.Exit(1)
 	}
+}
+
+// run rewrites the file -agents names.
+func run(args []string) error {
+	fs := flag.NewFlagSet("contractsgen", flag.ContinueOnError)
+	agents := fs.String("agents", "AGENTS.md", "the file whose tables to rewrite")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return rewrite(*agents, app.Contracts("").Markdown())
 }
 
 // rewrite puts tables between path's markers.
