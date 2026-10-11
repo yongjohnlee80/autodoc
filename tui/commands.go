@@ -28,7 +28,8 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.createAbsolute":     oneString("App.createAbsolute", "a path", h.createAbsolute),
 		"App.createFile":         oneString("App.createFile", "a path", h.createFile),
 		"App.quit":               none(h.quit),
-		"App.quitConfirmed":      none(func() { h.p.Quit() }),
+		"App.writeFromEditor":    oneBool("App.writeFromEditor", h.writeFromEditor),
+		"App.quitFromEditor":     oneBool("App.quitFromEditor", h.quitFromEditor),
 		"App.edited":             none(h.edited),
 		"App.syncMode":           none(h.syncMode),
 		"App.unsaved":            oneString("App.unsaved", "save, discard or stay", h.unsaved),
@@ -230,6 +231,17 @@ func none(fn func()) decl.HandlerFunc {
 			return fmt.Errorf("takes no arguments, and was given %d", len(args))
 		}
 		fn()
+		return nil
+	}
+}
+
+// oneBool is a command that takes true or false: an Editor signal's.
+func oneBool(name string, fn func(bool)) decl.HandlerFunc {
+	return func(args []qml.SpecValue) error {
+		if len(args) != 1 || args[0].Kind != qml.SpecValueBool {
+			return fmt.Errorf("%s takes true or false", name)
+		}
+		fn(args[0].Raw == "true")
 		return nil
 	}
 }

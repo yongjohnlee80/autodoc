@@ -530,16 +530,36 @@ func TestQuitOverUnsavedAsks(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
 	r.keys(t, decltest.Ctrl('q'))
-	r.s.WaitForText(t, "quit autodoc?")
-	r.keys(t, key('n'))
-	r.s.WaitFor(t, "stayed", func(sc string) bool { return !strings.Contains(sc, "quit autodoc?") })
+	r.s.WaitForText(t, "Save them before you quit?")
+	r.keys(t, key('t')) // Stay
+	r.s.WaitFor(t, "stayed", func(sc string) bool { return !strings.Contains(sc, "before you quit?") })
 	r.keys(t, decltest.Ctrl('q'))
-	r.s.WaitForText(t, "quit autodoc?")
-	r.keys(t, key('y'))
+	r.s.WaitForText(t, "Save them before you quit?")
+	r.keys(t, key('d')) // Discard
 	select {
 	case <-r.s.Quit():
 	case <-time.After(3 * time.Second):
 		t.Fatal("did not quit")
+	}
+}
+
+// TestQuitOverUnsavedCanSaveFirst: Save in the quit question writes the file, then quits.
+func TestQuitOverUnsavedCanSaveFirst(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.typeInEditor(t, "X")
+	r.keys(t, decltest.Ctrl('q'))
+	r.s.WaitForText(t, "Save them before you quit?")
+	r.keys(t, key('s'))
+	select {
+	case <-r.s.Quit():
+	case <-time.After(3 * time.Second):
+		t.Fatal("did not quit after the save")
+	}
+	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
+		t.Fatalf("on disk: %q", got)
 	}
 }
 

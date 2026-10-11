@@ -374,6 +374,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
+	h.addEditorCommands() // the command line's find is the page's (editorcmd.go)
 	h.installEditorMenu() // the stock rows, then related documents and back
 	h.linkPage()          // a raw HTML file's page opens its links as the preview pane does
 	p.Post(h.attachToasts)

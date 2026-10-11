@@ -966,7 +966,7 @@ func TestEveryCommandRefusesArgumentsNotItsOwn(t *testing.T) {
 	frac := qml.SpecValue{Kind: qml.SpecValueNumber, Raw: "1.5"}
 	s := qml.SpecValue{Kind: qml.SpecValueString, Raw: "x"}
 	// each list is one no command takes: a Host with no program would panic running any
-	bad := [][]qml.SpecValue{{b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}, {s, s, s, s, b}}
+	bad := [][]qml.SpecValue{{s, b}, {b, b}, {b, b, b, b}, {frac}, {frac, s}, {s, s, s, b}, {s, s, s, s, b}}
 	for name, fn := range h.commands() {
 		for _, args := range bad {
 			if err := fn(args); err == nil {

@@ -568,6 +568,9 @@ func (h *Host) write(content, want string, after func()) {
 			// typing during the save leaves the file unsaved: what is on disk is what was written
 			newer := h.core.Value() != content
 			h.setDirty(newer)
+			if !newer {
+				h.core.MarkSaved() // the command line's x reads it
+			}
 			h.notify("saved " + p)
 			switch {
 			case after == nil:
@@ -695,11 +698,7 @@ func (h *Host) createFile(name string) {
 	})
 }
 
-// quit quits, asking first over unsaved changes.
-func (h *Host) quit() {
-	if h.file.dirty {
-		h.open("confirmQuit")
-		return
-	}
-	h.p.Quit()
-}
+// quit quits, asking first over unsaved changes: Save (then quit once it is written), Discard, or
+// Stay. Every way out comes here: File › Exit, Ctrl+Q, SPC Q, the command line's q, the too-small
+// screen's Quit and the GUI window's close button (WithQuit).
+func (h *Host) quit() { h.guard("quit", h.p.Quit) }

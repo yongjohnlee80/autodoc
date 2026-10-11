@@ -37,7 +37,7 @@ func TestATooSmallWindowsQuitAsksOverUnsavedChanges(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 	r.shrink(t, false)
-	r.s.WaitForText(t, "quit autodoc?")
+	r.s.WaitForText(t, "Save them before you quit?")
 }
 
 // The Window declares its minimum, 80 by 20; with nothing unsaved, the too-small screen's Quit

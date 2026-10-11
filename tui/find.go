@@ -81,6 +81,7 @@ func (h *Host) startFind(pattern string) {
 	}
 	h.find.target, h.find.pending = h.find.pending, ""
 	h.find.query = pattern
+	h.core.SetFind("", widget.FindOptions{}) // n and N are this find's, not a replace's leftover
 	h.set("App.lastFind", pattern)
 	h.showFind()
 	h.p.Post(func() { h.findJump(+1, true) }) // once the question has closed

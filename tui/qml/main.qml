@@ -244,6 +244,9 @@ Window {
             onModeChanged: App.syncMode()
             onTextChanged: App.edited()
             onCursorPositionChanged: App.cursorMoved()
+            // the command line's (:) w, wq and x, and q and q!: AutoDoc's own save and quit
+            onWriteRequested: App.writeFromEditor(quit)
+            onQuitRequested: App.quitFromEditor(force)
             SyntaxHighlighter { definition: App.syntaxDefinition }
             // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
             // terminal's Editor has no Rendered view and ignores it
@@ -465,7 +468,6 @@ Window {
     Registrations { id: registrations }
     Vectors { id: vectorsDialog }
     PurgeModel { id: purgeModel }
-    ConfirmQuit { id: confirmQuit }
     Leader { id: leader }
     JumpCard { id: jumpCard }
     PluginKeys { id: pluginKeys }
