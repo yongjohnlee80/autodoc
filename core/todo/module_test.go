@@ -120,3 +120,57 @@ func TestAWriteLogsWhereAndWhat(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryVerbAnswers: each todos verb, called with the wire's params, reaches its Manager method
+// and answers what that answers.
+func TestEveryVerbAnswers(t *testing.T) {
+	e := claimed(t)
+	call := func(name string, params ...any) any {
+		t.Helper()
+		out, err := verb(t, e.m, name).Call(context.Background(), params)
+		if err != nil {
+			t.Fatalf("%s %v: %v", name, params, err)
+		}
+		return out
+	}
+	added := call("todos.add", "kb", map[string]any{"title": "Every verb"}).(todo.Task)
+	if r := call("todos.resolve", "kb").(todo.Resolved); !r.Claimed {
+		t.Errorf("resolve %+v", r)
+	}
+	call("todos.open", "kb", map[string]any{"kb_root": "/kb"})
+	if s := call("todos.stores").([]todo.StoreInfo); len(s) == 0 {
+		t.Error("no stores")
+	}
+	if vs := call("todos.vars", "kb").([]todo.Var); len(vs) == 0 {
+		t.Error("no vars")
+	}
+	call("todos.set_var", "PROJECTS", "/home/u/projects")
+	updated := call("todos.update", "kb", added.ID, added.Rev, map[string]any{"priority": "high"}).(todo.Task)
+	assigned := call("todos.assign", "kb", added.ID, updated.Rev, "agent:jarvis", "yours").(todo.Task)
+	statused := call("todos.status", "kb", added.ID, assigned.Rev, "completed").(todo.Task)
+	if statused.Status != "completed" || statused.Assignee != "agent:jarvis" {
+		t.Errorf("after the writes %+v", statused)
+	}
+	if s := call("todos.refresh", "kb").(todo.RefreshSummary); s.Scanned == 0 {
+		t.Errorf("refresh %+v", s)
+	}
+	page := call("todos.changes", "kb", "auto-core", int64(10)).(todo.ChangesPage)
+	if len(page.Changes) == 0 {
+		t.Fatal("no changes for a new consumer")
+	}
+	call("todos.ack", "kb", "auto-core", page.Changes[len(page.Changes)-1].Seq)
+	call("todos.remove", "kb", added.ID, statused.Rev)
+	e.disk.WriteFile("/kb/.todo-list/open/bad.md", []byte("not a task\n"))
+	call("todos.remove_malformed", "kb", "open/bad.md")
+	root := "/proj"
+	e.disk.MkdirAll(root)
+	if out := call("todos.register", root).(map[string]bool); !out["new"] {
+		t.Errorf("register %v", out)
+	}
+	call("todos.claim", map[string]any{"root": root}, map[string]any{})
+	call("todos.scaffold", map[string]any{"root": root})
+	e.disk.MkdirAll("/elsewhere")
+	call("todos.set_dir", map[string]any{"root": root}, "")
+	call("todos.move_store", map[string]any{"root": root}, "/elsewhere/.todo-list")
+	call("todos.release", map[string]any{"root": root})
+}

@@ -92,6 +92,7 @@ var sqliteSuites = []struct {
 	{"ClaimRewritesLegacyWorkspaceRefs", TestClaimRewritesLegacyWorkspaceRefs},
 	{"TheFirstWriteKeepsTheBaseline", TestTheFirstWriteKeepsTheBaseline},
 	{"TheVerbsServeTheManager", TestTheVerbsServeTheManager},
+	{"EveryVerbAnswers", TestEveryVerbAnswers},
 }
 
 // TestEveryEnvSuiteRunsOnSQLite: a test that builds an env (newEnv, claimed) is in sqliteSuites, so
