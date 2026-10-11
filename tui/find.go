@@ -43,7 +43,7 @@ type findState struct {
 func (h *Host) findTarget() string {
 	app := h.p.App()
 	for _, c := range []struct{ id, target string }{
-		{"editor", findPage}, {panels["explorer"], findExplorer}, {panels["links"], findLinks},
+		{"editor", findPage}, {panelView("explorer"), findExplorer}, {panelView("links"), findLinks},
 	} {
 		if comp, ok := h.p.Find(c.id); ok && app.FocusWithin(comp) {
 			return c.target
@@ -142,7 +142,12 @@ func (h *Host) showFind() {
 
 // rightDrawerOpen is whether a panel open now is docked at the right edge.
 func (h *Host) rightDrawerOpen() bool {
-	return (h.panelOpen["explorer"] && h.prefs.explorerEdge == "right") || (h.panelOpen["links"] && h.prefs.linkEdge == "right")
+	for id, at := range h.panelEdges() {
+		if at == "right" && h.panelOpen[id] {
+			return true
+		}
+	}
+	return false
 }
 
 // attachFindChip puts the find's card over the page, hidden until a find starts: at the top right, a
@@ -245,7 +250,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: cols[row]}, To: widget.TextPos{Line: row, Col: cols[row] + n}})
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	case findExplorer:
-		h.keep(h.p.Call(panels["explorer"], "setCurrentIndex", at[row]))
+		h.keep(h.p.Call(panelView("explorer"), "setCurrentIndex", at[row]))
 		h.explorerAt = h.explorerKeys(at[row])
 	case findLinks:
 		h.set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view

@@ -9,9 +9,6 @@ import "strconv"
 // defaults are agentplace.go's). A drag of the terminal writes its own, tui.terminal.<edge>.size
 // and .length.
 
-// sidePanels are the panels this file sizes; the terminal sizes itself.
-var sidePanels = []string{"explorer", "links"}
-
 // sidePanelMin is the explorer's and the links' smallest size across their edge, in percent: their
 // trees stay readable.
 const sidePanelMin = 15
@@ -37,12 +34,9 @@ func (p prefs) sideGeometry(panel, edge string) (size, length int) {
 
 // readPanelPrefs reads the side panels' sizes, keeping the defaults for anything out of bounds.
 func readPanelPrefs(p *prefs, m map[string]any) {
-	for _, panel := range append(sidePanels, "agent") {
-		places := edges
-		if panel == "agent" {
-			places = agentEdges
-		}
-		for _, edge := range places {
+	for _, spec := range panelSpecs {
+		panel := spec.ID
+		for _, edge := range spec.Places {
 			if n, ok := pct(m[panelPref(panel, edge, "size")], sidePanelMin, 90); ok {
 				p.panelGeo = withEntry(p.panelGeo, panelPref(panel, edge, "size"), n)
 			}

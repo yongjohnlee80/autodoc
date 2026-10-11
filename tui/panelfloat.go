@@ -11,15 +11,12 @@ import (
 // there from then on; its edge preference only says where it first appears. Go › Reset panel
 // layout, or a new edge in Preferences, docks it at its edge again (ADR 1791500773).
 
-// floatPanels are the drawers that float, by their document ids.
-var floatPanels = []string{"explorer", "links", "terminal", "agent", "htmlPane"}
-
 func floatPref(panel string) string { return "tui." + panel + ".float" }
 
 // readPanelFloats reads each panel's floating rectangle: four percentages (to a hundredth, as the
 // drawer reports them), the size at least 5.
 func readPanelFloats(p *prefs, m map[string]any) {
-	for _, panel := range floatPanels {
+	for _, panel := range panelIDs() {
 		s, _ := m[floatPref(panel)].(string)
 		if r, ok := parseFloat(s); ok {
 			p.panelFloat = withFloat(p.panelFloat, panel, &r)
@@ -72,7 +69,7 @@ func withFloat(m map[string][4]float64, panel string, r *[4]float64) map[string]
 // rectangle App.<panel>X, Y, W and H (a docked panel's are where it would float: the middle).
 func floatState(m map[string][4]float64) map[string]any {
 	st := map[string]any{}
-	for _, panel := range floatPanels {
+	for _, panel := range panelIDs() {
 		r, ok := m[panel]
 		if !ok {
 			r = [4]float64{25, 25, 50, 50}
@@ -118,7 +115,7 @@ func (h *Host) dockPanel(panel string) {
 // resetPanelLayout is Go › Reset panel layout: every panel docks at its edge again.
 func (h *Host) resetPanelLayout() {
 	docked := 0
-	for _, panel := range floatPanels {
+	for _, panel := range panelIDs() {
 		if _, ok := h.prefs.panelFloat[panel]; ok {
 			h.dockPanel(panel)
 			docked++
@@ -133,8 +130,8 @@ func (h *Host) resetPanelLayout() {
 // none is open.
 func (h *Host) panelWithKeyboard() string {
 	app := h.p.App()
-	for _, panel := range floatPanels {
-		if c, ok := h.p.Find(panels[panel]); ok && h.panelOpen[panel] && app.FocusWithin(c) {
+	for _, panel := range panelIDs() {
+		if c, ok := h.p.Find(panelView(panel)); ok && h.panelOpen[panel] && app.FocusWithin(c) {
 			return panel
 		}
 	}

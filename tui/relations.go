@@ -244,7 +244,7 @@ func (h *Host) openRelation(i int) {
 // relationsDepth is d: the drawer shows the second ring, or no longer does. Only the drawer
 // answers it.
 func (h *Host) relationsDepth() {
-	if comp, ok := h.p.Find(panels["links"]); !ok || !h.p.App().FocusWithin(comp) {
+	if comp, ok := h.p.Find(panelView("links")); !ok || !h.p.App().FocusWithin(comp) {
 		return
 	}
 	h.relDeep = !h.relDeep

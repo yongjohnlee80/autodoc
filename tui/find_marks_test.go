@@ -141,7 +141,7 @@ func TestSearchMenuFindsInTheTextMode(t *testing.T) {
 	// with the explorer open and the keyboard in it, Search › Find next still goes on in the page:
 	// the menu bar hands the keyboard back to the page before it runs an item
 	r.h.p.Post(func() { r.h.togglePanel("explorer") })
-	r.s.WaitFor(t, "the keyboard in the explorer", func(string) bool { return r.focused(panels["explorer"]) })
+	r.s.WaitFor(t, "the keyboard in the explorer", func(string) bool { return r.focused(panelView("explorer")) })
 	searchMenu('n') // Search › Find next
 	r.s.WaitForText(t, `find "kestrel": 2 of 2 in the page`)
 	searchMenu('c') // Search › Clear find

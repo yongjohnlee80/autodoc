@@ -7,8 +7,44 @@ import "github.com/yongjohnlee80/golib/tui/widget"
 // move between the page and the panels open at those edges, in Normal mode only: in Insert mode
 // they are the editor's.
 
-// The panels, by the document's ids: the drawer, and what in it takes the keyboard.
-var panels = map[string]string{"explorer": "explorerTree", "links": "linksList", "terminal": "terminalView", "agent": "agentView", "htmlPane": "htmlView"}
+// PanelSpec is one drawer over the page: everything the host's panel code asks of it, in one place,
+// so a list of panels cannot disagree with another.
+type PanelSpec struct {
+	ID       string               // the Drawer's id in the document
+	View     string               // what in it takes the keyboard
+	Edge     func(p prefs) string // the edge it opens from now; "center" for none
+	Places   []string             // the edges whose dragged size and length prefs keep; nil: it sizes itself
+	Keyboard bool                 // the terminal hands the keyboard back to it
+}
+
+// panelSpecs are the panels, in the order the host walks them. Every one floats (panelfloat.go).
+var panelSpecs = []PanelSpec{
+	{ID: "explorer", View: "explorerTree", Edge: func(p prefs) string { return p.explorerEdge }, Places: edges, Keyboard: true},
+	{ID: "links", View: "linksList", Edge: func(p prefs) string { return p.linkEdge }, Places: edges, Keyboard: true},
+	{ID: "terminal", View: "terminalView", Edge: func(p prefs) string { return p.termEdge }},
+	{ID: "agent", View: "agentView", Edge: func(p prefs) string { return p.agentEdge }, Places: agentEdges},
+	// the HTML preview's drawer is at the right edge (main.qml)
+	{ID: "htmlPane", View: "htmlView", Edge: func(prefs) string { return "right" }},
+}
+
+// panelIDs are the panels' ids.
+func panelIDs() []string {
+	out := make([]string, len(panelSpecs))
+	for i, s := range panelSpecs {
+		out[i] = s.ID
+	}
+	return out
+}
+
+// panelView is what in the panel id takes the keyboard; "" for no such panel.
+func panelView(id string) string {
+	for _, s := range panelSpecs {
+		if s.ID == id {
+			return s.View
+		}
+	}
+	return ""
+}
 
 // togglePanel opens or closes a panel; open, it has the keyboard.
 func (h *Host) togglePanel(name string) {
@@ -20,7 +56,7 @@ func (h *Host) togglePanel(name string) {
 		h.relationsOfOpenFile()
 	}
 	h.keep(h.p.Call(name, "open"))
-	h.keep(h.p.Call(panels[name], "forceActiveFocus"))
+	h.keep(h.p.Call(panelView(name), "forceActiveFocus"))
 }
 
 // panelOpened and panelClosed follow the drawers, however they were opened or closed (Escape
@@ -71,21 +107,25 @@ func (h *Host) movePane(dir string) {
 		}
 		for name, at := range h.panelEdges() {
 			if at == edge && h.panelOpen[name] {
-				h.keep(h.p.Call(panels[name], "forceActiveFocus"))
+				h.keep(h.p.Call(panelView(name), "forceActiveFocus"))
 				return
 			}
 		}
 		return
 	}
 	for name, at := range h.panelEdges() {
-		if c, ok := h.p.Find(panels[name]); ok && app.FocusWithin(c) && edge == opposite[at] {
+		if c, ok := h.p.Find(panelView(name)); ok && app.FocusWithin(c) && edge == opposite[at] {
 			h.keep(h.p.Call("editor", "forceActiveFocus"))
 			return
 		}
 	}
 }
 
+// panelEdges are the edges each panel opens from now.
 func (h *Host) panelEdges() map[string]string {
-	return map[string]string{"explorer": h.prefs.explorerEdge, "links": h.prefs.linkEdge, "terminal": h.prefs.termEdge,
-		"htmlPane": "right"} // the HTML preview's drawer is at the right edge (main.qml)
+	out := make(map[string]string, len(panelSpecs))
+	for _, s := range panelSpecs {
+		out[s.ID] = s.Edge(h.prefs)
+	}
+	return out
 }

@@ -245,12 +245,21 @@ func (h *Host) terminalClosed() {
 	h.keep(h.p.Call(target, "forceActiveFocus"))
 }
 
-// keyboardPanes are the panes the keyboard can come back to from the terminal.
-var keyboardPanes = []string{"editor", "explorerTree", "linksList"}
+// keyboardPanes are the panes the keyboard can come back to from the terminal: the page, then the
+// panels that take it back.
+func keyboardPanes() []string {
+	out := []string{"editor"}
+	for _, s := range panelSpecs {
+		if s.Keyboard {
+			out = append(out, s.View)
+		}
+	}
+	return out
+}
 
 // keyboardPane is the pane with the keyboard now, of those; "" for another (a dialog's field).
 func (h *Host) keyboardPane() string {
-	for _, id := range keyboardPanes {
+	for _, id := range keyboardPanes() {
 		if h.paneHasKeyboard(id) {
 			return id
 		}
