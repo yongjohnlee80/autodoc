@@ -174,21 +174,11 @@ const (
 )
 
 // Ticket is one answer's claim to still matter.
-type Ticket struct {
-	h          *Host
-	scope      TicketScope
-	seq        *uint64
-	n          uint64
-	gen, epoch uint64
-}
+type Ticket struct{ current func() bool }
 
-// Current reports whether no newer answer was asked for and the scope has not moved.
-func (t Ticket) Current() bool {
-	if *t.seq != t.n || t.h.session.Gen() != t.gen {
-		return false
-	}
-	return t.scope == TicketSession || t.h.epoch == t.epoch
-}
+// Current reports whether no newer answer was asked for and the scope has not moved; a zero
+// Ticket is always current.
+func (t Ticket) Current() bool { return t.current == nil || t.current() }
 
 // core is the host as a feature sees it.
 type core struct{ h *Host }
@@ -208,5 +198,11 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
 func (c core) Ticket(seq *uint64, scope TicketScope) Ticket {
 	*seq++
-	return Ticket{h: c.h, scope: scope, seq: seq, n: *seq, gen: c.h.session.Gen(), epoch: c.h.epoch}
+	n, gen, epoch := *seq, c.h.session.Gen(), c.h.epoch
+	return Ticket{current: func() bool {
+		if *seq != n || c.h.session.Gen() != gen {
+			return false
+		}
+		return scope == TicketSession || c.h.epoch == epoch
+	}}
 }

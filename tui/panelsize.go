@@ -70,13 +70,7 @@ func (h *Host) panelResized(panel string, size, length int) {
 			p.termLength = withEntry(p.termLength, edge, length)
 		})
 	case "explorer", "links", "agent":
-		edge := h.prefs.explorerEdge
-		switch panel {
-		case "links":
-			edge = h.prefs.linkEdge
-		case "agent":
-			edge = h.prefs.agentEdge
-		}
+		edge := h.panelEdges()[panel]
 		sk, lk := panelPref(panel, edge, "size"), panelPref(panel, edge, "length")
 		h.setPref(sk, strconv.Itoa(size), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, sk, size) })
 		h.setPref(lk, strconv.Itoa(length), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, lk, length) })

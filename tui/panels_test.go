@@ -1,6 +1,9 @@
 package tui
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // TestEveryPanelIsInTheDocument: each spec's drawer and the view in it that takes the keyboard are
 // ids the layout declares, so the registry cannot name a panel the document lacks.
@@ -72,5 +75,48 @@ func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
 	}
 	if panelView("nope") != "" {
 		t.Error("a view for a panel that does not exist")
+	}
+}
+
+// TestEveryPanelKeepsItsSizeAtItsEdge: a panel's grip released keeps its size and length for the
+// edge it opens from now, and a new start reads them back, each panel at its own edge.
+func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool {
+		r.h.prefs.explorerEdge, r.h.prefs.linkEdge, r.h.prefs.agentEdge = "left", "right", "bottom"
+		r.h.panelResized("explorer", 20, 70)
+		r.h.panelResized("links", 25, 75)
+		r.h.panelResized("agent", 40, 90)
+		r.h.panelResized("nope", 1, 1) // no such panel: nothing
+		return true
+	})
+	want := map[string]int{
+		"tui.explorer.left.size": 20, "tui.explorer.left.length": 70,
+		"tui.links.right.size": 25, "tui.links.right.length": 75,
+		"tui.agent.bottom.size": 40, "tui.agent.bottom.length": 90,
+	}
+	got := onLoop(r, func() map[string]int { return r.h.prefs.panelGeo })
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %d, want %d (%v)", k, got[k], v, got)
+		}
+	}
+	// read back as a new start reads them; an out-of-bounds one keeps the default
+	m := map[string]any{}
+	for k, v := range want {
+		m[k] = fmt.Sprint(v)
+	}
+	m["tui.links.right.size"] = "5"
+	var p prefs
+	readPanelPrefs(&p, m)
+	if p.panelGeo["tui.agent.bottom.size"] != 40 || p.panelGeo["tui.explorer.left.length"] != 70 {
+		t.Errorf("read back %v", p.panelGeo)
+	}
+	if _, kept := p.panelGeo["tui.links.right.size"]; kept {
+		t.Error("a size under the minimum was kept")
+	}
+	if s, l := p.sideGeometry("links", "right"); s != 30 || l != 75 {
+		t.Errorf("links at the right: %d × %d, want the default size and the kept length", s, l)
 	}
 }
