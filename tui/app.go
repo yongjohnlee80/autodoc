@@ -397,11 +397,12 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
-	h.addEditorCommands()        // the command line's find is the page's (editorcmd.go)
-	h.loadScripts()              // the Lua commands: AutoDoc's own, then the user's (scripts.go)
-	h.core.SetTableEditing(true) // the untitled draft is Markdown; readPage decides for a file
-	h.installEditorMenu()        // the stock rows, then related documents and back
-	h.linkPage()                 // a raw HTML file's page opens its links as the preview pane does
+	h.addEditorCommands()            // the command line's find is the page's (editorcmd.go)
+	h.core.SetOnEscape(h.escapeFind) // Esc in the page ends its find (find.go)
+	h.loadScripts()                  // the Lua commands: AutoDoc's own, then the user's (scripts.go)
+	h.core.SetTableEditing(true)     // the untitled draft is Markdown; readPage decides for a file
+	h.installEditorMenu()            // the stock rows, then related documents and back
+	h.linkPage()                     // a raw HTML file's page opens its links as the preview pane does
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)

@@ -692,8 +692,8 @@ func (h *Host) createFile(name string) {
 		}
 		h.draft = nil
 		if draft != nil {
-			// the draft's text is on disk now: its kept copies go
-			h.dropRecovery("", "")
+			// the draft's text is on disk now: the copy it was restored from goes (not another
+			// draft's, which Later kept for the next start)
 			if restored != nil {
 				h.dropRecovery(restored.ws, restored.path)
 				if h.restoredCopy == restored {

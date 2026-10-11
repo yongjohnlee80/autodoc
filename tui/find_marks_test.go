@@ -6,10 +6,11 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // THE PAGE'S FIND, marked and cleared (Johno, 2026-10-02): the page marks a find's words,
-// "finding …" under the menu clears it with its ✕, and the Search menu reaches the find from the
+// "finding …" under the menu clears it with its X, and the Search menu reaches the find from the
 // Text mode.
 
 // cellOf is the screen cell at the start of sub, on the first row holding within (sub inside it),
@@ -58,7 +59,7 @@ func (r *running) findChipRow() (int, string) {
 }
 
 // TestAPageFindIsMarkedAndClearedByItsX: / marks every occurrence in the page, and "finding …"
-// shows at the top right a row under the menu bar; its ✕, clicked, unmarks the page and hides it.
+// shows at the top right a row under the menu bar; its X, clicked, unmarks the page and hides it.
 // A drawer opened at the right edge hides it while it is open.
 func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\nthree kestrel\nfour\n", "x.md", "see [[a]]\n"}})
@@ -79,10 +80,14 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	r.s.WaitFor(t, "both occurrences marked", func(string) bool {
 		return r.marked("one kestrel", "kestrel", "one") && r.marked("three kestrel", "kestrel", "three")
 	})
-	r.s.WaitFor(t, "finding … under the menu", func(string) bool { y, _ := r.findChipRow(); return y == 1 })
+	r.s.WaitFor(t, "the find card under the menu", func(string) bool { y, _ := r.findChipRow(); return y == 2 })
 	_, row := r.findChipRow()
-	if !strings.HasSuffix(strings.TrimRight(row, " "), "✕") {
-		t.Fatalf("the chip is not at the right end with its ✕: %q", row)
+	if end := strings.TrimRight(row, " "); !strings.HasSuffix(end, "│") || !strings.HasSuffix(strings.TrimRight(strings.TrimSuffix(end, "│"), " "), "X") || !strings.Contains(r.s.String(), "┌ Find ") {
+		t.Fatalf("the card is not framed and titled, with its X at the right end: %q", row)
+	}
+	// the match the find is on is highlighted, the other only marked
+	if m, ok := onLoop(r, func() widget.TextRange { m, _ := r.h.core.CurrentMatch(); return m }), true; !ok || m != (widget.TextRange{From: widget.TextPos{Line: 0, Col: 4}, To: widget.TextPos{Line: 0, Col: 11}}) {
+		t.Fatalf("the current match is %v", m)
 	}
 
 	// the links drawer opens at the right edge: the chip hides under it, and comes back after
@@ -90,11 +95,11 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 	r.s.WaitForText(t, "backlinks (1)")
 	r.s.WaitFor(t, "the chip hidden under the drawer", func(string) bool { y, _ := r.findChipRow(); return y < 0 })
 	r.keys(t, esc())
-	r.s.WaitFor(t, "the chip back", func(string) bool { y, _ := r.findChipRow(); return y == 1 })
+	r.s.WaitFor(t, "the card back", func(string) bool { y, _ := r.findChipRow(); return y == 2 })
 
-	// its ✕, clicked
+	// its X, clicked
 	y, row := r.findChipRow()
-	x := len([]rune(row[:strings.LastIndex(row, "✕")]))
+	x := len([]rune(row[:strings.LastIndex(row, "X")]))
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 	r.s.WaitForText(t, "find cleared")
@@ -103,7 +108,10 @@ func TestAPageFindIsMarkedAndClearedByItsX(t *testing.T) {
 		return y < 0 && !r.marked("one kestrel", "kestrel", "one") && !r.marked("three kestrel", "kestrel", "three")
 	})
 	if q := onLoop(r, func() string { return r.h.find.query }); q != "" {
-		t.Fatalf("the find after its ✕ is %q, want none", q)
+		t.Fatalf("the find after its X is %q, want none", q)
+	}
+	if _, on := onLoop(r, func() widget.TextRange { m, _ := r.h.core.CurrentMatch(); return m }), onLoop(r, func() bool { _, ok := r.h.core.CurrentMatch(); return ok }); on {
+		t.Fatal("the current match outlived the find")
 	}
 }
 

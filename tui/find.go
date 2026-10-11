@@ -18,7 +18,7 @@ import (
 //
 // WHILE A FIND IS ON in the page, the page marks its words wherever they are (the Alert style, as
 // the search's preview marks its words), and "finding …" shows under the menu at the top right,
-// with a ✕ that clears it, except while a drawer at the right edge is open over that corner. Search › Clear find clears it too. Search › Find in page, next and previous reach the
+// with an X that clears it, except while a drawer at the right edge is open over that corner. Search › Clear find clears it too. Search › Find in page, next and previous reach the
 // page's find from the Text mode, where / types a slash.
 //
 // THE EXPLORER is searched over the rows it has loaded, in the order the tree shows them, a closed
@@ -34,6 +34,9 @@ const (
 type findState struct {
 	query, target string
 	pending       string // the pane / was pressed in, while the question is open
+	// at and total are where the last jump went, x of y rows holding the query: "finding" shows
+	// them; 0 before the first jump
+	at, total int
 }
 
 // findTarget is the pane with the keyboard: the page, or an open panel.
@@ -81,6 +84,7 @@ func (h *Host) startFind(pattern string) {
 	}
 	h.find.target, h.find.pending = h.find.pending, ""
 	h.find.query = pattern
+	h.find.at, h.find.total = 0, 0
 	h.core.SetFind("", widget.FindOptions{}) // n and N are this find's, not a replace's leftover
 	h.set("App.lastFind", pattern)
 	h.showFind()
@@ -102,6 +106,7 @@ func (h *Host) clearFind() {
 	if h.find.query == "" {
 		return
 	}
+	h.core.SetCurrentMatch(widget.TextRange{})
 	h.find.query, h.find.target = "", ""
 	h.showFind()
 	h.say("find cleared")
@@ -127,7 +132,11 @@ func (h *Host) showFind() {
 		h.findChip.Hide()
 		return
 	}
-	h.findLabel.SetText(fmt.Sprintf(" finding %q ", h.find.query))
+	label := fmt.Sprintf("finding %q · n next · N previous · Esc clears ", h.find.query)
+	if h.find.total > 0 {
+		label = fmt.Sprintf("finding %q %d/%d · n next · N previous · Esc clears ", h.find.query, h.find.at, h.find.total)
+	}
+	h.findLabel.SetText(label)
 	h.findChip.Show()
 }
 
@@ -136,20 +145,23 @@ func (h *Host) rightDrawerOpen() bool {
 	return (h.panelOpen["explorer"] && h.prefs.explorerEdge == "right") || (h.panelOpen["links"] && h.prefs.linkEdge == "right")
 }
 
-// attachFindChip puts "finding …" over the page, hidden until a find starts: at the top right, a row
-// down so the menu bar stays clear, its ✕ clearing the find.
+// attachFindChip puts the find's card over the page, hidden until a find starts: at the top right, a
+// row down so the menu bar stays clear, framed and titled as the replace card is, its X clearing the
+// find.
 func (h *Host) attachFindChip() {
 	host, ok := h.p.Overlay()
 	if !ok || h.findChip != nil {
 		return
 	}
-	// one row, no border: the panel's colour sets it apart from the page under it
-	h.findLabel = widget.NewText("", widget.WithTextStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	clear := widget.NewButton("✕", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
-	chip := tuicore.NewFlex(tuicore.Horizontal)
-	chip.Add(h.findLabel, clear)
+	// the replace card's look: the panel's colours, a frame and a title
+	look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
+	h.findLabel = widget.NewText("", widget.WithTextStyle(look))
+	clear := widget.NewButton("X", widget.WithOnActivate(h.clearFind), widget.WithButtonDecoration(" ", " "))
+	row := tuicore.NewFlex(tuicore.Horizontal)
+	row.Add(h.findLabel, clear)
+	card := widget.NewBox(row, widget.WithTitle("Find"), widget.WithBorder(style.BorderNormal), widget.WithStyle(look.Padding(0, 1)))
 	col := tuicore.NewFlex(tuicore.Vertical)
-	col.Add(widget.NewText(""), chip) // the empty row keeps the menu bar clear above the chip
+	col.Add(widget.NewText(""), card) // the empty row keeps the menu bar clear above the card
 	h.findChip = widget.NewFloat(col, widget.WithAnchor(widget.TopRight))
 	host.Attach(h.findChip)
 	h.showFind()
@@ -202,6 +214,8 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		}
 	}
 	if len(hits) == 0 {
+		f.at, f.total = 0, 0
+		h.showFind()
 		h.say(fmt.Sprintf("find: no %q in the %s", f.query, f.target))
 		return
 	}
@@ -226,6 +240,9 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	switch f.target {
 	case findPage:
 		h.core.SetLine(row, cols[row])
+		// the match the find is on, highlighted whatever the mode, so it is plain which it is
+		n := len(slices.Collect(tuicore.Graphemes(f.query)))
+		h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: cols[row]}, To: widget.TextPos{Line: row, Col: cols[row] + n}})
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	case findExplorer:
 		h.keep(h.p.Call(panels["explorer"], "setCurrentIndex", at[row]))
@@ -235,6 +252,8 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		h.set("App.linksIndex", row)
 		h.linksAt = row
 	}
+	f.at, f.total = selected+1, len(hits)
+	h.showFind()
 	h.say(fmt.Sprintf("find %q: %d of %d in the %s", f.query, selected+1, len(hits), f.target))
 }
 
@@ -296,4 +315,15 @@ func (h *Host) explorerLoaded() ([]string, []tuidecl.Index) {
 	}
 	walk(nil)
 	return labels, at
+}
+
+// escapeFind is the editor's Esc when it has nothing of its own to cancel (Normal mode, or Text
+// mode; never Insert or Visual, whose Esc goes back to Normal): the page's find ends, as its X
+// does. It reports whether there was one to end; with none the key goes on.
+func (h *Host) escapeFind() bool {
+	if h.find.query == "" || h.find.target != findPage {
+		return false
+	}
+	h.clearFind()
+	return true
 }

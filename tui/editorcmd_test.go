@@ -87,12 +87,17 @@ func TestTheCommandLinesFindIsThePagesFind(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.command(t, "find one")
-	r.s.WaitForText(t, `finding "one"`)
-	r.s.WaitForText(t, `find "one": 1 of 2`) // from the cursor's own line, as / does
+	r.s.WaitForText(t, `finding "one" 1/2`) // x/y: from the cursor's own line, as / does
 	r.keys(t, key('n'))
+	r.s.WaitForText(t, `finding "one" 2/2`)
 	r.s.WaitFor(t, "the cursor on line 3", func(string) bool {
 		return onLoop(r, func() int { ln, _ := r.h.core.Line(); return ln }) == 2
 	})
 	r.command(t, "nohl")
 	r.s.WaitFor(t, "the find cleared", func(sc string) bool { return !strings.Contains(sc, "finding") })
+	// Esc in the page ends it too, as its X does
+	r.command(t, "find one")
+	r.s.WaitForText(t, `finding "one"`)
+	r.keys(t, esc())
+	r.s.WaitFor(t, "Esc cleared the find", func(sc string) bool { return !strings.Contains(sc, "finding") })
 }

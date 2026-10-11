@@ -250,3 +250,26 @@ func TestARestoredDraftsCopyGoesWhenTheDraftIsSaved(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the copy gone", func(string) bool { return len(readRecovery(dir)) == 0 })
 }
+
+// Saving a draft drops only the copy it was restored from: an older draft's copy, kept with Later,
+// stays for the next start.
+func TestSavingADraftKeepsAnotherDraftsCopy(t *testing.T) {
+	dir := t.TempDir()
+	// a draft's copy, as keepRecovery writes it: no file open, so no workspace and no path
+	_ = writeRecovery(dir, recovered{WS: "", Path: "", Text: "an old draft\n", Saved: time.Now()})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "untitled had unsaved changes")
+	r.keys(t, key('l')) // Later
+	r.s.WaitFor(t, "the question gone", func(sc string) bool { return !strings.Contains(sc, "had unsaved changes") })
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.typeInEditor(t, "a new draft")
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	r.keys(t, decltest.Type("new")...)
+	r.keys(t, enter())
+	r.waitFile(t, "new.md")
+	if got := readRecovery(dir); len(got) != 1 || got[0].Text != "an old draft\n" {
+		t.Fatalf("copies after saving another draft: %+v; want the old draft's kept", got)
+	}
+}
