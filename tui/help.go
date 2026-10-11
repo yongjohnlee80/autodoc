@@ -26,6 +26,9 @@ const helpText = `KEYS
               what its derived text cannot show
   Ctrl+N      new file, in any folder (File › New file…; SPC n); .md added when it has none
   Ctrl+S      save the file
+  Ctrl+;      the command line, in every editor mode (:, in Vim's Normal mode): :w, :find,
+              :table, your Lua commands … (Search › Command line…; a terminal needs kitty's
+              keyboard protocol to send Ctrl+;)
   Ctrl+W      switch workspace; Manage… adds, renames and deletes them
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).

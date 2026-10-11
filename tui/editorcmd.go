@@ -43,6 +43,13 @@ func (h *Host) quitFromEditor(force bool) {
 	h.quit()
 }
 
+// openCommandLine is Ctrl+; and Search › Command line…: the editor's ':' prompt in every editor
+// mode, so the Text mode's users reach the commands, their own Lua ones among them.
+func (h *Host) openCommandLine() {
+	h.keep(h.p.Call("editor", "forceActiveFocus"))
+	h.keep(h.p.Call("editor", "openCommandLine"))
+}
+
 // addEditorCommands composes AutoDoc's commands into the editor's: find and nohl are the page's
 // find (marked words, "finding …", n and N, as / is), so the prompt and / share one find.
 func (h *Host) addEditorCommands() {

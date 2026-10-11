@@ -28,6 +28,7 @@ func (h *Host) commands() map[string]decl.HandlerFunc {
 		"App.createAbsolute":     oneString("App.createAbsolute", "a path", h.createAbsolute),
 		"App.createFile":         oneString("App.createFile", "a path", h.createFile),
 		"App.quit":               none(h.quit),
+		"App.openCommandLine":    none(h.openCommandLine),
 		"App.writeFromEditor":    oneBool("App.writeFromEditor", h.writeFromEditor),
 		"App.quitFromEditor":     oneBool("App.quitFromEditor", h.quitFromEditor),
 		"App.edited":             none(h.edited),

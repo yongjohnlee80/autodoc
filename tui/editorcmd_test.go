@@ -101,3 +101,33 @@ func TestTheCommandLinesFindIsThePagesFind(t *testing.T) {
 	r.keys(t, esc())
 	r.s.WaitFor(t, "Esc cleared the find", func(sc string) bool { return !strings.Contains(sc, "finding") })
 }
+
+// TestCtrlSemicolonOpensTheCommandLineInTheTextMode: the Text mode types ':', so Ctrl+; (':' with
+// Ctrl) is its way to the command line and to every command, its Lua ones among them.
+func TestCtrlSemicolonOpensTheCommandLineInTheTextMode(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.setKeymap("text"); return true })
+	r.keys(t, decltest.Type("X")...)
+	r.s.WaitFor(t, "X typed", func(string) bool { return strings.Contains(r.editorText(), "X") })
+	r.keys(t, decltest.Ctrl(';'))
+	r.s.WaitForText(t, "VIM Commands")
+	r.keys(t, decltest.Type("w")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
+	r.s.WaitForText(t, "saved a.md")
+	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
+		t.Fatalf("on disk after Ctrl+; w: %q", got)
+	}
+}
+
+// TestSearchMenuOpensTheCommandLine: the menu reaches it in any terminal, Ctrl+; or not.
+func TestSearchMenuOpensTheCommandLine(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.openCommandLine(); return true })
+	r.s.WaitForText(t, "VIM Commands")
+}

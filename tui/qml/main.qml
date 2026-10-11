@@ -64,6 +64,9 @@ Window {
     // Ctrl+G, and / where the editor leaves it (Normal mode), as vim's search: the Vim keyset takes
     // Ctrl+F and Ctrl+B to page
     Shortcut { sequence: "Ctrl+G"; onActivated: App.openSearch() }
+    // the command line in every editor mode, on : with Ctrl: the Text mode types :; a terminal
+    // sends Ctrl+; only with kitty's keyboard protocol, so Search › Command line… is always there
+    Shortcut { sequence: "Ctrl+;"; onActivated: App.openCommandLine() }
     // / finds in the pane with the keyboard; n and N find again (find.go)
     Shortcut { sequence: "/"; onActivated: App.openFind() }
     Shortcut { sequence: "n"; onActivated: App.findNext() }
@@ -135,6 +138,8 @@ Window {
             MenuItem { text: "&Clear find"; onTriggered: App.clearFind() }
             MenuSeparator {}
             MenuItem { text: "&Search files…"; onTriggered: App.openSearch() }
+            MenuSeparator {}
+            MenuItem { text: "C&ommand line…  (Ctrl+;)"; onTriggered: App.openCommandLine() }
         }
         Menu {
             title: "&View"
