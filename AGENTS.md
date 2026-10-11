@@ -368,3 +368,47 @@ Verbs at protocol 20; the daemon serves sessions from protocol 12.
 | -32603 | `rpc.internal` | a failure the daemon's log details: retry, or report it |  |
 
 <!-- autodoc:contracts:end -->
+
+## Todos: what by hand, what by verb
+
+A workspace's tasks are Markdown files with YAML frontmatter under `.todo-list/`, in the buckets
+`open/`, `in-progress/`, `deferred/` and `completed/`, and `archived/YYYY/MM/`. The daemon owns
+their format and their rules; the `todos.*` verbs are how a change keeps them. Each verb takes
+**where the store is** first: the workspace's name (`"kb"`), or `{"root": "/abs/project"}` for a
+project that is no AutoDoc workspace.
+
+```sh
+autodoc --call todos.list '["kb"]'                                  # the active buckets
+autodoc --call todos.list '["kb", {"buckets": ["archived"]}]'       # the archive's months
+autodoc --call todos.get '["kb", "2026-10-11-ship-the-todos"]'      # one task, with its rev
+autodoc --call todos.update '["kb", "2026-10-11-ship-the-todos", "<rev>", {"priority": "high"}]'
+autodoc --contracts 'todos.*'                                       # every todos verb
+```
+
+| You want to | Do |
+| --- | --- |
+| read tasks | `todos.list`, `todos.get`; or read the files |
+| change a task's **body** (the Markdown after the frontmatter) | edit the file |
+| change its title, description, priority, due, tags, adr, review, blocked | `todos.update` with the `rev` you read |
+| change its status | `todos.status` (it moves the file to its bucket and stamps the times) |
+| assign it | `todos.assign`: assigning an open task makes it in-progress, and the assignee is told |
+| add or remove one | `todos.add`, `todos.remove` |
+| touch `id`, `version`, `created`, `updated`, `status_changed`, `completed_at`, `archived_at`, `errors` | never: the daemon writes them |
+
+- Every write takes the `rev` you read. `todos.stale` (-32071) means the task changed since: get
+  it again, re-apply your change, retry.
+- Until the cutover a store is written by AutoVim's auto-core, and the daemon's writes answer
+  `todos.unclaimed` (-32077): change tasks through AutoVim (its mailbox `todos.*` verbs) then.
+- Archives are read a month at a time, on request; `todos.list` without `buckets` never reads them.
+
+## Choosing a surface
+
+| You are | Use |
+| --- | --- |
+| an agent with a shell | `autodoc --call <verb> '<json params>'`; `autodoc --contracts` says what each verb takes |
+| an agent with only the auto-agents mailbox | its `todos.*` verbs; the KB's `kb.*` search verbs |
+| a program that speaks msgpack-rpc | the socket (`autodoc --print-endpoint`), `sys.hello`, then the verbs |
+| a script inside AutoDoc | Lua: `autodoc.call`, `autodoc.<domain>.<verb>` (Help › Tutorial, pages 7–9) |
+| a tool with its own UI | a plugin (`docs/plugins.md`) |
+
+Never edit the daemon's store (`autodoc.db`), its lease, or a `.todo-list`'s `.autodoc-owner`.

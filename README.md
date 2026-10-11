@@ -4,23 +4,30 @@ AutoDoc indexes and searches a tree of Markdown files, and follows the files as 
 are canonical: the index is derived from them, lives outside the tree, and can always be rebuilt.
 
 It is one binary with the modes as flags, after [AutoDB](https://github.com/yongjohnlee80/autodb):
-`autodoc --serve` is the daemon, and the TUI (`--ui`), the Web-UI (`--web-ui`) and later AutoVim and a
-native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
+`autodoc --serve` is the daemon, and the TUI (`--ui`), the native GUI (`--gui`), Neovim
+([autodoc.nvim](#neovim)), plugins and `autodoc --call` are its clients, all over one msgpack-RPC API
+on a 0600 unix socket. It also keeps the workspaces' todo lists (Todos › Open todos…, the `todos.*`
+verbs).
 
-**Status: early.** The daemon serves, and the TUI edits; the Web-UI is next.
+How it is put together, and the convention a new feature follows, is
+[docs/architecture.md](docs/architecture.md); what an AI agent may call, and how, is
+[AGENTS.md](AGENTS.md) (`autodoc --contracts` prints every verb's contract).
 
 | Package | What it does |
 | --- | --- |
+| `core/module` | the convention's types: a verb's contract and typed handler, public errors, a `Module` |
 | `core/config` | reads `$XDG_CONFIG_HOME/autodoc/config.toml`, and resolves the socket, the state directory and the store |
 | `core/store` | the one store: every workspace and its index, in one SQLite file, read and written through golib `dao` (one declaration per table), with the lease that makes one daemon its only server |
 | `sql/deployments` | the store's schema as numbered SQL scripts, applied by golib `dao/deploy` (see `docs/ops/schema-scripts.md`) |
 | `core/workspace` | opens a workspace's root as a `golib/vfs` filesystem, with its include/exclude patterns |
 | `core/follow` | keeps a workspace's index following its root |
 | `core/index` | one workspace's index in the store, its indexer, the link graph, and search |
-| `core/embed` | the embedding providers' clients: Ollama, or any OpenAI-compatible endpoint, metered |
 | `core/docs` | reads and writes files for AutoDoc's own apps, conditional on the version the writer read |
-| `rpc` | the msgpack-RPC API: a projection of core, with no logic of its own |
-| `tui` | the terminal UI: search, the files, a Vim-keyed editor, the relations drawer; its screen written in QML |
+| `core/schema` | frontmatter schemas: a workspace's `schema.yaml`, and the todo formats |
+| `core/todo` | the todo system: the format, the rules and every write of a `.todo-list`; the `todos.*` verbs |
+| `rpc` | the msgpack-RPC API: every verb registered from its contract, rpc's own and the modules' |
+| `tui` | the terminal UI and the GUI: search, the files, a Vim-keyed editor, the relations drawer, the todos; its screen written in QML |
+| `script` | the Lua engine for the editor's commands, exportable to other programs |
 | `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
 | `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON, `--contracts` every verb's contract; a main hands it its version (ADR 0216) |
@@ -926,8 +933,8 @@ func main() {
 
 ## Building
 
-Go 1.25, `CGO_ENABLED=0`: the daemon, the TUI and the Web-UI link no cgo. The later native GUI is a
-separate binary.
+Go 1.25. `make build` links no cgo: the daemon and the TUI. `make build-gui` adds the GUI (`--gui`,
+golib's gui on Gio), the one part that needs cgo; on macOS `make build` is `make build-gui`.
 
 ```sh
 git clone https://github.com/yongjohnlee80/autodoc && cd autodoc && make build   # → bin/autodoc
