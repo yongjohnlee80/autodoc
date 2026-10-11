@@ -11,8 +11,8 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -21,25 +21,7 @@ import (
 // as JSON. It is the client for a program with no msgpack-rpc of its own: an AI agent's shell, a
 // script (AGENTS.md).
 func runCall(ctx context.Context, configPath, method, params string, out io.Writer) error {
-	if configPath == "" {
-		var err error
-		if configPath, err = config.DefaultPath(); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		return err
-	}
-	stateDir, err := cfg.Server.StateDirPath()
-	if err != nil {
-		return err
-	}
-	sock, err := cfg.Server.SocketPath()
-	if err != nil {
-		return err
-	}
-	storePath, err := cfg.Server.StorePath()
+	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
 	}
@@ -47,8 +29,8 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
-	session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).As(rpc.CLIName).
-		UseHandoffs(stateDir).ForStore(sock, storePath)
+	session := client.NewSession(e.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, e.StateDir) }).As(rpc.CLIName).
+		UseHandoffs(e.StateDir).ForStore(e.Socket, e.Store)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}

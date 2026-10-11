@@ -15,8 +15,8 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -60,13 +60,13 @@ func olderDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{},
 	return stopped, declared
 }
 
-func loadConfig(t *testing.T, path string) *config.Config {
+func loadEndpoints(t *testing.T, path string) *endpoint.Endpoints {
 	t.Helper()
-	cfg, err := config.Load(path)
+	e, err := endpoint.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cfg
+	return e
 }
 
 // spawnCounting is a restart's spawn that starts this build's daemon in-process, counting spawns.
@@ -83,7 +83,7 @@ func restartOnce(t *testing.T, r restarter, cfgPath string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var out bytes.Buffer
-	err := r.run(ctx, loadConfig(t, cfgPath), &out)
+	err := r.run(ctx, loadEndpoints(t, cfgPath), &out)
 	return out.String(), err
 }
 

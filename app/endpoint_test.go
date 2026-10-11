@@ -164,3 +164,27 @@ func TestAConfigWithAnotherStoreOnTheSameSocketIsRefused(t *testing.T) {
 		t.Errorf("--call over another store's daemon: %v, want a store mismatch", err)
 	}
 }
+
+// TestAFreshMachineServes: with no state, data or config directory yet, --print-endpoint --ensure
+// starts the daemon (its log and the store's directory are made by the modes that write them, not by
+// resolving the paths), and --call is answered by it.
+func TestAFreshMachineServes(t *testing.T) {
+	home := t.TempDir()
+	run := short(t)
+	env := []string{"XDG_CONFIG_HOME=" + filepath.Join(home, "config"), "XDG_STATE_HOME=" + filepath.Join(home, "state"),
+		"XDG_DATA_HOME=" + filepath.Join(home, "data"), "XDG_RUNTIME_DIR=" + run}
+	sock := filepath.Join(run, "autodoc.sock")
+	code, out := runMain(t, env, "--print-endpoint", "--ensure")
+	if code != 0 || out != "unix\t"+sock+"\n" {
+		t.Fatalf("--print-endpoint --ensure: exit %d, %q", code, out)
+	}
+	t.Cleanup(func() { runMain(t, env, "--call", "sys.shutdown") })
+	if code, out := runMain(t, env, "--call", "workspace.list"); code != 0 || strings.TrimSpace(out) != "[]" {
+		t.Fatalf("--call workspace.list: exit %d, %q", code, out)
+	}
+	for _, f := range []string{filepath.Join(home, "state", "autodoc", "serve.log"), filepath.Join(home, "data", "autodoc", "autodoc.db")} {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("%s: %v", f, err)
+		}
+	}
+}

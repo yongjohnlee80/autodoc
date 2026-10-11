@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 )
 
 // runCompact is --compact (ADR 1791284787 §2.5): with the daemon stopped, reclaim every workspace's
@@ -17,20 +17,14 @@ import (
 // a store that switches models often is made contiguous again this way. The daemon serving the store
 // holds its lease, so a daemon running is refused, saying how to stop it.
 func runCompact(ctx context.Context, configPath string, out io.Writer) error {
-	if configPath == "" {
-		var err error
-		if configPath, err = config.DefaultPath(); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(configPath)
+	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
 	}
-	storePath, err := cfg.Server.StorePath()
-	if err != nil {
+	if err := e.MakeDataDir(); err != nil {
 		return err
 	}
+	storePath := e.Store
 	db, err := store.Open(ctx, storePath)
 	if errors.Is(err, store.ErrBusy) {
 		return fmt.Errorf("the daemon is serving %s: stop it first (--call sys.shutdown), then --compact", storePath)

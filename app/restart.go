@@ -5,16 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
-	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
-	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // restartClientName is the name a restart's hello gives: not the TUI's, which a daemon admits only
@@ -38,53 +34,32 @@ type restarter struct {
 // TUI's restart stops an older backend. A handoff holds the other clients back from spawning
 // meanwhile, so the build that serves next is this one. With nothing serving, it only starts.
 func runRestart(ctx context.Context, configPath string, out io.Writer) error {
-	if configPath == "" {
-		var err error
-		if configPath, err = config.DefaultPath(); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(configPath)
-	if err != nil {
-		return err
-	}
-	stateDir, err := cfg.Server.StateDirPath()
+	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
 	}
 	r := restarter{
-		spawn:    func() (string, error) { return client.SpawnServe(configPath, stateDir) },
+		spawn:    func() (string, error) { return client.SpawnServe(e.ConfigPath, e.StateDir) },
 		waitGone: func(ctx context.Context, pid int64) bool { return client.WaitGone(ctx, pid, restartExitWait) },
 	}
-	return r.run(ctx, cfg, out)
+	return r.run(ctx, e, out)
 }
 
-func (r restarter) run(ctx context.Context, cfg *config.Config, out io.Writer) error {
-	sock, err := cfg.Server.SocketPath()
-	if err != nil {
+func (r restarter) run(ctx context.Context, e *endpoint.Endpoints, out io.Writer) error {
+	// the handoff below is written in the state directory
+	if err := e.MakeStateDir(); err != nil {
 		return err
 	}
-	storePath, err := cfg.Server.StorePath()
-	if err != nil {
-		return err
-	}
-	stateDir, err := cfg.Server.StateDirPath()
-	if err != nil {
-		return err
-	}
-	session := client.NewSession(sock, r.spawn).UseHandoffs(stateDir).ForStore(sock, storePath)
+	session := client.NewSession(e.Socket, r.spawn).UseHandoffs(e.StateDir).ForStore(e.Socket, e.Store)
 	defer session.Close()
 
-	addr := endpoint.Holder(ctx, storePath, sock)
-	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	info, perr := rpc.Probe(probeCtx, "unix", addr)
-	cancel()
+	addr := endpoint.Holder(ctx, e.Store, e.Socket)
+	info, perr := endpoint.Probe(ctx, addr, e.Store)
+	var mismatch *client.StoreMismatchError
+	if errors.As(perr, &mismatch) {
+		return perr
+	}
 	if perr == nil {
-		if info.StoreID != "" {
-			if wanted, _ := store.Identity(storePath); info.StoreID != wanted {
-				return &client.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
-			}
-		}
 		// until this build answers, another client only dials; a handoff that cannot be written
 		// fails open, as the TUI's does
 		_ = session.WriteHandoff()
@@ -103,7 +78,7 @@ func (r restarter) run(ctx context.Context, cfg *config.Config, out io.Writer) e
 		}
 		return err
 	}
-	_, err = fmt.Fprintf(out, "unix\t%s\n", session.Address())
+	_, err := fmt.Fprintf(out, "unix\t%s\n", session.Address())
 	return err
 }
 

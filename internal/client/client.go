@@ -11,7 +11,6 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -100,18 +99,8 @@ func (e *MismatchError) Error() string {
 }
 
 // StoreMismatchError is a daemon answering on the session's socket for another store than the
-// config names: a config that changed its data_dir but kept its socket would otherwise read and
-// write the old store. Nothing is spawned over it; the user stops that daemon or names another
-// socket.
-type StoreMismatchError struct {
-	Addr, StorePath string
-	Served, Wanted  string // store ids; Wanted "" when the config's store does not exist yet
-}
-
-func (e *StoreMismatchError) Error() string {
-	return fmt.Sprintf("the daemon on %s serves another store than %s: stop it (autodoc --call sys.shutdown with its config) or give this config its own socket",
-		e.Addr, e.StorePath)
-}
+// config names (endpoint.CheckStore).
+type StoreMismatchError = endpoint.StoreMismatchError
 
 // NewSession is the session to the daemon on the unix socket addr. spawn, when not nil, starts the
 // daemon once when nothing answers.
@@ -156,21 +145,13 @@ func (s *Session) ForStore(configured, storePath string) *Session {
 	return s.UseResolver(configured, func(ctx context.Context) string { return endpoint.Holder(ctx, storePath, configured) })
 }
 
-// checkStore refuses a daemon that serves another store than the session's (ForStore). A daemon
-// too old to say its store_id is let through: nothing can be checked.
+// checkStore refuses a daemon that serves another store than the session's (ForStore).
 func (s *Session) checkStore(hello map[string]any) error {
 	if s.storePath == "" {
 		return nil
 	}
 	served, _ := hello["store_id"].(string)
-	if served == "" {
-		return nil
-	}
-	wanted, _ := store.Identity(s.storePath)
-	if served == wanted {
-		return nil
-	}
-	return &StoreMismatchError{Addr: s.address(), StorePath: s.storePath, Served: served, Wanted: wanted}
+	return endpoint.CheckStore(s.address(), s.storePath, served)
 }
 
 // UseHandoffs keeps restart handoffs in stateDir, the daemon's state directory: Connect waits on

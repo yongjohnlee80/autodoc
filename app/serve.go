@@ -18,7 +18,6 @@ import (
 	"github.com/yongjohnlee80/golib/search/rank"
 	"github.com/yongjohnlee80/golib/vfs/local"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/index"
@@ -26,6 +25,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/todo"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -40,22 +40,17 @@ var errAlreadyServing = errors.New("autodoc is already serving")
 // it is still this process's.
 func runServe(ctx context.Context, configPath string, out io.Writer, b build) error {
 	log := logger.New(logger.WithWriter(out))
-	if configPath == "" {
-		var err error
-		if configPath, err = config.DefaultPath(); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(configPath)
+	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
 	}
-	sock, err := cfg.Server.SocketPath()
-	if err != nil {
+	cfg, sock, storePath := e.Config, e.Socket, e.Store
+	// the state directory holds the socket when there is no runtime directory; the data directory
+	// holds the store and its lease-info
+	if err := e.MakeStateDir(); err != nil {
 		return err
 	}
-	storePath, err := cfg.Server.StorePath()
-	if err != nil {
+	if err := e.MakeDataDir(); err != nil {
 		return err
 	}
 	ln, err := listen(sock)
@@ -82,14 +77,12 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	}
 	defer removeIfStillOurs(sock, id)
 
-	if stateDir, err := cfg.Server.StateDirPath(); err == nil {
-		noteOldIndexes(stateDir, storePath, out)
-	}
+	noteOldIndexes(e.StateDir, storePath, out)
 	db, err := store.Open(ctx, storePath)
 	if errors.Is(err, store.ErrBusy) {
 		// the store's daemon serves on another endpoint: a config naming another socket for the
 		// same store finds it there, through the lease-info, and leaves it be
-		if addr, ok := verifiedHolder(ctx, storePath); ok {
+		if addr, ok := endpoint.Verified(ctx, storePath); ok {
 			return fmt.Errorf("%w on %s, for %s; this process is not serving", errAlreadyServing, addr, storePath)
 		}
 		// the lease is held and no lease-info says by whom: the daemon before this one is closing
@@ -232,7 +225,7 @@ func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, 
 		if !errors.Is(err, store.ErrBusy) {
 			return db, err
 		}
-		if addr, ok := verifiedHolder(ctx, storePath); ok {
+		if addr, ok := endpoint.Verified(ctx, storePath); ok {
 			return nil, fmt.Errorf("%w on %s, for %s; this process is not serving", errAlreadyServing, addr, storePath)
 		}
 		if time.Now().After(deadline) {
@@ -246,22 +239,6 @@ func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, 
 func servesStore(info rpc.ProbeInfo, storePath string) bool {
 	id, err := store.Identity(storePath)
 	return err == nil && info.StoreID != "" && info.StoreID == id
-}
-
-// verifiedHolder is the endpoint of the daemon holding the store's lease, when its lease-info names
-// one that answers as this store's daemon and the same process the record was written by.
-func verifiedHolder(ctx context.Context, storePath string) (string, bool) {
-	li, err := store.ReadLeaseInfo(storePath)
-	if err != nil || li.Addr == "" {
-		return "", false
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	info, err := rpc.Probe(probeCtx, "unix", li.Addr)
-	if err != nil || !servesStore(info, storePath) || info.Instance != li.Instance {
-		return "", false
-	}
-	return li.Addr, true
 }
 
 // noteOldIndexes says once where the index files of the builds before the store are: they are no

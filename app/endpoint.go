@@ -5,10 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
-	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -22,44 +19,22 @@ import (
 // another protocol answers too, and the client's own hello finds the mismatch. A daemon that
 // answers for another store is refused either way (client.StoreMismatchError).
 func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out io.Writer) error {
-	if configPath == "" {
-		var err error
-		if configPath, err = config.DefaultPath(); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(configPath)
+	e, err := endpoint.Load(configPath)
 	if err != nil {
 		return err
 	}
-	sock, err := cfg.Server.SocketPath()
-	if err != nil {
-		return err
-	}
-	storePath, err := cfg.Server.StorePath()
-	if err != nil {
-		return err
-	}
-	addr := endpoint.Holder(ctx, storePath, sock)
+	addr := endpoint.Holder(ctx, e.Store, e.Socket)
 	if !ensure {
 		// what answers on the socket must be this store's daemon: a config that changed its
 		// data_dir but kept its socket would otherwise send its client to the old store
-		probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-		info, perr := rpc.Probe(probeCtx, "unix", addr)
-		cancel()
-		if perr == nil && info.StoreID != "" {
-			if wanted, _ := store.Identity(storePath); info.StoreID != wanted {
-				return &client.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
-			}
+		var mismatch *client.StoreMismatchError
+		if _, err := endpoint.Probe(ctx, addr, e.Store); errors.As(err, &mismatch) {
+			return err
 		}
 	}
 	if ensure {
-		stateDir, err := cfg.Server.StateDirPath()
-		if err != nil {
-			return err
-		}
-		session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).As(rpc.CLIName).
-			UseHandoffs(stateDir).ForStore(sock, storePath)
+		session := client.NewSession(e.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, e.StateDir) }).As(rpc.CLIName).
+			UseHandoffs(e.StateDir).ForStore(e.Socket, e.Store)
 		var mismatch *client.MismatchError
 		if err := session.Connect(ctx); err != nil && !errors.As(err, &mismatch) && session.Stale() == nil {
 			return err

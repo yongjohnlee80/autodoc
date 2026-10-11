@@ -12,9 +12,9 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/term"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 )
 
 // LaunchOptions is what a program running AutoDoc's TUI changes about how it starts: autodoc's own
@@ -67,29 +67,15 @@ type LaunchOptions struct {
 // on its socket (starting one when nothing answers), opens the workspace asked for or the one last
 // entered, and runs on the terminal.
 func Launch(ctx context.Context, o LaunchOptions) error {
-	configPath := o.ConfigPath
-	if configPath == "" {
-		var err error
-		if configPath, err = config.DefaultPath(); err != nil {
-			return err
-		}
-	}
-	cfg, err := config.Load(configPath)
+	e, err := endpoint.Load(o.ConfigPath)
 	if err != nil {
 		return err
 	}
-	stateDir, err := cfg.Server.StateDirPath()
-	if err != nil {
+	// the TUI's own state (the last workspace, unsaved work) and a spawned daemon's log live here
+	if err := e.MakeStateDir(); err != nil {
 		return err
 	}
-	sock, err := cfg.Server.SocketPath()
-	if err != nil {
-		return err
-	}
-	storePath, err := cfg.Server.StorePath()
-	if err != nil {
-		return err
-	}
+	configPath, stateDir, sock, storePath := e.ConfigPath, e.StateDir, e.Socket, e.Store
 	spawn := o.Spawn
 	if spawn == nil {
 		spawn = client.SpawnServe
