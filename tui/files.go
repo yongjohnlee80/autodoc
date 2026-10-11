@@ -668,8 +668,10 @@ func (h *Host) createFile(name string) {
 	}
 	draft := h.draft
 	content := []byte{}
+	var restored *fileRef // the kept copy the draft's text came from, if any (recovery.go)
 	if draft != nil {
 		content = []byte(h.core.Value())
+		restored = h.restoredCopy
 	}
 	ep, ws, gen := h.epoch, h.ws, h.file.gen
 	do(h, func(ctx context.Context) error {
@@ -690,6 +692,14 @@ func (h *Host) createFile(name string) {
 		}
 		h.draft = nil
 		if draft != nil {
+			// the draft's text is on disk now: its kept copies go
+			h.dropRecovery("", "")
+			if restored != nil {
+				h.dropRecovery(restored.ws, restored.path)
+				if h.restoredCopy == restored {
+					h.restoredCopy = nil
+				}
+			}
 			if gen != h.file.gen || h.file.open {
 				// the page moved on while the draft was written: the file is on disk; open it only
 				// when asked

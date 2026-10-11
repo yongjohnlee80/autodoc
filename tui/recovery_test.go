@@ -229,3 +229,24 @@ func TestQBangDeletesAnOlderCopy(t *testing.T) {
 		t.Fatalf(":q! left %+v", got)
 	}
 }
+
+// A copy whose file was gone, restored as the draft, goes once the draft is saved under a name.
+func TestARestoredDraftsCopyGoesWhenTheDraftIsSaved(t *testing.T) {
+	dir := t.TempDir()
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "gone.md", Text: "lost\n", Saved: time.Now()})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "gone.md had unsaved changes")
+	r.keys(t, key('r'))
+	r.s.WaitFor(t, "the draft restored", func(string) bool { return r.editorText() == "lost\n" })
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	r.keys(t, decltest.Type("saved")...)
+	r.keys(t, enter())
+	r.waitFile(t, "saved.md")
+	if got := d.read(t, "kb", "saved.md"); got != "lost\n" {
+		t.Fatalf("saved.md holds %q", got)
+	}
+	r.s.WaitFor(t, "the copy gone", func(string) bool { return len(readRecovery(dir)) == 0 })
+}

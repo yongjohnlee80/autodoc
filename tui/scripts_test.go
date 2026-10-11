@@ -23,7 +23,8 @@ func ownCore(t *testing.T, text string) *widget.EditorCore {
 	return core
 }
 
-// :table 3 4 is the table Johno's lazyvim plugin made: Column<c>, 15 dashes, Item<c>.<r>.
+// :table 3 4 is the table Johno's lazyvim plugin made (Column<c>, Item<c>.<r>), with a five-dash
+// delimiter row.
 func TestTableMakesTheMarkdownTable(t *testing.T) {
 	core := ownCore(t, "")
 	if err := core.RunCommand("table 3 4"); err != nil {
@@ -31,7 +32,7 @@ func TestTableMakesTheMarkdownTable(t *testing.T) {
 	}
 	want := strings.Join([]string{
 		"| Column1 | Column2 | Column3 |",
-		"| --------------- | --------------- | --------------- |",
+		"| ----- | ----- | ----- |",
 		"| Item1.1 | Item2.1 | Item3.1 |",
 		"| Item1.2 | Item2.2 | Item3.2 |",
 		"| Item1.3 | Item2.3 | Item3.3 |",
@@ -55,7 +56,7 @@ func TestTableGoesUnderTextAndRefusesBadSizes(t *testing.T) {
 	if err := core.RunCommand("table 1 1"); err != nil {
 		t.Fatal(err)
 	}
-	if got := core.Value(); got != "intro\n\n| Column1 |\n| --------------- |\n| Item1.1 |" {
+	if got := core.Value(); got != "intro\n\n| Column1 |\n| ----- |\n| Item1.1 |" {
 		t.Fatalf("under text: %q", got)
 	}
 	for _, line := range []string{"table 0 2", "table x 2", "table 2.5 1", "table 65 1"} {

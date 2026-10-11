@@ -17,9 +17,12 @@ func (h *Host) attachVimKeys() {
 	if !ok || h.vimKeys != nil {
 		return
 	}
-	card := widget.NewBox(widget.NewText(vimKeysText, widget.WithWrapMode(widget.Wrap)),
+	// the text wears the card's colours: a Text with none clears its cells to the screen's default
+	// background, a dark block on the card in a themed window
+	look := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
+	card := widget.NewBox(widget.NewText(vimKeysText, widget.WithWrapMode(widget.Wrap), widget.WithTextStyle(look)),
 		widget.WithTitle("Vim keys · Normal mode · ? closes"), widget.WithBorder(style.BorderRounded),
-		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground).Padding(0, 1)))
+		widget.WithStyle(look.Padding(0, 1)))
 	col := tuicore.NewFlex(tuicore.Vertical)
 	col.Add(card, widget.NewText("")) // the empty row keeps the status line under the card
 	h.vimKeys = widget.NewFloat(col, widget.WithAnchor(widget.BottomRight))

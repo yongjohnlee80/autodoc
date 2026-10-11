@@ -1,5 +1,6 @@
 -- :table <cols> <rows> — a Markdown table under the cursor's line: a header of Column1…, the
--- delimiter row, and rows of Item<col>.<row> to type over. In Insert mode Tab walks the cells,
+-- delimiter row (five dashes a column: enough for Markdown, short on the page), and rows of
+-- Item<col>.<row> to type over. In Insert mode Tab walks the cells,
 -- selecting each one's text so typing replaces it; past the last cell it adds a row.
 autodoc.command{
   name = "table",
@@ -20,7 +21,7 @@ autodoc.command{
     end
     local out = {
       row(function(c) return "Column" .. c end),
-      row(function() return string.rep("-", 15) end),
+      row(function() return "-----" end),
     }
     for r = 1, rows do
       out[#out + 1] = row(function(c) return "Item" .. c .. "." .. r end)
