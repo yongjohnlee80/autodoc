@@ -20,6 +20,10 @@ defer eng.Close()
 
 // a host function scripts can call: myapp.workspace()
 eng.SetFunction("workspace", func(L *lua.LState) int { L.Push(lua.LString(ws)); return 1 })
+// a table of them: myapp.git.branch()
+git := eng.L.NewTable()
+eng.L.SetField(git, "branch", eng.L.NewFunction(branch))
+eng.L.SetField(eng.Global(), "git", git)
 
 errs := eng.LoadDir(os.DirFS(configDir), "lua") // every lua/*.lua, in name order
 ```
@@ -60,6 +64,50 @@ cluster). A range runs from its start up to, not including, its end.
 | `ed:selection()` | the selection's range, or `nil` |
 | `ed:find(term, {ignore_case=, backward=, wrap=})` | the next match from the cursor, or `nil` |
 | `ed:run(line)` | run a command line, as the prompt does |
+
+## Host functions that wait
+
+A host function must not wait on the UI loop: a call to a server would freeze the program while it
+answers. It takes a callback instead, does its work on a goroutine, and hands the answer back on
+the loop with `Callback`, which runs the Lua function as a command runs: under the deadline, with
+the editor object reachable again and its edits one undo step, and its error returned.
+
+```go
+eng.SetFunction("fetch", func(L *lua.LState) int {
+	arg, err := script.ToGo(L.Get(1)) // a Lua value as Go: nil, bool, int64, float64, string, []any, map[string]any
+	if err != nil {
+		L.ArgError(1, err.Error())
+	}
+	cb := L.CheckFunction(2)
+	go func() {
+		answer := fetch(arg)
+		post(func() { // back on the UI loop
+			v, _ := script.ToLua(eng.L, answer)
+			if err := eng.Callback("fetch's callback", cb, v); err != nil {
+				statusLine(err.Error()) // nobody waits on a callback's error: show it
+			}
+		})
+	}()
+	return 0
+})
+```
+
+The editor may hold another document by the time the answer comes; a callback reads where things
+are then, not where they were when it was asked.
+
+Values cross as msgpack carries them:
+
+| Lua | Go |
+|---|---|
+| `nil`, a boolean, a string | `nil`, `bool`, `string` (`[]byte` reaches Lua as a string) |
+| an integral number / any other | `int64` / `float64` |
+| a table with keys `1..n` | `[]any` |
+| any other table | `map[string]any`, number and boolean keys as strings |
+
+An empty table is a map (the empty options a call takes most often); a table with a hole (`{1, nil,
+3}`) is a map too. A function, a coroutine, the editor object or a table holding itself cannot cross
+(`ErrNotCarried`). Going to Lua, every Go number is a number, any slice a list, any map a table, a
+pointer what it points to, and a `fmt.Stringer` its string.
 
 ## Safety
 

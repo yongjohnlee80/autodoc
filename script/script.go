@@ -41,7 +41,13 @@
 //	ed:run(line)                  run a command line, as the prompt does
 //
 // and the global table's notify(message) says something where the host shows messages
-// (WithNotify). A host adds functions of its own to the global table with SetFunction.
+// (WithNotify). A host adds functions of its own to the global table with SetFunction, and tables
+// of them through Global.
+//
+// A host function that must wait (a call to a server) never waits on the loop: it takes a Lua
+// function, does its work elsewhere, and hands the answer back on the loop with Callback, which
+// runs the function as a command runs (the deadline, the editor, one undo step). ToGo and ToLua
+// carry the values across, shaped as msgpack carries them.
 //
 // A command's edits are one undo step (the editor runs every command in one). A script runs on the
 // UI loop, as everything that touches the editor does, with a deadline (WithTimeout); an error, a
@@ -137,6 +143,10 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 // Close releases the Lua state.
 func (e *Engine) Close() { e.L.Close() }
 
+// Global is the global table scripts register through: a host adds its own fields to it, tables
+// of functions among them (AutoDoc's autodoc.search.query). Only the loop touches it.
+func (e *Engine) Global() *lua.LTable { return e.global }
+
 // SetFunction adds fn to the global table as name: a host's own function for its scripts (the
 // workspace's files, say). It runs on the UI loop, like the commands that call it.
 func (e *Engine) SetFunction(name string, fn lua.LGFunction) {
@@ -224,10 +234,6 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 // runCommand calls a script's run function for one command line, with the deadline.
 func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandContext) error {
 	L := e.L
-	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
-	defer cancel()
-	L.SetContext(ctx)
-	defer L.RemoveContext()
 	prev := e.cur
 	e.cur = x.Core
 	defer func() { e.cur = prev }()
@@ -235,11 +241,44 @@ func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandCon
 	for _, a := range x.Args {
 		args.Append(lua.LString(a))
 	}
-	L.Push(run)
-	L.Push(e.editorValue())
-	L.Push(args)
-	L.Push(lua.LString(x.Line))
-	if err := L.PCall(3, 0, nil); err != nil {
+	return e.protect(name, run, e.editorValue(), args, lua.LString(x.Line))
+}
+
+// Callback calls fn with args later, on the UI loop: when the answer a host function went to fetch
+// has come (the host's own call to a server, say). It runs as a command does: under the deadline,
+// its error (the script's, or the deadline's) returned and never a crash, the editor object
+// reaching the editor again and fn's edits one undo step. The editor may hold another document by
+// then than the command that asked had; a callback reads where things are now. name names fn in
+// the error ("search.query's callback").
+func (e *Engine) Callback(name string, fn *lua.LFunction, args ...lua.LValue) error {
+	return e.core.Batch(func() error {
+		prev := e.cur
+		e.cur = e.core
+		defer func() { e.cur = prev }()
+		return e.protect(name, fn, args...)
+	})
+}
+
+// protect calls fn with args under the deadline; an error, fn's or the deadline's, names name. The
+// deadline of a call it runs inside (a command running another through ed:run) is restored after.
+func (e *Engine) protect(name string, fn *lua.LFunction, args ...lua.LValue) error {
+	L := e.L
+	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
+	defer cancel()
+	outer := L.Context()
+	L.SetContext(ctx)
+	defer func() {
+		if outer != nil {
+			L.SetContext(outer)
+		} else {
+			L.RemoveContext()
+		}
+	}()
+	L.Push(fn)
+	for _, a := range args {
+		L.Push(a)
+	}
+	if err := L.PCall(len(args), 0, nil); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("%s: the script ran past %s and was stopped", name, e.timeout)
 		}
