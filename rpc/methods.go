@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/search/embed"
@@ -24,14 +23,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
-
-func diagnosticsList(ds []schema.Diagnostic) []any {
-	out := make([]any, len(ds))
-	for i, d := range ds {
-		out[i] = map[string]any{"field": d.Field, "line": int64(d.Line), "rule": d.Rule, "message": d.Message}
-	}
-	return out
-}
 
 // The error codes, chosen by what the client does next (ADR 0203 §4.4). The protocol codes keep
 // AutoDB's numbers.
@@ -170,109 +161,9 @@ func (s *Server) register() {
 	s.own(s.preferenceVerbs()...)
 	s.own(s.workspaceVerbs()...)
 	s.own(s.searchVerbs()...)
+	s.own(s.indexVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
-	// index.documents lists the workspace's documents with their frontmatter, ordered by updated
-	// (default), path or indexed, narrowed by tags, paths, facets and missing fields: the index a
-	// client renders instead of a hand-kept one (Protocol 13). opts.diagnosed keeps the documents the
-	// schema diagnoses, each with its diagnostics: the KB's frontmatter scan (Protocol 15).
-	s.handle("index.documents", s.verb(1, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		o, err := documentsOpts(ctx, p)
-		if err != nil {
-			return nil, err
-		}
-		docs, more, err := w.Index.Store().Documents(ctx, o)
-		if errors.Is(err, index.ErrBadSort) {
-			return nil, invalid("index.documents: opts.sort is updated, path or indexed")
-		}
-		if err != nil {
-			return nil, err
-		}
-		out := make([]any, len(docs))
-		for i, d := range docs {
-			out[i] = map[string]any{"path": d.Path, "generation": d.Generation, "title": d.Title, "updated": d.Updated,
-				"indexed_at": d.IndexedAt, "fields": d.Fields}
-			if o.Diagnosed {
-				out[i].(map[string]any)["diagnostics"] = diagnosticsList(d.Diagnostics)
-			}
-		}
-		next := int64(o.After + len(docs))
-		return map[string]any{"docs": out, "more": more, "next": next}, nil
-	}, true))
-
-	s.handle("index.status", s.verb(1, 1, func(ctx context.Context, w *Workspace, _ []any) (any, error) {
-		st, err := w.Index.Status(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return statusMap(st, w), nil
-	}, true))
-	s.handle("index.list", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		after, err := argStr(p, 1, "after")
-		if err != nil {
-			return nil, err
-		}
-		limit, err := argInt(p, 2, "limit")
-		if err != nil {
-			return nil, err
-		}
-		list, more, err := w.Index.Store().List(ctx, after, int(limit))
-		if err != nil {
-			return nil, err
-		}
-		out := make([]any, len(list))
-		for i, d := range list {
-			out[i] = map[string]any{"path": d.Path, "generation": d.Generation, "version": d.Version}
-		}
-		return map[string]any{"docs": out, "more": more}, nil
-	}, true))
-	s.handle("index.changes", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		since, err := argInt(p, 1, "since")
-		if err != nil {
-			return nil, err
-		}
-		limit, err := argInt(p, 2, "limit")
-		if err != nil {
-			return nil, err
-		}
-		changes, cursor, more, err := w.Index.Store().Changes(ctx, since, int(limit))
-		if err != nil {
-			return nil, err
-		}
-		out := make([]any, len(changes))
-		for i, c := range changes {
-			out[i] = map[string]any{"path": c.Path, "op": c.Op, "generation": c.Generation}
-		}
-		return map[string]any{"cursor": cursor, "changes": out, "more": more}, nil
-	}, true))
-	s.handle("index.reindex", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
-		}
-		return nil, w.Index.Reindex(path)
-	}, true))
-	// the workspace's models and the room their vectors take
-	s.handle("index.models", s.verb(1, 1, func(ctx context.Context, w *Workspace, _ []any) (any, error) {
-		ms, err := w.Index.Models(ctx)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]any, len(ms))
-		for i, m := range ms {
-			out[i] = map[string]any{"fp": m.FP, "provider": m.Provider, "name": m.Name, "dims": int64(m.Dims),
-				"state": m.State, "vectors": m.Vectors, "f32_bytes": m.F32Bytes, "bits_bytes": m.BitsBytes, "key_bytes": m.KeyBytes}
-		}
-		return out, nil
-	}, true))
-	s.handle("index.purge_model", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		fp, err := argStr(p, 1, "model")
-		if err != nil {
-			return nil, err
-		}
-		return nil, w.Index.PurgeModel(ctx, fp)
-	}, true))
-
 	links := func(backlinks bool) golibrpc.Handler {
 		return s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 			path, err := argStr(p, 1, "path")
@@ -452,7 +343,7 @@ func (s *Server) register() {
 		if w.Index == nil || w.Index.Kind(path) == kind.Markdown {
 			ds = sch.ValidateFile(content).Diagnostics
 		}
-		return map[string]any{"diagnostics": diagnosticsList(ds)}, nil
+		return map[string]any{"diagnostics": diagnosticsOf(ds)}, nil
 	}, true))
 	s.handle("doc.rename", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		from, err := argStr(p, 1, "from")
@@ -518,123 +409,4 @@ func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (an
 		out, err := h(withProtocol(ctx, sessionProtocol(req.Session)), w, req.Params)
 		return out, wireErr(err)
 	}
-}
-
-// documentsOpts reads index.documents' optional second parameter: {sort, fields, tags, paths,
-// facets, missing, after, limit}.
-// diagnosedSince is the protocol index.documents' diagnosed option arrived in.
-const diagnosedSince = 15
-
-// documentsOpts reads index.documents' options for the request's session: an option newer than the
-// session's protocol is refused, whatever its value, as the daemon of that protocol refuses it.
-func documentsOpts(ctx context.Context, p []any) (index.DocumentsOpts, error) {
-	var o index.DocumentsOpts
-	if len(p) < 2 || p[1] == nil {
-		return o, nil
-	}
-	m, ok := p[1].(map[string]any)
-	if !ok {
-		return o, invalid("index.documents: opts must be a map")
-	}
-	for k, v := range m {
-		switch k {
-		case "sort":
-			s, ok := v.(string)
-			if !ok {
-				return o, invalid("index.documents: opts.sort must be a string")
-			}
-			o.Sort = s
-		case "after", "limit":
-			n, ok := v.(int64)
-			if !ok || n < 0 {
-				return o, invalid("index.documents: opts." + k + " must be a non-negative integer")
-			}
-			if k == "after" {
-				o.After = int(n)
-			} else {
-				o.Limit = int(n)
-			}
-		case "fields", "tags", "paths", "missing":
-			l, err := strList(v, "index.documents: opts."+k)
-			if err != nil {
-				return o, err
-			}
-			switch k {
-			case "fields":
-				o.Fields = l
-			case "tags":
-				o.Tags = l
-			case "paths":
-				o.Paths = l
-			default:
-				o.Missing = l
-			}
-		case "diagnosed":
-			if protocolOf(ctx) < diagnosedSince {
-				// refused, not ignored, and false too: a protocol-14 daemon knows no such option
-				return o, invalid("index.documents: opts.diagnosed needs protocol " + strconv.FormatInt(diagnosedSince, 10))
-			}
-			b, ok := v.(bool)
-			if !ok {
-				return o, invalid("index.documents: opts.diagnosed must be a boolean")
-			}
-			o.Diagnosed = b
-		case "facets":
-			fm, ok := v.(map[string]any)
-			if !ok {
-				return o, invalid("index.documents: opts.facets must be a map of field to a value or a list of values")
-			}
-			o.Facets = map[string][]string{}
-			for field, fv := range fm {
-				if s, ok := fv.(string); ok {
-					o.Facets[field] = []string{s}
-					continue
-				}
-				l, err := strList(fv, "index.documents: opts.facets."+field)
-				if err != nil {
-					return o, err
-				}
-				o.Facets[field] = l
-			}
-		default:
-			return o, invalid("index.documents: unknown option " + k)
-		}
-	}
-	return o, nil
-}
-
-func statusMap(st index.Status, w *Workspace) map[string]any {
-	failing := make([]any, len(st.Failing))
-	for i, f := range st.Failing {
-		failing[i] = map[string]any{"path": f.Path, "attempts": int64(f.Attempts), "error": f.Err}
-	}
-	out := map[string]any{"cursor": st.Cursor, "oldest_retained": st.OldestRetained, "docs": st.Docs,
-		"chunks": st.Chunks, "pending_jobs": st.PendingJobs, "unparsed_frontmatter": strs(st.UnparsedFrontmatter),
-		"diagnosed": st.Diagnosed, "failing": failing,
-		"held": st.Held, "held_stale": st.HeldStale, "held_unchecked": st.HeldUnchecked}
-	if w.Following != nil {
-		f := w.Following()
-		out["following"] = map[string]any{"mode": f.Following, "error": f.Err, "retrying": strs(f.Retrying)}
-	}
-	if w.Warming != nil {
-		if reasons := w.Warming(); len(reasons) > 0 {
-			out["warming"] = strs(reasons)
-		}
-	}
-	if e := st.Embeddings; e != nil {
-		refused := make([]any, len(e.RefusedTexts))
-		for i, r := range e.RefusedTexts {
-			refused[i] = map[string]any{"path": r.Path, "breadcrumb": r.Breadcrumb, "error": r.Error,
-				"bytes": int64(r.Bytes), "estimated_tokens": int64(r.Tokens), "retry_at": r.RetryAt.Unix()}
-		}
-		emb := map[string]any{"provider": e.Provider, "model": e.Model, "target": e.Target,
-			"texts": e.Texts, "pending": e.Pending, "semantic": e.Semantic, "last_error": e.LastErr, "refused": int64(e.Refused),
-			"target_pending": e.TargetPending, "target_refused": int64(e.TargetRefused), "refused_texts": refused}
-		if w.EmbeddingQueue != nil {
-			state, behind := w.EmbeddingQueue()
-			emb["queue_state"], emb["waiting_for"] = state, behind
-		}
-		out["embeddings"] = emb
-	}
-	return out
 }

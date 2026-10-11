@@ -158,18 +158,18 @@ func TestSpanLines(t *testing.T) {
 // option read into its field, and each malformed value refused with the option it names.
 func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 	atNow := withProtocol(context.Background(), Protocol)
-	o, err := documentsOpts(atNow, []any{"kb"})
+	o, err := documentsOpts(atNow, nil)
 	if err != nil || o.Sort != "" || o.Limit != 0 {
 		t.Fatalf("no opts: %+v, %v", o, err)
 	}
-	if _, err := documentsOpts(atNow, []any{"kb", nil}); err != nil {
+	if _, err := documentsOpts(atNow, nil); err != nil {
 		t.Fatalf("nil opts: %v", err)
 	}
-	o, err = documentsOpts(atNow, []any{"kb", map[string]any{
+	o, err = documentsOpts(atNow, map[string]any{
 		"sort": "path", "after": int64(2), "limit": int64(5),
 		"fields": []any{"status"}, "tags": []any{"adr"}, "paths": []any{"adrs/"}, "missing": []any{"abstract"}, "diagnosed": true,
 		"facets": map[string]any{"status": "accepted", "type": []any{"adr", "note"}},
-	}})
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 	// below protocol 15 the option is unknown, true or false, as it is to a protocol-14 daemon
 	at14 := withProtocol(context.Background(), 14)
 	for _, v := range []bool{true, false} {
-		_, err := documentsOpts(at14, []any{"kb", map[string]any{"diagnosed": v}})
+		_, err := documentsOpts(at14, map[string]any{"diagnosed": v})
 		var rerr *golibrpc.Error
 		if !errors.As(err, &rerr) || rerr.Code != golibrpc.CodeInvalidParams || !strings.Contains(rerr.Message, "needs protocol 15") {
 			t.Errorf("diagnosed=%v at 14: %v, want invalid params naming protocol 15", v, err)
@@ -205,7 +205,7 @@ func TestDocumentsOptsReadsEveryOptionAndRefusesTheRest(t *testing.T) {
 		{map[string]any{"diagnosed": "yes"}, "opts.diagnosed must be a boolean"},
 		{map[string]any{"colour": "red"}, "unknown option colour"},
 	} {
-		_, err := documentsOpts(atNow, []any{"kb", c.opts})
+		_, err := documentsOpts(atNow, c.opts)
 		var rerr *golibrpc.Error
 		if !errors.As(err, &rerr) || rerr.Code != golibrpc.CodeInvalidParams || !strings.Contains(rerr.Message, c.says) {
 			t.Errorf("opts %#v: got %v, want invalid params saying %q", c.opts, err, c.says)
