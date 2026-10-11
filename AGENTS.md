@@ -36,6 +36,9 @@ refused, and so is every verb until the hello succeeds. A session keeps the prot
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
 and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
 `verbs` the session may call. The name `autodoc-tui` is admitted at the daemon's own protocol only.
+`autodoc --call` says hello as `autodoc-cli`, so what it changes is attributed to it in
+`sys.events`; refused by an older daemon it still serves, it says hello again at that daemon's
+protocol, on a new connection (a refused hello ends its session).
 
 ## A search, step by step
 

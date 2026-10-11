@@ -58,7 +58,7 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 		if err != nil {
 			return err
 		}
-		session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).
+		session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).As(rpc.CLIName).
 			UseHandoffs(stateDir).ForStore(sock, storePath)
 		var mismatch *client.MismatchError
 		if err := session.Connect(ctx); err != nil && !errors.As(err, &mismatch) && session.Stale() == nil {

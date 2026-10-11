@@ -82,6 +82,11 @@ const MinProtocol int64 = 12
 // TUI is the same binary as its daemon, and a mismatch is its cue to offer a restart.
 const TUIName = "autodoc-tui"
 
+// CLIName is the name `autodoc --call` and `--print-endpoint --ensure` say hello with: a client
+// like any other, admitted across MinProtocol to Protocol, so its events are attributed to it and an
+// agent's shell survives a daemon one protocol apart.
+const CLIName = "autodoc-cli"
+
 // ServerName is what sys.hello answers as "server", so a probe tells AutoDoc from another occupant.
 const ServerName = "autodoc"
 

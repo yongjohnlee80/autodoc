@@ -13,6 +13,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/internal/client"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // runCall is --call <method> [params]: one call to the local daemon, which it starts when nothing
@@ -46,7 +47,8 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
-	session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
+	session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).As(rpc.CLIName).
+		UseHandoffs(stateDir).ForStore(sock, storePath)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}

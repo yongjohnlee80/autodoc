@@ -904,3 +904,26 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 		t.Errorf("gave up after %v, want about %v", took, predecessorWait)
 	}
 }
+
+// TestACallsEventsAreTheCLIs: --call says hello as autodoc-cli, not as the TUI, so what it changes is
+// attributed to it in sys.events.
+func TestACallsEventsAreTheCLIs(t *testing.T) {
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
+	start(t, cfg, sock)
+	var out bytes.Buffer
+	if err := runCall(context.Background(), cfg, "preference.set", `["theme", "dark"]`, &out); err != nil {
+		t.Fatal(err)
+	}
+	events := call(t, dial(t, sock), "sys.events", int64(0), int64(50)).(map[string]any)["events"].([]any)
+	for _, e := range events {
+		if e := e.(map[string]any); e["kind"] == "preference.changed" {
+			if c, _ := e["client"].(string); !strings.HasPrefix(c, rpc.CLIName+"#") {
+				t.Fatalf("preference.changed attributed to %q, want %s#…", c, rpc.CLIName)
+			}
+			return
+		}
+	}
+	t.Fatalf("no preference.changed in sys.events: %v", events)
+}

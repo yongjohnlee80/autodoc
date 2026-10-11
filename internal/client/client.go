@@ -45,6 +45,9 @@ var errNotConnected = errors.New("not connected to the daemon")
 // connection's generation. Every result the host applies was asked under a generation; a
 // reconnect moves it on, so an answer from an old connection is never applied.
 type Session struct {
+	// name is what the hello says: rpc.TUIName (the default), held to this build's protocol, or
+	// another client's (As), admitted across the daemon's range
+	name   string
 	addr   string
 	spawn  func() (logPath string, err error) // start `autodoc --serve`; nil: never
 	window time.Duration
@@ -113,7 +116,15 @@ func (e *StoreMismatchError) Error() string {
 // NewSession is the session to the daemon on the unix socket addr. spawn, when not nil, starts the
 // daemon once when nothing answers.
 func NewSession(addr string, spawn func() (string, error)) *Session {
-	return &Session{addr: addr, spawn: spawn, window: spawnProbeWindow, self: int64(os.Getpid()), handoffCap: handoffSpan}
+	return &Session{name: rpc.TUIName, addr: addr, spawn: spawn, window: spawnProbeWindow, self: int64(os.Getpid()), handoffCap: handoffSpan}
+}
+
+// As has the session say hello as name. Any name but rpc.TUIName is admitted across the daemon's
+// protocol range: a daemon older than this build is spoken to at its own protocol, when this build
+// still serves it (rpc.MinProtocol), so a client that is not the TUI survives a protocol apart.
+func (s *Session) As(name string) *Session {
+	s.name = name
+	return s
 }
 
 // address is where the session dials now.
@@ -259,22 +270,9 @@ func (s *Session) Connect(ctx context.Context) error {
 		}
 		backoff = min(backoff*2, 2*time.Second)
 	}
-	res, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": rpc.TUIName})
+	cli, m, err := s.hello(ctx, cli)
 	if err != nil {
-		_ = cli.Close()
-		var re *golibrpc.Error
-		if errors.As(err, &re) && re.Code == rpc.CodeProtocolMismatch {
-			return s.mismatch(ctx)
-		}
-		return fmt.Errorf("hello: %w", err)
-	}
-	m, _ := res.(map[string]any)
-	// The daemon holds the TUI to its own protocol by name; a daemon that admitted this build at
-	// another one is a mismatch all the same, so the restart offer follows rather than a session
-	// that half works.
-	if sp, ok := m["server_protocol"].(int64); ok && sp != rpc.Protocol {
-		_ = cli.Close()
-		return s.mismatch(ctx)
+		return err
 	}
 	if err := s.checkStore(m); err != nil {
 		_ = cli.Close()
@@ -288,6 +286,48 @@ func (s *Session) Connect(ctx context.Context) error {
 	s.client, s.version, s.pid, s.stale, s.token, s.head = cli, v, pid, nil, token, head
 	s.mu.Unlock()
 	return nil
+}
+
+// hello says hello on cli at this build's protocol, and answers with the connection that was
+// admitted and its reply; it closes cli when it fails. The TUI is held to this build's protocol: a
+// daemon that refuses it, or admits it at another, is a mismatch (and an older one is kept as
+// Stale). Another client, refused by an older daemon this build still serves, says hello again at
+// that daemon's protocol, on a new connection: a refused hello spends its session for good.
+func (s *Session) hello(ctx context.Context, cli *golibrpc.Client) (*golibrpc.Client, map[string]any, error) {
+	res, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": s.name})
+	if err != nil {
+		_ = cli.Close()
+		var re *golibrpc.Error
+		if !errors.As(err, &re) || re.Code != rpc.CodeProtocolMismatch {
+			return nil, nil, fmt.Errorf("hello: %w", err)
+		}
+		if s.name == rpc.TUIName {
+			return nil, nil, s.mismatch(ctx)
+		}
+		info, err := s.probe(ctx)
+		if err != nil {
+			return nil, nil, fmt.Errorf("hello: protocol mismatch, and the probe failed: %w", err)
+		}
+		if info.Protocol >= rpc.Protocol || info.Protocol < rpc.MinProtocol {
+			return nil, nil, &MismatchError{Client: rpc.Protocol, Server: info.Protocol, Version: info.Version}
+		}
+		if cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix")); err != nil {
+			return nil, nil, err
+		}
+		if res, err = cli.Call(ctx, "sys.hello", map[string]any{"protocol": info.Protocol, "name": s.name}); err != nil {
+			_ = cli.Close()
+			return nil, nil, fmt.Errorf("hello at protocol %d: %w", info.Protocol, err)
+		}
+	}
+	m, _ := res.(map[string]any)
+	// The daemon holds the TUI to its own protocol by name; a daemon that admitted this build at
+	// another one is a mismatch all the same, so the restart offer follows rather than a session
+	// that half works.
+	if sp, ok := m["server_protocol"].(int64); ok && sp != rpc.Protocol && s.name == rpc.TUIName {
+		_ = cli.Close()
+		return nil, nil, s.mismatch(ctx)
+	}
+	return cli, m, nil
 }
 
 // mismatch probes a daemon that refused this build's protocol: a hello declaring none is answered
@@ -311,7 +351,7 @@ func (s *Session) probe(ctx context.Context) (OlderServer, error) {
 		return OlderServer{}, err
 	}
 	defer cli.Close()
-	res, err := cli.Call(ctx, "sys.hello", map[string]any{"name": rpc.TUIName})
+	res, err := cli.Call(ctx, "sys.hello", map[string]any{"name": s.name})
 	if err != nil {
 		return OlderServer{}, err
 	}

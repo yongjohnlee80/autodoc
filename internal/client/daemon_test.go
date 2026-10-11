@@ -14,7 +14,8 @@ import (
 )
 
 // otherDaemon is a daemon of protocol proto at sock: its hello refuses any other, admits proto, and
-// answers a probe with its number; sys.shutdown, admitted, stops it.
+// answers a probe with its number; a refused session stays refused, as rpc's does (sessRefused);
+// sys.shutdown, admitted, stops it.
 func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{}) {
 	t.Helper()
 	ln, err := net.Listen("unix", sock)
@@ -26,10 +27,12 @@ func otherDaemon(t *testing.T, sock string, proto int64) (stopped chan struct{})
 	srv.Handle("sys.hello", func(_ context.Context, req *golibrpc.Request) (any, error) {
 		reply := map[string]any{"protocol": proto, "version": fmt.Sprintf("v-p%d", proto), "pid": int64(os.Getpid())}
 		m, _ := req.Params[0].(map[string]any)
+		refused, _ := req.Session.Value("refused").(bool)
 		switch p, declared := m["protocol"]; {
 		case !declared:
 			return reply, nil
-		case p != proto:
+		case p != proto || refused:
+			req.Session.SetValue("refused", true)
 			return nil, &golibrpc.Error{Code: rpc.CodeProtocolMismatch, Message: fmt.Sprintf("protocol mismatch: client %v, server %d", p, proto)}
 		}
 		req.Session.SetValue("hello", true)
