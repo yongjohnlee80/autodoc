@@ -187,3 +187,32 @@ end }
 	}
 	x.r.waitNotice(t, "held: 1 nil")
 }
+
+// TestTheTutorialsLuaRuns: every Lua example in the tutorial loads, and runs as its page says.
+func TestTheTutorialsLuaRuns(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n\nkestrel notes\n"}})
+	r := attached(t, d)
+	r.waitNamespaces(t)
+	n := 0
+	for _, page := range tutorialPages {
+		for _, block := range strings.Split(page, "```lua\n")[1:] {
+			src, _, _ := strings.Cut(block, "```")
+			r.luaLoad(t, src)
+			n++
+		}
+	}
+	if n < 3 {
+		t.Fatalf("%d Lua examples in the tutorial", n)
+	}
+	onLoop(r, func() bool { r.h.core.SetValue("shout\n"); return true })
+	if err := r.luaRun("upper 1"); err != nil || !strings.HasPrefix(r.editorText(), "SHOUT") {
+		t.Fatalf("upper 1: %v, %q", err, r.editorText())
+	}
+	if err := r.luaRun("kestrels"); err != nil {
+		t.Fatal(err)
+	}
+	r.waitNotice(t, "1 hits; the first is a.md")
+	if err := r.luaRun("todo"); err == nil || !strings.Contains(err.Error(), "select the task's text first") {
+		t.Fatalf("todo with no selection: %v", err)
+	}
+}

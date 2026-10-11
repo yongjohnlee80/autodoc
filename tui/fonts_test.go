@@ -191,7 +191,7 @@ func TestTheTutorialPagesStopAtTheEnds(t *testing.T) {
 	for range len(tutorialPages) + 2 {
 		onLoop(r, func() bool { r.h.tutorialStep(1); return true })
 	}
-	r.s.WaitForText(t, fmt.Sprintf("%d of %d · The window", len(tutorialPages), len(tutorialPages)))
+	r.s.WaitForText(t, fmt.Sprintf("%d of %d · A worked example: :todo", len(tutorialPages), len(tutorialPages)))
 	if got := onLoop(r, func() int { return r.h.tutorialAt }); got != len(tutorialPages)-1 {
 		t.Errorf("page %d after too many Nexts", got)
 	}
