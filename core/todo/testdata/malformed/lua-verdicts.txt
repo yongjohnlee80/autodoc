@@ -1,0 +1,17 @@
+alias.md malformed
+anchor.md malformed
+automation-condition.md malformed
+automation-origin.md valid
+automation-status.md valid
+bad-enum.md malformed
+bad-timestamp.md malformed
+duplicate-key.md malformed
+empty-tags.md valid
+lifecycle.md malformed
+merge.md malformed
+no-frontmatter.md malformed
+null-assignee.md malformed
+null-due.md malformed
+tag.md malformed
+unknown-key.md malformed
+version-2.md malformed

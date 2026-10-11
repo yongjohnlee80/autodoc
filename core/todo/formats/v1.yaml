@@ -1,0 +1,37 @@
+# Todo format v1: auto-core's schema v1 (auto-core.nvim lua/auto-core/todo/schema.lua) without
+# automation, which ADR 1791532020 removed. A task's `version:` picks this file. core/schema
+# checks fields, types, enums and required; core/todo's v1 rules check what a schema cannot say:
+# the timestamps' shape, which status carries which timestamp, and a file-safe id.
+version: 1
+strict: true
+# FRONTMATTER_ORDER: hand-editable fields first, managed ones after, errors last
+order: [id, version, status, title, due, priority, assignee, tags, adr, review, blocked,
+  created, updated, status_changed, completed_at, archived_at, errors]
+frontmatter:
+  id: {type: string, required: true, managed: true}
+  version: {type: integer, enum: [1], required: true, managed: true}
+  status: {type: string, enum: [open, in-progress, deferred, completed, archived], required: true}
+  title: {type: string, required: true}
+  # the Markdown body is the description; a description key is accepted and never written
+  description: {type: string}
+  due: {type: date}
+  priority: {type: string, enum: [low, normal, high]}
+  assignee: {type: string}
+  tags: {type: list, item_type: string}
+  adr: {type: list, item_type: string}
+  review: {type: list, item_type: string}
+  blocked: {type: list, item_type: string}
+  created: {type: string, required: true, managed: true}
+  updated: {type: string, required: true, managed: true}
+  status_changed: {type: string, required: true, managed: true}
+  completed_at: {type: string, managed: true}
+  archived_at: {type: string, managed: true}
+  errors:
+    type: list
+    item_type: map
+    managed: true
+    fields:
+      field: {type: string, required: true}
+      code: {type: string, enum: [not-found, unresolved-variable], required: true}
+      message: {type: string, required: true}
+      detected: {type: string, required: true}
