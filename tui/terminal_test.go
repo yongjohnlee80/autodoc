@@ -300,3 +300,15 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 		return onLoop(r, func() bool { return term.Running() })
 	})
 }
+
+// :terminal opens the terminal with the keyboard in it; again, with it open, it keeps it open.
+func TestTheTerminalCommandOpensTheTerminal(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.command(t, "terminal")
+	r.s.WaitForText(t, "┌ terminal")
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.keys(t, esc(), esc()) // Normal mode, then hidden
+	r.s.WaitFor(t, "the pane hidden", func(sc string) bool { return !strings.Contains(sc, "┌ terminal") })
+	r.command(t, "term")
+	r.s.WaitForText(t, "┌ terminal")
+}

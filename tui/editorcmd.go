@@ -64,6 +64,11 @@ func (h *Host) addEditorCommands() {
 			h.clearFind()
 			return nil
 		}},
+		widget.Command{Name: "terminal", Aliases: []string{"term"}, Help: "open the terminal (SPC `)",
+			Run: func(widget.CommandContext) error {
+				h.openTerminal()
+				return nil
+			}},
 	)
 }
 

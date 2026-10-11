@@ -208,6 +208,16 @@ func (h *Host) toggleTerminal() {
 	h.keep(h.p.Call("terminalView", "forceActiveFocus"))
 }
 
+// openTerminal is the command line's terminal: the terminal panel open with the keyboard in it,
+// opening it if it is closed (SPC ` toggles it).
+func (h *Host) openTerminal() {
+	if h.panelOpen["terminal"] {
+		h.keep(h.p.Call("terminalView", "forceActiveFocus"))
+		return
+	}
+	h.toggleTerminal()
+}
+
 // termDir is where the shell starts: the workspace's folder when this machine has it as a folder
 // (a daemon may serve a root only it can see), else the user's home.
 func termDir(root string) string {

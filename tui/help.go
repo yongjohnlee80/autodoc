@@ -165,6 +165,7 @@ n N      again, forward, back ?      this card
 COMMANDS (:, Tab completes)
 :12  go to line 12      :w :q :wq :x :q!  save, quit
 :find :replace :nohl    :table 3 4  :mermaid flowchart
+:terminal  the terminal
 your own: ~/.config/autodoc/lua/*.lua (autodoc.command)`
 
 // author is AutoDoc's author, as NOTICE says.
