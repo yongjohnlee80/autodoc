@@ -298,6 +298,31 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	}
 }
 
+// A profile edited after the question opens is not the profile the user
+// approved removing. Refuse that stale confirmation and keep the new command
+// and default, instead of treating a matching name as enough identity.
+func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
+	profile := agentProfile{Name: "beta", Command: "beta --old"}
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{profile}, "beta")
+	onLoop(r, func() bool {
+		r.h.removeAgent(0)
+		r.h.prefs.agents[0].Command = "beta --new"
+		return true
+	})
+	r.s.WaitForText(t, "remove the agent profile?")
+	r.keys(t, key('y'))
+	r.s.WaitFor(t, "the stale question closed", func(sc string) bool {
+		return !strings.Contains(sc, "remove the agent profile?")
+	})
+	got := onLoop(r, func() []agentProfile { return append([]agentProfile(nil), r.h.prefs.agents...) })
+	if len(got) != 1 || got[0].Name != "beta" || got[0].Command != "beta --new" {
+		t.Fatalf("stale Yes removed or rewrote the edited profile: %v", got)
+	}
+	if def := onLoop(r, func() string { return r.h.prefs.agentDefault }); def != "beta" {
+		t.Errorf("refused removal changed the default to %q", def)
+	}
+}
+
 // Use starts another agent: with one running it asks first, and only Yes stops it.
 func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 	agent, _ := fakeAgent(t)

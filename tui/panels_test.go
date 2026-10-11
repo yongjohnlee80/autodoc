@@ -107,6 +107,35 @@ func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
 	}
 }
 
+// Unknown panel commands must not create open-state entries or move focus.
+// This keeps stale/custom callers from addressing a drawer the registry does
+// not contain.
+func TestUnknownPanelToggleKeepsOpenStateAndFocus(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	got := onLoop(r, func() bool {
+		r.h.focusEditor()
+		before := make(map[string]bool, len(r.h.panelOpen))
+		for name, open := range r.h.panelOpen {
+			before[name] = open
+		}
+		r.h.togglePanel("missing-panel")
+		if len(before) != len(r.h.panelOpen) {
+			return false
+		}
+		for name, open := range before {
+			if r.h.panelOpen[name] != open {
+				return false
+			}
+		}
+		c, ok := r.h.p.Find("editor")
+		return ok && r.h.p.App().FocusWithin(c)
+	})
+	if !got {
+		t.Fatal("an unknown panel toggle changed open state or moved focus")
+	}
+}
+
 // TestEveryPanelKeepsItsSizeAtItsEdge: a panel's grip released keeps its size and length for the
 // edge it opens from now, and a new start reads them back, each panel at its own edge.
 func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
