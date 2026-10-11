@@ -68,6 +68,7 @@ func (h *Host) start() {
 		h.followEvents()
 		h.watch()
 		h.p.Post(h.offerRecovery) // once a start: unsaved work kept when AutoDoc last ended
+		h.reg.connected()
 	})
 }
 

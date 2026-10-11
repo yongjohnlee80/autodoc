@@ -184,6 +184,7 @@ func (h *Host) enter(name string) {
 	h.refreshSearch()
 	h.listFiles()
 	h.poll()
+	h.reg.entered(name)
 }
 
 // manageWorkspaces opens the manager over the store's workspaces: the list on the left, the

@@ -52,6 +52,7 @@ import (
 type Host struct {
 	p       *tuidecl.Program
 	session *Session
+	reg     *registry          // the features, merged (feature.go)
 	editor  editorWidget       // main.qml's Editor, terminal or native (editor.go)
 	core    *widget.EditorCore // its core: the text, the cursor and the modes
 	gui     bool               // in a window (Options.GUI): the theme kept is gui.theme
@@ -433,10 +434,15 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	h.layoutSrc = src
 	h.theme = themeOf(src)
+	reg, err := newRegistry(h.features()...)
+	if err != nil {
+		panic(err) // two features naming one source or command: a build that cannot start
+	}
+	h.reg = reg
 	opts = append(opts,
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
-		tuidecl.Sources(h.state()),
-		tuidecl.Handlers(h.commands()),
+		tuidecl.Sources(h.reg.state),
+		tuidecl.Handlers(h.reg.handlers),
 		tuidecl.ErrorSink(h.keep),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.

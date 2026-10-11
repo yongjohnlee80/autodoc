@@ -116,6 +116,9 @@ func (h *Host) applyEvents(events []peerEvent) {
 		if e.client == self && self != "" {
 			continue // this TUI's own change: it already knows
 		}
+		if h.reg.event(e.kind, e.workspace, e.detail) {
+			continue // a feature's own kind: the feature tells of it
+		}
 		by := "by another client"
 		if e.client == "" {
 			by = "on disk"
