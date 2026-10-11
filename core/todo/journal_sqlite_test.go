@@ -94,6 +94,10 @@ var sqliteSuites = []struct {
 	{"TheVerbsServeTheManager", TestTheVerbsServeTheManager},
 	{"EveryVerbAnswers", TestEveryVerbAnswers},
 	{"ScaffoldAnEmptyOverride", TestScaffoldAnEmptyOverride},
+	{"DiskFailuresSurface", TestDiskFailuresSurface},
+	{"JournalFailuresSurface", TestJournalFailuresSurface},
+	{"HandMovesAcrossTheArchive", TestHandMovesAcrossTheArchive},
+	{"StoreOpenEdges", TestStoreOpenEdges},
 }
 
 // TestEveryEnvSuiteRunsOnSQLite: a test that builds an env (newEnv, claimed) is in sqliteSuites, so
