@@ -597,7 +597,8 @@ speak.
 
 - **Todos from Lua.** `require("autodoc.todos")`, also `require("autodoc.api").todos`, calls the
   daemon's `todos.*` verbs. Each takes the verb's params in order, then `cb(result, err)`. The first
-  param is where the store is: a workspace name, or `{ root = "/abs/project" }`.
+  param of most is where the store is: a workspace name, or `{ root = "/abs/project" }`
+  (`stores` and `set_var` take none).
 
   ```lua
   require("autodoc.todos").list("kb", {}, function(listing, err) … end)

@@ -20,12 +20,14 @@ local api = require("autodoc.api")
 local todos = require("autodoc.todos")
 autodoc.setup({ bin = bin, config = cfg })
 
--- run calls a todos function and waits for its answer
+-- run calls a todos function and waits for its answer. The count is select's, not #args, so a
+-- trailing nil is passed as given.
 local function run(fn, ...)
+  local n = select("#", ...)
   local args = { ... }
   return t.await(15000, function(done)
-    args[#args + 1] = done
-    fn(unpack(args))
+    args[n + 1] = done
+    fn(unpack(args, 1, n + 1))
   end)
 end
 
@@ -80,8 +82,13 @@ t.section("the client's own checks", function()
   t.ok(not ok and tostring(msg):find("takes 2 to 2 params", 1, true), "too few params raise at the call", msg)
   ok, msg = pcall(todos.get, "kb", "id")
   t.ok(not ok and tostring(msg):find("callback", 1, true), "a missing callback raises", msg)
-  local r = run(todos.list, "kb", nil) -- a trailing nil is a param left out
-  t.ok(r ~= nil, "a trailing nil is left out", vim.inspect(r))
+  -- a trailing nil is a param left out: list("kb", nil, cb) is list("kb", cb), not a nil opts
+  local sent
+  local real = todos.call
+  todos.call = function(verb, params, cb) sent = params; return real(verb, params, cb) end
+  local r = run(todos.list, "kb", nil)
+  todos.call = real
+  t.ok(r ~= nil and sent and #sent == 1 and sent[1] == "kb", "a trailing nil is left out", vim.inspect(sent))
   local _, err = t.await(10000, function(cb) todos.call("nope", {}, cb) end)
   t.eq(err and err.code, -32601, "an unknown todos verb is the daemon's method not found")
 end)
