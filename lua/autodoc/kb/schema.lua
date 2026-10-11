@@ -1,8 +1,8 @@
 -- autodoc.kb.schema: the KB's shipped frontmatter schema (templates/_schema/frontmatter.yaml).
 --
--- That YAML file is the single source: the daemon validates against it (core/schema), the
--- `_templates/<type>.md` files are generated from it here, and the migration counts schema
--- diagnostics with validate() below. The parser reads only the shape the shipped file is written
+-- That YAML file is the single source: the daemon validates against it (core/schema), and the
+-- `_templates/<type>.md` files are generated from it here. Validating a document is the daemon's
+-- (doc.validate); the migration's offline copy is autodoc.kb.migrate.schema_check. The parser reads only the shape the shipped file is written
 -- in (top-level keys, `common:` and `types:` with one flow mapping per field); it is not a general
 -- YAML reader and refuses anything else.
 
@@ -141,65 +141,6 @@ function M.fields_for(s, t)
     end
   end
   return out, by
-end
-
-local function enum_has(enum, v)
-  for _, e in ipairs(enum) do
-    if e == v then return true end
-  end
-  return false
-end
-
-local function check_scalar(ftype, v)
-  if ftype == "integer" then return v:match("^%-?%d+$") ~= nil end
-  if ftype == "number" then return tonumber(v) ~= nil end
-  if ftype == "boolean" then return v == "true" or v == "false" end
-  if ftype == "date" then return v:match("^%d%d%d%d%-%d%d%-%d%d") ~= nil end
-  return true
-end
-
----Diagnose a document's text against the schema: a list of {field, rule, message}. Mirrors
----core/schema's rules at the level the migration reports them (required, enum, type, unknown_type);
----the daemon's own `doc.validate` is the authority.
-function M.validate(s, text)
-  local fm = frontmatter.parse_text(text)
-  local diags = {}
-  local function add(field, rule, msg) diags[#diags + 1] = { field = field, rule = rule, message = msg } end
-  if not fm then
-    add("", "no_frontmatter", "the document has no frontmatter")
-    return diags
-  end
-  local tv = fm.keys[s.discriminator] and fm.keys[s.discriminator].value
-  local t = type(tv) == "string" and tv or nil
-  local fields
-  if t and s.types[t] then
-    fields = M.fields_for(s, t)
-  else
-    fields = M.fields_for(s, nil)
-    if t then add(s.discriminator, "unknown_type", ("unknown type %q"):format(t)) end
-  end
-  for _, f in ipairs(fields) do
-    local k = fm.keys[f.name]
-    local v = k and k.value
-    if v == nil then
-      if f.required and not (f.name == s.discriminator and t) then add(f.name, "required", f.name .. " is required") end
-    else
-      local vals = type(v) == "table" and v or { v }
-      if f.type ~= "list" and type(v) == "table" then
-        add(f.name, "type", f.name .. " must be a " .. f.type .. ", not a list")
-      else
-        local itype = f.type == "list" and (f.item_type or "string") or f.type
-        for _, x in ipairs(vals) do
-          if not check_scalar(itype, x) then
-            add(f.name, "type", ("%s: %q is not a %s"):format(f.name, x, itype))
-          elseif f.enum and not enum_has(f.enum, x) and not (f.name == s.discriminator and not s.types[x]) then
-            add(f.name, "enum", ("%s: %q is not one of %s"):format(f.name, x, table.concat(f.enum, ", ")))
-          end
-        end
-      end
-    end
-  end
-  return diags
 end
 
 -- ─── templates ──────────────────────────────────────────────────────

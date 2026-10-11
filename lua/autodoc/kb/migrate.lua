@@ -24,8 +24,9 @@
 -- paths (no remote assumed; never pushes).
 
 local util = require("autodoc.kb.util")
-local refs = require("autodoc.kb.refs")
+local refs = require("autodoc.kb.migrate.refs")
 local schema = require("autodoc.kb.schema")
+local schema_check = require("autodoc.kb.migrate.schema_check")
 local frontmatter = require("autodoc.kb.frontmatter")
 local scaffold = require("autodoc.kb.scaffold")
 local version = require("autodoc.kb.version")
@@ -249,7 +250,7 @@ local function schema_counts(root, paths)
   for _, rel in ipairs(paths) do
     local text = util.read_file(root .. "/" .. rel)
     if text then
-      for _, d in ipairs(schema.validate(s, text)) do
+      for _, d in ipairs(schema_check.validate(s, text)) do
         local k = d.rule .. (d.field ~= "" and (" " .. d.field) or "")
         c[k] = (c[k] or 0) + 1
       end
@@ -262,7 +263,7 @@ function M.schema_counts_texts(texts)
   local s = schema.shipped()
   local c = {}
   for _, text in ipairs(texts) do
-    for _, d in ipairs(schema.validate(s, text)) do
+    for _, d in ipairs(schema_check.validate(s, text)) do
       local k = d.rule .. (d.field ~= "" and (" " .. d.field) or "")
       c[k] = (c[k] or 0) + 1
     end

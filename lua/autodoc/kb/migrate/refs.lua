@@ -1,5 +1,11 @@
--- autodoc.kb.refs: find every path-bearing reference in a KB document, and resolve it against a
--- tree. A port of the 2026-10-06 inventory script (kbrefs.py) that ADR 1791209946 §8 is based on,
+-- autodoc.kb.migrate.refs: find every path-bearing reference in a KB document, and resolve it
+-- against a tree.
+--
+-- Offline copy for migrate's planned tree; parity: tests/kbparity_spec.lua. Where a link reaches is
+-- the daemon's (graph.resolve, over the indexed tree). The migration resolves every reference
+-- against the tree before it and the tree after it, which exists only in its plan, so it cannot ask.
+-- Nothing but the migration uses this module.
+-- A port of the 2026-10-06 inventory script (kbrefs.py) that ADR 1791209946 §8 is based on,
 -- with its classes:
 --
 --   wikilink          [[path/qualified]] (sub path:*), [[bare-name]] (sub bare:*, never rewritten)

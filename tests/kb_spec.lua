@@ -18,7 +18,8 @@ local util = require("autodoc.kb.util")
 local scaffold = require("autodoc.kb.scaffold")
 local schema = require("autodoc.kb.schema")
 local migrate = require("autodoc.kb.migrate")
-local refs = require("autodoc.kb.refs")
+local refs = require("autodoc.kb.migrate.refs")
+local schema_check = require("autodoc.kb.migrate.schema_check")
 
 local pass, fail = 0, 0
 local function ok(name, cond, detail)
@@ -204,13 +205,13 @@ do
       bad[#bad + 1] = t .. " (missing)"
     else
       local filled = text:gsub("{{date}}", "2026-10-06"):gsub("{{title}}", "T")
-      if #schema.validate(s, filled) > 0 then bad[#bad + 1] = t end
+      if #schema_check.validate(s, filled) > 0 then bad[#bad + 1] = t end
     end
   end
   ok("S6: one template per schema type, each valid against the schema once filled", #bad == 0 and #s.type_order == 11, table.concat(bad, ","))
   local invalid = {}
   for _, f in ipairs(util.walk(root)) do
-    if f:match("%.md$") and not f:match("^_templates/") and #schema.validate(s, read(root, f)) > 0 then invalid[#invalid + 1] = f end
+    if f:match("%.md$") and not f:match("^_templates/") and #schema_check.validate(s, read(root, f)) > 0 then invalid[#invalid + 1] = f end
   end
   ok("S7: every scaffolded document is valid against the schema", #invalid == 0, table.concat(invalid, ","))
   local r2 = scaffold.scaffold(root, { autodoc_version = "0.2.0", date = "2026-10-07" })
