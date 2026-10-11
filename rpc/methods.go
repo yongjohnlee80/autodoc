@@ -18,8 +18,6 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/module"
-	"github.com/yongjohnlee80/autodoc/core/outline"
-	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
@@ -163,148 +161,9 @@ func (s *Server) register() {
 	s.own(s.searchVerbs()...)
 	s.own(s.indexVerbs()...)
 	s.own(s.graphVerbs()...)
+	s.own(s.docVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
-	// doc.read_raw and doc.write_raw are doc.read and doc.write on an HTML file's own bytes, where
-	// the plain verbs give its derived text and refuse a write (core/docs ReadRaw, WriteRaw).
-	docRead := func(raw bool) verbFunc {
-		return func(ctx context.Context, w *Workspace, p []any) (any, error) {
-			path, err := argStr(p, 1, "path")
-			if err != nil {
-				return nil, err
-			}
-			read := w.Docs.Read
-			if raw {
-				read = w.Docs.ReadRaw
-			}
-			d, err := read(ctx, path)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]any{"content": d.Content, "version": string(d.Version)}, nil
-		}
-	}
-	docWrite := func(raw bool) verbFunc {
-		return func(ctx context.Context, w *Workspace, p []any) (any, error) {
-			path, err := argStr(p, 1, "path")
-			if err != nil {
-				return nil, err
-			}
-			content, err := argBytes(p, 2, "content")
-			if err != nil {
-				return nil, err
-			}
-			want, err := argStr(p, 3, "version")
-			if err != nil {
-				return nil, err
-			}
-			write := w.Docs.Write
-			if raw {
-				write = w.Docs.WriteRaw
-			}
-			v, err := write(ctx, path, content, vfs.Version(want))
-			if err != nil {
-				return nil, err
-			}
-			touch(w, path) // indexed now, not when a watch or a poll gets to it
-			return map[string]any{"version": string(v)}, nil
-		}
-	}
-	s.handle("doc.read", s.verb(2, 2, docRead(false), true))
-	s.handle("doc.read_raw", s.verb(2, 2, docRead(true), true))
-	s.handle("doc.write", s.verb(4, 4, docWrite(false), true))
-	s.handle("doc.write_raw", s.verb(4, 4, docWrite(true), true))
-	// doc.outline is a saved file's headings, with the version they were read at, for a client to
-	// navigate by (ADR 0212 §6). A document of another kind has none.
-	s.handle("doc.outline", s.verb(2, 2, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
-		}
-		d, err := w.Docs.Read(ctx, path)
-		if err != nil {
-			return nil, err
-		}
-		k := kind.Markdown
-		if w.Index != nil {
-			k = w.Index.Kind(path)
-		}
-		if k == kind.Derived {
-			k = kind.Markdown // read, so derived: its text is Markdown
-		}
-		hs := outline.Read(d.Content, k, "").Headings()
-		out := make([]any, len(hs))
-		for i, h := range hs {
-			out[i] = map[string]any{"id": h.ID, "level": int64(h.Level), "text": h.Text, "line": int64(h.Line), "byte": int64(h.Byte)}
-		}
-		return map[string]any{"version": string(d.Version), "headings": out}, nil
-	}, true))
-	// doc.validate checks a file's text, saved or not, against the workspace's frontmatter schema
-	// with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.
-	s.handle("doc.validate", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
-		}
-		content, err := argBytes(p, 2, "content")
-		if err != nil {
-			return nil, err
-		}
-		if len(content) > docs.MaxSize {
-			return nil, docs.ErrTooLarge
-		}
-		var sch *schema.Schema
-		if w.FrontmatterSchema != nil {
-			sch, _ = w.FrontmatterSchema()
-		}
-		var ds []schema.Diagnostic
-		if w.Index == nil || w.Index.Kind(path) == kind.Markdown {
-			ds = sch.ValidateFile(content).Diagnostics
-		}
-		return map[string]any{"diagnostics": diagnosticsOf(ds)}, nil
-	}, true))
-	s.handle("doc.rename", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		from, err := argStr(p, 1, "from")
-		if err != nil {
-			return nil, err
-		}
-		to, err := argStr(p, 2, "to")
-		if err != nil {
-			return nil, err
-		}
-		if err := w.Docs.Rename(ctx, from, to); err != nil {
-			return nil, err
-		}
-		touch(w, from, to)
-		return nil, nil
-	}, true))
-	s.handle("doc.remove", s.verb(3, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		path, err := argStr(p, 1, "path")
-		if err != nil {
-			return nil, err
-		}
-		want, err := argStr(p, 2, "version")
-		if err != nil {
-			return nil, err
-		}
-		if err := w.Docs.Remove(ctx, path, vfs.Version(want)); err != nil {
-			return nil, err
-		}
-		touch(w, path)
-		return nil, nil
-	}, true))
-}
-
-// touch tells the workspace's indexer that paths changed through the API, so a file saved in a client
-// is indexed at once, whatever the follower is doing — watching, polling, or still scanning. The
-// indexer re-reads each path and decides for itself (eligible, unchanged, gone).
-func touch(w *Workspace, paths ...string) {
-	if w.Index == nil {
-		return
-	}
-	for _, p := range paths {
-		w.Index.Touch(p)
-	}
 }
 
 // verbFunc is a verb's body: its workspace (nil for one that names none) and its params.
