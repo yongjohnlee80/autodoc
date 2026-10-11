@@ -131,7 +131,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
-	return []Feature{legacy{h}, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h})}
+	return []Feature{legacy{h}, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 }
 
 // legacy is the host as it is: everything not yet a feature of its own.

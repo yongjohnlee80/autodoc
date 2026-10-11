@@ -239,6 +239,7 @@ type Host struct {
 	recoveryOffered bool
 	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
 	scripts        *script.Engine
+	scripting      *scripting // the daemon's verbs in the engine: autodoc.call, autodoc.<domain> (scripting.go)
 	luaDir         string
 	recoveryQueue  []recovered
 	pendingRestore *recovered

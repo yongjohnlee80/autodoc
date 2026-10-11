@@ -10,7 +10,8 @@ import (
 // LUA COMMANDS — the editor's command line extended with scripts (package script): AutoDoc's own,
 // embedded here (table, mermaid), then the user's, every *.lua in the config folder's lua/, in
 // name order. A user's command with the name of one of AutoDoc's replaces it. Scripts register
-// through the global table "autodoc": autodoc.command{…}, autodoc.notify(…).
+// through the global table "autodoc": autodoc.command{…}, autodoc.notify(…), and call the daemon
+// through it: autodoc.call(…), autodoc.search.query(…) (scripting.go).
 
 // ownScripts are AutoDoc's own Lua commands.
 //
@@ -21,6 +22,7 @@ var ownScripts embed.FS
 // load is said once the program runs; the others still load.
 func (h *Host) loadScripts() {
 	h.scripts = script.New(h.core, script.WithGlobal("autodoc"), script.WithNotify(h.notify))
+	h.luaFeature().bind(h.scripts) // autodoc.call now; autodoc.<domain> once connected (scripting.go)
 	errs := h.scripts.LoadDir(ownScripts, "lua")
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)
