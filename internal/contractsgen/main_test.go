@@ -26,6 +26,36 @@ func TestAgentsMDIsGenerated(t *testing.T) {
 	}
 }
 
+// TestLuaContractsAreGenerated: autodoc.nvim's contracts.lua is what this binary's contracts say,
+// whole; a hand edit, or a contract changed without go generate ./rpc, fails here.
+func TestLuaContractsAreGenerated(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "lua", "autodoc", "contracts.lua"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != Lua(app.Contracts("")) {
+		t.Error("lua/autodoc/contracts.lua differs from the contracts: run go generate ./rpc")
+	}
+}
+
+// TestLuaString: a literal LuaJIT reads back as s: quotes, backslashes, newlines and control bytes
+// escaped, UTF-8 kept.
+func TestLuaString(t *testing.T) {
+	for in, want := range map[string]string{
+		"":             `""`,
+		`say "hi"`:     `"say \"hi\""`,
+		`a\b`:          `"a\\b"`,
+		"two\nlines":   `"two\nlines"`,
+		"tab\there":    `"tab\009here"`,
+		"bell\x07\x7f": `"bell\007\127"`,
+		"café →":       `"café →"`,
+	} {
+		if got := luaString(in); got != want {
+			t.Errorf("luaString(%q) = %s, want %s", in, got, want)
+		}
+	}
+}
+
 // TestRewrite: only the text between the markers changes, a file already current is left as it is,
 // and a file with no markers is refused.
 func TestRewrite(t *testing.T) {
@@ -65,6 +95,21 @@ func TestRun(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(path); !strings.Contains(string(got), "### `graph`") {
 		t.Errorf("run wrote %s", got)
+	}
+	lua := filepath.Join(t.TempDir(), "contracts.lua")
+	for range 2 { // the second run finds the file current and leaves it
+		if err := run([]string{"-agents", path, "-lua", lua}); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := os.ReadFile(lua); !strings.HasPrefix(string(got), luaHeader) || !strings.Contains(string(got), `["todos.get"]`) {
+			t.Fatalf("-lua wrote %.200s", got)
+		}
+	}
+	if err := run([]string{"-agents", path, "-lua", filepath.Join(t.TempDir(), "missing", "c.lua")}); err == nil {
+		t.Error("-lua into a missing directory succeeded")
+	}
+	if err := run([]string{"-agents", filepath.Join(t.TempDir(), "none.md")}); err == nil {
+		t.Error("a missing AGENTS.md was rewritten")
 	}
 	if err := run([]string{"-nope"}); err == nil {
 		t.Error("an unknown flag was taken")

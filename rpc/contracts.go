@@ -1,6 +1,6 @@
 package rpc
 
-//go:generate go run ../internal/contractsgen -agents ../AGENTS.md
+//go:generate go run ../internal/contractsgen -agents ../AGENTS.md -lua ../lua/autodoc/contracts.lua
 
 import (
 	"encoding/json"

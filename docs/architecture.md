@@ -38,7 +38,7 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `tui` | the TUI/GUI host and its features |
 | `script` | the exportable Lua engine (gopher-lua); no AutoDoc imports |
 | `plugin` | the plugin protocol |
-| `internal/contractsgen` | writes AGENTS.md's verb and error tables from the contracts |
+| `internal/contractsgen` | writes AGENTS.md's verb and error tables, and autodoc.nvim's `contracts.lua`, from the contracts |
 
 ## 3. Dependency rules
 
@@ -130,8 +130,8 @@ One SQLite file (`autodoc.db`), one writer connection. Migrations are
   the protocol it declared.
 - A verb arrives at a protocol: its contract's `Since`.
 - **Adding a verb** is its contract plus its handler. `rpc/testdata/contracts.json` (the golden
-  file; `go test ./rpc -update` rewrites it) and AGENTS.md (`go generate ./rpc`) follow, and
-  tests fail until they do.
+  file; `go test ./rpc -update` rewrites it), AGENTS.md and autodoc.nvim's
+  `lua/autodoc/contracts.lua` (`go generate ./rpc`) follow, and tests fail until they do.
 - A change that is not an addition raises `MinProtocol`, or keeps the old behaviour below it.
 
 ## 7. Concurrency
