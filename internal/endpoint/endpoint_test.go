@@ -28,14 +28,14 @@ func TestLoadResolvesAndMakesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := endpoint.Endpoints{
-		ConfigPath: filepath.Join(home, "XDG_CONFIG_HOME", "autodoc", "config.toml"),
-		Socket:     filepath.Join(home, "XDG_RUNTIME_DIR", "autodoc.sock"),
-		Store:      filepath.Join(home, "XDG_DATA_HOME", "autodoc", "autodoc.db"),
-		StateDir:   filepath.Join(home, "XDG_STATE_HOME", "autodoc"),
+	want := endpoint.Paths{
+		Socket:   filepath.Join(home, "XDG_RUNTIME_DIR", "autodoc.sock"),
+		Store:    filepath.Join(home, "XDG_DATA_HOME", "autodoc", "autodoc.db"),
+		StateDir: filepath.Join(home, "XDG_STATE_HOME", "autodoc"),
 	}
-	if e.ConfigPath != want.ConfigPath || e.Socket != want.Socket || e.Store != want.Store || e.StateDir != want.StateDir || e.Config == nil {
-		t.Fatalf("Load: %+v, want %+v", e, want)
+	p, err := e.Paths()
+	if err != nil || p != want || e.ConfigPath != filepath.Join(home, "XDG_CONFIG_HOME", "autodoc", "config.toml") || e.Config == nil {
+		t.Fatalf("Load: %+v, paths %+v, %v; want %+v", e, p, err, want)
 	}
 	if err := e.MakeStateDir(); err != nil {
 		t.Fatal(err)
@@ -43,7 +43,7 @@ func TestLoadResolvesAndMakesNothing(t *testing.T) {
 	if err := e.MakeDataDir(); err != nil {
 		t.Fatal(err)
 	}
-	for _, d := range []string{e.StateDir, filepath.Dir(e.Store)} {
+	for _, d := range []string{p.StateDir, filepath.Dir(p.Store)} {
 		if fi, err := os.Stat(d); err != nil || fi.Mode().Perm() != 0o700 {
 			t.Errorf("%s: %v, %v; want a 0700 directory", d, fi, err)
 		}
@@ -63,9 +63,19 @@ func TestMakeDirSaysWhichFailed(t *testing.T) {
 	if err := os.WriteFile(file, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	e := endpoint.Endpoints{StateDir: filepath.Join(file, "state")}
-	if err := e.MakeStateDir(); err == nil || !strings.Contains(err.Error(), e.StateDir) {
+	cfg := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(cfg, []byte("[server]\nstate_dir = \""+filepath.Join(file, "state")+"\"\ndata_dir = \""+filepath.Join(file, "data")+"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e, err := endpoint.Load(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.MakeStateDir(); err == nil || !strings.Contains(err.Error(), filepath.Join(file, "state")) {
 		t.Fatalf("MakeStateDir under a file: %v", err)
+	}
+	if err := e.MakeDataDir(); err == nil || !strings.Contains(err.Error(), filepath.Join(file, "data")) {
+		t.Fatalf("MakeDataDir under a file: %v", err)
 	}
 }
 

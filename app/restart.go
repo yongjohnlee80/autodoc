@@ -39,7 +39,7 @@ func runRestart(ctx context.Context, configPath string, out io.Writer) error {
 		return err
 	}
 	r := restarter{
-		spawn:    func() (string, error) { return client.SpawnServe(e.ConfigPath, e.StateDir) },
+		spawn:    func() (string, error) { return spawnFor(e) },
 		waitGone: func(ctx context.Context, pid int64) bool { return client.WaitGone(ctx, pid, restartExitWait) },
 	}
 	return r.run(ctx, e, out)
@@ -50,11 +50,15 @@ func (r restarter) run(ctx context.Context, e *endpoint.Endpoints, out io.Writer
 	if err := e.MakeStateDir(); err != nil {
 		return err
 	}
-	session := client.NewSession(e.Socket, r.spawn).UseHandoffs(e.StateDir).ForStore(e.Socket, e.Store)
+	p, err := e.Paths()
+	if err != nil {
+		return err
+	}
+	session := client.NewSession(p.Socket, r.spawn).UseHandoffs(p.StateDir).ForStore(p.Socket, p.Store)
 	defer session.Close()
 
-	addr := endpoint.Holder(ctx, e.Store, e.Socket)
-	info, perr := endpoint.Probe(ctx, addr, e.Store)
+	addr := endpoint.Holder(ctx, p.Store, p.Socket)
+	info, perr := endpoint.Probe(ctx, addr, p.Store)
 	var mismatch *client.StoreMismatchError
 	if errors.As(perr, &mismatch) {
 		return perr
@@ -78,8 +82,17 @@ func (r restarter) run(ctx context.Context, e *endpoint.Endpoints, out io.Writer
 		}
 		return err
 	}
-	_, err := fmt.Fprintf(out, "unix\t%s\n", session.Address())
+	_, err = fmt.Fprintf(out, "unix\t%s\n", session.Address())
 	return err
+}
+
+// spawnFor starts e's daemon, as SpawnServe does, in e's state directory.
+func spawnFor(e *endpoint.Endpoints) (string, error) {
+	dir, err := e.StateDir()
+	if err != nil {
+		return "", err
+	}
+	return client.SpawnServe(e.ConfigPath, dir)
 }
 
 // stopDaemon asks the daemon at addr to shut down, over a connection declaring its own protocol.

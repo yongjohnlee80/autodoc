@@ -44,7 +44,11 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	if err != nil {
 		return err
 	}
-	cfg, sock, storePath := e.Config, e.Socket, e.Store
+	p, err := e.Paths()
+	if err != nil {
+		return err
+	}
+	cfg, sock, storePath := e.Config, p.Socket, p.Store
 	// the state directory holds the socket when there is no runtime directory; the data directory
 	// holds the store and its lease-info
 	if err := e.MakeStateDir(); err != nil {
@@ -77,7 +81,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	}
 	defer removeIfStillOurs(sock, id)
 
-	noteOldIndexes(e.StateDir, storePath, out)
+	noteOldIndexes(p.StateDir, storePath, out)
 	db, err := store.Open(ctx, storePath)
 	if errors.Is(err, store.ErrBusy) {
 		// the store's daemon serves on another endpoint: a config naming another socket for the

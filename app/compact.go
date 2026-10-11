@@ -21,10 +21,13 @@ func runCompact(ctx context.Context, configPath string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	storePath, err := e.Store()
+	if err != nil {
+		return err
+	}
 	if err := e.MakeDataDir(); err != nil {
 		return err
 	}
-	storePath := e.Store
 	db, err := store.Open(ctx, storePath)
 	if errors.Is(err, store.ErrBusy) {
 		return fmt.Errorf("the daemon is serving %s: stop it first (--call sys.shutdown), then --compact", storePath)

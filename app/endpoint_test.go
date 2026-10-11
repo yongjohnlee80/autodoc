@@ -188,3 +188,31 @@ func TestAFreshMachineServes(t *testing.T) {
 		}
 	}
 }
+
+// TestModesResolveOnlyTheirPaths: a state directory that cannot be used (under a regular file)
+// stops neither --compact, which reads the store alone, nor --print-endpoint without --ensure, which
+// reads the socket and the store; --ensure, which writes the daemon's log there, is refused.
+func TestModesResolveOnlyTheirPaths(t *testing.T) {
+	dir := short(t)
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(dir, "a.sock")
+	cfg := filepath.Join(dir, "config.toml")
+	conf := fmt.Sprintf("[server]\nsocket = %q\nstate_dir = %q\ndata_dir = %q\n", sock, filepath.Join(file, "state"), filepath.Join(dir, "data"))
+	if err := os.WriteFile(cfg, []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := runCompact(context.Background(), cfg, &out); err != nil || !strings.HasPrefix(out.String(), "compacted ") {
+		t.Errorf("--compact with an unusable state directory: %v, %q", err, out.String())
+	}
+	out.Reset()
+	if err := runPrintEndpoint(context.Background(), cfg, false, &out); err != nil || out.String() != "unix\t"+sock+"\n" {
+		t.Errorf("--print-endpoint with an unusable state directory: %v, %q", err, out.String())
+	}
+	if err := runPrintEndpoint(context.Background(), cfg, true, &out); err == nil {
+		t.Error("--print-endpoint --ensure started a daemon with no state directory to log in")
+	}
+}

@@ -23,18 +23,31 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 	if err != nil {
 		return err
 	}
-	addr := endpoint.Holder(ctx, e.Store, e.Socket)
+	// only the paths this mode reads: the state directory is --ensure's alone
+	sock, err := e.Socket()
+	if err != nil {
+		return err
+	}
+	storePath, err := e.Store()
+	if err != nil {
+		return err
+	}
+	addr := endpoint.Holder(ctx, storePath, sock)
 	if !ensure {
 		// what answers on the socket must be this store's daemon: a config that changed its
 		// data_dir but kept its socket would otherwise send its client to the old store
 		var mismatch *client.StoreMismatchError
-		if _, err := endpoint.Probe(ctx, addr, e.Store); errors.As(err, &mismatch) {
+		if _, err := endpoint.Probe(ctx, addr, storePath); errors.As(err, &mismatch) {
 			return err
 		}
 	}
 	if ensure {
-		session := client.NewSession(e.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, e.StateDir) }).As(rpc.CLIName).
-			UseHandoffs(e.StateDir).ForStore(e.Socket, e.Store)
+		stateDir, err := e.StateDir()
+		if err != nil {
+			return err
+		}
+		session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(e.ConfigPath, stateDir) }).As(rpc.CLIName).
+			UseHandoffs(stateDir).ForStore(sock, storePath)
 		var mismatch *client.MismatchError
 		if err := session.Connect(ctx); err != nil && !errors.As(err, &mismatch) && session.Stale() == nil {
 			return err

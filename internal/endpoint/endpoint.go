@@ -20,17 +20,22 @@ import (
 // probeWait bounds the probe of the address a lease-info names, and of a socket's occupant.
 const probeWait = 2 * time.Second
 
-// Endpoints are a config's paths: where its daemon serves, its store, and its state directory.
-// Load only resolves them; a mode that writes one makes its directory (MakeStateDir, MakeDataDir).
+// Endpoints are a config, loaded once, and the paths it names: where its daemon serves, its store,
+// and its state directory. Each path is resolved when a mode asks for it, so a mode never fails on
+// a path it does not use; a mode that writes in one makes its directory (MakeStateDir, MakeDataDir).
 type Endpoints struct {
 	ConfigPath string // the config file, the default's resolved
 	Config     *config.Config
-	Socket     string // the configured socket, where a spawned daemon binds
-	Store      string // the store file
-	StateDir   string // the daemon's log, restart handoffs, the TUI's state
 }
 
-// Load reads the config at configPath ("" for config.DefaultPath) and resolves its paths.
+// Paths are the three paths a mode that runs or starts the daemon uses.
+type Paths struct {
+	Socket   string // the configured socket, where a spawned daemon binds
+	Store    string // the store file
+	StateDir string // the daemon's log, restart handoffs, the TUI's state
+}
+
+// Load reads the config at configPath ("" for config.DefaultPath).
 func Load(configPath string) (*Endpoints, error) {
 	if configPath == "" {
 		var err error
@@ -42,24 +47,51 @@ func Load(configPath string) (*Endpoints, error) {
 	if err != nil {
 		return nil, err
 	}
-	e := &Endpoints{ConfigPath: configPath, Config: cfg}
-	if e.StateDir, err = cfg.Server.StateDirPath(); err != nil {
-		return nil, err
+	return &Endpoints{ConfigPath: configPath, Config: cfg}, nil
+}
+
+// Socket is the configured socket.
+func (e *Endpoints) Socket() (string, error) { return e.Config.Server.SocketPath() }
+
+// Store is the store file.
+func (e *Endpoints) Store() (string, error) { return e.Config.Server.StorePath() }
+
+// StateDir is the state directory.
+func (e *Endpoints) StateDir() (string, error) { return e.Config.Server.StateDirPath() }
+
+// Paths resolves all three, for a mode that serves, spawns or restarts the daemon.
+func (e *Endpoints) Paths() (Paths, error) {
+	var p Paths
+	var err error
+	if p.StateDir, err = e.StateDir(); err != nil {
+		return Paths{}, err
 	}
-	if e.Socket, err = cfg.Server.SocketPath(); err != nil {
-		return nil, err
+	if p.Socket, err = e.Socket(); err != nil {
+		return Paths{}, err
 	}
-	if e.Store, err = cfg.Server.StorePath(); err != nil {
-		return nil, err
+	if p.Store, err = e.Store(); err != nil {
+		return Paths{}, err
 	}
-	return e, nil
+	return p, nil
 }
 
 // MakeStateDir creates the state directory, 0700, for a mode that writes in it.
-func (e *Endpoints) MakeStateDir() error { return makeDir(e.StateDir) }
+func (e *Endpoints) MakeStateDir() error {
+	dir, err := e.StateDir()
+	if err != nil {
+		return err
+	}
+	return makeDir(dir)
+}
 
 // MakeDataDir creates the store's directory, 0700, for a mode that opens the store.
-func (e *Endpoints) MakeDataDir() error { return makeDir(filepath.Dir(e.Store)) }
+func (e *Endpoints) MakeDataDir() error {
+	p, err := e.Store()
+	if err != nil {
+		return err
+	}
+	return makeDir(filepath.Dir(p))
+}
 
 func makeDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {

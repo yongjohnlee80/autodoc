@@ -75,7 +75,11 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	if err := e.MakeStateDir(); err != nil {
 		return err
 	}
-	configPath, stateDir, sock, storePath := e.ConfigPath, e.StateDir, e.Socket, e.Store
+	p, err := e.Paths()
+	if err != nil {
+		return err
+	}
+	configPath, stateDir, sock, storePath := e.ConfigPath, p.StateDir, p.Socket, p.Store
 	spawn := o.Spawn
 	if spawn == nil {
 		spawn = client.SpawnServe

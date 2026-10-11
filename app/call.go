@@ -29,8 +29,12 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
-	session := client.NewSession(e.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, e.StateDir) }).As(rpc.CLIName).
-		UseHandoffs(e.StateDir).ForStore(e.Socket, e.Store)
+	p, err := e.Paths()
+	if err != nil {
+		return err
+	}
+	session := client.NewSession(p.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, p.StateDir) }).As(rpc.CLIName).
+		UseHandoffs(p.StateDir).ForStore(p.Socket, p.Store)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}
