@@ -7,6 +7,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/search/rank"
 
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -53,9 +54,45 @@ var ErrSuppliedRanker = errors.New("this build supplies its ranker")
 // ErrWindow is a window outside the ranker's bounds.
 var ErrWindow = fmt.Errorf("a ranker's window is %d to %d candidates", rank.MinWindow, rank.MaxWindow)
 
-func rankerMap(r store.RankerInfo) map[string]any {
-	return map[string]any{"name": r.Name, "kind": r.Kind, "base_url": r.BaseURL, "model": r.Model, "has_key": r.HasKey}
+type rankerJSON struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	BaseURL string `json:"base_url"`
+	Model   string `json:"model"`
+	HasKey  bool   `json:"has_key"`
 }
+
+func rankerOf(r store.RankerInfo) *rankerJSON {
+	return &rankerJSON{Name: r.Name, Kind: r.Kind, BaseURL: r.BaseURL, Model: r.Model, HasKey: r.HasKey}
+}
+
+type rankersJSON struct {
+	Rankers  []*rankerJSON `json:"rankers"`
+	Active   string        `json:"active"`
+	Window   int           `json:"window"`
+	Error    string        `json:"error"`
+	Supplied string        `json:"supplied"`
+}
+
+type (
+	rankerAdd struct {
+		Ranker optionMap `param:"ranker" doc:"{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"`
+	}
+	rankerUpdate struct {
+		Name   string    `param:"name"`
+		Ranker optionMap `param:"ranker" doc:"{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"`
+	}
+	rankerUse struct {
+		Name string `param:"name" doc:"\"\" for none"`
+	}
+	rankerWindow struct {
+		Window int `param:"window" doc:"how many candidates it ranks, 10 to 100"`
+	}
+	rankerModels struct {
+		Ranker any       `param:"ranker" doc:"a stored ranker's name, or an unsaved one's spec"`
+		Spec   optionMap `param:"spec,optional" doc:"with a name: the edit asked about"`
+	}
+)
 
 // rankerSpecOf reads a ranker as a client writes it: name, kind, base_url and model; and key,
 // which absent keeps the key the store holds, and "" removes it.
@@ -84,168 +121,106 @@ func rankerSpecOf(v any) (store.RankerSpec, error) {
 	return sp, nil
 }
 
-func (s *Server) registerRankers() {
+func (s *Server) rankerVerbs() []module.Verb {
 	need := func() error {
 		if s.rankers == nil {
 			return errNoRankers
 		}
 		return nil
 	}
-	s.handle("ranker.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		l, err := s.rankers.ListRankers(ctx)
-		if err != nil {
-			return nil, err
-		}
-		list := []any{}
-		for _, r := range l.Rankers {
-			list = append(list, rankerMap(r))
-		}
-		return map[string]any{"rankers": list, "active": l.Active, "window": int64(l.Window), "error": l.Err,
-			"supplied": l.Supplied}, nil
-	}, false))
-	s.handle("ranker.add", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		sp, err := rankerSpecOf(p[0])
-		if err != nil {
-			return nil, err
-		}
-		info, err := s.rankers.AddRanker(ctx, sp)
-		if err != nil {
-			return nil, err
-		}
-		return rankerMap(info), nil
-	}, false))
-	s.handle("ranker.update", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		sp, err := rankerSpecOf(p[1])
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.rankers.UpdateRanker(ctx, name, sp)
-	}, false))
-	s.handle("ranker.remove", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.rankers.RemoveRanker(ctx, name)
-	}, false))
-	s.handle("ranker.use", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.rankers.Use(ctx, name)
-	}, false))
-	s.handle("ranker.window", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		n, err := argInt(p, 0, "window")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.rankers.SetWindow(ctx, int(n))
-	}, false))
-	// a ranker's models: a TEI server's one model, none for a rerank-API endpoint (its model is typed)
-	s.handle("ranker.models", s.verb(1, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		// a stored one by its name; an unsaved one by its spec; an edit of a stored one by its name
-		// and the edit's spec, which is what is asked, with the stored key unless it carries one
-		var name string
-		var sp store.RankerSpec
-		switch v := p[0].(type) {
-		case string:
-			name = v
-			if len(p) == 2 {
-				var err error
-				if sp, err = rankerSpecOf(p[1]); err != nil {
+	m := meters[store.RankerSpec]{need: need, specOf: rankerSpecOf,
+		usage: func(ctx context.Context, n string, d int) ([]store.Usage, error) { return s.rankers.Usage(ctx, n, d) },
+		log:   func(ctx context.Context, n string, l int) ([]store.LogEntry, error) { return s.rankers.Log(ctx, n, l) },
+		models: func(ctx context.Context, n string, sp store.RankerSpec) ([]string, error) {
+			return s.rankers.Models(ctx, n, sp)
+		}}
+	user := module.AudienceUser
+	ev := func(kind, detail string) *module.EventSpec { return &module.EventSpec{Kind: kind, Detail: detail} }
+	return []module.Verb{
+		module.Handle(module.Contract{Verb: "ranker.list", Since: 11, Audience: user,
+			Result: "{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}", Errors: []int64{CodeUnsupported},
+			Doc: "The stored rankers (kind tei or rerank-api), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (\"\" for none), which is then the one in use."},
+			func(ctx context.Context, _ struct{}) (*rankersJSON, error) {
+				if err := need(); err != nil {
 					return nil, err
 				}
-			}
-		default:
-			if len(p) == 2 {
-				return nil, invalid("ranker.models: a spec alone, or a name and a spec")
-			}
-			var err error
-			if sp, err = rankerSpecOf(v); err != nil {
-				return nil, err
-			}
-		}
-		models, err := s.rankers.Models(ctx, name, sp)
-		if err != nil {
-			return nil, err
-		}
-		out := []any{}
-		for _, m := range models {
-			out = append(out, m)
-		}
-		return out, nil
-	}, false))
-	s.handle("ranker.usage", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		days, err := argInt(p, 1, "days")
-		if err != nil {
-			return nil, err
-		}
-		us, err := s.rankers.Usage(ctx, name, int(days))
-		if err != nil {
-			return nil, err
-		}
-		out := []any{}
-		for _, u := range us {
-			out = append(out, map[string]any{"day": u.Day, "requests": u.Requests, "texts": u.Texts, "tokens": u.Tokens,
-				"failures": u.Failures, "limited": u.Limited})
-		}
-		return out, nil
-	}, false))
-	s.handle("ranker.log", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		limit, err := argInt(p, 1, "limit")
-		if err != nil {
-			return nil, err
-		}
-		es, err := s.rankers.Log(ctx, name, int(limit))
-		if err != nil {
-			return nil, err
-		}
-		out := []any{}
-		for _, e := range es {
-			out = append(out, map[string]any{"at": e.At, "texts": e.Texts, "tokens": e.Tokens, "millis": e.Millis, "outcome": e.Outcome})
-		}
-		return out, nil
-	}, false))
+				l, err := s.rankers.ListRankers(ctx)
+				if err != nil {
+					return nil, err
+				}
+				out := &rankersJSON{Rankers: []*rankerJSON{}, Active: l.Active, Window: l.Window, Error: l.Err, Supplied: l.Supplied}
+				for _, r := range l.Rankers {
+					out.Rankers = append(out.Rankers, rankerOf(r))
+				}
+				return out, nil
+			}),
+		module.Handle(module.Contract{Verb: "ranker.add", Since: 11, Audience: user,
+			Result: "{name, kind, base_url, model, has_key}", Errors: []int64{CodeUnsupported, CodeConflict, CodeProviderRefused},
+			Event: ev("ranker.providers", "")},
+			func(ctx context.Context, p rankerAdd) (*rankerJSON, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				sp, err := rankerSpecOf(p.Ranker.raw)
+				if err != nil {
+					return nil, err
+				}
+				info, err := s.rankers.AddRanker(ctx, sp)
+				if err != nil {
+					return nil, err
+				}
+				return rankerOf(info), nil
+			}),
+		module.Handle(module.Contract{Verb: "ranker.update", Since: 11, Audience: user,
+			Errors: []int64{CodeUnsupported, CodeNotFound, CodeConflict, CodeProviderRefused}, Event: ev("ranker.providers", "name")},
+			func(ctx context.Context, p rankerUpdate) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				sp, err := rankerSpecOf(p.Ranker.raw)
+				if err != nil {
+					return nil, err
+				}
+				return nil, s.rankers.UpdateRanker(ctx, p.Name, sp)
+			}),
+		module.Handle(module.Contract{Verb: "ranker.remove", Since: 11, Audience: user, Errors: []int64{CodeUnsupported, CodeNotFound},
+			Event: ev("ranker.providers", "name")},
+			func(ctx context.Context, p providerName) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				return nil, s.rankers.RemoveRanker(ctx, p.Name)
+			}),
+		module.Handle(module.Contract{Verb: "ranker.use", Since: 11, Audience: user, Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
+			Event: ev("ranker.switched", "name"), Doc: "Refused while the build supplies its ranker."},
+			func(ctx context.Context, p rankerUse) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				return nil, s.rankers.Use(ctx, p.Name)
+			}),
+		module.Handle(module.Contract{Verb: "ranker.window", Since: 11, Audience: user, Errors: []int64{CodeUnsupported},
+			Event: ev("ranker.switched", ""), Doc: "Refused while the build supplies its ranker."},
+			func(ctx context.Context, p rankerWindow) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				return nil, s.rankers.SetWindow(ctx, p.Window)
+			}),
+		// a ranker's models: a TEI server's one model, none for a rerank-API endpoint (its model is typed)
+		module.Handle(module.Contract{Verb: "ranker.models", Since: 11, Audience: user,
+			Result: "[string]", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
+			Doc: "A TEI server's one model; none for a rerank-API endpoint, whose model is typed."},
+			func(ctx context.Context, p rankerModels) ([]string, error) {
+				return m.modelsOf(ctx, "ranker.models", p.Ranker, p.Spec)
+			}),
+		m.usageVerb(module.Contract{Verb: "ranker.usage", Since: 11, Audience: user,
+			Result: "[{day, requests, texts, tokens, failures, limited}]", Errors: []int64{CodeUnsupported, CodeNotFound},
+			Doc: "A ranker's usage by day."}),
+		m.logVerb(module.Contract{Verb: "ranker.log", Since: 11, Audience: user,
+			Result: "[{at, texts, tokens, millis, outcome}]", Errors: []int64{CodeUnsupported, CodeNotFound},
+			Doc: "A ranker's recent calls."}),
+	}
 }
 
 // rankerCapability is sys.capabilities' ranker: whether the build supplies its own, and its model.

@@ -38,9 +38,6 @@ func legacyVerbs() []verb {
 	ev := func(kind, workspace, detail string) *module.EventSpec {
 		return &module.EventSpec{Kind: kind, Workspace: workspace, Detail: detail}
 	}
-	rankerSpec := "{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"
-	usage := "[{day, requests, texts, tokens, failures, limited}]"
-	calls := "[{at, texts, tokens, millis, outcome}]"
 	none := []module.Param(nil)
 	c := func(c module.Contract) verb { return verb{Contract: c} }
 	return []verb{
@@ -73,39 +70,5 @@ func legacyVerbs() []verb {
 			Event:  ev(configureKinds, "workspace name", ""),
 			Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},
 			events: configureEvents},
-
-		// ranker
-		c(module.Contract{Verb: "ranker.list", Since: 11, Scope: global, Audience: user, Params: none,
-			Result: "{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}", Errors: []int64{CodeUnsupported},
-			Doc: "The stored rankers (kind tei or rerank-api), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (\"\" for none), which is then the one in use."}),
-		c(module.Contract{Verb: "ranker.add", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("ranker", "map", rankerSpec)},
-			Result: "{name, kind, base_url, model, has_key}", Errors: []int64{CodeUnsupported, CodeConflict, CodeProviderRefused},
-			Event: ev("ranker.providers", "", "")}),
-		c(module.Contract{Verb: "ranker.update", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("ranker", "map", rankerSpec)},
-			Errors: []int64{CodeUnsupported, CodeNotFound, CodeConflict, CodeProviderRefused},
-			Event:  ev("ranker.providers", "", "name")}),
-		c(module.Contract{Verb: "ranker.remove", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", "")},
-			Errors: []int64{CodeUnsupported, CodeNotFound}, Event: ev("ranker.providers", "", "name")}),
-		c(module.Contract{Verb: "ranker.use", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", "\"\" for none")},
-			Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Event: ev("ranker.switched", "", "name"),
-			Doc: "Refused while the build supplies its ranker."}),
-		c(module.Contract{Verb: "ranker.window", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("window", "int", "how many candidates it ranks, 10 to 100")},
-			Errors: []int64{CodeUnsupported}, Event: ev("ranker.switched", "", ""),
-			Doc: "Refused while the build supplies its ranker."}),
-		c(module.Contract{Verb: "ranker.models", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("ranker", "any", "a stored ranker's name, or an unsaved one's spec"), optional("spec", "map", "with a name: the edit asked about")},
-			Result: "[string]", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
-			Doc: "A TEI server's one model; none for a rerank-API endpoint, whose model is typed."}),
-		c(module.Contract{Verb: "ranker.usage", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("days", "int", "")},
-			Result: usage, Errors: []int64{CodeUnsupported, CodeNotFound}, Doc: "A ranker's usage by day."}),
-		c(module.Contract{Verb: "ranker.log", Since: 11, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("limit", "int", "")},
-			Result: calls, Errors: []int64{CodeUnsupported, CodeNotFound}, Doc: "A ranker's recent calls."}),
 	}
 }

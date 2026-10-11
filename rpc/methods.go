@@ -150,7 +150,6 @@ func wireErr(err error) error {
 }
 
 func (s *Server) register() {
-	s.registerRankers()
 	s.registerEvents()
 	s.configureVerbs()
 	s.registerContracts()
@@ -162,6 +161,7 @@ func (s *Server) register() {
 	s.own(s.docVerbs()...)
 	s.own(s.fileVerbs()...)
 	s.own(s.embeddingVerbs()...)
+	s.own(s.rankerVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 }
