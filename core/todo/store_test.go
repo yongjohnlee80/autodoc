@@ -1,6 +1,7 @@
 package todo_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -481,5 +482,59 @@ func TestScaffoldAnEmptyOverride(t *testing.T) {
 	}
 	if _, err := e.m.Add(ctx, kb, todo.Spec{Title: "t"}); err != nil {
 		t.Error(err)
+	}
+}
+
+// TestAClaimItCannotServeIsUndone: only a store with no directory or no buckets yet is left to
+// Scaffold; a store the daemon cannot open or mark fails the claim, and a new claim is undone so
+// the cutover can retry. A claim made before stays.
+func TestAClaimItCannotServeIsUndone(t *testing.T) {
+	claimedNow := func(e *env) bool {
+		r, err := e.m.Resolve(ctx, kb)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r.Claimed
+	}
+	// no directory yet: deferred, claimed
+	e := newEnv(t)
+	if err := e.m.Claim(ctx, kb); err != nil || !claimedNow(e) {
+		t.Fatalf("a store with no directory: %v, claimed %v", err, claimedNow(e))
+	}
+	// the store's path is a file: it cannot be opened, so the claim fails and is undone
+	e = newEnv(t)
+	e.disk.WriteFile(kbStore, []byte("not a directory\n"))
+	if err := e.m.Claim(ctx, kb); err == nil || claimedNow(e) {
+		t.Errorf("a store that cannot be opened: %v, claimed %v", err, claimedNow(e))
+	}
+	// the marker cannot be written: the claim fails and is undone; once the disk is well it succeeds
+	e = newEnv(t)
+	e.disk.WriteFile(kbStore+"/open/t.md", []byte(taskFile("t", "open")))
+	e.disk.SetFault(func(op, name string) error {
+		if strings.HasSuffix(name, ".autodoc-owner") && op != "stat" && op != "read" {
+			return errors.New("disk full")
+		}
+		return nil
+	})
+	if err := e.m.Claim(ctx, kb); err == nil || claimedNow(e) {
+		t.Errorf("a marker that cannot be written: %v, claimed %v", err, claimedNow(e))
+	}
+	e.disk.SetFault(nil)
+	if err := e.m.Claim(ctx, kb); err != nil || !claimedNow(e) || !e.exists(kbStore+"/.autodoc-owner") {
+		t.Errorf("the retry: %v, claimed %v", err, claimedNow(e))
+	}
+	// a claim made before stays when a later one fails
+	e.disk.SetFault(func(op, name string) error {
+		if strings.HasSuffix(name, ".autodoc-owner") && op != "stat" && op != "read" {
+			return errors.New("disk full")
+		}
+		return nil
+	})
+	e.restart() // a new daemon: the store is opened again, and its marker must be written again
+	if err := e.disk.FS.Remove(ctx, "kb/.todo-list/.autodoc-owner"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.m.Claim(ctx, kb); err == nil || !claimedNow(e) {
+		t.Errorf("a failed re-claim: %v, claimed %v (the earlier claim stays)", err, claimedNow(e))
 	}
 }

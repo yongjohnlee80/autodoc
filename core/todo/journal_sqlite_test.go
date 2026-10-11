@@ -93,6 +93,7 @@ var sqliteSuites = []struct {
 	{"TheFirstWriteKeepsTheBaseline", TestTheFirstWriteKeepsTheBaseline},
 	{"TheVerbsServeTheManager", TestTheVerbsServeTheManager},
 	{"EveryVerbAnswers", TestEveryVerbAnswers},
+	{"AClaimItCannotServeIsUndone", TestAClaimItCannotServeIsUndone},
 	{"ScaffoldAnEmptyOverride", TestScaffoldAnEmptyOverride},
 	{"DiskFailuresSurface", TestDiskFailuresSurface},
 	{"JournalFailuresSurface", TestJournalFailuresSurface},

@@ -385,10 +385,11 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	if !w.writable {
 		return fmt.Errorf("%w: %s", ErrNotWritable, w.rec.Path)
 	}
+	fresh := false
 	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
 		rec := s.Stores[w.rec.ID]
 		if !rec.Claimed {
-			rec.Claimed, rec.ClaimedAt = true, m.now()
+			rec.Claimed, rec.ClaimedAt, fresh = true, m.now(), true
 			s.Stores[w.rec.ID] = rec
 		}
 		return nil
@@ -396,21 +397,52 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	if err != nil {
 		return err
 	}
-	if st, err := m.open(ctx, w); err == nil {
-		st.mu.Lock()
-		defer st.mu.Unlock()
-		if err := st.mark(ctx, m.now()); err != nil {
-			return err
+	if err := m.finishClaim(ctx, w, o); err != nil {
+		// a claim that cannot be served is no cutover: a new one is undone, so the caller sees the
+		// failure and retries; an old one stays, as it was
+		if fresh {
+			if uerr := m.unclaim(ctx, w.rec.ID); uerr != nil {
+				return errors.Join(err, uerr)
+			}
 		}
-		if o.LegacyWorkspace == "" {
-			return nil
-		}
-		if err := m.ready(ctx, st); err != nil {
-			return err
-		}
-		return m.cutover(ctx, st, w, o.LegacyWorkspace)
+		return err
 	}
-	return nil // no directory yet: Scaffold writes the marker
+	return nil
+}
+
+// finishClaim marks a claimed store and runs its cutover rewrite. A store with no directory or no
+// buckets yet is left to Scaffold, which writes the marker; any other failure to open it is the
+// claim's.
+func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
+	st, err := m.open(ctx, w)
+	if errors.Is(err, ErrNotAStore) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if err := st.mark(ctx, m.now()); err != nil {
+		return err
+	}
+	if o.LegacyWorkspace == "" {
+		return nil
+	}
+	if err := m.ready(ctx, st); err != nil {
+		return err
+	}
+	return m.cutover(ctx, st, w, o.LegacyWorkspace)
+}
+
+// unclaim records a store as not claimed.
+func (m *Manager) unclaim(ctx context.Context, id string) error {
+	return m.j.UpdateSettings(ctx, func(s *Settings) error {
+		rec := s.Stores[id]
+		rec.Claimed, rec.ClaimedAt = false, time.Time{}
+		s.Stores[id] = rec
+		return nil
+	})
 }
 
 // Release makes an At's store read-only to the daemon again: the cutover's rollback.
@@ -419,13 +451,7 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 	if err != nil {
 		return err
 	}
-	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
-		rec := s.Stores[w.rec.ID]
-		rec.Claimed, rec.ClaimedAt = false, time.Time{}
-		s.Stores[w.rec.ID] = rec
-		return nil
-	})
-	if err != nil {
+	if err := m.unclaim(ctx, w.rec.ID); err != nil {
 		return err
 	}
 	if st, err := m.open(ctx, w); err == nil {
