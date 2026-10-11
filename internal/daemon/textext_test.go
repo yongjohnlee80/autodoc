@@ -17,7 +17,7 @@ import (
 func crumbOf(t *testing.T, m *Workspaces, q string) string {
 	t.Helper()
 	w, _ := m.Get("kb")
-	r, err := w.Index.Search(context.Background(), q, index.QueryOpts{Mode: index.ModeLexical})
+	r, err := w.Index().Search(context.Background(), q, index.QueryOpts{Mode: index.ModeLexical})
 	if err != nil || len(r.Hits) == 0 {
 		return ""
 	}
@@ -56,7 +56,7 @@ func TestTextExtensionsChangeHowFilesAreRead(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "bin.log"), []byte{0xff, 0xfe, 0}, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Docs.Read(context.Background(), "bin.log"); err == nil {
+	if _, err := w.Docs().Read(context.Background(), "bin.log"); err == nil {
 		t.Fatal("a .log that is not UTF-8 was read as text")
 	}
 

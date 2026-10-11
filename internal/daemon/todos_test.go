@@ -14,7 +14,7 @@ import (
 )
 
 func TestTodoRootsAreTheServedWorkspaces(t *testing.T) {
-	ws := rpc.Fixed(&rpc.Workspace{Name: "kb", Root: "/kb"}, &rpc.Workspace{Name: "gone", Root: "/gone", Err: errors.New("no root")})
+	ws := rpc.Fixed(rpc.Static(rpc.WorkspaceInfo{Name: "kb", Root: "/kb"}), rpc.Static(rpc.WorkspaceInfo{Name: "gone", Root: "/gone", Err: errors.New("no root")}))
 	r := TodoRoots{Workspaces: ws}
 	if root, ok := r.Root("kb"); !ok || root != "/kb" {
 		t.Errorf("kb's root %q %v", root, ok)

@@ -208,8 +208,8 @@ func lineDiff(want, got string) string {
 // wireWorkspaces is a set of workspaces that changes as the daemon's does, answering fixed values.
 type wireWorkspaces struct{ Workspaces }
 
-func (wireWorkspaces) Add(_ context.Context, c config.Workspace) (*Workspace, error) {
-	return &Workspace{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude}, nil
+func (wireWorkspaces) Add(_ context.Context, c config.Workspace) (Workspace, error) {
+	return Static(WorkspaceInfo{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude}), nil
 }
 func (wireWorkspaces) Rename(context.Context, string, string) error                  { return nil }
 func (wireWorkspaces) Remove(context.Context, string) error                          { return nil }
@@ -280,7 +280,7 @@ func wireServer(t *testing.T) (*Server, *golibrpc.Client, *memfs.FS) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kb := &Workspace{Name: "kb", Root: "/roots/kb", EmbeddingPolicy: store.EmbeddingAlways, SectionTokens: 512,
+	kb := Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", EmbeddingPolicy: store.EmbeddingAlways, SectionTokens: 512,
 		Include: []string{"**/*.md"}, Exclude: []string{".git/**"}, Index: ix, Docs: docs.New(fsys, md), Following: f.Status,
 		Warming: func() []string { return nil }, EmbeddingQueue: func() (string, string) { return "idle", "" },
 		FrontmatterSchema: func() (*schema.Schema, SchemaStatus) {
@@ -291,8 +291,8 @@ func wireServer(t *testing.T) (*Server, *golibrpc.Client, *memfs.FS) {
 			return Databases{UID: "u1", Destination: "sqlite", VectorIndex: "", ViewArgs: map[string]any{"k": "v"},
 				Connections: []store.ConnectionSummary{{Role: store.RoleDestination, Engine: "postgres", Host: "db", Database: "rag", User: "me", HasPassword: true}}}
 		},
-		Provider: ProviderChoice{Override: "local", Err: "not set up"}}
-	broken := &Workspace{Name: "broken", Root: "/roots/broken", Err: errFixed}
+		Provider: ProviderChoice{Override: "local", Err: "not set up"}})
+	broken := Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: errFixed})
 	files := memfs.New()
 	sock := shortSocket(t)
 	ln, err := net.Listen("unix", sock)

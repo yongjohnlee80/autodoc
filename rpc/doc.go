@@ -75,9 +75,9 @@ func (s *Server) docVerbs() []module.Verb {
 	read := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p docPath) (*contentJSON, error) {
 			w := workspaceOf(ctx)
-			read := w.Docs.Read
+			read := w.Docs().Read
 			if raw {
-				read = w.Docs.ReadRaw
+				read = w.Docs().ReadRaw
 			}
 			d, err := read(ctx, p.Path)
 			if err != nil {
@@ -89,9 +89,9 @@ func (s *Server) docVerbs() []module.Verb {
 	write := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p docWrite) (*versionJSON, error) {
 			w := workspaceOf(ctx)
-			write := w.Docs.Write
+			write := w.Docs().Write
 			if raw {
-				write = w.Docs.WriteRaw
+				write = w.Docs().WriteRaw
 			}
 			v, err := write(ctx, p.Path, p.Content, vfs.Version(p.Version))
 			if err != nil {
@@ -119,13 +119,13 @@ func (s *Server) docVerbs() []module.Verb {
 			Doc: "A Markdown file's headings in order, with the version they were read at; other kinds have none."},
 			func(ctx context.Context, p docPath) (*outlineJSON, error) {
 				w := workspaceOf(ctx)
-				d, err := w.Docs.Read(ctx, p.Path)
+				d, err := w.Docs().Read(ctx, p.Path)
 				if err != nil {
 					return nil, err
 				}
 				k := kind.Markdown
-				if w.Index != nil {
-					k = w.Index.Kind(p.Path)
+				if w.Index() != nil {
+					k = w.Index().Kind(p.Path)
 				}
 				if k == kind.Derived {
 					k = kind.Markdown // read, so derived: its text is Markdown
@@ -148,11 +148,9 @@ func (s *Server) docVerbs() []module.Verb {
 					return nil, docs.ErrTooLarge
 				}
 				var sch *schema.Schema
-				if w.FrontmatterSchema != nil {
-					sch, _ = w.FrontmatterSchema()
-				}
+				sch, _, _ = w.FrontmatterSchema()
 				var ds []schema.Diagnostic
-				if w.Index == nil || w.Index.Kind(p.Path) == kind.Markdown {
+				if w.Index() == nil || w.Index().Kind(p.Path) == kind.Markdown {
 					ds = sch.ValidateFile(p.Content).Diagnostics
 				}
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil
@@ -161,7 +159,7 @@ func (s *Server) docVerbs() []module.Verb {
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported}},
 			func(ctx context.Context, p docRename) (any, error) {
 				w := workspaceOf(ctx)
-				if err := w.Docs.Rename(ctx, p.From, p.To); err != nil {
+				if err := w.Docs().Rename(ctx, p.From, p.To); err != nil {
 					return nil, err
 				}
 				touch(w, p.From, p.To)
@@ -171,7 +169,7 @@ func (s *Server) docVerbs() []module.Verb {
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported}},
 			func(ctx context.Context, p docRemove) (any, error) {
 				w := workspaceOf(ctx)
-				if err := w.Docs.Remove(ctx, p.Path, vfs.Version(p.Version)); err != nil {
+				if err := w.Docs().Remove(ctx, p.Path, vfs.Version(p.Version)); err != nil {
 					return nil, err
 				}
 				touch(w, p.Path)
@@ -183,11 +181,11 @@ func (s *Server) docVerbs() []module.Verb {
 // touch tells the workspace's indexer that paths changed through the API, so a file saved in a client
 // is indexed at once, whatever the follower is doing — watching, polling, or still scanning. The
 // indexer re-reads each path and decides for itself (eligible, unchanged, gone).
-func touch(w *Workspace, paths ...string) {
-	if w.Index == nil {
+func touch(w Workspace, paths ...string) {
+	if w.Index() == nil {
 		return
 	}
 	for _, p := range paths {
-		w.Index.Touch(p)
+		w.Index().Touch(p)
 	}
 }

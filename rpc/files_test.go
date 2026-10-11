@@ -23,7 +23,7 @@ import (
 
 // filesRig is a daemon serving the disk as the daemon does (app/serve.go), over network ("unix" or
 // "tcp"), with the workspaces ws. Its client has said hello at protocol proto.
-func filesRig(t *testing.T, network string, proto int64, ws ...*Workspace) *golibrpc.Client {
+func filesRig(t *testing.T, network string, proto int64, ws ...Workspace) *golibrpc.Client {
 	t.Helper()
 	disk, err := local.New("/")
 	if err != nil {
@@ -170,15 +170,15 @@ func TestFileVerbsOnAServerWithoutFiles(t *testing.T) {
 // excludes, and a workspace that could not open (Err, whatever else it has) are in none (ADR 1791430651 §5.4).
 func TestFileLocateFindsTheWorkspaceThatServesAPath(t *testing.T) {
 	base := t.TempDir()
-	ws := func(name, root string) *Workspace {
-		return &Workspace{Name: name, Root: root, Docs: docs.New(memfs.New(), md)}
+	ws := func(name, root string) Workspace {
+		return Static(WorkspaceInfo{Name: name, Root: root, Docs: docs.New(memfs.New(), md)})
 	}
 	cli := filesRig(t, "unix", Protocol,
 		ws("kb", filepath.Join(base, "kb")),
 		ws("inner", filepath.Join(base, "kb", "sub")),
-		&Workspace{Name: "all", Root: filepath.Join(base, "all"), Docs: docs.New(memfs.New(), nil)}, // every path
-		&Workspace{Name: "broken", Root: filepath.Join(base, "gone"), Docs: docs.New(memfs.New(), md),
-			Err: fmt.Errorf("x: %w", workspace.ErrNotADirectory)})
+		Static(WorkspaceInfo{Name: "all", Root: filepath.Join(base, "all"), Docs: docs.New(memfs.New(), nil)}), // every path
+		Static(WorkspaceInfo{Name: "broken", Root: filepath.Join(base, "gone"), Docs: docs.New(memfs.New(), md),
+			Err: fmt.Errorf("x: %w", workspace.ErrNotADirectory)}))
 	for _, tc := range []struct {
 		abs  string
 		want any

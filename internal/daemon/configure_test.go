@@ -70,8 +70,8 @@ func TestConfigure_AppliesEveryChangeAsItsVerbWould(t *testing.T) {
 	}
 	indexed(t, m, "docs", 2)
 	w, _ := m.Get("docs")
-	if w.SectionSize() != 256 || strings.Join(w.Include, ",") != "**/*.{md,txt}" {
-		t.Errorf("served with section %d, include %v", w.SectionSize(), w.Include)
+	if w.SectionTokens() != 256 || strings.Join(w.Include(), ",") != "**/*.{md,txt}" {
+		t.Errorf("served with section %d, include %v", w.SectionTokens(), w.Include())
 	}
 	list, err := db.Workspaces(context.Background())
 	if err != nil || len(list) != 1 || list[0].Name != "docs" || *list[0].SectionTokens != 256 {
@@ -157,7 +157,7 @@ func TestConfigure_ListsConnectionsWithoutTheirSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 	w, _ := m.Get("kb")
-	d := w.Databases()
+	d, _ := w.Databases()
 	if d.Destination != store.DestinationPostgres || len(d.UID) != 32 || d.ViewArgs["LabelGroupID"] != "7" || len(d.Connections) != 1 {
 		t.Fatalf("databases %+v", d)
 	}
@@ -234,8 +234,8 @@ func TestConfigure_ARestartThatFailsTakesTheWholeSaveBack(t *testing.T) {
 	if !ok {
 		t.Fatal("kb is not served")
 	}
-	if served.SectionSize() != store.SectionTokensDefault || strings.Join(served.Include, ",") != "**/*.md" {
-		t.Errorf("served with section %d, include %v", served.SectionSize(), served.Include)
+	if served.SectionTokens() != store.SectionTokensDefault || strings.Join(served.Include(), ",") != "**/*.md" {
+		t.Errorf("served with section %d, include %v", served.SectionTokens(), served.Include())
 	}
 	indexed(t, m, "kb", 1)
 }

@@ -518,7 +518,7 @@ func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
 	}
 	status := func() *index.EmbeddingStatus {
 		w, _ := m.Get("kb")
-		st, err := w.Index.Status(ctx)
+		st, err := w.Index().Status(ctx)
 		if err != nil {
 			t.Fatal(err)
 		}

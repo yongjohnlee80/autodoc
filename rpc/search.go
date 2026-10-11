@@ -84,10 +84,8 @@ func (s *Server) searchVerbs() []module.Verb {
 				if err != nil {
 					return nil, err
 				}
-				if w.Searched != nil {
-					w.Searched()
-				}
-				res, err := w.Index.Search(ctx, p.Query, opts)
+				w.Searched()
+				res, err := w.Index().Search(ctx, p.Query, opts)
 				if err != nil {
 					return nil, err
 				}
@@ -191,18 +189,18 @@ func queryOpts(raw any) (index.QueryOpts, error) {
 // reader, and opens a file at the line without converting bytes (Protocol 13). Each document is read
 // once. A hit on a held or derived document, or one whose span the file no longer holds (it changed
 // since it was indexed), gets neither: its bytes are not the file's.
-func addLines(ctx context.Context, w *Workspace, hits []index.Hit, out []hitJSON) {
-	if w.Docs == nil {
+func addLines(ctx context.Context, w Workspace, hits []index.Hit, out []hitJSON) {
+	if w.Docs() == nil {
 		return
 	}
 	read := map[string][]byte{}
 	for i, h := range hits {
-		if h.Hold != "" || w.Docs.Derived(h.Path) {
+		if h.Hold != "" || w.Docs().Derived(h.Path) {
 			continue
 		}
 		content, ok := read[h.Path]
 		if !ok {
-			if d, err := w.Docs.Read(ctx, h.Path); err == nil {
+			if d, err := w.Docs().Read(ctx, h.Path); err == nil {
 				content = d.Content
 			}
 			read[h.Path] = content

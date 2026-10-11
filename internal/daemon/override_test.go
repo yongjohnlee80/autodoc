@@ -33,15 +33,15 @@ func modelOf(t *testing.T, m *Workspaces, name, model string) {
 	t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		w, ok := m.Get(name)
-		if ok && w.Index != nil {
-			if st, err := w.Index.Status(context.Background()); err == nil && st.Embeddings != nil &&
+		if ok && w.Index() != nil {
+			if st, err := w.Index().Status(context.Background()); err == nil && st.Embeddings != nil &&
 				embed.ModelName(st.Embeddings.Model) == model && st.Embeddings.Target == "" && st.Embeddings.Pending == 0 {
 				return
 			}
 		}
 		if time.Now().After(deadline) {
 			w, _ := m.Get(name)
-			st, _ := w.Index.Status(context.Background())
+			st, _ := w.Index().Status(context.Background())
 			t.Fatalf("%s never embedded with %s: %+v", name, model, st.Embeddings)
 		}
 	}
@@ -86,8 +86,8 @@ func TestAWorkspacesOwnProvider(t *testing.T) {
 	if oneAfter, _ := m.Get("one"); oneAfter != oneBefore {
 		t.Fatal("setting two's provider restarted one")
 	}
-	if w, _ := m.Get("two"); w.Provider.Override != "own" || w.Provider.Err != "" {
-		t.Fatalf("two's provider = %+v", w.Provider)
+	if w, _ := m.Get("two"); w.Provider().Override != "own" || w.Provider().Err != "" {
+		t.Fatalf("two's provider = %+v", w.Provider())
 	}
 
 	twoBefore, _ := m.Get("two")
@@ -113,8 +113,8 @@ func TestAWorkspacesOwnProvider(t *testing.T) {
 	}
 	m.providerChanged("own")
 	modelOf(t, m, "two", "daemon2")
-	if w, _ := m.Get("two"); w.Provider.Override != "" {
-		t.Fatalf("after the delete two's provider = %+v", w.Provider)
+	if w, _ := m.Get("two"); w.Provider().Override != "" {
+		t.Fatalf("after the delete two's provider = %+v", w.Provider())
 	}
 	if built["own"] != 2 {
 		t.Errorf("own was set up %d times, want 2 (once per time it was chosen; shared otherwise)", built["own"])
@@ -149,8 +149,8 @@ func TestAnOwnProviderThatFailsAtStartIsNotReplaced(t *testing.T) {
 		t.Fatal(err)
 	}
 	w, _ := m.Get("two")
-	if w.Provider.Override != "own" || w.Provider.Err == "" || w.Index.HasEmbeddings() {
-		t.Fatalf("after a failed setup: provider %+v, embeddings %v; want own, its error, and words only", w.Provider, w.Index.HasEmbeddings())
+	if w.Provider().Override != "own" || w.Provider().Err == "" || w.Index().HasEmbeddings() {
+		t.Fatalf("after a failed setup: provider %+v, embeddings %v; want own, its error, and words only", w.Provider(), w.Index().HasEmbeddings())
 	}
 }
 

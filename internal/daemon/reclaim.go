@@ -90,13 +90,13 @@ func (m *Workspaces) sweepOne(ctx context.Context, id int64, name string) ([]ind
 	m.mu.Lock()
 	s := m.served[name]
 	m.mu.Unlock()
-	if s != nil && s.w != nil && s.w.Index != nil && s.ctx != nil {
+	if s != nil && s.ix != nil && s.ctx != nil {
 		// bounded by the workspace's life too: an indexer stopped mid-sweep leaves the rest to the next start
 		sctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		stop := context.AfterFunc(s.ctx, cancel)
 		defer stop()
-		return s.w.Index.Sweep(sctx)
+		return s.ix.Sweep(sctx)
 	}
 	return index.SweepStore(ctx, m.db, id)
 }
@@ -107,12 +107,12 @@ func (m *Workspaces) sweepOrphansOne(ctx context.Context, id int64, name string)
 	m.mu.Lock()
 	s := m.served[name]
 	m.mu.Unlock()
-	if s != nil && s.w != nil && s.w.Index != nil && s.ctx != nil {
+	if s != nil && s.ix != nil && s.ctx != nil {
 		sctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		stop := context.AfterFunc(s.ctx, cancel)
 		defer stop()
-		return s.w.Index.SweepOrphans(sctx)
+		return s.ix.SweepOrphans(sctx)
 	}
 	return index.SweepOrphansStore(ctx, m.db, id)
 }

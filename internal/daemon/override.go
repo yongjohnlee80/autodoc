@@ -7,7 +7,6 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/embed"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -131,8 +130,7 @@ func (m *Workspaces) restartOne(name string, s *served) {
 	m.restarting[name] = true
 	m.mu.Unlock()
 	s.halt()
-	w := s.w
-	next := m.serve(s.id, config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude})
+	next := m.serve(s.id, s.spec())
 	m.mu.Lock()
 	m.served[name] = next
 	delete(m.restarting, name)

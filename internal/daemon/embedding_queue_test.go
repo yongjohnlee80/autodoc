@@ -88,11 +88,11 @@ func queueReady(t *testing.T, m *Workspaces, names ...string) {
 		all := true
 		for _, name := range names {
 			w, ok := m.Get(name)
-			if !ok || w.Index == nil {
+			if !ok || w.Index() == nil {
 				all = false
 				break
 			}
-			st, err := w.Index.Status(context.Background())
+			st, err := w.Index().Status(context.Background())
 			if err != nil || st.Embeddings == nil || st.Embeddings.Semantic != "ready" || st.Embeddings.Pending != 0 {
 				all = false
 				break
@@ -230,7 +230,7 @@ func TestFocusSwitchTakesTheNextBatch(t *testing.T) {
 	}
 	addQueueWorkspace(t, m, "bravo", 150)
 	w, _ := m.Get("bravo")
-	if state, behind := w.EmbeddingQueue(); state != "waiting" || behind != "alpha" {
+	if state, behind, _ := w.EmbeddingQueue(); state != "waiting" || behind != "alpha" {
 		t.Errorf("bravo while alpha is in flight: %q behind %q", state, behind)
 	}
 	if err := m.Focus("bravo"); err != nil {
@@ -293,7 +293,7 @@ func TestBackgroundAdvancesBeforeFocusedBacklogIsDone(t *testing.T) {
 	close(p.release)
 	queueReady(t, m, "bravo")
 	w, _ := m.Get("alpha")
-	st, err := w.Index.Status(context.Background())
+	st, err := w.Index().Status(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,10 +317,10 @@ func TestNeverAndWhenOpenedPolicies(t *testing.T) {
 	}
 	for _, name := range []string{"archive", "seldom"} {
 		w, _ := m.Get(name)
-		if state, _ := w.EmbeddingQueue(); state != "paused" {
+		if state, _, _ := w.EmbeddingQueue(); state != "paused" {
 			t.Errorf("%s state = %q", name, state)
 		}
-		if res, err := w.Index.Search(context.Background(), "body", index.QueryOpts{}); err != nil || res.Semantic != "off" {
+		if res, err := w.Index().Search(context.Background(), "body", index.QueryOpts{}); err != nil || res.Semantic != "off" {
 			t.Errorf("%s lexical search = %+v, %v", name, res, err)
 		}
 	}
@@ -332,10 +332,10 @@ func TestNeverAndWhenOpenedPolicies(t *testing.T) {
 	m.queue.focusedAt = time.Now().Add(-focusTTL - time.Second)
 	m.queue.mu.Unlock()
 	w, _ := m.Get("seldom")
-	if err := os.WriteFile(filepath.Join(w.Root, "later.md"), []byte("# Later\n\nnew text after focus expired\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(w.Root(), "later.md"), []byte("# Later\n\nnew text after focus expired\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w.Index.Touch("later.md")
+	w.Index().Touch("later.md")
 	indexed(t, m, "seldom", 2)
 	queueReady(t, m, "seldom")
 	if policy, err := db.EmbeddingPolicy(context.Background(), 9999); err == nil || policy != "" {

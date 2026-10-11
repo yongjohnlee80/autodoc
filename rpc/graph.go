@@ -74,9 +74,9 @@ func (s *Server) graphVerbs() []module.Verb {
 				if err != nil {
 					return nil, err
 				}
-				read := workspaceOf(ctx).Index.Store().Links
+				read := workspaceOf(ctx).Index().Store().Links
 				if backlinks {
-					read = workspaceOf(ctx).Index.Store().Backlinks
+					read = workspaceOf(ctx).Index().Store().Backlinks
 				}
 				ls, err := read(ctx, p.Path, kinds)
 				if err != nil {
@@ -100,7 +100,7 @@ func (s *Server) graphVerbs() []module.Verb {
 				if err != nil {
 					return nil, err
 				}
-				nb, err := workspaceOf(ctx).Index.Store().Neighborhood(ctx, p.Path, p.Depth, kinds)
+				nb, err := workspaceOf(ctx).Index().Store().Neighborhood(ctx, p.Path, p.Depth, kinds)
 				if err != nil {
 					return nil, err
 				}
@@ -117,7 +117,7 @@ func (s *Server) graphVerbs() []module.Verb {
 				if err != nil {
 					return nil, err
 				}
-				us, err := workspaceOf(ctx).Index.Store().Unresolved(ctx, kinds)
+				us, err := workspaceOf(ctx).Index().Store().Unresolved(ctx, kinds)
 				if err != nil {
 					return nil, err
 				}
@@ -133,7 +133,7 @@ func (s *Server) graphVerbs() []module.Verb {
 			Result: "{path, reason}", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "Where one link reaches now, saved or not, as the index resolves links: path \"\" with reason missing or ambiguous, or \"\" when raw is no link the index keeps (a URL, a heading of from)."},
 			func(ctx context.Context, p graphResolve) (*resolvedJSON, error) {
-				path, reason, err := workspaceOf(ctx).Index.ResolveLink(ctx, p.From, p.Raw)
+				path, reason, err := workspaceOf(ctx).Index().ResolveLink(ctx, p.From, p.Raw)
 				if err != nil {
 					return nil, err
 				}

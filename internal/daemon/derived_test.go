@@ -91,7 +91,7 @@ func settled(t *testing.T, m *Workspaces, d *derivations, what string, cond func
 	}
 	w, _ := m.Get("kb")
 	for n, quiet := d.count(), 0; quiet < 30; time.Sleep(10 * time.Millisecond) {
-		st, err := w.Index.Status(context.Background())
+		st, err := w.Index().Status(context.Background())
 		if err != nil || st.PendingJobs != 0 || d.count() != n {
 			n, quiet = d.count(), 0
 			if time.Now().After(deadline) {
@@ -163,24 +163,24 @@ func TestARestartDerivesOnlyWhatChanged(t *testing.T) {
 		t.Fatalf("a build without DOCX derived %q, want the control file alone", got)
 	}
 	w, _ := m.Get("kb")
-	st, err := w.Index.Status(context.Background())
+	st, err := w.Index().Status(context.Background())
 	if err != nil || st.Held != 2 || st.Docs != 6 {
 		t.Fatalf("status %+v, %v: want the two DOCX files held among six documents", st, err)
 	}
 	for _, p := range []string{"c.docx", "d.docx"} {
-		if _, ok := w.Index.Store().Version(p); !ok {
+		if _, ok := w.Index().Store().Version(p); !ok {
 			t.Fatalf("held %s left the index", p)
 		}
 	}
 	// the document API reads what the build derives, read-only, and refuses what it holds
-	doc, err := w.Docs.Read(context.Background(), "a.pdf")
+	doc, err := w.Docs().Read(context.Background(), "a.pdf")
 	if err != nil || string(doc.Content) != "# A\n\nkestrel\n" {
 		t.Fatalf("doc.read a.pdf: %q, %v", doc.Content, err)
 	}
-	if _, err := w.Docs.Write(context.Background(), "a.pdf", []byte("x"), doc.Version); !errors.Is(err, docs.ErrReadOnly) {
+	if _, err := w.Docs().Write(context.Background(), "a.pdf", []byte("x"), doc.Version); !errors.Is(err, docs.ErrReadOnly) {
 		t.Fatalf("doc.write a.pdf: %v", err)
 	}
-	if _, err := w.Docs.Read(context.Background(), "c.docx"); !errors.Is(err, docs.ErrNotEligible) {
+	if _, err := w.Docs().Read(context.Background(), "c.docx"); !errors.Is(err, docs.ErrNotEligible) {
 		t.Fatalf("doc.read of a held DOCX file: %v", err)
 	}
 }

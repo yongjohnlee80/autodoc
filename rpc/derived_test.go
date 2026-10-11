@@ -50,7 +50,7 @@ func TestADerivedDocumentOnTheWire(t *testing.T) {
 	if _, err := fsys.WriteFile(ctx, "locked.pdf", strings.NewReader("%PDF")); err != nil {
 		t.Fatal(err)
 	}
-	serveWith := func(name string, d registrations.Deriver) *Workspace {
+	serveWith := func(name string, d registrations.Deriver) Workspace {
 		reg, err := registrations.New(nil, d)
 		if err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func TestADerivedDocumentOnTheWire(t *testing.T) {
 		}
 		pdf := func(p string) bool { return strings.HasSuffix(p, ".pdf") }
 		ix := index.NewIndexer(index.Open(db, row.ID), fsys, index.Options{Match: pdf, BatchDelay: 5 * time.Millisecond, Registrations: reg})
-		return &Workspace{Name: name, Index: ix, Docs: docs.New(fsys, pdf, docs.WithRegistrations(reg.Kinds()), docs.WithDeriver(reg))}
+		return Static(WorkspaceInfo{Name: name, Index: ix, Docs: docs.New(fsys, pdf, docs.WithRegistrations(reg.Kinds()), docs.WithDeriver(reg))})
 	}
 	dir, err := os.MkdirTemp("", "adr") // a short path: macOS bounds a socket's at 104 bytes
 	if err != nil {

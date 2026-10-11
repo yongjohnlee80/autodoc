@@ -83,7 +83,7 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 	}
 	var candidate config.Workspace
 	if c.Include != nil {
-		candidate = config.Workspace{Name: name, Root: s.w.Root, Include: *c.Include, Exclude: *c.Exclude}
+		candidate = config.Workspace{Name: name, Root: s.root, Include: *c.Include, Exclude: *c.Exclude}
 		if err := checkRoot(candidate); err != nil {
 			return err
 		}
@@ -136,8 +136,8 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		m.mu.Lock()
 		now := m.served[name]
 		m.mu.Unlock()
-		if now != nil && now.w.Index != nil {
-			_ = now.w.Index.Reindex("") // the whole workspace is never refused
+		if now != nil && now.ix != nil {
+			_ = now.ix.Reindex("") // the whole workspace is never refused
 		}
 	}
 	if c.AbstractChunk != nil {

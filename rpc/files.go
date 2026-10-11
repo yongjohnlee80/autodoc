@@ -31,7 +31,7 @@ func WithFiles(d *docs.Docs) Option { return func(o *options) { o.files = d } }
 // local is verb for a peer on the unix socket only: the daemon's own user (the socket is 0600),
 // for whom a path on its disk is nothing new. Over TCP a token would reach any file the daemon can
 // read (rationale §R2).
-func (s *Server) local(method string, lo, hi int, h func(context.Context, *Workspace, []any) (any, error)) golibrpc.Handler {
+func (s *Server) local(method string, lo, hi int, h func(context.Context, Workspace, []any) (any, error)) golibrpc.Handler {
 	inner := s.verb(lo, hi, h, false)
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		if req.Peer == nil || req.Peer.Network() != "unix" {
@@ -150,28 +150,28 @@ func (s *Server) fileVerbs() []module.Verb {
 				if _, err := absName(abs); err != nil {
 					return nil, err
 				}
-				var best *Workspace
+				var best Workspace
 				var bestPath string
 				for _, w := range s.workspaces.List() {
-					if w.Err != nil || w.Docs == nil || !filepath.IsAbs(w.Root) {
+					if w.Err() != nil || w.Docs() == nil || !filepath.IsAbs(w.Root()) {
 						continue
 					}
-					rel, err := filepath.Rel(filepath.Clean(w.Root), abs)
+					rel, err := filepath.Rel(filepath.Clean(w.Root()), abs)
 					if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 						continue
 					}
 					rel = filepath.ToSlash(rel)
-					if !w.Docs.Admits(rel) {
+					if !w.Docs().Admits(rel) {
 						continue
 					}
-					if best == nil || len(filepath.Clean(w.Root)) > len(filepath.Clean(best.Root)) {
+					if best == nil || len(filepath.Clean(w.Root())) > len(filepath.Clean(best.Root())) {
 						best, bestPath = w, rel
 					}
 				}
 				if best == nil {
 					return nil, nil
 				}
-				return &locatedJSON{Workspace: best.Name, Path: bestPath}, nil
+				return &locatedJSON{Workspace: best.Name(), Path: bestPath}, nil
 			}),
 	}
 }

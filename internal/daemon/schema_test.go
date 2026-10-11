@@ -24,7 +24,7 @@ func searchPaths(t *testing.T, m *Workspaces, name, q string) ([]string, error) 
 	if !ok {
 		t.Fatalf("%s is not served", name)
 	}
-	r, err := w.Index.Search(context.Background(), q, index.QueryOpts{})
+	r, err := w.Index().Search(context.Background(), q, index.QueryOpts{})
 	var out []string
 	for _, h := range r.Hits {
 		out = append(out, h.Path)
@@ -84,7 +84,7 @@ func TestSchemaLifecycle(t *testing.T) {
 	write(".autodoc/schema.yaml", "version: 1\nfrontmatter:\n  type: {type: text}\n")
 	eventually(t, "the invalid edit to be reported", func() bool {
 		w, _ := m.Get("kb")
-		_, st := w.FrontmatterSchema()
+		_, st, _ := w.FrontmatterSchema()
 		return st.Err != "" && st.Line == 3 && st.Active
 	})
 	if got, err := searchPaths(t, m, "kb", "alpha type:adr"); err != nil || !reflect.DeepEqual(got, []string{"a.md"}) {

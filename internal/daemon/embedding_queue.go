@@ -178,7 +178,7 @@ func (q *embeddingQueue) run(ctx context.Context) {
 		q.host.mu.Lock()
 		candidates := make(map[string]*served, len(q.host.served))
 		for name, s := range q.host.served {
-			if s.ctx != nil && s.w.Index != nil && s.w.Index.HasEmbeddings() && s.w.Index.EmbeddingReady() {
+			if s.ctx != nil && s.ix != nil && s.ix.HasEmbeddings() && s.ix.EmbeddingReady() {
 				candidates[name] = s
 			}
 		}
@@ -196,7 +196,7 @@ func (q *embeddingQueue) run(ctx context.Context) {
 		s := candidates[name]
 		batchCtx, cancel := context.WithCancel(ctx)
 		stop := context.AfterFunc(s.ctx, cancel)
-		worked, err := s.w.Index.EmbedBatch(batchCtx, position)
+		worked, err := s.ix.EmbedBatch(batchCtx, position)
 		stop()
 		cancel()
 		q.mu.Lock()

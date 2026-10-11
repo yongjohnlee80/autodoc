@@ -54,14 +54,14 @@ func TestAProviderChangeNeverHoldsUpReads(t *testing.T) {
 			t.Error("the workspace is not served")
 			return
 		}
-		res, err := ws.Index.Search(context.Background(), "kestrel", index.QueryOpts{Mode: index.ModeLexical})
+		res, err := ws.Index().Search(context.Background(), "kestrel", index.QueryOpts{Mode: index.ModeLexical})
 		if err != nil || len(res.Hits) != 1 {
 			t.Errorf("search while restarting: %d hits, %v", len(res.Hits), err)
 		}
 		if got := ws.Warming(); !slices.Contains(got, warmRestarting) {
 			t.Errorf("while restarting, warming = %v, want %q", got, warmRestarting)
 		}
-		if _, err := ws.Docs.Read(context.Background(), "a.md"); err != nil {
+		if _, err := ws.Docs().Read(context.Background(), "a.md"); err != nil {
 			t.Errorf("reading a note while restarting: %v", err)
 		}
 	})
@@ -125,7 +125,7 @@ func TestAPastDefaultExcludeMovesToTheCurrentOne(t *testing.T) {
 	if !slices.Equal(got["custom"], []string{".git/**", "drafts/**"}) {
 		t.Errorf("the workspace with its own patterns excludes %v, want them kept", got["custom"])
 	}
-	if w, _ := m.Get("old"); !slices.Equal(w.Exclude, config.DefaultExclude) {
-		t.Errorf("the served workspace excludes %v, want the current default", w.Exclude)
+	if w, _ := m.Get("old"); !slices.Equal(w.Exclude(), config.DefaultExclude) {
+		t.Errorf("the served workspace excludes %v, want the current default", w.Exclude())
 	}
 }

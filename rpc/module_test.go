@@ -83,7 +83,7 @@ func moduleServer(t *testing.T, ms ...module.Module) (*golibrpc.Client, *recorde
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	srv := New(Fixed(&Workspace{Name: "kb", Root: "/roots/kb"}), "v-test", WithListener(ln), WithEvents(ev), WithModules(ms...))
+	srv := New(Fixed(Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb"})), "v-test", WithListener(ln), WithEvents(ev), WithModules(ms...))
 	done := make(chan error, 1)
 	go func() { done <- srv.Run(ctx) }()
 	t.Cleanup(func() { cancel(); <-done })

@@ -146,7 +146,7 @@ func rankedServer(t *testing.T, ranker rank.Ranker) *golibrpc.Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(Fixed(&Workspace{Name: "kb", Root: "/roots/kb", Index: ix, Docs: docs.New(fsys, md)}), "v-test", WithListener(ln))
+	srv := New(Fixed(Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", Index: ix, Docs: docs.New(fsys, md)})), "v-test", WithListener(ln))
 	srvDone := make(chan error, 1)
 	go func() { srvDone <- srv.Run(ctx) }()
 	t.Cleanup(func() {

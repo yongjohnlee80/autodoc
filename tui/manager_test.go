@@ -65,14 +65,14 @@ func startManagedRanking(t *testing.T, roots map[string]string, o serving.Option
 	}
 	// wait until every root's files are indexed, so the first listing has them
 	for _, w := range ws.List() {
-		want, _ := filepath.Glob(filepath.Join(w.Root, "*.md"))
+		want, _ := filepath.Glob(filepath.Join(w.Root(), "*.md"))
 		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-			st, _ := w.Index.Status(ctx)
+			st, _ := w.Index().Status(ctx)
 			if st.Docs == int64(len(want)) && st.PendingJobs == 0 {
 				break
 			}
 			if time.Now().After(deadline) {
-				t.Fatalf("workspace %s did not index", w.Name)
+				t.Fatalf("workspace %s did not index", w.Name())
 			}
 		}
 	}

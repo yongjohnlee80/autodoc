@@ -51,7 +51,8 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 - `rpc` is a host: it adapts modules to the wire. The TUI's script engine is another host of the
   same contracts.
 - A port (an interface a package needs) is declared by the package that consumes it:
-  `todo.Journal`, `todo.Filesystems`, `todo.Roots`.
+  `todo.Journal`, `todo.Filesystems`, `todo.Roots`, and rpc's `Workspace`, which
+  `internal/daemon`'s served workspaces implement (`rpc.Static` is a fixed one, for tests).
 
 ## 4. The convention
 

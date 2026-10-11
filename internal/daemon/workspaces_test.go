@@ -36,10 +36,10 @@ func indexed(t *testing.T, m *Workspaces, name string, docs int64) {
 	t.Helper()
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 		w, ok := m.Get(name)
-		if !ok || w.Index == nil {
+		if !ok || w.Index() == nil {
 			t.Fatalf("%s is not served", name)
 		}
-		if st, err := w.Index.Status(context.Background()); err == nil && st.Docs == docs && st.PendingJobs == 0 {
+		if st, err := w.Index().Status(context.Background()); err == nil && st.Docs == docs && st.PendingJobs == 0 {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -79,7 +79,7 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 	if n := stored(t, db); n != 1 {
 		t.Fatalf("the store has %d workspaces after the failed remove, want 1", n)
 	}
-	if got := m.List(); len(got) != 1 || got[0].Name != "kb" || got[0].Err != nil {
+	if got := m.List(); len(got) != 1 || got[0].Name() != "kb" || got[0].Err() != nil {
 		t.Fatalf("after the failed remove the daemon lists %+v, want kb, served", got)
 	}
 	// served again, not only listed: a file written now is followed and indexed
@@ -108,7 +108,7 @@ func TestRemoveOfAWorkspaceTheStoreLost(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws, err := db.Workspaces(context.Background())
-	if err != nil || len(ws) != 1 || ws[0].Name != w.Name {
+	if err != nil || len(ws) != 1 || ws[0].Name != w.Name() {
 		t.Fatalf("stored %+v, %v", ws, err)
 	}
 	if err := db.RemoveWorkspace(context.Background(), ws[0].ID); err != nil {
@@ -190,7 +190,7 @@ func TestSetPatternsReconcilesAndRejectsMalformedEdits(t *testing.T) {
 	if err := manager.SetPatterns(context.Background(), "kb", []string{"**/*.{md,txt"}, nil); err == nil {
 		t.Fatal("accepted malformed brace pattern")
 	}
-	if got := manager.List()[0].Include; len(got) != 1 || got[0] != "**/*.md" {
+	if got := manager.List()[0].Include(); len(got) != 1 || got[0] != "**/*.md" {
 		t.Fatalf("invalid pattern changed the running matcher: %v", got)
 	}
 	if err := manager.SetPatterns(context.Background(), "kb", []string{"**/*.{md,txt}"}, nil); err != nil {
@@ -205,7 +205,7 @@ func TestSetPatternsReconcilesAndRejectsMalformedEdits(t *testing.T) {
 		t.Fatal(err)
 	}
 	indexed(t, manager, "kb", 0)
-	if got := manager.List()[0].Include; got == nil || len(got) != 0 {
+	if got := manager.List()[0].Include(); got == nil || len(got) != 0 {
 		t.Fatalf("running blank include = %v", got)
 	}
 	workspaces, err := db.Workspaces(context.Background())

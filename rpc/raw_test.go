@@ -49,7 +49,7 @@ func rawRig(t *testing.T, network string, proto int64) *golibrpc.Client {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(Fixed(&Workspace{Name: "kb", Root: "/roots/kb", Docs: docs.New(fsys, nil, opts...)}), "v-test",
+	srv := New(Fixed(Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", Docs: docs.New(fsys, nil, opts...)})), "v-test",
 		WithListener(ln), WithFiles(docs.New(disk, nil, opts...)))
 	rctx, cancel := context.WithCancel(ctx)
 	done := make(chan error, 1)

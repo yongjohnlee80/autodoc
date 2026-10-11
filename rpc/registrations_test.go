@@ -18,11 +18,11 @@ import (
 // workspace.list names the text extensions a registration of the build reads instead (Protocol
 // 10), as an empty list when there are none.
 func TestWorkspaceListNamesTextCollisions(t *testing.T) {
-	got := asWire(t, listed(&Workspace{Name: "kb", TextCollisions: func() []string { return []string{".go"} }}))["text_collisions"]
+	got := asWire(t, listed(Static(WorkspaceInfo{Name: "kb", TextCollisions: func() []string { return []string{".go"} }})))["text_collisions"]
 	if !reflect.DeepEqual(got, []any{".go"}) {
 		t.Errorf("text_collisions %#v", got)
 	}
-	if got := asWire(t, listed(&Workspace{Name: "kb"}))["text_collisions"]; !reflect.DeepEqual(got, []any{}) {
+	if got := asWire(t, listed(Static(WorkspaceInfo{Name: "kb"})))["text_collisions"]; !reflect.DeepEqual(got, []any{}) {
 		t.Errorf("none: %#v", got)
 	}
 }
@@ -34,7 +34,7 @@ func TestHeldDocumentsOnTheWire(t *testing.T) {
 	if hits[0].(map[string]any)["hold"] != "stale" || hits[1].(map[string]any)["hold"] != "" {
 		t.Errorf("hits %v", hits)
 	}
-	st := asWire(t, statusOf(index.Status{Held: 3, HeldStale: 1, HeldUnchecked: 2}, &Workspace{}))
+	st := asWire(t, statusOf(index.Status{Held: 3, HeldStale: 1, HeldUnchecked: 2}, Static(WorkspaceInfo{})))
 	if st["held"] != int64(3) || st["held_stale"] != int64(1) || st["held_unchecked"] != int64(2) {
 		t.Errorf("status %v", st)
 	}
@@ -79,8 +79,8 @@ func TestStatusOnTheWire(t *testing.T) {
 		Embeddings: &index.EmbeddingStatus{Provider: "ollama", Model: "fp1", Target: "fp2", Texts: 9, Pending: 4, Semantic: "switching",
 			LastErr: "slow", Refused: 1, TargetPending: 5, TargetRefused: 2,
 			RefusedTexts: []index.RefusedText{{Path: "a.md", Breadcrumb: "A", Error: "too long", Hash: "h", Bytes: 10, Tokens: 3, RetryAt: at}}}}
-	w := &Workspace{Following: func() follow.Status { return follow.Status{Following: "watching", Retrying: []string{"x"}} },
-		Warming: func() []string { return []string{"restarting"} }, EmbeddingQueue: func() (string, string) { return "", "" }}
+	w := Static(WorkspaceInfo{Following: func() follow.Status { return follow.Status{Following: "watching", Retrying: []string{"x"}} },
+		Warming: func() []string { return []string{"restarting"} }, EmbeddingQueue: func() (string, string) { return "", "" }})
 	want := map[string]any{"cursor": int64(0), "oldest_retained": int64(0), "docs": int64(2), "chunks": int64(0), "pending_jobs": int64(0),
 		"unparsed_frontmatter": []any{}, "diagnosed": int64(0), "held": int64(0), "held_stale": int64(0), "held_unchecked": int64(0),
 		"failing":   []any{map[string]any{"path": "a.md", "attempts": int64(3), "error": "boom"}},
@@ -94,7 +94,7 @@ func TestStatusOnTheWire(t *testing.T) {
 	if got := asWire(t, statusOf(st, w)); !reflect.DeepEqual(got, want) {
 		t.Errorf("status\n got %v\nwant %v", got, want)
 	}
-	if got := asWire(t, statusOf(index.Status{}, &Workspace{Warming: func() []string { return nil }})); got["warming"] != nil || got["embeddings"] != nil || got["following"] != nil {
+	if got := asWire(t, statusOf(index.Status{}, Static(WorkspaceInfo{Warming: func() []string { return nil }}))); got["warming"] != nil || got["embeddings"] != nil || got["following"] != nil {
 		t.Errorf("a bare status carries %v", got)
 	}
 }

@@ -132,39 +132,29 @@ func databasesOf(d Databases) *databasesJSON {
 	return out
 }
 
-func listed(w *Workspace) workspaceJSON {
-	out := workspaceJSON{Name: w.Name, Root: w.Root, State: "ready", Include: w.Include, Exclude: w.Exclude,
-		SectionTokens: w.SectionTokens, EmbeddingPolicy: w.EmbeddingPolicy, Provider: w.Provider.Override, ProviderError: w.Provider.Err}
-	if w.Err != nil {
+func listed(w Workspace) workspaceJSON {
+	pc := w.Provider()
+	out := workspaceJSON{Name: w.Name(), Root: w.Root(), State: "ready", Include: w.Include(), Exclude: w.Exclude(),
+		SectionTokens: w.SectionTokens(), EmbeddingPolicy: w.EmbeddingPolicy(), Provider: pc.Override, ProviderError: pc.Err}
+	if w.Err() != nil {
 		out.State = "error"
-	}
-	if w.SectionSize != nil {
-		out.SectionTokens = w.SectionSize()
-	}
-	if w.EmbeddingMode != nil {
-		out.EmbeddingPolicy = w.EmbeddingMode()
 	}
 	if out.EmbeddingPolicy == "" {
 		out.EmbeddingPolicy = store.EmbeddingAlways
 	}
-	if w.Index != nil {
-		if r, err := w.Index.Store().Retrieval(context.Background()); err == nil {
+	if w.Index() != nil {
+		if r, err := w.Index().Store().Retrieval(context.Background()); err == nil {
 			out.AbstractChunk, out.DemoteSuperseded = &r.AbstractChunk, &r.DemoteSuperseded
 		}
 	}
-	if w.FrontmatterSchema != nil {
-		_, st := w.FrontmatterSchema()
+	if _, st, ok := w.FrontmatterSchema(); ok {
 		sch := schemaOf(st)
 		out.Schema = &sch
 	}
-	if w.TextExtensions != nil {
-		out.TextExtensions = w.TextExtensions()
-	}
-	if w.TextCollisions != nil {
-		out.TextCollisions = w.TextCollisions()
-	}
-	if w.Databases != nil {
-		out.Databases = databasesOf(w.Databases())
+	out.TextExtensions = w.TextExtensions()
+	out.TextCollisions = w.TextCollisions()
+	if db, ok := w.Databases(); ok {
+		out.Databases = databasesOf(db)
 	}
 	return out
 }

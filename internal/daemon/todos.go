@@ -21,18 +21,18 @@ type TodoRoots struct{ Workspaces rpc.Workspaces }
 // Root is the root of the workspace named name.
 func (r TodoRoots) Root(name string) (string, bool) {
 	w, ok := r.Workspaces.Get(name)
-	if !ok || w.Err != nil {
+	if !ok || w.Err() != nil {
 		return "", false
 	}
-	return w.Root, true
+	return w.Root(), true
 }
 
 // Names are the served workspaces' names.
 func (r TodoRoots) Names() []string {
 	var out []string
 	for _, w := range r.Workspaces.List() {
-		if w.Err == nil {
-			out = append(out, w.Name)
+		if w.Err() == nil {
+			out = append(out, w.Name())
 		}
 	}
 	return out

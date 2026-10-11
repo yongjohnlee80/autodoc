@@ -69,7 +69,7 @@ func (m *Workspaces) applyTextExtensions(s *served, norm []string) {
 	t := m.textExtensionsFor(s.id)
 	old := t.load()
 	t.store(norm)
-	if s.w.Index == nil {
+	if s.ix == nil {
 		return
 	}
 	var changed []string
@@ -84,9 +84,9 @@ func (m *Workspaces) applyTextExtensions(s *served, norm []string) {
 		}
 	}
 	if len(changed) > 0 {
-		for _, p := range s.w.Index.PathsUnder(".") {
+		for _, p := range s.ix.PathsUnder(".") {
 			if slices.Contains(changed, kind.Ext(p)) {
-				_ = s.w.Index.Reindex(p) // a held document keeps its rows: no type of the workspace's reads it
+				_ = s.ix.Reindex(p) // a held document keeps its rows: no type of the workspace's reads it
 			}
 		}
 	}

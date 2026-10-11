@@ -62,19 +62,19 @@ func (s *Server) own(vs ...module.Verb) {
 type workspaceKey struct{}
 
 // workspaceOf is the workspace a ScopeWorkspace verb of rpc's named, as serve resolved it.
-func workspaceOf(ctx context.Context) *Workspace {
-	w, _ := ctx.Value(workspaceKey{}).(*Workspace)
+func workspaceOf(ctx context.Context) Workspace {
+	w, _ := ctx.Value(workspaceKey{}).(Workspace)
 	return w
 }
 
 // verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
 // first when ws is set, and maps the errors.
-func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (any, error), ws bool) golibrpc.Handler {
+func (s *Server) verb(lo, hi int, h func(context.Context, Workspace, []any) (any, error), ws bool) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		if err := argsBetween(req.Params, lo, hi); err != nil {
 			return nil, err
 		}
-		var w *Workspace
+		var w Workspace
 		if ws {
 			var err error
 			if w, err = s.workspace(req.Params); err != nil {
@@ -92,10 +92,10 @@ func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (an
 // protocol and client token too. The result is the handler's own: chain carries it with
 // module.Wire once its events are logged.
 func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handler {
-	call := func(ctx context.Context, w *Workspace, p []any) (any, error) {
+	call := func(ctx context.Context, w Workspace, p []any) (any, error) {
 		ctx = module.WithProtocol(ctx, protocolOf(ctx))
 		if w != nil {
-			ctx = module.WithWorkspace(context.WithValue(ctx, workspaceKey{}, w), module.Workspace{Name: w.Name, Root: w.Root})
+			ctx = module.WithWorkspace(context.WithValue(ctx, workspaceKey{}, w), module.Workspace{Name: w.Name(), Root: w.Root()})
 		}
 		out, err := v.Call(ctx, p)
 		return out, moduleErr(err, errs)

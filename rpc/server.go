@@ -108,9 +108,9 @@ type Databases struct {
 	Connections                   []store.ConnectionSummary
 }
 
-// Workspace is one workspace as the daemon serves it. Err set means it could not be opened (its
-// root is gone); every verb naming it fails with Err, and workspace.list reports it.
-type Workspace struct {
+// WorkspaceInfo is a workspace given whole, each answer a value or a closure of its own: what
+// Static serves, for rpc.Fixed and tests. The daemon implements Workspace itself.
+type WorkspaceInfo struct {
 	Name, Root       string
 	EmbeddingPolicy  string
 	EmbeddingMode    func() string
@@ -164,11 +164,11 @@ type SchemaStatus struct {
 // indexer and follower.
 type Workspaces interface {
 	// List is every workspace, by name.
-	List() []*Workspace
+	List() []Workspace
 	// Get is the workspace named name.
-	Get(name string) (*Workspace, bool)
+	Get(name string) (Workspace, bool)
 	// Add creates a workspace and starts serving it.
-	Add(ctx context.Context, w config.Workspace) (*Workspace, error)
+	Add(ctx context.Context, w config.Workspace) (Workspace, error)
 	// Rename gives a workspace a new name.
 	Rename(ctx context.Context, name, to string) error
 	// Remove stops serving a workspace and deletes its index; its files stay.
@@ -176,29 +176,29 @@ type Workspaces interface {
 }
 
 // Fixed is a set of workspaces that never changes: the workspace verbs answer that it cannot.
-func Fixed(ws ...*Workspace) Workspaces {
+func Fixed(ws ...Workspace) Workspaces {
 	f := fixed{}
 	for _, w := range ws {
-		f[w.Name] = w
+		f[w.Name()] = w
 	}
 	return f
 }
 
-type fixed map[string]*Workspace
+type fixed map[string]Workspace
 
 // errFixed is a change asked of a fixed set of workspaces.
 var errFixed = fmt.Errorf("%w: this set of workspaces is fixed", errs.ErrUnsupported)
 
-func (f fixed) List() []*Workspace {
-	out := make([]*Workspace, 0, len(f))
+func (f fixed) List() []Workspace {
+	out := make([]Workspace, 0, len(f))
 	for _, w := range f {
 		out = append(out, w)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	return out
 }
-func (f fixed) Get(name string) (*Workspace, bool) { w, ok := f[name]; return w, ok }
-func (fixed) Add(context.Context, config.Workspace) (*Workspace, error) {
+func (f fixed) Get(name string) (Workspace, bool) { w, ok := f[name]; return w, ok }
+func (fixed) Add(context.Context, config.Workspace) (Workspace, error) {
 	return nil, errFixed
 }
 func (fixed) Rename(context.Context, string, string) error {
@@ -432,7 +432,7 @@ var errNoPreferences = errors.New("rpc: this server keeps no preferences")
 var errNoEvents = errors.New("rpc: this server keeps no event log")
 
 // workspace resolves a verb's first parameter.
-func (s *Server) workspace(params []any) (*Workspace, error) {
+func (s *Server) workspace(params []any) (Workspace, error) {
 	name, err := argStr(params, 0, "workspace")
 	if err != nil {
 		return nil, err
@@ -441,8 +441,8 @@ func (s *Server) workspace(params []any) (*Workspace, error) {
 	if !ok {
 		return nil, errNoSuchWorkspace
 	}
-	if w.Err != nil {
-		return nil, w.Err
+	if w.Err() != nil {
+		return nil, w.Err()
 	}
 	return w, nil
 }

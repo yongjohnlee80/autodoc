@@ -23,7 +23,7 @@ func TestTheDaemonServesTheTodosModule(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	kb := t.TempDir()
-	deps := &moduleDeps{store: db, workspaces: rpc.Fixed(&rpc.Workspace{Name: "kb", Root: kb}), journal: db.TodoJournal(), log: logger.Nop{}}
+	deps := &moduleDeps{store: db, workspaces: rpc.Fixed(rpc.Static(rpc.WorkspaceInfo{Name: "kb", Root: kb})), journal: db.TodoJournal(), log: logger.Nop{}}
 	ms := modules(deps)
 	if len(ms) != 1 || ms[0].Name() != "todos" {
 		t.Fatalf("modules %v", ms)

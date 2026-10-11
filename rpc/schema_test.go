@@ -47,10 +47,10 @@ func schemaServer(t *testing.T, src string) (*golibrpc.Client, *memfs.FS) {
 	var cores sync.WaitGroup
 	cores.Go(func() { _ = ix.Run(ctx) })
 	cores.Go(func() { _ = f.Run(ctx) })
-	w := &Workspace{Name: "kb", Root: "/roots/kb", Index: ix, Docs: docs.New(fsys, md), Following: f.Status,
+	w := Static(WorkspaceInfo{Name: "kb", Root: "/roots/kb", Index: ix, Docs: docs.New(fsys, md), Following: f.Status,
 		FrontmatterSchema: func() (*schema.Schema, SchemaStatus) {
 			return sch, SchemaStatus{Path: ".autodoc/schema.yaml", Active: true, Fields: len(sch.Fields)}
-		}}
+		}})
 	sock := shortSocket(t) // a TempDir named after a long test passes macOS's socket-path limit
 	ln, err := net.Listen("unix", sock)
 	if err != nil {

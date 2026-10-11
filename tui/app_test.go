@@ -123,7 +123,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &daemon{fs: map[string]*memfs.FS{}}
-	var served []*rpc.Workspace
+	var served []rpc.Workspace
 	var cores sync.WaitGroup // the indexers and followers, stopped before the store closes
 	// one store for the daemon's workspaces; closed after the indexers stop (cleanups run last first)
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
@@ -198,7 +198,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		ix.SetRescanner(f)
 		cores.Go(func() { _ = ix.Run(ctx) })
 		cores.Go(func() { _ = f.Run(ctx) })
-		served = append(served, &rpc.Workspace{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming})
+		served = append(served, rpc.Static(rpc.WorkspaceInfo{Name: wsName, Root: "/" + wsName, Include: []string{"**/*.md"}, Index: ix, Docs: docs.New(fsys, match, docOpts...), Following: f.Status, Warming: o.warming}))
 		// wait until the files are indexed, so the first listing has them (a slow daemon does not)
 		for deadline := time.Now().Add(10 * time.Second); o.slow == 0; time.Sleep(10 * time.Millisecond) {
 			st, _ := ixs.Status(ctx)
@@ -240,8 +240,8 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	d.todoDisk = todotest.NewDisk()
 	roots := todotest.Roots{}
 	for _, w := range served {
-		roots[w.Name] = w.Root
-		d.todoDisk.MkdirAll(w.Root)
+		roots[w.Name()] = w.Root()
+		d.todoDisk.MkdirAll(w.Root())
 	}
 	d.todos = todo.New(roots, d.todoDisk, todotest.NewJournal())
 	opts = append(opts, rpc.WithModules(d.todos))
@@ -996,9 +996,9 @@ type notReadyWorkspaces struct {
 	left atomic.Int32
 }
 
-func (n *notReadyWorkspaces) Get(name string) (*rpc.Workspace, bool) {
+func (n *notReadyWorkspaces) Get(name string) (rpc.Workspace, bool) {
 	if n.left.Add(-1) >= 0 {
-		return &rpc.Workspace{Name: name, Err: errors.New("not ready yet")}, true
+		return rpc.Static(rpc.WorkspaceInfo{Name: name, Err: errors.New("not ready yet")}), true
 	}
 	return n.Workspaces.Get(name)
 }

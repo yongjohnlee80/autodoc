@@ -161,20 +161,17 @@ type refusedJSON struct {
 	RetryAt         int64  `json:"retry_at"`
 }
 
-func statusOf(st index.Status, w *Workspace) statusJSON {
+func statusOf(st index.Status, w Workspace) statusJSON {
 	out := statusJSON{Cursor: st.Cursor, OldestRetained: st.OldestRetained, Docs: st.Docs, Chunks: st.Chunks,
 		PendingJobs: st.PendingJobs, UnparsedFrontmatter: st.UnparsedFrontmatter, Diagnosed: st.Diagnosed,
 		Failing: make([]failingJSON, len(st.Failing)), Held: st.Held, HeldStale: st.HeldStale, HeldUnchecked: st.HeldUnchecked}
 	for i, f := range st.Failing {
 		out.Failing[i] = failingJSON{Path: f.Path, Attempts: f.Attempts, Error: f.Err}
 	}
-	if w.Following != nil {
-		f := w.Following()
+	if f, ok := w.Following(); ok {
 		out.Following = &followingJSON{Mode: f.Following, Error: f.Err, Retrying: f.Retrying}
 	}
-	if w.Warming != nil {
-		out.Warming = w.Warming()
-	}
+	out.Warming = w.Warming()
 	if e := st.Embeddings; e != nil {
 		emb := &embeddingsJSON{Provider: e.Provider, Model: e.Model, Target: e.Target, Texts: e.Texts, Pending: e.Pending,
 			Semantic: e.Semantic, LastError: e.LastErr, Refused: e.Refused, TargetPending: e.TargetPending,
@@ -183,8 +180,7 @@ func statusOf(st index.Status, w *Workspace) statusJSON {
 			emb.RefusedTexts[i] = refusedJSON{Path: r.Path, Breadcrumb: r.Breadcrumb, Error: r.Error, Bytes: r.Bytes,
 				EstimatedTokens: r.Tokens, RetryAt: r.RetryAt.Unix()}
 		}
-		if w.EmbeddingQueue != nil {
-			state, behind := w.EmbeddingQueue()
+		if state, behind, ok := w.EmbeddingQueue(); ok {
 			emb.QueueState, emb.WaitingFor = &state, &behind
 		}
 		out.Embeddings = emb
@@ -208,7 +204,7 @@ func (s *Server) indexVerbs() []module.Verb {
 				if err != nil {
 					return nil, err
 				}
-				docs, more, err := workspaceOf(ctx).Index.Store().Documents(ctx, o)
+				docs, more, err := workspaceOf(ctx).Index().Store().Documents(ctx, o)
 				if errors.Is(err, index.ErrBadSort) {
 					return nil, invalid("index.documents: opts.sort is updated, path or indexed")
 				}
@@ -232,7 +228,7 @@ func (s *Server) indexVerbs() []module.Verb {
 			Doc:    "diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them."},
 			func(ctx context.Context, _ indexWorkspace) (*statusJSON, error) {
 				w := workspaceOf(ctx)
-				st, err := w.Index.Status(ctx)
+				st, err := w.Index().Status(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -243,7 +239,7 @@ func (s *Server) indexVerbs() []module.Verb {
 			Result: "{docs: [{path, generation, version}], more}", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "Every file in path order, after after."},
 			func(ctx context.Context, p indexList) (*listedJSON, error) {
-				list, more, err := workspaceOf(ctx).Index.Store().List(ctx, p.After, p.Limit)
+				list, more, err := workspaceOf(ctx).Index().Store().List(ctx, p.After, p.Limit)
 				if err != nil {
 					return nil, err
 				}
@@ -257,7 +253,7 @@ func (s *Server) indexVerbs() []module.Verb {
 			Result: "{cursor, changes: [{path, op, generation}], more}", Errors: []int64{CodeNoSuchWorkspace, CodeCursorExpired},
 			Doc: "What changed after cursor since."},
 			func(ctx context.Context, p indexChanges) (*changesJSON, error) {
-				changes, cursor, more, err := workspaceOf(ctx).Index.Store().Changes(ctx, p.Since, p.Limit)
+				changes, cursor, more, err := workspaceOf(ctx).Index().Store().Changes(ctx, p.Since, p.Limit)
 				if err != nil {
 					return nil, err
 				}
@@ -270,13 +266,13 @@ func (s *Server) indexVerbs() []module.Verb {
 		module.Handle(module.Contract{Verb: "index.reindex", Since: 1, Scope: ws, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound}, Doc: "Indexes one file again; a held file is refused, naming the way out."},
 			func(ctx context.Context, p indexPath) (any, error) {
-				return nil, workspaceOf(ctx).Index.Reindex(p.Path)
+				return nil, workspaceOf(ctx).Index().Reindex(p.Path)
 			}),
 		module.Handle(module.Contract{Verb: "index.models", Since: 4, Scope: ws, Audience: user,
 			Result: "[{fp, provider, name, dims, state, vectors, f32_bytes, bits_bytes, key_bytes}]", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "The workspace's models and the room their vectors take."},
 			func(ctx context.Context, _ indexWorkspace) ([]modelJSON, error) {
-				ms, err := workspaceOf(ctx).Index.Models(ctx)
+				ms, err := workspaceOf(ctx).Index().Models(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -290,7 +286,7 @@ func (s *Server) indexVerbs() []module.Verb {
 		module.Handle(module.Contract{Verb: "index.purge_model", Since: 1, Scope: ws, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace}, Doc: "Deletes a model's vectors; the active model and the target are refused."},
 			func(ctx context.Context, p indexModel) (any, error) {
-				return nil, workspaceOf(ctx).Index.PurgeModel(ctx, p.Model)
+				return nil, workspaceOf(ctx).Index().PurgeModel(ctx, p.Model)
 			}),
 	}
 }

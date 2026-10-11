@@ -61,7 +61,7 @@ func serve(t *testing.T) *rig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	open := func(name string, fsys vfs.FS) *Workspace {
+	open := func(name string, fsys vfs.FS) Workspace {
 		row, err := db.AddWorkspace(ctx, name, "/roots/"+name, nil, nil)
 		if err != nil {
 			t.Fatal(err)
@@ -71,10 +71,10 @@ func serve(t *testing.T) *rig {
 		ix.SetRescanner(f)
 		r.cores.Go(func() { _ = ix.Run(ctx) })
 		r.cores.Go(func() { _ = f.Run(ctx) })
-		return &Workspace{Name: name, Root: "/roots/" + name, Index: ix, Docs: docs.New(fsys, md), Following: f.Status}
+		return Static(WorkspaceInfo{Name: name, Root: "/roots/" + name, Index: ix, Docs: docs.New(fsys, md), Following: f.Status})
 	}
-	ws := []*Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
-		{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)}}
+	ws := []Workspace{open("kb", r.fsys), open("flaky", committing{memfs.New()}),
+		Static(WorkspaceInfo{Name: "broken", Root: "/roots/broken", Err: fmt.Errorf("workspace %q: %w", "broken", workspace.ErrNotADirectory)})}
 	r.sock = shortSocket(t) // macOS bounds a socket's path at 104 bytes; a test's TempDir can pass it
 	ln, err := net.Listen("unix", r.sock)
 	if err != nil {

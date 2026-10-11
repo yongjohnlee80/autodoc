@@ -89,13 +89,13 @@ func TestARegistrationRefusesItsExtensionAsText(t *testing.T) {
 	if got := w.TextExtensions(); len(got) != 0 {
 		t.Fatalf("a refused change was kept: %v", got)
 	}
-	if w.Index.Kind("a.go") != kind.Registered {
+	if w.Index().Kind("a.go") != kind.Registered {
 		t.Fatal("the indexer does not read a.go as registered")
 	}
 	if err := os.WriteFile(filepath.Join(root, "bin.go"), []byte{0xff, 0}, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.Docs.Read(context.Background(), "bin.go"); err == nil {
+	if _, err := w.Docs().Read(context.Background(), "bin.go"); err == nil {
 		t.Fatal("the document API read a registered file that is not UTF-8")
 	}
 }
@@ -117,13 +117,13 @@ func TestAStoredCollisionDoesNotStopTheStart(t *testing.T) {
 	var log bytes.Buffer
 	m, _ := openOn(t, path, Options{Registrations: goRegistered(t), Log: logger.New(logger.WithWriter(&log))})
 	w, ok := m.Get("kb")
-	if !ok || w.Err != nil {
+	if !ok || w.Err() != nil {
 		t.Fatalf("kb: %v, %v", ok, w)
 	}
 	if got := w.TextCollisions(); !reflect.DeepEqual(got, []string{".go"}) {
 		t.Fatalf("collisions %v", got)
 	}
-	if w.Index.Kind("a.go") != kind.Registered || w.Index.Kind("a.log") != kind.Text {
+	if w.Index().Kind("a.go") != kind.Registered || w.Index().Kind("a.log") != kind.Text {
 		t.Fatal("the registration does not win, or the rest of the text types went with it")
 	}
 	id := mustID(t, m, "kb")
@@ -156,13 +156,13 @@ func TestAStoredHTMLTextTypeIsADocumentNow(t *testing.T) {
 	var log bytes.Buffer
 	m, _ := openOn(t, path, Options{Registrations: documents, Log: logger.New(logger.WithWriter(&log))})
 	w, ok := m.Get("kb")
-	if !ok || w.Err != nil {
+	if !ok || w.Err() != nil {
 		t.Fatalf("kb: %v, %v", ok, w)
 	}
 	if got := w.TextCollisions(); !reflect.DeepEqual(got, []string{".html"}) {
 		t.Fatalf("collisions %v", got)
 	}
-	if w.Index.Kind("page.html") != kind.Derived || w.Index.Kind("app.log") != kind.Text {
+	if w.Index().Kind("page.html") != kind.Derived || w.Index().Kind("app.log") != kind.Text {
 		t.Fatal(".html is not read as a document, or .log went with it")
 	}
 	if !strings.Contains(log.String(), "workspace.text_collision") {
