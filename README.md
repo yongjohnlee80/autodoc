@@ -348,6 +348,57 @@ on the page through the reconnect, unsaved changes and cursor as they were. It i
 changed on disk meanwhile and has no unsaved changes; if it is gone, closing it asks first; if its
 workspace is no longer served, its unsaved text stays as the untitled draft.
 
+Every way out asks over unsaved changes, and the answers are the same everywhere: **Save** (then
+quit once the file is written), **Discard** or **Stay**. That covers `File › Exit`, `Ctrl+Q`,
+`SPC Q`, `:q`, the too-small screen's Quit and the GUI window's close button. When AutoDoc ends
+without being asked to (`SIGTERM`, or `SIGHUP` because the terminal closed), the unsaved text is
+kept in the state folder's `recovery/`. At the next start AutoDoc says so: "<file> had unsaved
+changes when AutoDoc last closed … We kept a copy for you, just in case. Restore it?"
+
+- **Restore** opens the file with the kept text, still unsaved. The disk's version is one undo away.
+- **Discard** deletes the copy.
+- **Later** asks again at the next start.
+
+### The command line
+
+`:` in the Vim mode's Normal mode opens **VIM Commands** (golib's editor prompt). Tab completes a
+command and lists the candidates with their arguments; Enter runs it; Esc closes it.
+
+| Command | Does |
+|---|---|
+| `:12` | go to line 12 (refused past the last line) |
+| `:w`, `:wq`, `:x`, `:q`, `:q!` | save; save and quit; save if changed and quit; quit (asks over unsaved changes); quit discarding them |
+| `:find <term>`, `:nohl` | the page's find, as `/` is: marked, `n` and `N` go on; clear it |
+| `:replace <term> <with>` | each match in turn: `y` replaces, `n` skips, `q` or Esc stops; one undo for all |
+| `:table <cols> <rows>` | a Markdown table (`Column1…`, `Item1.1…`). In Insert mode, Tab walks its cells and selects each one's text so typing replaces it; past the last cell, Tab adds a row |
+| `:mermaid <type>` | a Mermaid diagram to start from: flowchart, sequence, class, state, er, gantt, pie, mindmap, timeline, journey |
+
+### Lua commands
+
+`table` and `mermaid` are Lua scripts (`tui/lua/`). Your own commands go in
+`~/.config/autodoc/lua/*.lua`, beside `config.toml`, and load at start in name order. A command of
+yours with the name of one of AutoDoc's replaces it.
+
+```lua
+-- :upper [line] — upper-case a line (the cursor's by default)
+autodoc.command{
+  name = "upper", args = "[line]", help = "upper-case a line",
+  run = function(ed, args, line)
+    local n = tonumber(args[1]) or ed:cursor()
+    ed:replace(n, 1, n, #ed:line(n) + 1, ed:line(n):upper())
+    autodoc.notify("upper-cased line " .. n)
+  end,
+}
+```
+
+`ed` is the editor: `ed:value()`, `ed:line(n)`, `ed:cursor()`, `ed:insert(text)`,
+`ed:replace(l1, c1, l2, c2, text)`, `ed:find(term)`, `ed:run(":12")` and more. Positions are
+1-based, and a command's edits undo as one step. A script that fails or runs past two seconds shows
+its error in the prompt. Scripts get Lua's base, table, string and math libraries, with no `os`,
+`io` or files. The engine is the package
+[`github.com/yongjohnlee80/autodoc/script`](script/README.md), which any program with a golib
+editor can import.
+
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
 

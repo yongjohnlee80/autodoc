@@ -1963,7 +1963,7 @@ func TestTheVimKeysCard(t *testing.T) {
 	})
 	rows := strings.Split(r.s.String(), "\n")
 	for i, row := range rows {
-		if strings.Contains(row, "n N      again, forward, back") && i != len(rows)-3 {
+		if strings.Contains(row, "your own: ~/.config/autodoc/lua") && i != len(rows)-3 {
 			t.Fatalf("the card's last line is at row %d of %d, want just over the status line's border:\n%s", i, len(rows), r.s)
 		}
 		if c := col(row, "╭ Vim keys"); c >= 0 && c < 20 {

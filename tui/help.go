@@ -160,7 +160,12 @@ y d x    copy, delete them
                               AUTODOC
 FIND                          SPC    the leader card: every command
 /        a word in the pane   SPC SPC, SPC /, Ctrl+G  search the workspace
-n N      again, forward, back ?      this card`
+n N      again, forward, back ?      this card
+
+COMMANDS (:, Tab completes)
+:12  go to line 12      :w :q :wq :x :q!  save, quit
+:find :replace :nohl    :table 3 4  :mermaid flowchart
+your own: ~/.config/autodoc/lua/*.lua (autodoc.command)`
 
 // author is AutoDoc's author, as NOTICE says.
 const author = "Yong Sung John Lee"
