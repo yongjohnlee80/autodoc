@@ -235,11 +235,14 @@ func TestCheckCodesKeepsAModuleInItsRange(t *testing.T) {
 	if err := module.CheckCodes(ok); err != nil {
 		t.Error(err)
 	}
-	if err := module.CheckCodes(mod{[]module.PublicError{{Code: -32061, Name: "todos.not_found"}}}); err == nil || !strings.Contains(err.Error(), "outside") {
+	if err := module.CheckCodes(mod{[]module.PublicError{{Code: -32050, Name: "todos.elsewhere"}}}); err == nil || !strings.Contains(err.Error(), "outside") {
 		t.Errorf("a code outside the range: %v", err)
 	}
 	if err := module.CheckCodes(other{ok}); err == nil {
 		t.Error("a module with no range was let through")
+	}
+	if err := module.CheckCodes(other{mod{[]module.PublicError{{Code: -32060, Name: "no_such_workspace"}}}}); err != nil {
+		t.Errorf("a shared code was refused: %v", err)
 	}
 }
 

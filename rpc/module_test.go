@@ -168,7 +168,7 @@ func TestModuleRegistrationRefuses(t *testing.T) {
 		{"one code in two modules", []module.Module{fakeModule{name: "todos", errs: []module.PublicError{stale}},
 			fakeModule{name: "todos", errs: []module.PublicError{stale}}}, "registered by two modules"},
 		{"a code outside its range", []module.Module{fakeModule{name: "todos",
-			errs: []module.PublicError{{Err: errFakeStale, Code: -32060, Name: "todos.x"}}}}, "outside"},
+			errs: []module.PublicError{{Err: errFakeStale, Code: -32050, Name: "todos.x"}}}}, "outside"},
 		{"a module with no range", []module.Module{fakeModule{name: "fake", errs: []module.PublicError{stale}}}, "no code range"},
 		{"an event naming no param", []module.Module{fakeModule{name: "todos", verbs: []module.Verb{{
 			Contract: module.Contract{Verb: "todos.b", Event: &module.EventSpec{Kind: "k", Workspace: "workspace"}}}}}}, "does not have"},

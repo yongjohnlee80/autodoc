@@ -37,6 +37,9 @@ func (s *Server) registerModules(ms []module.Module) {
 		}
 		errs := m.Errors()
 		for _, e := range errs {
+			if module.Shared(e.Code) {
+				continue // the daemon's shared codes mean the same whichever module answers them
+			}
 			if j, ok := owners[e.Code]; ok && j != i {
 				panic(fmt.Sprintf("rpc: error code %d is registered by two modules: %s and %s", e.Code, ms[j].Name(), m.Name()))
 			}
