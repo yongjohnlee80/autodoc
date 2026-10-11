@@ -63,6 +63,9 @@ function M.add_location(name, root, cb)
   session.call("workspace.add", { name, root }, cb)
 end
 
+---todos are the daemon's todo verbs (autodoc.todos): todos.list("kb", {}, cb) and the rest.
+M.todos = require("autodoc.todos")
+
 ---drawer_open / drawer_toggle / drawer_focus show the kb drawer in whichever host is active
 ---(auto-finder's kb section, else autodoc's own panel). `cb(ok, value)` as the host registry's.
 function M.drawer_open(cb) return require("autodoc.views.host").open(cb) end

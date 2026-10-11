@@ -595,6 +595,17 @@ speak.
   on a Linux host and commit: `git mv _templates/ABOUT.md _templates/_ABOUT.md` and
   `git mv _schema/ABOUT.md _schema/_ABOUT.md`. A macOS clone then checks out both files cleanly.
 
+- **Todos from Lua.** `require("autodoc.todos")`, also `require("autodoc.api").todos`, calls the
+  daemon's `todos.*` verbs. Each takes the verb's params in order, then `cb(result, err)`. The first
+  param is where the store is: a workspace name, or `{ root = "/abs/project" }`.
+
+  ```lua
+  require("autodoc.todos").list("kb", {}, function(listing, err) … end)
+  ```
+
+  `autodoc --contracts 'todos.*'` lists the verbs. Until the cutover claims a store, its writes
+  answer `-32077`, and AutoVim's auto-core keeps writing it.
+
 Saving a file in a KB reindexes it at once, without waiting for the daemon's watch.
 
 ## Plugins
