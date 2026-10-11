@@ -16,8 +16,8 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/rpc"
-	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // olderDaemon serves sock as an AutoDoc of protocol proto would for a restart: a probe hello is
@@ -202,7 +202,7 @@ func TestRestartLeavesAnotherStoresDaemonAlone(t *testing.T) {
 		waitGone: func(context.Context, int64) bool { t.Error("waited on another store's daemon"); return true },
 	}
 	_, err = restartOnce(t, r, cfgB)
-	var mm *tui.StoreMismatchError
+	var mm *client.StoreMismatchError
 	if !errors.As(err, &mm) {
 		t.Errorf("--restart over another store's daemon: %v, want a store mismatch", err)
 	}

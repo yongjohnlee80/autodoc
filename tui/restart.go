@@ -3,9 +3,8 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
-	"syscall"
-	"time"
+
+	"github.com/yongjohnlee80/autodoc/internal/client"
 )
 
 func (h *Host) showMismatch(mismatch *MismatchError) {
@@ -66,7 +65,7 @@ func (h *Host) quitMismatch() {
 // embedding pick up where they stopped: their work is kept in the store.
 
 // restartWait bounds waiting for the old daemon to exit before the new one is started.
-const restartWait = 15 * time.Second
+const restartWait = client.RestartWait
 
 // startRestart asks first, saying which version runs and which one a restart starts.
 func (h *Host) startRestart() {
@@ -139,7 +138,7 @@ func (h *Host) restartConfirmed() {
 				return
 			}
 			h.restartFrom = old.Version
-			h.session.forgetStale() // it has stopped: a retry starts the installed one, not stops this again
+			h.session.ForgetStale() // it has stopped: a retry starts the installed one, not stops this again
 			h.start()
 		})
 		return
@@ -160,35 +159,4 @@ func (h *Host) restartConfirmed() {
 }
 
 // awaitExit is the Host's wait for a stopped daemon: until its process has gone, restartWait at most.
-func awaitExit(ctx context.Context, pid int64) bool { return waitGone(ctx, pid, restartWait) }
-
-// WaitGone waits until process pid has exited, or d has passed (false): `autodoc --print-endpoint
-// --restart` waits on the stopped daemon as the TUI's restart does.
-func WaitGone(ctx context.Context, pid int64, d time.Duration) bool { return waitGone(ctx, pid, d) }
-
-// waitGone waits until process pid has exited, or d has passed (false).
-func waitGone(ctx context.Context, pid int64, d time.Duration) bool {
-	deadline := time.Now().Add(d)
-	for {
-		if !alive(pid) {
-			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		select {
-		case <-ctx.Done():
-			return false
-		case <-time.After(50 * time.Millisecond):
-		}
-	}
-}
-
-// alive is whether process pid exists: signal 0 checks without sending.
-func alive(pid int64) bool {
-	p, err := os.FindProcess(int(pid))
-	if err != nil {
-		return false
-	}
-	return p.Signal(syscall.Signal(0)) == nil
-}
+func awaitExit(ctx context.Context, pid int64) bool { return client.WaitGone(ctx, pid, restartWait) }

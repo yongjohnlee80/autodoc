@@ -25,6 +25,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	"github.com/yongjohnlee80/autodoc/tui"
 )
@@ -611,7 +612,7 @@ var (
 	testBuild   = build{version: testOptions.Version}
 )
 
-// TestMain lets a test run this binary as autodoc: tui.SpawnServe starts os.Executable(), which in a
+// TestMain lets a test run this binary as autodoc: client.SpawnServe starts os.Executable(), which in a
 // test is the test binary, so it runs Main when asked to.
 func TestMain(m *testing.M) {
 	if os.Getenv("AUTODOC_TEST_MAIN") == "1" {
@@ -632,7 +633,7 @@ func TestSpawnServeStartsADetachedDaemon(t *testing.T) {
 	}
 	cfg := writeConfig(t, sock, state, "", "kb="+t.TempDir())
 	t.Setenv("AUTODOC_TEST_MAIN", "1")
-	logPath, err := tui.SpawnServe(cfg, state)
+	logPath, err := client.SpawnServe(cfg, state)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -830,7 +831,7 @@ func TestACallDuringARestartSpawnsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = requester.Process.Kill(); _ = requester.Wait() })
-	if err := tui.WriteHandoff(state, sock, int64(requester.Process.Pid)); err != nil {
+	if err := client.WriteHandoff(state, sock, int64(requester.Process.Pid)); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("AUTODOC_TEST_MAIN", "1") // a spawn would start a real daemon, logging to serve.log

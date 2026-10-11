@@ -1,4 +1,4 @@
-package tui
+package client
 
 import (
 	"context"
@@ -41,7 +41,7 @@ func (e *ConnectError) Unwrap() error { return e.Last }
 // errNotConnected is a call with no connection: the session is between connections.
 var errNotConnected = errors.New("not connected to the daemon")
 
-// Session is the TUI's ONLY path to the core: a golib rpc client, the handshake, and the
+// Session is a client's ONLY path to the core: a golib rpc client, the handshake, and the
 // connection's generation. Every result the host applies was asked under a generation; a
 // reconnect moves it on, so an answer from an old connection is never applied.
 type Session struct {
@@ -323,8 +323,8 @@ func (s *Session) probe(ctx context.Context) (OlderServer, error) {
 	return info, nil
 }
 
-// forgetStale drops the older daemon once it has stopped.
-func (s *Session) forgetStale() {
+// ForgetStale drops the older daemon once it has stopped: a retry then starts the installed one.
+func (s *Session) ForgetStale() {
 	s.mu.Lock()
 	s.stale = nil
 	s.mu.Unlock()
@@ -437,22 +437,4 @@ func (s *Session) Close() {
 	if cli != nil {
 		_ = cli.Close()
 	}
-}
-
-// wireMessage is what a failed call says to the user: the daemon's constant message, or the error.
-func wireMessage(err error) string {
-	var e *golibrpc.Error
-	if errors.As(err, &e) {
-		return e.Message
-	}
-	return err.Error()
-}
-
-// code is a failed call's error code, 0 when it is not the daemon's.
-func code(err error) int64 {
-	var e *golibrpc.Error
-	if errors.As(err, &e) {
-		return e.Code
-	}
-	return 0
 }

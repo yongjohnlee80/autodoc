@@ -394,7 +394,7 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 	overtaken := make(chan struct{}) // a write answered while the first was held
 	once := sync.OnceFunc(func() { close(overtaken) })
 	sess := NewSession(d.sock, nil)
-	sess.beforeCall = func(method string, p []any) {
+	sess.SetBeforeCall(func(method string, p []any) {
 		if method == "preference.set" && p[1] == "top" {
 			// held until a later write overtakes it, or a while: written one at a time, the
 			// next is not sent before this one is answered, and nothing overtakes it
@@ -405,15 +405,15 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 			}
 			holding.Store(false)
 		}
-	}
-	sess.afterCall = func(method string) {
+	})
+	sess.SetAfterCall(func(method string) {
 		if method == "preference.set" {
 			if holding.Load() {
 				once()
 			}
 			answered.Add(1)
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	onLoop(r, func() bool {

@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 )
 
 // LaunchOptions is what a program running AutoDoc's TUI changes about how it starts: autodoc's own
@@ -35,7 +35,7 @@ type LaunchOptions struct {
 	// "" shows none.
 	BuildDate string
 	// Spawn starts the daemon when nothing answers on the socket and returns its log's path. nil is
-	// SpawnServe: this executable's --serve, detached, logging to serve.log in the state directory.
+	// client.SpawnServe: this executable's --serve, detached, logging to serve.log in the state directory.
 	Spawn func(configPath, stateDir string) (string, error)
 	// Installed is the version a restart would start; nil is InstalledVersion (this executable's
 	// --version).
@@ -92,7 +92,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	}
 	spawn := o.Spawn
 	if spawn == nil {
-		spawn = SpawnServe
+		spawn = client.SpawnServe
 	}
 	session := NewSession(sock, func() (string, error) { return spawn(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
 	workspace, last := o.Workspace, filepath.Join(stateDir, "last-workspace")
@@ -173,38 +173,6 @@ func checkWorkspace(ctx context.Context, session *Session, name string) error {
 		return fmt.Errorf("no workspace named %q: there are none yet; run autodoc --ui and add one (Go › Manage workspaces…)", name)
 	}
 	return fmt.Errorf("no workspace named %q; the workspaces are: %s", name, strings.Join(names, ", "))
-}
-
-// SpawnServe starts this executable's `--serve` detached from the TUI (its own session, so it
-// outlives the terminal), appending its output to serve.log in the state directory, and returns the
-// log's path.
-func SpawnServe(configPath, stateDir string) (string, error) {
-	logPath := filepath.Join(stateDir, "serve.log")
-	f, err := os.OpenFile(logPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
-	if err != nil {
-		return "", err
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		_ = f.Close()
-		return "", err
-	}
-	args := []string{"--serve"}
-	if configPath != "" {
-		args = append(args, "--config", configPath)
-	}
-	cmd := exec.Command(exe, args...)
-	cmd.Stdout, cmd.Stderr = f, f
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
-		_ = f.Close()
-		return "", err
-	}
-	go func() {
-		_ = cmd.Wait()
-		_ = f.Close()
-	}()
-	return logPath, nil
 }
 
 // InstalledVersion is the version of the program a restart starts: the binary at this one's path,

@@ -183,7 +183,7 @@ func (h *Host) agentEnv(ws wsInfo, dir string) []string {
 	return []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
-		"AUTODOC_SOCKET=" + h.session.address(),
+		"AUTODOC_SOCKET=" + h.session.Address(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
 		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),

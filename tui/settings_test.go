@@ -344,11 +344,11 @@ func TestTheSettingsReopenedAtOnceShowTheSave(t *testing.T) {
 	var holding atomic.Bool
 	release := make(chan struct{})
 	sess := NewSession(d.sock, nil)
-	sess.beforeCall = func(method string, _ []any) {
+	sess.SetBeforeCall(func(method string, _ []any) {
 		if method == "workspace.list" && holding.Load() {
 			<-release
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "· kb")
 	r.openSettings(t, "kb", 1)
@@ -372,11 +372,11 @@ func heldFirstList(t *testing.T) (r *running, arm func(), held func() bool, rele
 	var armed atomic.Bool
 	ch := make(chan struct{})
 	sess := NewSession(d.sock, nil)
-	sess.beforeCall = func(method string, _ []any) {
+	sess.SetBeforeCall(func(method string, _ []any) {
 		if method == "workspace.list" && armed.Load() && n.Add(1) == 1 {
 			<-ch
 		}
-	}
+	})
 	r = runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.manageWorkspaces() })
@@ -508,11 +508,11 @@ func TestARenameIsInTheListBeforeTheRelisting(t *testing.T) {
 	var holding atomic.Bool
 	release := make(chan struct{})
 	sess := NewSession(d.sock, nil)
-	sess.beforeCall = func(method string, _ []any) {
+	sess.SetBeforeCall(func(method string, _ []any) {
 		if method == "workspace.list" && holding.Load() {
 			<-release
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(r.h.manageWorkspaces)

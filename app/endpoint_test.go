@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
-	"github.com/yongjohnlee80/autodoc/tui"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 )
 
 // configSharing writes a config with its own socket and state directory over the store in data.
@@ -152,7 +152,7 @@ func TestAConfigWithAnotherStoreOnTheSameSocketIsRefused(t *testing.T) {
 	sock := filepath.Join(dir, "s.sock")
 	start(t, configSharing(t, sock, filepath.Join(dir, "state-a"), filepath.Join(dir, "data-a")), sock)
 	cfgB := configSharing(t, sock, filepath.Join(dir, "state-b"), filepath.Join(dir, "data-b"))
-	var mm *tui.StoreMismatchError
+	var mm *client.StoreMismatchError
 	var out bytes.Buffer
 	if err := runPrintEndpoint(context.Background(), cfgB, false, &out); !errors.As(err, &mm) {
 		t.Errorf("--print-endpoint over another store's daemon: %v (printed %q), want a store mismatch", err, out.String())

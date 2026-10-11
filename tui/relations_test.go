@@ -195,11 +195,11 @@ func TestTheJumpCardIsTheOpenDocuments(t *testing.T) {
 	var once sync.Once
 	release := func() { once.Do(func() { close(hold) }) }
 	t.Cleanup(release)
-	sess.beforeCall = func(method string, params []any) {
+	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "graph.links" && len(params) > 1 && params[1] == "new.md" {
 			<-hold
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })

@@ -1,4 +1,4 @@
-package tui
+package client
 
 import (
 	"crypto/sha256"
@@ -20,9 +20,9 @@ import (
 // build does. A daemon started by hand or by a supervisor does not read it, and the bind settles it.
 
 // handoffSpan is how long a handoff stands: the old process's exit, then the new daemon's start.
-// Every build shares restartWait, so a handoff another build wrote is never longer; a deadline
+// Every build shares RestartWait, so a handoff another build wrote is never longer; a deadline
 // further away than this is invalid, and ignored.
-const handoffSpan = 2 * restartWait
+const handoffSpan = 2 * RestartWait
 
 // handoff is a restart under way, as its requester wrote it.
 type handoff struct {

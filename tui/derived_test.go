@@ -97,11 +97,11 @@ const goWithAHashLine = "# not a heading in Go\n\nfunc A() {}\n"
 func holdCapabilities(sock string) (*Session, func()) {
 	release := make(chan struct{})
 	s := NewSession(sock, nil)
-	s.beforeCall = func(method string, _ []any) {
+	s.SetBeforeCall(func(method string, _ []any) {
 		if method == "sys.capabilities" {
 			<-release
 		}
-	}
+	})
 	return s, sync.OnceFunc(func() { close(release) })
 }
 
@@ -186,11 +186,11 @@ func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 	t.Cleanup(release)
 	var asked atomic.Int32
 	sess := NewSession(sock, nil)
-	sess.beforeCall = func(method string, _ []any) {
+	sess.SetBeforeCall(func(method string, _ []any) {
 		if method == "sys.capabilities" && asked.Add(1) > 1 {
 			<-held // the second connection's
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-pro")
 	r.s.WaitFor(t, "the files listed", func(string) bool { return len(r.listed()) > 0 }) // the workspace entered

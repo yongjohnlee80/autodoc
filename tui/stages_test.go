@@ -144,7 +144,7 @@ func TestTheSearchStagesBoxes(t *testing.T) {
 	ctx := context.Background()
 	rec := &stagesRecorder{}
 	sess := NewSession(d.sock, nil)
-	sess.beforeCall = rec.record
+	sess.SetBeforeCall(rec.record)
 	r := runTUI(t, sess, Options{})
 	r.ready(t)
 	// the first progress poll's answer searches again (showProgress), so the counts below start after

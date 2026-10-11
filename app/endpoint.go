@@ -9,9 +9,9 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
-	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // runPrintEndpoint is --print-endpoint: one line, "unix\t<address>", for a client that dials the
@@ -20,7 +20,7 @@ import (
 // lease-info, confirmed by a probe). With ensure it first makes sure a daemon answers, starting one
 // through the same Session.Connect the TUI and --call use, restart handoffs and all; a daemon of
 // another protocol answers too, and the client's own hello finds the mismatch. A daemon that
-// answers for another store is refused either way (tui.StoreMismatchError).
+// answers for another store is refused either way (client.StoreMismatchError).
 func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out io.Writer) error {
 	if configPath == "" {
 		var err error
@@ -49,7 +49,7 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 		cancel()
 		if perr == nil && info.StoreID != "" {
 			if wanted, _ := store.Identity(storePath); info.StoreID != wanted {
-				return &tui.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
+				return &client.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
 			}
 		}
 	}
@@ -58,9 +58,9 @@ func runPrintEndpoint(ctx context.Context, configPath string, ensure bool, out i
 		if err != nil {
 			return err
 		}
-		session := tui.NewSession(sock, func() (string, error) { return tui.SpawnServe(configPath, stateDir) }).
+		session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).
 			UseHandoffs(stateDir).ForStore(sock, storePath)
-		var mismatch *tui.MismatchError
+		var mismatch *client.MismatchError
 		if err := session.Connect(ctx); err != nil && !errors.As(err, &mismatch) && session.Stale() == nil {
 			return err
 		}

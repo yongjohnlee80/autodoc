@@ -32,6 +32,8 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `core/config`, `workspace`, `outline`, `export`, `edition`, `pgstore` | as named |
 | `rpc` | the daemon's socket: registers every verb from its contract; `Catalog` |
 | `internal/daemon` | the served workspaces; the todo system's disk and roots |
+| `internal/client` | the daemon's client: the session (handshake, spawning `--serve`), restart handoffs |
+| `internal/endpoint` | which socket serves a config's store |
 | `app` | the modes (`--serve`, `--ui`, `--call`, `--contracts`, …) and the one module list |
 | `tui` | the TUI/GUI host and its features |
 | `script` | the exportable Lua engine (gopher-lua); no AutoDoc imports |

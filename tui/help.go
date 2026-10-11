@@ -214,7 +214,7 @@ func (h *Host) aboutText() string {
 	return h.aboutHeadline() + "\n\n" +
 		"CONFIG: " + a.Config + "\n(log: " + a.Log + ")\n" +
 		"PLUGINS: " + a.Plugins + "\n" +
-		"DAEMON SOCKET: " + h.session.address() + "\n\n" +
+		"DAEMON SOCKET: " + h.session.Address() + "\n\n" +
 		"AUTHOR: " + author + "\n" + licence
 }
 
@@ -229,7 +229,7 @@ func (h *Host) aboutState() map[string]any {
 		"App.aboutConfig":   a.Config,
 		"App.aboutLog":      "(log: " + a.Log + ")",
 		"App.aboutPlugins":  a.Plugins,
-		"App.aboutSocket":   h.session.address(),
+		"App.aboutSocket":   h.session.Address(),
 		"App.aboutAuthor":   author,
 		"App.aboutLicence":  licence,
 		"App.aboutError":    "",

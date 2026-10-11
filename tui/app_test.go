@@ -628,11 +628,11 @@ func TestWorkspaces(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b1.md", "b\n", "b2.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
-	sess.beforeCall = func(method string, params []any) {
+	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "index.list" && len(params) > 0 && params[0] == "beta" {
 			<-release
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "· alpha")
 	r.waitListed(t, 1)
@@ -654,7 +654,7 @@ func TestWorkspaces(t *testing.T) {
 // TestConnectFailedSaysSo: with nothing on the socket and no daemon to start, the TUI says so.
 func TestConnectFailedSaysSo(t *testing.T) {
 	sess := NewSession(filepath.Join(t.TempDir(), "none.sock"), nil)
-	sess.window = 200 * time.Millisecond
+	sess.SetProbeWindow(200 * time.Millisecond)
 	r := runTUI(t, sess, Options{})
 	r.s.WaitFor(t, "the failure", func(sc string) bool {
 		return strings.Contains(sc, "connect failed") && strings.Contains(sc, "[disconnected]")
@@ -751,11 +751,11 @@ func TestASlowOpenNeverReplacesALaterOne(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"slow.md", "slow text\n", "fast.md", "fast text\n"}})
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
-	sess.beforeCall = func(method string, params []any) {
+	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "doc.read" && len(params) > 1 && params[1] == "slow.md" {
 			<-release
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.waitListed(t, 2)
 	r.h.p.Post(func() { r.h.openPath("slow.md") })
@@ -776,14 +776,14 @@ func TestCommittedThenOverwrittenIsAConflict(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb!": {"a.md", "one\n"}})
 	sess := NewSession(d.sock, nil)
 	wrote := false
-	sess.beforeCall = func(method string, params []any) {
+	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "doc.write" {
 			wrote = true
 		} else if method == "doc.read" && wrote {
 			wrote = false
 			d.write(t, "kb", "a.md", "someone else\n") // between the write and its read-back
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.waitListed(t, 1)
 	r.openByPicker(t, "a.md")
@@ -818,11 +818,11 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	sess := NewSession(d.sock, nil)
 	release := make(chan struct{})
 	var holding atomic.Bool
-	sess.beforeCall = func(method string, params []any) {
+	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "doc.write" && holding.Load() {
 			<-release
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.waitListed(t, 2)
 	r.openByPicker(t, "a.md")
@@ -969,11 +969,11 @@ func TestOnePollAfterSwitches(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"alpha": {"a.md", "a\n"}, "beta": {"b.md", "b\n"}})
 	sess := NewSession(d.sock, nil)
 	var polls atomic.Int32
-	sess.beforeCall = func(method string, params []any) {
+	sess.SetBeforeCall(func(method string, params []any) {
 		if method == "index.status" {
 			polls.Add(1)
 		}
-	}
+	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "· alpha")
 	time.Sleep(1500 * time.Millisecond) // a poll's timer is pending now

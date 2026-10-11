@@ -12,7 +12,7 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/config"
-	"github.com/yongjohnlee80/autodoc/tui"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 )
 
 // runCall is --call <method> [params]: one call to the local daemon, which it starts when nothing
@@ -46,7 +46,7 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
-	session := tui.NewSession(sock, func() (string, error) { return tui.SpawnServe(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
+	session := client.NewSession(sock, func() (string, error) { return client.SpawnServe(configPath, stateDir) }).UseHandoffs(stateDir).ForStore(sock, storePath)
 	if err := session.Connect(ctx); err != nil {
 		return err
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -103,7 +104,7 @@ func TestTheRequestersBuildServesNext(t *testing.T) {
 		return "", nil
 	}).UseHandoffs(state)
 	communitySess := NewSession(sock, func() (string, error) { communitySpawns.Add(1); return "", nil }).UseHandoffs(state)
-	communitySess.self = -1 // another process: the test's TUIs share one
+	communitySess.SetProcess(-1) // another process: the test's TUIs share one
 	pro := runTUI(t, proSess, Options{Registrations: proTables})
 	community := runTUI(t, communitySess, Options{})
 	community.s.WaitForText(t, "connected — autodoc v-test")
@@ -137,7 +138,7 @@ func TestTheRequestersBuildServesNext(t *testing.T) {
 	if strings.Contains(community.s.String(), regQuestion) || onLoop(community, func() bool { return community.h.registrationNoted }) {
 		t.Fatal("the community TUI was offered something")
 	}
-	if _, found := readHandoff(state, sock); found {
+	if client.HasHandoff(state, sock) {
 		t.Fatal("the requester left its handoff")
 	}
 }
@@ -264,7 +265,7 @@ func TestARefusedRestartTakesItsHandoffBack(t *testing.T) {
 				r.waitKept(t, "restart: the handoff to the other clients was not written")
 			}
 			r.waitKept(t, "restart refused")
-			if _, found := readHandoff(dir, sock); found {
+			if client.HasHandoff(dir, sock) {
 				t.Fatal("a refused restart left its handoff")
 			}
 		})

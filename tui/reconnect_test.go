@@ -24,11 +24,11 @@ func onARestartableDaemon(t *testing.T, notes map[string][]string) *restarted {
 	sock := filepath.Join(shortDir(t), "s.sock")
 	x := &restarted{sock: sock, d: startDaemonWith(t, sock, notes, daemonOpts{version: "v-1"})}
 	sess := NewSession(sock, nil)
-	sess.beforeCall = func(method string, _ []any) {
+	sess.SetBeforeCall(func(method string, _ []any) {
 		if method == "doc.read" {
 			x.reads.Add(1)
 		}
-	}
+	})
 	x.r = runTUI(t, sess, Options{})
 	x.r.s.WaitForText(t, "connected — autodoc v-1")
 	// connected is not entered: the workspace comes with the listing after, and a file opened
@@ -186,13 +186,13 @@ func withHeldReads(t *testing.T, notes map[string][]string) *heldReads {
 	x.release = sync.OnceFunc(func() { close(x.gate) })
 	t.Cleanup(x.release)
 	sess := NewSession(x.d.sock, nil)
-	sess.afterCall = func(method string) {
+	sess.SetAfterCall(func(method string) {
 		if method == "doc.read" && x.armed.CompareAndSwap(true, false) {
 			close(x.held)
 			<-x.gate
 			defer close(x.done)
 		}
-	}
+	})
 	x.r = runTUI(t, sess, Options{})
 	x.r.s.WaitFor(t, "the files listed", func(string) bool { return len(x.r.listed()) > 0 })
 	return x

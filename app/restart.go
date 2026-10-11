@@ -12,9 +12,9 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/internal/client"
 	"github.com/yongjohnlee80/autodoc/internal/endpoint"
 	"github.com/yongjohnlee80/autodoc/rpc"
-	"github.com/yongjohnlee80/autodoc/tui"
 )
 
 // restartClientName is the name a restart's hello gives: not the TUI's, which a daemon admits only
@@ -22,7 +22,7 @@ import (
 const restartClientName = "autodoc-restart"
 
 // restartExitWait bounds waiting for the stopped daemon's process to go before this build starts.
-const restartExitWait = 15 * time.Second
+const restartExitWait = client.RestartWait
 
 // restarter is a restart's moving parts; the tests replace the spawn and the wait.
 type restarter struct {
@@ -53,8 +53,8 @@ func runRestart(ctx context.Context, configPath string, out io.Writer) error {
 		return err
 	}
 	r := restarter{
-		spawn:    func() (string, error) { return tui.SpawnServe(configPath, stateDir) },
-		waitGone: func(ctx context.Context, pid int64) bool { return tui.WaitGone(ctx, pid, restartExitWait) },
+		spawn:    func() (string, error) { return client.SpawnServe(configPath, stateDir) },
+		waitGone: func(ctx context.Context, pid int64) bool { return client.WaitGone(ctx, pid, restartExitWait) },
 	}
 	return r.run(ctx, cfg, out)
 }
@@ -72,7 +72,7 @@ func (r restarter) run(ctx context.Context, cfg *config.Config, out io.Writer) e
 	if err != nil {
 		return err
 	}
-	session := tui.NewSession(sock, r.spawn).UseHandoffs(stateDir).ForStore(sock, storePath)
+	session := client.NewSession(sock, r.spawn).UseHandoffs(stateDir).ForStore(sock, storePath)
 	defer session.Close()
 
 	addr := endpoint.Holder(ctx, storePath, sock)
@@ -82,7 +82,7 @@ func (r restarter) run(ctx context.Context, cfg *config.Config, out io.Writer) e
 	if perr == nil {
 		if info.StoreID != "" {
 			if wanted, _ := store.Identity(storePath); info.StoreID != wanted {
-				return &tui.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
+				return &client.StoreMismatchError{Addr: addr, StorePath: storePath, Served: info.StoreID, Wanted: wanted}
 			}
 		}
 		// until this build answers, another client only dials; a handoff that cannot be written
@@ -97,7 +97,7 @@ func (r restarter) run(ctx context.Context, cfg *config.Config, out io.Writer) e
 		}
 	}
 	if err := session.Connect(ctx); err != nil {
-		var mismatch *tui.MismatchError
+		var mismatch *client.MismatchError
 		if errors.As(err, &mismatch) {
 			return fmt.Errorf("restart: the daemon that answers is not this build: %w", err)
 		}
