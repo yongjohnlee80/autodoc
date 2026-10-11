@@ -1,10 +1,12 @@
 package todo_test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -536,5 +538,65 @@ func TestAClaimItCannotServeIsUndone(t *testing.T) {
 	}
 	if err := e.m.Claim(ctx, kb); err == nil || !claimedNow(e) {
 		t.Errorf("a failed re-claim: %v, claimed %v (the earlier claim stays)", err, claimedNow(e))
+	}
+}
+
+// TestAFailedClaimIsUndoneWhateverItsRequest: a request cancelled after its claim was recorded is
+// still undone, on a context of the undo's own; and of two claims racing on one store, one
+// failing, the undo never clears the other's claim: claims are one at a time.
+func TestAFailedClaimIsUndoneWhateverItsRequest(t *testing.T) {
+	claimedNow := func(e *env) bool {
+		r, err := e.m.Resolve(ctx, kb)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r.Claimed
+	}
+	marker := func(op, name string) bool {
+		return strings.HasSuffix(name, ".autodoc-owner") && op != "stat" && op != "read"
+	}
+	// cancelled while marking: the claim is undone all the same
+	e := newEnv(t)
+	e.disk.WriteFile(kbStore+"/open/t.md", []byte(taskFile("t", "open")))
+	cctx, cancel := context.WithCancel(ctx)
+	e.disk.SetFault(func(op, name string) error {
+		if marker(op, name) {
+			cancel()
+			return context.Canceled
+		}
+		return nil
+	})
+	if err := e.m.Claim(cctx, kb); err == nil || claimedNow(e) {
+		t.Errorf("a claim cancelled while marking: %v, claimed %v", err, claimedNow(e))
+	}
+	// two claims at once: the first fails while the second waits; the second then claims
+	e = newEnv(t)
+	e.disk.WriteFile(kbStore+"/open/t.md", []byte(taskFile("t", "open")))
+	var writes atomic.Int32
+	inside, release := make(chan struct{}), make(chan struct{})
+	e.disk.SetFault(func(op, name string) error {
+		if marker(op, name) && writes.Add(1) == 1 {
+			close(inside)
+			<-release
+			return errors.New("disk full")
+		}
+		return nil
+	})
+	first := make(chan error, 1)
+	go func() { first <- e.m.Claim(ctx, kb) }()
+	<-inside
+	second := make(chan error, 1)
+	go func() { second <- e.m.Claim(ctx, kb) }()
+	select {
+	case err := <-second:
+		t.Fatalf("the second claim did not wait for the first: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-first; err == nil {
+		t.Error("the first claim, whose marker failed, succeeded")
+	}
+	if err := <-second; err != nil || !claimedNow(e) {
+		t.Errorf("the second claim: %v, claimed %v", err, claimedNow(e))
 	}
 }

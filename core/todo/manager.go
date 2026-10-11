@@ -42,6 +42,9 @@ type Manager struct {
 	stores       map[string]*store // open stores, by id
 	blocked      map[string]string // store ids an ambiguous store move made read-only, and why
 	movesSettled map[string]bool   // store ids whose interrupted store moves were settled
+	// claimMu serializes Claim and Release from the record to the marker: one call's undo can never
+	// clear what another call claimed
+	claimMu sync.Mutex
 }
 
 type options struct {
@@ -385,6 +388,8 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	if !w.writable {
 		return fmt.Errorf("%w: %s", ErrNotWritable, w.rec.Path)
 	}
+	m.claimMu.Lock()
+	defer m.claimMu.Unlock()
 	fresh := false
 	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
 		rec := s.Stores[w.rec.ID]
@@ -401,7 +406,10 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 		// a claim that cannot be served is no cutover: a new one is undone, so the caller sees the
 		// failure and retries; an old one stays, as it was
 		if fresh {
-			if uerr := m.unclaim(ctx, w.rec.ID); uerr != nil {
+			// the request's own context may be what failed: the undo has one of its own, bounded
+			uctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), undoTimeout)
+			defer cancel()
+			if uerr := m.unclaim(uctx, w.rec.ID); uerr != nil {
 				return errors.Join(err, uerr)
 			}
 		}
@@ -435,6 +443,9 @@ func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
 	return m.cutover(ctx, st, w, o.LegacyWorkspace)
 }
 
+// undoTimeout bounds a failed claim's undo, which runs whether or not its request was cancelled.
+const undoTimeout = 10 * time.Second
+
 // unclaim records a store as not claimed.
 func (m *Manager) unclaim(ctx context.Context, id string) error {
 	return m.j.UpdateSettings(ctx, func(s *Settings) error {
@@ -451,6 +462,8 @@ func (m *Manager) Release(ctx context.Context, at At) error {
 	if err != nil {
 		return err
 	}
+	m.claimMu.Lock()
+	defer m.claimMu.Unlock()
 	if err := m.unclaim(ctx, w.rec.ID); err != nil {
 		return err
 	}
