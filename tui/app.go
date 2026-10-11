@@ -240,6 +240,7 @@ type Host struct {
 	luaDir         string
 	recoveryQueue  []recovered
 	pendingRestore *recovered
+	restoreWaiting bool       // a restore is under way: its open, or the unsaved question before it
 	draft          *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,

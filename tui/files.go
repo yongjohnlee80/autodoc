@@ -151,6 +151,8 @@ func (h *Host) unsaved(answer string) {
 		if then != nil {
 			then()
 		}
+	default: // stay
+		h.restoreSettled()
 	}
 }
 
@@ -258,6 +260,8 @@ func (h *Host) openHTMLAs(how string) {
 		ask.then(false)
 	case "raw":
 		ask.then(true)
+	default: // cancel
+		h.restoreSettled()
 	}
 }
 
@@ -289,6 +293,7 @@ func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
 		}
 		if a.err != nil {
 			h.failed("open "+p, a.err)
+			h.restoreOpenFailed(ws, p) // a kept copy's file gone: its text becomes the draft
 			return
 		}
 		if prev != nil && *prev != (fileRef{ws, p}) {

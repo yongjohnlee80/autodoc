@@ -160,18 +160,39 @@ func (h *Host) recovery(answer string) {
 	h.askRecovery()
 }
 
-// restoreRecovered opens the kept document and puts the kept text in it, unsaved: the file as it
-// is on disk is one undo away. The untitled draft becomes the editor's text.
+// restoreRecovered puts a kept copy's text back in the editor, and asks about the next copy once
+// that is settled, whichever way it goes:
+//
+//   - the copy's document is open already: its text goes in at once;
+//   - the untitled draft's copy: it becomes the draft, asking first over unsaved changes;
+//   - another document: it opens, and the text goes in when it shows (applyPendingRestore). If it
+//     cannot be opened (moved, deleted), the kept text becomes the untitled draft instead;
+//   - Stay in the unsaved question, or Cancel in the HTML one: nothing is restored now, and the
+//     copy stays for the next start.
 func (h *Host) restoreRecovered(r recovered) {
-	if r.Path == "" {
-		h.guard("restore the draft", func() {
-			h.applyRecovered(r)
-			h.askRecovery()
-		})
-		return
+	switch {
+	case r.Path != "" && h.file.open && h.file.ws == r.WS && h.file.path == r.Path:
+		h.applyRecovered(r)
+		h.askRecovery()
+	case r.Path == "":
+		h.restoreAsDraft(r, "restore the kept draft")
+	default:
+		h.pendingRestore, h.restoreWaiting = &r, true
+		h.openRef(fileRef{r.WS, r.Path}, true, nil)
 	}
-	h.pendingRestore = &r
-	h.openRef(fileRef{r.WS, r.Path}, true, nil)
+}
+
+// restoreAsDraft makes the kept text the untitled draft, asking first over unsaved changes.
+func (h *Host) restoreAsDraft(r recovered, action string) {
+	h.restoreWaiting = true
+	h.guard(action, func() {
+		h.restoreWaiting = false
+		if h.file.open {
+			h.closeFile()
+		}
+		h.applyRecovered(r)
+		h.askRecovery()
+	})
 }
 
 // applyPendingRestore puts a restored copy's text in the document show just opened, if it is the
@@ -181,12 +202,36 @@ func (h *Host) applyPendingRestore(ws, p string) {
 	if r == nil || r.WS != ws || r.Path != p {
 		return
 	}
-	h.pendingRestore = nil
+	h.pendingRestore, h.restoreWaiting = nil, false
 	h.applyRecovered(*r)
 	h.p.Post(h.askRecovery)
 }
 
-// applyRecovered replaces the editor's text with the copy's, as one edit.
+// restoreOpenFailed is the open of a document being restored failing: its kept text becomes the
+// untitled draft, so it is not lost with the file. It reports whether p was being restored.
+func (h *Host) restoreOpenFailed(ws, p string) bool {
+	r := h.pendingRestore
+	if r == nil || r.WS != ws || r.Path != p {
+		return false
+	}
+	h.pendingRestore = nil
+	h.notify(p + " could not be opened: its kept text is restored as an untitled draft")
+	h.restoreAsDraft(*r, "restore the kept text of "+p+" as a draft")
+	return true
+}
+
+// restoreSettled ends a restore the user stopped (Stay, Cancel): the copy stays on disk for the
+// next start, and the next copy is asked about.
+func (h *Host) restoreSettled() {
+	if !h.restoreWaiting {
+		return
+	}
+	h.pendingRestore, h.restoreWaiting = nil, false
+	h.p.Post(h.askRecovery)
+}
+
+// applyRecovered replaces the editor's text with the copy's, as one edit, and deletes the copy: the
+// text is in the editor now, unsaved, which every quit asks about and an unasked exit keeps again.
 func (h *Host) applyRecovered(r recovered) {
 	end := widget.TextPos{Line: h.core.LineCount() - 1, Col: 1 << 30}
 	if _, err := h.core.Replace(widget.TextRange{To: end}, r.Text); err != nil {
@@ -194,5 +239,10 @@ func (h *Host) applyRecovered(r recovered) {
 		return
 	}
 	h.setDirty(true)
-	h.notify("restored the unsaved text of " + map[bool]string{true: untitled, false: r.Path}[r.Path == ""] + " — save it to keep it")
+	h.dropRecovery(r.WS, r.Path)
+	name := r.Path
+	if name == "" {
+		name = untitled
+	}
+	h.notify("restored the unsaved text of " + name + " — save it to keep it")
 }

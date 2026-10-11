@@ -34,7 +34,9 @@ func (h *Host) writeFromEditor(quit bool) {
 // quitFromEditor is q, asking over unsaved changes as every quit does, and q!, which discards them.
 func (h *Host) quitFromEditor(force bool) {
 	if force {
-		h.setDirty(false) // discarded on purpose: nothing to keep for recovery
+		// discarded on purpose: nothing to keep, and a copy kept earlier goes too
+		h.dropRecovery(h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
+		h.setDirty(false)
 		h.p.Quit()
 		return
 	}

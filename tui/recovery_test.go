@@ -106,3 +106,94 @@ func TestADiscardedEditIsNotKept(t *testing.T) {
 		t.Fatalf("q! kept a copy: %v %+v", err, readRecovery(dir))
 	}
 }
+
+// A kept copy whose file is gone is restored as the untitled draft, and the next copy is asked
+// about.
+func TestACopyWhoseFileIsGoneBecomesTheDraft(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "gone.md", Text: "the lost text\n", Saved: now})
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "older\n", Saved: now.Add(-time.Hour)})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "gone.md had unsaved changes")
+	r.keys(t, key('r'))
+	r.s.WaitForText(t, "a.md had unsaved changes") // the next one is asked
+	if got := r.editorText(); got != "the lost text\n" {
+		t.Fatalf("the draft holds %q", got)
+	}
+	if f := r.file(); f.open || !f.dirty {
+		t.Fatalf("the draft: open %v, dirty %v", f.open, f.dirty)
+	}
+	if got := readRecovery(dir); len(got) != 1 || got[0].Path != "a.md" {
+		t.Fatalf("copies left: %+v; the restored one goes, a.md's stays", got)
+	}
+}
+
+// Restoring the copy of the document open now puts its text in at once.
+func TestACopyOfTheOpenDocumentGoesInAtOnce(t *testing.T) {
+	dir := t.TempDir()
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool {
+		r.h.restoreRecovered(recovered{WS: "kb", Path: "a.md", Text: "kept\n", Saved: time.Now()})
+		return true
+	})
+	r.s.WaitForText(t, "kept")
+	if waiting := onLoop(r, func() bool { return r.h.restoreWaiting || r.h.pendingRestore != nil }); waiting {
+		t.Fatal("a restore of the open document is left waiting")
+	}
+}
+
+// Stay in the unsaved question before a restore keeps that copy for the next start, and nothing
+// waits for an open that will not come.
+func TestStayBeforeARestoreKeepsTheCopy(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "b.md", Text: "b kept\n", Saved: now})
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "a kept\n", Saved: now.Add(-time.Hour)})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a disk\n", "b.md", "b disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "b.md had unsaved changes")
+	r.keys(t, key('r'))
+	r.s.WaitForText(t, "a.md had unsaved changes")
+	if got := r.editorText(); got != "b kept\n" {
+		t.Fatalf("b.md holds %q", got)
+	}
+	r.keys(t, key('r'))
+	r.s.WaitForText(t, "Save them before you open a.md?") // b.md's restored text is unsaved
+	r.keys(t, key('t'))
+	r.s.WaitFor(t, "the question gone", func(sc string) bool { return !strings.Contains(sc, "before you open") })
+	if waiting := onLoop(r, func() bool { return r.h.restoreWaiting || r.h.pendingRestore != nil }); waiting {
+		t.Fatal("Stay left the restore waiting")
+	}
+	if got := readRecovery(dir); len(got) != 1 || got[0].Path != "a.md" {
+		t.Fatalf("copies left: %+v; want a.md's, kept for the next start", got)
+	}
+}
+
+// :q! deletes a copy kept earlier for the document it discards.
+func TestQBangDeletesAnOlderCopy(t *testing.T) {
+	dir := t.TempDir()
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "older\n", Saved: time.Now()})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "on disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "had unsaved changes")
+	r.keys(t, key('l')) // Later
+	r.s.WaitFor(t, "the question gone", func(sc string) bool { return !strings.Contains(sc, "had unsaved changes") })
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.typeInEditor(t, "X")
+	r.command(t, "q!")
+	select {
+	case <-r.s.Quit():
+	case <-time.After(3 * time.Second):
+		t.Fatal(":q! did not quit")
+	}
+	if got := readRecovery(dir); len(got) != 0 {
+		t.Fatalf(":q! left %+v", got)
+	}
+}
