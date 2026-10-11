@@ -927,3 +927,64 @@ func TestACallsEventsAreTheCLIs(t *testing.T) {
 	}
 	t.Fatalf("no preference.changed in sys.events: %v", events)
 }
+
+// TestServeAsAModeSaysWhyItServesNothing: --serve over a store its daemon already serves says so
+// and exits 0, as the process the client started; a config it cannot read, or a data directory it
+// cannot make, stops it before anything is bound, with exit 1.
+func TestServeAsAModeSaysWhyItServesNothing(t *testing.T) {
+	dir := short(t)
+	sock := filepath.Join(dir, "a.sock")
+	cfg := writeConfig(t, sock, filepath.Join(dir, "state"), "")
+	start(t, cfg, sock)
+	var stdout, stderr bytes.Buffer
+	if code := run(context.Background(), []string{"--serve", "--config", cfg}, testOptions, &stdout, &stderr); code != 0 ||
+		!strings.Contains(stderr.String(), "autodoc is already serving") {
+		t.Errorf("--serve beside its store's daemon: exit %d, %q", code, stderr.String())
+	}
+	bad := filepath.Join(dir, "bad.toml")
+	if err := os.WriteFile(bad, []byte("not = [toml\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runServe(context.Background(), bad, io.Discard, testBuild); err == nil || !strings.Contains(err.Error(), "config: invalid") {
+		t.Errorf("--serve over an invalid config: %v", err)
+	}
+	file := filepath.Join(dir, "file")
+	if err := os.WriteFile(file, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	under := filepath.Join(dir, "under.toml")
+	conf := fmt.Sprintf("[server]\nsocket = %q\nstate_dir = %q\ndata_dir = %q\n", filepath.Join(dir, "b.sock"), filepath.Join(dir, "state2"), filepath.Join(file, "data"))
+	if err := os.WriteFile(under, []byte(conf), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := runServe(context.Background(), under, io.Discard, testBuild); err == nil || !strings.Contains(err.Error(), filepath.Join(file, "data")) {
+		t.Errorf("--serve with a data directory under a file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.sock")); err == nil {
+		t.Error("the socket was bound before the data directory was refused")
+	}
+	// the socket held by a daemon of another store, and by something that is no autodoc
+	other := writeConfig(t, sock, filepath.Join(dir, "state3"), "")
+	if err := runServe(context.Background(), other, io.Discard, testBuild); err == nil || !strings.Contains(err.Error(), "that is not serving") {
+		t.Errorf("--serve on another store's daemon's socket: %v", err)
+	}
+	plain := filepath.Join(dir, "p.sock")
+	ln, err := net.Listen("unix", plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	squatted := writeConfig(t, plain, filepath.Join(dir, "state4"), "")
+	if err := runServe(context.Background(), squatted, io.Discard, testBuild); err == nil || !strings.Contains(err.Error(), "not an autodoc") {
+		t.Errorf("--serve on a socket something else holds: %v", err)
+	}
+}
