@@ -120,14 +120,6 @@ func legacyVerbs() []verb {
 			Errors: []int64{CodeNoSuchWorkspace, CodeUnsupported},
 			Event:  ev("workspace.embedding_policy", "workspace name", "embedding policy")}),
 
-		// preference
-		c(module.Contract{Verb: "preference.list", Since: 3, Scope: global, Audience: user, Params: none,
-			Result: "{name: value}", Errors: []int64{CodeUnsupported}, Doc: "What clients keep between runs."}),
-		c(module.Contract{Verb: "preference.set", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("value", "string", "")},
-			Errors: []int64{CodeUnsupported}, Event: ev("preference.changed", "", "name"),
-			Doc: "A preference that has a verb of its own (embedding.use, ranker.use, ranker.window) is refused."}),
-
 		// search
 		c(module.Contract{Verb: "search.query", Since: 1, Scope: workspace, Audience: agent,
 			Params: []module.Param{workspaceParam, param("query", "string", "words, \"phrases\", a prefix*, field:value filters"),

@@ -11,14 +11,12 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
-// verb is what the server keeps per name: the contract, the handler the gate calls, the expander
-// of the events a success logs when its EventSpec cannot say them, and the module serving it ("" for
-// rpc's own, whose errors publicErrs maps).
+// verb is what the server keeps per name: the contract, the handler the gate calls, and the
+// expander of the events a success logs when its EventSpec cannot say them.
 type verb struct {
 	module.Contract
 	h      golibrpc.Handler
 	events func(ctx context.Context, params []any, result any) []module.Event
-	owner  string
 }
 
 // module is v as core/module sees it, for its events.
@@ -46,21 +44,36 @@ func (s *Server) registerModules(ms []module.Module) {
 		}
 		s.moduleErrs = append(s.moduleErrs, errs...)
 		for _, v := range m.Verbs() {
-			s.add(verb{Contract: v.Contract, h: s.serve(v, errs), events: v.Events, owner: m.Name()})
+			s.add(verb{Contract: v.Contract, h: s.serve(v, errs), events: v.Events})
 		}
 	}
+}
+
+// own registers rpc's own typed verbs: served as a module's are, their errors mapped by publicErrs.
+func (s *Server) own(vs ...module.Verb) {
+	for _, v := range vs {
+		s.add(verb{Contract: v.Contract, h: s.serve(v, nil), events: v.Events})
+	}
+}
+
+type workspaceKey struct{}
+
+// workspaceOf is the workspace a ScopeWorkspace verb of rpc's named, as serve resolved it.
+func workspaceOf(ctx context.Context) *Workspace {
+	w, _ := ctx.Value(workspaceKey{}).(*Workspace)
+	return w
 }
 
 // serve is a module verb's handler, on the wrappers rpc's own verbs use: verb checks the arity the
 // contract gives, resolves a ScopeWorkspace verb's workspace and maps what the module leaves
 // unmapped; local refuses a ScopeLocalPeer verb over TCP. The handler's ctx carries the session's
-// protocol and client token too. The result is the handler's own: add carries it with module.Wire
-// once its events are logged.
+// protocol and client token too. The result is the handler's own: chain carries it with
+// module.Wire once its events are logged.
 func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handler {
 	call := func(ctx context.Context, w *Workspace, p []any) (any, error) {
 		ctx = module.WithProtocol(ctx, protocolOf(ctx))
 		if w != nil {
-			ctx = module.WithWorkspace(ctx, module.Workspace{Name: w.Name, Root: w.Root})
+			ctx = module.WithWorkspace(context.WithValue(ctx, workspaceKey{}, w), module.Workspace{Name: w.Name, Root: w.Root})
 		}
 		out, err := v.Call(ctx, p)
 		return out, moduleErr(err, errs)
@@ -94,8 +107,8 @@ func moduleErr(err error, errs []module.PublicError) error {
 	return err
 }
 
-// wired carries a module verb's result as the wire does. A result it cannot carry is the
-// handler's bug: logged, and an internal error to the client.
+// wired carries a verb's result as the wire does: a struct by its json tags, a hand-built map as it
+// is. A result it cannot carry is the handler's bug: logged, and an internal error to the client.
 func (s *Server) wired(h golibrpc.Handler) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
 		out, err := h(ctx, req)

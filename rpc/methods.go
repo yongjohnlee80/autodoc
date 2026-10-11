@@ -18,6 +18,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/outline"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -111,82 +112,79 @@ const (
 )
 
 // publicErrs maps core's errors to codes, first match wins. Only the message here crosses the
-// wire, never an error's own text (a path, a driver's detail).
-var publicErrs = []struct {
-	err     error
-	code    int64
-	message string
-}{
-	{errNoSuchWorkspace, CodeNoSuchWorkspace, "no such workspace"},
-	{store.ErrNoWorkspace, CodeNoSuchWorkspace, "no such workspace"},
-	{store.ErrEmbeddingPolicy, golibrpc.CodeInvalidParams, "embedding policy must be always, when opened, or never"},
-	{store.ErrTaken, CodeConflict, "another workspace has this name or root"},
-	{store.ErrNoPreferenceName, golibrpc.CodeInvalidParams, "a preference needs a name"},
-	{store.ErrOwnedPreference, golibrpc.CodeInvalidParams, "this preference is set by its own verb: embedding.use, ranker.use or ranker.window"},
-	{errNoPreferences, CodeUnsupported, "this server keeps no preferences"},
-	{errNoEmbeddings, CodeUnsupported, "this server keeps no embedding providers"},
-	{errNoEvents, CodeUnsupported, "this server keeps no event log"},
-	{store.ErrEventsExpired, CodeCursorExpired, "the event cursor is outside the retained log: take a snapshot and resume from the head"},
-	{ErrNoSwitch, golibrpc.CodeInvalidParams, "no model switch is under way"},
-	{store.ErrNoProvider, CodeNotFound, "no such embedding provider"},
-	{errNoRankers, CodeUnsupported, "this server keeps no rankers"},
-	{store.ErrNoRanker, CodeNotFound, "no such ranker"},
-	{store.ErrRankerTaken, CodeConflict, "another ranker has this name"},
-	{store.ErrRankerInvalid, golibrpc.CodeInvalidParams, "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api"},
-	{ErrSuppliedRanker, golibrpc.CodeInvalidParams, "this build supplies its ranker"},
-	{ErrWindow, golibrpc.CodeInvalidParams, ErrWindow.Error()},
+// wire, never an error's own text (a path, a driver's detail); each code's name and next step are
+// codeDocs'.
+var publicErrs = []module.PublicError{
+	{Err: errNoSuchWorkspace, Code: CodeNoSuchWorkspace, Message: "no such workspace"},
+	{Err: store.ErrNoWorkspace, Code: CodeNoSuchWorkspace, Message: "no such workspace"},
+	{Err: store.ErrEmbeddingPolicy, Code: golibrpc.CodeInvalidParams, Message: "embedding policy must be always, when opened, or never"},
+	{Err: store.ErrTaken, Code: CodeConflict, Message: "another workspace has this name or root"},
+	{Err: store.ErrNoPreferenceName, Code: golibrpc.CodeInvalidParams, Message: "a preference needs a name"},
+	{Err: store.ErrOwnedPreference, Code: golibrpc.CodeInvalidParams, Message: "this preference is set by its own verb: embedding.use, ranker.use or ranker.window"},
+	{Err: errNoPreferences, Code: CodeUnsupported, Message: "this server keeps no preferences"},
+	{Err: errNoEmbeddings, Code: CodeUnsupported, Message: "this server keeps no embedding providers"},
+	{Err: errNoEvents, Code: CodeUnsupported, Message: "this server keeps no event log"},
+	{Err: store.ErrEventsExpired, Code: CodeCursorExpired, Message: "the event cursor is outside the retained log: take a snapshot and resume from the head"},
+	{Err: ErrNoSwitch, Code: golibrpc.CodeInvalidParams, Message: "no model switch is under way"},
+	{Err: store.ErrNoProvider, Code: CodeNotFound, Message: "no such embedding provider"},
+	{Err: errNoRankers, Code: CodeUnsupported, Message: "this server keeps no rankers"},
+	{Err: store.ErrNoRanker, Code: CodeNotFound, Message: "no such ranker"},
+	{Err: store.ErrRankerTaken, Code: CodeConflict, Message: "another ranker has this name"},
+	{Err: store.ErrRankerInvalid, Code: golibrpc.CodeInvalidParams, Message: "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api"},
+	{Err: ErrSuppliedRanker, Code: golibrpc.CodeInvalidParams, Message: "this build supplies its ranker"},
+	{Err: ErrWindow, Code: golibrpc.CodeInvalidParams, Message: ErrWindow.Error()},
 	// before the ranker's own errors: a ranked-or-nothing refusal wraps the ranker's reason too, and
 	// its code is what the client acts on
-	{rank.ErrUnavailable, CodeRankUnavailable, "the ranker is unavailable: this build answers ranked results or none"},
-	{rank.ErrRateLimited, CodeProviderRefused, "the ranker's usage limit is reached"},
-	{rank.ErrUnauthorized, CodeProviderRefused, "the ranker refused the key"},
-	{rank.ErrNoModel, CodeProviderRefused, "the ranker has no such model"},
-	{rank.ErrNotARanker, CodeProviderRefused, "the server's model is not a re-ranker"},
-	{rank.ErrUnreachable, CodeProviderRefused, "the ranker did not answer: check its base URL, and that it is running"},
-	{rank.ErrBadAnswer, CodeProviderRefused, "the ranker's answer is not one score for each text"},
-	{rank.ErrRefused, CodeProviderRefused, "the ranker refused the request"},
-	{rank.ErrTooLarge, CodeProviderRefused, "the request is over the size a ranker is sent"},
-	{store.ErrProviderTaken, CodeConflict, "another embedding provider has this name"},
-	{store.ErrProviderInvalid, golibrpc.CodeInvalidParams, "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"},
-	{store.ErrContextRange, golibrpc.CodeInvalidParams, store.ErrContextRange.Error()[len("store: "):]},
-	{store.ErrProviderNeedsKey, golibrpc.CodeInvalidParams, "an Ollama Cloud provider needs its API key"},
-	{store.ErrSealed, CodeProviderRefused, "the store's keyslot does not open this provider's key"},
-	{store.ErrKeyslotExposed, CodeProviderRefused, "the store's keyslot file is readable by others: make it 0600"},
-	{embed.ErrRateLimited, CodeProviderRefused, "the provider's usage limit is reached: switch provider, or wait"},
-	{embed.ErrUnauthorized, CodeProviderRefused, "the provider refused the key"},
-	{embed.ErrNoModel, CodeProviderRefused, "the provider has no such model: List models shows the ones it has"},
-	{embed.ErrUnreachable, CodeProviderRefused, "the provider did not answer: check its base URL, and that it is running"},
-	{embed.ErrDims, CodeProviderRefused, "the model gave no usable vectors: it may be a chat model, not an embedding model"},
-	{embed.ErrRejected, CodeProviderRefused, "the provider rejected the probe text"},
-	{workspace.ErrNotADirectory, golibrpc.CodeInvalidParams, "the root is not a directory"},
-	{config.ErrInvalid, golibrpc.CodeInvalidParams, "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
-	{docs.ErrCommitted, CodeCommitted, "the write landed, then a follow-up step failed: read the document and compare"},
-	{vfs.ErrConflict, CodeConflict, "the document is not at that version"},
-	{index.ErrCursorExpired, CodeCursorExpired, "the change cursor is older than the retained log"},
-	{index.ErrNoDocument, CodeNotFound, "not found"},
-	{vfs.ErrNotExist, CodeNotFound, "not found"},
-	{index.ErrEmbedFailed, CodeEmbedFailed, "the query could not be embedded"},
-	{index.ErrSwitching, CodeSwitching, "a new model is filling: search by words until it is ready"},
+	{Err: rank.ErrUnavailable, Code: CodeRankUnavailable, Message: "the ranker is unavailable: this build answers ranked results or none"},
+	{Err: rank.ErrRateLimited, Code: CodeProviderRefused, Message: "the ranker's usage limit is reached"},
+	{Err: rank.ErrUnauthorized, Code: CodeProviderRefused, Message: "the ranker refused the key"},
+	{Err: rank.ErrNoModel, Code: CodeProviderRefused, Message: "the ranker has no such model"},
+	{Err: rank.ErrNotARanker, Code: CodeProviderRefused, Message: "the server's model is not a re-ranker"},
+	{Err: rank.ErrUnreachable, Code: CodeProviderRefused, Message: "the ranker did not answer: check its base URL, and that it is running"},
+	{Err: rank.ErrBadAnswer, Code: CodeProviderRefused, Message: "the ranker's answer is not one score for each text"},
+	{Err: rank.ErrRefused, Code: CodeProviderRefused, Message: "the ranker refused the request"},
+	{Err: rank.ErrTooLarge, Code: CodeProviderRefused, Message: "the request is over the size a ranker is sent"},
+	{Err: store.ErrProviderTaken, Code: CodeConflict, Message: "another embedding provider has this name"},
+	{Err: store.ErrProviderInvalid, Code: golibrpc.CodeInvalidParams, Message: "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"},
+	{Err: store.ErrContextRange, Code: golibrpc.CodeInvalidParams, Message: store.ErrContextRange.Error()[len("store: "):]},
+	{Err: store.ErrProviderNeedsKey, Code: golibrpc.CodeInvalidParams, Message: "an Ollama Cloud provider needs its API key"},
+	{Err: store.ErrSealed, Code: CodeProviderRefused, Message: "the store's keyslot does not open this provider's key"},
+	{Err: store.ErrKeyslotExposed, Code: CodeProviderRefused, Message: "the store's keyslot file is readable by others: make it 0600"},
+	{Err: embed.ErrRateLimited, Code: CodeProviderRefused, Message: "the provider's usage limit is reached: switch provider, or wait"},
+	{Err: embed.ErrUnauthorized, Code: CodeProviderRefused, Message: "the provider refused the key"},
+	{Err: embed.ErrNoModel, Code: CodeProviderRefused, Message: "the provider has no such model: List models shows the ones it has"},
+	{Err: embed.ErrUnreachable, Code: CodeProviderRefused, Message: "the provider did not answer: check its base URL, and that it is running"},
+	{Err: embed.ErrDims, Code: CodeProviderRefused, Message: "the model gave no usable vectors: it may be a chat model, not an embedding model"},
+	{Err: embed.ErrRejected, Code: CodeProviderRefused, Message: "the provider rejected the probe text"},
+	{Err: workspace.ErrNotADirectory, Code: golibrpc.CodeInvalidParams, Message: "the root is not a directory"},
+	{Err: config.ErrInvalid, Code: golibrpc.CodeInvalidParams, Message: "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
+	{Err: docs.ErrCommitted, Code: CodeCommitted, Message: "the write landed, then a follow-up step failed: read the document and compare"},
+	{Err: vfs.ErrConflict, Code: CodeConflict, Message: "the document is not at that version"},
+	{Err: index.ErrCursorExpired, Code: CodeCursorExpired, Message: "the change cursor is older than the retained log"},
+	{Err: index.ErrNoDocument, Code: CodeNotFound, Message: "not found"},
+	{Err: vfs.ErrNotExist, Code: CodeNotFound, Message: "not found"},
+	{Err: index.ErrEmbedFailed, Code: CodeEmbedFailed, Message: "the query could not be embedded"},
+	{Err: index.ErrSwitching, Code: CodeSwitching, Message: "a new model is filling: search by words until it is ready"},
 	// before ErrUnsupported, which it is: the same code, but a message that says what is missing
-	{index.ErrNoProvider, CodeUnsupported, "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"},
-	{edition.ErrDatabases, CodeUnsupported, "this edition has no database settings"},
-	{errFixed, CodeUnsupported, "this server's set of workspaces is fixed"},
-	{errNoFiles, CodeUnsupported, "this server serves no files outside its workspaces"},
-	{derived.ErrDeriverFailed, CodeUnsupported, "this document's text could not be made now: try again later, or open it in its own viewer"},
-	{derived.ErrRefused, CodeUnsupported, "this document's text could not be derived: open it in its own viewer"},
-	{errs.ErrUnsupported, CodeUnsupported, "the workspace's filesystem cannot do this"},
-	{docs.ErrReadOnly, golibrpc.CodeInvalidParams, "a derived document is read-only: its text is served, its file never written"},
-	{docs.ErrNotEligible, golibrpc.CodeInvalidParams, "not a file of this workspace"},
-	{docs.ErrTooLarge, golibrpc.CodeInvalidParams, "the document is over the size limit"},
-	{vfs.ErrInvalidName, golibrpc.CodeInvalidParams, "not a valid path in the workspace"},
-	{index.ErrUnknownMode, golibrpc.CodeInvalidParams, "unknown search mode"},
-	{index.ErrNoRetriever, golibrpc.CodeInvalidParams, "search stages must include lexical or semantic: a ranker only re-orders what they find"},
-	{index.ErrUnknownStage, golibrpc.CodeInvalidParams, "unknown search stage: the stages are lexical, semantic and rerank"},
-	{index.ErrRepeatedStage, golibrpc.CodeInvalidParams, "a search stage is named twice"},
-	{index.ErrStagesAndMode, golibrpc.CodeInvalidParams, "search stages and a search mode together: send one or the other"},
-	{index.ErrUnknownFacet, golibrpc.CodeInvalidParams, "a facet filter names a field the workspace's schema does not declare"},
-	{index.ErrFacetValue, golibrpc.CodeInvalidParams, "a facet filter's value is not of its field's type"},
-	{index.ErrModelInUse, golibrpc.CodeInvalidParams, "the model is in use"},
+	{Err: index.ErrNoProvider, Code: CodeUnsupported, Message: "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"},
+	{Err: edition.ErrDatabases, Code: CodeUnsupported, Message: "this edition has no database settings"},
+	{Err: errFixed, Code: CodeUnsupported, Message: "this server's set of workspaces is fixed"},
+	{Err: errNoFiles, Code: CodeUnsupported, Message: "this server serves no files outside its workspaces"},
+	{Err: derived.ErrDeriverFailed, Code: CodeUnsupported, Message: "this document's text could not be made now: try again later, or open it in its own viewer"},
+	{Err: derived.ErrRefused, Code: CodeUnsupported, Message: "this document's text could not be derived: open it in its own viewer"},
+	{Err: errs.ErrUnsupported, Code: CodeUnsupported, Message: "the workspace's filesystem cannot do this"},
+	{Err: docs.ErrReadOnly, Code: golibrpc.CodeInvalidParams, Message: "a derived document is read-only: its text is served, its file never written"},
+	{Err: docs.ErrNotEligible, Code: golibrpc.CodeInvalidParams, Message: "not a file of this workspace"},
+	{Err: docs.ErrTooLarge, Code: golibrpc.CodeInvalidParams, Message: "the document is over the size limit"},
+	{Err: vfs.ErrInvalidName, Code: golibrpc.CodeInvalidParams, Message: "not a valid path in the workspace"},
+	{Err: index.ErrUnknownMode, Code: golibrpc.CodeInvalidParams, Message: "unknown search mode"},
+	{Err: index.ErrNoRetriever, Code: golibrpc.CodeInvalidParams, Message: "search stages must include lexical or semantic: a ranker only re-orders what they find"},
+	{Err: index.ErrUnknownStage, Code: golibrpc.CodeInvalidParams, Message: "unknown search stage: the stages are lexical, semantic and rerank"},
+	{Err: index.ErrRepeatedStage, Code: golibrpc.CodeInvalidParams, Message: "a search stage is named twice"},
+	{Err: index.ErrStagesAndMode, Code: golibrpc.CodeInvalidParams, Message: "search stages and a search mode together: send one or the other"},
+	{Err: index.ErrUnknownFacet, Code: golibrpc.CodeInvalidParams, Message: "a facet filter names a field the workspace's schema does not declare"},
+	{Err: index.ErrFacetValue, Code: golibrpc.CodeInvalidParams, Message: "a facet filter's value is not of its field's type"},
+	{Err: index.ErrModelInUse, Code: golibrpc.CodeInvalidParams, Message: "the model is in use"},
 }
 
 // wireErr is err as the client sees it: a code and a constant message, or, for anything unmapped,
@@ -216,8 +214,8 @@ func wireErr(err error) error {
 		return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: extErr.Error()[len("kind: "):]}
 	}
 	for _, pe := range publicErrs {
-		if errors.Is(err, pe.err) {
-			return &golibrpc.Error{Code: pe.code, Message: pe.message}
+		if errors.Is(err, pe.Err) {
+			return &golibrpc.Error{Code: pe.Code, Message: pe.Message}
 		}
 	}
 	return err
@@ -230,6 +228,7 @@ func (s *Server) register() {
 	s.registerFiles()
 	s.configureVerbs()
 	s.registerContracts()
+	s.own(s.preferenceVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 	s.handle("workspace.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
@@ -408,38 +407,6 @@ func (s *Server) register() {
 			return nil, err
 		}
 		return nil, s.workspaces.Remove(ctx, name)
-	}, false))
-
-	s.handle("preference.list", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
-		if s.preferences == nil {
-			return nil, errNoPreferences
-		}
-		prefs, err := s.preferences.Preferences(ctx)
-		if err != nil {
-			return nil, err
-		}
-		out := map[string]any{}
-		for k, v := range prefs {
-			out[k] = v
-		}
-		return out, nil
-	}, false))
-	s.handle("preference.set", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if s.preferences == nil {
-			return nil, errNoPreferences
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		value, err := argStr(p, 1, "value")
-		if err != nil {
-			return nil, err
-		}
-		if store.Owned(name) {
-			return nil, store.ErrOwnedPreference
-		}
-		return nil, s.preferences.SetPreference(ctx, name, value)
 	}, false))
 
 	s.handle("search.query", s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {

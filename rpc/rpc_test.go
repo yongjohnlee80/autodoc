@@ -326,10 +326,10 @@ func TestErrorCodes(t *testing.T) {
 
 func TestWireErrMapsEverySentinel(t *testing.T) {
 	for _, pe := range publicErrs {
-		err := wireErr(fmt.Errorf("context: %w", pe.err))
+		err := wireErr(fmt.Errorf("context: %w", pe.Err))
 		var re *golibrpc.Error
-		if !errors.As(err, &re) || re.Code != pe.code || re.Message != pe.message {
-			t.Errorf("%v: %v", pe.err, err)
+		if !errors.As(err, &re) || re.Code != pe.Code || re.Message != pe.Message {
+			t.Errorf("%v: %v", pe.Err, err)
 		}
 	}
 	plain := errors.New("disk full at /home/x")

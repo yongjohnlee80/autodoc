@@ -133,8 +133,8 @@ func TestEveryCodeIsDocumented(t *testing.T) {
 		}
 	}
 	for _, pe := range publicErrs {
-		if !slices.Contains(byCode[pe.code].Messages, pe.message) {
-			t.Errorf("code %d does not list %q", pe.code, pe.message)
+		if !slices.Contains(byCode[pe.Code].Messages, pe.Message) {
+			t.Errorf("code %d does not list %q", pe.Code, pe.Message)
 		}
 	}
 }

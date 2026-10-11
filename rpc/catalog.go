@@ -90,7 +90,7 @@ func (s *Server) Catalog(p int64, filter string) Catalog {
 		add(d.code, d.name, d.next, "")
 	}
 	for _, pe := range publicErrs {
-		add(pe.code, "", "", pe.message)
+		add(pe.Code, "", "", pe.Message)
 	}
 	for _, e := range s.moduleErrs {
 		add(e.Code, e.Name, e.Next, e.Message)
