@@ -30,8 +30,8 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
 `autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
 when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": 13, "name": "<your client>"}`: the protocol your client was written
-for. The daemon serves every protocol from `min_protocol` (12) to its own (13); another is
+`sys.hello` with `{"protocol": 20, "name": "<your client>"}`: the protocol your client was written
+for. The daemon serves every protocol from `min_protocol` (12) to its own (20); another is
 refused, and so is every verb until the hello succeeds. A session keeps the protocol it declared: a
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
 and meaning, though a result may gain keys, which a client ignores. `sys.capabilities` lists the
@@ -177,54 +177,160 @@ For a broad question, search for its key terms in two or three phrasings and rea
 recur. For a precise one (a name, an error text), search the exact words with
 `stages: ["lexical", "rerank"]`.
 
-## The other verbs
+## The verbs
 
-Every verb but `workspace.*`, `preference.*`, `embedding.*`, `ranker.*`, `file.*` and `sys.*` takes
-the workspace's name first.
+Every verb is below with its parameters, its answer, the protocol it arrived in and who it is for.
+`autodoc --contracts` prints the same as JSON with no daemon (`--format md` as these tables; a verb
+or `domain.*` after it narrows them), and `sys.contracts` answers it on a connection, for that
+session's protocol. A parameter marked `?` is optional, and only trailing ones are. The verbs whose
+first parameter is `workspace` take the workspace's name first.
 
-| verb | parameters | answers |
-| --- | --- | --- |
-| `workspace.list` | — | `[{name, root, state, include, exclude, schema, text_extensions, text_collisions, provider, databases}]`; `provider` is the workspace's own embedding provider (`""`: the daemon's), with `provider_error` when it is not set up; `schema` is `{path, active, fields, error, line}`; `text_extensions` are the extensions read as plain text besides `.txt`; `text_collisions` are those of them the daemon's build reads with a registered chunker instead; `databases` is `{uid, destination, vector_index, view_args, source?, destination_connection?}`, each connection `{engine, host, database, user, schema, has_password}`, never its DSN |
-| `workspace.configure` | workspace, settings map | save any of `name`, `include`+`exclude`, `schema`, `text_extensions`, `section_tokens`, `embedding_policy`, `provider`, and (where `sys.capabilities` says `databases`) `destination`, `vector_index`, `view_args`, `source` and `destination_connection` (`{engine, dsn, schema}` or `{remove: true}`; a blank `dsn` keeps the stored one) at once: all of it or none. An unknown key is InvalidParams. Logs the event each changed setting's own verb logs, a rename first |
-| `workspace.set_patterns` | workspace, include list, exclude list | replace validated globs and reconcile that workspace; an empty include matches no files |
-| `workspace.set_provider` | workspace, provider | give the workspace a stored embedding provider of its own (`""`: the daemon's again); set up first, and only that workspace re-embeds |
-| `workspace.set_text_extensions` | workspace, list of extensions | declare the workspace's own plain-text extensions (`.log`); answers them normalized. Which files are indexed is still the patterns'. An extension the daemon's build reads with a registered chunker is refused |
-| `workspace.set_schema` | workspace, path | name the frontmatter schema file (under the root, or absolute; `""` for none); answers the `schema` status |
-| `search.query` | workspace, query, options? | see above |
-| `doc.read` | workspace, path | `{content, version}`: the file's text, and its version. A PDF or DOCX a build derives answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a `---` rule, begins `[autodoc: truncated]`: that line is AutoDoc's, not the document's, so stop quoting before it |
-| `doc.outline` | workspace, path | `{version, headings: [{id, level, text, line, byte}]}`: a Markdown file's headings in order, with the version they were read at; other kinds have none |
-| `doc.validate` | workspace, path, content | `{diagnostics: [{field, line, rule, message}]}`: the text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule `unknown_type`); only Markdown has frontmatter |
-| `file.read` | absolute path | `{content, version}` of a UTF-8 text file anywhere on the daemon's disk, as `doc.read`. On the unix socket only (-32001 over TCP); a relative or unclean path, or a file that is not text, is InvalidParams. Protocol 17 |
-| `file.write` | absolute path, content, version | `{version}`, as `doc.write`: at `version`, or `""` to create the file and its folders. Unix socket only. Protocol 17 |
-| `file.locate` | absolute path | `{workspace, path}`: the workspace that indexes the file (the most specific root), its path there; `nil` for none. Unix socket only. Protocol 17 |
-| `index.list` | workspace, after, limit | `{docs: [{path, generation, version}], more}`: every file in path order, after `after` (`""` from the start) |
-| `index.documents` | workspace, options? | `{docs: [{path, generation, title, updated, indexed_at, fields}], more, next}`: the files with their frontmatter, most recently updated first. Options: `sort` (`updated`, `path` or `indexed`), `fields` (the frontmatter fields to return; default `title`, `type`, `status`, `updated`, `tags`, `abstract`), `tags` (every one), `paths` (folders or files), `facets` (as search's), `missing` (files that lack one of these fields), `after` (the previous page's `next`), `limit` (up to 500, default 100). `updated` is the frontmatter's, else when the index last read a change to the file. Protocol 13 |
-| `index.status` | workspace | `{docs, pending_jobs, cursor, diagnosed, held, held_stale, held_unchecked, embeddings: {model, pending, semantic, …}, …}`; `diagnosed` counts files whose frontmatter has a problem; `held` the files another build indexed that this one holds (see `hold` above), `held_stale` and `held_unchecked` among them |
-| `index.changes` | workspace, since, limit | `{cursor, changes: [{path, op, generation}], more}`: what changed after cursor `since` |
-| `graph.links` | workspace, path | `[{path, raw, anchor, kind, resolved}]`: the links the file makes |
-| `graph.backlinks` | workspace, path | the same shape: the files that link to it |
-| `graph.neighborhood` | workspace, path, depth | `{nodes, edges: [{src, dst, kind}]}`: the files within `depth` links |
-| `graph.unresolved` | workspace | `[{src, raw, reason}]`: links that name no file |
-| `graph.resolve` | workspace, from, raw | `{path, reason}`: where one link, as written in the file at `from`, reaches now, saved or not, resolved as the index resolves links; `path` `""` with `reason` `missing` or `ambiguous`, or `""` when `raw` is no link the index keeps (a URL, a heading of `from`). Protocol 18 |
-| `sys.hello` | `{protocol, name}` | `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`: `protocol` is the session's, `server_protocol` and `min_protocol` the range the daemon serves, `store_id` the store's identity, `client` this connection's token, `events` the event log's head |
-| `ranker.list` | — | `{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}`: the stored rankers (`kind` `tei` or `rerank-api`), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (`""` for none), which is then the one in use |
-| `sys.capabilities` | — | `{databases, registrations, ranker, verbs}`: `verbs` is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false, and the daemon refuses its settings), the build's registrations, `{chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}`, empty for the community build, and `ranker`, `{supplied, model}`: whether the build supplies its own ranker |
-| `sys.events` | since, limit (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}`: configuration and lifecycle changes after cursor `since` (a model switch, a workspace's rules, schema, database settings (`workspace.databases`, never a connection) or removal), each with the token of the client that made it (`""` for the daemon itself). `since` −1 answers the head alone; an expired cursor is -32063 |
+Writing files (`doc.write`, `doc.rename`, `doc.remove`, `file.write`), changing workspaces and
+preferences, and choosing the embedding model or the ranker are for people's tools, not an agent's
+search: the tables say **for people's tools**. Do not call them unless the user asks you to change
+their files or settings through AutoDoc. A verb marked *unix socket only* is refused over TCP
+(-32001).
 
-Writing files (`doc.write`, `doc.rename`, `doc.remove`, `file.write`), changing workspaces and choosing the
-embedding model or the ranker (`ranker.add`, `update`, `remove`, `use`, `window`) are for the user's
-tools, not an agent's search. Do not call them unless the user
-asks you to change their files through AutoDoc.
+A refusal's code says what to do next; the errors table lists each with the messages it carries.
 
-## Errors
+<!-- autodoc:contracts:start -->
+<!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-| code | meaning | what to do |
-| --- | --- | --- |
-| -32060 | no such workspace | call `workspace.list` and use a listed name |
-| -32061 | no such file | the path is wrong or not indexed; `index.list` shows the paths |
-| -32602 | invalid parameters | the message says which; check the table above. `held: …` is a reindex of a file this build cannot index again: the message names the way out |
-| -32065 | not supported here | `stages: ["semantic"]` (or `mode: "semantic"`) with no model in use; search with `lexical` among the stages |
-| -32067 | the query could not be embedded | retry, or search with `lexical` among the stages |
-| -32069 | a new model is filling | search with `lexical` among the stages, or with no `stages` |
-| -32070 | the ranker is unavailable, and this build answers ranked results or none | retry later, or leave `rerank` out of the stages for an unranked answer |
-| -32020 | protocol mismatch | the daemon is another version: `autodoc --version`, then restart it |
+Verbs at protocol 20; the daemon serves sessions from protocol 12.
+
+### `doc`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `doc.outline` | `workspace` string, `path` string | `{version, headings: [{id, level, text, line, byte}]}` — A Markdown file's headings in order, with the version they were read at; other kinds have none. Codes: -32060, -32061, -32065. | 8 | agent |
+| `doc.read` | `workspace` string, `path` string | `{content, version}` — The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's. Codes: -32060, -32061, -32065. | 1 | agent |
+| `doc.read_raw` | `workspace` string, `path` string | `{content, version}` — doc.read on an HTML file's own bytes, where doc.read gives its derived text. Codes: -32060, -32061, -32065. | 19 | agent |
+| `doc.remove` | `workspace` string, `path` string, `version` string (the version read) | Codes: -32060, -32061, -32062, -32065. | 1 | for people's tools |
+| `doc.rename` | `workspace` string, `from` string, `to` string | Codes: -32060, -32061, -32062, -32065. | 1 | for people's tools |
+| `doc.validate` | `workspace` string, `path` string, `content` bytes (the text, saved or not) | `{diagnostics: [{field, line, rule, message}]}` — The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter. Codes: -32060. | 8 | agent |
+| `doc.write` | `workspace` string, `path` string, `content` bytes (binary, or a string), `version` string (the version read; "" to create the file) | `{version}` — Writes the file at version; a stale version is a conflict. Codes: -32060, -32061, -32062, -32066, -32065. | 1 | for people's tools |
+| `doc.write_raw` | `workspace` string, `path` string, `content` bytes (binary, or a string), `version` string (the version read; "" to create the file) | `{version}` — doc.write on an HTML file's own bytes, which doc.write refuses. Codes: -32060, -32061, -32062, -32066, -32065. | 19 | for people's tools |
+
+### `embedding`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `embedding.add` | `provider` map ({name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, "" removes it) | `{name, kind, base_url, model, context, has_key}` Logs `embedding.providers`. Codes: -32065, -32062, -32068. | 3 | for people's tools |
+| `embedding.cancel_switch` | — | `{model}` — Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16). Logs `embedding.cancelled`. Codes: -32065. | 4 | for people's tools |
+| `embedding.log` | `name` string, `limit` int | `[{at, texts, tokens, millis, outcome}]` — A provider's recent calls. Codes: -32065, -32061. | 3 | for people's tools |
+| `embedding.model_context` | `stored provider` string ("" for an unsaved one), `provider` map ({name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, "" removes it) | `{maximum}` — The context window the provider's model reports, in tokens. Codes: -32065, -32061, -32068. | 5 | for people's tools |
+| `embedding.models` | `provider` any (a stored provider's name, or an unsaved one's spec), `spec`? map (with a name: the edit asked about) | `[string]` — The models a provider offers. Codes: -32065, -32061, -32068. | 3 | for people's tools |
+| `embedding.providers` | — | `{providers: [{name, kind, base_url, model, context, has_key}], active, error}` — The stored embedding providers, the one in use, and why the one chosen is not in use. Codes: -32065. | 3 | for people's tools |
+| `embedding.remove` | `name` string | Deletes the provider and its model's vectors (refused below protocol 16). Logs `embedding.providers`. Codes: -32065, -32061. | 3 | for people's tools |
+| `embedding.update` | `name` string, `provider` map ({name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, "" removes it) | Logs `embedding.providers`. Codes: -32065, -32061, -32062, -32068. | 3 | for people's tools |
+| `embedding.usage` | `name` string, `days` int | `[{day, requests, texts, tokens, failures, limited}]` — A provider's usage by day. Codes: -32065, -32061. | 3 | for people's tools |
+| `embedding.use` | `name` string | Switches the daemon's provider; the new model fills while the old one answers. Logs `embedding.switched`. Codes: -32065, -32061, -32068. | 3 | for people's tools |
+
+### `file`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `file.locate` | `path` string (absolute and clean) | `{workspace, path} \| nil` — The workspace that indexes the file (the most specific root) and its path there; nil for none. Codes: -32001. | 17 | agent; unix socket only |
+| `file.read` | `path` string (absolute and clean) | `{content, version}` — A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params. Codes: -32001, -32061, -32065. | 17 | agent; unix socket only |
+| `file.read_raw` | `path` string (absolute and clean) | `{content, version}` — file.read on an HTML file's own bytes. Codes: -32001, -32061, -32065. | 19 | agent; unix socket only |
+| `file.write` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — As doc.write, on a file anywhere on the daemon's disk. Codes: -32001, -32061, -32062, -32066, -32065. | 17 | for people's tools; unix socket only |
+| `file.write_raw` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — file.write on an HTML file's own bytes. Codes: -32001, -32061, -32062, -32066, -32065. | 19 | for people's tools; unix socket only |
+
+### `graph`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `graph.backlinks` | `workspace` string, `path` string, `options`? map ({kinds} (protocol 14)) | `[{path, raw, anchor, kind, resolved}]` — The files that link to it. Codes: -32060, -32061. | 1 | agent |
+| `graph.links` | `workspace` string, `path` string, `options`? map ({kinds} (protocol 14)) | `[{path, raw, anchor, kind, resolved}]` — The links the file makes. Codes: -32060, -32061. | 1 | agent |
+| `graph.neighborhood` | `workspace` string, `path` string, `depth` int, `options`? map ({kinds} (protocol 14)) | `{nodes, edges: [{src, dst, kind}]}` — The files within depth links. Codes: -32060, -32061. | 1 | agent |
+| `graph.resolve` | `workspace` string, `from` string (the file the link is written in), `raw` string (the link as written) | `{path, reason}` — Where one link reaches now, saved or not, as the index resolves links: path "" with reason missing or ambiguous, or "" when raw is no link the index keeps (a URL, a heading of from). Codes: -32060. | 18 | agent |
+| `graph.unresolved` | `workspace` string, `options`? map ({kinds} (protocol 14)) | `[{src, raw, reason}]` — Links that name no file. Codes: -32060. | 1 | agent |
+
+### `index`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `index.changes` | `workspace` string, `since` int (a cursor), `limit` int | `{cursor, changes: [{path, op, generation}], more}` — What changed after cursor since. Codes: -32060, -32063. | 1 | agent |
+| `index.documents` | `workspace` string, `opts`? map ({sort, fields, tags, paths, facets, missing, diagnosed, after, limit}) | `{docs: [{path, generation, title, updated, indexed_at, fields, diagnostics?}], more, next}` — The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100. Codes: -32060. | 13 | agent |
+| `index.list` | `workspace` string, `after` string (a path; "" from the start), `limit` int | `{docs: [{path, generation, version}], more}` — Every file in path order, after after. Codes: -32060. | 1 | agent |
+| `index.models` | `workspace` string | `[{fp, provider, name, dims, state, vectors, f32_bytes, bits_bytes, key_bytes}]` — The workspace's models and the room their vectors take. Codes: -32060. | 4 | for people's tools |
+| `index.purge_model` | `workspace` string, `model` string (a model's fp, as index.models answers it) | Deletes a model's vectors; the active model and the target are refused. Codes: -32060. | 1 | for people's tools |
+| `index.reindex` | `workspace` string, `path` string | Indexes one file again; a held file is refused, naming the way out. Codes: -32060, -32061. | 1 | for people's tools |
+| `index.status` | `workspace` string | `{docs, chunks, pending_jobs, cursor, oldest_retained, diagnosed, failing, held, held_stale, held_unchecked, following, warming?, embeddings?, …}` — diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them. Codes: -32060. | 1 | agent |
+
+### `preference`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `preference.list` | — | `{name: value}` — What clients keep between runs. Codes: -32065. | 3 | for people's tools |
+| `preference.set` | `name` string, `value` string | A preference that has a verb of its own (embedding.use, ranker.use, ranker.window) is refused. Logs `preference.changed`. Codes: -32065. | 3 | for people's tools |
+
+### `ranker`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `ranker.add` | `ranker` map ({name, kind, base_url, model, key?}: an absent key keeps the stored one, "" removes it) | `{name, kind, base_url, model, has_key}` Logs `ranker.providers`. Codes: -32065, -32062, -32068. | 11 | for people's tools |
+| `ranker.list` | — | `{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}` — The stored rankers (kind tei or rerank-api), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker ("" for none), which is then the one in use. Codes: -32065. | 11 | for people's tools |
+| `ranker.log` | `name` string, `limit` int | `[{at, texts, tokens, millis, outcome}]` — A ranker's recent calls. Codes: -32065, -32061. | 11 | for people's tools |
+| `ranker.models` | `ranker` any (a stored ranker's name, or an unsaved one's spec), `spec`? map (with a name: the edit asked about) | `[string]` — A TEI server's one model; none for a rerank-API endpoint, whose model is typed. Codes: -32065, -32061, -32068. | 11 | for people's tools |
+| `ranker.remove` | `name` string | Logs `ranker.providers`. Codes: -32065, -32061. | 11 | for people's tools |
+| `ranker.update` | `name` string, `ranker` map ({name, kind, base_url, model, key?}: an absent key keeps the stored one, "" removes it) | Logs `ranker.providers`. Codes: -32065, -32061, -32062, -32068. | 11 | for people's tools |
+| `ranker.usage` | `name` string, `days` int | `[{day, requests, texts, tokens, failures, limited}]` — A ranker's usage by day. Codes: -32065, -32061. | 11 | for people's tools |
+| `ranker.use` | `name` string ("" for none) | Refused while the build supplies its ranker. Logs `ranker.switched`. Codes: -32065, -32061, -32068. | 11 | for people's tools |
+| `ranker.window` | `window` int (how many candidates it ranks, 10 to 100) | Refused while the build supplies its ranker. Logs `ranker.switched`. Codes: -32065. | 11 | for people's tools |
+
+### `search`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `search.query` | `workspace` string, `query` string (words, "phrases", a prefix*, field:value filters), `opts`? map ({limit, stages, mode, tags, paths, facets, retrieval}) | `{hits: [{path, breadcrumb, snippet, byte_start, byte_end, line_start?, line_end?, relevance, score, via, rank_score?, superseded_by?, generation, hold}], mode_used, semantic, rank, stages, semantic_error?}` — The search, ranked: see search.query above. Codes: -32060, -32065, -32067, -32069, -32070. | 1 | agent |
+
+### `sys`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `sys.capabilities` | — | `{databases, registrations, ranker, verbs}` — verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}. | 9 | agent |
+| `sys.contracts` | `filter`? string ("" or "*" for every verb, "domain.*" for a domain's, or a verb's name) | `{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}` — These tables: the verbs this session may call, and the codes they may answer. | 20 | agent |
+| `sys.events` | `since` int (a cursor; -1 answers the head alone), `limit` int (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}` — Configuration and lifecycle changes after cursor since, each with the token of the client that made it ("" for the daemon itself). Codes: -32065, -32063. | 8 | agent |
+| `sys.hello` | `info`? map ({protocol, name}; none, or no protocol, is a probe that admits nothing) | `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}` — Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head. Codes: -32020. | 1 | internal |
+| `sys.shutdown` | — | Stops the daemon. Frozen across protocols. Codes: -32001. | 1 | internal; unix socket only |
+
+### `workspace`
+
+| verb | params | result | since | audience |
+| --- | --- | --- | --- | --- |
+| `workspace.add` | `name` string, `root` string (an absolute directory), `include`? []string (globs), `exclude`? []string (globs) | `{name, root, state, …}` — Adds a workspace and starts serving it; answers it as workspace.list does. Logs `workspace.added`. Codes: -32062, -32065. | 2 | for people's tools |
+| `workspace.configure` | `workspace name` string, `settings` map (any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)) | Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first. Logs `workspace.renamed \| workspace.patterns \| workspace.schema \| workspace.text_extensions \| workspace.section_size \| workspace.embedding_policy \| workspace.provider \| workspace.databases \| workspace.retrieval`. Codes: -32060, -32062, -32061, -32065, -32068. | 9 | for people's tools |
+| `workspace.embedding_policy` | `workspace name` string, `embedding policy` string (always, when opened or never) | Logs `workspace.embedding_policy`. Codes: -32060, -32065. | 6 | for people's tools |
+| `workspace.focus` | `workspace name` string | Embeds this workspace's files first. Codes: -32060, -32065. | 6 | for people's tools |
+| `workspace.list` | — | `[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]` — Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider ("": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN. | 1 | agent |
+| `workspace.remove` | `name` string | Stops serving a workspace and deletes its index; its files stay. Logs `workspace.removed`. Codes: -32060, -32065. | 2 | for people's tools |
+| `workspace.rename` | `name` string, `new name` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |
+| `workspace.section_size` | `name` string, `section size` int (tokens; 0 for the default) | Logs `workspace.section_size`. Codes: -32060, -32065. | 5 | for people's tools |
+| `workspace.set_patterns` | `workspace name` string, `include` []string (globs; empty matches no files), `exclude` []string (globs) | Replaces the workspace's validated globs and reconciles it. Logs `workspace.patterns`. Codes: -32060, -32065. | 7 | for people's tools |
+| `workspace.set_provider` | `workspace name` string, `provider` string (a stored provider; "" for the daemon's) | Gives the workspace a stored embedding provider of its own; it is set up first, and only that workspace re-embeds. Logs `workspace.provider`. Codes: -32060, -32061, -32065, -32068. | 8 | for people's tools |
+| `workspace.set_schema` | `workspace name` string, `schema path` string (under the root, or absolute; "" for none) | `{path, active, fields, error, line}` — Names the workspace's frontmatter schema file; answers its status. Logs `workspace.schema`. Codes: -32060, -32065. | 8 | for people's tools |
+| `workspace.set_text_extensions` | `workspace name` string, `text extensions` []string (".log", …) | `[string]` — Declares the workspace's own plain-text extensions; answers them normalized. One the build reads with a registered chunker is refused. Logs `workspace.text_extensions`. Codes: -32060, -32065. | 8 | for people's tools |
+
+### Errors
+
+| code | name | next | messages |
+| --- | --- | --- | --- |
+| -32001 | `rpc.access_denied` | call it on the unix socket: it is for a local peer |  |
+| -32020 | `rpc.protocol_mismatch` | the daemon serves other protocols: autodoc --version, then restart it, or reconnect declaring one it serves |  |
+| -32021 | `rpc.handshake_required` | say sys.hello first |  |
+| -32060 | `rpc.no_such_workspace` | call workspace.list and use a listed name | "no such workspace" |
+| -32061 | `rpc.not_found` | refresh the listing: the path is wrong or not indexed (index.list), or the provider or ranker is gone | "no such embedding provider"; "no such ranker"; "not found" |
+| -32062 | `rpc.conflict` | doc.read, then merge or retry; for a name, choose another | "another workspace has this name or root"; "another ranker has this name"; "another embedding provider has this name"; "the document is not at that version" |
+| -32063 | `rpc.cursor_expired` | re-list: take index.status's cursor (sys.hello's events head for sys.events), list, and resume from it | "the event cursor is outside the retained log: take a snapshot and resume from the head"; "the change cursor is older than the retained log" |
+| -32065 | `rpc.unsupported` | this daemon or the workspace's filesystem cannot: do without it, or search with lexical among the stages | "this server keeps no preferences"; "this server keeps no embedding providers"; "this server keeps no event log"; "this server keeps no rankers"; "semantic search is not ready: no embedding provider is in use yet (the daemon may still be setting it up); search by words, or set one up in System › Search models"; "this edition has no database settings"; "this server's set of workspaces is fixed"; "this server serves no files outside its workspaces"; "this document's text could not be made now: try again later, or open it in its own viewer"; "this document's text could not be derived: open it in its own viewer"; "the workspace's filesystem cannot do this" |
+| -32066 | `rpc.committed` | the write landed: doc.read and compare, never re-send | "the write landed, then a follow-up step failed: read the document and compare" |
+| -32067 | `rpc.embed_failed` | retry later, or search with lexical among the stages | "the query could not be embedded" |
+| -32068 | `rpc.provider_refused` | switch provider or ranker, or fix its key or base URL | "the ranker's usage limit is reached"; "the ranker refused the key"; "the ranker has no such model"; "the server's model is not a re-ranker"; "the ranker did not answer: check its base URL, and that it is running"; "the ranker's answer is not one score for each text"; "the ranker refused the request"; "the request is over the size a ranker is sent"; "the store's keyslot does not open this provider's key"; "the store's keyslot file is readable by others: make it 0600"; "the provider's usage limit is reached: switch provider, or wait"; "the provider refused the key"; "the provider has no such model: List models shows the ones it has"; "the provider did not answer: check its base URL, and that it is running"; "the model gave no usable vectors: it may be a chat model, not an embedding model"; "the provider rejected the probe text" |
+| -32069 | `rpc.switching` | a new model is filling: search with lexical among the stages until it is ready | "a new model is filling: search by words until it is ready" |
+| -32070 | `rpc.rank_unavailable` | retry later, or leave rerank out of the stages for an unranked answer | "the ranker is unavailable: this build answers ranked results or none" |
+| -32601 | `rpc.method_not_found` | the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call |  |
+| -32602 | `rpc.invalid_params` | the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out | "embedding policy must be always, when opened, or never"; "a preference needs a name"; "this preference is set by its own verb: embedding.use, ranker.use or ranker.window"; "no model switch is under way"; "a ranker needs a name, a kind (tei or rerank-api), a base URL, and a model for rerank-api"; "this build supplies its ranker"; "a ranker's window is 10 to 100 candidates"; "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"; "a provider's context window is 256 to 262144 tokens"; "an Ollama Cloud provider needs its API key"; "the root is not a directory"; "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"; "a derived document is read-only: its text is served, its file never written"; "not a file of this workspace"; "the document is over the size limit"; "not a valid path in the workspace"; "unknown search mode"; "search stages must include lexical or semantic: a ranker only re-orders what they find"; "unknown search stage: the stages are lexical, semantic and rerank"; "a search stage is named twice"; "search stages and a search mode together: send one or the other"; "a facet filter names a field the workspace's schema does not declare"; "a facet filter's value is not of its field's type"; "the model is in use" |
+| -32603 | `rpc.internal` | a failure the daemon's log details: retry, or report it |  |
+
+<!-- autodoc:contracts:end -->

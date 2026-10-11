@@ -51,7 +51,7 @@ var codeDocs = []struct {
 	{CodeSwitching, "rpc.switching", "a new model is filling: search with lexical among the stages until it is ready"},
 	{CodeRankUnavailable, "rpc.rank_unavailable", "retry later, or leave rerank out of the stages for an unranked answer"},
 	{golibrpc.CodeMethodNotFound, "rpc.method_not_found", "the verb is unknown, or newer than the session's protocol: sys.capabilities lists the verbs it may call"},
-	{golibrpc.CodeInvalidParams, "rpc.invalid_params", "the message says which param and why; check the verb's contract"},
+	{golibrpc.CodeInvalidParams, "rpc.invalid_params", "the message says which param and why; check the verb's contract. A reindex refused with held: … names the way out"},
 	{golibrpc.CodeInternal, "rpc.internal", "a failure the daemon's log details: retry, or report it"},
 }
 
@@ -197,10 +197,12 @@ func paramsCell(ps []module.Param) string {
 
 func resultCell(v module.Contract) string {
 	var parts []string
-	if v.Result != "" {
+	switch {
+	case v.Result != "" && v.Doc != "":
+		parts = append(parts, "`"+v.Result+"` — "+v.Doc)
+	case v.Result != "":
 		parts = append(parts, "`"+v.Result+"`")
-	}
-	if v.Doc != "" {
+	case v.Doc != "":
 		parts = append(parts, v.Doc)
 	}
 	if v.Event != nil {

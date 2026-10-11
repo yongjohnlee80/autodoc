@@ -1,5 +1,7 @@
 package rpc
 
+//go:generate go run ../internal/contractsgen -agents ../AGENTS.md
+
 import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 

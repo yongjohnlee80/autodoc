@@ -23,7 +23,7 @@ native GUI are its clients, all over one msgpack-RPC API on a 0600 unix socket.
 | `tui` | the terminal UI: search, the files, a Vim-keyed editor, the relations drawer; its screen written in QML |
 | `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
-| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON; a main hands it its version (ADR 0216) |
+| `app` | the binary's modes as one function, `app.Main`: `--serve` is the daemon, `--ui` the TUI, `--call` one verb as JSON, `--contracts` every verb's contract; a main hands it its version (ADR 0216) |
 | `cmd/autodoc` | the binary, the community build: `app.Main` with no registrations |
 
 ## Install
@@ -154,17 +154,11 @@ left alone. With nothing serving, `--restart` only starts.
 A client that dials the socket itself asks the binary where it is, so it never repeats the rules.
 Every client speaks one API. A session starts with `sys.hello({protocol, name})`, and until then
 only `sys.hello` answers. The daemon serves a range of protocols (`min_protocol` to its own): a
-session keeps the one it declared, and a verb added after it answers as an unknown method. Every
-other verb takes the workspace name first:
-
-| Group | Verbs |
-| --- | --- |
-| `sys` | `hello`, `shutdown`, `capabilities` (what this edition offers beyond the core, `{databases}`, the build's registrations, and the `verbs` this session may call) |
-| `workspace` | `list`, `add(name, root, include?, exclude?)`, `configure(name, settings)`, `set_patterns(name, include, exclude)`, `rename(name, to)`, `remove(name)`, `focus(name)`, `embedding_policy(name, policy)` (`always`, `when opened`, `never`), `section_size(name, tokens)`, `set_schema(name, path)`, `set_text_extensions(name, exts)`, `set_provider(name, provider)` |
-| `search` | `query(ws, q, {limit, stages, mode, tags, paths, facets})`: `stages` is any of `lexical`, `semantic` and `rerank`, at least one of the first two (default: all); the answer's `stages` says which ran, and why the others did not; a hit gives its lines (`line_start`, `line_end`) beside its bytes |
-| `index` | `status`, `list(ws, after, limit)`, `documents(ws, {sort, fields, tags, paths, facets, missing, diagnosed, after, limit})` (the files with their frontmatter, most recently updated first; `diagnosed` keeps the ones the schema diagnoses, each with its `diagnostics`), `changes(ws, since, limit)`, `reindex(ws, path)`, `purge_model` |
-| `graph` | `links`, `backlinks`, `neighborhood(ws, path, depth)`, `unresolved` |
-| `doc` | `read`, `write(ws, path, content, version)`, `rename`, `remove(ws, path, version)` |
+session keeps the one it declared, and a verb added after it answers as an unknown method.
+[AGENTS.md](AGENTS.md)'s tables list every verb with its params, its answer, the protocol it arrived
+in and its error codes; they are generated from the verbs' contracts, which `autodoc --contracts`
+prints as JSON with no daemon (`--format md` for the tables), and `sys.contracts` answers on a
+connection.
 
 The server only answers: it never sends a notification. A client follows changes by pulling
 `index.changes` from a cursor. When that cursor has expired, it takes `index.status`'s cursor, re-lists
