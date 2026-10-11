@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -117,10 +119,28 @@ func (h *Host) saveAgent(name, command string) {
 	h.say("saved the agent profile " + name)
 }
 
-// removeAgent removes profile i; it is the default no more.
+// removeAgent asks about the profile at i. The answer holds that profile, not
+// the row: a list refresh or a changed selection cannot remove a different one.
 func (h *Host) removeAgent(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
+		return
+	}
+	h.ask(Question{
+		Title: "remove the agent profile?",
+		Text: fmt.Sprintf("Remove the saved agent profile %q? It will no longer be available to start. "+
+			"A running agent is not stopped.", a.Name),
+		Yes:   "&Yes, remove it",
+		OnYes: func() { h.removeAgentConfirmed(a) },
+	})
+}
+
+// removeAgentConfirmed removes the exact profile the question named. A profile
+// edited or removed while the card was open needs a new question.
+func (h *Host) removeAgentConfirmed(a agentProfile) {
+	i := slices.Index(h.prefs.agents, a)
+	if i < 0 {
+		h.say("the agent profile changed; ask to remove it again")
 		return
 	}
 	agents := append(append([]agentProfile(nil), h.prefs.agents[:i]...), h.prefs.agents[i+1:]...)

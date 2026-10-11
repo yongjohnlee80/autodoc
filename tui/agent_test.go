@@ -241,6 +241,8 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	onLoop(r, func() bool { r.h.makeAgentDefault(1); return true })
 	r.s.WaitForText(t, "SPC g opens codex")
 	onLoop(r, func() bool { r.h.removeAgent(1); return true })
+	r.s.WaitForText(t, "remove the agent profile?")
+	r.keys(t, key('y'))
 	r.s.WaitForText(t, "Make default marks the one SPC g opens")
 	d.waitStored(t, "", `[{"name":"claude-opus","command":"claude --model opus"}]`)
 	// Profiles but no default: SPC g asks for one.
@@ -251,6 +253,48 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	again := attached(t, d)
 	if n := onLoop(again, func() int { return len(again.h.prefs.agents) }); n != 1 {
 		t.Errorf("a new TUI reads %d profiles, want the 1 kept", n)
+	}
+}
+
+func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
+	profiles := []agentProfile{{Name: "alpha", Command: "alpha"}, {Name: "beta", Command: "beta"}, {Name: "gamma", Command: "gamma"}}
+	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "beta")
+	count := func() int { return onLoop(r, func() int { return len(r.h.prefs.agents) }) }
+	onLoop(r, func() bool { r.h.removeAgent(1); return true })
+	r.s.WaitForText(t, "remove the agent profile?")
+	if count() != 3 {
+		t.Fatal("asking removed a profile before an answer")
+	}
+	r.keys(t, enter()) // No is initially focused.
+	r.s.WaitFor(t, "No closes the question", func(sc string) bool { return !strings.Contains(sc, "remove the agent profile?") })
+	if count() != 3 {
+		t.Fatal("No removed a profile")
+	}
+	onLoop(r, func() bool {
+		r.h.removeAgent(1)
+		r.h.ask(Question{Title: "another question?", Text: "Nothing is removed."})
+		return true
+	})
+	r.s.WaitForText(t, "another question?")
+	r.keys(t, key('y'))
+	r.s.WaitFor(t, "replacement closes", func(sc string) bool { return !strings.Contains(sc, "another question?") })
+	if count() != 3 {
+		t.Fatal("answering a replacement removed the old question's profile")
+	}
+	onLoop(r, func() bool {
+		r.h.removeAgent(1) // beta at row 1 when asked
+		r.h.prefs.agents = []agentProfile{profiles[1], profiles[0], profiles[2]}
+		return true
+	})
+	r.s.WaitForText(t, "remove the agent profile?")
+	r.keys(t, key('y'))
+	r.s.WaitFor(t, "beta removed", func(string) bool { return count() == 2 })
+	got := onLoop(r, func() []agentProfile { return append([]agentProfile(nil), r.h.prefs.agents...) })
+	if got[0] != profiles[0] || got[1] != profiles[2] {
+		t.Fatalf("Yes removed a changed row instead of beta: %v", got)
+	}
+	if def := onLoop(r, func() string { return r.h.prefs.agentDefault }); def != "" {
+		t.Errorf("removed profile is still default: %q", def)
 	}
 }
 
