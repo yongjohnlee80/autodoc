@@ -153,7 +153,6 @@ func (s *Server) register() {
 	s.registerEmbeddings()
 	s.registerRankers()
 	s.registerEvents()
-	s.registerFiles()
 	s.configureVerbs()
 	s.registerContracts()
 	s.own(s.preferenceVerbs()...)
@@ -162,12 +161,10 @@ func (s *Server) register() {
 	s.own(s.indexVerbs()...)
 	s.own(s.graphVerbs()...)
 	s.own(s.docVerbs()...)
+	s.own(s.fileVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 }
-
-// verbFunc is a verb's body: its workspace (nil for one that names none) and its params.
-type verbFunc = func(context.Context, *Workspace, []any) (any, error)
 
 // verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
 // first when ws is set, and maps the errors.

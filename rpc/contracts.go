@@ -75,28 +75,6 @@ func legacyVerbs() []verb {
 			Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},
 			events: configureEvents},
 
-		// file
-		c(module.Contract{Verb: "file.read", Since: 17, Scope: local, Audience: agent,
-			Params: []module.Param{param("path", "string", "absolute and clean")},
-			Result: "{content, version}", Errors: []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported},
-			Doc: "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."}),
-		c(module.Contract{Verb: "file.read_raw", Since: 19, Scope: local, Audience: agent,
-			Params: []module.Param{param("path", "string", "absolute and clean")},
-			Result: "{content, version}", Errors: []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported},
-			Doc: "file.read on an HTML file's own bytes."}),
-		c(module.Contract{Verb: "file.write", Since: 17, Scope: local, Audience: user,
-			Params: []module.Param{param("path", "string", "absolute and clean"), param("content", "bytes", "UTF-8 text"), param("version", "string", "the version read; \"\" to create the file and its folders")},
-			Result: "{version}", Errors: []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported},
-			Doc: "As doc.write, on a file anywhere on the daemon's disk."}),
-		c(module.Contract{Verb: "file.write_raw", Since: 19, Scope: local, Audience: user,
-			Params: []module.Param{param("path", "string", "absolute and clean"), param("content", "bytes", "UTF-8 text"), param("version", "string", "the version read; \"\" to create the file and its folders")},
-			Result: "{version}", Errors: []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported},
-			Doc: "file.write on an HTML file's own bytes."}),
-		c(module.Contract{Verb: "file.locate", Since: 17, Scope: local, Audience: agent,
-			Params: []module.Param{param("path", "string", "absolute and clean")},
-			Result: "{workspace, path} | nil", Errors: []int64{golibrpc.CodeAccessDenied},
-			Doc: "The workspace that indexes the file (the most specific root) and its path there; nil for none."}),
-
 		// embedding
 		c(module.Contract{Verb: "embedding.providers", Since: 3, Scope: global, Audience: user, Params: none,
 			Result: "{providers: [{name, kind, base_url, model, context, has_key}], active, error}", Errors: []int64{CodeUnsupported},
