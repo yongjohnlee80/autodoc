@@ -40,13 +40,8 @@ function M.validate(s, text)
   end
   local tv = fm.keys[s.discriminator] and fm.keys[s.discriminator].value
   local t = type(tv) == "string" and tv or nil
-  local fields
-  if t and s.types[t] then
-    fields = schema.fields_for(s, t)
-  else
-    fields = schema.fields_for(s, nil)
-    if t then add(s.discriminator, "unknown_type", ("unknown type %q"):format(t)) end
-  end
+  -- a type the schema has no fields for is checked against common alone
+  local fields = schema.fields_for(s, t and s.types[t] and t or nil)
   for _, f in ipairs(fields) do
     local k = fm.keys[f.name]
     local v = k and k.value
@@ -61,8 +56,11 @@ function M.validate(s, text)
         for _, x in ipairs(vals) do
           if not check_scalar(itype, x) then
             add(f.name, "type", ("%s: %q is not a %s"):format(f.name, x, itype))
-          elseif f.enum and not enum_has(f.enum, x) and not (f.name == s.discriminator and not s.types[x]) then
+          elseif f.enum and not enum_has(f.enum, x) then
             add(f.name, "enum", ("%s: %q is not one of %s"):format(f.name, x, table.concat(f.enum, ", ")))
+          elseif f.name == s.discriminator and not s.types[x] then
+            -- as core/schema: a type its enum allows that the schema has no section for
+            add(f.name, "unknown_type", ("unknown type %q"):format(x))
           end
         end
       end
