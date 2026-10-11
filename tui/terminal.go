@@ -13,14 +13,9 @@ import (
 // the shell, and Ctrl+\ Ctrl+n (or Esc in the Vim editor mode, outside full-screen programs) leaves
 // for Normal mode over its history.
 
-// The terminal's preferences: where it opens, and at each place its size across the edge and its
-// length along it, in percent of the Window.
-const (
-	prefTermEdge   = "tui.terminal.edge"
-	prefTermPrefix = "tui.terminal."
-	prefTermSize   = ".size"
-	prefTermLength = ".length"
-)
+// The terminal's preference: where it opens. Its sizes are the panels' one way (panelsize.go), and
+// its defaults and bounds are its spec's (panels.go).
+const prefTermEdge = "tui.terminal.edge"
 
 // termEdges are where the terminal opens, in the order the Preferences dialog offers them: the
 // Drawer's edges and its centre.
@@ -51,9 +46,9 @@ func percents(lo, hi int) []int {
 	return out
 }
 
-// termDefault is a place's size and length before the user sets them: a third of the Window's
-// height at the top or bottom, two fifths of its width at a side, both the full length; 70 by 70
-// centred.
+// termDefault is the terminal's size and length at a place before the user sets them: a third of
+// the Window's height at the top or bottom, two fifths of its width at a side, both the full
+// length; 70 by 70 centred.
 func termDefault(edge string) (size, length int) {
 	switch edge {
 	case "left", "right":
@@ -64,32 +59,10 @@ func termDefault(edge string) (size, length int) {
 	return 30, 100
 }
 
-// termGeometry is the terminal's size and length at an edge: the stored ones, or that edge's
-// defaults, so a size set at the bottom never stretches a centred pane.
-func (p prefs) termGeometry(edge string) (size, length int) {
-	size, length = termDefault(edge)
-	if v, ok := p.termSize[edge]; ok {
-		size = v
-	}
-	if v, ok := p.termLength[edge]; ok {
-		length = v
-	}
-	return size, length
-}
-
-// readTermPrefs reads the terminal's preferences from the store's, keeping the defaults for
-// anything it cannot use.
+// readTermPrefs reads where the terminal opens, keeping the default for a place it cannot use.
 func readTermPrefs(p *prefs, m map[string]any) {
 	if s, _ := m[prefTermEdge].(string); indexOfOK(termEdges, s) {
 		p.termEdge = s
-	}
-	for _, edge := range termEdges {
-		if n, ok := pct(m[prefTermPrefix+edge+prefTermSize], 10, 90); ok {
-			p.termSize[edge] = n
-		}
-		if n, ok := pct(m[prefTermPrefix+edge+prefTermLength], 10, 100); ok {
-			p.termLength[edge] = n
-		}
 	}
 }
 
@@ -111,7 +84,7 @@ func indexOfOK(list []string, s string) bool {
 
 // termState is what the document reads of the terminal's preferences.
 func termState(p prefs) map[string]any {
-	size, length := p.termGeometry(p.termEdge)
+	size, length := p.panelGeometry("terminal", p.termEdge)
 	return map[string]any{
 		"App.terminalEdge":   p.termEdge,
 		"App.terminalSize":   size,
@@ -121,7 +94,7 @@ func termState(p prefs) map[string]any {
 
 // syncTermDialog sets the Preferences dialog's terminal choosers.
 func (h *Host) syncTermDialog() {
-	size, length := h.prefs.termGeometry(h.prefs.termEdge)
+	size, length := h.prefs.panelGeometry("terminal", h.prefs.termEdge)
 	h.set("App.terminalEdgeIndex", indexOf(termEdges, h.prefs.termEdge))
 	h.set("App.terminalSizeIndex", nearest(termSizes, size))
 	h.set("App.terminalLengthIndex", nearest(termLengths, length))
@@ -153,22 +126,17 @@ func (h *Host) setTerminalEdge(i int) {
 	}
 }
 
-// setTerminalSize and setTerminalLength set the size at the edge the terminal opens from now.
+// setTerminalSize and setTerminalLength set the size at the place the terminal opens from now, the
+// panels' one way.
 func (h *Host) setTerminalSize(i int) {
 	if i >= 0 && i < len(termSizes) {
-		edge, n := h.prefs.termEdge, termSizes[i]
-		h.setPref(prefTermPrefix+edge+prefTermSize, strconv.Itoa(n), func(p *prefs) {
-			p.termSize = withEntry(p.termSize, edge, n)
-		})
+		h.keepPanelGeo("terminal", "size", termSizes[i])
 	}
 }
 
 func (h *Host) setTerminalLength(i int) {
 	if i >= 0 && i < len(termLengths) {
-		edge, n := h.prefs.termEdge, termLengths[i]
-		h.setPref(prefTermPrefix+edge+prefTermLength, strconv.Itoa(n), func(p *prefs) {
-			p.termLength = withEntry(p.termLength, edge, n)
-		})
+		h.keepPanelGeo("terminal", "length", termLengths[i])
 	}
 }
 
@@ -182,15 +150,10 @@ func withEntry(m map[string]int, k string, v int) map[string]int {
 	return out
 }
 
-// toggleTerminal is SPC ` and Go › Terminal. Opening it the first time starts the shell, in
-// the workspace's folder; opening it remembers which pane had the keyboard, for hiding it to give
-// it back.
-func (h *Host) toggleTerminal() {
-	if h.panelOpen["terminal"] {
-		h.termRestore = h.paneHasKeyboard("terminalView")
-		h.keep(h.p.Call("terminal", "close"))
-		return
-	}
+// openTerminalPanel is the terminal's spec Open (panels.go): it remembers which pane had the
+// keyboard, for hiding it to give it back, opens the drawer, starts the shell the first time, and
+// gives the terminal the keyboard. SPC ` and Go › Terminal are togglePanel, which comes here.
+func (h *Host) openTerminalPanel() {
 	h.termBefore = h.keyboardPane()
 	h.keep(h.p.Call("terminal", "open"))
 	if !h.termStarted {
@@ -207,6 +170,23 @@ func (h *Host) toggleTerminal() {
 	}
 	h.keep(h.p.Call("terminalView", "forceActiveFocus"))
 }
+
+// closeTerminalPanel is the terminal's spec Close: it remembers whether the terminal had the
+// keyboard, for the close to give it back, and closes the drawer.
+func (h *Host) closeTerminalPanel() {
+	h.termRestore = h.paneHasKeyboard("terminalView")
+	h.closeDrawer("terminal")
+}
+
+// terminalPanelClosed is the terminal's spec Closed: the drawer is closed, however it closed
+// (Escape inside it, SPC ` from it), and the keyboard goes back where it was.
+func (h *Host) terminalPanelClosed() {
+	h.set("App.terminalShown", false)
+	h.terminalClosed()
+}
+
+// toggleTerminal is SPC ` and Go › Terminal: togglePanel, the one way (panels.go).
+func (h *Host) toggleTerminal() { h.togglePanel("terminal") }
 
 // openTerminal is the command line's terminal: the terminal panel open with the keyboard in it,
 // opening it if it is closed (SPC ` toggles it).

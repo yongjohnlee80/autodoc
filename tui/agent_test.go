@@ -307,7 +307,7 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 	})
 	again := attached(t, d)
 	if g := onLoop(again, func() [2]int {
-		s, l := again.h.prefs.agentGeometry("top")
+		s, l := again.h.prefs.panelGeometry("agent", "top")
 		return [2]int{s, l}
 	}); g != [2]int{60, 70} {
 		t.Errorf("a new TUI sizes the agent %v, want the kept 60 by 70", g)
@@ -316,7 +316,7 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 		place string
 		want  [2]int
 	}{{"top", [2]int{50, 100}}, {"left", [2]int{50, 100}}, {"center", [2]int{80, 80}}} {
-		s, l := (prefs{}).agentGeometry(tc.place)
+		s, l := (prefs{}).panelGeometry("agent", tc.place)
 		if g := [2]int{s, l}; g != tc.want {
 			t.Errorf("before a drag the agent at %s is %v, want %v", tc.place, g, tc.want)
 		}

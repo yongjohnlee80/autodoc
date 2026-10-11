@@ -1,7 +1,5 @@
 package tui
 
-import "strconv"
-
 // AGENT PLACE — where the agent panel opens: an edge or the centre, chosen in Preferences as the
 // terminal's place is (terminal.go), at that place's size and length. A size or length is kept
 // per place, chosen in Preferences or dragged with the panel's grip (panelResized):
@@ -26,18 +24,6 @@ func agentDefault(edge string) (size, length int) {
 	return 50, 100
 }
 
-// agentGeometry is the agent's size and length at a place: the ones set there, or its defaults.
-func (p prefs) agentGeometry(edge string) (size, length int) {
-	size, length = agentDefault(edge)
-	if v, ok := p.panelGeo[panelPref("agent", edge, "size")]; ok {
-		size = v
-	}
-	if v, ok := p.panelGeo[panelPref("agent", edge, "length")]; ok {
-		length = v
-	}
-	return size, length
-}
-
 // readAgentPrefs reads where the agent opens, keeping the default for a place it cannot use. Its
 // sizes are read with the side panels' (readPanelPrefs).
 func readAgentPrefs(p *prefs, m map[string]any) {
@@ -48,7 +34,7 @@ func readAgentPrefs(p *prefs, m map[string]any) {
 
 // agentState is what the document reads of where the agent opens.
 func agentState(p prefs) map[string]any {
-	size, length := p.agentGeometry(p.agentEdge)
+	size, length := p.panelGeometry("agent", p.agentEdge)
 	return map[string]any{
 		"App.agentEdge":   p.agentEdge,
 		"App.agentSize":   size,
@@ -58,7 +44,7 @@ func agentState(p prefs) map[string]any {
 
 // syncAgentDialog sets the Preferences dialog's agent choosers.
 func (h *Host) syncAgentDialog() {
-	size, length := h.prefs.agentGeometry(h.prefs.agentEdge)
+	size, length := h.prefs.panelGeometry("agent", h.prefs.agentEdge)
 	h.set("App.agentEdgeIndex", indexOf(agentEdges, h.prefs.agentEdge))
 	h.set("App.agentSizeIndex", nearest(termSizes, size))
 	h.set("App.agentLengthIndex", nearest(termLengths, length))
@@ -76,14 +62,12 @@ func (h *Host) setAgentEdge(i int) {
 // setAgentSize and setAgentLength set the size at the place the agent opens from now.
 func (h *Host) setAgentSize(i int) {
 	if i >= 0 && i < len(termSizes) {
-		k, n := panelPref("agent", h.prefs.agentEdge, "size"), termSizes[i]
-		h.setPref(k, strconv.Itoa(n), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
+		h.keepPanelGeo("agent", "size", termSizes[i])
 	}
 }
 
 func (h *Host) setAgentLength(i int) {
 	if i >= 0 && i < len(termLengths) {
-		k, n := panelPref("agent", h.prefs.agentEdge, "length"), termLengths[i]
-		h.setPref(k, strconv.Itoa(n), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
+		h.keepPanelGeo("agent", "length", termLengths[i])
 	}
 }

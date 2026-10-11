@@ -2,77 +2,80 @@ package tui
 
 import "strconv"
 
-// PANEL SIZES — the explorer's, the links' and the agent's size across their edge and length along
-// it, in percent of the Window, kept per edge as the terminal's are (terminal.go), and set by
-// dragging a panel's corner grip (ADR 1791213315): tui.explorer.<edge>.size and .length,
-// tui.links.<edge>.size and .length, tui.agent.<place>.size and .length (the agent's places and
-// defaults are agentplace.go's). A drag of the terminal writes its own, tui.terminal.<edge>.size
-// and .length.
+// PANEL SIZES — every panel's size across its edge and length along it, in percent of the Window,
+// kept per edge and place as one preference shape, tui.<panel>.<place>.size and .length, set by
+// dragging a panel's corner grip or in Preferences. Each panel's defaults and
+// bounds are its spec's (panels.go); the HTML pane sizes itself and keeps none.
 
 // sidePanelMin is the explorer's and the links' smallest size across their edge, in percent: their
 // trees stay readable.
 const sidePanelMin = 15
 
-// panelPref is a side panel's size or length preference at an edge.
+// panelPref is a panel's size or length preference at a place.
 func panelPref(panel, edge, what string) string { return "tui." + panel + "." + edge + "." + what }
 
-// sideDefault is a side panel's size and length before the user drags it: a third across, and
-// 85% along a side or 80% along the top or bottom.
+// sideDefault is the explorer's and the links' size and length before the user drags them: a
+// third across, and 85% along a side or 80% along the top or bottom.
 func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
 
-// sideGeometry is a side panel's size and length at an edge: the dragged ones, or the defaults.
-func (p prefs) sideGeometry(panel, edge string) (size, length int) {
-	size, length = sideDefault(edge)
-	if v, ok := p.panelGeo[panelPref(panel, edge, "size")]; ok {
+// panelGeometry is a panel's size and length at a place: the kept ones, or its spec's defaults.
+func (p prefs) panelGeometry(id, edge string) (size, length int) {
+	s := panelSpec(id)
+	if s == nil || s.Default == nil {
+		return 0, 0
+	}
+	size, length = s.Default(edge)
+	if v, ok := p.panelGeo[panelPref(id, edge, "size")]; ok {
 		size = v
 	}
-	if v, ok := p.panelGeo[panelPref(panel, edge, "length")]; ok {
+	if v, ok := p.panelGeo[panelPref(id, edge, "length")]; ok {
 		length = v
 	}
 	return size, length
 }
 
-// readPanelPrefs reads the side panels' sizes, keeping the defaults for anything out of bounds.
+// readPanelPrefs reads every sized panel's geometry, keeping the defaults for anything out of
+// bounds. The spec names the places and the bounds, so a panel cannot be missed here.
 func readPanelPrefs(p *prefs, m map[string]any) {
-	for _, spec := range panelSpecs {
-		panel := spec.ID
-		for _, edge := range spec.Places {
-			if n, ok := pct(m[panelPref(panel, edge, "size")], sidePanelMin, 90); ok {
-				p.panelGeo = withEntry(p.panelGeo, panelPref(panel, edge, "size"), n)
+	for _, s := range panelSpecs {
+		if s.Places == nil {
+			continue
+		}
+		for _, edge := range s.Places {
+			if n, ok := pct(m[panelPref(s.ID, edge, "size")], s.Size[0], s.Size[1]); ok {
+				p.panelGeo = withEntry(p.panelGeo, panelPref(s.ID, edge, "size"), n)
 			}
-			if n, ok := pct(m[panelPref(panel, edge, "length")], 20, 100); ok {
-				p.panelGeo = withEntry(p.panelGeo, panelPref(panel, edge, "length"), n)
+			if n, ok := pct(m[panelPref(s.ID, edge, "length")], s.Length[0], s.Length[1]); ok {
+				p.panelGeo = withEntry(p.panelGeo, panelPref(s.ID, edge, "length"), n)
 			}
 		}
 	}
 }
 
+// keepPanelGeo writes a panel's size or length at the place it opens from now, one path for
+// Preferences and a finished drag.
+func (h *Host) keepPanelGeo(panel, what string, n int) {
+	edge := panelSpec(panel).Edge(h.prefs)
+	k := panelPref(panel, edge, what)
+	h.setPref(k, strconv.Itoa(n), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
+}
+
 // panelState is what the document reads of the side panels' sizes, at the edges they open from.
 func panelState(p prefs) map[string]any {
-	es, el := p.sideGeometry("explorer", p.explorerEdge)
-	ls, ll := p.sideGeometry("links", p.linkEdge)
+	es, el := p.panelGeometry("explorer", p.explorerEdge)
+	ls, ll := p.panelGeometry("links", p.linkEdge)
 	return map[string]any{
 		"App.explorerSize": es, "App.explorerLength": el,
 		"App.linksSize": ls, "App.linksLength": ll,
 	}
 }
 
-// panelResized is a panel's grip released: its size and length kept for the edge it opens from
-// now, the terminal's as the Preferences dialog keeps them.
+// panelResized is a panel's grip released: its size and length kept for the place it opens from
+// now, the one way for every panel.
 func (h *Host) panelResized(panel string, size, length int) {
-	switch panel {
-	case "terminal":
-		edge := h.prefs.termEdge
-		h.setPref(prefTermPrefix+edge+prefTermSize, strconv.Itoa(size), func(p *prefs) {
-			p.termSize = withEntry(p.termSize, edge, size)
-		})
-		h.setPref(prefTermPrefix+edge+prefTermLength, strconv.Itoa(length), func(p *prefs) {
-			p.termLength = withEntry(p.termLength, edge, length)
-		})
-	case "explorer", "links", "agent":
-		edge := h.panelEdges()[panel]
-		sk, lk := panelPref(panel, edge, "size"), panelPref(panel, edge, "length")
-		h.setPref(sk, strconv.Itoa(size), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, sk, size) })
-		h.setPref(lk, strconv.Itoa(length), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, lk, length) })
+	if s := panelSpec(panel); s == nil || s.Places == nil {
+		return // a panel that sizes itself keeps no geometry
 	}
+	h.keepPanelGeo(panel, "size", size)
+	h.keepPanelGeo(panel, "length", length)
 }

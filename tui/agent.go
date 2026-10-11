@@ -67,10 +67,12 @@ func (p prefs) agentProfile(name string) (agentProfile, bool) {
 // toggleAgent is SPC g: the agent running shown or hidden; none running, the default started;
 // no default, the profiles, which say what to do.
 func (h *Host) toggleAgent() {
-	if h.panelOpen["agent"] {
-		h.keep(h.p.Call("agent", "close"))
-		return
-	}
+	h.togglePanel("agent")
+}
+
+// openAgentPanel shows the running agent, or starts the default profile. With no
+// default, it opens the profiles dialog instead of an empty terminal.
+func (h *Host) openAgentPanel() {
 	if h.agentRunning != "" {
 		h.keep(h.p.Call("agent", "open"))
 		h.keep(h.p.Call("agentView", "forceActiveFocus"))

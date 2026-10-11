@@ -84,10 +84,11 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.prefs.explorerEdge, r.h.prefs.linkEdge, r.h.prefs.agentEdge = "left", "right", "bottom"
+		r.h.prefs.explorerEdge, r.h.prefs.linkEdge, r.h.prefs.agentEdge, r.h.prefs.termEdge = "left", "right", "bottom", "center"
 		r.h.panelResized("explorer", 20, 70)
 		r.h.panelResized("links", 25, 75)
 		r.h.panelResized("agent", 40, 90)
+		r.h.panelResized("terminal", 60, 80)
 		r.h.panelResized("nope", 1, 1) // no such panel: nothing
 		return true
 	})
@@ -95,6 +96,7 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 		"tui.explorer.left.size": 20, "tui.explorer.left.length": 70,
 		"tui.links.right.size": 25, "tui.links.right.length": 75,
 		"tui.agent.bottom.size": 40, "tui.agent.bottom.length": 90,
+		"tui.terminal.center.size": 60, "tui.terminal.center.length": 80,
 	}
 	got := onLoop(r, func() map[string]int { return r.h.prefs.panelGeo })
 	for k, v := range want {
@@ -116,7 +118,7 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	if _, kept := p.panelGeo["tui.links.right.size"]; kept {
 		t.Error("a size under the minimum was kept")
 	}
-	if s, l := p.sideGeometry("links", "right"); s != 30 || l != 75 {
+	if s, l := p.panelGeometry("links", "right"); s != 30 || l != 75 {
 		t.Errorf("links at the right: %d × %d, want the default size and the kept length", s, l)
 	}
 }
