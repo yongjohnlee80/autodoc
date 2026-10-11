@@ -33,6 +33,35 @@ func TestTheAgentPanelHasAnEdge(t *testing.T) {
 	}
 }
 
+// Two open panels on the same edge use registry order on every move. Returning
+// to the editor between moves exercises target selection afresh; a map walk
+// used to send the keyboard to either panel depending on iteration order.
+func TestPaneMoveToSharedEdgeUsesRegistryOrder(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool {
+		r.h.prefs.explorerEdge, r.h.prefs.linkEdge = "left", "left"
+		r.h.keep(r.h.p.Call("explorer", "open"))
+		r.h.keep(r.h.p.Call("links", "open"))
+		return true
+	})
+	for i := 0; i < 128; i++ {
+		got := onLoop(r, func() string {
+			r.h.focusEditor()
+			r.h.movePane("h")
+			for _, id := range []string{"explorerTree", "linksList", "editor"} {
+				if c, ok := r.h.p.Find(id); ok && r.h.p.App().FocusWithin(c) {
+					return id
+				}
+			}
+			return ""
+		})
+		if got != "explorerTree" {
+			t.Fatalf("shared-edge move %d focused %q, want the first panel explorerTree", i, got)
+		}
+	}
+}
+
 // TestAnyPanelAtTheRightHidesTheFindCard: "finding …" sits at the top right, so any open panel
 // docked there hides it, not the explorer and the links only.
 func TestAnyPanelAtTheRightHidesTheFindCard(t *testing.T) {

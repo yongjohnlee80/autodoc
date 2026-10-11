@@ -4,7 +4,8 @@ import "strconv"
 
 // PANEL SIZES — every panel's size across its edge and length along it, in percent of the Window,
 // kept per edge and place as one preference shape, tui.<panel>.<place>.size and .length, set by
-// dragging a panel's corner grip or in Preferences. Each panel's defaults and
+// Preferences. Floating rectangles from move/resize gestures are kept separately
+// in panelFloat (panelfloat.go). Each panel's defaults and
 // bounds are its spec's (panels.go); the HTML pane sizes itself and keeps none.
 
 // sidePanelMin is the explorer's and the links' smallest size across their edge, in percent: their

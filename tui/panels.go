@@ -152,7 +152,8 @@ var dirEdge = map[string]string{"h": "left", "l": "right", "k": "top", "j": "bot
 var opposite = map[string]string{"left": "right", "right": "left", "top": "bottom", "bottom": "top"}
 
 // movePane is Ctrl+h/j/k/l: from the page, in Normal mode, to the open panel at that edge; from a
-// panel, back to the page the other way.
+// panel, back to the page the other way. When panels share an edge, declared
+// registry order determines the target; map iteration must never pick focus.
 func (h *Host) movePane(dir string) {
 	edge, ok := dirEdge[dir]
 	if !ok {
@@ -163,16 +164,16 @@ func (h *Host) movePane(dir string) {
 		if h.core.Mode() != widget.ModeNormal {
 			return // Insert mode: the editor's keys, not a move
 		}
-		for name, at := range h.panelEdges() {
-			if at == edge && h.panelOpen[name] {
-				h.keep(h.p.Call(panelView(name), "forceActiveFocus"))
+		for _, s := range panelSpecs {
+			if s.Edge(h.prefs) == edge && h.panelOpen[s.ID] {
+				h.keep(h.p.Call(s.View, "forceActiveFocus"))
 				return
 			}
 		}
 		return
 	}
-	for name, at := range h.panelEdges() {
-		if c, ok := h.p.Find(panelView(name)); ok && app.FocusWithin(c) && edge == opposite[at] {
+	for _, s := range panelSpecs {
+		if c, ok := h.p.Find(s.View); ok && app.FocusWithin(c) && edge == opposite[s.Edge(h.prefs)] {
 			h.keep(h.p.Call("editor", "forceActiveFocus"))
 			return
 		}
