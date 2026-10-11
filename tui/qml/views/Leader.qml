@@ -40,5 +40,6 @@ Dialog {
     Shortcut { sequence: "Shift+L"; onActivated: { leader.close(); App.arrangePanel() } }
     Shortcut { sequence: "."; onActivated: { leader.close(); App.openContextMenu() } }
     Shortcut { sequence: "Shift+T"; onActivated: { leader.close(); App.openTutorial() } }
+    Shortcut { sequence: "x"; onActivated: { leader.close(); App.openTodos() } }
     Shortcut { sequence: "Shift+Q"; onActivated: { leader.close(); App.quit() } }
 }

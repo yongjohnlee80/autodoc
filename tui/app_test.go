@@ -31,6 +31,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/todo"
+	"github.com/yongjohnlee80/autodoc/core/todo/todotest"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -55,6 +57,9 @@ type daemon struct {
 	db      *store.Store
 	stop    func()
 	stopped chan struct{} // closed once its server has stopped, by stop or by sys.shutdown
+	// the todo system, over an in-memory disk where each workspace's root is a folder
+	todos    *todo.Manager
+	todoDisk *todotest.Disk
 }
 
 // startDaemon serves the workspaces named (each with its files, path then content). A name ending
@@ -232,6 +237,14 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		nr.left.Store(o.notReady)
 		set = nr
 	}
+	d.todoDisk = todotest.NewDisk()
+	roots := todotest.Roots{}
+	for _, w := range served {
+		roots[w.Name] = w.Root
+		d.todoDisk.MkdirAll(w.Root)
+	}
+	d.todos = todo.New(roots, d.todoDisk, todotest.NewJournal())
+	opts = append(opts, rpc.WithModules(d.todos))
 	srv := rpc.New(set, version, opts...)
 	done := make(chan struct{})
 	d.stopped = done

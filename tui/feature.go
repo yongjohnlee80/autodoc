@@ -131,7 +131,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
-	return []Feature{legacy{h}, newStartup(core{h}, h.aboutInfo.Version)}
+	return []Feature{legacy{h}, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h})}
 }
 
 // legacy is the host as it is: everything not yet a feature of its own.
@@ -152,6 +152,10 @@ type Core interface {
 	Workspace() string
 	// Prefs are the preferences in effect.
 	Prefs() prefs
+	// OpenFile opens a file by its absolute path in the editor, asking first over unsaved changes.
+	OpenFile(abs string)
+	// Failed tells what failed and why, in the words a daemon error carries.
+	Failed(what string, err error)
 	// Call calls a daemon verb; it blocks, so only work Go runs calls it.
 	Call(ctx context.Context, verb string, params ...any) (any, error)
 	// Go runs fn off the loop and then on the loop with its result, as do does.
@@ -189,12 +193,15 @@ func (t Ticket) Current() bool {
 // core is the host as a feature sees it.
 type core struct{ h *Host }
 
-func (c core) Set(name string, v any) { c.h.set(name, v) }
-func (c core) Open(id string)         { c.h.open(id) }
-func (c core) Close(id string)        { c.h.closeDialog(id) }
-func (c core) Notify(msg string)      { c.h.notify(msg) }
-func (c core) Workspace() string      { return c.h.ws }
-func (c core) Prefs() prefs           { return c.h.prefs }
+func (c core) Set(name string, v any)        { c.h.set(name, v) }
+func (c core) Open(id string)                { c.h.open(id) }
+func (c core) Close(id string)               { c.h.closeDialog(id) }
+func (c core) Notify(msg string)             { c.h.notify(msg) }
+func (c core) Workspace() string             { return c.h.ws }
+func (c core) Prefs() prefs                  { return c.h.prefs }
+func (c core) OpenFile(abs string)           { c.h.openAbsolute(abs) }
+func (c core) Failed(what string, err error) { c.h.failed(what, err) }
+func (c core) Focus(id string)               { c.h.keep(c.h.p.Call(id, "forceActiveFocus")) }
 func (c core) Call(ctx context.Context, verb string, params ...any) (any, error) {
 	return c.h.session.Call(ctx, verb, params...)
 }

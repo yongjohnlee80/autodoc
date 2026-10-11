@@ -157,6 +157,14 @@ Window {
             MenuSeparator {}
             MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
         }
+        // the todo stores, AutoDoc's own view of them (todos.go)
+        Menu {
+            title: "&Todos"
+            MenuItem { text: "&Open todos…  (SPC x)"; onTriggered: App.openTodos() }
+            MenuSeparator {}
+            MenuItem { text: "&New store…"; onTriggered: App.todoNew() }
+            MenuItem { text: "&Load store…"; onTriggered: App.todoLoad() }
+        }
         Menu {
             title: "&Options"
             Menu {
@@ -481,5 +489,9 @@ Window {
     Arrange { id: arrange }
     Tutorial { id: tutorial }
     About { id: about }
+    Todos { id: todosDialog }
+    TodoNew { id: todoNew }
+    TodoRemove { id: todoRemove }
+    TodoFolder { id: todoFolder }
     Notifications { id: notifications }
 }

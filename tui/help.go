@@ -145,7 +145,7 @@ d  view the diagram       A  about
 G  agent profiles         Q  quit
 p  plugin commands        H  preview HTML
 .  the right-click menu   L  arrange a panel
-T  the tutorial`
+T  the tutorial           x  todos`
 
 // vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
 // keyset as autodoc's page takes it.
