@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/todo"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -146,7 +148,7 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 	files := docs.New(disk, nil, docs.WithRegistrations(b.reg.Kinds()), docs.WithDeriver(b.reg))
 	srv := rpc.New(ws, b.version, rpc.WithListener(ln), rpc.WithLogger(log), rpc.WithPreferences(db), rpc.WithEmbeddings(emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(ranking), rpc.WithStoreID(storeID), rpc.WithFiles(files),
-		rpc.WithModules(modules(&moduleDeps{store: db})...))
+		rpc.WithModules(modules(&moduleDeps{store: db, workspaces: ws, log: log})...))
 	// the lease and the socket are both this process's now: say where it serves, beside the store
 	li := store.LeaseInfo{StoreID: storeID, StorePath: storePath, Addr: sock, PID: int64(os.Getpid()), Instance: srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
@@ -161,12 +163,30 @@ func runServe(ctx context.Context, configPath string, out io.Writer, b build) er
 // moduleDeps are what the modules' handlers use. nil builds the modules for their contracts alone
 // (--contracts), which never touch them.
 type moduleDeps struct {
-	store *store.Store
+	store      *store.Store
+	workspaces rpc.Workspaces
+	journal    todo.Journal // the todos' change log, in the store
+	log        logger.Logger
 }
 
 // modules are the daemon's core Modules, the one list of them: runServe serves them, and
 // --contracts and AGENTS.md's tables list them.
-func modules(*moduleDeps) []module.Module { return nil }
+func modules(d *moduleDeps) []module.Module {
+	if d == nil {
+		return []module.Module{todo.New(nil, nil, nil)}
+	}
+	return []module.Module{todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal,
+		todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) }))}
+}
+
+// todoEvent records in sys.events what the todo system saw beyond its verbs' own events: an
+// ambiguous change, a blocked store move, a consumer dropped, a root registered.
+func todoEvent(d *moduleDeps, e todo.Event) {
+	detail := strings.Join(slices.DeleteFunc([]string{e.Path, e.ID, e.Detail}, func(s string) bool { return s == "" }), " · ")
+	if _, err := d.store.AppendEvent(context.Background(), store.Event{Kind: e.Kind, Detail: detail}); err != nil {
+		logger.Warning(d.log, err, "logging event "+e.Kind)
+	}
+}
 
 // Contracts is the catalog of every verb this build serves, rpc's own and its modules', that filter
 // names ("" or "*" for all, "domain.*", or a verb), at this build's protocol: built in this process,

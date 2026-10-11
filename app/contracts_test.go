@@ -74,13 +74,29 @@ func TestContractsWithNoDaemon(t *testing.T) {
 	}
 }
 
-// TestContractsFiltersAndFormats: a filter narrows the catalog (todos.* is nothing without the
-// todos module), md prints AGENTS.md's tables, flags may follow the filter, and --format is
-// --contracts' alone.
+// TestContractsFiltersAndFormats: a filter narrows the catalog to its verbs and the codes they
+// answer, md prints AGENTS.md's tables, flags may follow the filter, and --format is --contracts'
+// alone.
 func TestContractsFiltersAndFormats(t *testing.T) {
 	code, out, _ := contractsOut(t, "--contracts", "todos.*")
-	if want := map[string]any{"protocol": float64(rpc.Protocol), "min_protocol": float64(rpc.MinProtocol), "verbs": []any{}, "errors": []any{}}; code != 0 || !reflect.DeepEqual(asJSON(t, []byte(out)), want) {
-		t.Errorf("--contracts todos.*: exit %d, %s", code, out)
+	var todos rpc.Catalog
+	if err := json.Unmarshal([]byte(out), &todos); code != 0 || err != nil {
+		t.Fatalf("--contracts todos.*: exit %d, %v", code, err)
+	}
+	if len(todos.Verbs) < 20 {
+		t.Errorf("--contracts todos.*: %d verbs", len(todos.Verbs))
+	}
+	for _, v := range todos.Verbs {
+		if !strings.HasPrefix(v.Verb, "todos.") {
+			t.Errorf("--contracts todos.* listed %s", v.Verb)
+		}
+	}
+	hasStale := false
+	for _, e := range todos.Errors {
+		hasStale = hasStale || e.Code == -32071 && e.Name == "todos.stale"
+	}
+	if !hasStale {
+		t.Errorf("--contracts todos.* lists no todos.stale: %v", todos.Errors)
 	}
 	code, out, _ = contractsOut(t, "--contracts", "--format", "md")
 	if code != 0 || out != Contracts("").Markdown() || !strings.Contains(out, "### `graph`") {
