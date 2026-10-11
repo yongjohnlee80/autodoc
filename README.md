@@ -423,6 +423,11 @@ end)
 Help › Tutorial… (SPC T) walks through it all, ending with a worked `:todo` command. Its pages are
 in [`tui/tutorial/`](tui/tutorial/): 07 to 09 are the scripting ones.
 
+[`docs/lua/`](docs/lua/) has all of it: [Lua in AutoDoc](docs/lua/README.md), where scripts live
+and how they load; a step-by-step [tutorial for your own Vim commands](docs/lua/tutorial-vim-commands.md),
+from `:hello` to `:wc`, `:toc` and a `:link` that searches the workspace; and the
+[Lua reference](docs/lua/reference.md), every function a script can call.
+
 The screen is QML, under `tui/qml/`. `autodoc --ui --dev tui/qml` reads it from disk and follows
 edits to it.
 

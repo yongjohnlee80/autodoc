@@ -21,3 +21,5 @@ autodoc.command{
 **The editor, `ed`.** Positions are 1-based: line 1, column 1 is the first character. A range runs from its start up to, not including, its end: `ed:text(2, 1, 2, 6)` is line 2's first five characters. `ed:cursor()` and `ed:selection()` say where you are; `ed:insert`, `ed:replace` and `ed:delete` edit; `ed:find(term)` searches; `ed:run(":12")` runs another command. Whatever one command edits is **one undo**: `u` takes it all back.
 
 **The sandbox.** Scripts get Lua's base, table, string and math libraries: no `os`, no `io`, no files, no `require`. A script that fails, or runs past two seconds, is stopped; its error shows in the prompt, and AutoDoc carries on.
+
+**The full tutorial**, step by step from `:hello` to a `:link` that asks the daemon, is `docs/lua/tutorial-vim-commands.md` in AutoDoc's repository.
