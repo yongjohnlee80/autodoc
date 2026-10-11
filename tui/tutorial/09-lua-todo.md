@@ -3,9 +3,7 @@
 Select some text, run `todo` on the command line (**:** or **Ctrl+;**), and it is a task in the workspace's todo list: its first line the title, unless you type one.
 
 ```lua
--- :todo [title] — the selection, filed as a task
-local workspace = "kb" -- the workspace whose todo list it goes to
-
+-- :todo [title] — the selection, filed as a task in the workspace's todo list
 autodoc.command{
   name = "todo", args = "[title]", help = "file the selection as a task",
   run = function(ed, args, line)
@@ -13,6 +11,8 @@ autodoc.command{
     if not l1 then error("select the task's text first", 0) end
     local text = ed:text(l1, c1, l2, c2)
     local title = line ~= "" and line or text:match("[^\n]+")
+    local workspace = autodoc.current_workspace()
+    if not workspace then error("enter a workspace first", 0) end
     autodoc.todos.add(workspace, {title = title, description = text}, function(task, err)
       if err then autodoc.notify("todo: " .. err) return end
       autodoc.notify("filed " .. task.id)

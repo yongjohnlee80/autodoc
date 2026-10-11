@@ -1,8 +1,13 @@
 package tui
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/golib/tui/widget"
+
+	"github.com/yongjohnlee80/autodoc/core/todo"
 
 	lua "github.com/yuin/gopher-lua"
 )
@@ -214,5 +219,20 @@ func TestTheTutorialsLuaRuns(t *testing.T) {
 	r.waitNotice(t, "1 hits; the first is a.md")
 	if err := r.luaRun("todo"); err == nil || !strings.Contains(err.Error(), "select the task's text first") {
 		t.Fatalf("todo with no selection: %v", err)
+	}
+	// :todo files the selection in the workspace's claimed store
+	seedTodos(t, d, true)
+	onLoop(r, func() bool {
+		r.h.core.SetValue("Ship the release\nwith its notes\n")
+		r.h.core.Select(widget.TextRange{From: widget.TextPos{}, To: widget.TextPos{Line: 1, Col: 14}})
+		return true
+	})
+	if err := r.luaRun("todo"); err != nil {
+		t.Fatal(err)
+	}
+	r.waitNotice(t, "filed ")
+	l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{})
+	if err != nil || len(l.Tasks) != 1 || l.Tasks[0].Title != "Ship the release" || !strings.Contains(l.Tasks[0].Description, "with its notes") {
+		t.Fatalf("after :todo: %+v %v", l.Tasks, err)
 	}
 }

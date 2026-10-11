@@ -15,6 +15,7 @@ import (
 // SCRIPTS CALL THE DAEMON — the daemon's verbs as Lua functions (ADR 1791719881 §4.8).
 //
 //	autodoc.call(verb, params, cb)   any verb but the protocol's own; params a list, as the wire's
+//	autodoc.current_workspace()      the workspace in use; nil before one is entered
 //	autodoc.<domain>.<verb>(…, cb)   each verb the daemon offers scripts, its params in order:
 //	                                 autodoc.search.query("kb", "words", {limit = 5}, cb)
 //
@@ -72,6 +73,14 @@ func (*scripting) Commands() map[string]decl.HandlerFunc { return nil }
 func (s *scripting) bind(eng *script.Engine) {
 	s.eng = eng
 	eng.SetFunction("call", s.luaCall)
+	eng.SetFunction("current_workspace", func(L *lua.LState) int {
+		if ws := s.c.Workspace(); ws != "" {
+			L.Push(lua.LString(ws))
+		} else {
+			L.Push(lua.LNil)
+		}
+		return 1
+	})
 }
 
 // Connected fetches the daemon's contracts and makes the namespaces from them.

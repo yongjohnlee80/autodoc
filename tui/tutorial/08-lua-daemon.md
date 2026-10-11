@@ -15,6 +15,8 @@ end }
 
 **The params** are the verb's, in order; optional ones at the end may be left out. The wrong number is an error at the call, naming them. A table with keys 1, 2, 3… goes as a list, any other as a map, whole numbers as integers; the result comes back as Lua tables.
 
+**`autodoc.current_workspace()`** is the workspace in use (nil before one is entered): the first param most verbs take.
+
 **`autodoc.call(verb, params, cb)`** reaches a verb by its name, the params as a list: `autodoc.call("doc.read", {"kb", "a.md"}, cb)`. The `autodoc.search`-style functions are made when AutoDoc connects, from the daemon it is on: use them inside `run`, not at a file's top.
 
 **Which verbs?** `autodoc --contracts` prints every verb, its params and its result; `autodoc --contracts 'search.*' --format md` one domain, as tables. The protocol's own verbs (`sys.hello`, `sys.shutdown`) are refused to scripts.
