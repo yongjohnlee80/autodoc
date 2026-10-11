@@ -122,118 +122,96 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	b := build{version: o.Version, buildDate: o.BuildDate, reg: reg, rank: o.Rank}
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	serve := fs.Bool("serve", false, "run the daemon")
+	fs.Bool("serve", false, "run the daemon")
 	ui := fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
 	gui := fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
 	dev := fs.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
 	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
-	showVersion := fs.Bool("version", false, "print the version")
-	contracts := fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
+	fs.Bool("version", false, "print the version")
+	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text")
 	exportOutput := fs.String("output", "", "--export: destination file (required)")
 	exportTheme := fs.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
 	exportBase := fs.String("base", "", "--export html: the directory relative links are read from, written as file: URLs (default the source's directory)")
-	printEndpoint := fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
+	fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
-	compact := fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
+
+	// failed is a mode's error as its exit code: code, after saying why.
+	failed := func(err error, code int) int {
+		fmt.Fprintln(stderr, "autodoc:", err)
+		return code
+	}
+	modes := []mode{
+		{flag: "version", run: func(string) int { fmt.Fprintln(stdout, "autodoc", b.version); return 0 }},
+		{flag: "contracts", arg: true, flagsAfter: true, run: func(filter string) int {
+			if err := writeContracts(stdout, Contracts(filter), *format); err != nil {
+				return failed(err, 2)
+			}
 			return 0
-		}
-		return 2
-	}
-	filter := ""
-	if *contracts && fs.NArg() > 0 {
-		// its one argument, and flags after it: autodoc --contracts todos.* --format md
-		filter = fs.Arg(0)
-		if err := fs.Parse(fs.Args()[1:]); err != nil {
-			return 2
-		}
-	}
-	if fs.NArg() > 0 && !((*ui || *gui || *call != "" || *exportFormat != "") && fs.NArg() == 1) {
-		fmt.Fprintln(stderr, "autodoc: unexpected arguments:", fs.Args(), "(only --ui, --gui, --call, --export and --contracts take one argument)")
-		return 2
-	}
-	if (*ensure || *restart) && !*printEndpoint {
-		fmt.Fprintln(stderr, "autodoc: --ensure and --restart go with --print-endpoint")
-		return 2
-	}
-	if *exportFormat == "" {
-		stray := ""
-		fs.Visit(func(f *flag.Flag) {
-			if stray == "" && (f.Name == "output" || f.Name == "theme" || f.Name == "base") {
-				stray = f.Name
+		}},
+		{flag: "compact", run: func(string) int {
+			if err := runCompact(ctx, *configPath, stdout); err != nil {
+				return failed(err, 1)
 			}
-		})
-		if stray != "" {
-			fmt.Fprintf(stderr, "autodoc: --%s is for --export\n", stray)
-			return 2
-		}
-	}
-	if !*contracts {
-		stray := false
-		fs.Visit(func(f *flag.Flag) { stray = stray || f.Name == "format" })
-		if stray {
-			fmt.Fprintln(stderr, "autodoc: --format is for --contracts")
-			return 2
-		}
-	}
-	switch {
-	case *showVersion:
-		fmt.Fprintln(stdout, "autodoc", b.version)
-	case *contracts:
-		if err := writeContracts(stdout, Contracts(filter), *format); err != nil {
-			fmt.Fprintln(stderr, "autodoc:", err)
-			return 2
-		}
-	case *compact:
-		if err := runCompact(ctx, *configPath, stdout); err != nil {
-			fmt.Fprintln(stderr, "autodoc:", err)
-			return 1
-		}
-	case *printEndpoint:
-		run := func() error { return runPrintEndpoint(ctx, *configPath, *ensure, stdout) }
-		if *restart {
-			run = func() error { return runRestart(ctx, *configPath, stdout) }
-		}
-		if err := run(); err != nil {
-			fmt.Fprintln(stderr, "autodoc:", err)
-			return 1
-		}
-	case *serve:
-		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-		if err := runServe(ctx, *configPath, stderr, b); err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintln(stderr, "autodoc:", err)
-			if errors.Is(err, errAlreadyServing) {
-				return 0 // this store's daemon is serving: nothing is wrong
+			return 0
+		}},
+		{flag: "print-endpoint", run: func(string) int {
+			run := func() error { return runPrintEndpoint(ctx, *configPath, *ensure, stdout) }
+			if *restart {
+				run = func() error { return runRestart(ctx, *configPath, stdout) }
 			}
-			return 1
-		}
-	case *call != "":
-		ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-		return callMain(ctx, *configPath, *call, fs.Arg(0), stdout, stderr)
-	case *exportFormat != "":
-		if err := exportMain(fs.Arg(0), *exportFormat, *exportOutput, *exportTheme, *exportBase); err != nil {
-			fmt.Fprintln(stderr, "autodoc:", err)
-			return 1
-		}
-	case *ui || *gui:
-		// SIGTERM and SIGHUP (the terminal gone): the program ends and keeps unsaved work for the
-		// next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the TUI's.
-		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
-		defer stop()
-		if err := runUI(ctx, *configPath, *dev, fs.Arg(0), *gui, b); err != nil && !errors.Is(err, context.Canceled) {
-			fmt.Fprintln(stderr, "autodoc:", err)
-			return 1
-		}
-	default:
-		fs.Usage()
-		return 2
+			if err := run(); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "serve", run: func(string) int {
+			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+			if err := runServe(ctx, *configPath, stderr, b); err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Fprintln(stderr, "autodoc:", err)
+				if errors.Is(err, errAlreadyServing) {
+					return 0 // this store's daemon is serving: nothing is wrong
+				}
+				return 1
+			}
+			return 0
+		}},
+		{flag: "call", asked: func() bool { return *call != "" }, arg: true, run: func(params string) int {
+			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+			return callMain(ctx, *configPath, *call, params, stdout, stderr)
+		}},
+		{flag: "export", asked: func() bool { return *exportFormat != "" }, arg: true, run: func(src string) int {
+			if err := exportMain(src, *exportFormat, *exportOutput, *exportTheme, *exportBase); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "ui", asked: func() bool { return *ui || *gui }, arg: true, run: func(ws string) int {
+			// SIGTERM and SIGHUP (the terminal gone): the program ends and keeps unsaved work for the
+			// next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the TUI's.
+			ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
+			defer stop()
+			if err := runUI(ctx, *configPath, *dev, ws, *gui, b); err != nil && !errors.Is(err, context.Canceled) {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "gui", asked: func() bool { return false }, arg: true}, // --ui's row runs it
 	}
-	return 0
+	companions := []companion{
+		{flags: []string{"ensure", "restart"}, modes: []string{"print-endpoint"}, says: "--ensure and --restart go with --print-endpoint"},
+		{flags: []string{"base", "output", "theme"}, modes: []string{"export"}},
+		{flags: []string{"format"}, modes: []string{"contracts"}},
+	}
+	m, arg, code, ok := choose(fs, args, modes, companions)
+	if !ok {
+		return code
+	}
+	return m.run(arg)
 }
