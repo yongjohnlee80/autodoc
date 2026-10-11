@@ -48,6 +48,34 @@ func TestTerminalStoredLengthAppliesOnlyToItsEdge(t *testing.T) {
 	}
 }
 
+// Stored terminal geometry uses the same preference names as before the
+// shared geometry reader. Read a pre-existing preferences snapshot, not a
+// snapshot produced by the new setters.
+func TestTerminalExistingGeometryPreferencesReadBack(t *testing.T) {
+	p := prefsOf(map[string]any{
+		"tui.terminal.edge":          "left",
+		"tui.terminal.left.size":     "40",
+		"tui.terminal.left.length":   "60",
+		"tui.terminal.center.size":   "80",
+		"tui.terminal.center.length": "70",
+		"tui.agent.top.size":         "50",
+		"tui.agent.top.length":       "90",
+	})
+	st := termState(p)
+	if st["App.terminalEdge"] != "left" || st["App.terminalSize"] != 40 || st["App.terminalLength"] != 60 {
+		t.Fatalf("existing terminal preferences read as %v", st)
+	}
+	if size, length := p.panelGeometry("terminal", "center"); size != 80 || length != 70 {
+		t.Errorf("stored center geometry = %d × %d, want 80 × 70", size, length)
+	}
+	if size, length := p.panelGeometry("terminal", "bottom"); size != 30 || length != 100 {
+		t.Errorf("unset bottom geometry = %d × %d, want defaults 30 × 100", size, length)
+	}
+	if size, length := p.panelGeometry("agent", "top"); size != 50 || length != 90 {
+		t.Errorf("agent geometry = %d × %d, want 50 × 90", size, length)
+	}
+}
+
 func (r *running) terminal() *widget.Terminal {
 	return onLoop(r, func() *widget.Terminal {
 		c, _ := r.h.p.Find("terminalView")
