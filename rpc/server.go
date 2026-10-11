@@ -213,24 +213,25 @@ type Preferences interface {
 
 // Server is the API over the daemon's workspaces.
 type Server struct {
-	reg         registrations.Tables // the build's registrations, sys.capabilities reports them
-	files       *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
-	rpc         *golibrpc.Server
-	workspaces  Workspaces
-	preferences Preferences
-	embeddings  Embeddings
-	rankers     Rankers
-	events      Events
-	log         logger.Logger
-	version     string
-	instance    string
-	storeID     string // the store's identity (store.Identity), "" when not set
-	setters     setters
-	verbs       map[string]verb
-	legacy      map[string]verb // rpc's own contracts, until register gives each its handler
-	moduleErrs  []module.PublicError
-	stop        chan struct{}
-	stopOnce    sync.Once
+	reg          registrations.Tables // the build's registrations, sys.capabilities reports them
+	files        *docs.Docs           // a local peer's files outside every workspace (WithFiles); nil: none
+	rpc          *golibrpc.Server
+	workspaces   Workspaces
+	preferences  Preferences
+	embeddings   Embeddings
+	rankers      Rankers
+	events       Events
+	log          logger.Logger
+	version      string
+	instance     string
+	storeID      string // the store's identity (store.Identity), "" when not set
+	setters      setters
+	modelContext modelContexter // the embeddings', when they read a model's context window
+	verbs        map[string]verb
+	legacy       map[string]verb // rpc's own contracts, until register gives each its handler
+	moduleErrs   []module.PublicError
+	stop         chan struct{}
+	stopOnce     sync.Once
 }
 
 type options struct {
@@ -282,7 +283,8 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 	_, _ = rand.Read(id[:])
 	s := &Server{workspaces: workspaces, preferences: o.preferences, embeddings: o.embeddings, rankers: o.rankers, events: o.events, log: o.log,
 		version: version, instance: hex.EncodeToString(id[:]), reg: o.reg, files: o.files, storeID: o.storeID, setters: settersOf(workspaces),
-		verbs: map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
+		modelContext: modelContextOf(o.embeddings),
+		verbs:        map[string]verb{}, legacy: map[string]verb{}, stop: make(chan struct{})}
 	ropts := []golibrpc.Option{golibrpc.WithLogger(o.log), golibrpc.MaxMessageBytes(MaxMessage), golibrpc.WithGate(s.gate)}
 	if o.listener != nil {
 		ropts = append(ropts, golibrpc.WithListener(o.listener))

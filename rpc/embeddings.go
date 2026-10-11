@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
@@ -33,10 +34,6 @@ var ErrNoSwitch = errors.New("rpc: no model switch is under way")
 
 // errNoEmbeddings answers the embedding verbs of a server given no Embeddings.
 var errNoEmbeddings = errors.New("rpc: this server keeps no embedding providers")
-
-func providerMap(p store.ProviderInfo) map[string]any {
-	return map[string]any{"name": p.Name, "kind": p.Kind, "base_url": p.BaseURL, "model": p.Model, "context": int64(p.Context), "has_key": p.HasKey}
-}
 
 // specOf reads a provider as a client writes it: name, kind, base_url and model; context, the
 // context window in tokens, which absent is the default; and key, which absent keeps the key the
@@ -76,196 +73,289 @@ func specOf(v any) (store.ProviderSpec, error) {
 	return sp, nil
 }
 
-func (s *Server) registerEmbeddings() {
+// modelContexter is Embeddings that reads a model's context window (the daemon's), read at New.
+type modelContexter interface {
+	ModelContext(ctx context.Context, stored string, sp store.ProviderSpec) (int, error)
+}
+
+type providerJSON struct {
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	BaseURL string `json:"base_url"`
+	Model   string `json:"model"`
+	Context int    `json:"context"`
+	HasKey  bool   `json:"has_key"`
+}
+
+func providerOf(p store.ProviderInfo) *providerJSON {
+	return &providerJSON{Name: p.Name, Kind: p.Kind, BaseURL: p.BaseURL, Model: p.Model, Context: p.Context, HasKey: p.HasKey}
+}
+
+type providersJSON struct {
+	Providers []*providerJSON `json:"providers"`
+	Active    string          `json:"active"`
+	Error     string          `json:"error"`
+}
+
+type (
+	providerName struct {
+		Name string `param:"name"`
+	}
+	providerAdd struct {
+		Provider optionMap `param:"provider" doc:"{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"`
+	}
+	providerUpdate struct {
+		Name     string    `param:"name"`
+		Provider optionMap `param:"provider" doc:"{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"`
+	}
+	providerModels struct {
+		Provider any       `param:"provider" doc:"a stored provider's name, or an unsaved one's spec"`
+		Spec     optionMap `param:"spec,optional" doc:"with a name: the edit asked about"`
+	}
+	providerContext struct {
+		Stored   string    `param:"stored" doc:"the stored provider; \"\" for an unsaved one"`
+		Provider optionMap `param:"provider" doc:"{name, kind, base_url, model, context?, key?}"`
+	}
+	meterParams struct {
+		Name string `param:"name"`
+		Days int    `param:"days"`
+	}
+	callsParams struct {
+		Name  string `param:"name"`
+		Limit int    `param:"limit"`
+	}
+)
+
+// usageJSON and callJSON are a provider's or a ranker's usage by day and recent calls.
+type usageJSON struct {
+	Day      string `json:"day"`
+	Requests int64  `json:"requests"`
+	Texts    int64  `json:"texts"`
+	Tokens   int64  `json:"tokens"`
+	Failures int64  `json:"failures"`
+	Limited  int64  `json:"limited"`
+}
+
+type callJSON struct {
+	At      int64  `json:"at"`
+	Texts   int64  `json:"texts"`
+	Tokens  int64  `json:"tokens"`
+	Millis  int64  `json:"millis"`
+	Outcome string `json:"outcome"`
+}
+
+// meters are the usage, log and models verbs an embedding provider and a ranker share: need says
+// whether the server keeps them, and specOf reads a spec of S.
+type meters[S any] struct {
+	need   func() error
+	specOf func(any) (S, error)
+	usage  func(ctx context.Context, name string, days int) ([]store.Usage, error)
+	log    func(ctx context.Context, name string, limit int) ([]store.LogEntry, error)
+	models func(ctx context.Context, name string, sp S) ([]string, error)
+}
+
+func (m meters[S]) usageVerb(c module.Contract) module.Verb {
+	return module.Handle(c, func(ctx context.Context, p meterParams) ([]usageJSON, error) {
+		if err := m.need(); err != nil {
+			return nil, err
+		}
+		us, err := m.usage(ctx, p.Name, p.Days)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]usageJSON, len(us))
+		for i, u := range us {
+			out[i] = usageJSON{Day: u.Day, Requests: u.Requests, Texts: u.Texts, Tokens: u.Tokens, Failures: u.Failures, Limited: u.Limited}
+		}
+		return out, nil
+	})
+}
+
+func (m meters[S]) logVerb(c module.Contract) module.Verb {
+	return module.Handle(c, func(ctx context.Context, p callsParams) ([]callJSON, error) {
+		if err := m.need(); err != nil {
+			return nil, err
+		}
+		es, err := m.log(ctx, p.Name, p.Limit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]callJSON, len(es))
+		for i, e := range es {
+			out[i] = callJSON{At: e.At, Texts: e.Texts, Tokens: e.Tokens, Millis: e.Millis, Outcome: e.Outcome}
+		}
+		return out, nil
+	})
+}
+
+// modelsOf lists the models of a stored one by its name, an unsaved one by its spec, or an edit of a
+// stored one by its name and the edit's spec, which is what is asked, with the stored key unless it
+// carries one.
+func (m meters[S]) modelsOf(ctx context.Context, verb string, first any, spec optionMap) ([]string, error) {
+	if err := m.need(); err != nil {
+		return nil, err
+	}
+	var name string
+	var sp S
+	var err error
+	switch v := first.(type) {
+	case string:
+		name = v
+		if spec.raw != nil {
+			if sp, err = m.specOf(spec.raw); err != nil {
+				return nil, err
+			}
+		}
+	default:
+		if spec.raw != nil {
+			return nil, invalid(verb + ": a spec alone, or a name and a spec")
+		}
+		if sp, err = m.specOf(v); err != nil {
+			return nil, err
+		}
+	}
+	return m.models(ctx, name, sp)
+}
+
+func (s *Server) embeddingVerbs() []module.Verb {
 	need := func() error {
 		if s.embeddings == nil {
 			return errNoEmbeddings
 		}
 		return nil
 	}
-	s.handle("embedding.providers", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		ps, active, lastErr, err := s.embeddings.Providers(ctx)
-		if err != nil {
-			return nil, err
-		}
-		list := []any{}
-		for _, p := range ps {
-			list = append(list, providerMap(p))
-		}
-		return map[string]any{"providers": list, "active": active, "error": lastErr}, nil
-	}, false))
-	s.handle("embedding.add", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		sp, err := specOf(p[0])
-		if err != nil {
-			return nil, err
-		}
-		info, err := s.embeddings.AddProvider(ctx, sp)
-		if err != nil {
-			return nil, err
-		}
-		return providerMap(info), nil
-	}, false))
-	s.handle("embedding.update", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		sp, err := specOf(p[1])
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.embeddings.UpdateProvider(ctx, name, sp)
-	}, false))
-	s.handle("embedding.remove", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		if err := needReclaim(ctx, "embedding.remove"); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.embeddings.RemoveProvider(ctx, name)
-	}, false))
-	s.handle("embedding.use", s.verb(1, 1, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		return nil, s.embeddings.Use(ctx, name)
-	}, false))
-	// the model switch under way ends: the provider in use goes back to the model still active
-	s.handle("embedding.cancel_switch", s.verb(0, 0, func(ctx context.Context, _ *Workspace, _ []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		if err := needReclaim(ctx, "embedding.cancel_switch"); err != nil {
-			return nil, err
-		}
-		model, err := s.embeddings.CancelSwitch(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"model": model}, nil
-	}, false))
-	// a stored provider's models by its name, or an unsaved one's by its kind, base_url and key
-	s.handle("embedding.models", s.verb(1, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		// a stored one by its name; an unsaved one by its spec; an edit of a stored one by its name
-		// and the edit's spec, which is what is asked, with the stored key unless it carries one
-		var name string
-		var sp store.ProviderSpec
-		switch v := p[0].(type) {
-		case string:
-			name = v
-			if len(p) == 2 {
-				var err error
-				if sp, err = specOf(p[1]); err != nil {
+	m := meters[store.ProviderSpec]{need: need, specOf: specOf,
+		usage: func(ctx context.Context, n string, d int) ([]store.Usage, error) {
+			return s.embeddings.Usage(ctx, n, d)
+		},
+		log: func(ctx context.Context, n string, l int) ([]store.LogEntry, error) {
+			return s.embeddings.Log(ctx, n, l)
+		},
+		models: func(ctx context.Context, n string, sp store.ProviderSpec) ([]string, error) {
+			return s.embeddings.Models(ctx, n, sp)
+		}}
+	user := module.AudienceUser
+	ev := func(kind, detail string) *module.EventSpec { return &module.EventSpec{Kind: kind, Detail: detail} }
+	return []module.Verb{
+		module.Handle(module.Contract{Verb: "embedding.providers", Since: 3, Audience: user,
+			Result: "{providers: [{name, kind, base_url, model, context, has_key}], active, error}", Errors: []int64{CodeUnsupported},
+			Doc: "The stored embedding providers, the one in use, and why the one chosen is not in use."},
+			func(ctx context.Context, _ struct{}) (*providersJSON, error) {
+				if err := need(); err != nil {
 					return nil, err
 				}
-			}
-		default:
-			if len(p) == 2 {
-				return nil, invalid("embedding.models: a spec alone, or a name and a spec")
-			}
-			var err error
-			if sp, err = specOf(v); err != nil {
-				return nil, err
-			}
-		}
-		models, err := s.embeddings.Models(ctx, name, sp)
-		if err != nil {
-			return nil, err
-		}
-		out := []any{}
-		for _, m := range models {
-			out = append(out, m)
-		}
-		return out, nil
-	}, false))
-	s.handle("embedding.model_context", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		info, ok := s.embeddings.(interface {
-			ModelContext(context.Context, string, store.ProviderSpec) (int, error)
-		})
-		if !ok {
-			return nil, errNoEmbeddings
-		}
-		stored, err := argStr(p, 0, "stored provider")
-		if err != nil {
-			return nil, err
-		}
-		sp, err := specOf(p[1])
-		if err != nil {
-			return nil, err
-		}
-		maximum, err := info.ModelContext(ctx, stored, sp)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"maximum": int64(maximum)}, nil
-	}, false))
-	s.handle("embedding.usage", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		days, err := argInt(p, 1, "days")
-		if err != nil {
-			return nil, err
-		}
-		us, err := s.embeddings.Usage(ctx, name, int(days))
-		if err != nil {
-			return nil, err
-		}
-		out := []any{}
-		for _, u := range us {
-			out = append(out, map[string]any{"day": u.Day, "requests": u.Requests, "texts": u.Texts, "tokens": u.Tokens,
-				"failures": u.Failures, "limited": u.Limited})
-		}
-		return out, nil
-	}, false))
-	s.handle("embedding.log", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if err := need(); err != nil {
-			return nil, err
-		}
-		name, err := argStr(p, 0, "name")
-		if err != nil {
-			return nil, err
-		}
-		limit, err := argInt(p, 1, "limit")
-		if err != nil {
-			return nil, err
-		}
-		es, err := s.embeddings.Log(ctx, name, int(limit))
-		if err != nil {
-			return nil, err
-		}
-		out := []any{}
-		for _, e := range es {
-			out = append(out, map[string]any{"at": e.At, "texts": e.Texts, "tokens": e.Tokens, "millis": e.Millis, "outcome": e.Outcome})
-		}
-		return out, nil
-	}, false))
+				ps, active, lastErr, err := s.embeddings.Providers(ctx)
+				if err != nil {
+					return nil, err
+				}
+				out := &providersJSON{Providers: []*providerJSON{}, Active: active, Error: lastErr}
+				for _, p := range ps {
+					out.Providers = append(out.Providers, providerOf(p))
+				}
+				return out, nil
+			}),
+		module.Handle(module.Contract{Verb: "embedding.add", Since: 3, Audience: user,
+			Result: "{name, kind, base_url, model, context, has_key}", Errors: []int64{CodeUnsupported, CodeConflict, CodeProviderRefused},
+			Event: ev("embedding.providers", "")},
+			func(ctx context.Context, p providerAdd) (*providerJSON, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				sp, err := specOf(p.Provider.raw)
+				if err != nil {
+					return nil, err
+				}
+				info, err := s.embeddings.AddProvider(ctx, sp)
+				if err != nil {
+					return nil, err
+				}
+				return providerOf(info), nil
+			}),
+		module.Handle(module.Contract{Verb: "embedding.update", Since: 3, Audience: user,
+			Errors: []int64{CodeUnsupported, CodeNotFound, CodeConflict, CodeProviderRefused}, Event: ev("embedding.providers", "name")},
+			func(ctx context.Context, p providerUpdate) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				sp, err := specOf(p.Provider.raw)
+				if err != nil {
+					return nil, err
+				}
+				return nil, s.embeddings.UpdateProvider(ctx, p.Name, sp)
+			}),
+		module.Handle(module.Contract{Verb: "embedding.remove", Since: 3, Audience: user,
+			Errors: []int64{CodeUnsupported, CodeNotFound}, Event: ev("embedding.providers", "name"),
+			Doc: "Deletes the provider and its model's vectors (refused below protocol 16)."},
+			func(ctx context.Context, p providerName) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				if err := needReclaim(ctx, "embedding.remove"); err != nil {
+					return nil, err
+				}
+				return nil, s.embeddings.RemoveProvider(ctx, p.Name)
+			}),
+		module.Handle(module.Contract{Verb: "embedding.use", Since: 3, Audience: user,
+			Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Event: ev("embedding.switched", "name"),
+			Doc: "Switches the daemon's provider; the new model fills while the old one answers."},
+			func(ctx context.Context, p providerName) (any, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				return nil, s.embeddings.Use(ctx, p.Name)
+			}),
+		// the model switch under way ends: the provider in use goes back to the model still active
+		module.Handle(module.Contract{Verb: "embedding.cancel_switch", Since: 4, Audience: user,
+			Result: "{model}", Errors: []int64{CodeUnsupported}, Event: ev("embedding.cancelled", ""),
+			Doc: "Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16)."},
+			func(ctx context.Context, _ struct{}) (map[string]string, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				if err := needReclaim(ctx, "embedding.cancel_switch"); err != nil {
+					return nil, err
+				}
+				model, err := s.embeddings.CancelSwitch(ctx)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]string{"model": model}, nil
+			}),
+		module.Handle(module.Contract{Verb: "embedding.models", Since: 3, Audience: user,
+			Result: "[string]", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Doc: "The models a provider offers."},
+			func(ctx context.Context, p providerModels) ([]string, error) {
+				return m.modelsOf(ctx, "embedding.models", p.Provider, p.Spec)
+			}),
+		module.Handle(module.Contract{Verb: "embedding.model_context", Since: 5, Audience: user,
+			Result: "{maximum}", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
+			Doc: "The context window the provider's model reports, in tokens."},
+			func(ctx context.Context, p providerContext) (map[string]int, error) {
+				if err := need(); err != nil {
+					return nil, err
+				}
+				if s.modelContext == nil {
+					return nil, errNoEmbeddings
+				}
+				sp, err := specOf(p.Provider.raw)
+				if err != nil {
+					return nil, err
+				}
+				maximum, err := s.modelContext.ModelContext(ctx, p.Stored, sp)
+				if err != nil {
+					return nil, err
+				}
+				return map[string]int{"maximum": maximum}, nil
+			}),
+		m.usageVerb(module.Contract{Verb: "embedding.usage", Since: 3, Audience: user,
+			Result: "[{day, requests, texts, tokens, failures, limited}]", Errors: []int64{CodeUnsupported, CodeNotFound},
+			Doc: "A provider's usage by day."}),
+		m.logVerb(module.Contract{Verb: "embedding.log", Since: 3, Audience: user,
+			Result: "[{at, texts, tokens, millis, outcome}]", Errors: []int64{CodeUnsupported, CodeNotFound},
+			Doc: "A provider's recent calls."}),
+	}
+}
+
+func modelContextOf(e Embeddings) modelContexter {
+	m, _ := e.(modelContexter)
+	return m
 }

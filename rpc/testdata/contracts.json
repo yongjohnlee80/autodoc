@@ -286,14 +286,14 @@
       "audience": "user",
       "params": [
         {
-          "name": "stored provider",
+          "name": "stored",
           "type": "string",
-          "doc": "\"\" for an unsaved one"
+          "doc": "the stored provider; \"\" for an unsaved one"
         },
         {
           "name": "provider",
           "type": "map",
-          "doc": "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"
+          "doc": "{name, kind, base_url, model, context?, key?}"
         }
       ],
       "result": "{maximum}",

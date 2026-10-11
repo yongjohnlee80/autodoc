@@ -38,7 +38,6 @@ func legacyVerbs() []verb {
 	ev := func(kind, workspace, detail string) *module.EventSpec {
 		return &module.EventSpec{Kind: kind, Workspace: workspace, Detail: detail}
 	}
-	providerSpec := "{name, kind, base_url, model, context?, key?}: an absent key keeps the stored one, \"\" removes it"
 	rankerSpec := "{name, kind, base_url, model, key?}: an absent key keeps the stored one, \"\" removes it"
 	usage := "[{day, requests, texts, tokens, failures, limited}]"
 	calls := "[{at, texts, tokens, millis, outcome}]"
@@ -74,44 +73,6 @@ func legacyVerbs() []verb {
 			Event:  ev(configureKinds, "workspace name", ""),
 			Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},
 			events: configureEvents},
-
-		// embedding
-		c(module.Contract{Verb: "embedding.providers", Since: 3, Scope: global, Audience: user, Params: none,
-			Result: "{providers: [{name, kind, base_url, model, context, has_key}], active, error}", Errors: []int64{CodeUnsupported},
-			Doc: "The stored embedding providers, the one in use, and why the one chosen is not in use."}),
-		c(module.Contract{Verb: "embedding.add", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("provider", "map", providerSpec)},
-			Result: "{name, kind, base_url, model, context, has_key}", Errors: []int64{CodeUnsupported, CodeConflict, CodeProviderRefused},
-			Event: ev("embedding.providers", "", "")}),
-		c(module.Contract{Verb: "embedding.update", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("provider", "map", providerSpec)},
-			Errors: []int64{CodeUnsupported, CodeNotFound, CodeConflict, CodeProviderRefused},
-			Event:  ev("embedding.providers", "", "name")}),
-		c(module.Contract{Verb: "embedding.remove", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", "")},
-			Errors: []int64{CodeUnsupported, CodeNotFound}, Event: ev("embedding.providers", "", "name"),
-			Doc: "Deletes the provider and its model's vectors (refused below protocol 16)."}),
-		c(module.Contract{Verb: "embedding.use", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", "")},
-			Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Event: ev("embedding.switched", "", "name"),
-			Doc: "Switches the daemon's provider; the new model fills while the old one answers."}),
-		c(module.Contract{Verb: "embedding.cancel_switch", Since: 4, Scope: global, Audience: user, Params: none,
-			Result: "{model}", Errors: []int64{CodeUnsupported}, Event: ev("embedding.cancelled", "", ""),
-			Doc: "Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16)."}),
-		c(module.Contract{Verb: "embedding.models", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("provider", "any", "a stored provider's name, or an unsaved one's spec"), optional("spec", "map", "with a name: the edit asked about")},
-			Result: "[string]", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
-			Doc: "The models a provider offers."}),
-		c(module.Contract{Verb: "embedding.model_context", Since: 5, Scope: global, Audience: user,
-			Params: []module.Param{param("stored provider", "string", "\"\" for an unsaved one"), param("provider", "map", providerSpec)},
-			Result: "{maximum}", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
-			Doc: "The context window the provider's model reports, in tokens."}),
-		c(module.Contract{Verb: "embedding.usage", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("days", "int", "")},
-			Result: usage, Errors: []int64{CodeUnsupported, CodeNotFound}, Doc: "A provider's usage by day."}),
-		c(module.Contract{Verb: "embedding.log", Since: 3, Scope: global, Audience: user,
-			Params: []module.Param{param("name", "string", ""), param("limit", "int", "")},
-			Result: calls, Errors: []int64{CodeUnsupported, CodeNotFound}, Doc: "A provider's recent calls."}),
 
 		// ranker
 		c(module.Contract{Verb: "ranker.list", Since: 11, Scope: global, Audience: user, Params: none,

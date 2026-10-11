@@ -74,7 +74,7 @@ var publicErrs = []module.PublicError{
 	{Err: rank.ErrTooLarge, Code: CodeProviderRefused, Message: "the request is over the size a ranker is sent"},
 	{Err: store.ErrProviderTaken, Code: CodeConflict, Message: "another embedding provider has this name"},
 	{Err: store.ErrProviderInvalid, Code: golibrpc.CodeInvalidParams, Message: "a provider needs a name, a kind (ollama, ollama-cloud or openai), a base URL and a model"},
-	{Err: store.ErrContextRange, Code: golibrpc.CodeInvalidParams, Message: store.ErrContextRange.Error()[len("store: "):]},
+	{Err: store.ErrContextRange, Code: golibrpc.CodeInvalidParams, Message: fmt.Sprintf("a provider's context window is %d to %d tokens", store.MinContext, store.MaxContext)},
 	{Err: store.ErrProviderNeedsKey, Code: golibrpc.CodeInvalidParams, Message: "an Ollama Cloud provider needs its API key"},
 	{Err: store.ErrSealed, Code: CodeProviderRefused, Message: "the store's keyslot does not open this provider's key"},
 	{Err: store.ErrKeyslotExposed, Code: CodeProviderRefused, Message: "the store's keyslot file is readable by others: make it 0600"},
@@ -150,7 +150,6 @@ func wireErr(err error) error {
 }
 
 func (s *Server) register() {
-	s.registerEmbeddings()
 	s.registerRankers()
 	s.registerEvents()
 	s.configureVerbs()
@@ -162,6 +161,7 @@ func (s *Server) register() {
 	s.own(s.graphVerbs()...)
 	s.own(s.docVerbs()...)
 	s.own(s.fileVerbs()...)
+	s.own(s.embeddingVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
 }
