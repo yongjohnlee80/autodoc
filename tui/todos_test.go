@@ -71,7 +71,9 @@ func TestTodosAddsCyclesAndRemoves(t *testing.T) {
 	r.s.WaitForText(t, "new task")
 	r.keys(t, decltest.Type("Ship the todos")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
-	r.s.WaitForText(t, "Ship the todos")
+	// the view's own count, which only its reload after the add writes ("Ship the todos" is also
+	// the title field's text, on screen before the add lands)
+	r.s.WaitForText(t, "1 tasks")
 	listed := func(bucket string) []todo.Task {
 		l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{Buckets: []string{bucket}})
 		if err != nil {
@@ -86,7 +88,7 @@ func TestTodosAddsCyclesAndRemoves(t *testing.T) {
 	r.s.WaitFor(t, "completed", func(string) bool { return len(listed("completed")) == 1 })
 	r.s.WaitForText(t, "0 tasks")
 	r.keys(t, key('4'))
-	r.s.WaitForText(t, "Ship the todos")
+	r.s.WaitForText(t, "1 tasks")
 	r.keys(t, key('d'))
 	r.s.WaitForText(t, "remove the task?")
 	r.keys(t, key('y'))
