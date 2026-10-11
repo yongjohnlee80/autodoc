@@ -45,6 +45,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/outline"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/script"
 )
 
 // Host is the program behind qml/main.qml.
@@ -233,10 +234,13 @@ type Host struct {
 	// still to ask about, and the one being restored once its file opens
 	recoveryDir     string
 	recoveryOffered bool
-	recoveryQueue   []recovered
-	pendingRestore  *recovered
-	draft           *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
-	prog            progress   // the daemon's work left (progress.go)
+	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
+	scripts        *script.Engine
+	luaDir         string
+	recoveryQueue  []recovered
+	pendingRestore *recovered
+	draft          *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
+	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
 	toasts      *widget.Toasts
@@ -303,6 +307,9 @@ type Options struct {
 	// RecoveryDir is where unsaved work is kept when AutoDoc ends without being asked to, and offered
 	// back at the next start (recovery.go); "" keeps nothing.
 	RecoveryDir string
+	// LuaDir holds the user's Lua commands, every *.lua in it (scripts.go); "" loads only AutoDoc's
+	// own.
+	LuaDir string
 	// ConfigPath is the config file the TUI runs on: the agent's autodoc runs on it too, so it
 	// reaches the TUI's store (agent.go). "" is the default config.
 	ConfigPath string
@@ -332,7 +339,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath, recoveryDir: opt.RecoveryDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath, recoveryDir: opt.RecoveryDir, luaDir: opt.LuaDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		picker:          tuidecl.NewListModel("key", "path"),
@@ -384,9 +391,11 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
-	h.addEditorCommands() // the command line's find is the page's (editorcmd.go)
-	h.installEditorMenu() // the stock rows, then related documents and back
-	h.linkPage()          // a raw HTML file's page opens its links as the preview pane does
+	h.addEditorCommands()        // the command line's find is the page's (editorcmd.go)
+	h.loadScripts()              // the Lua commands: AutoDoc's own, then the user's (scripts.go)
+	h.core.SetTableEditing(true) // the untitled draft is Markdown; readPage decides for a file
+	h.installEditorMenu()        // the stock rows, then related documents and back
+	h.linkPage()                 // a raw HTML file's page opens its links as the preview pane does
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)
@@ -437,6 +446,9 @@ func (h *Host) Run(ctx context.Context) error {
 	err := h.p.Run(ctx)
 	// ended unasked (a signal) with unsaved work: kept, and offered at the next start
 	keepErr := h.keepRecovery()
+	if h.scripts != nil {
+		h.scripts.Close()
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return errors.Join(append([]error{err, keepErr}, h.errs...)...)

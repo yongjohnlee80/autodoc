@@ -343,6 +343,8 @@ func (h *Host) readPage() {
 	}
 	h.core.SetReadOnly(h.file.derived != "")
 	k := h.kinds.Of(p, h.textExtensions()) // the daemon's registrations: it is the one indexing
+	// Tab walks a Markdown table's cells (the draft is Markdown too)
+	h.core.SetTableEditing(k == kind.Markdown || !h.file.open)
 	// a raw HTML file's Rendered view is its page (documentFor), where there is one: the GUI's
 	h.setRendered(k == kind.Markdown || h.file.derived != "" || h.file.raw && h.native())
 	switch {
