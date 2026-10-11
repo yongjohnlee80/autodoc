@@ -227,9 +227,16 @@ type Host struct {
 	removing     string
 	databases    bool
 
-	file  openedFile // the file in the editor (files.go)
-	draft *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
-	prog  progress   // the daemon's work left (progress.go)
+	file openedFile // the file in the editor (files.go)
+
+	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
+	// still to ask about, and the one being restored once its file opens
+	recoveryDir     string
+	recoveryOffered bool
+	recoveryQueue   []recovered
+	pendingRestore  *recovered
+	draft           *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
+	prog            progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
 	toasts      *widget.Toasts
@@ -293,6 +300,9 @@ type Options struct {
 	// AgentDir is where the agent terminal's agents work, a folder a workspace (agent.go); "" is
 	// one under the system's temporary folder.
 	AgentDir string
+	// RecoveryDir is where unsaved work is kept when AutoDoc ends without being asked to, and offered
+	// back at the next start (recovery.go); "" keeps nothing.
+	RecoveryDir string
 	// ConfigPath is the config file the TUI runs on: the agent's autodoc runs on it too, so it
 	// reaches the TUI's store (agent.go). "" is the default config.
 	ConfigPath string
@@ -322,7 +332,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath, recoveryDir: opt.RecoveryDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		picker:          tuidecl.NewListModel("key", "path"),
@@ -425,9 +435,11 @@ func (h *Host) Run(ctx context.Context) error {
 	defer h.session.Close()
 	defer h.stopPlugins() // after the loop: each stopped, bounded, before the session ends
 	err := h.p.Run(ctx)
+	// ended unasked (a signal) with unsaved work: kept, and offered at the next start
+	keepErr := h.keepRecovery()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return errors.Join(append([]error{err}, h.errs...)...)
+	return errors.Join(append([]error{err, keepErr}, h.errs...)...)
 }
 
 // keep records a handler's error for Run, and shows it.

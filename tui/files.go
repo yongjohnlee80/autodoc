@@ -146,6 +146,7 @@ func (h *Host) unsaved(answer string) {
 		}
 		h.write(h.core.Value(), h.file.version, then)
 	case "discard":
+		h.dropRecovery(h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
 		h.setDirty(false)
 		if then != nil {
 			then()
@@ -319,6 +320,7 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 	h.readPage()
 	h.relationsOfOpenFile()
 	h.htmlPaneNoteChanged()
+	h.applyPendingRestore(ws, p)
 }
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
@@ -570,6 +572,7 @@ func (h *Host) write(content, want string, after func()) {
 			h.setDirty(newer)
 			if !newer {
 				h.core.MarkSaved() // the command line's x reads it
+				h.dropRecovery(ws, p)
 			}
 			h.notify("saved " + p)
 			switch {

@@ -193,8 +193,9 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return 1
 		}
 	case *ui || *gui:
-		// SIGTERM only: the terminal's own keys (ctrl-c among them) are the TUI's
-		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
+		// SIGTERM and SIGHUP (the terminal gone): the program ends and keeps unsaved work for the
+		// next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the TUI's.
+		ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
 		defer stop()
 		if err := runUI(ctx, *configPath, *dev, fs.Arg(0), *gui, b); err != nil && !errors.Is(err, context.Canceled) {
 			fmt.Fprintln(stderr, "autodoc:", err)

@@ -134,6 +134,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Plugins:         plugins,
 		Registrations:   o.Registrations,
 		AgentDir:        filepath.Join(stateDir, "agent"),
+		RecoveryDir:     filepath.Join(stateDir, "recovery"),
 		ConfigPath:      configPath,
 		ProgramOptions:  o.ProgramOptions,
 		Fonts:           o.Fonts,

@@ -66,6 +66,7 @@ func (h *Host) start() {
 		h.loadWorkspaces()
 		h.followEvents()
 		h.watch()
+		h.p.Post(h.offerRecovery) // once a start: unsaved work kept when AutoDoc last ended
 	})
 }
 

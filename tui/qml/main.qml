@@ -438,6 +438,7 @@ Window {
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }
     UnsavedFile { id: unsavedFile }
+    Recovery { id: recoveryDialog }
     OpenHTML { id: openHTML }
     FileConflict { id: fileConflict }
     WorkspacePicker { id: workspacePicker }
