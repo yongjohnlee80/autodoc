@@ -123,8 +123,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Bool("serve", false, "run the daemon")
-	ui := fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
-	gui := fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
+	fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
+	fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
 	dev := fs.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
 	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	fs.Bool("version", false, "print the version")
@@ -192,17 +192,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
-		{flag: "ui", asked: func() bool { return *ui || *gui }, arg: true, run: func(ws string) int {
-			// SIGTERM and SIGHUP (the terminal gone): the program ends and keeps unsaved work for the
-			// next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the TUI's.
-			ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
-			defer stop()
-			if err := runUI(ctx, *configPath, *dev, ws, *gui, b); err != nil && !errors.Is(err, context.Canceled) {
-				return failed(err, 1)
-			}
-			return 0
-		}},
-		{flag: "gui", asked: func() bool { return false }, arg: true}, // --ui's row runs it
+		{flag: "ui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, false, b, stderr) }},
+		{flag: "gui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, true, b, stderr) }},
 	}
 	companions := []companion{
 		{flags: []string{"ensure", "restart"}, modes: []string{"print-endpoint"}, says: "--ensure and --restart go with --print-endpoint"},
@@ -214,4 +205,17 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		return code
 	}
 	return m.run(arg)
+}
+
+// uiMode is --ui and --gui. SIGTERM and SIGHUP (the terminal gone): the program ends and keeps
+// unsaved work for the next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the
+// TUI's.
+func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, stderr io.Writer) int {
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
+	if err := runUI(ctx, configPath, dev, ws, gui, b); err != nil && !errors.Is(err, context.Canceled) {
+		fmt.Fprintln(stderr, "autodoc:", err)
+		return 1
+	}
+	return 0
 }

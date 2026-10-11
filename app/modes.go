@@ -29,8 +29,8 @@ type companion struct {
 	says string
 }
 
-// choose parses args and picks the mode to run, with its argument: the first asked in the table's
-// order. ok false is a refusal, already said on fs's output, and the exit code to return.
+// choose parses args and picks the mode to run, with its argument: one mode, two asked together
+// are refused. ok false is a refusal, already said on fs's output, and the exit code to return.
 func choose(fs *flag.FlagSet, args []string, modes []mode, companions []companion) (m mode, arg string, code int, ok bool) {
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -75,6 +75,16 @@ func choose(fs *flag.FlagSet, args []string, modes []mode, companions []companio
 		fmt.Fprintf(fs.Output(), "autodoc: unexpected arguments: %v (only %s take one argument)\n", shown, list(takers))
 		return mode{}, "", 2, false
 	}
+	var chosen []string
+	for _, m := range modes {
+		if asked(m) {
+			chosen = append(chosen, "--"+m.flag)
+		}
+	}
+	if len(chosen) > 1 {
+		fmt.Fprintf(fs.Output(), "autodoc: %s are separate modes: give one\n", list(chosen))
+		return mode{}, "", 2, false
+	}
 	for _, c := range companions {
 		stray := ""
 		for _, f := range c.flags {
@@ -94,7 +104,7 @@ func choose(fs *flag.FlagSet, args []string, modes []mode, companions []companio
 		return mode{}, "", 2, false
 	}
 	for _, m := range modes {
-		if asked(m) && m.run != nil {
+		if asked(m) {
 			return m, arg, 0, true
 		}
 	}

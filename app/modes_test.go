@@ -40,6 +40,8 @@ func TestChooseDerivesItsChecksFromTheTable(t *testing.T) {
 		{args: []string{"-a", "w"}, says: "unexpected arguments: [w]"},
 		{args: []string{"-a", "-x", "v"}, says: "--x is for --b and --c"},
 		{args: []string{"-x", "v", "-b"}, ok: true, run: 11},
+		{args: []string{"-a", "-b", "w"}, says: "autodoc: --a and --b are separate modes: give one\n"},
+		{args: []string{"-c", "f", "-a", "-b"}, says: "autodoc: --a, --b and --c are separate modes: give one\n"},
 		{args: nil, says: "Usage of t"},
 	} {
 		fs, out, modes, companions := table()

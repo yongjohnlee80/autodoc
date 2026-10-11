@@ -108,8 +108,15 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		// first line as one) and says why
 		{[]string{"--config", bad, "--print-endpoint"}, 1, "", "config: invalid"},
 		{[]string{"--export", "html", "--output", filepath.Join(t.TempDir(), "x.html"), filepath.Join(t.TempDir(), "missing.md")}, 1, "", "autodoc:"},
+		// --ui reads its config before it opens the terminal
+		{[]string{"--config", bad, "--ui"}, 1, "", "config: invalid"},
 		// a build without the gui tag (this test's) says so, and how to get one
 		{[]string{"--gui"}, 1, "", "built without the GUI"},
+		// one mode at a time: two together are refused, whichever the order
+		{[]string{"--version", "--serve"}, 2, "", "autodoc: --version and --serve are separate modes: give one\n"},
+		{[]string{"--serve", "--version"}, 2, "", "autodoc: --version and --serve are separate modes: give one\n"},
+		{[]string{"--ui", "--gui"}, 2, "", "autodoc: --ui and --gui are separate modes: give one\n"},
+		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
 		{[]string{"--gui", "kb", "extra"}, 2, "", "only --contracts, --call, --export, --ui and --gui take one argument"},
 	} {
 		var stdout, stderr bytes.Buffer
