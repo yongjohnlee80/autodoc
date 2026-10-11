@@ -58,7 +58,8 @@ type Host struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 
-	about string
+	about     string
+	aboutInfo AboutInfo // what Help › About lists (help.go)
 	// layoutSrc is the layout as last loaded, dev the -dev directory ("" for none), theme the one
 	// the screen wears (theme.go).
 	layoutSrc []byte
@@ -277,8 +278,11 @@ type Host struct {
 
 // Options are what New needs from the program around it.
 type Options struct {
-	// About is the build and location text of Help › About.
+	// About replaces Help › About's text entirely; "" is AutoDoc's, from AboutInfo.
 	About string
+	// AboutInfo is what Help › About lists: the version and its date, the config and the daemon's
+	// log, the plugins (the daemon's socket is the session's).
+	AboutInfo AboutInfo
 	// GUI is set when the UI runs in a window (--gui): its theme is kept apart from the
 	// terminal's (gui.theme), sepia until one is chosen.
 	GUI bool
@@ -338,7 +342,7 @@ func New(session *Session, opt Options) (*Host, error) {
 
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
-	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, dev: opt.Dev,
+	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath, recoveryDir: opt.RecoveryDir, luaDir: opt.LuaDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,

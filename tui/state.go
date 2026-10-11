@@ -278,7 +278,9 @@ func (h *Host) state() map[string]any {
 		"App.fontSizes":     choices(fontSizeLabels()...),
 		"App.zoomSteps":     choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0,
-		"App.aboutText": h.aboutText(),
+	}
+	for k, v := range h.aboutState() {
+		st[k] = v
 	}
 	for k, v := range themeState(h.theme) {
 		st[k] = v

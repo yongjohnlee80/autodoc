@@ -1,5 +1,6 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X main.version=$(VERSION)
+BUILD_DATE := $(shell date -u +%F)
+LDFLAGS := -s -w -X main.version=$(VERSION) -X main.buildDate=$(BUILD_DATE)
 
 # The dev checkout nests worktrees inside the bare repo, and Go's nested-VCS
 # rule then points buildvcs at the bare dir and fails; the version comes from

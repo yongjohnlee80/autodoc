@@ -1975,7 +1975,7 @@ func TestTheVimKeysCard(t *testing.T) {
 	}
 	r.keys(t, key('?'))
 	r.s.WaitFor(t, "the card hidden", func(sc string) bool { return !strings.Contains(sc, "Vim keys") })
-	if got := onLoop(r, r.h.aboutText); !strings.Contains(got, "By Yong Sung John Lee") || !strings.Contains(got, "Apache License, Version 2.0") {
+	if got := onLoop(r, r.h.aboutText); !strings.Contains(got, "AUTHOR: Yong Sung John Lee") || !strings.Contains(got, "Licensed under Apache 2.0") {
 		t.Errorf("About says %q", got)
 	}
 }

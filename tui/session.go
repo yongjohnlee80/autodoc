@@ -36,6 +36,7 @@ func (h *Host) start() {
 				h.notifyOngoing(toastConnection, "connect failed (Help › About)")
 			}
 			h.set("App.aboutText", h.aboutText()+"\n\nThe last connect failed:\n"+err.Error())
+			h.set("App.aboutError", "The last connect failed: "+err.Error())
 			if h.mismatchRecovery && !errors.As(err, &me) {
 				// the older backend stopped, and the installed one did not come up: the recovery stays
 				// in its dialog, with the reason, and Restart Now tries the start again (ADR 0212 §8)

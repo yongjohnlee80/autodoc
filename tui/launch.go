@@ -31,6 +31,9 @@ type LaunchOptions struct {
 	Workspace string
 	// Version is the program's own, for Help › About.
 	Version string
+	// BuildDate is the day the build was made (YYYY-MM-DD), beside the version in Help › About;
+	// "" shows none.
+	BuildDate string
 	// Spawn starts the daemon when nothing answers on the socket and returns its log's path. nil is
 	// SpawnServe: this executable's --serve, detached, logging to serve.log in the state directory.
 	Spawn func(configPath, stateDir string) (string, error)
@@ -112,18 +115,16 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	if o.Plugins != nil {
 		plugins = *o.Plugins
 	}
-	about := o.About
-	if about == "" {
-		about = fmt.Sprintf("AutoDoc %s\n\nThe config: %s\nThe daemon's log, when --ui started it: %s\nThe plugins: %s (their logs: %s)",
-			o.Version, configPath, filepath.Join(stateDir, "serve.log"), plugins.Dir, plugins.LogDir)
-	}
+	info := AboutInfo{Version: o.Version, BuildDate: o.BuildDate, Config: configPath,
+		Log: filepath.Join(stateDir, "serve.log"), Plugins: plugins.Dir}
 	installed := o.Installed
 	if installed == nil {
 		installed = InstalledVersion
 	}
 	host, err := New(session, Options{
 		GUI:       o.GUI,
-		About:     about,
+		About:     o.About,
+		AboutInfo: info,
 		App:       []tuicore.AppOption{tuicore.WithBackend(backend)},
 		Dev:       o.Dev,
 		Layout:    o.Layout,

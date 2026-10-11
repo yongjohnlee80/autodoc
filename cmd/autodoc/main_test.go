@@ -63,3 +63,23 @@ func TestMainExitsWithAppMainsCode(t *testing.T) {
 		t.Fatalf("a usage error exited %d", code)
 	}
 }
+
+// TestTheBuildDateIsTheStampOrTheCommitsDay: a stamp wins; unstamped, the day of the commit the
+// build recorded; neither, no date.
+func TestTheBuildDateIsTheStampOrTheCommitsDay(t *testing.T) {
+	withTime := &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.time", Value: "2026-10-09T12:34:56Z"}}}
+	for _, c := range []struct {
+		stamped string
+		info    *debug.BuildInfo
+		want    string
+	}{
+		{"2026-10-11", withTime, "2026-10-11"},
+		{"", withTime, "2026-10-09"},
+		{"", &debug.BuildInfo{}, ""},
+		{"", &debug.BuildInfo{Settings: []debug.BuildSetting{{Key: "vcs.time", Value: "short"}}}, ""},
+	} {
+		if got := recordedDate(c.stamped, c.info); got != c.want {
+			t.Errorf("stamped %q: %q, want %q", c.stamped, got, c.want)
+		}
+	}
+}

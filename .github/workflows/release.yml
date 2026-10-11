@@ -48,7 +48,7 @@ jobs:
           OUT="autodoc-${VERSION}-${GOOS}-${GOARCH}${{ matrix.suffix }}"
           # -s -w: no symbol table or DWARF; stack traces keep their function
           # names. -trimpath keeps the runner's paths out of the binary.
-          go build -tags "${{ matrix.tags }}" -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o "${OUT}" ./cmd/autodoc
+          go build -tags "${{ matrix.tags }}" -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.buildDate=$(date -u +%F)" -o "${OUT}" ./cmd/autodoc
           tar czf "${OUT}.tar.gz" "${OUT}"
           shasum -a 256 "${OUT}.tar.gz" > "${OUT}.tar.gz.sha256" # on Ubuntu and macOS alike
       - uses: actions/upload-artifact@v4

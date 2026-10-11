@@ -34,6 +34,8 @@ type Options struct {
 	// Version is the build's, stamped in its main package: --version prints it, the daemon reports
 	// it, and the TUI compares it with the installed binary's, so it must be real.
 	Version string
+	// BuildDate is the day the build was made (YYYY-MM-DD), for Help › About; "" shows none.
+	BuildDate string
 	// Chunkers are the build's own chunkers, by lower-case extension with its dot: a file of one is
 	// indexed by it, as kind.Registered (ADR 0216 §1.2-1.3). They are added to golib's code
 	// chunkers (.go, .ts, .tsx, .js, .jsx, .mjs, .py, .rs), which every build has. Main refuses one
@@ -88,9 +90,10 @@ type (
 
 // build is a build as the modes run it: Options validated and frozen once, at entry.
 type build struct {
-	version string
-	reg     *registrations.Table
-	rank    Rank
+	version   string
+	buildDate string
+	reg       *registrations.Table
+	rank      Rank
 }
 
 // Main runs autodoc as its CLI does and returns the process's exit code: 2 for usage, 1 for an
@@ -112,7 +115,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}
-	b := build{version: o.Version, reg: reg, rank: o.Rank}
+	b := build{version: o.Version, buildDate: o.BuildDate, reg: reg, rank: o.Rank}
 	fs := flag.NewFlagSet("autodoc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	serve := fs.Bool("serve", false, "run the daemon")

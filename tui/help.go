@@ -165,12 +165,64 @@ n N      again, forward, back ?      this card`
 // author is AutoDoc's author, as NOTICE says.
 const author = "Yong Sung John Lee"
 
-// aboutText is the build and location detail.
-func (h *Host) aboutText() string {
-	about := h.about
-	if about == "" {
-		about = "AutoDoc — indexes, searches and edits a tree of files."
+// licence is how About names the licence.
+const licence = "Licensed under Apache 2.0"
+
+// AboutInfo is what Help › About lists, each on its own labelled line:
+//
+//	AutoDoc v0.1.37 (2026-10-11)
+//
+//	CONFIG: ~/.config/autodoc/config.toml
+//	(log: ~/.local/state/autodoc/serve.log)
+//	PLUGINS: ~/.config/autodoc/plugins
+//	DAEMON SOCKET: /run/user/1000/autodoc.sock
+//
+//	AUTHOR: Yong Sung John Lee
+//	Licensed under Apache 2.0
+type AboutInfo struct {
+	Version   string // the program's
+	BuildDate string // the day it was built, YYYY-MM-DD; "" for none
+	Config    string // the config file
+	Log       string // the daemon's log, when --ui started it
+	Plugins   string // the plugins folder
+}
+
+// aboutHeadline is "AutoDoc <version> (<date>)", the date left out when there is none.
+func (h *Host) aboutHeadline() string {
+	s := "AutoDoc " + h.aboutInfo.Version
+	if h.aboutInfo.BuildDate != "" {
+		s += " (" + h.aboutInfo.BuildDate + ")"
 	}
-	return about + "\n\nBy " + author + ". Licensed under the Apache License, Version 2.0." +
-		"\n\nThe daemon's socket: " + h.session.address()
+	return s
+}
+
+// aboutText is About as plain text: the program's replacement (Options.About), or AutoDoc's lines.
+func (h *Host) aboutText() string {
+	if h.about != "" {
+		return h.about
+	}
+	a := h.aboutInfo
+	return h.aboutHeadline() + "\n\n" +
+		"CONFIG: " + a.Config + "\n(log: " + a.Log + ")\n" +
+		"PLUGINS: " + a.Plugins + "\n" +
+		"DAEMON SOCKET: " + h.session.address() + "\n\n" +
+		"AUTHOR: " + author + "\n" + licence
+}
+
+// aboutState is About's sources, line by line, for About.qml's labels: the plain text too, which a
+// program's replacement uses, and the last connect's failure.
+func (h *Host) aboutState() map[string]any {
+	a := h.aboutInfo
+	return map[string]any{
+		"App.aboutText":     h.aboutText(),
+		"App.aboutCustom":   h.about != "",
+		"App.aboutHeadline": h.aboutHeadline(),
+		"App.aboutConfig":   a.Config,
+		"App.aboutLog":      "(log: " + a.Log + ")",
+		"App.aboutPlugins":  a.Plugins,
+		"App.aboutSocket":   h.session.address(),
+		"App.aboutAuthor":   author,
+		"App.aboutLicence":  licence,
+		"App.aboutError":    "",
+	}
 }
