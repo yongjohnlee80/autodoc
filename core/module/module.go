@@ -1,6 +1,10 @@
 package module
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+)
 
 // Scope is what a verb's first param names, and so what the host resolves before the handler runs.
 type Scope int
@@ -145,4 +149,29 @@ type Module interface {
 	Name() string
 	Verbs() []Verb
 	Errors() []PublicError
+}
+
+// Check reports what is wrong with c as a host would register it: no name, an optional param before
+// a required one, or an event naming a param c does not have. A host refuses such a verb at start.
+func (c Contract) Check() error {
+	if c.Verb == "" {
+		return errors.New("module: a contract with no verb name")
+	}
+	names := map[string]bool{}
+	optional := false
+	for _, p := range c.Params {
+		if optional && !p.Optional {
+			return fmt.Errorf("module: %s: %s is required after an optional param", c.Verb, p.Name)
+		}
+		optional = p.Optional
+		names[p.Name] = true
+	}
+	if e := c.Event; e != nil {
+		for _, n := range []string{e.Workspace, e.Detail} {
+			if n != "" && !names[n] {
+				return fmt.Errorf("module: %s: its event names a param it does not have: %s", c.Verb, n)
+			}
+		}
+	}
+	return nil
 }

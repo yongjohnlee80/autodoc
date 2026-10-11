@@ -302,3 +302,20 @@ func TestHandleDecodesEveryWireType(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckRefusesAContractAHostCannotServe(t *testing.T) {
+	good := module.Contract{Verb: "workspace.rename", Params: []module.Param{{Name: "name"}, {Name: "new name"}},
+		Event: &module.EventSpec{Kind: "workspace.renamed", Workspace: "name", Detail: "new name"}}
+	if err := good.Check(); err != nil {
+		t.Error(err)
+	}
+	for name, c := range map[string]module.Contract{
+		"no name":                 {Params: good.Params},
+		"an event's lost param":   {Verb: "x", Params: []module.Param{{Name: "name"}}, Event: &module.EventSpec{Kind: "k", Detail: "new name"}},
+		"required after optional": {Verb: "x", Params: []module.Param{{Name: "a", Optional: true}, {Name: "b"}}},
+	} {
+		if c.Check() == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
