@@ -77,6 +77,30 @@ t.section("a claimed store's life", function()
   t.ok(relerr == nil, "release", relerr and relerr.message)
 end)
 
+t.section("the verbs are the contracts'", function()
+  local contracts = require("autodoc.contracts")
+  local contract = require("autodoc.contract")
+  t.eq(client.PROTOCOL, contracts.protocol, "the plugin's protocol is its contracts'")
+  local bound, want = 0, 0
+  for verb, c in pairs(contracts.verbs) do
+    local name = verb:match("^todos%.(.+)$")
+    if name then
+      want = want + 1
+      if type(todos[name]) == "function" and todos.VERBS[name] then bound = bound + 1 end
+      local params = {}
+      for i, p in ipairs(c.params) do params[i] = p.name .. (p.optional and "?" or "") end
+      t.eq(table.concat(todos.VERBS[name] or {}, ","), table.concat(params, ","), verb .. "'s params are its contract's")
+    end
+  end
+  t.ok(want > 0 and bound == want, "every todos.* contract is a function", bound .. " of " .. want)
+  local sys = contract.domain("sys")
+  t.ok(sys.contracts and not sys.hello and not sys.shutdown, "the protocol's own verbs are not bound", vim.inspect(sys))
+  t.eq(contract.params("no.such"), nil, "a verb the contracts lack has no params")
+  local schema = require("autodoc.verbs").SPECS["kb.search"].schema
+  t.eq(vim.inspect(schema), vim.inspect({ workspace = "string?", query = "string", opts = "table?" }),
+    "kb.search's args are search.query's params, its workspace defaulted")
+end)
+
 t.section("the client's own checks", function()
   local ok, msg = pcall(todos.get, "kb", function() end)
   t.ok(not ok and tostring(msg):find("takes 2 to 2 params", 1, true), "too few params raise at the call", msg)

@@ -11,6 +11,7 @@
 ---its answer, bounded; a daemon that does not answer in time is an error, never a hang.
 ---@module 'autodoc.verbs'
 
+local contracts = require("autodoc.contracts")
 local session = require("autodoc.session")
 
 local M = {}
@@ -29,6 +30,22 @@ local function await(fn)
     return nil, { message = "autodoc: the daemon did not answer within " .. M.WAIT_MS .. " ms" }
   end
   return result, err
+end
+
+-- The registry's type for each contract param type a kb.* verb passes on.
+local REGISTRY_TYPES = { string = "string", map = "table", int = "number", bool = "boolean" }
+
+---args_of is a registry schema from a daemon verb's params (autodoc.contracts): each param by name,
+---"?" when it is optional or one of the names the registry verb fills in itself.
+---@param verb string
+---@param defaulted table<string, boolean>
+---@return table<string, string>
+local function args_of(verb, defaulted)
+  local schema = {}
+  for _, p in ipairs(contracts.verbs[verb].params) do
+    schema[p.name] = (REGISTRY_TYPES[p.type] or "any") .. ((p.optional or defaulted[p.name]) and "?" or "")
+  end
+  return schema
 end
 
 local function fail(err)
@@ -61,7 +78,8 @@ M.SPECS = {
   },
   ["kb.search"] = {
     description = "search.query on a workspace (default: the selected KB, else the project's primary). Args: {query, workspace?, opts?}.",
-    schema = { query = "string", workspace = "string?", opts = "table?" },
+    -- search.query's params; the workspace defaults to the selected KB
+    schema = args_of("search.query", { workspace = true }),
     handler = function(args)
       local ws = args.workspace or await(function(done) session.resolve_selected(done) end)
       if not ws then return fail("no KB selected, and this project has no primary KB") end

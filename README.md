@@ -604,7 +604,8 @@ speak.
   require("autodoc.todos").list("kb", {}, function(listing, err) … end)
   ```
 
-  `autodoc --contracts 'todos.*'` lists the verbs. Until the cutover claims a store, its writes
+  `autodoc --contracts 'todos.*'` lists the verbs; the functions are bound from the same contracts,
+  generated into `lua/autodoc/contracts.lua`. Until the cutover claims a store, its writes
   answer `-32077`, and AutoVim's auto-core keeps writing it.
 
 Saving a file in a KB reindexes it at once, without waiting for the daemon's watch.

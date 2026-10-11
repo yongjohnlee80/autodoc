@@ -16,9 +16,10 @@ local rpc = require("auto-core.rpc")
 
 local M = {}
 
--- The protocol this plugin is written for. The daemon serves it while it is within the daemon's
--- range; a verb added after it answers as an unknown method, so a newer daemon is fine.
-M.PROTOCOL = 20
+-- The protocol this plugin is written for: its contracts' (autodoc.contracts, generated with the
+-- binary it ships with). The daemon serves it while it is within the daemon's range; a verb added
+-- after it answers as an unknown method, so a newer daemon is fine.
+M.PROTOCOL = require("autodoc.contracts").protocol
 
 -- The name the daemon logs this client by. Not the TUI's: the TUI is held to the daemon's own
 -- protocol, this plugin to the range.
