@@ -16,8 +16,8 @@ import (
 
 var unixPeer = &net.UnixAddr{Name: "/tmp/s.sock", Net: "unix"}
 
-// sessionOf is a session after a hello as client.
-func sessionOf(client string) *golibrpc.Session {
+// clientSession is a session after a hello as client.
+func clientSession(client string) *golibrpc.Session {
 	sess := &golibrpc.Session{}
 	sess.SetValue(sessClient, client)
 	return sess
@@ -99,7 +99,7 @@ func TestEventsAreUnchanged(t *testing.T) {
 			want.Detail, _ = params[before.detail].(string)
 		}
 		n := len(ev.all())
-		if _, err := s.logged(v.module(), ok)(context.Background(), &golibrpc.Request{Method: name, Params: params, Session: sessionOf("test#1")}); err != nil {
+		if _, err := s.logged(v.module(), ok)(context.Background(), &golibrpc.Request{Method: name, Params: params, Session: clientSession("test#1")}); err != nil {
 			t.Fatal(err)
 		}
 		if got := ev.all()[n:]; !reflect.DeepEqual(got, []store.Event{want}) {
@@ -109,7 +109,7 @@ func TestEventsAreUnchanged(t *testing.T) {
 	cfg := s.verbs["workspace.configure"]
 	n := len(ev.all())
 	params := []any{"kb", map[string]any{"name": "docs", "schema": "s.yaml", "provider": "big", "view_args": map[string]any{}}}
-	if _, err := s.logged(cfg.module(), ok)(context.Background(), &golibrpc.Request{Params: params, Session: sessionOf("test#1")}); err != nil {
+	if _, err := s.logged(cfg.module(), ok)(context.Background(), &golibrpc.Request{Params: params, Session: clientSession("test#1")}); err != nil {
 		t.Fatal(err)
 	}
 	want := []store.Event{{Kind: "workspace.renamed", Workspace: "kb", Detail: "docs", Client: "test#1"},
@@ -131,9 +131,9 @@ func TestEveryVerbThatLogsSaysSo(t *testing.T) {
 	}
 }
 
-// TestLegacyArityIsTheContracts: the lo and hi each handler checks are its contract's required
-// count and its params' (a call with too many params answers them).
-func TestLegacyArityIsTheContracts(t *testing.T) {
+// TestArityIsTheContracts: the lo and hi each handler checks are its contract's required count and
+// its params' (a call with too many params answers them).
+func TestArityIsTheContracts(t *testing.T) {
 	s := New(Fixed(), "v")
 	want := regexp.MustCompile(`^want (\d+)(?: to (\d+))? parameters, got 64$`)
 	for name, v := range s.verbs {
@@ -147,22 +147,9 @@ func TestLegacyArityIsTheContracts(t *testing.T) {
 			if m[2] != "" {
 				hi, _ = strconv.Atoi(m[2])
 			}
-		} else if name == "sys.hello" && msg == "sys.hello takes one map" {
-			lo, hi = 0, 1
 		}
 		if lo != v.Required() || hi != len(v.Params) {
 			t.Errorf("%s checks %d to %d params (%q), its contract %d to %d", name, lo, hi, msg, v.Required(), len(v.Params))
 		}
 	}
-}
-
-// TestAVerbWithNoContractPanics: handle refuses a verb its table lacks.
-func TestAVerbWithNoContractPanics(t *testing.T) {
-	s := New(Fixed(), "v")
-	defer func() {
-		if recover() == nil {
-			t.Error("a verb with no contract was registered")
-		}
-	}()
-	s.handle("sys.nothing", s.hello)
 }

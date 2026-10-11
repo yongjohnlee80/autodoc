@@ -185,7 +185,7 @@ func TestDuplicateVerbPanics(t *testing.T) {
 			t.Error("a second registration of a verb did not panic")
 		}
 	}()
-	s.handle("sys.hello", s.hello)
+	s.own(s.sysVerbs()[0])
 }
 
 // TestSession runs what an AutoVim-shaped client does: list the workspaces, write a file, follow

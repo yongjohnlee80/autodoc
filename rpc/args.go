@@ -7,8 +7,9 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 )
 
-// Positional parameters arrive in msgpack's vocabulary: int64, string, []byte, []any,
-// map[string]any. These read them, answering InvalidParams for a wrong shape.
+// A verb's params are decoded by core/module from its params struct. The option maps some verbs
+// read themselves arrive in msgpack's vocabulary (int64, string, []byte, []any, map[string]any);
+// these read their values, answering InvalidParams for a wrong shape.
 
 func invalid(msg string) error {
 	return &golibrpc.Error{Code: golibrpc.CodeInvalidParams, Message: msg}
@@ -23,8 +24,6 @@ func argsBetween(p []any, lo, hi int) error {
 	}
 	return nil
 }
-
-func exactArgs(p []any, n int) error { return argsBetween(p, n, n) }
 
 func argStr(p []any, i int, name string) (string, error) {
 	if i >= len(p) {
@@ -52,20 +51,6 @@ func argInt(p []any, i int, name string) (int64, error) {
 	return 0, invalid(name + " must be an integer")
 }
 
-// argBytes reads a document's content: binary, or a string (the bytes as written).
-func argBytes(p []any, i int, name string) ([]byte, error) {
-	if i >= len(p) {
-		return nil, invalid(name + " is required")
-	}
-	switch b := p[i].(type) {
-	case []byte:
-		return b, nil
-	case string:
-		return []byte(b), nil
-	}
-	return nil, invalid(name + " must be binary or a string")
-}
-
 func strList(v any, name string) ([]string, error) {
 	l, ok := v.([]any)
 	if !ok {
@@ -80,15 +65,6 @@ func strList(v any, name string) ([]string, error) {
 		out[i] = s
 	}
 	return out, nil
-}
-
-// strs is a []string in the encoder's vocabulary.
-func strs(ss []string) []any {
-	out := make([]any, len(ss))
-	for i, s := range ss {
-		out[i] = s
-	}
-	return out
 }
 
 // protocolKey carries a request's session protocol to its handler.

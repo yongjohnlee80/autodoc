@@ -7,8 +7,6 @@ import (
 	"slices"
 	"sort"
 
-	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
-
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
@@ -210,45 +208,36 @@ func configureEvents(_ context.Context, p []any, _ any) []module.Event {
 	return out
 }
 
-func (s *Server) configureVerbs() {
-	s.handle("workspace.configure", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		name, err := argStr(p, 0, "workspace name")
-		if err != nil {
-			return nil, err
-		}
-		m, ok := p[1].(map[string]any)
-		if !ok {
-			return nil, invalid("settings must be a map")
-		}
-		c, err := changesOf(m)
-		if err != nil {
-			return nil, err
-		}
-		manager, ok := s.workspaces.(interface {
-			Configure(context.Context, string, store.Changes) error
-		})
-		if !ok {
-			return nil, errFixed
-		}
-		return nil, manager.Configure(ctx, name, c)
-	}, false))
-	// sys.capabilities is what this daemon offers beyond the core (core/edition): a client hides
-	// what is false. A daemon whose workspaces say nothing offers nothing extra. Its registrations
-	// are always there, empty for the community build (Protocol 10). verbs is what the session may
-	// call at the protocol it declared, so a client asks before it calls (Protocol 13).
-	s.handle("sys.capabilities", func(_ context.Context, req *golibrpc.Request) (any, error) {
-		if err := argsBetween(req.Params, 0, 0); err != nil {
-			return nil, err
-		}
-		out := map[string]any{"databases": false, "registrations": RegistrationsMap(s.reg), "ranker": s.rankerCapability(),
-			"verbs": strs(s.verbsAt(sessionProtocol(req.Session)))}
-		if c, ok := s.workspaces.(interface{ Capabilities() map[string]bool }); ok {
-			for k, v := range c.Capabilities() {
-				out[k] = v
+type workspaceConfigure struct {
+	Workspace string    `param:"workspace"`
+	Settings  optionMap `param:"settings" doc:"any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)"`
+}
+
+// The kinds of event workspace.configure may log, one for each setting it changed (configureEvents).
+const configureKinds = "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | " +
+	"workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval"
+
+func (s *Server) configureVerb() module.Verb {
+	v := module.Handle(module.Contract{Verb: "workspace.configure", Since: 9, Audience: module.AudienceUser,
+		Errors: []int64{CodeNoSuchWorkspace, CodeConflict, CodeNotFound, CodeUnsupported, CodeProviderRefused},
+		Event:  &module.EventSpec{Kind: configureKinds, Workspace: "workspace"},
+		Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},
+		func(ctx context.Context, p workspaceConfigure) (any, error) {
+			m, ok := p.Settings.raw.(map[string]any)
+			if !ok {
+				return nil, invalid("settings must be a map")
 			}
-		}
-		return out, nil
-	})
+			c, err := changesOf(m)
+			if err != nil {
+				return nil, err
+			}
+			if s.setters.configure == nil {
+				return nil, errFixed
+			}
+			return nil, s.setters.configure.Configure(ctx, p.Workspace, c)
+		})
+	v.Events = configureEvents
+	return v
 }
 
 // RegistrationsMap is a build's registrations as sys.capabilities reports them: each chunker's

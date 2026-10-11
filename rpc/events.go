@@ -72,32 +72,3 @@ func (s *Server) logged(v module.Verb, h golibrpc.Handler) golibrpc.Handler {
 		return out, nil
 	}
 }
-
-func (s *Server) registerEvents() {
-	s.handle("sys.events", s.verb(2, 2, func(ctx context.Context, _ *Workspace, p []any) (any, error) {
-		if s.events == nil {
-			return nil, errNoEvents
-		}
-		since, err := argInt(p, 0, "since")
-		if err != nil {
-			return nil, err
-		}
-		limit, err := argInt(p, 1, "limit")
-		if err != nil {
-			return nil, err
-		}
-		if limit < 1 || limit > maxEvents {
-			return nil, invalid("sys.events: limit must be 1 to 500")
-		}
-		evs, cursor, more, err := s.events.Events(ctx, since, int(limit))
-		if err != nil {
-			return nil, err
-		}
-		out := make([]any, len(evs))
-		for i, e := range evs {
-			out[i] = map[string]any{"seq": e.Seq, "kind": e.Kind, "workspace": e.Workspace, "client": e.Client,
-				"detail": e.Detail, "at": e.At}
-		}
-		return map[string]any{"cursor": cursor, "events": out, "more": more}, nil
-	}, false))
-}

@@ -32,17 +32,25 @@ type (
 	policySetter interface {
 		SetEmbeddingPolicy(ctx context.Context, name, policy string) error
 	}
+	workspaceConfigurer interface {
+		Configure(ctx context.Context, name string, c store.Changes) error
+	}
+	// capabilityReporter is what an edition offers beyond the core (core/edition), for
+	// sys.capabilities.
+	capabilityReporter interface{ Capabilities() map[string]bool }
 )
 
 // setters are what s.workspaces changes beyond its set, each nil when it cannot: read once, at New.
 type setters struct {
-	patterns patternSetter
-	provider providerSetter
-	texts    textExtensionSetter
-	schema   schemaSetter
-	section  sectionSizer
-	focus    focuser
-	policy   policySetter
+	patterns     patternSetter
+	provider     providerSetter
+	texts        textExtensionSetter
+	schema       schemaSetter
+	section      sectionSizer
+	focus        focuser
+	policy       policySetter
+	configure    workspaceConfigurer
+	capabilities capabilityReporter
 }
 
 func settersOf(ws Workspaces) setters {
@@ -54,6 +62,8 @@ func settersOf(ws Workspaces) setters {
 	s.section, _ = ws.(sectionSizer)
 	s.focus, _ = ws.(focuser)
 	s.policy, _ = ws.(policySetter)
+	s.configure, _ = ws.(workspaceConfigurer)
+	s.capabilities, _ = ws.(capabilityReporter)
 	return s
 }
 

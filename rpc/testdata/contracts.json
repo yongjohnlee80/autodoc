@@ -1233,7 +1233,7 @@
       "audience": "user",
       "params": [
         {
-          "name": "workspace name",
+          "name": "workspace",
           "type": "string"
         },
         {
@@ -1251,7 +1251,7 @@
       ],
       "event": {
         "kind": "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval",
-        "workspace": "workspace name"
+        "workspace": "workspace"
       },
       "doc": "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."
     },

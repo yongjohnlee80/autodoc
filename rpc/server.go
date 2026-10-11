@@ -14,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"os"
 	"sort"
 	"sync"
 
@@ -290,28 +289,24 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 		ropts = append(ropts, golibrpc.WithListener(o.listener))
 	}
 	s.rpc = golibrpc.New(msgpackrpc.New(decodeLimits()), ropts...)
-	for _, v := range legacyVerbs() {
-		s.legacy[v.Verb] = v
-	}
 	s.register()
-	for name := range s.legacy {
-		if _, ok := s.verbs[name]; !ok {
-			panic("rpc: " + name + " has a contract and no handler")
-		}
-	}
 	s.registerModules(o.modules)
 	return s
 }
 
-// handle registers one of rpc's own verbs with its contract's row (contracts.go); a verb with no
-// row panics at start.
-func (s *Server) handle(method string, h golibrpc.Handler) {
-	v, ok := s.legacy[method]
-	if !ok {
-		panic("rpc: " + method + " has no contract")
-	}
-	v.h = h
-	s.add(v)
+// register registers rpc's own verbs, by domain: each domain's file declares its verbs.
+func (s *Server) register() {
+	s.own(s.sysVerbs()...)
+	s.own(s.workspaceVerbs()...)
+	s.own(s.configureVerb())
+	s.own(s.preferenceVerbs()...)
+	s.own(s.searchVerbs()...)
+	s.own(s.indexVerbs()...)
+	s.own(s.graphVerbs()...)
+	s.own(s.docVerbs()...)
+	s.own(s.fileVerbs()...)
+	s.own(s.embeddingVerbs()...)
+	s.own(s.rankerVerbs()...)
 }
 
 // add registers v. A contract that does not check, or a second registration of one name, panics at
@@ -412,66 +407,6 @@ func (s *Server) verbsAt(p int64) []string {
 		}
 	}
 	return out
-}
-
-// hello answers sys.hello({protocol, name}). No protocol is a probe: it is answered, and admits
-// nothing. A protocol this build serves admits the session at that protocol (the TUI's, only this
-// build's own); another refuses it for good.
-func (s *Server) hello(ctx context.Context, req *golibrpc.Request) (any, error) {
-	if len(req.Params) > 1 {
-		return nil, invalid("sys.hello takes one map")
-	}
-	var info map[string]any
-	if len(req.Params) == 1 {
-		m, ok := req.Params[0].(map[string]any)
-		if !ok {
-			return nil, invalid("sys.hello takes one map")
-		}
-		info = m
-	}
-	reply := map[string]any{"protocol": Protocol, "server_protocol": Protocol, "min_protocol": MinProtocol,
-		"server": ServerName, "version": s.version, "instance": s.instance, "pid": int64(os.Getpid()),
-		"addr": s.rpc.Addr(), "store_id": s.storeID}
-	raw, declared := info["protocol"]
-	if !declared {
-		return reply, nil
-	}
-	proto, ok := raw.(int64)
-	if !ok {
-		return nil, invalid("sys.hello: protocol must be an integer")
-	}
-	name, _ := info["name"].(string)
-	if !admits(proto, name) {
-		req.Session.SetValue(sessRefused, true)
-		return nil, &golibrpc.Error{Code: CodeProtocolMismatch,
-			Message: fmt.Sprintf("protocol mismatch: client %d, server %d (serves %d to %d)", proto, Protocol, MinProtocol, Protocol)}
-	}
-	req.Session.SetValue(sessHello, true)
-	req.Session.SetValue(sessProtocol, proto)
-	reply["protocol"] = proto
-	token := newClientToken(name)
-	req.Session.SetValue(sessClient, token)
-	reply["client"] = token
-	if s.events != nil {
-		// where this client's sys.events begins: what happened before it connected is in its snapshot
-		if _, head, _, err := s.events.Events(ctx, -1, 1); err == nil {
-			reply["events"] = head
-		}
-	}
-	return reply, nil
-}
-
-// shutdown answers sys.shutdown from a local peer: the unix socket, whose 0600 mode is the access
-// control.
-func (s *Server) shutdown(_ context.Context, req *golibrpc.Request) (any, error) {
-	if err := exactArgs(req.Params, 0); err != nil {
-		return nil, err
-	}
-	if req.Peer == nil || req.Peer.Network() != "unix" {
-		return nil, &golibrpc.Error{Code: golibrpc.CodeAccessDenied, Message: "sys.shutdown is for local peers"}
-	}
-	s.RequestShutdown()
-	return nil, nil
 }
 
 var errNoSuchWorkspace = errors.New("rpc: no such workspace")

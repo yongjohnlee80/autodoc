@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -147,40 +146,4 @@ func wireErr(err error) error {
 		}
 	}
 	return err
-}
-
-func (s *Server) register() {
-	s.registerEvents()
-	s.configureVerbs()
-	s.registerContracts()
-	s.own(s.preferenceVerbs()...)
-	s.own(s.workspaceVerbs()...)
-	s.own(s.searchVerbs()...)
-	s.own(s.indexVerbs()...)
-	s.own(s.graphVerbs()...)
-	s.own(s.docVerbs()...)
-	s.own(s.fileVerbs()...)
-	s.own(s.embeddingVerbs()...)
-	s.own(s.rankerVerbs()...)
-	s.handle("sys.hello", s.hello)
-	s.handle("sys.shutdown", s.shutdown)
-}
-
-// verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
-// first when ws is set, and maps the errors.
-func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (any, error), ws bool) golibrpc.Handler {
-	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
-		if err := argsBetween(req.Params, lo, hi); err != nil {
-			return nil, err
-		}
-		var w *Workspace
-		if ws {
-			var err error
-			if w, err = s.workspace(req.Params); err != nil {
-				return nil, wireErr(err)
-			}
-		}
-		out, err := h(withProtocol(ctx, sessionProtocol(req.Session)), w, req.Params)
-		return out, wireErr(err)
-	}
 }

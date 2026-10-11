@@ -64,6 +64,25 @@ func workspaceOf(ctx context.Context) *Workspace {
 	return w
 }
 
+// verb wraps a handler: it checks the parameter count (lo to hi), resolves the workspace named
+// first when ws is set, and maps the errors.
+func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (any, error), ws bool) golibrpc.Handler {
+	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
+		if err := argsBetween(req.Params, lo, hi); err != nil {
+			return nil, err
+		}
+		var w *Workspace
+		if ws {
+			var err error
+			if w, err = s.workspace(req.Params); err != nil {
+				return nil, wireErr(err)
+			}
+		}
+		out, err := h(withProtocol(ctx, sessionProtocol(req.Session)), w, req.Params)
+		return out, wireErr(err)
+	}
+}
+
 // serve is a module verb's handler, on the wrappers rpc's own verbs use: verb checks the arity the
 // contract gives, resolves a ScopeWorkspace verb's workspace and maps what the module leaves
 // unmapped; local refuses a ScopeLocalPeer verb over TCP. The handler's ctx carries the session's
@@ -84,8 +103,17 @@ func (s *Server) serve(v module.Verb, errs []module.PublicError) golibrpc.Handle
 		h = s.local(v.Verb, lo, hi, call)
 	}
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
+		ctx = context.WithValue(ctx, sessionKey{}, req.Session)
 		return h(module.WithClient(ctx, clientOf(req.Session)), req)
 	}
+}
+
+type sessionKey struct{}
+
+// sessionOf is the session a verb of rpc's was called in: sys.hello opens it.
+func sessionOf(ctx context.Context) *golibrpc.Session {
+	sess, _ := ctx.Value(sessionKey{}).(*golibrpc.Session)
+	return sess
 }
 
 // moduleErr is a module verb's error as the client sees it: params that do not fit its contract,
