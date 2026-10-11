@@ -311,4 +311,16 @@ func TestTheTerminalCommandOpensTheTerminal(t *testing.T) {
 	r.s.WaitFor(t, "the pane hidden", func(sc string) bool { return !strings.Contains(sc, "┌ terminal") })
 	r.command(t, "term")
 	r.s.WaitForText(t, "┌ terminal")
+	// open already: the keyboard back in the page, :terminal gives it to the terminal again and
+	// leaves the pane as it is
+	onLoop(r, func() error { return r.h.p.Call("editor", "forceActiveFocus") })
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	if !r.termShown() {
+		t.Fatal("the terminal closed when the page took the keyboard")
+	}
+	r.command(t, "terminal")
+	r.s.WaitFor(t, "the terminal's keyboard again", func(string) bool { return r.focused("terminalView") })
+	if !r.termShown() {
+		t.Fatal(":terminal over an open terminal closed it")
+	}
 }
