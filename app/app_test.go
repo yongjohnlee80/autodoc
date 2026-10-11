@@ -119,6 +119,8 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--serve", "--version"}, 2, "", "autodoc: --version and --serve are separate modes: give one\n"},
 		{[]string{"--ui", "--gui"}, 2, "", "autodoc: --ui and --gui are separate modes: give one\n"},
 		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
+		// --dev is the UI's: without it, it is refused
+		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
 		{[]string{"--gui", "kb", "extra"}, 2, "", "only --contracts, --call, --export, --ui and --gui take one argument"},
 	} {
 		var stdout, stderr bytes.Buffer

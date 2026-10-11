@@ -125,7 +125,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("serve", false, "run the daemon")
 	fs.Bool("ui", false, "run the TUI (starts --serve when nothing answers); a workspace name after the flags opens it")
 	fs.Bool("gui", false, "run the UI in a window instead of the terminal, as --ui does (a build with the GUI: make build on macOS, or on Linux with its window libraries); a workspace name after the flags opens it")
-	dev := fs.String("dev", "", "--ui: read the TUI's QML from this directory, and follow edits to it")
+	dev := fs.String("dev", "", "--ui and --gui: read the TUI's QML from this directory, and follow edits to it")
 	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	fs.Bool("version", false, "print the version")
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
@@ -199,6 +199,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"ensure", "restart"}, modes: []string{"print-endpoint"}, says: "--ensure and --restart go with --print-endpoint"},
 		{flags: []string{"base", "output", "theme"}, modes: []string{"export"}},
 		{flags: []string{"format"}, modes: []string{"contracts"}},
+		{flags: []string{"dev"}, modes: []string{"ui", "gui"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)
 	if !ok {
