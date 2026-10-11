@@ -75,14 +75,6 @@ func legacyVerbs() []verb {
 			Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},
 			events: configureEvents},
 
-		// search
-		c(module.Contract{Verb: "search.query", Since: 1, Scope: workspace, Audience: agent,
-			Params: []module.Param{workspaceParam, param("query", "string", "words, \"phrases\", a prefix*, field:value filters"),
-				optional("opts", "map", "{limit, stages, mode, tags, paths, facets, retrieval}")},
-			Result: "{hits: [{path, breadcrumb, snippet, byte_start, byte_end, line_start?, line_end?, relevance, score, via, rank_score?, superseded_by?, generation, hold}], mode_used, semantic, rank, stages, semantic_error?}",
-			Errors: []int64{CodeNoSuchWorkspace, CodeUnsupported, CodeEmbedFailed, CodeSwitching, CodeRankUnavailable},
-			Doc:    "The search, ranked: see search.query above."}),
-
 		// index
 		c(module.Contract{Verb: "index.list", Since: 1, Scope: workspace, Audience: agent,
 			Params: []module.Param{workspaceParam, param("after", "string", "a path; \"\" from the start"), param("limit", "int", "")},

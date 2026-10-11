@@ -158,3 +158,11 @@ func graphKinds(ctx context.Context, p []any, i int) ([]string, error) {
 	}
 	return nil, nil
 }
+
+// optionMap is an options param its verb reads itself, so that a value that is not a map is refused
+// in the verb's own words; nil, like an absent one, is none.
+type optionMap struct{ raw any }
+
+func (o *optionMap) DecodeParam(v any) error { o.raw = v; return nil }
+
+func (*optionMap) ParamType() string { return "map" }

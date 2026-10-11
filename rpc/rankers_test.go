@@ -158,8 +158,8 @@ func TestRankerRefusals(t *testing.T) {
 // none; the result's rank is off when nothing ranked it.
 func TestSearchCarriesTheRanking(t *testing.T) {
 	zero, one := 0.0, 1.0
-	ranked := resultMap(index.Result{Hits: []index.Hit{{Path: "a.md", RankScore: &one}, {Path: "b.md", RankScore: &zero}},
-		Rank: index.RankState{State: "ready", Model: "bge"}})
+	ranked := asWire(t, resultOf(index.Result{Hits: []index.Hit{{Path: "a.md", RankScore: &one}, {Path: "b.md", RankScore: &zero}},
+		Rank: index.RankState{State: "ready", Model: "bge"}}))
 	hits := ranked["hits"].([]any)
 	if s, ok := hits[1].(map[string]any)["rank_score"]; !ok || s != 0.0 {
 		t.Errorf("a hit ranked 0: rank_score %v, %v", s, ok)
@@ -167,7 +167,7 @@ func TestSearchCarriesTheRanking(t *testing.T) {
 	if !reflect.DeepEqual(ranked["rank"], map[string]any{"state": "ready", "model": "bge", "error": ""}) {
 		t.Errorf("rank = %v", ranked["rank"])
 	}
-	plain := resultMap(index.Result{Hits: []index.Hit{{Path: "a.md"}}})
+	plain := asWire(t, resultOf(index.Result{Hits: []index.Hit{{Path: "a.md"}}}))
 	if _, ok := plain["hits"].([]any)[0].(map[string]any)["rank_score"]; ok {
 		t.Error("an unranked hit carries a rank_score")
 	}

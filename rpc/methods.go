@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -170,29 +169,9 @@ func (s *Server) register() {
 	s.registerContracts()
 	s.own(s.preferenceVerbs()...)
 	s.own(s.workspaceVerbs()...)
+	s.own(s.searchVerbs()...)
 	s.handle("sys.hello", s.hello)
 	s.handle("sys.shutdown", s.shutdown)
-	s.handle("search.query", s.verb(2, 3, func(ctx context.Context, w *Workspace, p []any) (any, error) {
-		q, err := argStr(p, 1, "query")
-		if err != nil {
-			return nil, err
-		}
-		opts, err := queryOpts(p)
-		if err != nil {
-			return nil, err
-		}
-		if w.Searched != nil {
-			w.Searched()
-		}
-		res, err := w.Index.Search(ctx, q, opts)
-		if err != nil {
-			return nil, err
-		}
-		out := resultMap(res)
-		addLines(ctx, w, res.Hits, out["hits"].([]any))
-		return out, nil
-	}, true))
-
 	// index.documents lists the workspace's documents with their frontmatter, ordered by updated
 	// (default), path or indexed, narrowed by tags, paths, facets and missing fields: the index a
 	// client renders instead of a hand-kept one (Protocol 13). opts.diagnosed keeps the documents the
@@ -541,95 +520,6 @@ func (s *Server) verb(lo, hi int, h func(context.Context, *Workspace, []any) (an
 	}
 }
 
-// queryOpts reads search.query's optional third parameter: {limit, stages, mode, tags, paths,
-// facets}.
-func queryOpts(p []any) (index.QueryOpts, error) {
-	var o index.QueryOpts
-	if len(p) < 3 || p[2] == nil {
-		return o, nil
-	}
-	m, ok := p[2].(map[string]any)
-	if !ok {
-		return o, invalid("search.query: opts must be a map")
-	}
-	for k, v := range m {
-		switch k {
-		case "limit":
-			n, ok := v.(int64)
-			if !ok {
-				return o, invalid("search.query: opts.limit must be an integer")
-			}
-			o.Limit = int(n)
-		case "stages":
-			l, err := strList(v, "search.query: opts.stages")
-			if err != nil {
-				return o, err
-			}
-			o.Stages = l // an empty list is stages naming none, never auto
-		case "mode":
-			s, ok := v.(string)
-			if !ok {
-				return o, invalid("search.query: opts.mode must be a string")
-			}
-			if s == "" {
-				s = index.ModeAuto // a mode said is a mode, so stages beside it are refused
-			}
-			o.Mode = s
-		case "facets":
-			fm, ok := v.(map[string]any)
-			if !ok {
-				return o, invalid("search.query: opts.facets must be a map of field to a value or a list of values")
-			}
-			o.Facets = map[string][]string{}
-			for field, fv := range fm {
-				if s, ok := fv.(string); ok {
-					o.Facets[field] = []string{s}
-					continue
-				}
-				l, err := strList(fv, "search.query: opts.facets."+field)
-				if err != nil {
-					return o, err
-				}
-				o.Facets[field] = l
-			}
-		case "retrieval":
-			rm, ok := v.(map[string]any)
-			if !ok {
-				return o, invalid("search.query: opts.retrieval must be a map")
-			}
-			r := &index.Retrieval{}
-			for rk, rv := range rm {
-				b, ok := rv.(bool)
-				if !ok {
-					return o, invalid("search.query: opts.retrieval." + rk + " must be true or false")
-				}
-				switch rk {
-				case "abstract_chunk":
-					r.AbstractChunk = &b
-				case "demote_superseded":
-					r.DemoteSuperseded = &b
-				default:
-					return o, invalid("search.query: unknown retrieval option " + rk)
-				}
-			}
-			o.Retrieval = r
-		case "tags", "paths":
-			l, err := strList(v, "search.query: opts."+k)
-			if err != nil {
-				return o, err
-			}
-			if k == "tags" {
-				o.Tags = l
-			} else {
-				o.Paths = l
-			}
-		default:
-			return o, invalid("search.query: unknown option " + k)
-		}
-	}
-	return o, nil
-}
-
 // documentsOpts reads index.documents' optional second parameter: {sort, fields, tags, paths,
 // facets, missing, after, limit}.
 // diagnosedSince is the protocol index.documents' diagnosed option arrived in.
@@ -711,80 +601,6 @@ func documentsOpts(ctx context.Context, p []any) (index.DocumentsOpts, error) {
 		}
 	}
 	return o, nil
-}
-
-// addLines gives each hit line_start and line_end (1-based, the lines its span starts and ends on)
-// when its document is a file read as it is, so a client reads just that range with a line-ranged
-// reader, and opens a file at the line without converting bytes (Protocol 13). Each document is read
-// once. A hit on a held or derived document, or one whose span the file no longer holds (it changed
-// since it was indexed), gets neither: its bytes are not the file's.
-func addLines(ctx context.Context, w *Workspace, hits []index.Hit, out []any) {
-	if w.Docs == nil {
-		return
-	}
-	read := map[string][]byte{}
-	for i, h := range hits {
-		if h.Hold != "" || w.Docs.Derived(h.Path) {
-			continue
-		}
-		content, ok := read[h.Path]
-		if !ok {
-			if d, err := w.Docs.Read(ctx, h.Path); err == nil {
-				content = d.Content
-			}
-			read[h.Path] = content
-		}
-		start, end, ok := spanLines(content, h.ByteStart, h.ByteEnd)
-		if !ok {
-			continue
-		}
-		m := out[i].(map[string]any)
-		m["line_start"], m["line_end"] = int64(start), int64(end)
-	}
-}
-
-// spanLines is the 1-based lines the bytes [start, end) of content start and end on; false when
-// content does not hold the span.
-func spanLines(content []byte, start, end int) (int, int, bool) {
-	if content == nil || start < 0 || end < start || end > len(content) {
-		return 0, 0, false
-	}
-	first := 1 + bytes.Count(content[:start], []byte{'\n'})
-	last := first + bytes.Count(content[start:end], []byte{'\n'})
-	if end > start && content[end-1] == '\n' {
-		last-- // a span that ends with its line's newline ends on that line
-	}
-	return first, last, true
-}
-
-func resultMap(r index.Result) map[string]any {
-	hits := make([]any, len(r.Hits))
-	for i, h := range r.Hits {
-		hits[i] = map[string]any{"path": h.Path, "breadcrumb": h.Breadcrumb, "snippet": h.Snippet,
-			"generation": h.Generation, "byte_start": int64(h.ByteStart), "byte_end": int64(h.ByteEnd),
-			"score": h.Score, "relevance": h.Relevance, "via": strs(h.Via), "hold": h.Hold}
-		if h.SupersededBy != "" {
-			hits[i].(map[string]any)["superseded_by"] = h.SupersededBy
-		}
-		if h.RankScore != nil { // present only for a ranked hit: 0 is a score
-			hits[i].(map[string]any)["rank_score"] = *h.RankScore
-		}
-	}
-	out := map[string]any{"hits": hits, "mode_used": r.ModeUsed, "semantic": r.Semantic}
-	state := r.Rank.State
-	if state == "" {
-		state = "off"
-	}
-	out["rank"] = map[string]any{"state": state, "model": r.Rank.Model, "error": r.Rank.Error}
-	skipped := map[string]any{}
-	for stage, why := range r.Stages.Skipped {
-		skipped[stage] = why
-	}
-	out["stages"] = map[string]any{"requested": strs(r.Stages.Requested), "performed": strs(r.Stages.Performed), "skipped": skipped}
-	if r.SemanticError != "" {
-		out["semantic_error"] = r.SemanticError
-	}
-	return out
 }
 
 func statusMap(st index.Status, w *Workspace) map[string]any {

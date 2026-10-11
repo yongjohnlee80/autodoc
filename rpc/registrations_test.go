@@ -28,7 +28,7 @@ func TestWorkspaceListNamesTextCollisions(t *testing.T) {
 // A held document reaches the wire (Protocol 10): a hit's hold, index.status's counts, and
 // index.reindex's refusal as invalid parameters naming the way out.
 func TestHeldDocumentsOnTheWire(t *testing.T) {
-	hits := resultMap(index.Result{Hits: []index.Hit{{Path: "a.go", Hold: index.HoldStale}, {Path: "n.md"}}})["hits"].([]any)
+	hits := asWire(t, resultOf(index.Result{Hits: []index.Hit{{Path: "a.go", Hold: index.HoldStale}, {Path: "n.md"}}}))["hits"].([]any)
 	if hits[0].(map[string]any)["hold"] != "stale" || hits[1].(map[string]any)["hold"] != "" {
 		t.Errorf("hits %v", hits)
 	}
