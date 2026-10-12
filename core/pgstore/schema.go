@@ -25,6 +25,7 @@ const (
 type docRow struct {
 	Tenant, Path, Title string
 	Version, Indexer    string
+	SourceID            string // 000004
 	ID, Generation      int64
 	Tags, Facets        []string
 	Ready               bool
@@ -43,6 +44,7 @@ const (
 	dIndexer docField = "indexer"
 	dGen     docField = "generation"
 	dReady   docField = "semantic_ready"
+	dSource  docField = "source_id" // 000004
 )
 
 type docSort string
@@ -70,6 +72,7 @@ func newDocSchema(conn dao.DataConn) *docSchema {
 			dIndexer: {Expr: dao.T(tDoc, dIndexer), Scan: func(r *docRow) any { return &r.Indexer }, Value: func(r *docRow) any { return r.Indexer }},
 			dGen:     {Expr: dao.T(tDoc, dGen), Scan: func(r *docRow) any { return &r.Generation }, Value: func(r *docRow) any { return r.Generation }},
 			dReady:   {Expr: dao.T(tDoc, dReady), Scan: func(r *docRow) any { return &r.Ready }, Value: func(r *docRow) any { return r.Ready }},
+			dSource:  {Expr: dao.T(tDoc, dSource), Scan: func(r *docRow) any { return &r.SourceID }, Value: func(r *docRow) any { return r.SourceID }},
 		})),
 		o(dao.Default[*docRow, docField, docSort, int64](dID, dPath, dTitle, dTags, dFacets, dVersion, dIndexer, dGen, dReady)),
 		o(dao.SortExpr[*docRow, docField, docSort, int64](dByPath, dao.T(tDoc, dPath))),

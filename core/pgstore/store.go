@@ -105,6 +105,72 @@ func (s *Store) ViewWithin(ctx context.Context, access map[string][]string, fn f
 	})
 }
 
+// ViewPolicy runs fn in one View scoped by access, in the snapshot of the tenant's policy. The
+// View's first statement reads the policy (ErrNoPolicy when none is recorded); access is held to
+// it (ErrNoAccess): every access field of the policy given at least one value, no value empty or
+// repeated, no field outside the policy. Then check, when not nil, may refuse more, its error
+// returned as it is; it cannot loosen what the policy holds access to. Only then does fn run.
+//
+// The policy, the checks and every row fn reads are one REPEATABLE READ snapshot, fixed by the
+// policy read: a policy changed concurrently is either seen, and the access checked against it,
+// or not seen at all, together with the documents written beside it. Reading the policy apart
+// from the View would let a scope checked against the old policy read the new documents.
+func (s *Store) ViewPolicy(ctx context.Context, access map[string][]string, check func(p Policy, access map[string][]string) error, fn func(v *View) error) error {
+	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		r, err := s.ro.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Get(pAccess, pView)
+		switch {
+		case errors.Is(err, dao.ErrNoRows):
+			return ErrNoPolicy
+		case err != nil:
+			return fmt.Errorf("pgstore: policy: %w", err)
+		}
+		p := Policy{AccessFields: r.AccessFields, View: r.View}
+		if err := holdToPolicy(p, access); err != nil {
+			return err
+		}
+		if check != nil {
+			if err := check(p, access); err != nil {
+				return err
+			}
+		}
+		preds, err := accessPredicates(access)
+		if err != nil {
+			return err
+		}
+		return fn(&View{s: s, tx: tx, access: preds})
+	})
+}
+
+// holdToPolicy refuses (ErrNoAccess) an access that does not give the policy's every field at
+// least one value, has an empty or a repeated value, or names a field outside the policy.
+func holdToPolicy(p Policy, access map[string][]string) error {
+	if len(p.AccessFields) == 0 {
+		return fmt.Errorf("%w: the tenant's policy has no access field", ErrNoAccess)
+	}
+	for _, f := range p.AccessFields {
+		vals := access[f]
+		if len(vals) == 0 {
+			return fmt.Errorf("%w: no value for the access field %q", ErrNoAccess, f)
+		}
+		seen := make(map[string]bool, len(vals))
+		for _, v := range vals {
+			switch {
+			case v == "":
+				return fmt.Errorf("%w: an empty value for the access field %q", ErrNoAccess, f)
+			case seen[v]:
+				return fmt.Errorf("%w: the value %q twice for the access field %q", ErrNoAccess, v, f)
+			}
+			seen[v] = true
+		}
+	}
+	for f := range access {
+		if !slices.Contains(p.AccessFields, f) {
+			return fmt.Errorf("%w: %q is not an access field of the tenant", ErrNoAccess, f)
+		}
+	}
+	return nil
+}
+
 // accessPredicates are access's predicates over the document's facets: one per field, in field
 // order, each ORing the field's allowed values.
 func accessPredicates(access map[string][]string) ([]dao.Predicate, error) {
@@ -148,6 +214,9 @@ type Document struct {
 	// Kinds are the chunks' kinds, by position: none, or one per chunk. A missing or "" kind is
 	// ChunkSection.
 	Kinds []string
+	// SourceID is the source row the document was rendered from (an enterprise .view's id): a
+	// search hit links back to its record by it. "" for none.
+	SourceID string
 }
 
 // The kinds of chunk (000002): a document's section, or its abstract. WithSectionsOnly leaves the
@@ -344,7 +413,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 		case errors.Is(err, dao.ErrNoRows):
 			id, err = s.rw.doc.On(tx, dao.WithQueryContext(ctx)).Set(dTenant, s.tenant).Set(dPath, d.Path).Set(dTitle, d.Title).
 				Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, int64(1)).Set(dReady, false).Insert()
+				Set(dGen, int64(1)).Set(dReady, false).Set(dSource, d.SourceID).Insert()
 			if err != nil {
 				// two first writers of one path both saw no row: the unique (tenant, path) makes
 				// the second's insert a duplicate — the same race, retried on the update path
@@ -365,7 +434,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 			n, err := dao.UpdateAffected(s.rw.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dID, id).
 				With(dGen, cur.Generation).
 				Set(dTitle, d.Title).Set(dTags, tags).Set(dFacets, facets).Set(dVersion, d.Version).Set(dIndexer, d.Indexer).
-				Set(dGen, cur.Generation+1).Set(dReady, false))
+				Set(dGen, cur.Generation+1).Set(dReady, false).Set(dSource, d.SourceID))
 			if err != nil {
 				return err
 			}

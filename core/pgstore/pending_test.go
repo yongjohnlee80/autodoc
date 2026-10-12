@@ -260,8 +260,10 @@ func TestMigration000003IndexesTheUnreadyDocuments(t *testing.T) {
 	if !strings.Contains(scalar(t, conn, `SELECT indexdef FROM pg_indexes WHERE indexname = 'rag_document_unready_id'`), "WHERE (NOT semantic_ready)") {
 		t.Error("rag_document_unready_id is not partial on the unready documents")
 	}
-	if _, err := deploy.New(migrations, deploy.Ledger(Ledger)).Revert(ctx, conn, 3); err != nil {
-		t.Fatal(err)
+	for _, n := range []int{4, 3} { // the latest first: 000004 sits on 000003
+		if _, err := deploy.New(migrations, deploy.Ledger(Ledger)).Revert(ctx, conn, n); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if got := indexes(); got != "" {
 		t.Errorf("after the revert: %q", got)

@@ -3,7 +3,9 @@ package pgstore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
+	"sync"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/postgres"
@@ -24,6 +26,51 @@ type View struct {
 	s      *Store
 	tx     *dao.Transaction
 	access []dao.Predicate // ViewWithin's; nil is unscoped
+
+	mu   sync.Mutex
+	seen map[int64]bool // the documents handed out as candidates (CandidateSourceIDs)
+}
+
+// saw records the documents of cands as handed out, and returns cands.
+func (v *View) saw(cands []search.Candidate[int64]) []search.Candidate[int64] {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.seen == nil {
+		v.seen = map[int64]bool{}
+	}
+	for _, c := range cands {
+		v.seen[c.Doc] = true
+	}
+	return cands
+}
+
+// CandidateSourceIDs are the source ids of every document this View has handed out as a
+// candidate (Lexical, Semantic, List), by path, read in the View's own snapshot under its access
+// predicate: a search's hits, all of them its candidates, linked to their source rows in the
+// snapshot they were found in. A document with no source id maps to "".
+func (v *View) CandidateSourceIDs(ctx context.Context) (map[string]string, error) {
+	v.mu.Lock()
+	ids := make([]any, 0, len(v.seen))
+	for id := range v.seen {
+		ids = append(ids, id)
+	}
+	v.mu.Unlock()
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	d := v.s.ro.doc.On(v.tx, v.opts(ctx)...).With(dTenant, v.s.tenant).WithPredicate(dao.In(qcol(tDoc, string(dID)), ids))
+	for _, p := range v.access {
+		d = d.WithPredicate(p)
+	}
+	rows, err := d.Select(dPath, dSource)
+	if err != nil {
+		return nil, fmt.Errorf("pgstore: candidate source ids: %w", err)
+	}
+	for _, r := range rows {
+		out[r.Path] = r.SourceID
+	}
+	return out, nil
 }
 
 // viewHook observes every statement a View runs. It is nil in production; a cell sets it to read
@@ -110,7 +157,7 @@ func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter
 	for _, r := range rows {
 		out = append(out, candidate(r, chunk.Highlight(r.Body, terms, snippetTokens)))
 	}
-	return out, nil
+	return v.saw(out), nil
 }
 
 // activeModel is the tenant's active and target models, read in this View; none recorded is "".
@@ -154,7 +201,7 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	for _, r := range rows {
 		out = append(out, candidate(r, chunk.Snippet(r.Body)))
 	}
-	return out, nil
+	return v.saw(out), nil
 }
 
 // SemanticState is StateSwitching while a target model fills, StatePartial while a document is not
@@ -280,5 +327,5 @@ func (v *View) List(ctx context.Context, f search.Filter, n int) ([]search.Candi
 		c.Path, c.Generation = doc.Path, doc.Generation
 		out = append(out, candidate(c, chunk.Snippet(c.Body)))
 	}
-	return slices.Clip(out), nil
+	return v.saw(slices.Clip(out)), nil
 }
