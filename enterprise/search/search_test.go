@@ -100,7 +100,7 @@ var scopeA = Scope{"label_id": {"A"}}
 func TestASearchAnswersOnlyWithinItsScope(t *testing.T) {
 	f := newFixture(t)
 	s := f.open(qe)
-	got, err := s.Search(f.ctx, scopeA, Request{Query: "ballad"})
+	got, err := s.Search(f.ctx, scopeA, Request{Query: "ballad", Mode: gsearch.ModeLexical})
 	if err != nil || !slices.Equal(hits(got), []string{"track/1.md=1"}) {
 		t.Fatalf("ballad within A: %v, %v", hits(got), err)
 	}
@@ -118,17 +118,18 @@ func TestASearchAnswersOnlyWithinItsScope(t *testing.T) {
 	if !slices.Equal(paths, []string{"track/1.md=1", "track/2.md=2"}) || got.ModeUsed != gsearch.ModeFacet {
 		t.Errorf("a filter alone, within A: %v (%s)", paths, got.ModeUsed)
 	}
-	if got, err = s.Search(f.ctx, Scope{"label_id": {"A", "B"}}, Request{Query: "lullaby"}); err != nil || !slices.Equal(hits(got), []string{"track/3.md=3"}) {
+	if got, err = s.Search(f.ctx, Scope{"label_id": {"A", "B"}}, Request{Query: "lullaby", Mode: gsearch.ModeLexical}); err != nil || !slices.Equal(hits(got), []string{"track/3.md=3"}) {
 		t.Errorf("lullaby within A and B: %v, %v", hits(got), err)
 	}
-	if got, err = s.Search(f.ctx, scopeA, Request{Query: "lullaby"}); err != nil || len(got.Hits) != 0 {
+	if got, err = s.Search(f.ctx, scopeA, Request{Query: "lullaby", Mode: gsearch.ModeLexical}); err != nil || len(got.Hits) != 0 {
 		t.Errorf("lullaby within A: %v, %v", hits(got), err)
 	}
 }
 
 // A query word or a filter facet naming an access field is refused, in any case: access is the
-// scope's alone. A facet on another field is the caller's own narrowing. The mutants, named here:
-// the query's words not checked; field names compared with case.
+// scope's alone. A filter facet on another field is refused too (the tenant keeps none), while a
+// field:value word of another field is only a word. The mutants, named here: the query's words not
+// checked; field names compared with case.
 func TestARequestNamingAnAccessFieldIsRefused(t *testing.T) {
 	f := newFixture(t)
 	s := f.open(qe)
@@ -143,8 +144,11 @@ func TestARequestNamingAnAccessFieldIsRefused(t *testing.T) {
 			t.Errorf("%s: %v, want ErrProtectedFacet", name, err)
 		}
 	}
-	if _, err := s.Search(f.ctx, scopeA, Request{Query: "ballad genre:rock", Filter: gsearch.Filter{Facets: map[string][]string{"genre": {"rock"}}}}); err != nil {
-		t.Errorf("another field: %v", err)
+	if _, err := s.Search(f.ctx, scopeA, Request{Query: "ballad genre:rock"}); err != nil {
+		t.Errorf("a word of another field: %v", err)
+	}
+	if _, err := s.Search(f.ctx, scopeA, Request{Query: "ballad", Filter: gsearch.Filter{Facets: map[string][]string{"genre": {"rock"}}}}); !errors.Is(err, ErrUnknownFacet) {
+		t.Errorf("a facet of another field: %v, want ErrUnknownFacet", err)
 	}
 }
 

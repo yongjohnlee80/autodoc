@@ -35,7 +35,8 @@ type Scope map[string][]string
 type Request struct {
 	Query string
 	Mode  gsearch.Mode // "" is auto: hybrid when vectors can answer, else by words
-	// Filter narrows by tags, path prefixes, and facets on fields that are not access fields
+	// Filter narrows by tags and path prefixes. Its Facets must be empty: a tenant keeps no facet
+	// but its access fields, and those are the scope's alone (ErrProtectedFacet, ErrUnknownFacet).
 	Filter gsearch.Filter
 	Limit  int // 0 is the default (20); above the most (200) is refused
 }
@@ -63,6 +64,9 @@ var (
 	// ErrProtectedFacet is a query or a filter that names an access field: access is the scope's
 	// alone, and a facet could widen it.
 	ErrProtectedFacet = errs.Sentinel(errs.ErrInvalidArgument, "search: the query or the filter names an access field")
+	// ErrUnknownFacet is a filter facet on a field the tenant does not keep: it keeps no facet but
+	// its access fields.
+	ErrUnknownFacet = errs.Sentinel(errs.ErrInvalidArgument, "search: the tenant keeps no such facet")
 	// ErrLimit is a limit below zero or above the most.
 	ErrLimit = errs.Sentinel(errs.ErrInvalidArgument, "search: the limit is out of range")
 	// ErrNoPolicy is a tenant the server has recorded no policy for: it is not searchable.
@@ -175,8 +179,10 @@ func refusal(err error) error {
 var facetToken = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_.-]*):(\S+)$`)
 
 // checkRequest is what the policy refuses beyond the scope's shape, which pgstore holds: a "*"
-// among the scope's values (it belongs to a client's grants, not to a search), and an access
-// field named by the filter's facets or by a field:value word of the query. Field names are
+// among the scope's values (it belongs to a client's grants, not to a search), an access field
+// named by the filter's facets or by a field:value word of the query, and any other facet, which
+// the tenant does not keep. A field:value word of another field is a word: the engine declares no
+// facet for an enterprise tenant. Field names are
 // compared regardless of case, so no spelling of an access field passes.
 func checkRequest(p pgstore.Policy, scope map[string][]string, r Request) error {
 	for f, vals := range scope {
@@ -191,6 +197,7 @@ func checkRequest(p pgstore.Policy, scope map[string][]string, r Request) error 
 		if access(f) {
 			return fmt.Errorf("%w: the filter's facet %s", ErrProtectedFacet, f)
 		}
+		return fmt.Errorf("%w: %s (filter by tags or paths)", ErrUnknownFacet, f)
 	}
 	for _, w := range strings.Fields(r.Query) {
 		if m := facetToken.FindStringSubmatch(w); m != nil && access(m[1]) {
