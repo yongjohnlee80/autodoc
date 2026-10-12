@@ -65,10 +65,13 @@ func findKeys(fs []Feature) []Key {
 	var out []Key
 	for _, f := range fs {
 		p, ok := f.(Findable)
-		if !ok || p.FindPane().Scope == "" {
+		if !ok {
 			continue
 		}
 		scope := p.FindPane().Scope
+		if scope == "" {
+			continue
+		}
 		out = append(out,
 			Key{Scope: scope, Seq: "/", Show: "/", Run: "App.openFind()"},
 			Key{Scope: scope, Seq: "n", Show: "n and N", Run: "App.findNext()"},
