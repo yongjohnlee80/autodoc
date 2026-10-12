@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/config"
+	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
 )
 
@@ -26,7 +28,8 @@ import (
 //
 // Otherwise it logs to stderr, and its subsystems start in serverSteps' order, each pushing how to
 // stop what it started: they stop in reverse when ctx ends (SIGTERM) or an ingester fails (a lost
-// lock), the ingesters first, releasing their tenants' locks, and the pools last.
+// lock), the embedding worker first, then the ingesters, releasing their tenants' locks, and the
+// pools last.
 func runServer(ctx context.Context, path string, check bool, stdout, stderr io.Writer, version string) error {
 	cfg, err := config.Load(path)
 	if err != nil {
@@ -68,6 +71,12 @@ type server struct {
 	store, business, locks dao.DataConn
 	// failed carries the first ingester that stopped with an error
 	failed chan error
+	// ingesters are the sources' ingesters, in the configuration's order: the embedding worker
+	// writes a tenant only while its ingester holds the tenant's lock.
+	ingesters []*ingest.Ingester
+	// worker is the embedding worker once it has started, which an ingester's commit wakes; nil
+	// before, when a commit has nothing to wake (the worker's first round reads what it wrote).
+	worker atomic.Pointer[embedder.Worker]
 }
 
 // serverSteps are --server's subsystems in the order they start. The schema must exist before
@@ -81,6 +90,7 @@ var serverSteps = []struct {
 	{"schema", (*server).migrate},
 	{"policy", (*server).setPolicies},
 	{"ingesters", (*server).startIngesters},
+	{"embedder", (*server).startEmbedder},
 }
 
 // openPostgres opens the three pools on the configured database. The DSN is a secret: an error
@@ -144,7 +154,8 @@ func (s *server) startIngesters() error {
 			return err
 		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.locks, ingest.Options{Schema: s.cfg.Postgres.Schema,
-			Refresh: src.Refresh, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log})
+			Refresh: src.Refresh, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder})
+		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -154,6 +165,40 @@ func (s *server) startIngesters() error {
 		}()
 	}
 	return nil
+}
+
+// startEmbedder runs the one embedding worker over every tenant until the server stops; stopping
+// cancels it and waits for its calls in flight. It never fails the server: a provider that cannot
+// be set up or fails is retried while ingestion goes on, and searches answer by words meanwhile.
+func (s *server) startEmbedder() error {
+	tenants := make([]embedder.Tenant, len(s.ingesters))
+	for i, in := range s.ingesters {
+		st, err := pgstore.New(s.store, in.Tenant())
+		if err != nil {
+			return err
+		}
+		tenants[i] = embedder.Tenant{Name: in.Tenant(), Store: st, Confirm: in.Confirm}
+	}
+	w := embedder.New(providerOf(s.cfg.Embedding), tenants, embedder.WithSlots(s.cfg.Embedding.Slots), embedder.WithLogger(s.log))
+	ctx, cancel := context.WithCancel(s.ctx)
+	done := make(chan struct{})
+	s.stops.push(func() {
+		cancel()
+		<-done
+	})
+	s.worker.Store(w)
+	go func() {
+		defer close(done)
+		w.Run(ctx)
+	}()
+	return nil
+}
+
+// wakeEmbedder wakes the embedding worker after an ingester's commit.
+func (s *server) wakeEmbedder() {
+	if w := s.worker.Load(); w != nil {
+		w.Wake()
+	}
 }
 
 // lagOf is a configured lag as ingest.Options takes it, where zero is the default: a lag of zero
@@ -185,8 +230,8 @@ func loadSources(path string, cfg *config.Server) ([]*ingest.Source, error) {
 }
 
 // checkServer is --server --check, after the configuration and the views loaded: each view's order
-// is confirmed against the live source, read-only, up to now − its lag. It writes what it checked,
-// and the configuration's warnings, to out.
+// is confirmed against the live source, read-only, up to now − its lag, and the embedding provider
+// is asked to embed a probe. It writes what it checked, and the configuration's warnings, to out.
 func checkServer(ctx context.Context, path string, cfg *config.Server, sources []*ingest.Source, out io.Writer) error {
 	for _, w := range cfg.Warnings {
 		fmt.Fprintln(out, "warning:", w)
@@ -219,6 +264,9 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 		for _, w := range rep.Warnings {
 			fmt.Fprintf(out, "warning: source[%d] %s: %s\n", i, src.Tenant, w)
 		}
+	}
+	if err := checkEmbedding(ctx, path, cfg.Embedding, out); err != nil {
+		return err
 	}
 	fmt.Fprintf(out, "%s: ok\n", path)
 	return nil

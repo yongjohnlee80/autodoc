@@ -3,6 +3,12 @@ package app
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +21,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/postgres"
+	"github.com/yongjohnlee80/golib/search/embed"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/core/pgstore/pgtest"
@@ -38,13 +45,71 @@ export: track/{{.id}}.md
 `
 
 // serverFixture is a business database with a track table, a server.toml naming it through
-// AUTODOC_TEST_SERVER_DSN, and a pool for looking at what the server did.
+// AUTODOC_TEST_SERVER_DSN, an OpenAI-compatible embedding endpoint of the test's own, and a pool for
+// looking at what the server did.
 type serverFixture struct {
 	t      *testing.T
 	ctx    context.Context
 	path   string // server.toml
+	view   string // the source's view file
 	schema string
 	plain  dao.DataConn
+	emb    *fakeEmbeddings
+	url    string // the endpoint's base URL, as server.toml names it
+}
+
+// embedKey is the embedding endpoint's API key, which the fixture's server.toml names through
+// AUTODOC_TEST_EMBED_KEY.
+const embedKey = "sk-test-embedding-secret-key"
+
+// fakeEmbeddings is an OpenAI-compatible /v1/embeddings with no network beyond loopback: it
+// answers a request bearing embedKey with a four-dimensional vector per text, made from the text's
+// hash, and counts the texts; any other key is a 401 quoting it, as some providers do.
+type fakeEmbeddings struct {
+	mu    sync.Mutex
+	texts map[string]int
+}
+
+func (f *fakeEmbeddings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/v1/embeddings" {
+		http.NotFound(w, r)
+		return
+	}
+	if got := r.Header.Get("Authorization"); got != "Bearer "+embedKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprintf(w, `{"error": "invalid key %s"}`, strings.TrimPrefix(got, "Bearer "))
+		return
+	}
+	var req struct {
+		Model string   `json:"model"`
+		Input []string `json:"input"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	type datum struct {
+		Index     int       `json:"index"`
+		Embedding []float32 `json:"embedding"`
+	}
+	var out struct {
+		Data []datum `json:"data"`
+	}
+	f.mu.Lock()
+	for i, text := range req.Input {
+		f.texts[text]++
+		h := sha256.Sum256([]byte(req.Model + "\x00" + text))
+		out.Data = append(out.Data, datum{Index: i, Embedding: []float32{float32(h[0]) + 1, float32(h[1]) + 1, float32(h[2]) + 1, float32(h[3]) + 1}})
+	}
+	f.mu.Unlock()
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// asked is how many times the endpoint embedded text.
+func (f *fakeEmbeddings) asked(text string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.texts[text]
 }
 
 func newServerFixture(t *testing.T, view string) *serverFixture {
@@ -61,18 +126,33 @@ func newServerFixture(t *testing.T, view string) *serverFixture {
 	f.exec(`CREATE TABLE track (id bigint PRIMARY KEY, label_id text, title text, updated_at timestamptz NOT NULL)`)
 	f.exec(`INSERT INTO track VALUES (1, 'A', 'kestrel song', now() - interval '1 hour'), (2, 'B', 'heron song', now() - interval '1 hour')`)
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "track.view"), []byte(view), 0o600); err != nil {
+	f.view = filepath.Join(dir, "track.view")
+	if err := os.WriteFile(f.view, []byte(view), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	f.emb = &fakeEmbeddings{texts: map[string]int{}}
+	srv := httptest.NewServer(f.emb)
+	t.Cleanup(srv.Close)
+	f.url = srv.URL + "/v1"
+	t.Setenv("AUTODOC_TEST_EMBED_KEY", embedKey)
 	f.path = filepath.Join(dir, "server.toml")
+	f.configure("fake-model", f.url)
+	return f
+}
+
+// configure writes server.toml with the embedding model and base URL given.
+func (f *serverFixture) configure(model, baseURL string) {
+	f.t.Helper()
 	cfg := `
 [postgres]
 dsn_env = "AUTODOC_TEST_SERVER_DSN"
 schema  = "` + f.schema + `"
 
 [embedding]
-provider = "ollama"
-model    = "nomic-embed-text"
+provider = "openai"
+base_url = "` + baseURL + `"
+model    = "` + model + `"
+key_env  = "AUTODOC_TEST_EMBED_KEY"
 
 [[source]]
 tenant   = "lm-catalog"
@@ -82,9 +162,8 @@ lag      = "0s"
 access   = ["label_id"]
 `
 	if err := os.WriteFile(f.path, []byte(cfg), 0o600); err != nil {
-		t.Fatal(err)
+		f.t.Fatal(err)
 	}
-	return f
 }
 
 func (f *serverFixture) exec(q string) {
@@ -115,6 +194,22 @@ func (f *serverFixture) scalar(q string) string {
 func (f *serverFixture) documents() string {
 	return f.scalar(`SELECT CASE WHEN to_regclass('` + f.schema + `.rag_document') IS NULL THEN '0'
 		ELSE (xpath('/row/c/text()', query_to_xml('SELECT count(*) AS c FROM ` + f.schema + `.rag_document', false, true, '')))[1]::text END`)
+}
+
+// embedded reports whether the tenant is embedded under model: it is the active one, every
+// distinct chunk text has a vector under it, there are documents, and every one is ready.
+func (f *serverFixture) embedded(model string) bool {
+	s := f.schema
+	return f.scalar(`SELECT coalesce((
+		(SELECT active_model FROM `+s+`.rag_meta WHERE tenant = 'lm-catalog') = '`+model+`'
+		AND (SELECT count(*) FROM `+s+`.rag_embedding WHERE model = '`+model+`') = (SELECT count(DISTINCT text_hash) FROM `+s+`.rag_chunk)
+		AND EXISTS (SELECT 1 FROM `+s+`.rag_document)
+		AND NOT EXISTS (SELECT 1 FROM `+s+`.rag_document WHERE NOT semantic_ready)), false)::text`) == "true"
+}
+
+// vectors is how many vectors the server stored under model.
+func (f *serverFixture) vectors(model string) string {
+	return f.scalar(`SELECT count(*)::text FROM ` + f.schema + `.rag_embedding WHERE model = '` + model + `'`)
 }
 
 // ownLocks selects the advisory locks held in the fixture's database: pg_locks shows the whole
@@ -186,13 +281,14 @@ func exitOf(t *testing.T, done <-chan int, stderr *syncBuffer) int {
 }
 
 // TestServerStepsStartInOrder: Postgres opens, the schema is created before pgstore's migrations
-// run in it, the tenants' policies are recorded, and the ingesters start last.
+// run in it, the tenants' policies are recorded, the ingesters start, and the embedding worker
+// starts last, so it stops first, while the ingesters still hold their tenants' locks.
 func TestServerStepsStartInOrder(t *testing.T) {
 	var names []string
 	for _, s := range serverSteps {
 		names = append(names, s.name)
 	}
-	if want := []string{"postgres", "schema", "policy", "ingesters"}; !slices.Equal(names, want) {
+	if want := []string{"postgres", "schema", "policy", "ingesters", "embedder"}; !slices.Equal(names, want) {
 		t.Fatalf("serverSteps %v, want %v", names, want)
 	}
 }
@@ -335,6 +431,9 @@ func TestTheServerChecksItsViews(t *testing.T) {
 	if f.documents() != "0" {
 		t.Error("--check wrote documents")
 	}
+	if !strings.Contains(stdout.String(), "embedding: openai at "+f.url+" answered: openai|fake-model||4, 4 dimensions") {
+		t.Errorf("--check did not report the embedding provider: %q", stdout.String())
+	}
 	view := filepath.Join(filepath.Dir(f.path), "track.view")
 	if err := os.WriteFile(view, []byte(strings.Replace(serverView, "ORDER BY updated_at, id", "ORDER BY id", 1)), 0o600); err != nil {
 		t.Fatal(err)
@@ -379,5 +478,96 @@ func TestSIGTERMStopsTheServer(t *testing.T) {
 	}
 	if got := f.locks(); got != "0" {
 		t.Errorf("%s advisory locks held after SIGTERM", got)
+	}
+}
+
+// The server embeds its tenant centrally: every distinct text gets a vector under the configured
+// model, which is the tenant's active one, and every document is ready. A row added while it
+// serves is embedded at once, its commit waking the worker long before the worker's poll. With
+// another model configured, the next start switches: it fills the new model, flips to it and
+// reclaims the old one's vectors. The key is never in the log. The mutant, named here: the
+// ingesters not waking the worker (the new row waits for the 30 s poll).
+func TestTheServerEmbedsItsTenantsCentrally(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	first, second := "openai|fake-model||4", "openai|fake-model-2||4"
+	ctx, cancel := context.WithCancel(f.ctx)
+	done, stderr := f.serve(ctx)
+	f.started(stderr)
+	f.waitFor("both rows embedded", func() bool { return f.documents() == "2" && f.embedded(first) })
+	f.exec(`INSERT INTO track VALUES (3, 'A', 'osprey song', now() - interval '1 minute')`)
+	f.waitFor("the new row embedded, woken by its commit", func() bool { return f.documents() == "3" && f.embedded(first) })
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+	log := stderr.String()
+
+	f.configure("fake-model-2", f.url)
+	ctx, cancel = context.WithCancel(f.ctx)
+	defer cancel()
+	done, stderr = f.serve(ctx)
+	f.started(stderr)
+	f.waitFor("the switch to the second model", func() bool { return f.embedded(second) && f.vectors(first) == "0" })
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+	log += stderr.String()
+	for _, says := range []string{"embedding with " + first, "switching from " + first + " to " + second, second + " is active"} {
+		if !strings.Contains(log, says) {
+			t.Errorf("the log does not say %q: %s", says, log)
+		}
+	}
+	if strings.Contains(log, embedKey) {
+		t.Errorf("the key is in the log: %s", log)
+	}
+}
+
+// --server --check asks the embedding provider for a probe: a key it refuses is refused, exit 2,
+// naming embedding.key_env, and the key it quotes back is never shown; a provider that does not
+// answer is a warning, and the check passes. The mutants, named here: a refused key reported as a
+// warning, and the provider's error shown with the key in it.
+func TestTheServerChecksItsEmbeddingProvider(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	t.Setenv("AUTODOC_TEST_EMBED_KEY", "sk-the-wrong-secret")
+	var stdout, stderr bytes.Buffer
+	code := run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+	if code != 2 || !strings.Contains(stderr.String(), "embedding.key_env: the provider refused the key") {
+		t.Errorf("--check with a refused key: exit %d, said %q %q", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "sk-the-wrong-secret") || !strings.Contains(stderr.String(), "[REDACTED]") {
+		t.Errorf("--check showed the key, or did not say it hid it: %q", stderr.String())
+	}
+	t.Setenv("AUTODOC_TEST_EMBED_KEY", embedKey)
+	f.configure("fake-model", "http://127.0.0.1:1/v1")
+	stdout.Reset()
+	stderr.Reset()
+	code = run(f.ctx, []string{"--server", "--check", f.path}, testOptions, &stdout, &stderr)
+	if code != 0 || !strings.Contains(stdout.String(), "warning: embedding: openai at http://127.0.0.1:1/v1 did not answer the probe") ||
+		!strings.HasSuffix(stdout.String(), ": ok\n") {
+		t.Errorf("--check with a provider that does not answer: exit %d, said %q %q", code, stdout.String(), stderr.String())
+	}
+}
+
+// An OpenAI-compatible base URL is its root, whether or not server.toml names the API's /v1; and
+// a key taken out of an error leaves the error what it was, so a rejection still splits a batch.
+func TestTheEmbeddingProvidersURLAndKey(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://api.openai.com/v1":      "https://api.openai.com",
+		"https://api.openai.com/v1/":     "https://api.openai.com",
+		"https://embeddings.example/":    "https://embeddings.example",
+		"https://embeddings.example/v1x": "https://embeddings.example/v1x",
+	} {
+		if got := openAIRoot(in); got != want {
+			t.Errorf("openAIRoot(%q) = %q, want %q", in, got, want)
+		}
+	}
+	err := hideKey(fmt.Errorf("%w: the key sk-abc is not allowed this input", embed.ErrRejected), "sk-abc")
+	if !errors.Is(err, embed.ErrRejected) || strings.Contains(err.Error(), "sk-abc") || !strings.Contains(err.Error(), "[REDACTED]") {
+		t.Errorf("hideKey: %v (a rejection: %v)", err, errors.Is(err, embed.ErrRejected))
+	}
+	plain := errors.New("nothing secret")
+	if hideKey(plain, "sk-abc") != plain || hideKey(nil, "sk-abc") != nil || hideKey(plain, "") != plain {
+		t.Error("an error with no key in it is not kept as it was")
 	}
 }
