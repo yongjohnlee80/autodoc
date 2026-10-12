@@ -28,6 +28,29 @@ const (
 // Scratch is a fresh database prepared by migrate, closed and dropped when t ends.
 func Scratch(t testing.TB, migrate func(context.Context, dao.DataConn) error) dao.DataConn {
 	t.Helper()
+	dsn := ScratchURL(t)
+	ctx := context.Background()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("the scratch database's URL: %v", err)
+	}
+	conn, err := postgres.OpenNamed(ctx, u.Path[1:], dsn)
+	if err != nil {
+		t.Fatalf("connect to the scratch database: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if err := migrate(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
+// ScratchURL is the URL of a fresh, empty database, dropped when t ends (WITH (FORCE), so a pool
+// the test left open does not keep it), for a test that opens its own pools on it: with options
+// such as pgstore.WithSchema, or from configuration, as a server does. It skips or fails as
+// Scratch does when AUTODOC_TEST_PGURL is not set.
+func ScratchURL(t testing.TB) string {
+	t.Helper()
 	dsn := os.Getenv(URLEnv)
 	if dsn == "" {
 		if os.Getenv(RequiredEnv) != "" {
@@ -55,13 +78,5 @@ func Scratch(t testing.TB, migrate func(context.Context, dao.DataConn) error) da
 		t.Fatalf("%s is not a URL: %v", URLEnv, err)
 	}
 	u.Path = "/" + name
-	conn, err := postgres.OpenNamed(ctx, name, u.String())
-	if err != nil {
-		t.Fatalf("connect to the scratch database: %v", err)
-	}
-	t.Cleanup(func() { conn.Close() })
-	if err := migrate(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
-	return conn
+	return u.String()
 }

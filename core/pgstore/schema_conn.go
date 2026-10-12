@@ -24,9 +24,10 @@ var ErrSchemaName = errs.Sentinel(errs.ErrInvalidArgument, "pgstore: not a plain
 // digits and underscores, not starting with a digit, at most 63 bytes (NAMEDATALEN - 1).
 var plainIdent = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
-// checkSchema refuses a schema name that is not a plain identifier, or one in the pg_ namespace
-// PostgreSQL reserves for its own schemas.
-func checkSchema(schema string) error {
+// CheckSchema refuses (ErrSchemaName) a schema name that is not a plain identifier, or one in the
+// pg_ namespace PostgreSQL reserves for its own schemas: the check EnsureSchema and WithSchema make,
+// for a caller validating its configuration before it opens anything.
+func CheckSchema(schema string) error {
 	if !plainIdent.MatchString(schema) || strings.HasPrefix(schema, "pg_") {
 		return fmt.Errorf("%w: %q (lowercase letters, digits and _, not starting with a digit or pg_, at most 63)", ErrSchemaName, schema)
 	}
@@ -44,7 +45,7 @@ func checkSchema(schema string) error {
 // place it would create the tables in public.
 func WithSchema(schema string) postgres.Option {
 	return postgres.WithConnectHook(func(ctx context.Context, c dao.ConnectedConn) error {
-		if err := checkSchema(schema); err != nil {
+		if err := CheckSchema(schema); err != nil {
 			return err
 		}
 		if _, err := c.ExecContext(ctx, "SET search_path TO "+quoteIdent(schema)+", public"); err != nil {
@@ -58,7 +59,7 @@ func WithSchema(schema string) postgres.Option {
 // creates it on conn if it does not exist. The connection's role needs CREATE on the database the
 // first time, and nothing after.
 func EnsureSchema(ctx context.Context, conn dao.DataConn, schema string) error {
-	if err := checkSchema(schema); err != nil {
+	if err := CheckSchema(schema); err != nil {
 		return err
 	}
 	if _, err := conn.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS "+quoteIdent(schema)); err != nil {
@@ -67,5 +68,5 @@ func EnsureSchema(ctx context.Context, conn dao.DataConn, schema string) error {
 	return nil
 }
 
-// quoteIdent quotes a name checkSchema admitted: it holds no quote to escape.
+// quoteIdent quotes a name CheckSchema admitted: it holds no quote to escape.
 func quoteIdent(name string) string { return `"` + name + `"` }

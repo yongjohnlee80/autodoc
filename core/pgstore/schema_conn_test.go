@@ -145,8 +145,8 @@ func TestASchemaNameIsAPlainIdentifier(t *testing.T) {
 		}
 	}
 	for _, good := range []string{"autodoc_search", "_x", "s1", strings.Repeat("a", 63)} {
-		if err := checkSchema(good); err != nil {
-			t.Errorf("checkSchema(%q): %v, want accepted", good, err)
+		if err := CheckSchema(good); err != nil {
+			t.Errorf("CheckSchema(%q): %v, want accepted", good, err)
 		}
 	}
 	admin, err := postgres.Open(ctx, dsnBase(t))

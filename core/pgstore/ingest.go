@@ -171,7 +171,7 @@ func (s *Store) Quarantined(ctx context.Context, limit int) ([]IngestError, erro
 // SetPolicy records the tenant's access policy, replacing any it had. A policy with no access
 // field is refused (ErrNoAccess): there is no policy that turns access checking off.
 func (s *Store) SetPolicy(ctx context.Context, p Policy) error {
-	if err := checkFields(p.AccessFields); err != nil {
+	if err := CheckAccessFields(p.AccessFields); err != nil {
 		return err
 	}
 	err := s.rw.policy.DAO(dao.WithQueryContext(ctx)).Set(pTenant, s.tenant).
@@ -194,9 +194,10 @@ func (s *Store) Policy(ctx context.Context) (Policy, error) {
 	return Policy{AccessFields: r.AccessFields, View: r.View}, nil
 }
 
-// checkFields refuses access fields no scope can be built on: none, an empty name, a repeat, or a
-// name with '=' in it, which a stored field=value facet could not tell from its value.
-func checkFields(fields []string) error {
+// CheckAccessFields refuses (ErrNoAccess) access fields no scope can be built on: none, an empty
+// name, a repeat, or a name with '=' in it, which a stored field=value facet could not tell from
+// its value. SetPolicy makes the same check; a caller validating its configuration makes it first.
+func CheckAccessFields(fields []string) error {
 	if len(fields) == 0 {
 		return ErrNoAccess
 	}
