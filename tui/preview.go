@@ -150,9 +150,9 @@ func (h *Host) showDiagramText(text, help string) {
 // cannot be had.
 func (h *Host) renderPreview(fallback func(why string)) {
 	pv := h.imagePreview
-	h.withImageCells(pv.dialog, fallback, func(img *widget.Image, cols, rows int) {
+	h.withImageCells(pv.dialog, fallback, func(tk Ticket, img *widget.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
-		gen, rasterize := h.previewGen, h.rasterizer()
+		rasterize := h.rasterizer()
 		// a spinner while the page renders (a headless browser takes a moment), where the Image has
 		// no picture yet; a zoom keeps the picture it has until the new one comes
 		img.SetLoadingText(map[bool]string{true: "drawing the diagram…", false: "rendering the page…"}[pv.dialog == "diagram"])
@@ -168,7 +168,7 @@ func (h *Host) renderPreview(fallback func(why string)) {
 			strips, err := widget.SplitPNG(png)
 			return answerOf[widget.Strips]{v: strips, err: err}
 		}, func(a answerOf[widget.Strips]) {
-			if gen != h.previewGen {
+			if !tk.Current() {
 				return // closed, or another preview since
 			}
 			img.SetLoading(false)
@@ -208,13 +208,12 @@ func (h *Host) zoomPreview(step int) {
 // (a screen too small, a layout that never gave it cells) runs fallback instead, with why: a
 // preview always ends as an image or as its fallback, never blank (ADR 0212 §6). A screen resized
 // to a usable size before then renders the image. A new preview or a closed dialog drops both.
-func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(img *widget.Image, cols, rows int)) {
-	h.previewGen++
-	gen := h.previewGen
+func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(tk Ticket, img *widget.Image, cols, rows int)) {
+	tk := h.ticket(&h.previewGen, TicketLocal)
 	deadline := time.Now().Add(imageWait)
 	var try func()
 	try = func() {
-		if gen != h.previewGen {
+		if !tk.Current() {
 			return
 		}
 		cols, rows := 0, 0
@@ -222,7 +221,7 @@ func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(
 		if ok {
 			cols, rows = img.Cells()
 			if cols >= minImageCols && rows >= minImageRows {
-				fn(img, cols, rows)
+				fn(tk, img, cols, rows)
 				return
 			}
 		}

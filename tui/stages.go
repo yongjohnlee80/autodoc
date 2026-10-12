@@ -159,7 +159,7 @@ func (h *Host) toggleSearchStage(stage string) {
 // model is not known (a TEI server names its own, which a ranked answer then says). refresh
 // searches again whatever changed; otherwise only a change of the stages asked for does.
 func (h *Host) loadStageRanker(refresh bool) {
-	gen := h.session.Gen()
+	tk := h.ticket(nil, TicketSession)
 	type answer struct {
 		id, label string
 		err       error
@@ -172,7 +172,7 @@ func (h *Host) loadStageRanker(refresh bool) {
 		id, label := rankerInUse(asMap(res))
 		return answer{id: id, label: label}
 	}, func(a answer) {
-		if gen != h.session.Gen() {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {

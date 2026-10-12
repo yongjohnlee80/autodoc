@@ -552,9 +552,9 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 		t.Fatalf("a right-first dialog ends at column %d, want 99 (the edge):\n%s", right, r.s)
 	}
 	r.h.p.Post(r.h.managePlugins)
-	r.s.WaitFor(t, "the manager listed", func(string) bool { return onLoop(r, func() int { return len(r.h.managedList) }) == 2 })
+	r.s.WaitFor(t, "the manager listed", func(string) bool { return onLoop(r, func() int { return len(r.h.managedPlugins.All()) }) == 2 })
 	i := onLoop(r, func() int {
-		for i, m := range r.h.managedList {
+		for i, m := range r.h.managedPlugins.All() {
 			if m.e.m.Name == "side" {
 				return i
 			}
@@ -885,7 +885,7 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	r.s.WaitForText(t, "local: put in the folder by hand")
 	r.s.WaitFor(t, "the clone's source listed", func(string) bool { // the column elides it on screen
 		return onLoop(r, func() bool {
-			for _, m := range r.h.managedList {
+			for _, m := range r.h.managedPlugins.All() {
 				if m.e.m.Name == "echo" && m.source == "file://"+repo && m.commit != "" {
 					return true
 				}
@@ -894,12 +894,12 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 		})
 	})
 
-	before := onLoop(r, func() []managedPlugin { return slices.Clone(r.h.managedList) })
+	before := onLoop(r, func() []managedPlugin { return slices.Clone(r.h.managedPlugins.All()) })
 
 	commitPlugin(t, repo, "Echo two", "echo two > built.txt")
 	next := runGit(t, repo, "rev-parse", "--short", "HEAD")
 	i := onLoop(r, func() int {
-		for i, m := range r.h.managedList {
+		for i, m := range r.h.managedPlugins.All() {
 			if m.e.m.Name == "echo" {
 				return i
 			}
@@ -927,7 +927,7 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	})
 	// Update again while the row still shows the commit before the update, as it does until the
 	// manager's listing, run off the loop, comes back: up to date all the same.
-	r.h.p.Post(func() { r.h.managedList = before; r.h.startUpdatePlugin(i) })
+	r.h.p.Post(func() { r.h.managedPlugins.Reset(before); r.h.startUpdatePlugin(i) })
 	r.waitNotice(t, "echo is up to date at "+next)
 
 	r.h.p.Post(func() { r.h.startRemovePlugin(i) })

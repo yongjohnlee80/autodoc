@@ -8,11 +8,11 @@ func TestPickingTheWorkspaceInUseOnlyClosesThePicker(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}, "notes": {"n.md", "n\n"}})
 	r := attached(t, d)
 	r.s.WaitFor(t, "a workspace entered", func(string) bool {
-		return onLoop(r, func() bool { return r.h.ws != "" && len(r.h.wsList) == 2 })
+		return onLoop(r, func() bool { return r.h.ws != "" && len(r.h.workspaces.All()) == 2 })
 	})
 	before := onLoop(r, func() [2]any { return [2]any{r.h.ws, r.h.epoch} })
 	onLoop(r, func() bool {
-		for i, w := range r.h.wsList {
+		for i, w := range r.h.workspaces.All() {
 			if w.name == r.h.ws {
 				r.h.useWorkspace(i)
 			}

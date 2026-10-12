@@ -205,8 +205,8 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 			}
 		}
 	case findLinks:
-		for i := range h.relationsModel.Len() {
-			rows = append(rows, h.relationsModel.At(i)["label"].(string))
+		for _, r := range h.relations.All() {
+			rows = append(rows, r.label)
 		}
 		cur = h.linksAt
 	}

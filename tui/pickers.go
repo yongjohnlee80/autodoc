@@ -39,8 +39,7 @@ func (h *Host) searchLive(q string) {
 		h.searchCancel()
 		h.searchCancel = nil
 	}
-	h.searchSeq++
-	seq, ep, ws := h.searchSeq, h.epoch, h.ws
+	tk, ws := h.ticket(&h.searchSeq, TicketWorkspace), h.ws
 	h.marks.Store(termsOf(q))
 	h.set("App.searchStatus", "")
 	if q == "" {
@@ -58,7 +57,7 @@ func (h *Host) searchLive(q string) {
 	queryCtx, cancel := context.WithCancel(h.ctx)
 	h.searchCancel = cancel
 	h.set("App.hitsTitle", "hits · searching "+ws)
-	h.searchWaitLine(seq)
+	h.searchWaitLine(tk, h.searchSeq)
 	if remaining := h.prog.emb.working(); remaining > 0 {
 		h.notifyOngoing(toastSearchWait, fmt.Sprintf("search in %s is waiting: %d texts still embedding", ws, remaining))
 		h.searchWaitToast = true
@@ -95,7 +94,7 @@ func (h *Host) searchLive(q string) {
 		}
 		return a
 	}, func(a answer) {
-		if seq != h.searchSeq || ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		cancel()
@@ -173,13 +172,13 @@ const searchWaitDelay = 300 * time.Millisecond
 // searchWaitFrames is how many spinner frames one of searchWaits stays before the next.
 const searchWaitFrames = 16
 
-// searchWaitLine turns the line under the search's field while search seq has not answered: a
-// spinner and one of searchWaits, changing every few seconds. It starts after searchWaitDelay and
-// stops when the search answers, is replaced, cleared or closed (each blanks the line).
-func (h *Host) searchWaitLine(seq uint64) {
-	ep := h.epoch
-	frame := int(seq) * searchWaitFrames // a different message first, search to search
-	waiting := func() bool { return seq == h.searchSeq && ep == h.epoch && h.searchCancel != nil }
+// searchWaitLine turns the line under the search's field while search n (its ticket tk) has not
+// answered: a spinner and one of searchWaits, changing every few seconds. It starts after
+// searchWaitDelay and stops when the search answers, is replaced, cleared or closed (each blanks
+// the line).
+func (h *Host) searchWaitLine(tk Ticket, n uint64) {
+	frame := int(n) * searchWaitFrames // a different message first, search to search
+	waiting := func() bool { return tk.Current() && h.searchCancel != nil }
 	var turn func()
 	turn = func() {
 		if !waiting() {
@@ -282,25 +281,18 @@ func (h *Host) openHit(i int) {
 // preview shows file p of the workspace in the named picker's preview, at byte at: read through
 // the daemon, the latest asked for winning.
 func (h *Host) preview(picker, p string, at int) {
-	h.previewSeq++
-	seq, ep, ws := h.previewSeq, h.epoch, h.ws
-	do(h, func(ctx context.Context) (answer struct {
-		text string
-		err  error
-	}) {
+	tk, ws := h.ticket(&h.previewSeq, TicketWorkspace), h.ws
+	do(h, func(ctx context.Context) (answer answerOf[string]) {
 		res, err := h.call(ctx, "doc.read", ws, p)
 		if err != nil {
 			answer.err = err
 			return
 		}
 		b, _ := asMap(res)["content"].([]byte)
-		answer.text = string(b)
+		answer.v = string(b)
 		return
-	}, func(a struct {
-		text string
-		err  error
-	}) {
-		if seq != h.previewSeq || ep != h.epoch {
+	}, func(a answerOf[string]) {
+		if !tk.Current() {
 			return
 		}
 		if picker == "search" {
@@ -315,7 +307,7 @@ func (h *Host) preview(picker, p string, at int) {
 			h.showPreview(picker, p+" · "+why, "", 0)
 			return
 		}
-		h.showPreview(picker, p, a.text, at)
+		h.showPreview(picker, p, a.v, at)
 	})
 }
 

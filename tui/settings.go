@@ -574,16 +574,14 @@ func (h *Host) settingsExtras(ctx context.Context) (any, error) {
 
 // withSettingsExtras is settingsExtras for a dialog with no workspace yet.
 func (h *Host) withSettingsExtras(fn func(providers []string, databases bool)) {
-	ep := h.epoch
-	h.dialogSeq++
-	seq := h.dialogSeq
+	tk := h.ticket(&h.dialogSeq, TicketWorkspace)
 	do(h, func(ctx context.Context) answerOf[settingsExtras] {
 		x, err := h.settingsExtras(ctx)
 		v, _ := x.(settingsExtras)
 		return answerOf[settingsExtras]{v: v, err: err}
 	}, func(a answerOf[settingsExtras]) {
 		switch {
-		case ep != h.epoch, seq != h.dialogSeq:
+		case !tk.Current():
 		case a.err != nil:
 			h.failed("workspace settings", a.err)
 		default:
@@ -780,12 +778,13 @@ func (h *Host) saved(name string, c map[string]any) {
 		to = n
 		// the list holds the new name at once: a Delete… or Edit… asked for before the relisting
 		// answers acts on the workspace as it is now named
-		for i := range h.wsList {
-			if h.wsList[i].name == name {
-				h.wsList[i].name = to
+		list := slices.Clone(h.workspaces.All())
+		for i := range list {
+			if list[i].name == name {
+				list[i].name = to
 			}
 		}
-		h.showWorkspaceRows()
+		h.showWorkspaceRows(list)
 		if h.ws == name {
 			// the same workspace under another name: the open file stays open
 			h.ws = to
@@ -890,9 +889,10 @@ func (h *Host) managerMoved(i int) {
 }
 
 func (h *Host) showManagerDetail() {
-	if h.managerIndex < 0 || h.managerIndex >= len(h.wsList) {
+	w, ok := h.managed.At(h.managerIndex)
+	if !ok {
 		h.set("App.managerDetail", "no workspace · Add… makes one")
 		return
 	}
-	h.set("App.managerDetail", managerDetail(h.wsList[h.managerIndex], h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
+	h.set("App.managerDetail", managerDetail(w, h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
 }

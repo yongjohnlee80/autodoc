@@ -53,12 +53,12 @@ func (h *Host) goToLink(l cursorLink) {
 		h.htmlLink(l.dest)
 		return
 	}
-	ws, from, gen, ep := h.file.ws, h.file.path, h.file.gen, h.epoch
+	ws, from, tk := h.file.ws, h.file.path, h.ticket(nil, TicketFile)
 	do(h, func(ctx context.Context) answerOf[map[string]any] {
 		res, err := h.call(ctx, "graph.resolve", ws, from, l.raw)
 		return answerOf[map[string]any]{v: asMap(res), err: err}
 	}, func(a answerOf[map[string]any]) {
-		if gen != h.file.gen || ep != h.epoch {
+		if !tk.Current() {
 			return // another file opened, or another daemon, since: the link was the old file's
 		}
 		switch path, reason := str(a.v, "path"), str(a.v, "reason"); {

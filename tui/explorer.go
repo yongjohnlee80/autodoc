@@ -110,16 +110,12 @@ func (h *Host) listUnder(ix tuidecl.Index, onlyChanged bool) {
 	if kind != "ws" {
 		return
 	}
-	gen := h.session.Gen()
-	type answer struct {
-		paths []string
-		err   error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(nil, TicketSession)
+	do(h, func(ctx context.Context) answerOf[[]string] {
 		paths, err := h.listAll(ctx, ws)
-		return answer{paths, err}
-	}, func(a answer) {
-		if gen != h.session.Gen() {
+		return answered(paths, err)
+	}, func(a answerOf[[]string]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
@@ -131,11 +127,11 @@ func (h *Host) listUnder(ix tuidecl.Index, onlyChanged bool) {
 		if h.explorer.Key(ix) != key {
 			return
 		}
-		if old, listed := h.explorerPaths[ws]; onlyChanged && listed && slices.Equal(old, a.paths) {
+		if old, listed := h.explorerPaths[ws]; onlyChanged && listed && slices.Equal(old, a.v) {
 			return
 		}
-		h.explorerPaths[ws] = a.paths
-		h.explorer.SetChildren(&ix, childrenOf(ws, "", a.paths))
+		h.explorerPaths[ws] = a.v
+		h.explorer.SetChildren(&ix, childrenOf(ws, "", a.v))
 	})
 }
 

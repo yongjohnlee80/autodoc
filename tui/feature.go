@@ -192,7 +192,8 @@ type Core interface {
 	// Go runs fn off the loop and then on the loop with its result, as do does.
 	Go(fn func(context.Context) any, then func(any))
 	// Ticket issues the next answer of the sequence seq: only the latest one issued, under the
-	// same connection and (for TicketWorkspace) the same workspace, is Current.
+	// same connection and, as scope says, the same workspace and file, is Current. A nil seq
+	// numbers nothing: the answer is stale only when its scope moves.
 	Ticket(seq *uint64, scope TicketScope) Ticket
 }
 
@@ -202,6 +203,8 @@ type TicketScope int
 const (
 	TicketSession   TicketScope = iota // a reconnect
 	TicketWorkspace                    // a reconnect, or a workspace switch
+	TicketFile                         // a reconnect, a workspace switch, or another file opened
+	TicketLocal                        // nothing but a newer one: work of the terminal's own, no answer
 )
 
 // Ticket is one answer's claim to still matter.
@@ -228,13 +231,29 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 	return c.h.session.Call(ctx, verb, params...)
 }
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
-func (c core) Ticket(seq *uint64, scope TicketScope) Ticket {
-	*seq++
-	n, gen, epoch := *seq, c.h.session.Gen(), c.h.epoch
+func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }
+
+// ticket is Core.Ticket, for the host's own answers too: every stale-answer guard is one.
+func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
+	var n uint64
+	if seq != nil {
+		*seq++
+		n = *seq
+	}
+	gen, epoch, file := h.session.Gen(), h.epoch, h.file.gen
 	return Ticket{current: func() bool {
-		if *seq != n || c.h.session.Gen() != gen {
+		if scope == TicketLocal {
+			return seq == nil || *seq == n
+		}
+		if seq != nil && *seq != n || h.session.Gen() != gen {
 			return false
 		}
-		return scope == TicketSession || c.h.epoch == epoch
+		switch scope {
+		case TicketSession:
+			return true
+		case TicketWorkspace:
+			return h.epoch == epoch
+		}
+		return h.epoch == epoch && h.file.gen == file
 	}}
 }

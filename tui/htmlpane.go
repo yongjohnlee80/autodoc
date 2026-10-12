@@ -78,8 +78,7 @@ func (h *Host) htmlPaneShown() bool { return h.panelOpen["htmlPane"] }
 // renderHTMLPane exports the editor's text off the loop and shows it in the pane, its images read
 // from the note's folder and its blocks carrying their source bytes.
 func (h *Host) renderHTMLPane() {
-	h.htmlPane.gen++
-	gen := h.htmlPane.gen
+	tk := h.ticket(&h.htmlPane.gen, TicketLocal)
 	source, theme := []byte(h.core.Value()), h.exportTheme()
 	options := export.Options{SourceSpans: true}
 	dir, root, base := "", "", ""
@@ -92,7 +91,7 @@ func (h *Host) renderHTMLPane() {
 		page, err := export.RenderWith(source, export.HTML, theme, options)
 		return answerOf[[]byte]{v: page, err: err}
 	}, func(a answerOf[[]byte]) {
-		if gen != h.htmlPane.gen {
+		if !tk.Current() {
 			return // an edit since: its render follows
 		}
 		if a.err != nil {
@@ -124,10 +123,9 @@ func (h *Host) htmlPaneSoon() {
 	if !h.htmlPaneShown() {
 		return
 	}
-	h.htmlPane.gen++
-	gen := h.htmlPane.gen
+	tk := h.ticket(&h.htmlPane.gen, TicketLocal)
 	h.after(htmlPaneDelay, func() {
-		if gen == h.htmlPane.gen && h.htmlPaneShown() {
+		if tk.Current() && h.htmlPaneShown() {
 			h.renderHTMLPane()
 		}
 	})

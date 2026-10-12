@@ -38,28 +38,26 @@ type todos struct {
 	store    string // the store directory, as todos.resolve answers
 	claimed  bool
 	tab      int
-	month    string // the archived month open; "" for the month list
-	tasks    [todoTabs][]map[string]any
-	months   []map[string]any
-	stores   []map[string]any
-	cursor   int    // the row under the cursor in the tab shown
-	folderAs string // what the folder chosen is for: "load", "new" or "move"
+	month    string                          // the archived month open; "" for the month list
+	tasks    [todoTabs]*rows[map[string]any] // each tab's tasks
+	months   *rows[map[string]any]           // the archived months, while the Archived tab lists them
+	stores   *rows[map[string]any]           // the stores the daemon knows
+	cursor   int                             // the row under the cursor in the tab shown
+	folderAs string                          // what the folder chosen is for: "load", "new" or "move"
 	// the latest store read and the latest store list asked for: an older answer of either is
 	// dropped; the two never cancel each other, and a write's answer is never dropped
 	loadSeq, storesSeq uint64
-	detail             bool // the details pane shows (i, o)
-	help               bool // the keys show (?)
-
-	storesModel *tuidecl.ListModel
-	tabModels   [todoTabs]*tuidecl.ListModel
-	monthsModel *tuidecl.ListModel
+	detail             bool           // the details pane shows (i, o)
+	help               bool           // the keys show (?)
+	loaded             [todoTabs]bool // the tab's tasks were read since it was last shown empty
 }
 
 func newTodos(c Core) *todos {
-	t := &todos{c: c, detail: true, storesModel: tuidecl.NewListModel("key", "mark", "name", "path"),
-		monthsModel: tuidecl.NewListModel("key", "month", "count")}
-	for i := range t.tabModels {
-		t.tabModels[i] = tuidecl.NewListModel("key", "n", "title", "priority", "assignee", "due", "errors")
+	t := &todos{c: c, detail: true,
+		stores: newRows(tuidecl.NewListModel("key", "mark", "name", "path"), storeRowOf),
+		months: newRows(tuidecl.NewListModel("key", "month", "count"), monthRowOf)}
+	for i := range t.tasks {
+		t.tasks[i] = newRows(tuidecl.NewListModel("key", "n", "title", "priority", "assignee", "due", "errors"), taskRowOf(i == 0))
 	}
 	return t
 }
@@ -71,9 +69,9 @@ func (t *todos) State() map[string]any {
 		"App.todosTitle": "todos", "App.todosStatus": "", "App.todoTab": 0, "App.todoDetail": "",
 		"App.todoDetailShown": true, "App.todoHelpShown": false,
 		"App.todoFolder": "",
-		"App.todoStores": t.storesModel, "App.todoMonths": t.monthsModel,
-		"App.todoOpen": t.tabModels[0], "App.todoInProgress": t.tabModels[1], "App.todoDeferred": t.tabModels[2],
-		"App.todoCompleted": t.tabModels[3], "App.todoArchived": t.tabModels[4],
+		"App.todoStores": t.stores.Model(), "App.todoMonths": t.months.Model(),
+		"App.todoOpen": t.tasks[0].Model(), "App.todoInProgress": t.tasks[1].Model(), "App.todoDeferred": t.tasks[2].Model(),
+		"App.todoCompleted": t.tasks[3].Model(), "App.todoArchived": t.tasks[4].Model(),
 	}
 }
 
@@ -217,24 +215,22 @@ func (t *todos) loadTab() {
 	t.call("todos.list", []any{t.at, map[string]any{"buckets": []any{bucket}}}, &t.loadSeq, func(v any) {
 		l := asMap(v)
 		if t.tab == archivedTab && t.month == "" {
-			t.months = nil
-			rows := []rowOf{}
-			for i, p := range asList(l["partitions"]) {
-				m := asMap(p)
-				t.months = append(t.months, m)
-				rows = append(rows, rowOf{"key": fmt.Sprint(i), "month": str(m, "month"), "count": fmt.Sprint(m["files"])})
+			var months []map[string]any
+			for _, p := range asList(l["partitions"]) {
+				months = append(months, asMap(p))
 			}
-			t.monthsModel.Reset(rows)
-			t.tabModels[archivedTab].Reset(nil)
-			t.status(fmt.Sprintf("%d months archived: Enter opens one", len(rows)))
+			t.months.Reset(months)
+			t.tasks[archivedTab].Reset(nil) // the month list shows, not a month's tasks
+			t.loaded[archivedTab] = false
+			t.status(fmt.Sprintf("%d months archived: Enter opens one", len(months)))
 			return
 		}
 		var tasks []map[string]any
 		for _, x := range asList(l["tasks"]) {
 			tasks = append(tasks, asMap(x))
 		}
-		t.tasks[t.tab] = tasks
-		t.tabModels[t.tab].Reset(taskRows(tasks, t.tab == 0))
+		t.tasks[t.tab].Reset(tasks)
+		t.loaded[t.tab] = true
 		bad := len(asList(l["malformed"]))
 		msg := fmt.Sprintf("%d tasks", len(tasks))
 		if bad > 0 {
@@ -245,10 +241,9 @@ func (t *todos) loadTab() {
 	})
 }
 
-// taskRows are a bucket's tasks as rows; the open bucket numbers them, as autofinder's does.
-func taskRows(tasks []map[string]any, numbered bool) []rowOf {
-	rows := make([]rowOf, len(tasks))
-	for i, x := range tasks {
+// taskRowOf is a bucket's task as its row; the open bucket numbers them, as autofinder's does.
+func taskRowOf(numbered bool) func(int, map[string]any) rowOf {
+	return func(i int, x map[string]any) rowOf {
 		n := ""
 		if numbered {
 			n = fmt.Sprint(i + 1)
@@ -257,10 +252,24 @@ func taskRows(tasks []map[string]any, numbered bool) []rowOf {
 		if len(asList(x["errors"])) > 0 {
 			mark = "!"
 		}
-		rows[i] = rowOf{"key": str(x, "id"), "n": n, "title": str(x, "title"), "priority": str(x, "priority"),
+		return rowOf{"key": str(x, "id"), "n": n, "title": str(x, "title"), "priority": str(x, "priority"),
 			"assignee": str(x, "assignee"), "due": str(x, "due"), "errors": mark}
 	}
-	return rows
+}
+
+// monthRowOf is an archived month as its row.
+func monthRowOf(i int, m map[string]any) rowOf {
+	return rowOf{"key": fmt.Sprint(i), "month": str(m, "month"), "count": fmt.Sprint(m["files"])}
+}
+
+// storeRowOf is a known store as its row, the open one marked.
+func storeRowOf(i int, s map[string]any) rowOf {
+	mark := "  "
+	if s["claimed"] == true {
+		mark = "● "
+	}
+	name := filepath.Base(filepath.Dir(str(s, "path")))
+	return rowOf{"key": fmt.Sprint(i), "mark": mark, "name": name, "path": str(s, "path")}
 }
 
 func (t *todos) status(s string) {
@@ -268,7 +277,7 @@ func (t *todos) status(s string) {
 }
 
 func (t *todos) showTab(i int) {
-	if i < 0 || i >= len(todoBuckets) || i == t.tab && t.tasks[i] != nil {
+	if i < 0 || i >= len(todoBuckets) || i == t.tab && t.loaded[i] {
 		return
 	}
 	t.tab, t.month = i, ""
@@ -278,10 +287,8 @@ func (t *todos) showTab(i int) {
 
 // task is the row i of the tab shown; nil for none.
 func (t *todos) task(i int) map[string]any {
-	if i < 0 || i >= len(t.tasks[t.tab]) {
-		return nil
-	}
-	return t.tasks[t.tab][i]
+	x, _ := t.tasks[t.tab].At(i)
+	return x
 }
 
 // moved shows the task under the cursor.
@@ -333,10 +340,11 @@ func (t *todos) activated(i int) {
 }
 
 func (t *todos) monthChosen(i int) {
-	if i < 0 || i >= len(t.months) {
+	m, ok := t.months.At(i)
+	if !ok {
 		return
 	}
-	t.month = str(t.months[i], "month")
+	t.month = str(m, "month")
 	t.loadTab()
 }
 
@@ -403,10 +411,10 @@ func (t *todos) toggleHelp()   { t.help = !t.help; t.c.Set("App.todoHelpShown", 
 
 // storeChosen shows another store: a known one, by its first root.
 func (t *todos) storeChosen(i int) {
-	if i < 0 || i >= len(t.stores) {
+	s, ok := t.stores.At(i)
+	if !ok {
 		return
 	}
-	s := t.stores[i]
 	roots := asList(s["roots"])
 	if len(roots) == 0 {
 		return
@@ -419,19 +427,11 @@ func (t *todos) storeChosen(i int) {
 // loadStores lists the stores the daemon knows; the open one is marked.
 func (t *todos) loadStores() {
 	t.call("todos.stores", nil, &t.storesSeq, func(v any) {
-		t.stores = nil
-		rows := []rowOf{}
-		for i, x := range asList(v) {
-			s := asMap(x)
-			t.stores = append(t.stores, s)
-			mark := "  "
-			if s["claimed"] == true {
-				mark = "● "
-			}
-			name := filepath.Base(filepath.Dir(str(s, "path")))
-			rows = append(rows, rowOf{"key": fmt.Sprint(i), "mark": mark, "name": name, "path": str(s, "path")})
+		var stores []map[string]any
+		for _, x := range asList(v) {
+			stores = append(stores, asMap(x))
 		}
-		t.storesModel.Reset(rows)
+		t.stores.Reset(stores)
 	})
 }
 

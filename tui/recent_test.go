@@ -20,7 +20,7 @@ func runRecentTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 }
 
 func (r *running) recentListedNow() []recentDoc {
-	return onLoop(r, func() []recentDoc { return append([]recentDoc(nil), r.h.recentRows...) })
+	return onLoop(r, func() []recentDoc { return append([]recentDoc(nil), r.h.recent.All()...) })
 }
 
 // waitRecentStored waits for the daemon's store to hold the recent files want.

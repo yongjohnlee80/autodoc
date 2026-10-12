@@ -88,6 +88,24 @@ func TestTheLegacyFeatureIsTheWholeHost(t *testing.T) {
 	}
 }
 
+// TestAFileTicketIsStaleWhenAnotherFileOpens: a file-scoped answer is stale once another file
+// opens; a workspace-scoped one is not. With no sequence, nothing newer makes either stale.
+func TestAFileTicketIsStaleWhenAnotherFileOpens(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	got := onLoop(r, func() [4]bool {
+		file, ws := r.h.ticket(nil, TicketFile), r.h.ticket(nil, TicketWorkspace)
+		r.h.ticket(nil, TicketFile) // no sequence: a later ticket supersedes nothing
+		before := [2]bool{file.Current(), ws.Current()}
+		r.h.file.gen++ // another file opened
+		defer func() { r.h.file.gen-- }()
+		return [4]bool{before[0], before[1], file.Current(), ws.Current()}
+	})
+	if got != [4]bool{true, true, false, true} {
+		t.Errorf("current: file %v, workspace %v; after another file opened: file %v, workspace %v", got[0], got[1], got[2], got[3])
+	}
+}
+
 // TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch: the latest answer wins, and an answer asked
 // under another workspace never applies.
 func TestATicketIsStaleAfterANewerOneOrAWorkspaceSwitch(t *testing.T) {

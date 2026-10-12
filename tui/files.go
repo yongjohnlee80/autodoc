@@ -267,8 +267,7 @@ func (h *Host) openHTMLAs(how string) {
 
 // loadAs is load, raw or not.
 func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
-	h.file.gen++
-	gen, ep := h.file.gen, h.epoch
+	tk := h.ticket(&h.file.gen, TicketWorkspace)
 	again, read := h.file.open && h.file.ws == ws && h.file.path == p, h.file.version
 	type answer struct {
 		content, version string
@@ -284,7 +283,7 @@ func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
 		b, _ := m["content"].([]byte)
 		return answer{content: string(b), version: str(m, "version")}
 	}, func(a answer) {
-		if gen != h.file.gen || ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		if again && h.file.version != read {
@@ -408,7 +407,7 @@ func (h *Host) setRendered(on bool) {
 // is gone, closed, after asking over unsaved changes, whose save writes it anew. A save that lands
 // while it reads moves the page's version on, and the read, older, is dropped.
 func (h *Host) recheckFile() {
-	gen, ep, ws, p, read, raw := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.version, h.file.raw
+	tk, ws, p, read, raw := h.ticket(nil, TicketFile), h.file.ws, h.file.path, h.file.version, h.file.raw
 	where := "the workspace"
 	if ws == "" {
 		where = "disk"
@@ -426,7 +425,7 @@ func (h *Host) recheckFile() {
 		b, _ := m["content"].([]byte)
 		return answer{content: string(b), version: str(m, "version")}
 	}, func(a answer) {
-		if gen != h.file.gen || ep != h.epoch || !h.file.open || h.file.version != read {
+		if !tk.Current() || !h.file.open || h.file.version != read {
 			return
 		}
 		switch {
@@ -553,7 +552,7 @@ func (h *Host) cursorBytes() int {
 // holds what was written, its version is adopted; otherwise someone wrote after it, which is a
 // conflict. It is never sent again blindly.
 func (h *Host) write(content, want string, after func()) {
-	gen, ep, ws, p, raw := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.raw
+	tk, ws, p, raw := h.ticket(nil, TicketFile), h.file.ws, h.file.path, h.file.raw
 	type answer struct {
 		version string
 		err     error
@@ -577,7 +576,7 @@ func (h *Host) write(content, want string, after func()) {
 		b, _ := m["content"].([]byte)
 		return answer{err: err, version: str(m, "version"), same: string(b) == content}
 	}, func(a answer) {
-		if gen != h.file.gen || ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		switch {
@@ -632,7 +631,7 @@ func (h *Host) conflict(answer string) {
 // overwrite writes the editor's text over whatever version is on disk now: it reads the version
 // first, so the write is still conditional (a third writer in between is still a conflict).
 func (h *Host) overwrite() {
-	gen, ep, ws, p, raw := h.file.gen, h.epoch, h.file.ws, h.file.path, h.file.raw
+	tk, ws, p, raw := h.ticket(nil, TicketFile), h.file.ws, h.file.path, h.file.raw
 	type answer struct {
 		version string
 		gone    bool
@@ -648,7 +647,7 @@ func (h *Host) overwrite() {
 		}
 		return answer{version: str(asMap(res), "version")}
 	}, func(a answer) {
-		if gen != h.file.gen || ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		switch {
@@ -682,12 +681,13 @@ func (h *Host) createFile(name string) {
 		content = []byte(h.core.Value())
 		restored = h.restoredCopy
 	}
-	ep, ws, gen := h.epoch, h.ws, h.file.gen
+	// tk is the workspace the draft is written to; page is the page it was typed on
+	ws, tk, page := h.ws, h.ticket(nil, TicketWorkspace), h.ticket(nil, TicketFile)
 	do(h, func(ctx context.Context) error {
 		_, err := h.call(ctx, "doc.write", ws, name, content, "")
 		return err
 	}, func(err error) {
-		if ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		if err != nil && code(err) != rpc.CodeCommitted {
@@ -709,7 +709,7 @@ func (h *Host) createFile(name string) {
 					h.restoredCopy = nil
 				}
 			}
-			if gen != h.file.gen || h.file.open {
+			if !page.Current() || h.file.open {
 				// the page moved on while the draft was written: the file is on disk; open it only
 				// when asked
 				h.notify("saved the draft as " + name)

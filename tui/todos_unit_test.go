@@ -217,11 +217,11 @@ func TestTodosTabsArchiveStoresAndFolders(t *testing.T) {
 	v := newTodos(s)
 	v.open()
 	v.showTab(archivedTab)
-	if v.months == nil || len(v.months) != 1 {
-		t.Fatalf("months %v", v.months)
+	if v.months.Len() != 1 {
+		t.Fatalf("months %v", v.months.All())
 	}
 	v.monthChosen(0)
-	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || len(v.tasks[archivedTab]) != 1 {
+	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || v.tasks[archivedTab].Len() != 1 {
 		t.Errorf("month: %v", s.calls)
 	}
 	v.monthChosen(5)
@@ -296,11 +296,11 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 		v := newTodos(s)
 		v.open() // held: [0] todos.stores, [1] todos.resolve
 		s.deliver(order...)
-		if len(v.stores) != 2 {
-			t.Errorf("order %v: the stores answer was dropped: %v", order, v.stores)
+		if v.stores.Len() != 2 {
+			t.Errorf("order %v: the stores answer was dropped: %v", order, v.stores.All())
 		}
 		s.deliver(0) // the list the resolve asked for
-		if len(v.tasks[0]) != 1 {
+		if v.tasks[0].Len() != 1 {
 			t.Errorf("order %v: the open tasks were dropped", order)
 		}
 	}

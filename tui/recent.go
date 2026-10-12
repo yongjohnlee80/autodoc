@@ -66,33 +66,34 @@ func (h *Host) openRecent() {
 // listRecent shows the recent files still there: their workspace known, and, in the workspace in
 // use, still among its files.
 func (h *Host) listRecent() {
-	h.recentRows = h.recentRows[:0]
+	var listed []recentDoc
 	for _, d := range h.prefs.recent {
 		if h.recentListed(d) {
-			h.recentRows = append(h.recentRows, d)
+			listed = append(listed, d)
 		}
 	}
-	rows := make([]rowOf, len(h.recentRows))
-	for i, d := range h.recentRows {
-		label := d.Workspace
-		if label == "" {
-			label = "(" + outsideBadge + ")"
-		}
-		rows[i] = rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
-	}
-	h.recentModel.Reset(rows)
-	if len(rows) == 0 {
+	h.recent.Reset(listed)
+	if len(listed) == 0 {
 		h.set("App.recentStatus", "no recent files: the files you open are listed here")
 		return
 	}
-	h.set("App.recentStatus", fmt.Sprintf("%d recent files, the newest first", len(rows)))
+	h.set("App.recentStatus", fmt.Sprintf("%d recent files, the newest first", len(listed)))
+}
+
+// recentRowOf is a recent file as the list shows it.
+func recentRowOf(_ int, d recentDoc) rowOf {
+	label := d.Workspace
+	if label == "" {
+		label = "(" + outsideBadge + ")"
+	}
+	return rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
 }
 
 func (h *Host) recentListed(d recentDoc) bool {
 	if d.Workspace == "" {
 		return true // a file outside every workspace: opening it says when it is gone
 	}
-	if !slices.ContainsFunc(h.wsList, func(w wsInfo) bool { return w.name == d.Workspace }) {
+	if !slices.ContainsFunc(h.workspaces.All(), func(w wsInfo) bool { return w.name == d.Workspace }) {
 		return false
 	}
 	return d.Workspace != h.ws || slices.Contains(h.filesAll, d.Path)
@@ -100,10 +101,10 @@ func (h *Host) recentListed(d recentDoc) bool {
 
 // recentSelect opens the recent file at row i.
 func (h *Host) recentSelect(i int) {
-	if i < 0 || i >= len(h.recentRows) {
+	d, ok := h.recent.At(i)
+	if !ok {
 		return
 	}
-	d := h.recentRows[i]
 	h.closeDialog("recent")
 	h.openIn(d.Workspace, d.Path)
 }

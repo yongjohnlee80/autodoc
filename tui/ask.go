@@ -56,8 +56,7 @@ func (a *asker) Commands() map[string]Command {
 
 // ask shows q, replacing any question still open.
 func (a *asker) ask(q Question) Asked {
-	a.seq++
-	n := a.seq
+	tk := a.c.Ticket(&a.seq, TicketLocal)
 	a.yes = q.OnYes
 	a.c.Set("App.askTitle", q.Title)
 	a.c.Set("App.askText", q.Text)
@@ -65,7 +64,7 @@ func (a *asker) ask(q Question) Asked {
 	a.c.Set("App.askNo", cmp.Or(q.No, "&No"))
 	a.c.Open("confirm")
 	return Asked{say: func(text string) {
-		if a.seq == n {
+		if tk.Current() {
 			a.c.Set("App.askText", text)
 		}
 	}}

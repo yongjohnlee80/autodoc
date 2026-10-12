@@ -15,7 +15,6 @@ import (
 	"slices"
 
 	"github.com/BurntSushi/toml"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // ADDING AND MANAGING PLUGINS — Plugins › Add from a git URL… clones a repository whose top holds a
@@ -339,26 +338,26 @@ func (h *Host) loadManaged() {
 		}
 		return out
 	}, func(ms []managedPlugin) {
-		h.managedList = ms
-		rows := make([]tuidecl.Row, len(ms))
-		for i, m := range ms {
-			source := m.source
-			if source == "" {
-				source = "local: put in the folder by hand"
-			}
-			rows[i] = tuidecl.Row{"key": m.e.dir, "name": m.e.label(), "place": h.placement(m.e), "commit": m.commit, "source": source}
-		}
-		h.managedPlugins.Reset(rows)
+		h.managedPlugins.Reset(ms)
 	})
+}
+
+// managedPluginRowOf is an installed plugin as the manager shows it.
+func (h *Host) managedPluginRowOf(_ int, m managedPlugin) rowOf {
+	source := m.source
+	if source == "" {
+		source = "local: put in the folder by hand"
+	}
+	return rowOf{"key": m.e.dir, "name": m.e.label(), "place": h.placement(m.e), "commit": m.commit, "source": source}
 }
 
 // managedRow is the manager's row i, as listed.
 func (h *Host) managedRow(i int) (managedPlugin, bool) {
-	if i < 0 || i >= len(h.managedList) {
+	m, ok := h.managedPlugins.At(i)
+	if !ok {
 		h.set("App.pluginsHelp", "no plugin under the cursor · Add… installs one")
-		return managedPlugin{}, false
 	}
-	return h.managedList[i], true
+	return m, ok
 }
 
 // startUpdatePlugin is the manager's Update…: the origin fetched, and PluginConfirm asked about the

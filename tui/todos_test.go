@@ -155,7 +155,7 @@ func TestEnterOpensTheTasksFileInTheStore(t *testing.T) {
 	f := &fakeCore{}
 	v := newTodos(f)
 	v.store = "/p/.todo-list"
-	v.tasks[0] = []map[string]any{{"id": "t1", "path": "open/t1.md"}}
+	v.tasks[0].Reset([]map[string]any{{"id": "t1", "path": "open/t1.md"}})
 	v.activated(0)
 	v.activated(5) // no such row: nothing
 	if len(f.opened) != 1 || f.opened[0] != "/p/.todo-list/open/t1.md" {

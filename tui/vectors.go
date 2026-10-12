@@ -31,7 +31,7 @@ func (h *Host) openVectors() {
 }
 
 func (h *Host) loadVectors() {
-	ep, ws := h.epoch, h.ws
+	tk, ws := h.ticket(nil, TicketWorkspace), h.ws
 	type answer struct {
 		rows     []vectorRow
 		refusals string
@@ -62,27 +62,21 @@ func (h *Host) loadVectors() {
 		}
 		return answer{rows: rows, refusals: strings.Join(details, "\n")}
 	}, func(a answer) {
-		if ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.set("App.vectorsStatus", "vectors: "+wireMessage(a.err))
 			return
 		}
-		h.vectorList = a.rows
-		rows := make([]rowOf, len(a.rows))
+		h.vectors.Reset(a.rows)
 		var total, unused int64
-		for i, r := range a.rows {
-			all := r.f32 + r.bits + r.keys
-			total += all
+		for _, r := range a.rows {
+			total += r.size()
 			if r.state == "unused" {
-				unused += all
+				unused += r.size()
 			}
-			rows[i] = rowOf{"key": r.fp, "state": r.state, "model": r.name, "dims": fmt.Sprint(r.dims),
-				"vectors": fmt.Sprint(r.vectors), "f32": bytesText(r.f32), "bits": bytesText(r.bits),
-				"keys": bytesText(r.keys), "total": bytesText(all)}
 		}
-		h.vectors.Reset(rows)
 		status := fmt.Sprintf("%d models, %s in all", len(a.rows), bytesText(total))
 		if unused > 0 {
 			status += fmt.Sprintf(" · %s in models no longer used: Purge… removes one", bytesText(unused))
@@ -90,6 +84,16 @@ func (h *Host) loadVectors() {
 		h.set("App.vectorsStatus", status)
 		h.set("App.vectorsRefusals", a.refusals)
 	})
+}
+
+// size is the room a model's vectors take.
+func (r vectorRow) size() int64 { return r.f32 + r.bits + r.keys }
+
+// vectorRowOf is a model as the list shows it.
+func vectorRowOf(_ int, r vectorRow) rowOf {
+	return rowOf{"key": r.fp, "state": r.state, "model": r.name, "dims": fmt.Sprint(r.dims),
+		"vectors": fmt.Sprint(r.vectors), "f32": bytesText(r.f32), "bits": bytesText(r.bits),
+		"keys": bytesText(r.keys), "total": bytesText(r.size())}
 }
 
 // bytesText is a size as the list shows it.
@@ -107,10 +111,10 @@ func bytesText(n int64) string {
 
 // startPurge asks before model i's vectors go; only a model no longer used can be purged.
 func (h *Host) startPurge(i int) {
-	if i < 0 || i >= len(h.vectorList) {
+	r, ok := h.vectors.At(i)
+	if !ok {
 		return
 	}
-	r := h.vectorList[i]
 	if r.state != "unused" {
 		what := "the active model: choose another model, or remove its provider in Search models"
 		if r.state != "active" {
@@ -122,7 +126,7 @@ func (h *Host) startPurge(i int) {
 	ws := h.ws
 	h.ask(Question{Title: "purge the model?", Text: fmt.Sprintf("Purge %s's %d vectors (%s) from %s? Switching back to it would embed "+
 		"every section again; the store gives its room back.", r.name, r.vectors,
-		bytesText(r.f32+r.bits+r.keys), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
+		bytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
 }
 
 func (h *Host) purgeConfirmed(r vectorRow, ws string) {
@@ -147,22 +151,16 @@ func (h *Host) cancelIndexing() {
 	switch {
 	case e.target != "":
 		target := embed.ModelName(e.target)
-		do(h, func(ctx context.Context) (out struct {
-			model string
-			err   error
-		}) {
+		do(h, func(ctx context.Context) (out answerOf[string]) {
 			res, err := h.call(ctx, "embedding.cancel_switch")
-			out.model, out.err = str(asMap(res), "model"), err
+			out.v, out.err = str(asMap(res), "model"), err
 			return
-		}, func(a struct {
-			model string
-			err   error
-		}) {
+		}, func(a answerOf[string]) {
 			if a.err != nil {
 				h.failed("cancel the switch", a.err)
 				return
 			}
-			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are deleted", a.model, target))
+			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are deleted", a.v, target))
 			h.loadProviders()
 		})
 	case e.working() > 0:

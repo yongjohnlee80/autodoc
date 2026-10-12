@@ -64,7 +64,7 @@ type relations struct {
 
 // loadRelations reads the relations of p in workspace ws and shows them in the drawer.
 func (h *Host) loadRelations(ws, p string) {
-	gen, ep, deep := h.file.gen, h.epoch, h.relDeep
+	tk, deep := h.ticket(nil, TicketFile), h.relDeep
 	do(h, func(ctx context.Context) relations {
 		var r relations
 		edges := func(verb string) ([]relEdge, error) {
@@ -110,7 +110,7 @@ func (h *Host) loadRelations(ws, p string) {
 		}
 		return r
 	}, func(r relations) {
-		if gen != h.file.gen || ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		if r.err != nil {
@@ -190,12 +190,8 @@ func (h *Host) showRelations(ws, p string, r relations) {
 			rows = append(rows, relRow{label: "  " + u})
 		}
 	}
-	h.relRows, h.relFor = rows, fileRef{ws, p}
-	list := make([]rowOf, len(rows))
-	for i, row := range rows {
-		list[i] = rowOf{"key": fmt.Sprint(i), "label": row.label}
-	}
-	h.relationsModel.Reset(list)
+	h.relFor = fileRef{ws, p}
+	h.relations.Reset(rows)
 	// the cursor on the first document, not a heading: Enter opens it
 	if first := slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" }); first >= 0 {
 		h.set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view
@@ -208,10 +204,13 @@ func (h *Host) showRelations(ws, p string, r relations) {
 	h.set("App.relationsTitle", title+" · d depth")
 }
 
+// relationRowOf is a row of the drawer: a document, a heading, or what could not be resolved.
+func relationRowOf(i int, r relRow) rowOf { return rowOf{"key": fmt.Sprint(i), "label": r.label} }
+
 // clearRelations empties the drawer, saying why when a file is open.
 func (h *Host) clearRelations(why string) {
-	h.relRows, h.relFor = nil, fileRef{}
-	h.relationsModel.Reset(nil)
+	h.relFor = fileRef{}
+	h.relations.Reset(nil)
 	h.set("App.relationsTitle", why)
 }
 
@@ -234,10 +233,10 @@ func (h *Host) relationsOfOpenFile() {
 
 // openRelation opens the drawer's row i in the editor; the drawer stays open.
 func (h *Host) openRelation(i int) {
-	if i < 0 || i >= len(h.relRows) || h.relRows[i].path == "" {
+	row, ok := h.relations.At(i)
+	if !ok || row.path == "" {
 		return
 	}
-	row := h.relRows[i]
 	h.openIn(row.ws, row.path)
 }
 
@@ -254,7 +253,7 @@ func (h *Host) relationsDepth() {
 // jumpRows are the jump card's documents: the drawer's first nine, once each.
 func (h *Host) jumpRows() []relRow {
 	var out []relRow
-	for _, r := range h.relRows {
+	for _, r := range h.relations.All() {
 		if r.path == "" || strings.HasPrefix(r.label, "    ") || slices.ContainsFunc(out, func(o relRow) bool { return o.path == r.path }) {
 			continue
 		}

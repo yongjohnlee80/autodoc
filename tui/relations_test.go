@@ -38,7 +38,7 @@ var relationsKB = map[string][]string{"kb": {
 func (r *running) relationLabels() []string {
 	return onLoop(r, func() []string {
 		var out []string
-		for _, row := range r.h.relRows {
+		for _, row := range r.h.relations.All() {
 			out = append(out, row.label)
 		}
 		return out

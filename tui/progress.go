@@ -100,7 +100,7 @@ func (e embedProgress) online() bool {
 
 // poll asks for the status, and asks again a second after the answer, while the program runs.
 func (h *Host) poll() {
-	ep, ws := h.epoch, h.ws
+	tk, ws := h.ticket(nil, TicketWorkspace), h.ws
 	if ws != "" && time.Since(h.focusSent) >= 10*time.Second {
 		h.focusSent = time.Now()
 		do(h, func(ctx context.Context) error { _, err := h.call(ctx, "workspace.focus", ws); return err }, func(error) {})
@@ -123,7 +123,7 @@ func (h *Host) poll() {
 		a.cursor, _ = m["cursor"].(int64)
 		return a
 	}, func(a answer) {
-		if ep != h.epoch {
+		if !tk.Current() {
 			return // another workspace or connection: its own poll is running
 		}
 		if a.err == nil {
@@ -132,7 +132,7 @@ func (h *Host) poll() {
 		}
 		// the next poll is this epoch's: a switch or a reconnect in the meantime has started its own
 		h.after(progressEvery, func() {
-			if ep == h.epoch {
+			if tk.Current() {
 				h.poll()
 			}
 		})
@@ -254,11 +254,11 @@ func (h *Host) spinWhileEmbedding() {
 		return
 	}
 	h.prog.spinning = true
-	ep := h.epoch
+	tk := h.ticket(nil, TicketWorkspace)
 	var turn func()
 	turn = func() {
-		if ep != h.epoch || h.prog.emb.working() == 0 || h.prog.emb.failing || h.prog.emb.queueState == "paused" || (h.prog.emb.queueState == "waiting" && h.prog.emb.waitingFor != "") {
-			if ep == h.epoch {
+		if !tk.Current() || h.prog.emb.working() == 0 || h.prog.emb.failing || h.prog.emb.queueState == "paused" || (h.prog.emb.queueState == "waiting" && h.prog.emb.waitingFor != "") {
+			if tk.Current() {
 				h.prog.spinning = false
 			}
 			return

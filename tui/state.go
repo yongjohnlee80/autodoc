@@ -47,7 +47,7 @@ func (h *Host) state() map[string]any {
 		"App.pluginRisk":         pluginRisk,
 		"App.pluginConfirmTitle": "",
 		"App.pluginQuestion":     "",
-		"App.managedPlugins":     h.managedPlugins,
+		"App.managedPlugins":     h.managedPlugins.Model(),
 		"App.pluginsHelp":        pluginsHelp,
 		"App.fileTitle":          untitled,
 		"App.diagramTitle":       "Mermaid preview",
@@ -62,7 +62,7 @@ func (h *Host) state() map[string]any {
 		"App.diagnosticsShown":   false,
 		"App.diagnosticsLine":    "",
 		"App.syntaxDefinition":   "Markdown",
-		"App.relations":          h.relationsModel,
+		"App.relations":          h.relations.Model(),
 		"App.relationsTitle":     "relations",
 		"App.jumpText":           "",
 
@@ -116,7 +116,7 @@ func (h *Host) state() map[string]any {
 		// the notifications' history (notify.go), and the Vim keys' card
 		"App.notices":         h.noticeList,
 		"App.noticesTitle":    "notifications (0)",
-		"App.providers":       h.providers,
+		"App.providers":       h.providers.Model(),
 		"App.providersStatus": "",
 		"App.providersTitle":  "embedding providers",
 		"App.providerDetail":  "",
@@ -138,7 +138,7 @@ func (h *Host) state() map[string]any {
 		"App.providerModels":       h.providerModels,
 		"App.providerModelsStatus": "",
 		// the recent files (recent.go)
-		"App.recentFiles":  h.recentModel,
+		"App.recentFiles":  h.recent.Model(),
 		"App.recentStatus": "",
 		// the agent terminal and its profiles (agent.go, agentprofiles.go)
 		"App.agentTitle":          "agent",
@@ -163,7 +163,7 @@ func (h *Host) state() map[string]any {
 		"App.aiRankerTab":        false,
 		"App.aiRankerChoice":     false,
 		"App.aiUseEnabled":       true,
-		"App.rankers":            h.rankers,
+		"App.rankers":            h.rankers.Model(),
 		"App.rankersStatus":      "",
 		"App.rankerDetail":       "",
 		"App.rankerKinds":        choices(rankerKindChoices()...),
@@ -185,7 +185,7 @@ func (h *Host) state() map[string]any {
 		"App.lastFind":   "",
 		"App.linksIndex": 0,
 		// the workspace's models and their vectors (vectors.go)
-		"App.vectors":         h.vectors,
+		"App.vectors":         h.vectors.Model(),
 		"App.vectorsTitle":    "vectors",
 		"App.vectorsStatus":   "",
 		"App.vectorsRefusals": "",
@@ -242,9 +242,9 @@ func (h *Host) state() map[string]any {
 		"App.htmlOpenQuestion": "",
 		"App.conflictQuestion": "",
 		"App.quitQuestion":     "The file has unsaved changes. Quit, and lose them?",
-		"App.workspaces":       h.workspaces,
+		"App.workspaces":       h.workspaces.Model(),
 
-		"App.managed":        h.managed,
+		"App.managed":        h.managed.Model(),
 		"App.managerHelp":    managerHelp,
 		"App.managerDetail":  "",
 		"App.managerIndex":   0,

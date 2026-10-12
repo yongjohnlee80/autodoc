@@ -265,7 +265,7 @@ func TestListModelsOfAnEditAsksItsServer(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
 	r.h.p.Post(r.h.loadProviders)
-	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.providerList) }) == 1 })
+	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.providers.All()) }) == 1 })
 	r.h.p.Post(func() { r.h.startEditProvider(0) })
 	r.s.WaitForText(t, "edit local")
 	r.h.p.Post(func() { r.h.listModels(other.URL, "") })

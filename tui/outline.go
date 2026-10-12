@@ -49,10 +49,9 @@ func (h *Host) refreshOutline() {
 
 // outlineSoon outlines the text once it has rested; a later edit supersedes it.
 func (h *Host) outlineSoon() {
-	h.outlineGen++
-	gen := h.outlineGen
+	tk := h.ticket(&h.outlineGen, TicketLocal)
 	h.after(outlineDelay, func() {
-		if gen == h.outlineGen {
+		if tk.Current() {
 			h.refreshOutline()
 		}
 	})

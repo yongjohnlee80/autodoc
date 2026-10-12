@@ -14,17 +14,12 @@ type rowOf = tuidecl.Row
 
 // listFiles reads every file of the workspace in use, in path order.
 func (h *Host) listFiles() {
-	h.listSeq++
-	seq, ep, ws := h.listSeq, h.epoch, h.ws
-	type answer struct {
-		paths []string
-		err   error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk, ws := h.ticket(&h.listSeq, TicketWorkspace), h.ws
+	do(h, func(ctx context.Context) answerOf[[]string] {
 		paths, err := h.listAll(ctx, ws)
-		return answer{paths, err}
-	}, func(a answer) {
-		if seq != h.listSeq || ep != h.epoch {
+		return answered(paths, err)
+	}, func(a answerOf[[]string]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
@@ -35,14 +30,14 @@ func (h *Host) listFiles() {
 			}
 			h.listRetry = min(max(2*h.listRetry, listRetryFirst), listRetryMax)
 			h.after(h.listRetry, func() {
-				if seq == h.listSeq && ep == h.epoch {
+				if tk.Current() {
 					h.listFiles()
 				}
 			})
 			return
 		}
 		h.listRetry = 0
-		h.filesAll = a.paths
+		h.filesAll = a.v
 		// the recent files of the workspace in use are listed by these files: a list made before
 		// they came (a workspace just entered) is made again
 		h.listRecent()

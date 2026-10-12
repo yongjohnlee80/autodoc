@@ -292,24 +292,20 @@ func prefState(p prefs) map[string]any {
 // loadPrefs reads the store's preferences on a connection, and applies them: the theme by a
 // reload, when it is not the one on screen.
 func (h *Host) loadPrefs() {
-	gen := h.session.Gen() // daemon-wide: a workspace switch keeps it, a new connection drops it
-	type answer struct {
-		m   map[string]any
-		err error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(nil, TicketSession) // daemon-wide: a workspace switch keeps it, a new connection drops it
+	do(h, func(ctx context.Context) answerOf[map[string]any] {
 		res, err := h.call(ctx, "preference.list")
-		return answer{asMap(res), err}
-	}, func(a answer) {
-		if gen != h.session.Gen() {
+		return answered(asMap(res), err)
+	}, func(a answerOf[map[string]any]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.failed("preferences", a.err)
 			return
 		}
-		p := prefsFor(a.m, h.gui)
-		readRows(&p, a.m, h.prefRows) // the features' own rows too
+		p := prefsFor(a.v, h.gui)
+		readRows(&p, a.v, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
 	})
 }

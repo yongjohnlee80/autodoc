@@ -18,3 +18,13 @@ func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
 		h.p.Post(func() { then(v) })
 	}()
 }
+
+// answerOf is a background answer: a value, or why there is none. An answer of several values is
+// a struct of its own; one value and its error is this.
+type answerOf[T any] struct {
+	v   T
+	err error
+}
+
+// answered is a value and its error as an answerOf.
+func answered[T any](v T, err error) answerOf[T] { return answerOf[T]{v: v, err: err} }

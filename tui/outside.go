@@ -78,7 +78,7 @@ func (h *Host) pathOnDisk(ws, p string) string {
 
 // rootOf is workspace ws's folder, "" until it is listed.
 func (h *Host) rootOf(ws string) string {
-	for _, w := range h.wsList {
+	for _, w := range h.workspaces.All() {
 		if w.name == ws {
 			return w.root
 		}
@@ -111,9 +111,9 @@ func (h *Host) openAbsolute(abs string) {
 		return
 	}
 	abs = filepath.Clean(abs)
-	ep := h.epoch
+	tk := h.ticket(nil, TicketWorkspace)
 	do(h, func(ctx context.Context) located { return h.locate(ctx, abs) }, func(l located) {
-		if ep != h.epoch {
+		if !tk.Current() {
 			return
 		}
 		switch {
@@ -143,24 +143,20 @@ func (h *Host) createAbsolute(abs string) {
 	if filepath.Ext(abs) == "" {
 		abs += ".md"
 	}
-	ep := h.epoch
-	type answer struct {
-		at  located
-		err error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(nil, TicketWorkspace)
+	do(h, func(ctx context.Context) answerOf[located] {
 		at := h.locate(ctx, abs)
 		if at.err != nil {
-			return answer{err: at.err}
+			return answerOf[located]{err: at.err}
 		}
 		ws, p := at.ws, at.path
 		if ws == "" {
 			p = abs
 		}
 		_, err := h.writeFile(ctx, ws, p, []byte{}, "", false)
-		return answer{at: at, err: err}
-	}, func(a answer) {
-		if ep != h.epoch {
+		return answered(at, err)
+	}, func(a answerOf[located]) {
+		if !tk.Current() {
 			return
 		}
 		switch {
@@ -171,12 +167,12 @@ func (h *Host) createAbsolute(abs string) {
 			h.failed("create "+abs, a.err)
 			return
 		}
-		if a.at.ws == "" {
+		if a.v.ws == "" {
 			h.openOutside(abs)
 			return
 		}
-		h.openIn(a.at.ws, a.at.path)
-		if a.at.ws == h.ws {
+		h.openIn(a.v.ws, a.v.path)
+		if a.v.ws == h.ws {
 			h.listFiles()
 		}
 		h.loadWorkspaces() // the explorer lists it

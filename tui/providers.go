@@ -48,7 +48,7 @@ type providerRow struct {
 // loadProviders lists the providers, the one in use, and why the one chosen is not in use, if
 // it is not.
 func (h *Host) loadProviders() {
-	gen := h.session.Gen()
+	tk := h.ticket(nil, TicketSession)
 	type answer struct {
 		rows          []providerRow
 		active, error string
@@ -68,32 +68,15 @@ func (h *Host) loadProviders() {
 		}
 		return answer{rows: rows, active: str(m, "active"), error: str(m, "error")}
 	}, func(a answer) {
-		if gen != h.session.Gen() {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.set("App.providersStatus", "providers: "+wireMessage(a.err))
 			return
 		}
-		h.providerList, h.activeProvider = a.rows, a.active
-		rows := make([]rowOf, len(a.rows))
-		for i, p := range a.rows {
-			use := ""
-			if p.name == a.active {
-				use = "●"
-			}
-			key := "—"
-			if p.hasKey {
-				key = "sealed"
-			}
-			k := providerKinds[kindIndex(p.kind)]
-			window := "—"
-			if k.window {
-				window = strconv.FormatInt(p.context, 10)
-			}
-			rows[i] = rowOf{"key": p.name, "use": use, "name": p.name, "kind": k.label, "model": p.model, "context": window, "apiKey": key}
-		}
-		h.providers.Reset(rows)
+		h.activeProvider = a.active
+		h.providers.Reset(a.rows)
 		status := "semantic search off: Add… a provider, then Use it"
 		if a.active != "" {
 			status = "semantic search with " + a.active
@@ -118,11 +101,24 @@ func (h *Host) inUseText() string {
 	return "semantic search with " + h.activeProvider
 }
 
-func (h *Host) providerAt(i int) (providerRow, bool) {
-	if i < 0 || i >= len(h.providerList) {
-		return providerRow{}, false
+func (h *Host) providerAt(i int) (providerRow, bool) { return h.providers.At(i) }
+
+// providerRowOf is a provider as the list shows it, the one in use marked.
+func (h *Host) providerRowOf(_ int, p providerRow) rowOf {
+	use := ""
+	if p.name == h.activeProvider {
+		use = "●"
 	}
-	return h.providerList[i], true
+	key := "—"
+	if p.hasKey {
+		key = "sealed"
+	}
+	k := providerKinds[kindIndex(p.kind)]
+	window := "—"
+	if k.window {
+		window = strconv.FormatInt(p.context, 10)
+	}
+	return rowOf{"key": p.name, "use": use, "name": p.name, "kind": k.label, "model": p.model, "context": window, "apiKey": key}
 }
 
 // providerDetail shows provider i's usage over the last week and its latest calls.
@@ -131,12 +127,8 @@ func (h *Host) providerDetail(i int) {
 	if !ok {
 		return
 	}
-	h.providerSeq++
-	seq, gen := h.providerSeq, h.session.Gen()
-	do(h, func(ctx context.Context) (out struct {
-		text string
-		err  error
-	}) {
+	tk := h.ticket(&h.providerSeq, TicketSession)
+	do(h, func(ctx context.Context) (out answerOf[string]) {
 		us, err := h.call(ctx, "embedding.usage", p.name, int64(7))
 		if err != nil {
 			out.err = err
@@ -147,20 +139,17 @@ func (h *Host) providerDetail(i int) {
 			out.err = err
 			return
 		}
-		out.text = usageText(p.name, asList(us), asList(log))
+		out.v = usageText(p.name, asList(us), asList(log))
 		return
-	}, func(a struct {
-		text string
-		err  error
-	}) {
-		if seq != h.providerSeq || gen != h.session.Gen() {
+	}, func(a answerOf[string]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.set("App.providerDetail", p.name+": "+wireMessage(a.err))
 			return
 		}
-		h.set("App.providerDetail", a.text)
+		h.set("App.providerDetail", a.v)
 	})
 }
 
@@ -241,7 +230,7 @@ func (h *Host) startRemoveProvider(i int) {
 	}
 	ask := "Remove the provider " + p.name + "? Its key, its usage and its log go. "
 	var sibling string
-	for _, o := range h.providerList {
+	for _, o := range h.providers.All() {
 		if o.name != p.name && providerFamily(o.kind) == providerFamily(p.kind) && o.model == p.model {
 			sibling = o.name
 		}
@@ -272,8 +261,8 @@ func providerFamily(kind string) string {
 // countRemoved says, in the removal's question, how many of p's model's vectors it deletes, and in
 // how many workspaces, while the question is still open.
 func (h *Host) countRemoved(p providerRow, asked Asked) {
-	names := make([]string, len(h.wsList))
-	for i, w := range h.wsList {
+	names := make([]string, h.workspaces.Len())
+	for i, w := range h.workspaces.All() {
 		names[i] = w.name
 	}
 	type answer struct{ vectors, bytes, spaces int64 }
@@ -356,7 +345,7 @@ func (h *Host) fillProviderForm(title string, p providerRow) {
 	h.formMax = 0
 	h.set("App.providerContextHint", "List models shows max · more uses GPU memory")
 	section := int64(store.SectionTokensDefault)
-	for _, w := range h.wsList {
+	for _, w := range h.workspaces.All() {
 		if w.name == h.ws && w.sectionTokens > 0 {
 			section = w.sectionTokens
 		}
@@ -422,11 +411,8 @@ func (h *Host) listModels(base, key string) {
 		args = []any{h.editingProvider, spec} // the form's endpoint, with the stored key, opened by the daemon
 	}
 	h.set("App.providerModelsStatus", "asking the provider…")
-	gen := h.session.Gen()
-	do(h, func(ctx context.Context) (out struct {
-		models []string
-		err    error
-	}) {
+	tk := h.ticket(nil, TicketSession)
+	do(h, func(ctx context.Context) (out answerOf[[]string]) {
 		res, err := h.call(ctx, "embedding.models", args...)
 		if err != nil {
 			out.err = err
@@ -434,28 +420,25 @@ func (h *Host) listModels(base, key string) {
 		}
 		for _, m := range asList(res) {
 			if s, ok := m.(string); ok {
-				out.models = append(out.models, s)
+				out.v = append(out.v, s)
 			}
 		}
 		return
-	}, func(a struct {
-		models []string
-		err    error
-	}) {
-		if gen != h.session.Gen() {
+	}, func(a answerOf[[]string]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.set("App.providerModelsStatus", "no models: "+wireMessage(a.err))
 			return
 		}
-		h.modelList = a.models
-		rows := make([]rowOf, len(a.models))
-		for i, m := range a.models {
+		h.modelList = a.v
+		rows := make([]rowOf, len(a.v))
+		for i, m := range a.v {
 			rows[i] = rowOf{"key": m, "name": m}
 		}
 		h.providerModels.Reset(rows)
-		h.set("App.providerModelsStatus", fmt.Sprintf("%d models: Enter on one writes it above; an embedding model, not a chat model", len(a.models)))
+		h.set("App.providerModelsStatus", fmt.Sprintf("%d models: Enter on one writes it above; an embedding model, not a chat model", len(a.v)))
 		if h.formModel != "" {
 			h.checkModelContext(base, key, h.formModel)
 		}
@@ -486,19 +469,15 @@ func (h *Host) checkModelContext(base, key, model string) {
 	if key == "" && h.editingProvider != "" {
 		stored = h.editingProvider
 	}
-	gen := h.session.Gen()
-	type answer struct {
-		maximum int64
-		err     error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(nil, TicketSession)
+	do(h, func(ctx context.Context) answerOf[int64] {
 		v, err := h.call(ctx, "embedding.model_context", stored, spec)
-		return answer{num(asMap(v), "maximum"), err}
-	}, func(a answer) {
-		if gen != h.session.Gen() || h.formModel != model {
+		return answered(num(asMap(v), "maximum"), err)
+	}, func(a answerOf[int64]) {
+		if !tk.Current() || h.formModel != model {
 			return
 		}
-		maximum := a.maximum
+		maximum := a.v
 		if a.err != nil || maximum <= 0 {
 			h.formMax = 0
 			h.set("App.providerContextHint", "max unknown · more uses GPU memory")

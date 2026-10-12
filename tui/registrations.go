@@ -23,31 +23,25 @@ import (
 // checkRegistrations asks the daemon just connected for its registrations, and takes its kinds. The
 // answer is the connection's, whichever workspace is entered meanwhile: a reconnect drops it.
 func (h *Host) checkRegistrations() {
-	gen := h.session.Gen()
-	do(h, func(ctx context.Context) (answer struct {
-		t   registrations.Tables
-		err error
-	}) {
+	tk := h.ticket(nil, TicketSession)
+	do(h, func(ctx context.Context) (answer answerOf[registrations.Tables]) {
 		caps, err := h.call(ctx, "sys.capabilities")
 		if err != nil {
 			answer.err = err
 			return
 		}
-		answer.t, answer.err = rpc.RegistrationsOf(caps)
+		answer.v, answer.err = rpc.RegistrationsOf(caps)
 		return
-	}, func(a struct {
-		t   registrations.Tables
-		err error
-	}) {
-		if gen != h.session.Gen() {
+	}, func(a answerOf[registrations.Tables]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.daemonTables, h.kinds = registrations.Tables{}, kind.Registrations{}
 			h.notify("the backend's registrations: " + wireMessage(a.err))
 		} else {
-			h.daemonTables = a.t
-			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.t.Chunkers)), Derived: slices.Sorted(maps.Keys(a.t.Formats))}
+			h.daemonTables = a.v
+			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.v.Chunkers)), Derived: slices.Sorted(maps.Keys(a.v.Formats))}
 			h.compareRegistrations()
 		}
 		if h.file.open {

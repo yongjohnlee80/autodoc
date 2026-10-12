@@ -72,13 +72,16 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	picker, relationsModel, workspaces, managed       *tuidecl.ListModel
-	outlineList, wsProviders                          *tuidecl.ListModel
-	hits, newList, providers, providerModels, rankers *tuidecl.ListModel
-	vectors                                           *tuidecl.ListModel // the workspace's models (vectors.go)
-	explorer                                          *tuidecl.TreeListModel
-	explorerPaths                                     map[string][]string // by workspace: its files, once listed (explorer.go)
-	explorerTop                                       []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
+	picker                        *tuidecl.ListModel
+	workspaces, managed           *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
+	outlineList, wsProviders      *tuidecl.ListModel
+	hits, newList, providerModels *tuidecl.ListModel
+	providers                     *rows[providerRow] // the embedding providers (providers.go)
+	rankers                       *rows[rankerRow]   // the re-rankers (rankers.go)
+	vectors                       *rows[vectorRow]   // the workspace's models (vectors.go)
+	explorer                      *tuidecl.TreeListModel
+	explorerPaths                 map[string][]string // by workspace: its files, once listed (explorer.go)
+	explorerTop                   []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
 
 	// the pickers (pickers.go): what each lists, the latest answers winning, and the search's words
 	hitList             []hit
@@ -100,10 +103,10 @@ type Host struct {
 	explorerAt []string // the explorer's row under its cursor, by its keys
 	linksAt    int
 	// the Relations drawer (relations.go): its rows, whether it shows depth 2, and back's history
-	relRows []relRow
-	relFor  fileRef // the document relRows are of; the zero fileRef when they are of none
-	relDeep bool
-	history []fileRef
+	relations *rows[relRow]
+	relFor    fileRef // the document relations are of; the zero fileRef when they are of none
+	relDeep   bool
+	history   []fileRef
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs                          prefs
@@ -141,24 +144,20 @@ type Host struct {
 	agentRows              *tuidecl.ListModel
 	termBefore             string
 	// the recent files (recent.go): those listed, in their rows' order
-	recentRows  []recentDoc
-	recentModel *tuidecl.ListModel
+	recent *rows[recentDoc]
 
 	// the embedding providers (providers.go)
-	providerList                    []providerRow
 	activeProvider, editingProvider string
 	formKind                        int
 	formBase, formKey, formModel    string
 	formMax                         int64
 	formHasKey                      bool // the provider the form edits has a key sealed
 	modelList                       []string
-	vectorList                      []vectorRow // the workspace's models, as listed (vectors.go)
 	providerSeq                     uint64
 
 	// the ranker models (rankers.go): AI models' tab, the rankers listed, the one in use, the
 	// build's own (its model, "" for none), and the row the shared buttons act on
 	aiTab                        int
-	rankerList                   []rankerRow
 	activeRanker, rankerSupplied string
 	editingRanker                string
 	rankerFormKind               int
@@ -220,7 +219,6 @@ type Host struct {
 	// test's process, so its test waits on the daemon instead
 	awaitExit func(ctx context.Context, pid int64) bool
 	where     string // the status line's "autodoc <version> · <workspace>", or why there is none
-	wsList    []wsInfo
 	epoch     uint64
 	listSeq   uint64        // numbers the file list's loads; the latest wins (search.go)
 	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
@@ -272,8 +270,7 @@ type Host struct {
 	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, and the
 	// manager's rows
 	pendingPlugin  *pluginChange
-	managedList    []managedPlugin
-	managedPlugins *tuidecl.ListModel
+	managedPlugins *rows[managedPlugin]
 	pageWidth      int // the page's width as last set: the ruler, the border, the gutter
 
 	mu   sync.Mutex
@@ -355,17 +352,15 @@ func newHost(session *Session, opt Options) *Host {
 		wsProviders:     tuidecl.NewListModel("key", "label"),
 		hits:            tuidecl.NewListModel("key", "hit", "path", "section"),
 		newList:         tuidecl.NewListModel("key", "path"),
-		providers:       tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"),
 		providerModels:  tuidecl.NewListModel("key", "name"),
 		agentRows:       tuidecl.NewListModel("key", "default", "name", "command"),
-		recentModel:     tuidecl.NewListModel("key", "workspace", "path"),
+		recent:          newRows(tuidecl.NewListModel("key", "workspace", "path"), recentRowOf),
 		cellFontModel:   fontModel(),
 		proseFontModel:  fontModel(),
 		fonts:           opt.Fonts,
 		families:        opt.FontFamilies,
 		defaultCellFont: opt.DefaultCellFont,
-		rankers:         tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"),
-		vectors:         tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"),
+		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
 		explorer:        tuidecl.NewTreeListModel("key", "label"),
 		explorerPaths:   map[string][]string{},
 		openAt:          -1,
@@ -373,15 +368,17 @@ func newHost(session *Session, opt Options) *Host {
 		gui:             opt.GUI,
 		panelOpen:       map[string]bool{},
 		termRestore:     true,
-		relationsModel:  tuidecl.NewListModel("key", "label"),
+		relations:       newRows(tuidecl.NewListModel("key", "label"), relationRowOf),
 		noticeList:      tuidecl.NewListModel("key", "when", "text"),
-		workspaces:      tuidecl.NewListModel("key", "label"),
-		managed:         tuidecl.NewListModel("key", "name", "state", "root"),
+		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
+		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 		pluginOpt:       opt.Plugins,
 		pluginRows:      tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
 		pluginKeyRows:   tuidecl.NewListModel("key", "target"),
-		managedPlugins:  tuidecl.NewListModel("key", "name", "place", "commit", "source"),
 		running:         map[string]*pluginRun{}}
+	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
+	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
+	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
 	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
 	return h

@@ -1539,11 +1539,11 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 		onLoop(r, func() bool { r.h.loadProviders(); return true })
 		r.s.WaitFor(t, "the providers listed", func(string) bool {
 			return onLoop(r, func() bool {
-				return slices.ContainsFunc(r.h.providerList, func(p providerRow) bool { return p.name == listed })
+				return slices.ContainsFunc(r.h.providers.All(), func(p providerRow) bool { return p.name == listed })
 			})
 		})
 		onLoop(r, func() bool {
-			r.h.startRemoveProvider(slices.IndexFunc(r.h.providerList, func(p providerRow) bool { return p.name == name }))
+			r.h.startRemoveProvider(slices.IndexFunc(r.h.providers.All(), func(p providerRow) bool { return p.name == name }))
 			return true
 		})
 	}

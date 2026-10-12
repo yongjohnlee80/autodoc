@@ -130,7 +130,7 @@ func (h *Host) aiRemove(provider int) {
 // loadRankers lists the rankers, the one in use and its window, why the one chosen is not in use if
 // it is not, and the build's own ranker when it supplies one.
 func (h *Host) loadRankers() {
-	gen := h.session.Gen()
+	tk := h.ticket(nil, TicketSession)
 	type answer struct {
 		rows                    []rankerRow
 		active, error, supplied string
@@ -151,32 +151,16 @@ func (h *Host) loadRankers() {
 		}
 		return answer{rows: rows, active: str(m, "active"), error: str(m, "error"), supplied: str(m, "supplied"), window: num(m, "window")}
 	}, func(a answer) {
-		if gen != h.session.Gen() {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.set("App.rankersStatus", "rankers: "+wireMessage(a.err))
 			return
 		}
-		h.rankerList, h.activeRanker, h.rankerSupplied = a.rows, a.active, a.supplied
+		h.activeRanker, h.rankerSupplied = a.active, a.supplied
+		h.rankers.Reset(a.rows)
 		h.syncRankerButtons()
-		rows := make([]rowOf, len(a.rows))
-		for i, r := range a.rows {
-			use := ""
-			if r.name == a.active {
-				use = "●"
-			}
-			key := "—"
-			if r.hasKey {
-				key = "sealed"
-			}
-			model := r.model
-			if model == "" {
-				model = "—" // a TEI server's own, named by Check
-			}
-			rows[i] = rowOf{"key": r.name, "use": use, "name": r.name, "kind": rankerKinds[rankerKindIndex(r.kind)].label, "model": model, "apiKey": key}
-		}
-		h.rankers.Reset(rows)
 		h.set("App.rankersStatus", rankersStatus(a.active, a.supplied, a.error, a.window))
 		if len(a.rows) > 0 {
 			h.rankerDetail(min(max(h.rankerCursor, 0), len(a.rows)-1))
@@ -207,11 +191,23 @@ func rankersStatus(active, supplied, why string, window int64) string {
 	return s
 }
 
-func (h *Host) rankerAt(i int) (rankerRow, bool) {
-	if i < 0 || i >= len(h.rankerList) {
-		return rankerRow{}, false
+func (h *Host) rankerAt(i int) (rankerRow, bool) { return h.rankers.At(i) }
+
+// rankerRowOf is a ranker as the list shows it, the one in use marked.
+func (h *Host) rankerRowOf(_ int, r rankerRow) rowOf {
+	use := ""
+	if r.name == h.activeRanker {
+		use = "●"
 	}
-	return h.rankerList[i], true
+	key := "—"
+	if r.hasKey {
+		key = "sealed"
+	}
+	model := r.model
+	if model == "" {
+		model = "—" // a TEI server's own, named by Check
+	}
+	return rowOf{"key": r.name, "use": use, "name": r.name, "kind": rankerKinds[rankerKindIndex(r.kind)].label, "model": model, "apiKey": key}
 }
 
 // rankerDetail shows ranker i's usage over the last week and its latest calls, and keeps it as the
@@ -222,31 +218,26 @@ func (h *Host) rankerDetail(i int) {
 		return
 	}
 	h.rankerCursor = i
-	h.rankerSeq++
-	seq, gen := h.rankerSeq, h.session.Gen()
-	type answer struct {
-		text string
-		err  error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(&h.rankerSeq, TicketSession)
+	do(h, func(ctx context.Context) answerOf[string] {
 		us, err := h.call(ctx, "ranker.usage", r.name, int64(7))
 		if err != nil {
-			return answer{err: err}
+			return answerOf[string]{err: err}
 		}
 		log, err := h.call(ctx, "ranker.log", r.name, int64(30))
 		if err != nil {
-			return answer{err: err}
+			return answerOf[string]{err: err}
 		}
-		return answer{text: usageText(r.name, asList(us), asList(log))}
-	}, func(a answer) {
-		if seq != h.rankerSeq || gen != h.session.Gen() {
+		return answerOf[string]{v: usageText(r.name, asList(us), asList(log))}
+	}, func(a answerOf[string]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.set("App.rankerDetail", r.name+": "+wireMessage(a.err))
 			return
 		}
-		h.set("App.rankerDetail", a.text)
+		h.set("App.rankerDetail", a.v)
 	})
 }
 
@@ -428,15 +419,11 @@ func (h *Host) checkRanker(base, key string) {
 		args = []any{h.editingRanker, spec} // its stored key, opened by the daemon
 	}
 	h.set("App.rankerModelsStatus", "asking the ranker…")
-	gen := h.session.Gen()
-	type answer struct {
-		models []string
-		err    error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(nil, TicketSession)
+	do(h, func(ctx context.Context) answerOf[[]string] {
 		res, err := h.call(ctx, "ranker.models", args...)
 		if err != nil {
-			return answer{err: err}
+			return answerOf[[]string]{err: err}
 		}
 		var out []string
 		for _, m := range asList(res) {
@@ -444,18 +431,18 @@ func (h *Host) checkRanker(base, key string) {
 				out = append(out, s)
 			}
 		}
-		return answer{models: out}
-	}, func(a answer) {
-		if gen != h.session.Gen() {
+		return answerOf[[]string]{v: out}
+	}, func(a answerOf[[]string]) {
+		if !tk.Current() {
 			return
 		}
 		switch {
 		case a.err != nil:
 			h.set("App.rankerModelsStatus", "not a ranker: "+wireMessage(a.err))
-		case len(a.models) == 0:
+		case len(a.v) == 0:
 			h.set("App.rankerModelsStatus", "an endpoint that names no models: type the model it ranks with")
 		default:
-			h.set("App.rankerModelsStatus", "it ranks with "+strings.Join(a.models, ", "))
+			h.set("App.rankerModelsStatus", "it ranks with "+strings.Join(a.v, ", "))
 		}
 	})
 }

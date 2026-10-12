@@ -59,25 +59,18 @@ func (s schemaInfo) state() string {
 	return b.String()
 }
 
-// answerOf is a background answer: a value, or why there is none.
-type answerOf[T any] struct {
-	v   T
-	err error
-}
-
 // validateSoon checks the open file once its text has rested; a later call supersedes it.
 func (h *Host) validateSoon() {
-	h.fmGen++
-	gen := h.fmGen
+	tk := h.ticket(&h.fmGen, TicketFile)
 	h.after(validateDelay, func() {
-		if gen == h.fmGen {
-			h.validateNow(gen)
+		if tk.Current() {
+			h.validateNow(tk)
 		}
 	})
 }
 
 // validateNow sends the editor's text to doc.validate. Only Markdown has frontmatter.
-func (h *Host) validateNow(gen uint64) {
+func (h *Host) validateNow(tk Ticket) {
 	p := h.file.path
 	if !h.file.open {
 		p = untitled + ".md"
@@ -86,7 +79,7 @@ func (h *Host) validateNow(gen uint64) {
 		h.showDiagnostics(nil)
 		return
 	}
-	ws, ep, text := h.ws, h.epoch, h.core.Value()
+	ws, text := h.ws, h.core.Value()
 	do(h, func(ctx context.Context) answerOf[[]fmDiagnostic] {
 		res, err := h.call(ctx, "doc.validate", ws, p, []byte(text))
 		if err != nil {
@@ -99,8 +92,8 @@ func (h *Host) validateNow(gen uint64) {
 		}
 		return answerOf[[]fmDiagnostic]{v: out}
 	}, func(a answerOf[[]fmDiagnostic]) {
-		if gen != h.fmGen || ep != h.epoch {
-			return // later text was sent, or another workspace or connection
+		if !tk.Current() {
+			return // later text was sent, another file opened, or another workspace or connection
 		}
 		if a.err != nil {
 			h.showDiagnostics(nil) // a check that could not run says nothing about the file

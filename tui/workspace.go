@@ -42,32 +42,27 @@ func patternArgs(patterns []string) []any {
 // loadWorkspaces lists the daemon's workspaces and uses the current one if it is still served,
 // else the first that is.
 func (h *Host) loadWorkspaces() {
-	ep := h.epoch
-	type answer struct {
-		list []wsInfo
-		err  error
-	}
-	do(h, func(ctx context.Context) answer {
+	tk := h.ticket(nil, TicketWorkspace)
+	do(h, func(ctx context.Context) answerOf[[]wsInfo] {
 		list, err := h.listWorkspaces(ctx)
-		return answer{list: list, err: err}
-	}, func(a answer) {
-		if ep != h.epoch {
+		return answered(list, err)
+	}, func(a answerOf[[]wsInfo]) {
+		if !tk.Current() {
 			return
 		}
 		if a.err != nil {
 			h.failed("workspaces", a.err)
 			return
 		}
-		h.wsList = a.list
-		h.showWorkspacesInExplorer(a.list)
+		h.showWorkspacesInExplorer(a.v)
 		pick := -1
-		for i, w := range a.list {
+		for i, w := range a.v {
 			if w.state == "ready" && (pick < 0 || w.name == h.ws) {
 				pick = i
 			}
 		}
-		h.showWorkspaceRows()
-		if h.ws != "" && (pick < 0 || a.list[pick].name != h.ws) {
+		h.showWorkspaceRows(a.v)
+		if h.ws != "" && (pick < 0 || a.v[pick].name != h.ws) {
 			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
 		}
 		if pick < 0 {
@@ -83,31 +78,36 @@ func (h *Host) loadWorkspaces() {
 			h.notify("no workspace: Go › Manage workspaces… adds one")
 			return
 		}
-		if a.list[pick].name != h.ws || !h.entered {
-			h.enter(a.list[pick].name)
+		if a.v[pick].name != h.ws || !h.entered {
+			h.enter(a.v[pick].name)
 		}
 	})
 }
 
-// showWorkspaceRows shows h.wsList in the picker and the manager, and the settings of the
-// manager's row.
-func (h *Host) showWorkspaceRows() {
-	var rows, managed []rowOf
-	for _, w := range h.wsList {
-		label := w.name
-		if w.state != "ready" {
-			label += "  (" + w.state + ")"
-		}
-		rows = append(rows, rowOf{"key": w.name, "label": label})
-		managed = append(managed, rowOf{"key": w.name, "name": label, "root": w.root})
-	}
-	h.workspaces.Reset(rows)
-	h.managed.Reset(managed)
+// showWorkspaceRows shows list in the picker and the manager, and the settings of the manager's
+// row.
+func (h *Host) showWorkspaceRows(list []wsInfo) {
+	h.workspaces.Reset(list)
+	h.managed.Reset(list)
 	h.showManagerDetail()
 }
 
+// workspaceLabel is a workspace's name, with its state when it is not ready.
+func workspaceLabel(w wsInfo) string {
+	if w.state != "ready" {
+		return w.name + "  (" + w.state + ")"
+	}
+	return w.name
+}
+
+// workspaceRowOf is a workspace as the picker shows it; managedRowOf, as the manager does.
+func workspaceRowOf(_ int, w wsInfo) rowOf { return rowOf{"key": w.name, "label": workspaceLabel(w)} }
+func managedRowOf(_ int, w wsInfo) rowOf {
+	return rowOf{"key": w.name, "name": workspaceLabel(w), "root": w.root}
+}
+
 func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
-	for _, workspace := range h.wsList {
+	for _, workspace := range h.workspaces.All() {
 		if workspace.name == h.ws {
 			return workspace, true
 		}
@@ -118,7 +118,7 @@ func (h *Host) activeWorkspaceInfo() (wsInfo, bool) {
 // pickWorkspace opens the picker.
 func (h *Host) pickWorkspace() {
 	current := 0
-	for i, w := range h.wsList {
+	for i, w := range h.workspaces.All() {
 		if w.name == h.ws {
 			current = i
 			break
@@ -130,10 +130,10 @@ func (h *Host) pickWorkspace() {
 
 // useWorkspace switches to the picker's row, asking first over unsaved changes.
 func (h *Host) useWorkspace(i int) {
-	if i < 0 || i >= len(h.wsList) {
+	w, ok := h.workspaces.At(i)
+	if !ok {
 		return
 	}
-	w := h.wsList[i]
 	if w.name == h.ws {
 		h.closeDialog("workspacePicker")
 		return
@@ -197,13 +197,13 @@ func (h *Host) manageWorkspaces() {
 	h.set("App.managerIndex", -1)
 	h.set("App.managerIndex", 0)
 	h.open("workspaceManager")
-	ep := h.epoch
+	tk := h.ticket(nil, TicketWorkspace)
 	do(h, func(ctx context.Context) bool {
 		caps, err := h.call(ctx, "sys.capabilities")
 		on, _ := asMap(caps)["databases"].(bool)
 		return err == nil && on
 	}, func(on bool) {
-		if ep == h.epoch {
+		if tk.Current() {
 			h.databases = on
 			h.showManagerDetail()
 		}
@@ -239,9 +239,7 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 // dialog opened or closed after it (open, closeDialog, the manager's own dismissal) supersedes it:
 // an answer arriving late never replaces what the user went to since.
 func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, error), fn func(w wsInfo, more any)) {
-	ep := h.epoch
-	h.dialogSeq++
-	seq := h.dialogSeq
+	tk := h.ticket(&h.dialogSeq, TicketWorkspace)
 	type answer struct {
 		w     wsInfo
 		found bool
@@ -265,7 +263,7 @@ func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, er
 		return a
 	}, func(a answer) {
 		switch {
-		case ep != h.epoch, seq != h.dialogSeq:
+		case !tk.Current():
 			// another connection, or a later dialog asked for since: this answer is nobody's
 		case a.err != nil:
 			h.failed(name, a.err)
@@ -286,11 +284,11 @@ func (h *Host) withCurrentRow(i int, fn func(w wsInfo)) {
 }
 
 func (h *Host) managerRow(i int) (wsInfo, bool) {
-	if i < 0 || i >= len(h.wsList) {
+	w, ok := h.managed.At(i)
+	if !ok {
 		h.set("App.managerHelp", "no workspace under the cursor · Add… makes one")
-		return wsInfo{}, false
 	}
-	return h.wsList[i], true
+	return w, ok
 }
 
 func splitPatternRules(value string) ([]string, error) {
