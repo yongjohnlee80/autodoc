@@ -1,5 +1,5 @@
 {
-  "protocol": 20,
+  "protocol": 21,
   "min_protocol": 12,
   "verbs": [
     {
@@ -450,7 +450,7 @@
       "errors": [
         -32001
       ],
-      "doc": "The workspace that indexes the file (the most specific root) and its path there; nil for none."
+      "doc": "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none."
     },
     {
       "verb": "file.read",
@@ -522,7 +522,7 @@
         -32066,
         -32065
       ],
-      "doc": "As doc.write, on a file anywhere on the daemon's disk."
+      "doc": "As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once."
     },
     {
       "verb": "file.write_raw",
@@ -554,7 +554,7 @@
         -32066,
         -32065
       ],
-      "doc": "file.write on an HTML file's own bytes."
+      "doc": "file.write on an HTML file's own bytes; in a workspace, its doc.write_raw."
     },
     {
       "verb": "graph.backlinks",

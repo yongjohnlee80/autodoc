@@ -41,8 +41,8 @@ func TestContractsAreGolden(t *testing.T) {
 	if string(got) != string(want) {
 		t.Errorf("the contracts differ from %s: review the change, bump Protocol if a client sees it, and rewrite it with -update", golden)
 	}
-	if Protocol != 20 || MinProtocol != 12 {
-		t.Errorf("protocol %d to %d: the golden file is protocol 20's, served from 12", MinProtocol, Protocol)
+	if Protocol != 21 || MinProtocol != 12 {
+		t.Errorf("protocol %d to %d: the golden file is protocol 21's, served from 12", MinProtocol, Protocol)
 	}
 }
 
@@ -213,7 +213,7 @@ func sameJSON(t *testing.T, a, b any) bool {
 func TestCatalogMarkdown(t *testing.T) {
 	md := New(Fixed(), "v").Catalog(Protocol, "").Markdown()
 	for _, want := range []string{
-		"Verbs at protocol 20; the daemon serves sessions from protocol 12.",
+		"Verbs at protocol 21; the daemon serves sessions from protocol 12.",
 		"\n### `graph`\n\n| verb | params | result | since | audience |\n",
 		"| `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
 		"| `file.locate` | `path` string (absolute and clean) |",

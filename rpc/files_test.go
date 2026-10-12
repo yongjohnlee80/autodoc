@@ -18,6 +18,8 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
@@ -198,5 +200,84 @@ func TestFileLocateFindsTheWorkspaceThatServesAPath(t *testing.T) {
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("file.locate %s = %v, want %v", tc.abs, got, tc.want)
 		}
+	}
+}
+
+// diskWorkspace is workspace kb over root on the disk, Markdown only, its indexer running.
+func diskWorkspace(t *testing.T, root string) (Workspace, *index.Indexer) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	row, err := db.AddWorkspace(ctx, "kb", root, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fsys, err := local.New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond))
+	done := make(chan struct{})
+	go func() { _ = ix.Run(ctx); close(done) }()
+	t.Cleanup(func() { cancel(); <-done; _ = fsys.Close(); _ = db.Close() })
+	return Static(WorkspaceInfo{Name: "kb", Root: root, Index: ix, Docs: docs.New(fsys, md)}), ix
+}
+
+// TestFileWriteInAWorkspaceIsItsDocWrite: file.write on a file a workspace indexes is that
+// workspace's doc.write. The write is indexed at once. The version file.read gave through "/" is
+// the workspace's, so a write at it lands and a stale one conflicts. A path reached through a
+// symlink into the root is the workspace's file. A path the workspace excludes is written through
+// "/", as one outside every workspace is, and is not indexed.
+func TestFileWriteInAWorkspaceIsItsDocWrite(t *testing.T) {
+	root := t.TempDir()
+	w, ix := diskWorkspace(t, root)
+	cli := filesRig(t, "unix", Protocol, w)
+	ctx := context.Background()
+	indexed := func(p string) bool {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, ok, err := ix.Store().Version(ctx, p); err == nil && ok {
+				return true
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		return false
+	}
+
+	abs := filepath.Join(root, "notes", "a.md")
+	call(t, cli, "file.write", abs, []byte("# A\n\nkestrel\n"), "")
+	if !indexed("notes/a.md") {
+		t.Fatal("a file written by file.write in the workspace was not indexed")
+	}
+	v := call(t, cli, "file.read", abs).(map[string]any)["version"].(string)
+	call(t, cli, "file.write", abs, []byte("# A\n\nosprey\n"), v)
+	if err := callErr(cli, "file.write", abs, []byte("# A\n\nstale\n"), v); code(err) != CodeConflict {
+		t.Errorf("a write at a stale version: %v; want a conflict", err)
+	}
+
+	link := filepath.Join(t.TempDir(), "to-notes")
+	if err := os.Symlink(filepath.Join(root, "notes"), link); err != nil {
+		t.Fatal(err)
+	}
+	if got := call(t, cli, "file.locate", filepath.Join(link, "b.md")); !reflect.DeepEqual(got, map[string]any{"workspace": "kb", "path": "notes/b.md"}) {
+		t.Errorf("file.locate through a symlink = %v", got)
+	}
+	call(t, cli, "file.write", filepath.Join(link, "b.md"), []byte("# B\n"), "")
+	if !indexed("notes/b.md") {
+		t.Error("a file written through a symlink into the workspace was not indexed")
+	}
+
+	excluded := filepath.Join(root, "plain.txt")
+	call(t, cli, "file.write", excluded, []byte("plain\n"), "")
+	if b, err := os.ReadFile(excluded); err != nil || string(b) != "plain\n" {
+		t.Fatalf("an excluded path was not written through /: %q, %v", b, err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if _, ok, _ := ix.Store().Version(ctx, "plain.txt"); ok {
+		t.Error("a path the workspace excludes was indexed")
 	}
 }

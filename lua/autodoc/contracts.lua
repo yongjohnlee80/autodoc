@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 20,
+  protocol = 21,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -162,7 +162,7 @@ return {
         { name = "path", type = "string" }
       },
       result = "{workspace, path} | nil",
-      doc = "The workspace that indexes the file (the most specific root) and its path there; nil for none.",
+      doc = "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none.",
     },
     ["file.read"] = {
       since = 17, scope = "local-peer", audience = "agent",
@@ -188,7 +188,7 @@ return {
         { name = "version", type = "string" }
       },
       result = "{version}",
-      doc = "As doc.write, on a file anywhere on the daemon's disk.",
+      doc = "As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once.",
     },
     ["file.write_raw"] = {
       since = 19, scope = "local-peer", audience = "user",
@@ -198,7 +198,7 @@ return {
         { name = "version", type = "string" }
       },
       result = "{version}",
-      doc = "file.write on an HTML file's own bytes.",
+      doc = "file.write on an HTML file's own bytes; in a workspace, its doc.write_raw.",
     },
     ["graph.backlinks"] = {
       since = 1, scope = "workspace", audience = "agent",

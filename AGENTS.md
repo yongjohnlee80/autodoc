@@ -30,8 +30,8 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
 `autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
 when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": 20, "name": "<your client>"}`: the protocol your client was written
-for. The daemon serves every protocol from `min_protocol` (12) to its own (20); another is
+`sys.hello` with `{"protocol": 21, "name": "<your client>"}`: the protocol your client was written
+for. The daemon serves every protocol from `min_protocol` (12) to its own (21); another is
 refused, and so is every verb until the hello succeeds. A verb may be written right behind the
 hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
@@ -200,7 +200,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 20; the daemon serves sessions from protocol 12.
+Verbs at protocol 21; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -234,11 +234,11 @@ Verbs at protocol 20; the daemon serves sessions from protocol 12.
 
 | verb | params | result | since | audience |
 | --- | --- | --- | --- | --- |
-| `file.locate` | `path` string (absolute and clean) | `{workspace, path} \| nil` — The workspace that indexes the file (the most specific root) and its path there; nil for none. Codes: -32001. | 17 | agent; unix socket only |
+| `file.locate` | `path` string (absolute and clean) | `{workspace, path} \| nil` — The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none. Codes: -32001. | 17 | agent; unix socket only |
 | `file.read` | `path` string (absolute and clean) | `{content, version}` — A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params. Codes: -32001, -32061, -32065. | 17 | agent; unix socket only |
 | `file.read_raw` | `path` string (absolute and clean) | `{content, version}` — file.read on an HTML file's own bytes. Codes: -32001, -32061, -32065. | 19 | agent; unix socket only |
-| `file.write` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — As doc.write, on a file anywhere on the daemon's disk. Codes: -32001, -32061, -32062, -32066, -32065. | 17 | for people's tools; unix socket only |
-| `file.write_raw` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — file.write on an HTML file's own bytes. Codes: -32001, -32061, -32062, -32066, -32065. | 19 | for people's tools; unix socket only |
+| `file.write` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once. Codes: -32001, -32061, -32062, -32066, -32065. | 17 | for people's tools; unix socket only |
+| `file.write_raw` | `path` string (absolute and clean), `content` bytes (UTF-8 text), `version` string (the version read; "" to create the file and its folders) | `{version}` — file.write on an HTML file's own bytes; in a workspace, its doc.write_raw. Codes: -32001, -32061, -32062, -32066, -32065. | 19 | for people's tools; unix socket only |
 
 ### `graph`
 

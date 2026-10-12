@@ -68,8 +68,11 @@ import (
 // Protocol 19 is ADR 1791474356: doc.read_raw, doc.write_raw, file.read_raw and file.write_raw, an
 // HTML file's own bytes where doc.read and file.read give its derived text; a session below 19 sees
 // them as unknown methods. Protocol 20 is ADR 1791719881 and ADR 1791532020: sys.contracts, and the
-// todos.* verbs.
-const Protocol int64 = 20
+// todos.* verbs. Protocol 21 makes file.write and file.write_raw on a file a workspace indexes that
+// workspace's doc.write and doc.write_raw, indexed at once, where they wrote round it through "/";
+// file.locate resolves symlinks. No verb is added, and every session gets the new behaviour: the
+// old one was the bypass.
+const Protocol int64 = 21
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

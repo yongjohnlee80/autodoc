@@ -88,16 +88,10 @@ func (s *Server) docVerbs() []module.Verb {
 	}
 	write := func(c module.Contract, raw bool) module.Verb {
 		return module.Handle(c, func(ctx context.Context, p docWrite) (*versionJSON, error) {
-			w := workspaceOf(ctx)
-			write := w.Docs().Write
-			if raw {
-				write = w.Docs().WriteRaw
-			}
-			v, err := write(ctx, p.Path, p.Content, vfs.Version(p.Version))
+			v, err := writeDoc(ctx, workspaceOf(ctx), p.Path, p.Content, vfs.Version(p.Version), raw)
 			if err != nil {
 				return nil, err
 			}
-			touch(w, p.Path) // indexed now, not when a watch or a poll gets to it
 			return &versionJSON{Version: string(v)}, nil
 		})
 	}
@@ -173,6 +167,22 @@ func (s *Server) docVerbs() []module.Verb {
 				return nil, nil
 			}),
 	}
+}
+
+// writeDoc is doc.write (raw: doc.write_raw) on workspace w's file at path: written at version
+// through the workspace's documents, then indexed at once. file.write on a path a workspace indexes
+// is this too.
+func writeDoc(ctx context.Context, w Workspace, path string, content []byte, version vfs.Version, raw bool) (vfs.Version, error) {
+	write := w.Docs().Write
+	if raw {
+		write = w.Docs().WriteRaw
+	}
+	v, err := write(ctx, path, content, version)
+	if err != nil {
+		return "", err
+	}
+	touch(w, path) // indexed now, not when a watch or a poll gets to it
+	return v, nil
 }
 
 // touch tells the workspace's indexer that paths changed through the API, so a file saved in a client
