@@ -98,7 +98,7 @@ func TestMigration000002KeepsWhat000001Wrote(t *testing.T) {
 		model, h[:], postgres.Vector(embedVec(c.EmbedText())))
 	exec(t, conn, "INSERT INTO rag_link (tenant, src, dst_path) SELECT 't', id, 'a.md' FROM rag_document WHERE path = 'b.md'")
 
-	if err := Migrate(ctx, conn); err != nil {
+	if _, err := deploy.New(migrationsUpTo(t, 2), deploy.Ledger(Ledger)).Apply(ctx, conn); err != nil {
 		t.Fatalf("000002 onto a populated 000001: %v", err)
 	}
 	if got := ledgerScripts(t, conn); got != "000001_update_initialize_tables.sql 000002_update_enterprise_ingest.sql" {

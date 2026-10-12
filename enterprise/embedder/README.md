@@ -30,6 +30,11 @@ w.Wake()      // after an ingester commits (ingest.Options.Committed)
 ## What it guarantees
 
 - **Once per distinct text.** Pending lists each text hash once, and vectors are keyed by it.
+- **Each chunk read about once.** A tenant's rounds resume Pending where the last one stopped, and
+  PostgreSQL decides which texts lack a vector; outside a model switch only unready documents are
+  read, so a ready tenant's new document costs its own rows. The scan looks again from the start
+  only when it reaches the end from part way, when a batch failed, and when a set-aside text's
+  time is up.
 - **Bounded.** At most the slots' calls are in flight, whichever tenants they are for; each call
   embeds at most a batch, and is bounded in time.
 - **Retries, never blocks.** A provider that fails (down, rate limited, refusing the key) is asked

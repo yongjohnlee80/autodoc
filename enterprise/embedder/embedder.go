@@ -29,9 +29,8 @@ const (
 	// batchTimeout bounds one provider call, and setupTimeout the provider's setup (its probe).
 	batchTimeout = 2 * time.Minute
 	setupTimeout = 30 * time.Second
-	// roundBatches is how many batches a tenant's round reads from Pending at once: Pending reads
-	// the tenant's embedded hashes on every call, so a larger read costs it less often, and the
-	// slots, not the read, bound the calls in flight.
+	// roundBatches is how many batches a tenant's round reads from Pending at once, so a round
+	// can keep every slot busy; the slots, not the read, bound the calls in flight.
 	roundBatches = 4
 	// pageSize is how many documents one read of Docs or Unready returns.
 	pageSize = 500
@@ -42,7 +41,7 @@ type Store interface {
 	Models(ctx context.Context) (active, target string, err error)
 	SetModels(ctx context.Context, active, target string) error
 	ReclaimModels(ctx context.Context) (int, error)
-	Pending(ctx context.Context, model string, skip map[[32]byte]bool, limit int) ([]pgstore.Text, error)
+	Pending(ctx context.Context, q pgstore.PendingQuery) ([]pgstore.Text, pgstore.PendingKey, error)
 	Embed(ctx context.Context, model string, vecs []pgstore.Embedding) error
 	MarkReady(ctx context.Context, path, model string) (bool, error)
 	Docs(ctx context.Context, after string, limit int) ([]pgstore.DocInfo, bool, error)
@@ -134,6 +133,10 @@ type tenant struct {
 	// pending but texts set aside: only a set-aside text's time running out can complete them, so
 	// they are not looked at until then. Run's goroutine alone uses it.
 	waiting map[string]int64
+	// cursor is where the tenant's next Pending resumes: each round reads on from the last, so a
+	// fill reads the tenant once, not once a round. The zero key is the start. Run's goroutine
+	// alone uses it.
+	cursor pgstore.PendingKey
 
 	mu sync.Mutex // guards refused: a round's batches set texts aside concurrently
 	// refused are the texts the provider rejected, by hash, and when each may be tried again.
@@ -296,27 +299,42 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	}
 	skip, expired := t.skip(w.o.clock.Now())
 	if expired {
-		t.waiting = map[string]int64{}
+		// the set-aside texts are behind the cursor: the scan begins again
+		t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
 	}
 	if !t.switching && !expired {
-		// a tenant whose documents are all ready has nothing pending: Pending, which reads every
-		// chunk, is not asked
+		// a tenant whose documents are all ready has nothing pending: Pending is not asked
 		unready, err := w.anyUnready(ctx, t)
 		if err != nil || !unready {
 			return false, err
 		}
 	}
-	texts, err := t.Store.Pending(ctx, w.fp, skip, w.o.batch*w.o.slots*roundBatches)
+	// Under the active model only unready documents can hold a pending text, so the scan reads
+	// those alone; a switch's target is missing from ready documents too.
+	from := t.cursor
+	texts, next, err := t.Store.Pending(ctx, pgstore.PendingQuery{Model: w.fp, After: from, Unready: !t.switching,
+		Skip: skip, Limit: w.o.batch * w.o.slots * roundBatches})
 	if err != nil {
 		return false, err
 	}
+	t.cursor = next
 	if len(texts) == 0 {
+		if !from.IsZero() {
+			// the scan reached the end from part way: what was written behind it is looked for
+			// from the start before anything is concluded
+			return true, nil
+		}
 		if t.switching {
 			return false, w.flip(ctx, t)
 		}
 		return false, w.settle(ctx, t)
 	}
 	stored, err := w.embed(ctx, t, texts)
+	if err != nil {
+		// a batch that failed is read again: its texts have no vector, and the next round
+		// resumes where this one began
+		t.cursor = from
+	}
 	if len(stored) > 0 && !t.switching {
 		// while a switch fills, readiness is the active model's, which the flip marks again
 		paths, merr := t.Store.DocsWithTexts(ctx, stored)
@@ -376,7 +394,7 @@ func (w *Worker) prepare(ctx context.Context, t *tenant) error {
 	if err := w.reclaim(ctx, t); err != nil {
 		return err
 	}
-	t.waiting = map[string]int64{}
+	t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
 	t.prepared = true
 	return nil
 }
@@ -407,7 +425,7 @@ func (w *Worker) flip(ctx context.Context, t *tenant) error {
 	if err := t.Store.SetModels(ctx, w.fp, ""); err != nil {
 		return err
 	}
-	t.switching = false
+	t.switching, t.cursor = false, pgstore.PendingKey{}
 	logger.Notice(w.o.log, fmt.Sprintf("tenant %s: %s is active: every text is embedded", t.Name, w.fp))
 	return w.reclaim(ctx, t)
 }

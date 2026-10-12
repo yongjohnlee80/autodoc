@@ -166,7 +166,7 @@ func TestPendingReturnsTheEmbedText(t *testing.T) {
 	if _, err := s.Put(ctx, Document{Path: "sig.md", Chunks: []search.Chunk{c}}); err != nil {
 		t.Fatal(err)
 	}
-	pending, err := s.Pending(ctx, model, nil, 10)
+	pending, _, err := s.Pending(ctx, PendingQuery{Model: model, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestPendingReturnsTheEmbedText(t *testing.T) {
 	if _, err := s.Put(ctx, Document{Path: "sig.md", Chunks: []search.Chunk{c2}}); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = s.Pending(ctx, model, nil, 10)
+	pending, _, err = s.Pending(ctx, PendingQuery{Model: model, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestPendingReturnsTheEmbedText(t *testing.T) {
 	if err := s.Embed(ctx, model, []Embedding{{TextHash: c.TextHash(), Vec: embedVec(c.Embed)}}); err != nil {
 		t.Fatal(err)
 	}
-	if pending, err = s.Pending(ctx, model, nil, 10); err != nil || len(pending) != 0 {
+	if pending, _, err = s.Pending(ctx, PendingQuery{Model: model, Limit: 10}); err != nil || len(pending) != 0 {
 		t.Fatalf("pending after embed = %+v, %v; want empty", pending, err)
 	}
 	if ready, err := s.MarkReady(ctx, "sig.md", model); err != nil || !ready {
@@ -201,7 +201,7 @@ func TestPendingReturnsTheEmbedText(t *testing.T) {
 	if _, err := s.Put(ctx, Document{Path: "sig2.md", Chunks: []search.Chunk{other}}); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = s.Pending(ctx, model, map[[32]byte]bool{other.TextHash(): true}, 10)
+	pending, _, err = s.Pending(ctx, PendingQuery{Model: model, Skip: map[[32]byte]bool{other.TextHash(): true}, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestPendingReturnsTheEmbedText(t *testing.T) {
 	if _, err := s.Put(ctx, Document{Path: "builtin.md", Chunks: []search.Chunk{b}}); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = s.Pending(ctx, model, nil, 10)
+	pending, _, err = s.Pending(ctx, PendingQuery{Model: model, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -725,11 +725,9 @@ func hashOf(text string) [32]byte {
 	return search.Chunk{Embed: text}.TextHash()
 }
 
-// Cell — Pending pages past embedded chunks to the pending ones. More than 2*limit chunks
-// already embedded (and so filtered) come before the unembedded one in (doc, ord) order, with
-// limit 1: an early-truncated scan would return nothing forever and the worker would never reach
-// the pending text. The reverted line is Pending's per-page Limit with no resumption: a scan that
-// stops at the first page hides every later pending hash.
+// Cell — Pending reaches past embedded chunks to the pending ones. Six embedded chunks come
+// before the unembedded one in (doc, ord) order, with limit 1: a scan that stopped at embedded
+// chunks would return nothing forever and the worker would never reach the pending text.
 func TestPendingPagesPastEmbeddedChunks(t *testing.T) {
 	conn := scratch(t)
 	ctx := context.Background()
@@ -751,7 +749,7 @@ func TestPendingPagesPastEmbeddedChunks(t *testing.T) {
 	if _, err := s.Put(ctx, Document{Path: "z-last.md", Chunks: []search.Chunk{pending}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.Pending(ctx, model, nil, 1)
+	got, _, err := s.Pending(ctx, PendingQuery{Model: model, Limit: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -206,7 +206,7 @@ func (s *Store) docsPage(ctx context.Context, after string, limit int, unready b
 	}
 	d := s.rw.doc.DAO(dao.WithQueryContext(ctx)).With(dTenant, s.tenant)
 	if unready {
-		d = d.With(dReady, false)
+		d = d.WithPredicate(notReady())
 	}
 	if after != "" {
 		d = d.WithPredicate(dao.Gt(string(dByPath), after))
@@ -223,80 +223,6 @@ func (s *Store) docsPage(ctx context.Context, after string, limit int, unready b
 		docs = append(docs, DocInfo{Path: r.Path, Version: r.Version, Indexer: r.Indexer, Generation: r.Generation})
 	}
 	return docs, more, nil
-}
-
-// Text is one unembedded chunk text: the hash a vector is stored under, and the text to make it
-// from — the chunk's Embed when it has one, else Breadcrumb + "\n" + Body, as the chunk's identity
-// hash is defined over.
-type Text struct {
-	TextHash [32]byte
-	Text     string
-}
-
-// Pending lists up to limit distinct text hashes of the tenant's chunks with no vector under
-// model, except the ones skip names, each with its embed text, in (doc, ord) order: the input an
-// embedding worker reads back after a restart. The limit counts distinct hashes: the chunk scan
-// pages forward past embedded, skipped and duplicate hashes until limit distinct pending ones are
-// collected or the chunks end, so a later unembedded text is never hidden behind a page of
-// already-embedded ones, and a caller paging with the returned hashes in its skip set gets every
-// hash in at most limit rounds.
-func (s *Store) Pending(ctx context.Context, model string, skip map[[32]byte]bool, limit int) ([]Text, error) {
-	if limit <= 0 {
-		return nil, nil
-	}
-	// the tenant's hashes already embedded under this model: the set the page walks past
-	embRows, err := s.rw.emb.DAO(dao.WithQueryContext(ctx)).With(eTenant, s.tenant).With(eModel, model).Select(eHash)
-	if err != nil {
-		return nil, fmt.Errorf("pgstore: pending embeddings: %w", err)
-	}
-	have := make(map[[32]byte]bool, len(embRows))
-	for _, r := range embRows {
-		var h [32]byte
-		copy(h[:], r.TextHash)
-		have[h] = true
-	}
-	// the tenant's chunks in (doc, ord) order, one page at a time: distinctness is folded in Go
-	// against the embedded and skipped sets, and the page advances until the limit is met, so no
-	// unembedded text sits beyond a page of embedded ones
-	const page = 256
-	out := make([]Text, 0, limit)
-	seen := map[[32]byte]bool{}
-	var last docOrd
-	started := false
-	for len(out) < limit {
-		d := s.rw.chunk.DAO(dao.WithQueryContext(ctx)).With(cTenant, s.tenant).Join(joinDoc)
-		if started {
-			d = d.WithPredicate(dao.Or(
-				dao.Gt(qcol(tDoc, string(dPath)), last.doc),
-				dao.And(dao.Eq(qcol(tDoc, string(dPath)), last.doc), dao.Gt(qcol(tChunk, string(cOrd)), last.ord)),
-			))
-		}
-		rows, err := d.OrderBy(dao.Asc(cByPath), dao.Asc(cByOrd)).Limit(page).Select(cDoc, cOrd, cHash, cEmb, cCrumb, cBody)
-		if err != nil {
-			return nil, fmt.Errorf("pgstore: pending chunks: %w", err)
-		}
-		if len(rows) == 0 {
-			break
-		}
-		for _, r := range rows {
-			last.doc, last.ord = r.Path, r.Ord
-			started = true
-			var h [32]byte
-			copy(h[:], r.TextHash)
-			if seen[h] || have[h] || skip[h] {
-				continue
-			}
-			seen[h] = true
-			out = append(out, Text{TextHash: h, Text: r.EmbedText()})
-			if len(out) == limit {
-				break
-			}
-		}
-		if len(rows) < page {
-			break
-		}
-	}
-	return out, nil
 }
 
 // textsPart bounds the hashes one DocsWithTexts statement looks up: an IN list well inside
@@ -330,12 +256,6 @@ func (s *Store) DocsWithTexts(ctx context.Context, hashes [][32]byte) ([]string,
 	}
 	slices.Sort(out)
 	return out, nil
-}
-
-// docOrd is a chunk's (document path, ordinal): the keyset a Pending page resumes from.
-type docOrd struct {
-	doc string
-	ord int
 }
 
 // facetPairs stores facets as "field=value", which a facet filter matches exactly.

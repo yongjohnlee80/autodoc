@@ -25,6 +25,7 @@ type provider struct {
 
 	mu       sync.Mutex
 	asked    map[string]int // texts, by how many times a call carried them
+	order    []string       // texts, in the order they were embedded
 	calls    int
 	fail     int             // the next calls that fail as a whole
 	reject   map[string]bool // texts rejected, as ErrRejected
@@ -66,6 +67,7 @@ func (p *provider) Embed(ctx context.Context, texts []string) ([][]float32, erro
 	if !failing && !rejected {
 		for _, t := range texts {
 			p.asked[t]++
+			p.order = append(p.order, t)
 		}
 	}
 	p.mu.Unlock()
@@ -152,9 +154,13 @@ type store struct {
 	target  string
 	writes  int // every write the worker made
 	pending []map[[32]byte]bool
+	afters  []pgstore.PendingKey // every Pending's After, in order
+	unready []bool               // every Pending's Unready, in order
+	nextID  int64
 }
 
 type doc struct {
+	id    int64 // given at the first write, as pgstore's identity column does
 	gen   int64
 	texts []string // embed texts, in order
 	ready bool
@@ -172,7 +178,8 @@ func (s *store) put(path string, texts ...string) {
 	defer s.mu.Unlock()
 	d := s.docs[path]
 	if d == nil {
-		d = &doc{}
+		s.nextID++
+		d = &doc{id: s.nextID}
 		s.docs[path] = d
 	}
 	d.gen++
@@ -244,23 +251,43 @@ func (s *store) ReclaimModels(context.Context) (int, error) {
 	return n, nil
 }
 
-func (s *store) Pending(_ context.Context, model string, skip map[[32]byte]bool, limit int) ([]pgstore.Text, error) {
+// Pending is pgstore's: the texts after q.After in (doc id, ord) order with no vector under the
+// model, distinct, not skipped, of unready documents when asked, up to the limit; next is the last
+// text's key when the limit stops it, and the zero key at the end.
+func (s *store) Pending(_ context.Context, q pgstore.PendingQuery) ([]pgstore.Text, pgstore.PendingKey, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.pending = append(s.pending, skip)
+	s.pending = append(s.pending, q.Skip)
+	s.afters = append(s.afters, q.After)
+	s.unready = append(s.unready, q.Unready)
+	docs := make([]*doc, 0, len(s.docs))
+	for _, d := range s.docs {
+		docs = append(docs, d)
+	}
+	sort.Slice(docs, func(i, j int) bool { return docs[i].id < docs[j].id })
 	seen := map[[32]byte]bool{}
 	var out []pgstore.Text
-	for _, p := range s.paths() {
-		for _, t := range s.docs[p].texts {
+	for _, d := range docs {
+		if q.Unready && d.ready {
+			continue
+		}
+		for ord, t := range d.texts {
+			k := pgstore.PendingKey{Doc: d.id, Ord: ord}
+			if k.Doc < q.After.Doc || (k.Doc == q.After.Doc && k.Ord <= q.After.Ord) {
+				continue
+			}
 			h := hashOf(t)
-			if _, ok := s.vecs[model][h]; ok || seen[h] || skip[h] || len(out) == limit {
+			if _, ok := s.vecs[q.Model][h]; ok || seen[h] || q.Skip[h] {
 				continue
 			}
 			seen[h] = true
 			out = append(out, pgstore.Text{TextHash: h, Text: t})
+			if len(out) == q.Limit {
+				return out, k, nil
+			}
 		}
 	}
-	return out, nil
+	return out, pgstore.PendingKey{}, nil
 }
 
 func (s *store) Embed(_ context.Context, model string, vecs []pgstore.Embedding) error {

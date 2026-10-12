@@ -47,7 +47,10 @@ const (
 
 type docSort string
 
-const dByPath docSort = "path"
+const (
+	dByPath docSort = "path"
+	dByID   docSort = "id"
+)
 
 type docSchema = dao.Schema[*docRow, docField, docSort, int64]
 
@@ -70,6 +73,7 @@ func newDocSchema(conn dao.DataConn) *docSchema {
 		})),
 		o(dao.Default[*docRow, docField, docSort, int64](dID, dPath, dTitle, dTags, dFacets, dVersion, dIndexer, dGen, dReady)),
 		o(dao.SortExpr[*docRow, docField, docSort, int64](dByPath, dao.T(tDoc, dPath))),
+		o(dao.SortExpr[*docRow, docField, docSort, int64](dByID, dao.T(tDoc, dID))),
 	)
 }
 
@@ -129,6 +133,7 @@ const (
 	cByRank    chunkSort = "rank"
 	cByNearest chunkSort = "nearest"
 	cByPath    chunkSort = "path"
+	cByDoc     chunkSort = "doc"
 	cByOrd     chunkSort = "ord"
 )
 
@@ -173,6 +178,7 @@ func newChunkSchema(conn dao.DataConn) *chunkSchema {
 		o(dao.SortParam[*chunkRow, chunkField, chunkSort, int64](cByRank, dao.RankQuery(tsv(), 1.0, 0.5, 0.5, 0.1))),
 		o(dao.SortParam[*chunkRow, chunkField, chunkSort, int64](cByNearest, dao.Distance(dao.T(tEmb, "vec"), dao.Cosine))),
 		o(dao.SortExpr[*chunkRow, chunkField, chunkSort, int64](cByPath, dao.T(tDoc, "path"))),
+		o(dao.SortExpr[*chunkRow, chunkField, chunkSort, int64](cByDoc, dao.T(tChunk, cDoc))),
 		o(dao.SortExpr[*chunkRow, chunkField, chunkSort, int64](cByOrd, dao.T(tChunk, cOrd))),
 		o(dao.JoinForSort[*chunkRow, chunkField, chunkSort, int64](cByPath, joinDoc)),
 		o(dao.JoinForSort[*chunkRow, chunkField, chunkSort, int64](cByNearest, joinEmb)),

@@ -7,9 +7,11 @@
 // Run sets up the provider (Build: embed.NewOpenAI or embed.NewOllama, which probe the model for
 // its size), then works each tenant in turn:
 //
-//   - the texts pgstore lists as Pending under the model are embedded in batches, through a
-//     limited number of slots shared by every tenant, with embed.Bisect: each vector normalized,
-//     and a text the provider rejects set aside for a while, never failing its batch;
+//   - the texts pgstore lists as Pending under the model, the scan resumed where the last round
+//     stopped (and, outside a switch, reading the unready documents alone), are embedded in
+//     batches, through a limited number of slots shared by every tenant, with embed.Bisect: each
+//     vector normalized, and a text the provider rejects set aside for a while, never failing
+//     its batch;
 //   - each batch's vectors are stored (pgstore's Embed, keyed by the text's hash, so a text two
 //     chunks share is embedded once), and the documents they complete are marked ready;
 //   - a document written again with texts already embedded is marked ready when nothing is
