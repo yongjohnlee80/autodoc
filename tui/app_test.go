@@ -353,8 +353,14 @@ func TestQClosesNavigationPanelsAndCards(t *testing.T) {
 	for _, card := range []struct {
 		key   rune
 		title string
-	}{{'T', "1 of"}, {'j', "related documents"}, {'p', "SPC p — plugin commands"}} {
-		r.leader(t, card.key)
+	}{{0, "1 of"}, {'j', "related documents"}, {'p', "SPC p — plugin commands"}} {
+		if card.key == 0 { // the tutorial, which no key opens: Help › Tutorial… runs its entry
+			if err := onLoop(r, func() error { return r.h.cat.run("help.tutorial", nil) }); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			r.leader(t, card.key)
+		}
 		r.s.WaitForText(t, card.title)
 		r.keys(t, key('q'))
 		r.s.WaitFor(t, "q closed "+card.title, func(sc string) bool { return !strings.Contains(sc, card.title) })
