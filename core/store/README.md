@@ -109,7 +109,7 @@ opens none of them.
   the daemon). Kinds `KindOllama`, `KindOllamaCloud`, `KindOpenAI`. The provider in use is the
   preference `PrefProvider`. `RemoveProviderInUse` also takes the provider's models out of use in
   every workspace, in the same transaction, and returns them (`Retired`) to be reclaimed.
-- **Rankers** (`rankers.go`, ADR 0215): `AddRanker`, `UpdateRanker`, `RemoveRanker`, `Rankers`,
+- **Rankers** (`rankers.go`): `AddRanker`, `UpdateRanker`, `RemoveRanker`, `Rankers`,
   `RankerWithKey`; kinds `KindTEI`, `KindRerankAPI`; the ranker in use and its window are the
   preferences `PrefRanker` and `PrefRankerWindow`.
 

@@ -1,5 +1,5 @@
 // Package edition is what this build of AutoDoc offers beyond its core: the one place a Community
-// build and a Pro build differ (ADR 0214 §8).
+// build and a Pro build differ.
 //
 // Databases is the database features: a workspace's source database, where its .view files run,
 // and its destination, Postgres with pgvector instead of the local store. When it is off, the

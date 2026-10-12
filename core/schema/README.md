@@ -1,10 +1,10 @@
 # core/schema
 
-A workspace's frontmatter schema (ADR 0212 §5): the fields its Markdown files declare, their types,
+A workspace's frontmatter schema: the fields its Markdown files declare, their types,
 and which are required. One validator serves the daemon, which indexes typed facets and
 diagnostics, and the editor, which checks unsaved text, so the two never disagree. Validation never
 rewrites a file. Version 1 declares every field under `frontmatter`; version 2 declares `common`
-fields and per-type fields picked by a `discriminator` (ADR 1791209945 §4.3). The file format is in
+fields and per-type fields picked by a `discriminator`. The file format is in
 the package comment (`doc.go`).
 
 ## Loading a schema

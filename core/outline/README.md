@@ -1,6 +1,6 @@
 # core/outline
 
-A document's structure for navigation (ADR 0212 §6): a Markdown file's headings, and the breadcrumb
+A document's structure for navigation: a Markdown file's headings, and the breadcrumb
 at a place in any document. The daemon's `doc.outline` and the editor's live outline both read it,
 so a saved file and an unsaved buffer are outlined alike. The caller passes the bytes; the package
 reads no file.

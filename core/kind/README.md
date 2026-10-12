@@ -1,6 +1,6 @@
 # core/kind
 
-How AutoDoc reads a file, decided by its extension and never by its content (ADR 0212 §4). The
+How AutoDoc reads a file, decided by its extension and never by its content. The
 indexer, the document API and the editor all ask here, so they agree. In order: `.txt` is `Text`,
 `.yaml` and `.yml` are `YAML`, a derived format is `Derived`, a registered chunker's extension is
 `Registered`, a workspace's own text extension is `Text`, and anything else is `Markdown`.

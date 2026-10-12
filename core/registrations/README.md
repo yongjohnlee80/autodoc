@@ -1,6 +1,6 @@
 # core/registrations
 
-A build's chunkers and derivers, validated once and frozen when it starts (ADR 0216 §1.2). A main
+A build's chunkers and derivers, validated once and frozen when it starts. A main
 hands them to `app.Main`, which builds one `*Table` with `New`; the daemon, its indexers and its
 clients read it. The community build registers nothing and has the nil `*Table`, whose every
 method answers as for no registrations.
@@ -29,7 +29,7 @@ method answers as for no registrations.
 | `Deriver()` | the build's derivers as one, each format going to the deriver that named it; nil for none |
 | `CheckDerived(format, d)` | refuses a `Derived` made under another identity than the frozen one |
 | `Kinds()` | the extensions the registrations give a kind (`kind.Registrations`) |
-| `Collisions(text)` | the workspace plain-text extensions a registration reads instead (ADR 0216 §1.3) |
+| `Collisions(text)` | the workspace plain-text extensions a registration reads instead |
 | `Tables()` | the frozen registrations as a client compares them; empty for none |
 
 ## Derivers
@@ -38,13 +38,13 @@ method answers as for no registrations.
 | --- | --- |
 | `Deriver` | makes text of derived formats: `Formats`, `Describe` (the identity, read once), `Derive` |
 | `Derived` | one file's text: `Text`, `Bytes` (its size, known before reading), `Info`, `ID`, `Version` |
-| `Format` | a deriver's identity for one format: `ID` and `Version` (ADR 0216 §1.8) |
+| `Format` | a deriver's identity for one format: `ID` and `Version` |
 
 ## Comparing builds
 
 | Name | What |
 | --- | --- |
-| `Tables` | chunker versions by extension and deriver identities by format (ADR 0216 §1.4) |
+| `Tables` | chunker versions by extension and deriver identities by format |
 | `Tables.Fingerprint()` | hex sha256 over the sorted entries; builds with the same registrations agree |
 | `Tables.StrictSubsetOf(o)` | every entry is in `o` with the same version, and `o` has more: when a TUI offers a restart |
 | `Tables.Lacks(o)` | the extensions and formats `o` registers that this does not, or registers otherwise |

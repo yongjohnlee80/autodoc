@@ -14,8 +14,9 @@
 // every document at one generation, never half-written.
 //
 // Concurrency: call Run once per Indexer, and run one Indexer per workspace. Run starts the
-// workers, the embedding loop (unless WithExternalEmbedding) and the reclaimer, runs the writer on
-// its own goroutine, and returns once all of them have stopped. Only the writer writes the
+// workers, the embedding loop (unless WithExternalEmbedding) and the reclaimer, runs the writer
+// itself on the goroutine that called it, and returns once the writer's ctx ends and all of them
+// have stopped. Only the writer writes the
 // workspace's rows. Every other method of Indexer and Store is safe for concurrent use, whether Run
 // runs or not: Touch, Reindex and Revalidate only queue paths, and the readers each use one read
 // transaction. Sweep, SweepOrphans, PurgeModel and EmbedBatch hand their writes to Run's writer and

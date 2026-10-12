@@ -55,11 +55,11 @@ new one, never a mix. The writer deletes dead chunks when it is idle.
 | `WithLogger(l)` | where it logs; default nowhere |
 | `WithWorkspace(name)` | the workspace's name, for the logs |
 | `WithSchema(fn)`, `WithTextExtensions(fn)` | the frontmatter schema and the plain-text extensions, asked once per document |
-| `WithRegistrations(t)` | the build's chunkers and derivers (ADR 0216) |
+| `WithRegistrations(t)` | the build's chunkers and derivers |
 | `WithProvider(p)` | embeds chunks for semantic search; without one, search is lexical only |
 | `WithExternalEmbedding(onWork)` | the daemon runs the embedding work (`EmbedBatch`); `onWork` is told after each commit with documents |
 | `WithSearcher(fn)` | the engine that answers searches (default golib's search engine) |
-| `WithRank(r)` | the re-ranking stage, for the queries that ask for it (ADR 0215) |
+| `WithRank(r)` | the re-ranking stage, for the queries that ask for it |
 
 ### Run, the job queue and the writer
 
@@ -87,7 +87,7 @@ and its job waits for the file to change.
 `Touch(path)` queues a path and never blocks; it and `Version` and `PathsUnder` make the `Indexer`
 the queue and store `core/follow` follows into. `Reindex(ctx, path)` forces a path, or with `""`
 every indexed document plus the files the `Rescanner` (`SetRescanner`) finds. A held document
-(ADR 0216 §1.4: made by a chunker or a format this build lacks) is never reinterpreted:
+(made by a chunker or a format this build lacks) is never reinterpreted:
 `Reindex` of one alone is a `HeldError`.
 
 ### Kinds
@@ -151,7 +151,7 @@ vectors take.
 
 ## Reclaim and orphan sweeps
 
-A workspace keeps vectors for its active model and its target only (ADR 1791284787). Every other
+A workspace keeps vectors for its active model and its target only. Every other
 model is reclaimed: its vectors in batches of 2000, each its own write transaction, then its row,
 then the freed pages go back to the file system. A batch that finds the model active or targeted
 again stops, and keeps what is left.
@@ -172,8 +172,8 @@ again stops, and keeps what is left.
 ## Concurrency
 
 - Call `Run` once per `Indexer`, and run one `Indexer` per workspace. `Run` starts the workers, the
-  embedding loop (unless `WithExternalEmbedding`) and the reclaimer, runs the writer on its own
-  goroutine, and returns once all of them have stopped.
+  embedding loop (unless `WithExternalEmbedding`) and the reclaimer, runs the writer itself on the
+  goroutine that called it, and returns once the writer's ctx ends and all of them have stopped.
 - Only the writer writes the workspace's rows.
 - Every other method of `Indexer` and `Store` is safe for concurrent use, whether `Run` runs or
   not. `Touch`, `Reindex` and `Revalidate` only queue paths, and the readers each use one read

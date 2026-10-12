@@ -1,4 +1,4 @@
-// Package outline is a document's structure for navigation (ADR 0212 §6): a Markdown file's
+// Package outline is a document's structure for navigation: a Markdown file's
 // headings, and the breadcrumb at a place in any document. The breadcrumb is the headings above the
 // place in Markdown (and in a derived document's text, which is Markdown), the key path in YAML,
 // and the title in plain text and a registered chunker's file. The daemon's doc.outline and the

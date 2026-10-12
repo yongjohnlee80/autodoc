@@ -1,4 +1,4 @@
-// Package schema is a workspace's frontmatter schema (ADR 0212 §5): the fields its Markdown files
+// Package schema is a workspace's frontmatter schema: the fields its Markdown files
 // declare in frontmatter, their types, and which are required. One validator serves the daemon,
 // which indexes typed facets and diagnostics, and the editor, which checks unsaved text, so the two
 // never disagree. Validation never rewrites a file: a default is a value the facet index answers
@@ -23,7 +23,7 @@
 // date is its facet) and list. A list's items are strings unless item_type names another scalar
 // type; a single scalar where a list is declared is a list of one, as Obsidian writes tags.
 //
-// A schema file, version 2, declares fields by document type (ADR 1791209945 §4.3), and still
+// A schema file, version 2, declares fields by document type, and still
 // validates every document:
 //
 //	version: 2

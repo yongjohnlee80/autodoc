@@ -1,5 +1,5 @@
 // Package kind is how AutoDoc reads a file, decided by its extension and never by sniffing its
-// content (ADR 0212 §4): Markdown, plain text, YAML, a registered chunker's (ADR 0216 §1.3), or a
+// content: Markdown, plain text, YAML, a registered chunker's, or a
 // derived document format, read only as the text a build's deriver makes of it. The indexer, the
 // document API and the editor all ask here, so they agree.
 //

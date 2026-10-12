@@ -1,6 +1,6 @@
 # core/docs
 
-Reads and writes a workspace's files for AutoDoc's own apps (ADR 0203 §4.6), over the workspace
+Reads and writes a workspace's files for AutoDoc's own apps, over the workspace
 root's golib `vfs.FS`. A read returns the content with the version it was read at; every write is
 conditional on the version the writer read, so no writer replaces what it has not seen, and the
 index learns of the write as it learns of an external edit. A derived format (a PDF, a DOCX) reads

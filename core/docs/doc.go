@@ -1,4 +1,4 @@
-// Package docs reads and writes a workspace's files for AutoDoc's own apps (ADR 0203 §4.6). A Docs
+// Package docs reads and writes a workspace's files for AutoDoc's own apps. A Docs
 // works over one workspace root, given as a golib vfs.FS; it never opens a file any other way.
 //
 // A read returns the content with the version it was read at: the file is stat'ed before and after

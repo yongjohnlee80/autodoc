@@ -1,7 +1,7 @@
 # core/edition
 
 What this build of AutoDoc offers beyond its core: the one place a Community build and a Pro build
-differ (ADR 0214 §8). Turning a feature off changes no schema and no protocol.
+differ. Turning a feature off changes no schema and no protocol.
 
 | Name | What |
 | --- | --- |
