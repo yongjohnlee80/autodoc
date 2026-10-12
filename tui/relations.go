@@ -147,6 +147,7 @@ type related struct {
 	of   fileRef // the document the rows are of; the zero fileRef when they are of none
 	deep bool    // the drawer shows the second ring (d)
 	at   int     // the drawer's row under its cursor (find.go reads it)
+	seq  uint64  // numbers the reads: only the latest is shown, and a clear drops any in flight
 }
 
 func newRelated(c Core) *related {
@@ -217,8 +218,9 @@ func (r *related) ofPage() {
 	}
 }
 
-// clear empties the drawer, saying why.
+// clear empties the drawer, saying why; a read still in flight is of rows it no longer shows.
 func (r *related) clear(why string) {
+	r.seq++
 	r.of = fileRef{}
 	r.rows.Reset(nil)
 	r.c.Set("App.relationsTitle", why)
@@ -226,7 +228,7 @@ func (r *related) clear(why string) {
 
 // load reads the relations of p in workspace ws and shows them in the drawer.
 func (r *related) load(ws, p string) {
-	tk, deep := r.c.Ticket(nil, TicketFile), r.deep
+	tk, deep := r.c.Ticket(&r.seq, TicketFile), r.deep
 	r.c.Go(func(ctx context.Context) any {
 		var rl relations
 		edges := func(verb string) ([]relEdge, error) {

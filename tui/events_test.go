@@ -89,11 +89,16 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 		return strings.Contains(one.frameTitle(), "conf.yaml › server › host")
 	})
 	one.s.WaitFor(t, "dirty", func(string) bool { return one.file().dirty })
+	// an answer still coming for the file (a ticket of its own) is of a file no longer open
+	tk := onLoop(one, func() Ticket { return one.h.ticket(nil, TicketFile) })
 	two.h.p.Post(func() {
 		two.h.removeWorkspaceConfirmed("alpha")
 	})
 	one.s.WaitForText(t, "· beta")
 	one.waitNoticed(t, "kept as an untitled draft")
+	if onLoop(one, tk.Current) {
+		t.Fatal("an answer for the file kept as the draft would still land on the draft")
+	}
 	if n := one.file(); n.open || !n.dirty || !strings.Contains(one.editorText(), "words nobody saved") {
 		t.Fatalf("after the peer's removal: %+v, text %q", n, one.editorText())
 	}

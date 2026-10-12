@@ -90,3 +90,29 @@ func TestTheRelationsDepthAndJumps(t *testing.T) {
 		t.Fatalf("opened files %v, dialogs opened %v closed %v", c.files, c.opened, c.closed)
 	}
 }
+
+// An answer for a page no longer shown is dropped: the file kept as the draft (its workspace gone)
+// does not get the gone file's rows when their read answers late, and of two reads for one page
+// (d pressed twice), the later one's rows are the ones shown, whatever order they answer in.
+func TestTheRelationsDropAStaleAnswer(t *testing.T) {
+	c := newScripted("kb")
+	scriptedGraph(c)
+	r := newRelated(c)
+	c.deferred = true
+	r.Shown(Page{Ref: fileRef{"kb", "a.md"}}) // read 0, held
+	r.Shown(Page{})                           // the file kept as the draft
+	c.deliver(0)
+	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "relations" {
+		t.Fatalf("the draft took the gone file's relations: rows %q, title %q", r.labels(), c.set["App.relationsTitle"])
+	}
+
+	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	c.deliver(0)
+	c.focused = true
+	r.depth() // depth 2: read 0, held
+	r.depth() // depth 1 again: read 1, held
+	c.deliver(1, 0)
+	if r.deep || slices.ContainsFunc(r.labels(), func(l string) bool { return strings.HasPrefix(l, "    › ") }) {
+		t.Fatalf("the first d's late answer replaced the second's: deep %v, rows %q", r.deep, r.labels())
+	}
+}
