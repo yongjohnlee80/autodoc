@@ -18,6 +18,8 @@ autodoc.command{
 
 **`name`** is what you type, **`aliases`** are other names for it, and **`args`** and **`help`** are what Tab shows. **`run`** gets the editor, `ed`; the words after the command, `args`; and the rest of the line as typed, `line`.
 
+**Any command, by its id.** `autodoc.run("todos.open")` runs a command of AutoDoc's or yours (`autodoc.run("lua.upper", "3")`) and returns `ok, err`; F1 lists every id under COMMANDS.
+
 **The editor, `ed`.** Positions are 1-based: line 1, column 1 is the first character. A range runs from its start up to, not including, its end: `ed:text(2, 1, 2, 6)` is line 2's first five characters. `ed:cursor()` and `ed:selection()` say where you are; `ed:insert`, `ed:replace` and `ed:delete` edit; `ed:find(term)` searches; `ed:run(":12")` runs another command. Whatever one command edits is **one undo**: `u` takes it all back.
 
 **The sandbox.** Scripts get Lua's base, table, string and math libraries: no `os`, no `io`, no files, no `require`. A script that fails, or runs past two seconds, is stopped; its error shows in the prompt, and AutoDoc carries on.

@@ -372,11 +372,19 @@ changes when AutoDoc last closed … We kept a copy for you, just in case. Resto
 `:` in the Vim mode's Normal mode opens **VIM Commands** (golib's editor prompt). Tab completes a
 command and lists the candidates with their arguments; Enter runs it; Esc closes it.
 
+Every command a user can run is in one **command catalog**, by a stable id (`file.open`,
+`todos.open`, `terminal.toggle`, `lua.upper`, `plugin.<name>.<id>`): AutoDoc's own, its features',
+your Lua commands and the plugins'. The command line, the keys, SPC p and Lua all run them from
+there, and F1 lists every one under **COMMANDS**, with its id, its `:` names, its keys and what it
+does. A plugin runs one with `host.call` (protocol 3, [docs/plugins.md](docs/plugins.md)).
+
 | Command | Does |
 |---|---|
 | `:12` | go to line 12 (refused past the last line) |
 | `:w`, `:wq`, `:x`, `:q`, `:q!` | save; save and quit; save if changed and quit; quit (asks over unsaved changes); quit discarding them |
 | `:find <term>`, `:nohl` | the page's find, as `/` is: marked, `n` and `N` go on; clear it |
+| `:terminal`, `:term` | open the terminal, with the keyboard in it |
+| `:todos` | the todos (SPC x) |
 | `:replace <term> <with>` | each match in turn: `y` replaces, `n` skips, `q` or Esc stops; one undo for all |
 | `:table <cols> <rows>` | a Markdown table (`Column1…`, `Item1.1…`). In Insert mode, Tab walks its cells and selects each one's text so typing replaces it; past the last cell, Tab adds a row |
 | `:mermaid <type>` | a Mermaid diagram to start from: flowchart, sequence, class, state, er, gantt, pie, mindmap, timeline, journey |
@@ -384,8 +392,10 @@ command and lists the candidates with their arguments; Enter runs it; Esc closes
 ### Lua commands
 
 `table` and `mermaid` are Lua scripts (`tui/lua/`). Your own commands go in
-`~/.config/autodoc/lua/*.lua`, beside `config.toml`, and load at start in name order. A command of
-yours with the name of one of AutoDoc's replaces it.
+`~/.config/autodoc/lua/*.lua`, beside `config.toml`, and load at start in name order. Each is a
+catalog entry, `lua.<name>` (or the `id` it gives, under `lua.`), named in F1 by its `title`. A command
+of yours named like one of AutoDoc's takes that name, and only it: `:term` of yours leaves
+`:terminal` opening the terminal, and AutoDoc's command stays runnable by its id.
 
 ```lua
 -- :upper [line] — upper-case a line (the cursor's by default)
@@ -418,6 +428,15 @@ autodoc.search.query("kb", "kestrel", {limit = 5}, function(res, err)
   if err then autodoc.notify("search failed: " .. err) return end
   autodoc.notify(#res.hits .. " hits")
 end)
+```
+
+`autodoc.run(id, args…)` runs any command of the catalog by its id, AutoDoc's or yours, and returns
+`ok, err` without raising: `err` is `"unknown: <id>"` for an id no command has, or the command's own
+error. A plugin's command (`plugin.…`) is never Lua's to run.
+
+```lua
+local ok, err = autodoc.run("todos.open")
+local ok, err = autodoc.run("lua.upper", "3")
 ```
 
 Help › Tutorial… (SPC T) walks through it all, ending with a worked `:todo` command. Its pages are
