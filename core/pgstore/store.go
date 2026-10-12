@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -71,11 +72,63 @@ func (c committedConn) Begin(ctx context.Context) (dao.TxConn, error) {
 }
 
 // View runs fn in one View: one REPEATABLE READ, READ ONLY transaction, so every retriever and
-// presentation field reads one snapshot. fn's error is returned as it is.
+// presentation field reads one snapshot. fn's error is returned as it is. The View is unscoped: it
+// reads every document of the tenant (the local and back-compat paths). A reader acting for a
+// caller with an access scope uses ViewWithin.
 func (s *Store) View(ctx context.Context, fn func(v *View) error) error {
 	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
 		return fn(&View{s: s, tx: tx})
 	})
+}
+
+// ViewWithin runs fn in one View scoped to access: every retrieval it answers (Lexical, Semantic,
+// List, Signals, and SemanticState's count) is ANDed, in SQL, with a predicate over the document's
+// facets that no search.Filter can widen. Within one field the values are the ones allowed (ORed);
+// across fields every one must hold (ANDed); a document with no value for a field is outside. The
+// predicate is the View's own, apart from the filter: a filter or a query naming an access field
+// can only narrow what access admits, never add to it (ADR 1791762085 §4.5, R6).
+//
+// An access with no field, a field with no name or no values, or a name with '=' is refused with
+// ErrNoAccess before any transaction begins: there is no scope that reads everything. Which fields
+// a caller must be scoped by is the tenant's policy (Policy); checking a scope against it is the
+// caller's (enterprise/search).
+func (s *Store) ViewWithin(ctx context.Context, access map[string][]string, fn func(v *View) error) error {
+	preds, err := accessPredicates(access)
+	if err != nil {
+		return err
+	}
+	return dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		return fn(&View{s: s, tx: tx, access: preds})
+	})
+}
+
+// accessPredicates are access's predicates over the document's facets: one per field, in field
+// order, each ORing the field's allowed values.
+func accessPredicates(access map[string][]string) ([]dao.Predicate, error) {
+	if len(access) == 0 {
+		return nil, ErrNoAccess
+	}
+	fields := make([]string, 0, len(access))
+	for f := range access {
+		if err := checkField(f); err != nil {
+			return nil, err
+		}
+		if len(access[f]) == 0 {
+			return nil, fmt.Errorf("%w: the access field %q has no allowed value", ErrNoAccess, f)
+		}
+		fields = append(fields, f)
+	}
+	slices.Sort(fields)
+	facets := dao.ArrayOp("facet", qcol(tDoc, string(dFacets)))
+	preds := make([]dao.Predicate, 0, len(fields))
+	for _, f := range fields {
+		ors := make([]dao.Predicate, 0, len(access[f]))
+		for _, v := range access[f] {
+			ors = append(ors, facets.Predicate(f+"="+v))
+		}
+		preds = append(preds, dao.Or(ors...))
+	}
+	return preds, nil
 }
 
 var _ search.Store[int64, *View] = (*Store)(nil)

@@ -17,9 +17,19 @@ const snippetTokens = 24
 
 // View is one snapshot of a tenant's index: a REPEATABLE READ, READ ONLY transaction every method
 // reads in. It is valid only inside Store.View's fn.
+//
+// A View from ViewWithin carries its access predicates, which every retrieval ANDs apart from the
+// filter; a View from View carries none.
 type View struct {
-	s  *Store
-	tx *dao.Transaction
+	s      *Store
+	tx     *dao.Transaction
+	access []dao.Predicate // ViewWithin's; nil is unscoped
+}
+
+// where is a retrieval's predicates over the document: the filter's, and the View's access ANDed
+// beside them, never merged into the filter's facets (where a query's own facet would OR with it).
+func (v *View) where(f search.Filter) []dao.Predicate {
+	return append(filters(f), v.access...)
 }
 
 var (
@@ -76,7 +86,7 @@ func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter
 		return nil, err
 	}
 	d := v.retrieved(ctx).Join(joinDoc).WithPredicate(dao.Match(tsv(), q))
-	for _, p := range filters(f) {
+	for _, p := range v.where(f) {
 		d = d.WithPredicate(p)
 	}
 	rows, err := d.OrderBy(dao.AscBy(cByRank, q), dao.Asc(cByPath), dao.Asc(cByOrd)).Limit(uint64(n)).Select(hitFields()...)
@@ -120,7 +130,7 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	d := v.retrieved(ctx).Join(joinDoc, joinEmb).
 		WithPredicate(dao.Eq(qcol(tEmb, "model"), model)).
 		WithPredicate(dao.Eq(qcol(tDoc, string(dReady)), true))
-	for _, p := range filters(f) {
+	for _, p := range v.where(f) {
 		d = d.WithPredicate(p)
 	}
 	rows, err := d.OrderBy(dao.AscBy(cByNearest, postgres.Vector(vec)), dao.Asc(cByPath), dao.Asc(cByOrd)).Limit(uint64(n)).Select(hitFields()...)
@@ -144,7 +154,11 @@ func (v *View) SemanticState(ctx context.Context) (search.State, error) {
 	if target != "" && target != active {
 		return search.StateSwitching, nil
 	}
-	unready, err := v.docs(ctx).With(dReady, false).Exists()
+	d := v.docs(ctx).With(dReady, false)
+	for _, p := range v.access {
+		d = d.WithPredicate(p)
+	}
+	unready, err := d.Exists()
 	if err != nil {
 		return "", err
 	}
@@ -164,7 +178,11 @@ func (v *View) Signals(ctx context.Context, ids []int64) (map[int64]search.Signa
 	for i, id := range ids {
 		in[i] = id
 	}
-	docs, err := v.docs(ctx).WithPredicate(dao.In(qcol(tDoc, string(dID)), in)).Select(dID, dPath, dTags)
+	d := v.docs(ctx).WithPredicate(dao.In(qcol(tDoc, string(dID)), in))
+	for _, p := range v.access {
+		d = d.WithPredicate(p)
+	}
+	docs, err := d.Select(dID, dPath, dTags)
 	if err != nil {
 		return nil, err
 	}
@@ -183,11 +201,18 @@ func (v *View) Signals(ctx context.Context, ids []int64) (map[int64]search.Signa
 	if err != nil {
 		return nil, err
 	}
+	within, err := v.linkingWithin(ctx, links)
+	if err != nil {
+		return nil, err
+	}
 	from := map[int64]map[int64]bool{}
 	for _, l := range links {
 		dst := byPath[l.DstPath]
 		if l.Src == dst {
 			continue // a link to itself is not a signal
+		}
+		if within != nil && !within[l.Src] {
+			continue // a document the access does not admit says nothing, not even that it links
 		}
 		if from[dst] == nil {
 			from[dst] = map[int64]bool{}
@@ -202,6 +227,34 @@ func (v *View) Signals(ctx context.Context, ids []int64) (map[int64]search.Signa
 	return out, nil
 }
 
+// linkingWithin is the linking documents of links the View's access admits; nil when the View is
+// unscoped, so every one counts.
+func (v *View) linkingWithin(ctx context.Context, links []*linkRow) (map[int64]bool, error) {
+	if v.access == nil {
+		return nil, nil
+	}
+	within := map[int64]bool{}
+	if len(links) == 0 {
+		return within, nil
+	}
+	srcs := make([]any, 0, len(links))
+	for _, l := range links {
+		srcs = append(srcs, l.Src)
+	}
+	d := v.docs(ctx).WithPredicate(dao.In(qcol(tDoc, string(dID)), srcs))
+	for _, p := range v.access {
+		d = d.WithPredicate(p)
+	}
+	rows, err := d.Select(dID)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		within[r.ID] = true
+	}
+	return within, nil
+}
+
 // List is the documents f admits, in path order, each as its first chunk with the start of its text
 // as the snippet, at most n.
 func (v *View) List(ctx context.Context, f search.Filter, n int) ([]search.Candidate[int64], error) {
@@ -209,7 +262,7 @@ func (v *View) List(ctx context.Context, f search.Filter, n int) ([]search.Candi
 		return nil, nil
 	}
 	d := v.docs(ctx)
-	for _, p := range filters(f) {
+	for _, p := range v.where(f) {
 		d = d.WithPredicate(p)
 	}
 	docs, err := d.OrderBy(dao.Asc(dByPath)).Limit(uint64(n)).Select(dID, dPath, dGen)
