@@ -8,7 +8,8 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 )
 
-// Batch is documents written in one transaction: kept together, or none of them. A Put that loses
+// Batch is documents written in one transaction, with the ingest state their page moved (SetCursor,
+// SetRefreshed, Quarantine, Release, in ingest.go): kept together, or none of them. A Put that loses
 // its compare-and-set to another writer fails with ErrWriteRace and is not written again: the
 // other writer's row is newer than the one the batch read, and versions are opaque, so writing
 // over it would silently drop that writer's work. Any error, that one or another (a first insert
@@ -48,7 +49,7 @@ func (b *Batch) Delete(ctx context.Context, path string) error {
 	return nil
 }
 
-// Commit keeps the batch's documents.
+// Commit keeps the batch's documents and ingest state.
 func (b *Batch) Commit() error { return b.tx.Commit() }
 
 // Rollback keeps none of them.

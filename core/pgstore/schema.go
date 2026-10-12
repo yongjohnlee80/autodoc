@@ -1,6 +1,8 @@
 package pgstore
 
 import (
+	"time"
+
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/postgres"
 )
@@ -12,6 +14,10 @@ const (
 	tEmb   = "rag_embedding"
 	tLink  = "rag_link"
 	tMeta  = "rag_meta"
+
+	tCursor = "rag_cursor"        // 000002
+	tIngErr = "rag_ingest_error"  // 000002
+	tPolicy = "rag_tenant_policy" // 000002
 )
 
 // --- documents -----------------------------------------------------------------
@@ -265,16 +271,131 @@ func newMetaSchema(conn dao.DataConn) *metaSchema {
 	)
 }
 
+// --- cursor (000002) ---------------------------------------------------------------
+
+// cursorRow is a tenant's position in its source and its last refresh; a NULL is never set.
+// The new tables' fields are written by Set and never from a row (AddRow), so they declare no
+// Value; their tenant is written and filtered on, never scanned.
+type cursorRow struct {
+	UpdatedAt                       *time.Time
+	ID                              string
+	RefreshStarted, RefreshFinished *time.Time
+}
+
+type cursorField string
+
+const (
+	kTenant   cursorField = "tenant"
+	kUpdated  cursorField = "updated_at"
+	kID       cursorField = "id"
+	kStarted  cursorField = "refresh_started"
+	kFinished cursorField = "refresh_finished"
+)
+
+type cursorSchema = dao.Schema[*cursorRow, cursorField, string, int64]
+
+func newCursorSchema(conn dao.DataConn) *cursorSchema {
+	type o = dao.Option[*cursorRow, cursorField, string, int64]
+	return dao.New(conn,
+		o(dao.Table[*cursorRow, cursorField, string, int64](tCursor)),
+		o(dao.Fields[*cursorRow, cursorField, string, int64](map[cursorField]dao.Field[*cursorRow]{
+			kTenant:   {Expr: dao.T(tCursor, kTenant)},
+			kUpdated:  {Expr: dao.T(tCursor, kUpdated), Scan: func(r *cursorRow) any { return &r.UpdatedAt }},
+			kID:       {Expr: dao.T(tCursor, kID), Scan: func(r *cursorRow) any { return &r.ID }},
+			kStarted:  {Expr: dao.T(tCursor, kStarted), Scan: func(r *cursorRow) any { return &r.RefreshStarted }},
+			kFinished: {Expr: dao.T(tCursor, kFinished), Scan: func(r *cursorRow) any { return &r.RefreshFinished }},
+		})),
+		o(dao.Conflict[*cursorRow, cursorField, string, int64](kTenant)),
+	)
+}
+
+// --- ingest errors (000002) ---------------------------------------------------------
+
+type ingErrRow struct {
+	SourceID, Error     string
+	FirstSeen, LastSeen time.Time
+}
+
+type ingErrField string
+
+const (
+	qTenant ingErrField = "tenant"
+	qSource ingErrField = "source_id"
+	qError  ingErrField = "error"
+	qFirst  ingErrField = "first_seen"
+	qLast   ingErrField = "last_seen"
+)
+
+type ingErrSort string
+
+const (
+	qByLast   ingErrSort = "last_seen"
+	qBySource ingErrSort = "source_id"
+)
+
+type ingErrSchema = dao.Schema[*ingErrRow, ingErrField, ingErrSort, int64]
+
+func newIngErrSchema(conn dao.DataConn) *ingErrSchema {
+	type o = dao.Option[*ingErrRow, ingErrField, ingErrSort, int64]
+	return dao.New(conn,
+		o(dao.Table[*ingErrRow, ingErrField, ingErrSort, int64](tIngErr)),
+		o(dao.Fields[*ingErrRow, ingErrField, ingErrSort, int64](map[ingErrField]dao.Field[*ingErrRow]{
+			qTenant: {Expr: dao.T(tIngErr, qTenant)},
+			qSource: {Expr: dao.T(tIngErr, qSource), Scan: func(r *ingErrRow) any { return &r.SourceID }},
+			qError:  {Expr: dao.T(tIngErr, qError), Scan: func(r *ingErrRow) any { return &r.Error }},
+			qFirst:  {Expr: dao.T(tIngErr, qFirst), Scan: func(r *ingErrRow) any { return &r.FirstSeen }},
+			qLast:   {Expr: dao.T(tIngErr, qLast), Scan: func(r *ingErrRow) any { return &r.LastSeen }},
+		})),
+		o(dao.Conflict[*ingErrRow, ingErrField, ingErrSort, int64](qTenant, qSource)),
+		o(dao.SortExpr[*ingErrRow, ingErrField, ingErrSort, int64](qByLast, dao.T(tIngErr, qLast))),
+		o(dao.SortExpr[*ingErrRow, ingErrField, ingErrSort, int64](qBySource, dao.T(tIngErr, qSource))),
+	)
+}
+
+// --- tenant policy (000002) ---------------------------------------------------------
+
+type policyRow struct {
+	View         string
+	AccessFields []string
+}
+
+type policyField string
+
+const (
+	pTenant policyField = "tenant"
+	pAccess policyField = "access_fields"
+	pView   policyField = "view_name"
+)
+
+type policySchema = dao.Schema[*policyRow, policyField, string, int64]
+
+func newPolicySchema(conn dao.DataConn) *policySchema {
+	type o = dao.Option[*policyRow, policyField, string, int64]
+	return dao.New(conn,
+		o(dao.Table[*policyRow, policyField, string, int64](tPolicy)),
+		o(dao.Fields[*policyRow, policyField, string, int64](map[policyField]dao.Field[*policyRow]{
+			pTenant: {Expr: dao.T(tPolicy, pTenant)},
+			pAccess: {Expr: dao.T(tPolicy, pAccess), Scan: func(r *policyRow) any { return &r.AccessFields }},
+			pView:   {Expr: dao.T(tPolicy, pView), Scan: func(r *policyRow) any { return &r.View }},
+		})),
+		o(dao.Conflict[*policyRow, policyField, string, int64](pTenant)),
+	)
+}
+
 // schemas are the entities on one connection.
 type schemas struct {
-	doc   *docSchema
-	chunk *chunkSchema
-	emb   *embSchema
-	link  *linkSchema
-	meta  *metaSchema
+	doc    *docSchema
+	chunk  *chunkSchema
+	emb    *embSchema
+	link   *linkSchema
+	meta   *metaSchema
+	cursor *cursorSchema
+	ingErr *ingErrSchema
+	policy *policySchema
 }
 
 func newSchemas(conn dao.DataConn) schemas {
 	return schemas{doc: newDocSchema(conn), chunk: newChunkSchema(conn), emb: newEmbSchema(conn),
-		link: newLinkSchema(conn), meta: newMetaSchema(conn)}
+		link: newLinkSchema(conn), meta: newMetaSchema(conn), cursor: newCursorSchema(conn),
+		ingErr: newIngErrSchema(conn), policy: newPolicySchema(conn)}
 }

@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/dao/deploy"
@@ -473,6 +474,19 @@ func TestDropRemovesOneTenantOnly(t *testing.T) {
 		d := Document{Path: "shared.md", Tags: []string{"x"}, Links: []string{"shared.md"},
 			Chunks: []search.Chunk{{Ord: 0, Breadcrumb: "shared", Body: "common words"}}}
 		putDoc(t, s, d, true)
+		b := s.Begin(ctx)
+		if err := b.SetCursor(ctx, Cursor{UpdatedAt: time.Now(), ID: "1"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Quarantine(ctx, "2", errors.New("bad row")); err != nil {
+			t.Fatal(err)
+		}
+		if err := b.Commit(); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SetPolicy(ctx, Policy{AccessFields: []string{"label_id"}, View: "v"}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := a.Drop(ctx); err != nil {
 		t.Fatal(err)
@@ -484,6 +498,9 @@ func TestDropRemovesOneTenantOnly(t *testing.T) {
 		{"rag_link", "tenant"},
 		{"rag_embedding", "tenant"},
 		{"rag_meta", "tenant"},
+		{"rag_cursor", "tenant"},
+		{"rag_ingest_error", "tenant"},
+		{"rag_tenant_policy", "tenant"},
 	} {
 		rows, err := conn.QueryContext(ctx, "SELECT count(*) FROM "+table.name+" WHERE "+table.tenantCol+" = 'tenant-a'")
 		if err != nil {
@@ -500,7 +517,16 @@ func TestDropRemovesOneTenantOnly(t *testing.T) {
 			t.Errorf("%d rows of tenant a outlived Drop in %s", n, table.name)
 		}
 	}
-	// tenant b answers as before
+	// tenant b answers as before, and keeps its ingest state
+	if c, err := b.Cursor(ctx); err != nil || c.ID != "1" {
+		t.Errorf("tenant b's cursor after a's drop: %+v, %v", c, err)
+	}
+	if q, err := b.Quarantined(ctx, 10); err != nil || len(q) != 1 {
+		t.Errorf("tenant b's quarantine after a's drop: %+v, %v", q, err)
+	}
+	if _, err := b.Policy(ctx); err != nil {
+		t.Errorf("tenant b's policy after a's drop: %v", err)
+	}
 	b.View(ctx, func(v *View) error {
 		if got, err := v.Lexical(ctx, []search.Term{{Text: "common"}}, search.Filter{}, 10); err != nil || len(got) != 1 || got[0].Path != "shared.md" {
 			t.Errorf("tenant b after a's drop: %+v, %v", got, err)

@@ -481,7 +481,8 @@ func (s *Store) Delete(ctx context.Context, path string) error {
 }
 
 // Drop deletes everything the tenant has, in one transaction: its documents (chunks and links
-// cascade), its embeddings and its meta row. Another tenant's rows are untouched.
+// cascade), its embeddings, its meta row, its cursor, its quarantine and its access policy.
+// Another tenant's rows are untouched.
 func (s *Store) Drop(ctx context.Context) error {
 	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
 		for _, del := range []func(*dao.Transaction) error{
@@ -493,6 +494,15 @@ func (s *Store) Drop(ctx context.Context) error {
 			},
 			func(tx *dao.Transaction) error {
 				return s.rw.meta.On(tx, dao.WithQueryContext(ctx)).With(mTenant, s.tenant).Delete()
+			},
+			func(tx *dao.Transaction) error {
+				return s.rw.cursor.On(tx, dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Delete()
+			},
+			func(tx *dao.Transaction) error {
+				return s.rw.ingErr.On(tx, dao.WithQueryContext(ctx)).With(qTenant, s.tenant).Delete()
+			},
+			func(tx *dao.Transaction) error {
+				return s.rw.policy.On(tx, dao.WithQueryContext(ctx)).With(pTenant, s.tenant).Delete()
 			},
 		} {
 			if err := del(tx); err != nil {
