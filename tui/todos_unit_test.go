@@ -412,3 +412,62 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 		t.Errorf("%d adds answered, want 2: %v", n, s.notes)
 	}
 }
+
+// TestTodosAStaleReadIsNotTheNewTrees: a section's read on its way when the stores are listed
+// again answers into nothing: the new tree's section stays closed and unread, and once opened it
+// is read, and a change reads it again.
+func TestTodosAStaleReadIsNotTheNewTrees(t *testing.T) {
+	s := scriptedStore(true)
+	s.deferred = true
+	v := newTodos(s)
+	v.list()
+	s.deliver(0) // the stores; the workspace's resolve held
+	s.deliver(0) // the resolve: the tree
+	openSection(t, v, "ws:kb", "open")
+	old := s.pending[0] // the section's read, held
+	s.pending = nil
+	v.list()
+	s.deliver(0)
+	s.deliver(0) // listed again: a new tree, the section closed
+	old()        // the old read answers late
+	section, ok := v.indexOf("ws:kb", bucketKey("ws:kb", "open"))
+	if !ok || v.model.RowCount(&section) != 0 || !v.model.CanFetchMore(section) {
+		t.Fatalf("the old read filled the new tree: rows %q", treeLabels(v, &section))
+	}
+	v.model.FetchMore(section)
+	s.deliver(0)
+	if got := treeLabels(v, &section); len(got) != 1 {
+		t.Fatalf("the new tree's section, opened: %q", got)
+	}
+	n := len(s.calls)
+	v.Event("todos.changed", "kb", "")
+	if len(s.calls) == n {
+		t.Error("a change did not read the opened section again")
+	}
+}
+
+// TestTodosARefreshKeepsAnOpenMonthsTasks: a store read again with an archived month open reads the
+// month after its Archived section, under the month's new row, so the month keeps its tasks
+// whichever answer comes first.
+func TestTodosARefreshKeepsAnOpenMonthsTasks(t *testing.T) {
+	for _, monthFirst := range []bool{false, true} {
+		s := scriptedStore(true)
+		v := newTodos(s)
+		v.list()
+		archived := openSection(t, v, "ws:kb", "archived")
+		v.model.FetchMore(tuidecl.Index{Row: 0, Parent: &archived})
+		s.deferred = true
+		v.reread(v.stores[0]) // held: [0] Archived
+		if monthFirst {
+			v.read(v.stores[0], "m", "2026/09") // a read of the month already on its way: [1]
+			s.deliver(1, 0)                     // the month answers first, then Archived replaces its row
+		} else {
+			s.deliver(0)
+		}
+		s.deliver(0) // the month read again under its new row
+		month, ok := v.indexOf("ws:kb", bucketKey("ws:kb", "archived"), monthKey("ws:kb", "2026/09"))
+		if got := treeLabels(v, &month); !ok || !slices.Equal(got, []string{"Old"}) {
+			t.Errorf("month first %v: the month's tasks after a refresh: %q", monthFirst, got)
+		}
+	}
+}

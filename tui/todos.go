@@ -54,6 +54,9 @@ type todos struct {
 	// older answer is dropped; a write's answer never is
 	rootsSeq uint64
 	seqs     map[string]*uint64
+	// gen is the tree's generation, one more each time the stores are listed: a read asked of an
+	// older tree is dropped, its rows not this tree's
+	gen      uint64
 	folderAs string // what the folder chosen is for: "load", "new" or "move"
 	detail   bool   // the details show (i, o)
 	help     bool   // the keys show (?)
@@ -238,6 +241,7 @@ func (t *todos) list() {
 
 // show puts stores in the tree, each with its buckets, closed: a section is read when it opens.
 func (t *todos) show(stores []*todoStore) {
+	t.gen++
 	t.stores, t.open, t.tasks = stores, map[string]bool{}, map[string]map[string]any{}
 	var rows []tuidecl.TreeRow
 	for _, s := range stores {
@@ -312,10 +316,11 @@ func (t *todos) read(s *todoStore, kind, rest string) {
 		path = []string{s.id, bucketKey(s.id, "archived"), key}
 	}
 	t.open[key] = true
+	gen := t.gen
 	t.call("todos.list", []any{s.at, map[string]any{"buckets": []any{bucket}}}, t.seq(key), func(v any) {
 		ix, ok := t.indexOf(path...)
-		if !ok {
-			return // the stores were listed again since
+		if gen != t.gen || !ok {
+			return // asked of a tree since listed again
 		}
 		l := asMap(v)
 		if kind == "b" && rest == "archived" {
@@ -327,6 +332,16 @@ func (t *todos) read(s *todoStore, kind, rest string) {
 			}
 			t.model.SetChildren(&ix, months)
 			t.status(fmt.Sprintf("%d months archived: open one for its tasks", len(months)))
+			// the months open before are new rows now, empty: each is read again under its new row
+			for k := range t.open {
+				if kind, id, month := splitTodoKey(k); kind == "m" && id == s.id {
+					if _, still := t.indexOf(s.id, key, k); still {
+						t.read(s, "m", month)
+					} else {
+						delete(t.open, k) // the month is gone
+					}
+				}
+			}
 			return
 		}
 		tasks := asList(l["tasks"])
@@ -362,11 +377,12 @@ func (t *todos) read(s *todoStore, kind, rest string) {
 	})
 }
 
-// reread reads again what of store s was open: its sections and months.
+// reread reads again what of store s was open: its sections, and through its Archived section the
+// months open in it, once their new rows are there.
 func (t *todos) reread(s *todoStore) {
 	for key := range t.open {
 		kind, id, rest := splitTodoKey(key)
-		if id == s.id {
+		if id == s.id && kind == "b" {
 			t.read(s, kind, rest)
 		}
 	}
