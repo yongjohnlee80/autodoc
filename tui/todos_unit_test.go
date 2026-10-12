@@ -30,6 +30,7 @@ type scriptedCore struct {
 	page    Page        // what Page answers
 	crumbs  []string    // the breadcrumb last put on the frame
 	focused bool        // what HasFocus answers
+	viewErr error       // what View answers
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	deferred bool
 	pending  []func()
@@ -73,7 +74,7 @@ func (s *scriptedCore) GoToLine(line int) {
 }
 func (s *scriptedCore) View(id, method string, _ ...any) error {
 	s.views = append(s.views, id+"."+method)
-	return nil
+	return s.viewErr
 }
 func (s *scriptedCore) Failed(what string, err error) {
 	s.failed = append(s.failed, what+": "+err.Error())
@@ -469,5 +470,82 @@ func TestTodosARefreshKeepsAnOpenMonthsTasks(t *testing.T) {
 		if got := treeLabels(v, &month); !ok || !slices.Equal(got, []string{"Old"}) {
 			t.Errorf("month first %v: the month's tasks after a refresh: %q", monthFirst, got)
 		}
+	}
+}
+
+// TestTodosAtTheEdges: with no workspace the stores alone are the roots; with nothing under the
+// cursor, or a row whose store is gone, the keys do nothing; Load, New and M open the folder dialog;
+// a section the tree no longer shows is not jumped to, and a refused jump is said; a month gone from
+// Archived is no longer read again.
+func TestTodosAtTheEdges(t *testing.T) {
+	s := scriptedStore(true)
+	s.ws = ""
+	v := newTodos(s)
+	v.list()
+	if got := treeLabels(v, nil); !slices.Equal(got, []string{"● /p"}) {
+		t.Errorf("no workspace: roots %q", got)
+	}
+
+	idle := scriptedStore(true)
+	w := newTodos(idle) // nothing listed: no store under the cursor
+	n := len(idle.calls)
+	w.add()
+	w.cycle()
+	w.refresh()
+	w.folderAs = "move"
+	w.folderChosen("/m")
+	if len(idle.calls) != n {
+		t.Errorf("with no store, the keys asked %v", idle.calls[n:])
+	}
+	cmds := w.Commands()
+	for _, c := range []string{"App.todoLoad", "App.todoNew", "App.todoMove"} {
+		if err := cmds[c].Run(nil); err != nil {
+			t.Errorf("%s: %v", c, err)
+		}
+	}
+	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolder" { // M on no store: read-only, said
+		t.Errorf("the folder dialog opened %q", got)
+	}
+
+	v = newTodos(scriptedStore(true))
+	v.list()
+	open := openSection(t, v, "ws:kb", "open")
+	task := tuidecl.Index{Row: 0, Parent: &open}
+	v.stores[0].path = "" // a store not yet resolved: Enter has no file to open
+	if err := v.activated(task); err != nil {
+		t.Fatal(err)
+	}
+	v.stores = v.stores[1:] // the task's store is gone
+	if err := v.activated(task); err != nil {
+		t.Fatal(err)
+	}
+	if f := v.c.(*scriptedCore).files; len(f) != 0 {
+		t.Errorf("Enter opened %v", f)
+	}
+	v.stores = append(v.stores, &todoStore{id: "root:/z"})
+	v.at = []string{"root:/z"} // a store the tree does not show
+	v.section(0)
+	sc := v.c.(*scriptedCore)
+	if slices.Contains(sc.views, "todoTree.setCurrentIndex") {
+		t.Error("jumped to a section the tree does not show")
+	}
+	sc.viewErr = errors.New("no such row")
+	v.at = []string{"root:/p"}
+	v.section(0)
+	if len(sc.failed) != 1 || !strings.Contains(sc.failed[0], "a section") {
+		t.Errorf("a refused jump: failed %v", sc.failed)
+	}
+
+	m := scriptedStore(true)
+	a := newTodos(m)
+	a.list()
+	archived := openSection(t, a, "ws:kb", "archived")
+	a.model.FetchMore(tuidecl.Index{Row: 0, Parent: &archived})
+	m.answers["todos.list"] = func(p []any) (any, error) {
+		return map[string]any{"partitions": []any{map[string]any{"month": "2026/10", "files": int64(1)}}}, nil
+	}
+	a.reread(a.stores[0])
+	if a.open[monthKey("ws:kb", "2026/09")] {
+		t.Error("a month gone from Archived is still read again")
 	}
 }
