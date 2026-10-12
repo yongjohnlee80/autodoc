@@ -58,20 +58,28 @@ type keyScope struct {
 // explorer's and the relations' panels.
 var keyScopes = []keyScope{{"page", "            "}, {"explorer", "        "}, {"links", "        "}}
 
-// scopedKeys are the keys a pane answers itself. / n N find in the pane with the keyboard where
-// find covers it (find.go); the Window's own / n N answer everywhere else, saying where to put the
-// keyboard. d is the relations' alone.
-var scopedKeys = func() []Key {
+// findKeys are / n N in each pane find searches that has keys of its own (FindPane.Scope), in find's
+// order: the pane answers them itself (find.go). The Window's own / n N answer everywhere else,
+// saying where to put the keyboard.
+func findKeys(fs []Feature) []Key {
 	var out []Key
-	for _, scope := range []string{"page", "explorer", "links"} {
+	for _, f := range fs {
+		p, ok := f.(Findable)
+		if !ok || p.FindPane().Scope == "" {
+			continue
+		}
+		scope := p.FindPane().Scope
 		out = append(out,
 			Key{Scope: scope, Seq: "/", Show: "/", Run: "App.openFind()"},
 			Key{Scope: scope, Seq: "n", Show: "n and N", Run: "App.findNext()"},
 			Key{Scope: scope, Seq: "Shift+N", Show: "n and N", Run: "App.findPrevious()"})
 	}
-	// d in the Relations drawer shows the second ring, or hides it (relations.go)
-	return append(out, Key{Scope: "links", Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"})
-}()
+	return out
+}
+
+// scopedKeys are the other keys a pane answers itself: d in the Relations drawer shows the second
+// ring, or hides it (relations.go).
+var scopedKeys = []Key{{Scope: "links", Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"}}
 
 // Card is a card of keys: a Dialog listing its keys, each closing the card before it runs.
 type Card struct {
@@ -124,7 +132,7 @@ var windowKeys = []Key{
 	// Ctrl+; only with kitty's keyboard protocol, so Search › Command line… is always there
 	{Seq: "Ctrl+;", Show: "Ctrl+;", Run: "App.openCommandLine()"},
 	// / n N in a pane find does not cover: where to put the keyboard (find.go); in the panes it
-	// covers, their own (scopedKeys) win
+	// covers, their own (findKeys) win
 	{Seq: "/", Show: "/", Run: "App.openFind()"},
 	{Seq: "n", Show: "n and N", Run: "App.findNext()"},
 	{Seq: "Shift+N", Show: "n and N", Run: "App.findPrevious()"},
@@ -227,7 +235,7 @@ type keyset struct {
 // keyCatalog is the catalog with every feature's keys and cards after the host's. A key running a
 // catalog entry that says nothing itself is named by the entry's title.
 func keyCatalog(fs []Feature) keyset {
-	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, scopedKeys, leaderKeys)}
+	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, findKeys(fs), scopedKeys, leaderKeys)}
 	titles := map[string]string{}
 	for _, f := range fs {
 		if kf, ok := f.(Keyed); ok {

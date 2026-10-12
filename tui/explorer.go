@@ -250,7 +250,7 @@ func (e *explorer) moveTo(ix tuidecl.Index) error {
 // closed folder's loaded rows included. A hit is moved to by the Index it was listed at, revealed, its
 // folders opened.
 func (e *explorer) FindPane() FindPane {
-	return FindPane{Name: "explorer", View: explorerPanelSpec().View, Rows: func() ([]string, int, func(int, int) error) {
+	return FindPane{Name: "explorer", View: explorerPanelSpec().View, Scope: explorerPanelSpec().ID, Rows: func() ([]string, int, func(int, int) error) {
 		rows, at := e.loaded()
 		cur := slices.IndexFunc(at, func(ix tuidecl.Index) bool { return slices.Equal(e.keys(ix), e.at) })
 		return rows, cur, func(row, _ int) error { return e.moveTo(at[row]) }

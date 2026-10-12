@@ -321,7 +321,7 @@ func (r *related) moveTo(i int) {
 
 // FindPane is the drawer's rows for find, as it shows them.
 func (r *related) FindPane() FindPane {
-	return FindPane{Name: "relations", View: relationsPanelSpec().View, Rows: func() ([]string, int, func(int, int) error) {
+	return FindPane{Name: "relations", View: relationsPanelSpec().View, Scope: relationsPanelSpec().ID, Rows: func() ([]string, int, func(int, int) error) {
 		return r.labels(), r.at, func(row, _ int) error { r.moveTo(row); return nil }
 	}}
 }

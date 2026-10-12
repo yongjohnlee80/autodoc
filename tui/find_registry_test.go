@@ -15,13 +15,14 @@ type findableFake struct {
 	fake
 	pane  string // the pane's name
 	view  string
+	scope string
 	rows  []string
 	cur   int
 	moved []int
 }
 
 func (f *findableFake) FindPane() FindPane {
-	return FindPane{Name: f.pane, View: f.view, Rows: func() ([]string, int, func(int, int) error) {
+	return FindPane{Name: f.pane, View: f.view, Scope: f.scope, Rows: func() ([]string, int, func(int, int) error) {
 		return slices.Clone(f.rows), f.cur, func(row, _ int) error {
 			f.moved = append(f.moved, row)
 			f.cur = row
@@ -193,5 +194,50 @@ func TestAPageHitFromAnotherPaneGivesThePageTheKeyboard(t *testing.T) {
 	r.s.WaitForText(t, `find "kestrel": 1 of 1 in the page`)
 	if got := onLoop(r, func() string { return r.h.findTarget() }); got != findPage {
 		t.Fatalf("after the page's hit the keyboard is in %q, want the page", got)
+	}
+}
+
+// The scoped / n N are the registered panes': each pane with a Scope answers them in it, in find's
+// order, and a pane without one adds none. A scope two panes claim, or one main.qml does not
+// scope, is the registry's error.
+func TestTheScopedFindKeysAreTheRegisteredPanes(t *testing.T) {
+	findScopes := func(fs []Feature) []string {
+		var out []string
+		for _, k := range keyCatalog(fs).keys {
+			if k.Scope != "" && k.Seq == "/" {
+				out = append(out, k.Scope)
+			}
+		}
+		return out
+	}
+	if got := findScopes(nil); len(got) != 0 {
+		t.Fatalf("with no pane registered, / is scoped to %q", got)
+	}
+	fs := newHost(NewSession("unused", nil), Options{}).features()
+	if got, want := findScopes(fs), []string{"page", "explorer", "links"}; !slices.Equal(got, want) {
+		t.Fatalf("the built-in panes scope / to %q, want %q", got, want)
+	}
+	unscoped := &findableFake{fake: fake{name: "zz"}, pane: "birds", view: "zzList"}
+	if got := findScopes(append(slices.Clone(fs), unscoped)); len(got) != 3 {
+		t.Errorf("a pane with no scope added scoped keys: %q", got)
+	}
+	scoped := &findableFake{fake: fake{name: "zz"}, pane: "birds", view: "zzList", scope: "links"}
+	got := keyCatalog([]Feature{scoped})
+	var seqs []string
+	for _, k := range got.keys {
+		if k.Scope == "links" {
+			seqs = append(seqs, k.Seq)
+		}
+	}
+	if want := []string{"/", "n", "Shift+N", "d"}; !slices.Equal(seqs, want) {
+		t.Errorf("a pane scoped to links answers %q there, want %q", seqs, want)
+	}
+	for want, fs := range map[string][]Feature{
+		"the pane links's / is taken twice": {scoped, &findableFake{fake: fake{name: "yy"}, pane: "fish", view: "yyList", scope: "links"}},
+		"which main.qml does not scope":     {&findableFake{fake: fake{name: "zz"}, pane: "birds", view: "zzList", scope: "nowhere"}},
+	} {
+		if _, err := newRegistry(fs...); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("the registry said %v, want %q", err, want)
+		}
 	}
 }

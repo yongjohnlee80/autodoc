@@ -29,6 +29,9 @@ import (
 type FindPane struct {
 	Name string // "explorer": "find in the explorer", "n and N find again in the explorer"
 	View string // / searches the pane whose view has the keyboard
+	// Scope is the pane's keyScope (keys.go), where it answers / n N itself; "" for none, and the
+	// Window's / n N, which say where to put the keyboard, answer there
+	Scope string
 	// Rows are the pane's rows as it shows them, the row under its cursor (-1 for none), and how to put
 	// the cursor on row i, the match at col (grapheme columns). The move is bound to this same snapshot,
 	// so a pane whose rows are not plain indexes (the explorer's tree) moves to the row it listed.
@@ -284,7 +287,7 @@ func (p pageFind) FindPane() FindPane         { return p.h.pageFindPane() }
 // pageFindPane is the page's pane, the host's own: a hit puts the cursor on it, highlights it and
 // gives the page the keyboard.
 func (h *Host) pageFindPane() FindPane {
-	return FindPane{Name: findPage, View: "editor", Rows: func() ([]string, int, func(int, int) error) {
+	return FindPane{Name: findPage, View: "editor", Scope: "page", Rows: func() ([]string, int, func(int, int) error) {
 		cur, _ := h.core.Line()
 		return h.core.Lines(), cur, func(row, col int) error {
 			h.core.SetLine(row, col)

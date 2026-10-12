@@ -307,7 +307,7 @@ func scopeBlocks() string {
 // relations' alone. The check refuses a scoped key on a card, one of a pane main.qml does not
 // scope, and a sequence a pane takes twice.
 func TestAPanesKeysAreItsOwn(t *testing.T) {
-	k := keyCatalog(nil)
+	k := keyCatalog(newHost(NewSession("unused", nil), Options{}).features()) // the find panes give the scopes / n N
 	if err := k.check(mainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
