@@ -44,11 +44,8 @@ func (a *agents) State() map[string]any {
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,
 		"App.agentEdges":          choices(agentEdgeLabels...),
-		"App.agentEdgeIndex":      0,
 		"App.agentSizes":          choices(percentLabels(termSizes)...),
-		"App.agentSizeIndex":      nearest(termSizes, 50),
 		"App.agentLengths":        choices(percentLabels(termLengths)...),
-		"App.agentLengthIndex":    nearest(termLengths, 100),
 		"App.agentProfiles":       a.agentRows,
 		"App.agentProfilesStatus": "",
 		"App.agentFormTitle":      "",
@@ -57,9 +54,38 @@ func (a *agents) State() map[string]any {
 		"App.agentCommand":        "",
 		"App.agentSwitchQuestion": "",
 	}
-	maps.Copy(st, agentState(a.c.Prefs()))
 	return st
 }
+func (a *agents) Prefs() []PrefSpec { return agentPrefRows(a) }
+
+func agentPrefRows(a *agents) []PrefSpec {
+	edge := choicePref(prefAgentEdge, defaultAgentEdge, agentEdges, func(p *prefs) *string { return &p.agentEdge }).
+		shows(agentPreferenceState)
+	profiles := ValuePref(prefAgentProfiles, "[]", nil)
+	def := ValuePref(prefAgentDefault, "", nil)
+	if a != nil {
+		edge = edge.then(func(prefs) { a.c.DockPanel("agent") })
+		profiles = profiles.then(func(prefs) { a.listAgents() })
+		def = def.then(func(prefs) { a.listAgents() })
+	}
+	return []PrefSpec{edge, profiles, def}
+}
+
+func agentPreferenceState(p prefs) map[string]any {
+	st := agentState(p)
+	size, length := p.panelGeometry("agent", p.agentEdge)
+	maps.Copy(st, map[string]any{
+		"App.agentEdgeIndex":   indexOf(agentEdges, p.agentEdge),
+		"App.agentSizeIndex":   nearest(termSizes, size),
+		"App.agentLengthIndex": nearest(termLengths, length),
+	})
+	return st
+}
+
+func (a *agents) profiles() []agentProfile {
+	return agentProfilesOf(a.c.Prefs().Value(prefAgentProfiles))
+}
+func (a *agents) defaultProfile() string { return a.c.Prefs().Value(prefAgentDefault) }
 func (a *agents) Commands() map[string]Command {
 	return map[string]Command{
 		"App.toggleAgent":          none(a.toggleAgent),
@@ -135,8 +161,8 @@ func agentProfilesJSON(ps []agentProfile) string {
 }
 
 // agentProfile is the profile named name, ok false when there is none.
-func (p prefs) agentProfile(name string) (agentProfile, bool) {
-	for _, a := range p.agents {
+func (a *agents) profile(name string) (agentProfile, bool) {
+	for _, a := range a.profiles() {
 		if a.Name == name {
 			return a, true
 		}
@@ -157,8 +183,7 @@ func (h *agents) openAgentPanel() {
 		h.c.OpenDrawer("agent")
 		return
 	}
-	prefs := h.c.Prefs()
-	p, ok := prefs.agentProfile(prefs.agentDefault)
+	p, ok := h.profile(h.defaultProfile())
 	if !ok {
 		h.openAgentProfiles()
 		return

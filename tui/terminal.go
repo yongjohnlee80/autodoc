@@ -23,16 +23,33 @@ func (t *terminals) BindPanelHost(c PanelHost) error {
 func (*terminals) Name() string { return "terminals" }
 func (t *terminals) State() map[string]any {
 	st := map[string]any{
-		"App.terminalDir":         "",
-		"App.terminalShown":       false,
-		"App.terminalEdges":       choices(termEdgeLabels...),
-		"App.terminalEdgeIndex":   0,
-		"App.terminalSizes":       choices(percentLabels(termSizes)...),
-		"App.terminalSizeIndex":   nearest(termSizes, 30),
-		"App.terminalLengths":     choices(percentLabels(termLengths)...),
-		"App.terminalLengthIndex": nearest(termLengths, 100),
+		"App.terminalDir":     "",
+		"App.terminalShown":   false,
+		"App.terminalEdges":   choices(termEdgeLabels...),
+		"App.terminalSizes":   choices(percentLabels(termSizes)...),
+		"App.terminalLengths": choices(percentLabels(termLengths)...),
 	}
-	maps.Copy(st, termState(t.c.Prefs()))
+	return st
+}
+func (t *terminals) Prefs() []PrefSpec { return terminalPrefRows(t) }
+
+func terminalPrefRows(t *terminals) []PrefSpec {
+	row := choicePref(prefTermEdge, "bottom", termEdges, func(p *prefs) *string { return &p.termEdge }).
+		shows(terminalPreferenceState)
+	if t != nil {
+		row = row.then(func(prefs) { t.c.DockPanel("terminal") })
+	}
+	return []PrefSpec{row}
+}
+
+func terminalPreferenceState(p prefs) map[string]any {
+	st := termState(p)
+	size, length := p.panelGeometry("terminal", p.termEdge)
+	maps.Copy(st, map[string]any{
+		"App.terminalEdgeIndex":   indexOf(termEdges, p.termEdge),
+		"App.terminalSizeIndex":   nearest(termSizes, size),
+		"App.terminalLengthIndex": nearest(termLengths, length),
+	})
 	return st
 }
 func (t *terminals) Commands() map[string]Command {
@@ -114,27 +131,11 @@ func termDefault(edge string) (size, length int) {
 	return 30, 100
 }
 
-// readTermPrefs reads where the terminal opens, keeping the default for a place it cannot use.
-func readTermPrefs(p *prefs, m map[string]any) {
-	if s, _ := m[prefTermEdge].(string); indexOfOK(termEdges, s) {
-		p.termEdge = s
-	}
-}
-
 // pct is a stored percentage in [lo, hi].
 func pct(v any, lo, hi int) (int, bool) {
 	s, _ := v.(string)
 	n, err := strconv.Atoi(s)
 	return n, err == nil && n >= lo && n <= hi
-}
-
-func indexOfOK(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // termState is what the document reads of the terminal's preferences.
@@ -177,7 +178,7 @@ func abs(n int) int {
 func (t *terminals) setTerminalEdge(i int) {
 	if i >= 0 && i < len(termEdges) {
 		e := termEdges[i]
-		t.c.KeepPreference(prefTermEdge, e, func(p *prefs) { p.termEdge = e })
+		t.c.SetPref(prefTermEdge, e)
 		t.c.DockPanel("terminal")
 	}
 }

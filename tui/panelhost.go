@@ -25,7 +25,7 @@ type PanelHost interface {
 	OpenDrawer(id string)
 	CloseDrawer(id string)
 	DockPanel(id string)
-	KeepPreference(name, value string, change func(*prefs))
+	SetPref(name, value string)
 	KeepPanelGeometry(id, dimension string, percent int)
 	ActiveWorkspace() (wsInfo, bool)
 	// RefreshRelations is transitional while links still belongs to legacy.
@@ -52,9 +52,6 @@ func (c core) TogglePanel(id string)                         { c.h.togglePanel(i
 func (c core) OpenDrawer(id string)                          { c.h.openDrawer(id) }
 func (c core) CloseDrawer(id string)                         { c.h.closeDrawer(id) }
 func (c core) DockPanel(id string)                           { c.h.dockPanel(id) }
-func (c core) KeepPreference(name, value string, change func(*prefs)) {
-	c.h.setPref(name, value, change)
-}
 func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 	c.h.keepPanelGeo(id, dimension, percent)
 }

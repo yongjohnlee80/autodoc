@@ -18,11 +18,11 @@ func (h *agents) openAgentProfiles() {
 
 // listAgents shows the profiles, the default marked, and keeps the cursor on a row that exists.
 func (h *agents) listAgents() {
-	p := h.c.Prefs()
-	rows := make([]rowOf, len(p.agents))
-	for i, a := range p.agents {
+	profiles, def := h.profiles(), h.defaultProfile()
+	rows := make([]rowOf, len(profiles))
+	for i, a := range profiles {
 		mark := ""
-		if a.Name == p.agentDefault {
+		if a.Name == def {
 			mark = "●"
 		}
 		if a.Name == h.agentRunning {
@@ -34,26 +34,26 @@ func (h *agents) listAgents() {
 	switch {
 	case len(rows) == 0:
 		h.c.Set("App.agentProfilesStatus", "no profiles yet: Add… one, a name and the command that starts the agent")
-	case p.agentDefault == "":
+	case def == "":
 		h.c.Set("App.agentProfilesStatus", "Make default marks the one SPC g opens")
 	default:
-		h.c.Set("App.agentProfilesStatus", "SPC g opens "+p.agentDefault+" · {root} and {workspace} in a command are filled in")
+		h.c.Set("App.agentProfilesStatus", "SPC g opens "+def+" · {root} and {workspace} in a command are filled in")
 	}
 }
 
 func (h *agents) agentAt(i int) (agentProfile, bool) {
-	p := h.c.Prefs()
-	if i < 0 || i >= len(p.agents) {
+	profiles := h.profiles()
+	if i < 0 || i >= len(profiles) {
 		return agentProfile{}, false
 	}
-	return p.agents[i], true
+	return profiles[i], true
 }
 
 // keepAgents writes the profiles and the default, and lists them again.
 func (h *agents) keepAgents(agents []agentProfile, def string) {
-	h.c.KeepPreference(prefAgentProfiles, agentProfilesJSON(agents), func(p *prefs) { p.agents = agents })
-	if def != h.c.Prefs().agentDefault {
-		h.c.KeepPreference(prefAgentDefault, def, func(p *prefs) { p.agentDefault = def })
+	h.c.SetPref(prefAgentProfiles, agentProfilesJSON(agents))
+	if def != h.defaultProfile() {
+		h.c.SetPref(prefAgentDefault, def)
 	}
 	h.listAgents()
 }
@@ -94,8 +94,7 @@ func (h *agents) saveAgent(name, command string) {
 		refuse("a profile is a name and the command that starts the agent")
 		return
 	}
-	prefs := h.c.Prefs()
-	agents := append([]agentProfile(nil), prefs.agents...)
+	agents := h.profiles()
 	at := -1
 	for i, a := range agents {
 		if a.Name == name && a.Name != h.editingAgent {
@@ -106,7 +105,7 @@ func (h *agents) saveAgent(name, command string) {
 			at = i
 		}
 	}
-	def := prefs.agentDefault
+	def := h.defaultProfile()
 	if at >= 0 {
 		if def == agents[at].Name {
 			def = name
@@ -141,14 +140,14 @@ func (h *agents) removeAgent(i int) {
 // removeAgentConfirmed removes the exact profile the question named. A profile
 // edited or removed while the card was open needs a new question.
 func (h *agents) removeAgentConfirmed(a agentProfile) {
-	prefs := h.c.Prefs()
-	i := slices.Index(prefs.agents, a)
+	profiles := h.profiles()
+	i := slices.Index(profiles, a)
 	if i < 0 {
 		h.c.Set("App.status", "the agent profile changed; ask to remove it again")
 		return
 	}
-	agents := append(append([]agentProfile(nil), prefs.agents[:i]...), prefs.agents[i+1:]...)
-	def := prefs.agentDefault
+	agents := append(append([]agentProfile(nil), profiles[:i]...), profiles[i+1:]...)
+	def := h.defaultProfile()
 	if def == a.Name {
 		def = ""
 	}
@@ -162,7 +161,7 @@ func (h *agents) makeAgentDefault(i int) {
 	if !ok {
 		return
 	}
-	h.keepAgents(h.c.Prefs().agents, a.Name)
+	h.keepAgents(h.profiles(), a.Name)
 	h.c.Set("App.status", "SPC g opens "+a.Name)
 }
 
@@ -189,7 +188,7 @@ func (h *agents) useAgent(i int) {
 
 // switchAgentConfirmed stops the agent running and starts the one asked for.
 func (h *agents) switchAgentConfirmed() {
-	a, ok := h.c.Prefs().agentProfile(h.switchingAgent)
+	a, ok := h.profile(h.switchingAgent)
 	if !ok {
 		return
 	}

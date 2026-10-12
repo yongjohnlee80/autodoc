@@ -115,9 +115,6 @@ type prefs struct {
 	// the GUI's fonts and zoom (fonts.go): "" and 0 are the window's defaults
 	cellFont, proseFont string
 	fontSize, zoom      int
-	// agents are the agent terminal's profiles, and agentDefault the one SPC g opens (agent.go)
-	agents       []agentProfile
-	agentDefault string
 	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
 	agentEdge string
 	// values are the features' own preferences (ValuePref), by name: read with Value
@@ -129,9 +126,10 @@ func defaultPrefs() prefs { return defaultPrefsFor(false) }
 // defaultPrefsFor are the defaults of the terminal's UI, or of the GUI's: they differ in the
 // theme alone.
 func defaultPrefsFor(gui bool) prefs {
-	p := prefs{termEdge: "bottom", searchStages: allStagesChecked(),
-		agentEdge: defaultAgentEdge}
+	p := prefs{searchStages: allStagesChecked()}
 	readRows(&p, nil, legacyPrefRows(nil, gui))
+	readRows(&p, nil, terminalPrefRows(nil))
+	readRows(&p, nil, agentPrefRows(nil))
 	return p
 }
 
@@ -262,14 +260,8 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 			}
 		}
 	}
-	readTermPrefs(&p, m)
-	readAgentPrefs(&p, m)
-	if s, ok := str(prefAgentProfiles); ok {
-		p.agents = agentProfilesOf(s)
-	}
-	if s, ok := str(prefAgentDefault); ok {
-		p.agentDefault = s
-	}
+	readRows(&p, m, terminalPrefRows(nil))
+	readRows(&p, m, agentPrefRows(nil))
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
 	readFontPrefs(&p, m)

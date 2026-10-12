@@ -24,14 +24,6 @@ func agentDefault(edge string) (size, length int) {
 	return 50, 100
 }
 
-// readAgentPrefs reads where the agent opens, keeping the default for a place it cannot use. Its
-// sizes are read with the side panels' (readPanelPrefs).
-func readAgentPrefs(p *prefs, m map[string]any) {
-	if s, _ := m[prefAgentEdge].(string); indexOfOK(agentEdges, s) {
-		p.agentEdge = s
-	}
-}
-
 // agentState is what the document reads of where the agent opens.
 func agentState(p prefs) map[string]any {
 	size, length := p.panelGeometry("agent", p.agentEdge)
@@ -54,7 +46,7 @@ func (h *agents) syncAgentDialog() {
 func (h *agents) setAgentEdge(i int) {
 	if i >= 0 && i < len(agentEdges) {
 		e := agentEdges[i]
-		h.c.KeepPreference(prefAgentEdge, e, func(p *prefs) { p.agentEdge = e })
+		h.c.SetPref(prefAgentEdge, e)
 		h.c.DockPanel("agent")
 		h.syncAgentDialog() // the size and length shown are the new place's
 	}

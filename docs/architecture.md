@@ -126,6 +126,11 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
 - `PreferencesChanged()` projects each feature's current preferences into its own sources and
   choosers. Geometry/float readback uses the program's validated panel schema; standalone
   preference readers use fresh built-in descriptors without runtime callbacks.
+- Terminal and agent keys are declared through their `Prefs()` rows and written through
+  `Core.SetPref`; no feature supplies an arbitrary whole-prefs mutation callback. Edge rows
+  publish their geometry and chooser sources through `State`, and profile/default rows refresh
+  their model through `Changed`. JSON profiles stay raw `ValuePref` strings and are decoded
+  inside the agents feature, not kept as a second mutable profile list in Host preferences.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
 - **A list to filter and choose from is a picker, never a fifth layout.**

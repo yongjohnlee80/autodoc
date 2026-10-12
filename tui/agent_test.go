@@ -251,7 +251,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 		return strings.Contains(sc, "Make default marks the one SPC g opens") && !onLoop(r, func() bool { return r.h.panelOpen["agent"] })
 	})
 	again := attached(t, d)
-	if n := onLoop(again, func() int { return len(again.h.prefs.agents) }); n != 1 {
+	if n := onLoop(again, func() int { return len(again.h.agents.profiles()) }); n != 1 {
 		t.Errorf("a new TUI reads %d profiles, want the 1 kept", n)
 	}
 }
@@ -259,7 +259,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	profiles := []agentProfile{{Name: "alpha", Command: "alpha"}, {Name: "beta", Command: "beta"}, {Name: "gamma", Command: "gamma"}}
 	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "beta")
-	count := func() int { return onLoop(r, func() int { return len(r.h.prefs.agents) }) }
+	count := func() int { return onLoop(r, func() int { return len(r.h.agents.profiles()) }) }
 	onLoop(r, func() bool { r.h.agents.removeAgent(1); return true })
 	r.s.WaitForText(t, "remove the agent profile?")
 	if count() != 3 {
@@ -283,17 +283,17 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	}
 	onLoop(r, func() bool {
 		r.h.agents.removeAgent(1) // beta at row 1 when asked
-		r.h.prefs.agents = []agentProfile{profiles[1], profiles[0], profiles[2]}
+		r.h.agents.c.SetPref(prefAgentProfiles, agentProfilesJSON([]agentProfile{profiles[1], profiles[0], profiles[2]}))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
 	r.keys(t, key('y'))
 	r.s.WaitFor(t, "beta removed", func(string) bool { return count() == 2 })
-	got := onLoop(r, func() []agentProfile { return append([]agentProfile(nil), r.h.prefs.agents...) })
+	got := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
 	if got[0] != profiles[0] || got[1] != profiles[2] {
 		t.Fatalf("Yes removed a changed row instead of beta: %v", got)
 	}
-	if def := onLoop(r, func() string { return r.h.prefs.agentDefault }); def != "" {
+	if def := onLoop(r, func() string { return r.h.agents.defaultProfile() }); def != "" {
 		t.Errorf("removed profile is still default: %q", def)
 	}
 }
@@ -306,7 +306,9 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{profile}, "beta")
 	onLoop(r, func() bool {
 		r.h.agents.removeAgent(0)
-		r.h.prefs.agents[0].Command = "beta --new"
+		profiles := r.h.agents.profiles()
+		profiles[0].Command = "beta --new"
+		r.h.agents.c.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
 		return true
 	})
 	r.s.WaitForText(t, "remove the agent profile?")
@@ -314,11 +316,11 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 	r.s.WaitFor(t, "the stale question closed", func(sc string) bool {
 		return !strings.Contains(sc, "remove the agent profile?")
 	})
-	got := onLoop(r, func() []agentProfile { return append([]agentProfile(nil), r.h.prefs.agents...) })
+	got := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
 	if len(got) != 1 || got[0].Name != "beta" || got[0].Command != "beta --new" {
 		t.Fatalf("stale Yes removed or rewrote the edited profile: %v", got)
 	}
-	if def := onLoop(r, func() string { return r.h.prefs.agentDefault }); def != "beta" {
+	if def := onLoop(r, func() string { return r.h.agents.defaultProfile() }); def != "beta" {
 		t.Errorf("refused removal changed the default to %q", def)
 	}
 }
