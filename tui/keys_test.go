@@ -57,7 +57,7 @@ func TestKeysAreGenerated(t *testing.T) {
 // every card is in the help under its heading.
 func TestEveryKeyIsInTheHelp(t *testing.T) {
 	k := keyCatalog(nil)
-	help := helpText(k)
+	help := helpText(k, nil, nil)
 	for _, key := range k.on("") {
 		if !strings.Contains(help, key.Show) {
 			t.Errorf("the Window's %s (%s) is not in the help", key.Seq, key.Show)
@@ -114,7 +114,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 	if err != nil || !strings.Contains(main, "    AgentsCard { id: agentsCard }\n") || !strings.Contains(main, "    Leader { id: leader }\n") {
 		t.Errorf("the cards' declarations: %v\n%s", err, main)
 	}
-	if !strings.Contains(helpText(k), "SPC a — AGENTS\n  b  send the buffer") {
+	if !strings.Contains(helpText(k, nil, nil), "SPC a — AGENTS\n  b  send the buffer") {
 		t.Error("the help lacks the agents card")
 	}
 	if _, err := keyCatalog(nil).withGenerated("no markers"); err == nil {

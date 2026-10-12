@@ -1,10 +1,119 @@
 package tui
 
-// HELP — the keys, and what each needs (a key that silently needs something reads as broken).
+import (
+	"fmt"
+	"slices"
+	"strings"
+	"unicode/utf8"
+)
 
-// helpText is Help › Keys: the Window's keys, each card as it lists its keys (keys.go), then the
-// page, the panels and what a key needs.
-func helpText(k keyset) string { return helpKeys + "\n\n" + k.helpCards() + "\n\n" + helpRest }
+// HELP — the keys, the commands, and what each needs (a key that silently needs something reads as
+// broken).
+
+// helpText is Help › Keys: the Window's keys, each card as it lists its keys (keys.go), every
+// command of the catalog (catalog.go) with its ':' names and its keys, more naming keys the key
+// catalog does not hold (a plugin's SPC p letter), then the page, the panels and what a key needs.
+func helpText(k keyset, cat *catalog, more map[string][]string) string {
+	cmds := k.helpCommands(cat, more)
+	if cmds != "" {
+		cmds += "\n\n"
+	}
+	return helpKeys + "\n\n" + k.helpCards() + "\n\n" + cmds + helpRest
+}
+
+// commandsChanged is the catalog changed: F1 is made anew once the loop is free, however many
+// commands a script registers at once.
+func (h *Host) commandsChanged() {
+	if h.p == nil || h.helpPosted {
+		return
+	}
+	h.helpPosted = true
+	h.p.Post(func() {
+		h.helpPosted = false
+		h.helpNow = helpText(h.keys, h.cat, nil)
+		h.set("App.helpText", h.helpNow)
+	})
+}
+
+// helpGroups are the catalog's sources as F1 heads them, in its order.
+var helpGroups = []struct {
+	source Source
+	head   string
+}{{SourceBuiltin, "AutoDoc's"}, {SourceFeature, "the features'"}, {SourceLua, "yours, in Lua (autodoc.command)"}, {SourcePlugin, "the plugins' (SPC p)"}}
+
+// helpCommands is F1's COMMANDS: every entry by its source, each line its id, its ':' names, its
+// keys and its title. The names are the ones it owns now, so F1, ':' and its completion name the
+// same owner. "" with no catalog.
+func (k keyset) helpCommands(cat *catalog, more map[string][]string) string {
+	if cat == nil {
+		return ""
+	}
+	width := 0
+	for _, e := range cat.entries() {
+		width = max(width, utf8.RuneCountInString(e.ID))
+	}
+	var b strings.Builder
+	b.WriteString("COMMANDS (each by its id, which Lua's autodoc.run(id) runs; its : names; its keys; what it does)")
+	for _, g := range helpGroups {
+		var lines []string
+		for _, e := range cat.entries() {
+			if e.Source != g.source {
+				continue
+			}
+			names := cat.owned(e.ID)
+			for i, n := range names {
+				names[i] = ":" + n
+			}
+			keys := append(k.keysOf(e), more[e.ID]...)
+			lines = append(lines, fmt.Sprintf("    %s%s  %s · %s · %s", e.ID, strings.Repeat(" ", width-utf8.RuneCountInString(e.ID)),
+				orDash(strings.Join(names, " ")), orDash(strings.Join(keys, ", ")), e.Title))
+		}
+		if len(lines) > 0 {
+			b.WriteString("\n  " + g.head + "\n" + strings.Join(lines, "\n"))
+		}
+	}
+	return b.String()
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// keysOf are the keys that run e, as help names them: its Cmd's, and its twin's.
+func (k keyset) keysOf(e *Entry) []string {
+	var out []string
+	for _, key := range k.keys {
+		if key.Cmd == e.ID || e.Twin != "" && key.Run == e.Twin {
+			if n := k.keyName(key, 0); !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
+// keyName is key as typed from the page: a Window key's own name, a leader key after SPC, a key
+// on a card after the keys that open the card.
+func (k keyset) keyName(key Key, depth int) string {
+	show := key.Show
+	if show == "" {
+		show = key.Seq
+	}
+	if key.Card == leader {
+		return "SPC " + show
+	}
+	if key.Card == "" || depth > len(k.cards) {
+		return show
+	}
+	i := slices.IndexFunc(k.keys, func(o Key) bool { return o.Opens == key.Card })
+	if i < 0 {
+		return show
+	}
+	return k.keyName(k.keys[i], depth+1) + " " + show
+}
 
 const helpKeys = `KEYS
   Space       the leader card, in Normal mode: a key runs its command (its list is the card);

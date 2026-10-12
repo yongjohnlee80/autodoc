@@ -248,7 +248,7 @@ func (h *Host) state() map[string]any {
 		"App.managerIndex":   0,
 		"App.workspaceIndex": 0,
 
-		"App.helpText":      helpText(h.keys),
+		"App.helpText":      helpText(h.keys, nil, nil), // the commands follow once attached (commandsChanged)
 		"App.arrangeTitle":  "arrange a panel",
 		"App.tutorialTitle": "", "App.tutorialText": "", "App.tutorialBack": false, "App.tutorialNext": true,
 		"App.gui":           h.gui,

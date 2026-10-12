@@ -274,6 +274,9 @@ type Host struct {
 	pendingPlugin  *pluginChange
 	managedPlugins *rows[managedPlugin]
 	pageWidth      int // the page's width as last set: the ruler, the border, the gutter
+	// helpNow is F1's text as last set; helpPosted, that a refresh of it is on its way
+	helpNow    string
+	helpPosted bool
 	// moreFeatures follow the host's own in features(): a test's, whose keys and catalog entries
 	// run in the program as any feature's do
 	moreFeatures []Feature
@@ -399,6 +402,9 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
+	if h.cat != nil {
+		h.cat.changed = h.commandsChanged // F1 lists the commands as they come and go (help.go)
+	}
 	h.cat.attach(h.core)             // the catalog's verbs on the command line: find is the page's (catalog.go)
 	h.core.SetOnEscape(h.escapeFind) // Esc in the page ends its find (find.go)
 	h.loadScripts()                  // the Lua commands: AutoDoc's own, then the user's (scripts.go)
