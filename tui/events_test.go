@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // Two TUIs on one daemon keep their own workspace and their own unsaved file while each sees what
@@ -65,21 +67,26 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 }
 
 // A peer deleting the workspace this TUI has an unsaved file in keeps the file's text, as the
-// untitled draft, in the workspace entered next.
+// untitled draft, in the workspace entered next. The draft is a new page: a YAML file kept leaves
+// no key path on the frame, and the outline reads the draft as Markdown.
 func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	d := startManaged(t, map[string]string{
-		"alpha": fileDir(t, "a.md", "# Alpha\n"),
+		"alpha": fileDir(t, "a.md", "# Alpha\n", "conf.yaml", "server:\n  host: db\n"),
 		"beta":  fileDir(t, "b.md", "# Beta\n"),
 	})
 	one := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
 	two := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "beta"})
 	one.s.WaitForText(t, "· alpha")
 	two.s.WaitForText(t, "· beta")
-	one.h.p.Post(func() { one.h.openPath("a.md") })
-	one.waitFile(t, "a.md")
+	one.h.p.Post(func() { one.h.openPath("conf.yaml") })
+	one.waitFile(t, "conf.yaml")
 	one.h.p.Post(func() {
-		one.h.editor.SetValue("# Alpha\n\nwords nobody saved\n")
+		one.h.editor.SetValue("server:\n  host: db\n# words nobody saved\n")
 		one.h.edited()
+		one.h.core.SetLine(1, 4)
+	})
+	one.s.WaitFor(t, "the key path on the frame", func(string) bool {
+		return strings.Contains(one.frameTitle(), "conf.yaml › server › host")
 	})
 	one.s.WaitFor(t, "dirty", func(string) bool { return one.file().dirty })
 	two.h.p.Post(func() {
@@ -92,6 +99,10 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	}
 	one.s.WaitFor(t, "the frame titled as the draft", func(string) bool {
 		t := one.frameTitle()
-		return strings.Contains(t, "┌ "+untitled) && !strings.Contains(t, "a.md")
+		return strings.Contains(t, "┌ "+untitled) && !strings.Contains(t, "conf.yaml") && !strings.Contains(t, "›")
 	})
+	one.h.p.Post(func() { one.h.outline.open() })
+	if p := onLoop(one, func() Page { return one.h.outline.page }); p.Kind != kind.Markdown || p.Ref.path != "" {
+		t.Fatalf("the outline reads the kept draft as %v of %q, want the Markdown draft", p.Kind, p.Ref.path)
+	}
 }

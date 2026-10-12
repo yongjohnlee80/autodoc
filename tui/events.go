@@ -189,14 +189,15 @@ func (h *Host) applyEvents(events []peerEvent) {
 
 // keepDraftOnLeave keeps the file's unsaved text when its workspace is about to go: the file
 // becomes the untitled draft (its path names a workspace that no longer exists), and the next
-// workspace entered keeps it instead of starting a blank page.
+// workspace entered keeps it instead of starting a blank page. The draft is another page: shown as
+// one, so the watchers read it as the draft (Markdown, no file), not as the file it was.
 func (h *Host) keepDraftOnLeave() {
 	if !h.file.dirty || h.file.outside() { // an outside file is in no workspace: it stays as it is
 		return
 	}
 	h.file.open, h.file.path, h.file.version = false, "", ""
 	h.keepDraft = true
-	h.showTitle()
+	h.showPage()
 	h.setDirty(true)
 	h.notify("the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace")
 }
