@@ -100,7 +100,8 @@ func (t *todos) Commands() map[string]Command {
 // Catalog is the todos' user commands (catalog.go): each runs what its App.* twin runs.
 func (t *todos) Catalog() []Entry {
 	return []Entry{
-		builtin("todos.open", "todos", "App.openTodos()", t.open),
+		{ID: "todos.open", Title: "todos", Verb: "todos", Help: "open the todos (SPC x)", Twin: "App.openTodos()",
+			Run: func(Invocation) error { t.open(); return nil }},
 		builtin("todos.new_store", "a new todo store", "App.todoNew()", t.chooseNew),
 		builtin("todos.load_store", "load a todo store", "App.todoLoad()", t.chooseLoad),
 	}

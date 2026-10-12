@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -130,4 +132,41 @@ func TestSearchMenuOpensTheCommandLine(t *testing.T) {
 	r.waitFile(t, "a.md")
 	onLoop(r, func() bool { r.h.openCommandLine(); return true })
 	r.s.WaitForText(t, "VIM Commands")
+}
+
+// TestTheCommandLineKeepsItsParity (ADR 1791762474 §5.3, §5.9): with ':' made from the catalog, a
+// feature's verb runs and completes with its help, :find takes the whole line, a Lua command still
+// gets ed, its words and its raw line, and a Lua w still replaces golib's.
+func TestTheCommandLineKeepsItsParity(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "echo.lua"), []byte(`
+autodoc.command{ name = "echo", run = function(ed, args, line) ed:insert(#args .. "|" .. line .. "|") end }
+autodoc.command{ name = "w", run = function(ed) ed:insert("lua's w") end }
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "x two words y\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.command(t, "find two words")
+	r.s.WaitForText(t, `finding "two words" 1/1`)
+	r.command(t, "nohl")
+	r.command(t, "echo a  b")
+	r.s.WaitForText(t, "2|a  b|")
+	r.command(t, "w")
+	r.s.WaitForText(t, "lua's w")
+	if got := d.read(t, "kb", "a.md"); got != "x two words y\n" {
+		t.Fatalf("Lua's :w saved: %q", got)
+	}
+	// a feature's verb: Tab completes it with its help, and it runs
+	r.keys(t, key(':'))
+	r.s.WaitForText(t, "VIM Commands")
+	r.keys(t, decltest.Type("tod")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab})
+	r.s.WaitForText(t, "todos — open the todos (SPC x)")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
+	r.s.WaitForText(t, "todos · kb")
 }
