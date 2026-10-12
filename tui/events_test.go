@@ -71,7 +71,7 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 // no key path on the frame, and the outline reads the draft as Markdown.
 func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	d := startManaged(t, map[string]string{
-		"alpha": fileDir(t, "a.md", "# Alpha\n", "conf.yaml", "server:\n  host: db\n"),
+		"alpha": fileDir(t, "conf.yaml", "server:\n  host: db\n"),
 		"beta":  fileDir(t, "b.md", "# Beta\n"),
 	})
 	one := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
