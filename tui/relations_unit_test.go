@@ -144,12 +144,14 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 	r := newRelated(c)
 	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
 	c.deferred = true
-	for _, scope := range []string{"document", "workspace", "failure"} {
+	for _, scope := range []string{"document", "workspace", "graph.links", "graph.backlinks", "graph.unresolved", "graph.neighborhood"} {
 		before, of := slices.Clone(r.rows.All()), r.of
 		gen, epoch := c.h.file.gen, c.h.epoch
-		if scope == "failure" {
-			c.answers["graph.links"] = func([]any) (any, error) {
-				return nil, errors.New("graph lookup refused")
+		scriptedGraph(c.scriptedCore)
+		r.deep = scope == "graph.neighborhood"
+		if strings.HasPrefix(scope, "graph.") {
+			c.answers[scope] = func([]any) (any, error) {
+				return nil, errors.New(scope + " refused")
 			}
 		}
 		r.load("kb", "a.md")
@@ -165,7 +167,10 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 			t.Fatalf("%s answer replaced the current relations", scope)
 		}
 	}
-	if !slices.Equal(c.failed, []string{"relations: graph lookup refused"}) {
+	if !slices.Equal(c.failed, []string{
+		"relations: graph.links refused", "relations: graph.backlinks refused",
+		"relations: graph.unresolved refused", "relations: graph.neighborhood refused",
+	}) {
 		t.Fatalf("refresh failure was not reported: %v", c.failed)
 	}
 }
