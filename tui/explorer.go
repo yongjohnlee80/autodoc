@@ -101,10 +101,19 @@ func (e *explorer) State() map[string]any { return map[string]any{"App.explorer"
 
 func (e *explorer) Commands() map[string]Command {
 	return map[string]Command{
+		"App.toggleExplorer":    none(e.toggle),
 		"App.explorerActivated": oneIndex(e.activated),
 		"App.explorerMoved":     oneIndex(e.moved),
 	}
 }
+
+// Catalog is the explorer's user command (catalog.go): it runs what App.toggleExplorer runs.
+func (e *explorer) Catalog() []Entry {
+	return []Entry{builtin("explorer.toggle", "the explorer", "App.toggleExplorer()", e.toggle)}
+}
+
+// toggle opens the drawer, or closes it.
+func (e *explorer) toggle() { e.c.TogglePanel("explorer") }
 
 // Listed shows the workspaces when they changed, and the workspace in use's files when the host
 // listed them anew.

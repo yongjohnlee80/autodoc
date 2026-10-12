@@ -35,7 +35,6 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("find.open", "find in the page", "App.openFindInPage()", h.openFindInPage),
 		builtin("find.next", "find next", "App.findAgainNext()", func() { h.findAgain(+1) }),
 		builtin("find.previous", "find previous", "App.findAgainPrevious()", func() { h.findAgain(-1) }),
-		builtin("explorer.toggle", "the explorer", "App.toggleExplorer()", func() { h.togglePanel("explorer") }),
 		builtin("links.toggle", "the relations", "App.toggleLinks()", func() { h.togglePanel("links") }),
 		builtin("agent.toggle", "AI agent", "App.toggleAgent()", h.toggleAgent),
 		builtin("terminal.toggle", "the terminal", "App.toggleTerminal()", h.toggleTerminal),

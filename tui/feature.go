@@ -269,6 +269,8 @@ type Core interface {
 	// View calls a method of a view of the document, by its id: a drawer's close, a tree's
 	// toggleExpanded.
 	View(id, method string, args ...any) error
+	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
+	TogglePanel(id string)
 }
 
 // Workspace is one of the daemon's workspaces as a feature reads it: its name, its state, and what
@@ -330,6 +332,7 @@ func (c core) Workspaces() []Workspace {
 	return list
 }
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
+func (c core) TogglePanel(id string)                     { c.h.togglePanel(id) }
 func (c core) SetPref(name, value string) {
 	for _, row := range c.h.prefRows {
 		if row.Name == name {

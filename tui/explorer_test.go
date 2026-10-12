@@ -60,7 +60,7 @@ func TestTheExplorerTakesTheHostsListings(t *testing.T) {
 }
 
 // Enter on a file opens it and closes the drawer; on a workspace or a folder, it opens or closes
-// the row.
+// the row. SPC e opens or closes the drawer.
 func TestTheExplorerOpensWhatIsActivated(t *testing.T) {
 	c := newScripted("kb")
 	c.answers["index.list"] = func([]any) (any, error) {
@@ -77,7 +77,8 @@ func TestTheExplorerOpensWhatIsActivated(t *testing.T) {
 	if err := e.activated(tuidecl.Index{Row: 0, Parent: &kb}); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"explorerTree.toggleExpanded", "explorer.close"}; !slices.Equal(c.views, want) {
+	e.toggle()
+	if want := []string{"explorerTree.toggleExpanded", "explorer.close", "explorer.toggle"}; !slices.Equal(c.views, want) {
 		t.Errorf("views called: %v, want %v", c.views, want)
 	}
 	if !slices.Equal(c.files, []string{"kb:a.md"}) {

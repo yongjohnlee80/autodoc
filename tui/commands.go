@@ -76,7 +76,6 @@ func (h *Host) commands() map[string]Command {
 		"App.placePlugin":       oneNumber("a row", h.placePlugin),
 
 		// the panels
-		"App.toggleExplorer":    none(func() { h.togglePanel("explorer") }),
 		"App.toggleLinks":       none(func() { h.togglePanel("links") }),
 		"App.toggleTerminal":    none(h.toggleTerminal),
 		"App.terminalExited":    oneNumber("an exit code", h.terminalExited),

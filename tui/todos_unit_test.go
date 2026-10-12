@@ -54,6 +54,7 @@ func (s *scriptedCore) Say(msg string)             { s.notes = append(s.notes, m
 func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
 func (s *scriptedCore) Files() FileList            { return s.listing }
 func (s *scriptedCore) Workspaces() []Workspace    { return s.spaces }
+func (s *scriptedCore) TogglePanel(id string)      { s.views = append(s.views, id+".toggle") }
 func (s *scriptedCore) View(id, method string, _ ...any) error {
 	s.views = append(s.views, id+"."+method)
 	return nil
