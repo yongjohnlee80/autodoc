@@ -64,7 +64,7 @@ func TestEveryKeyIsInTheHelp(t *testing.T) {
 		}
 	}
 	for _, c := range k.cards {
-		text := cardText(k.on(c.ID))
+		text := cardText(c.Groups, k.on(c.ID))
 		for _, key := range k.on(c.ID) {
 			if !strings.Contains(text, key.Show+"  "+key.Does) {
 				t.Errorf("%s is not on the card %s", key.Show, c.ID)
@@ -123,6 +123,49 @@ func TestACardOpensFromAKey(t *testing.T) {
 	// a title is a QML string, quoted whatever it holds
 	if q := cardQML(Card{ID: "x", View: "X", Title: `say "hi" \ bye`}, nil); !strings.Contains(q, `title: "say \"hi\" \\ bye"`) {
 		t.Errorf("the title is not quoted:\n%s", q)
+	}
+}
+
+// A feature's key on SPC's card is under the group it names, the agents' under AGENTS after the
+// host's two; one naming a group the card lacks, or none, is under MORE, last in the last column,
+// and a card without groups lists its keys two a row, as ever.
+func TestAFeaturesKeyIsUnderItsGroupOrMore(t *testing.T) {
+	f := &keyedFake{fake: fake{name: "zz"},
+		cards: []Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: leader, Help: "SPC Z — ZZ"}},
+		keys: []Key{
+			{Card: leader, Seq: "a", Show: "a", Does: "agents…", Group: groupAgents, Opens: "zzCard"},
+			{Card: leader, Seq: "Shift+Z", Show: "Z", Does: "zz's own", Group: "ZZ", Run: "App.x()"},
+			{Card: leader, Seq: "Shift+Y", Show: "Y", Does: "no group", Run: "App.y()"},
+			{Card: leader, Seq: "Shift+X", Show: "X", Group: "ZZ", Run: "App.z()"}, // listed nowhere: no Does
+			{Card: "zzCard", Seq: "b", Show: "b", Does: "send the buffer", Run: "App.b()"},
+			{Card: "zzCard", Seq: "f", Show: "f", Does: "forward", Run: "App.f()"},
+			{Card: "zzCard", Seq: "Shift+F", Show: "F", Does: "forward all", Group: groupAgents, Run: "App.g()"},
+		}}
+	k := keyCatalog([]Feature{f})
+	if err := k.check(mainIDs, nil); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(k.cardState()[textSource(leader)].(string), "\n")
+	row, col := headingAt(t, lines, groupAgents)
+	if got := cellAt(lines, row+3, col); got != "a  agents…" {
+		t.Errorf("the agents' key is %q under AGENTS, after its two:\n%s", got, strings.Join(lines, "\n"))
+	}
+	last := leaderGroups[len(leaderGroups)-1]
+	lastRow, lastCol := headingAt(t, lines, last[len(last)-1])
+	row, col = headingAt(t, lines, groupMore)
+	if col != lastCol || row <= lastRow {
+		t.Errorf("MORE is at row %d column %d, not under %s (row %d column %d)", row, col, last[len(last)-1], lastRow, lastCol)
+	}
+	for i, want := range []string{"Z  zz's own", "Y  no group", ""} {
+		if got := cellAt(lines, row+1+i, col); got != want {
+			t.Errorf("row %d under MORE holds %q, want %q", i, got, want)
+		}
+	}
+	if text := strings.Join(lines, "\n"); strings.Contains(text, "ZZ") || strings.Contains(text, "X  ") {
+		t.Errorf("a group the card lacks is headed, or a key without Does listed:\n%s", text)
+	}
+	if got := k.cardState()[textSource("zzCard")]; got != "b  send the buffer  f  forward\nF  forward all" {
+		t.Errorf("the card without groups: %q", got)
 	}
 }
 

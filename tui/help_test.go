@@ -10,29 +10,100 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// TestTheLeaderCardsColumnsAlign: every row's second command starts in the same column, so its
-// key letters line up. The last row may hold one command, when their number is odd.
-func TestTheLeaderCardsColumnsAlign(t *testing.T) {
-	row := regexp.MustCompile(`^(\S+)  (.+?) {2,}(\S+)  `)
-	lone := regexp.MustCompile(`^\S+  \S.*\S$`)
-	col := -1
-	lines := strings.Split(cardText(leaderKeys), "\n")
-	for i, line := range lines {
-		m := row.FindStringSubmatchIndex(line)
-		if m == nil && i == len(lines)-1 && lone.MatchString(line) && !strings.Contains(line, "   ") {
-			continue
-		}
-		if m == nil {
-			t.Fatalf("row %d is not two commands: %q", i, line)
-		}
-		at := utf8.RuneCountInString(line[:m[6]])
-		if col < 0 {
-			col = at
-		}
-		if at != col {
-			t.Errorf("row %d's second command starts at column %d, the first row's at %d: %q", i, at, col, line)
+// TestEveryLeaderKeyHasAGroupOfItsCard: a key SPC's card lists is under one of the card's own
+// headings, so a new key cannot fall under MORE unnoticed.
+func TestEveryLeaderKeyHasAGroupOfItsCard(t *testing.T) {
+	k := keyCatalog(nil)
+	c, _ := k.card(leader)
+	headings := slices.Concat(c.Groups...)
+	for _, k := range k.on(leader) {
+		if k.Does != "" && !slices.Contains(headings, k.Group) {
+			t.Errorf("SPC %s (%s) is in the group %q, which SPC's card does not head", k.Show, k.Does, k.Group)
 		}
 	}
+}
+
+// TestTheLeaderCardsGroupsAlign: each group's keys are under its heading, in the catalog's order,
+// starting in its column; a column's groups are in order, a blank row between two; and the card
+// fits the smallest screen, 80 × 20 less its frame.
+func TestTheLeaderCardsGroupsAlign(t *testing.T) {
+	k := keyCatalog(nil)
+	c, _ := k.card(leader)
+	text := k.cardState()[textSource(leader)].(string)
+	lines := strings.Split(text, "\n")
+	if len(lines) > 16 {
+		t.Errorf("SPC's card is %d rows, more than the 16 the screen leaves it:\n%s", len(lines), text)
+	}
+	for _, l := range lines {
+		if n := utf8.RuneCountInString(l); n > 76 {
+			t.Errorf("a row of SPC's card is %d cells, more than the 76 the screen leaves it: %q", n, l)
+		}
+	}
+	under := map[string][]string{}
+	for _, key := range k.on(leader) {
+		if key.Does != "" {
+			under[key.Group] = append(under[key.Group], key.Show+"  "+key.Does)
+		}
+	}
+	if len(c.Groups) == 0 {
+		t.Fatal("SPC's card has no groups")
+	}
+	prev := -1
+	for _, col := range c.Groups {
+		at, end := -1, -1
+		for _, g := range col {
+			row, c := headingAt(t, lines, g)
+			if at >= 0 && c != at {
+				t.Errorf("%s starts at column %d, the column's first heading at %d", g, c, at)
+			}
+			if at < 0 && c <= prev {
+				t.Errorf("%s starts at column %d, not right of the column before it (%d)", g, c, prev)
+			}
+			if end >= 0 && (row != end+2 || cellAt(lines, end+1, c) != "") {
+				t.Errorf("%s is at row %d, not after a blank row below the group above (its last row %d)", g, row, end)
+			}
+			at = c
+			for i, want := range under[g] {
+				if got := cellAt(lines, row+1+i, c); got != want {
+					t.Errorf("row %d under %s holds %q, want %q", row+1+i, g, got, want)
+				}
+			}
+			end = row + len(under[g])
+		}
+		prev = at
+	}
+}
+
+// headingAt is the row and column where heading starts a cell of lines.
+func headingAt(t *testing.T, lines []string, heading string) (row, col int) {
+	t.Helper()
+	re := regexp.MustCompile(`(^|  )` + regexp.QuoteMeta(heading) + `(  |$)`)
+	for r, l := range lines {
+		if m := re.FindStringSubmatchIndex(l); m != nil {
+			return r, utf8.RuneCountInString(l[:m[3]])
+		}
+	}
+	t.Fatalf("no heading %s in:\n%s", heading, strings.Join(lines, "\n"))
+	return 0, 0
+}
+
+// cellAt is the command starting at column col of lines' row: "" for none, or for a row past the
+// card's last.
+func cellAt(lines []string, row, col int) string {
+	if row >= len(lines) {
+		return ""
+	}
+	rs := []rune(lines[row])
+	if col >= len(rs) || rs[col] == ' ' {
+		return ""
+	}
+	// a key and what it does are two cells apart, and the next column at least two after
+	key, rest, ok := strings.Cut(string(rs[col:]), "  ")
+	if !ok {
+		return key
+	}
+	does, _, _ := strings.Cut(rest, "  ")
+	return key + "  " + does
 }
 
 // TestTheHelpsCommandsAreTheCatalogs (ADR 1791762474 §5.5, §4.2 r2): F1's COMMANDS lists every

@@ -40,6 +40,8 @@ type Key struct {
 	// Cmd is a catalog entry's id, in place of Run and Opens: the key runs App.run("<id>"), and a
 	// card names it by the entry's title when Does is "".
 	Cmd string
+	// Group is the heading its card lists it under, when the card has Groups: "FIND & OPEN".
+	Group string
 }
 
 // Card is a card of keys: a Dialog listing its keys, each closing the card before it runs.
@@ -52,6 +54,9 @@ type Card struct {
 	Back string
 	// Help is how help heads the card's list: "THE LEADER CARD (…)".
 	Help string
+	// Groups are the headings its keys are listed under, a column of them each, left to right; a
+	// key whose Group none is goes under MORE, last. nil lists the keys two a row, unheaded.
+	Groups [][]string
 }
 
 // Keyed is a feature with keys of its own, and cards of its own for keys to open.
@@ -65,7 +70,12 @@ const leader = "leader"
 
 // cards are the host's cards.
 var cards = []Card{{ID: leader, View: "Leader", Title: "SPC — commands",
-	Help: "THE LEADER CARD (Space in Normal mode, Ctrl+Space in every mode)"}}
+	Help: "THE LEADER CARD (Space in Normal mode, Ctrl+Space in every mode)", Groups: leaderGroups}}
+
+// leaderGroups are SPC's card's columns. The card is to fit the smallest screen, main.qml's 80 × 20:
+// its frame leaves the body 76 cells by 16 rows. MANAGE and WINDOW, the widest groups, share a
+// column, and the narrowest has room for the agents' key and a feature's under MORE.
+var leaderGroups = [][]string{{groupFind, groupFile}, {groupPanels, groupAgents, groupHelp}, {groupManage, groupWindow}}
 
 // windowKeys fire whichever widget has focus, when it leaves them. Space and Ctrl+h/j/k/l reach the
 // Window from the page only in Vim's Normal mode: Insert mode, and the Text editor mode, type them.
@@ -101,39 +111,76 @@ var windowKeys = []Key{
 	{Seq: "?", Show: "?", Run: "App.toggleVimKeys()"},
 }
 
-// leaderKeys are SPC's card's, in the card's reading order: left column, right column, row by row.
-var leaderKeys = onCard(leader, []Key{
-	{Seq: "/", Also: []string{"Space"}, Show: "/", Does: "search (or SPC again)", Run: "App.openSearch()"},
-	{Seq: "e", Show: "e", Does: "the explorer", Run: "App.toggleExplorer()"},
-	{Seq: "o", Show: "o", Does: "open a document", Run: "App.openPicker()"},
-	{Seq: "l", Show: "l", Does: "the relations", Run: "App.toggleLinks()"},
-	{Seq: "f", Show: "f", Does: "open a file anywhere", Run: "App.openFileDialog()"},
-	{Seq: "j", Show: "j", Does: "related files, by digit", Run: "App.openJumpCard()"},
-	{Seq: "n", Show: "n", Does: "new file", Run: "App.newFile()"},
-	{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
-	{Seq: "s", Show: "s", Does: "search models", Run: "App.openAIModels()"},
-	{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
-	{Seq: "r", Show: "r", Does: "recent files", Run: "App.openRecent()"},
-	{Seq: "t", Show: "t", Does: "the status line", Run: "App.toggleStatusLine()"},
-	{Seq: "w", Show: "w", Does: "switch workspace", Run: "App.pickWorkspace()"},
-	{Seq: "g", Show: "g", Does: "AI agent", Run: "App.toggleAgent()"},
-	{Seq: "Shift+W", Show: "W", Does: "manage workspaces", Run: "App.manageWorkspaces()"},
-	{Seq: "m", Show: "m", Does: "show/focus or hide the menu", Run: "App.leaderMenuBar()"},
-	{Seq: "?", Show: "?", Does: "help", Run: "help.open()"},
-	{Seq: "k", Show: "k", Does: "the editor mode (Vim, Text)", Run: "App.toggleKeymap()"},
-	{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},
-	{Seq: ",", Show: ",", Does: "editor preferences", Run: "App.openPrefs()"},
-	{Seq: "Shift+O", Show: "O", Does: "the file's outline", Run: "App.openOutline()"},
-	{Seq: "d", Show: "d", Does: "view the diagram", Run: "App.previewDiagram()"},
-	{Seq: "Shift+A", Show: "A", Does: "about", Run: "about.open()"},
-	{Seq: "Shift+G", Show: "G", Does: "agent profiles", Run: "App.openAgentProfiles()"},
-	{Seq: "Shift+Q", Show: "Q", Does: "quit", Run: "App.quit()"},
-	{Seq: "p", Show: "p", Does: "plugin commands", Run: "pluginKeys.open()"},
-	{Seq: "Shift+H", Show: "H", Does: "preview HTML", Run: "App.previewHTML()"},
-	{Seq: ".", Show: ".", Does: "the right-click menu", Run: "App.openContextMenu()"},
-	{Seq: "Shift+L", Show: "L", Does: "arrange a panel", Run: "App.arrangePanel()"},
-	{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
-})
+// The headings of SPC's card, by purpose. A feature's key on SPC's card names one in Group, the
+// agents' groupAgents, or lands under MORE.
+const (
+	groupFind   = "FIND & OPEN"
+	groupFile   = "THIS FILE"
+	groupPanels = "PANELS"
+	groupAgents = "AGENTS"
+	groupHelp   = "HELP"
+	groupManage = "MANAGE"
+	groupWindow = "WINDOW"
+	groupMore   = "MORE"
+)
+
+// leaderKeys are SPC's card's, by group, in the order each lists them.
+var leaderKeys = onCard(leader, slices.Concat(
+	inGroup(groupFind, []Key{
+		{Seq: "/", Also: []string{"Space"}, Show: "/", Does: "search (or SPC again)", Run: "App.openSearch()"},
+		{Seq: "o", Show: "o", Does: "open a document", Run: "App.openPicker()"},
+		{Seq: "f", Show: "f", Does: "open a file anywhere", Run: "App.openFileDialog()"},
+		{Seq: "r", Show: "r", Does: "recent files", Run: "App.openRecent()"},
+		// no comma: with it SPC's card is 77 cells across, one more than the screen leaves it
+		{Seq: "j", Show: "j", Does: "related files by digit", Run: "App.openJumpCard()"},
+		{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
+	}),
+	inGroup(groupFile, []Key{
+		{Seq: "n", Show: "n", Does: "new file", Run: "App.newFile()"},
+		{Seq: "Shift+O", Show: "O", Does: "the file's outline", Run: "App.openOutline()"},
+		{Seq: "d", Show: "d", Does: "view the diagram", Run: "App.previewDiagram()"},
+		{Seq: "Shift+H", Show: "H", Does: "preview HTML", Run: "App.previewHTML()"},
+	}),
+	inGroup(groupPanels, []Key{
+		{Seq: "e", Show: "e", Does: "the explorer", Run: "App.toggleExplorer()"},
+		{Seq: "l", Show: "l", Does: "the relations", Run: "App.toggleLinks()"},
+		{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
+		{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
+		{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},
+	}),
+	// a is the agents' card's, which their feature brings
+	inGroup(groupAgents, []Key{
+		{Seq: "g", Show: "g", Does: "AI agent", Run: "App.toggleAgent()"},
+		{Seq: "Shift+G", Show: "G", Does: "agent profiles", Run: "App.openAgentProfiles()"},
+	}),
+	inGroup(groupHelp, []Key{
+		{Seq: "?", Show: "?", Does: "help", Run: "help.open()"},
+		{Seq: "Shift+A", Show: "A", Does: "about", Run: "about.open()"},
+		{Seq: "Shift+Q", Show: "Q", Does: "quit", Run: "App.quit()"},
+	}),
+	inGroup(groupManage, []Key{
+		{Seq: "w", Show: "w", Does: "switch workspace", Run: "App.pickWorkspace()"},
+		{Seq: "Shift+W", Show: "W", Does: "manage workspaces", Run: "App.manageWorkspaces()"},
+		{Seq: "s", Show: "s", Does: "search models", Run: "App.openAIModels()"},
+		{Seq: ",", Show: ",", Does: "editor preferences", Run: "App.openPrefs()"},
+		{Seq: "k", Show: "k", Does: "the editor mode (Vim, Text)", Run: "App.toggleKeymap()"},
+	}),
+	inGroup(groupWindow, []Key{
+		{Seq: "m", Show: "m", Does: "show/focus or hide the menu", Run: "App.leaderMenuBar()"},
+		{Seq: ".", Show: ".", Does: "the right-click menu", Run: "App.openContextMenu()"},
+		{Seq: "t", Show: "t", Does: "the status line", Run: "App.toggleStatusLine()"},
+		{Seq: "Shift+L", Show: "L", Does: "arrange a panel", Run: "App.arrangePanel()"},
+		{Seq: "p", Show: "p", Does: "plugin commands", Run: "pluginKeys.open()"},
+	}),
+))
+
+// inGroup is keys, each under group.
+func inGroup(group string, keys []Key) []Key {
+	for i := range keys {
+		keys[i].Group = group
+	}
+	return keys
+}
 
 // onCard is keys, each on card.
 func onCard(card string, keys []Key) []Key {
@@ -322,31 +369,82 @@ func placeName(card string) string {
 	return "the card " + card + "'s"
 }
 
-// cardText is a card's body: two commands a row, the second column aligned, as the catalog orders
-// them.
-func cardText(keys []Key) string {
-	var listed []string
+// cardText is a card's body, its keys in the catalog's order. With groups, each key is under its
+// heading, the headings in columns side by side, a blank line between two of a column: SPC's
+// card holds too many keys for two a row to fit the screen once headed. With none, two commands a
+// row, the second column aligned.
+func cardText(groups [][]string, keys []Key) string {
+	var listed []Key
 	for _, k := range keys {
 		if k.Does != "" {
-			listed = append(listed, k.Show+"  "+k.Does)
+			listed = append(listed, k)
 		}
 	}
-	width := 0
-	for i := 0; i < len(listed); i += 2 {
-		width = max(width, utf8.RuneCountInString(listed[i]))
-	}
-	var b strings.Builder
-	for i := 0; i < len(listed); i += 2 {
-		if i > 0 {
-			b.WriteByte('\n')
+	if groups == nil {
+		cols := make([][]string, 2)
+		for i, k := range listed {
+			cols[i%2] = append(cols[i%2], k.Show+"  "+k.Does)
 		}
-		b.WriteString(listed[i])
-		if i+1 < len(listed) {
-			b.WriteString(strings.Repeat(" ", width+2-utf8.RuneCountInString(listed[i])))
-			b.WriteString(listed[i+1])
+		return sideBySide(cols)
+	}
+	headed := map[string]bool{}
+	for _, g := range slices.Concat(groups...) {
+		headed[g] = true
+	}
+	under := map[string][]string{}
+	for _, k := range listed {
+		g := k.Group
+		if !headed[g] {
+			g = groupMore
+		}
+		under[g] = append(under[g], k.Show+"  "+k.Does)
+	}
+	cols := make([][]string, len(groups))
+	for i, col := range groups {
+		if i == len(groups)-1 {
+			col = append(slices.Clone(col), groupMore) // a key in no group of the card's is still listed
+		}
+		for _, g := range col {
+			if len(under[g]) == 0 {
+				continue
+			}
+			if len(cols[i]) > 0 {
+				cols[i] = append(cols[i], "")
+			}
+			cols[i] = append(append(cols[i], g), under[g]...)
 		}
 	}
-	return b.String()
+	return sideBySide(cols)
+}
+
+// sideBySide is cols as text, row by row, each column starting two cells after the widest line of
+// the one before it. An empty column takes no room.
+func sideBySide(cols [][]string) string {
+	cols = slices.DeleteFunc(slices.Clone(cols), func(c []string) bool { return len(c) == 0 })
+	rows := 0
+	widths := make([]int, len(cols))
+	for i, c := range cols {
+		rows = max(rows, len(c))
+		for _, line := range c {
+			widths[i] = max(widths[i], utf8.RuneCountInString(line))
+		}
+	}
+	lines := make([]string, rows)
+	for r := range lines {
+		var b strings.Builder
+		for i, c := range cols {
+			cell := ""
+			if r < len(c) {
+				cell = c[r]
+			}
+			b.WriteString(cell)
+			if i < len(cols)-1 {
+				b.WriteString(strings.Repeat(" ", widths[i]+2-utf8.RuneCountInString(cell)))
+			}
+		}
+		lines[r] = strings.TrimRight(b.String(), " ")
+	}
+	return strings.Join(lines, "\n")
 }
 
 // textSource is the App.* source a card's body is: App.leaderText for SPC's.
@@ -356,7 +454,7 @@ func textSource(card string) string { return "App." + card + "Text" }
 func (k keyset) cardState() map[string]any {
 	m := map[string]any{}
 	for _, c := range k.cards {
-		m[textSource(c.ID)] = cardText(k.on(c.ID))
+		m[textSource(c.ID)] = cardText(c.Groups, k.on(c.ID))
 	}
 	return m
 }
@@ -365,7 +463,7 @@ func (k keyset) cardState() map[string]any {
 func (k keyset) helpCards() string {
 	var parts []string
 	for _, c := range k.cards {
-		parts = append(parts, c.Help+"\n  "+strings.ReplaceAll(cardText(k.on(c.ID)), "\n", "\n  "))
+		parts = append(parts, c.Help+"\n  "+strings.ReplaceAll(cardText(c.Groups, k.on(c.ID)), "\n", "\n  "))
 	}
 	return strings.Join(parts, "\n\n")
 }

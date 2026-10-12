@@ -276,7 +276,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 
 | Key | Does |
 | --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `s` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `s` …), listed by purpose: find and open, this file, the panels, the agents, help, managing, the window |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
