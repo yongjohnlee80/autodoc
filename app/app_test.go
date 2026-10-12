@@ -48,8 +48,8 @@ func TestArguments(t *testing.T) {
 	}{
 		{[]string{"--version"}, 0, "autodoc " + testOptions.Version},
 		{[]string{"kb"}, 2, "unexpected arguments: [kb]"},
-		{[]string{"--serve", "kb"}, 2, "only --contracts, --call, --export, --ui and --gui take one"},
-		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --contracts, --call, --export, --ui and --gui take one"},
+		{[]string{"--serve", "kb"}, 2, "only --contracts, --server, --call, --export, --ui and --gui take one"},
+		{[]string{"--call", "workspace.list", "[]", "extra"}, 2, "only --contracts, --server, --call, --export, --ui and --gui take one"},
 		// refused before anything is dialled: exit 1, saying why
 		{[]string{"--config", "/nonexistent/autodoc.toml", "--call", "workspace.list", "{"}, 1, "--call: the parameters are not JSON"},
 		{[]string{"--ui", "kb", "notes"}, 2, "unexpected arguments: [kb notes]"},
@@ -121,7 +121,7 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
 		// --dev is the UI's: without it, it is refused
 		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
-		{[]string{"--gui", "kb", "extra"}, 2, "", "only --contracts, --call, --export, --ui and --gui take one argument"},
+		{[]string{"--gui", "kb", "extra"}, 2, "", "only --contracts, --server, --call, --export, --ui and --gui take one argument"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, Options{Version: "v1.2.3"}, &stdout, &stderr)

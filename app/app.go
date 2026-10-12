@@ -13,6 +13,12 @@
 //
 //	autodoc --contracts [verb | domain.*] [--format json|md]
 //
+// --server is the enterprise search server: headless, it indexes an enterprise's database rows
+// through .view files into a schema of the same Postgres (docs/enterprise). --check validates its
+// configuration and every view, then exits:
+//
+//	autodoc --server [--check] server.toml
+//
 // The Web-UI (--web-ui) follows.
 package app
 
@@ -31,6 +37,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/enterprise/config"
 )
 
 // Options is what a main hands Main: what makes its build its own.
@@ -139,6 +146,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	ensure := fs.Bool("ensure", false, "--print-endpoint: start the daemon first when nothing answers")
 	restart := fs.Bool("restart", false, "--print-endpoint: stop the daemon serving this store and start this build in its place")
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
+	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (docs/enterprise)")
+	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
 
 	// failed is a mode's error as its exit code: code, after saying why.
 	failed := func(err error, code int) int {
@@ -181,6 +190,22 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
+		{flag: "server", arg: true, flagsAfter: true, run: func(cfg string) int {
+			if cfg == "" {
+				fmt.Fprintln(stderr, "autodoc: --server needs its configuration: autodoc --server [--check] server.toml")
+				return 2
+			}
+			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+			err := runServer(ctx, cfg, *check, stdout, stderr, b.version)
+			switch {
+			case err == nil || errors.Is(err, context.Canceled):
+				return 0
+			case config.IsRefusal(err):
+				return failed(err, 2)
+			}
+			return failed(err, 1)
+		}},
 		{flag: "call", asked: func() bool { return *call != "" }, arg: true, run: func(params string) int {
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
@@ -200,6 +225,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"base", "output", "theme"}, modes: []string{"export"}},
 		{flags: []string{"format"}, modes: []string{"contracts"}},
 		{flags: []string{"dev"}, modes: []string{"ui", "gui"}},
+		{flags: []string{"check"}, modes: []string{"server"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)
 	if !ok {
