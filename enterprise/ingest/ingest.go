@@ -305,11 +305,16 @@ func (in *Ingester) retry(ctx context.Context, upto time.Time, st *Stats) error 
 // rows not seen deleted, the quarantined rows not seen released, and the refresh recorded; the
 // cursor then moves up to the scan's last row if it was behind it. A scan that failed or stopped
 // deletes nothing.
+//
+// NOTE: a refresh holds every document's path, version and indexer, and every quarantined id, in
+// memory for the length of its scan: O(documents), some hundred bytes each. A row's document is
+// then compared without a query per row, and the paths not seen are known when the scan ends.
 func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
-	st := Stats{Complete: true}
+	var st Stats
 	if in.lock == nil {
 		return st, ErrNotLocked
 	}
+	st.Complete = true
 	started := in.o.Clock.Now()
 	upto, err := in.upto(ctx)
 	if err != nil {
