@@ -86,6 +86,7 @@ type Host struct {
 	searchPick        *pick[hit]
 	openPick, newPick *pick[string]
 	outlinePick       *pick[outline.Heading]
+	picks             map[string]picker // by the name Picker.qml's handlers pass
 	searchSeq         uint64
 	searchCancel      context.CancelFunc
 	searchQuery       string
@@ -374,6 +375,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
 	h.searchPick, h.openPick, h.newPick, h.outlinePick = h.newSearchPick(), h.newOpenPick(), h.newNewPick(), h.newOutlinePick()
+	h.picks = map[string]picker{"search": h.searchPick, "open": h.openPick, "new": h.newPick, "outline": h.outlinePick}
 	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
 	return h

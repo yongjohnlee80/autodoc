@@ -303,6 +303,7 @@ func (h *Host) previewRendered(p string, read bool) {
 func (h *Host) newOpenPick() *pick[string] {
 	return &pick[string]{c: core{h}, dialog: "fileOpen", name: "open",
 		list:   newRows(tuidecl.NewListModel("key", "path"), pathRowOf),
+		field:  "App.openField",
 		status: "App.pickerStatus", noun: "files",
 		match:   func(p string) string { return p },
 		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },

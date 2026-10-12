@@ -1,11 +1,13 @@
 package tui
 
+import "maps"
+
 // THE APP SINGLETON'S COMMANDS — what the document invokes.
 //
 // The table is the whole of it: a handler in main.qml or a component file can reach exactly these,
 // by these names, and nothing else of the program.
 func (h *Host) commands() map[string]Command {
-	return map[string]Command{
+	cmds := map[string]Command{
 		"App.save":               none(h.save),
 		"App.reload":             none(h.reload),
 		"App.previewHTML":        none(h.previewHTML),
@@ -31,8 +33,6 @@ func (h *Host) commands() map[string]Command {
 
 		// the pickers
 		"App.openSearch":           none(h.openSearch),
-		"App.searchLive":           oneString("a query", h.searchLive),
-		"App.searchClosed":         none(h.searchClosed),
 		"App.toggleAgent":          none(h.toggleAgent),
 		"App.openAgentProfiles":    none(h.openAgentProfiles),
 		"App.startAddAgent":        none(h.startAddAgent),
@@ -61,15 +61,7 @@ func (h *Host) commands() map[string]Command {
 		"App.setZoom":              oneNumber("a percent", h.setZoom),
 		"App.zoomWindow":           oneString("in or out", h.zoomWindow),
 		"App.toggleSearchStage":    oneString("lexical, semantic or rerank", h.toggleSearchStage),
-		"App.previewHit":           oneNumber("a row", h.searchPick.move),
-		"App.openHit":              oneNumber("a row", h.searchPick.enterRow),
 		"App.openPicker":           none(h.openPicker),
-		"App.pickerFilter":         oneString("a filter", h.openPick.filter),
-		"App.previewPick":          oneNumber("a row", h.openPick.move),
-		"App.pickerSelect":         oneNumber("a row", h.openPick.enterRow),
-		"App.newFileFilter":        oneString("a path", h.newPick.filter),
-		"App.previewNew":           oneNumber("a row", h.newPick.move),
-		"App.newFileFolder":        oneNumber("a row", h.newPick.enterRow),
 
 		// the plugins
 		"App.openPlugin":        oneString("a plugin", h.openPlugin),
@@ -131,9 +123,6 @@ func (h *Host) commands() map[string]Command {
 		"App.rootChosen":             oneString("a directory", h.rootChosen),
 		"App.managerClosed":          none(h.managerClosed),
 		"App.openOutline":            none(h.openOutline),
-		"App.outlineFilter":          oneString("a filter", h.outlinePick.filter),
-		"App.previewHeading":         oneNumber("a row", h.outlinePick.move),
-		"App.jumpToHeading":          oneNumber("a row", h.outlinePick.enterRow),
 		"App.cursorMoved":            none(h.cursorMoved),
 		"App.htmlLink":               oneString("a link's target", h.htmlLink),
 		"App.startRemoveWorkspace":   oneNumber("a row", h.startRemoveWorkspace),
@@ -191,4 +180,6 @@ func (h *Host) commands() map[string]Command {
 		"App.saveRanker":        fourStrings("a name, the base URL, the model and the key", h.saveRanker),
 		"App.saveProvider":      fiveStrings("a name, the base URL, the model, the key and the context window", h.saveProvider),
 	}
+	maps.Copy(cmds, pickCommands(h.picks))
+	return cmds
 }

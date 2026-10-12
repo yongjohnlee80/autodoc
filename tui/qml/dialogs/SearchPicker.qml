@@ -1,8 +1,10 @@
-// SearchPicker.qml — Go › Search (Ctrl+G, /): the picker's layout. On the left the search, then its
-// hits, a section a row, each with its relevance on the left; on the right the note under the cursor, at that section, the search's
-// words marked. Beneath both, a checkbox for each stage the search can run: Lexical, Semantic
-// while a model is in use, Rerank while a ranker is; a change searches again. Enter opens the hit,
-// the cursor at its section; q closes, outside the field. Ctrl+h/j/k/l move between the parts.
+// SearchPicker.qml — Go › Search (Ctrl+G, /): Picker.qml's layout, its own file for what Picker has
+// no place for (a row under the Split, a renderer in the preview). On the left the search, then its
+// hits, a section a row, each with its relevance on the left; on the right the note under the
+// cursor, at that section, the search's words marked. Beneath both, a checkbox for each stage the
+// search can run: Lexical, Semantic while a model is in use, Rerank while a ranker is; a change
+// searches again. Enter opens the hit, the cursor at its section; q closes, outside the field.
+// Ctrl+h/j/k/l move between the parts. Its handlers are Picker's, App.pick*("search", …).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 92
@@ -21,8 +23,8 @@ Dialog {
                 TextField {
                     id: query
                     text: App.searchText
-                    onTextEdited: App.searchLive(text)
-                    onAccepted: App.openHit(hits.currentIndex)
+                    onTextEdited: App.pickFilter("search", text)
+                    onAccepted: App.pickAccept("search", hits.currentIndex, text)
                 }
                 // a row between the field and the hits: blank, or a turning spinner and what an
                 // unanswered search is waiting on
@@ -35,8 +37,8 @@ Dialog {
                         palette.highlight: Theme.document.highlight
                         palette.highlightedText: Theme.document.highlightedText
                         model: App.hits
-                        onCurrentIndexChanged: App.previewHit(index)
-                        onActivated: App.openHit(index)
+                        onCurrentIndexChanged: App.pickMove("search", index)
+                        onActivated: App.pickChoose("search", index)
                         TableViewColumn { role: "hit"; title: "HIT"; width: 4 }
                         TableViewColumn { role: "path"; title: "FILE"; width: 0; elideMode: Tui.ElidePath }
                         TableViewColumn { role: "section"; title: "SECTION"; width: 22 }
@@ -77,6 +79,6 @@ Dialog {
         Button { text: "&Open"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
-    onAccepted: App.openHit(hits.currentIndex)
-    onRejected: App.searchClosed()
+    onAccepted: App.pickAccept("search", hits.currentIndex, query.text)
+    onRejected: App.pickCancel("search")
 }

@@ -117,6 +117,7 @@ func (h *Host) openOutline() {
 func (h *Host) newOutlinePick() *pick[outline.Heading] {
 	return &pick[outline.Heading]{c: core{h}, dialog: "outlinePicker", name: "outline",
 		list:   newRows(tuidecl.NewListModel("key", "heading", "line"), headingRowOf),
+		field:  "App.outlineField",
 		status: "App.outlineStatus", noun: "headings",
 		match: func(hd outline.Heading) string { return hd.Text },
 		preview: func(hd outline.Heading) func(context.Context) answerOf[pane] {

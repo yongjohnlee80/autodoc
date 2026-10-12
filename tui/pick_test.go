@@ -3,9 +3,13 @@ package tui
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/parse/qml"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
 // testPick is a picker over paths, its preview the path's text, recording what it chose, entered,
@@ -143,5 +147,92 @@ func TestAPickChoosesAndCancels(t *testing.T) {
 	}
 	if len(p.chosen) != 0 || len(p.c.closed) != 0 {
 		t.Errorf("Enter and accept chose %v and closed %v; the picker's own did", p.chosen, p.c.closed)
+	}
+}
+
+// File › Open opens with its field empty, whatever was typed in it the last time: Go empties the
+// field's source (App.openField), as the dialog's own onOpened did before Picker.qml.
+func TestTheOpenPickerOpensEmpty(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n", "b/zq.md", "# C\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	r.keys(t, decltest.Ctrl('o'))
+	r.s.WaitForText(t, "files (2 of 2)")
+	r.keys(t, decltest.Type("zq")...)
+	r.s.WaitForText(t, "files (1 of 2)")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the picker closed", func(sc string) bool { return !strings.Contains(sc, "open a document") })
+	r.keys(t, decltest.Ctrl('o'))
+	r.s.WaitForText(t, "files (2 of 2)")
+	for _, line := range strings.Split(r.s.String(), "\n") {
+		if strings.Contains(line, "│ zq") {
+			t.Fatalf("the field kept the last filter:\n%s", r.s)
+		}
+	}
+}
+
+// Naming the draft, Enter on a file takes its folder into the path, the picker staying open;
+// Create makes the note at the path typed.
+func TestTheDraftsNameTakesAFilesFolder(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"notes/a.md", "# A\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 1)
+	r.typeInEditor(t, "draft text")
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab}, enter())
+	r.s.WaitFor(t, "the folder in the path", func(string) bool {
+		return onLoop(r, func() bool {
+			v, _ := r.h.p.Tree().Source("App.newFilePath")
+			return v.Raw == "notes/"
+		})
+	})
+	if !strings.Contains(r.s.String(), "save the draft") {
+		t.Fatalf("Enter on a file closed the picker:\n%s", r.s)
+	}
+	r.keys(t, decltest.Ctrl('k'))
+	r.keys(t, decltest.Type("b")...)
+	r.keys(t, enter())
+	r.waitFile(t, "notes/b.md")
+	if got := d.read(t, "kb", "notes/b.md"); got != "draft text" {
+		t.Errorf("the note holds %q, want the draft", got)
+	}
+}
+
+// Picker.qml's handlers reach a pick by the name they pass; a name no picker has is refused.
+func TestThePickCommandsGoByName(t *testing.T) {
+	p := newTestPick()
+	cmds := pickCommands(map[string]picker{"test": p})
+	str := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: s} }
+	num := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueNumber, Raw: s} }
+	run := func(name string, args ...qml.SpecValue) error { return cmds[name].handler(name)(args) }
+	if err := run("App.pickFilter", str("test"), str("notes")); err != nil || len(p.shown()) != 2 {
+		t.Fatalf("pickFilter: %v, rows %v", err, p.shown())
+	}
+	if err := run("App.pickMove", str("test"), num("1")); err != nil || p.title() != "notes/c.md" {
+		t.Errorf("pickMove: %v, preview %v", err, p.title())
+	}
+	if err := run("App.pickChoose", str("test"), num("0")); err != nil || !slices.Equal(p.chosen, []string{"Notes/A.md"}) {
+		t.Errorf("pickChoose: %v, chose %v", err, p.chosen)
+	}
+	if err := run("App.pickAccept", str("test"), num("1"), str("typed")); err != nil || !slices.Equal(p.chosen, []string{"Notes/A.md", "notes/c.md"}) {
+		t.Errorf("pickAccept: %v, chose %v", err, p.chosen)
+	}
+	if err := run("App.pickCancel", str("test")); err != nil || p.cancelled != 1 {
+		t.Errorf("pickCancel: %v, %d cancels", err, p.cancelled)
+	}
+	for name, args := range map[string][]qml.SpecValue{
+		"App.pickFilter": {str("nope"), str("x")},
+		"App.pickMove":   {str("nope"), num("0")},
+		"App.pickChoose": {str("nope"), num("0")},
+		"App.pickAccept": {str("nope"), num("0"), str("x")},
+		"App.pickCancel": {str("nope")},
+	} {
+		if err := run(name, args...); err == nil || err.Error() != name+` takes a picker's name, not "nope"` {
+			t.Errorf("%s on a picker nobody has: %v", name, err)
+		}
+	}
+	if err := run("App.pickMove", str("test"), num("1.5")); err == nil || err.Error() != "App.pickMove takes a picker's name and a row, not 1.5" {
+		t.Errorf("a row that is not whole: %v", err)
 	}
 }

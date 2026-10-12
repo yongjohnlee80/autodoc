@@ -3,8 +3,10 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
+	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
@@ -199,6 +201,15 @@ func (p *pick[T]) dismiss() {
 	}
 }
 
+// picker is a pick of any item, as the App.pick* commands reach it by its name.
+type picker interface {
+	filter(text string)
+	move(i int)
+	enterRow(i int)
+	accept(i int, text string)
+	dismiss()
+}
+
 // cursorAt is byte at of text as the editor's cursorPosition counts it: characters (grapheme
 // clusters) before it, a line break (\r\n, \r or \n) one, as the editor splits them. A byte
 // inside a character is that character's start. A count of runes lands late after a combining
@@ -212,4 +223,70 @@ func cursorAt(text string, at int) int {
 		n++
 	}
 	return n
+}
+
+// pickCommands are Picker.qml's handlers: each names its picker first.
+func pickCommands(picks map[string]picker) map[string]Command {
+	named := func(name string) (picker, error) {
+		if p, ok := picks[name]; ok {
+			return p, nil
+		}
+		return nil, argError(fmt.Sprintf("takes a picker's name, not %q", name))
+	}
+	row := func(what string, v qml.SpecValue) (int, error) {
+		n, err := strconv.Atoi(v.Raw)
+		if err != nil {
+			return 0, argError(fmt.Sprintf("takes %s, not %s", what, v.Raw))
+		}
+		return n, nil
+	}
+	nameAndRow := func(fn func(picker, int)) Command {
+		const what = "a picker's name and a row"
+		return Command{Args: []qml.SpecValueKind{argStr, argNum}, What: what, Run: func(a []qml.SpecValue) error {
+			p, err := named(a[0].Raw)
+			if err != nil {
+				return err
+			}
+			n, err := row(what, a[1])
+			if err != nil {
+				return err
+			}
+			fn(p, n)
+			return nil
+		}}
+	}
+	return map[string]Command{
+		"App.pickFilter": {Args: []qml.SpecValueKind{argStr, argStr}, What: "a picker's name and a filter",
+			Run: func(a []qml.SpecValue) error {
+				p, err := named(a[0].Raw)
+				if err == nil {
+					p.filter(a[1].Raw)
+				}
+				return err
+			}},
+		"App.pickMove":   nameAndRow(picker.move),
+		"App.pickChoose": nameAndRow(picker.enterRow),
+		"App.pickAccept": {Args: []qml.SpecValueKind{argStr, argNum, argStr}, What: "a picker's name, a row and the field's text",
+			Run: func(a []qml.SpecValue) error {
+				const what = "a picker's name, a row and the field's text"
+				p, err := named(a[0].Raw)
+				if err != nil {
+					return err
+				}
+				n, err := row(what, a[1])
+				if err != nil {
+					return err
+				}
+				p.accept(n, a[2].Raw)
+				return nil
+			}},
+		"App.pickCancel": {Args: []qml.SpecValueKind{argStr}, What: "a picker's name",
+			Run: func(a []qml.SpecValue) error {
+				p, err := named(a[0].Raw)
+				if err == nil {
+					p.dismiss()
+				}
+				return err
+			}},
+	}
 }

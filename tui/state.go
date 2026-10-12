@@ -75,12 +75,14 @@ func (h *Host) state() map[string]any {
 		"App.searchPreviewAt":       0,
 		// the outline picker (outline.go)
 		"App.outlineRows":         h.outlinePick.list.Model(),
+		"App.outlineField":        "",
 		"App.outlineStatus":       "headings",
 		"App.outlinePreviewTitle": "",
 		"App.outlinePreviewText":  "",
 		"App.outlinePreviewAt":    0,
 		// the open picker
 		"App.pickerRows":       h.openPick.list.Model(),
+		"App.openField":        "",
 		"App.pickerStatus":     "files",
 		"App.openPreviewTitle": "",
 		"App.openPreviewText":  "",
