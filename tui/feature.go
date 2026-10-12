@@ -29,6 +29,12 @@ type (
 	Connecter interface{ Connected() }
 	// Starter hears once that the program has started: its first preferences are applied.
 	Starter interface{ Started() }
+	// Stopper hears once, after the program's loop has ended, that the program is stopping: it stops
+	// what it started (processes, connections). Each stop is bounded by the Stopper's own deadline,
+	// so the session closes after a stop that hangs, not never.
+	Stopper interface{ Stopped() }
+	// ThemeSink hears that the screen wears another theme; it reads which from its host.
+	ThemeSink interface{ ThemeChanged() }
 	// PreferenceSink projects the preferences currently in effect on the loop.
 	// It also runs when preference dialogs resync; this is not a change-only event.
 	PreferenceSink interface{ PreferencesChanged() }
@@ -148,6 +154,31 @@ type registryPicks struct{ r *registry }
 func (registryPicks) Name() string                   { return "pickers" }
 func (registryPicks) State() map[string]any          { return nil }
 func (p registryPicks) Commands() map[string]Command { return pickCommands(p.r.picks) }
+
+// stopped tells the features that stop what they started, once the loop has ended.
+func (r *registry) stopped() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if s, ok := f.(Stopper); ok {
+			s.Stopped()
+		}
+	}
+}
+
+// themeChanged tells the features that hear the theme the screen wears.
+func (r *registry) themeChanged() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if t, ok := f.(ThemeSink); ok {
+			t.ThemeChanged()
+		}
+	}
+}
+
 func (r *registry) preferencesChanged() {
 	if r == nil {
 		return
@@ -234,7 +265,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
@@ -327,8 +358,9 @@ type Core interface {
 	// Post runs fn on the loop once the event being handled is done: a view still changing (a tab)
 	// must not have what it shows changed under it.
 	Post(fn func())
-	// Page is the page as it is now (page.go: pageNow), snapshotted again only when typed since the
-	// last: a picker opened mid-typing cannot wait for the pause.
+	// Page is the page as it is now (page.go: pageNow): it can take a fresh snapshot, when typed since
+	// the last one (on the loop, a copy of the editor's text), so a reader that cannot wait for the
+	// pause (a picker opened, a plugin started mid-typing) has the text and Version as they are.
 	Page() Page
 	// Crumbs puts a breadcrumb after the file's name on the page's frame; nil, the name alone. The
 	// host composes the title, so the name and its badges are right with no breadcrumb at all.

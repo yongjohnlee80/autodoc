@@ -343,7 +343,6 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
 	h.file.raw = raw
 	h.page = h.takePage() // readPage's consumers read it
-	h.feedEdited()        // another note: a new version
 	h.readPage()
 	h.showPage() // the relations are read for it (relations.go: Shown)
 	h.htmlPaneNoteChanged()
@@ -484,18 +483,16 @@ func (h *Host) closeFile() {
 	h.set("App.statusCenter", "")
 	h.clearDiagnostics()
 	h.showPage()
-	h.feedEdited()
 	h.htmlPaneNoteChanged()
 }
 
 // edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.
 func (h *Host) edited() {
 	h.setDirty(true)
-	h.feedVersion++ // a new version, sent once the page rests (pagePaused)
+	h.pageVersion++ // an edit: the next page taken carries it (Page.Version)
 	// a check or a feed the last pause scheduled is of text this keystroke changed: the next
 	// pause schedules them again, from this keystroke
 	h.fmGen++
-	h.feedGen++
 	h.pageSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
 }

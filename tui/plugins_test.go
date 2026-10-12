@@ -329,7 +329,7 @@ func pluginLuaTUI(t *testing.T, dir string, prefs map[string]string, luaDir stri
 	t.Cleanup(func() {
 		runs := onLoop(r, func() []*pluginRun {
 			var out []*pluginRun
-			for _, p := range r.h.running {
+			for _, p := range r.h.plugins.running {
 				out = append(out, p)
 			}
 			return out
@@ -342,7 +342,7 @@ func pluginLuaTUI(t *testing.T, dir string, prefs map[string]string, luaDir stri
 }
 
 func (r *running) openPlugin(key string) *pluginRun {
-	return onLoop(r, func() *pluginRun { r.h.openPlugin(key); return r.h.running[key] })
+	return onLoop(r, func() *pluginRun { r.h.plugins.openPlugin(key); return r.h.plugins.running[key] })
 }
 
 // waitShown waits for text on the screen, longer than a screen's usual wait: a plugin is a process
@@ -416,7 +416,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	if strings.Contains(sc, "not-a-plugin") {
 		t.Errorf("a directory with no plugin.toml is listed:\n%s", sc)
 	}
-	rows := onLoop(r, func() int { return len(r.h.pluginList) })
+	rows := onLoop(r, func() int { return len(r.h.plugins.pluginList) })
 	if rows != 10 {
 		t.Errorf("%d plugins listed, want 10", rows)
 	}
@@ -429,7 +429,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	if !strings.Contains(none.s.String(), "no plugins yet") {
 		t.Errorf("an empty folder's menu:\n%s", none.s)
 	}
-	if n := onLoop(none, func() int { return len(none.h.pluginList) }); n != 0 {
+	if n := onLoop(none, func() int { return len(none.h.plugins.pluginList) }); n != 0 {
 		t.Errorf("%d plugins in an empty folder", n)
 	}
 }
@@ -460,7 +460,7 @@ func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
 
 	r.keys(t, key('c'))
 	r.s.WaitForText(t, "RED odd")
-	run := onLoop(r, func() *pluginRun { return r.h.running["echo"] })
+	run := onLoop(r, func() *pluginRun { return r.h.plugins.running["echo"] })
 	cells := onLoop(r, func() []pluginCell { run.mu.Lock(); defer run.mu.Unlock(); return run.frame[0] })
 	if fg, _ := cells[0].st.GetForeground(); fg != style.ANSI(1) {
 		t.Errorf("RED's colour = %v, want ANSI red", fg)
@@ -484,7 +484,7 @@ func TestAPluginsDialogShowsItsFramesAndTakesItsKeys(t *testing.T) {
 	if !strings.Contains(string(log), "echo: closing") || !strings.Contains(string(log), "1 unknown colours") {
 		t.Errorf("the plugin's log:\n%s", log)
 	}
-	if n := onLoop(r, func() int { return len(r.h.running) }); n != 0 {
+	if n := onLoop(r, func() int { return len(r.h.plugins.running) }); n != 0 {
 		t.Errorf("%d plugins still open", n)
 	}
 }
@@ -521,7 +521,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 		t.Error("a plugin that did not start is open")
 	}
 	r.waitNotice(t, "gone did not start")
-	if n := onLoop(r, func() int { return len(r.h.running) }); n != 0 {
+	if n := onLoop(r, func() int { return len(r.h.plugins.running) }); n != 0 {
 		t.Errorf("%d plugins still open after failing", n)
 	}
 }
@@ -619,7 +619,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	t.Cleanup(func() {
 		for _, p := range onLoop(r, func() []*pluginRun {
 			var out []*pluginRun
-			for _, p := range r.h.running {
+			for _, p := range r.h.plugins.running {
 				out = append(out, p)
 			}
 			return out
@@ -633,17 +633,17 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	if _, right := r.dialogEdges("Side"); right != 99 {
 		t.Fatalf("a right-first dialog ends at column %d, want 99 (the edge):\n%s", right, r.s)
 	}
-	r.h.p.Post(r.h.managePlugins)
-	r.s.WaitFor(t, "the manager listed", func(string) bool { return onLoop(r, func() int { return len(r.h.managedPlugins.All()) }) == 2 })
+	r.h.p.Post(r.h.plugins.managePlugins)
+	r.s.WaitFor(t, "the manager listed", func(string) bool { return onLoop(r, func() int { return len(r.h.plugins.managedPlugins.All()) }) == 2 })
 	i := onLoop(r, func() int {
-		for i, m := range r.h.managedPlugins.All() {
+		for i, m := range r.h.plugins.managedPlugins.All() {
 			if m.e.m.Name == "side" {
 				return i
 			}
 		}
 		return -1
 	})
-	r.h.p.Post(func() { r.h.placePlugin(i) })
+	r.h.p.Post(func() { r.h.plugins.placePlugin(i) })
 	r.s.WaitFor(t, "the choice stored", func(string) bool {
 		m, err := d.db.Preferences(context.Background())
 		return err == nil && m["tui.plugin.side.placement"] == "left"
@@ -652,7 +652,7 @@ func TestADialogSitsWhereItsManifestSaysAndTheUserMovesIt(t *testing.T) {
 	r.s.WaitFor(t, "moved to the left", func(string) bool { l, _ := r.dialogEdges("Side"); return l == 0 })
 
 	r.keys(t, esc())
-	r.s.WaitFor(t, "side closed", func(string) bool { return onLoop(r, func() bool { return r.h.running["side"] == nil }) })
+	r.s.WaitFor(t, "side closed", func(string) bool { return onLoop(r, func() bool { return r.h.plugins.running["side"] == nil }) })
 	r.openPlugin("echo")
 	r.waitShown(t, "╭ Echo")
 	if left, right := r.dialogEdges("Echo"); left < 30 || right > 69 {
@@ -677,7 +677,7 @@ func TestAStoredPlacementIsReadAtStart(t *testing.T) {
 	t.Cleanup(func() {
 		for _, p := range onLoop(r, func() []*pluginRun {
 			var out []*pluginRun
-			for _, p := range r.h.running {
+			for _, p := range r.h.plugins.running {
 				out = append(out, p)
 			}
 			return out
@@ -691,7 +691,7 @@ func TestAStoredPlacementIsReadAtStart(t *testing.T) {
 		t.Fatalf("the stored left placement: the dialog starts at column %d:\n%s", l, r.s)
 	}
 	r.keys(t, esc())
-	r.s.WaitFor(t, "side closed", func(string) bool { return onLoop(r, func() bool { return r.h.running["side"] == nil }) })
+	r.s.WaitFor(t, "side closed", func(string) bool { return onLoop(r, func() bool { return r.h.plugins.running["side"] == nil }) })
 	r.openPlugin("odd")
 	r.waitShown(t, "╭ Odd")
 	if _, rt := r.dialogEdges("Odd"); rt != 99 {
@@ -716,7 +716,7 @@ func TestEscHidesAPluginWithItsOwnQuit(t *testing.T) {
 		t.Fatal("Esc ended a plugin that hides")
 	case <-time.After(300 * time.Millisecond):
 	}
-	if onLoop(r, func() *pluginRun { return r.h.running["game"] }) != run {
+	if onLoop(r, func() *pluginRun { return r.h.plugins.running["game"] }) != run {
 		t.Fatal("the hidden plugin is not kept")
 	}
 	r.openPlugin("game")
@@ -742,7 +742,7 @@ func TestAHeightInPercentIsTheScreensShare(t *testing.T) {
 	r, _ := pluginTUI(t, dir) // 30 rows
 	r.openPlugin("tall")
 	r.waitShown(t, "open 30x")
-	h := onLoop(r, func() int { return r.h.running["tall"].view.laidH })
+	h := onLoop(r, func() int { return r.h.plugins.running["tall"].view.laidH })
 	if h < 20 || h > 24 {
 		t.Fatalf("an 80%% dialog is %d rows inside its border on a 30-row screen", h)
 	}
@@ -776,7 +776,7 @@ func TestAPluginIsToldTheThemeAndTheSizeItGot(t *testing.T) {
 	r, _ := pluginTUI(t, dir) // 100×30
 	r.openPlugin("echo")
 	r.waitShown(t, "open ")
-	w, h := onLoop(r, func() int { return r.h.running["echo"].view.laidW }), onLoop(r, func() int { return r.h.running["echo"].view.laidH })
+	w, h := onLoop(r, func() int { return r.h.plugins.running["echo"].view.laidW }), onLoop(r, func() int { return r.h.plugins.running["echo"].view.laidH })
 	// plugin.open waits for the first layout: the plugin is opened at the size it got, not asked
 	if w >= 200 || h >= 60 || !strings.Contains(r.s.String(), fmt.Sprintf("open %dx%d", w, h)) {
 		t.Fatalf("laid %dx%d; the screen:\n%s", w, h, r.s)
@@ -827,7 +827,7 @@ func (r *running) question(t *testing.T) string {
 	t.Helper()
 	read := func() string {
 		return onLoop(r, func() string {
-			if r.h.pendingPlugin == nil {
+			if r.h.plugins.pendingPlugin == nil {
 				return ""
 			}
 			v, _ := r.h.p.Tree().Source("App.pluginQuestion")
@@ -885,7 +885,7 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, entries(t, dir)[0], "built.txt")); err == nil {
 		t.Fatal("the build ran before the question was answered")
 	}
-	if n := onLoop(r, func() int { return len(r.h.pluginList) }); n != 0 {
+	if n := onLoop(r, func() int { return len(r.h.plugins.pluginList) }); n != 0 {
 		t.Fatalf("a staged clone is listed as a plugin (%d)", n)
 	}
 
@@ -895,7 +895,7 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 		t.Fatalf("No left %v in the folder", got)
 	}
 
-	r.h.p.Post(func() { r.h.addPlugin(url) })
+	r.h.p.Post(func() { r.h.plugins.addPlugin(url) })
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at "+commit+": Plugins › Echo")
@@ -912,7 +912,7 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 	dir := t.TempDir()
 	r, logs := pluginTUI(t, dir)
-	add := func(url string) { r.h.p.Post(func() { r.h.addPlugin(url) }) }
+	add := func(url string) { r.h.p.Post(func() { r.h.plugins.addPlugin(url) }) }
 
 	add("file:///no/such/repository")
 	r.waitNotice(t, "not added: git clone:")
@@ -958,16 +958,16 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	dir := t.TempDir()
 	installTestPlugin(t, dir, "local", "echo", 30, 6)
 	r, _ := pluginTUI(t, dir)
-	r.h.p.Post(func() { r.h.addPlugin("file://" + repo) })
+	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + repo) })
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "added echo at")
 
-	r.h.p.Post(r.h.managePlugins)
+	r.h.p.Post(r.h.plugins.managePlugins)
 	r.s.WaitForText(t, "local: put in the folder by hand")
 	r.s.WaitFor(t, "the clone's source listed", func(string) bool { // the column elides it on screen
 		return onLoop(r, func() bool {
-			for _, m := range r.h.managedPlugins.All() {
+			for _, m := range r.h.plugins.managedPlugins.All() {
 				if m.e.m.Name == "echo" && m.source == "file://"+repo && m.commit != "" {
 					return true
 				}
@@ -976,19 +976,19 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 		})
 	})
 
-	before := onLoop(r, func() []managedPlugin { return slices.Clone(r.h.managedPlugins.All()) })
+	before := onLoop(r, func() []managedPlugin { return slices.Clone(r.h.plugins.managedPlugins.All()) })
 
 	commitPlugin(t, repo, "Echo two", "echo two > built.txt")
 	next := runGit(t, repo, "rev-parse", "--short", "HEAD")
 	i := onLoop(r, func() int {
-		for i, m := range r.h.managedPlugins.All() {
+		for i, m := range r.h.plugins.managedPlugins.All() {
 			if m.e.m.Name == "echo" {
 				return i
 			}
 		}
 		return -1
 	})
-	r.h.p.Post(func() { r.h.startUpdatePlugin(i) })
+	r.h.p.Post(func() { r.h.plugins.startUpdatePlugin(i) })
 	if q := r.question(t); !strings.Contains(q, "at    "+next) || !strings.Contains(q, "echo two > built.txt") {
 		t.Fatalf("the update's question is not the new commit's:\n%s", q)
 	}
@@ -999,7 +999,7 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the new title listed", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, e := range r.h.pluginList {
+			for _, e := range r.h.plugins.pluginList {
 				if e.m.Title == "Echo two" {
 					return true
 				}
@@ -1009,10 +1009,10 @@ func TestAPluginIsUpdatedAndRemovedFromTheManager(t *testing.T) {
 	})
 	// Update again while the row still shows the commit before the update, as it does until the
 	// manager's listing, run off the loop, comes back: up to date all the same.
-	r.h.p.Post(func() { r.h.managedPlugins.Reset(before); r.h.startUpdatePlugin(i) })
+	r.h.p.Post(func() { r.h.plugins.managedPlugins.Reset(before); r.h.plugins.startUpdatePlugin(i) })
 	r.waitNotice(t, "echo is up to date at "+next)
 
-	r.h.p.Post(func() { r.h.startRemovePlugin(i) })
+	r.h.p.Post(func() { r.h.plugins.startRemovePlugin(i) })
 	r.s.WaitForText(t, "remove the plugin?")
 	r.keys(t, key('y'))
 	r.waitNotice(t, "removed echo")
@@ -1292,7 +1292,7 @@ func TestTheDocumentFeed(t *testing.T) {
 	r, logs := pluginTUI(t, dir)
 	// any feed the start scheduled has fired, to nobody: the one sent now is the plugin's start's
 	time.Sleep(3 * pluginFeedDelay)
-	onLoop(r, func() bool { r.h.openPlugin("stats"); r.h.openPlugin("quiet"); return true })
+	onLoop(r, func() bool { r.h.plugins.openPlugin("stats"); r.h.plugins.openPlugin("quiet"); return true })
 	first := docsIn(waitSaid(t, logs, "stats", "doc "))
 	if len(first) != 1 || !strings.HasPrefix(first[0], `doc "" v`) || !strings.Contains(first[0], `"" at 1:1 large=false`) {
 		t.Fatalf("the document at start: %q", first)
@@ -1304,7 +1304,7 @@ func TestTheDocumentFeed(t *testing.T) {
 	r.s.WaitFor(t, "the burst typed", func(string) bool {
 		return onLoop(r, func() bool { return r.h.core.Value() == "héllo" && r.h.core.Mode().String() == "NORMAL" })
 	})
-	got := docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.feedVersion }))))
+	got := docsIn(waitSaid(t, logs, "stats", `doc "" v`+fmt.Sprint(onLoop(r, func() int { return r.h.pageVersion }))))
 	time.Sleep(2 * pluginFeedDelay) // nothing more comes of that burst
 	got = docsIn(said(t, logs, "stats"))
 	if len(got) != 2 || !strings.Contains(got[1], `"héllo" at 1:5 large=false`) {
@@ -1348,7 +1348,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	installPlugin2(t, dir, "atstart", "service", "echo", "start = \"launch\"\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n")
 	r, logs := pluginTUI(t, dir)
 	waitSaid(t, logs, "atstart", "open 0x0 dark")
-	if running := onLoop(r, func() []string { return slices.Sorted(maps.Keys(r.h.running)) }); !reflect.DeepEqual(running, []string{"atstart"}) {
+	if running := onLoop(r, func() []string { return slices.Sorted(maps.Keys(r.h.plugins.running)) }); !reflect.DeepEqual(running, []string{"atstart"}) {
 		t.Fatalf("running at start: %v, want atstart alone", running)
 	}
 
@@ -1363,7 +1363,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 		t.Fatalf("a service drew on the screen:\n%s", r.s)
 	}
 
-	if onLoop(r, func() bool { return r.h.running["onfeed"] != nil }) {
+	if onLoop(r, func() bool { return r.h.plugins.running["onfeed"] != nil }) {
 		t.Fatal("onfeed runs before its feed's first event")
 	}
 	r.keys(t, key('i'), key('k'), esc())
@@ -1543,11 +1543,11 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.waitShown(t, "command hello")
-	onLoop(r, func() bool { r.h.running["alpha"].close(""); return true })
+	onLoop(r, func() bool { r.h.plugins.running["alpha"].close(""); return true })
 	if err := os.RemoveAll(filepath.Join(dir, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	onLoop(r, func() bool { r.h.loadPlugins(); return true })
+	onLoop(r, func() bool { r.h.plugins.loadPlugins(); return true })
 	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("plugin.alpha.hello") }); e != nil {
 		t.Fatalf("a removed plugin's command stayed: %+v", e)
 	}
@@ -1562,15 +1562,15 @@ func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	refused := pluginEntry{dir: "/plugins/broken", m: manifest{Name: "broken"}, reason: "it speaks protocol 9"}
 	onLoop(r, func() bool {
-		r.h.pluginList = []pluginEntry{refused}
-		r.h.openPlugin("")
-		r.h.openPlugin("nosuch")
-		r.h.openPlugin(refused.key())
+		r.h.plugins.pluginList = []pluginEntry{refused}
+		r.h.plugins.openPlugin("")
+		r.h.plugins.openPlugin("nosuch")
+		r.h.plugins.openPlugin(refused.key())
 		return true
 	})
 	r.waitNoticed(t, "no plugin nosuch")
 	r.waitNoticed(t, "broken — it speaks protocol 9")
-	if n := onLoop(r, func() int { return len(r.h.running) }); n != 0 {
+	if n := onLoop(r, func() int { return len(r.h.plugins.running) }); n != 0 {
 		t.Fatalf("%d plugins started from entries that start nothing", n)
 	}
 	if onLoop(r, func() bool {
@@ -1578,7 +1578,7 @@ func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
 	}) {
 		t.Error(`the empty entry ("no plugins yet") looked for a plugin named ""`)
 	}
-	th := onLoop(r, func() plugin.Theme { r.h.theme = "no-such-theme"; return r.h.pluginTheme() })
+	th := onLoop(r, func() plugin.Theme { r.h.theme = "no-such-theme"; return r.h.plugins.pluginTheme() })
 	if th.Name != "no-such-theme" || th.Colors == nil || len(th.Colors) != 0 {
 		t.Errorf("an unknown theme was sent as %+v, want its name and no colours, {} not null", th)
 	}

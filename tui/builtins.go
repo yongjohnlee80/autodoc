@@ -50,9 +50,6 @@ func (h *Host) builtinEntries() []Entry {
 		// Options, Plugins, System, Help
 		builtin("prefs.editor", "editor preferences", "App.openPrefs()", h.openPrefs),
 		builtin("prefs.fonts", "fonts and zoom", "App.openFonts()", h.openFonts),
-		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", h.startAddPlugin),
-		builtin("plugins.manage", "manage plugins", "App.managePlugins()", h.managePlugins),
-		builtin("plugins.commands", "plugin commands", "pluginKeys.open()", func() { h.open("pluginKeys") }),
 		builtin("help.keys", "help", "help.open()", func() { h.open("help") }),
 		builtin("help.tutorial", "the tutorial", "App.openTutorial()", h.openTutorial),
 		builtin("help.about", "about", "about.open()", func() { h.open("about") }),

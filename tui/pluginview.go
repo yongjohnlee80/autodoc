@@ -155,7 +155,7 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
 		if !v.run.e.m.modal() {
 			// the card stays open; the editor has the keys again (ADR 1791268009 §2.2)
-			v.run.h.keep(v.run.h.p.Call("editor", "forceActiveFocus"))
+			v.run.pl.c.Keep(v.run.pl.c.View("editor", "forceActiveFocus"))
 			return true
 		}
 		if v.run.e.m.Dialog.Esc == "hide" {

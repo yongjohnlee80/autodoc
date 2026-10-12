@@ -22,56 +22,56 @@ const (
 )
 
 // loadPlugins lists the folder's plugins in the Plugins menu.
-func (h *Host) loadPlugins() {
-	h.pluginList = discoverPlugins(h.pluginOpt.Dir)
-	h.syncPluginEntries()
-	h.refreshPlugins()
-	if h.p != nil { // read anew, not at New: the program runs, and attach launched the first ones
-		h.launchServices()
+func (pl *plugins) loadPlugins() {
+	pl.pluginList = discoverPlugins(pl.pluginOpt.Dir)
+	pl.syncPluginEntries()
+	pl.refreshPlugins()
+	if pl.c.Attached() { // read anew, not at New: the program runs, and attach launched the first ones
+		pl.launchServices()
 	}
 }
 
 // openPlugin is a Plugins menu entry: the plugin's dialog, started, or brought forward when open.
-func (h *Host) openPlugin(key string) {
+func (pl *plugins) openPlugin(key string) {
 	if key == "" {
 		return // "no plugins yet"
 	}
-	if r := h.running[key]; r != nil {
+	if r := pl.running[key]; r != nil {
 		r.show()
 		return
 	}
-	i := slices.IndexFunc(h.pluginList, func(e pluginEntry) bool { return e.key() == key })
+	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.key() == key })
 	if i < 0 {
-		h.notify("no plugin " + key)
+		pl.c.Notify("no plugin " + key)
 		return
 	}
-	e := h.pluginList[i]
+	e := pl.pluginList[i]
 	if e.reason != "" {
-		h.notify(e.label())
+		pl.c.Notify(e.label())
 		return
 	}
-	r, err := h.startPlugin(e)
+	r, err := pl.startPlugin(e)
 	if err != nil {
-		h.failed(e.m.Name+" did not start", err)
+		pl.c.Failed(e.m.Name+" did not start", err)
 		return
 	}
-	h.running[key] = r
-	h.refreshPlugins() // a card shown takes no keys: a click or its command focuses it (§2.2)
+	pl.running[key] = r
+	pl.refreshPlugins() // a card shown takes no keys: a click or its command focuses it (§2.2)
 }
 
 // pluginTheme is the theme a plugin is sent: the one the screen wears.
-func (h *Host) pluginTheme() plugin.Theme {
-	colors, err := themes.Values(h.theme)
+func (pl *plugins) pluginTheme() plugin.Theme {
+	colors, err := themes.Values(pl.c.Theme())
 	if err != nil {
 		colors = map[string]string{}
 	}
-	return plugin.Theme{Name: h.theme, Colors: colors}
+	return plugin.Theme{Name: pl.c.Theme(), Colors: colors}
 }
 
 // themePlugins tells the open plugins the theme changed.
-func (h *Host) themePlugins() {
-	t := h.pluginTheme()
-	for _, r := range h.running {
+func (pl *plugins) themePlugins() {
+	t := pl.pluginTheme()
+	for _, r := range pl.running {
 		r.send(plugin.MethodTheme, plugin.ThemeParams(t))
 	}
 }

@@ -37,6 +37,9 @@ type Page struct {
 	Outside bool // a file in no workspace
 	// Line and At are the cursor when Text was taken: its line (0-based) and byte offset in Text
 	Line, At int
+	// Version is the page's edit count when Text was taken: it rises with every edit and with every
+	// page shown (a note opened or closed, a file kept as the draft), never with a cursor move
+	Version int
 }
 
 // More optional parts of a Feature (feature.go).
@@ -137,10 +140,13 @@ func (h *Host) resetFiles() {
 	h.reg.listed()
 }
 
-// showPage is a page shown, a file read or the draft started: its text snapshotted, and the
-// watchers told (the one before closed first). The host's consumers read h.page from here on.
+// showPage is a page shown, a file read or the draft started, and the one way a page is shown: its
+// version rises, its text is snapshotted with it, and the watchers are told (the one before closed
+// first). Every change of the page shown goes through here, so none can show a page with the last
+// one's version. The host's consumers read h.page from here on.
 func (h *Host) showPage() {
 	h.pageGen++ // a pause still to come was the page before's: it must not reach this one
+	h.pageVersion++
 	h.page, h.typing = h.takePage(), false
 	h.reg.shown(h.page)
 	h.showTitle() // the file's name, whether or not a feature puts a breadcrumb after it
@@ -158,7 +164,7 @@ func (h *Host) pageNow() Page {
 // takePage is the page as the editor shows it now, its text one snapshot.
 func (h *Host) takePage() Page {
 	line, _ := h.core.Line()
-	p := Page{Kind: h.pageKind(), Text: []byte(h.core.Value()), Line: line, At: h.cursorBytes()}
+	p := Page{Kind: h.pageKind(), Text: []byte(h.core.Value()), Line: line, At: h.cursorBytes(), Version: h.pageVersion}
 	if h.file.open {
 		p.Ref, p.Outside = fileRef{h.file.ws, h.file.path}, h.file.outside()
 	}
@@ -198,6 +204,5 @@ func (h *Host) pagePaused() {
 		h.renderHTMLPane()
 	}
 	h.validateSoon(validateDelay - editPause)
-	h.feedSoonAfter(max(pluginFeedDelay-editPause, 0))
 	h.reg.edited(h.page)
 }

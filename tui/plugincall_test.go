@@ -64,7 +64,7 @@ title = "Plugin"
 `)
 	r, logs := callTUI(t, dir)
 	for _, id := range []string{"mark", "boom", "undeclared", "unknown", "plugin"} {
-		onLoop(r, func() bool { r.h.runPluginCommand("caller", id); return true })
+		onLoop(r, func() bool { r.h.plugins.runPluginCommand("caller", id); return true })
 		waitSaid(t, logs, "caller", "called "+id+" ")
 	}
 	r.keys(t, key('k')) // the dialog has the keys: the plugin's Key handler calls
@@ -88,7 +88,7 @@ title = "Plugin"
 	}
 	r.waitPage(t, "<1")
 	r.waitPage(t, "<key")
-	if waiting, _, _ := onLoop(r, func() *pluginRun { return r.h.running["caller"] }).callStats(); waiting != 0 {
+	if waiting, _, _ := onLoop(r, func() *pluginRun { return r.h.plugins.running["caller"] }).callStats(); waiting != 0 {
 		t.Fatalf("%d calls still wait", waiting)
 	}
 }
@@ -108,10 +108,10 @@ func rawTUI(t *testing.T, protocol int) (*running, string, *pluginRun) {
 		_ = os.WriteFile(path, []byte(strings.Replace(string(b), "calls = [\"lua.mark\"]\n", "", 1)), 0o644)
 	}
 	r, logs := callTUI(t, dir)
-	onLoop(r, func() bool { r.h.runPluginCommand("raw", "ping"); return true })
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("raw", "ping"); return true })
 	waitSaid(t, logs, "raw", "pong")
-	r.s.WaitFor(t, "raw ready", func(string) bool { return onLoop(r, func() bool { return r.h.running["raw"].ready }) })
-	return r, logs, onLoop(r, func() *pluginRun { return r.h.running["raw"] })
+	r.s.WaitFor(t, "raw ready", func(string) bool { return onLoop(r, func() bool { return r.h.plugins.running["raw"].ready }) })
+	return r, logs, onLoop(r, func() *pluginRun { return r.h.plugins.running["raw"] })
 }
 
 // heldLoop sends the raw plugin command while the loop is held, so the calls it sends wait, and

@@ -44,10 +44,10 @@ type pluginBinding struct {
 
 // refreshPlugins rebuilds the Plugins menu and the SPC p card from the plugins found, the user's
 // letters and what is running.
-func (h *Host) refreshPlugins() {
-	bindings := h.bindPluginKeys()
-	rows := make([]tuidecl.Row, 0, len(h.pluginList))
-	for _, e := range h.pluginList {
+func (pl *plugins) refreshPlugins() {
+	bindings := pl.bindPluginKeys()
+	rows := make([]tuidecl.Row, 0, len(pl.pluginList))
+	for _, e := range pl.pluginList {
 		key := e.key()
 		simple := e.reason != "" || (len(e.m.Commands) == 0 && !e.m.card() && !e.m.service())
 		if simple {
@@ -57,7 +57,7 @@ func (h *Host) refreshPlugins() {
 		}
 		sub := tuidecl.NewListModel("key", "label", "enabled", "target")
 		var items []tuidecl.Row
-		running := h.running[key] != nil
+		running := pl.running[key] != nil
 		if !e.m.service() {
 			items = append(items, tuidecl.Row{"key": "open", "label": "Open", "enabled": true,
 				"target": pluginTarget(key, targetOpen)})
@@ -78,7 +78,7 @@ func (h *Host) refreshPlugins() {
 	if len(rows) == 0 {
 		rows = []tuidecl.Row{{"key": "", "kind": "item", "label": "no plugins yet", "enabled": false, "target": ""}}
 	}
-	h.pluginRows.Reset(rows)
+	pl.pluginRows.Reset(rows)
 }
 
 // pluginCommandRef is a plugin command's catalog entry, as SPC p binds it: its plugin and its
@@ -90,30 +90,26 @@ type pluginCommandRef struct {
 // syncPluginEntries makes the runnable plugins' [[commands]] the catalog's plugin entries,
 // plugin.<name>.<id>, with no verb: SPC p binds them, F1 lists them, and they run their plugin's
 // command. The catalog follows the folder: a plugin removed, or one that cannot run, has none.
-func (h *Host) syncPluginEntries() {
-	if h.cat == nil {
+func (pl *plugins) syncPluginEntries() {
+	if !pl.c.HasCatalog() {
 		return // before the registry is built: options syncs them
 	}
-	for _, e := range h.cat.entries() {
-		if e.Source == SourcePlugin {
-			h.cat.remove(e.ID)
-		}
-	}
-	h.pluginCmds = map[string]pluginCommandRef{}
-	for _, e := range h.pluginList {
+	pl.c.RemovePluginEntries()
+	pl.pluginCmds = map[string]pluginCommandRef{}
+	for _, e := range pl.pluginList {
 		if e.reason != "" {
 			continue
 		}
 		title := cmp.Or(e.m.Title, e.m.Name)
 		for _, c := range e.m.Commands {
 			id, key, cmd := "plugin."+e.m.Name+"."+c.ID, e.key(), c.ID
-			err := h.cat.add(Entry{ID: id, Source: SourcePlugin, Owner: e.m.Name, Title: title + ": " + c.Title, Help: c.Title,
-				Run: func(Invocation) error { h.runPluginCommand(key, cmd); return nil }})
+			err := pl.c.AddPluginEntry(Entry{ID: id, Source: SourcePlugin, Owner: e.m.Name, Title: title + ": " + c.Title, Help: c.Title,
+				Run: func(Invocation) error { pl.runPluginCommand(key, cmd); return nil }})
 			if err != nil { // a manifest's ids are checked when it is read; this is a bug, said
-				h.keep(err)
+				pl.c.Keep(err)
 				continue
 			}
-			h.pluginCmds[id] = pluginCommandRef{plugin: e.m.Name, key: key, id: cmd, letter: c.Key}
+			pl.pluginCmds[id] = pluginCommandRef{plugin: e.m.Name, key: key, id: cmd, letter: c.Key}
 		}
 	}
 }
@@ -121,21 +117,19 @@ func (h *Host) syncPluginEntries() {
 // bindPluginKeys gives the catalog's plugin commands their SPC p letters, in the order of the
 // plugins' names, and sets the card: its letters, and its text. It returns each command's binding,
 // by "<plugin>.<id>".
-func (h *Host) bindPluginKeys() map[string]pluginBinding {
+func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 	var entries []*Entry
-	if h.cat != nil {
-		entries = slices.DeleteFunc(h.cat.entries(), func(e *Entry) bool { return e.Source != SourcePlugin })
-	}
+	entries = pl.c.PluginEntries()
 	slices.SortStableFunc(entries, func(a, b *Entry) int { return strings.Compare(a.Owner, b.Owner) })
 	out := map[string]pluginBinding{}
 	taken := map[string]string{"q": "close card"}
 	var rows []tuidecl.Row
 	targets := map[string]string{}
-	h.pluginLetters = map[string][]string{}
+	pl.pluginLetters = map[string][]string{}
 	var bound, unbound []string
 	for _, e := range entries {
-		ref := h.pluginCmds[e.ID]
-		letter, chosen := h.prefs.pluginKeys[ref.plugin+"."+ref.id]
+		ref := pl.pluginCmds[e.ID]
+		letter, chosen := pl.c.Prefs().pluginKeys[ref.plugin+"."+ref.id]
 		if !chosen {
 			letter = ref.letter
 		}
@@ -156,75 +150,75 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 			rows = append(rows, tuidecl.Row{"key": letter, "target": target})
 			targets[letter] = target
 			bound = append(bound, letter+"  "+e.Title)
-			h.pluginLetters[e.ID] = []string{"SPC p " + letter}
+			pl.pluginLetters[e.ID] = []string{"SPC p " + letter}
 		}
 		if b.letter == "" {
 			unbound = append(unbound, "   "+e.Title+" — "+b.why)
 		}
 		out[ref.plugin+"."+ref.id] = b
 	}
-	h.pluginKeyTargets = targets
-	h.pluginKeyRows.Reset(rows)
+	pl.pluginKeyTargets = targets
+	pl.pluginKeyRows.Reset(rows)
 	text := "no plugin commands yet"
 	if lines := append(bound, unbound...); len(lines) > 0 {
 		text = strings.Join(lines, "\n")
 	}
-	if h.p != nil { // at New there is no program yet: attach's launchServices refreshes it
-		h.set("App.pluginKeysText", text)
-		h.commandsChanged() // F1 names the letters
+	if pl.c.Attached() { // at New there is no program yet: attach's launchServices refreshes it
+		pl.c.Set("App.pluginKeysText", text)
+		pl.c.CommandsChanged() // F1 names the letters
 	}
 	return out
 }
 
-func (h *Host) pluginKey(letter string) {
-	if target := h.pluginKeyTargets[letter]; target != "" {
-		h.closeDialog("pluginKeys")
-		h.pluginEntry(target)
+func (pl *plugins) pluginKey(letter string) {
+	if target := pl.pluginKeyTargets[letter]; target != "" {
+		pl.c.Close("pluginKeys")
+		pl.pluginEntry(target)
 	}
 }
 
 // pluginEntry is a Plugins menu row or a SPC p letter, chosen: its target.
-func (h *Host) pluginEntry(target string) {
+func (pl *plugins) pluginEntry(target string) {
 	key, rest, _ := strings.Cut(target, "|")
 	action, id, _ := strings.Cut(rest, "|")
 	switch action {
 	case targetOpen:
-		h.openPlugin(key)
+		pl.openPlugin(key)
 	case targetClose:
-		if r := h.running[key]; r != nil {
+		if r := pl.running[key]; r != nil {
 			r.close("")
 		}
 	case targetCommand:
-		h.runPluginCommand(key, id)
+		pl.runPluginCommand(key, id)
 	}
 }
 
 // runPluginCommand runs a plugin's command: the plugin started first when it is not running, a
 // card focused, and the command sent once the plugin has opened.
-func (h *Host) runPluginCommand(key, id string) {
-	i := slices.IndexFunc(h.pluginList, func(e pluginEntry) bool { return e.key() == key })
+func (pl *plugins) runPluginCommand(key, id string) {
+	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.key() == key })
 	if i < 0 {
-		h.notify("no plugin " + key)
+		pl.c.Notify("no plugin " + key)
 		return
 	}
-	e := h.pluginList[i]
+	e := pl.pluginList[i]
 	if e.reason != "" {
-		h.notify(e.label())
+		pl.c.Notify(e.label())
 		return
 	}
-	r := h.running[key]
+	r := pl.running[key]
 	if e.m.card() && id == pluginToggle && r != nil {
 		r.close("")
 		return
 	}
 	if r == nil {
 		var err error
-		if r, err = h.startPlugin(e); err != nil {
-			h.failed(e.m.Name+" did not start", err)
+		if r, err = pl.startPlugin(e); err != nil {
+			pl.c.Failed(e.m.Name+" did not start", err)
 			return
 		}
-		h.running[key] = r
-		h.refreshPlugins()
+		pl.running[key] = r
+		pl.refreshPlugins()
 		r.focusOnOpen = e.m.card()
 	} else {
 		r.show()
@@ -239,17 +233,17 @@ func (h *Host) runPluginCommand(key, id string) {
 
 // launchServices starts the services whose manifest says start = "launch": with the TUI, and again
 // when the plugins are read anew (one added, say). A running one is left as it is.
-func (h *Host) launchServices() {
-	for _, e := range h.pluginList {
-		if e.reason != "" || !e.m.service() || e.m.Start != "launch" || h.running[e.key()] != nil {
+func (pl *plugins) launchServices() {
+	for _, e := range pl.pluginList {
+		if e.reason != "" || !e.m.service() || e.m.Start != "launch" || pl.running[e.key()] != nil {
 			continue
 		}
-		r, err := h.startPlugin(e)
+		r, err := pl.startPlugin(e)
 		if err != nil {
-			h.failed(e.m.Name+" did not start", err)
+			pl.c.Failed(e.m.Name+" did not start", err)
 			continue
 		}
-		h.running[e.key()] = r
+		pl.running[e.key()] = r
 	}
-	h.refreshPlugins()
+	pl.refreshPlugins()
 }

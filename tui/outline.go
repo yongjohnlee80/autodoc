@@ -35,7 +35,6 @@ func (h *Host) showTitle() {
 
 // cursorMoved is the editor's cursor landing elsewhere: the watchers hear it (the breadcrumb follows).
 func (h *Host) cursorMoved() {
-	h.feedSoon()
 	h.followCursorInPane()
 	line, _ := h.core.Line()
 	h.reg.moved(line, h.cursorBytes())

@@ -228,27 +228,13 @@ type Host struct {
 	vimKeys   *widget.Float // the Vim keys' card (vimkeys.go)
 	findChip  *widget.Float // "finding …" and its ✕, under the menu at the top right (find.go)
 	findLabel *widget.Text
-	// the plugins (plugins.go): where they are, the folder's as found, the menu's rows, and the open
-	// ones by key
-	pluginOpt  Plugins
-	pluginList []pluginEntry
-	pluginRows *tuidecl.ListModel
-	// feedVersion numbers the editor's text for the document feed, and feedGen its pending send
-	// (pluginfeed.go)
-	feedVersion, feedGen int
-	// pluginKeyRows are the SPC p card's letters: each command's, as bound (plugincmds.go)
-	pluginKeyRows    *tuidecl.ListModel
-	pluginKeyTargets map[string]string
-	running          map[string]*pluginRun
-	// pluginCmds are the catalog's plugin entries by id, and pluginLetters their letters as F1
-	// names them (plugincmds.go)
-	pluginCmds    map[string]pluginCommandRef
-	pluginLetters map[string][]string
-	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, and the
-	// manager's rows
-	pendingPlugin  *pluginChange
-	managedPlugins *rows[managedPlugin]
-	pageWidth      int // the page's width as last set: the ruler, the border, the gutter
+	// the plugins (pluginfeature.go), a feature of its own: the host syncs their catalog entries
+	// when the registry is built, launches their services when the program runs, and F1 names their
+	// letters (help.go), at the moments the host decides
+	plugins *plugins
+	// pageVersion is the page's edit count, which every Page carries (page.go: Page.Version)
+	pageVersion int
+	pageWidth   int // the page's width as last set: the ruler, the border, the gutter
 	// helpNow is F1's text as last set; helpPosted, that a refresh of it is on its way
 	helpNow    string
 	helpPosted bool
@@ -343,21 +329,17 @@ func newHost(session *Session, opt Options) *Host {
 		panelOpen:       map[string]bool{},
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
-		pluginOpt:       opt.Plugins,
-		pluginRows:      tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
-		pluginKeyRows:   tuidecl.NewListModel("key", "target"),
-		running:         map[string]*pluginRun{}}
+	}
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
 	h.explorer = newExplorer(core{h})
 	h.ai = newAIModels(core{h})
 	h.outline = newOutline(core{h})
 	h.rel = newRelated(core{h})
-	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
-	h.loadPlugins()
+	h.plugins = newPlugins(core{h}, opt.Plugins)
 	return h
 }
 
@@ -387,7 +369,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)
 	p.Post(h.start)
-	p.Post(h.launchServices)
+	p.Post(h.plugins.launchServices)
 	return nil
 }
 
@@ -417,8 +399,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
 	h.cat = h.reg.catalog
-	h.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
-	h.refreshPlugins()
+	h.plugins.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
+	h.plugins.refreshPlugins()
 	opts = append(opts,
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
 		tuidecl.Sources(h.reg.state),
@@ -439,7 +421,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 func (h *Host) Run(ctx context.Context) error {
 	defer h.cancel()
 	defer h.session.Close()
-	defer h.stopPlugins() // after the loop: each stopped, bounded, before the session ends
+	defer h.reg.stopped() // after the loop: what each feature started stopped, bounded, before the session ends
 	err := h.p.Run(ctx)
 	// ended unasked (a signal) with unsaved work: kept, and offered at the next start
 	keepErr := h.keepRecovery()

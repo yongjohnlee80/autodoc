@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"maps"
 	"slices"
 
 	"github.com/BurntSushi/toml"
@@ -57,40 +56,40 @@ type managedPlugin struct {
 }
 
 // startAddPlugin is Plugins › Add from a git URL….
-func (h *Host) startAddPlugin() {
-	if h.pluginOpt.Dir == "" {
-		h.notify("no plugins folder: AutoDoc was started without one")
+func (pl *plugins) startAddPlugin() {
+	if pl.pluginOpt.Dir == "" {
+		pl.c.Notify("no plugins folder: AutoDoc was started without one")
 		return
 	}
-	h.setField("App.pluginUrl", "")
-	h.open("pluginAdd")
+	setField(pl.c, "App.pluginUrl", "")
+	pl.c.Open("pluginAdd")
 }
 
 // addPlugin clones url into a staged directory and asks PluginConfirm about what it holds.
-func (h *Host) addPlugin(url string) {
+func (pl *plugins) addPlugin(url string) {
 	url = strings.TrimSpace(url)
 	if url == "" {
-		h.notify("add a plugin: no URL")
-		h.open("pluginAdd")
+		pl.c.Notify("add a plugin: no URL")
+		pl.c.Open("pluginAdd")
 		return
 	}
-	h.closeDialog("pluginAdd")
-	h.notifyOngoing(toastPlugin, "cloning "+url+"…")
-	dir := h.pluginOpt.Dir
+	pl.c.Close("pluginAdd")
+	pl.c.NotifyOngoing(toastPlugin, "cloning "+url+"…")
+	dir := pl.pluginOpt.Dir
 	type cloned struct {
 		c   pluginChange
 		err error
 	}
-	do(h, func(ctx context.Context) cloned {
+	coreDo(pl.c, func(ctx context.Context) cloned {
 		c, err := stageClone(ctx, dir, url)
 		return cloned{c, err}
 	}, func(r cloned) {
 		if r.err != nil {
-			h.notifyDone(toastPlugin, "not added: "+r.err.Error())
+			pl.c.NotifyDone(toastPlugin, "not added: "+r.err.Error())
 			return
 		}
-		h.notifyDone(toastPlugin, "cloned "+r.c.m.Name+" at "+r.c.commit)
-		h.askPlugin(r.c)
+		pl.c.NotifyDone(toastPlugin, "cloned "+r.c.m.Name+" at "+r.c.commit)
+		pl.askPlugin(r.c)
 	})
 }
 
@@ -132,8 +131,8 @@ func stageClone(ctx context.Context, dir, url string) (pluginChange, error) {
 }
 
 // askPlugin puts c to PluginConfirm.
-func (h *Host) askPlugin(c pluginChange) {
-	h.pendingPlugin = &c
+func (pl *plugins) askPlugin(c pluginChange) {
+	pl.pendingPlugin = &c
 	verb := "add"
 	if c.update {
 		verb = "update"
@@ -142,9 +141,9 @@ func (h *Host) askPlugin(c pluginChange) {
 	if title == "" {
 		title = c.m.Name
 	}
-	h.set("App.pluginConfirmTitle", verb+" the plugin "+title+"?")
-	h.set("App.pluginQuestion", pluginQuestion(c, title))
-	h.open("pluginConfirm")
+	pl.c.Set("App.pluginConfirmTitle", verb+" the plugin "+title+"?")
+	pl.c.Set("App.pluginQuestion", pluginQuestion(c, title))
+	pl.c.Open("pluginConfirm")
 }
 
 // pluginQuestion is PluginConfirm's text: what the plugin is, where it came from, what its build
@@ -194,47 +193,47 @@ func pluginDeclares(m *manifest) string {
 }
 
 // pluginConfirmed is PluginConfirm's Yes: the build, then the plugin in the folder.
-func (h *Host) pluginConfirmed() {
-	c := h.pendingPlugin
-	h.pendingPlugin = nil
+func (pl *plugins) pluginConfirmed() {
+	c := pl.pendingPlugin
+	pl.pendingPlugin = nil
 	if c == nil {
 		return
 	}
 	if c.update {
-		if r := h.running[c.m.Name]; r != nil {
+		if r := pl.running[c.m.Name]; r != nil {
 			r.close("") // it is replaced under itself otherwise
 		}
 	}
-	h.notifyOngoing(toastPlugin, "building "+c.m.Name+"…")
-	dir, logs := h.pluginOpt.Dir, h.pluginOpt.LogDir
-	do(h, func(ctx context.Context) error { return installChange(ctx, dir, logs, *c) }, func(err error) {
+	pl.c.NotifyOngoing(toastPlugin, "building "+c.m.Name+"…")
+	dir, logs := pl.pluginOpt.Dir, pl.pluginOpt.LogDir
+	coreDo(pl.c, func(ctx context.Context) error { return installChange(ctx, dir, logs, *c) }, func(err error) {
 		if err != nil {
-			h.notifyDone(toastPlugin, c.m.Name+" not installed: "+err.Error())
+			pl.c.NotifyDone(toastPlugin, c.m.Name+" not installed: "+err.Error())
 			return
 		}
-		h.loadPlugins()
-		h.loadManaged()
+		pl.loadPlugins()
+		pl.loadManaged()
 		verb := "added"
 		if c.update {
 			verb = "updated"
 		}
-		h.notifyDone(toastPlugin, fmt.Sprintf("%s %s at %s: Plugins › %s", verb, c.m.Name, c.commit, c.m.Title))
+		pl.c.NotifyDone(toastPlugin, fmt.Sprintf("%s %s at %s: Plugins › %s", verb, c.m.Name, c.commit, c.m.Title))
 	})
 }
 
 // pluginDeclined is PluginConfirm's No: an add's clone is thrown away; an update is left undone.
-func (h *Host) pluginDeclined() {
-	c := h.pendingPlugin
-	h.pendingPlugin = nil
+func (pl *plugins) pluginDeclined() {
+	c := pl.pendingPlugin
+	pl.pendingPlugin = nil
 	if c == nil {
 		return
 	}
 	if !c.update {
 		_ = os.RemoveAll(c.dir)
-		h.notify(c.m.Name + " not added")
+		pl.c.Notify(c.m.Name + " not added")
 		return
 	}
-	h.notify(c.m.Name + " not updated")
+	pl.c.Notify(c.m.Name + " not updated")
 }
 
 // installChange builds c and puts it in the folder: an add's clone moves in, an update's directory
@@ -313,23 +312,23 @@ func git(ctx context.Context, timeout time.Duration, dir string, args ...string)
 // ---------------------------------------------------------------- the manager
 
 // managePlugins is Plugins › Manage plugins….
-func (h *Host) managePlugins() {
-	if h.pluginOpt.Dir == "" {
-		h.notify("no plugins folder: AutoDoc was started without one")
+func (pl *plugins) managePlugins() {
+	if pl.pluginOpt.Dir == "" {
+		pl.c.Notify("no plugins folder: AutoDoc was started without one")
 		return
 	}
-	h.set("App.pluginsHelp", pluginsHelp)
-	h.open("pluginManager")
-	h.loadManaged()
+	pl.c.Set("App.pluginsHelp", pluginsHelp)
+	pl.c.Open("pluginManager")
+	pl.loadManaged()
 }
 
 const pluginsHelp = "Add… from a git URL · Update… or Remove… the one under the cursor · the folder: "
 
 // loadManaged lists the installed plugins in the manager, each with its source, read off the loop.
-func (h *Host) loadManaged() {
-	h.set("App.pluginsHelp", pluginsHelp+h.pluginOpt.Dir)
-	entries := discoverPlugins(h.pluginOpt.Dir)
-	do(h, func(ctx context.Context) []managedPlugin {
+func (pl *plugins) loadManaged() {
+	pl.c.Set("App.pluginsHelp", pluginsHelp+pl.pluginOpt.Dir)
+	entries := discoverPlugins(pl.pluginOpt.Dir)
+	coreDo(pl.c, func(ctx context.Context) []managedPlugin {
 		out := make([]managedPlugin, len(entries))
 		for i, e := range entries {
 			out[i] = managedPlugin{e: e}
@@ -341,24 +340,24 @@ func (h *Host) loadManaged() {
 		}
 		return out
 	}, func(ms []managedPlugin) {
-		h.managedPlugins.Reset(ms)
+		pl.managedPlugins.Reset(ms)
 	})
 }
 
 // managedPluginRowOf is an installed plugin as the manager shows it.
-func (h *Host) managedPluginRowOf(_ int, m managedPlugin) rowOf {
+func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
 	source := m.source
 	if source == "" {
 		source = "local: put in the folder by hand"
 	}
-	return rowOf{"key": m.e.dir, "name": m.e.label(), "place": h.placement(m.e), "commit": m.commit, "source": source}
+	return rowOf{"key": m.e.dir, "name": m.e.label(), "place": pl.placement(m.e), "commit": m.commit, "source": source}
 }
 
 // managedRow is the manager's row i, as listed.
-func (h *Host) managedRow(i int) (managedPlugin, bool) {
-	m, ok := h.managedPlugins.At(i)
+func (pl *plugins) managedRow(i int) (managedPlugin, bool) {
+	m, ok := pl.managedPlugins.At(i)
 	if !ok {
-		h.set("App.pluginsHelp", "no plugin under the cursor · Add… installs one")
+		pl.c.Set("App.pluginsHelp", "no plugin under the cursor · Add… installs one")
 	}
 	return m, ok
 }
@@ -367,22 +366,22 @@ func (h *Host) managedRow(i int) (managedPlugin, bool) {
 // commit it would move to. Up to date is the fetched commit against the clone's HEAD, read with the
 // fetch: the manager's row is listed off the loop, so for a moment after an update it still shows
 // the commit before it.
-func (h *Host) startUpdatePlugin(i int) {
-	m, ok := h.managedRow(i)
+func (pl *plugins) startUpdatePlugin(i int) {
+	m, ok := pl.managedRow(i)
 	if !ok {
 		return
 	}
 	if m.source == "" {
-		h.notify(m.e.label() + " was put in the folder by hand: update it there")
+		pl.c.Notify(m.e.label() + " was put in the folder by hand: update it there")
 		return
 	}
-	h.notifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
+	pl.c.NotifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
 	type fetched struct {
 		c    pluginChange
 		head string
 		err  error
 	}
-	do(h, func(ctx context.Context) fetched {
+	coreDo(pl.c, func(ctx context.Context) fetched {
 		c, err := fetchUpdate(ctx, m)
 		if err != nil {
 			return fetched{err: err}
@@ -392,12 +391,12 @@ func (h *Host) startUpdatePlugin(i int) {
 	}, func(r fetched) {
 		switch {
 		case r.err != nil:
-			h.notifyDone(toastPlugin, m.e.m.Name+" not updated: "+r.err.Error())
+			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+r.err.Error())
 		case r.c.commit == r.head:
-			h.notifyDone(toastPlugin, m.e.m.Name+" is up to date at "+r.head)
+			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" is up to date at "+r.head)
 		default:
-			h.notifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+r.c.commit)
-			h.askPlugin(r.c)
+			pl.c.NotifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+r.c.commit)
+			pl.askPlugin(r.c)
 		}
 	})
 }
@@ -428,64 +427,57 @@ func fetchUpdate(ctx context.Context, m managedPlugin) (pluginChange, error) {
 
 // placePlugin is the manager's Place: the plugin under the cursor to the next placement its
 // manifest offers, kept as a preference, and moved at once when it is open.
-func (h *Host) placePlugin(i int) {
-	m, ok := h.managedRow(i)
+func (pl *plugins) placePlugin(i int) {
+	m, ok := pl.managedRow(i)
 	if !ok {
 		return
 	}
 	places := m.e.m.Dialog.Placements
 	if len(places) < 2 {
-		h.set("App.pluginsHelp", fmt.Sprintf("%s is designed for %s only", m.e.label(), strings.Join(places, ", ")))
+		pl.c.Set("App.pluginsHelp", fmt.Sprintf("%s is designed for %s only", m.e.label(), strings.Join(places, ", ")))
 		return
 	}
-	next := places[(slices.Index(places, h.placement(m.e))+1)%len(places)]
+	next := places[(slices.Index(places, pl.placement(m.e))+1)%len(places)]
 	name := m.e.m.Name
-	h.setPref(prefPluginPrefix+name+prefPluginPlace, next, func(p *prefs) {
-		place := maps.Clone(p.pluginPlace)
-		if place == nil {
-			place = map[string]string{}
-		}
-		place[name] = next
-		p.pluginPlace = place
-	})
-	if r := h.running[name]; r != nil {
+	pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+name+prefPluginPlace, next))
+	if r := pl.running[name]; r != nil {
 		r.float.SetAnchor(pluginAnchors[next])
 	}
-	h.set("App.pluginsHelp", fmt.Sprintf("%s: %s", m.e.label(), next))
-	h.loadManaged()
+	pl.c.Set("App.pluginsHelp", fmt.Sprintf("%s: %s", m.e.label(), next))
+	pl.loadManaged()
 }
 
 // startRemovePlugin is the manager's Remove….
-func (h *Host) startRemovePlugin(i int) {
-	m, ok := h.managedRow(i)
+func (pl *plugins) startRemovePlugin(i int) {
+	m, ok := pl.managedRow(i)
 	if !ok {
 		return
 	}
 	dir := m.e.dir
-	h.ask(Question{Title: "remove the plugin?", Text: fmt.Sprintf("Remove %s? Its directory goes, with what its build made:\n%s",
-		m.e.label(), dir), No: "&No, keep it", Yes: "&Yes, remove it", OnYes: func() { h.removePluginConfirmed(dir) }})
+	pl.c.Ask(Question{Title: "remove the plugin?", Text: fmt.Sprintf("Remove %s? Its directory goes, with what its build made:\n%s",
+		m.e.label(), dir), No: "&No, keep it", Yes: "&Yes, remove it", OnYes: func() { pl.removePluginConfirmed(dir) }})
 }
 
 // removePluginConfirmed removes the plugin asked about: closed first when it is open, and only a
 // directory of the plugins folder itself.
-func (h *Host) removePluginConfirmed(dir string) {
-	if dir == "" || filepath.Dir(dir) != filepath.Clean(h.pluginOpt.Dir) {
+func (pl *plugins) removePluginConfirmed(dir string) {
+	if dir == "" || filepath.Dir(dir) != filepath.Clean(pl.pluginOpt.Dir) {
 		return
 	}
-	for key, r := range h.running {
+	for key, r := range pl.running {
 		if r.e.dir == dir {
 			r.close("")
-			delete(h.running, key)
+			delete(pl.running, key)
 		}
 	}
 	name := filepath.Base(dir)
-	do(h, func(context.Context) error { return os.RemoveAll(dir) }, func(err error) {
+	coreDo(pl.c, func(context.Context) error { return os.RemoveAll(dir) }, func(err error) {
 		if err != nil {
-			h.failed("not removed", err)
+			pl.c.Failed("not removed", err)
 			return
 		}
-		h.notify("removed " + name)
-		h.loadPlugins()
-		h.loadManaged()
+		pl.c.Notify("removed " + name)
+		pl.loadPlugins()
+		pl.loadManaged()
 	})
 }

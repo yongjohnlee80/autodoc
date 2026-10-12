@@ -53,17 +53,6 @@ func (h *Host) commands() map[string]Command {
 		"App.openPicker":        none(h.openPicker),
 
 		// the plugins
-		"App.openPlugin":        oneString("a plugin", h.openPlugin),
-		"App.pluginEntry":       oneString("a plugin's menu row or letter", h.pluginEntry),
-		"App.pluginKey":         oneString("a plugin command letter", h.pluginKey),
-		"App.startAddPlugin":    none(h.startAddPlugin),
-		"App.addPlugin":         oneString("a git URL", h.addPlugin),
-		"App.pluginConfirmed":   none(h.pluginConfirmed),
-		"App.pluginDeclined":    none(h.pluginDeclined),
-		"App.managePlugins":     none(h.managePlugins),
-		"App.startUpdatePlugin": oneNumber("a row", h.startUpdatePlugin),
-		"App.startRemovePlugin": oneNumber("a row", h.startRemovePlugin),
-		"App.placePlugin":       oneNumber("a row", h.placePlugin),
 
 		// the panels
 		"App.panelOpened":       oneString("a panel", h.panelOpened),

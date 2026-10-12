@@ -48,7 +48,7 @@ func (r *pluginRun) hostCall(params []any) {
 	case len(r.calls) >= plugin.MaxPendingCalls:
 		r.busy++
 		r.callMu.Unlock()
-		r.h.p.Post(func() { r.answer(c.Num, plugin.CallRefused+" busy", false) })
+		r.pl.c.Post(func() { r.answer(c.Num, plugin.CallRefused+" busy", false) })
 		return
 	}
 	if r.calls == nil {
@@ -65,12 +65,12 @@ func (r *pluginRun) hostCall(params []any) {
 	case !slices.Contains(r.e.m.Calls, c.ID):
 		refusal = c.ID + " is not in the manifest's calls"
 	}
-	r.h.p.Post(func() {
+	r.pl.c.Post(func() {
 		if refusal != "" {
 			r.answer(c.Num, plugin.CallRefused+" "+refusal, true)
 			return
 		}
-		r.answer(c.Num, callOutcome(c.ID, r.h.cat.run(c.ID, c.Args)), true)
+		r.answer(c.Num, callOutcome(c.ID, r.pl.c.RunEntry(c.ID, c.Args)), true)
 	})
 }
 

@@ -46,16 +46,16 @@ func TestAFailureSaysWhatFailedAndWhy(t *testing.T) {
 		launched := pluginEntry{dir: t.TempDir(), m: manifest{Name: "launched", Kind: "service", Start: "launch", Command: gone}}
 		fed := pluginEntry{dir: t.TempDir(), m: manifest{Name: "fed", Kind: "service", Start: "use", Command: gone}}
 		fed.m.Feed.Document = true
-		r.h.pluginList = []pluginEntry{cmd, launched, fed}
-		r.h.runPluginCommand("bycommand", "x")
-		r.h.launchServices()
-		r.h.feedDocuments()
+		r.h.plugins.pluginList = []pluginEntry{cmd, launched, fed}
+		r.h.plugins.runPluginCommand("bycommand", "x")
+		r.h.plugins.launchServices()
+		r.h.plugins.feedDocuments()
 		return true
 	})
 	for _, name := range []string{"bycommand", "launched", "fed"} {
 		r.waitKept(t, name+" did not start: ")
 	}
-	if n := onLoop(r, func() int { return len(r.h.running) }); n != 0 {
+	if n := onLoop(r, func() int { return len(r.h.plugins.running) }); n != 0 {
 		t.Errorf("%d plugins running whose program is not there", n)
 	}
 }

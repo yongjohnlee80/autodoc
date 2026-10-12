@@ -19,6 +19,14 @@ func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
 	}()
 }
 
+// coreDo is do for a feature, through its Core: fn off the loop, then on it with fn's result, typed.
+func coreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
+	c.Go(func(ctx context.Context) any { return fn(ctx) }, func(v any) {
+		t, _ := v.(T) // a nil error comes back as nil, not a failed assertion
+		then(t)
+	})
+}
+
 // answerOf is a background answer: a value, or why there is none. An answer of several values is
 // a struct of its own; one value and its error is this.
 type answerOf[T any] struct {

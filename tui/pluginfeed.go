@@ -20,8 +20,8 @@ import (
 var pluginFeedDelay = 300 * time.Millisecond
 
 // feeds reports whether a plugin found declares the feed.
-func (h *Host) feeds() bool {
-	for _, e := range h.pluginList {
+func (pl *plugins) feeds() bool {
+	for _, e := range pl.pluginList {
 		if e.reason == "" && e.m.Feed.Document {
 			return true
 		}
@@ -29,74 +29,66 @@ func (h *Host) feeds() bool {
 	return false
 }
 
-// feedEdited is the text changing, typed or replaced: a new version, sent once it rests.
-func (h *Host) feedEdited() {
-	h.feedVersion++
-	h.feedSoon()
-}
-
 // feedSoon sends the document once editing and moving have rested; a later call supersedes it.
-func (h *Host) feedSoon() { h.feedSoonAfter(pluginFeedDelay) }
+func (pl *plugins) feedSoon() { pl.feedSoonAfter(pluginFeedDelay) }
 
 // feedSoonAfter sends the document after wait: a typing pause waits the rest of pluginFeedDelay,
 // so the document goes pluginFeedDelay after the last keystroke, as a move's does after the move.
-func (h *Host) feedSoonAfter(wait time.Duration) {
-	if !h.feeds() {
+func (pl *plugins) feedSoonAfter(wait time.Duration) {
+	if !pl.feeds() {
 		return
 	}
-	h.feedGen++
-	gen := h.feedGen
-	h.after(wait, func() {
-		if gen == h.feedGen {
-			h.feedDocuments()
+	pl.feedGen++
+	gen := pl.feedGen
+	pl.c.After(wait, func() {
+		if gen == pl.feedGen {
+			pl.feedDocuments()
 		}
 	})
 }
 
 // feedDocuments sends the document to every plugin that declared the feed and runs, and starts a
 // service that starts on use.
-func (h *Host) feedDocuments() {
+func (pl *plugins) feedDocuments() {
 	var d plugin.Document
 	built := false
-	for _, e := range h.pluginList {
+	for _, e := range pl.pluginList {
 		if e.reason != "" || !e.m.Feed.Document {
 			continue
 		}
 		if !built {
-			d, built = h.document(), true
+			d, built = pl.document(), true
 		}
-		r := h.running[e.key()]
+		r := pl.running[e.key()]
 		if r == nil {
 			if !e.m.service() || e.m.Start != "use" {
 				continue // a dialog is sent the document when it opens
 			}
 			var err error
-			if r, err = h.startPlugin(e); err != nil {
-				h.failed(e.m.Name+" did not start", err)
+			if r, err = pl.startPlugin(e); err != nil {
+				pl.c.Failed(e.m.Name+" did not start", err)
 				continue
 			}
-			h.running[e.key()] = r
-			h.refreshPlugins()
+			pl.running[e.key()] = r
+			pl.refreshPlugins()
 			continue // startPlugin sent it the document
 		}
 		r.sendDocument(d)
 	}
 }
 
-// document is the note in the editor: its path in the workspace ("" for a draft), its text, the
-// cursor and the selection, from 1 in the editor's columns (grapheme clusters).
-func (h *Host) document() plugin.Document {
-	d := plugin.Document{Workspace: h.ws, Version: h.feedVersion}
-	if h.editor == nil {
-		return d
+// document is the note in the editor: its path in the workspace ("" for a draft), its text and its
+// version (Page: snapshotted again when typed since the last), the cursor and the selection, from 1
+// in the editor's columns (grapheme clusters).
+func (pl *plugins) document() plugin.Document {
+	p := pl.c.Page()
+	d := plugin.Document{Workspace: pl.c.Workspace(), Version: p.Version, Text: string(p.Text)}
+	if p.Ref.path != "" {
+		d.Workspace, d.Path = p.Ref.ws, p.Ref.path // "" and absolute for a file outside every workspace
 	}
-	if h.file.open {
-		d.Workspace, d.Path = h.file.ws, h.file.path // "" and absolute for a file outside every workspace
-	}
-	d.Text = string(h.pageNow().Text) // the page's snapshot; the cursor and selection are taken now
-	row, col := h.core.Line()
+	row, col := pl.c.Cursor()
 	d.Cursor = plugin.Position{Line: row + 1, Col: col + 1}
-	if r, c, er, ec, ok := h.core.SelectionRange(); ok {
+	if r, c, er, ec, ok := pl.c.Selection(); ok {
 		d.Selection = []plugin.Range{{Start: plugin.Position{Line: r + 1, Col: c + 1},
 			End: plugin.Position{Line: er + 1, Col: ec + 1}}}
 	}

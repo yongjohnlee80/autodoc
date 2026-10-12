@@ -30,7 +30,7 @@ func (h *Host) commandsChanged() {
 	h.helpPosted = true
 	h.p.Post(func() {
 		h.helpPosted = false
-		h.helpNow = helpText(h.keys, h.cat, h.pluginLetters)
+		h.helpNow = helpText(h.keys, h.cat, h.plugins.pluginLetters)
 		h.set("App.helpText", h.helpNow)
 	})
 }

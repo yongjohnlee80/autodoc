@@ -170,7 +170,7 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: ".", Show: ".", Does: "the right-click menu", Run: "App.openContextMenu()"},
 		{Seq: "t", Show: "t", Does: "the status line", Run: "App.toggleStatusLine()"},
 		{Seq: "Shift+L", Show: "L", Does: "arrange a panel", Run: "App.arrangePanel()"},
-		{Seq: "p", Show: "p", Does: "plugin commands", Run: "pluginKeys.open()"},
+		// SPC p is the plugins' (pluginfeature.go: Keys)
 	}),
 ))
 

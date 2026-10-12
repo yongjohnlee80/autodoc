@@ -71,7 +71,7 @@ func (h *Host) switchTheme(name string) {
 			return
 		}
 		h.layoutSrc, h.theme = next, name
-		h.themePlugins()
+		h.reg.themeChanged()
 		for k, v := range themeState(name) {
 			h.set(k, v)
 		}

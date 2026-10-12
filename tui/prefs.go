@@ -240,25 +240,7 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 		p.searchStages = stageChoiceOf(s)
 	}
 	for k, v := range m {
-		if name, ok := strings.CutPrefix(k, prefPluginPrefix); ok {
-			if plug, id, ok := strings.Cut(name, prefPluginKey); ok {
-				if s, isStr := v.(string); isStr {
-					if p.pluginKeys == nil {
-						p.pluginKeys = map[string]string{}
-					}
-					p.pluginKeys[plug+"."+id] = s
-				}
-				continue
-			}
-			if name, ok = strings.CutSuffix(name, prefPluginPlace); ok {
-				if s, _ := v.(string); s != "" {
-					if p.pluginPlace == nil {
-						p.pluginPlace = map[string]string{}
-					}
-					p.pluginPlace[name] = s
-				}
-			}
-		}
+		readPluginPref(&p, k, v)
 	}
 	readRows(&p, m, terminalPrefRows(nil))
 	readRows(&p, m, agentPrefRows(nil))
@@ -320,10 +302,9 @@ func (h *Host) applyPrefs(p prefs) {
 	h.keep(h.p.SetMany(st))
 	h.syncPageWidth()
 	h.applyFonts(p)
-	h.reg.preferencesChanged()
+	h.reg.preferencesChanged() // the SPC p letters the user chose among them (plugins: PreferencesChanged)
 	h.applyToastPrefs()
 	h.syncStages(true)
-	h.refreshPlugins() // the SPC p letters the user chose
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
 	}
@@ -365,6 +346,32 @@ func (h *Host) setConnected(v bool) {
 // were made. Each write is its own call on its own worker, and the daemon may answer them in any
 // order: sent together, an earlier change could land after a later one and the store keep it, so
 // the next start shows what the user changed away from. They go one at a time instead.
+// readPluginPref reads one tui.plugin.* preference into p: a command's letter or a dialog's
+// placement. Anything else is not a plugin's, and is left alone.
+func readPluginPref(p *prefs, k string, v any) {
+	name, ok := strings.CutPrefix(k, prefPluginPrefix)
+	if !ok {
+		return
+	}
+	if plug, id, ok := strings.Cut(name, prefPluginKey); ok {
+		if s, isStr := v.(string); isStr {
+			if p.pluginKeys == nil {
+				p.pluginKeys = map[string]string{}
+			}
+			p.pluginKeys[plug+"."+id] = s
+		}
+		return
+	}
+	if name, ok = strings.CutSuffix(name, prefPluginPlace); ok {
+		if s, _ := v.(string); s != "" {
+			if p.pluginPlace == nil {
+				p.pluginPlace = map[string]string{}
+			}
+			p.pluginPlace[name] = s
+		}
+	}
+}
+
 func (h *Host) setPref(name, value string, change func(*prefs)) {
 	p := h.prefs
 	change(&p)

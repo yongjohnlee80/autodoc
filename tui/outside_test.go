@@ -114,7 +114,7 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 	r.h.p.Post(func() { r.h.enter("notes") })
 	r.s.WaitFor(t, "notes in use", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "notes" && r.h.entered }) })
 	r.waitOpen(t, "", abs)
-	if d := onLoop(r, r.h.document); d.Workspace != "" || d.Path != abs || d.Text != "# Notes\n" {
+	if d := onLoop(r, r.h.plugins.document); d.Workspace != "" || d.Path != abs || d.Text != "# Notes\n" {
 		t.Errorf("the feed's document: workspace %q path %q text %q", d.Workspace, d.Path, d.Text)
 	}
 	r.h.p.Post(func() { r.h.closeFile() })

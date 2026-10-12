@@ -28,7 +28,7 @@ var (
 
 // pluginRun is one plugin's process, its link and its dialog. Loop-owned unless marked.
 type pluginRun struct {
-	h     *Host
+	pl    *plugins
 	e     pluginEntry
 	cmd   *exec.Cmd
 	link  *plugin.Link
@@ -70,8 +70,8 @@ type pluginRun struct {
 
 // startPlugin starts e's process, its link and its surface, and sends plugin.open: a dialog's at
 // its first layout, a service's at once.
-func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
-	host, ok := h.p.Overlay()
+func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
+	host, ok := pl.c.Overlay()
 	if !ok && !e.m.service() {
 		return nil, errors.New("the screen is not ready")
 	}
@@ -85,11 +85,11 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 		hostOut.Close()
 		return nil, err
 	}
-	log := openPluginLog(h.pluginOpt.LogDir, e.m.Name)
+	log := openPluginLog(pl.pluginOpt.LogDir, e.m.Name)
 	cmd := exec.Command(e.m.Command[0], e.m.Command[1:]...)
 	cmd.Dir = e.dir
 	cmd.Env = append(os.Environ(), fmt.Sprintf("AUTODOC_PLUGIN_PROTOCOL=%d", e.m.Protocol),
-		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+h.pluginOpt.Socket)
+		"AUTODOC_PLUGIN_DIR="+e.dir, "AUTODOC_SOCKET="+pl.pluginOpt.Socket)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = toPlugin, fromPlugin, log
 	cmd.SysProcAttr = pluginProcAttr()
 	err = cmd.Start()
@@ -102,15 +102,15 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return nil, err
 	}
 
-	r := &pluginRun{h: h, e: e, cmd: cmd, log: log, out: newOutQueue(),
+	r := &pluginRun{pl: pl, e: e, cmd: cmd, log: log, out: newOutQueue(),
 		exited: make(chan struct{}), shutDone: make(chan struct{}),
 		handshake: pluginHandshake, grace: pluginGrace, termGrace: pluginTermGrace}
-	r.ctx, r.stop = context.WithCancel(h.ctx)
+	r.ctx, r.stop = context.WithCancel(pl.c.Context())
 	go func() {
 		r.exitErr = cmd.Wait()
 		log.Close()
 		close(r.exited)
-		h.p.Post(r.exitedUnasked)
+		pl.c.Post(r.exitedUnasked)
 	}()
 	r.link, err = plugin.NewLink(r.ctx, plugin.FileConn(hostIn, hostOut), r.onNote)
 	if err != nil {
@@ -120,7 +120,7 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 	}
 	go r.sender()
 	if e.m.Feed.Document {
-		r.sendDocument(h.document()) // after plugin.open: the note as it stands when it starts
+		r.sendDocument(pl.document()) // after plugin.open: the note as it stands when it starts
 	}
 	if e.m.service() {
 		r.openAt(0, 0) // no surface to lay out: open it now
@@ -130,7 +130,7 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 	r.view = &pluginView{run: r, w: e.m.Dialog.Width, h: e.m.Dialog.Height.rows, fill: e.m.Dialog.Height.pct > 0}
 	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
 		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	opts := []widget.FloatOption{widget.WithModal(e.m.modal()), widget.WithAnchor(pluginAnchors[h.placement(e)])}
+	opts := []widget.FloatOption{widget.WithModal(e.m.modal()), widget.WithAnchor(pluginAnchors[pl.placement(e)])}
 	if pct := e.m.Dialog.Height.pct; pct > 0 {
 		opts = append(opts, widget.WithSizeFraction(0, pct))
 	}
@@ -145,14 +145,14 @@ func (h *Host) startPlugin(e pluginEntry) (*pluginRun, error) {
 func (r *pluginRun) openAt(w, h int) {
 	r.opened = true
 	r.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: r.e.m.Protocol,
-		Width: w, Height: h, Theme: r.h.pluginTheme()}))
+		Width: w, Height: h, Theme: r.pl.pluginTheme()}))
 	early := r.early
 	r.early = nil
 	for _, n := range early {
 		r.send(n.method, n.params)
 	}
 	time.AfterFunc(r.handshake, func() {
-		r.h.p.Post(func() {
+		r.pl.c.Post(func() {
 			if !r.ready && !r.closing {
 				r.close(fmt.Sprintf("did not answer in %s", r.handshake))
 			}
@@ -194,8 +194,8 @@ func (r *pluginRun) show() {
 }
 
 // placement is where e's dialog sits: the user's choice among its placements, or its first.
-func (h *Host) placement(e pluginEntry) string {
-	if p := h.prefs.pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
+func (pl *plugins) placement(e pluginEntry) string {
+	if p := pl.c.Prefs().pluginPlace[e.m.Name]; slices.Contains(e.m.Dialog.Placements, p) {
 		return p
 	}
 	return e.m.Dialog.Placements[0]
@@ -233,7 +233,7 @@ func (r *pluginRun) sender() {
 		}
 		if err := r.link.Notify(r.ctx, n.method, n.params); err != nil {
 			if r.ctx.Err() == nil {
-				r.h.p.Post(func() { r.close("stopped answering: " + firstLine(err.Error())) })
+				r.pl.c.Post(func() { r.close("stopped answering: " + firstLine(err.Error())) })
 			}
 			r.out.drop()
 			return
@@ -251,7 +251,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 			// here, not on the loop: the plugin's first frame follows at once, on this goroutine
 			r.readyIn.Store(true)
 		}
-		r.h.p.Post(func() { r.readied(p, err) })
+		r.pl.c.Post(func() { r.readied(p, err) })
 	case plugin.MethodFrame:
 		if !r.readyIn.Load() || r.e.m.service() { // a service has nothing to draw into
 			return
@@ -269,17 +269,17 @@ func (r *pluginRun) onNote(method string, params []any) {
 		r.frame = frame
 		r.mu.Unlock()
 		if !r.posted.Swap(true) {
-			r.h.p.Post(func() {
+			r.pl.c.Post(func() {
 				r.posted.Store(false)
 				r.view.MarkDirty()
 			})
 		}
 	case plugin.MethodTitle:
 		if t, err := plugin.ReadTitle(params); err == nil && !r.e.m.service() {
-			r.h.p.Post(func() { r.box.SetTitle(r.title(t)) })
+			r.pl.c.Post(func() { r.box.SetTitle(r.title(t)) })
 		}
 	case plugin.MethodHostClose:
-		r.h.p.Post(func() { r.close("") })
+		r.pl.c.Post(func() { r.close("") })
 	case plugin.MethodCall:
 		r.hostCall(params)
 	}
@@ -322,18 +322,18 @@ func (r *pluginRun) close(why string) {
 	r.closing = true
 	if r.float != nil {
 		if r.focused {
-			r.h.keep(r.h.p.Call("editor", "forceActiveFocus"))
+			r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
 		}
 		if r.float.Shown() {
 			r.float.Hide()
 		}
-		if host, ok := r.h.p.Overlay(); ok {
+		if host, ok := r.pl.c.Overlay(); ok {
 			host.Detach(r.float)
 		}
 	}
-	if r.h.running[r.e.key()] == r {
-		delete(r.h.running, r.e.key())
-		r.h.refreshPlugins()
+	if r.pl.running[r.e.key()] == r {
+		delete(r.pl.running, r.e.key())
+		r.pl.refreshPlugins()
 	}
 	go r.shutdown()
 	if why != "" {
@@ -341,7 +341,7 @@ func (r *pluginRun) close(why string) {
 		if last := r.log.last(); last != "" {
 			msg += ": " + last
 		}
-		r.h.notify(msg)
+		r.pl.c.Notify(msg)
 	}
 }
 
@@ -374,12 +374,12 @@ func (r *pluginRun) shutdown() {
 
 // stopPlugins stops every open plugin and waits for them, as the TUI quits: bounded by the close's
 // deadlines, since they run at once.
-func (h *Host) stopPlugins() {
-	for _, r := range h.running {
+func (pl *plugins) stopPlugins() {
+	for _, r := range pl.running {
 		go r.shutdown()
 	}
-	for _, r := range h.running {
+	for _, r := range pl.running {
 		<-r.shutDone
 	}
-	h.running = map[string]*pluginRun{}
+	pl.running = map[string]*pluginRun{}
 }
