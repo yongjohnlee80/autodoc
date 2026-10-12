@@ -69,9 +69,17 @@ func TestAFileOutsideEveryWorkspaceOpensEditsAndSaves(t *testing.T) {
 	if r.editorText() != "# Notes\n" {
 		t.Fatalf("the page holds %q", r.editorText())
 	}
+	read := r.file().version
 	r.typeInEditor(t, "more ")
 	r.keys(t, decltest.Ctrl('s'))
 	waitDisk(t, r, abs, "more # Notes\n")
+	// The disk holds the save before the daemon has stat'ed the file for the version it answers:
+	// a write from here before the TUI has that answer would be the version it answers, and the
+	// next save would not conflict (vfs/local's version, "a foreign write racing the lstat").
+	r.s.WaitFor(t, "the save's version adopted", func(string) bool {
+		f := r.file()
+		return !f.dirty && f.version != read
+	})
 	if err := os.WriteFile(abs, []byte("# Changed elsewhere\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
