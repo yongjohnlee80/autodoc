@@ -79,6 +79,11 @@ func (r *recent) Commands() map[string]Command {
 }
 
 // Prefs is the list, as the store keeps it: no chooser, the feature sets it (SetPref).
+// Catalog is the recent files' user command (catalog.go): it runs what App.openRecent runs.
+func (r *recent) Catalog() []Entry {
+	return []Entry{builtin("file.open_recent", "recent files", "App.openRecent()", r.open)}
+}
+
 func (r *recent) Prefs() []PrefSpec { return []PrefSpec{ValuePref(prefRecent, "[]", nil)} }
 
 // docs are the recent files the preference holds, newest first.

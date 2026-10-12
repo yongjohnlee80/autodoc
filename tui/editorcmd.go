@@ -11,7 +11,8 @@ import (
 //	w, wq, x   the editor's writeRequested(quit): writeFromEditor
 //	q, q!      the editor's quitRequested(force): quitFromEditor
 //
-// and AutoDoc's own commands composed into the editor's (the Lua ones, script.go).
+// and AutoDoc's own commands composed into the editor's from the command catalog (catalog.go): its
+// own (editorEntries), each feature's, and the Lua ones (script.go).
 
 // writeFromEditor saves, as File › Save does, and quits once the file is written when quit (wq, x).
 // An untitled draft asks for its path first; a quit then waits for it, and is dropped if the
@@ -50,33 +51,31 @@ func (h *Host) openCommandLine() {
 	h.keep(h.p.Call("editor", "openCommandLine"))
 }
 
-// addEditorCommands composes AutoDoc's commands into the editor's: find and nohl are the page's
-// find (marked words, "finding …", n and N, as / is), so the prompt and / share one find.
-func (h *Host) addEditorCommands() {
-	cmds := h.core.Commands()
-	if cmds == nil {
-		return
-	}
-	_ = cmds.Set(
-		widget.Command{Name: "find", Args: "<term>", Help: "find term in the page; n and N go to the next and previous",
-			Run: func(x widget.CommandContext) error {
+// editorEntries are AutoDoc's verbs of the command line, as catalog entries (catalog.go): find and
+// nohl are the page's find (marked words, "finding …", n and N, as / is), so the prompt and / share
+// one find, and replace golib's own.
+func (h *Host) editorEntries() []Entry {
+	return []Entry{
+		{ID: "find.term", Title: "find a term in the page", Verb: "find", Args: "<term>",
+			Help: "find term in the page; n and N go to the next and previous",
+			Run: func(x Invocation) error {
 				if x.Line == "" {
 					return errors.New("find: what? find <term>")
 				}
 				h.findInPage(x.Line)
 				return nil
 			}},
-		widget.Command{Name: "nohl", Help: "clear the find", Run: func(widget.CommandContext) error {
+		{ID: "find.clear", Title: "clear the find", Verb: "nohl", Help: "clear the find", Run: func(Invocation) error {
 			h.core.SetFind("", widget.FindOptions{})
 			h.clearFind()
 			return nil
 		}},
-		widget.Command{Name: "terminal", Aliases: []string{"term"}, Help: "open the terminal (SPC `)",
-			Run: func(widget.CommandContext) error {
+		{ID: "terminal.open", Title: "open the terminal", Verb: "terminal", Aliases: []string{"term"},
+			Help: "open the terminal (SPC `)", Run: func(Invocation) error {
 				h.openTerminal()
 				return nil
 			}},
-	)
+	}
 }
 
 // findInPage starts the page's find for pattern, as / then Enter does, and goes to the first match

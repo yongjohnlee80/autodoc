@@ -2,6 +2,8 @@ package tui
 
 import (
 	"errors"
+	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -201,4 +203,66 @@ func TestALuaCommandTakesOneNameOnly(t *testing.T) {
 	if err := c.run("no.such", nil); !errors.Is(err, errUnknownCommand) || err.Error() != "unknown: no.such" {
 		t.Fatalf("an unknown id: %v", err)
 	}
+}
+
+// noArgCall is QML that invokes a command with no arguments: App.save(), help.open().
+var noArgCall = regexp.MustCompile(`^(App\.\w+|\w+\.open)\(\)$`)
+
+// TestEveryMenuRowAndLeaderKeyIsACatalogEntry (ADR 1791762474 §4.1): what a menu row or a SPC key
+// runs, with no arguments, is a catalog entry's twin, and each twin is a command the document can
+// invoke: so the catalog holds every user command, and each entry runs what its row runs.
+func TestEveryMenuRowAndLeaderKeyIsACatalogEntry(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	reg, err := newRegistry(h.features()...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	twins := map[string]string{}
+	for _, e := range reg.catalog.entries() {
+		if e.Twin == "" {
+			continue
+		}
+		twins[e.Twin] = e.ID
+		name, _, _ := strings.Cut(e.Twin, "(")
+		if obj, ok := strings.CutSuffix(name, ".open"); ok && !strings.HasPrefix(name, "App.") {
+			if !mainIDs[obj] && !slices.ContainsFunc(cards, func(c Card) bool { return c.ID == obj }) {
+				t.Errorf("%s's twin %s opens no dialog main.qml has", e.ID, e.Twin)
+			}
+		} else if reg.handlers[name] == nil {
+			t.Errorf("%s's twin %s is no command", e.ID, e.Twin)
+		}
+	}
+	src, err := os.ReadFile("qml/main.qml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs []string
+	for _, m := range regexp.MustCompile(`onTriggered: ([^}]*?)\s*}`).FindAllStringSubmatch(string(src), -1) {
+		runs = append(runs, m[1])
+	}
+	for _, k := range leaderKeys {
+		runs = append(runs, k.Run)
+	}
+	// :nohl's entry also clears the editor's own find; the menu's row clears the page's alone
+	exempt := map[string]bool{"App.clearFind()": true}
+	for _, run := range runs {
+		if noArgCall.MatchString(run) && twins[run] == "" && !exempt[run] {
+			t.Errorf("%s runs from a menu row or a SPC key, and no catalog entry is its twin", run)
+		}
+	}
+}
+
+// TestAnEntryRunsWhatItsTwinRuns: run by id, a built-in and a feature's entry do what their menu
+// rows do.
+func TestAnEntryRunsWhatItsTwinRuns(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	if err := onLoop(r, func() error { return r.h.cat.run("explorer.toggle", nil) }); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "┌ explorer")
+	if err := onLoop(r, func() error { return r.h.cat.run("todos.open", nil) }); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "todos · kb")
 }

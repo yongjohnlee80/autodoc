@@ -37,6 +37,11 @@ func (n *notices) Commands() map[string]Command {
 	}
 }
 
+// Catalog is the history's user command (catalog.go): it runs what App.openNotices runs.
+func (n *notices) Catalog() []Entry {
+	return []Entry{builtin("notices.open", "notifications", "App.openNotices()", n.open)}
+}
+
 // keep adds a notification to the history, newest first.
 func (n *notices) keep(msg string) {
 	n.items = append([]notice{{at: time.Now(), text: msg}}, n.items...)

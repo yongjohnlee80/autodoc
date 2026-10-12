@@ -396,8 +396,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
-	h.addEditorCommands()            // the command line's find is the page's (editorcmd.go)
-	h.cat.attach(h.core)             // the catalog's verbs on the command line (catalog.go)
+	h.cat.attach(h.core)             // the catalog's verbs on the command line: find is the page's (catalog.go)
 	h.core.SetOnEscape(h.escapeFind) // Esc in the page ends its find (find.go)
 	h.loadScripts()                  // the Lua commands: AutoDoc's own, then the user's (scripts.go)
 	h.core.SetTableEditing(true)     // the untitled draft is Markdown; readPage decides for a file

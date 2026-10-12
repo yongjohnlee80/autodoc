@@ -90,12 +90,24 @@ func (t *todos) Commands() map[string]Command {
 		"App.todoRefresh":      none(t.refresh),
 		"App.todoToggleDetail": none(t.toggleDetail),
 		"App.todoToggleHelp":   none(t.toggleHelp),
-		"App.todoLoad":         none(func() { t.chooseFolder("load", "load a todo store: its project's folder") }),
-		"App.todoNew":          none(func() { t.chooseFolder("new", "a new todo store: the project's folder") }),
+		"App.todoLoad":         none(t.chooseLoad),
+		"App.todoNew":          none(t.chooseNew),
 		"App.todoMove":         none(func() { t.chooseFolder("move", "move the store: its new folder") }),
 		"App.todoFolderChosen": oneString("a folder", t.folderChosen),
 	}
 }
+
+// Catalog is the todos' user commands (catalog.go): each runs what its App.* twin runs.
+func (t *todos) Catalog() []Entry {
+	return []Entry{
+		builtin("todos.open", "todos", "App.openTodos()", t.open),
+		builtin("todos.new_store", "a new todo store", "App.todoNew()", t.chooseNew),
+		builtin("todos.load_store", "load a todo store", "App.todoLoad()", t.chooseLoad),
+	}
+}
+
+func (t *todos) chooseLoad() { t.chooseFolder("load", "load a todo store: its project's folder") }
+func (t *todos) chooseNew()  { t.chooseFolder("new", "a new todo store: the project's folder") }
 
 // Kinds: another client's change to any store shows here when its store is the one open.
 func (t *todos) Kinds() []string { return []string{"todos.changed"} }
