@@ -49,6 +49,8 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
 - **No document is deleted on a partial read.** A refresh deletes only after a scan that read every
   row, and a row whose body fails still counts as seen. A row updated within the lag counts as
   seen too: after its bounded read, the refresh reads on to the view's end for presence alone.
+  Both reads share one read-only snapshot of the source, so a row updated mid-scan is still read
+  once, where it was.
 
 Writing a source view: [docs/enterprise/views.md](../../docs/enterprise/views.md).
 

@@ -249,6 +249,38 @@ func TestARefreshKeepsARowUpdatedWithinTheLag(t *testing.T) {
 	}
 }
 
+// A row updated while a refresh scans, to an updated_at behind the scan's position (its
+// transaction began before the scan got there), is still read: the refresh reads one snapshot of
+// the source, where the row is where it was. The mutant, named here: each page read on its own
+// (the row is ahead of the scan when the scan begins and behind it once moved, so it is read
+// nowhere and its document deleted).
+func TestARefreshReadsARowMovedBehindItsScan(t *testing.T) {
+	f := newFixture(t)
+	for id := 1; id <= 7; id++ { // the view's pages are 3 rows
+		f.track(id, "A", "song", id)
+	}
+	in := f.ingester(f.source(nil), Options{}, "")
+	if _, err := in.Pass(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	moved := false
+	beforeCommit = func() error {
+		if !moved { // after the first page (tracks 1 to 3): track 6 moves behind it
+			moved = true
+			f.exec(`UPDATE track SET updated_at = $1 WHERE id = 6`, at(0))
+		}
+		return nil
+	}
+	t.Cleanup(func() { beforeCommit = nil })
+	st := must[Stats](t)(in.Refresh(f.ctx))
+	if !moved || !st.Complete || st.Deleted != 0 {
+		t.Errorf("Refresh: %+v, want nothing deleted", st)
+	}
+	if got := f.paths(); !slices.Equal(got, trackPaths(1, 2, 3, 4, 5, 6, 7)) {
+		t.Errorf("documents %v, want track 6's kept", got)
+	}
+}
+
 // A scan that fails after some pages deletes nothing: the rows it did not reach would look gone.
 // The mutant, named here: the stale paths deleted after a scan that stopped on an error.
 func TestARefreshThatFailsDeletesNothing(t *testing.T) {

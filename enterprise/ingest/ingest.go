@@ -316,9 +316,12 @@ func (in *Ingester) retry(ctx context.Context, upto time.Time, st *Stats) error 
 //
 // The scan then goes on past now − Lag to the view's end, only to count the rows there as seen:
 // a row updated within the lag is still in the source, though the bounded scan cannot reach it.
-// The next pass indexes it once it is older than the lag. Pages are read one query at a time, not
-// in one snapshot, but a row updated during the scan only moves later in the order, where the scan
-// still reaches it.
+// The next pass indexes it once it is older than the lag. Both scans read one read-only snapshot of
+// the source, so every row is read exactly once, in one place: a row updated while the scan runs
+// is seen as it was when the scan began, whatever updated_at the update gives it. Read page by page
+// without one, a row moved behind the scan's position by an update (a transaction that began
+// before the scan got there, or an updated_at that went back) would be read nowhere, and its
+// document deleted.
 //
 // Only when the scan read every row, with no error and no row lacking an id, are the documents of
 // rows not seen deleted, the quarantined rows not seen released, and the refresh recorded; the
@@ -328,6 +331,10 @@ func (in *Ingester) retry(ctx context.Context, upto time.Time, st *Stats) error 
 // NOTE: a refresh holds every document's path, version and indexer, and every quarantined id, in
 // memory for the length of its scan: O(documents), some hundred bytes each. A row's document is
 // then compared without a query per row, and the paths not seen are known when the scan ends.
+//
+// NOTE: the snapshot is a read-only REPEATABLE READ transaction on the source, open for the
+// length of the refresh: it holds back the source's vacuum of rows updated meanwhile, as any
+// long read does, once per Refresh period.
 func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	var st Stats
 	if in.lock == nil {
@@ -355,11 +362,18 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	for _, e := range held {
 		quarantined[e.SourceID] = true
 	}
+	tx, err := dao.BeginConnTx(ctx, in.business, dao.TxOptions{Access: dao.TxReadOnly, Isolation: dao.TxRepeatableRead})
+	if err != nil {
+		st.Complete = false
+		return st, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	source := snapshot{TxConn: tx, base: in.business}
 	seen := map[string]bool{}
 	seenIDs := map[string]bool{}
 	var cur pgstore.Cursor
 	for {
-		rows, err := readPage(ctx, in.src, in.business, cur, upto)
+		rows, err := readPage(ctx, in.src, source, cur, upto)
 		if err != nil {
 			st.Complete = false
 			return st, err
@@ -405,7 +419,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 		cur = next
 	}
 	if st.Complete {
-		if err := in.present(ctx, cur, seen, seenIDs, &st); err != nil {
+		if err := in.present(ctx, source, cur, seen, seenIDs, &st); err != nil {
 			st.Complete = false
 			return st, err
 		}
@@ -427,12 +441,12 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 // holds, so the view returns every row after the cursor.
 var beyond = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
 
-// present reads the rows after cur, past the refresh's bound, and counts each as seen without
-// indexing it: rows updated within the lag are still in the source, and their documents and
+// present reads the rows after cur on source, past the refresh's bound, and counts each as seen
+// without indexing it: rows updated within the lag are still in the source, and their documents and
 // quarantine entries must outlive the refresh.
-func (in *Ingester) present(ctx context.Context, cur pgstore.Cursor, seen, seenIDs map[string]bool, st *Stats) error {
+func (in *Ingester) present(ctx context.Context, source dao.DataConn, cur pgstore.Cursor, seen, seenIDs map[string]bool, st *Stats) error {
 	for {
-		rows, err := readPage(ctx, in.src, in.business, cur, beyond)
+		rows, err := readPage(ctx, in.src, source, cur, beyond)
 		if err != nil || len(rows) == 0 {
 			return err
 		}

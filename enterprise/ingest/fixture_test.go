@@ -253,8 +253,37 @@ type failingConn struct {
 }
 
 func (c *failingConn) QueryContext(ctx context.Context, q string, args ...any) (dao.Rows, error) {
-	if strings.Contains(q, "jsonb_build_object") && c.calls.Add(1) >= c.n.Load() {
-		return nil, fmt.Errorf("the source went away")
+	if err := c.fail(q); err != nil {
+		return nil, err
 	}
 	return c.DataConn.QueryContext(ctx, q, args...)
+}
+
+// BeginTx begins a transaction whose view queries fail as the connection's do: a refresh reads
+// the view in a snapshot.
+func (c *failingConn) BeginTx(ctx context.Context, o dao.TxOptions) (dao.TxConn, error) {
+	tx, err := dao.BeginConnTx(ctx, c.DataConn, o)
+	if err != nil {
+		return nil, err
+	}
+	return failingTx{TxConn: tx, c: c}, nil
+}
+
+func (c *failingConn) fail(q string) error {
+	if strings.Contains(q, "jsonb_build_object") && c.calls.Add(1) >= c.n.Load() {
+		return fmt.Errorf("the source went away")
+	}
+	return nil
+}
+
+type failingTx struct {
+	dao.TxConn
+	c *failingConn
+}
+
+func (t failingTx) QueryContext(ctx context.Context, q string, args ...any) (dao.Rows, error) {
+	if err := t.c.fail(q); err != nil {
+		return nil, err
+	}
+	return t.TxConn.QueryContext(ctx, q, args...)
 }
