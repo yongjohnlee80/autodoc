@@ -202,8 +202,8 @@ type Core interface {
 	// Say puts a message about the page or the view on the status line, until the next.
 	Say(msg string)
 	// SetPref sets one of the feature's preferences (its PrefSpec row names it), through the row
-	// alone: read into Prefs at once, the row's State published and its Changed run when the value
-	// changed, then stored, in order with the other preferences written. Nothing else is applied
+	// alone: read into Prefs at once, the row's chooser (Index) and State published and its Changed
+	// run when the value changed, then stored, in order with the other preferences written. Nothing else is applied
 	// again: what a preference changes on screen is its row's State and Changed. A name no row
 	// declares is ignored.
 	SetPref(name, value string)

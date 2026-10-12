@@ -124,6 +124,10 @@ func TestCoreSetPrefFilesAndListings(t *testing.T) {
 	if wrap := onLoop(r, func() bool { core{r.h}.SetPref(prefWrap, "false"); return core{r.h}.Prefs().wrap }); wrap {
 		t.Error("SetPref did not reach the live prefs")
 	}
+	// the chooser follows: the Settings dialog's wrap row is "false", the second of its choices
+	if idx := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.wrapIndex"); return fmt.Sprint(v) }); !strings.HasPrefix(idx, "{number 1 ") {
+		t.Errorf("App.wrapIndex after SetPref(wrap, false) = %s; want the row of false (1)", idx)
+	}
 	w := &watching{fake: fake{name: "w"}}
 	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, w); return true })
 	before := onLoop(r, func() FileList { return core{r.h}.Files() })
