@@ -528,7 +528,7 @@ func TestTheProviderForm(t *testing.T) {
 		return strings.Contains(sc, "nomic-embed-text") && !strings.Contains(sc, "nomic-embed-text, say")
 	})
 	r.s.WaitForText(t, "model max 4096")
-	r.h.p.Post(func() { r.h.saveProvider("cloud", ollama.URL, "nomic-embed-text", "", "8192") })
+	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "8192") })
 	r.s.WaitForText(t, "exceeds this model's maximum of 4096")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saved the provider cloud")
@@ -542,7 +542,7 @@ func TestTheProviderForm(t *testing.T) {
 
 	// edited, its key sealed: another kind that takes a key still keeps it when left empty
 	r.s.WaitForText(t, "cloud")
-	r.h.p.Post(func() { r.h.startEditProvider(0) })
+	r.h.p.Post(func() { r.h.ai.providers.startEdit(0) })
 	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
 	r.keys(t, tab(), enter()) // the kind
 	r.s.WaitForText(t, "OpenAI-compatible")
@@ -555,7 +555,7 @@ func TestTheProviderForm(t *testing.T) {
 	r.s.WaitFor(t, "Ollama Cloud again", func(sc string) bool {
 		return strings.Contains(sc, "Ollama Cloud") && !strings.Contains(sc, "OpenAI-compatible")
 	})
-	r.h.p.Post(func() { r.h.listModels(ollama.URL, "") })
+	r.h.p.Post(func() { r.h.ai.providers.listModels(ollama.URL, "") })
 	r.s.WaitForText(t, "2 models")
 	mu.Lock()
 	last := auth[len(auth)-1]
@@ -564,7 +564,7 @@ func TestTheProviderForm(t *testing.T) {
 		t.Errorf("an edited provider's models were asked for with %q, not its stored key", last)
 	}
 	// a context window that is not a number is refused in the form, the store unchanged
-	r.h.p.Post(func() { r.h.saveProvider("cloud", ollama.URL, "nomic-embed-text", "", "lots") })
+	r.h.p.Post(func() { r.h.ai.providers.save("cloud", ollama.URL, "nomic-embed-text", "", "lots") })
 	r.s.WaitForText(t, "the context window is a number of tokens")
 	if info, _, err := d.db.ProviderWithKey(context.Background(), "cloud"); err != nil || info.Context != 4096 {
 		t.Errorf("after the refused window: %+v, %v", info, err)
@@ -907,7 +907,7 @@ func TestAProviderInUse(t *testing.T) {
 	r.s.WaitFor(t, "the dialog's green mark", func(string) bool { return r.markAbove(1) == "green semantic search · embedder" })
 	// its calls, metered and written every couple of seconds, under the list
 	r.s.WaitFor(t, "local's usage", func(sc string) bool {
-		r.h.p.Post(func() { r.h.providerDetail(0) })
+		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
 		return strings.Contains(sc, "requests ·") && strings.Contains(sc, "latest calls") && strings.Contains(sc, "· ok")
 	})
 	// at its usage limit: a new file's embedding is refused, and the log says why
@@ -918,7 +918,7 @@ func TestAProviderInUse(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.s.WaitFor(t, "the refused call", func(sc string) bool {
-		r.h.p.Post(func() { r.h.providerDetail(0) })
+		r.h.p.Post(func() { r.h.ai.providers.detail(0) })
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ") // wrapped: running text
 		return strings.Contains(text, "at the usage limit") && strings.Contains(text, "rate limited")
 	})
@@ -930,13 +930,13 @@ func TestAProviderInUse(t *testing.T) {
 	}
 
 	// a provider that does not set up: refused, and local stays in use
-	r.h.p.Post(func() { r.h.useProvider(1) })
+	r.h.p.Post(func() { r.h.ai.providers.use(1) })
 	r.s.WaitFor(t, "missing refused", func(sc string) bool {
 		// the reason, not the model's name in the list, wrapped: read as running text
 		text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
 		return strings.Contains(text, "missing not used: the provider has no such model")
 	})
-	if got := onLoop(r, func() string { return r.h.activeProvider }); got != "local" {
+	if got := onLoop(r, func() string { return r.h.ai.providers.active }); got != "local" {
 		t.Fatalf("after a refused Use the provider in use is %q", got)
 	}
 
@@ -1536,14 +1536,14 @@ func TestRemovingAProviderSaysWhatItDeletes(t *testing.T) {
 	// ask opens the removal's question for name, once the list holds listed too
 	ask := func(name, listed string) {
 		t.Helper()
-		onLoop(r, func() bool { r.h.loadProviders(); return true })
+		onLoop(r, func() bool { r.h.ai.providers.load(); return true })
 		r.s.WaitFor(t, "the providers listed", func(string) bool {
 			return onLoop(r, func() bool {
-				return slices.ContainsFunc(r.h.providers.All(), func(p providerRow) bool { return p.name == listed })
+				return slices.ContainsFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == listed })
 			})
 		})
 		onLoop(r, func() bool {
-			r.h.startRemoveProvider(slices.IndexFunc(r.h.providers.All(), func(p providerRow) bool { return p.name == name }))
+			r.h.ai.providers.startRemove(slices.IndexFunc(r.h.ai.providers.rows.All(), func(p endpointRow) bool { return p.name == name }))
 			return true
 		})
 	}

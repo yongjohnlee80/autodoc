@@ -125,7 +125,6 @@ func (h *Host) commands() map[string]Command {
 		// the preferences
 		"App.openPrefs":            none(h.openPrefs),
 		"App.openActiveSettings":   none(h.openActiveSettings),
-		"App.openAIModels":         none(h.openAIModels),
 		"App.setKeymap":            oneString("vim or text", h.setKeymap),
 		"App.toggleKeymap":         none(h.toggleKeymap),
 		"App.useTheme":             oneString("a theme's name", h.useTheme),
@@ -140,33 +139,9 @@ func (h *Host) commands() map[string]Command {
 		"App.setIndentMarks":       oneString("off, cursorLine or all", h.setIndentMarks),
 		"App.setRuler":             oneString("a number of columns", h.setRuler),
 
-		// the embedding providers
-		"App.showProvider":        oneNumber("a row", h.providerDetail),
-		"App.useProvider":         oneNumber("a row", h.useProvider),
-		"App.stopSemantic":        none(h.stopSemantic),
-		"App.startAddProvider":    none(h.startAddProvider),
-		"App.startEditProvider":   oneNumber("a row", h.startEditProvider),
-		"App.startRemoveProvider": oneNumber("a row", h.startRemoveProvider),
-		"App.providerKindChosen":  numberAndString("a row and the base URL", h.providerKindChosen),
-		"App.listModels":          twoStrings("the base URL and the key", h.listModels),
-		"App.pickModel":           oneNumber("a row", h.pickModel),
-		"App.cancelIndexing":      none(h.cancelIndexing),
-		"App.openVectors":         none(h.openVectors),
-		"App.startPurge":          oneNumber("a row", h.startPurge),
-		// the ranker models, and the buttons AI models' tabs share
-		"App.aiTabMoved":        oneNumber("a tab", h.aiTabMoved),
-		"App.aiAdd":             none(h.aiAdd),
-		"App.aiEdit":            oneNumber("a row", h.aiEdit),
-		"App.aiUse":             oneNumber("a row", h.aiUse),
-		"App.aiRemove":          oneNumber("a row", h.aiRemove),
-		"App.showRanker":        oneNumber("a row", h.rankerDetail),
-		"App.startEditRanker":   oneNumber("a row", h.startEditRanker),
-		"App.stopRanking":       none(h.stopRanking),
-		"App.startRankerWindow": none(h.startRankerWindow),
-		"App.saveRankerWindow":  oneString("a number of candidates", h.saveRankerWindow),
-		"App.rankerKindChosen":  numberAndString("a row and the base URL", h.rankerKindChosen),
-		"App.checkRanker":       twoStrings("the base URL and the key", h.checkRanker),
-		"App.saveRanker":        fourStrings("a name, the base URL, the model and the key", h.saveRanker),
-		"App.saveProvider":      fiveStrings("a name, the base URL, the model, the key and the context window", h.saveProvider),
+		// the workspace's models (vectors.go)
+		"App.cancelIndexing": none(h.cancelIndexing),
+		"App.openVectors":    none(h.openVectors),
+		"App.startPurge":     oneNumber("a row", h.startPurge),
 	}
 }

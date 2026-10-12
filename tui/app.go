@@ -75,11 +75,9 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	workspaces, managed         *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
-	wsProviders, providerModels *tuidecl.ListModel
-	providers                   *rows[providerRow] // the embedding providers (providers.go)
-	rankers                     *rows[rankerRow]   // the re-rankers (rankers.go)
-	vectors                     *rows[vectorRow]   // the workspace's models (vectors.go)
+	workspaces, managed *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
+	wsProviders         *tuidecl.ListModel
+	vectors             *rows[vectorRow] // the workspace's models (vectors.go)
 
 	// the pickers (pick.go): the search's, File › Open's and the draft's name (the outline's is
 	// outline.go's); the search's own state, and its words
@@ -141,25 +139,12 @@ type Host struct {
 	// the explorer (explorer.go), a feature of its own: find.go finds in its rows
 	explorer *explorer
 
-	// the embedding providers (providers.go)
-	activeProvider, editingProvider string
-	formKind                        int
-	formBase, formKey, formModel    string
-	formMax                         int64
-	formHasKey                      bool // the provider the form edits has a key sealed
-	modelList                       []string
-	providerSeq                     uint64
+	// the AI models dialog (aimodels.go), a feature of its own: the host lists its providers again
+	// when the workspace's vectors change under them (vectors.go), and its rankers when the daemon
+	// says the ranker in use changed (events.go)
+	ai *aiModels
 
-	// the ranker models (rankers.go): AI models' tab, the rankers listed, the one in use, the
-	// build's own (its model, "" for none), and the row the shared buttons act on
-	aiTab                        int
-	activeRanker, rankerSupplied string
-	editingRanker                string
-	rankerFormKind               int
-	rankerFormHasKey             bool
-	rankerCursor                 int
-	rankerSeq                    uint64
-	hitsRanked                   string // the hits' title's note of their order (rankedTitle)
+	hitsRanked string // the hits' title's note of their order (rankedTitle)
 	// the search's stages (stages.go): the ranker in use, who it is and how its box names it ("" for
 	// none), and the stages the boxes last asked for
 	stageRankerID, stageRanker string
@@ -354,7 +339,6 @@ func newHost(session *Session, opt Options) *Host {
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
-		providerModels:  tuidecl.NewListModel("key", "name"),
 		agentRows:       tuidecl.NewListModel("key", "default", "name", "command"),
 		cellFontModel:   fontModel(),
 		proseFontModel:  fontModel(),
@@ -376,11 +360,10 @@ func newHost(session *Session, opt Options) *Host {
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
 	h.explorer = newExplorer(core{h})
+	h.ai = newAIModels(core{h})
 	h.outline = newOutline(core{h})
 	h.rel = newRelated(core{h})
-	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
-	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.loadPlugins()
 	return h

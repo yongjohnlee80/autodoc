@@ -106,27 +106,6 @@ func (h *Host) state() map[string]any {
 		"App.toastSeconds":        choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
 		"App.prefsError":          "",
 		// the notifications' history (notify.go), and the Vim keys' card
-		"App.providers":       h.providers.Model(),
-		"App.providersStatus": "",
-		"App.providersTitle":  "embedding providers",
-		"App.providerDetail":  "",
-		// the provider form
-		"App.providerKinds":        kindChoices(),
-		"App.providerFormTitle":    "",
-		"App.providerFormError":    "",
-		"App.providerKindIndex":    0,
-		"App.providerName":         "",
-		"App.providerBase":         "",
-		"App.providerModel":        "",
-		"App.providerKey":          "",
-		"App.providerKeyShown":     false,
-		"App.providerKeyLabel":     "",
-		"App.providerContext":      "",
-		"App.providerContextHint":  "",
-		"App.providerSectionHint":  "",
-		"App.providerContextShown": false,
-		"App.providerModels":       h.providerModels,
-		"App.providerModelsStatus": "",
 		// the agent terminal and its profiles (agent.go, agentprofiles.go)
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,
@@ -144,28 +123,6 @@ func (h *Host) state() map[string]any {
 		"App.agentName":           "",
 		"App.agentCommand":        "",
 		"App.agentSwitchQuestion": "",
-		// the ranker models (rankers.go)
-		"App.aiTab":              0,
-		"App.aiEmbeddingTab":     true,
-		"App.aiRankerTab":        false,
-		"App.aiRankerChoice":     false,
-		"App.aiUseEnabled":       true,
-		"App.rankers":            h.rankers.Model(),
-		"App.rankersStatus":      "",
-		"App.rankerDetail":       "",
-		"App.rankerKinds":        choices(rankerKindChoices()...),
-		"App.rankerFormTitle":    "",
-		"App.rankerFormError":    "",
-		"App.rankerKindIndex":    0,
-		"App.rankerName":         "",
-		"App.rankerBase":         "",
-		"App.rankerModel":        "",
-		"App.rankerModelShown":   false,
-		"App.rankerKey":          "",
-		"App.rankerKeyLabel":     "",
-		"App.rankerModelsStatus": "",
-		"App.rankerWindow":       "",
-		"App.rankerWindowError":  "",
 		// find in a pane (find.go)
 		"App.findTitle": "find",
 		"App.findError": "",
@@ -273,14 +230,6 @@ func choices(labels ...string) *tuidecl.ListModel {
 	return m
 }
 
-func kindChoices() *tuidecl.ListModel {
-	labels := make([]string, len(providerKinds))
-	for i, k := range providerKinds {
-		labels[i] = k.label
-	}
-	return choices(labels...)
-}
-
 // homeDir is where the folder picker starts: the home directory, or the root.
 func homeDir() string {
 	if d, err := os.UserHomeDir(); err == nil {
@@ -291,6 +240,9 @@ func homeDir() string {
 
 // set publishes one source; a failure is kept for Run.
 func (h *Host) set(name string, v any) { h.keep(h.p.Set(name, v)) }
+
+// setField is the host's form fields written as a feature's are (endpoints.go: setField).
+func (h *Host) setField(name, text string) { setField(core{h}, name, text) }
 
 // setWhere is the status line's left: the editor's mode, then where the TUI is attached.
 func (h *Host) setWhere(where string) {

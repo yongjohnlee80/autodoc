@@ -58,9 +58,13 @@ func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
 func (s *scriptedCore) Files() FileList            { return s.listing }
 func (s *scriptedCore) Workspaces() []Workspace    { return s.spaces }
 func (s *scriptedCore) HasFocus(string) bool       { return s.focused }
-func (s *scriptedCore) TogglePanel(id string)      { s.views = append(s.views, id+".toggle") }
-func (s *scriptedCore) Page() Page                 { return s.page }
-func (s *scriptedCore) Crumbs(parts []string)      { s.crumbs = parts }
+func (s *scriptedCore) SearchModelsChanged(ranker bool) {
+	s.views = append(s.views, fmt.Sprint("search.changed ranker=", ranker))
+}
+func (s *scriptedCore) Post(fn func())        { fn() }
+func (s *scriptedCore) TogglePanel(id string) { s.views = append(s.views, id+".toggle") }
+func (s *scriptedCore) Page() Page            { return s.page }
+func (s *scriptedCore) Crumbs(parts []string) { s.crumbs = parts }
 func (s *scriptedCore) GoToLine(line int) {
 	s.views = append(s.views, fmt.Sprint("editor.line ", line))
 }

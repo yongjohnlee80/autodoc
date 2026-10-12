@@ -505,16 +505,6 @@ func (h *Host) openPrefs() {
 	h.open("preferences")
 }
 
-// openAIModels opens the AI models: the providers on the left, the one under the cursor's usage
-// and calls on the right.
-func (h *Host) openAIModels() {
-	h.loadProviders()
-	if h.aiTab == rankerTab {
-		h.loadRankers()
-	}
-	h.open("aiModels")
-}
-
 // syncPrefDialog sets the dialog's choosers to the preferences: a chooser moved and not chosen
 // shows the value in effect again.
 func (h *Host) syncPrefDialog() {

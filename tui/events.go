@@ -173,8 +173,8 @@ func (h *Host) applyEvents(events []peerEvent) {
 	for _, n := range notices {
 		h.notify(n)
 	}
-	if reranked && h.aiTab == rankerTab {
-		h.loadRankers()
+	if reranked {
+		h.ai.reranked()
 	}
 	if reranked {
 		h.loadStageRanker(true)

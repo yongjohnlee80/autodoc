@@ -51,7 +51,7 @@ func nextTab() tuicore.Event {
 func rankerTabOpen(t *testing.T, r *running) {
 	t.Helper()
 	r.leader(t, 'a') // System › Search models: on the tab it was left on
-	if onLoop(r, func() int { return r.h.aiTab }) != rankerTab {
+	if onLoop(r, func() int { return r.h.ai.tab }) != rankerTab {
 		r.s.WaitForText(t, "embedding providers")
 		r.keys(t, nextTab())
 	}
@@ -172,29 +172,29 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	// the TEI playbook's address, and no key: a local TEI has none
 	r.s.WaitForText(t, "http://127.0.0.1:18080")
 	// another kind fills in its own address over the one kind's default, never over one typed
-	r.h.p.Post(func() { r.h.rankerKindChosen(1, defaultTEIURL) })
+	r.h.p.Post(func() { r.h.ai.rankers.kindChosen(1, defaultTEIURL) })
 	r.s.WaitForText(t, "https://api.cohere.com/v2")
-	r.h.p.Post(func() { r.h.rankerKindChosen(len(rankerKinds), "") }) // no such kind: nothing changes
-	r.h.p.Post(func() { r.h.rankerKindChosen(0, "https://api.cohere.com/v2") })
+	r.h.p.Post(func() { r.h.ai.rankers.kindChosen(len(rankerKinds), "") }) // no such kind: nothing changes
+	r.h.p.Post(func() { r.h.ai.rankers.kindChosen(0, "https://api.cohere.com/v2") })
 	r.s.WaitForText(t, "http://127.0.0.1:18080")
 	r.h.p.Post(func() {
 		r.h.setField("App.rankerBase", "http://my-ranker:9000")
-		r.h.rankerKindChosen(1, "http://my-ranker:9000")
+		r.h.ai.rankers.kindChosen(1, "http://my-ranker:9000")
 	})
 	r.s.WaitFor(t, "the typed address kept", func(sc string) bool {
-		return onLoop(r, func() int { return r.h.rankerFormKind }) == 1 && strings.Contains(sc, "http://my-ranker:9000")
+		return onLoop(r, func() int { return r.h.ai.rankers.kind }) == 1 && strings.Contains(sc, "http://my-ranker:9000")
 	})
-	r.h.p.Post(func() { r.h.rankerKindChosen(0, defaultTEIURL) })
+	r.h.p.Post(func() { r.h.ai.rankers.kindChosen(0, defaultTEIURL) })
 	r.s.WaitForText(t, "http://127.0.0.1:18080")
-	r.h.p.Post(func() { r.h.checkRanker(tei.URL, "") })
+	r.h.p.Post(func() { r.h.ai.rankers.check(tei.URL, "") })
 	r.s.WaitForText(t, "it ranks with BAAI/bge-reranker-v2-m3")
 	// a TEI that answers but serves an embedder says so
-	r.h.p.Post(func() { r.h.checkRanker(fakeTEIOf(t, "embedding").URL, "") })
+	r.h.p.Post(func() { r.h.ai.rankers.check(fakeTEIOf(t, "embedding").URL, "") })
 	r.s.WaitForText(t, "not a ranker: the server's model is not a re-ranker")
-	r.h.p.Post(func() { r.h.closeDialog("rankerEdit"); r.h.saveRanker("local", "ftp://nowhere", "", "") })
+	r.h.p.Post(func() { r.h.closeDialog("rankerEdit"); r.h.ai.rankers.save("local", "ftp://nowhere", "", "", "") })
 	r.s.WaitForText(t, "not saved: a ranker needs a name")
 	// as the form's Save calls it
-	save := r.h.commands()["App.saveRanker"].handler("App.saveRanker")
+	save := r.h.ai.Commands()["App.saveRanker"].handler("App.saveRanker")
 	str := func(v string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: v} }
 	r.h.p.Post(func() {
 		r.h.closeDialog("rankerEdit")
@@ -208,11 +208,11 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	})
 	r.s.WaitForText(t, "local         TEI")
 	// Check on an edit asks the edited endpoint, with the stored key: here, an embedder
-	r.h.p.Post(func() { r.h.startEditRanker(0) })
+	r.h.p.Post(func() { r.h.ai.rankers.startEdit(0) })
 	r.s.WaitForText(t, "edit local")
-	r.h.p.Post(func() { r.h.checkRanker(fakeTEIOf(t, "embedding").URL, "") })
+	r.h.p.Post(func() { r.h.ai.rankers.check(fakeTEIOf(t, "embedding").URL, "") })
 	r.s.WaitForText(t, "not a ranker: the server's model is not a re-ranker")
-	r.h.p.Post(func() { r.h.checkRanker(tei.URL, "") })
+	r.h.p.Post(func() { r.h.ai.rankers.check(tei.URL, "") })
 	r.s.WaitForText(t, "it ranks with BAAI/bge-reranker-v2-m3")
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the form closed", func(sc string) bool { return !strings.Contains(sc, "edit local") })
@@ -220,9 +220,9 @@ func TestTheRankerFormAndWindow(t *testing.T) {
 	r.s.WaitForText(t, "re-ranking with local over the top 40 candidates")
 	r.keys(t, key('n')) // Window…
 	r.s.WaitForText(t, "the ranker's window")
-	r.h.p.Post(func() { r.h.closeDialog("rankerWindow"); r.h.saveRankerWindow("5") })
+	r.h.p.Post(func() { r.h.closeDialog("rankerWindow"); r.h.ai.rankers.saveWindow("5") })
 	r.s.WaitForText(t, `not saved: the window is 10 to 100 candidates, not "5"`)
-	r.h.p.Post(func() { r.h.closeDialog("rankerWindow"); r.h.saveRankerWindow("20") })
+	r.h.p.Post(func() { r.h.closeDialog("rankerWindow"); r.h.ai.rankers.saveWindow("20") })
 	r.s.WaitForText(t, "re-ranking with local over the top 20 candidates")
 	if p, _ := d.db.Preferences(ctx); p[store.PrefRankerWindow] != "20" {
 		t.Errorf("the stored window: %q", p[store.PrefRankerWindow])
@@ -264,13 +264,13 @@ func TestListModelsOfAnEditAsksItsServer(t *testing.T) {
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.h.p.Post(r.h.loadProviders)
-	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.providers.All()) }) == 1 })
-	r.h.p.Post(func() { r.h.startEditProvider(0) })
+	r.h.p.Post(r.h.ai.providers.load)
+	r.s.WaitFor(t, "the providers listed", func(string) bool { return onLoop(r, func() int { return len(r.h.ai.providers.rows.All()) }) == 1 })
+	r.h.p.Post(func() { r.h.ai.providers.startEdit(0) })
 	r.s.WaitForText(t, "edit local")
-	r.h.p.Post(func() { r.h.listModels(other.URL, "") })
+	r.h.p.Post(func() { r.h.ai.providers.listModels(other.URL, "") })
 	r.s.WaitForText(t, "1 models")
-	if got := onLoop(r, func() []string { return r.h.modelList }); len(got) != 1 || got[0] != "other-embedder" {
+	if got := onLoop(r, func() []string { return r.h.ai.providers.modelList }); len(got) != 1 || got[0] != "other-embedder" {
 		t.Errorf("listed %v, want the edited server's other-embedder", got)
 	}
 }

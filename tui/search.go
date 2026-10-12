@@ -55,3 +55,4 @@ func str(m map[string]any, k string) string {
 	s, _ := m[k].(string)
 	return s
 }
+func num(m map[string]any, k string) int64 { n, _ := m[k].(int64); return n }

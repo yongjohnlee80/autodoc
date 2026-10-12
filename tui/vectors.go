@@ -161,7 +161,7 @@ func (h *Host) cancelIndexing() {
 				return
 			}
 			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are deleted", a.v, target))
-			h.loadProviders()
+			h.ai.providers.load()
 		})
 	case e.working() > 0:
 		do(h, func(ctx context.Context) error {
@@ -173,7 +173,7 @@ func (h *Host) cancelIndexing() {
 				return
 			}
 			h.notify("embedding stopped, the vectors made kept: Use carries on from them")
-			h.loadProviders()
+			h.ai.providers.load()
 		})
 	default:
 		h.say("nothing is being embedded")

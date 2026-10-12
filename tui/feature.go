@@ -188,7 +188,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
@@ -274,6 +274,13 @@ type Core interface {
 	// HasFocus reports whether the view id, or one inside it, has the keyboard: a key bound across
 	// the window that only one pane answers.
 	HasFocus(id string) bool
+	// SearchModelsChanged is a change of search's models: the hits are searched again; with ranker,
+	// the Rerank box reads the ranker in use first. A feature that changes them does not reach into
+	// the search.
+	SearchModelsChanged(ranker bool)
+	// Post runs fn on the loop once the event being handled is done: a view still changing (a tab)
+	// must not have what it shows changed under it.
+	Post(fn func())
 	// Page is the page as it is now (page.go: pageNow), snapshotted again only when typed since the
 	// last: a picker opened mid-typing cannot wait for the pause.
 	Page() Page
@@ -290,6 +297,7 @@ type Core interface {
 type Workspace struct {
 	Name, Root, State string
 	Include, Exclude  []string
+	SectionTokens     int64 // the tokens a section holds: its own, or 0 for the default
 }
 
 // same reports whether w and o are the same workspace, in the same state, over the same files.
@@ -339,12 +347,20 @@ func (c core) Files() FileList                                 { return c.h.file
 func (c core) Workspaces() []Workspace {
 	list := make([]Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {
-		list = append(list, Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude})
+		list = append(list, Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude, SectionTokens: w.sectionTokens})
 	}
 	return list
 }
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
 func (c core) TogglePanel(id string)                     { c.h.togglePanel(id) }
+func (c core) SearchModelsChanged(ranker bool) {
+	if ranker {
+		c.h.loadStageRanker(true) // which searches again, once
+		return
+	}
+	c.h.refreshSearch()
+}
+func (c core) Post(fn func()) { c.h.p.Post(fn) }
 func (c core) HasFocus(id string) bool {
 	comp, ok := c.h.p.Find(id)
 	return ok && c.h.p.App().FocusWithin(comp)

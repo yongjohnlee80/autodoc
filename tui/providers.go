@@ -5,248 +5,138 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/yongjohnlee80/golib/search/embed"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
 
-// THE EMBEDDING PROVIDERS — the Preferences dialog's list of them, the one in use, each one's
-// usage and recent calls, and the form that adds or edits one. A key goes in through the form and
-// is never shown again; the list says only whether a provider has one.
+// THE EMBEDDING PROVIDERS — AI models' first tab: the providers semantic search can use, the one in
+// use, each one's usage and recent calls, and the form that adds or edits one (endpoints.go). A key
+// goes in through the form and is never shown again; the list says only whether a provider has
+// one. A provider's own: the context window it is sent (Ollama's num_ctx) and its model's maximum,
+// the models List models finds, and a removal that says how many vectors it deletes.
 
-// providerKind is one of the form's kinds: the store's name, how the form offers it, where it
-// usually is, whether it takes a key, and whether it is sent a context window (Ollama's num_ctx).
-type providerKind struct {
-	kind, label, base string
-	key, window       bool
+// providerKinds are the form's kinds; an Ollama kind is sent a context window.
+var providerKinds = []endpointKind{
+	{kind: "ollama", label: "Ollama (local)", base: embed.DefaultOllamaURL, window: true, model: true},
+	{kind: "ollama-cloud", label: "Ollama Cloud", base: embed.DefaultOllamaCloudURL, keyLabel: "API key (required)", window: true, model: true},
+	{kind: "openai", label: "OpenAI-compatible", base: embed.DefaultOpenAIURL, keyLabel: "API key (if the endpoint takes one)", model: true},
 }
 
-var providerKinds = []providerKind{
-	{"ollama", "Ollama (local)", embed.DefaultOllamaURL, false, true},
-	{"ollama-cloud", "Ollama Cloud", embed.DefaultOllamaCloudURL, true, true},
-	{"openai", "OpenAI-compatible", embed.DefaultOpenAIURL, true, false},
+// providers is the providers' list and form, and what the form asks of the provider it describes.
+type providers struct {
+	*endpoints
+	models    *tuidecl.ListModel // List models' answer, a model a row
+	modelList []string
+	// the form's endpoint and model as last asked of it (List models, a model picked), and that
+	// model's context window maximum (0 unknown)
+	base, key, model string
+	max              int64
 }
 
-func kindIndex(kind string) int {
-	for i, k := range providerKinds {
-		if k.kind == kind {
-			return i
-		}
-	}
-	return 0
-}
-
-// providerRow is a provider as the list and the form know it.
-type providerRow struct {
-	name, kind, base, model string
-	context                 int64 // the context window, in tokens
-	hasKey                  bool
-}
-
-// loadProviders lists the providers, the one in use, and why the one chosen is not in use, if
-// it is not.
-func (h *Host) loadProviders() {
-	tk := h.ticket(nil, TicketSession)
-	type answer struct {
-		rows          []providerRow
-		active, error string
-		err           error
-	}
-	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "embedding.providers")
-		if err != nil {
-			return answer{err: err}
-		}
-		m := asMap(res)
-		var rows []providerRow
-		for _, x := range asList(m["providers"]) {
-			p := asMap(x)
-			has, _ := p["has_key"].(bool)
-			rows = append(rows, providerRow{name: str(p, "name"), kind: str(p, "kind"), base: str(p, "base_url"), model: str(p, "model"), context: num(p, "context"), hasKey: has})
-		}
-		return answer{rows: rows, active: str(m, "active"), error: str(m, "error")}
-	}, func(a answer) {
-		if !tk.Current() {
-			return
-		}
-		if a.err != nil {
-			h.set("App.providersStatus", "providers: "+wireMessage(a.err))
-			return
-		}
-		h.activeProvider = a.active
-		h.providers.Reset(a.rows)
-		status := "semantic search off: Add… a provider, then Use it"
-		if a.active != "" {
-			status = "semantic search with " + a.active
-		}
-		if a.error != "" {
-			status += " · the last choice was refused: " + a.error
-		}
-		h.set("App.providersStatus", status)
-		if len(a.rows) > 0 {
-			h.providerDetail(0)
-		} else {
-			h.set("App.providerDetail", "")
-		}
+func newProviders(c Core) *providers {
+	p := &providers{models: tuidecl.NewListModel("key", "name")}
+	p.endpoints = newEndpoints(c, endpointSpec{
+		noun: "provider", verb: "embedding", list: "embedding.providers",
+		kinds:     providerKinds,
+		blank:     endpointRow{kind: "ollama", base: embed.DefaultOllamaURL, context: store.DefaultContext},
+		addTitle:  "add an embedding provider",
+		checkHint: "List models asks the provider what it has",
+		columns:   []string{"use", "name", "kind", "model", "context", "apiKey"},
+		listed:    providersStatus,
+		removal:   p.removal, formOpened: p.formOpened, kindShown: p.kindShown, checked: p.checked, saveSpec: p.saveSpec,
 	})
+	return p
+}
+
+func (p *providers) State() map[string]any {
+	s := p.endpoints.State()
+	s["App.providersTitle"] = "embedding providers"
+	s["App.providerKeyShown"], s["App.providerContextShown"] = false, false
+	s["App.providerContext"], s["App.providerContextHint"], s["App.providerSectionHint"] = "", "", ""
+	s["App.providerModels"] = p.models
+	return s
+}
+
+func (p *providers) Commands() map[string]Command {
+	return map[string]Command{
+		"App.showProvider":        oneNumber("a row", p.detail),
+		"App.useProvider":         oneNumber("a row", p.use),
+		"App.stopSemantic":        none(p.stop),
+		"App.startAddProvider":    none(p.startAdd),
+		"App.startEditProvider":   oneNumber("a row", p.startEdit),
+		"App.startRemoveProvider": oneNumber("a row", p.startRemove),
+		"App.providerKindChosen":  numberAndString("a row and the base URL", p.kindChosen),
+		"App.listModels":          twoStrings("the base URL and the key", p.listModels),
+		"App.pickModel":           oneNumber("a row", p.pickModel),
+		"App.saveProvider":        fiveStrings("a name, the base URL, the model, the key and the context window", p.save),
+	}
+}
+
+// providersStatus is the line under the list: the provider in use, and why the one chosen was
+// refused.
+func providersStatus(_ map[string]any, active, why string) string {
+	status := "semantic search off: Add… a provider, then Use it"
+	if active != "" {
+		status = "semantic search with " + active
+	}
+	if why != "" {
+		status += " · the last choice was refused: " + why
+	}
+	return status
 }
 
 // inUseText says which provider semantic search uses, for the status under the list.
-func (h *Host) inUseText() string {
-	if h.activeProvider == "" {
+func (p *providers) inUseText() string {
+	if p.active == "" {
 		return "semantic search off"
 	}
-	return "semantic search with " + h.activeProvider
+	return "semantic search with " + p.active
 }
 
-func (h *Host) providerAt(i int) (providerRow, bool) { return h.providers.At(i) }
-
-// providerRowOf is a provider as the list shows it, the one in use marked.
-func (h *Host) providerRowOf(_ int, p providerRow) rowOf {
-	use := ""
-	if p.name == h.activeProvider {
-		use = "●"
-	}
-	key := "—"
-	if p.hasKey {
-		key = "sealed"
-	}
-	k := providerKinds[kindIndex(p.kind)]
-	window := "—"
-	if k.window {
-		window = strconv.FormatInt(p.context, 10)
-	}
-	return rowOf{"key": p.name, "use": use, "name": p.name, "kind": k.label, "model": p.model, "context": window, "apiKey": key}
-}
-
-// providerDetail shows provider i's usage over the last week and its latest calls.
-func (h *Host) providerDetail(i int) {
-	p, ok := h.providerAt(i)
+// use makes provider i the one semantic search uses; one that does not set up is refused, and the
+// one in use stays.
+func (p *providers) use(i int) {
+	r, ok := p.at(i)
 	if !ok {
 		return
 	}
-	tk := h.ticket(&h.providerSeq, TicketSession)
-	do(h, func(ctx context.Context) (out answerOf[string]) {
-		us, err := h.call(ctx, "embedding.usage", p.name, int64(7))
-		if err != nil {
-			out.err = err
-			return
-		}
-		log, err := h.call(ctx, "embedding.log", p.name, int64(30))
-		if err != nil {
-			out.err = err
-			return
-		}
-		out.v = usageText(p.name, asList(us), asList(log))
-		return
-	}, func(a answerOf[string]) {
-		if !tk.Current() {
-			return
-		}
-		if a.err != nil {
-			h.set("App.providerDetail", p.name+": "+wireMessage(a.err))
-			return
-		}
-		h.set("App.providerDetail", a.v)
-	})
+	p.c.Set("App.providersStatus", "setting up "+r.name+"…")
+	p.choose(r.name, func(err error) {
+		p.c.Set("App.providersStatus", r.name+" not used: "+wireMessage(err)+" · "+p.inUseText())
+	}, func() { p.c.Notify("semantic search with " + r.name + ": the files are embedded in the background") })
 }
 
-// usageText is a provider's usage, a day a line, and its latest calls.
-func usageText(name string, usage, log []any) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "%s — the last 7 days", name)
-	if len(usage) == 0 {
-		b.WriteString(": no calls yet")
-	}
-	for _, x := range usage {
-		u := asMap(x)
-		fmt.Fprintf(&b, "\n  %s  %d requests · %d texts · %d tokens", str(u, "day"), num(u, "requests"), num(u, "texts"), num(u, "tokens"))
-		if f := num(u, "failures"); f > 0 {
-			fmt.Fprintf(&b, " · %d failed", f)
-		}
-		if l := num(u, "limited"); l > 0 {
-			fmt.Fprintf(&b, " (%d at the usage limit)", l)
-		}
-	}
-	if len(log) > 0 {
-		b.WriteString("\nlatest calls")
-	}
-	for _, x := range log {
-		e := asMap(x)
-		at := time.Unix(num(e, "at"), 0).Format("01-02 15:04:05")
-		fmt.Fprintf(&b, "\n  %s  %d texts · %d tokens · %d ms · %s", at, num(e, "texts"), num(e, "tokens"), num(e, "millis"), str(e, "outcome"))
-	}
-	return b.String()
+// stop turns semantic search off: search by words alone.
+func (p *providers) stop() {
+	p.choose("", func(err error) { p.c.Failed("turn semantic search off", err) }, func() {})
 }
 
-func num(m map[string]any, k string) int64 { n, _ := m[k].(int64); return n }
-
-// useProvider makes provider i the one semantic search uses; one that does not set up is refused,
-// and the one in use stays.
-func (h *Host) useProvider(i int) {
-	p, ok := h.providerAt(i)
-	if !ok {
-		return
-	}
-	h.set("App.providersStatus", "setting up "+p.name+"…")
-	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "embedding.use", p.name)
-		return err
-	}, func(err error) {
-		if err != nil {
-			h.set("App.providersStatus", p.name+" not used: "+wireMessage(err)+" · "+h.inUseText())
-			return
-		}
-		h.notify("semantic search with " + p.name + ": the files are embedded in the background")
-		h.loadProviders()
-		h.refreshSearch()
-	})
-}
-
-// stopSemantic turns semantic search off: search by words alone.
-func (h *Host) stopSemantic() {
-	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "embedding.use", "")
-		return err
-	}, func(err error) {
-		if err != nil {
-			h.failed("turn semantic search off", err)
-			return
-		}
-		h.loadProviders()
-		h.refreshSearch()
-	})
-}
-
-// startRemoveProvider asks before removing provider i, with its usage and log, and says what its
-// removal deletes (ADR 1791284787 §2.3, item 4): the provider in use, or with none in use, takes its
-// model's vectors in every workspace with it, unless another provider serves the same model.
-func (h *Host) startRemoveProvider(i int) {
-	p, ok := h.providerAt(i)
-	if !ok {
-		return
-	}
-	ask := "Remove the provider " + p.name + "? Its key, its usage and its log go. "
+// removal asks before removing provider r, and says what its removal deletes (ADR 1791284787 §2.3,
+// item 4): the provider in use, or with none in use, takes its model's vectors in every workspace
+// with it, unless another provider serves the same model.
+func (p *providers) removal(r endpointRow, remove func()) {
+	ask := "Remove the provider " + r.name + "? Its key, its usage and its log go. "
 	var sibling string
-	for _, o := range h.providers.All() {
-		if o.name != p.name && providerFamily(o.kind) == providerFamily(p.kind) && o.model == p.model {
+	for _, o := range p.rows.All() {
+		if o.name != r.name && providerFamily(o.kind) == providerFamily(r.kind) && o.model == r.model {
 			sibling = o.name
 		}
 	}
-	q := Question{Title: "remove the provider?", OnYes: func() { h.removeProviderConfirmed(p.name) }}
+	q := Question{Title: "remove the provider?", OnYes: remove}
 	switch {
-	case h.activeProvider != "" && h.activeProvider != p.name:
+	case p.active != "" && p.active != r.name:
 		q.Text = ask + "Its model's vectors go once no workspace uses them."
 	case sibling != "":
-		q.Text = ask + fmt.Sprintf("%s keeps its vectors: %s serves it too.", p.model, sibling)
+		q.Text = ask + fmt.Sprintf("%s keeps its vectors: %s serves it too.", r.model, sibling)
 	default:
-		q.Text = ask + "Semantic search goes off, and " + p.model + "'s vectors are deleted: counting them…"
-		h.countRemoved(p, h.ask(q))
+		q.Text = ask + "Semantic search goes off, and " + r.model + "'s vectors are deleted: counting them…"
+		p.countRemoved(r, p.c.Ask(q))
 		return
 	}
-	h.ask(q)
+	p.c.Ask(q)
 }
 
 // providerFamily is the embedding family a provider's kind embeds under: an Ollama Cloud
@@ -258,25 +148,25 @@ func providerFamily(kind string) string {
 	return kind
 }
 
-// countRemoved says, in the removal's question, how many of p's model's vectors it deletes, and in
+// countRemoved says, in the removal's question, how many of r's model's vectors it deletes, and in
 // how many workspaces, while the question is still open.
-func (h *Host) countRemoved(p providerRow, asked Asked) {
-	names := make([]string, h.workspaces.Len())
-	for i, w := range h.workspaces.All() {
-		names[i] = w.name
+func (p *providers) countRemoved(r endpointRow, asked Asked) {
+	var names []string
+	for _, w := range p.c.Workspaces() {
+		names = append(names, w.Name)
 	}
 	type answer struct{ vectors, bytes, spaces int64 }
-	do(h, func(ctx context.Context) answer {
+	p.c.Go(func(ctx context.Context) any {
 		var a answer
 		for _, ws := range names {
-			res, err := h.call(ctx, "index.models", ws)
+			res, err := p.c.Call(ctx, "index.models", ws)
 			if err != nil {
 				continue
 			}
 			counted := false
 			for _, x := range asList(res) {
 				m := asMap(x)
-				if embed.ModelName(str(m, "fp")) != p.model {
+				if embed.ModelName(str(m, "fp")) != r.model {
 					continue
 				}
 				a.vectors += num(m, "vectors")
@@ -288,255 +178,131 @@ func (h *Host) countRemoved(p providerRow, asked Asked) {
 			}
 		}
 		return a
-	}, func(a answer) {
+	}, func(v any) {
+		a := v.(answer)
 		asked.Say(fmt.Sprintf("Remove the provider %s? Its key, its usage and its log go. "+
 			"Semantic search goes off, and %s's %d vectors (%s) in %d workspaces are deleted.",
-			p.name, p.model, a.vectors, bytesText(a.bytes), a.spaces))
+			r.name, r.model, a.vectors, bytesText(a.bytes), a.spaces))
 	})
 }
 
-func (h *Host) removeProviderConfirmed(name string) {
-	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "embedding.remove", name)
-		return err
-	}, func(err error) {
-		if err != nil {
-			h.failed("remove "+name, err)
-			return
-		}
-		h.notify("removed the provider " + name)
-		h.loadProviders()
-	})
-}
+// The form's own fields.
 
-// The form.
-
-// startAddProvider opens the form for a new provider: a local Ollama, to begin with.
-func (h *Host) startAddProvider() {
-	h.editingProvider = ""
-	h.fillProviderForm("add an embedding provider", providerRow{kind: "ollama", base: embed.DefaultOllamaURL, context: store.DefaultContext})
-}
-
-// startEditProvider opens the form on provider i; its key is kept unless one is typed.
-func (h *Host) startEditProvider(i int) {
-	p, ok := h.providerAt(i)
-	if !ok {
-		return
-	}
-	h.editingProvider = p.name
-	h.fillProviderForm("edit "+p.name, p)
-}
-
-func (h *Host) fillProviderForm(title string, p providerRow) {
-	h.formBase, h.formModel = p.base, p.model
-	h.formKind, h.formHasKey = kindIndex(p.kind), p.hasKey
-	h.set("App.providerFormTitle", title)
-	h.set("App.providerFormError", "")
-	h.set("App.providerKindIndex", h.formKind)
-	h.setField("App.providerName", p.name)
-	h.setField("App.providerBase", p.base)
-	h.setField("App.providerModel", p.model)
-	h.setField("App.providerKey", "")
-	window := p.context
+// formOpened fills the context window (the default when r has none), its hints, and asks the
+// model's maximum when r names a model.
+func (p *providers) formOpened(r endpointRow) {
+	p.base, p.model = r.base, r.model
+	window := r.context
 	if window <= 0 {
 		window = store.DefaultContext
 	}
-	h.setField("App.providerContext", strconv.FormatInt(window, 10))
-	h.formMax = 0
-	h.set("App.providerContextHint", "List models shows max · more uses GPU memory")
+	setField(p.c, "App.providerContext", strconv.FormatInt(window, 10))
+	p.max = 0
+	p.c.Set("App.providerContextHint", "List models shows max · more uses GPU memory")
 	section := int64(store.SectionTokensDefault)
-	for _, w := range h.workspaces.All() {
-		if w.name == h.ws && w.sectionTokens > 0 {
-			section = w.sectionTokens
+	for _, w := range p.c.Workspaces() {
+		if w.Name == p.c.Workspace() && w.SectionTokens > 0 {
+			section = w.SectionTokens
 		}
 	}
-	h.set("App.providerSectionHint", fmt.Sprintf("%s: %d tokens · edit in Workspaces…", h.ws, section))
-	h.showKeyField()
-	h.providerModels.Reset(nil)
-	h.set("App.providerModelsStatus", "List models asks the provider what it has")
-	h.open("providerEdit")
-	if p.model != "" {
-		h.checkModelContext(p.base, "", p.model)
+	p.c.Set("App.providerSectionHint", fmt.Sprintf("%s: %d tokens · edit in Workspaces…", p.c.Workspace(), section))
+	p.models.Reset(nil)
+	if r.model != "" {
+		p.checkModelContext(r.base, "", r.model)
 	}
 }
 
-// setField writes a form field bound to name, moving it away first so the same text written twice
-// still reaches a field the user has typed in.
-func (h *Host) setField(name, text string) {
-	h.set(name, "\x00")
-	h.set(name, text)
-}
-
-// showKeyField shows the key field for a kind that takes one, saying what leaving it empty does.
-func (h *Host) showKeyField() {
-	k := providerKinds[h.formKind]
-	h.set("App.providerContextShown", k.window)
-	h.set("App.providerKeyShown", k.key)
-	switch {
-	case !k.key:
-		h.set("App.providerKeyLabel", "")
-	case h.editingProvider != "" && h.formHasKey:
-		h.set("App.providerKeyLabel", "API key (sealed; leave empty to keep it)")
-	case k.kind == "ollama-cloud":
-		h.set("App.providerKeyLabel", "API key (required)")
-	default:
-		h.set("App.providerKeyLabel", "API key (if the endpoint takes one)")
-	}
-}
-
-// providerKindChosen is the form's kind chooser: its base URL filled in when the one there is
-// another kind's default, and the key field shown where the kind takes one.
-func (h *Host) providerKindChosen(i int, base string) {
-	if i < 0 || i >= len(providerKinds) {
-		return
-	}
-	h.formKind = i
-	for _, k := range providerKinds {
-		if strings.TrimSpace(base) == "" || base == k.base {
-			h.setField("App.providerBase", providerKinds[i].base)
-			break
-		}
-	}
-	h.showKeyField()
+// kindShown shows the key field for a kind that takes one, and the window for a kind sent one.
+func (p *providers) kindShown(k endpointKind) {
+	p.c.Set("App.providerContextShown", k.window)
+	p.c.Set("App.providerKeyShown", k.keyLabel != "")
 }
 
 // listModels asks the provider the form describes what models it has.
-func (h *Host) listModels(base, key string) {
-	h.formBase, h.formKey = base, key
-	spec := map[string]any{"kind": providerKinds[h.formKind].kind, "base_url": strings.TrimSpace(base)}
-	args := []any{spec}
-	if key != "" {
-		spec["key"] = key
-	} else if h.editingProvider != "" {
-		args = []any{h.editingProvider, spec} // the form's endpoint, with the stored key, opened by the daemon
-	}
-	h.set("App.providerModelsStatus", "asking the provider…")
-	tk := h.ticket(nil, TicketSession)
-	do(h, func(ctx context.Context) (out answerOf[[]string]) {
-		res, err := h.call(ctx, "embedding.models", args...)
-		if err != nil {
-			out.err = err
-			return
-		}
-		for _, m := range asList(res) {
-			if s, ok := m.(string); ok {
-				out.v = append(out.v, s)
-			}
-		}
+func (p *providers) listModels(base, key string) {
+	p.base, p.key = base, key
+	p.check(base, key)
+}
+
+// checked lists the models the provider has, and asks the maximum of the one in the form.
+func (p *providers) checked(models []string, err error) {
+	if err != nil {
+		p.c.Set("App.providerModelsStatus", "no models: "+wireMessage(err))
 		return
-	}, func(a answerOf[[]string]) {
-		if !tk.Current() {
-			return
-		}
-		if a.err != nil {
-			h.set("App.providerModelsStatus", "no models: "+wireMessage(a.err))
-			return
-		}
-		h.modelList = a.v
-		rows := make([]rowOf, len(a.v))
-		for i, m := range a.v {
-			rows[i] = rowOf{"key": m, "name": m}
-		}
-		h.providerModels.Reset(rows)
-		h.set("App.providerModelsStatus", fmt.Sprintf("%d models: Enter on one writes it above; an embedding model, not a chat model", len(a.v)))
-		if h.formModel != "" {
-			h.checkModelContext(base, key, h.formModel)
-		}
-	})
+	}
+	p.modelList = models
+	rows := make([]rowOf, len(models))
+	for i, m := range models {
+		rows[i] = rowOf{"key": m, "name": m}
+	}
+	p.models.Reset(rows)
+	p.c.Set("App.providerModelsStatus", fmt.Sprintf("%d models: Enter on one writes it above; an embedding model, not a chat model", len(models)))
+	if p.model != "" {
+		p.checkModelContext(p.base, p.key, p.model)
+	}
 }
 
 // pickModel writes model i into the form's model field.
-func (h *Host) pickModel(i int) {
-	if i >= 0 && i < len(h.modelList) {
-		h.setField("App.providerModel", h.modelList[i])
-		h.formModel = h.modelList[i]
-		h.checkModelContext(h.formBase, h.formKey, h.modelList[i])
+func (p *providers) pickModel(i int) {
+	if i >= 0 && i < len(p.modelList) {
+		setField(p.c, "App.providerModel", p.modelList[i])
+		p.model = p.modelList[i]
+		p.checkModelContext(p.base, p.key, p.modelList[i])
 	}
 }
 
 // checkModelContext updates the hint from Ollama /api/show without blocking the UI.
-func (h *Host) checkModelContext(base, key, model string) {
-	if model == "" || !providerKinds[h.formKind].window {
+func (p *providers) checkModelContext(base, key, model string) {
+	k := p.spec.kinds[p.kind]
+	if model == "" || !k.window {
 		return
 	}
-	h.formMax = 0
-	h.formModel = model
-	spec := map[string]any{"kind": providerKinds[h.formKind].kind, "base_url": strings.TrimSpace(base), "model": strings.TrimSpace(model)}
+	p.max = 0
+	p.model = model
+	spec := map[string]any{"kind": k.kind, "base_url": strings.TrimSpace(base), "model": strings.TrimSpace(model)}
 	if key != "" {
 		spec["key"] = key
 	}
 	stored := ""
-	if key == "" && h.editingProvider != "" {
-		stored = h.editingProvider
+	if key == "" && p.editing != "" {
+		stored = p.editing
 	}
-	tk := h.ticket(nil, TicketSession)
-	do(h, func(ctx context.Context) answerOf[int64] {
-		v, err := h.call(ctx, "embedding.model_context", stored, spec)
+	tk := p.c.Ticket(nil, TicketSession)
+	p.c.Go(func(ctx context.Context) any {
+		v, err := p.c.Call(ctx, "embedding.model_context", stored, spec)
 		return answered(num(asMap(v), "maximum"), err)
-	}, func(a answerOf[int64]) {
-		if !tk.Current() || h.formModel != model {
+	}, func(v any) {
+		a := v.(answerOf[int64])
+		if !tk.Current() || p.model != model {
 			return
 		}
-		maximum := a.v
-		if a.err != nil || maximum <= 0 {
-			h.formMax = 0
-			h.set("App.providerContextHint", "max unknown · more uses GPU memory")
+		if a.err != nil || a.v <= 0 {
+			p.max = 0
+			p.c.Set("App.providerContextHint", "max unknown · more uses GPU memory")
 			return
 		}
-		h.formMax = maximum
-		h.set("App.providerContextHint", fmt.Sprintf("model max %d · more uses GPU memory", maximum))
-		if h.editingProvider == "" {
-			h.setField("App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), maximum)))
+		p.max = a.v
+		p.c.Set("App.providerContextHint", fmt.Sprintf("model max %d · more uses GPU memory", a.v))
+		if p.editing == "" {
+			setField(p.c, "App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), a.v)))
 		}
 	})
 }
 
-// saveProvider adds the provider the form describes, or rewrites the one it edits. A refusal opens
-// the form again, saying why. The context window, for a kind sent one, is a number of tokens; left
-// empty it is the default.
-func (h *Host) saveProvider(name, base, model, key, window string) {
-	k := providerKinds[h.formKind]
-	spec := map[string]any{"name": strings.TrimSpace(name), "kind": k.kind, "base_url": strings.TrimSpace(base), "model": strings.TrimSpace(model)}
-	if w := strings.TrimSpace(window); k.window && w != "" {
-		n, err := strconv.ParseInt(w, 10, 64)
-		if err != nil {
-			h.set("App.providerFormError", fmt.Sprintf("not saved: the context window is a number of tokens (%d to %d), not %q", store.MinContext, store.MaxContext, w))
-			h.open("providerEdit")
-			return
-		}
-		spec["context"] = n
-		if h.formMax > 0 && n > h.formMax {
-			h.set("App.providerFormError", fmt.Sprintf("not saved: context window exceeds this model's maximum of %d tokens", h.formMax))
-			h.open("providerEdit")
-			return
-		}
+// saveSpec puts the context window, for a kind sent one, into spec: a number of tokens, at most the
+// model's maximum when it is known; left empty it is the default.
+func (p *providers) saveSpec(spec map[string]any, k endpointKind, window string) string {
+	w := strings.TrimSpace(window)
+	if !k.window || w == "" {
+		return ""
 	}
-	switch {
-	case !k.key:
-		spec["key"] = "" // a local Ollama keeps none
-	case key != "":
-		spec["key"] = key
-	case h.editingProvider == "":
-		// a new one with no key typed: none
+	n, err := strconv.ParseInt(w, 10, 64)
+	if err != nil {
+		return fmt.Sprintf("not saved: the context window is a number of tokens (%d to %d), not %q", store.MinContext, store.MaxContext, w)
 	}
-	editing := h.editingProvider
-	do(h, func(ctx context.Context) error {
-		var err error
-		if editing == "" {
-			_, err = h.call(ctx, "embedding.add", spec)
-		} else {
-			_, err = h.call(ctx, "embedding.update", editing, spec)
-		}
-		return err
-	}, func(err error) {
-		if err != nil {
-			// the Save button closed the form: it opens again as it was, saying why
-			h.set("App.providerFormError", "not saved: "+wireMessage(err))
-			h.open("providerEdit")
-			return
-		}
-		h.notify("saved the provider " + spec["name"].(string))
-		h.loadProviders()
-		h.refreshSearch()
-	})
+	spec["context"] = n
+	if p.max > 0 && n > p.max {
+		return fmt.Sprintf("not saved: context window exceeds this model's maximum of %d tokens", p.max)
+	}
+	return ""
 }
