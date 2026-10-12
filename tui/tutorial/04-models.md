@@ -1,6 +1,6 @@
 # Search models: embeddings and a reranker
 
-Without a model, search is by words. **System › Search models…** (SPC a) adds the models that search by meaning. It has two tabs.
+Without a model, search is by words. **System › Search models…** (SPC s) adds the models that search by meaning. It has two tabs.
 
 **Embedding Models** turn each section of your files into a vector, so a search finds what *means* the same.
 

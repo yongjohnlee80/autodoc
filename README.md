@@ -276,7 +276,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 
 | Key | Does |
 | --- | --- |
-| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `a` …) |
+| `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `s` …) |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
@@ -288,7 +288,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `SPC L` | arrange the panel with the keyboard: move and resize it (`Go › Arrange panel…`) |
 | `Shift+F10`, the Menu key, `SPC .` | the page's right-click menu, at the cursor (the Menu key where the terminal sends it) |
 | `Ctrl+=`, `Ctrl+-`, `Ctrl+0` | in the GUI, zoom in, out, and back to 100 % |
-| `F1`, `SPC T`, `F10`, `Ctrl+Q` | help, the tutorial (`Help › Tutorial…`), the menu bar, quit |
+| `F1`, `F10`, `Ctrl+Q` | help, the menu bar, quit; `Help › Tutorial…` is the tutorial |
 
 **Options** is the menu for the editor:
 
@@ -313,7 +313,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 
 **System**, right of Options, is the menu for the backend:
 
-- **Search models…** (`SPC a`): two tabs. **Embedding Models** has the embedding providers on the
+- **Search models…** (`SPC s`): two tabs. **Embedding Models** has the embedding providers on the
   left, and the one under the cursor's usage by day and latest calls on the right (see below).
   **Ranker Models** has the rankers the same way, the one in use and how many candidates it
   ranks (`Window…`). Add…, Edit…, Use and Remove… act on the tab that is open.
@@ -439,7 +439,7 @@ local ok, err = autodoc.run("todos.open")
 local ok, err = autodoc.run("lua.upper", "3")
 ```
 
-Help › Tutorial… (SPC T) walks through it all, ending with a worked `:todo` command. Its pages are
+Help › Tutorial… walks through it all, ending with a worked `:todo` command. Its pages are
 in [`tui/tutorial/`](tui/tutorial/): 07 to 09 are the scripting ones.
 
 [`docs/lua/`](docs/lua/) has all of it: [Lua in AutoDoc](docs/lua/README.md), where scripts live

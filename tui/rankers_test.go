@@ -50,7 +50,7 @@ func nextTab() tuicore.Event {
 // rankerTabOpen opens Search models on its Ranker Models tab.
 func rankerTabOpen(t *testing.T, r *running) {
 	t.Helper()
-	r.leader(t, 'a') // System › Search models: on the tab it was left on
+	r.leader(t, 's') // System › Search models: on the tab it was left on
 	if onLoop(r, func() int { return r.h.ai.tab }) != rankerTab {
 		r.s.WaitForText(t, "embedding providers")
 		r.keys(t, nextTab())

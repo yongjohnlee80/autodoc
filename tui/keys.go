@@ -111,7 +111,7 @@ var leaderKeys = onCard(leader, []Key{
 	{Seq: "j", Show: "j", Does: "related files, by digit", Run: "App.openJumpCard()"},
 	{Seq: "n", Show: "n", Does: "new file", Run: "App.newFile()"},
 	{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
-	{Seq: "s", Show: "s", Does: "save", Run: "App.save()"},
+	{Seq: "s", Show: "s", Does: "search models", Run: "App.openAIModels()"},
 	{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
 	{Seq: "r", Show: "r", Does: "recent files", Run: "App.openRecent()"},
 	{Seq: "t", Show: "t", Does: "the status line", Run: "App.toggleStatusLine()"},
@@ -124,7 +124,6 @@ var leaderKeys = onCard(leader, []Key{
 	{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},
 	{Seq: ",", Show: ",", Does: "editor preferences", Run: "App.openPrefs()"},
 	{Seq: "Shift+O", Show: "O", Does: "the file's outline", Run: "App.openOutline()"},
-	{Seq: "a", Show: "a", Does: "search models", Run: "App.openAIModels()"},
 	{Seq: "d", Show: "d", Does: "view the diagram", Run: "App.previewDiagram()"},
 	{Seq: "Shift+A", Show: "A", Does: "about", Run: "about.open()"},
 	{Seq: "Shift+G", Show: "G", Does: "agent profiles", Run: "App.openAgentProfiles()"},
@@ -133,7 +132,6 @@ var leaderKeys = onCard(leader, []Key{
 	{Seq: "Shift+H", Show: "H", Does: "preview HTML", Run: "App.previewHTML()"},
 	{Seq: ".", Show: ".", Does: "the right-click menu", Run: "App.openContextMenu()"},
 	{Seq: "Shift+L", Show: "L", Does: "arrange a panel", Run: "App.arrangePanel()"},
-	{Seq: "Shift+T", Show: "T", Does: "the tutorial", Run: "App.openTutorial()"},
 	{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
 })
 

@@ -20,7 +20,7 @@ Dialog {
     Shortcut { sequence: "j"; onActivated: { leader.close(); App.openJumpCard() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newFile() } }
     Shortcut { sequence: "b"; onActivated: { leader.close(); App.goBack() } }
-    Shortcut { sequence: "s"; onActivated: { leader.close(); App.save() } }
+    Shortcut { sequence: "s"; onActivated: { leader.close(); App.openAIModels() } }
     Shortcut { sequence: "`"; onActivated: { leader.close(); App.toggleTerminal() } }
     Shortcut { sequence: "r"; onActivated: { leader.close(); App.openRecent() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
@@ -33,7 +33,6 @@ Dialog {
     Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }
     Shortcut { sequence: ","; onActivated: { leader.close(); App.openPrefs() } }
     Shortcut { sequence: "Shift+O"; onActivated: { leader.close(); App.openOutline() } }
-    Shortcut { sequence: "a"; onActivated: { leader.close(); App.openAIModels() } }
     Shortcut { sequence: "d"; onActivated: { leader.close(); App.previewDiagram() } }
     Shortcut { sequence: "Shift+A"; onActivated: { leader.close(); about.open() } }
     Shortcut { sequence: "Shift+G"; onActivated: { leader.close(); App.openAgentProfiles() } }
@@ -42,6 +41,5 @@ Dialog {
     Shortcut { sequence: "Shift+H"; onActivated: { leader.close(); App.previewHTML() } }
     Shortcut { sequence: "."; onActivated: { leader.close(); App.openContextMenu() } }
     Shortcut { sequence: "Shift+L"; onActivated: { leader.close(); App.arrangePanel() } }
-    Shortcut { sequence: "Shift+T"; onActivated: { leader.close(); App.openTutorial() } }
     Shortcut { sequence: "x"; onActivated: { leader.close(); App.openTodos() } }
 }

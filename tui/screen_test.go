@@ -489,7 +489,7 @@ func TestTheProviderForm(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "a\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.leader(t, 'a') // System › Search models
+	r.leader(t, 's') // System › Search models
 	r.s.WaitForText(t, "embedding providers")
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "add an embedding provider")
@@ -890,7 +890,7 @@ func TestAProviderInUse(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
 	r.s.WaitFor(t, "the status line's red mark", func(string) bool { return r.semanticMark() == "red lexical search" })
-	r.leader(t, 'a') // System › Search models
+	r.leader(t, 's') // System › Search models
 	r.s.WaitForText(t, "semantic search off")
 	r.keys(t, key('u')) // the first row: local
 	r.s.WaitForText(t, "semantic search with local")
@@ -1218,7 +1218,7 @@ func TestTheAIModelsSideBySide(t *testing.T) {
 	}
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.ready(t)
-	r.leader(t, 'a')
+	r.leader(t, 's')
 	r.s.WaitFor(t, "both panes", func(sc string) bool {
 		// "no calls" alone: the pane wraps the rest, and the panes' rows interleave
 		return strings.Contains(sc, "embedding providers") && strings.Contains(sc, "usage and calls") && strings.Contains(sc, "no calls")

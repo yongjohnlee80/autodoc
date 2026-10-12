@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// THE TUTORIAL — Help › Tutorial… (SPC T): a few pages, each Markdown, embedded in the binary and
+// THE TUTORIAL — Help › Tutorial…: a few pages, each Markdown, embedded in the binary and
 // read in order (tutorial/NN-name.md). The dialog shows one at a time, Rendered under --gui and as
 // text in a terminal, with Back and Next (views/Tutorial.qml).
 

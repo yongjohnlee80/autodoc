@@ -20,7 +20,7 @@ The rest of this folder:
 - **[Lua reference](reference.md)** lists every function a script can call: the `autodoc` table,
   the editor object `ed`, the daemon's verbs, and the errors each one raises.
 
-In AutoDoc, **Help › Tutorial…** (SPC T) has a short version: its pages 7 to 9.
+In AutoDoc, **Help › Tutorial…** has a short version: its pages 7 to 9.
 
 ## Where scripts live
 
