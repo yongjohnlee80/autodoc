@@ -101,6 +101,9 @@ func (p *Peer) Call(id string, args ...string) (bool, error) {
 		p.calls.cancel(n)
 		return false, fmt.Errorf("%w: %w", ErrClosed, err)
 	}
+	// NOTE: a deadline the code can name: CallTimeout bounds the wait for an answer that may not
+	// come (a host that dropped the call, or hangs), so a plugin never waits forever. The answer
+	// itself is waited on, not polled; this only ends the wait when it does not arrive.
 	t := time.NewTimer(callTimeout)
 	defer t.Stop()
 	select {
