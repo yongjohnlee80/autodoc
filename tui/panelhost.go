@@ -28,9 +28,6 @@ type PanelHost interface {
 	SetPref(name, value string)
 	KeepPanelGeometry(id, dimension string, percent int)
 	ActiveWorkspace() (wsInfo, bool)
-	// RefreshRelations is transitional while links still belongs to legacy.
-	// Remove it when the relations Feature owns its panel's open hook.
-	RefreshRelations()
 }
 
 // agentHost adds only the services needed to configure an agent terminal and
@@ -48,7 +45,6 @@ func (c core) Keep(err error)                                { c.h.keep(err) }
 func (c core) Focused(id string) bool                        { return c.h.paneHasKeyboard(id) }
 func (c core) KeyboardPane() string                          { return c.h.keyboardPane() }
 func (c core) PanelOpen(id string) bool                      { return c.h.panelOpen[id] }
-func (c core) TogglePanel(id string)                         { c.h.togglePanel(id) }
 func (c core) OpenDrawer(id string)                          { c.h.openDrawer(id) }
 func (c core) CloseDrawer(id string)                         { c.h.closeDrawer(id) }
 func (c core) DockPanel(id string)                           { c.h.dockPanel(id) }
@@ -56,7 +52,6 @@ func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 	c.h.keepPanelGeo(id, dimension, percent)
 }
 func (c core) ActiveWorkspace() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
-func (c core) RefreshRelations()               { c.h.relationsOfOpenFile() }
 func (c core) SetFormText(name, value string)  { c.h.setField(name, value) }
 func (c core) DaemonAddress() string           { return c.h.session.Address() }
 func (c core) ConfigureTerminal(id, command, dir string, args ...string) error {

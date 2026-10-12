@@ -118,11 +118,14 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   Cross-panel toggles/open/close are navigation actions. Focus return uses
   `RestoreKeyboardPane`, limited to the editor and the registry's receiving panes, not arbitrary
   view methods. Form-text reset is `SetFormText`, distinct from ordinary source updates.
-  The legacy links refresh operation is transitional until relations owns its own open hook.
+  Explorer and relations contribute their own panel specs. Relations owns its open hook,
+  including the page's graph refresh; no links-refresh operation remains on `PanelHost`.
   `terminals` owns startup and
   focus restoration; `agents` owns its profile form/model and running identity. Their state and
   commands are not part of `legacy`. The agent panel is one contribution; future profile tabs
   belong inside its Feature, not one panel spec per agent.
+  Their `Catalog()` entries own terminal toggle/open (`:terminal` / `:term`), agent toggle,
+  and profile settings, so catalog invocations and their QML twins reach the same Feature.
 - `PreferencesChanged()` projects each feature's current preferences into its own sources and
   choosers. Geometry/float readback uses the program's validated panel schema; standalone
   preference readers use fresh built-in descriptors without runtime callbacks.

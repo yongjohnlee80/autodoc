@@ -155,6 +155,15 @@ func newRelated(c Core) *related {
 
 func (*related) Name() string { return "relations" }
 
+func (r *related) Panels() []PanelSpec {
+	s := sidePanelSpec("links", "linksList", 20, func(p prefs) string { return p.linkEdge })
+	s.Open = func(c PanelHost) {
+		r.ofPage()
+		c.OpenDrawer("links")
+	}
+	return []PanelSpec{s}
+}
+
 func (r *related) State() map[string]any {
 	return map[string]any{
 		"App.relations":      r.rows.Model(),
@@ -330,7 +339,7 @@ func (r *related) open(i int) {
 
 // depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.
 func (r *related) depth() {
-	if !r.c.HasFocus(panelView("links")) {
+	if !r.c.HasFocus("linksList") {
 		return
 	}
 	r.deep = !r.deep

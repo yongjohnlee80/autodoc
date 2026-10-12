@@ -1,10 +1,21 @@
 package tui
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 )
+
+// Use the host's actual workspace/file tickets while controlling callback delivery.
+type relatedTicketCore struct {
+	*scriptedCore
+	h *Host
+}
+
+func (c relatedTicketCore) Ticket(seq *uint64, scope TicketScope) Ticket {
+	return c.h.ticket(seq, scope)
+}
 
 // scriptedGraph answers the graph verbs: a.md links to b.md, c.md links back to it, and at depth 2
 // b.md links on to d.md.
@@ -121,5 +132,40 @@ func TestTheLaterRelationsReadWins(t *testing.T) {
 	c.deliver(1, 0)
 	if r.deep || slices.ContainsFunc(r.labels(), func(l string) bool { return strings.HasPrefix(l, "    › ") }) {
 		t.Fatalf("the first d's late answer replaced the second's: deep %v, rows %q", r.deep, r.labels())
+	}
+}
+
+// A stale or failed refresh must preserve the currently displayed relations.
+// This replaces the former Host.applyRelations test after relations became a Feature.
+func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
+	c := relatedTicketCore{newScripted("kb"), newHost(NewSession("unused", nil), Options{Workspace: "kb"})}
+	defer c.h.cancel()
+	scriptedGraph(c.scriptedCore)
+	r := newRelated(c)
+	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
+	c.deferred = true
+	for _, scope := range []string{"document", "workspace", "failure"} {
+		before, of := slices.Clone(r.rows.All()), r.of
+		gen, epoch := c.h.file.gen, c.h.epoch
+		if scope == "failure" {
+			c.answers["graph.links"] = func([]any) (any, error) {
+				return nil, errors.New("graph lookup refused")
+			}
+		}
+		r.load("kb", "a.md")
+		switch scope {
+		case "document":
+			c.h.file.gen++
+		case "workspace":
+			c.h.epoch++
+		}
+		c.deliver(0)
+		c.h.file.gen, c.h.epoch = gen, epoch
+		if !slices.Equal(before, r.rows.All()) || r.of != of {
+			t.Fatalf("%s answer replaced the current relations", scope)
+		}
+	}
+	if !slices.Equal(c.failed, []string{"relations: graph lookup refused"}) {
+		t.Fatalf("refresh failure was not reported: %v", c.failed)
 	}
 }

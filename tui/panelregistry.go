@@ -109,21 +109,17 @@ func agentPanelSpec() PanelSpec {
 }
 func legacyPanelSpecs() []PanelSpec {
 	return []PanelSpec{
-		sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge }),
-		sidePanelSpec("links", "linksList", 20, func(p prefs) string { return p.linkEdge }),
 		{ID: "htmlPane", View: "htmlView", Priority: 50, Edge: func(prefs) string { return "right" }},
 	}
 }
 func defaultPanelSpecs() []PanelSpec {
-	s := legacyPanelSpecs()
-	return []PanelSpec{s[0], s[1], terminalPanelSpec(), agentPanelSpec(), s[2]}
+	return []PanelSpec{
+		sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge }),
+		sidePanelSpec("links", "linksList", 20, func(p prefs) string { return p.linkEdge }),
+		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
+	}
 }
 
 func (l legacy) Panels() []PanelSpec {
-	s := legacyPanelSpecs()
-	s[1].Open = func(c PanelHost) {
-		c.RefreshRelations()
-		c.OpenDrawer("links")
-	}
-	return s
+	return legacyPanelSpecs()
 }
