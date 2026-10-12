@@ -249,3 +249,22 @@ func TestTheFilePickersRelistWhenTheFilesAreListed(t *testing.T) {
 		}
 	}
 }
+
+// Choosing closes the picker: a preview still being read, delivered after Enter on a row or after
+// accept, does not write the closed picker's preview.
+func TestAPickChosenDropsThePreviewInFlight(t *testing.T) {
+	for name, choose := range map[string]func(p *testPick){
+		"Enter on a row": func(p *testPick) { p.enterRow(0) },
+		"accept":         func(p *testPick) { p.accept(0, "") },
+	} {
+		p := newTestPick()
+		p.filter("")
+		p.c.deferred = true
+		p.move(1) // b.md, still being read …
+		choose(p) // … when the picker closes on a choice
+		p.c.deliver(0)
+		if p.title() != "Notes/A.md" {
+			t.Errorf("%s: a preview read before the choice was shown: %v", name, p.title())
+		}
+	}
+}

@@ -187,8 +187,10 @@ func (p *pick[T]) accept(i int, text string) {
 	}
 }
 
-// take closes the picker and chooses x.
+// take closes the picker and chooses x: a preview still being read is dropped first, since a
+// Dialog closed by close() emits neither accepted nor rejected, so dismiss does not run.
 func (p *pick[T]) take(x T) {
+	p.c.Ticket(&p.seq, p.scope)
 	p.c.Close(p.dialog)
 	if p.choose != nil {
 		p.choose(x)
