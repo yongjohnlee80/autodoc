@@ -222,15 +222,19 @@ type linkRow struct {
 type linkField string
 
 const (
-	lTenant linkField = "tenant"
-	lSrc    linkField = "src"
-	lDst    linkField = "dst_path"
+	lTenant linkField   = "tenant"
+	lSrc    linkField   = "src"
+	lDst    linkField   = "dst_path"
+	joinSrc dao.JoinKey = "src"
 )
 
 type linkSchema = dao.Schema[*linkRow, linkField, string, int64]
 
 func newLinkSchema(conn dao.DataConn) *linkSchema {
 	type o = dao.Option[*linkRow, linkField, string, int64]
+	// the linking document, joined when a scoped read must filter links by their source's facets;
+	// the join carries the tenant, as every join does
+	srcJoin := dao.InnerJoinOn(tDoc, dao.On(dao.T(tDoc, "tenant"), dao.T(tLink, "tenant")), dao.On(dao.T(tDoc, "id"), dao.T(tLink, "src")))
 	return dao.New(conn,
 		o(dao.Table[*linkRow, linkField, string, int64](tLink)),
 		o(dao.Fields[*linkRow, linkField, string, int64](map[linkField]dao.Field[*linkRow]{
@@ -239,6 +243,7 @@ func newLinkSchema(conn dao.DataConn) *linkSchema {
 			lDst:    {Expr: dao.T(tLink, lDst), Scan: func(r *linkRow) any { return &r.DstPath }, Value: func(r *linkRow) any { return r.DstPath }},
 		})),
 		o(dao.Conflict[*linkRow, linkField, string, int64](lTenant, lSrc, lDst)),
+		o(dao.OptionalJoinExpr[*linkRow, linkField, string, int64](joinSrc, srcJoin)),
 	)
 }
 

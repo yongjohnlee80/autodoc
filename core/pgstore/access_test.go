@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/searchtest"
 )
@@ -171,6 +172,77 @@ func TestAViewWithinNeverAnswersOutsideItsAccess(t *testing.T) {
 		err := s.ViewWithin(ctx, bad, func(*View) error { ran = true; return nil })
 		if !errors.Is(err, ErrNoAccess) || ran {
 			t.Errorf("access %v: %v (fn ran: %v), want ErrNoAccess before fn", bad, err, ran)
+		}
+	}
+}
+
+// statements records every statement a View runs while viewHook is set.
+type statements struct {
+	dao.NopHook
+	got []dao.QueryInfo
+}
+
+func (s *statements) BeforeExec(_ context.Context, q *dao.QueryInfo) error {
+	s.got = append(s.got, dao.QueryInfo{Op: q.Op, Table: q.Table, SQL: q.SQL, Args: slices.Clone(q.Args)})
+	return nil
+}
+
+// Within a scope, Signals reads in-links in ONE statement that joins each link's source document
+// and carries the access predicate on it: a link from a document outside the scope is never read,
+// not read and dropped afterwards. The statement shape is checked, because the counts alone are the
+// same either way. The mutant, named here: the links read unfiltered and their sources filtered by a
+// second query afterwards — the in-link counts still pass the cell above, and this one fails.
+func TestScopedSignalsFilterLinksBySourceInSQL(t *testing.T) {
+	ctx := context.Background()
+	s := openCorpus(t, scratch(t), "t", accessDocs)
+	var ids []int64
+	if err := s.View(ctx, func(v *View) error {
+		got, err := v.List(ctx, search.Filter{}, 100)
+		for _, c := range got {
+			ids = append(ids, c.Doc)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec := &statements{}
+	viewHook = rec
+	t.Cleanup(func() { viewHook = nil })
+	access := map[string][]string{"label_id": {"A", "B"}, "territory": {"US"}}
+	if err := s.ViewWithin(ctx, access, func(v *View) error {
+		_, err := v.Signals(ctx, ids)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	viewHook = nil
+
+	var links []dao.QueryInfo
+	for _, q := range rec.got {
+		if q.Table == tLink {
+			links = append(links, q)
+		}
+	}
+	if len(rec.got) != 2 || len(links) != 1 {
+		for _, q := range rec.got {
+			t.Logf("%s %s: %s %v", q.Op, q.Table, q.SQL, q.Args)
+		}
+		t.Errorf("Signals ran %d statements, %d on rag_link; want 2: the admitted documents, then their in-links", len(rec.got), len(links))
+	}
+	if len(links) == 0 {
+		t.FailNow()
+	}
+	q := links[0]
+	join := `INNER JOIN "rag_document" ON "rag_document"."tenant" = "rag_link"."tenant" AND "rag_document"."id" = "rag_link"."src"`
+	if !strings.Contains(q.SQL, join) {
+		t.Errorf("the in-link query does not join the linking document:\n%s", q.SQL)
+	}
+	if n := strings.Count(q.SQL, "= ANY(rag_document.facets)"); n != 3 {
+		t.Errorf("the in-link query tests the linking document's facets %d times, want 3 (A, B, US):\n%s", n, q.SQL)
+	}
+	for _, want := range []string{"label_id=A", "label_id=B", "territory=US"} {
+		if !slices.Contains(q.Args, any(want)) {
+			t.Errorf("the in-link query does not bind %q: %v", want, q.Args)
 		}
 	}
 }

@@ -26,6 +26,19 @@ type View struct {
 	access []dao.Predicate // ViewWithin's; nil is unscoped
 }
 
+// viewHook observes every statement a View runs. It is nil in production; a cell sets it to read
+// the SQL a retrieval sends, so a predicate's place in the statement is checked, not only its
+// effect on the rows.
+var viewHook dao.Hook
+
+// opts are the query options of every statement a View runs: its context, and viewHook when set.
+func (v *View) opts(ctx context.Context) []dao.QueryOption {
+	if viewHook != nil {
+		return []dao.QueryOption{dao.WithQueryContext(ctx), dao.WithHooks(viewHook)}
+	}
+	return []dao.QueryOption{dao.WithQueryContext(ctx)}
+}
+
 // where is a retrieval's predicates over the document: the filter's, and the View's access ANDed
 // beside them, never merged into the filter's facets (where a query's own facet would OR with it).
 func (v *View) where(f search.Filter) []dao.Predicate {
@@ -39,7 +52,7 @@ var (
 )
 
 func (v *View) chunks(ctx context.Context) dao.DAO[*chunkRow, chunkField, int64] {
-	return v.s.ro.chunk.On(v.tx, dao.WithQueryContext(ctx)).With(cTenant, v.s.tenant)
+	return v.s.ro.chunk.On(v.tx, v.opts(ctx)...).With(cTenant, v.s.tenant)
 }
 
 // sectionsOnlyKey marks a context whose chunk retrievals leave the abstracts out.
@@ -62,7 +75,7 @@ func (v *View) retrieved(ctx context.Context) dao.DAO[*chunkRow, chunkField, int
 }
 
 func (v *View) docs(ctx context.Context) dao.DAO[*docRow, docField, int64] {
-	return v.s.ro.doc.On(v.tx, dao.WithQueryContext(ctx)).With(dTenant, v.s.tenant)
+	return v.s.ro.doc.On(v.tx, v.opts(ctx)...).With(dTenant, v.s.tenant)
 }
 
 func candidate(r *chunkRow, snippet string) search.Candidate[int64] {
@@ -102,7 +115,7 @@ func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter
 
 // activeModel is the tenant's active and target models, read in this View; none recorded is "".
 func (v *View) models(ctx context.Context) (active, target string, err error) {
-	m, err := v.s.ro.meta.On(v.tx, dao.WithQueryContext(ctx)).With(mTenant, v.s.tenant).Get(mActive, mTarget)
+	m, err := v.s.ro.meta.On(v.tx, v.opts(ctx)...).With(mTenant, v.s.tenant).Get(mActive, mTarget)
 	if errors.Is(err, dao.ErrNoRows) {
 		return "", "", nil
 	}
@@ -196,12 +209,19 @@ func (v *View) Signals(ctx context.Context, ids []int64) (map[int64]search.Signa
 	if len(paths) == 0 {
 		return out, nil
 	}
-	links, err := v.s.ro.link.On(v.tx, dao.WithQueryContext(ctx)).With(lTenant, v.s.tenant).
-		WithPredicate(dao.In(qcol(tLink, string(lDst)), paths)).Select(lSrc, lDst)
-	if err != nil {
-		return nil, err
+	// Within a scope, a link counts only when its linking document is admitted too: a document
+	// outside the scope says nothing, not even that it links. The source is joined and the access
+	// predicate applied in this query, so a link from outside the scope is never read at all, not
+	// read and dropped afterwards.
+	lq := v.s.ro.link.On(v.tx, v.opts(ctx)...).With(lTenant, v.s.tenant).
+		WithPredicate(dao.In(qcol(tLink, string(lDst)), paths))
+	if v.access != nil {
+		lq = lq.Join(joinSrc)
+		for _, p := range v.access {
+			lq = lq.WithPredicate(p)
+		}
 	}
-	within, err := v.linkingWithin(ctx, links)
+	links, err := lq.Select(lSrc, lDst)
 	if err != nil {
 		return nil, err
 	}
@@ -210,9 +230,6 @@ func (v *View) Signals(ctx context.Context, ids []int64) (map[int64]search.Signa
 		dst := byPath[l.DstPath]
 		if l.Src == dst {
 			continue // a link to itself is not a signal
-		}
-		if within != nil && !within[l.Src] {
-			continue // a document the access does not admit says nothing, not even that it links
 		}
 		if from[dst] == nil {
 			from[dst] = map[int64]bool{}
@@ -225,34 +242,6 @@ func (v *View) Signals(ctx context.Context, ids []int64) (map[int64]search.Signa
 		out[id] = s
 	}
 	return out, nil
-}
-
-// linkingWithin is the linking documents of links the View's access admits; nil when the View is
-// unscoped, so every one counts.
-func (v *View) linkingWithin(ctx context.Context, links []*linkRow) (map[int64]bool, error) {
-	if v.access == nil {
-		return nil, nil
-	}
-	within := map[int64]bool{}
-	if len(links) == 0 {
-		return within, nil
-	}
-	srcs := make([]any, 0, len(links))
-	for _, l := range links {
-		srcs = append(srcs, l.Src)
-	}
-	d := v.docs(ctx).WithPredicate(dao.In(qcol(tDoc, string(dID)), srcs))
-	for _, p := range v.access {
-		d = d.WithPredicate(p)
-	}
-	rows, err := d.Select(dID)
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range rows {
-		within[r.ID] = true
-	}
-	return within, nil
 }
 
 // List is the documents f admits, in path order, each as its first chunk with the start of its text
