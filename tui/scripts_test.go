@@ -172,8 +172,8 @@ func TestAutodocRunRunsTheCatalog(t *testing.T) {
 	}
 	r.waitPage(t, "<by id")
 	// a built-in, then a feature's (each takes the keyboard, so runit is run by its id)
-	// in this order: the todos' view covers the explorer
-	for _, c := range []struct{ id, want string }{{"explorer.toggle", "┌ explorer"}, {"todos.open", "todos · kb"}} {
+	// the todos' panel opens at the right, beside the explorer
+	for _, c := range []struct{ id, want string }{{"explorer.toggle", "┌ explorer"}, {"todos.open", "┌ todos"}} {
 		if err := onLoop(r, func() error { return r.h.cat.run("lua.runit", []string{c.id}) }); err != nil {
 			t.Fatal(err)
 		}

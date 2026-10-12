@@ -420,6 +420,74 @@ Window {
         }
     }
 
+    // the todos (todos.go): the stores open, each its buckets and tasks, as autofinder's todos panel;
+    // at the right edge unless moved, so the explorer's left one stays beside it
+    Panel {
+        id: todos
+        heading: App.todosTitle
+        closeOnQ: true
+        edge: App.todosEdge
+        size: App.todosSize
+        length: App.todosLength
+        floating: App.todosFloating
+        floatX: App.todosX; floatY: App.todosY; floatWidth: App.todosW; floatHeight: App.todosH
+        onPlaced: App.panelPlaced("todos", x, y, width, height)
+        minimumSize: 15
+        onResized: App.panelResized("todos", size, length)
+        onOpened: App.panelOpened("todos")
+        onClosed: App.panelClosed("todos")
+        // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+        Shortcut { sequence: "a"; onActivated: App.todoAdd() }
+        Shortcut { sequence: "d"; onActivated: App.todoRemove() }
+        Shortcut { sequence: "s"; onActivated: App.todoCycle() }
+        Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
+        Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
+        Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
+        Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
+        Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
+        Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
+        Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
+        Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
+        Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
+        Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
+        // ---- end of the todos's keys ----
+        Flex {
+            direction: Tui.Vertical
+            Flex {
+                direction: Tui.Horizontal
+                Button { text: "&New…"; onClicked: App.todoNew() }
+                Text { text: " " }
+                Button { text: "&Load…"; onClicked: App.todoLoad() }
+                Text { text: " " }
+                Button { text: "Close (&q)"; onClicked: todos.close() }
+            }
+            TreeView {
+                id: todoTree
+                Layout.fillHeight: true
+                palette.highlight: Theme.document.highlight
+                palette.highlightedText: Theme.document.highlightedText
+                model: App.todoTree
+                textRole: "label"
+                onCurrentIndexChanged: App.todoMoved(index)
+                onActivated: App.todoActivated(index)
+            }
+            // the task under the cursor's details (i, o): at most half the panel, scrolled, so a long
+            // description never pushes the tree away
+            Frame {
+                title: "details"
+                visible: App.todoDetailShown
+                Layout.fillHeight: true
+                Editor { readOnly: true; text: App.todoDetail; wrap: true }
+            }
+            Text { text: App.todosStatus; wrapMode: Tui.WordWrap }
+            Text {
+                visible: App.todoHelpShown
+                wrapMode: Tui.WordWrap
+                text: "Enter open the task's file, or a section   a add   d remove   s status (open → completed → deferred → open)   i, o details   R refresh   M move the store   1–5 a section   ? these keys   q close"
+            }
+        }
+    }
+
     SearchPicker { id: searchPicker }
     Find { id: findDialog }
     FileOpen { id: fileOpen }
@@ -462,7 +530,6 @@ Window {
     Arrange { id: arrange }
     Tutorial { id: tutorial }
     About { id: about }
-    Todos { id: todosDialog }
     TodoNew { id: todoNew }
     TodoFolder { id: todoFolder }
     Notifications { id: notifications }

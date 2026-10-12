@@ -340,8 +340,16 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		if has := strings.Contains(got, s.Indent+`Shortcut { sequence: "/"; onActivated: App.openFind() }`); has != finds[s.ID] {
 			t.Errorf("the %s's keys hold /: %v, but a find pane scoped there: %v\n%s", s.ID, has, finds[s.ID], got)
 		}
-		if hasD := strings.Contains(got, `sequence: "d"`); hasD != (s.ID == "links") {
+		if hasD := strings.Contains(got, `sequence: "d"`); hasD != (s.ID == "links" || s.ID == "todos") {
 			t.Errorf("the %s's keys hold d: %v", s.ID, hasD)
+		}
+	}
+	// the todos' keys are autofinder's, in its panel alone
+	todosBegin, todosEnd := scopeMarkers(keyScope{ID: "todos", Indent: "        "})
+	todosKeys := block(todosBegin, todosEnd)
+	for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "?", "1", "2", "3", "4", "5"} {
+		if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
+			t.Errorf("the todos panel lacks %s:\n%s", seq, todosKeys)
 		}
 	}
 	for want, key := range map[string]Key{

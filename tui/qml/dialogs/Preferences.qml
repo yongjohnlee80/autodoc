@@ -86,8 +86,13 @@ Dialog {
                     Text { text: "the explorer opens from" }
                     ComboBox { model: App.edges; textRole: "label"; currentIndex: App.explorerEdgeIndex; onActivated: App.setExplorerEdge(index) }
                     Text { text: "" }
-                    Text { text: "the relations open from" }
-                    ComboBox { model: App.edges; textRole: "label"; currentIndex: App.relationsEdgeIndex; onActivated: App.setRelationsEdge(index) }
+                    Text { text: "the relations · the todos open from" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.edges; textRole: "label"; currentIndex: App.relationsEdgeIndex; onActivated: App.setRelationsEdge(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.edges; textRole: "label"; currentIndex: App.todosEdgeIndex; onActivated: App.setTodosEdge(index) }
+                    }
                     Text { text: "" }
                     Text { text: "the agent: from · size · length" }
                     Flex {

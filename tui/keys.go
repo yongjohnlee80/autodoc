@@ -54,9 +54,10 @@ type keyScope struct {
 	ID, Indent string
 }
 
-// keyScopes are the panes with keys of their own: the page (the Editor's FocusScope), and the
+// keyScopes are the panes with keys of their own: the page (the Editor's FocusScope), the todos'
+// panel (its keys the todos feature's), and the
 // explorer's and the relations' panels.
-var keyScopes = []keyScope{{"page", "            "}, {"explorer", "        "}, {"links", "        "}}
+var keyScopes = []keyScope{{"page", "            "}, {"explorer", "        "}, {"links", "        "}, {"todos", "        "}}
 
 // findKeys are / n N in each pane find searches that has keys of its own (FindPane.Scope), in the
 // features' order (which is find's, the registry keeping it): the pane answers them itself (find.go). The Window's own / n N answer everywhere else,

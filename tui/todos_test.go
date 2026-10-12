@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -40,40 +39,51 @@ func seedTodos(t *testing.T, d *daemon, claimed bool, specs ...todo.Spec) []todo
 	return out
 }
 
-// TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover: SPC x opens the workspace's store, its
-// open tasks listed and numbered; a store the daemon has not claimed takes no writes here.
+// openTodos opens the todos panel and the workspace's store, and puts the cursor on its section n
+// (1–5), opened: its tasks read.
+func openTodos(t *testing.T, r *running, root string, n rune) {
+	t.Helper()
+	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
+	r.leader(t, 'x')
+	r.s.WaitForText(t, root)
+	r.keys(t, key('l')) // the store open: its sections
+	r.s.WaitForText(t, "In progress")
+	r.keys(t, key(n), key('l')) // the section, opened: its tasks read
+}
+
+// TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover: SPC x opens the panel, the workspace's
+// store its first root, marked read-only while the daemon has not claimed it; its open tasks are
+// numbered, and a store not claimed takes no writes here. SPC x again closes the panel.
 func TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, false, todo.Spec{Title: "Write the view", Priority: "high"})
 	r := attached(t, d)
-	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	r.leader(t, 'x')
-	r.s.WaitForText(t, "todos · kb  (read-only until the cutover)")
-	r.s.WaitForText(t, "Write the view")
+	openTodos(t, r, "kb  (read-only", '1') // the label is cut to the panel's width
+	r.s.WaitForText(t, "1  Write the view")
 	r.s.WaitForText(t, "1 tasks")
 	r.keys(t, key('a'))
 	r.waitNotice(t, "read-only in AutoDoc until the cutover")
 	if strings.Contains(r.s.String(), "new task") {
 		t.Error("a read-only store opened the new task's title")
 	}
+	r.leader(t, 'x')
+	r.s.WaitFor(t, "the panel closed", func(sc string) bool { return !strings.Contains(sc, "Write the view") })
 }
 
-// TestTodosAddsCyclesAndRemoves: on a claimed store a adds, s cycles the status, d removes after
-// asking; each lands in the store, and the tabs follow it.
+// TestTodosAddsCyclesAndRemoves: on a claimed store, marked ●, a adds, s cycles the status, d
+// removes after asking; each lands in the store, and the sections follow it. d is the panel's
+// alone: with the keyboard in the page it asks nothing.
 func TestTodosAddsCyclesAndRemoves(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
-	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	r.leader(t, 'x')
-	r.s.WaitForText(t, "todos · kb")
+	openTodos(t, r, "● kb", '1')
+	r.s.WaitForText(t, "0 tasks")
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "new task")
 	r.keys(t, decltest.Type("Ship the todos")...)
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
-	// the view's own count, which only its reload after the add writes ("Ship the todos" is also
-	// the title field's text, on screen before the add lands)
-	r.s.WaitForText(t, "1 tasks")
+	r.keys(t, enter())
+	r.s.WaitForText(t, "1  Ship the todos")
 	listed := func(bucket string) []todo.Task {
 		l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{Buckets: []string{bucket}})
 		if err != nil {
@@ -84,51 +94,52 @@ func TestTodosAddsCyclesAndRemoves(t *testing.T) {
 	if got := listed("open"); len(got) != 1 || got[0].Title != "Ship the todos" {
 		t.Fatalf("open after a: %+v", got)
 	}
-	r.keys(t, key('s')) // open → completed
+	r.keys(t, key('j'))
+	r.s.WaitForText(t, "status:") // the task under the cursor: the details show it (a key and the move are not ordered)
+	r.keys(t, key('s'))           // open → completed
 	r.s.WaitFor(t, "completed", func(string) bool { return len(listed("completed")) == 1 })
 	r.s.WaitForText(t, "0 tasks")
-	r.keys(t, key('4'))
-	r.s.WaitForText(t, "1 tasks")
+	r.keys(t, key('4'), key('l')) // Completed, opened
+	r.s.WaitForText(t, "Ship the todos")
+	r.keys(t, key('j'))
+	r.s.WaitForText(t, "status:   completed")
+	// d with the keyboard in the page is not the panel's
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("editor", "forceActiveFocus")); return true })
+	r.keys(t, key('d'))
+	time.Sleep(200 * time.Millisecond)
+	if strings.Contains(r.s.String(), "remove the task?") {
+		t.Fatal("d in the page asked to remove a task")
+	}
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoTree", "forceActiveFocus")); return true })
 	r.keys(t, key('d'))
 	r.s.WaitForText(t, "remove the task?")
 	r.keys(t, key('y'))
 	r.s.WaitFor(t, "removed", func(string) bool { return len(listed("completed")) == 0 })
 }
 
-// TestTodosArchiveIsReadByMonth: the Archived tab lists months with their counts and reads a
-// month's tasks only once it is opened; Backspace is the months again.
+// TestTodosArchiveIsReadByMonth: Archived lists its months, and a month's tasks are read only once
+// it is opened.
 func TestTodosArchiveIsReadByMonth(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	tasks := seedTodos(t, d, true, todo.Spec{Title: "Old and done", Status: "archived"}, todo.Spec{Title: "Still open"})
+	seedTodos(t, d, true, todo.Spec{Title: "Old and done", Status: "archived"}, todo.Spec{Title: "Still open"})
 	r := attached(t, d)
-	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	r.leader(t, 'x')
-	r.s.WaitForText(t, "Still open")
-	r.keys(t, key('5'))
+	openTodos(t, r, "● kb", '5')
 	month := time.Now().Format("2006/01")
 	r.s.WaitForText(t, month)
 	if strings.Contains(r.s.String(), "Old and done") {
 		t.Fatal("an archived task was read before its month was opened")
 	}
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
+	r.keys(t, key('j'), key('l')) // the month, opened
 	r.s.WaitForText(t, "Old and done")
-	// Backspace is the months again: Enter there opens the month, not a task
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyBackspace})
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
-	r.s.WaitForText(t, "1 tasks")
-	if tasks[0].Status != "archived" {
-		t.Fatalf("seeded %+v", tasks[0])
-	}
 }
 
-// TestTodosRefreshesOnAnotherClientsChange: todos.changed from another client reads the store
-// again, so the view never shows a stale list.
+// TestTodosRefreshesOnAnotherClientsChange: todos.changed from another client reads the open
+// section again, so the panel never shows a stale list.
 func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
-	r.s.WaitFor(t, "kb entered", func(string) bool { return onLoop(r, func() bool { return r.h.ws == "kb" }) })
-	r.leader(t, 'x')
+	openTodos(t, r, "● kb", '1')
 	r.s.WaitForText(t, "0 tasks")
 	// another client's add arrives as an event, as sys.events carries it
 	if _, err := d.todos.Add(context.Background(), kbTodos, todo.Spec{Title: "From an agent"}); err != nil {
@@ -136,33 +147,4 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	}
 	onLoop(r, func() bool { return r.h.reg.event("todos.changed", "kb", "x") })
 	r.s.WaitForText(t, "From an agent")
-}
-
-// fakeCore records what a feature asks of the host.
-type fakeCore struct {
-	Core
-	opened, notes []string
-}
-
-func (f *fakeCore) OpenFile(abs string) { f.opened = append(f.opened, abs) }
-func (f *fakeCore) Close(string)        {}
-func (f *fakeCore) Notify(msg string)   { f.notes = append(f.notes, msg) }
-func (f *fakeCore) Set(string, any)     {}
-
-// TestEnterOpensTheTasksFileInTheStore: Enter opens the task's own file, under the store's
-// directory, wherever the store is.
-func TestEnterOpensTheTasksFileInTheStore(t *testing.T) {
-	f := &fakeCore{}
-	v := newTodos(f)
-	v.store = "/p/.todo-list"
-	v.tasks[0].Reset([]map[string]any{{"id": "t1", "path": "open/t1.md"}})
-	v.activated(0)
-	v.activated(5) // no such row: nothing
-	if len(f.opened) != 1 || f.opened[0] != "/p/.todo-list/open/t1.md" {
-		t.Errorf("opened %v", f.opened)
-	}
-	v.remove() // read-only: says so, asks nothing
-	if len(f.notes) != 1 || !strings.Contains(f.notes[0], "read-only") {
-		t.Errorf("notes %v", f.notes)
-	}
 }

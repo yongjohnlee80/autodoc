@@ -282,5 +282,5 @@ func TestAnEntryRunsWhatItsTwinRuns(t *testing.T) {
 	if err := onLoop(r, func() error { return r.h.cat.run("todos.open", nil) }); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitForText(t, "todos · kb")
+	r.s.WaitForText(t, "┌ todos")
 }

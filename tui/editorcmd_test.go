@@ -166,7 +166,7 @@ autodoc.command{ name = "w", run = function(ed) ed:insert("lua's w") end }
 	r.s.WaitForText(t, "VIM Commands")
 	r.keys(t, decltest.Type("tod")...)
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab})
-	r.s.WaitForText(t, "todos — open the todos (SPC x)")
+	r.s.WaitForText(t, "todos — the todos panel")
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
-	r.s.WaitForText(t, "todos · kb")
+	r.s.WaitForText(t, "┌ todos")
 }

@@ -24,6 +24,7 @@ const (
 	prefStatus        = "tui.status.shown"
 	prefExplorer      = "tui.explorer.edge"
 	prefRelationsEdge = "tui.links.edge"
+	prefTodosEdge     = "tui.todos.edge"
 	prefRuler         = "tui.ruler"
 	prefKeymap        = "tui.editor.keymap"
 	prefWrap          = "tui.editor.wrap"
@@ -84,6 +85,7 @@ type prefs struct {
 	theme                       string
 	menuHidden, statusOn        bool
 	explorerEdge, relationsEdge string
+	todosEdge                   string // where the todos panel opens: the right edge unless chosen
 	ruler                       int
 	keymap                      string
 	wrap, lineNumbers           bool   // the page: long lines wrapped at its width; each line's number
@@ -167,6 +169,10 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 			chooser("App.relationsEdgeIndex", "App.setRelationsEdge").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.relationsEdge": p.relationsEdge} }).
 			then(func(prefs) { h.dockPanel(relationsPanelSpec().ID) }),
+		choicePref(prefTodosEdge, "right", edges, func(p *prefs) *string { return &p.todosEdge }).
+			chooser("App.todosEdgeIndex", "App.setTodosEdge").
+			shows(func(p prefs) map[string]any { return map[string]any{"App.todosEdge": p.todosEdge} }).
+			then(func(prefs) { h.dockPanel(todosPanelSpec().ID) }),
 		choicePref(prefKeymap, "vim", keymaps, func(p *prefs) *string { return &p.keymap }).
 			chooser("App.keymapIndex", "App.setKeymapIndex").
 			shows(func(p prefs) map[string]any {

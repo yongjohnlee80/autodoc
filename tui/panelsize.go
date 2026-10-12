@@ -96,9 +96,11 @@ func (h *Host) keepPanelGeo(panel, what string, n int) {
 func panelState(p prefs) map[string]any {
 	es, el := p.panelGeometry("explorer", p.explorerEdge)
 	ls, ll := p.panelGeometry(relationsPanelSpec().ID, p.relationsEdge)
+	ts, tl := p.panelGeometry(todosPanelSpec().ID, p.todosEdge)
 	return map[string]any{
 		"App.explorerSize": es, "App.explorerLength": el,
 		"App.linksSize": ls, "App.linksLength": ll,
+		"App.todosSize": ts, "App.todosLength": tl,
 	}
 }
 

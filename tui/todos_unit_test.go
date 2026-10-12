@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // scriptedCore answers a feature's daemon calls from a table and runs Go at once, recording what
@@ -148,61 +151,137 @@ func scriptedStore(claimed bool) *scriptedCore {
 	return s
 }
 
-func TestTodosOpensTheWorkspacesStoreAndShowsATask(t *testing.T) {
-	if s := newScripted(""); true {
-		newTodos(s).open()
-		if len(s.notes) != 1 || len(s.opened) != 0 {
-			t.Errorf("no workspace: notes %v, opened %v", s.notes, s.opened)
-		}
+// treeLabels are the labels of the rows under parent (nil: the roots).
+func treeLabels(v *todos, parent *tuidecl.Index) []string {
+	var out []string
+	for r := 0; r < v.model.RowCount(parent); r++ {
+		out = append(out, v.model.Data(tuidecl.Index{Row: r, Parent: parent}, "label").Raw)
+	}
+	return out
+}
+
+// openSection opens a section of a store, as the tree does when it first opens one, and is its row.
+func openSection(t *testing.T, v *todos, store, bucket string) tuidecl.Index {
+	t.Helper()
+	ix, ok := v.indexOf(store, bucketKey(store, bucket))
+	if !ok {
+		t.Fatalf("no section %s of %s: %v", bucket, store, treeLabels(v, nil))
+	}
+	v.model.FetchMore(ix)
+	return ix
+}
+
+// TestTodosListsTheStoresAsTheTreesRoots: SPC x toggles the panel, saying so when there is no
+// workspace and no store; opened, the workspace's store is the first root and every other with a
+// root of its own follows, ● on those the daemon writes; each has the five sections, read only when
+// one opens.
+func TestTodosListsTheStoresAsTheTreesRoots(t *testing.T) {
+	none := newScripted("")
+	newTodos(none).toggle()
+	if len(none.notes) != 1 || len(none.views) != 0 {
+		t.Errorf("no workspace: notes %v, views %v", none.notes, none.views)
 	}
 	s := scriptedStore(false)
 	v := newTodos(s)
-	v.open()
-	if s.opened[0] != "todosDialog" || !s.called("todos.stores") || !s.called("todos.list") {
-		t.Fatalf("opened %v, calls %v", s.opened, s.calls)
+	v.toggle()
+	if len(s.views) != 1 || s.views[0] != "todos.toggle" {
+		t.Errorf("SPC x: views %v", s.views)
 	}
-	if s.set["App.todosTitle"] != "todos · kb  (read-only until the cutover)" {
-		t.Errorf("title %v", s.set["App.todosTitle"])
+	v.Panels()[0].Opened(nil)
+	if got, want := treeLabels(v, nil), []string{"  kb  (read-only until the cutover)", "● /p"}; !slices.Equal(got, want) {
+		t.Fatalf("roots %q, want %q (the rootless store left out)", got, want)
 	}
-	if !strings.Contains(fmt.Sprint(s.set["App.todosStatus"]), "1 tasks · 1 malformed files") {
+	if got := treeLabels(v, &tuidecl.Index{Row: 0}); !slices.Equal(got, []string{"Open", "In progress", "Deferred", "Completed", "Archived"}) {
+		t.Errorf("sections %q", got)
+	}
+	if s.called("todos.list") {
+		t.Error("a section was read before it opened")
+	}
+	if spec := v.Panels()[0]; spec.ID != "todos" || spec.Edge(prefs{todosEdge: "right"}) != "right" {
+		t.Errorf("the panel %+v", spec)
+	}
+}
+
+// TestTodosReadsASectionWhenItOpens: a section's tasks are read as it opens, errored ones first
+// and marked, the open section's numbered; the details are the task under the cursor's; Enter opens
+// its file and closes the panel, and on a section opens or closes it.
+func TestTodosReadsASectionWhenItOpens(t *testing.T) {
+	s := scriptedStore(false)
+	s.answers["todos.list"] = func(p []any) (any, error) {
+		return map[string]any{"tasks": []any{
+			map[string]any{"id": "t1", "rev": "r1", "title": "Clean", "status": "open", "path": "open/t1.md"},
+			map[string]any{"id": "t2", "rev": "r2", "title": "Ship", "status": "open", "priority": "high", "path": "open/t2.md",
+				"tags": []any{"x"}, "description": "the notes", "errors": []any{map[string]any{"field": "adr[0]", "code": "not-found", "message": "gone"}}}},
+			"malformed": []any{map[string]any{"path": "open/bad.md"}}}, nil
+	}
+	v := newTodos(s)
+	v.list()
+	open := openSection(t, v, "ws:kb", "open")
+	if got, want := treeLabels(v, &open), []string{"⚠ 1  Ship", "2  Clean"}; !slices.Equal(got, want) {
+		t.Fatalf("tasks %q, want %q", got, want)
+	}
+	if !strings.Contains(fmt.Sprint(s.set["App.todosStatus"]), "2 tasks · 1 malformed files") {
 		t.Errorf("status %v", s.set["App.todosStatus"])
 	}
+	ship := tuidecl.Index{Row: 0, Parent: &open}
+	v.moved(ship)
 	d := fmt.Sprint(s.set["App.todoDetail"])
 	for _, want := range []string{"Ship", "priority: high", "tags:", "errors:", "adr[0] not-found: gone", "the notes"} {
 		if !strings.Contains(d, want) {
 			t.Errorf("details lack %q:\n%s", want, d)
 		}
 	}
-	v.moved(9)
+	v.moved(open)
 	if s.set["App.todoDetail"] != "" {
-		t.Error("details for no row")
+		t.Error("details for a section")
 	}
-	v.activated(0)
-	if len(s.files) != 1 || s.files[0] != "/kb/.todo-list/open/t1.md" {
-		t.Errorf("opened file %v", s.files)
+	if err := v.activated(ship); err != nil {
+		t.Fatal(err)
 	}
-	// read-only: every write says so and calls nothing
-	v.moved(0)
-	n := len(s.calls)
-	v.add()
-	v.remove()
-	v.cycle()
-	v.chooseFolder("move", "x")
-	if len(s.calls) != n || len(s.notes) != 4 {
-		t.Errorf("a read-only store was written: %v, notes %v", s.calls[n:], s.notes)
+	if len(s.files) != 1 || s.files[0] != "/kb/.todo-list/open/t2.md" || !slices.Contains(s.views, "todos.close") {
+		t.Errorf("Enter on a task: files %v, views %v", s.files, s.views)
 	}
-	v.refresh() // read-only: reads again
-	if !s.called("todos.resolve") || s.called("todos.refresh") {
-		t.Error("refresh on a read-only store")
+	if err := v.activated(open); err != nil || !slices.Contains(s.views, "todoTree.toggleExpanded") {
+		t.Errorf("Enter on a section: %v, views %v", err, s.views)
 	}
 }
 
-func TestTodosWritesAClaimedStore(t *testing.T) {
+// TestTodosReadsTheArchiveByMonth: Archived lists its months with their counts, and a month's tasks
+// are read only when it opens; s leaves an archived task alone.
+func TestTodosReadsTheArchiveByMonth(t *testing.T) {
+	s := scriptedStore(true)
+	v := newTodos(s)
+	v.list()
+	archived := openSection(t, v, "ws:kb", "archived")
+	if got := treeLabels(v, &archived); !slices.Equal(got, []string{"2026/09  (3)"}) {
+		t.Fatalf("months %q", got)
+	}
+	if s.called("todos.list[kb map[buckets:[archived/2026/09]]]") {
+		t.Fatal("a month was read before it opened")
+	}
+	month := tuidecl.Index{Row: 0, Parent: &archived}
+	v.model.FetchMore(month)
+	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || !slices.Equal(treeLabels(v, &month), []string{"Old"}) {
+		t.Fatalf("the month: calls %v, rows %q", s.calls, treeLabels(v, &month))
+	}
+	v.moved(tuidecl.Index{Row: 0, Parent: &month})
+	v.cycle()
+	if s.called("todos.status") {
+		t.Error("s moved an archived task")
+	}
+}
+
+// TestTodosWritesAClaimedStoreAndNotAReadOnlyOne: on the claimed store a, s, d, R and M write to the
+// cursor's store; on one the daemon has not claimed each says so and writes nothing, and R reads it
+// again.
+func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	s := scriptedStore(true)
 	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "new"}, nil }
 	s.answers["todos.refresh"] = func([]any) (any, error) { return map[string]any{"moved": int64(1)}, nil }
 	v := newTodos(s)
-	v.open()
+	v.list()
+	open := openSection(t, v, "ws:kb", "open")
+	v.moved(tuidecl.Index{Row: 0, Parent: &open})
 	v.add()
 	if s.opened[len(s.opened)-1] != "todoNew" {
 		t.Fatalf("opened %v", s.opened)
@@ -212,18 +291,17 @@ func TestTodosWritesAClaimedStore(t *testing.T) {
 		t.Error("an empty title was added")
 	}
 	v.addTitle(" Write it ")
-	if !s.called("todos.add[kb map[title:Write it]]") {
-		t.Errorf("calls %v", s.calls)
-	}
-	v.moved(0)
+	v.moved(tuidecl.Index{Row: 0, Parent: &open})
 	v.remove()
 	if len(s.asked) != 1 || s.asked[0].Title != "remove the task?" {
 		t.Fatalf("asked %v", s.asked)
 	}
 	s.yes()
 	v.cycle()
-	if !s.called("todos.remove[kb t1 r1]") || !s.called("todos.status[kb t1 r1 completed]") {
-		t.Errorf("calls %v", s.calls)
+	for _, want := range []string{"todos.add[kb map[title:Write it]]", "todos.remove[kb t1 r1]", "todos.status[kb t1 r1 completed]"} {
+		if !s.called(want) {
+			t.Errorf("no %s: %v", want, s.calls)
+		}
 	}
 	v.refresh()
 	if !s.called("todos.refresh") || !strings.Contains(strings.Join(s.notes, "|"), "refreshed: 1 moved") {
@@ -239,121 +317,90 @@ func TestTodosWritesAClaimedStore(t *testing.T) {
 	if len(s.failed) != 1 || !strings.Contains(s.failed[0], "todos.remove") {
 		t.Errorf("failed %v", s.failed)
 	}
+
+	ro := scriptedStore(false)
+	w := newTodos(ro)
+	w.list()
+	ropen := openSection(t, w, "ws:kb", "open")
+	w.moved(tuidecl.Index{Row: 0, Parent: &ropen})
+	n := len(ro.calls)
+	w.add()
+	w.remove()
+	w.cycle()
+	w.chooseFolder("move", "x")
+	if len(ro.calls) != n || len(ro.notes) != 4 {
+		t.Errorf("a read-only store was written: %v, notes %v", ro.calls[n:], ro.notes)
+	}
+	w.refresh() // read-only: the open section read again, nothing reconciled
+	if len(ro.calls) == n || ro.called("todos.refresh") {
+		t.Errorf("refresh on a read-only store: %v", ro.calls[n:])
+	}
 }
 
-func TestTodosTabsArchiveStoresAndFolders(t *testing.T) {
+// TestTodosSectionsByNumberEventsAndFolders: 1–5 put the cursor on that section of its store; an
+// event for a store listed reads its open sections again, another's nothing; Load registers and
+// lists, New registers and scaffolds, M moves the cursor's store.
+func TestTodosSectionsByNumberEventsAndFolders(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
-	v.open()
-	v.showTab(archivedTab)
-	if v.months.Len() != 1 {
-		t.Fatalf("months %v", v.months.All())
+	v.list()
+	v.section(3)
+	if want := []string{"ws:kb", bucketKey("ws:kb", "completed")}; !slices.Equal(v.at, want) || !slices.Contains(s.views, "todoTree.setCurrentIndex") {
+		t.Errorf("4: at %q, views %v", v.at, s.views)
 	}
-	v.monthChosen(0)
-	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || v.tasks[archivedTab].Len() != 1 {
-		t.Errorf("month: %v", s.calls)
-	}
-	v.monthChosen(5)
-	v.cursor = 0
-	v.cycle() // an archived task: s does nothing
-	if s.called("todos.status") {
-		t.Error("s moved an archived task")
-	}
-	v.showTab(1)
-	v.showTab(9)
-	if v.tab != 1 {
-		t.Errorf("tab %d", v.tab)
-	}
-	// stores: the chosen one by its root; one with no root is left alone
-	v.storeChosen(0)
-	if v.rootOf() != "/p" {
-		t.Errorf("at %v", v.at)
-	}
-	v.storeChosen(1)
-	v.storeChosen(7)
-	if v.rootOf() != "/p" {
-		t.Errorf("a store with no root was chosen: %v", v.at)
-	}
-	// a workspace entered does not replace a chosen root; with none chosen it does
-	v.Entered("other")
-	if v.rootOf() != "/p" {
-		t.Error("entering a workspace replaced the chosen store")
-	}
-	// events: the chosen root's, and nothing else's, read it again
+	v.section(9) // no such section: nothing
+	openSection(t, v, "root:/p", "open")
 	n := len(s.calls)
 	v.Event("todos.changed", "", "/p#t9")
 	v.Event("todos.changed", "elsewhere", "x")
-	if got := len(s.calls) - n; got != 2 { // resolve + list, once
-		t.Errorf("%d calls after the events", got)
+	if got := len(s.calls) - n; got != 1 {
+		t.Errorf("%d reads after the events, want the one open section of /p", got)
 	}
-	// folders: load registers and shows; new registers and scaffolds; M moves the store
 	v.chooseFolder("load", "load")
-	if s.set["App.todoFolder"] != "/p" || s.opened[len(s.opened)-1] != "todoFolder" {
-		t.Errorf("folder dialog %v %v", s.set["App.todoFolder"], s.opened)
+	if s.opened[len(s.opened)-1] != "todoFolder" {
+		t.Errorf("folder dialog %v", s.opened)
 	}
 	v.folderChosen("/r/.todo-list")
-	if !s.called("todos.register[/r]") || v.rootOf() != "/r" {
-		t.Errorf("load: %v at %v", s.calls, v.at)
+	if !s.called("todos.register[/r]") {
+		t.Errorf("load: %v", s.calls)
 	}
 	v.folderAs = "new"
 	v.folderChosen("/n")
 	if !s.called("todos.scaffold[map[root:/n]]") {
 		t.Errorf("new: %v", s.calls)
 	}
+	v.at = []string{"ws:kb"}
 	v.folderAs = "move"
 	v.folderChosen("/m")
-	if !s.called("todos.move_store[map[root:/n] /m/.todo-list]") {
+	if !s.called("todos.move_store[kb /m/.todo-list]") {
 		t.Errorf("move: %v", s.calls)
 	}
 	v.folderChosen("")
-	var none todos
-	none.Event("todos.changed", "kb", "") // no store chosen: nothing
-	fresh := newTodos(newScripted("kb"))
-	fresh.Entered("kb")
-	if fresh.at != "kb" {
-		t.Errorf("entered: %v", fresh.at)
-	}
 }
 
-// TestTodosAnswersDoNotCancelEachOther: opening asks for the stores and the store at once; each
-// answer arrives, in either order, and neither drops the other. Only a newer read of the same
-// kind makes an answer stale, and a stale answer's error is not shown.
+// TestTodosAnswersDoNotCancelEachOther: a newer listing of the stores drops an older one's answer
+// and its error; two reads of one section, the older is dropped; a write is never dropped.
 func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
-	for _, order := range [][]int{{0, 1}, {1, 0}} {
-		s := scriptedStore(true)
-		s.deferred = true
-		v := newTodos(s)
-		v.open() // held: [0] todos.stores, [1] todos.resolve
-		s.deliver(order...)
-		if v.stores.Len() != 2 {
-			t.Errorf("order %v: the stores answer was dropped: %v", order, v.stores.All())
-		}
-		s.deliver(0) // the list the resolve asked for
-		if v.tasks[0].Len() != 1 {
-			t.Errorf("order %v: the open tasks were dropped", order)
-		}
-	}
-	// two reads of the store: the older answer is dropped, its error unseen
 	s := scriptedStore(true)
 	s.deferred = true
 	v := newTodos(s)
-	v.at, v.atLabel = "kb", "kb"
 	failing := true
-	s.answers["todos.resolve"] = func([]any) (any, error) {
+	s.answers["todos.stores"] = func([]any) (any, error) {
 		if failing {
 			failing = false
-			return nil, errors.New("-32060 no such workspace")
+			return nil, errors.New("-32060 the daemon is busy")
 		}
-		return map[string]any{"store": "/kb/.todo-list", "claimed": true}, nil
+		return []any{}, nil
 	}
-	v.load() // [0], fails
-	v.load() // [1]
+	v.list() // [0], fails
+	v.list() // [1]
 	s.deliver(1, 0)
 	if len(s.failed) != 0 {
 		t.Errorf("a stale answer's error was shown: %v", s.failed)
 	}
-	if !v.claimed {
-		t.Error("the latest read was not applied")
+	s.deliver(0) // the workspace's resolve the newer listing asked for
+	if got := treeLabels(v, nil); len(got) != 1 {
+		t.Fatalf("roots %q", got)
 	}
 	// a write is never dropped: two adds both land
 	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "x"}, nil }

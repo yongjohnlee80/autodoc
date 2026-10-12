@@ -4,61 +4,65 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // TODOS — the todo stores as AutoDoc's own view (ADR 1791532020 §2.7): Todos › Open todos… or
-// SPC x. The stores known on the left; on the right a tab per bucket, the Archived tab by month,
-// read only when a month is opened. Every read and write is a todos.* verb: the daemon owns the
-// format and the rules, so this file only shows and asks. A store the daemon has not claimed is
-// read-only here until the cutover.
+// SPC x, a panel in the one dock style, at the right edge unless moved. A tree, as autofinder's
+// todos panel is: the stores open, ● on those the daemon writes; under each its buckets (Open, In
+// progress, Deferred, Completed, Archived); under a bucket its tasks, read when the bucket first
+// opens, errored ones first and marked ⚠, the Open bucket's numbered; Archived by month, a month's
+// tasks read when it opens. The keys are autofinder's, live while the keyboard is in the panel.
+// Every read and write is a todos.* verb: the daemon owns the format and the rules, so this file
+// only shows and asks. A store the daemon has not claimed is read-only here until the cutover.
 
-// todoBuckets are the tabs, in order: each one's bucket, and its title.
+// todoBuckets are a store's sections, in order: each one's bucket, and its title.
 var todoBuckets = []struct{ bucket, title string }{
 	{"open", "Open"}, {"in-progress", "In progress"}, {"deferred", "Deferred"}, {"completed", "Completed"}, {"archived", "Archived"},
 }
 
-// todoTabs is how many there are; archivedTab is the last.
-const (
-	todoTabs    = 5
-	archivedTab = 4
-)
-
 // todoCycle is s: the next status, as autofinder's todos panel cycles it.
 var todoCycle = map[string]string{"open": "completed", "completed": "deferred", "deferred": "open", "in-progress": "completed"}
 
+// todoStore is one root of the tree: where it is, as the todos.* verbs take it, and what the
+// daemon says of it.
+type todoStore struct {
+	id      string // the row's key: "ws:<name>" or "root:<dir>"
+	at      any    // a workspace name, or {root: …}
+	label   string
+	path    string // the store directory, once known
+	claimed bool   // the daemon writes it: ● and writes allowed
+}
+
 // todos is the feature.
 type todos struct {
-	c Core
-
-	at       any    // the store's where: a workspace name, or {root: …}; nil before one is chosen
-	atLabel  string // what the title calls it
-	store    string // the store directory, as todos.resolve answers
-	claimed  bool
-	tab      int
-	month    string                          // the archived month open; "" for the month list
-	tasks    [todoTabs]*rows[map[string]any] // each tab's tasks
-	months   *rows[map[string]any]           // the archived months, while the Archived tab lists them
-	stores   *rows[map[string]any]           // the stores the daemon knows
-	cursor   int                             // the row under the cursor in the tab shown
-	folderAs string                          // what the folder chosen is for: "load", "new" or "move"
-	// the latest store read and the latest store list asked for: an older answer of either is
-	// dropped; the two never cancel each other, and a write's answer is never dropped
-	loadSeq, storesSeq uint64
-	detail             bool           // the details pane shows (i, o)
-	help               bool           // the keys show (?)
-	loaded             [todoTabs]bool // the tab's tasks were read since it was last shown empty
+	c     Core
+	model *tuidecl.TreeListModel
+	// stores are the roots, in the order the tree shows them
+	stores []*todoStore
+	// tasks are the task rows' tasks, by row key
+	tasks map[string]map[string]any
+	// at is the row under the cursor, by its keys from the root down
+	at []string
+	// open are the sections and months read since the stores were last listed: a change reads
+	// them again
+	open map[string]bool
+	// rootsSeq is the latest listing of the stores asked for, seqs each section's latest read: an
+	// older answer is dropped; a write's answer never is
+	rootsSeq uint64
+	seqs     map[string]*uint64
+	folderAs string // what the folder chosen is for: "load", "new" or "move"
+	detail   bool   // the details show (i, o)
+	help     bool   // the keys show (?)
 }
 
 func newTodos(c Core) *todos {
-	t := &todos{c: c, detail: true,
-		stores: newRows(tuidecl.NewListModel("key", "mark", "name", "path"), storeRowOf),
-		months: newRows(tuidecl.NewListModel("key", "month", "count"), monthRowOf)}
-	for i := range t.tasks {
-		t.tasks[i] = newRows(tuidecl.NewListModel("key", "n", "title", "priority", "assignee", "due", "errors"), taskRowOf(i == 0))
-	}
+	t := &todos{c: c, detail: true, model: tuidecl.NewTreeListModel("key", "label"),
+		tasks: map[string]map[string]any{}, open: map[string]bool{}, seqs: map[string]*uint64{}}
+	t.model.OnFetch = t.fetch
 	return t
 }
 
@@ -66,23 +70,18 @@ func (*todos) Name() string { return "todos" }
 
 func (t *todos) State() map[string]any {
 	return map[string]any{
-		"App.todosTitle": "todos", "App.todosStatus": "", "App.todoTab": 0, "App.todoDetail": "",
+		"App.todosTitle": "todos", "App.todosStatus": "", "App.todoDetail": "",
 		"App.todoDetailShown": true, "App.todoHelpShown": false,
-		"App.todoFolder": "",
-		"App.todoStores": t.stores.Model(), "App.todoMonths": t.months.Model(),
-		"App.todoOpen": t.tasks[0].Model(), "App.todoInProgress": t.tasks[1].Model(), "App.todoDeferred": t.tasks[2].Model(),
-		"App.todoCompleted": t.tasks[3].Model(), "App.todoArchived": t.tasks[4].Model(),
+		"App.todoFolder": "", "App.todoTree": t.model,
 	}
 }
 
 func (t *todos) Commands() map[string]Command {
 	return map[string]Command{
-		"App.openTodos":        none(t.open),
-		"App.todosTab":         oneNumber("a tab", t.showTab),
-		"App.todoMoved":        oneNumber("a row", t.moved),
-		"App.todoActivated":    oneNumber("a row", t.activated),
-		"App.todoStoreChosen":  oneNumber("a row", t.storeChosen),
-		"App.todoMonthChosen":  oneNumber("a row", t.monthChosen),
+		"App.openTodos":        none(t.toggle),
+		"App.todosTab":         oneNumber("a section", t.section),
+		"App.todoMoved":        oneIndex(t.moved),
+		"App.todoActivated":    oneIndex(t.activated),
 		"App.todoAdd":          none(t.add),
 		"App.todoAddTitle":     oneString("a title", t.addTitle),
 		"App.todoRemove":       none(t.remove),
@@ -100,60 +99,82 @@ func (t *todos) Commands() map[string]Command {
 // Catalog is the todos' user commands (catalog.go): each runs what its App.* twin runs.
 func (t *todos) Catalog() []Entry {
 	return []Entry{
-		{ID: "todos.open", Title: "todos", Verb: "todos", Help: "open the todos (SPC x)", Twin: "App.openTodos()",
-			Run: func(Invocation) error { t.open(); return nil }},
+		{ID: "todos.open", Title: "todos", Verb: "todos", Help: "the todos panel, open or closed (SPC x)", Twin: "App.openTodos()",
+			Run: func(Invocation) error { t.toggle(); return nil }},
 		builtin("todos.new_store", "a new todo store", "App.todoNew()", t.chooseNew),
 		builtin("todos.load_store", "load a todo store", "App.todoLoad()", t.chooseLoad),
 	}
 }
 
+// todosPanelSpec is the todos panel: at the right edge by default, where the explorer's left one
+// leaves room, its geometry kept per edge like the side panels'.
+func todosPanelSpec() PanelSpec {
+	return sidePanelSpec("todos", "todoTree", 60, func(p prefs) string { return p.todosEdge })
+}
+
+// Panels: the panel, its stores listed afresh each time it opens.
+func (t *todos) Panels() []PanelSpec {
+	s := todosPanelSpec()
+	s.Opened = func(PanelHost) { t.list() }
+	return []PanelSpec{s}
+}
+
+// Keys are autofinder's todos panel's, live while the keyboard is in the panel: Enter is the tree's
+// own (activated). 1–5 put the cursor on that section of its store.
+func (*todos) Keys() []Key {
+	keys := []Key{
+		{Scope: "todos", Seq: "a", Show: "a", Run: "App.todoAdd()"},
+		{Scope: "todos", Seq: "d", Show: "d", Run: "App.todoRemove()"},
+		{Scope: "todos", Seq: "s", Show: "s", Run: "App.todoCycle()"},
+		{Scope: "todos", Seq: "i", Show: "i", Run: "App.todoToggleDetail()"},
+		{Scope: "todos", Seq: "o", Show: "o", Run: "App.todoToggleDetail()"},
+		{Scope: "todos", Seq: "Shift+R", Show: "R", Run: "App.todoRefresh()"},
+		{Scope: "todos", Seq: "Shift+M", Show: "M", Run: "App.todoMove()"},
+		{Scope: "todos", Seq: "?", Show: "?", Run: "App.todoToggleHelp()"},
+	}
+	for i := range todoBuckets {
+		keys = append(keys, Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–5", Run: fmt.Sprintf("App.todosTab(%d)", i)})
+	}
+	return keys
+}
+
+// Cards: the todos have no card of keys.
+func (*todos) Cards() []Card { return nil }
+
 func (t *todos) chooseLoad() { t.chooseFolder("load", "load a todo store: its project's folder") }
 func (t *todos) chooseNew()  { t.chooseFolder("new", "a new todo store: the project's folder") }
 
-// Kinds: another client's change to any store shows here when its store is the one open.
+// Kinds: another client's change to a store shows here when its store is listed.
 func (t *todos) Kinds() []string { return []string{"todos.changed"} }
 
 func (t *todos) Event(_, workspace, detail string) {
-	if t.at == nil {
-		return
-	}
-	ws, isWorkspace := t.at.(string)
-	root := t.rootOf()
-	if isWorkspace && ws == workspace || root != "" && (detail == root || strings.HasPrefix(detail, root+"#")) {
-		t.load()
-	}
-}
-
-// Entered: a workspace entered is the store shown, until another is chosen.
-func (t *todos) Entered(ws string) {
-	if _, root := t.at.(map[string]any); !root {
-		t.at, t.atLabel = ws, ws
+	for _, s := range t.stores {
+		ws, isWorkspace := s.at.(string)
+		root := rootOf(s.at)
+		if isWorkspace && ws == workspace || root != "" && (detail == root || strings.HasPrefix(detail, root+"#")) {
+			t.reread(s)
+		}
 	}
 }
 
-func (t *todos) rootOf() string {
-	if m, ok := t.at.(map[string]any); ok {
+// Entered: the workspace entered is the first store listed, the next time the stores are.
+func (t *todos) Entered(string) {}
+
+func rootOf(at any) string {
+	if m, ok := at.(map[string]any); ok {
 		r, _ := m["root"].(string)
 		return r
 	}
 	return ""
 }
 
-// open is Todos › Open todos… (SPC x): the workspace's store, or the one chosen last.
-func (t *todos) open() {
-	if t.at == nil {
-		ws := t.c.Workspace()
-		if ws == "" {
-			t.c.Notify("todos: enter a workspace first, or Load a store")
-			return
-		}
-		t.at, t.atLabel = ws, ws
+// toggle is Todos › Open todos… (SPC x): the panel, open or closed.
+func (t *todos) toggle() {
+	if t.c.Workspace() == "" && len(t.stores) == 0 {
+		t.c.Notify("todos: enter a workspace first, or Load a store")
+		return
 	}
-	t.tab, t.month = 0, ""
-	t.c.Set("App.todoTab", 0)
-	t.c.Open("todosDialog")
-	t.loadStores()
-	t.load()
+	t.c.TogglePanel(todosPanelSpec().ID)
 }
 
 // call runs a todos verb off the loop and hands its answer to then on the loop. With a sequence,
@@ -185,129 +206,233 @@ func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
 // answer wraps a verb's result, so a nil one is not taken for an error.
 type answer struct{ v any }
 
-// readOnly reports, and says, that the store takes no writes here: the daemon has not claimed it.
-func (t *todos) readOnly() bool {
-	if !t.claimed {
-		t.c.Notify("todos: this store is read-only in AutoDoc until the cutover; change it through AutoVim")
-	}
-	return !t.claimed
-}
-
-// write runs a todos verb that changes the store, once the store takes writes here.
-func (t *todos) write(verb string, params []any, done func(any)) {
-	if t.readOnly() {
-		return
-	}
-	t.call(verb, params, nil, func(v any) {
-		if done != nil {
-			done(v)
-		}
-		t.load()
-	})
-}
-
-// load reads the store's state and the tab shown.
-func (t *todos) load() {
-	t.call("todos.resolve", []any{t.at}, &t.loadSeq, func(v any) {
-		r := asMap(v)
-		t.store, t.claimed = str(r, "store"), r["claimed"] == true
-		title := "todos · " + t.atLabel
-		if !t.claimed {
-			title += "  (read-only until the cutover)"
-		}
-		t.c.Set("App.todosTitle", title)
-		t.loadTab()
-	})
-}
-
-func (t *todos) loadTab() {
-	bucket := todoBuckets[t.tab].bucket
-	if t.tab == archivedTab && t.month != "" {
-		bucket = "archived/" + t.month
-	}
-	t.call("todos.list", []any{t.at, map[string]any{"buckets": []any{bucket}}}, &t.loadSeq, func(v any) {
-		l := asMap(v)
-		if t.tab == archivedTab && t.month == "" {
-			var months []map[string]any
-			for _, p := range asList(l["partitions"]) {
-				months = append(months, asMap(p))
+// list reads the stores: the workspace's first, as todos.resolve finds it, then every other the
+// daemon knows by a root of its own; each shows with its buckets, all closed.
+func (t *todos) list() {
+	t.call("todos.stores", nil, &t.rootsSeq, func(v any) {
+		var stores []*todoStore
+		for _, x := range asList(v) {
+			m := asMap(x)
+			roots := asList(m["roots"])
+			if len(roots) == 0 {
+				continue // a store with no project root is not one the verbs can reach
 			}
-			t.months.Reset(months)
-			t.tasks[archivedTab].Reset(nil) // the month list shows, not a month's tasks
-			t.loaded[archivedTab] = false
-			t.status(fmt.Sprintf("%d months archived: Enter opens one", len(months)))
+			root, _ := roots[0].(string)
+			stores = append(stores, &todoStore{id: "root:" + root, at: map[string]any{"root": root}, label: root,
+				path: str(m, "path"), claimed: m["claimed"] == true})
+		}
+		ws := t.c.Workspace()
+		if ws == "" {
+			t.show(stores)
 			return
 		}
-		var tasks []map[string]any
-		for _, x := range asList(l["tasks"]) {
-			tasks = append(tasks, asMap(x))
+		t.call("todos.resolve", []any{ws}, &t.rootsSeq, func(v any) {
+			r := asMap(v)
+			w := &todoStore{id: "ws:" + ws, at: ws, label: ws, path: str(r, "store"), claimed: r["claimed"] == true}
+			// the workspace's store listed by its root as well shows once, as the workspace's
+			stores = slices.DeleteFunc(stores, func(s *todoStore) bool { return w.path != "" && s.path == w.path })
+			t.show(append([]*todoStore{w}, stores...))
+		})
+	})
+}
+
+// show puts stores in the tree, each with its buckets, closed: a section is read when it opens.
+func (t *todos) show(stores []*todoStore) {
+	t.stores, t.open, t.tasks = stores, map[string]bool{}, map[string]map[string]any{}
+	var rows []tuidecl.TreeRow
+	for _, s := range stores {
+		mark := "  "
+		if s.claimed {
+			mark = "● "
 		}
-		t.tasks[t.tab].Reset(tasks)
-		t.loaded[t.tab] = true
-		bad := len(asList(l["malformed"]))
+		label := mark + s.label
+		if !s.claimed {
+			label += "  (read-only until the cutover)"
+		}
+		rows = append(rows, tuidecl.TreeRow{Row: rowOf{"key": s.id, "label": label}, HasChildren: true})
+	}
+	t.model.SetChildren(nil, rows)
+	for i, s := range stores {
+		ix := tuidecl.Index{Row: i}
+		var buckets []tuidecl.TreeRow
+		for _, b := range todoBuckets {
+			buckets = append(buckets, tuidecl.TreeRow{Row: rowOf{"key": bucketKey(s.id, b.bucket), "label": b.title}, HasChildren: true})
+		}
+		t.model.SetChildren(&ix, buckets)
+	}
+	t.at = nil
+	t.status(fmt.Sprintf("%d stores: open a section for its tasks", len(stores)))
+	t.showDetail()
+}
+
+func bucketKey(store, bucket string) string { return "b\x00" + store + "\x00" + bucket }
+func monthKey(store, month string) string   { return "m\x00" + store + "\x00" + month }
+func taskKey(store, id string) string       { return "t\x00" + store + "\x00" + id }
+
+// splitTodoKey is a row key's kind, its store, and the rest: a bucket, a month or a task's id.
+func splitTodoKey(k string) (kind, store, rest string) {
+	parts := strings.SplitN(k, "\x00", 3)
+	if len(parts) != 3 {
+		return "store", k, ""
+	}
+	return parts[0], parts[1], parts[2]
+}
+
+// seq is the latest-read sequence of a row's reads.
+func (t *todos) seq(key string) *uint64 {
+	if t.seqs[key] == nil {
+		t.seqs[key] = new(uint64)
+	}
+	return t.seqs[key]
+}
+
+// store is the store of id.
+func (t *todos) store(id string) *todoStore {
+	if i := slices.IndexFunc(t.stores, func(s *todoStore) bool { return s.id == id }); i >= 0 {
+		return t.stores[i]
+	}
+	return nil
+}
+
+// fetch is a section or a month opened for the first time: its rows read.
+func (t *todos) fetch(ix tuidecl.Index) {
+	kind, id, rest := splitTodoKey(t.model.Key(ix))
+	if s := t.store(id); s != nil && (kind == "b" || kind == "m") {
+		t.read(s, kind, rest)
+	}
+}
+
+// read lists a section ("b", a bucket) or an archived month ("m") of store s, and puts its rows
+// under it: wherever its row is when the answer comes.
+func (t *todos) read(s *todoStore, kind, rest string) {
+	key, bucket := bucketKey(s.id, rest), rest
+	path := []string{s.id, key} // a section is a store's row; a month, its Archived section's
+	if kind == "m" {
+		key, bucket = monthKey(s.id, rest), "archived/"+rest
+		path = []string{s.id, bucketKey(s.id, "archived"), key}
+	}
+	t.open[key] = true
+	t.call("todos.list", []any{s.at, map[string]any{"buckets": []any{bucket}}}, t.seq(key), func(v any) {
+		ix, ok := t.indexOf(path...)
+		if !ok {
+			return // the stores were listed again since
+		}
+		l := asMap(v)
+		if kind == "b" && rest == "archived" {
+			var months []tuidecl.TreeRow
+			for _, p := range asList(l["partitions"]) {
+				m := asMap(p)
+				months = append(months, tuidecl.TreeRow{Row: rowOf{"key": monthKey(s.id, str(m, "month")),
+					"label": fmt.Sprintf("%s  (%v)", str(m, "month"), m["files"])}, HasChildren: true})
+			}
+			t.model.SetChildren(&ix, months)
+			t.status(fmt.Sprintf("%d months archived: open one for its tasks", len(months)))
+			return
+		}
+		tasks := asList(l["tasks"])
+		var errored, clean []map[string]any
+		for _, x := range tasks {
+			m := asMap(x)
+			if len(asList(m["errors"])) > 0 {
+				errored = append(errored, m)
+			} else {
+				clean = append(clean, m)
+			}
+		}
+		var rows []tuidecl.TreeRow
+		for i, m := range append(errored, clean...) {
+			k := taskKey(s.id, str(m, "id"))
+			t.tasks[k] = m
+			label := str(m, "title")
+			if kind == "b" && rest == "open" {
+				label = fmt.Sprintf("%d  %s", i+1, label) // the open bucket is numbered, as autofinder's is
+			}
+			if len(asList(m["errors"])) > 0 {
+				label = "⚠ " + label
+			}
+			rows = append(rows, tuidecl.TreeRow{Row: rowOf{"key": k, "label": label}})
+		}
+		t.model.SetChildren(&ix, rows)
 		msg := fmt.Sprintf("%d tasks", len(tasks))
-		if bad > 0 {
+		if bad := len(asList(l["malformed"])); bad > 0 {
 			msg += fmt.Sprintf(" · %d malformed files", bad)
 		}
 		t.status(msg)
-		t.moved(0)
+		t.showDetail()
 	})
 }
 
-// taskRowOf is a bucket's task as its row; the open bucket numbers them, as autofinder's does.
-func taskRowOf(numbered bool) func(int, map[string]any) rowOf {
-	return func(i int, x map[string]any) rowOf {
-		n := ""
-		if numbered {
-			n = fmt.Sprint(i + 1)
+// reread reads again what of store s was open: its sections and months.
+func (t *todos) reread(s *todoStore) {
+	for key := range t.open {
+		kind, id, rest := splitTodoKey(key)
+		if id == s.id {
+			t.read(s, kind, rest)
 		}
-		mark := ""
-		if len(asList(x["errors"])) > 0 {
-			mark = "!"
-		}
-		return rowOf{"key": str(x, "id"), "n": n, "title": str(x, "title"), "priority": str(x, "priority"),
-			"assignee": str(x, "assignee"), "due": str(x, "due"), "errors": mark}
 	}
 }
 
-// monthRowOf is an archived month as its row.
-func monthRowOf(i int, m map[string]any) rowOf {
-	return rowOf{"key": fmt.Sprint(i), "month": str(m, "month"), "count": fmt.Sprint(m["files"])}
-}
-
-// storeRowOf is a known store as its row, the open one marked.
-func storeRowOf(i int, s map[string]any) rowOf {
-	mark := "  "
-	if s["claimed"] == true {
-		mark = "● "
+// indexOf is the row of keys, from the root down.
+func (t *todos) indexOf(keys ...string) (tuidecl.Index, bool) {
+	var parent *tuidecl.Index
+	var ix tuidecl.Index
+	for _, k := range keys {
+		found := false
+		for r := 0; r < t.model.RowCount(parent); r++ {
+			at := tuidecl.Index{Row: r, Parent: parent}
+			if t.model.Key(at) == k {
+				ix, found = at, true
+				break
+			}
+		}
+		if !found {
+			return tuidecl.Index{}, false
+		}
+		p := ix
+		parent = &p
 	}
-	name := filepath.Base(filepath.Dir(str(s, "path")))
-	return rowOf{"key": fmt.Sprint(i), "mark": mark, "name": name, "path": str(s, "path")}
+	return ix, len(keys) > 0
 }
 
 func (t *todos) status(s string) {
 	t.c.Set("App.todosStatus", s+"   a add · s status · d remove · R refresh · i details · M move · ? keys")
 }
 
-func (t *todos) showTab(i int) {
-	if i < 0 || i >= len(todoBuckets) || i == t.tab && t.loaded[i] {
-		return
+// keysOf is a row's identity: the keys from the root down to it.
+func (t *todos) keysOf(ix tuidecl.Index) []string {
+	var keys []string
+	for p := &ix; p != nil; p = p.Parent {
+		keys = append([]string{t.model.Key(*p)}, keys...)
 	}
-	t.tab, t.month = i, ""
-	t.c.Set("App.todoTab", i)
-	t.loadTab()
+	return keys
 }
 
-// task is the row i of the tab shown; nil for none.
-func (t *todos) task(i int) map[string]any {
-	x, _ := t.tasks[t.tab].At(i)
-	return x
+// moved is the cursor moving: the row under it kept, its task's details shown.
+func (t *todos) moved(ix tuidecl.Index) error {
+	t.at = t.keysOf(ix)
+	t.showDetail()
+	return nil
 }
 
-// moved shows the task under the cursor.
-func (t *todos) moved(i int) {
-	t.cursor = i
-	x := t.task(i)
+// cursor is the row under the cursor: its store, and its task when it is one.
+func (t *todos) cursor() (*todoStore, map[string]any) {
+	if len(t.at) == 0 {
+		if len(t.stores) > 0 {
+			return t.stores[0], nil
+		}
+		return nil, nil
+	}
+	last := t.at[len(t.at)-1]
+	_, id, _ := splitTodoKey(last)
+	if kind, _, _ := splitTodoKey(last); kind == "store" {
+		id = last
+	}
+	return t.store(id), t.tasks[last]
+}
+
+// showDetail shows the task under the cursor's details, as autofinder's i does.
+func (t *todos) showDetail() {
+	_, x := t.cursor()
 	if x == nil {
 		t.c.Set("App.todoDetail", "")
 		return
@@ -342,61 +467,100 @@ func todoDetail(x map[string]any) string {
 	return b.String()
 }
 
-// activated is Enter: the task's file, in the editor.
-func (t *todos) activated(i int) {
-	x := t.task(i)
-	if x == nil || t.store == "" {
-		return
+// activated is Enter: a task's file opens in the editor, the panel closing; a store, a section or a
+// month opens or closes.
+func (t *todos) activated(ix tuidecl.Index) error {
+	key := t.model.Key(ix)
+	kind, id, _ := splitTodoKey(key)
+	if kind != "t" {
+		return t.c.View(todosPanelSpec().View, "toggleExpanded", ix)
 	}
-	t.c.Close("todosDialog")
-	t.c.OpenFile(filepath.Join(t.store, filepath.FromSlash(str(x, "path"))))
+	s, x := t.store(id), t.tasks[key]
+	if s == nil || x == nil || s.path == "" {
+		return nil
+	}
+	err := t.c.View(todosPanelSpec().ID, "close")
+	t.c.OpenFile(filepath.Join(s.path, filepath.FromSlash(str(x, "path"))))
+	return err
 }
 
-func (t *todos) monthChosen(i int) {
-	m, ok := t.months.At(i)
+// section is 1–5: the cursor to that section of the store it is in, the first store's when it is
+// in none.
+func (t *todos) section(i int) {
+	s, _ := t.cursor()
+	if s == nil || i < 0 || i >= len(todoBuckets) {
+		return
+	}
+	ix, ok := t.indexOf(s.id, bucketKey(s.id, todoBuckets[i].bucket))
 	if !ok {
 		return
 	}
-	t.month = str(m, "month")
-	t.loadTab()
+	t.at = t.keysOf(ix)
+	if err := t.c.View(todosPanelSpec().View, "setCurrentIndex", ix); err != nil {
+		t.c.Failed("todos: a section", err)
+	}
 }
 
+// readOnly reports, and says, that store s takes no writes here: the daemon has not claimed it.
+func (t *todos) readOnly(s *todoStore) bool {
+	if s == nil {
+		return true
+	}
+	if !s.claimed {
+		t.c.Notify("todos: this store is read-only in AutoDoc until the cutover; change it through AutoVim")
+	}
+	return !s.claimed
+}
+
+// write runs a todos verb that changes store s, once s takes writes here, and reads it again.
+func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
+	if t.readOnly(s) {
+		return
+	}
+	t.call(verb, params, nil, func(v any) {
+		if done != nil {
+			done(v)
+		}
+		t.reread(s)
+	})
+}
+
+// add is a: the title of a new task in the cursor's store asked for (todoNew).
 func (t *todos) add() {
-	if !t.readOnly() {
+	s, _ := t.cursor()
+	if !t.readOnly(s) {
 		t.c.Open("todoNew")
 	}
 }
 
 func (t *todos) addTitle(title string) {
 	t.c.Close("todoNew")
-	if strings.TrimSpace(title) == "" {
+	s, _ := t.cursor()
+	if s == nil || strings.TrimSpace(title) == "" {
 		return
 	}
-	t.write("todos.add", []any{t.at, map[string]any{"title": strings.TrimSpace(title)}}, func(v any) {
+	t.write(s, "todos.add", []any{s.at, map[string]any{"title": strings.TrimSpace(title)}}, func(v any) {
 		t.c.Notify("todos: added " + str(asMap(v), "id"))
 	})
 }
 
 func (t *todos) remove() {
-	x := t.task(t.cursor)
-	if x == nil {
-		return
-	}
-	if t.readOnly() {
+	s, x := t.cursor()
+	if x == nil || t.readOnly(s) {
 		return
 	}
 	t.c.Ask(Question{Title: "remove the task?", Text: fmt.Sprintf("Remove %q? Its file is deleted.", str(x, "title")),
-		OnYes: func() { t.removeConfirmed(x) }})
+		OnYes: func() { t.removeConfirmed(s, x) }})
 }
 
 // removeConfirmed removes the task asked about, whatever row the cursor is on by then.
-func (t *todos) removeConfirmed(x map[string]any) {
-	t.write("todos.remove", []any{t.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify("todos: removed " + str(x, "id")) })
+func (t *todos) removeConfirmed(s *todoStore, x map[string]any) {
+	t.write(s, "todos.remove", []any{s.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify("todos: removed " + str(x, "id")) })
 }
 
 // cycle is s: open → completed → deferred → open.
 func (t *todos) cycle() {
-	x := t.task(t.cursor)
+	s, x := t.cursor()
 	if x == nil {
 		return
 	}
@@ -404,67 +568,49 @@ func (t *todos) cycle() {
 	if !ok {
 		return // archived: Status from the daemon's verbs, not this key
 	}
-	t.write("todos.status", []any{t.at, str(x, "id"), str(x, "rev"), next}, nil)
+	t.write(s, "todos.status", []any{s.at, str(x, "id"), str(x, "rev"), next}, nil)
 }
 
-// refresh is R: the daemon reconciles the active buckets, then the tab is read again.
+// refresh is R: the daemon reconciles the store's active buckets, then what was open is read again.
 func (t *todos) refresh() {
-	if !t.claimed {
-		t.load() // read-only: read again, nothing to reconcile
+	s, _ := t.cursor()
+	if s == nil {
 		return
 	}
-	t.write("todos.refresh", []any{t.at}, func(v any) {
-		s := asMap(v)
-		t.c.Notify(fmt.Sprintf("todos: refreshed: %v moved, %v archived, %v rewritten", s["moved"], s["archived"], s["rewritten"]))
+	if !s.claimed {
+		t.reread(s) // read-only: read again, nothing to reconcile
+		return
+	}
+	t.write(s, "todos.refresh", []any{s.at}, func(v any) {
+		r := asMap(v)
+		t.c.Notify(fmt.Sprintf("todos: refreshed: %v moved, %v archived, %v rewritten", r["moved"], r["archived"], r["rewritten"]))
 	})
 }
 
 func (t *todos) toggleDetail() { t.detail = !t.detail; t.c.Set("App.todoDetailShown", t.detail) }
 func (t *todos) toggleHelp()   { t.help = !t.help; t.c.Set("App.todoHelpShown", t.help) }
 
-// storeChosen shows another store: a known one, by its first root.
-func (t *todos) storeChosen(i int) {
-	s, ok := t.stores.At(i)
-	if !ok {
-		return
-	}
-	roots := asList(s["roots"])
-	if len(roots) == 0 {
-		return
-	}
-	root, _ := roots[0].(string)
-	t.at, t.atLabel, t.month = map[string]any{"root": root}, root, ""
-	t.load()
-}
-
-// loadStores lists the stores the daemon knows; the open one is marked.
-func (t *todos) loadStores() {
-	t.call("todos.stores", nil, &t.storesSeq, func(v any) {
-		var stores []map[string]any
-		for _, x := range asList(v) {
-			stores = append(stores, asMap(x))
-		}
-		t.stores.Reset(stores)
-	})
-}
-
 // chooseFolder opens the folder dialog for Load, New or M (move).
 func (t *todos) chooseFolder(as, title string) {
-	if as == "move" && t.readOnly() {
+	s, _ := t.cursor()
+	if as == "move" && t.readOnly(s) {
 		return
 	}
 	t.folderAs = as
 	t.status(title)
-	start := t.rootOf()
-	if start == "" {
-		start = filepath.Dir(t.store)
+	start := ""
+	if s != nil {
+		start = rootOf(s.at)
+		if start == "" && s.path != "" {
+			start = filepath.Dir(s.path)
+		}
 	}
 	t.c.Set("App.todoFolder", start)
 	t.c.Open("todoFolder")
 }
 
-// folderChosen acts on the folder: Load registers the project and shows its store; New registers it
-// and creates its store (a write: after the cutover); M moves the store there.
+// folderChosen acts on the folder: Load registers the project and lists its store; New registers it
+// and creates its store (a write: after the cutover); M moves the cursor's store there.
 func (t *todos) folderChosen(dir string) {
 	t.c.Close("todoFolder")
 	if dir == "" {
@@ -477,23 +623,22 @@ func (t *todos) folderChosen(dir string) {
 	at := map[string]any{"root": dir}
 	switch t.folderAs {
 	case "load":
-		t.call("todos.register", []any{dir}, nil, func(any) {
-			t.at, t.atLabel, t.month = at, dir, ""
-			t.loadStores()
-			t.load()
-		})
+		t.call("todos.register", []any{dir}, nil, func(any) { t.list() })
 	case "new":
 		t.call("todos.register", []any{dir}, nil, func(any) {
-			t.at, t.atLabel, t.month = at, dir, ""
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
-				t.claimed = asMap(v)["claimed"] == true
-				t.write("todos.scaffold", []any{at}, func(any) { t.c.Notify("todos: a new store in " + dir); t.loadStores() })
+				s := &todoStore{id: "root:" + dir, at: at, label: dir, claimed: asMap(v)["claimed"] == true}
+				t.write(s, "todos.scaffold", []any{at}, func(any) { t.c.Notify("todos: a new store in " + dir); t.list() })
 			})
 		})
 	case "move":
-		t.write("todos.move_store", []any{t.at, filepath.Join(dir, ".todo-list")}, func(any) {
+		s, _ := t.cursor()
+		if s == nil {
+			return
+		}
+		t.write(s, "todos.move_store", []any{s.at, filepath.Join(dir, ".todo-list")}, func(any) {
 			t.c.Notify("todos: the store is now in " + dir)
-			t.loadStores()
+			t.list()
 		})
 	}
 }
