@@ -2,10 +2,8 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -103,21 +101,21 @@ func (sp ProviderSpec) check() error {
 	return nil
 }
 
-// keyAAD binds a sealed key to its purpose and its row.
-func keyAAD(id int64) string {
-	return "autodoc:embedding_provider.api_key:" + strconv.FormatInt(id, 10)
+// providerColumns sets a provider's own columns from its spec.
+func providerColumns(sp ProviderSpec) meteredSetter[*Provider, ProviderField] {
+	return func(d dao.DAO[*Provider, ProviderField, int64]) dao.DAO[*Provider, ProviderField, int64] {
+		return d.Set(ProviderName, sp.Name).Set(ProviderKind, sp.Kind).Set(ProviderBaseURL, sp.BaseURL).
+			Set(ProviderModel, sp.Model).Set(ProviderContext, int64(sp.ContextWindow()))
+	}
 }
 
 // Providers are every provider, by name.
 func (s *Store) Providers(ctx context.Context) ([]ProviderInfo, error) {
-	var out []ProviderInfo
-	err := s.Read(ctx, func(tx *Tx) error {
-		rows, err := tx.t.providers.On(tx.tx).OrderBy(dao.Asc(ByKey)).Select()
-		for _, r := range rows {
-			out = append(out, infoOf(r))
-		}
-		return err
-	})
+	rows, err := s.providers().list(ctx)
+	out := make([]ProviderInfo, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, infoOf(r))
+	}
 	return out, err
 }
 
@@ -128,14 +126,8 @@ func (s *Store) AddProvider(ctx context.Context, sp ProviderSpec) (ProviderInfo,
 	}
 	var info ProviderInfo
 	err := s.Write(ctx, func(tx *Tx) error {
-		now := s.now.Now().Unix()
-		id, err := tx.t.providers.On(tx.tx).Set(ProviderName, sp.Name).Set(ProviderKind, sp.Kind).
-			Set(ProviderBaseURL, sp.BaseURL).Set(ProviderModel, sp.Model).Set(ProviderContext, int64(sp.ContextWindow())).
-			Set(ProviderCreatedAt, now).Set(ProviderUpdatedAt, now).Insert()
+		id, err := s.providers().add(tx, providerColumns(sp), sp.Key)
 		if err != nil {
-			return providerTaken(err)
-		}
-		if err := s.setKey(tx, id, sp.Key); err != nil {
 			return err
 		}
 		p, err := s.keyed(tx, id)
@@ -151,7 +143,7 @@ func (s *Store) AddProvider(ctx context.Context, sp ProviderSpec) (ProviderInfo,
 // keyed is the provider's row once its key is set: an ollama-cloud provider left without one is
 // refused, and the write it is in rolls back.
 func (s *Store) keyed(tx *Tx, id int64) (*Provider, error) {
-	p, err := tx.t.providers.On(tx.tx).With(ProviderID, id).Get()
+	p, err := s.providers().get(tx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -167,67 +159,21 @@ func (s *Store) UpdateProvider(ctx context.Context, name string, sp ProviderSpec
 		return err
 	}
 	return s.Write(ctx, func(tx *Tx) error {
-		p, err := tx.t.providers.On(tx.tx).With(ProviderName, name).Get(ProviderID)
-		if errors.Is(err, dao.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNoProvider, name)
-		}
+		id, err := s.providers().update(tx, name, sp.Name, providerColumns(sp), sp.Key)
 		if err != nil {
 			return err
 		}
-		if err := tx.t.providers.On(tx.tx).With(ProviderID, p.ID).Set(ProviderName, sp.Name).Set(ProviderKind, sp.Kind).
-			Set(ProviderBaseURL, sp.BaseURL).Set(ProviderModel, sp.Model).Set(ProviderContext, int64(sp.ContextWindow())).
-			Set(ProviderUpdatedAt, s.now.Now().Unix()).Update(); err != nil {
-			return providerTaken(err)
-		}
-		if err := s.setKey(tx, p.ID, sp.Key); err != nil {
-			return err
-		}
-		if _, err = s.keyed(tx, p.ID); err != nil {
-			return err
-		}
-		return followProvider(tx, name, sp.Name)
+		_, err = s.keyed(tx, id)
+		return err
 	})
-}
-
-// followProvider makes the preference naming provider from name to instead, in the transaction
-// that renames or removes it ("" for removed: none in use), so the preference never names a
-// provider the store does not have.
-func followProvider(tx *Tx, from, to string) error {
-	if from == to {
-		return nil
-	}
-	return tx.t.preferences.On(tx.tx).With(PrefName, PrefProvider).With(PrefValue, from).
-		Set(PrefValue, to).Set(PrefUpdatedAt, tx.now.Now().Unix()).Update()
-}
-
-// setKey seals key into the provider's row; nil leaves it, "" removes it.
-func (s *Store) setKey(tx *Tx, id int64, key *string) error {
-	if key == nil {
-		return nil
-	}
-	var sealed any
-	if *key != "" {
-		b, err := s.keys.seal([]byte(*key), keyAAD(id))
-		if err != nil {
-			return err
-		}
-		sealed = b
-	}
-	return tx.t.providers.On(tx.tx).With(ProviderID, id).Set(ProviderAPIKey, sealed).Update()
 }
 
 // RemoveProvider deletes a provider, and with it its usage and its log; a preference naming it
 // names none.
 func (s *Store) RemoveProvider(ctx context.Context, name string) error {
 	return s.Write(ctx, func(tx *Tx) error {
-		id, err := s.providerID(tx, name)
-		if err != nil {
-			return err
-		}
-		if err := tx.t.providers.On(tx.tx).With(ProviderID, id).Delete(); err != nil {
-			return err
-		}
-		return followProvider(tx, name, "")
+		_, err := s.providers().remove(tx, name)
+		return err
 	})
 }
 
@@ -255,17 +201,8 @@ func family(kind string) string {
 func (s *Store) RemoveProviderInUse(ctx context.Context, name string) ([]Retired, error) {
 	var out []Retired
 	err := s.Write(ctx, func(tx *Tx) error {
-		p, err := tx.t.providers.On(tx.tx).With(ProviderName, name).Get()
-		if errors.Is(err, dao.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNoProvider, name)
-		}
+		p, err := s.providers().remove(tx, name)
 		if err != nil {
-			return err
-		}
-		if err := tx.t.providers.On(tx.tx).With(ProviderID, p.ID).Delete(); err != nil {
-			return err
-		}
-		if err := followProvider(tx, name, ""); err != nil {
 			return err
 		}
 		others, err := tx.t.providers.On(tx.tx).Select(ProviderKind, ProviderModel)
@@ -300,26 +237,11 @@ func (s *Store) RemoveProviderInUse(ctx context.Context, name string) ([]Retired
 // ProviderWithKey is the provider named name and its key, opened: for the daemon, which embeds
 // with it, and never for a client.
 func (s *Store) ProviderWithKey(ctx context.Context, name string) (ProviderInfo, string, error) {
-	var p *Provider
-	err := s.Read(ctx, func(tx *Tx) error {
-		var err error
-		p, err = tx.t.providers.On(tx.tx).With(ProviderName, name).Get()
-		if errors.Is(err, dao.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNoProvider, name)
-		}
-		return err
-	})
+	p, key, err := s.providers().withKey(ctx, name)
 	if err != nil {
 		return ProviderInfo{}, "", err
 	}
-	if len(p.APIKey) == 0 {
-		return infoOf(p), "", nil
-	}
-	key, err := s.keys.open(p.APIKey, keyAAD(p.ID))
-	if err != nil {
-		return ProviderInfo{}, "", err
-	}
-	return infoOf(p), string(key), nil
+	return infoOf(p), key, nil
 }
 
 // CallRecord is one call to a provider, as its meter reported it.
@@ -334,7 +256,7 @@ type CallRecord struct {
 
 // RecordCalls adds calls to a provider's usage by day and to its log, which keeps the last 200.
 func (s *Store) RecordCalls(ctx context.Context, providerID int64, calls []CallRecord) error {
-	return s.recordCalls(ctx, func(t *tables) meterTables { return t.embeddingMeter() }, providerID, calls)
+	return s.providers().record(ctx, providerID, calls)
 }
 
 // meterTables are where a model's calls are kept: its usage by day and its log (log names the
@@ -400,12 +322,12 @@ func addUsage(tx *Tx, m meterTables, id int64, c CallRecord) error {
 
 // ProviderUsage is the provider's use by day, the latest first, at most days of them.
 func (s *Store) ProviderUsage(ctx context.Context, name string, days int) ([]Usage, error) {
-	return s.usageOf(ctx, func(t *tables) meterTables { return t.embeddingMeter() }, s.providerID, name, days)
+	return s.providers().usage(ctx, name, days)
 }
 
 // ProviderLog is the provider's recent calls, the latest first, at most limit of them.
 func (s *Store) ProviderLog(ctx context.Context, name string, limit int) ([]LogEntry, error) {
-	return s.logOf(ctx, func(t *tables) meterTables { return t.embeddingMeter() }, s.providerID, name, limit)
+	return s.providers().log(ctx, name, limit)
 }
 
 func (s *Store) usageOf(ctx context.Context, meterOf func(*tables) meterTables, idOf func(*Tx, string) (int64, error), name string, days int) ([]Usage, error) {
@@ -438,22 +360,4 @@ func (s *Store) logOf(ctx context.Context, meterOf func(*tables) meterTables, id
 		return err
 	})
 	return out, err
-}
-
-func (s *Store) providerID(tx *Tx, name string) (int64, error) {
-	p, err := tx.t.providers.On(tx.tx).With(ProviderName, name).Get(ProviderID)
-	if errors.Is(err, dao.ErrNoRows) {
-		return 0, fmt.Errorf("%w: %s", ErrNoProvider, name)
-	}
-	if err != nil {
-		return 0, err
-	}
-	return p.ID, nil
-}
-
-func providerTaken(err error) error {
-	if errors.Is(err, dao.ErrDuplicate) {
-		return fmt.Errorf("%w: %w", ErrProviderTaken, err)
-	}
-	return err
 }

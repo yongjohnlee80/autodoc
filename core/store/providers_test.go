@@ -97,7 +97,7 @@ func TestASealedKeyOpensOnlyInItsRow(t *testing.T) {
 	if err := one(t, raw, "SELECT api_key FROM embedding_provider WHERE name = 'a'", &sealed); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := other.open(sealed, keyAAD(1)); !errors.Is(err, ErrSealed) {
+	if _, err := other.open(sealed, s.providers().aad(1)); !errors.Is(err, ErrSealed) {
 		t.Fatalf("another keyslot opened a's key: %v", err)
 	}
 }
@@ -400,5 +400,18 @@ func TestRemovingTheProviderInUseRetiresItsModel(t *testing.T) {
 		if st := state(ws, fp); st != "active=0 target=0" {
 			t.Errorf("workspace %d's model after the removal: %s", ws, st)
 		}
+	}
+}
+
+// TestTheSealedKeysPurposesAreTheStoresOwn: a key is opened with the purpose it was sealed for, so
+// each kind's purpose is the one every store already holds keys under. A change would leave every
+// stored key unopenable.
+func TestTheSealedKeysPurposesAreTheStoresOwn(t *testing.T) {
+	var s *Store
+	if got := s.providers().aad(7); got != "autodoc:embedding_provider.api_key:7" {
+		t.Errorf("a provider's key purpose: %q", got)
+	}
+	if got := s.rankers().aad(7); got != "autodoc:ranker.api_key:7" {
+		t.Errorf("a ranker's key purpose: %q", got)
 	}
 }

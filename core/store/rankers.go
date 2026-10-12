@@ -2,10 +2,8 @@ package store
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -74,19 +72,20 @@ func (sp RankerSpec) model() string {
 	return strings.TrimSpace(sp.Model)
 }
 
-// rankerKeyAAD binds a sealed key to its purpose and its row.
-func rankerKeyAAD(id int64) string { return "autodoc:ranker.api_key:" + strconv.FormatInt(id, 10) }
+// rankerColumns sets a ranker's own columns from its spec.
+func rankerColumns(sp RankerSpec) meteredSetter[*Ranker, RankerField] {
+	return func(d dao.DAO[*Ranker, RankerField, int64]) dao.DAO[*Ranker, RankerField, int64] {
+		return d.Set(RankerName, sp.Name).Set(RankerKind, sp.Kind).Set(RankerBaseURL, sp.BaseURL).Set(RankerModel, sp.model())
+	}
+}
 
 // Rankers are every ranker, by name.
 func (s *Store) Rankers(ctx context.Context) ([]RankerInfo, error) {
-	var out []RankerInfo
-	err := s.Read(ctx, func(tx *Tx) error {
-		rows, err := tx.t.rankers.On(tx.tx).OrderBy(dao.Asc(ByKey)).Select()
-		for _, r := range rows {
-			out = append(out, rankerInfoOf(r))
-		}
-		return err
-	})
+	rows, err := s.rankers().list(ctx)
+	out := make([]RankerInfo, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, rankerInfoOf(r))
+	}
 	return out, err
 }
 
@@ -97,22 +96,14 @@ func (s *Store) AddRanker(ctx context.Context, sp RankerSpec) (RankerInfo, error
 	}
 	var info RankerInfo
 	err := s.Write(ctx, func(tx *Tx) error {
-		now := s.now.Now().Unix()
-		id, err := tx.t.rankers.On(tx.tx).Set(RankerName, sp.Name).Set(RankerKind, sp.Kind).
-			Set(RankerBaseURL, sp.BaseURL).Set(RankerModel, sp.model()).
-			Set(RankerCreatedAt, now).Set(RankerUpdatedAt, now).Insert()
-		if err != nil {
-			return rankerTaken(err)
-		}
-		if err := s.setRankerKey(tx, id, sp.Key); err != nil {
-			return err
-		}
-		r, err := tx.t.rankers.On(tx.tx).With(RankerID, id).Get()
+		m := s.rankers()
+		id, err := m.add(tx, rankerColumns(sp), sp.Key)
 		if err != nil {
 			return err
 		}
+		r, err := m.get(tx, id)
 		info = rankerInfoOf(r)
-		return nil
+		return err
 	})
 	return info, err
 }
@@ -124,19 +115,8 @@ func (s *Store) UpdateRanker(ctx context.Context, name string, sp RankerSpec) er
 		return err
 	}
 	return s.Write(ctx, func(tx *Tx) error {
-		id, err := s.rankerID(tx, name)
-		if err != nil {
-			return err
-		}
-		if err := tx.t.rankers.On(tx.tx).With(RankerID, id).Set(RankerName, sp.Name).Set(RankerKind, sp.Kind).
-			Set(RankerBaseURL, sp.BaseURL).Set(RankerModel, sp.model()).
-			Set(RankerUpdatedAt, s.now.Now().Unix()).Update(); err != nil {
-			return rankerTaken(err)
-		}
-		if err := s.setRankerKey(tx, id, sp.Key); err != nil {
-			return err
-		}
-		return followRanker(tx, name, sp.Name)
+		_, err := s.rankers().update(tx, name, sp.Name, rankerColumns(sp), sp.Key)
+		return err
 	})
 }
 
@@ -144,97 +124,32 @@ func (s *Store) UpdateRanker(ctx context.Context, name string, sp RankerSpec) er
 // none.
 func (s *Store) RemoveRanker(ctx context.Context, name string) error {
 	return s.Write(ctx, func(tx *Tx) error {
-		id, err := s.rankerID(tx, name)
-		if err != nil {
-			return err
-		}
-		if err := tx.t.rankers.On(tx.tx).With(RankerID, id).Delete(); err != nil {
-			return err
-		}
-		return followRanker(tx, name, "")
+		_, err := s.rankers().remove(tx, name)
+		return err
 	})
-}
-
-// followRanker makes the preference naming ranker from name to instead ("" for removed: none in
-// use), in the transaction that renames or removes it.
-func followRanker(tx *Tx, from, to string) error {
-	if from == to {
-		return nil
-	}
-	return tx.t.preferences.On(tx.tx).With(PrefName, PrefRanker).With(PrefValue, from).
-		Set(PrefValue, to).Set(PrefUpdatedAt, tx.now.Now().Unix()).Update()
-}
-
-// setRankerKey seals key into the ranker's row; nil leaves it, "" removes it.
-func (s *Store) setRankerKey(tx *Tx, id int64, key *string) error {
-	if key == nil {
-		return nil
-	}
-	var sealed any
-	if *key != "" {
-		b, err := s.keys.seal([]byte(*key), rankerKeyAAD(id))
-		if err != nil {
-			return err
-		}
-		sealed = b
-	}
-	return tx.t.rankers.On(tx.tx).With(RankerID, id).Set(RankerAPIKey, sealed).Update()
 }
 
 // RankerWithKey is the ranker named name and its key, opened: for the daemon, which ranks with it,
 // and never for a client.
 func (s *Store) RankerWithKey(ctx context.Context, name string) (RankerInfo, string, error) {
-	var r *Ranker
-	err := s.Read(ctx, func(tx *Tx) error {
-		var err error
-		r, err = tx.t.rankers.On(tx.tx).With(RankerName, name).Get()
-		if errors.Is(err, dao.ErrNoRows) {
-			return fmt.Errorf("%w: %s", ErrNoRanker, name)
-		}
-		return err
-	})
+	r, key, err := s.rankers().withKey(ctx, name)
 	if err != nil {
 		return RankerInfo{}, "", err
 	}
-	if len(r.APIKey) == 0 {
-		return rankerInfoOf(r), "", nil
-	}
-	key, err := s.keys.open(r.APIKey, rankerKeyAAD(r.ID))
-	if err != nil {
-		return RankerInfo{}, "", err
-	}
-	return rankerInfoOf(r), string(key), nil
+	return rankerInfoOf(r), key, nil
 }
 
 // RecordRankerCalls adds calls to a ranker's usage by day and to its log, which keeps the last 200.
 func (s *Store) RecordRankerCalls(ctx context.Context, rankerID int64, calls []CallRecord) error {
-	return s.recordCalls(ctx, func(t *tables) meterTables { return t.rankerMeter() }, rankerID, calls)
+	return s.rankers().record(ctx, rankerID, calls)
 }
 
 // RankerUsage is the ranker's use by day, the latest first, at most days of them.
 func (s *Store) RankerUsage(ctx context.Context, name string, days int) ([]Usage, error) {
-	return s.usageOf(ctx, func(t *tables) meterTables { return t.rankerMeter() }, s.rankerID, name, days)
+	return s.rankers().usage(ctx, name, days)
 }
 
 // RankerLog is the ranker's recent calls, the latest first, at most limit of them.
 func (s *Store) RankerLog(ctx context.Context, name string, limit int) ([]LogEntry, error) {
-	return s.logOf(ctx, func(t *tables) meterTables { return t.rankerMeter() }, s.rankerID, name, limit)
-}
-
-func (s *Store) rankerID(tx *Tx, name string) (int64, error) {
-	r, err := tx.t.rankers.On(tx.tx).With(RankerName, name).Get(RankerID)
-	if errors.Is(err, dao.ErrNoRows) {
-		return 0, fmt.Errorf("%w: %s", ErrNoRanker, name)
-	}
-	if err != nil {
-		return 0, err
-	}
-	return r.ID, nil
-}
-
-func rankerTaken(err error) error {
-	if errors.Is(err, dao.ErrDuplicate) {
-		return fmt.Errorf("%w: %w", ErrRankerTaken, err)
-	}
-	return err
+	return s.rankers().log(ctx, name, limit)
 }
