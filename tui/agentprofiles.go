@@ -22,13 +22,13 @@ func (h *agents) listAgents() {
 	rows := make([]rowOf, len(profiles))
 	for i, a := range profiles {
 		mark := ""
-		if a.Name == def {
+		if a.Codename == def {
 			mark = "●"
 		}
-		if h.agentRunning != "" && a.Codename == h.agentRunningCodename {
+		if h.agentRunning != "" && a.Codename == h.agentRunning {
 			mark += "▶"
 		}
-		rows[i] = rowOf{"key": a.Name, "default": mark, "name": a.Name, "codename": a.Codename,
+		rows[i] = rowOf{"key": a.Codename, "default": mark, "name": a.Name, "codename": a.Codename,
 			"command": a.Command, "problem": h.profileProblem(a)}
 	}
 	h.agentRows.Reset(rows)
@@ -38,7 +38,11 @@ func (h *agents) listAgents() {
 	case def == "":
 		h.c.Set("App.agentProfilesStatus", "Make default marks the one SPC g opens")
 	default:
-		h.c.Set("App.agentProfilesStatus", "SPC g opens "+def+" · {root} and {workspace} in a command are filled in")
+		label := def
+		if p, ok := h.profile(def); ok {
+			label = p.Name
+		}
+		h.c.Set("App.agentProfilesStatus", "SPC g opens "+label+" · {root} and {workspace} in a command are filled in")
 	}
 }
 
@@ -53,8 +57,20 @@ func (h *agents) agentAt(i int) (agentProfile, bool) {
 // keepAgents writes the profiles and the default, and lists them again.
 func (h *agents) keepAgents(agents []agentProfile, def string) {
 	h.c.SetPref(prefAgentProfiles, agentProfilesJSON(agents))
-	if def != h.defaultProfile() {
-		h.c.SetPref(prefAgentDefault, def)
+	if def != h.c.Prefs().Value(prefAgentDefaultCodename) {
+		h.c.SetPref(prefAgentDefaultCodename, def)
+	}
+	// Keep a legacy label mirror for old readers. The identity preference above
+	// is authoritative, including an explicit empty default.
+	label := ""
+	for _, p := range agents {
+		if p.Codename == def {
+			label = p.Name
+			break
+		}
+	}
+	if label != h.c.Prefs().Value(prefAgentDefault) {
+		h.c.SetPref(prefAgentDefault, label)
 	}
 	h.listAgents()
 }
@@ -62,6 +78,7 @@ func (h *agents) keepAgents(agents []agentProfile, def string) {
 // startAddAgent and startEditAgent open the form, empty or on profile i.
 func (h *agents) startAddAgent() {
 	h.editingAgent = ""
+	h.editingAgentProfile = nil
 	h.fillAgentForm("add an agent profile", agentProfile{})
 }
 
@@ -70,7 +87,8 @@ func (h *agents) startEditAgent(i int) {
 	if !ok {
 		return
 	}
-	h.editingAgent = a.Name
+	h.editingAgent = a.Codename
+	h.editingAgentProfile = &a
 	h.fillAgentForm("edit "+a.Name, a)
 }
 
@@ -88,9 +106,7 @@ func (h *agents) fillAgentForm(title string, a agentProfile) {
 	h.c.Open("agentEdit")
 }
 
-// saveAgent adds the profile the form describes, or rewrites the one it edits: a name another
-// profile has, or an empty name or command, opens the form again, saying why. The first profile
-// added becomes the default.
+// saveAgent keeps the selected profile's identity when a legacy caller edits its label.
 func (h *agents) saveAgent(name, command string) {
 	codename := ""
 	if p, ok := h.profile(h.editingAgent); ok {
@@ -121,40 +137,41 @@ func (h *agents) saveAgentProfile(name, command, codename string) {
 	agents := h.profiles()
 	at := -1
 	for i, a := range agents {
-		if a.Name == name && a.Name != h.editingAgent {
-			refuse("another profile is named " + name)
-			return
-		}
-		if a.Name == h.editingAgent {
+		if a.Codename == h.editingAgent {
 			at = i
 		} else if a.Codename == codename {
 			refuse("codename taken by " + a.Name)
 			return
 		}
 	}
+	if h.editingAgent != "" && (at < 0 || (h.editingAgentProfile != nil && agents[at] != *h.editingAgentProfile)) {
+		refuse("the agent profile changed; open it again before saving")
+		return
+	}
 	if h.agentRunning != "" {
-		if at >= 0 && agents[at].Codename == h.agentRunningCodename && codename != h.agentRunningCodename {
+		if at >= 0 && agents[at].Codename == h.agentRunning && codename != h.agentRunning {
 			refuse("stop the running agent before changing its codename")
 			return
 		}
-		if codename == h.agentRunningCodename && (at < 0 || agents[at].Codename != codename) {
+		if codename == h.agentRunning && (at < 0 || agents[at].Codename != codename) {
 			refuse("codename held by a running agent")
 			return
 		}
 	}
 	def := h.defaultProfile()
 	if at >= 0 {
-		if def == agents[at].Name {
-			def = name
+		if def == agents[at].Codename {
+			def = codename
 		}
 		agents[at] = agentProfile{Name: name, Command: command, Codename: codename}
 	} else {
 		agents = append(agents, agentProfile{Name: name, Command: command, Codename: codename})
 		if def == "" {
-			def = name
+			def = codename
 		}
 	}
 	h.keepAgents(agents, def)
+	h.editingAgent, h.editingAgentProfile = "", nil
 	h.c.Set("App.status", "saved the agent profile "+name)
 }
 
@@ -185,7 +202,7 @@ func (h *agents) removeAgentConfirmed(a agentProfile) {
 	}
 	agents := append(append([]agentProfile(nil), profiles[:i]...), profiles[i+1:]...)
 	def := h.defaultProfile()
-	if def == a.Name {
+	if def == a.Codename {
 		def = ""
 	}
 	h.keepAgents(agents, def)
@@ -198,7 +215,7 @@ func (h *agents) makeAgentDefault(i int) {
 	if !ok {
 		return
 	}
-	h.keepAgents(h.profiles(), a.Name)
+	h.keepAgents(h.profiles(), a.Codename)
 	h.c.Set("App.status", "SPC g opens "+a.Name)
 }
 
@@ -212,14 +229,14 @@ func (h *agents) useAgent(i int) {
 		h.c.Set("App.agentProfilesStatus", "not a target: "+why)
 		return
 	}
-	if h.agentRunning != "" && h.agentRunningCodename == a.Codename {
+	if h.agentRunning == a.Codename {
 		h.c.Close("agentProfiles")
 		h.toggleAgentShown()
 		return
 	}
 	if h.agentRunning != "" {
-		h.switchingAgent = a.Name
-		h.c.Set("App.agentSwitchQuestion", "Stop "+h.agentRunning+" and start "+a.Name+"? What "+h.agentRunning+" was doing ends.")
+		h.switchingAgent = a.Codename
+		h.c.Set("App.agentSwitchQuestion", "Stop "+h.agentRunningLabel+" and start "+a.Name+"? What "+h.agentRunningLabel+" was doing ends.")
 		h.c.Open("agentSwitch")
 		return
 	}
@@ -231,6 +248,10 @@ func (h *agents) useAgent(i int) {
 func (h *agents) switchAgentConfirmed() {
 	a, ok := h.profile(h.switchingAgent)
 	if !ok {
+		return
+	}
+	if why := h.profileProblem(a); why != "" {
+		h.c.Set("App.agentProfilesStatus", "not a target: "+why)
 		return
 	}
 	if !h.stopAgent() {

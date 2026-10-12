@@ -227,7 +227,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 		r.h.agents.saveAgent("codex", "codex --other")
 		return true
 	})
-	r.s.WaitForText(t, "not saved: another profile is named codex")
+	r.s.WaitForText(t, "not saved: codename taken by codex")
 	onLoop(r, func() bool {
 		r.h.agents.startAddAgent()
 		r.h.closeDialog("agentEdit")

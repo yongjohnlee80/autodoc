@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -12,20 +13,34 @@ import (
 // panel services remain absent so an invalid target cannot accidentally spawn.
 type identityHost struct {
 	agentHost
-	p       prefs
-	state   map[string]any
-	notes   []string
-	stopErr error
+	p                 prefs
+	state             map[string]any
+	notes             []string
+	stopErr           error
+	ws                wsInfo
+	configuredCommand string
 }
 
 func newIdentityHost(raw string) *identityHost {
-	return &identityHost{p: prefs{values: map[string]string{prefAgentProfiles: raw}}, state: map[string]any{}}
+	return &identityHost{p: prefs{values: map[string]string{
+		prefAgentProfiles: raw, prefAgentDefaultCodename: legacyAgentDefault,
+	}}, state: map[string]any{}}
 }
-func (c *identityHost) Prefs() prefs                          { return c.p }
-func (c *identityHost) SetPref(name, value string)            { c.p.values[name] = value }
-func (c *identityHost) Set(name string, value any)            { c.state[name] = value }
-func (c *identityHost) SetFormText(name, value string)        { c.Set(name, value) }
-func (*identityHost) Open(string)                             {}
+func (c *identityHost) Prefs() prefs                    { return c.p }
+func (c *identityHost) SetPref(name, value string)      { c.p.values[name] = value }
+func (c *identityHost) Set(name string, value any)      { c.state[name] = value }
+func (c *identityHost) SetFormText(name, value string)  { c.Set(name, value) }
+func (*identityHost) Open(string)                       {}
+func (*identityHost) Close(string)                      {}
+func (*identityHost) Focus(string) error                { return nil }
+func (*identityHost) DaemonAddress() string             { return "unused" }
+func (c *identityHost) ActiveWorkspace() (wsInfo, bool) { return c.ws, c.ws.name != "" }
+func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
+	if len(args) > 0 {
+		c.configuredCommand = args[len(args)-1]
+	}
+	return nil
+}
 func (c *identityHost) Notify(msg string)                     { c.notes = append(c.notes, msg) }
 func (c *identityHost) CallView(string, string, ...any) error { return c.stopErr }
 func (c *identityHost) Keep(err error) {
@@ -34,29 +49,31 @@ func (c *identityHost) Keep(err error) {
 	}
 }
 
-func TestLegacyCodenameCollisionsSurviveAnUnrelatedSave(t *testing.T) {
-	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"claude_opus","command":"two"}]`)
+func TestLegacyCodenamesAreUniqueDeterministicAndPersisted(t *testing.T) {
+	raw := `[{"name":"Claude Opus","command":"one"},{"name":"claude_opus","command":"two"},{"name":"Claude Opus","command":"three"}]`
+	c := newIdentityHost(raw)
 	a := newAgents(c, "", "")
+	before := a.profiles()
+	if !reflect.DeepEqual(before, agentProfilesOf(raw)) || before[0].Codename != "claude-opus" || before[1].Codename != "claude-opus-2" || before[2].Codename != "claude-opus-3" {
+		t.Fatalf("migration is not deterministic in stored order: %+v", before)
+	}
 	a.saveAgentProfile("Other", "other", "other")
 	profiles := a.profiles()
-	if len(profiles) != 3 || profiles[0].Command != "one" || profiles[1].Command != "two" || profiles[0].Codename != "claude-opus" || profiles[1].Codename != "claude-opus" {
-		t.Fatalf("an unrelated save dropped or renamed colliding legacy profiles: %+v", profiles)
+	if len(profiles) != 4 || !reflect.DeepEqual(profiles[:3], before) {
+		t.Fatalf("an unrelated save dropped or renumbered legacy profiles: %+v", profiles)
 	}
-	for _, p := range profiles[:2] {
-		if why := a.profileProblem(p); !strings.Contains(why, "codename taken by") {
-			t.Fatalf("%s's collision is not explained: %q", p.Name, why)
-		}
-		a.startAgent(p) // must refuse before any workspace/terminal operation
-	}
-	if len(c.notes) != 2 || a.agentRunning != "" {
-		t.Fatalf("colliding profiles became start targets: notes %v, running %q", c.notes, a.agentRunning)
-	}
-	a.editingAgent = profiles[1].Name
-	a.saveAgentProfile(profiles[1].Name, "two", "opus-two")
-	for _, p := range a.profiles() {
+	for _, p := range profiles[:3] {
 		if why := a.profileProblem(p); why != "" {
-			t.Fatalf("explicit repair left %s unavailable: %s", p.Name, why)
+			t.Fatalf("migrated profile is not a valid target: %q", why)
 		}
+	}
+	if raw := c.p.Value(prefAgentProfiles); !strings.Contains(raw, `"codename":"claude-opus-3"`) {
+		t.Fatal("first list save did not persist allocated identities")
+	}
+	a.startEditAgent(3)
+	a.saveAgent("Other renamed", "other")
+	if !reflect.DeepEqual(a.profiles()[:3], before) {
+		t.Fatal("renaming an unrelated profile renumbered persisted suffixes")
 	}
 }
 
@@ -64,10 +81,10 @@ func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
 	c.SetPref(prefAgentDefault, "Other Agent")
 	a := newAgents(c, "", "")
-	a.editingAgent = "Other Agent"
+	a.startEditAgent(1)
 	a.saveAgent("Renamed", "two")
 	profiles := a.profiles()
-	if profiles[0].Codename != "claude-opus" || profiles[1].Codename != "other-agent" || a.defaultProfile() != "Renamed" {
+	if profiles[0].Codename != "claude-opus" || profiles[1].Codename != "other-agent" || a.defaultProfile() != "other-agent" {
 		t.Fatalf("display rename changed an identity or lost the name-based default: %+v, default %q", profiles, a.defaultProfile())
 	}
 	if raw := c.p.Value(prefAgentProfiles); !strings.Contains(raw, `"codename":"other-agent"`) {
@@ -75,25 +92,90 @@ func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 	}
 }
 
-func TestLegacyDuplicateLabelsAreNotDeliveryTargets(t *testing.T) {
+func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testing.T) {
+	for _, row := range []int{0, 1} {
+		c := newIdentityHost(`[{"name":"Same","command":"one"},{"name":"Same","command":"two"}]`)
+		c.ws = wsInfo{name: "kb", root: t.TempDir()}
+		a := newAgents(c, t.TempDir(), "")
+		before := a.profiles()
+		a.startEditAgent(row)
+		a.saveAgentProfile("Same", before[row].Command+" edited", before[row].Codename)
+		got := a.profiles()
+		if got[1-row] != before[1-row] || got[row].Command != before[row].Command+" edited" {
+			t.Fatalf("edit row%d overwrote another profile: %+v", row, got)
+		}
+		for _, p := range got {
+			if why := a.profileProblem(p); why != "" {
+				t.Fatalf("repeated label blocked a unique identity: %s", why)
+			}
+		}
+		a.makeAgentDefault(row)
+		p, ok := a.profile(a.defaultProfile())
+		if !ok || p != got[row] || c.p.Value(prefAgentDefaultCodename) != got[row].Codename {
+			t.Fatalf("default selected another Same label: %+v", p)
+		}
+		a.agentRunning, a.agentRunningLabel = "running-orphan", "orphan"
+		a.useAgent(row)
+		if a.switchingAgent != got[row].Codename {
+			t.Fatal("switch remembered a label instead of the selected identity")
+		}
+		a.switchAgentConfirmed()
+		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
+			t.Fatalf("switch started another Same label: command %q, identity %q", c.configuredCommand, a.agentRunning)
+		}
+	}
+}
+
+func TestLegacyDefaultNameMigratesWithoutConfusingAnotherCodename(t *testing.T) {
+	c := newIdentityHost(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
+	c.SetPref(prefAgentDefault, "foo-2")
+	a := newAgents(c, "", "")
+	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "three" {
+		t.Fatalf("legacy name was mistaken for another allocated codename: %+v", p)
+	}
+	a.saveAgentProfile("Other", "other", "other")
+	if a.defaultProfile() != "foo-2-2" || c.p.Value(prefAgentDefaultCodename) != "foo-2-2" {
+		t.Fatal("list save did not persist the intended default identity")
+	}
+	a.makeAgentDefault(1)
+	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "two" {
+		t.Fatal("canonical default still resolved through display labels")
+	}
+	a.removeAgentConfirmed(a.profiles()[1])
+	if a.defaultProfile() != "" || c.p.Value(prefAgentDefaultCodename) != "" {
+		t.Fatal("removing the default resurrected the legacy label")
+	}
+}
+
+func TestMigrationDoesNotStealAnExplicitPersistedCodename(t *testing.T) {
+	profiles := agentProfilesOf(`[{"name":"Taken","command":"legacy"},{"name":"Explicit","command":"saved","codename":"taken"}]`)
+	if profiles[0].Codename != "taken-2" || profiles[1].Codename != "taken" {
+		t.Fatalf("migration renumbered an already persisted identity: %+v", profiles)
+	}
+}
+
+func TestAnEditedProfileSnapshotCannotOverwriteANewerRecord(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Same","command":"one"},{"name":"Same","command":"two"}]`)
 	a := newAgents(c, "", "")
-	for _, p := range a.profiles() {
-		if why := a.profileProblem(p); !strings.Contains(why, "codename taken by") {
-			t.Fatalf("duplicate labels hid a duplicate delivery identity: %q", why)
-		}
+	a.startEditAgent(0)
+	profiles := a.profiles()
+	profiles[0].Command = "changed elsewhere"
+	c.SetPref(prefAgentProfiles, agentProfilesJSON(profiles))
+	a.saveAgentProfile("Edited", "old form", "same")
+	if !reflect.DeepEqual(profiles, a.profiles()) || !strings.Contains(c.state["App.agentFormError"].(string), "profile changed") {
+		t.Fatal("a stale form overwrote the changed record")
 	}
 }
 
 func TestRunningOrphanReservesItsCodename(t *testing.T) {
 	c := newIdentityHost(`[]`)
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningCodename = "removed profile", "reserved"
+	a.agentRunning, a.agentRunningLabel = "reserved", "removed profile"
 	a.saveAgentProfile("Replacement", "replacement", "reserved")
 	if len(a.profiles()) != 0 || !strings.Contains(c.state["App.agentFormError"].(string), "held by a running agent") {
 		t.Fatal("a new profile reused a running orphan's codename")
 	}
-	a.agentRunning, a.agentRunningCodename = "", ""
+	a.agentRunning, a.agentRunningLabel = "", ""
 	a.saveAgentProfile("Replacement", "replacement", "reserved")
 	if len(a.profiles()) != 1 || a.profiles()[0].Codename != "reserved" {
 		t.Fatal("a stopped orphan kept its old identity reserved")
@@ -103,7 +185,8 @@ func TestRunningOrphanReservesItsCodename(t *testing.T) {
 func TestLiveProfileCodenameCannotChangeUntilItStops(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Original","command":"one","codename":"original"}]`)
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningCodename, a.editingAgent = "Original", "original", "Original"
+	a.agentRunning, a.agentRunningLabel = "original", "Original"
+	a.startEditAgent(0)
 	a.saveAgentProfile("Original", "one", "renamed")
 	if a.profiles()[0].Codename != "original" || !strings.Contains(c.state["App.agentFormError"].(string), "stop the running agent") {
 		t.Fatal("a live profile changed its delivery identity")
@@ -118,8 +201,8 @@ func TestARefusedStopDoesNotReleaseTheRunningCodename(t *testing.T) {
 	c := newIdentityHost(`[]`)
 	c.stopErr = errors.New("stop refused")
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningCodename = "removed profile", "reserved"
-	if a.stopAgent() || a.agentRunningCodename != "reserved" || a.agentRunning == "" {
+	a.agentRunning, a.agentRunningLabel = "reserved", "removed profile"
+	if a.stopAgent() || a.agentRunning != "reserved" {
 		t.Fatal("a failed stop released the running identity")
 	}
 	a.saveAgentProfile("Replacement", "replacement", "reserved")
@@ -127,7 +210,7 @@ func TestARefusedStopDoesNotReleaseTheRunningCodename(t *testing.T) {
 		t.Fatal("a failed stop allowed another profile to reuse its identity")
 	}
 	c.stopErr = nil
-	if !a.stopAgent() || a.agentRunningCodename != "" {
+	if !a.stopAgent() || a.agentRunning != "" {
 		t.Fatal("a successful stop did not release the running identity")
 	}
 }
@@ -161,7 +244,7 @@ func TestProfileFormSaveKeepsAnExplicitDeliveryIdentity(t *testing.T) {
 	if p := a.profiles()[0]; p.Name != "Display Label" || p.Command != "command" || p.Codename != "work-helper" {
 		t.Fatalf("form save discarded or reordered its explicit identity: %+v", p)
 	}
-	a.editingAgent = "Display Label"
+	a.startEditAgent(0)
 	a.saveAgent("Different Label", "command")
 	if p := a.profiles()[0]; p.Codename != "work-helper" {
 		t.Fatalf("a subsequent display edit changed the explicit identity: %+v", p)

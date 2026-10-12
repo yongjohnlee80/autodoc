@@ -19,10 +19,11 @@ import (
 type agents struct {
 	c                      agentHost
 	agentDir, agentRunning string
-	agentRunningCodename   string // captured at start; reserved even if its saved profile is removed
+	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
 	agentBinPath           string
 	editingAgent           string
+	editingAgentProfile    *agentProfile // exact record shown in the form; stale edits are refused
 	switchingAgent         string
 	agentRows              *tuidecl.ListModel
 }
@@ -72,12 +73,14 @@ func agentPrefRows(a *agents) []PrefSpec {
 		shows(agentPreferenceState)
 	profiles := ValuePref(prefAgentProfiles, "[]", nil)
 	def := ValuePref(prefAgentDefault, "", nil)
+	identity := ValuePref(prefAgentDefaultCodename, legacyAgentDefault, nil)
 	if a != nil {
 		edge = edge.then(func(prefs) { a.c.DockPanel("agent") })
 		profiles = profiles.then(func(prefs) { a.listAgents() })
 		def = def.then(func(prefs) { a.listAgents() })
+		identity = identity.then(func(prefs) { a.listAgents() })
 	}
-	return []PrefSpec{edge, profiles, def}
+	return []PrefSpec{edge, profiles, def, identity}
 }
 
 func agentPreferenceState(p prefs) map[string]any {
@@ -94,7 +97,18 @@ func agentPreferenceState(p prefs) map[string]any {
 func (a *agents) profiles() []agentProfile {
 	return agentProfilesOf(a.c.Prefs().Value(prefAgentProfiles))
 }
-func (a *agents) defaultProfile() string { return a.c.Prefs().Value(prefAgentDefault) }
+func (a *agents) defaultProfile() string {
+	if code := a.c.Prefs().Value(prefAgentDefaultCodename); code != legacyAgentDefault {
+		return code
+	}
+	name := a.c.Prefs().Value(prefAgentDefault)
+	for _, p := range a.profiles() {
+		if p.Name == name {
+			return p.Codename // legacy name selects the first stored match
+		}
+	}
+	return ""
+}
 func (a *agents) Commands() map[string]Command {
 	return map[string]Command{
 		"App.toggleAgent":          none(a.toggleAgent),
@@ -137,8 +151,10 @@ func (a *agents) PreferencesChanged() {
 
 // The agent's preferences: the profiles, as JSON, and the default's name.
 const (
-	prefAgentProfiles = "tui.agent.profiles"
-	prefAgentDefault  = "tui.agent.default"
+	prefAgentProfiles        = "tui.agent.profiles"
+	prefAgentDefault         = "tui.agent.default"
+	prefAgentDefaultCodename = "tui.agent.default.codename"
+	legacyAgentDefault       = "<legacy>" // missing identity preference, distinct from an explicit empty default
 )
 
 // agentProfile is one way to start an agent.
@@ -157,13 +173,10 @@ func agentProfilesOf(s string) []agentProfile {
 	out := all[:0]
 	for _, p := range all {
 		if strings.TrimSpace(p.Name) != "" && strings.TrimSpace(p.Command) != "" {
-			if p.Codename == "" {
-				p.Codename = agentCodename(p.Name)
-			}
 			out = append(out, p)
 		}
 	}
-	return out
+	return uniqueAgentCodenames(out)
 }
 
 func agentProfilesJSON(ps []agentProfile) string {
@@ -174,10 +187,10 @@ func agentProfilesJSON(ps []agentProfile) string {
 	return string(b)
 }
 
-// agentProfile is the profile named name, ok false when there is none.
-func (a *agents) profile(name string) (agentProfile, bool) {
+// profile resolves the stable codename, never the display label.
+func (a *agents) profile(codename string) (agentProfile, bool) {
 	for _, a := range a.profiles() {
-		if a.Name == name {
+		if a.Codename == codename {
 			return a, true
 		}
 	}
@@ -241,8 +254,8 @@ func (h *agents) startAgent(p agentProfile) {
 		h.c.Notify("the agent could not start (" + err.Error() + ")")
 		return
 	}
-	h.agentRunning = p.Name
-	h.agentRunningCodename = p.Codename
+	h.agentRunning = p.Codename
+	h.agentRunningLabel = p.Name
 	h.c.Keep(h.c.Focus("agentView"))
 }
 
@@ -256,16 +269,19 @@ func (h *agents) stopAgent() bool {
 		return false
 	}
 	h.agentRunning = ""
-	h.agentRunningCodename = ""
+	h.agentRunningLabel = ""
 	return true
 }
 
 // agentExited is the agent's program ending: the next SPC g starts the default again. The shell's
 // 127 and 126 are its command not found and not runnable: the profile's command is wrong.
 func (h *agents) agentExited(code int) {
-	name := h.agentRunning
+	name := h.agentRunningLabel
+	if name == "" {
+		name = h.agentRunning
+	}
 	h.agentRunning = ""
-	h.agentRunningCodename = ""
+	h.agentRunningLabel = ""
 	if name == "" {
 		return
 	}

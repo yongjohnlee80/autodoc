@@ -6,8 +6,8 @@ import (
 	"unicode"
 )
 
-// agentCodename is a legacy profile name's stable default identity. Separators
-// become one hyphen; a collision is reported, never repaired with a suffix.
+// agentCodename is a legacy profile name's default identity. Separators become
+// one hyphen; uniqueAgentCodenames allocates stable migration suffixes.
 func agentCodename(name string) string {
 	var b strings.Builder
 	separator := false
@@ -29,8 +29,40 @@ func validAgentCodename(name string) bool {
 	return name != "" && name == agentCodename(name)
 }
 
-// profileProblem is why a saved profile cannot be a delivery/start target.
-// Invalid legacy profiles remain in the editor until explicitly repaired.
+// Preserve already persisted identities, then allocate missing/duplicate ones
+// in stored order. A first list save persists the result so later edits do not
+// move suffixes. Reserving explicit identities prevents a legacy name stealing one.
+func uniqueAgentCodenames(profiles []agentProfile) []agentProfile {
+	owners := map[string]int{}
+	used := map[string]bool{}
+	for i, p := range profiles {
+		if validAgentCodename(p.Codename) && !used[p.Codename] {
+			owners[p.Codename], used[p.Codename] = i, true
+		}
+	}
+	for i := range profiles {
+		p := &profiles[i]
+		if owner, exists := owners[p.Codename]; exists && owner == i {
+			continue
+		}
+		base := p.Codename
+		if !validAgentCodename(base) {
+			base = agentCodename(p.Name)
+		}
+		if base == "" {
+			base = "agent"
+		}
+		code := base
+		for n := 2; used[code]; n++ {
+			code = fmt.Sprintf("%s-%d", base, n)
+		}
+		p.Codename, used[code] = code, true
+	}
+	return profiles
+}
+
+// profileProblem protects direct start requests and live reservations. Stored
+// profiles already project validated, unique codenames through migration.
 func (a *agents) profileProblem(p agentProfile) string {
 	if !validAgentCodename(p.Codename) {
 		return "codename needs lower-case letters or digits, separated by hyphens"
@@ -45,7 +77,7 @@ func (a *agents) profileProblem(p agentProfile) string {
 			return fmt.Sprintf("codename taken by %s", other.Name)
 		}
 	}
-	if a.agentRunning != "" && a.agentRunningCodename == p.Codename {
+	if a.agentRunning != "" && a.agentRunning == p.Codename {
 		for _, saved := range a.profiles() {
 			if saved.Codename == p.Codename {
 				return ""

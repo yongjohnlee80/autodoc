@@ -138,10 +138,13 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   their model through `Changed`. JSON profiles stay raw `ValuePref` strings and are decoded
   inside the agents feature, not kept as a second mutable profile list in Host preferences.
   A profile's persisted codename is its delivery identity; legacy names derive a lower-case,
-  hyphen-separated default. Display-name edits preserve that identity. Colliding legacy records
-  remain repairable in the profile editor and cannot start until repaired. A running identity
+  hyphen-separated default, with deterministic suffixes allocated in stored order for collisions.
+  The first list save persists all identities; display-name edits do not renumber them. Display
+  labels may repeat: editing, default and switch flows resolve by codename. A running identity
   stays reserved after profile removal; a refused stop request does not release it. The default
-  preference still names the display profile and follows its rename through the same save path.
+  preference stores the codename; a legacy name selects its first stored matching profile
+  during migration. A separate identity key distinguishes an explicit empty default from legacy
+  data, while the old name key remains a compatibility mirror.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
 - **A list to filter and choose from is a picker, never a fifth layout.**
