@@ -115,6 +115,8 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   queries and terminal configuration are restricted to that feature's validated ids/views;
   cross-role id/view collisions are refused. Each contributor receives its own services even
   when feature labels match. Calls before view attachment report a precondition error.
+  The scoped facade holds Core in a named field and forwards only panel/agent services;
+  asserting it to full Core cannot recover unchecked view or daemon operations.
   Cross-panel toggles/open/close are navigation actions. Focus return uses
   `RestoreKeyboardPane`, limited to the editor and the registry's receiving panes, not arbitrary
   view methods. Form-text reset is `SetFormText`, distinct from ordinary source updates.

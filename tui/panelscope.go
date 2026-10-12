@@ -21,9 +21,30 @@ type panelContribution struct {
 }
 
 type scopedPanelHost struct {
-	core
+	core  core // named: a PanelHost must not expose Core through method promotion
 	owner string
 	ids   map[string]bool
+}
+
+func (s *scopedPanelHost) Set(name string, v any)          { s.core.Set(name, v) }
+func (s *scopedPanelHost) Open(id string)                  { s.core.Open(id) }
+func (s *scopedPanelHost) Close(id string)                 { s.core.Close(id) }
+func (s *scopedPanelHost) Notify(msg string)               { s.core.Notify(msg) }
+func (s *scopedPanelHost) Ask(q Question) Asked            { return s.core.Ask(q) }
+func (s *scopedPanelHost) Prefs() prefs                    { return s.core.Prefs() }
+func (s *scopedPanelHost) Keep(err error)                  { s.core.Keep(err) }
+func (s *scopedPanelHost) KeyboardPane() string            { return s.core.KeyboardPane() }
+func (s *scopedPanelHost) PanelOpen(id string) bool        { return s.core.PanelOpen(id) }
+func (s *scopedPanelHost) TogglePanel(id string)           { s.core.TogglePanel(id) }
+func (s *scopedPanelHost) OpenDrawer(id string)            { s.core.OpenDrawer(id) }
+func (s *scopedPanelHost) CloseDrawer(id string)           { s.core.CloseDrawer(id) }
+func (s *scopedPanelHost) DockPanel(id string)             { s.core.DockPanel(id) }
+func (s *scopedPanelHost) SetPref(name, value string)      { s.core.SetPref(name, value) }
+func (s *scopedPanelHost) ActiveWorkspace() (wsInfo, bool) { return s.core.ActiveWorkspace() }
+func (s *scopedPanelHost) SetFormText(name, value string)  { s.core.SetFormText(name, value) }
+func (s *scopedPanelHost) DaemonAddress() string           { return s.core.DaemonAddress() }
+func (s *scopedPanelHost) KeepPanelGeometry(id, dimension string, percent int) {
+	s.core.KeepPanelGeometry(id, dimension, percent)
 }
 
 func newScopedPanelHost(c core, f Feature, specs []PanelSpec) *scopedPanelHost {
@@ -57,7 +78,7 @@ func (s *scopedPanelHost) CallView(id, method string, args ...any) error {
 	if err := s.ready(); err != nil {
 		return err
 	}
-	return s.core.CallView(id, method, args...)
+	return s.core.View(id, method, args...)
 }
 func (s *scopedPanelHost) Focus(id string) error {
 	return s.CallView(id, "forceActiveFocus")
@@ -87,7 +108,7 @@ func (s *scopedPanelHost) RestoreKeyboardPane(id string) error {
 	if !slices.Contains(keyboardPanes(s.core.h.panelSpecs()), id) {
 		return fmt.Errorf("restore keyboard pane %q: %w", id, errs.ErrInvalidArgument)
 	}
-	return s.core.CallView(id, "forceActiveFocus")
+	return s.core.View(id, "forceActiveFocus")
 }
 
 func (r *panelRegistry) bind(c core) error {

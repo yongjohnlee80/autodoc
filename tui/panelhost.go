@@ -40,14 +40,13 @@ type agentHost interface {
 	DaemonAddress() string
 }
 
-func (c core) CallView(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
-func (c core) Keep(err error)                                { c.h.keep(err) }
-func (c core) Focused(id string) bool                        { return c.h.paneHasKeyboard(id) }
-func (c core) KeyboardPane() string                          { return c.h.keyboardPane() }
-func (c core) PanelOpen(id string) bool                      { return c.h.panelOpen[id] }
-func (c core) OpenDrawer(id string)                          { c.h.openDrawer(id) }
-func (c core) CloseDrawer(id string)                         { c.h.closeDrawer(id) }
-func (c core) DockPanel(id string)                           { c.h.dockPanel(id) }
+func (c core) Keep(err error)           { c.h.keep(err) }
+func (c core) Focused(id string) bool   { return c.h.paneHasKeyboard(id) }
+func (c core) KeyboardPane() string     { return c.h.keyboardPane() }
+func (c core) PanelOpen(id string) bool { return c.h.panelOpen[id] }
+func (c core) OpenDrawer(id string)     { c.h.openDrawer(id) }
+func (c core) CloseDrawer(id string)    { c.h.closeDrawer(id) }
+func (c core) DockPanel(id string)      { c.h.dockPanel(id) }
 func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 	c.h.keepPanelGeo(id, dimension, percent)
 }

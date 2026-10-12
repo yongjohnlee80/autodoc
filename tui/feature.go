@@ -29,7 +29,8 @@ type (
 	Connecter interface{ Connected() }
 	// Starter hears once that the program has started: its first preferences are applied.
 	Starter interface{ Started() }
-	// PreferenceSink sees the preferences currently in effect on the loop.
+	// PreferenceSink projects the preferences currently in effect on the loop.
+	// It also runs when preference dialogs resync; this is not a change-only event.
 	PreferenceSink interface{ PreferencesChanged() }
 	// Enterer hears each workspace entered, the one in use again included.
 	Enterer interface{ Entered(ws string) }

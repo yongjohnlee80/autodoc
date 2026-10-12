@@ -9,6 +9,23 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 )
 
+func TestPanelServicesCannotBeAssertedToFullCore(t *testing.T) {
+	f := &panelFixture{name: "owner", specs: []PanelSpec{fixturePanel()}}
+	for _, p := range []PanelHost{newScopedPanelHost(core{}, f, f.specs), unboundPanelHost(core{})} {
+		if _, ok := p.(Core); ok {
+			t.Fatal("panel services exposed unchecked Core methods through a type assertion")
+		}
+		if _, ok := p.(interface {
+			View(string, string, ...any) error
+		}); ok {
+			t.Fatal("panel services exposed an unchecked view call")
+		}
+		if _, ok := p.(agentHost); !ok {
+			t.Fatal("panel services lost the agent's bounded configuration capability")
+		}
+	}
+}
+
 func TestPanelServicesRejectOtherFeaturesViews(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)

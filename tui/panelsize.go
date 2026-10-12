@@ -65,6 +65,8 @@ func readPanelPrefs(p *prefs, m map[string]any) {
 
 // keepPanelGeo writes a panel's size or length at the place it opens from now, one path for
 // Preferences and a finished drag.
+// The grips and choosers supply registry-bounded values. Invalid or stale dynamic
+// requests are defensive no-ops: they must not alter or persist panel preferences.
 func (h *Host) keepPanelGeo(panel, what string, n int) {
 	s := h.panelSpec(panel)
 	if s == nil || len(s.Places) == 0 {
