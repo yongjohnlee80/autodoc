@@ -6,13 +6,12 @@ import (
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
-// FIND — / in the page, the explorer or the relations, as AutoDB's: a word or phrase in the pane that
-// has the keyboard. The cursor moves to the next row holding it; n and N go to the next and the
+// FIND — / in the page, the explorer, the relations or any pane a feature registers (Findable), as
+// AutoDB's: a word or phrase in the pane that has the keyboard. The cursor moves to the next row holding it; n and N go to the next and the
 // previous. It is a literal, case-blind match, read afresh from the pane at every jump. The
 // workspace's search (by words and meaning, across every file) is Ctrl+G, SPC / or SPC SPC.
 //
@@ -24,12 +23,25 @@ import (
 // THE EXPLORER is searched over the rows it has loaded, in the order the tree shows them, a closed
 // folder's loaded rows included: a hit there is revealed, its folders opened.
 
-// The panes find searches, by the id of their view.
-const (
-	findPage      = "page"
-	findExplorer  = "explorer"
-	findRelations = "relations"
-)
+// FindPane is a pane / searches: what find calls it, the view whose keyboard makes it the pane
+// searched, and its rows as they are now. Name and View are declarations, the same whenever read: a
+// panel's View is its own PanelSpec's, never one looked up.
+type FindPane struct {
+	Name string // "explorer": "find in the explorer", "n and N find again in the explorer"
+	View string // / searches the pane whose view has the keyboard
+	// Rows are the pane's rows as it shows them, the row under its cursor (-1 for none), and how to put
+	// the cursor on row i, the match at col (grapheme columns). The move is bound to this same snapshot,
+	// so a pane whose rows are not plain indexes (the explorer's tree) moves to the row it listed.
+	Rows func() (rows []string, cursor int, moveTo func(row, col int) error)
+}
+
+// Findable is a feature whose pane / searches. The registry takes the panes in the features' order,
+// the page first (the host's own).
+type Findable interface{ FindPane() FindPane }
+
+// findPage is the page's pane: the host's own, which Search › Find in page, the page's marks and Esc
+// name.
+const findPage = "page"
 
 type findState struct {
 	query, target string
@@ -39,14 +51,29 @@ type findState struct {
 	at, total int
 }
 
-// findTarget is the pane with the keyboard: the page, or an open panel.
+// findPanes are the panes find searches, in the registry's order: the page first.
+func (h *Host) findPanes() []FindPane {
+	if h.reg == nil {
+		return nil // a host built without its options (tests)
+	}
+	return h.reg.finds
+}
+
+// findPane is the pane named name.
+func (h *Host) findPane(name string) (FindPane, bool) {
+	i := slices.IndexFunc(h.findPanes(), func(p FindPane) bool { return p.Name == name })
+	if i < 0 {
+		return FindPane{}, false
+	}
+	return h.findPanes()[i], true
+}
+
+// findTarget is the pane with the keyboard, by its name; "" when no pane find searches has it.
 func (h *Host) findTarget() string {
 	app := h.p.App()
-	for _, c := range []struct{ id, target string }{
-		{"editor", findPage}, {h.panelView("explorer"), findExplorer}, {h.panelView(relationsPanelSpec().ID), findRelations},
-	} {
-		if comp, ok := h.p.Find(c.id); ok && app.FocusWithin(comp) {
-			return c.target
+	for _, p := range h.findPanes() {
+		if comp, ok := h.p.Find(p.View); ok && app.FocusWithin(comp) {
+			return p.Name
 		}
 	}
 	return ""
@@ -56,10 +83,22 @@ func (h *Host) findTarget() string {
 func (h *Host) openFind() {
 	target := h.findTarget()
 	if target == "" {
-		h.say("find: put the keyboard in the page, the explorer or the relations first")
+		h.say("find: put the keyboard in " + findPaneList(h.findPanes()) + " first")
 		return
 	}
 	h.askFind(target)
+}
+
+// findPaneList names the panes as the hint does: "the page, the explorer or the relations".
+func findPaneList(panes []FindPane) string {
+	var names []string
+	for _, p := range panes {
+		names = append(names, "the "+p.Name)
+	}
+	if len(names) < 2 {
+		return strings.Join(names, "")
+	}
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
 
 // openFindInPage is Search › Find in page: the page's find, wherever the keyboard is.
@@ -189,24 +228,12 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		h.say("n and N find again in the " + f.target + ": put the keyboard there, or / for a new find")
 		return
 	}
-	var rows []string
-	var at []tuidecl.Index
-	cur := -1
-	switch f.target {
-	case findPage:
-		rows = h.core.Lines()
-		cur, _ = h.core.Line()
-	case findExplorer:
-		rows, at = h.explorer.loaded()
-		for i, ix := range at {
-			if slices.Equal(h.explorer.keys(ix), h.explorer.at) {
-				cur = i
-				break
-			}
-		}
-	case findRelations:
-		rows, cur = h.rel.labels(), h.rel.at
+	pane, ok := h.findPane(f.target)
+	if !ok {
+		h.say("nothing to find again: / asks what to find")
+		return
 	}
+	rows, cur, moveTo := pane.Rows()
 	var hits []int
 	cols := map[int]int{}
 	for i, row := range rows {
@@ -239,21 +266,34 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		}
 	}
 	row := hits[selected]
-	switch f.target {
-	case findPage:
-		h.core.SetLine(row, cols[row])
-		// the match the find is on, highlighted whatever the mode, so it is plain which it is
-		n := len(slices.Collect(tuicore.Graphemes(f.query)))
-		h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: cols[row]}, To: widget.TextPos{Line: row, Col: cols[row] + n}})
-		h.keep(h.p.Call("editor", "forceActiveFocus"))
-	case findExplorer:
-		h.keep(h.explorer.moveTo(at[row]))
-	case findRelations:
-		h.rel.moveTo(row)
-	}
+	h.keep(moveTo(row, cols[row]))
 	f.at, f.total = selected+1, len(hits)
 	h.showFind()
 	h.say(fmt.Sprintf("find %q: %d of %d in the %s", f.query, selected+1, len(hits), f.target))
+}
+
+// pageFind is the page's pane as a feature, the host's own: first among the features, so first in
+// find's order.
+type pageFind struct{ h *Host }
+
+func (pageFind) Name() string                 { return "page find" }
+func (pageFind) State() map[string]any        { return nil }
+func (pageFind) Commands() map[string]Command { return nil }
+func (p pageFind) FindPane() FindPane         { return p.h.pageFindPane() }
+
+// pageFindPane is the page's pane, the host's own: a hit puts the cursor on it, highlights it and
+// gives the page the keyboard.
+func (h *Host) pageFindPane() FindPane {
+	return FindPane{Name: findPage, View: "editor", Rows: func() ([]string, int, func(int, int) error) {
+		cur, _ := h.core.Line()
+		return h.core.Lines(), cur, func(row, col int) error {
+			h.core.SetLine(row, col)
+			// the match the find is on, highlighted whatever the mode, so it is plain which it is
+			n := len(slices.Collect(tuicore.Graphemes(h.find.query)))
+			h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: col}, To: widget.TextPos{Line: row, Col: col + n}})
+			return h.p.Call("editor", "forceActiveFocus")
+		}
+	}}
 }
 
 // clusterMatch is where pattern first appears in line, case-blind, in grapheme columns (what

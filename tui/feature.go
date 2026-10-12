@@ -56,6 +56,7 @@ type registry struct {
 	state     map[string]any
 	handlers  map[string]decl.HandlerFunc
 	picks     map[string]picker // every feature's pickers, which the App.pick* commands reach by name
+	finds     []FindPane        // the panes / searches, in the features' order (find.go)
 	pageShown bool              // a page was shown to the DocWatchers (page.go): the next one closes it first
 	catalog   *catalog          // the user commands: the features' now, Lua's and the plugins' as they come
 	panels    *panelRegistry
@@ -143,8 +144,32 @@ func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, er
 				r.picks[name] = picks[name]
 			}
 		}
+		if p, ok := f.(Findable); ok {
+			pane := p.FindPane()
+			if err := checkFindPane(f, pane); err != nil {
+				return nil, err
+			}
+			for _, name := range []string{"the find pane " + pane.Name, "the find view " + pane.View} {
+				if err := claim(f, name); err != nil {
+					return nil, err
+				}
+			}
+			r.finds = append(r.finds, pane)
+		}
 	}
 	return r, nil
+}
+
+// checkFindPane refuses a pane find could not route to: one without a name, a view or its rows, and
+// a panel feature's whose view is not one of its own panels'.
+func checkFindPane(f Feature, pane FindPane) error {
+	if pane.Name == "" || pane.View == "" || pane.Rows == nil {
+		return fmt.Errorf("tui: %s's find pane needs a name, a view and its rows", f.Name())
+	}
+	if p, ok := f.(Panel); ok && !slices.ContainsFunc(p.Panels(), func(s PanelSpec) bool { return s.View == pane.View }) {
+		return fmt.Errorf("tui: %s finds in %s, which is none of its panels' views", f.Name(), pane.View)
+	}
+	return nil
 }
 
 // registryPicks is the registry's own feature: Picker.qml's handlers, over every feature's picks
@@ -265,7 +290,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own

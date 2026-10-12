@@ -128,7 +128,7 @@ type Host struct {
 	agents    *agents
 	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
-	// the explorer (explorer.go), a feature of its own: find.go finds in its rows
+	// the explorer (explorer.go), a feature of its own: find searches its rows (FindPane)
 	explorer *explorer
 
 	// the AI models dialog (aimodels.go), a feature of its own: the host lists its providers again

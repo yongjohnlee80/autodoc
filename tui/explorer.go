@@ -85,7 +85,7 @@ type explorer struct {
 	model *tuidecl.TreeListModel
 	top   []Workspace         // the workspaces the top level shows
 	paths map[string][]string // by workspace: its files, once listed
-	at    []string            // the row under the cursor, by its keys (find.go reads it)
+	at    []string            // the row under the cursor, by its keys (FindPane reads it)
 	gen   uint64              // the workspace's files last taken from Core.Files, by their Gen
 }
 
@@ -244,6 +244,17 @@ func (e *explorer) loaded() ([]string, []tuidecl.Index) {
 func (e *explorer) moveTo(ix tuidecl.Index) error {
 	e.at = e.keys(ix)
 	return e.c.View(explorerPanelSpec().View, "setCurrentIndex", ix)
+}
+
+// FindPane is the explorer's rows for find: those it has loaded, in the order the tree shows them, a
+// closed folder's loaded rows included. A hit is moved to by the Index it was listed at, revealed, its
+// folders opened.
+func (e *explorer) FindPane() FindPane {
+	return FindPane{Name: "explorer", View: explorerPanelSpec().View, Rows: func() ([]string, int, func(int, int) error) {
+		rows, at := e.loaded()
+		cur := slices.IndexFunc(at, func(ix tuidecl.Index) bool { return slices.Equal(e.keys(ix), e.at) })
+		return rows, cur, func(row, _ int) error { return e.moveTo(at[row]) }
+	}}
 }
 
 func (*explorer) Panels() []PanelSpec {

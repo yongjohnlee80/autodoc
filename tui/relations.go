@@ -145,7 +145,7 @@ type related struct {
 	page Page    // the page shown
 	of   fileRef // the document the rows are of; the zero fileRef when they are of none
 	deep bool    // the drawer shows the second ring (d)
-	at   int     // the drawer's row under its cursor (find.go reads it)
+	at   int     // the drawer's row under its cursor (FindPane reads it)
 	seq  uint64  // numbers the reads: only the latest is shown, and a clear drops any in flight
 }
 
@@ -319,7 +319,14 @@ func (r *related) moveTo(i int) {
 	r.at = i
 }
 
-// labels are the drawer's rows as it shows them (find.go finds in them).
+// FindPane is the drawer's rows for find, as it shows them.
+func (r *related) FindPane() FindPane {
+	return FindPane{Name: "relations", View: relationsPanelSpec().View, Rows: func() ([]string, int, func(int, int) error) {
+		return r.labels(), r.at, func(row, _ int) error { r.moveTo(row); return nil }
+	}}
+}
+
+// labels are the drawer's rows as it shows them.
 func (r *related) labels() []string {
 	var out []string
 	for _, row := range r.rows.All() {
