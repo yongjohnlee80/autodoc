@@ -85,26 +85,7 @@ func explain(t *testing.T, conn dao.DataConn, q dao.QueryInfo, into *planRead) {
 // with EXPLAIN; see the pull request.) A sequential scan that remains is one no index could answer.
 func TestPendingReadsEachRowAboutOnce(t *testing.T) {
 	ctx := context.Background()
-	admin, err := postgres.Open(ctx, dsnBase(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { admin.Close() })
-	u, err := url.Parse(dsnOf(t, admin, scratchName(t, admin, "autodoc_pgstore_")))
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := u.Query()
-	q.Set("enable_seqscan", "off")
-	u.RawQuery = q.Encode()
-	conn, err := postgres.Open(ctx, u.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { conn.Close() })
-	if err := Migrate(ctx, conn); err != nil {
-		t.Fatal(err)
-	}
+	conn := indexedScratch(t)
 	s, err := New(conn, "t")
 	if err != nil {
 		t.Fatal(err)
@@ -229,6 +210,34 @@ func TestPendingReadsEachRowAboutOnce(t *testing.T) {
 	t.Logf("a new document: read %v; scans %v; statements:\n%s", one.rows, one.scans, sqlOf(rec.got))
 }
 
+// indexedScratch is a migrated scratch database on a connection with sequential scans off: a small
+// tenant then gets the plans a large one does, so the rows they read measure an access pattern.
+func indexedScratch(t *testing.T) dao.DataConn {
+	t.Helper()
+	ctx := context.Background()
+	admin, err := postgres.Open(ctx, dsnBase(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { admin.Close() })
+	u, err := url.Parse(dsnOf(t, admin, scratchName(t, admin, "autodoc_pgstore_")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	q.Set("enable_seqscan", "off")
+	u.RawQuery = q.Encode()
+	conn, err := postgres.Open(ctx, u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if err := Migrate(ctx, conn); err != nil {
+		t.Fatal(err)
+	}
+	return conn
+}
+
 func sqlOf(qs []dao.QueryInfo) string {
 	var b strings.Builder
 	for _, q := range qs {
@@ -262,5 +271,68 @@ func TestMigration000003IndexesTheUnreadyDocuments(t *testing.T) {
 	}
 	if got := indexes(); got != "rag_document_unready_id,rag_document_unready_path" {
 		t.Errorf("migrated again: %q", got)
+	}
+}
+
+// pendingRows records the statements Pending runs and the rows they returned.
+type pendingRows struct {
+	dao.NopHook
+	got      []dao.QueryInfo
+	returned int
+}
+
+func (r *pendingRows) BeforeExec(_ context.Context, q *dao.QueryInfo) error {
+	r.got = append(r.got, dao.QueryInfo{Op: q.Op, Table: q.Table, SQL: q.SQL, Args: slices.Clone(q.Args)})
+	return nil
+}
+
+func (r *pendingRows) AfterExec(_ context.Context, _ *dao.QueryInfo, out dao.Outcome) error {
+	r.returned += max(out.Rows, 0)
+	return out.Err
+}
+
+// One unready document of many chunks is read only as far as the limit needs: with a limit of
+// one, Pending's statements read and return a row or two, from the start and resumed part way
+// through the document, never the document's every chunk. The mutant, named here: the unready
+// scan's chunk statement with no LIMIT (every chunk of the document read and sent to Go).
+func TestPendingReadsAManyChunkDocumentOnlyAsFarAsItsLimit(t *testing.T) {
+	ctx := context.Background()
+	conn := indexedScratch(t)
+	s, err := New(conn, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const chunks = 2000
+	big := make([]search.Chunk, chunks)
+	for i := range big {
+		big[i] = search.Chunk{Ord: i, Breadcrumb: "big", Body: fmt.Sprintf("section %d", i)}
+	}
+	if _, err := s.Put(ctx, Document{Path: "big.md", Chunks: big}); err != nil {
+		t.Fatal(err)
+	}
+	exec(t, conn, "ANALYZE rag_document, rag_chunk, rag_embedding")
+	rec := &pendingRows{}
+	pendingHook = rec
+	t.Cleanup(func() { pendingHook = nil })
+	var doc int64
+	for _, after := range []int{-1, 1000} {
+		var from PendingKey
+		if after >= 0 {
+			from = PendingKey{Doc: doc, Ord: after}
+		}
+		rec.got, rec.returned = nil, 0
+		texts, next, err := s.Pending(ctx, PendingQuery{Model: model, After: from, Unready: true, Limit: 1})
+		if err != nil || len(texts) != 1 || next.Ord != after+1 {
+			t.Fatalf("after %d: %d texts, next %+v, %v; want the chunk after it", after, len(texts), next, err)
+		}
+		doc = next.Doc
+		read := newPlanRead()
+		for _, q := range rec.got {
+			explain(t, conn, q, read)
+		}
+		if read.rows["rag_chunk"] > 2 || rec.returned > 3 {
+			t.Errorf("after %d, a limit of one: %v chunk rows read and %d rows returned, of a %d-chunk document; statements:\n%s",
+				after, read.rows["rag_chunk"], rec.returned, chunks, sqlOf(rec.got))
+		}
 	}
 }

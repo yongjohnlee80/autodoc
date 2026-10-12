@@ -135,14 +135,22 @@ func (p *pendingScan) all(ctx context.Context) error {
 		if !p.cur.IsZero() {
 			d = d.WithPredicate(after(p.cur))
 		}
-		rows, err := d.OrderBy(dao.Asc(cByDoc), dao.Asc(cByOrd)).Limit(uint64(pendingPage)).Select(cDoc, cOrd, cHash, cEmb, cCrumb, cBody)
+		page := p.page()
+		rows, err := d.OrderBy(dao.Asc(cByDoc), dao.Asc(cByOrd)).Limit(uint64(page)).Select(cDoc, cOrd, cHash, cEmb, cCrumb, cBody)
 		if err != nil {
 			return err
 		}
-		if p.take(rows) || len(rows) < pendingPage {
+		if p.take(rows) || len(rows) < page {
 			return nil
 		}
 	}
+}
+
+// page is how many chunks the scan's next statement reads: a page, or fewer when fewer texts are
+// still wanted, so a small limit reads few rows. A repeated or skipped text is one fewer taken, and
+// the scan then reads another page for it.
+func (p *pendingScan) page() int {
+	return max(1, min(pendingPage, p.q.Limit-len(p.out)))
 }
 
 // unready scans the chunks of the tenant's unready documents from cur: a page of the documents in
@@ -169,17 +177,25 @@ func (p *pendingScan) unready(ctx context.Context) error {
 		for i, r := range docs {
 			ids[i] = r.ID
 		}
-		c := p.s.rw.chunk.DAO(pendingOpts(ctx)...).With(cTenant, p.s.tenant).
-			WithPredicate(dao.In(qcol(tChunk, string(cDoc)), ids)).WithPredicate(missing(p.q.Model))
-		if !p.cur.IsZero() {
-			c = c.WithPredicate(after(p.cur))
-		}
-		rows, err := c.OrderBy(dao.Asc(cByDoc), dao.Asc(cByOrd)).Select(cDoc, cOrd, cHash, cEmb, cCrumb, cBody)
-		if err != nil {
-			return err
-		}
-		if p.take(rows) {
-			return nil
+		// the documents' pending chunks, a page at a time in (doc, ord) order from cur, so one
+		// document of many chunks is read only as far as the limit needs
+		for {
+			c := p.s.rw.chunk.DAO(pendingOpts(ctx)...).With(cTenant, p.s.tenant).
+				WithPredicate(dao.In(qcol(tChunk, string(cDoc)), ids)).WithPredicate(missing(p.q.Model))
+			if !p.cur.IsZero() {
+				c = c.WithPredicate(after(p.cur))
+			}
+			page := p.page()
+			rows, err := c.OrderBy(dao.Asc(cByDoc), dao.Asc(cByOrd)).Limit(uint64(page)).Select(cDoc, cOrd, cHash, cEmb, cCrumb, cBody)
+			if err != nil {
+				return err
+			}
+			if p.take(rows) {
+				return nil
+			}
+			if len(rows) < page {
+				break
+			}
 		}
 		// every pending chunk of these documents is read: the next page begins after the last
 		p.cur = PendingKey{Doc: docs[len(docs)-1].ID, Ord: maxOrd}
