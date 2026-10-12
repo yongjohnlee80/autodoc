@@ -58,8 +58,9 @@ func document(d index.Doc) pgstore.Document {
 		}
 	}
 	out.Chunks = make([]search.Chunk, len(d.Chunks))
+	out.Kinds = make([]string, len(d.Chunks))
 	for i, c := range d.Chunks {
-		out.Chunks[i] = c.Chunk
+		out.Chunks[i], out.Kinds[i] = c.Chunk, c.Kind
 	}
 	return out
 }

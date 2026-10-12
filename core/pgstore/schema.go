@@ -79,6 +79,7 @@ type chunkRow struct {
 	Title, Tags        string // the document's, on every chunk: lexical ranking weighs them
 	ByteStart, ByteEnd int
 	TextHash           []byte
+	Kind               string // ChunkSection or ChunkAbstract (000002)
 	Path               string // joined from the document
 	Generation         int64  // joined from the document
 	DocReady           bool   // joined from the document
@@ -107,6 +108,7 @@ const (
 	cStart  chunkField  = "byte_start"
 	cEnd    chunkField  = "byte_end"
 	cHash   chunkField  = "text_hash"
+	cKind   chunkField  = "kind"
 	cPath   chunkField  = "doc_path"
 	cGen    chunkField  = "doc_generation"
 	cReady  chunkField  = "doc_ready"
@@ -154,6 +156,7 @@ func newChunkSchema(conn dao.DataConn) *chunkSchema {
 			cStart:  {Expr: dao.T(tChunk, cStart), Scan: func(r *chunkRow) any { return &r.ByteStart }, Value: func(r *chunkRow) any { return r.ByteStart }},
 			cEnd:    {Expr: dao.T(tChunk, cEnd), Scan: func(r *chunkRow) any { return &r.ByteEnd }, Value: func(r *chunkRow) any { return r.ByteEnd }},
 			cHash:   {Expr: dao.T(tChunk, cHash), Scan: func(r *chunkRow) any { return &r.TextHash }, Value: func(r *chunkRow) any { return r.TextHash }},
+			cKind:   {Expr: dao.T(tChunk, cKind), Scan: func(r *chunkRow) any { return &r.Kind }, Value: func(r *chunkRow) any { return r.Kind }},
 			cPath:   {Expr: dao.T(tDoc, "path"), Scan: func(r *chunkRow) any { return &r.Path }, Join: joinDoc, ReadOnly: true},
 			cGen:    {Expr: dao.T(tDoc, "generation"), Scan: func(r *chunkRow) any { return &r.Generation }, Join: joinDoc, ReadOnly: true},
 			cReady:  {Expr: dao.T(tDoc, "semantic_ready"), Scan: func(r *chunkRow) any { return &r.DocReady }, Join: joinDoc, ReadOnly: true},

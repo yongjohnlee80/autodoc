@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/search"
 
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/index/writertest"
@@ -28,6 +29,40 @@ func TestThePostgresWriterConforms(t *testing.T) {
 				return readKept(ctx, conn, path)
 			}
 		}})
+}
+
+// A chunk's kind reaches pgstore: the abstract is kept as one, so a sections-only search leaves it
+// out. The mutant, named here: document() not passing the kinds keeps every chunk a section.
+func TestTheWriterKeepsEachChunksKind(t *testing.T) {
+	ctx := context.Background()
+	conn := pgtest.Scratch(t, pgstore.Migrate)
+	s, err := pgstore.New(conn, "tenant")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := pgwriter.New(s).Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec := search.Chunk{Ord: 0, Breadcrumb: "a", Body: "a section"}
+	abs := search.Chunk{Ord: 1, Breadcrumb: "a", Body: "the abstract"}
+	err = b.Put(ctx, index.Doc{Path: "a.md", Chunks: []index.DocChunk{{Chunk: sec, Kind: index.ChunkSection}, {Chunk: abs, Kind: index.ChunkAbstract}}})
+	if err != nil {
+		_ = b.Rollback()
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := conn.QueryContext(ctx, "SELECT string_agg(kind, ',' ORDER BY ord) FROM rag_chunk WHERE tenant = 'tenant'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got string
+	if !rows.Next() || rows.Scan(&got) != nil || got != "section,abstract" {
+		t.Errorf("the kinds kept: %q, want section,abstract", got)
+	}
 }
 
 // readKept reads back what pgstore keeps of path, with SQL of the test's own.

@@ -89,6 +89,36 @@ type Document struct {
 	Facets      map[string][]string // field → values
 	Links       []string            // the paths it links to; a repeat is stored once
 	Chunks      []search.Chunk      // in order; Ord is the position; Embed is the text its vector is made of
+	// Kinds are the chunks' kinds, by position: none, or one per chunk. A missing or "" kind is
+	// ChunkSection.
+	Kinds []string
+}
+
+// The kinds of chunk (000002): a document's section, or its abstract. WithSectionsOnly leaves the
+// abstracts out of a search.
+const (
+	ChunkSection  = "section"
+	ChunkAbstract = "abstract"
+)
+
+// kindOf is chunk i's kind in d: ChunkSection unless d says otherwise.
+func (d Document) kindOf(i int) string {
+	if i < len(d.Kinds) && d.Kinds[i] != "" {
+		return d.Kinds[i]
+	}
+	return ChunkSection
+}
+
+// check refuses a document no write can keep: one with no path, or kinds that do not match its
+// chunks one for one.
+func (d Document) check() error {
+	if d.Path == "" {
+		return errs.Wrap(errs.ErrInvalidArgument, "pgstore: a document has no path")
+	}
+	if len(d.Kinds) != 0 && len(d.Kinds) != len(d.Chunks) {
+		return errs.Wrap(errs.ErrInvalidArgument, "pgstore: %s has %d chunks and %d kinds", d.Path, len(d.Chunks), len(d.Kinds))
+	}
+	return nil
 }
 
 // DocInfo is one stored document as a consumer's revalidation reads it: the path with the source
@@ -233,8 +263,8 @@ const putRetries = 8
 // condition, two Puts reading generation 1 could both write 2 under READ COMMITTED, and the
 // second's chunk replacement would answer for the first's text.
 func (s *Store) Put(ctx context.Context, d Document) (int64, error) {
-	if d.Path == "" {
-		return 0, errs.Wrap(errs.ErrInvalidArgument, "pgstore: a document has no path")
+	if err := d.check(); err != nil {
+		return 0, err
 	}
 	tags, facets := nonNil(d.Tags), nonNil(facetPairs(d.Facets))
 	tagText := strings.Join(d.Tags, " ")
@@ -330,7 +360,7 @@ func (s *Store) putIn(ctx context.Context, tx *dao.Transaction, d Document, tags
 				h := c.TextHash()
 				b.Add(map[chunkField]any{cTenant: s.tenant, cDoc: id, cOrd: i, cCrumb: c.Breadcrumb, cBody: c.Body,
 					cEmb: c.Embed, cTitle: d.Title, cTags: tagText,
-					cStart: c.ByteStart, cEnd: c.ByteEnd, cHash: h[:]})
+					cStart: c.ByteStart, cEnd: c.ByteEnd, cHash: h[:], cKind: d.kindOf(i)})
 			}
 			if err := b.Flush(); err != nil {
 				return err

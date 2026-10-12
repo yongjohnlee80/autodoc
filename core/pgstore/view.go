@@ -32,6 +32,25 @@ func (v *View) chunks(ctx context.Context) dao.DAO[*chunkRow, chunkField, int64]
 	return v.s.ro.chunk.On(v.tx, dao.WithQueryContext(ctx)).With(cTenant, v.s.tenant)
 }
 
+// sectionsOnlyKey marks a context whose chunk retrievals leave the abstracts out.
+type sectionsOnlyKey struct{}
+
+// WithSectionsOnly is ctx with Lexical and Semantic answering sections only: a chunk whose kind is
+// ChunkAbstract is left out, in the same WHERE as the match, so before the rank and the limit. It
+// is the local store's "abstract chunk off" for a Postgres index.
+func WithSectionsOnly(ctx context.Context) context.Context {
+	return context.WithValue(ctx, sectionsOnlyKey{}, true)
+}
+
+// retrieved is the chunks a retrieval reads: the tenant's, and its sections only when ctx says so.
+func (v *View) retrieved(ctx context.Context) dao.DAO[*chunkRow, chunkField, int64] {
+	d := v.chunks(ctx)
+	if on, _ := ctx.Value(sectionsOnlyKey{}).(bool); on {
+		d = d.With(cKind, ChunkSection)
+	}
+	return d
+}
+
 func (v *View) docs(ctx context.Context) dao.DAO[*docRow, docField, int64] {
 	return v.s.ro.doc.On(v.tx, dao.WithQueryContext(ctx)).With(dTenant, v.s.tenant)
 }
@@ -56,7 +75,7 @@ func (v *View) Lexical(ctx context.Context, terms []search.Term, f search.Filter
 	if err != nil {
 		return nil, err
 	}
-	d := v.chunks(ctx).Join(joinDoc).WithPredicate(dao.Match(tsv(), q))
+	d := v.retrieved(ctx).Join(joinDoc).WithPredicate(dao.Match(tsv(), q))
 	for _, p := range filters(f) {
 		d = d.WithPredicate(p)
 	}
@@ -98,7 +117,7 @@ func (v *View) Semantic(ctx context.Context, model string, vec []float32, f sear
 	if n <= 0 {
 		return nil, nil
 	}
-	d := v.chunks(ctx).Join(joinDoc, joinEmb).
+	d := v.retrieved(ctx).Join(joinDoc, joinEmb).
 		WithPredicate(dao.Eq(qcol(tEmb, "model"), model)).
 		WithPredicate(dao.Eq(qcol(tDoc, string(dReady)), true))
 	for _, p := range filters(f) {

@@ -540,9 +540,18 @@ func TestMigrateRecordsAndRefusesAnOldLedger(t *testing.T) {
 	if err = Migrate(ctx, conn); err != nil {
 		t.Fatalf("second migrate: %v", err)
 	}
-	n := ledgerRows(t, conn)
-	if n != 1 {
-		t.Errorf("the ledger holds %d rows, want 1", n)
+	all, err := deploy.Load(migrations, dao.DialectPostgres)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updates := 0
+	for _, s := range all {
+		if s.Kind == deploy.Update {
+			updates++
+		}
+	}
+	if n := ledgerRows(t, conn); n != updates || n < 2 {
+		t.Errorf("the ledger holds %d rows, want one per update script (%d)", n, updates)
 	}
 
 	// a destination that holds the deleted scripts: the old ledger names a script this binary does

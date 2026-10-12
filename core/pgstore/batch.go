@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/golib/dao"
-	"github.com/yongjohnlee80/golib/errs"
 )
 
 // Batch is documents written in one transaction: kept together, or none of them. A Put that loses
@@ -28,8 +27,8 @@ func (s *Store) Begin(ctx context.Context) *Batch { return &Batch{s: s, tx: dao.
 
 // Put writes d inside the batch, as Store.Put does alone. It returns the document's id.
 func (b *Batch) Put(ctx context.Context, d Document) (int64, error) {
-	if d.Path == "" {
-		return 0, errs.Wrap(errs.ErrInvalidArgument, "pgstore: a document has no path")
+	if err := d.check(); err != nil {
+		return 0, err
 	}
 	tags, facets := nonNil(d.Tags), nonNil(facetPairs(d.Facets))
 	tagText := strings.Join(d.Tags, " ")
