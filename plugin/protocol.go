@@ -5,7 +5,7 @@
 // dialog over the page and fills it with the plugin's frames; every key but Esc goes to the plugin,
 // and Esc closes it. A non-modal one (a card) sits beside the page and takes the keys only when
 // focused; a service has no surface at all. The two speak msgpack-RPC NOTIFICATIONS, both ways, over
-// the plugin's stdin and stdout — nothing waits for an answer:
+// the plugin's stdin and stdout — never a request, which golib's RPC client cannot take:
 //
 //	host → plugin   plugin.open {protocol, width, height, theme}   the first, once; a service's has no size
 //	                plugin.key {key, text, ctrl, alt, shift}
@@ -16,14 +16,26 @@
 //	                plugin.document {path, workspace, text,         2: the open note, as [feed] declares
 //	                  cursor, selection, version, too_large}
 //	                plugin.command {id}                             2: one of the manifest's [[commands]]
+//	                plugin.result {call, ok, error}                 3: the answer to host.call
 //	                plugin.close {}                                 the last
 //	plugin → host   host.ready {protocol}                           the answer to plugin.open
 //	                host.frame {rows}                               the whole dialog, any time
 //	                host.title {title}
+//	                host.call {call, id, args}                      3: run a command of AutoDoc's catalog
 //	                host.close {}
 //
-// The notifications marked 2 are protocol 2's. A host sends them only to a plugin whose manifest
-// says protocol = 2 and declares them, so a protocol-1 plugin never sees one.
+// The notifications marked 2 are protocol 2's, those marked 3 protocol 3's. A host sends them only
+// to a plugin whose manifest says that protocol (or a later one) and declares them, so a protocol-1
+// plugin never sees one.
+//
+// host.call and plugin.result are a request and its answer made of two notifications, matched by
+// call, a number the plugin chooses and does not reuse while it waits. The host runs only the
+// command ids the manifest's calls = [...] declares, and answers every call it accepts exactly once:
+// ok, or error "<code> <message>" with the code refused (an id not declared, a plugin's command, or
+// more than MaxPendingCalls waiting: "refused busy"), unknown (no command has the id) or failed
+// (the command's own error). A call reusing a number still waiting is a protocol violation: the
+// host logs it, runs nothing, and sends no result for it, so the waiting call's is the only one
+// with that number. Peer.Call does all of this for a plugin in Go.
 //
 // A plugin in Go writes a [Handler] and calls [Serve]; one in another language speaks the table
 // above. The frame's colours are the themes' vocabulary: "default", an ANSI name ("brightwhite"), or
@@ -33,6 +45,9 @@ package plugin
 import (
 	"errors"
 	"fmt"
+	"math"
+	"strings"
+	"time"
 )
 
 // The plugin protocol's versions this SDK speaks. A host speaks to each plugin the one its manifest
@@ -41,7 +56,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 2
+	Protocol    = 3
 )
 
 // The notifications the host sends.
@@ -61,6 +76,8 @@ const (
 	MethodDocument = "plugin.document"
 	// MethodCommand is one of the manifest's [[commands]], chosen.
 	MethodCommand = "plugin.command"
+	// MethodResult is the host's answer to a host.call, by its call number.
+	MethodResult = "plugin.result"
 )
 
 // The notifications the plugin sends.
@@ -69,6 +86,24 @@ const (
 	MethodFrame     = "host.frame"
 	MethodTitle     = "host.title"
 	MethodHostClose = "host.close"
+	// MethodCall asks the host to run a command of its catalog, one the manifest's calls declares.
+	MethodCall = "host.call"
+)
+
+// The bounds of host.call (protocol 3).
+const (
+	// MaxPendingCalls is how many of a plugin's calls the host keeps waiting; one more is answered
+	// "refused busy".
+	MaxPendingCalls = 64
+	// CallTimeout is how long Peer.Call waits for the host's answer.
+	CallTimeout = 10 * time.Second
+)
+
+// The codes of a plugin.result's error.
+const (
+	CallRefused = "refused" // not declared, a plugin's command, or too many waiting (busy)
+	CallUnknown = "unknown" // no command has the id
+	CallFailed  = "failed"  // the command's own error
 )
 
 // Limits on what the host reads of a frame: past them it is clipped.
@@ -235,6 +270,106 @@ func one(m map[string]any) []any { return []any{m} }
 
 // ErrParams is a notification whose parameters are not the protocol's.
 var ErrParams = errors.New("plugin: malformed parameters")
+
+// Call is host.call: its number, the command's id and its arguments.
+type Call struct {
+	Num  int64
+	ID   string
+	Args []string
+}
+
+// Result is plugin.result: the call it answers, and whether the command ran; Error is
+// "<code> <message>" when it did not.
+type Result struct {
+	Num   int64
+	OK    bool
+	Error string
+}
+
+// CallError is a call the host did not run, or whose command failed: its code (CallRefused,
+// CallUnknown, CallFailed) and why.
+type CallError struct{ Code, Message string }
+
+func (e *CallError) Error() string { return strings.TrimSpace(e.Code + " " + e.Message) }
+
+// callError reads a plugin.result's error.
+func callError(s string) *CallError {
+	code, msg, _ := strings.Cut(s, " ")
+	return &CallError{Code: code, Message: msg}
+}
+
+// CallParams are host.call's.
+func CallParams(c Call) []any {
+	args := make([]any, len(c.Args))
+	for i, a := range c.Args {
+		args[i] = a
+	}
+	return one(map[string]any{"call": c.Num, "id": c.ID, "args": args})
+}
+
+// ResultParams are plugin.result's; error only when it did not run.
+func ResultParams(r Result) []any {
+	m := map[string]any{"call": r.Num, "ok": r.OK}
+	if !r.OK {
+		m["error"] = r.Error
+	}
+	return one(m)
+}
+
+// callNum is a call number: a positive whole number.
+func callNum(m map[string]any) (int64, bool) {
+	switch n := m["call"].(type) {
+	case int64:
+		return n, n > 0
+	case uint64:
+		return int64(n), n > 0 && n <= math.MaxInt64
+	case int:
+		return int64(n), n > 0
+	}
+	return 0, false
+}
+
+// ReadCall reads host.call. Its Num is set whenever the call number is readable, even when the rest
+// is not, so a host can answer a malformed call by its number.
+func ReadCall(params []any) (Call, error) {
+	m, err := arg(params)
+	if err != nil {
+		return Call{}, err
+	}
+	n, ok := callNum(m)
+	if !ok {
+		return Call{}, fmt.Errorf("%w: host.call wants a call number, a positive whole number", ErrParams)
+	}
+	c := Call{Num: n, ID: str(m, "id")}
+	if c.ID == "" {
+		return c, fmt.Errorf("%w: host.call wants id", ErrParams)
+	}
+	raw, ok := m["args"].([]any)
+	if !ok && m["args"] != nil {
+		return c, fmt.Errorf("%w: host.call's args is a list of strings", ErrParams)
+	}
+	for _, a := range raw {
+		s, ok := a.(string)
+		if !ok {
+			return c, fmt.Errorf("%w: host.call's args is a list of strings", ErrParams)
+		}
+		c.Args = append(c.Args, s)
+	}
+	return c, nil
+}
+
+// ReadResult reads plugin.result.
+func ReadResult(params []any) (Result, error) {
+	m, err := arg(params)
+	if err != nil {
+		return Result{}, err
+	}
+	n, ok := callNum(m)
+	if !ok {
+		return Result{}, fmt.Errorf("%w: plugin.result wants a call number", ErrParams)
+	}
+	return Result{Num: n, OK: flag(m, "ok"), Error: str(m, "error")}, nil
+}
 
 // arg is a notification's one map.
 func arg(params []any) (map[string]any, error) {

@@ -56,8 +56,8 @@ const WriteTimeout = 2 * time.Second
 // Incoming ones are passed to on, one at a time in arrival order, from a goroutine of the link's.
 // A burst larger than the link's queue (a paste of keys, say) waits for on to take them rather
 // than failing the link, so on must not wait on the link itself: it never Calls, as the protocol
-// has only notifications, and it should hand each one on quickly, as the peer's writes slow to its
-// pace. Notify is safe from any goroutine.
+// has only notifications (host.call and plugin.result included), and it should hand each one on
+// quickly, as the peer's writes slow to its pace. Notify is safe from any goroutine.
 type Link struct{ c *golibrpc.Client }
 
 // NewLink starts the link over conn. It owns conn from here: Close closes it.

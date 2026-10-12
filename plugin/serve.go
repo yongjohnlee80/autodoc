@@ -9,11 +9,14 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 // Handler is a dialog plugin. Serve calls its methods one at a time, in the order the host sent
 // them, on one goroutine of its own. A plugin with a clock of its own (a game's gravity) runs it on
-// another goroutine and sends through the Peer, which is safe for concurrent use.
+// another goroutine and sends through the Peer, which is safe for concurrent use. A method may
+// Peer.Call: the host's answer never waits behind it.
 type Handler interface {
 	// Open is the dialog opened: its size inside the border, and the theme. p sends frames.
 	Open(p *Peer, o Open)
@@ -59,8 +62,120 @@ func (Base) Close()           {}
 
 // Peer is the host, as a plugin sends to it.
 type Peer struct {
-	ctx  context.Context
-	link *Link
+	ctx      context.Context
+	link     *Link
+	calls    *pendingCalls
+	protocol atomic.Int64 // plugin.open's, once opened
+}
+
+// The errors of Peer.Call besides the host's own answer (a *CallError).
+var (
+	// ErrClosed is a call made, or waiting, when the link is gone.
+	ErrClosed = errors.New("plugin: the link to the host is closed")
+	// ErrCallTimeout is a call the host did not answer within CallTimeout. Its answer, if it comes,
+	// is dropped.
+	ErrCallTimeout = errors.New("plugin: the host did not answer the call in time")
+	// ErrNoCalls is a call to a host that opened the plugin at a protocol before 3, which has no
+	// host.call.
+	ErrNoCalls = errors.New("plugin: the host speaks a protocol before 3, without host.call")
+)
+
+// callTimeout is CallTimeout, which a test shortens.
+var callTimeout = CallTimeout
+
+// Call asks the host to run a command of AutoDoc's catalog by its id, with args (protocol 3): one
+// of the ids the manifest's calls = [...] declares. It waits for the host's answer, at most
+// CallTimeout, and returns true, or false and why: a *CallError (refused, unknown, failed), or
+// ErrCallTimeout, ErrClosed or ErrNoCalls. Each call has a number of its own, never one still
+// waiting. It is safe from any goroutine, the Handler's own methods included: the answer is taken
+// off the link as it arrives, never queued behind the method that waits for it.
+func (p *Peer) Call(id string, args ...string) (bool, error) {
+	if p.protocol.Load() < 3 {
+		return false, ErrNoCalls
+	}
+	n, answer, err := p.calls.begin()
+	if err != nil {
+		return false, err
+	}
+	if err := p.link.Notify(p.ctx, MethodCall, CallParams(Call{Num: n, ID: id, Args: args})); err != nil {
+		p.calls.cancel(n)
+		return false, fmt.Errorf("%w: %w", ErrClosed, err)
+	}
+	t := time.NewTimer(callTimeout)
+	defer t.Stop()
+	select {
+	case r := <-answer:
+		if r.OK {
+			return true, nil
+		}
+		return false, callError(r.Error)
+	case <-t.C:
+		p.calls.cancel(n)
+		return false, ErrCallTimeout
+	case <-p.calls.done:
+		return false, ErrClosed
+	}
+}
+
+// pendingCalls are a Peer's calls waiting for their answers, by number. The link's own goroutine
+// resolves them, before the Handler's queue, so a Handler method waiting on one is never behind
+// its answer.
+type pendingCalls struct {
+	mu      sync.Mutex
+	next    int64
+	waiting map[int64]chan Result
+	closed  bool
+	done    chan struct{} // closed with the link: every waiting call fails
+}
+
+func newPendingCalls() *pendingCalls {
+	return &pendingCalls{waiting: map[int64]chan Result{}, done: make(chan struct{})}
+}
+
+// begin is a new call: its number, never one waiting, and where its answer comes.
+func (c *pendingCalls) begin() (int64, chan Result, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return 0, nil, ErrClosed
+	}
+	c.next++
+	ch := make(chan Result, 1)
+	c.waiting[c.next] = ch
+	return c.next, ch, nil
+}
+
+// resolve hands a plugin.result to its call; one for no call waiting (late, or never asked) is
+// dropped.
+func (c *pendingCalls) resolve(params []any) {
+	r, err := ReadResult(params)
+	if err != nil {
+		return
+	}
+	c.mu.Lock()
+	ch := c.waiting[r.Num]
+	delete(c.waiting, r.Num)
+	c.mu.Unlock()
+	if ch != nil {
+		ch <- r
+	}
+}
+
+// cancel forgets a call no longer waiting.
+func (c *pendingCalls) cancel(n int64) {
+	c.mu.Lock()
+	delete(c.waiting, n)
+	c.mu.Unlock()
+}
+
+// close fails every call waiting, and every call after.
+func (c *pendingCalls) close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed {
+		c.closed = true
+		close(c.done)
+	}
 }
 
 // Frame sends f, the whole dialog.
@@ -89,18 +204,27 @@ func Serve(ctx context.Context, h Handler) error {
 func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	q := newQueue()
-	link, err := NewLink(ctx, conn, q.push)
+	q, calls := newQueue(), newPendingCalls()
+	// plugin.result goes straight to its call, every other notification to the Handler's queue
+	link, err := NewLink(ctx, conn, func(method string, params []any) {
+		if method == MethodResult {
+			calls.resolve(params)
+			return
+		}
+		q.push(method, params)
+	})
 	if err != nil {
 		return err
 	}
 	defer link.Close()
-	peer := &Peer{ctx: ctx, link: link}
+	defer calls.close()
+	peer := &Peer{ctx: ctx, link: link, calls: calls}
 	go func() {
 		select {
 		case <-link.Done():
 		case <-ctx.Done():
 		}
+		calls.close()
 		q.end()
 	}()
 
@@ -133,6 +257,7 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 			}
 			if speaks && !opened {
 				opened = true
+				peer.protocol.Store(int64(o.Protocol))
 				h.Open(peer, o)
 			}
 		case MethodKey:

@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -272,14 +273,14 @@ func TestThePeerSendsFramesTitlesAndClose(t *testing.T) {
 	}
 }
 
-// TestServeAnswersEachProtocolInItsRange: a host speaking 1 (a 0209-era manifest) or 2 is answered
-// with that same protocol, and the Handler opens; one below or above the range is told the newest,
-// and nothing opens.
+// TestServeAnswersEachProtocolInItsRange: a host speaking 1 (a 0209-era manifest), 2 or 3 is
+// answered with that same protocol, and the Handler opens; one below or above the range is told the
+// newest, and nothing opens.
 func TestServeAnswersEachProtocolInItsRange(t *testing.T) {
 	for _, c := range []struct {
 		protocol, answer int
 		opens            bool
-	}{{1, 1, true}, {2, 2, true}, {0, Protocol, false}, {3, Protocol, false}} {
+	}{{1, 1, true}, {2, 2, true}, {3, 3, true}, {0, Protocol, false}, {4, Protocol, false}} {
 		r := &recorder{}
 		hs := start(t, r)
 		hs.send(t, MethodOpen, OpenParams(Open{Protocol: c.protocol, Width: 40, Height: 20}))
@@ -456,5 +457,235 @@ func TestADocumentIsBoundedByItsEncoding(t *testing.T) {
 		"document notes/a.md v4 0 bytes", "command after-the-large-one", "close"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("the service's calls:\n got %q\nwant %q", got, want)
+	}
+}
+
+// caller is a Handler that calls the host from its own methods: Key and Command call the id they
+// are given, as a plugin's handlers would, and write down the answer.
+type caller struct {
+	service
+	peer   *Peer
+	opened chan struct{} // closed once peer is set
+}
+
+func newCaller() *caller { return &caller{opened: make(chan struct{})} }
+
+func (c *caller) Open(p *Peer, o Open) { c.peer = p; c.service.Open(p, o); close(c.opened) }
+func (c *caller) Key(k Key)            { c.call(k.Key) }
+func (c *caller) Command(id string)    { c.call(id) }
+func (c *caller) call(id string) {
+	ok, err := c.peer.Call(id, "a", "b")
+	c.rec.add(fmt.Sprintf("%s %v %v", id, ok, err))
+}
+
+// opener is the Peer, once Open has been called.
+func (c *caller) opener(t *testing.T) *Peer {
+	t.Helper()
+	select {
+	case <-c.opened:
+		return c.peer
+	case <-time.After(5 * time.Second):
+		t.Fatal("never opened")
+	}
+	return nil
+}
+
+// nextCall is the next host.call the plugin sent.
+func (hs *host) nextCall(t *testing.T) Call {
+	t.Helper()
+	n := hs.next(t)
+	c, err := ReadCall(n.params)
+	if n.method != MethodCall || err != nil {
+		t.Fatalf("got %s (%v), want a host.call", n.method, err)
+	}
+	return c
+}
+
+// waitCalls waits until the recorder has n calls written down.
+func waitCalls(t *testing.T, r *recorder, n int) []string {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); len(r.all()) < n; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("waited for %d calls: %q", n, r.all())
+		}
+	}
+	return r.all()
+}
+
+// TestACallFromAHandlerIsAnswered (ADR 1791762474 §4.5, §5.7): Peer.Call from inside Key and
+// Command, the Handler's own queue, gets the host's answer: plugin.result is routed by the link,
+// never queued behind the method waiting for it. The host's error comes back as a *CallError.
+func TestACallFromAHandlerIsAnswered(t *testing.T) {
+	c := newCaller()
+	hs := start(t, c)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 3}))
+	hs.next(t)
+	hs.send(t, MethodKey, KeyParams(Key{Key: "todos.open"}))
+	call := hs.nextCall(t)
+	if call.ID != "todos.open" || !reflect.DeepEqual(call.Args, []string{"a", "b"}) || call.Num <= 0 {
+		t.Fatalf("the call: %+v", call)
+	}
+	hs.send(t, MethodResult, ResultParams(Result{Num: call.Num, OK: true}))
+	hs.send(t, MethodCommand, CommandParams("lua.x"))
+	call = hs.nextCall(t)
+	hs.send(t, MethodResult, ResultParams(Result{Num: call.Num, Error: CallRefused + " lua.x is not declared"}))
+	got := waitCalls(t, &c.rec, 3)
+	if want := []string{"open 0x0  ", "todos.open true <nil>", "lua.x false refused lua.x is not declared"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("the answers:\n got %q\nwant %q", got, want)
+	}
+}
+
+// TestConcurrentCallsEachGetTheirOwnAnswer: calls in flight together have numbers of their own,
+// and each gets its own answer, whatever order the host answers in.
+func TestConcurrentCallsEachGetTheirOwnAnswer(t *testing.T) {
+	c := newCaller()
+	hs := start(t, c)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 3}))
+	hs.next(t)
+	const n = 5
+	peer := c.opener(t)
+	got := make(chan string, n)
+	for i := range n {
+		go func() {
+			id := fmt.Sprintf("x.%d", i)
+			_, err := peer.Call(id)
+			got <- id + " " + err.Error()
+		}()
+	}
+	var calls []Call
+	nums := map[int64]bool{}
+	for range n {
+		call := hs.nextCall(t)
+		if nums[call.Num] {
+			t.Fatalf("the number %d twice", call.Num)
+		}
+		nums[call.Num] = true
+		calls = append(calls, call)
+	}
+	for i := len(calls) - 1; i >= 0; i-- { // answered last first
+		hs.send(t, MethodResult, ResultParams(Result{Num: calls[i].Num, Error: CallUnknown + " " + calls[i].ID}))
+	}
+	for range n {
+		select {
+		case s := <-got:
+			id, rest, _ := strings.Cut(s, " ")
+			if rest != CallUnknown+" "+id {
+				t.Errorf("a call got another's answer: %q", s)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("a call was never answered")
+		}
+	}
+}
+
+// TestACallTimesOutAndItsLateAnswerIsDropped: a call the host does not answer fails at the bound;
+// its answer, arriving after, is dropped, and the next call gets its own. CallTimeout is 10 s.
+func TestACallTimesOutAndItsLateAnswerIsDropped(t *testing.T) {
+	if CallTimeout != 10*time.Second {
+		t.Fatalf("CallTimeout is %s", CallTimeout)
+	}
+	defer func(d time.Duration) { callTimeout = d }(callTimeout)
+	callTimeout = 50 * time.Millisecond
+	c := newCaller()
+	hs := start(t, c)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 3}))
+	hs.next(t)
+	hs.send(t, MethodCommand, CommandParams("slow"))
+	first := hs.nextCall(t)
+	waitCalls(t, &c.rec, 2) // timed out
+	hs.send(t, MethodResult, ResultParams(Result{Num: first.Num, Error: CallFailed + " too late"}))
+	callTimeout = 5 * time.Second
+	hs.send(t, MethodCommand, CommandParams("next"))
+	second := hs.nextCall(t)
+	hs.send(t, MethodResult, ResultParams(Result{Num: second.Num, OK: true}))
+	got := waitCalls(t, &c.rec, 3)
+	if want := []string{"open 0x0  ", "slow false " + ErrCallTimeout.Error(), "next true <nil>"}; !reflect.DeepEqual(got, want) || second.Num == first.Num {
+		t.Fatalf("the answers: %q (numbers %d, %d)", got, first.Num, second.Num)
+	}
+}
+
+// TestClosingFailsTheWaitingCalls: the host gone, a call waiting fails with ErrClosed, and so does
+// one made after. A host before protocol 3 has no host.call: a call fails at once, unsent.
+func TestClosingFailsTheWaitingCalls(t *testing.T) {
+	c := newCaller()
+	hs := start(t, c)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 3}))
+	hs.next(t)
+	hs.send(t, MethodCommand, CommandParams("waits"))
+	hs.nextCall(t)
+	hs.link.Close()
+	if err := hs.served(t); err != nil {
+		t.Fatal(err)
+	}
+	got := waitCalls(t, &c.rec, 3)
+	if got[1] != "waits false "+ErrClosed.Error() {
+		t.Fatalf("the waiting call: %q", got)
+	}
+	if ok, err := c.opener(t).Call("after"); ok || !errors.Is(err, ErrClosed) {
+		t.Fatalf("a call after the close: %v %v", ok, err)
+	}
+
+	old := newCaller()
+	hs = start(t, old)
+	hs.send(t, MethodOpen, OpenParams(Open{Protocol: 2}))
+	hs.next(t)
+	hs.send(t, MethodCommand, CommandParams("x"))
+	hs.send(t, MethodClose, EmptyParams())
+	if err := hs.served(t); err != nil {
+		t.Fatal(err)
+	}
+	if got := old.rec.all(); !reflect.DeepEqual(got, []string{"open 0x0  ", "x false " + ErrNoCalls.Error(), "close"}) {
+		t.Fatalf("a call at protocol 2: %q", got)
+	}
+	select {
+	case n := <-hs.got:
+		t.Fatalf("a protocol-2 call was sent: %s", n.method)
+	default:
+	}
+}
+
+// TestCallsAndResultsReadAsTheProtocolSays: the frames round-trip, a malformed one is refused with
+// its number kept when it is readable, and a result for no call waiting is dropped.
+func TestCallsAndResultsReadAsTheProtocolSays(t *testing.T) {
+	c, err := ReadCall(CallParams(Call{Num: 7, ID: "todos.open", Args: []string{"x"}}))
+	if err != nil || !reflect.DeepEqual(c, Call{Num: 7, ID: "todos.open", Args: []string{"x"}}) {
+		t.Fatalf("host.call: %+v %v", c, err)
+	}
+	if c, err := ReadCall(one(map[string]any{"call": uint64(3), "id": "a.b"})); err != nil || c.Num != 3 || c.Args != nil {
+		t.Fatalf("no args: %+v %v", c, err)
+	}
+	for name, m := range map[string]map[string]any{
+		"no number": {"id": "a.b"}, "number 0": {"call": int64(0), "id": "a.b"}, "a string number": {"call": "1"},
+	} {
+		if c, err := ReadCall(one(m)); err == nil || c.Num != 0 {
+			t.Errorf("%s: %+v %v", name, c, err)
+		}
+	}
+	for name, m := range map[string]map[string]any{
+		"no id": {"call": int64(4)}, "args not a list": {"call": int64(4), "id": "a.b", "args": "x"},
+		"an arg not a string": {"call": int64(4), "id": "a.b", "args": []any{int64(1)}},
+	} {
+		if c, err := ReadCall(one(m)); err == nil || c.Num != 4 {
+			t.Errorf("%s: %+v %v, want refused with its number", name, c, err)
+		}
+	}
+	r, err := ReadResult(ResultParams(Result{Num: 9, Error: "refused busy"}))
+	if err != nil || !reflect.DeepEqual(r, Result{Num: 9, Error: "refused busy"}) {
+		t.Fatalf("plugin.result: %+v %v", r, err)
+	}
+	if _, err := ReadResult(one(map[string]any{"ok": true})); err == nil {
+		t.Error("a result with no number was read")
+	}
+	if _, err := ReadCall(nil); err == nil {
+		t.Error("no params read as a call")
+	}
+	if _, err := ReadResult(nil); err == nil {
+		t.Error("no params read as a result")
+	}
+	pc := newPendingCalls()
+	pc.resolve(ResultParams(Result{Num: 42, OK: true})) // nothing waits: dropped
+	pc.resolve(nil)
+	if (&CallError{Code: "refused"}).Error() != "refused" {
+		t.Error("a CallError with no message")
 	}
 }

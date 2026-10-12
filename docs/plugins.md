@@ -1,8 +1,9 @@
 # Writing an AutoDoc plugin
 
 A plugin is a program. AutoDoc's TUI starts it and the two speak msgpack-RPC **notifications**, both
-ways, over the plugin's stdin and stdout. Nothing waits for an answer. A plugin is one of three
-things:
+ways, over the plugin's stdin and stdout. Nothing is a request: where a plugin needs an answer (a
+call, protocol 3), the answer is a notification of its own, matched by a number. A plugin is one of
+three things:
 
 - **a dialog** (protocol 1): AutoDoc draws a dialog over the page, the plugin fills it with frames,
   and it is sent every key but Esc, which closes it;
@@ -10,7 +11,8 @@ things:
 - **a service** (protocol 2): no surface at all. It works on the note, or serves something of its own.
 
 A protocol-2 plugin can also read the open note (the document feed) and have commands on the Plugins
-menu and the SPC p card. ADR 0209 and ADR 1791268009 are the decisions behind it.
+menu and the SPC p card. A protocol-3 plugin can also run AutoDoc's own commands, the ones its
+manifest declares (`calls`). ADR 0209, ADR 1791268009 and ADR 1791762474 are the decisions behind it.
 
 [autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris) is a complete protocol-1 example.
 [`examples/python/echo_plugin.py`](../examples/python/echo_plugin.py) speaks the protocol with no
@@ -62,14 +64,16 @@ title = "Show / hide the stats"
 key   = "s"                  # its letter on the SPC p card; optional
 ```
 
-A service on the feed, protocol 2. `start` is a top-level key, so it comes before the first table:
+A service on the feed that saves the note before it previews it, protocol 3. `start` and `calls`
+are top-level keys, so they come before the first table:
 
 ```toml
 name     = "html-preview"
 title    = "HTML preview"
 kind     = "service"
-protocol = 2
+protocol = 3                 # it declares calls, protocol 3's
 start    = "use"             # "use" (default) or "launch"; services only
+calls    = ["file.save"]     # AutoDoc's commands it may run (host.call), by id; optional
 command  = ["autodoc-html-preview"]
 
 [feed]
@@ -83,33 +87,40 @@ key   = "h"
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. Among the reasons:
 
-- an unknown kind, or a protocol outside 1 to 2;
+- an unknown kind, or a protocol outside 1 to 3;
 - an unknown key, at any level (`dialog.colour`): AutoDoc decodes the manifest strictly;
 - a name taken, no command;
 - a placement, `esc` or height it does not know;
-- a protocol-2 key under `protocol = 1` ("declares [feed]: needs protocol = 2");
+- a protocol-2 key under `protocol = 1` ("declares [feed]: needs protocol = 2"), or `calls` under a
+  protocol before 3;
 - `start` on a dialog, `[dialog]` on a service, `esc` on a card;
 - a service that starts on use with nothing to start it (no command, no feed);
 - a command id that is not lower-case letters, digits and -, or appears twice; a command with no
-  title; a key that is not one lower-case letter or digit, or is the plugin's twice.
+  title; a key that is not one lower-case letter or digit, or is the plugin's twice;
+- a call that is not one exact command id (`todos.*` is refused: no wildcards), is a plugin's
+  (`plugin.…`), or is listed twice.
 
 Adding a plugin from a git URL asks first. The question shows what its build runs, what it starts and
 the risk, then what it declares: "a card beside the page · reads the open note's text (feed) ·
-commands: Show / hide the stats (SPC p s)".
+commands: Show / hide the stats (SPC p s)", and the commands of AutoDoc's it may run: "may run
+AutoDoc's commands: file.save".
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 and 2**, and speaks to each plugin the one its manifest says. A
-protocol-1 plugin runs as it always has.
+AutoDoc speaks plugin protocols **1, 2 and 3**, and speaks to each plugin the one its manifest says. A
+protocol-1 or -2 plugin runs as it always has.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
   `kind = "service"`, `start`, `[dialog] modal`, `[feed]` and `[[commands]]`. An AutoDoc that speaks
   only 1 lists such a plugin disabled, "protocol 2; this AutoDoc speaks 1", so a card never runs there
   as a modal dialog without its feed.
+- **A manifest that declares `calls` says `protocol = 3`.** An AutoDoc that speaks only 1 and 2
+  lists it disabled ("protocol 3; this AutoDoc speaks 1 to 2"), as it does a protocol-2 manifest on
+  an AutoDoc of 1.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 and 2, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 3, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -146,10 +157,12 @@ Each notification carries one map.
 | AutoDoc | `plugin.focus` | 2 | `{focused}`: a card took the keys, or gave them back |
 | AutoDoc | `plugin.document` | 2 | `{path, workspace, text, cursor, selection, version, too_large}`: the open note, under `[feed] document = true` |
 | AutoDoc | `plugin.command` | 2 | `{id}`: one of the manifest's `[[commands]]`, chosen |
+| AutoDoc | `plugin.result` | 3 | `{call, ok, error}`: the answer to the `host.call` numbered `call` |
 | AutoDoc | `plugin.close` | 1 | `{}`: the last |
 | plugin | `host.ready` | 1 | `{protocol}`: the answer to `plugin.open`, with the protocol it was opened at |
 | plugin | `host.frame` | 1 | `{rows}`: the whole dialog, at any time. A service's is dropped |
 | plugin | `host.title` | 1 | `{title}` |
+| plugin | `host.call` | 3 | `{call, id, args}`: run AutoDoc's command `id`, one the manifest's `calls` declares, with `args` (strings) |
 | plugin | `host.close` | 1 | `{}`: asks to close |
 
 - **Keys.** `key` is a printable key's text (`" "` for Space), or one of `Up`, `Down`, `Left`,
@@ -218,6 +231,28 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
   - A card's command `toggle` is AutoDoc's own and is never sent: it opens the card, focused, and
     closes it when it is open.
 
+### Calls (`calls = [...]`, protocol 3)
+
+A plugin runs AutoDoc's own commands by their ids: those of AutoDoc's command catalog, which F1
+lists under COMMANDS with their ids (`file.save`, `todos.open`, `search.open`), and your Lua
+commands (`lua.<name>`). It may run only the ids its manifest's `calls` lists, so what a plugin can
+do in AutoDoc is there to read before it is installed.
+
+- **A call is two notifications.** The plugin sends `host.call {call, id, args}`, `call` a positive
+  whole number of its own choosing that no call still waiting has. AutoDoc answers
+  `plugin.result {call, ok, error}` with the same number.
+- **AutoDoc answers every call it accepts exactly once**, after running it on its UI loop as a key
+  runs a command. `ok` is true when the command ran; otherwise `error` is a code, a space and why:
+  - `refused`: the id is not in `calls`, is a plugin's command (`plugin.…`, never another plugin's
+    to run), or the call is malformed; `refused busy` when 64 of the plugin's calls are waiting;
+  - `unknown`: no command has the id (a Lua command not loaded, say);
+  - `failed`: the command ran and failed; why is its own error.
+- **A call that reuses a number still waiting is a protocol violation.** AutoDoc writes it in the
+  plugin's log, runs nothing and answers nothing, so the waiting call's answer is the only one with
+  that number. A call from a plugin before protocol 3, or before it has answered `plugin.open`, is
+  dropped the same way.
+- A Lua command run by a call edits the note in the editor, as it does from a key.
+
 ## The SDK, in Go
 
 ```go
@@ -276,17 +311,38 @@ no interface takes is dropped.
 `plugin.Base` is a Handler that does nothing. A service embeds it and adds what it needs:
 
 ```go
-type preview struct{ plugin.Base }
+type preview struct {
+	plugin.Base
+	peer *plugin.Peer
+}
 
-func (p *preview) Document(d plugin.Document) { /* render d.Text, serve it */ }
-func (p *preview) Command(id string)          { /* "open": open the browser */ }
+func (p *preview) Open(peer *plugin.Peer, o plugin.Open) { p.peer = peer }
+func (p *preview) Document(d plugin.Document)           { /* render d.Text, serve it */ }
+func (p *preview) Command(id string) {
+	if ok, err := p.peer.Call("file.save"); !ok { // protocol 3: one of the manifest's calls
+		log.Print(err)
+	}
+	/* "open": open the browser */
+}
 ```
+
+**Protocol 3** adds `Peer.Call(id, args…) (ok bool, err error)`: it sends `host.call` and waits for
+AutoDoc's answer.
+
+- It may be called from any goroutine, the Handler's own methods included. The answer is taken off
+  the link as it arrives, never queued behind the method waiting for it, so a `Command` or a `Key`
+  that calls does not deadlock.
+- Each call gets a number of its own; calls in flight together each get their own answer.
+- `err` is a `*plugin.CallError` (`Code` refused, unknown or failed, and `Message`) when AutoDoc
+  answered no; `plugin.ErrCallTimeout` when it did not answer within 10 s (a late answer is
+  dropped); `plugin.ErrClosed` when the link is gone, for every call waiting then and after;
+  `plugin.ErrNoCalls` when AutoDoc opened the plugin at a protocol before 3.
 
 ## What a plugin may not do
 
-- **Change the note.** A plugin reads the feed. Writing to the document (inserting a translation,
-  applying a fix) needs host-side actions that answer and work with undo, and is for a later
-  protocol.
+- **Change the note** but through a command it declares in `calls` (a Lua command of yours, say). A
+  plugin reads the feed; there is no protocol to write a document directly.
+- **Run what its manifest does not declare,** or any plugin's command.
 - **Highlight the editor's text.** The highlighter runs on every frame, synchronously, which a
   process round-trip cannot meet. New languages are AutoDoc's own work.
 - **Draw outside its surface, or add to AutoDoc's menus** other than its Plugins entry and its

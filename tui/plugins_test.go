@@ -85,6 +85,43 @@ func runTestPlugin(mode string) int {
 			return 1
 		}
 		return 0
+	case "rawcalls": // protocol 3's host.call as a plugin that is not the SDK sends it: numbers its own
+		conn := testStdio()
+		done := make(chan struct{})
+		ctx := context.Background()
+		var link *plugin.Link
+		call := func(n int64, id string, args ...string) {
+			_ = link.Notify(ctx, plugin.MethodCall, plugin.CallParams(plugin.Call{Num: n, ID: id, Args: args}))
+		}
+		link, _ = plugin.NewLink(ctx, conn, func(m string, p []any) {
+			switch m {
+			case plugin.MethodOpen:
+				o, _ := plugin.ReadOpen(p)
+				_ = link.Notify(ctx, plugin.MethodReady, plugin.ReadyParams(o.Protocol))
+			case plugin.MethodCommand:
+				switch id, _ := plugin.ReadCommand(p); id {
+				case "dup": // 7 again while 7 waits, then 8
+					call(7, "lua.mark", "a")
+					call(7, "lua.mark", "b")
+					call(8, "lua.mark", "c")
+				case "busy":
+					for i := range 70 {
+						call(int64(i+1), "lua.mark")
+					}
+				case "once":
+					call(1, "lua.mark", "p")
+				case "ping":
+					fmt.Fprintln(os.Stderr, "said: pong")
+				}
+			case plugin.MethodResult:
+				res, _ := plugin.ReadResult(p)
+				fmt.Fprintf(os.Stderr, "said: result %d %v %s\n", res.Num, res.OK, res.Error)
+			case plugin.MethodClose:
+				close(done)
+			}
+		})
+		<-done
+		return 0
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
 		child := exec.Command("sleep", "60")
@@ -125,6 +162,11 @@ func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
 }
 
 func (e *echo) Key(k plugin.Key) {
+	if e.mode == "caller" && k.Key == "k" { // a call from a Key handler, on Serve's own queue
+		ok, err := e.peer.Call("lua.mark", "key")
+		e.say(fmt.Sprintf("called key %v %v", ok, err))
+		return
+	}
 	switch k.Key {
 	case "q":
 		_ = e.peer.Close()
@@ -152,7 +194,19 @@ func (e *echo) Theme(t plugin.Theme) { e.say("theme " + t.Name) }
 
 // protocol 2's: a card's focus, a command, the feed's document
 func (e *echo) Focus(focused bool) { e.say(fmt.Sprintf("focus %v", focused)) }
-func (e *echo) Command(id string)  { e.say("command " + id) }
+func (e *echo) Command(id string) {
+	if target, ok := callerTargets[id]; ok && e.mode == "caller" { // a call from a Command handler
+		ok, err := e.peer.Call(target, "1")
+		e.say(fmt.Sprintf("called %s %v %v", id, ok, err))
+		return
+	}
+	e.say("command " + id)
+}
+
+// callerTargets are the ids the caller plugin's commands call.
+var callerTargets = map[string]string{"mark": "lua.mark", "boom": "lua.boom", "undeclared": "file.save",
+	"unknown": "lua.nope", "plugin": "plugin.caller.mark"}
+
 func (e *echo) Document(d plugin.Document) {
 	sel := ""
 	for _, r := range d.Selection {
@@ -221,6 +275,17 @@ func installPlugin2(t *testing.T, dir, name, kind, mode, extra string) {
 	}
 }
 
+// installPlugin3 writes a protocol-3 manifest for the test plugin in mode: kind, then extra.
+func installPlugin3(t *testing.T, dir, name, kind, mode, extra string) {
+	t.Helper()
+	installPlugin2(t, dir, name, kind, mode, extra)
+	path := filepath.Join(dir, name, "plugin.toml")
+	b, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "protocol = 2\n", "protocol = 3\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // shorten sets the plugin deadlines for a test and puts them back after it — registered before the
 // TUI runs, so it is undone after the TUI's own cleanups.
 func shorten(t *testing.T, handshake, grace, term time.Duration) {
@@ -238,11 +303,17 @@ func pluginTUI(t *testing.T, dir string) (*running, string) {
 // pluginTUIWith is pluginTUI with these preferences stored before the TUI starts.
 func pluginTUIWith(t *testing.T, dir string, prefs map[string]string) (*running, string) {
 	t.Helper()
+	return pluginLuaTUI(t, dir, prefs, "")
+}
+
+// pluginLuaTUI is pluginTUIWith, with the user's Lua commands in luaDir.
+func pluginLuaTUI(t *testing.T, dir string, prefs map[string]string, luaDir string) (*running, string) {
+	t.Helper()
 	logs := t.TempDir()
 	all := maps.Clone(testPrefs)
 	maps.Copy(all, prefs)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: all})
-	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}, LuaDir: luaDir})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	t.Cleanup(func() {
 		runs := onLoop(r, func() []*pluginRun {
@@ -305,7 +376,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 3\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 4\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -322,7 +393,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 3; this AutoDoc speaks 1 to 2",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 4; this AutoDoc speaks 1 to 3",
 		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
@@ -433,7 +504,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
-	r.waitNotice(t, "future speaks protocol 3; its manifest says 1")
+	r.waitNotice(t, "future speaks protocol 4; its manifest says 1")
 
 	if r.openPlugin("gone") != nil {
 		t.Error("a plugin that did not start is open")
@@ -845,11 +916,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 3\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 4\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 3; this AutoDoc speaks 1 to 2")
+	r.waitNotice(t, "not added: protocol 4; this AutoDoc speaks 1 to 3")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)

@@ -90,6 +90,7 @@ func (d *dialogSize) UnmarshalTOML(v any) error {
 
 // manifest is a plugin.toml. Protocol 2's keys (ADR 1791268009) are kind = "service", start,
 // [dialog] modal, [feed] and [[commands]]; a manifest that uses any of them says protocol = 2.
+// Protocol 3's (ADR 1791762474 §4.5) is calls; a manifest with it says protocol = 3.
 type manifest struct {
 	Name     string   `toml:"name"`
 	Title    string   `toml:"title"`
@@ -119,6 +120,9 @@ type manifest struct {
 	} `toml:"feed"`
 	// Commands are the plugin's own, on the Plugins menu and the SPC p card.
 	Commands []pluginCommand `toml:"commands"`
+	// Calls are the command catalog's ids the plugin may run through host.call: exact ids, never a
+	// plugin's (plugincall.go).
+	Calls []string `toml:"calls"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv (plugininstall.go).
 	Install struct {
@@ -286,6 +290,9 @@ func checkProtocolTwo(m *manifest, md toml.MetaData) string {
 	if len(declares) > 0 && m.Protocol < 2 {
 		return fmt.Sprintf("declares %s: needs protocol = 2", declares[0])
 	}
+	if why := checkCalls(m, md); why != "" {
+		return why
+	}
 	switch {
 	case m.service() && md.IsDefined("dialog"):
 		return "[dialog]: a service has no dialog"
@@ -317,6 +324,32 @@ func checkProtocolTwo(m *manifest, md toml.MetaData) string {
 	}
 	if m.service() && (m.Start == "" || m.Start == "use") && len(m.Commands) == 0 && !m.Feed.Document {
 		return `start = "use": nothing would start it (no command, no feed)`
+	}
+	return ""
+}
+
+// checkCalls is why m's calls cannot run ("" when they can): they need protocol = 3, and each is
+// one exact command id, never a plugin's, and listed once.
+func checkCalls(m *manifest, md toml.MetaData) string {
+	if !md.IsDefined("calls") {
+		return ""
+	}
+	if m.Protocol < 3 {
+		return "declares calls: needs protocol = 3"
+	}
+	seen := map[string]bool{}
+	for _, id := range m.Calls {
+		switch {
+		case strings.ContainsAny(id, "*?[]{}"):
+			return fmt.Sprintf("calls %q: one exact command id, no wildcards", id)
+		case !commandID.MatchString(id):
+			return fmt.Sprintf("calls %q: not a command id (file.open, todos.open)", id)
+		case strings.HasPrefix(id, "plugin."):
+			return fmt.Sprintf("calls %q: a plugin's command is never another plugin's to run", id)
+		case seen[id]:
+			return fmt.Sprintf("calls %q: twice", id)
+		}
+		seen[id] = true
 	}
 	return ""
 }
@@ -418,6 +451,11 @@ type pluginRun struct {
 	frame   [][]pluginCell
 	readyIn atomic.Bool
 	posted  atomic.Bool // a repaint is posted and not yet run
+	// the host.calls waiting for their answers, by number, and how many were refused unanswered
+	// (a number reused) or answered busy, under callMu (plugincall.go)
+	callMu      sync.Mutex
+	calls       map[int64]bool
+	dupes, busy int
 
 	exited   chan struct{} // closed when the process has exited
 	exitErr  error
@@ -731,6 +769,8 @@ func (r *pluginRun) onNote(method string, params []any) {
 		}
 	case plugin.MethodHostClose:
 		r.h.p.Post(func() { r.close("") })
+	case plugin.MethodCall:
+		r.hostCall(params)
 	}
 }
 

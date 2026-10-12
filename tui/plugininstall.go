@@ -162,7 +162,7 @@ func pluginQuestion(c pluginChange, title string) string {
 	return q
 }
 
-// pluginDeclares is what a manifest's protocol-2 keys say the plugin does, for the install
+// pluginDeclares is what a manifest's protocol-2 and -3 keys say the plugin does, for the install
 // confirmation (ADR 1791268009 §2.1): "" for a 0209 dialog.
 func pluginDeclares(m *manifest) string {
 	var parts []string
@@ -186,6 +186,9 @@ func pluginDeclares(m *manifest) string {
 			}
 		}
 		parts = append(parts, "commands: "+strings.Join(cmds, ", "))
+	}
+	if len(m.Calls) > 0 {
+		parts = append(parts, "may run AutoDoc's commands: "+strings.Join(m.Calls, ", "))
 	}
 	return strings.Join(parts, " · ")
 }
