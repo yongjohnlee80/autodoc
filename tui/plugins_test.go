@@ -1430,3 +1430,45 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 		return slices.ContainsFunc(said(t, logs, "py-echo"), func(s string) bool { return strings.Contains(s, " 2 words at 1:5") })
 	})
 }
+
+// TestPluginCommandsAreCatalogEntries (ADR 1791762474 §3.2, §3.5): a runnable plugin's [[commands]]
+// are catalog entries, plugin.<name>.<id>, with no ':' name; F1 lists them with their SPC p
+// letters; run by id they run the plugin's command; the folder read anew without the plugin takes
+// them out, and SPC p with them. A plugin that cannot run has none.
+func TestPluginCommandsAreCatalogEntries(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
+		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n[[commands]]\nid = \"quiet\"\ntitle = \"Stay quiet\"\n")
+	installPlugin2(t, dir, "broken", "dialog", "echo", "[[commands]]\nid = \"Bad\"\ntitle = \"Bad\"\n")
+	r, _ := pluginTUI(t, dir)
+	got := onLoop(r, func() []string {
+		var out []string
+		for _, e := range r.h.cat.entries() {
+			if e.Source == SourcePlugin {
+				out = append(out, fmt.Sprintf("%s %s %q %q", e.ID, e.Owner, e.Title, r.h.cat.owned(e.ID)))
+			}
+		}
+		return out
+	})
+	if want := []string{`plugin.alpha.hello alpha "Alpha: Say hello" []`, `plugin.alpha.quiet alpha "Alpha: Stay quiet" []`}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("the plugin entries: %q, want %q", got, want)
+	}
+	r.s.WaitFor(t, "F1 names the letters", func(string) bool {
+		help := strings.Join(strings.Fields(onLoop(r, func() string { return r.h.helpNow })), " ")
+		return strings.Contains(help, "the plugins' (SPC p) plugin.alpha.hello — · SPC p h · Alpha: Say hello")
+	})
+	if err := onLoop(r, func() error { return r.h.cat.run("plugin.alpha.hello", nil) }); err != nil {
+		t.Fatal(err)
+	}
+	r.waitShown(t, "command hello")
+	onLoop(r, func() bool { r.h.running["alpha"].close(""); return true })
+	if err := os.RemoveAll(filepath.Join(dir, "alpha")); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.loadPlugins(); return true })
+	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("plugin.alpha.hello") }); e != nil {
+		t.Fatalf("a removed plugin's command stayed: %+v", e)
+	}
+	r.leader(t, 'p')
+	r.s.WaitForText(t, "no plugin commands yet")
+}

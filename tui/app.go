@@ -269,6 +269,10 @@ type Host struct {
 	pluginKeyRows    *tuidecl.ListModel
 	pluginKeyTargets map[string]string
 	running          map[string]*pluginRun
+	// pluginCmds are the catalog's plugin entries by id, and pluginLetters their letters as F1
+	// names them (plugincmds.go)
+	pluginCmds    map[string]pluginCommandRef
+	pluginLetters map[string][]string
 	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, and the
 	// manager's rows
 	pendingPlugin  *pluginChange
@@ -446,6 +450,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
 	h.reg, h.cat = reg, reg.catalog
+	h.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
+	h.refreshPlugins()
 	opts = append(opts,
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
 		tuidecl.Sources(h.reg.state),

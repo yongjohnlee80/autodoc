@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,7 +12,9 @@ import (
 )
 
 // PLUGIN COMMANDS (ADR 1791268009 §2.5) — a manifest's [[commands]] are on the Plugins menu, under
-// the plugin's own submenu, and on the SPC p card by their letters. A letter is the manifest's, or
+// the plugin's own submenu, and on the SPC p card by their letters. Each is a command catalog entry
+// (catalog.go), plugin.<name>.<id>, with no verb: the SPC p card is made from the catalog's, and F1
+// lists them with their letters. A letter is the manifest's, or
 // the user's (tui.plugin.<name>.key.<id>; "" unbinds it); the first plugin by name keeps a letter
 // two want, and the other is listed unbound, saying why. Plugins never take AutoDoc's own leader
 // letters: SPC p is a card of its own.
@@ -81,53 +84,87 @@ func (h *Host) refreshPlugins() {
 	h.pluginRows.Reset(rows)
 }
 
-// bindPluginKeys gives each runnable plugin's commands their SPC p letters, in the order of the
+// pluginCommandRef is a plugin command's catalog entry, as SPC p binds it: its plugin and its
+// manifest's id and letter.
+type pluginCommandRef struct {
+	plugin, key, id, letter string
+}
+
+// syncPluginEntries makes the runnable plugins' [[commands]] the catalog's plugin entries,
+// plugin.<name>.<id>, with no verb: SPC p binds them, F1 lists them, and they run their plugin's
+// command. The catalog follows the folder: a plugin removed, or one that cannot run, has none.
+func (h *Host) syncPluginEntries() {
+	if h.cat == nil {
+		return // before the registry is built: options syncs them
+	}
+	for _, e := range h.cat.entries() {
+		if e.Source == SourcePlugin {
+			h.cat.remove(e.ID)
+		}
+	}
+	h.pluginCmds = map[string]pluginCommandRef{}
+	for _, e := range h.pluginList {
+		if e.reason != "" {
+			continue
+		}
+		title := cmp.Or(e.m.Title, e.m.Name)
+		for _, c := range e.m.Commands {
+			id, key, cmd := "plugin."+e.m.Name+"."+c.ID, e.key(), c.ID
+			err := h.cat.add(Entry{ID: id, Source: SourcePlugin, Owner: e.m.Name, Title: title + ": " + c.Title, Help: c.Title,
+				Run: func(Invocation) error { h.runPluginCommand(key, cmd); return nil }})
+			if err != nil { // a manifest's ids are checked when it is read; this is a bug, said
+				h.keep(err)
+				continue
+			}
+			h.pluginCmds[id] = pluginCommandRef{plugin: e.m.Name, key: key, id: cmd, letter: c.Key}
+		}
+	}
+}
+
+// bindPluginKeys gives the catalog's plugin commands their SPC p letters, in the order of the
 // plugins' names, and sets the card: its letters, and its text. It returns each command's binding,
 // by "<plugin>.<id>".
 func (h *Host) bindPluginKeys() map[string]pluginBinding {
-	entries := slices.Clone(h.pluginList)
-	slices.SortStableFunc(entries, func(a, b pluginEntry) int { return strings.Compare(a.m.Name, b.m.Name) })
+	var entries []*Entry
+	if h.cat != nil {
+		entries = slices.DeleteFunc(h.cat.entries(), func(e *Entry) bool { return e.Source != SourcePlugin })
+	}
+	slices.SortStableFunc(entries, func(a, b *Entry) int { return strings.Compare(a.Owner, b.Owner) })
 	out := map[string]pluginBinding{}
 	taken := map[string]string{"q": "close card"}
 	var rows []tuidecl.Row
 	targets := map[string]string{}
+	h.pluginLetters = map[string][]string{}
 	var bound, unbound []string
 	for _, e := range entries {
-		if e.reason != "" {
-			continue
+		ref := h.pluginCmds[e.ID]
+		letter, chosen := h.prefs.pluginKeys[ref.plugin+"."+ref.id]
+		if !chosen {
+			letter = ref.letter
 		}
-		title := e.m.Title
-		if title == "" {
-			title = e.m.Name
+		var b pluginBinding
+		switch {
+		case letter == "" && chosen:
+			b.why = "unbound in the preferences"
+		case letter == "":
+			b.why = "no key"
+		case !pluginLetter(letter):
+			b.why = fmt.Sprintf("key %q: want one letter or digit", letter)
+		case taken[letter] != "":
+			b.why = fmt.Sprintf("%s is %s's", letter, taken[letter])
+		default:
+			b.letter = letter
+			taken[letter] = ref.plugin
+			target := pluginTarget(ref.key, targetCommand, ref.id)
+			rows = append(rows, tuidecl.Row{"key": letter, "target": target})
+			targets[letter] = target
+			bound = append(bound, letter+"  "+e.Title)
+			h.pluginLetters[e.ID] = []string{"SPC p " + letter}
 		}
-		for _, c := range e.m.Commands {
-			letter, chosen := h.prefs.pluginKeys[e.m.Name+"."+c.ID]
-			if !chosen {
-				letter = c.Key
-			}
-			label := title + ": " + c.Title
-			var b pluginBinding
-			switch {
-			case letter == "" && chosen:
-				b.why = "unbound in the preferences"
-			case letter == "":
-				b.why = "no key"
-			case !pluginLetter(letter):
-				b.why = fmt.Sprintf("key %q: want one letter or digit", letter)
-			case taken[letter] != "":
-				b.why = fmt.Sprintf("%s is %s's", letter, taken[letter])
-			default:
-				b.letter = letter
-				taken[letter] = e.m.Name
-				rows = append(rows, tuidecl.Row{"key": letter, "target": pluginTarget(e.key(), targetCommand, c.ID)})
-				targets[letter] = pluginTarget(e.key(), targetCommand, c.ID)
-				bound = append(bound, letter+"  "+label)
-			}
-			if b.letter == "" {
-				unbound = append(unbound, "   "+label+" — "+b.why)
-			}
-			out[e.m.Name+"."+c.ID] = b
+		if b.letter == "" {
+			unbound = append(unbound, "   "+e.Title+" — "+b.why)
 		}
+		out[ref.plugin+"."+ref.id] = b
 	}
 	h.pluginKeyTargets = targets
 	h.pluginKeyRows.Reset(rows)
@@ -137,6 +174,7 @@ func (h *Host) bindPluginKeys() map[string]pluginBinding {
 	}
 	if h.p != nil { // at New there is no program yet: attach's launchServices refreshes it
 		h.set("App.pluginKeysText", text)
+		h.commandsChanged() // F1 names the letters
 	}
 	return out
 }

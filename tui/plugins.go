@@ -334,6 +334,7 @@ func firstLine(s string) string {
 // loadPlugins lists the folder's plugins in the Plugins menu.
 func (h *Host) loadPlugins() {
 	h.pluginList = discoverPlugins(h.pluginOpt.Dir)
+	h.syncPluginEntries()
 	h.refreshPlugins()
 	if h.p != nil { // read anew, not at New: the program runs, and attach launched the first ones
 		h.launchServices()
