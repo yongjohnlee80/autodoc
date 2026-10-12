@@ -76,5 +76,3 @@ func (h *Host) themePlugins() {
 		r.send(plugin.MethodTheme, plugin.ThemeParams(t))
 	}
 }
-
-// ---------------------------------------------------------------- one plugin, running

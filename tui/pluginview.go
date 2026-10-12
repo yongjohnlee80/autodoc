@@ -59,8 +59,6 @@ func runStyle(s plugin.Style) (style.Style, int) {
 	return st.Bold(s.Bold).Italic(s.Italic).Underline(s.Underline), bad
 }
 
-// ---------------------------------------------------------------- the dialog's body
-
 // pluginView is the dialog's inside: the plugin's latest frame, and its keys.
 type pluginView struct {
 	widget.Base
@@ -198,5 +196,3 @@ func pluginKey(e tuicore.KeyEvent) (plugin.Key, bool) {
 	}
 	return k, true
 }
-
-// ---------------------------------------------------------------- a plugin's log
