@@ -11,7 +11,7 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// The Rendered view follows the page's kind: a note renders; a Go file opened after it is Raw and
+// The window opens in the Rendered view, and the view follows the page's kind: a note renders; a Go file opened after it is Raw and
 // Ctrl+T does nothing there; the draft left by closing it renders; and a note opened from the
 // rendered draft keeps the view, Ctrl+T switching it back. No window opens.
 func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
@@ -45,6 +45,14 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
 	r.waitFile(t, "a.md")
+	// the window opens in the Rendered view: a note reads as it will look
+	if m := mode(); m != guiwidget.Rendered {
+		t.Fatalf("a note as the window opens: %v, want Rendered", m)
+	}
+	ctrlT()
+	if m := mode(); m != guiwidget.Raw {
+		t.Fatalf("a note: Ctrl+T from Rendered gives %v, want Raw", m)
+	}
 	ctrlT()
 	if m := mode(); m != guiwidget.Rendered {
 		t.Fatalf("a note: Ctrl+T gives %v, want Rendered", m)

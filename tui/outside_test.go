@@ -117,7 +117,7 @@ func TestAnOutsideFileStaysOpenAcrossWorkspacesAndReachesTheFeedAndRecent(t *tes
 	if len(rows) == 0 || rows[0] != (recentDoc{Workspace: "", Path: abs}) {
 		t.Fatalf("recent files %v, want the outside file first", rows)
 	}
-	r.h.p.Post(func() { r.h.recent.choose(0) })
+	r.h.p.Post(func() { r.h.recentSelect(0) })
 	r.waitOpen(t, "", abs)
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "notes" {
 		t.Errorf("reopening it left the workspace in use %q, want notes", ws)

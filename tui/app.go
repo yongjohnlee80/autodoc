@@ -143,8 +143,8 @@ type Host struct {
 	switchingAgent         string // the profile the switch question would start
 	agentRows              *tuidecl.ListModel
 	termBefore             string
-	// the recent files (recent.go), a feature of its own
-	recent *recent
+	// the recent files (recent.go): those listed, in their rows' order
+	recent *rows[recentDoc]
 
 	// the embedding providers (providers.go)
 	activeProvider, editingProvider string
@@ -355,6 +355,7 @@ func newHost(session *Session, opt Options) *Host {
 		newList:         tuidecl.NewListModel("key", "path"),
 		providerModels:  tuidecl.NewListModel("key", "name"),
 		agentRows:       tuidecl.NewListModel("key", "default", "name", "command"),
+		recent:          newRows(tuidecl.NewListModel("key", "workspace", "path"), recentRowOf),
 		cellFontModel:   fontModel(),
 		proseFontModel:  fontModel(),
 		fonts:           opt.Fonts,
@@ -376,7 +377,6 @@ func newHost(session *Session, opt Options) *Host {
 		pluginKeyRows:   tuidecl.NewListModel("key", "target"),
 		running:         map[string]*pluginRun{}}
 	h.noticeLog = newNotices(core{h})
-	h.recent = newRecent(core{h})
 	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
@@ -394,6 +394,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 		return errors.New("main.qml declares no Editor with id: editor")
 	}
 	h.core = h.editor.Core()
+	startRendered(h.editor) // the GUI's page opens in its Rendered view (rendered_gui.go)
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {
 		return markedSpans(&h.findMarks, line, semantic)
 	})

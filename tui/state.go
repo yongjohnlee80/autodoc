@@ -109,6 +109,7 @@ func (h *Host) state() map[string]any {
 		"App.terminalLengths":     choices(percentLabels(termLengths)...),
 		"App.terminalLengthIndex": nearest(termLengths, 100),
 		"App.yesNo":               choices("yes", "no"),
+		"App.openAsChoices":       choices(openAsLabels...),
 		"App.indentMarkModes":     choices(indentMarkLabels...),
 		"App.corners":             choices(cornerLabels...),
 		"App.toastSeconds":        choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
@@ -135,6 +136,9 @@ func (h *Host) state() map[string]any {
 		"App.providerContextShown": false,
 		"App.providerModels":       h.providerModels,
 		"App.providerModelsStatus": "",
+		// the recent files (recent.go)
+		"App.recentFiles":  h.recent.Model(),
+		"App.recentStatus": "",
 		// the agent terminal and its profiles (agent.go, agentprofiles.go)
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,

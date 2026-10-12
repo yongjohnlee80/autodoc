@@ -167,7 +167,7 @@ func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
 	// an HTML file asks how to open it before anything else: entering its workspace closes the
 	// file open now, which Cancel must leave as it is
 	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {
-		h.askHTML(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw) })
+		h.askHowToOpen(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw) })
 		return
 	}
 	h.openRefAs(ref, remember, proceed, nil)
@@ -230,7 +230,7 @@ func (h *Host) reload() {
 func (h *Host) load(ws, p string, prev *fileRef) {
 	again := h.file.open && h.file.ws == ws && h.file.path == p
 	if !again && kind.RawText(p) {
-		h.askHTML(p, func(raw bool) { h.loadAs(ws, p, prev, raw) })
+		h.askHowToOpen(p, func(raw bool) { h.loadAs(ws, p, prev, raw) })
 		return
 	}
 	h.loadAs(ws, p, prev, again && h.file.raw)
@@ -239,8 +239,27 @@ func (h *Host) load(ws, p string, prev *fileRef) {
 // htmlOpen is the open question: what opens the HTML file once it is answered.
 type htmlOpen struct{ then func(raw bool) }
 
-// askHTML asks how to open the HTML file p, then runs then with the answer; Cancel runs nothing.
-func (h *Host) askHTML(p string, then func(raw bool)) {
+// openAsChoices are how a document with two views opens, as Preferences stores them: asked each
+// time, or always one way. A document with two views is one whose source is itself text a person
+// edits (kind.RawText: HTML today; other formats join as they gain a raw view).
+var openAsChoices = []string{"prompt", "raw", "simplified"}
+
+// openAsLabels are openAsChoices as the chooser shows them: raw is a document's source, to edit;
+// simplified, its text, read-only.
+var openAsLabels = []string{"ask each time", "raw", "simplified"}
+
+// askHowToOpen asks how to open p, a document with two views (its source raw, or its text
+// simplified), then runs then with the answer; Cancel runs nothing. Preferences may answer for
+// the user: raw, or simplified, every time.
+func (h *Host) askHowToOpen(p string, then func(raw bool)) {
+	switch h.prefs.openAs { // Preferences: how a document with two views opens
+	case "raw":
+		then(true)
+		return
+	case "simplified":
+		then(false)
+		return
+	}
 	h.htmlAsk = &htmlOpen{then: then}
 	h.set("App.htmlOpenQuestion", "Open "+filepath.Base(p)+" simplified, its text read-only, or raw, its HTML to edit?")
 	h.open("openHTML")
@@ -298,7 +317,8 @@ func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
 		if prev != nil && *prev != (fileRef{ws, p}) {
 			h.rememberLeft(*prev)
 		}
-		h.show(ws, p, a.content, a.version, raw) // the recent files note it (recent.go: Shown)
+		h.show(ws, p, a.content, a.version, raw)
+		h.noteRecent(ws, p)
 		h.say("opened " + p)
 		if ws == "" {
 			h.notify(p + ": " + outsideLimits)

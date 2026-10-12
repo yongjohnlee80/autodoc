@@ -30,6 +30,7 @@ const (
 	prefNumbers  = "tui.editor.linenumbers"
 	prefIndent   = "tui.editor.indentmarks"
 	prefImages   = "tui.preview.images"
+	prefOpenAs   = "tui.documents.open"
 	prefCorner   = "tui.toast.corner"
 	prefAboutAt  = "tui.about.atstart"
 	prefUpdates  = "tui.update.check"
@@ -88,6 +89,7 @@ type prefs struct {
 	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
 	indentMarks            string // which lines show their indentation as marks (indentMarks)
 	images                 bool   // previews as images where the terminal draws them (preview.go)
+	openAs                 string // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
 	aboutAtStart           bool   // About opens when the program starts (startup.go)
 	updateCheck            bool   // a newer release is looked for when the program starts (startup.go)
 	toastCorner            string // where the notifications stack
@@ -115,6 +117,8 @@ type prefs struct {
 	agentDefault string
 	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
 	agentEdge string
+	// recent are the files opened last, newest first (recent.go)
+	recent []recentDoc
 	// values are the features' own preferences (ValuePref), by name: read with Value
 	values map[string]string
 }
@@ -186,6 +190,8 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		boolPref(prefImages, true, func(p *prefs) *bool { return &p.images }).
 			chooser("App.imagesIndex", "App.setImagesIndex").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.imagePreviews": p.images} }),
+		choicePref(prefOpenAs, "prompt", openAsChoices, func(p *prefs) *string { return &p.openAs }).
+			chooser("App.openAsIndex", "App.setOpenAsIndex"),
 		boolPref(prefAboutAt, true, func(p *prefs) *bool { return &p.aboutAtStart }).
 			chooser("App.aboutAtStartIndex", "App.setAboutAtStartIndex"),
 		boolPref(prefUpdates, true, func(p *prefs) *bool { return &p.updateCheck }).
@@ -257,6 +263,9 @@ func prefsFor(m map[string]any, gui bool) prefs {
 	}
 	if s, ok := str(prefAgentDefault); ok {
 		p.agentDefault = s
+	}
+	if s, ok := str(prefRecent); ok {
+		p.recent = recentOf(s)
 	}
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
@@ -366,8 +375,8 @@ func (h *Host) setPref(name, value string, change func(*prefs)) {
 	h.storePref(name, value)
 }
 
-// storePref writes one preference to the store, behind those waiting, so they land in the order
-// set: after setPref's full apply, and after a feature's SetPref through its row (setRowPref).
+// storePref writes one preference to the store, behind those waiting. Alone, it is for one
+// nothing on screen shows: the recent files (recent.go), which every file opened changes.
 func (h *Host) storePref(name, value string) {
 	h.prefWrites = append(h.prefWrites, [2]string{name, value})
 	if len(h.prefWrites) == 1 {

@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // RECENT DOCUMENTS — File › Recent files… (SPC r): the files opened last, newest first, across
@@ -53,102 +51,33 @@ func withRecent(docs []recentDoc, d recentDoc) []recentDoc {
 	return out
 }
 
-// recent is File › Recent files…, a feature of its own: its list is its preference (tui.recent),
-// noted on every file shown and listed again whenever the workspaces or their files are.
-type recent struct {
-	c    Core
-	rows *rows[recentDoc]
+// noteRecent puts file p of workspace ws first among the recent files.
+func (h *Host) noteRecent(ws, p string) {
+	h.prefs.recent = withRecent(h.prefs.recent, recentDoc{Workspace: ws, Path: p})
+	h.storePref(prefRecent, recentJSON(h.prefs.recent))
 }
 
-func newRecent(c Core) *recent {
-	return &recent{c: c, rows: newRows(tuidecl.NewListModel("key", "workspace", "path"), recentRowOf)}
+// openRecent lists the recent files and opens the dialog.
+func (h *Host) openRecent() {
+	h.listRecent()
+	h.open("recent")
 }
 
-func (*recent) Name() string { return "recent" }
-
-func (r *recent) State() map[string]any {
-	return map[string]any{"App.recentFiles": r.rows.Model(), "App.recentStatus": ""}
-}
-
-func (r *recent) Commands() map[string]Command {
-	return map[string]Command{
-		"App.openRecent":   none(r.open),
-		"App.recentSelect": oneNumber("a row", r.choose),
-		"App.clearRecent":  none(r.clear),
-	}
-}
-
-// Prefs is the list, as the store keeps it: no chooser, the feature sets it (SetPref).
-func (r *recent) Prefs() []PrefSpec { return []PrefSpec{ValuePref(prefRecent, "[]", nil)} }
-
-// docs are the recent files the preference holds, newest first.
-func (r *recent) docs() []recentDoc { return recentOf(r.c.Prefs().Value(prefRecent)) }
-
-// Shown notes a file shown: first among the recent files. The draft is none.
-func (r *recent) Shown(p Page) {
-	if p.Ref.path == "" {
-		return
-	}
-	r.c.SetPref(prefRecent, recentJSON(withRecent(r.docs(), recentDoc{Workspace: p.Ref.ws, Path: p.Ref.path})))
-}
-
-func (*recent) Edited(Page)    {}
-func (*recent) Moved(int, int) {}
-func (*recent) Reread(Page)    {}
-func (*recent) Closed()        {}
-
-// Listed lists the recent files again: a workspace's files, or the workspaces, listed anew decide
-// which are still there.
-func (r *recent) Listed() { r.list() }
-
-// open lists the recent files and opens the dialog.
-func (r *recent) open() {
-	r.list()
-	r.c.Open("recent")
-}
-
-// list shows the recent files still there: their workspace known, and, in the workspace in use,
-// still among its files.
-func (r *recent) list() {
+// listRecent shows the recent files still there: their workspace known, and, in the workspace in
+// use, still among its files.
+func (h *Host) listRecent() {
 	var listed []recentDoc
-	for _, d := range r.docs() {
-		if r.listed(d) {
+	for _, d := range h.prefs.recent {
+		if h.recentListed(d) {
 			listed = append(listed, d)
 		}
 	}
-	r.rows.Reset(listed)
+	h.recent.Reset(listed)
 	if len(listed) == 0 {
-		r.c.Set("App.recentStatus", "no recent files: the files you open are listed here")
+		h.set("App.recentStatus", "no recent files: the files you open are listed here")
 		return
 	}
-	r.c.Set("App.recentStatus", fmt.Sprintf("%d recent files, the newest first", len(listed)))
-}
-
-func (r *recent) listed(d recentDoc) bool {
-	if d.Workspace == "" {
-		return true // a file outside every workspace: opening it says when it is gone
-	}
-	if !slices.Contains(r.c.Workspaces(), d.Workspace) {
-		return false
-	}
-	return d.Workspace != r.c.Workspace() || slices.Contains(r.c.Files().Paths, d.Path)
-}
-
-// choose opens the recent file at row i.
-func (r *recent) choose(i int) {
-	d, ok := r.rows.At(i)
-	if !ok {
-		return
-	}
-	r.c.Close("recent")
-	r.c.OpenRef(d.Workspace, d.Path)
-}
-
-// clear forgets the recent files.
-func (r *recent) clear() {
-	r.c.SetPref(prefRecent, "[]")
-	r.list()
-	r.c.Say("cleared the recent files")
+	h.set("App.recentStatus", fmt.Sprintf("%d recent files, the newest first", len(listed)))
 }
 
 // recentRowOf is a recent file as the list shows it.
@@ -158,4 +87,31 @@ func recentRowOf(_ int, d recentDoc) rowOf {
 		label = "(" + outsideBadge + ")"
 	}
 	return rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
+}
+
+func (h *Host) recentListed(d recentDoc) bool {
+	if d.Workspace == "" {
+		return true // a file outside every workspace: opening it says when it is gone
+	}
+	if !slices.ContainsFunc(h.workspaces.All(), func(w wsInfo) bool { return w.name == d.Workspace }) {
+		return false
+	}
+	return d.Workspace != h.ws || slices.Contains(h.files.Paths, d.Path)
+}
+
+// recentSelect opens the recent file at row i.
+func (h *Host) recentSelect(i int) {
+	d, ok := h.recent.At(i)
+	if !ok {
+		return
+	}
+	h.closeDialog("recent")
+	h.openIn(d.Workspace, d.Path)
+}
+
+// clearRecent forgets the recent files.
+func (h *Host) clearRecent() {
+	h.setPref(prefRecent, "[]", func(pr *prefs) { pr.recent = nil })
+	h.listRecent()
+	h.say("cleared the recent files")
 }

@@ -43,8 +43,14 @@ Dialog {
                     Text { text: "indentation marks" }
                     ComboBox { model: App.indentMarkModes; textRole: "label"; currentIndex: App.indentMarksIndex; onActivated: App.setIndentMarksIndex(index) }
                     Text { text: "" }
-                    Text { text: "image previews (kitty graphics)" }
-                    ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.imagesIndex; onActivated: App.setImagesIndex(index) }
+                    // a document with two views (HTML): its source raw, or its text simplified
+                    Text { text: "image previews · two-view documents (HTML) open" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        ComboBox { model: App.yesNo; textRole: "label"; currentIndex: App.imagesIndex; onActivated: App.setImagesIndex(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.openAsChoices; textRole: "label"; currentIndex: App.openAsIndex; onActivated: App.setOpenAsIndex(index) }
+                    }
                     Text { text: "" }
                     Text { text: "the terminal: from · size · length" }
                     Flex {

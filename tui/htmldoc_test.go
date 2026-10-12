@@ -208,3 +208,40 @@ func TestRefusalNoticesSayWhy(t *testing.T) {
 		}
 	}
 }
+
+// TestTheOpenPreferenceAnswersForTheUser: Preferences' "documents with two views open" answers the
+// question once for all: raw opens a document's own bytes, editable, and simplified its text,
+// read-only, neither asking; "ask each time" (the default) asks.
+func TestTheOpenPreferenceAnswersForTheUser(t *testing.T) {
+	r, _ := runHTML(t)
+	dir := t.TempDir()
+	raw, simple := filepath.Join(dir, "raw.html"), filepath.Join(dir, "simple.html")
+	for _, p := range []string{raw, simple} {
+		if err := os.WriteFile(p, []byte("<h1>Title</h1><p>body</p>\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if def := onLoop(r, func() string { return r.h.prefs.openAs }); def != "prompt" {
+		t.Fatalf("the default is %q, want prompt (ask each time)", def)
+	}
+	asked := func() bool { return onLoop(r, func() bool { return r.h.htmlAsk != nil }) }
+
+	onLoop(r, func() bool { r.h.choosePrefNamed(prefOpenAs, 1); return true }) // raw
+	r.h.p.Post(func() { r.h.openAbsolute(raw) })
+	r.waitOpen(t, "", raw)
+	if f := r.file(); !f.raw || asked() {
+		t.Fatalf("raw by preference: raw %v, asked %v", f.raw, asked())
+	}
+
+	onLoop(r, func() bool { r.h.choosePrefNamed(prefOpenAs, 2); return true }) // simplified
+	r.h.p.Post(func() { r.h.openAbsolute(simple) })
+	r.waitOpen(t, "", simple)
+	if f := r.file(); f.raw || f.derived != "HTML" || asked() {
+		t.Fatalf("simplified by preference: raw %v, derived %q, asked %v", f.raw, f.derived, asked())
+	}
+
+	onLoop(r, func() bool { r.h.choosePrefNamed(prefOpenAs, 0); return true }) // ask each time
+	r.h.p.Post(func() { r.h.openAbsolute(raw) })
+	r.s.WaitForText(t, "open an HTML file")
+	r.h.p.Post(func() { r.h.openHTMLAs("cancel") })
+}
