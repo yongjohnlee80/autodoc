@@ -3,12 +3,16 @@ package ingest
 import (
 	"context"
 	"errors"
+	"net"
+	"net/url"
 	"slices"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
+	"github.com/yongjohnlee80/golib/dao/postgres"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 )
@@ -258,5 +262,87 @@ func TestConfirmSaysWhetherTheTenantIsThisServers(t *testing.T) {
 	in.Release()
 	if err := in.Confirm(f.ctx); !errors.Is(err, ErrNotLocked) {
 		t.Fatalf("Confirm after Release: %v, want ErrNotLocked", err)
+	}
+}
+
+// A Run whose lock wait passes the caller's deadline stops cleanly, nil, though the driver's
+// write timed out a moment before the context said it had ended. The mutant, named here: Run
+// judging the stop by ctx.Err() alone (it returns the deadline as a failure).
+func TestARunWhoseWaitPassesItsDeadlineStopsCleanly(t *testing.T) {
+	f := newFixture(t)
+	open, cancel := context.WithCancel(f.ctx)
+	t.Cleanup(cancel)
+	late := lateTimer{Context: open, deadline: time.Now().Add(-time.Millisecond)}
+	locks := f.open("locks", "")
+	f.scalar(locks, "SELECT 1") // an idle connection, so the pin succeeds and the write times out
+	in := New(f.st, f.tenant, f.source(nil), f.business, locks, Options{Schema: f.schema, LockPoll: 20 * time.Millisecond})
+	if err := in.Run(late); err != nil {
+		t.Errorf("a Run whose wait passed its deadline: %v, want nil", err)
+	}
+}
+
+// blackHole is a TCP address that accepts connections and never answers: a database host that
+// hangs, so a connection to it ends at its own connect_timeout.
+func blackHole(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var held []net.Conn
+	t.Cleanup(func() {
+		_ = ln.Close()
+		mu.Lock()
+		for _, c := range held {
+			_ = c.Close()
+		}
+		mu.Unlock()
+	})
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			held = append(held, c)
+			mu.Unlock()
+		}
+	}()
+	return ln.Addr().String()
+}
+
+// A Run whose lock connection times out on its own, under a caller's context still live, fails
+// with that error: the server stops and its supervisor restarts it, rather than going on without
+// the tenant's ingester. The timeout wraps context.DeadlineExceeded, the connection's own deadline,
+// not the caller's. The mutant, named here: Run treating any error that wraps a context error as a
+// clean stop (it returns nil, and the tenant is silently not ingested).
+func TestARunWhoseLockConnectionTimesOutFails(t *testing.T) {
+	f := newFixture(t)
+	u, err := url.Parse(f.dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.Host = blackHole(t)
+	q := u.Query()
+	q.Set("connect_timeout", "1")
+	q.Set("sslmode", "disable")
+	u.RawQuery = q.Encode()
+	locks, err := postgres.OpenNamed(f.ctx, "locks-hung", u.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { locks.Close() })
+	in := New(f.st, f.tenant, f.source(nil), f.business, locks, Options{Schema: f.schema})
+	done := make(chan error, 1)
+	go func() { done <- in.Run(f.ctx) }()
+	select {
+	case err := <-done:
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || f.ctx.Err() != nil {
+			t.Errorf("a Run whose lock connection timed out under a live context: %v, want the connection's timeout", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("Run went on waiting for a connection that timed out")
 	}
 }

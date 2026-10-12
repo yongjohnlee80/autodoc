@@ -652,10 +652,10 @@ func (in *Ingester) count(ctx context.Context, st *Stats) {
 // it at once with ErrLockLost. It returns nil when ctx ends, with the lock released.
 func (in *Ingester) Run(ctx context.Context) error {
 	if err := in.Acquire(ctx); err != nil {
-		// a wait ended by ctx is a clean stop. Acquire answers ctx's error as soon as its deadline
-		// has passed, which can be a moment before ctx's own timer marks it done, so ctx.Err()
-		// alone would call that stop a failure
-		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		// a wait ended by ctx is a clean stop: ctx's error, or its deadline passed, which Acquire
+		// answers as soon as it has, a moment before ctx's own timer may mark it done. Any other
+		// failure is one, though it wrap a deadline of its own (a connection's connect_timeout)
+		if pgstore.Ended(ctx) != nil {
 			return nil
 		}
 		return err

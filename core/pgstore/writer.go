@@ -66,7 +66,7 @@ func AcquireWriter(ctx context.Context, conn dao.DataConn, schema, tenant string
 	key := WriterKey(schema, tenant)
 	pin, err := postgres.PinSessionConn(ctx, conn)
 	if err != nil {
-		if err := ended(ctx); err != nil {
+		if err := Ended(ctx); err != nil {
 			return nil, err
 		}
 		return nil, fmt.Errorf("pgstore: pin the writer lock's connection: %w", err)
@@ -83,7 +83,7 @@ func AcquireWriter(ctx context.Context, conn dao.DataConn, schema, tenant string
 		})
 		if err != nil {
 			pin.Discard()
-			if err := ended(ctx); err != nil {
+			if err := Ended(ctx); err != nil {
 				// the caller stopped waiting: the driver's error (an i/o timeout at the deadline)
 				// says nothing more than that
 				return nil, err
@@ -123,8 +123,8 @@ func (l *WriterLock) Check(ctx context.Context) error {
 			[]any{l.key}, &held)
 	})
 	switch {
-	case err != nil && ended(ctx) != nil:
-		return ended(ctx) // the caller stopped: that says nothing of the lock
+	case err != nil && Ended(ctx) != nil:
+		return Ended(ctx) // the caller stopped: that says nothing of the lock
 	case err != nil:
 		l.markLost()
 		return fmt.Errorf("%w: %v", ErrWriterLost, err)
@@ -135,11 +135,11 @@ func (l *WriterLock) Check(ctx context.Context) error {
 	return nil
 }
 
-// ended is ctx's error once it has ended, counting a deadline that has passed though ctx's own
+// Ended is ctx's error once it has ended, counting a deadline that has passed though ctx's own
 // timer has not yet fired. The driver bounds a write by the socket's deadline, set to ctx's, and the
 // runtime can fail that write with an i/o timeout a moment before the timer marks ctx done: in that
 // window ctx.Err() is still nil, and the caller's deadline would read as a broken connection.
-func ended(ctx context.Context) error {
+func Ended(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
