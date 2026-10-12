@@ -73,7 +73,7 @@ func agentPrefRows(a *agents) []PrefSpec {
 		shows(agentPreferenceState)
 	profiles := ValuePref(prefAgentProfiles, "[]", nil)
 	def := ValuePref(prefAgentDefault, "", nil)
-	identity := ValuePref(prefAgentDefaultCodename, legacyAgentDefault, nil)
+	identity := ValuePref(prefAgentDefaultCodename, "", nil)
 	if a != nil {
 		edge = edge.then(func(prefs) { a.c.DockPanel("agent") })
 		profiles = profiles.then(func(prefs) { a.listAgents() })
@@ -98,16 +98,7 @@ func (a *agents) profiles() []agentProfile {
 	return agentProfilesOf(a.c.Prefs().Value(prefAgentProfiles))
 }
 func (a *agents) defaultProfile() string {
-	if code := a.c.Prefs().Value(prefAgentDefaultCodename); code != legacyAgentDefault {
-		return code
-	}
-	name := a.c.Prefs().Value(prefAgentDefault)
-	for _, p := range a.profiles() {
-		if p.Name == name {
-			return p.Codename // legacy name selects the first stored match
-		}
-	}
-	return ""
+	return a.c.Prefs().Value(prefAgentDefaultCodename)
 }
 func (a *agents) Commands() map[string]Command {
 	return map[string]Command{
@@ -154,7 +145,6 @@ const (
 	prefAgentProfiles        = "tui.agent.profiles"
 	prefAgentDefault         = "tui.agent.default"
 	prefAgentDefaultCodename = "tui.agent.default.codename"
-	legacyAgentDefault       = "<legacy>" // missing identity preference, distinct from an explicit empty default
 )
 
 // agentProfile is one way to start an agent.

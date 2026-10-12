@@ -2,9 +2,34 @@ package tui
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"unicode"
 )
+
+// migrateAgentDefault examines presence in the raw store, before readRows can
+// turn absence and an explicit empty string into the same default. Once the
+// canonical key exists, the legacy mirror never participates in resolution.
+func migrateAgentDefault(values map[string]any) (map[string]any, bool) {
+	if _, present := values[prefAgentDefaultCodename]; present {
+		return values, false
+	}
+	name, _ := values[prefAgentDefault].(string)
+	raw, _ := values[prefAgentProfiles].(string)
+	code := ""
+	for _, p := range agentProfilesOf(raw) {
+		if p.Name == name {
+			code = p.Codename
+			break
+		}
+	}
+	values = maps.Clone(values)
+	if values == nil {
+		values = map[string]any{}
+	}
+	values[prefAgentDefaultCodename] = code
+	return values, true
+}
 
 // agentCodename is a legacy profile name's default identity. Separators become
 // one hyphen; uniqueAgentCodenames allocates stable migration suffixes.

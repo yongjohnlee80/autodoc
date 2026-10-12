@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -260,6 +261,52 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	again := attached(t, d)
 	if n := onLoop(again, func() int { return len(again.h.agents.profiles()) }); n != 1 {
 		t.Errorf("a new TUI reads %d profiles, want the 1 kept", n)
+	}
+}
+
+func TestAnExplicitlyClearedAgentDefaultStaysClearedAfterLoad(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
+		prefAgentProfiles: `[{"name":"A","command":"false","codename":"a"}]`,
+		prefAgentDefault:  "A", prefAgentDefaultCodename: "",
+	}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitFor(t, "stored cleared default loaded", func(string) bool {
+		return onLoop(r, func() bool {
+			return r.h.started && len(r.h.agents.profiles()) == 1 && r.h.agents.defaultProfile() == ""
+		})
+	})
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitForText(t, "Make default marks the one SPC g opens")
+	if code := onLoop(r, func() string { return r.h.agents.agentRunning }); code != "" {
+		t.Fatalf("restart revived the old default identity %q", code)
+	}
+}
+
+func TestLegacyAgentDefaultMigratesOnceAndNeverReadsItsMirrorAgain(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: map[string]string{
+		prefAgentProfiles: `[{"name":"A","command":"false"}]`, prefAgentDefault: "A",
+	}})
+	sess := NewSession(d.sock, nil)
+	var writes atomic.Int32
+	sess.SetBeforeCall(func(method string, args []any) {
+		if method == "preference.set" && args[0] == prefAgentDefaultCodename {
+			writes.Add(1)
+		}
+	})
+	r := runTUI(t, sess, Options{})
+	r.s.WaitFor(t, "canonical default persisted", func(string) bool {
+		m, err := d.db.Preferences(context.Background())
+		return err == nil && m[prefAgentDefaultCodename] == "a"
+	})
+	if _, err := sess.Call(context.Background(), "preference.set", prefAgentDefault, "B"); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.loadPrefs(); return true })
+	r.s.WaitFor(t, "mirror reloaded without retargeting", func(string) bool {
+		return onLoop(r, func() bool { return r.h.prefs.Value(prefAgentDefault) == "B" && r.h.agents.defaultProfile() == "a" })
+	})
+	if got := writes.Load(); got != 1 {
+		t.Fatalf("canonical migration wrote %d times, want once", got)
 	}
 }
 

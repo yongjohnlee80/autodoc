@@ -416,6 +416,12 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 	})
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-test")
+	// Initial preference migrations are stored through the same queue. Count
+	// only the two user changes after those startup writes have answered.
+	r.s.WaitFor(t, "initial preference writes answered", func(string) bool {
+		return onLoop(r, func() bool { return r.h.started && len(r.h.prefWrites) == 0 })
+	})
+	answered.Store(0)
 	onLoop(r, func() bool {
 		r.h.terminals.setTerminalEdge(indexOf(termEdges, "top"))
 		r.h.terminals.setTerminalEdge(indexOf(termEdges, "right"))

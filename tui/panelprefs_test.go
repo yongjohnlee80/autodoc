@@ -18,7 +18,7 @@ func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 		r.h.terminals.c.SetPref(prefTermEdge, "left")
 		r.h.agents.c.SetPref(prefAgentEdge, "center")
 		r.h.agents.c.SetPref(prefAgentProfiles, json)
-		r.h.agents.c.SetPref(prefAgentDefault, "alpha")
+		r.h.agents.c.SetPref(prefAgentDefaultCodename, "alpha")
 		for name, want := range map[string]string{
 			"App.terminalEdge": "left", "App.terminalSize": "40", "App.terminalEdgeIndex": "2",
 			"App.agentEdge": "center", "App.agentSize": "80", "App.agentEdgeIndex": "4",
@@ -32,7 +32,7 @@ func TestPanelPreferenceRowsApplyLiveAndQueueWritesInOrder(t *testing.T) {
 		if !strings.Contains(status.Raw, "SPC g opens alpha") || r.h.agents.defaultProfile() != "alpha" || len(r.h.agents.profiles()) != 1 {
 			return false
 		}
-		want := [][2]string{{prefTermEdge, "left"}, {prefAgentEdge, "center"}, {prefAgentProfiles, json}, {prefAgentDefault, "alpha"}}
+		want := [][2]string{{prefTermEdge, "left"}, {prefAgentEdge, "center"}, {prefAgentProfiles, json}, {prefAgentDefaultCodename, "alpha"}}
 		return reflect.DeepEqual(r.h.prefWrites[before:], want)
 	})
 	if !got {

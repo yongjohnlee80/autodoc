@@ -232,6 +232,7 @@ func prefsFor(m map[string]any, gui bool) prefs {
 }
 
 func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
+	m, _ = migrateAgentDefault(m)
 	p := defaultPrefsFor(gui)
 	p.panelDefs = specs
 	readRows(&p, m, legacyPrefRows(nil, gui))
@@ -303,9 +304,14 @@ func (h *Host) loadPrefs() {
 			h.failed("preferences", a.err)
 			return
 		}
-		p := prefsForPanels(a.v, h.gui, h.panelSpecs())
-		readRows(&p, a.v, h.prefRows) // the features' own rows too
+		values, migrated := migrateAgentDefault(a.v)
+		p := prefsForPanels(values, h.gui, h.panelSpecs())
+		readRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
+		if migrated {
+			// The row setter persists even when the projected value already matches.
+			core{h}.SetPref(prefAgentDefaultCodename, p.Value(prefAgentDefaultCodename))
+		}
 	})
 }
 

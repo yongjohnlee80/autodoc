@@ -23,7 +23,7 @@ type identityHost struct {
 
 func newIdentityHost(raw string) *identityHost {
 	return &identityHost{p: prefs{values: map[string]string{
-		prefAgentProfiles: raw, prefAgentDefaultCodename: legacyAgentDefault,
+		prefAgentProfiles: raw, prefAgentDefaultCodename: "",
 	}}, state: map[string]any{}}
 }
 func (c *identityHost) Prefs() prefs                    { return c.p }
@@ -79,7 +79,7 @@ func TestLegacyCodenamesAreUniqueDeterministicAndPersisted(t *testing.T) {
 
 func TestProfileRenamesKeepOwnAndUntouchedLegacyCodenames(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Claude Opus","command":"one"},{"name":"Other Agent","command":"two"}]`)
-	c.SetPref(prefAgentDefault, "Other Agent")
+	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefault: "Other Agent"}, false)
 	a := newAgents(c, "", "")
 	a.startEditAgent(1)
 	a.saveAgent("Renamed", "two")
@@ -160,7 +160,7 @@ func TestGoneProfileActionsAndARefusedSwitchLeaveTheRunningAgentAlone(t *testing
 
 func TestLegacyDefaultNameMigratesWithoutConfusingAnotherCodename(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Foo","command":"one"},{"name":"foo","command":"two"},{"name":"foo-2","command":"three"}]`)
-	c.SetPref(prefAgentDefault, "foo-2")
+	c.p = prefsFor(map[string]any{prefAgentProfiles: c.p.Value(prefAgentProfiles), prefAgentDefault: "foo-2"}, false)
 	a := newAgents(c, "", "")
 	if p, ok := a.profile(a.defaultProfile()); !ok || p.Command != "three" {
 		t.Fatalf("legacy name was mistaken for another allocated codename: %+v", p)
@@ -196,6 +196,47 @@ func TestAnEditedProfileSnapshotCannotOverwriteANewerRecord(t *testing.T) {
 	a.saveAgentProfile("Edited", "old form", "same")
 	if !reflect.DeepEqual(profiles, a.profiles()) || !strings.Contains(c.state["App.agentFormError"].(string), "profile changed") {
 		t.Fatal("a stale form overwrote the changed record")
+	}
+}
+
+func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		present         bool
+		canonical, want string
+	}{
+		{"legacy absent", false, "", "a"},
+		{"explicit clear", true, "", ""},
+		{"canonical selection", true, "b", "b"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := map[string]any{
+				prefAgentProfiles: `[{"name":"A","command":"one"},{"name":"B","command":"two"}]`,
+				prefAgentDefault:  "A",
+			}
+			if tc.present {
+				raw[prefAgentDefaultCodename] = tc.canonical
+			}
+			values, migrated := migrateAgentDefault(raw)
+			if migrated == tc.present {
+				t.Fatal("migration ignored canonical key presence")
+			}
+			var rows prefs
+			readRows(&rows, values, agentPrefRows(nil))
+			for _, p := range []prefs{rows, prefsFor(raw, false), prefsFor(raw, true)} {
+				c := newIdentityHost(`[]`)
+				c.p = p
+				if got := newAgents(c, "", "").defaultProfile(); got != tc.want {
+					t.Fatalf("restart default %q, want %q", got, tc.want)
+				}
+			}
+			if _, changed := migrateAgentDefault(values); changed {
+				t.Fatal("canonical preferences migrated more than once")
+			}
+			if _, added := raw[prefAgentDefaultCodename]; added != tc.present {
+				t.Fatal("migration mutated the raw store map")
+			}
+		})
 	}
 }
 

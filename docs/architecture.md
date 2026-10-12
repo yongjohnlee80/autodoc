@@ -142,9 +142,10 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   The first list save persists all identities; display-name edits do not renumber them. Display
   labels may repeat: editing, default and switch flows resolve by codename. A running identity
   stays reserved after profile removal; a refused stop request does not release it. The default
-  preference stores the codename; a legacy name selects its first stored matching profile
-  during migration. A separate identity key distinguishes an explicit empty default from legacy
-  data, while the old name key remains a compatibility mirror.
+  preference stores the codename. At load, absence of the canonical key migrates the legacy name
+  to its first stored matching profile and persists that identity once. An existing canonical key,
+  including an empty value, never falls back to the old name. The old key is only a compatibility
+  mirror, not a lookup key after migration.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
 - **A list to filter and choose from is a picker, never a fifth layout.**
