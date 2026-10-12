@@ -480,7 +480,6 @@ func (h *Host) closeFile() {
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
 	h.core.SetReadOnly(false)
-	h.showTitle()
 	h.set("App.syntaxDefinition", "Markdown")
 	h.setRendered(true) // the draft is Markdown, whatever the file before it was
 	h.set("App.statusCenter", "")

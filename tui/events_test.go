@@ -90,4 +90,8 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 	if n := one.file(); n.open || !n.dirty || !strings.Contains(one.editorText(), "words nobody saved") {
 		t.Fatalf("after the peer's removal: %+v, text %q", n, one.editorText())
 	}
+	one.s.WaitFor(t, "the frame titled as the draft", func(string) bool {
+		t := one.frameTitle()
+		return strings.Contains(t, "┌ "+untitled) && !strings.Contains(t, "a.md")
+	})
 }
