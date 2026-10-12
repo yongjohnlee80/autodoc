@@ -308,10 +308,16 @@ func (in *Ingester) retry(ctx context.Context, upto time.Time, st *Stats) error 
 // is written again; one that fails is quarantined and its document kept. Every row read with an id
 // counts as seen, whether or not its body renders.
 //
+// The scan then goes on past now − Lag to the view's end, only to count the rows there as seen:
+// a row updated within the lag is still in the source, though the bounded scan cannot reach it.
+// The next pass indexes it once it is older than the lag. Pages are read one query at a time, not
+// in one snapshot, but a row updated during the scan only moves later in the order, where the scan
+// still reaches it.
+//
 // Only when the scan read every row, with no error and no row lacking an id, are the documents of
 // rows not seen deleted, the quarantined rows not seen released, and the refresh recorded; the
-// cursor then moves up to the scan's last row if it was behind it. A scan that failed or stopped
-// deletes nothing.
+// cursor then moves up to the last row read before now − Lag if it was behind it. A scan that
+// failed or stopped deletes nothing.
 //
 // NOTE: a refresh holds every document's path, version and indexer, and every quarantined id, in
 // memory for the length of its scan: O(documents), some hundred bytes each. A row's document is
@@ -365,10 +371,7 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 				st.Complete = false
 				continue
 			}
-			seenIDs[r.id] = true
-			if path, err := in.src.Path(r.id); err == nil {
-				seen[path] = true
-			}
+			in.see(r, seen, seenIDs)
 			written, err := in.apply(ctx, b, r, &st, current)
 			if err == nil && !written && quarantined[r.id] {
 				// current, though it failed before: the cause was fixed without changing it
@@ -395,6 +398,12 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 		}
 		cur = next
 	}
+	if st.Complete {
+		if err := in.present(ctx, cur, seen, seenIDs, &st); err != nil {
+			st.Complete = false
+			return st, err
+		}
+	}
 	if !st.Complete {
 		logger.Warning(in.o.Log, nil, fmt.Sprintf("tenant %s: refresh read %d rows with no id: it deletes nothing until the view gives every row one", in.tenant, st.Unidentified))
 		in.count(ctx, &st)
@@ -406,6 +415,48 @@ func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	}
 	in.count(ctx, &st)
 	return st, nil
+}
+
+// beyond is the upper bound a refresh's presence scan reads to: later than any updated_at a source
+// holds, so the view returns every row after the cursor.
+var beyond = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+
+// present reads the rows after cur, past the refresh's bound, and counts each as seen without
+// indexing it: rows updated within the lag are still in the source, and their documents and
+// quarantine entries must outlive the refresh.
+func (in *Ingester) present(ctx context.Context, cur pgstore.Cursor, seen, seenIDs map[string]bool, st *Stats) error {
+	for {
+		rows, err := readPage(ctx, in.src, in.business, cur, beyond)
+		if err != nil || len(rows) == 0 {
+			return err
+		}
+		st.Pages++
+		st.Read += len(rows)
+		next := cur
+		for _, r := range rows {
+			if r.id == "" {
+				st.Unidentified++
+				st.Complete = false
+				continue
+			}
+			in.see(r, seen, seenIDs)
+			if r.keyed() {
+				next = r.key()
+			}
+		}
+		if sameKey(next, cur) {
+			return ErrStalled
+		}
+		cur = next
+	}
+}
+
+// see counts row r as present in the source: its id, and its document's path when it has one.
+func (in *Ingester) see(r row, seen, seenIDs map[string]bool) {
+	seenIDs[r.id] = true
+	if path, err := in.src.Path(r.id); err == nil {
+		seen[path] = true
+	}
 }
 
 // deleteBatch bounds how many documents one transaction of a refresh deletes.

@@ -46,7 +46,8 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
   boundary are read; a pass reads up to `now() − Lag`, behind any business transaction shorter than
   the lag; a row that fails is quarantined and retried on every pass.
 - **No document is deleted on a partial read.** A refresh deletes only after a scan that read every
-  row, and a row whose body fails still counts as seen.
+  row, and a row whose body fails still counts as seen. A row updated within the lag counts as
+  seen too: after its bounded read, the refresh reads on to the view's end for presence alone.
 
 Writing a source view: [docs/enterprise/views.md](../../docs/enterprise/views.md).
 

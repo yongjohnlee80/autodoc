@@ -61,7 +61,7 @@ args: [after_ts, after_id, upto_ts]
 |---|---|---|
 | `$1` | `after_ts` | the `updated_at` of the last row the tenant's cursor passed |
 | `$2` | `after_id` | that row's `id`; **NULL** on the tenant's very first page, when `after_ts` is the zero time |
-| `$3` | `upto_ts` | the pass's upper bound: the database's `now()` minus the source's `lag` |
+| `$3` | `upto_ts` | the pass's upper bound: the database's `now()` minus the source's `lag`. A full refresh, after its bounded read, reads on past it with a far-future `upto_ts`, only to learn which rows still exist |
 
 The query returns **the rows after the cursor, up to `upto_ts`, in cursor order**:
 

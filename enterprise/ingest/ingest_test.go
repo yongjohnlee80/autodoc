@@ -208,6 +208,46 @@ func TestARefreshKeepsWhatItReadAndDeletesWhatIsGone(t *testing.T) {
 	}
 }
 
+// A row updated within the lag is past the refresh's bound, yet still in the source: the refresh
+// keeps its document and its quarantine entry, while a row truly gone loses its document; the next
+// pass past the lag indexes the update. The mutant, named here: absence taken from the bounded scan
+// alone (the updated row's document is deleted and its quarantine entry released).
+func TestARefreshKeepsARowUpdatedWithinTheLag(t *testing.T) {
+	f := newFixture(t)
+	f.track(1, "A", "song", 1)
+	f.track(2, "", "no label", 2) // quarantined
+	f.track(3, "A", "song", 3)
+	f.track(4, "A", "song", 4)
+	now := at(100)
+	in := f.ingester(f.source(nil), Options{Lag: time.Minute, Now: func(context.Context) (time.Time, error) { return now, nil }}, "")
+	if _, err := in.Pass(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.paths(); !slices.Equal(got, trackPaths(1, 3, 4)) {
+		t.Fatalf("documents %v before the refresh", got)
+	}
+	f.track(1, "A", "updated", 90) // within the lag: past now − lag
+	f.track(2, "", "still no label", 95)
+	f.exec(`DELETE FROM track WHERE id = 4`)
+	st := must[Stats](t)(in.Refresh(f.ctx))
+	if !st.Complete || st.Deleted != 1 || st.Released != 0 {
+		t.Errorf("Refresh: %+v, want track 4 alone deleted and nothing released", st)
+	}
+	if got := f.paths(); !slices.Equal(got, trackPaths(1, 3)) {
+		t.Errorf("documents %v, want track 1's kept", got)
+	}
+	if got := f.quarantined(); !slices.Equal(got, []string{"2"}) {
+		t.Errorf("quarantine %v, want track 2 kept", got)
+	}
+	now = at(200)
+	if _, err := in.Pass(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.lexical("updated"); !slices.Equal(got, []string{"track/1.md"}) {
+		t.Errorf("a search for the update finds %v", got)
+	}
+}
+
 // A scan that fails after some pages deletes nothing: the rows it did not reach would look gone.
 // The mutant, named here: the stale paths deleted after a scan that stopped on an error.
 func TestARefreshThatFailsDeletesNothing(t *testing.T) {
