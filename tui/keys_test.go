@@ -307,7 +307,14 @@ func scopeBlocks() string {
 // relations' alone. The check refuses a scoped key on a card, one of a pane main.qml does not
 // scope, and a sequence a pane takes twice.
 func TestAPanesKeysAreItsOwn(t *testing.T) {
-	k := keyCatalog(newHost(NewSession("unused", nil), Options{}).features()) // the find panes give the scopes / n N
+	fs := newHost(NewSession("unused", nil), Options{}).features()
+	k := keyCatalog(fs) // the find panes give the scopes their / n N
+	finds := map[string]bool{}
+	for _, f := range fs {
+		if p, ok := f.(Findable); ok {
+			finds[p.FindPane().Scope] = true
+		}
+	}
 	if err := k.check(mainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -330,8 +337,8 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 	for _, s := range keyScopes {
 		begin, end := scopeMarkers(s)
 		got := block(begin, end)
-		if !strings.Contains(got, s.Indent+`Shortcut { sequence: "/"; onActivated: App.openFind() }`) {
-			t.Errorf("the %s's keys lack /:\n%s", s.ID, got)
+		if has := strings.Contains(got, s.Indent+`Shortcut { sequence: "/"; onActivated: App.openFind() }`); has != finds[s.ID] {
+			t.Errorf("the %s's keys hold /: %v, but a find pane scoped there: %v\n%s", s.ID, has, finds[s.ID], got)
 		}
 		if hasD := strings.Contains(got, `sequence: "d"`); hasD != (s.ID == "links") {
 			t.Errorf("the %s's keys hold d: %v", s.ID, hasD)
