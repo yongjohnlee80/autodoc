@@ -1554,3 +1554,32 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 	r.leader(t, 'p')
 	r.s.WaitForText(t, "no plugin commands yet")
 }
+
+// A Plugins menu entry that starts nothing says why: none ("no plugins yet") does nothing; a key no
+// plugin has says so; a plugin refused when it was read says its reason. A theme golib does not
+// know is sent with no colours, its name kept.
+func TestAPluginEntryThatStartsNothingSaysWhy(t *testing.T) {
+	r := runTUI(t, NewSession("unused", nil), Options{})
+	refused := pluginEntry{dir: "/plugins/broken", m: manifest{Name: "broken"}, reason: "it speaks protocol 9"}
+	onLoop(r, func() bool {
+		r.h.pluginList = []pluginEntry{refused}
+		r.h.openPlugin("")
+		r.h.openPlugin("nosuch")
+		r.h.openPlugin(refused.key())
+		return true
+	})
+	r.waitNoticed(t, "no plugin nosuch")
+	r.waitNoticed(t, "broken — it speaks protocol 9")
+	if n := onLoop(r, func() int { return len(r.h.running) }); n != 0 {
+		t.Fatalf("%d plugins started from entries that start nothing", n)
+	}
+	if onLoop(r, func() bool {
+		return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return n.text == "no plugin " })
+	}) {
+		t.Error(`the empty entry ("no plugins yet") looked for a plugin named ""`)
+	}
+	th := onLoop(r, func() plugin.Theme { r.h.theme = "no-such-theme"; return r.h.pluginTheme() })
+	if th.Name != "no-such-theme" || th.Colors == nil || len(th.Colors) != 0 {
+		t.Errorf("an unknown theme was sent as %+v, want its name and no colours, {} not null", th)
+	}
+}
