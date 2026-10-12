@@ -906,6 +906,18 @@ pull one of these:
 
 They are small beside a chat model and run alongside one.
 
+## Enterprise search
+
+`autodoc --server server.toml` indexes an enterprise's **database rows**, not files: each row of a
+`.view` query is rendered to a document and kept in PostgreSQL with pgvector, in a schema of its
+own beside the business tables, current as the rows change, for a web application to search with
+an access scope on every query. `autodoc --server --check server.toml` validates the configuration
+and every view, and confirms each view's order against the database, read-only.
+
+[`docs/enterprise/`](docs/enterprise/) has all of it: [what it is and when to use
+it](docs/enterprise/README.md), [the server configuration](docs/enterprise/server-config.md), and
+[writing a `.view` source](docs/enterprise/views.md).
+
 ## Builds of your own
 
 `cmd/autodoc` is the community build: `app.Main` with nothing of its own. Every build, the community
