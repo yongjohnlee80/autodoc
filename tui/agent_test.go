@@ -80,7 +80,7 @@ func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) 
 	// with the listing's: SPC g before they land finds no default and opens the profiles.
 	r.s.WaitFor(t, "the preferences read", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.started && r.h.prefs.agentDefault == def && len(r.h.prefs.agents) == len(profiles)
+			return r.h.started && r.h.agents.defaultProfile() == def && len(r.h.agents.profiles()) == len(profiles)
 		})
 	})
 	return d, r, calls
