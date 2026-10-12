@@ -161,3 +161,25 @@ func TestOwnedPanelViewsRefuseCallsBeforeAttachment(t *testing.T) {
 		}
 	}
 }
+
+func TestFailedPanelAssemblyKeepsThePublishedRegistry(t *testing.T) {
+	h := newHost(NewSession("", nil), Options{})
+	defer h.cancel()
+	h.options(Options{})
+	previous := h.reg
+	before := h.prefs.panelDefs
+	f := &panelBinderFixture{panelFixture: panelFixture{name: "refusing", specs: []PanelSpec{fixturePanel()}}, err: errs.ErrUnsupported}
+	if err := h.assembleFeatures(f); !errors.Is(err, errs.ErrUnsupported) {
+		t.Fatalf("binding refusal: %v", err)
+	}
+	if h.reg != previous || len(h.prefs.panelDefs) != len(before) || h.prefs.panelDefs[0].ID != before[0].ID {
+		t.Fatal("a refused binding replaced the previously published registry/schema")
+	}
+	f.specs[0].ID = ""
+	if err := h.assembleFeatures(f); err == nil {
+		t.Fatal("an invalid schema was accepted")
+	}
+	if h.reg != previous || len(h.prefs.panelDefs) != len(before) {
+		t.Fatal("an invalid schema changed the published registry/schema")
+	}
+}

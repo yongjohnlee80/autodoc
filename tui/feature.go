@@ -158,6 +158,23 @@ func (r *registry) preferencesChanged() {
 	}
 }
 
+// assembleFeatures is initial program construction, before views can run.
+// A failed schema or service binding must not publish the candidate registry.
+func (h *Host) assembleFeatures(fs ...Feature) error {
+	previous, defs := h.reg, h.prefs.panelDefs
+	r, err := newRegistryWithPanels(func(specs []PanelSpec) { h.prefs.panelDefs = specs }, fs...)
+	if err != nil {
+		h.prefs.panelDefs = defs
+		return err
+	}
+	h.reg = r
+	if err := r.panels.bind(core{h}); err != nil {
+		h.reg, h.prefs.panelDefs = previous, defs
+		return err
+	}
+	return nil
+}
+
 // connected tells the features that hear connections.
 func (r *registry) connected() {
 	if r == nil {

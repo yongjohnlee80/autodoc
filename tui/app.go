@@ -413,14 +413,10 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	h.layoutSrc = src
 	h.theme = themeOf(src)
-	reg, err := newRegistryWithPanels(func(specs []PanelSpec) { h.prefs.panelDefs = specs }, h.features()...)
-	if err != nil {
+	if err := h.assembleFeatures(h.features()...); err != nil {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
-	h.reg, h.cat = reg, reg.catalog
-	if err := h.reg.panels.bind(core{h}); err != nil {
-		panic(err) // an invalid service binding cannot build a program
-	}
+	h.cat = h.reg.catalog
 	h.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
 	h.refreshPlugins()
 	opts = append(opts,
