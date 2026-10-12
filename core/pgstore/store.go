@@ -125,7 +125,7 @@ func (s *Store) ViewPolicy(ctx context.Context, access map[string][]string, chec
 			return fmt.Errorf("pgstore: policy: %w", err)
 		}
 		p := Policy{AccessFields: r.AccessFields, View: r.View}
-		if err := holdToPolicy(p, access); err != nil {
+		if err := CheckScope(p, access); err != nil {
 			return err
 		}
 		if check != nil {
@@ -141,9 +141,11 @@ func (s *Store) ViewPolicy(ctx context.Context, access map[string][]string, chec
 	})
 }
 
-// holdToPolicy refuses (ErrNoAccess) an access that does not give the policy's every field at
-// least one value, has an empty or a repeated value, or names a field outside the policy.
-func holdToPolicy(p Policy, access map[string][]string) error {
+// CheckScope refuses (ErrNoAccess) an access that does not give the policy's every field at least
+// one value, has an empty or a repeated value, or names a field outside the policy: what ViewPolicy
+// holds every access to. A caller may check early with it; ViewPolicy's check is the one that
+// guards, in its snapshot.
+func CheckScope(p Policy, access map[string][]string) error {
 	if len(p.AccessFields) == 0 {
 		return fmt.Errorf("%w: the tenant's policy has no access field", ErrNoAccess)
 	}
