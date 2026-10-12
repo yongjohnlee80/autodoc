@@ -143,7 +143,7 @@ var leaderKeys = onCard(leader, slices.Concat(
 	}),
 	inGroup(groupPanels, []Key{
 		{Seq: "e", Show: "e", Does: "the explorer", Run: "App.toggleExplorer()"},
-		{Seq: "l", Show: "l", Does: "the relations", Run: "App.toggleLinks()"},
+		{Seq: "l", Show: "l", Does: "the relations", Run: "App.toggleRelations()"},
 		{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
 		{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
 		{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},

@@ -1260,7 +1260,7 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	stored("tui.status.shown", "false")
 	post(func() { r.h.choosePrefNamed(prefExplorer, 2) })
 	stored("tui.explorer.edge", "top")
-	post(func() { r.h.choosePrefNamed(prefLinks, 3) })
+	post(func() { r.h.choosePrefNamed(prefRelationsEdge, 3) })
 	stored("tui.links.edge", "bottom")
 	post(func() { r.h.choosePrefNamed(themePref(r.h.gui), 1) })
 	stored("tui.theme", "light")

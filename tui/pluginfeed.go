@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
@@ -73,7 +72,7 @@ func (h *Host) feedDocuments() {
 			}
 			var err error
 			if r, err = h.startPlugin(e); err != nil {
-				h.notify(fmt.Sprintf("%s did not start: %v", e.m.Name, err))
+				h.failed(e.m.Name+" did not start", err)
 				continue
 			}
 			h.running[e.key()] = r

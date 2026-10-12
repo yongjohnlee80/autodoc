@@ -53,7 +53,7 @@ func (h *Host) switchTheme(name string) {
 	if h.dev != "" {
 		b, err := os.ReadFile(path.Join(h.dev, "main.qml"))
 		if err != nil {
-			h.notify("theme: " + err.Error())
+			h.failed("theme", err)
 			return
 		}
 		src = b
@@ -67,7 +67,7 @@ func (h *Host) switchTheme(name string) {
 	// between emissions
 	h.p.Post(func() {
 		if _, err := h.p.Reload(next); err != nil {
-			h.notify("theme: " + err.Error())
+			h.failed("theme", err)
 			return
 		}
 		h.layoutSrc, h.theme = next, name

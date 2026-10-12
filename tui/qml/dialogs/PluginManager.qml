@@ -24,6 +24,6 @@ Dialog {
         Button { text: "&Place"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.placePlugin(pluginTable.currentIndex) }
         Button { text: "&Update…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startUpdatePlugin(pluginTable.currentIndex) }
         Button { text: "&Remove…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemovePlugin(pluginTable.currentIndex) }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

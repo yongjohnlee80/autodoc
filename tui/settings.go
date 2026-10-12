@@ -754,7 +754,7 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 		case !a.added:
 			refuse(a.err)
 		case a.err != nil:
-			h.notify("added workspace " + name + ", but its settings were not saved: " + wireMessage(a.err))
+			h.failed("added workspace "+name+", but its settings were not saved", a.err)
 			made := base
 			made.w, made.adding = a.w, false
 			h.loadWorkspaces()

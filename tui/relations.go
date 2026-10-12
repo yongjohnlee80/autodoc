@@ -156,10 +156,10 @@ func newRelated(c Core) *related {
 func (*related) Name() string { return "relations" }
 
 func (r *related) Panels() []PanelSpec {
-	s := linksPanelSpec()
+	s := relationsPanelSpec()
 	s.Open = func(c PanelHost) {
 		r.ofPage()
-		c.OpenDrawer("links")
+		c.OpenDrawer(relationsPanelSpec().ID)
 	}
 	return []PanelSpec{s}
 }
@@ -169,18 +169,18 @@ func (r *related) State() map[string]any {
 		"App.relations":      r.rows.Model(),
 		"App.relationsTitle": "relations",
 		"App.jumpText":       "",
-		"App.linksIndex":     0,
+		"App.relationsIndex": 0,
 	}
 }
 
 func (r *related) Commands() map[string]Command {
 	return map[string]Command{
-		"App.toggleLinks":    none(r.toggle),
-		"App.linksMoved":     oneNumber("a row", r.moved),
-		"App.openRelation":   oneNumber("a row", r.open),
-		"App.relationsDepth": none(r.depth),
-		"App.openJumpCard":   none(r.openJumpCard),
-		"App.jumpTo":         oneNumber("1 to 9", r.jumpTo),
+		"App.toggleRelations": none(r.toggle),
+		"App.relationsMoved":  oneNumber("a row", r.moved),
+		"App.openRelation":    oneNumber("a row", r.open),
+		"App.relationsDepth":  none(r.depth),
+		"App.openJumpCard":    none(r.openJumpCard),
+		"App.jumpTo":          oneNumber("1 to 9", r.jumpTo),
 	}
 }
 
@@ -188,7 +188,7 @@ func (r *related) Commands() map[string]Command {
 func (r *related) Catalog() []Entry {
 	return []Entry{
 		builtin("file.related", "related files, by digit", "App.openJumpCard()", r.openJumpCard),
-		builtin("links.toggle", "the relations", "App.toggleLinks()", r.toggle),
+		builtin("links.toggle", "the relations", "App.toggleRelations()", r.toggle),
 	}
 }
 
@@ -204,7 +204,7 @@ func (*related) Reread(Page)    {}
 func (*related) Closed()        {}
 
 // toggle opens the drawer, or closes it; opening reads the relations again (panels.go).
-func (r *related) toggle() { r.c.TogglePanel("links") }
+func (r *related) toggle() { r.c.TogglePanel(relationsPanelSpec().ID) }
 
 // moved is the drawer's cursor moving.
 func (r *related) moved(i int) { r.at = i }
@@ -314,8 +314,8 @@ func (r *related) show(ws, p string, rl relations) {
 
 // moveTo puts the drawer's cursor on row i.
 func (r *related) moveTo(i int) {
-	r.c.Set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view
-	r.c.Set("App.linksIndex", i)
+	r.c.Set("App.relationsIndex", -1) // moved away first: the same row twice still reaches the view
+	r.c.Set("App.relationsIndex", i)
 	r.at = i
 }
 
@@ -339,7 +339,7 @@ func (r *related) open(i int) {
 
 // depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.
 func (r *related) depth() {
-	if !r.c.HasFocus(linksPanelSpec().View) {
+	if !r.c.HasFocus(relationsPanelSpec().View) {
 		return
 	}
 	r.deep = !r.deep

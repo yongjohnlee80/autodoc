@@ -36,6 +36,6 @@ Dialog {
         Button { text: "&Edit…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEditWorkspace(managerTable.currentIndex) }
         Button { text: "Ad&vanced…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAdvancedWorkspace(managerTable.currentIndex) }
         Button { text: "&Delete…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemoveWorkspace(managerTable.currentIndex) }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

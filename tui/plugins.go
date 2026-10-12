@@ -53,7 +53,7 @@ func (h *Host) openPlugin(key string) {
 	}
 	r, err := h.startPlugin(e)
 	if err != nil {
-		h.notify(fmt.Sprintf("%s did not start: %v", e.m.Name, err))
+		h.failed(e.m.Name+" did not start", err)
 		return
 	}
 	h.running[key] = r

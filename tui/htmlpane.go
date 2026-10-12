@@ -91,7 +91,7 @@ func (h *Host) renderHTMLPane() {
 			return // an edit since: its render follows
 		}
 		if a.err != nil {
-			h.notify("HTML preview: " + a.err.Error())
+			h.failed("HTML preview", a.err)
 			return
 		}
 		v, ok := h.htmlView()
@@ -140,7 +140,7 @@ func (h *Host) htmlLink(href string) {
 	default:
 		do(h, func(ctx context.Context) error { return h.browser(ctx, href) }, func(err error) {
 			if err != nil {
-				h.notify("open " + href + ": " + err.Error())
+				h.failed("open "+href, err)
 			}
 		})
 		return

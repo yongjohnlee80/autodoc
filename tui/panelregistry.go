@@ -100,8 +100,11 @@ func sidePanelSpec(id, view string, priority int, edge func(prefs) string) Panel
 func explorerPanelSpec() PanelSpec {
 	return sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
 }
-func linksPanelSpec() PanelSpec {
-	return sidePanelSpec("links", "linksList", 20, func(p prefs) string { return p.linkEdge })
+
+// relationsPanelSpec is the relations drawer. Its id stays "links": the geometry and float
+// preferences it keeps are stored under that id (tui.links.*).
+func relationsPanelSpec() PanelSpec {
+	return sidePanelSpec("links", "relationsList", 20, func(p prefs) string { return p.relationsEdge })
 }
 func terminalPanelSpec() PanelSpec {
 	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30,
@@ -120,7 +123,7 @@ func legacyPanelSpecs() []PanelSpec {
 }
 func defaultPanelSpecs() []PanelSpec {
 	return []PanelSpec{
-		explorerPanelSpec(), linksPanelSpec(),
+		explorerPanelSpec(), relationsPanelSpec(),
 		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
 	}
 }

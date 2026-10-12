@@ -220,7 +220,7 @@ func (h *Host) runPluginCommand(key, id string) {
 	if r == nil {
 		var err error
 		if r, err = h.startPlugin(e); err != nil {
-			h.notify(fmt.Sprintf("%s did not start: %v", e.m.Name, err))
+			h.failed(e.m.Name+" did not start", err)
 			return
 		}
 		h.running[key] = r
@@ -246,7 +246,7 @@ func (h *Host) launchServices() {
 		}
 		r, err := h.startPlugin(e)
 		if err != nil {
-			h.notify(fmt.Sprintf("%s did not start: %v", e.m.Name, err))
+			h.failed(e.m.Name+" did not start", err)
 			continue
 		}
 		h.running[e.key()] = r

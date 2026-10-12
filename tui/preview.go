@@ -289,7 +289,7 @@ func (h *Host) openPreviewInBrowser() {
 	}
 	do(h, func(ctx context.Context) error { return h.browser(ctx, path) }, func(err error) {
 		if err != nil {
-			h.notify("the browser did not open: " + err.Error())
+			h.failed("the browser did not open", err)
 			return
 		}
 		h.say("HTML preview opened in the browser: " + filepath.Base(path))

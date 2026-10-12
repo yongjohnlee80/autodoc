@@ -17,6 +17,6 @@ Dialog {
     }
     DialogButtonBox {
         Button { text: "&Manage…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.manageWorkspaces() }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

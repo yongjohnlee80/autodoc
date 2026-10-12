@@ -111,7 +111,7 @@ func (h *Host) dropRecovery(ws, p string) {
 		return
 	}
 	if err := os.Remove(recoveryFile(h.recoveryDir, ws, p)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		h.notify("could not remove the recovery copy of " + p + ": " + err.Error())
+		h.failed("could not remove the recovery copy of "+p, err)
 	}
 }
 
@@ -255,7 +255,7 @@ func (h *Host) restoreSettled() {
 func (h *Host) applyRecovered(r recovered) {
 	end := widget.TextPos{Line: h.core.LineCount() - 1, Col: 1 << 30}
 	if _, err := h.core.Replace(widget.TextRange{To: end}, r.Text); err != nil {
-		h.notify("could not restore " + r.Path + ": " + err.Error())
+		h.failed("could not restore "+r.Path, err)
 		return
 	}
 	h.setDirty(true)

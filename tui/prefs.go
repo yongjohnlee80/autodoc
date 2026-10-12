@@ -19,22 +19,22 @@ const (
 	prefTheme = "tui.theme"
 	// the GUI's theme, kept apart from the terminal's: a light page in a window, a dark one among
 	// the terminal's tools, each kept as chosen
-	prefGUITheme = "gui.theme"
-	prefMenuHide = "tui.menu.autohide"
-	prefStatus   = "tui.status.shown"
-	prefExplorer = "tui.explorer.edge"
-	prefLinks    = "tui.links.edge"
-	prefRuler    = "tui.ruler"
-	prefKeymap   = "tui.editor.keymap"
-	prefWrap     = "tui.editor.wrap"
-	prefNumbers  = "tui.editor.linenumbers"
-	prefIndent   = "tui.editor.indentmarks"
-	prefImages   = "tui.preview.images"
-	prefOpenAs   = "tui.documents.open"
-	prefCorner   = "tui.toast.corner"
-	prefAboutAt  = "tui.about.atstart"
-	prefUpdates  = "tui.update.check"
-	prefSeconds  = "tui.toast.seconds"
+	prefGUITheme      = "gui.theme"
+	prefMenuHide      = "tui.menu.autohide"
+	prefStatus        = "tui.status.shown"
+	prefExplorer      = "tui.explorer.edge"
+	prefRelationsEdge = "tui.links.edge"
+	prefRuler         = "tui.ruler"
+	prefKeymap        = "tui.editor.keymap"
+	prefWrap          = "tui.editor.wrap"
+	prefNumbers       = "tui.editor.linenumbers"
+	prefIndent        = "tui.editor.indentmarks"
+	prefImages        = "tui.preview.images"
+	prefOpenAs        = "tui.documents.open"
+	prefCorner        = "tui.toast.corner"
+	prefAboutAt       = "tui.about.atstart"
+	prefUpdates       = "tui.update.check"
+	prefSeconds       = "tui.toast.seconds"
 	// a plugin's placement: tui.plugin.<name>.placement
 	prefPluginPrefix = "tui.plugin."
 	prefPluginPlace  = ".placement"
@@ -70,7 +70,7 @@ var indentMarks = []string{"off", "cursorLine", "all"}
 var indentMarkLabels = []string{"off", "on the cursor's line", "on every line"}
 
 // The defaults: a blank page, the menu hidden until F10 or an Alt+letter, the explorer on the
-// left, the links on the right, a page 120 columns wide.
+// left, the relations on the right, a page 120 columns wide.
 const (
 	defaultTheme    = "dark"
 	defaultGUITheme = "sepia"
@@ -81,19 +81,19 @@ const (
 
 // prefs are the preferences as the TUI uses them.
 type prefs struct {
-	theme                  string
-	menuHidden, statusOn   bool
-	explorerEdge, linkEdge string
-	ruler                  int
-	keymap                 string
-	wrap, lineNumbers      bool   // the page: long lines wrapped at its width; each line's number
-	indentMarks            string // which lines show their indentation as marks (indentMarks)
-	images                 bool   // previews as images where the terminal draws them (preview.go)
-	openAs                 string // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
-	aboutAtStart           bool   // About opens when the program starts (startup.go)
-	updateCheck            bool   // a newer release is looked for when the program starts (startup.go)
-	toastCorner            string // where the notifications stack
-	toastSeconds           int    // how long a finished one stays
+	theme                       string
+	menuHidden, statusOn        bool
+	explorerEdge, relationsEdge string
+	ruler                       int
+	keymap                      string
+	wrap, lineNumbers           bool   // the page: long lines wrapped at its width; each line's number
+	indentMarks                 string // which lines show their indentation as marks (indentMarks)
+	images                      bool   // previews as images where the terminal draws them (preview.go)
+	openAs                      string // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
+	aboutAtStart                bool   // About opens when the program starts (startup.go)
+	updateCheck                 bool   // a newer release is looked for when the program starts (startup.go)
+	toastCorner                 string // where the notifications stack
+	toastSeconds                int    // how long a finished one stays
 	// the terminal: the edge it opens from; its geometry is in panelGeo
 	termEdge string
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
@@ -163,10 +163,10 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 			chooser("App.explorerEdgeIndex", "App.setExplorerEdge").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.explorerEdge": p.explorerEdge} }).
 			then(func(prefs) { h.dockPanel("explorer") }), // a new edge is seen at once
-		choicePref(prefLinks, "right", edges, func(p *prefs) *string { return &p.linkEdge }).
-			chooser("App.linksEdgeIndex", "App.setLinksEdge").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.linksEdge": p.linkEdge} }).
-			then(func(prefs) { h.dockPanel("links") }),
+		choicePref(prefRelationsEdge, "right", edges, func(p *prefs) *string { return &p.relationsEdge }).
+			chooser("App.relationsEdgeIndex", "App.setRelationsEdge").
+			shows(func(p prefs) map[string]any { return map[string]any{"App.relationsEdge": p.relationsEdge} }).
+			then(func(prefs) { h.dockPanel(relationsPanelSpec().ID) }),
 		choicePref(prefKeymap, "vim", keymaps, func(p *prefs) *string { return &p.keymap }).
 			chooser("App.keymapIndex", "App.setKeymapIndex").
 			shows(func(p prefs) map[string]any {

@@ -38,7 +38,7 @@ func (h *Host) checkRegistrations() {
 		}
 		if a.err != nil {
 			h.daemonTables, h.kinds = registrations.Tables{}, kind.Registrations{}
-			h.notify("the backend's registrations: " + wireMessage(a.err))
+			h.failed("the backend's registrations", a.err)
 		} else {
 			h.daemonTables = a.v
 			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.v.Chunkers)), Derived: slices.Sorted(maps.Keys(a.v.Formats))}

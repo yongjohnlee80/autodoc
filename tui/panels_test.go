@@ -40,7 +40,7 @@ func TestPaneMoveToSharedEdgeUsesRegistryOrder(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.prefs.explorerEdge, r.h.prefs.linkEdge = "left", "left"
+		r.h.prefs.explorerEdge, r.h.prefs.relationsEdge = "left", "left"
 		r.h.keep(r.h.p.Call("explorer", "open"))
 		r.h.keep(r.h.p.Call("links", "open"))
 		return true
@@ -49,7 +49,7 @@ func TestPaneMoveToSharedEdgeUsesRegistryOrder(t *testing.T) {
 		got := onLoop(r, func() string {
 			r.h.focusEditor()
 			r.h.movePane("h")
-			for _, id := range []string{"explorerTree", "linksList", "editor"} {
+			for _, id := range []string{"explorerTree", "relationsList", "editor"} {
 				if c, ok := r.h.p.Find(id); ok && r.h.p.App().FocusWithin(c) {
 					return id
 				}
@@ -93,7 +93,7 @@ func TestAnyPanelAtTheRightHidesTheFindCard(t *testing.T) {
 // to a panel that takes it.
 func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
 	got := keyboardPanes(defaultPanelSpecs())
-	want := []string{"editor", "explorerTree", "linksList"}
+	want := []string{"editor", "explorerTree", "relationsList"}
 	if len(got) != len(want) {
 		t.Fatalf("keyboard panes %v, want %v", got, want)
 	}
@@ -142,7 +142,7 @@ func TestEveryPanelKeepsItsSizeAtItsEdge(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool {
-		r.h.prefs.explorerEdge, r.h.prefs.linkEdge, r.h.prefs.agentEdge, r.h.prefs.termEdge = "left", "right", "bottom", "center"
+		r.h.prefs.explorerEdge, r.h.prefs.relationsEdge, r.h.prefs.agentEdge, r.h.prefs.termEdge = "left", "right", "bottom", "center"
 		r.h.panelResized("explorer", 20, 70)
 		r.h.panelResized("links", 25, 75)
 		r.h.panelResized("agent", 40, 90)

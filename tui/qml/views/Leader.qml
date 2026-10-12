@@ -23,7 +23,7 @@ Dialog {
     Shortcut { sequence: "d"; onActivated: { leader.close(); App.previewDiagram() } }
     Shortcut { sequence: "Shift+H"; onActivated: { leader.close(); App.previewHTML() } }
     Shortcut { sequence: "e"; onActivated: { leader.close(); App.toggleExplorer() } }
-    Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleLinks() } }
+    Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleRelations() } }
     Shortcut { sequence: "`"; onActivated: { leader.close(); App.toggleTerminal() } }
     Shortcut { sequence: "x"; onActivated: { leader.close(); App.openTodos() } }
     Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }

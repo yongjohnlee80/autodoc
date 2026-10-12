@@ -19,7 +19,7 @@ Dialog {
     }
     DialogButtonBox {
         Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.saveAgent(aName.text, aCommand.text)
 }

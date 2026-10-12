@@ -26,9 +26,9 @@ import (
 
 // The panes find searches, by the id of their view.
 const (
-	findPage     = "page"
-	findExplorer = "explorer"
-	findLinks    = "relations"
+	findPage      = "page"
+	findExplorer  = "explorer"
+	findRelations = "relations"
 )
 
 type findState struct {
@@ -43,7 +43,7 @@ type findState struct {
 func (h *Host) findTarget() string {
 	app := h.p.App()
 	for _, c := range []struct{ id, target string }{
-		{"editor", findPage}, {h.panelView("explorer"), findExplorer}, {h.panelView("links"), findLinks},
+		{"editor", findPage}, {h.panelView("explorer"), findExplorer}, {h.panelView(relationsPanelSpec().ID), findRelations},
 	} {
 		if comp, ok := h.p.Find(c.id); ok && app.FocusWithin(comp) {
 			return c.target
@@ -204,7 +204,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 				break
 			}
 		}
-	case findLinks:
+	case findRelations:
 		rows, cur = h.rel.labels(), h.rel.at
 	}
 	var hits []int
@@ -248,7 +248,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	case findExplorer:
 		h.keep(h.explorer.moveTo(at[row]))
-	case findLinks:
+	case findRelations:
 		h.rel.moveTo(row)
 	}
 	f.at, f.total = selected+1, len(hits)

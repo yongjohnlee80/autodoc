@@ -64,13 +64,13 @@ func (p *providers) Commands() map[string]Command {
 	return map[string]Command{
 		"App.showProvider":        oneNumber("a row", p.detail),
 		"App.useProvider":         oneNumber("a row", p.use),
-		"App.stopSemantic":        none(p.stop),
+		"App.stopProvider":        none(p.stop),
 		"App.startAddProvider":    none(p.startAdd),
 		"App.startEditProvider":   oneNumber("a row", p.startEdit),
 		"App.startRemoveProvider": oneNumber("a row", p.startRemove),
 		"App.providerKindChosen":  numberAndString("a row and the base URL", p.kindChosen),
-		"App.listModels":          twoStrings("the base URL and the key", p.listModels),
-		"App.pickModel":           oneNumber("a row", p.pickModel),
+		"App.listProviderModels":  twoStrings("the base URL and the key", p.listModels),
+		"App.pickProviderModel":   oneNumber("a row", p.pickModel),
 		"App.saveProvider":        fiveStrings("a name, the base URL, the model, the key and the context window", p.save),
 	}
 }

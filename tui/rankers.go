@@ -68,7 +68,7 @@ func (r *rankers) Commands() map[string]Command {
 	return map[string]Command{
 		"App.showRanker":        oneNumber("a row", r.detail),
 		"App.startEditRanker":   oneNumber("a row", r.startEdit),
-		"App.stopRanking":       none(r.stop),
+		"App.stopRanker":        none(r.stop),
 		"App.startRankerWindow": none(r.startWindow),
 		"App.saveRankerWindow":  oneString("a number of candidates", r.saveWindow),
 		"App.rankerKindChosen":  numberAndString("a row and the base URL", r.kindChosen),

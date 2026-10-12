@@ -7,7 +7,7 @@
 // A writing screen: the file is a page, as wide as reading wants (App.pageWidth, the ruler's
 // columns and its border) and centred, and nothing else shows until it is asked for. The menu bar
 // hides until F10 or an Alt+letter brings it up; the status line shows when its preference says;
-// the explorer and the links are drawers over the page, which never moves under them.
+// the explorer and the relations are drawers over the page, which never moves under them.
 
 import tui 1.0
 import autodoc 1.0                // App: this program's state and commands
@@ -108,7 +108,7 @@ Window {
             MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
             MenuSeparator {}
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
-            MenuItem { text: "&Links"; onTriggered: App.toggleLinks() }
+            MenuItem { text: "Re&lations"; onTriggered: App.toggleRelations() }
             MenuItem { text: "&Notifications…"; onTriggered: App.openNotices() }
             MenuSeparator {}
             // the panels that stay open, checked while they show
@@ -341,7 +341,7 @@ Window {
         id: links
         modal: false
         closeOnQ: true
-        edge: App.linksEdge
+        edge: App.relationsEdge
         size: App.linksSize
         length: App.linksLength
         // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
@@ -361,13 +361,13 @@ Window {
             // a band beside its border, which the GUI draws as a thin line through the cell
             palette.window: Theme.document.base
             ListView {
-                id: linksList
+                id: relationsList
                 palette.highlight: Theme.document.highlight
                 palette.highlightedText: Theme.document.highlightedText
                 model: App.relations
                 textRole: "label"
-                currentIndex: App.linksIndex
-                onCurrentIndexChanged: App.linksMoved(index)
+                currentIndex: App.relationsIndex
+                onCurrentIndexChanged: App.relationsMoved(index)
                 onActivated: App.openRelation(index)
             }
         }

@@ -25,6 +25,6 @@ Dialog {
     DialogButtonBox {
         Button { text: "P&revious"; enabled: App.tutorialBack; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("back") }
         Button { text: "&Next"; enabled: App.tutorialNext; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("next") }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

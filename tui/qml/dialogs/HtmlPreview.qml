@@ -18,6 +18,6 @@ Dialog {
         Button { text: "Zoom &in"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }
         Button { text: "Zoom &out"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomOut() }
         Button { text: "Open in &browser"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openPreviewInBrowser() }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

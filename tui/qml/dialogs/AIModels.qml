@@ -90,10 +90,10 @@ Dialog {
         Button { text: "&Add…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiAdd() }
         Button { text: "&Edit…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiEdit(providerTable.currentIndex) }
         Button { text: "&Use"; enabled: App.aiUseEnabled; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiUse(providerTable.currentIndex) }
-        Button { text: "&Words only"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopSemantic() }
+        Button { text: "&Words only"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopProvider() }
         Button { text: "Cancel &indexing"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.cancelIndexing() }
         Button { text: "&Vectors…"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openVectors() }
-        Button { text: "&Don't use"; visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopRanking() }
+        Button { text: "&Don't use"; visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopRanker() }
         Button { text: "Wi&ndow…"; visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRankerWindow() }
         Button { text: "&Remove…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiRemove(providerTable.currentIndex) }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }

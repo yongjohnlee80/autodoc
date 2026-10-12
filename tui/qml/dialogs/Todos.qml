@@ -33,7 +33,7 @@ Dialog {
             Text { text: " " }
             Button { text: "&Load…"; onClicked: App.todoLoad() }
             Text { text: " " }
-            Button { text: "&Close"; onClicked: todosDialog.close() }
+            Button { text: "Close (&q)"; onClicked: todosDialog.close() }
         }
         Split {
             orientation: Tui.Horizontal

@@ -113,7 +113,7 @@ func (h *Host) restartConfirmed() {
 	// until this TUI's daemon answers, another client only dials, so the build that serves next is
 	// this one (handoff.go); a handoff that cannot be written fails open, as before
 	if err := h.session.WriteHandoff(); err != nil {
-		h.notify("restart: the handoff to the other clients was not written: " + err.Error())
+		h.failed("restart: the handoff to the other clients was not written", err)
 	}
 	if old := h.session.Stale(); old != nil && !h.connected {
 		h.notify(fmt.Sprintf("asking the older backend (autodoc %s) to stop…", old.Version))

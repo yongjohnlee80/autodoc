@@ -1,5 +1,5 @@
 // Find.qml — / : a word or phrase to find in the pane that had the keyboard (the page, the explorer
-// or the links); n and N then find it again. The workspace's search is Ctrl+G, SPC / or SPC SPC.
+// or the relations); n and N then find it again. The workspace's search is Ctrl+G, SPC / or SPC SPC.
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80

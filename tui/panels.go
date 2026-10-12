@@ -2,7 +2,7 @@ package tui
 
 import "github.com/yongjohnlee80/golib/tui/widget"
 
-// THE PANELS — the explorer and the links, drawers over the page: toggled (SPC e, SPC l, the Go
+// THE PANELS — the explorer and the relations, drawers over the page: toggled (SPC e, SPC l, the Go
 // menu), each from the edge its preference names, the page beneath never moving. Ctrl+h/j/k/l
 // move between the page and the panels open at those edges, in Normal mode only: in Insert mode
 // they are the editor's.

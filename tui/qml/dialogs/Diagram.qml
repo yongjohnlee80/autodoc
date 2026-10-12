@@ -20,6 +20,6 @@ Dialog {
     DialogButtonBox {
         Button { text: "Zoom &in"; visible: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }
         Button { text: "Zoom &out"; visible: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomOut() }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

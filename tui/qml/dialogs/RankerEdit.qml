@@ -28,7 +28,7 @@ Dialog {
     DialogButtonBox {
         Button { text: "C&heck"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.checkRanker(rBase.text, rKey.text) }
         Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.saveRanker(rName.text, rBase.text, rModel.text, rKey.text)
 }

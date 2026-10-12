@@ -199,7 +199,7 @@ func (e *explorer) activated(ix tuidecl.Index) error {
 		e.c.OpenRef(ws, p)
 		return err
 	case "ws", "dir":
-		return e.c.View("explorerTree", "toggleExpanded", ix)
+		return e.c.View(explorerPanelSpec().View, "toggleExpanded", ix)
 	}
 	return nil
 }

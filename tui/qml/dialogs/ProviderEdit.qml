@@ -44,15 +44,15 @@ Dialog {
                     model: App.providerModels
                     textRole: "name"
                     Layout.fillHeight: true
-                    onActivated: App.pickModel(index)
+                    onActivated: App.pickProviderModel(index)
                 }
             }
         }
     }
     DialogButtonBox {
-        Button { text: "&List models"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.listModels(pBase.text, pKey.text) }
+        Button { text: "&List models"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.listProviderModels(pBase.text, pKey.text) }
         Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "&Close"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.saveProvider(pName.text, pBase.text, pModel.text, pKey.text, pContext.text)
 }

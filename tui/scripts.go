@@ -40,7 +40,7 @@ func (h *Host) loadScripts() {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)
 	}
 	for _, err := range errs {
-		h.p.Post(func() { h.notify("a Lua command did not load: " + err.Error()) })
+		h.p.Post(func() { h.failed("a Lua command did not load", err) })
 	}
 }
 

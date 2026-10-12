@@ -87,7 +87,7 @@ Dialog {
                     ComboBox { model: App.edges; textRole: "label"; currentIndex: App.explorerEdgeIndex; onActivated: App.setExplorerEdge(index) }
                     Text { text: "" }
                     Text { text: "the links open from" }
-                    ComboBox { model: App.edges; textRole: "label"; currentIndex: App.linksEdgeIndex; onActivated: App.setLinksEdge(index) }
+                    ComboBox { model: App.edges; textRole: "label"; currentIndex: App.relationsEdgeIndex; onActivated: App.setRelationsEdge(index) }
                     Text { text: "" }
                     Text { text: "the agent: from · size · length" }
                     Flex {

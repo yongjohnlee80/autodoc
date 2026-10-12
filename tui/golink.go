@@ -63,7 +63,7 @@ func (h *Host) goToLink(l cursorLink) {
 		}
 		switch path, reason := str(a.v, "path"), str(a.v, "reason"); {
 		case a.err != nil:
-			h.notify("go to link: " + a.err.Error())
+			h.failed("go to link", a.err)
 		case path != "":
 			h.openIn(ws, path)
 		case reason == "ambiguous":

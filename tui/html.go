@@ -70,7 +70,7 @@ func (h *Host) openWithDefaultApp() {
 	}
 	do(h, func(ctx context.Context) error { return h.browser(ctx, full) }, func(err error) {
 		if err != nil {
-			h.notify("open with the default app: " + err.Error())
+			h.failed("open with the default app", err)
 			return
 		}
 		h.say("opened " + h.file.path + " with its default app")
@@ -131,7 +131,7 @@ func (h *Host) previewHTML() {
 		return answer{content: content, path: path, err: err}
 	}, func(a answer) {
 		if a.err != nil {
-			h.notify("HTML preview: " + a.err.Error())
+			h.failed("HTML preview", a.err)
 			return
 		}
 		if image {

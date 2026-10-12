@@ -481,7 +481,7 @@ func (h *Host) removePluginConfirmed(dir string) {
 	name := filepath.Base(dir)
 	do(h, func(context.Context) error { return os.RemoveAll(dir) }, func(err error) {
 		if err != nil {
-			h.notify("not removed: " + err.Error())
+			h.failed("not removed", err)
 			return
 		}
 		h.notify("removed " + name)
