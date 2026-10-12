@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // TestARenameLeavesAnEarlierViewItsName: rpc reads a served workspace through a view; a rename
@@ -19,7 +19,7 @@ func TestARenameLeavesAnEarlierViewItsName(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("# A\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "a", Root: root}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "a", Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := m.Get("a")
@@ -52,7 +52,7 @@ func TestARenameLeavesAnEarlierViewItsName(t *testing.T) {
 // root, patterns and error, and keeps nothing else.
 func TestAWorkspaceNotOpenedAnswersOnlyWhatItIs(t *testing.T) {
 	m, _ := open(t)
-	s := m.serve(1, config.Workspace{Name: "gone", Root: filepath.Join(t.TempDir(), "missing"), Include: []string{"**/*.md"}})
+	s := m.serve(1, workspace.Spec{Name: "gone", Root: filepath.Join(t.TempDir(), "missing"), Include: []string{"**/*.md"}})
 	w := s.view
 	if w.Name() != "gone" || w.Err() == nil || w.Index() != nil || w.Docs() != nil || len(w.Include()) != 1 || w.Exclude() != nil {
 		t.Fatalf("not opened: %q %v %v %v %v %v", w.Name(), w.Err(), w.Index(), w.Docs(), w.Include(), w.Exclude())

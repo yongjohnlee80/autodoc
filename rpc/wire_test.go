@@ -15,13 +15,13 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // THE WIRE GOLDENS: what every verb answers, as the encoder receives it, pinned per domain in
@@ -208,7 +208,7 @@ func lineDiff(want, got string) string {
 // wireWorkspaces is a set of workspaces that changes as the daemon's does, answering fixed values.
 type wireWorkspaces struct{ Workspaces }
 
-func (wireWorkspaces) Add(_ context.Context, c config.Workspace) (Workspace, error) {
+func (wireWorkspaces) Add(_ context.Context, c workspace.Spec) (Workspace, error) {
 	return Static(WorkspaceInfo{Name: c.Name, Root: c.Root, Include: c.Include, Exclude: c.Exclude}), nil
 }
 func (wireWorkspaces) Rename(context.Context, string, string) error                  { return nil }

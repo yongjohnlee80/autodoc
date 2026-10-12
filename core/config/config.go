@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/yongjohnlee80/autodoc/core/paths"
 	"github.com/yongjohnlee80/golib/errs"
 )
 
@@ -71,20 +71,6 @@ func (d *Duration) UnmarshalText(b []byte) error {
 	d.Duration = v
 	return nil
 }
-
-// Workspace is one root AutoDoc indexes, as it is added: a row of the store (core/store).
-type Workspace struct {
-	Name, Root       string
-	Include, Exclude []string
-}
-
-// DefaultInclude and DefaultExclude are the patterns a workspace gets when it names none of its
-// own: a fresh slice each call, so no caller can change the defaults another reads.
-func DefaultInclude() []string { return []string{"**/*.md", "**/*.txt", "**/*.yaml", "**/*.yml"} }
-
-// node_modules anywhere: a JavaScript project's dependencies are hundreds of thousands of files,
-// their READMEs are not the workspace's files, and walking them is most of a scan's cost.
-func DefaultExclude() []string { return []string{".git/**", "**/node_modules/**"} }
 
 // DefaultPollInterval is the watch fallback's listing interval when none is configured.
 const DefaultPollInterval = 2 * time.Second
@@ -155,110 +141,6 @@ func (c *Config) normalize() error {
 	}
 	if c.Follow.PollInterval.Duration < 0 {
 		return fmt.Errorf("%w: follow.poll_interval must be positive", ErrInvalid)
-	}
-	return nil
-}
-
-// NormalizeWorkspace checks a workspace before it is added, and fills its defaults: a name that
-// is not empty and holds no path separator; a root that is absolute after "~/" is expanded; and
-// patterns that are valid (none: the defaults).
-func NormalizeWorkspace(w Workspace) (Workspace, error) {
-	if w.Name == "" || strings.ContainsAny(w.Name, `/\`) || w.Name == "." || w.Name == ".." || strings.TrimSpace(w.Name) != w.Name {
-		return w, fmt.Errorf("%w: workspace name %q: a name is required, without a path separator or surrounding space", ErrInvalid, w.Name)
-	}
-	root, err := expandHome(w.Root)
-	if err != nil {
-		return w, err
-	}
-	if !filepath.IsAbs(root) {
-		return w, fmt.Errorf("%w: workspace %q: root %q must be absolute (or start with ~/)", ErrInvalid, w.Name, w.Root)
-	}
-	w.Root = filepath.Clean(root)
-	if w.Include == nil {
-		w.Include = DefaultInclude()
-	}
-	if w.Exclude == nil {
-		w.Exclude = DefaultExclude()
-	}
-	for _, p := range append(append([]string{}, w.Include...), w.Exclude...) {
-		if err := ValidPattern(p); err != nil {
-			return w, fmt.Errorf("%w: workspace %q: pattern %q: %w", ErrInvalid, w.Name, p, err)
-		}
-	}
-	return w, nil
-}
-
-func expandHome(p string) (string, error) {
-	if p != "~" && !strings.HasPrefix(p, "~/") {
-		return p, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("%w: %q needs a home directory", ErrInvalid, p)
-	}
-	return filepath.Join(home, strings.TrimPrefix(p, "~")), nil
-}
-
-// ExpandPattern expands bounded brace alternatives before path.Match sees each segment.
-func ExpandPattern(pattern string) ([]string, error) {
-	patterns := []string{pattern}
-	for {
-		var expanded []string
-		changed := false
-		for _, current := range patterns {
-			open := strings.IndexByte(current, '{')
-			close := strings.IndexByte(current, '}')
-			if close >= 0 && (open < 0 || close < open) {
-				return nil, errors.New("unmatched closing brace")
-			}
-			if open < 0 {
-				expanded = append(expanded, current)
-				continue
-			}
-			if close < 0 || strings.ContainsAny(current[open+1:close], "{}") {
-				return nil, errors.New("unmatched or nested braces")
-			}
-			alternatives := strings.Split(current[open+1:close], ",")
-			if len(alternatives) < 2 {
-				return nil, errors.New("braces need at least two alternatives")
-			}
-			for _, alternative := range alternatives {
-				if alternative == "" {
-					return nil, errors.New("empty brace alternative")
-				}
-				expanded = append(expanded, current[:open]+alternative+current[close+1:])
-				if len(expanded) > 64 {
-					return nil, errors.New("brace expansion exceeds 64 patterns")
-				}
-			}
-			changed = true
-		}
-		patterns = expanded
-		if !changed {
-			return patterns, nil
-		}
-	}
-}
-
-// ValidPattern checks a root-relative glob: segments separated by '/', each a path.Match pattern
-// or "**" (any number of whole segments). Braces have bounded, non-nested alternatives.
-func ValidPattern(p string) error {
-	if p == "" || strings.HasPrefix(p, "/") {
-		return errors.New("a pattern is relative to the root and may not be empty")
-	}
-	patterns, err := ExpandPattern(p)
-	if err != nil {
-		return err
-	}
-	for _, pattern := range patterns {
-		for _, seg := range strings.Split(pattern, "/") {
-			if seg == "**" {
-				continue
-			}
-			if _, err := path.Match(seg, ""); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -337,8 +219,8 @@ func xdgDir(configured, env, fallback string) (string, error) {
 		dir = filepath.Join(base, "autodoc")
 	} else {
 		var err error
-		if dir, err = expandHome(dir); err != nil {
-			return "", err
+		if dir, err = paths.ExpandHome(dir); err != nil {
+			return "", fmt.Errorf("%w: %w", ErrInvalid, err)
 		}
 	}
 	return dir, nil

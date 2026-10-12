@@ -15,10 +15,10 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // wholeFile is a registered chunker for tests: one chunk, the whole file.
@@ -72,7 +72,7 @@ func TestARegistrationRefusesItsExtensionAsText(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("package a\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.go"}}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.go"}}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 1)
@@ -107,7 +107,7 @@ func TestAStoredCollisionDoesNotStopTheStart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "autodoc.db")
 	root := t.TempDir()
 	community, closeCommunity := openOn(t, path, Options{})
-	if _, err := community.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.go"}}); err != nil {
+	if _, err := community.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.go"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := community.SetTextExtensions(context.Background(), "kb", []string{".go", ".log"}); err != nil {
@@ -141,7 +141,7 @@ func TestAStoredHTMLTextTypeIsADocumentNow(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "autodoc.db")
 	root := t.TempDir()
 	before, closeBefore := openOn(t, path, Options{})
-	if _, err := before.Add(ctx, config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.html", "**/*.log"}}); err != nil {
+	if _, err := before.Add(ctx, workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.html", "**/*.log"}}); err != nil {
 		t.Fatal(err)
 	}
 	// as the earlier build stored it: kind.TextExtensions refuses .html now, so the store is written

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/embed"
 )
@@ -76,7 +76,7 @@ func addQueueWorkspace(t *testing.T, m *Workspaces, name string, sections int) {
 	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte(body.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: name, Root: root}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: name, Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, name, 1)

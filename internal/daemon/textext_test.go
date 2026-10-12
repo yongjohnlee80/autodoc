@@ -13,9 +13,9 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // crumbOf is the breadcrumb of the first hit for q.
@@ -37,7 +37,7 @@ func TestTextExtensionsChangeHowFilesAreRead(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "app.log"), []byte("# Boot\nkestrel started\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.log"}}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.log"}}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 1)
@@ -87,7 +87,7 @@ func TestTextExtensionsSayWhenTheyCannotListTheIndex(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "app.log"), []byte("# Boot\nkestrel started\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.log"}}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.log"}}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 1)

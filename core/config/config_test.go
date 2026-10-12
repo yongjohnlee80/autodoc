@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -67,42 +66,6 @@ func TestLoadRejects(t *testing.T) {
 	} {
 		_, err := load(t, c.body)
 		if !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
-			t.Errorf("%s: %v, want ErrInvalid mentioning %q", c.name, err, c.want)
-		}
-	}
-}
-
-// NormalizeWorkspace is what workspace.add checks: the rules [[workspace]] had.
-func TestNormalizeWorkspace(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	w, err := config.NormalizeWorkspace(config.Workspace{Name: "kb", Root: "~/notes"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if w.Root != filepath.Join(home, "notes") {
-		t.Errorf("root = %q, want ~ expanded", w.Root)
-	}
-	if !reflect.DeepEqual(w.Include, config.DefaultInclude()) || !reflect.DeepEqual(w.Exclude, config.DefaultExclude()) {
-		t.Errorf("patterns = %v / %v, want the defaults", w.Include, w.Exclude)
-	}
-	w, err = config.NormalizeWorkspace(config.Workspace{Name: "kb", Root: "/srv/kb", Include: []string{"docs/**/*.md", "*.markdown"}, Exclude: []string{}})
-	if err != nil || len(w.Include) != 2 || len(w.Exclude) != 0 {
-		t.Errorf("an explicit empty exclude must stay empty: %+v, %v", w, err)
-	}
-	for _, c := range []struct {
-		name string
-		w    config.Workspace
-		want string
-	}{
-		{"relative root", config.Workspace{Name: "a", Root: "notes"}, "absolute"},
-		{"no name", config.Workspace{Root: "/x"}, "name is required"},
-		{"a name with a separator", config.Workspace{Name: "a/b", Root: "/x"}, "path separator"},
-		{"a name with surrounding space", config.Workspace{Name: " a", Root: "/x"}, "surrounding space"},
-		{"bad pattern", config.Workspace{Name: "a", Root: "/x", Include: []string{"["}}, "pattern"},
-		{"absolute pattern", config.Workspace{Name: "a", Root: "/x", Exclude: []string{"/etc/**"}}, "pattern"},
-	} {
-		if _, err := config.NormalizeWorkspace(c.w); !errors.Is(err, config.ErrInvalid) || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: %v, want ErrInvalid mentioning %q", c.name, err, c.want)
 		}
 	}

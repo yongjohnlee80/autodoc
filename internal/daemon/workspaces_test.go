@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // open is a daemon over a fresh store, stopped with the test.
@@ -66,7 +66,7 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("alpha\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 1)
@@ -103,7 +103,7 @@ func TestRemoveThatFailsLeavesTheWorkspace(t *testing.T) {
 // daemon's back), the remove says so, and the daemon drops it too.
 func TestRemoveOfAWorkspaceTheStoreLost(t *testing.T) {
 	m, db := open(t)
-	w, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: t.TempDir()})
+	w, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestWorkspaceSectionSizeReindexesOnlyTheNamedWorkspace(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "n.md"), []byte("# Note\n\n"+strings.Repeat("many words and details.\n\n", 100)), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := m.Add(context.Background(), config.Workspace{Name: name, Root: root}); err != nil {
+		if _, err := m.Add(context.Background(), workspace.Spec{Name: name, Root: root}); err != nil {
 			t.Fatal(err)
 		}
 		indexed(t, m, name, 1)
@@ -176,7 +176,7 @@ func TestSetPatternsReconcilesAndRejectsMalformedEdits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := manager.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+	if _, err := manager.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, manager, "kb", 1)

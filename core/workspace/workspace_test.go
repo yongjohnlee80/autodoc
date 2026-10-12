@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
@@ -37,7 +36,7 @@ func TestOpenReportsAMissingRoot(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# a file\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := config.Workspace{Name: "kb", Include: config.DefaultInclude(), Exclude: config.DefaultExclude()}
+	c := workspace.Spec{Name: "kb", Include: workspace.DefaultInclude(), Exclude: workspace.DefaultExclude()}
 	for _, root := range []string{filepath.Join(dir, "missing"), file} {
 		c.Root = root
 		if w, err := workspace.Open(c); !errors.Is(err, workspace.ErrNotADirectory) || w != nil {
@@ -66,7 +65,7 @@ func TestOpenReportsARootItCannotRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
-	_, err := workspace.Open(config.Workspace{Name: "kb", Root: dir})
+	_, err := workspace.Open(workspace.Spec{Name: "kb", Root: dir})
 	if err == nil || errors.Is(err, workspace.ErrNotADirectory) || !errors.Is(err, os.ErrPermission) {
 		t.Fatalf("Open of an unreadable root = %v; want the permission error, not ErrNotADirectory", err)
 	}

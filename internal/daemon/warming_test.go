@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // TestAProviderChangeNeverHoldsUpReads: while a provider change restarts a workspace — here held
@@ -21,7 +21,7 @@ func TestAProviderChangeNeverHoldsUpReads(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("# A\n\nkestrel\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 1)
@@ -82,7 +82,7 @@ func TestAProviderChangeNeverHoldsUpReads(t *testing.T) {
 func TestSettingUpAProviderIsReported(t *testing.T) {
 	m, _ := open(t)
 	root := t.TempDir()
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	ws, _ := m.Get("kb")
@@ -119,13 +119,13 @@ func TestAPastDefaultExcludeMovesToTheCurrentOne(t *testing.T) {
 	for _, w := range ws {
 		got[w.Name] = w.Exclude
 	}
-	if !slices.Equal(got["old"], config.DefaultExclude()) {
-		t.Errorf("the workspace on the old default excludes %v, want %v", got["old"], config.DefaultExclude())
+	if !slices.Equal(got["old"], workspace.DefaultExclude()) {
+		t.Errorf("the workspace on the old default excludes %v, want %v", got["old"], workspace.DefaultExclude())
 	}
 	if !slices.Equal(got["custom"], []string{".git/**", "drafts/**"}) {
 		t.Errorf("the workspace with its own patterns excludes %v, want them kept", got["custom"])
 	}
-	if w, _ := m.Get("old"); !slices.Equal(w.Exclude(), config.DefaultExclude()) {
+	if w, _ := m.Get("old"); !slices.Equal(w.Exclude(), workspace.DefaultExclude()) {
 		t.Errorf("the served workspace excludes %v, want the current default", w.Exclude())
 	}
 }

@@ -9,9 +9,9 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/edition"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -38,7 +38,7 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		return edition.ErrDatabases
 	}
 	if c.Name != nil {
-		if _, err := config.NormalizeWorkspace(config.Workspace{Name: *c.Name, Root: "/"}); err != nil {
+		if _, err := workspace.Normalize(workspace.Spec{Name: *c.Name, Root: "/"}); err != nil {
 			return err
 		}
 	}
@@ -47,8 +47,8 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 			c.Include = &[]string{}
 		}
 		for _, p := range append(append([]string(nil), *c.Include...), *c.Exclude...) {
-			if err := config.ValidPattern(p); err != nil {
-				return fmt.Errorf("%w: pattern %q: %v", config.ErrInvalid, p, err)
+			if err := workspace.ValidPattern(p); err != nil {
+				return fmt.Errorf("%w: pattern %q: %v", workspace.ErrInvalidSpec, p, err)
 			}
 		}
 	}
@@ -83,9 +83,9 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 	if renamed && taken {
 		return fmt.Errorf("%w: %s", store.ErrTaken, *c.Name)
 	}
-	var candidate config.Workspace
+	var candidate workspace.Spec
 	if c.Include != nil {
-		candidate = config.Workspace{Name: name, Root: s.root, Include: *c.Include, Exclude: *c.Exclude}
+		candidate = workspace.Spec{Name: name, Root: s.root, Include: *c.Include, Exclude: *c.Exclude}
 		if err := checkRoot(candidate); err != nil {
 			return err
 		}

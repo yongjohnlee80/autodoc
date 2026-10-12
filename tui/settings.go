@@ -12,9 +12,9 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
@@ -505,7 +505,7 @@ func changed(c map[string]any) string {
 // until another is typed or browsed to, with the default rules.
 func (h *Host) startAddWorkspace() {
 	h.withSettingsExtras(func(providers []string, databases bool) {
-		w := wsInfo{name: "untitled", root: homeDir(), include: config.DefaultInclude(), exclude: config.DefaultExclude(),
+		w := wsInfo{name: "untitled", root: homeDir(), include: workspace.DefaultInclude(), exclude: workspace.DefaultExclude(),
 			sectionTokens: store.SectionTokensDefault, embeddingPolicy: store.EmbeddingAlways,
 			db: databasesInfo{destination: store.DestinationLocal}}
 		h.showSettings(settingsBase{w: w, adding: true, providers: providers, databases: databases, registered: h.kinds.Chunked, derived: h.kinds.Derived}, 0, "")

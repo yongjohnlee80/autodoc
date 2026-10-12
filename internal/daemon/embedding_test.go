@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/yongjohnlee80/autodoc/core/config"
-	"github.com/yongjohnlee80/autodoc/core/index"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +15,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 
 	"github.com/yongjohnlee80/golib/search/embed"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -510,7 +511,7 @@ func TestCancelSwitchGoesBackToTheActiveModel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("# A\n\nalpha\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(ctx, config.Workspace{Name: "kb", Root: root}); err != nil {
+	if _, err := m.Add(ctx, workspace.Spec{Name: "kb", Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.Use(ctx, "a"); err != nil {
@@ -592,7 +593,7 @@ func TestRemovingTheProviderInUseReclaimsItsModel(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("# A\n\nalpha\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := m.Add(ctx, config.Workspace{Name: name, Root: root}); err != nil {
+		if _, err := m.Add(ctx, workspace.Spec{Name: name, Root: root}); err != nil {
 			t.Fatal(err)
 		}
 	}

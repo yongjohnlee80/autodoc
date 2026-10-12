@@ -11,8 +11,6 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/vfs"
 	"github.com/yongjohnlee80/golib/vfs/local"
-
-	"github.com/yongjohnlee80/autodoc/core/config"
 )
 
 // ErrNotADirectory is a workspace root that is not a directory.
@@ -29,7 +27,7 @@ type Workspace struct {
 // Open opens the workspace's root with the local driver; a root that is not a directory is
 // ErrNotADirectory. The driver holds the opened directory (os.OpenRoot refuses anything else), so
 // no later check of it is needed.
-func Open(cfg config.Workspace) (*Workspace, error) {
+func Open(cfg Spec) (*Workspace, error) {
 	fsys, err := local.New(cfg.Root)
 	switch {
 	case errors.Is(err, fs.ErrPermission): // a directory it may not open is not a missing one

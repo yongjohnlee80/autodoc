@@ -10,7 +10,6 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/vfs"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/edition"
@@ -84,7 +83,7 @@ var publicErrs = []module.PublicError{
 	{Err: embed.ErrDims, Code: CodeProviderRefused, Message: "the model gave no usable vectors: it may be a chat model, not an embedding model"},
 	{Err: embed.ErrRejected, Code: CodeProviderRefused, Message: "the provider rejected the probe text"},
 	{Err: workspace.ErrNotADirectory, Code: golibrpc.CodeInvalidParams, Message: "the root is not a directory"},
-	{Err: config.ErrInvalid, Code: golibrpc.CodeInvalidParams, Message: "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
+	{Err: workspace.ErrInvalidSpec, Code: golibrpc.CodeInvalidParams, Message: "not a valid workspace: a name without a path separator, an absolute root, and valid patterns"},
 	{Err: docs.ErrCommitted, Code: CodeCommitted, Message: "the write landed, then a follow-up step failed: read the document and compare"},
 	{Err: vfs.ErrConflict, Code: CodeConflict, Message: "the document is not at that version"},
 	{Err: index.ErrCursorExpired, Code: CodeCursorExpired, Message: "the change cursor is older than the retained log"},

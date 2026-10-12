@@ -15,7 +15,6 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/embed"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
@@ -115,8 +114,8 @@ type served struct {
 }
 
 // spec is s as a config workspace, under its name now, for serving it again.
-func (s *served) spec() config.Workspace {
-	return config.Workspace{Name: s.view.name, Root: s.root, Include: s.include, Exclude: s.exclude}
+func (s *served) spec() workspace.Spec {
+	return workspace.Spec{Name: s.view.name, Root: s.root, Include: s.include, Exclude: s.exclude}
 }
 
 // Options are how the daemon serves a workspace.
@@ -177,16 +176,16 @@ func (m *Workspaces) OpenAll() error {
 		if !pastDefault(w.Exclude) {
 			continue
 		}
-		if err := m.db.SetWorkspaceExclude(m.ctx, w.ID, config.DefaultExclude()); err != nil {
+		if err := m.db.SetWorkspaceExclude(m.ctx, w.ID, workspace.DefaultExclude()); err != nil {
 			logger.Warning(m.opts.Log, err, "workspace kept its old default exclude: "+w.Name)
 			continue
 		}
-		ws[i].Exclude = config.DefaultExclude()
+		ws[i].Exclude = workspace.DefaultExclude()
 		logger.Info(m.opts.Log, logger.Fields{"event": "workspace moved to the current default exclude",
-			"workspace": w.Name, "exclude": config.DefaultExclude()})
+			"workspace": w.Name, "exclude": workspace.DefaultExclude()})
 	}
 	for _, w := range ws {
-		s := m.serve(w.ID, config.Workspace{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude})
+		s := m.serve(w.ID, workspace.Spec{Name: w.Name, Root: w.Root, Include: w.Include, Exclude: w.Exclude})
 		m.mu.Lock()
 		m.served[w.Name] = s
 		m.mu.Unlock()
@@ -205,7 +204,7 @@ func pastDefault(exclude []string) bool {
 }
 
 // serve starts a stored workspace, or lists it with the error that kept it from starting.
-func (m *Workspaces) serve(id int64, c config.Workspace) *served {
+func (m *Workspaces) serve(id int64, c workspace.Spec) *served {
 	s, err := m.start(id, c)
 	if err != nil {
 		logger.Warning(m.opts.Log, err, "workspace not served: "+c.Name)
@@ -220,7 +219,7 @@ func (m *Workspaces) serve(id int64, c config.Workspace) *served {
 var startFault func(name string) error
 
 // start opens a workspace's root and starts its indexer and follower.
-func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
+func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 	if startFault != nil {
 		if err := startFault(c.Name); err != nil {
 			return nil, err
@@ -235,10 +234,10 @@ func (m *Workspaces) start(id int64, c config.Workspace) (*served, error) {
 		return nil, err
 	}
 	if c.Include == nil {
-		c.Include = config.DefaultInclude()
+		c.Include = workspace.DefaultInclude()
 	}
 	if c.Exclude == nil {
-		c.Exclude = config.DefaultExclude()
+		c.Exclude = workspace.DefaultExclude()
 	}
 	schemaPath, err := m.db.SchemaPath(m.ctx, id)
 	if err != nil {
@@ -446,8 +445,8 @@ func (m *Workspaces) SetPatterns(ctx context.Context, name string, include, excl
 		include = []string{}
 	}
 	for _, pattern := range append(append([]string(nil), include...), exclude...) {
-		if err := config.ValidPattern(pattern); err != nil {
-			return fmt.Errorf("%w: pattern %q: %v", config.ErrInvalid, pattern, err)
+		if err := workspace.ValidPattern(pattern); err != nil {
+			return fmt.Errorf("%w: pattern %q: %v", workspace.ErrInvalidSpec, pattern, err)
 		}
 	}
 	m.chg.Lock()
@@ -458,7 +457,7 @@ func (m *Workspaces) SetPatterns(ctx context.Context, name string, include, excl
 	if !ok {
 		return fmt.Errorf("%w: %s", store.ErrNoWorkspace, name)
 	}
-	candidate := config.Workspace{Name: name, Root: old.root, Include: include, Exclude: exclude}
+	candidate := workspace.Spec{Name: name, Root: old.root, Include: include, Exclude: exclude}
 	if err := checkRoot(candidate); err != nil {
 		return err
 	}
@@ -471,7 +470,7 @@ func (m *Workspaces) SetPatterns(ctx context.Context, name string, include, excl
 // restartWithPatterns serves workspace name again under the patterns the store now holds for it,
 // candidate's: its follower and indexer are stopped and started anew. When the new ones cannot
 // start, the store gets old's patterns back and old's are served again. m.chg is held.
-func (m *Workspaces) restartWithPatterns(ctx context.Context, name string, old *served, candidate config.Workspace) error {
+func (m *Workspaces) restartWithPatterns(ctx context.Context, name string, old *served, candidate workspace.Spec) error {
 	m.queue.stop()
 	defer m.queue.start()
 	if old.stop != nil {
@@ -480,7 +479,7 @@ func (m *Workspaces) restartWithPatterns(ctx context.Context, name string, old *
 	next, err := m.start(old.id, candidate)
 	if err != nil {
 		rollbackErr := m.db.SetWorkspacePatterns(context.WithoutCancel(ctx), old.id, old.include, old.exclude)
-		restored := m.serve(old.id, config.Workspace{Name: name, Root: old.root, Include: old.include, Exclude: old.exclude})
+		restored := m.serve(old.id, workspace.Spec{Name: name, Root: old.root, Include: old.include, Exclude: old.exclude})
 		m.mu.Lock()
 		m.served[name] = restored
 		m.mu.Unlock()
@@ -589,8 +588,8 @@ func (m *Workspaces) Get(name string) (rpc.Workspace, bool) {
 
 // Add checks the workspace, records it, and serves it. The root must be a directory; the name and
 // the root must be the store's only ones.
-func (m *Workspaces) Add(ctx context.Context, c config.Workspace) (rpc.Workspace, error) {
-	c, err := config.NormalizeWorkspace(c)
+func (m *Workspaces) Add(ctx context.Context, c workspace.Spec) (rpc.Workspace, error) {
+	c, err := workspace.Normalize(c)
 	if err != nil {
 		return nil, err
 	}
@@ -624,7 +623,7 @@ func (m *Workspaces) Add(ctx context.Context, c config.Workspace) (rpc.Workspace
 	return s.view, nil
 }
 
-func checkRoot(c config.Workspace) error {
+func checkRoot(c workspace.Spec) error {
 	ws, err := workspace.Open(c)
 	if err != nil {
 		return err
@@ -634,7 +633,7 @@ func checkRoot(c config.Workspace) error {
 
 // Rename gives a workspace a new name: one row. Its indexer keeps running.
 func (m *Workspaces) Rename(ctx context.Context, name, to string) error {
-	if _, err := config.NormalizeWorkspace(config.Workspace{Name: to, Root: "/"}); err != nil {
+	if _, err := workspace.Normalize(workspace.Spec{Name: to, Root: "/"}); err != nil {
 		return err
 	}
 	m.chg.Lock()

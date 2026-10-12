@@ -14,7 +14,6 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/logger"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
@@ -48,7 +47,7 @@ func kbWith(t *testing.T, m *Workspaces, files map[string]string, include ...str
 			t.Fatal(err)
 		}
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: include}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: include}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -89,7 +88,7 @@ func TestConfigure_RefusedChangesLeaveItAsItWas(t *testing.T) {
 	m, db := openWith(t, Options{Databases: true})
 	kbWith(t, m, map[string]string{"a.md": "# A\n"}, "**/*.md")
 	indexed(t, m, "kb", 1)
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "other", Root: t.TempDir()}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "other", Root: t.TempDir()}); err != nil {
 		t.Fatal(err)
 	}
 	for name, c := range map[string]store.Changes{

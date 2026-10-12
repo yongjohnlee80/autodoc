@@ -23,7 +23,6 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
@@ -31,6 +30,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/schema"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // Protocol is the API's version. A client declares the one it was written for, which this build
@@ -168,7 +168,7 @@ type Workspaces interface {
 	// Get is the workspace named name.
 	Get(name string) (Workspace, bool)
 	// Add creates a workspace and starts serving it.
-	Add(ctx context.Context, w config.Workspace) (Workspace, error)
+	Add(ctx context.Context, w workspace.Spec) (Workspace, error)
 	// Rename gives a workspace a new name.
 	Rename(ctx context.Context, name, to string) error
 	// Remove stops serving a workspace and deletes its index; its files stay.
@@ -198,7 +198,7 @@ func (f fixed) List() []Workspace {
 	return out
 }
 func (f fixed) Get(name string) (Workspace, bool) { w, ok := f[name]; return w, ok }
-func (fixed) Add(context.Context, config.Workspace) (Workspace, error) {
+func (fixed) Add(context.Context, workspace.Spec) (Workspace, error) {
 	return nil, errFixed
 }
 func (fixed) Rename(context.Context, string, string) error {

@@ -3,9 +3,9 @@ package rpc
 import (
 	"context"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/module"
 	"github.com/yongjohnlee80/autodoc/core/store"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // THE WORKSPACES — the set the daemon serves, and each one's settings. A Workspaces that changes
@@ -224,7 +224,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 			Result: "{name, root, state, …}", Errors: []int64{CodeConflict, CodeUnsupported},
 			Event: ev("workspace.added", "name", ""), Doc: "Adds a workspace and starts serving it; answers it as workspace.list does."},
 			func(ctx context.Context, p workspaceAdd) (*workspaceJSON, error) {
-				w, err := s.workspaces.Add(ctx, config.Workspace{Name: p.Name, Root: p.Root, Include: p.Include, Exclude: p.Exclude})
+				w, err := s.workspaces.Add(ctx, workspace.Spec{Name: p.Name, Root: p.Root, Include: p.Include, Exclude: p.Exclude})
 				if err != nil {
 					return nil, err
 				}

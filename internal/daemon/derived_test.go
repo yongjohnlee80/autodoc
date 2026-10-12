@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // derivations is a build's deriver for tests, kept outside the daemon so its calls are counted
@@ -125,7 +125,7 @@ func TestARestartDerivesOnlyWhatChanged(t *testing.T) {
 	d := &derivations{}
 	v1 := map[string]string{".pdf": "1", ".docx": "1"}
 	m, stop := openOn(t, path, Options{Registrations: buildWith(t, d, v1)})
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root,
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root,
 		Include: []string{"**/*.pdf", "**/*.docx", "**/*.md"}}); err != nil {
 		t.Fatal(err)
 	}

@@ -3,8 +3,6 @@ package workspace
 import (
 	"path"
 	"strings"
-
-	"github.com/yongjohnlee80/autodoc/core/config"
 )
 
 // Matcher decides which files of a root belong to the workspace: a path matching some include
@@ -13,14 +11,14 @@ type Matcher struct {
 	include, exclude [][]string
 }
 
-// NewMatcher compiles include and exclude patterns (config.ValidPattern checks them): root-relative
+// NewMatcher compiles include and exclude patterns (ValidPattern checks them): root-relative
 // globs split on '/', each segment a path.Match pattern, or "**" for any number of whole segments.
 // A pattern ending in "/**" also matches the directory itself.
 func NewMatcher(include, exclude []string) Matcher {
 	split := func(ps []string) [][]string {
 		var out [][]string
 		for _, p := range ps {
-			patterns, err := config.ExpandPattern(p)
+			patterns, err := ExpandPattern(p)
 			if err != nil {
 				continue
 			}

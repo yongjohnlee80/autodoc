@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yongjohnlee80/autodoc/core/config"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 const daemonSchema = `version: 1
@@ -59,7 +59,7 @@ func TestSchemaLifecycle(t *testing.T) {
 	write("a.md", "---\ntype: adr\n---\nalpha\n")
 	write("b.md", "---\ntype: memo\n---\nalpha\n")
 	write(".autodoc/schema.yaml", daemonSchema)
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 2)
@@ -123,7 +123,7 @@ func TestSchemaPathBeforeItsFile(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.md"), []byte("---\ntype: adr\n---\nalpha\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 1)
@@ -155,7 +155,7 @@ func TestSchemaV2Loads(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := m.Add(context.Background(), config.Workspace{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root, Include: []string{"**/*.md"}}); err != nil {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 2)
