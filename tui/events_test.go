@@ -111,3 +111,31 @@ func TestAPeersRemovalKeepsTheUnsavedText(t *testing.T) {
 		t.Fatalf("the outline reads the kept draft as %v of %q, want the Markdown draft", p.Kind, p.Ref.path)
 	}
 }
+
+// A peer removing the only workspace while this TUI has an unsaved file in it: the text stays as
+// the draft, with no workspace to enter, and an answer still coming for the file is dropped (no
+// workspace entered moves nothing else that would drop it).
+func TestTheLastWorkspacesRemovalDropsItsFilesAnswers(t *testing.T) {
+	d := startManaged(t, map[string]string{"alpha": fileDir(t, "conf.yaml", "server:\n  host: db\n")})
+	one := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
+	two := runTUI(t, NewSession(d.sock, nil), Options{Workspace: "alpha"})
+	one.s.WaitForText(t, "· alpha")
+	two.s.WaitForText(t, "· alpha")
+	one.h.p.Post(func() { one.h.openPath("conf.yaml") })
+	one.waitFile(t, "conf.yaml")
+	one.h.p.Post(func() {
+		one.h.editor.SetValue("server:\n  host: db\n# words nobody saved\n")
+		one.h.edited()
+	})
+	one.s.WaitFor(t, "dirty", func(string) bool { return one.file().dirty })
+	tk := onLoop(one, func() Ticket { return one.h.ticket(nil, TicketFile) })
+	two.h.p.Post(func() { two.h.removeWorkspaceConfirmed("alpha") })
+	one.waitNoticed(t, "kept as an untitled draft")
+	one.s.WaitForText(t, "no workspace")
+	if n := one.file(); n.open || !n.dirty || !strings.Contains(one.editorText(), "words nobody saved") {
+		t.Fatalf("after the only workspace went: %+v, text %q", n, one.editorText())
+	}
+	if onLoop(one, tk.Current) {
+		t.Fatal("an answer for the file kept as the draft would still land on the draft")
+	}
+}
