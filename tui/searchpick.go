@@ -3,22 +3,15 @@ package tui
 import (
 	"context"
 	"fmt"
-	"path"
 	"strings"
-	"sync/atomic"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/golib/highlight"
-	"github.com/yongjohnlee80/golib/parse/markdown"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// THE PICKERS — search, open and new file: the picker's layout (the fields over the list on the
-// left, the file under the cursor on the right, the buttons beneath), each over the workspace's
-// files through the daemon.
+// THE SEARCH PICKER — Go › Search: the words typed searched by the daemon as they are typed, the
+// hits listed, the file under the cursor previewed at its section (SearchPicker.qml, a pick[hit]).
 
 // hit is one section a search found.
 type hit struct {
@@ -268,26 +261,6 @@ func (h *Host) openHit(x hit) {
 	}
 }
 
-// readPreview is the work that reads file p of the workspace for a picker's preview, the cursor at
-// byte at: through the daemon, off the loop. held is a hit of a document another backend's build
-// indexed, which says so when this one cannot read it.
-func (h *Host) readPreview(p string, at int, held bool) func(context.Context) answerOf[pane] {
-	ws := h.ws
-	return func(ctx context.Context) answerOf[pane] {
-		res, err := h.call(ctx, "doc.read", ws, p)
-		if err != nil {
-			why := wireMessage(err)
-			if held {
-				// a held hit this backend cannot read (a PDF under a community build): say why
-				why = "held: this backend's build does not read this file; it was indexed by another (" + why + ")"
-			}
-			return answerOf[pane]{v: pane{title: p + " · " + why}, err: err}
-		}
-		b, _ := asMap(res)["content"].([]byte)
-		return answerOf[pane]{v: pane{title: p, text: string(b), at: at}}
-	}
-}
-
 // previewRendered gives the search's preview its Rendered view for a hit read as Markdown, as
 // setRendered does the editor's: a note or a derived document; code, YAML and plain text stay
 // Raw. read is false when the hit could not be read, which shows no text to render.
@@ -295,155 +268,6 @@ func (h *Host) readPreview(p string, at int, held bool) func(context.Context) an
 // own file is not the host's to look up.
 func (h *Host) previewRendered(p string, read bool) {
 	h.set("App.searchPreviewRendered", read && h.resolver().Of(p).Traits().ReadsAs == kind.Markdown)
-}
-
-// The open picker: a filter over the workspace's files.
-
-// newOpenPick is File › Open's picker over the workspace's files.
-func (h *Host) newOpenPick() *pick[string] {
-	return &pick[string]{c: core{h}, dialog: "fileOpen", name: "open",
-		list:   newRows(tuidecl.NewListModel("key", "path"), pathRowOf),
-		field:  "App.openField",
-		status: "App.pickerStatus", noun: "files",
-		match:   func(p string) string { return p },
-		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },
-		scope:   TicketWorkspace,
-		choose:  h.openPath}
-}
-
-// openPicker opens File › Open over the workspace's files.
-func (h *Host) openPicker() {
-	h.openPick.setAll(h.files.Paths)
-	h.openPick.open()
-}
-
-// pathRowOf is a file's row in a list of paths.
-func pathRowOf(_ int, p string) rowOf { return rowOf{"key": p, "path": p} }
-
-// The new-file picker: a path, over the workspace's files to take a folder from.
-
-// newNewPick is the draft's name: the path typed, over the workspace's files under it. Enter on a
-// file takes its folder; accept creates the file at the path.
-func (h *Host) newNewPick() *pick[string] {
-	return &pick[string]{c: core{h}, dialog: "fileName", name: "new",
-		list:    newRows(tuidecl.NewListModel("key", "path"), pathRowOf),
-		match:   func(p string) string { return p },
-		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },
-		scope:   TicketWorkspace,
-		enter:   h.newFileFolder,
-		submit:  h.createFile}
-}
-
-// newFileFolder writes file p's folder into the path, for a name to follow.
-func (h *Host) newFileFolder(p string) {
-	dir := path.Dir(p)
-	if dir == "." {
-		dir = ""
-	} else {
-		dir += "/"
-	}
-	h.set("App.newFilePath", "\x00") // moved away first, so the same folder twice still writes it
-	h.set("App.newFilePath", dir)
-}
-
-// marks is the search's words, as the preview's highlighter marks them.
-type marks struct{ terms atomic.Pointer[[]string] }
-
-func (m *marks) Store(terms []string) { m.terms.Store(&terms) }
-
-func (m *marks) load() []string {
-	if p := m.terms.Load(); p != nil {
-		return *p
-	}
-	return nil
-}
-
-// searchHighlighter is Markdown's, with the search's words marked over it (the Alert style).
-func (h *Host) searchHighlighter() highlight.Highlighter { return markedHighlighter(&h.marks) }
-
-func (h *Host) searchDefinition() highlight.Definition {
-	d := markdown.Definition()
-	d.Name = "Markdown (search)"
-	d.Extensions = nil
-	d.Aliases = nil
-	factory := d.SourceFactory
-	d.SourceFactory = func(catalog *highlight.Catalog) highlight.Source {
-		source := factory(catalog)
-		source.Highlighter = markedHighlighterWith(&h.marks, source.Highlighter)
-		return source
-	}
-	return d
-}
-
-// markedHighlighter is Markdown's, with the words in m marked over it (the Alert style), read
-// afresh on every line: the preview's for the search's words, the page's for the find's.
-func markedHighlighter(m *marks) highlight.Highlighter {
-	return markedHighlighterWith(m, markdown.Highlighter())
-}
-
-func markedHighlighterWith(m *marks, base highlight.Highlighter) highlight.Highlighter {
-	return highlight.HighlighterFunc(func(line string, prev highlight.State) ([]highlight.Span, highlight.State) {
-		spans, next := base.HighlightBlock(line, prev)
-		return markedSpans(m, line, spans), next
-	})
-}
-
-func markedSpans(m *marks, line string, spans []highlight.Span) []highlight.Span {
-	terms := m.load()
-	if len(terms) == 0 || line == "" {
-		return spans
-	}
-	styles := make([]highlight.Style, len(line))
-	for _, s := range spans {
-		for i := s.Start; i < s.End && i < len(styles); i++ {
-			styles[i] = s.Style
-		}
-	}
-	marked := false
-	for i := 0; i < len(line); {
-		for _, t := range terms {
-			if end := foldAt(line, i, t); end > i {
-				for j := i; j < end; j++ {
-					styles[j] = highlight.Alert
-				}
-				marked = true
-			}
-		}
-		_, n := utf8.DecodeRuneInString(line[i:])
-		i += n
-	}
-	if !marked {
-		return spans
-	}
-	var out []highlight.Span
-	for i := 0; i < len(styles); {
-		j := i
-		for j < len(styles) && styles[j] == styles[i] {
-			j++
-		}
-		if styles[i] != highlight.Normal {
-			out = append(out, highlight.Span{Start: i, End: j, Style: styles[i]})
-		}
-		i = j
-	}
-	return out
-}
-
-// foldAt is where term t (lower case) ends when it matches s from byte i, case aside; -1 when it
-// does not. The offsets are s's own: lower-casing can change a rune's length, so a match found in
-// strings.ToLower(s) would mark the wrong bytes of s.
-func foldAt(s string, i int, t string) int {
-	for _, tr := range t {
-		if i >= len(s) {
-			return -1
-		}
-		r, n := utf8.DecodeRuneInString(s[i:])
-		if unicode.ToLower(r) != tr {
-			return -1
-		}
-		i += n
-	}
-	return i
 }
 
 // hitRows are the hit list's rows.

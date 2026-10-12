@@ -14,7 +14,10 @@
 //	workspace.go  the workspaces, and switching between them
 //	files.go      the file in the editor: opening, saving, conflicts, unsaved changes
 //	search.go     the workspace's files, as the pickers filter them
-//	pickers.go    the search, open and new-file pickers, and their previews
+//	pick.go       the one picker core, pick[T], behind Picker.qml and the App.pick* commands
+//	searchpick.go the search picker: the daemon's search as it is typed, and its hits
+//	filepick.go   File › Open and the draft's name: pickers over the workspace's files
+//	marks.go      words marked over Markdown's highlighting: the search's and the find's
 //	explorer.go   the explorer: every workspace's folders and files, as a tree
 //	relations.go  the Relations drawer, the jump card and back (SPC l, j, b)
 //	outside.go    files outside every workspace: Open file…, New file…
