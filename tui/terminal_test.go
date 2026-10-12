@@ -136,7 +136,7 @@ func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 	if !r.terminal().Running() {
 		t.Error("the shell stopped while hidden")
 	}
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "hidden by its key", func(sc string) bool { return !strings.Contains(sc, "┌ terminal") })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
 
@@ -150,17 +150,17 @@ func TestTheTerminalGivesTheKeyboardBackToThePaneThatHadIt(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "the explorer's keyboard", func(string) bool { return r.focused("explorerTree") })
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "back to the explorer", func(string) bool { return r.focused("explorerTree") })
 
 	// Hidden while another pane has the keyboard, it moves nothing.
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("editor", "forceActiveFocus")); return true })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	time.Sleep(50 * time.Millisecond)
 	if !r.focused("editor") {
@@ -170,26 +170,26 @@ func TestTheTerminalGivesTheKeyboardBackToThePaneThatHadIt(t *testing.T) {
 
 func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 	d, r := runShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	// At the bottom, 50% high, of the 30 rows: its frame at row 15, the full width.
 	r.s.WaitFor(t, "at the bottom, half high", func(sc string) bool {
 		row, c := frameAt(sc)
 		return row == 15 && c == 0
 	})
-	onLoop(r, func() bool { r.h.setTerminalEdge(indexOf(termEdges, "center")); return true })
+	onLoop(r, func() bool { r.h.terminals.setTerminalEdge(indexOf(termEdges, "center")); return true })
 	// Centred, with the centre's own defaults (70 x 70), not the bottom's 50: 70 of 100 columns
 	// from column 15, 21 of 30 rows from row 4.
 	r.s.WaitFor(t, "centred at its own size", func(sc string) bool {
 		row, c := frameAt(sc)
 		return row == 4 && c == 15
 	})
-	onLoop(r, func() bool { r.h.setTerminalSize(indexOf(percentLabels(termSizes), "40%")); return true })
+	onLoop(r, func() bool { r.h.terminals.setTerminalSize(indexOf(percentLabels(termSizes), "40%")); return true })
 	r.s.WaitFor(t, "the centre's size changed", func(sc string) bool {
 		row, _ := frameAt(sc)
 		return row == 9 // 12 of 30 rows, centred
 	})
 	for _, edge := range []string{"top", "left", "right"} {
-		onLoop(r, func() bool { r.h.setTerminalEdge(indexOf(termEdges, edge)); return true })
+		onLoop(r, func() bool { r.h.terminals.setTerminalEdge(indexOf(termEdges, edge)); return true })
 		r.s.WaitFor(t, "at the "+edge, func(sc string) bool {
 			row, c := frameAt(sc)
 			switch edge {
@@ -217,7 +217,7 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 
 func TestTheTerminalsVimKeysFollowTheEditorsKeymap(t *testing.T) {
 	_, r := runShellTUI(t, map[string]string{"tui.editor.keymap": "text"})
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	r.keys(t, esc())
 	time.Sleep(100 * time.Millisecond)
@@ -231,7 +231,7 @@ func TestTheTerminalsVimKeysFollowTheEditorsKeymap(t *testing.T) {
 
 func TestTheTerminalSaysWhenTheShellExitsAndStartsAnother(t *testing.T) {
 	_, r := runShellTUI(t, nil)
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	r.keys(t, decltest.Type("exit 4\r")...)
 	r.s.WaitForText(t, "[process exited 4]")
@@ -258,7 +258,7 @@ func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
 		t.Skip("no bash: the cell needs a shell that forwards its hang-up to its jobs")
 	}
 	_, r := runTUIWithShell(t, bash, nil)
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
 	// +H: no history expansion of the $! below (macOS's bash 3.2 applies it).
 	r.keys(t, decltest.Type("set +H; sleep 1000 & echo J''OB=$!\r")...)
@@ -304,7 +304,7 @@ func TestTheShellStartsInTheWorkspacesFolderWhenThisMachineHasIt(t *testing.T) {
 // command works.
 func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 	_, r := runTUIWithShell(t, "/nonexistent/shell", nil)
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the failure noticed", func(string) bool {
 		return onLoop(r, func() bool {
 			for _, n := range r.h.noticeLog.items {
@@ -315,15 +315,15 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 			return false
 		})
 	})
-	if onLoop(r, func() bool { return r.h.termStarted }) {
+	if onLoop(r, func() bool { return r.h.terminals.started }) {
 		t.Fatal("a shell that failed to start counts as started")
 	}
 	// The command works now (as a fixed $SHELL would make it at the next run); the next open starts it.
 	term := r.terminal() // outside onLoop: it runs on the loop itself
 	onLoop(r, func() bool { term.SetCommand("/bin/sh"); return true })
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true }) // hide
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // hide
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true }) // open again
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // open again
 	r.s.WaitFor(t, "the shell started on the retry", func(string) bool {
 		return onLoop(r, func() bool { return term.Running() })
 	})

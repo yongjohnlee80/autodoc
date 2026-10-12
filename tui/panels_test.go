@@ -10,7 +10,7 @@ import (
 func TestEveryPanelIsInTheDocument(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	for _, s := range panelSpecs {
+	for _, s := range r.h.panelSpecs() {
 		for _, id := range []string{s.ID, s.View} {
 			if !onLoop(r, func() bool { _, ok := r.h.p.Find(id); return ok }) {
 				t.Errorf("panel %s: no %q in the document", s.ID, id)
@@ -92,7 +92,7 @@ func TestAnyPanelAtTheRightHidesTheFindCard(t *testing.T) {
 // TestKeyboardPanesAreThePageAndTheTreePanels: the terminal hands the keyboard back to the page or
 // to a panel that takes it.
 func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
-	got := keyboardPanes()
+	got := keyboardPanes(defaultPanelSpecs())
 	want := []string{"editor", "explorerTree", "linksList"}
 	if len(got) != len(want) {
 		t.Fatalf("keyboard panes %v, want %v", got, want)
@@ -102,7 +102,7 @@ func TestKeyboardPanesAreThePageAndTheTreePanels(t *testing.T) {
 			t.Errorf("keyboard panes %v, want %v", got, want)
 		}
 	}
-	if panelView("nope") != "" {
+	if (&Host{}).panelView("nope") != "" {
 		t.Error("a view for a panel that does not exist")
 	}
 }

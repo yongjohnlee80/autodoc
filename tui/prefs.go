@@ -106,6 +106,9 @@ type prefs struct {
 	searchStages stageChoice
 	// panelGeo are every sized panel's kept size and length, by preference name (panelsize.go)
 	panelGeo map[string]int
+	// panelDefs is this program's validated snapshot. A standalone reader uses
+	// fresh built-in descriptors rather than a shared runtime registry.
+	panelDefs []PanelSpec
 	// panelFloat are the panels moved or resized off their edges: x, y, w, h in percent of the
 	// Window (panelfloat.go)
 	panelFloat map[string][4]float64
@@ -227,7 +230,12 @@ func prefsOf(m map[string]any) prefs { return prefsFor(m, false) }
 // prefsFor reads the store's preferences for the terminal's UI or the GUI's: the same but the
 // theme, each its own (themePref).
 func prefsFor(m map[string]any, gui bool) prefs {
+	return prefsForPanels(m, gui, defaultPanelSpecs())
+}
+
+func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	p := defaultPrefsFor(gui)
+	p.panelDefs = specs
 	readRows(&p, m, legacyPrefRows(nil, gui))
 	str := func(k string) (string, bool) { s, ok := m[k].(string); return s, ok && s != "" }
 	if s, ok := str(prefSearchStages); ok {
@@ -281,8 +289,8 @@ func panelLength(edge string) int {
 // prefState is what the document reads of the composite preferences: the panels', the agents',
 // the fonts'. The rows' are rowState's (prefspec.go); the status line's is statusShown's.
 func prefState(p prefs) map[string]any {
-	m := termState(p)
-	for _, part := range []map[string]any{panelState(p), agentState(p), floatState(p.panelFloat), fontState(p)} {
+	m := map[string]any{}
+	for _, part := range []map[string]any{panelState(p), floatStateFor(p.panelFloat, p.geometrySpecs()), fontState(p)} {
 		maps.Copy(m, part)
 	}
 	return m
@@ -303,13 +311,16 @@ func (h *Host) loadPrefs() {
 			h.failed("preferences", a.err)
 			return
 		}
-		p := prefsFor(a.v, h.gui)
+		p := prefsForPanels(a.v, h.gui, h.panelSpecs())
 		readRows(&p, a.v, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
 	})
 }
 
 func (h *Host) applyPrefs(p prefs) {
+	if h.reg != nil {
+		p.panelDefs = h.panelSpecs()
+	}
 	h.prefs = p
 	st := prefState(p)
 	maps.Copy(st, rowState(p, h.prefRows))
@@ -317,8 +328,7 @@ func (h *Host) applyPrefs(p prefs) {
 	h.keep(h.p.SetMany(st))
 	h.syncPageWidth()
 	h.applyFonts(p)
-	h.syncTermDialog()
-	h.syncAgentDialog()
+	h.reg.preferencesChanged()
 	h.applyToastPrefs()
 	h.syncStages(true)
 	h.refreshPlugins() // the SPC p letters the user chose
@@ -515,8 +525,7 @@ func (h *Host) syncPrefDialog() {
 		}
 	}
 	h.keep(h.p.SetMany(st))
-	h.syncTermDialog()
-	h.syncAgentDialog()
+	h.reg.preferencesChanged()
 }
 
 func indexOf(list []string, s string) int {

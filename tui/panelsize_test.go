@@ -43,7 +43,7 @@ func storedPref(t *testing.T, d *daemon, r *running, name, want string) {
 // (ADR 1791500773). No corner grip is drawn.
 func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	d, r := runShellTUI(t, nil)
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal 30% high", func(sc string) bool { row, _ := frameAt(sc); return row == 21 })
 	if strings.Contains(r.s.String(), "□") {
 		t.Error("a corner grip is drawn")
@@ -51,7 +51,7 @@ func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	altDrag(t, r, tuicore.MouseLeft, 50, 25, 0, -6)
 	r.s.WaitFor(t, "the terminal six rows up", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 	storedPref(t, d, r, "tui.terminal.float", "0,50,100,30")
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 
 	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
 	r.s.WaitFor(t, "the explorer", func(sc string) bool { row, _ := panelAt(sc, "explorer"); return row >= 0 })
@@ -63,7 +63,7 @@ func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	})
 
 	again := attached(t, d)
-	onLoop(again, func() bool { again.h.toggleTerminal(); return true })
+	onLoop(again, func() bool { again.h.terminals.toggleTerminal(); return true })
 	again.s.WaitFor(t, "the terminal floating six rows up in a new TUI", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 }
 
@@ -109,7 +109,7 @@ func TestResetAndANewEdgeDockThePanels(t *testing.T) {
 	r.s.WaitFor(t, "the explorer floating mid-screen", func(sc string) bool { _, c := panelAt(sc, "explorer"); return c >= 45 })
 	onLoop(r, func() bool { r.h.choosePrefNamed(prefExplorer, 1); return true }) // right
 	storedPref(t, d, r, "tui.explorer.float", "")
-	onLoop(r, func() bool { r.h.setTerminalEdge(indexOf(termEdges, "top")); return true })
+	onLoop(r, func() bool { r.h.terminals.setTerminalEdge(indexOf(termEdges, "top")); return true })
 	storedPref(t, d, r, "tui.terminal.float", "")
 	if got := onLoop(r, func() bool { _, ok := r.h.prefs.panelFloat["links"]; return ok }); !got {
 		t.Fatal("a new edge for the explorer docked the links too")
@@ -176,6 +176,6 @@ func TestArrangingMovesAPanelOnAWideScreen(t *testing.T) {
 // before panels floated) is read when a TUI attaches, and the terminal opens at it, docked.
 func TestTheTerminalOpensAtItsStoredSize(t *testing.T) {
 	_, r := runShellTUI(t, map[string]string{"tui.terminal.bottom.size": "50"})
-	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal 50% high", func(sc string) bool { row, _ := frameAt(sc); return row == 15 })
 }

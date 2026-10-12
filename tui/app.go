@@ -123,18 +123,10 @@ type Host struct {
 	cellFonts, proseFonts                  []string                // the Fonts dialog's choices, "" the default first
 	cellFontModel, proseFontModel          *tuidecl.ListModel
 	arrange                                *arrangeState // an arrangement in progress (arrange.go)
-	// the terminal (terminal.go): started once opened; the pane that had the keyboard when it
-	// opened; whether its closing gives the keyboard back
-	termStarted, termRestore bool
-	// the agent terminal (agent.go): where agents work, and the profile running ("" for none)
-	agentDir, agentRunning string
-	agentConfig            string // the TUI's config, the agent's autodoc's (Options.ConfigPath)
-	agentBinPath           string // the autodoc the agent calls; "" is this binary (a test sets it)
-	editingAgent           string // the profile the agent form edits, "" adding one
-	switchingAgent         string // the profile the switch question would start
-	agentRows              *tuidecl.ListModel
-	termBefore             string
-	// the recent files (recent.go), a feature of its own
+	// Stateful terminal and agent behavior is owned by these Features.
+	terminals *terminals
+	agents    *agents
+	// The recent-files Feature owns its rows and persisted list.
 	recent *recent
 	// the explorer (explorer.go), a feature of its own: find.go finds in its rows
 	explorer *explorer
@@ -335,11 +327,10 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath, recoveryDir: opt.RecoveryDir, luaDir: opt.LuaDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, luaDir: opt.LuaDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
-		agentRows:       tuidecl.NewListModel("key", "default", "name", "command"),
 		cellFontModel:   fontModel(),
 		proseFontModel:  fontModel(),
 		fonts:           opt.Fonts,
@@ -350,7 +341,6 @@ func newHost(session *Session, opt Options) *Host {
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
 		panelOpen:       map[string]bool{},
-		termRestore:     true,
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 		pluginOpt:       opt.Plugins,
@@ -365,6 +355,8 @@ func newHost(session *Session, opt Options) *Host {
 	h.rel = newRelated(core{h})
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
+	h.terminals = newTerminals(core{h})
+	h.agents = newAgents(core{h}, opt.AgentDir, opt.ConfigPath)
 	h.loadPlugins()
 	return h
 }
@@ -421,7 +413,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	}
 	h.layoutSrc = src
 	h.theme = themeOf(src)
-	reg, err := newRegistry(h.features()...)
+	reg, err := newRegistryWithPanels(func(specs []PanelSpec) { h.prefs.panelDefs = specs }, h.features()...)
 	if err != nil {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}

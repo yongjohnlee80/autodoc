@@ -417,8 +417,8 @@ func TestPreferencesAreStoredInTheOrderTheyChanged(t *testing.T) {
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	onLoop(r, func() bool {
-		r.h.setTerminalEdge(indexOf(termEdges, "top"))
-		r.h.setTerminalEdge(indexOf(termEdges, "right"))
+		r.h.terminals.setTerminalEdge(indexOf(termEdges, "top"))
+		r.h.terminals.setTerminalEdge(indexOf(termEdges, "right"))
 		return true
 	})
 	r.s.WaitFor(t, "both writes answered", func(string) bool { return answered.Load() == 2 })

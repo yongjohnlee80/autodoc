@@ -43,31 +43,32 @@ func agentState(p prefs) map[string]any {
 }
 
 // syncAgentDialog sets the Preferences dialog's agent choosers.
-func (h *Host) syncAgentDialog() {
-	size, length := h.prefs.panelGeometry("agent", h.prefs.agentEdge)
-	h.set("App.agentEdgeIndex", indexOf(agentEdges, h.prefs.agentEdge))
-	h.set("App.agentSizeIndex", nearest(termSizes, size))
-	h.set("App.agentLengthIndex", nearest(termLengths, length))
+func (h *agents) syncAgentDialog() {
+	p := h.c.Prefs()
+	size, length := p.panelGeometry("agent", p.agentEdge)
+	h.c.Set("App.agentEdgeIndex", indexOf(agentEdges, p.agentEdge))
+	h.c.Set("App.agentSizeIndex", nearest(termSizes, size))
+	h.c.Set("App.agentLengthIndex", nearest(termLengths, length))
 }
 
-func (h *Host) setAgentEdge(i int) {
+func (h *agents) setAgentEdge(i int) {
 	if i >= 0 && i < len(agentEdges) {
 		e := agentEdges[i]
-		h.setPref(prefAgentEdge, e, func(p *prefs) { p.agentEdge = e })
-		h.dockPanel("agent")
+		h.c.KeepPreference(prefAgentEdge, e, func(p *prefs) { p.agentEdge = e })
+		h.c.DockPanel("agent")
 		h.syncAgentDialog() // the size and length shown are the new place's
 	}
 }
 
 // setAgentSize and setAgentLength set the size at the place the agent opens from now.
-func (h *Host) setAgentSize(i int) {
+func (h *agents) setAgentSize(i int) {
 	if i >= 0 && i < len(termSizes) {
-		h.keepPanelGeo("agent", "size", termSizes[i])
+		h.c.KeepPanelGeometry("agent", "size", termSizes[i])
 	}
 }
 
-func (h *Host) setAgentLength(i int) {
+func (h *agents) setAgentLength(i int) {
 	if i >= 0 && i < len(termLengths) {
-		h.keepPanelGeo("agent", "length", termLengths[i])
+		h.c.KeepPanelGeometry("agent", "length", termLengths[i])
 	}
 }

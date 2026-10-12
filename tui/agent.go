@@ -3,13 +3,85 @@ package tui
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+
 	"github.com/yongjohnlee80/autodoc"
 )
+
+// agents owns profile forms and the running agent's identity. Its single panel
+// remains one contribution even when the later agents model gains more tabs.
+type agents struct {
+	c                      agentHost
+	agentDir, agentRunning string
+	agentConfig            string
+	agentBinPath           string
+	editingAgent           string
+	switchingAgent         string
+	agentRows              *tuidecl.ListModel
+}
+
+func newAgents(c agentHost, dir, config string) *agents {
+	return &agents{c: c, agentDir: dir, agentConfig: config,
+		agentRows: tuidecl.NewListModel("key", "default", "name", "command")}
+}
+func (*agents) Name() string { return "agents" }
+func (a *agents) State() map[string]any {
+	st := map[string]any{
+		"App.agentTitle":          "agent",
+		"App.agentShown":          false,
+		"App.agentEdges":          choices(agentEdgeLabels...),
+		"App.agentEdgeIndex":      0,
+		"App.agentSizes":          choices(percentLabels(termSizes)...),
+		"App.agentSizeIndex":      nearest(termSizes, 50),
+		"App.agentLengths":        choices(percentLabels(termLengths)...),
+		"App.agentLengthIndex":    nearest(termLengths, 100),
+		"App.agentProfiles":       a.agentRows,
+		"App.agentProfilesStatus": "",
+		"App.agentFormTitle":      "",
+		"App.agentFormError":      "",
+		"App.agentName":           "",
+		"App.agentCommand":        "",
+		"App.agentSwitchQuestion": "",
+	}
+	maps.Copy(st, agentState(a.c.Prefs()))
+	return st
+}
+func (a *agents) Commands() map[string]Command {
+	return map[string]Command{
+		"App.toggleAgent":          none(a.toggleAgent),
+		"App.openAgentProfiles":    none(a.openAgentProfiles),
+		"App.startAddAgent":        none(a.startAddAgent),
+		"App.startEditAgent":       oneNumber("a row", a.startEditAgent),
+		"App.saveAgent":            twoStrings("a name and a command", a.saveAgent),
+		"App.removeAgent":          oneNumber("a row", a.removeAgent),
+		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
+		"App.useAgent":             oneNumber("a row", a.useAgent),
+		"App.switchAgentConfirmed": none(a.switchAgentConfirmed),
+		"App.agentExited":          oneNumber("an exit code", a.agentExited),
+		"App.setAgentEdge":         oneNumber("a row", a.setAgentEdge),
+		"App.setAgentSize":         oneNumber("a row", a.setAgentSize),
+		"App.setAgentLength":       oneNumber("a row", a.setAgentLength),
+	}
+}
+func (a *agents) Panels() []PanelSpec {
+	s := agentPanelSpec()
+	s.Open = func(PanelHost) { a.openAgentPanel() }
+	s.Opened = func(c PanelHost) { c.Set("App.agentShown", true) }
+	s.Closed = func(c PanelHost) { c.Set("App.agentShown", false); c.Focus("editor") }
+	return []PanelSpec{s}
+}
+func (a *agents) PreferencesChanged() {
+	for name, value := range agentState(a.c.Prefs()) {
+		a.c.Set(name, value)
+	}
+	a.syncAgentDialog()
+}
 
 // THE AGENT — an AI agent's CLI in a terminal of its own, floating over the page (ADR 1791213400):
 // SPC g, Go › Agent. The user keeps profiles, each a name and the command that starts the agent
@@ -66,19 +138,19 @@ func (p prefs) agentProfile(name string) (agentProfile, bool) {
 
 // toggleAgent is SPC g: the agent running shown or hidden; none running, the default started;
 // no default, the profiles, which say what to do.
-func (h *Host) toggleAgent() {
-	h.togglePanel("agent")
+func (h *agents) toggleAgent() {
+	h.c.TogglePanel("agent")
 }
 
 // openAgentPanel shows the running agent, or starts the default profile. With no
 // default, it opens the profiles dialog instead of an empty terminal.
-func (h *Host) openAgentPanel() {
+func (h *agents) openAgentPanel() {
 	if h.agentRunning != "" {
-		h.keep(h.p.Call("agent", "open"))
-		h.keep(h.p.Call("agentView", "forceActiveFocus"))
+		h.c.OpenDrawer("agent")
 		return
 	}
-	p, ok := h.prefs.agentProfile(h.prefs.agentDefault)
+	prefs := h.c.Prefs()
+	p, ok := prefs.agentProfile(prefs.agentDefault)
 	if !ok {
 		h.openAgentProfiles()
 		return
@@ -88,54 +160,49 @@ func (h *Host) openAgentPanel() {
 
 // startAgent starts p in the agent's terminal and shows it. The shell runs the command as written,
 // so it decides what the command is: one it cannot find exits 127, which agentExited explains.
-func (h *Host) startAgent(p agentProfile) {
-	ws, ok := h.activeWorkspaceInfo()
+func (h *agents) startAgent(p agentProfile) {
+	ws, ok := h.c.ActiveWorkspace()
 	if !ok {
-		h.say("the agent works in a workspace: open one first")
+		h.c.Set("App.status", "the agent works in a workspace: open one first")
 		return
 	}
 	command := fillAgentCommand(p.Command, ws)
 	dir, err := h.writeAgentGuide(ws)
 	if err != nil {
-		h.notify("the agent's folder could not be written: " + err.Error())
+		h.c.Notify("the agent's folder could not be written: " + err.Error())
 		return
 	}
 	path, args, err := agentArgv(command, h.agentEnv(ws, dir))
 	if err != nil {
-		h.notify("the agent could not start: " + err.Error())
+		h.c.Notify("the agent could not start: " + err.Error())
 		return
 	}
-	if c, ok := h.p.Find("agentView"); ok {
-		if t, ok := c.(interface {
-			SetCommand(string, ...string)
-			SetDir(string)
-		}); ok {
-			t.SetCommand(path, args...)
-			t.SetDir(dir)
-		}
+	if err := h.c.ConfigureTerminal("agentView", path, dir, args...); err != nil {
+		h.c.Notify("the agent could not start: " + err.Error())
+		return
 	}
-	h.set("App.agentTitle", "agent · "+p.Name)
-	h.keep(h.p.Call("agent", "open"))
-	if err := h.p.Call("agentView", "start"); err != nil {
-		h.notify("the agent could not start (" + err.Error() + ")")
+	h.c.Set("App.agentTitle", "agent · "+p.Name)
+	h.c.Keep(h.c.CallView("agent", "open"))
+	if err := h.c.CallView("agentView", "start"); err != nil {
+		h.c.Notify("the agent could not start (" + err.Error() + ")")
 		return
 	}
 	h.agentRunning = p.Name
-	h.keep(h.p.Call("agentView", "forceActiveFocus"))
+	h.c.Focus("agentView")
 }
 
 // stopAgent ends the agent running, if one is.
-func (h *Host) stopAgent() {
+func (h *agents) stopAgent() {
 	if h.agentRunning == "" {
 		return
 	}
-	h.keep(h.p.Call("agentView", "stop"))
+	h.c.Keep(h.c.CallView("agentView", "stop"))
 	h.agentRunning = ""
 }
 
 // agentExited is the agent's program ending: the next SPC g starts the default again. The shell's
 // 127 and 126 are its command not found and not runnable: the profile's command is wrong.
-func (h *Host) agentExited(code int) {
+func (h *agents) agentExited(code int) {
 	name := h.agentRunning
 	h.agentRunning = ""
 	if name == "" {
@@ -144,16 +211,16 @@ func (h *Host) agentExited(code int) {
 	switch code {
 	case 0:
 		// a clean exit (the user quit the agent): its panel goes with it
-		if h.panelOpen["agent"] {
-			h.keep(h.p.Call("agent", "close"))
+		if h.c.PanelOpen("agent") {
+			h.c.CloseDrawer("agent")
 		}
-		h.notify(fmt.Sprintf("the agent %s exited: SPC g starts the default again", name))
+		h.c.Notify(fmt.Sprintf("the agent %s exited: SPC g starts the default again", name))
 	case 127, 126:
 		why := map[int]string{127: "was not found", 126: "could not run"}[code]
-		h.notify(fmt.Sprintf("the agent %s's command %s (%d): check it in System › Agent profiles…", name, why, code))
+		h.c.Notify(fmt.Sprintf("the agent %s's command %s (%d): check it in System › Agent profiles…", name, why, code))
 	default:
 		// a failure: the panel stays, with what the agent printed before it ended
-		h.notify(fmt.Sprintf("the agent %s exited (%d): SPC g starts the default again", name, code))
+		h.c.Notify(fmt.Sprintf("the agent %s exited (%d): SPC g starts the default again", name, code))
 	}
 }
 
@@ -181,11 +248,11 @@ func agentArgv(command string, env []string) (string, []string, error) {
 // the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
 // folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
 // store, not the default config's, and is found when no autodoc is installed.
-func (h *Host) agentEnv(ws wsInfo, dir string) []string {
+func (h *agents) agentEnv(ws wsInfo, dir string) []string {
 	return []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
-		"AUTODOC_SOCKET=" + h.session.Address(),
+		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
 		"AUTODOC_BIN=" + h.agentBin(),
 		"AUTODOC_CONFIG=" + h.agentConfig,
 		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
@@ -193,7 +260,7 @@ func (h *Host) agentEnv(ws wsInfo, dir string) []string {
 }
 
 // agentBin is the autodoc binary the agent calls: this one, unless a test says otherwise.
-func (h *Host) agentBin() string {
+func (h *agents) agentBin() string {
 	if h.agentBinPath != "" {
 		return h.agentBinPath
 	}
@@ -211,7 +278,7 @@ func agentWrapper(bin, config string) string {
 }
 
 // agentDir is the folder the agent works in for a workspace: AutoDoc's, never the workspace's.
-func (h *Host) agentFolder(ws wsInfo) string {
+func (h *agents) agentFolder(ws wsInfo) string {
 	base := h.agentDir
 	if base == "" {
 		base = filepath.Join(os.TempDir(), "autodoc-agent")
@@ -232,7 +299,7 @@ func safeName(s string) string {
 // writeAgentGuide writes AGENTS.md, and CLAUDE.md as the same text, into the agent's folder for ws:
 // most agent CLIs read one of the two from where they start; and bin/autodoc, agentWrapper. It
 // returns the folder.
-func (h *Host) writeAgentGuide(ws wsInfo) (string, error) {
+func (h *agents) writeAgentGuide(ws wsInfo) (string, error) {
 	dir := h.agentFolder(ws)
 	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o700); err != nil {
 		return "", err

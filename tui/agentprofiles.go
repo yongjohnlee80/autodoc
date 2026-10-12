@@ -11,17 +11,18 @@ import (
 // saying why.
 
 // openAgentProfiles lists the profiles and opens the dialog.
-func (h *Host) openAgentProfiles() {
+func (h *agents) openAgentProfiles() {
 	h.listAgents()
-	h.open("agentProfiles")
+	h.c.Open("agentProfiles")
 }
 
 // listAgents shows the profiles, the default marked, and keeps the cursor on a row that exists.
-func (h *Host) listAgents() {
-	rows := make([]rowOf, len(h.prefs.agents))
-	for i, a := range h.prefs.agents {
+func (h *agents) listAgents() {
+	p := h.c.Prefs()
+	rows := make([]rowOf, len(p.agents))
+	for i, a := range p.agents {
 		mark := ""
-		if a.Name == h.prefs.agentDefault {
+		if a.Name == p.agentDefault {
 			mark = "●"
 		}
 		if a.Name == h.agentRunning {
@@ -32,37 +33,38 @@ func (h *Host) listAgents() {
 	h.agentRows.Reset(rows)
 	switch {
 	case len(rows) == 0:
-		h.set("App.agentProfilesStatus", "no profiles yet: Add… one, a name and the command that starts the agent")
-	case h.prefs.agentDefault == "":
-		h.set("App.agentProfilesStatus", "Make default marks the one SPC g opens")
+		h.c.Set("App.agentProfilesStatus", "no profiles yet: Add… one, a name and the command that starts the agent")
+	case p.agentDefault == "":
+		h.c.Set("App.agentProfilesStatus", "Make default marks the one SPC g opens")
 	default:
-		h.set("App.agentProfilesStatus", "SPC g opens "+h.prefs.agentDefault+" · {root} and {workspace} in a command are filled in")
+		h.c.Set("App.agentProfilesStatus", "SPC g opens "+p.agentDefault+" · {root} and {workspace} in a command are filled in")
 	}
 }
 
-func (h *Host) agentAt(i int) (agentProfile, bool) {
-	if i < 0 || i >= len(h.prefs.agents) {
+func (h *agents) agentAt(i int) (agentProfile, bool) {
+	p := h.c.Prefs()
+	if i < 0 || i >= len(p.agents) {
 		return agentProfile{}, false
 	}
-	return h.prefs.agents[i], true
+	return p.agents[i], true
 }
 
 // keepAgents writes the profiles and the default, and lists them again.
-func (h *Host) keepAgents(agents []agentProfile, def string) {
-	h.setPref(prefAgentProfiles, agentProfilesJSON(agents), func(p *prefs) { p.agents = agents })
-	if def != h.prefs.agentDefault {
-		h.setPref(prefAgentDefault, def, func(p *prefs) { p.agentDefault = def })
+func (h *agents) keepAgents(agents []agentProfile, def string) {
+	h.c.KeepPreference(prefAgentProfiles, agentProfilesJSON(agents), func(p *prefs) { p.agents = agents })
+	if def != h.c.Prefs().agentDefault {
+		h.c.KeepPreference(prefAgentDefault, def, func(p *prefs) { p.agentDefault = def })
 	}
 	h.listAgents()
 }
 
 // startAddAgent and startEditAgent open the form, empty or on profile i.
-func (h *Host) startAddAgent() {
+func (h *agents) startAddAgent() {
 	h.editingAgent = ""
 	h.fillAgentForm("add an agent profile", agentProfile{})
 }
 
-func (h *Host) startEditAgent(i int) {
+func (h *agents) startEditAgent(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
 		return
@@ -71,28 +73,29 @@ func (h *Host) startEditAgent(i int) {
 	h.fillAgentForm("edit "+a.Name, a)
 }
 
-func (h *Host) fillAgentForm(title string, a agentProfile) {
-	h.set("App.agentFormTitle", title)
-	h.set("App.agentFormError", "")
-	h.setField("App.agentName", a.Name)
-	h.setField("App.agentCommand", a.Command)
-	h.open("agentEdit")
+func (h *agents) fillAgentForm(title string, a agentProfile) {
+	h.c.Set("App.agentFormTitle", title)
+	h.c.Set("App.agentFormError", "")
+	h.c.SetField("App.agentName", a.Name)
+	h.c.SetField("App.agentCommand", a.Command)
+	h.c.Open("agentEdit")
 }
 
 // saveAgent adds the profile the form describes, or rewrites the one it edits: a name another
 // profile has, or an empty name or command, opens the form again, saying why. The first profile
 // added becomes the default.
-func (h *Host) saveAgent(name, command string) {
+func (h *agents) saveAgent(name, command string) {
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
 	refuse := func(why string) {
-		h.set("App.agentFormError", "not saved: "+why)
-		h.open("agentEdit")
+		h.c.Set("App.agentFormError", "not saved: "+why)
+		h.c.Open("agentEdit")
 	}
 	if name == "" || command == "" {
 		refuse("a profile is a name and the command that starts the agent")
 		return
 	}
-	agents := append([]agentProfile(nil), h.prefs.agents...)
+	prefs := h.c.Prefs()
+	agents := append([]agentProfile(nil), prefs.agents...)
 	at := -1
 	for i, a := range agents {
 		if a.Name == name && a.Name != h.editingAgent {
@@ -103,7 +106,7 @@ func (h *Host) saveAgent(name, command string) {
 			at = i
 		}
 	}
-	def := h.prefs.agentDefault
+	def := prefs.agentDefault
 	if at >= 0 {
 		if def == agents[at].Name {
 			def = name
@@ -116,17 +119,17 @@ func (h *Host) saveAgent(name, command string) {
 		}
 	}
 	h.keepAgents(agents, def)
-	h.say("saved the agent profile " + name)
+	h.c.Set("App.status", "saved the agent profile "+name)
 }
 
 // removeAgent asks about the profile at i. The answer holds that profile, not
 // the row: a list refresh or a changed selection cannot remove a different one.
-func (h *Host) removeAgent(i int) {
+func (h *agents) removeAgent(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
 		return
 	}
-	h.ask(Question{
+	h.c.Ask(Question{
 		Title: "remove the agent profile?",
 		Text: fmt.Sprintf("Remove the saved agent profile %q? It will no longer be available to start. "+
 			"A running agent is not stopped.", a.Name),
@@ -137,67 +140,68 @@ func (h *Host) removeAgent(i int) {
 
 // removeAgentConfirmed removes the exact profile the question named. A profile
 // edited or removed while the card was open needs a new question.
-func (h *Host) removeAgentConfirmed(a agentProfile) {
-	i := slices.Index(h.prefs.agents, a)
+func (h *agents) removeAgentConfirmed(a agentProfile) {
+	prefs := h.c.Prefs()
+	i := slices.Index(prefs.agents, a)
 	if i < 0 {
-		h.say("the agent profile changed; ask to remove it again")
+		h.c.Set("App.status", "the agent profile changed; ask to remove it again")
 		return
 	}
-	agents := append(append([]agentProfile(nil), h.prefs.agents[:i]...), h.prefs.agents[i+1:]...)
-	def := h.prefs.agentDefault
+	agents := append(append([]agentProfile(nil), prefs.agents[:i]...), prefs.agents[i+1:]...)
+	def := prefs.agentDefault
 	if def == a.Name {
 		def = ""
 	}
 	h.keepAgents(agents, def)
-	h.say("removed the agent profile " + a.Name)
+	h.c.Set("App.status", "removed the agent profile "+a.Name)
 }
 
 // makeAgentDefault marks profile i the one SPC g opens.
-func (h *Host) makeAgentDefault(i int) {
+func (h *agents) makeAgentDefault(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
 		return
 	}
-	h.keepAgents(h.prefs.agents, a.Name)
-	h.say("SPC g opens " + a.Name)
+	h.keepAgents(h.c.Prefs().agents, a.Name)
+	h.c.Set("App.status", "SPC g opens "+a.Name)
 }
 
 // useAgent starts profile i now. Another running is stopped first, after asking.
-func (h *Host) useAgent(i int) {
+func (h *agents) useAgent(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
 		return
 	}
 	if h.agentRunning == a.Name {
-		h.closeDialog("agentProfiles")
+		h.c.Close("agentProfiles")
 		h.toggleAgentShown()
 		return
 	}
 	if h.agentRunning != "" {
 		h.switchingAgent = a.Name
-		h.set("App.agentSwitchQuestion", "Stop "+h.agentRunning+" and start "+a.Name+"? What "+h.agentRunning+" was doing ends.")
-		h.open("agentSwitch")
+		h.c.Set("App.agentSwitchQuestion", "Stop "+h.agentRunning+" and start "+a.Name+"? What "+h.agentRunning+" was doing ends.")
+		h.c.Open("agentSwitch")
 		return
 	}
-	h.closeDialog("agentProfiles")
+	h.c.Close("agentProfiles")
 	h.startAgent(a)
 }
 
 // switchAgentConfirmed stops the agent running and starts the one asked for.
-func (h *Host) switchAgentConfirmed() {
-	a, ok := h.prefs.agentProfile(h.switchingAgent)
+func (h *agents) switchAgentConfirmed() {
+	a, ok := h.c.Prefs().agentProfile(h.switchingAgent)
 	if !ok {
 		return
 	}
 	h.stopAgent()
-	h.closeDialog("agentProfiles")
+	h.c.Close("agentProfiles")
 	h.startAgent(a)
 }
 
 // toggleAgentShown shows the agent running, its panel open.
-func (h *Host) toggleAgentShown() {
-	if !h.panelOpen["agent"] {
-		h.keep(h.p.Call("agent", "open"))
+func (h *agents) toggleAgentShown() {
+	if !h.c.PanelOpen("agent") {
+		h.c.OpenDrawer("agent")
 	}
-	h.keep(h.p.Call("agentView", "forceActiveFocus"))
+	h.c.Focus("agentView")
 }

@@ -43,7 +43,7 @@ type findState struct {
 func (h *Host) findTarget() string {
 	app := h.p.App()
 	for _, c := range []struct{ id, target string }{
-		{"editor", findPage}, {panelView("explorer"), findExplorer}, {panelView("links"), findLinks},
+		{"editor", findPage}, {h.panelView("explorer"), findExplorer}, {h.panelView("links"), findLinks},
 	} {
 		if comp, ok := h.p.Find(c.id); ok && app.FocusWithin(comp) {
 			return c.target

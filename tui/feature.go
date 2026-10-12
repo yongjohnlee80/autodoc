@@ -29,6 +29,8 @@ type (
 	Connecter interface{ Connected() }
 	// Starter hears once that the program has started: its first preferences are applied.
 	Starter interface{ Started() }
+	// PreferenceSink sees the preferences currently in effect on the loop.
+	PreferenceSink interface{ PreferencesChanged() }
 	// Enterer hears each workspace entered, the one in use again included.
 	Enterer interface{ Entered(ws string) }
 	// EventSink hears the daemon's events of the kinds it names (sys.events), on the loop.
@@ -49,16 +51,28 @@ type registry struct {
 	picks     map[string]picker // every feature's pickers, which the App.pick* commands reach by name
 	pageShown bool              // a page was shown to the DocWatchers (page.go): the next one closes it first
 	catalog   *catalog          // the user commands: the features' now, Lua's and the plugins' as they come
+	panels    *panelRegistry
 }
 
 // newRegistry merges fs; a source, a command or a picker two features both name is an error, and so
 // is a catalog entry the catalog refuses (catalog.go). It adds one feature of its own, pickCommands:
 // the App.pick* commands over every feature's picks.
 func newRegistry(fs ...Feature) (*registry, error) {
+	return newRegistryWithPanels(nil, fs...)
+}
+
+// The host binds the validated snapshot before State runs, so features read
+// geometry from their actual program's panel schema even at first assembly.
+func newRegistryWithPanels(bind func([]PanelSpec), fs ...Feature) (*registry, error) {
+	panels, err := newPanelRegistry(fs)
+	if err != nil {
+		return nil, err
+	}
 	r := &registry{state: map[string]any{}, handlers: map[string]decl.HandlerFunc{}, picks: map[string]picker{},
 		catalog: newCatalog()}
 	fs = append(slices.Clip(fs), registryPicks{r})
 	r.features = fs
+	r.panels = panels
 	owner := map[string]string{}
 	claim := func(f Feature, name string) error {
 		if prev, ok := owner[name]; ok {
@@ -95,12 +109,16 @@ func newRegistry(fs ...Feature) (*registry, error) {
 	if err := keyCatalog(fs).check(mainIDs, r.catalog); err != nil {
 		return nil, err
 	}
+	if bind != nil {
+		bind(panels.specs)
+	}
 	for _, f := range fs {
-		for _, name := range slices.Sorted(maps.Keys(f.State())) {
+		state := f.State()
+		for _, name := range slices.Sorted(maps.Keys(state)) {
 			if err := claim(f, name); err != nil {
 				return nil, err
 			}
-			r.state[name] = f.State()[name]
+			r.state[name] = state[name]
 		}
 		cmds := f.Commands()
 		for _, name := range slices.Sorted(maps.Keys(cmds)) {
@@ -129,6 +147,16 @@ type registryPicks struct{ r *registry }
 func (registryPicks) Name() string                   { return "pickers" }
 func (registryPicks) State() map[string]any          { return nil }
 func (p registryPicks) Commands() map[string]Command { return pickCommands(p.r.picks) }
+func (r *registry) preferencesChanged() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if p, ok := f.(PreferenceSink); ok {
+			p.PreferencesChanged()
+		}
+	}
+}
 
 // connected tells the features that hear connections.
 func (r *registry) connected() {
@@ -188,7 +216,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own

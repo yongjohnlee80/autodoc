@@ -1,6 +1,16 @@
 package tui
 
-import "strconv"
+import (
+	"slices"
+	"strconv"
+)
+
+func (p prefs) geometrySpecs() []PanelSpec {
+	if p.panelDefs != nil {
+		return p.panelDefs
+	}
+	return defaultPanelSpecs()
+}
 
 // PANEL SIZES — every panel's size across its edge and length along it, in percent of the Window,
 // kept per edge and place as one preference shape, tui.<panel>.<place>.size and .length, set by
@@ -21,7 +31,7 @@ func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) 
 
 // panelGeometry is a panel's size and length at a place: the kept ones, or its spec's defaults.
 func (p prefs) panelGeometry(id, edge string) (size, length int) {
-	s := panelSpec(id)
+	s := findPanel(p.geometrySpecs(), id)
 	if s == nil || s.Default == nil {
 		return 0, 0
 	}
@@ -38,7 +48,7 @@ func (p prefs) panelGeometry(id, edge string) (size, length int) {
 // readPanelPrefs reads every sized panel's geometry, keeping the defaults for anything out of
 // bounds. The spec names the places and the bounds, so a panel cannot be missed here.
 func readPanelPrefs(p *prefs, m map[string]any) {
-	for _, s := range panelSpecs {
+	for _, s := range p.geometrySpecs() {
 		if s.Places == nil {
 			continue
 		}
@@ -56,7 +66,26 @@ func readPanelPrefs(p *prefs, m map[string]any) {
 // keepPanelGeo writes a panel's size or length at the place it opens from now, one path for
 // Preferences and a finished drag.
 func (h *Host) keepPanelGeo(panel, what string, n int) {
-	edge := panelSpec(panel).Edge(h.prefs)
+	s := h.panelSpec(panel)
+	if s == nil || len(s.Places) == 0 {
+		return
+	}
+	var bounds [2]int
+	switch what {
+	case "size":
+		bounds = s.Size
+	case "length":
+		bounds = s.Length
+	default:
+		return
+	}
+	if !inPercentRange(n, bounds) {
+		return
+	}
+	edge := s.Edge(h.prefs)
+	if !slices.Contains(s.Places, edge) {
+		return
+	}
 	k := panelPref(panel, edge, what)
 	h.setPref(k, strconv.Itoa(n), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
 }
@@ -74,7 +103,8 @@ func panelState(p prefs) map[string]any {
 // panelResized is a panel's grip released: its size and length kept for the place it opens from
 // now, the one way for every panel.
 func (h *Host) panelResized(panel string, size, length int) {
-	if s := panelSpec(panel); s == nil || s.Places == nil {
+	if s := h.panelSpec(panel); s == nil || len(s.Places) == 0 ||
+		!inPercentRange(size, s.Size) || !inPercentRange(length, s.Length) {
 		return // a panel that sizes itself keeps no geometry
 	}
 	h.keepPanelGeo(panel, "size", size)

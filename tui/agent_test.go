@@ -73,7 +73,7 @@ func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) 
 	}
 	d = startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
 	r = runTUI(t, NewSession(d.sock, nil), Options{AgentDir: dir, ConfigPath: agentConfig})
-	onLoop(r, func() bool { r.h.agentBinPath = bin; return true })
+	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	return d, r, calls
@@ -142,7 +142,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	r.s.WaitForText(t, "heard-hello")
 
 	// Hidden, it lives on: SPC g again shows the same agent, not a new one.
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
 	if !r.agentTerm().Running() {
@@ -155,12 +155,12 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	// It exits: the notifications say so, and the next SPC g starts the default again.
 	r.keys(t, decltest.Type("exit 3\r")...)
 	r.s.WaitFor(t, "the exit in the notifications", func(string) bool { return r.noticed("fake exited (3)") })
-	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "" {
+	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "" {
 		t.Fatalf("after its exit %q is still running", n)
 	}
 
 	// The card lists it.
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.keys(t, key(' '))
 	r.s.WaitForText(t, "g  AI agent")
@@ -185,11 +185,11 @@ func (d *daemon) waitStored(t *testing.T, def, profiles string) {
 // not found, and the next SPC g tries again.
 func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "gone", Command: "autodoc-no-such-agent --x"}}, "gone")
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "not found", func(string) bool {
 		return r.noticed("the agent gone's command was not found (127): check it in System › Agent profiles…")
 	})
-	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "" {
+	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "" {
 		t.Fatalf("after its command was not found %q is running", n)
 	}
 }
@@ -198,55 +198,55 @@ func TestAnAgentNotInstalledSaysItsCommandWasNotFound(t *testing.T) {
 // is refused, an edit renames the default with it, and a removal leaves none. All of it is kept.
 func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitForText(t, "no profiles yet")
 
 	onLoop(r, func() bool {
-		r.h.startAddAgent()
+		r.h.agents.startAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.saveAgent(" claude ", " claude --model opus ")
+		r.h.agents.saveAgent(" claude ", " claude --model opus ")
 		return true
 	})
 	onLoop(r, func() bool {
-		r.h.startAddAgent()
+		r.h.agents.startAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.saveAgent("codex", "codex")
+		r.h.agents.saveAgent("codex", "codex")
 		return true
 	})
 	r.s.WaitForText(t, "SPC g opens claude")
 	onLoop(r, func() bool {
-		r.h.startAddAgent()
+		r.h.agents.startAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.saveAgent("codex", "codex --other")
+		r.h.agents.saveAgent("codex", "codex --other")
 		return true
 	})
 	r.s.WaitForText(t, "not saved: another profile is named codex")
 	onLoop(r, func() bool {
-		r.h.startAddAgent()
+		r.h.agents.startAddAgent()
 		r.h.closeDialog("agentEdit")
-		r.h.saveAgent("blank", "  ")
+		r.h.agents.saveAgent("blank", "  ")
 		return true
 	})
 	r.s.WaitForText(t, "not saved: a profile is a name and the command")
 
 	onLoop(r, func() bool {
-		r.h.startEditAgent(0)
+		r.h.agents.startEditAgent(0)
 		r.h.closeDialog("agentEdit")
-		r.h.saveAgent("claude-opus", "claude --model opus")
+		r.h.agents.saveAgent("claude-opus", "claude --model opus")
 		return true
 	})
 	r.s.WaitForText(t, "SPC g opens claude-opus")
 	d.waitStored(t, "claude-opus", `[{"name":"claude-opus","command":"claude --model opus"},{"name":"codex","command":"codex"}]`)
 
-	onLoop(r, func() bool { r.h.makeAgentDefault(1); return true })
+	onLoop(r, func() bool { r.h.agents.makeAgentDefault(1); return true })
 	r.s.WaitForText(t, "SPC g opens codex")
-	onLoop(r, func() bool { r.h.removeAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.removeAgent(1); return true })
 	r.s.WaitForText(t, "remove the agent profile?")
 	r.keys(t, key('y'))
 	r.s.WaitForText(t, "Make default marks the one SPC g opens")
 	d.waitStored(t, "", `[{"name":"claude-opus","command":"claude --model opus"}]`)
 	// Profiles but no default: SPC g asks for one.
-	onLoop(r, func() bool { r.h.closeDialog("agentProfiles"); r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.closeDialog("agentProfiles"); r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the profiles, to make one the default", func(sc string) bool {
 		return strings.Contains(sc, "Make default marks the one SPC g opens") && !onLoop(r, func() bool { return r.h.panelOpen["agent"] })
 	})
@@ -260,7 +260,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 	profiles := []agentProfile{{Name: "alpha", Command: "alpha"}, {Name: "beta", Command: "beta"}, {Name: "gamma", Command: "gamma"}}
 	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "beta")
 	count := func() int { return onLoop(r, func() int { return len(r.h.prefs.agents) }) }
-	onLoop(r, func() bool { r.h.removeAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.removeAgent(1); return true })
 	r.s.WaitForText(t, "remove the agent profile?")
 	if count() != 3 {
 		t.Fatal("asking removed a profile before an answer")
@@ -271,7 +271,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 		t.Fatal("No removed a profile")
 	}
 	onLoop(r, func() bool {
-		r.h.removeAgent(1)
+		r.h.agents.removeAgent(1)
 		r.h.ask(Question{Title: "another question?", Text: "Nothing is removed."})
 		return true
 	})
@@ -282,7 +282,7 @@ func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
 		t.Fatal("answering a replacement removed the old question's profile")
 	}
 	onLoop(r, func() bool {
-		r.h.removeAgent(1) // beta at row 1 when asked
+		r.h.agents.removeAgent(1) // beta at row 1 when asked
 		r.h.prefs.agents = []agentProfile{profiles[1], profiles[0], profiles[2]}
 		return true
 	})
@@ -305,7 +305,7 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 	profile := agentProfile{Name: "beta", Command: "beta --old"}
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{profile}, "beta")
 	onLoop(r, func() bool {
-		r.h.removeAgent(0)
+		r.h.agents.removeAgent(0)
 		r.h.prefs.agents[0].Command = "beta --new"
 		return true
 	})
@@ -330,24 +330,24 @@ func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 		{Name: "one", Command: agent + " first"},
 		{Name: "two", Command: agent + " second"},
 	}, "one")
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitForText(t, "started first")
 	// The profiles mark the default and the one running; Use on the one running only shows it.
-	onLoop(r, func() bool { r.h.toggleAgent(); r.h.openAgentProfiles(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); r.h.agents.openAgentProfiles(); return true })
 	r.s.WaitForText(t, "●▶   one")
-	onLoop(r, func() bool { r.h.useAgent(0); return true })
+	onLoop(r, func() bool { r.h.agents.useAgent(0); return true })
 	r.s.WaitFor(t, "the one running shown, unasked", func(sc string) bool {
 		return strings.Contains(sc, "agent · one") && !strings.Contains(sc, "agent profiles") && r.focused("agentView")
 	})
-	onLoop(r, func() bool { r.h.openAgentProfiles(); r.h.useAgent(1); return true })
+	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); r.h.agents.useAgent(1); return true })
 	r.s.WaitForText(t, "Stop one and start two?")
-	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "one" {
+	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "one" {
 		t.Fatalf("asking, %q is running, want one still", n)
 	}
-	onLoop(r, func() bool { r.h.switchAgentConfirmed(); return true })
+	onLoop(r, func() bool { r.h.agents.switchAgentConfirmed(); return true })
 	r.s.WaitForText(t, "agent · two")
 	r.s.WaitForText(t, "started second")
-	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "two" {
+	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "two" {
 		t.Fatalf("after Yes %q is running, want two", n)
 	}
 
@@ -356,11 +356,11 @@ func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 	shown := func() bool {
 		return onLoop(r, func() bool { v, _ := r.h.p.Tree().Source("App.agentShown"); return v.Raw == "true" })
 	}
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden, unchecked", func(sc string) bool { return !strings.Contains(sc, "agent · two") && !shown() })
-	onLoop(r, func() bool { r.h.toggleAgent(); return true })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "two shown again, checked", func(sc string) bool { return strings.Contains(sc, "agent · two") && shown() })
-	if n := onLoop(r, func() string { return r.h.agentRunning }); n != "two" {
+	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "two" {
 		t.Fatalf("shown again, %q is running, want two", n)
 	}
 }
@@ -399,13 +399,13 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	if e := onLoop(r, func() string { return r.h.prefs.agentEdge }); e != "top" {
 		t.Fatalf("the agent opens at %q by default, want top", e)
 	}
-	onLoop(r, func() bool { r.h.setAgentSize(nearest(termSizes, 70)); return true })
-	onLoop(r, func() bool { r.h.setAgentLength(nearest(termLengths, 60)); return true })
-	onLoop(r, func() bool { r.h.setAgentEdge(indexOf(agentEdges, "center")); return true })
+	onLoop(r, func() bool { r.h.agents.setAgentSize(nearest(termSizes, 70)); return true })
+	onLoop(r, func() bool { r.h.agents.setAgentLength(nearest(termLengths, 60)); return true })
+	onLoop(r, func() bool { r.h.agents.setAgentEdge(indexOf(agentEdges, "center")); return true })
 	onLoop(r, func() bool {
-		r.h.setAgentEdge(len(agentEdges))
-		r.h.setAgentSize(-1)
-		r.h.setAgentLength(99)
+		r.h.agents.setAgentEdge(len(agentEdges))
+		r.h.agents.setAgentSize(-1)
+		r.h.agents.setAgentLength(99)
 		return true
 	}) // out of range: ignored
 	r.s.WaitFor(t, "kept", func(string) bool {
