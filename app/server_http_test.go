@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,6 +146,9 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 
 	// a search held in the provider when the server stops is answered, then the server exits
 	held, release := make(chan struct{}, 1), make(chan struct{})
+	var released sync.Once
+	let := func() { released.Do(func() { close(release) }) }
+	t.Cleanup(let) // before the endpoint's own cleanup, which waits for its held handler
 	f.emb.mu.Lock()
 	f.emb.gate = func(text string) {
 		if text == "hold this query" {
@@ -165,7 +169,7 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 		t.Fatalf("--server exited %d with a search in flight", code)
 	case <-time.After(300 * time.Millisecond):
 	}
-	close(release)
+	let()
 	if status := <-answered; status != http.StatusOK {
 		t.Errorf("the search in flight when the server stopped: %d", status)
 	}

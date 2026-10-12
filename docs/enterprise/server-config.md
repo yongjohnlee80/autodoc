@@ -133,7 +133,8 @@ it and keep trying.
 ## `[http]` and `[[http.client]]`: the search API (optional)
 
 Without an `[http]` table the server answers no HTTP request. A Go web application can still search
-through the library. This section is validated now and served from M3.
+through the library ([web-integration](web-integration.md)). With it, the server serves
+`POST /v1/search` once its embedding worker has started.
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
