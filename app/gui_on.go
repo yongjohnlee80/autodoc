@@ -32,15 +32,11 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, dbg *debugRecording) error
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
 		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native()))
-		err := tui.Launch(ctx, o)
 		// gui.Main ends the process when this callback returns, so this is the last
 		// code that runs: the recording's owner closes here, with the TUI's trace
 		// stopped, Launch having returned. gui.Main prints a returned error and
 		// exits 1.
-		if cerr := dbg.close(); err == nil {
-			err = cerr
-		}
-		if err != nil && !errors.Is(err, context.Canceled) {
+		if err := finishUI(tui.Launch(ctx, o), dbg); err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil

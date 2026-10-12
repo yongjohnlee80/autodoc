@@ -34,9 +34,5 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 	if window {
 		return runGUI(ctx, o, dbg)
 	}
-	uiErr := tui.Launch(ctx, o)
-	if cerr := dbg.close(); uiErr == nil {
-		uiErr = cerr
-	}
-	return uiErr
+	return finishUI(tui.Launch(ctx, o), dbg)
 }

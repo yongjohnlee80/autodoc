@@ -185,3 +185,51 @@ func TestAnIncompleteRecordingFailsTheCommand(t *testing.T) {
 		t.Fatalf("a run without --debug closes nothing: %v", err)
 	}
 }
+
+// An interrupted run — SIGTERM is the ordinary way a --debug run ends — fails the
+// command when its recording could not be written whole, and a real UI failure
+// keeps both errors. The GUI's callback folds through the same helper.
+func TestACancelledRunWithABrokenRecordingFails(t *testing.T) {
+	f, err := os.CreateTemp("", "addbg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(f.Name()) })
+	broken := &debugRecording{f: f, rec: record.NewJSONLRecorder(failingWriter{})}
+	broken.rec.Record(record.Record{Stage: record.StageTui, Kind: "key"})
+
+	// cancellation plus a failing close: the close error, and not the
+	// cancellation, is what the command exits on
+	err = finishUI(context.Canceled, broken)
+	if err == nil || !strings.Contains(err.Error(), "debug recording incomplete") {
+		t.Fatalf("a cancelled run with a broken recording returned %v; want the close failure", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("the close failure was swallowed as a cancellation: %v", err)
+	}
+
+	// cancellation with a good recording: the ordinary exit, as today
+	goodF, err := os.CreateTemp("", "addbg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(goodF.Name()) })
+	good := &debugRecording{f: goodF, rec: record.NewJSONLRecorder(goodF)}
+	if err := finishUI(context.Canceled, good); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a cancelled run with a good recording returned %v; want the cancellation", err)
+	}
+
+	// a real UI failure and a failing close: both errors travel
+	err = finishUI(errors.New("the UI broke"), broken)
+	if err == nil || !strings.Contains(err.Error(), "the UI broke") || !strings.Contains(err.Error(), "debug recording incomplete") {
+		t.Fatalf("a UI failure with a broken recording returned %v; want both errors", err)
+	}
+	if errors.Is(err, context.Canceled) {
+		t.Fatalf("a UI failure with a broken recording was swallowed as a cancellation: %v", err)
+	}
+
+	// no recording at all: the UI's error is the command's
+	if err := finishUI(errors.New("the UI broke"), nil); err == nil || !strings.Contains(err.Error(), "the UI broke") {
+		t.Fatalf("a run without --debug returned %v; want the UI's error", err)
+	}
+}
