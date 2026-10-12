@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -178,5 +180,30 @@ func TestTheServerServesSearchOverHTTP(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), httpToken) {
 		t.Errorf("the token is in the log: %s", stderr)
+	}
+}
+
+// resolveClients turns each client's token into the hash the API compares: token_sha256 as given,
+// token_env's token hashed; an environment variable emptied since the configuration loaded is
+// refused naming the client, never a token; a hash that is not 64 hex digits is refused.
+func TestTheClientsTokensAreResolvedToTheirHashes(t *testing.T) {
+	sum := sha256.Sum256([]byte("from the file"))
+	t.Setenv("AUTODOC_TEST_RESOLVE_TOKEN", "from the environment")
+	got, err := resolveClients([]config.Client{
+		{Name: "a", TokenSHA256: hex.EncodeToString(sum[:])},
+		{Name: "b", TokenEnv: "AUTODOC_TEST_RESOLVE_TOKEN", Grants: map[string]map[string][]string{"t": {"f": {"*"}}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Name != "a" || got[0].Token != sum || got[1].Token != sha256.Sum256([]byte("from the environment")) || got[1].Grants["t"]["f"][0] != "*" {
+		t.Errorf("the clients: %+v", got)
+	}
+	t.Setenv("AUTODOC_TEST_RESOLVE_TOKEN", "")
+	if _, err := resolveClients([]config.Client{{Name: "b", TokenEnv: "AUTODOC_TEST_RESOLVE_TOKEN"}}); err == nil || !strings.Contains(err.Error(), "http client b") {
+		t.Errorf("an emptied variable: %v", err)
+	}
+	if _, err := resolveClients([]config.Client{{Name: "c", TokenSHA256: "not-hex"}}); err == nil || !strings.Contains(err.Error(), "http client c") || strings.Contains(err.Error(), "not-hex") {
+		t.Errorf("a malformed hash: %v", err)
 	}
 }
