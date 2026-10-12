@@ -172,6 +172,8 @@ func (q *embeddingQueue) queueState(name string) (state, behind string) {
 }
 
 func (q *embeddingQueue) run(ctx context.Context) {
+	// NOTE: new work signals wake at once. A workspace with no work is skipped for queuePoll
+	// (idle), and nothing announces that time passing: the tick chooses again then.
 	tick := time.NewTicker(queuePoll)
 	defer tick.Stop()
 	for ctx.Err() == nil {

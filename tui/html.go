@@ -43,6 +43,9 @@ func startOpener(ctx context.Context, command string, args ...string) error {
 	select {
 	case err := <-done:
 		return err
+		// NOTE: an opener (xdg-open, open) either fails at once, which is worth reporting, or hands
+		// the file to an application and may keep running. openerGrace tells the two apart; a command
+		// still running then is left to run.
 	case <-time.After(openerGrace):
 		return nil
 	case <-ctx.Done():

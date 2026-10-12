@@ -143,6 +143,8 @@ func (h *Host) poll() {
 func (h *Host) after(d time.Duration, fn func()) {
 	ctx := h.ctx
 	go func() {
+		// NOTE: a timer on a goroutine of its own, which posts fn to the loop: the loop never blocks on
+		// a wait, and the host's ctx ends every pending one.
 		t := time.NewTimer(d)
 		defer t.Stop()
 		select {

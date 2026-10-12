@@ -307,6 +307,9 @@ func openAfterPredecessor(ctx context.Context, storePath string) (*store.Store, 
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
+			// NOTE: polled, not waited on. The lease is another process's flock, and nothing tells this
+			// one when it is released; a blocking flock could not be bounded by predecessorWait or ctx. A
+			// try every 100 ms keeps a restart's handoff quick.
 		case <-time.After(100 * time.Millisecond):
 		}
 		db, err := store.Open(ctx, storePath)

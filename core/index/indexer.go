@@ -427,6 +427,11 @@ func (x *Indexer) writer(ctx context.Context) error {
 	var ready []workItem
 	var first time.Time
 	gcDue := time.Now().Add(x.opts.BatchDelay)
+	// NOTE: a heartbeat for the times no event announces: a batch's age (BatchDelay), the garbage
+	// collection's due time, and a job's retry time. It wakes the writer every BatchDelay/2 even
+	// when idle.
+	// TODO: a timer set to the earliest of those times, reset as they change, would wake the
+	// writer only when one is due.
 	ticker := time.NewTicker(x.opts.BatchDelay / 2)
 	defer ticker.Stop()
 	for {

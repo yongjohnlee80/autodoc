@@ -182,6 +182,8 @@ func (h *schemaHolder) watch(ctx context.Context, every time.Duration) {
 	h.cancel = cancel
 	h.mu.Unlock()
 	go func() {
+		// NOTE: polled, not watched: a schema may live outside the workspace's root, or be excluded
+		// from it, so the follower never sees it change.
 		t := time.NewTicker(every)
 		defer t.Stop()
 		for {

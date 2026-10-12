@@ -50,6 +50,8 @@ func (m *callMeter) hear(id int64, texts, tokens int, took time.Duration, err er
 // flush writes the calls heard every flushEvery, and once more when ctx ends.
 func (m *callMeter) flush(ctx context.Context) {
 	defer close(m.done)
+	// NOTE: calls are written to the store in batches, every flushEvery, not one write per call:
+	// a busy ranker makes many calls a second. ctx's end flushes the rest.
 	tick := time.NewTicker(flushEvery)
 	defer tick.Stop()
 	for {

@@ -114,6 +114,7 @@ func (t *todos) Commands() map[string]decl.HandlerFunc { … } // its App.* comm
 | constructor | `New(required…, opts ...Option)`; ctx first on any I/O |
 | I/O | golib `vfs` only (§3) |
 | time | `WithClock`; no `time.Now()` in logic |
+| waits | no `time.Sleep` in production code: wait on the event (a channel, a context), or on a cancellable timer; every timed wait (`clock.Sleep`, `time.After`, a timer, a ticker) has a `NOTE:` directly above saying why it must be timed (backoff, nothing can announce it, a named deadline, a grace period, batching, debounce). `core/clock/waits_test.go` enforces both; tests may sleep |
 | logging | `WithLogger(logger.Logger)` |
 | errors | `errs.Sentinel`; wrap with `%w`; public ones in the module's `Errors()` |
 | wire types | json-tagged structs in the package |

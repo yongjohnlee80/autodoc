@@ -247,6 +247,8 @@ func (s *Session) Connect(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+			// NOTE: the daemon is another process starting, and nothing tells this one when its socket
+			// accepts: connecting is tried again, the wait doubling to 2 s, bounded by the window and ctx.
 		case <-time.After(backoff):
 		}
 		backoff = min(backoff*2, 2*time.Second)

@@ -283,6 +283,8 @@ func outcomeOf(err error) string {
 // flush writes the calls heard every flushEvery, and once more when ctx ends.
 func (e *Embedding) flush(ctx context.Context) {
 	defer close(e.done)
+	// NOTE: calls are written to the store in batches, every flushEvery, not one write per call:
+	// a busy provider makes many calls a second. ctx's end flushes the rest.
 	tick := time.NewTicker(flushEvery)
 	defer tick.Stop()
 	for {

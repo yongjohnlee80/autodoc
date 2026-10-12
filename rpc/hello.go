@@ -57,6 +57,8 @@ func (h *hellos) wait(d time.Duration) {
 	}
 	zero := h.zero
 	h.mu.Unlock()
+	// NOTE: a bounded wait on a signal (zero closes when no hello is pending), not a sleep: d caps
+	// how long a verb written behind a hello waits for it.
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {

@@ -801,10 +801,13 @@ func (r *pluginRun) shutdown() {
 		r.out.close()
 		select {
 		case <-r.exited:
+			// NOTE: a plugin is asked to close, then given grace to exit before SIGTERM, and termGrace
+			// more before SIGKILL: a graceful stop, bounded so a stuck plugin cannot hold the TUI open.
 		case <-time.After(r.grace):
 			signalGroup(r.cmd, false)
 			select {
 			case <-r.exited:
+			// NOTE: SIGTERM's grace, before SIGKILL ends a plugin that ignores it.
 			case <-time.After(r.termGrace):
 				signalGroup(r.cmd, true)
 				<-r.exited

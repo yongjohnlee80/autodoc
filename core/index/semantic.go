@@ -629,6 +629,8 @@ func (s *Store) loadCodes(tx *store.Tx, fp string, docs []int64) (map[int64][]co
 func (x *Indexer) embedLoop(ctx context.Context) {
 	m := x.sem
 	wait := x.opts.RetryDelay
+	// NOTE: a commit that adds chunks signals wake at once. The poll catches the work no signal
+	// announces: refused texts whose retry time has passed, and a provider that answers again.
 	poll := time.NewTicker(5 * time.Second)
 	defer poll.Stop()
 	for ctx.Err() == nil {
@@ -641,6 +643,8 @@ func (x *Indexer) embedLoop(ctx context.Context) {
 			if ctx.Err() == nil {
 				logger.Warning(x.opts.Logger, err, logger.Fields{"event": "embedding.batch.failed", "model": m.target.Model().Fingerprint(), "retry_after_ms": wait.Milliseconds()})
 			}
+			// NOTE: a provider that failed (down, rate-limited, refusing) is not asked again at once: the
+			// wait doubles from RetryDelay to a minute, and ctx ends it.
 			if !clock.Sleep(ctx, wait) {
 				return
 			}

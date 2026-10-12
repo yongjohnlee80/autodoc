@@ -193,6 +193,8 @@ func (f *Follower) Run(ctx context.Context) error {
 		if time.Since(start) > f.opts.maxBackoff {
 			backoff = f.opts.minBackoff
 		}
+		// NOTE: a pause, so a watch that keeps ending (its root gone, a subtree it cannot watch) is not
+		// set up again at once, forever. It doubles up to maxBackoff, and ctx ends it.
 		if !clock.Sleep(ctx, backoff) {
 			break
 		}
@@ -229,6 +231,8 @@ func (f *Follower) drain(ctx context.Context, events <-chan vfs.Event) {
 		var due <-chan time.Time
 		var t *time.Timer
 		if next, ok := f.nextRetry(); ok {
+			// NOTE: a timer to the earliest due retry, not a sleep: an event or a rescan wakes the loop
+			// before it, and the retry runs when it is due.
 			t = time.NewTimer(max(0, time.Until(next)))
 			due = t.C
 		}
@@ -259,8 +263,11 @@ func (f *Follower) drain(ctx context.Context, events <-chan vfs.Event) {
 // degraded runs full reconciles every poll interval for one backoff period, then returns so the
 // setup is retried.
 func (f *Follower) degraded(ctx context.Context, wait time.Duration) {
+	// NOTE: polling is this mode's point. The watch could not be set up, so the tree is reconciled
+	// every pollInterval until the retry timer tries the watch again.
 	retry := time.NewTimer(wait)
 	defer retry.Stop()
+	// NOTE: with no watch, a reconcile every pollInterval is the only way changes are seen.
 	tick := time.NewTicker(f.opts.pollInterval)
 	defer tick.Stop()
 	for {

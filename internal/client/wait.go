@@ -25,6 +25,8 @@ func WaitGone(ctx context.Context, pid int64, d time.Duration) bool {
 		select {
 		case <-ctx.Done():
 			return false
+			// NOTE: polled: the process is not this one's child, so it cannot be waited on, and there is
+			// no portable notice of another process's exit. 50 ms keeps a restart prompt.
 		case <-time.After(50 * time.Millisecond):
 		}
 	}
