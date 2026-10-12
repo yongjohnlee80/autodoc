@@ -19,6 +19,7 @@ import (
 type agents struct {
 	c                      agentHost
 	agentDir, agentRunning string
+	agentRunningCodename   string // captured at start; reserved even if its saved profile is removed
 	agentConfig            string
 	agentBinPath           string
 	editingAgent           string
@@ -28,7 +29,7 @@ type agents struct {
 
 func newAgents(c agentHost, dir, config string) *agents {
 	return &agents{c: c, agentDir: dir, agentConfig: config,
-		agentRows: tuidecl.NewListModel("key", "default", "name", "command")}
+		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command", "problem")}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
 	host, ok := c.(agentHost)
@@ -51,6 +52,7 @@ func (a *agents) State() map[string]any {
 		"App.agentFormTitle":      "",
 		"App.agentFormError":      "",
 		"App.agentName":           "",
+		"App.agentCodename":       "",
 		"App.agentCommand":        "",
 		"App.agentSwitchQuestion": "",
 	}
@@ -100,6 +102,7 @@ func (a *agents) Commands() map[string]Command {
 		"App.startAddAgent":        none(a.startAddAgent),
 		"App.startEditAgent":       oneNumber("a row", a.startEditAgent),
 		"App.saveAgent":            twoStrings("a name and a command", a.saveAgent),
+		"App.saveAgentProfile":     threeStrings("a name, command and codename", a.saveAgentProfile),
 		"App.removeAgent":          oneNumber("a row", a.removeAgent),
 		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
 		"App.useAgent":             oneNumber("a row", a.useAgent),
@@ -140,8 +143,9 @@ const (
 
 // agentProfile is one way to start an agent.
 type agentProfile struct {
-	Name    string `json:"name"`
-	Command string `json:"command"`
+	Name     string `json:"name"`
+	Command  string `json:"command"`
+	Codename string `json:"codename,omitempty"`
 }
 
 // agentProfilesOf reads the profiles preference; one without a name or a command is dropped.
@@ -153,6 +157,9 @@ func agentProfilesOf(s string) []agentProfile {
 	out := all[:0]
 	for _, p := range all {
 		if strings.TrimSpace(p.Name) != "" && strings.TrimSpace(p.Command) != "" {
+			if p.Codename == "" {
+				p.Codename = agentCodename(p.Name)
+			}
 			out = append(out, p)
 		}
 	}
@@ -201,6 +208,13 @@ func (h *agents) openAgentPanel() {
 // startAgent starts p in the agent's terminal and shows it. The shell runs the command as written,
 // so it decides what the command is: one it cannot find exits 127, which agentExited explains.
 func (h *agents) startAgent(p agentProfile) {
+	if p.Codename == "" {
+		p.Codename = agentCodename(p.Name)
+	}
+	if why := h.profileProblem(p); why != "" {
+		h.c.Notify("the agent cannot start: " + why)
+		return
+	}
 	ws, ok := h.c.ActiveWorkspace()
 	if !ok {
 		h.c.Set("App.status", "the agent works in a workspace: open one first")
@@ -228,16 +242,22 @@ func (h *agents) startAgent(p agentProfile) {
 		return
 	}
 	h.agentRunning = p.Name
+	h.agentRunningCodename = p.Codename
 	h.c.Keep(h.c.Focus("agentView"))
 }
 
-// stopAgent ends the agent running, if one is.
-func (h *agents) stopAgent() {
+// stopAgent releases the running identity only after the terminal accepts stop.
+func (h *agents) stopAgent() bool {
 	if h.agentRunning == "" {
-		return
+		return true
 	}
-	h.c.Keep(h.c.CallView("agentView", "stop"))
+	if err := h.c.CallView("agentView", "stop"); err != nil {
+		h.c.Keep(err)
+		return false
+	}
 	h.agentRunning = ""
+	h.agentRunningCodename = ""
+	return true
 }
 
 // agentExited is the agent's program ending: the next SPC g starts the default again. The shell's
@@ -245,6 +265,7 @@ func (h *agents) stopAgent() {
 func (h *agents) agentExited(code int) {
 	name := h.agentRunning
 	h.agentRunning = ""
+	h.agentRunningCodename = ""
 	if name == "" {
 		return
 	}

@@ -137,6 +137,11 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   publish their geometry and chooser sources through `State`, and profile/default rows refresh
   their model through `Changed`. JSON profiles stay raw `ValuePref` strings and are decoded
   inside the agents feature, not kept as a second mutable profile list in Host preferences.
+  A profile's persisted codename is its delivery identity; legacy names derive a lower-case,
+  hyphen-separated default. Display-name edits preserve that identity. Colliding legacy records
+  remain repairable in the profile editor and cannot start until repaired. A running identity
+  stays reserved after profile removal; a refused stop request does not release it. The default
+  preference still names the display profile and follows its rename through the same save path.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
 - **A list to filter and choose from is a picker, never a fifth layout.**

@@ -25,10 +25,11 @@ func (h *agents) listAgents() {
 		if a.Name == def {
 			mark = "●"
 		}
-		if a.Name == h.agentRunning {
+		if h.agentRunning != "" && a.Codename == h.agentRunningCodename {
 			mark += "▶"
 		}
-		rows[i] = rowOf{"key": a.Name, "default": mark, "name": a.Name, "command": a.Command}
+		rows[i] = rowOf{"key": a.Name, "default": mark, "name": a.Name, "codename": a.Codename,
+			"command": a.Command, "problem": h.profileProblem(a)}
 	}
 	h.agentRows.Reset(rows)
 	switch {
@@ -77,7 +78,13 @@ func (h *agents) fillAgentForm(title string, a agentProfile) {
 	h.c.Set("App.agentFormTitle", title)
 	h.c.Set("App.agentFormError", "")
 	h.c.SetFormText("App.agentName", a.Name)
+	h.c.SetFormText("App.agentCodename", a.Codename)
 	h.c.SetFormText("App.agentCommand", a.Command)
+	if a.Name != "" {
+		if why := h.profileProblem(a); why != "" {
+			h.c.Set("App.agentFormError", "not a target: "+why)
+		}
+	}
 	h.c.Open("agentEdit")
 }
 
@@ -85,13 +92,30 @@ func (h *agents) fillAgentForm(title string, a agentProfile) {
 // profile has, or an empty name or command, opens the form again, saying why. The first profile
 // added becomes the default.
 func (h *agents) saveAgent(name, command string) {
+	codename := ""
+	if p, ok := h.profile(h.editingAgent); ok {
+		codename = p.Codename
+	}
+	h.saveAgentProfile(name, command, codename)
+}
+
+// saveAgentProfile is the form's save, including the explicit stable identity.
+func (h *agents) saveAgentProfile(name, command, codename string) {
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
+	codename = strings.TrimSpace(codename)
+	if codename == "" {
+		codename = agentCodename(name)
+	}
 	refuse := func(why string) {
 		h.c.Set("App.agentFormError", "not saved: "+why)
 		h.c.Open("agentEdit")
 	}
 	if name == "" || command == "" {
 		refuse("a profile is a name and the command that starts the agent")
+		return
+	}
+	if !validAgentCodename(codename) {
+		refuse("codename needs lower-case letters or digits, separated by hyphens")
 		return
 	}
 	agents := h.profiles()
@@ -103,6 +127,19 @@ func (h *agents) saveAgent(name, command string) {
 		}
 		if a.Name == h.editingAgent {
 			at = i
+		} else if a.Codename == codename {
+			refuse("codename taken by " + a.Name)
+			return
+		}
+	}
+	if h.agentRunning != "" {
+		if at >= 0 && agents[at].Codename == h.agentRunningCodename && codename != h.agentRunningCodename {
+			refuse("stop the running agent before changing its codename")
+			return
+		}
+		if codename == h.agentRunningCodename && (at < 0 || agents[at].Codename != codename) {
+			refuse("codename held by a running agent")
+			return
 		}
 	}
 	def := h.defaultProfile()
@@ -110,9 +147,9 @@ func (h *agents) saveAgent(name, command string) {
 		if def == agents[at].Name {
 			def = name
 		}
-		agents[at] = agentProfile{Name: name, Command: command}
+		agents[at] = agentProfile{Name: name, Command: command, Codename: codename}
 	} else {
-		agents = append(agents, agentProfile{Name: name, Command: command})
+		agents = append(agents, agentProfile{Name: name, Command: command, Codename: codename})
 		if def == "" {
 			def = name
 		}
@@ -171,7 +208,11 @@ func (h *agents) useAgent(i int) {
 	if !ok {
 		return
 	}
-	if h.agentRunning == a.Name {
+	if why := h.profileProblem(a); why != "" {
+		h.c.Set("App.agentProfilesStatus", "not a target: "+why)
+		return
+	}
+	if h.agentRunning != "" && h.agentRunningCodename == a.Codename {
 		h.c.Close("agentProfiles")
 		h.toggleAgentShown()
 		return
@@ -192,7 +233,9 @@ func (h *agents) switchAgentConfirmed() {
 	if !ok {
 		return
 	}
-	h.stopAgent()
+	if !h.stopAgent() {
+		return
+	}
 	h.c.Close("agentProfiles")
 	h.startAgent(a)
 }

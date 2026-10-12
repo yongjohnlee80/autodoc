@@ -1,4 +1,4 @@
-// AgentProfiles.qml — System › Agent profiles…: the ways to start an agent, each a name and the
+// AgentProfiles.qml — System › Agent profiles…: display names, codenames, target refusals and the
 // command that starts it, the default marked ●, the one running ▶. SPC ~ opens the default; Use
 // starts another now, asking first when one is running (agent.go, agentprofiles.go).
 Dialog {
@@ -19,7 +19,9 @@ Dialog {
             onActivated: App.useAgent(index)
             TableViewColumn { role: "default"; title: ""; width: 3 }
             TableViewColumn { role: "name"; title: "NAME"; width: 14 }
+            TableViewColumn { role: "codename"; title: "CODENAME"; width: 16 }
             TableViewColumn { role: "command"; title: "COMMAND"; width: 0 }
+            TableViewColumn { role: "problem"; title: "TARGET"; width: 24 }
         }
         Text { text: App.agentProfilesStatus; wrapMode: Tui.WordWrap }
     }

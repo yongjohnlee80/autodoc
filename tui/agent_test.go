@@ -243,7 +243,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 		return true
 	})
 	r.s.WaitForText(t, "SPC g opens claude-opus")
-	d.waitStored(t, "claude-opus", `[{"name":"claude-opus","command":"claude --model opus"},{"name":"codex","command":"codex"}]`)
+	d.waitStored(t, "claude-opus", `[{"name":"claude-opus","command":"claude --model opus","codename":"claude"},{"name":"codex","command":"codex","codename":"codex"}]`)
 
 	onLoop(r, func() bool { r.h.agents.makeAgentDefault(1); return true })
 	r.s.WaitForText(t, "SPC g opens codex")
@@ -251,7 +251,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 	r.s.WaitForText(t, "remove the agent profile?")
 	r.keys(t, key('y'))
 	r.s.WaitForText(t, "Make default marks the one SPC g opens")
-	d.waitStored(t, "", `[{"name":"claude-opus","command":"claude --model opus"}]`)
+	d.waitStored(t, "", `[{"name":"claude-opus","command":"claude --model opus","codename":"claude"}]`)
 	// Profiles but no default: SPC g asks for one.
 	onLoop(r, func() bool { r.h.closeDialog("agentProfiles"); r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "the profiles, to make one the default", func(sc string) bool {
@@ -264,7 +264,7 @@ func TestAgentProfilesAreAddedEditedAndRemoved(t *testing.T) {
 }
 
 func TestRemoveAgentOnlyRemovesTheConfirmedProfile(t *testing.T) {
-	profiles := []agentProfile{{Name: "alpha", Command: "alpha"}, {Name: "beta", Command: "beta"}, {Name: "gamma", Command: "gamma"}}
+	profiles := []agentProfile{{Name: "alpha", Command: "alpha", Codename: "alpha"}, {Name: "beta", Command: "beta", Codename: "beta"}, {Name: "gamma", Command: "gamma", Codename: "gamma"}}
 	_, r, _ := runAgentTUI(t, t.TempDir(), profiles, "beta")
 	count := func() int { return onLoop(r, func() int { return len(r.h.agents.profiles()) }) }
 	onLoop(r, func() bool { r.h.agents.removeAgent(1); return true })

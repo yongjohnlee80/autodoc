@@ -81,6 +81,11 @@ func twoStrings(what string, fn func(string, string)) Command {
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw); return nil }}
 }
 
+func threeStrings(what string, fn func(string, string, string)) Command {
+	return Command{Args: []qml.SpecValueKind{argStr, argStr, argStr}, What: what,
+		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw); return nil }}
+}
+
 func fourStrings(what string, fn func(a, b, c, d string)) Command {
 	return Command{Args: []qml.SpecValueKind{argStr, argStr, argStr, argStr}, What: what,
 		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw, a[3].Raw); return nil }}
