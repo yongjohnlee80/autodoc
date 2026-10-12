@@ -42,7 +42,7 @@ func runServer(ctx context.Context, path string, check bool, stdout, stderr io.W
 	if check {
 		return checkServer(ctx, path, cfg, sources, stdout)
 	}
-	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr)), failed: make(chan error, len(sources))}
+	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr)), failed: make(chan error, len(sources)+1)}
 	defer s.stops.unwind()
 	for _, step := range serverSteps {
 		if err := step.start(s); err != nil {
@@ -69,7 +69,7 @@ type server struct {
 	// store is pgstore's pool, every connection in the configured schema; business reads the
 	// views on the role's own search_path; locks holds one pinned connection per tenant's lock.
 	store, business, locks dao.DataConn
-	// failed carries the first ingester that stopped with an error
+	// failed carries the first ingester, or the HTTP server, that stopped with an error
 	failed chan error
 	// ingesters are the sources' ingesters, in the configuration's order: the embedding worker
 	// writes a tenant only while its ingester holds the tenant's lock.
@@ -91,6 +91,7 @@ var serverSteps = []struct {
 	{"policy", (*server).setPolicies},
 	{"ingesters", (*server).startIngesters},
 	{"embedder", (*server).startEmbedder},
+	{"http", (*server).startHTTP},
 }
 
 // openPostgres opens the three pools on the configured database. The DSN is a secret: an error
