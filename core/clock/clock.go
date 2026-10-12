@@ -18,6 +18,8 @@ func (c Clock) Now() time.Time {
 
 // Sleep waits for d or ctx, whichever ends first, and reports whether d elapsed.
 func Sleep(ctx context.Context, d time.Duration) bool {
+	// NOTE: the cancellable timed wait every justified pause in AutoDoc goes through (backoff,
+	// grace): unlike time.Sleep, it ends when ctx does. Each caller's NOTE says why it waits.
 	t := time.NewTimer(d)
 	defer t.Stop()
 	select {

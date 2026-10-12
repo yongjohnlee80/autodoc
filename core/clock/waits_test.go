@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// waits are the timed waits a NOTE: must justify (the no-sleep-in-production convention). The
-// package's own Sleep is their definition, not a use.
+// waits are the timed waits a NOTE: must justify (the no-sleep-in-production convention). Every
+// production file is checked, this package's own included: Sleep's timer carries its NOTE too.
 var waits = []string{"clock.Sleep(", "time.After(", "time.NewTimer(", "time.NewTicker(", "time.Tick("}
 
 // TestProductionCodeSaysWhyItWaits: no production file sleeps (time.Sleep cannot be cancelled), and
@@ -29,8 +29,7 @@ func TestProductionCodeSaysWhyItWaits(t *testing.T) {
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") ||
-			filepath.ToSlash(path) == "../../core/clock/clock.go" {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		b, err := os.ReadFile(path)
