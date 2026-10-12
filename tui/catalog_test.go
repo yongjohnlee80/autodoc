@@ -59,21 +59,22 @@ func TestTheRegistryMergesCatalogEntries(t *testing.T) {
 func TestTheCatalogRefusesWhatItCannotHold(t *testing.T) {
 	first := Entry{ID: "a.one", Verb: "one", Aliases: []string{"uno"}, Run: noRun}
 	for want, e := range map[string]Entry{
-		"the command a.one is both a's and b's":               {ID: "a.one", Run: noRun},
-		":one is both a's (a.one) and b's (b.two)":            {ID: "b.two", Verb: "one", Run: noRun},
-		":uno is both a's (a.one) and b's (b.two)":            {ID: "b.two", Verb: "dos", Aliases: []string{"uno"}, Run: noRun},
-		"the command b.w: :w is the editor's own":             {ID: "b.w", Verb: "w", Run: noRun},
-		"the command b.write: :write is the editor's own":     {ID: "b.write", Verb: "save", Aliases: []string{"write"}, Run: noRun},
-		"the command b.find: :find is the editor's own":       {ID: "b.find", Verb: "find", Run: noRun},
-		"the command lua.x: lua.* is Lua's":                   {ID: "lua.x", Run: noRun},
-		"the command plugin.p.x: lua.* is Lua's":              {ID: "plugin.p.x", Run: noRun},
-		`the command id "Bad": want dotted lower-case words`:  {ID: "Bad", Run: noRun},
-		`the command id "nodot": want dotted lower-case`:      {ID: "nodot", Run: noRun},
-		"the command b.two has nothing to run":                {ID: "b.two"},
-		"the command b.two has aliases and no verb":           {ID: "b.two", Aliases: []string{"x"}, Run: noRun},
-		`the command b.two: "12" is not a ':' name`:           {ID: "b.two", Verb: "12", Run: noRun},
-		`the command b.two: "dos" is not a ':' name it can`:   {ID: "b.two", Verb: "dos", Aliases: []string{"dos"}, Run: noRun},
-		`the command b.two: "two words" is not a ':' name it`: {ID: "b.two", Verb: "two words", Run: noRun},
+		"the command a.one is both a's and b's":              {ID: "a.one", Run: noRun},
+		":one is both a's (a.one) and b's (b.two)":           {ID: "b.two", Verb: "one", Run: noRun},
+		":uno is both a's (a.one) and b's (b.two)":           {ID: "b.two", Verb: "dos", Aliases: []string{"uno"}, Run: noRun},
+		"the command b.w: :w is the editor's own":            {ID: "b.w", Verb: "w", Run: noRun},
+		"the command b.write: :write is the editor's own":    {ID: "b.write", Verb: "save", Aliases: []string{"write"}, Run: noRun},
+		"the command b.find: :find is the editor's own":      {ID: "b.find", Verb: "find", Run: noRun},
+		"the command lua.x: lua.* is Lua's":                  {ID: "lua.x", Run: noRun},
+		"the command plugin.p.x: lua.* is Lua's":             {ID: "plugin.p.x", Run: noRun},
+		`the command id "Bad": want dotted lower-case words`: {ID: "Bad", Run: noRun},
+		`the command id "nodot": want dotted lower-case`:     {ID: "nodot", Run: noRun},
+		"the command b.two has nothing to run":               {ID: "b.two"},
+		"the command b.two has aliases and no verb":          {ID: "b.two", Aliases: []string{"x"}, Run: noRun},
+		`"12" is not a ':' name: letters, digits`:            {ID: "b.two", Verb: "12", Run: noRun},
+		`the command b.two names :dos twice`:                 {ID: "b.two", Verb: "dos", Aliases: []string{"dos"}, Run: noRun},
+		`"two words" is not a ':' name: letters`:             {ID: "b.two", Verb: "two words", Run: noRun},
+		`"a b" is not a ':' name`:                            {ID: "lua.a b", Source: SourceLua, Verb: "a b", Run: noRun},
 	} {
 		a := &catFake{fake: fake{name: "a"}, entries: []Entry{first}}
 		b := &catFake{fake: fake{name: "b"}, entries: []Entry{e}}

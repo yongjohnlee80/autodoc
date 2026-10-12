@@ -145,6 +145,19 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 			t.Fatalf(":shape registered as %+v", cmd)
 		}
 	},
+	"-- again.lua: :again <id> [args] runs a command of the catalog by its id, and says how it went": func(t *testing.T, r *running) {
+		r.mustRun(t, "again lua.shape one two")
+		r.waitNotice(t, "shape: 2 args, line 'one two'")
+		r.waitNotice(t, "again: ran lua.shape")
+		r.mustRun(t, "again no.such")
+		r.waitNotice(t, "again: unknown: no.such")
+		r.mustRun(t, "again plugin.tetris.new")
+		r.waitNotice(t, "again: refused: plugin.tetris.new is a plugin's command, which Lua cannot run")
+		r.mustRun(t, "again explorer.toggle")
+		r.s.WaitForText(t, "┌ explorer")
+		r.mustRun(t, "again explorer.toggle")
+		r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
+	},
 	"-- peek.lua: :peek <path> shows a document's first line, read through autodoc.call": func(t *testing.T, r *running) {
 		r.mustRun(t, "peek a.md")
 		r.waitNotice(t, "peek: # A")

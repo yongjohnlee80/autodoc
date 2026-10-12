@@ -26,7 +26,8 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 
 | Function | Does | Returns |
 |---|---|---|
-| `autodoc.command{name, aliases, args, help, run}` | Registers a `:` command, replacing any command with one of its names. Runs as the file loads. | nothing |
+| `autodoc.command{name, aliases, args, help, run, id, title}` | Registers a `:` command, an entry of AutoDoc's command catalog ([what it takes](#what-a-command-takes)). Runs as the file loads. | nothing |
+| `autodoc.run(id, …)` | Runs a command of the catalog by its id, AutoDoc's or yours, with the rest as its arguments ([below](#autodocrunid-)). | `true`, or `false` and why |
 | `autodoc.notify(message)` | Shows a notification: a toast in the corner, kept in the history (SPC h). | nothing |
 | `autodoc.call(verb, params, cb)` | Calls any daemon verb by its name, with `params` a list of its params in order (`nil` or `{}` for none). `cb` is optional. | nothing; the answer goes to `cb` |
 | `autodoc.current_workspace()` | The workspace in use. | a string, or `nil` before one is entered |
@@ -41,6 +42,8 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | `aliases` | list of strings | no | Other names for it, under the same rules as `name`. |
 | `args` | string | no | Its arguments, as Tab shows them: `"<term>"`, `"[depth]"`. A hint only: nothing checks it. |
 | `help` | string | no | What it does, in one line, as Tab shows it. |
+| `id` | string | no | Its id in the command catalog, which `autodoc.run` and F1 name it by: `lua.<something>`. `lua.<name>` when left out. |
+| `title` | string | no | What F1's COMMANDS calls it. Its `help`, or its `name`, when left out. |
 
 `run` gets:
 
@@ -67,14 +70,56 @@ autodoc.command{
 
 - no `name`, or no `run` function: `bad argument #1 to command (command needs a name and a run
   function)`;
-- a name or alias outside the rules: `widget: "has space" is not a valid editor command name`.
+- a name or alias outside the rules: `tui: "has space" is not a ':' name: letters, digits, - and _,
+  and not all digits`;
+- an `id` outside `lua.`: `tui: the Lua command file.mine: a Lua id is lua.<name>`. `lua.` is yours;
+  AutoDoc's ids and the plugins' are theirs.
 
-**What a command replaces.** A command replaces every command that has one of its names or aliases,
-with all of that command's names. An alias `write` replaces `:w`, `:w`'s other name.
+### What a command takes
+
+- **Its id replaces the command with that id.** A command named `table` is `lua.table`, so yours
+  replaces AutoDoc's `:table` whole, and a later file's replaces an earlier file's.
+- **Each of its names, it takes from whatever had it, and only that name.** Your `term` takes `:term`
+  from AutoDoc's terminal command, which keeps `:terminal` and its id (`terminal.open`); `:find` of
+  yours takes `:find`, and AutoDoc's find in the page still runs by its id (`find.term`). F1, `:`
+  and Tab all show the name under yours.
+- **The editor's own verbs are replaced whole,** as they always were: they are the editor's, not
+  catalog entries. An alias `write` replaces `:w` and `:write` both. `:w`, `:q`, `:x`, `:wq` and
+  `:replace` are the editor's.
 
 **The bang.** `:hello!` runs `hello`; the `!` is dropped, and `run` cannot tell it was typed.
 
 **One undo.** Everything `run` edits is one undo step, `ed:run`'s commands included.
+
+### `autodoc.run(id, …)`
+
+Runs a command of AutoDoc's command catalog by its id: AutoDoc's own (`todos.open`, `file.save`,
+`terminal.toggle`), a feature's, or a Lua command (`lua.<name>`). F1's COMMANDS lists every id,
+with its `:` names and keys. The arguments after the id are the command's words, as if typed after
+its name: strings, numbers or booleans.
+
+- **It returns `true`**, or **`false` and why**, and never raises, so a script can try a command
+  another may not have: `unknown: <id>` for an id no command has, the command's own error, or a
+  refusal. A plugin's command (`plugin.<name>.<id>`) is never Lua's to run.
+- **It runs now**, on AutoDoc's loop, as a key does. A Lua command it runs gets `ed`, the editor's,
+  and its edits join the running command's one undo.
+
+```lua
+-- again.lua: :again <id> [args] runs a command of the catalog by its id, and says how it went
+autodoc.command{
+  name = "again",
+  args = "<id> [args]",
+  help = "run a command by its id",
+  run = function(ed, args)
+    local ok, err = autodoc.run(unpack(args))
+    if ok then
+      autodoc.notify("again: ran " .. args[1])
+    else
+      autodoc.notify("again: " .. err)
+    end
+  end,
+}
+```
 
 ## The editor object, `ed`
 

@@ -51,7 +51,9 @@ At start AutoDoc loads its own scripts first (`table`, `mermaid`), then yours, e
 folder in file-name order.
 
 - **A command named like one already loaded replaces it.** Yours can replace AutoDoc's `:table`, or
-  the editor's own `:find` or `:w`; a later file replaces an earlier file's.
+  the editor's own `:find` or `:w`; a later file replaces an earlier file's. A name AutoDoc's own
+  command had moves to yours alone: its other names, and its id, stay its
+  ([what a command takes](reference.md#what-a-command-takes)).
 - **A file that fails to load** is one notification; the other files still load.
 - **Every file shares one Lua state.** A global one file sets, a later file sees. Keep helpers
   `local` unless you mean to share them.

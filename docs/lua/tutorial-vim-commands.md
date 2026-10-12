@@ -219,6 +219,9 @@ last.
 - **`ed:run(line)`** runs a command line, as if you typed it: `ed:run("12")` goes to line 12, and
   `ed:run("find - [ ]")` is AutoDoc's own find, so its matches are marked and `n` and `N` step
   through them. If that command fails, `ed:run` raises its error, and yours fails with it.
+- **`autodoc.run(id, …)`** runs any of AutoDoc's commands by its id, those with no `:` name too:
+  `autodoc.run("todos.open")` opens the todos, as SPC x does. It returns `true`, or `false` and why,
+  and never raises. F1's COMMANDS lists the ids ([the reference](reference.md#autodocrunid-)).
 - **`error(message, 0)`** refuses: the prompt shows `next: no beta on the page` and reopens with
   your line, so you can fix it.
 
@@ -351,8 +354,9 @@ Put the cursor where the link should go and run `:link kestrel`.
 
 ## 8. Replacing a built-in, and naming
 
-A command with the name of one already loaded replaces it. This file replaces AutoDoc's own
-`:table` with one that also takes the header's names: `:table Name Role Team`.
+A command with the name of one of AutoDoc's Lua commands replaces it: both are `lua.table`. This
+file replaces AutoDoc's own `:table` with one that also takes the header's names:
+`:table Name Role Team`.
 
 ```lua
 -- table.lua: AutoDoc's :table, also taking the header's names
@@ -393,9 +397,10 @@ autodoc.command{
 ```
 
 - **Your files load after AutoDoc's**, so any file name replaces `:table`. Name it for what it is.
-- **A command replaces the whole command it collides with**, aliases and all. An alias of yours
-  named `write` takes away `:w`, since `write` is one of `:w`'s names. Run `:` and Tab to see the
-  names in use.
+- **A name of yours that another command has moves to yours, and only that name.** A `term` of
+  yours takes `:term`, and AutoDoc's `:terminal` still opens the terminal. The editor's own verbs
+  are the exception, replaced whole: an alias of yours named `write` takes away `:w`, since `write`
+  is one of `:w`'s names. Run `:` and Tab, or F1's COMMANDS, to see the names in use.
 - **A name is letters, digits, `-` and `_`**, and is not all digits: `:12` goes to line 12. A name
   with a space or a dot fails to load.
 - **Between your own files, the later name wins.** Files load in name order: `20-table.lua` after

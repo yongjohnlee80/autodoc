@@ -150,6 +150,12 @@ func validVerb(n string) bool {
 
 // check is why e cannot be added, nil when it can. A Lua entry replaces its own id.
 func (c *catalog) check(e *Entry) error {
+	// the names first: a Lua command's id is made from its name, so a bad name is said as one
+	for _, n := range e.declared() {
+		if !validVerb(n) {
+			return fmt.Errorf("tui: %q is not a ':' name: letters, digits, - and _, and not all digits", n)
+		}
+	}
 	switch {
 	case !commandID.MatchString(e.ID):
 		return fmt.Errorf("tui: the command id %q: want dotted lower-case words, file.open", e.ID)
@@ -183,8 +189,8 @@ func (c *catalog) check(e *Entry) error {
 	seen := map[string]bool{}
 	for _, n := range e.declared() {
 		switch owner := c.names[n]; {
-		case !validVerb(n) || seen[n]:
-			return fmt.Errorf("tui: the command %s: %q is not a ':' name it can take", e.ID, n)
+		case seen[n]:
+			return fmt.Errorf("tui: the command %s names :%s twice", e.ID, n)
 		case e.Source == SourceLua:
 		case golibVerbs[n] && !(e.Source == SourceBuiltin && takenOver[n]):
 			return fmt.Errorf("tui: the command %s: :%s is the editor's own", e.ID, n)
