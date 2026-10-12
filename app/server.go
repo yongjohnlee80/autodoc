@@ -154,7 +154,7 @@ func (s *server) startIngesters() error {
 			return err
 		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.locks, ingest.Options{Schema: s.cfg.Postgres.Schema,
-			Refresh: src.Refresh, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder})
+			Refresh: src.Refresh, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {
@@ -194,7 +194,8 @@ func (s *server) startEmbedder() error {
 	return nil
 }
 
-// wakeEmbedder wakes the embedding worker after an ingester's commit.
+// wakeEmbedder wakes the embedding worker after an ingester's commit, and when an ingester takes
+// its tenant's lock: the worker leaves a tenant alone until it is this server's.
 func (s *server) wakeEmbedder() {
 	if w := s.worker.Load(); w != nil {
 		w.Wake()

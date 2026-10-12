@@ -34,8 +34,9 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
     rows gone; `Run` does both on schedule. Each returns `Stats`.
   - `Options`: `Schema` (required), `Refresh`, `RefreshRetry` (how soon a failed or incomplete
     refresh is tried again), `Interval`, `Lag`, `PingEvery`, `LockPoll`, `Log`, `Now` (the
-    source's clock), `Clock` (the time a refresh records and Run schedules by) and `Committed`
-    (called after each commit: the embedding worker's wake).
+    source's clock), `Clock` (the time a refresh records and Run schedules by), and `Committed`
+    and `Locked` (called after each commit and once the lock is taken: the embedding worker's
+    wakes).
 - **Errors:** `ErrLockLost`, `ErrNotLocked`, `ErrOrder`, `ErrStalled`; `RetryLimit`; the fields
   every row carries, `FieldID`, `FieldUpdatedAt`, `FieldTitle`, `FieldTags`; `CutVersion`.
 

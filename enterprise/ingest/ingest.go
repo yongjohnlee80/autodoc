@@ -83,6 +83,11 @@ type Options struct {
 	// chunks a page wrote are embedded without waiting for the worker's own poll. It runs on the
 	// ingester's goroutine and must not block.
 	Committed func()
+	// Locked, when set, is called once the writer lock is taken: the tenant is this server's now,
+	// and the embedding worker, which leaves a tenant alone until then, may begin on it without
+	// waiting for its poll (a pass that finds nothing new commits nothing to wake it). Like
+	// Committed, it runs on the ingester's goroutine and must not block.
+	Locked func()
 }
 
 // Ingester indexes one source into its tenant: the only writer of the tenant while it holds the
@@ -153,6 +158,9 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 		return err
 	}
 	in.lock.Store(l)
+	if in.o.Locked != nil {
+		in.o.Locked()
+	}
 	return nil
 }
 

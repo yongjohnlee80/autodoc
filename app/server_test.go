@@ -485,8 +485,10 @@ func TestSIGTERMStopsTheServer(t *testing.T) {
 // model, which is the tenant's active one, and every document is ready. A row added while it
 // serves is embedded at once, its commit waking the worker long before the worker's poll. With
 // another model configured, the next start switches: it fills the new model, flips to it and
-// reclaims the old one's vectors. The key is never in the log. The mutant, named here: the
-// ingesters not waking the worker (the new row waits for the 30 s poll).
+// reclaims the old one's vectors, woken when its ingester takes the tenant's lock though no row
+// changed. The key is never in the log. The mutants, named here: the ingesters' commits not waking
+// the worker (the new row waits for the 30 s poll), and the lock taken not waking it (the switch
+// waits for the poll).
 func TestTheServerEmbedsItsTenantsCentrally(t *testing.T) {
 	f := newServerFixture(t, serverView)
 	first, second := "openai|fake-model||4", "openai|fake-model-2||4"

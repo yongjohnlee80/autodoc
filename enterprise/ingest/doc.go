@@ -28,7 +28,8 @@
 // A caller with its own schedule calls Acquire, then Pass and Refresh, then Release.
 //
 // Another writer of the tenant in the same process, the embedding worker, writes only while
-// Confirm says the ingester holds the lock, and Options.Committed wakes it after each commit.
+// Confirm says the ingester holds the lock; Options.Locked and Options.Committed wake it when the
+// lock is taken and after each commit.
 //
 // Concurrency: a Source is immutable and safe for concurrent use. An Ingester belongs to one
 // goroutine: Acquire, Pass, Refresh, Run and Release are called from it alone; Confirm may be

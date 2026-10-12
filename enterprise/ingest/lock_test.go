@@ -224,15 +224,16 @@ func TestRunReleasesItsLockWhenItStops(t *testing.T) {
 
 // Confirm says whether the tenant is this server's now, for the embedding worker beside the
 // ingester: not before the lock is taken, yes while it is held, lost once its connection is
-// killed, and not after it is let go. Committed is called once per committed batch, and not for a
-// pass that read nothing. The mutants, named here: Confirm answering nil with no lock held (the
-// worker would write a tenant another server holds), and the commit not calling Committed.
+// killed, and not after it is let go. Locked is called once the lock is taken; Committed once per
+// committed batch, and not for a pass that read nothing. The mutants, named here: Confirm
+// answering nil with no lock held (the worker would write a tenant another server holds), the
+// commit not calling Committed, and Acquire not calling Locked.
 func TestConfirmSaysWhetherTheTenantIsThisServers(t *testing.T) {
 	f := newFixture(t)
-	commits := 0
+	commits, locked := 0, 0
 	in := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks", ""), Options{Schema: f.schema,
 		LockPoll: 20 * time.Millisecond, Now: func(context.Context) (time.Time, error) { return at(1_000_000), nil }, Lag: -1,
-		Committed: func() { commits++ }})
+		Committed: func() { commits++ }, Locked: func() { locked++ }})
 	t.Cleanup(in.Release)
 	if err := in.Confirm(f.ctx); !errors.Is(err, ErrNotLocked) {
 		t.Fatalf("Confirm before Acquire: %v, want ErrNotLocked", err)
@@ -240,8 +241,8 @@ func TestConfirmSaysWhetherTheTenantIsThisServers(t *testing.T) {
 	if err := in.Acquire(f.ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := in.Confirm(f.ctx); err != nil {
-		t.Fatalf("Confirm while the lock is held: %v", err)
+	if err := in.Confirm(f.ctx); err != nil || locked != 1 {
+		t.Fatalf("Confirm while the lock is held: %v; Locked called %d times, want 1", err, locked)
 	}
 	for i := 1; i <= 4; i++ {
 		f.track(i, "A", "song", i)
