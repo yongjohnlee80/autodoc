@@ -172,3 +172,26 @@ func TestTheRegistryRefusesAPaneFindCannotRoute(t *testing.T) {
 type findableFakeNoRows struct{ fake }
 
 func (*findableFakeNoRows) FindPane() FindPane { return FindPane{Name: "fish", View: "bList"} }
+
+// Search › Find in page with the keyboard in the explorer: the page's hit gives the page the keyboard
+// (the page's FindPane moves it there).
+func TestAPageHitFromAnotherPaneGivesThePageTheKeyboard(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one kestrel\ntwo\n", "b.md", "b\n"}})
+	r := attached(t, d)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.leader(t, 'e')
+	r.s.WaitForText(t, "explorer")
+	if got := onLoop(r, func() string { return r.h.findTarget() }); got != "explorer" {
+		t.Fatalf("the keyboard is in %q before Find in page, want the explorer", got)
+	}
+	onLoop(r, func() bool { r.h.openFindInPage(); return true })
+	r.s.WaitForText(t, "find in the page — n next, N previous")
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type("kestrel")...)
+	r.keys(t, enter())
+	r.s.WaitForText(t, `find "kestrel": 1 of 1 in the page`)
+	if got := onLoop(r, func() string { return r.h.findTarget() }); got != findPage {
+		t.Fatalf("after the page's hit the keyboard is in %q, want the page", got)
+	}
+}
