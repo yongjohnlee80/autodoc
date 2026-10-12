@@ -624,9 +624,9 @@ func (in *Ingester) report(kind string, st Stats) {
 	if st.InQuarantine >= countCap {
 		held += "+"
 	}
-	msg := fmt.Sprintf("tenant %s: %s read %d rows: %d written, %d quarantined, %d released, %d deleted; %s in quarantine",
-		in.tenant, kind, st.Read, st.Written, st.Quarantined, st.Released, st.Deleted, held)
-	if st.InQuarantine > 0 {
+	msg := fmt.Sprintf("tenant %s: %s read %d rows: %d written, %d quarantined, %d released, %d deleted, %d without an id; %s in quarantine",
+		in.tenant, kind, st.Read, st.Written, st.Quarantined, st.Released, st.Deleted, st.Unidentified, held)
+	if st.InQuarantine > 0 || st.Unidentified > 0 {
 		logger.Warning(in.o.Log, nil, msg)
 		return
 	}

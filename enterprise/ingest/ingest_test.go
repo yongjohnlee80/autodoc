@@ -3,10 +3,14 @@ package ingest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 )
@@ -351,4 +355,40 @@ func TestWritingNeedsTheLock(t *testing.T) {
 	if in.Tenant() != f.tenant {
 		t.Errorf("Tenant %q", in.Tenant())
 	}
+}
+
+// Run's log says, after a run that leaves rows in quarantine or meets rows with no id, how many
+// rows wait in quarantine, as a warning; a run that only wrote says what it did, as information.
+func TestRunLogsTheQuarantine(t *testing.T) {
+	f := newFixture(t)
+	f.track(1, "", "no label", 1)
+	f.track(2, "A", "good", 2)
+	var mu sync.Mutex
+	var lines []string
+	log := logger.Adapt(func(s logger.Severity, payload any) {
+		mu.Lock()
+		defer mu.Unlock()
+		lines = append(lines, fmt.Sprintf("%v %v", s, payload))
+	})
+	said := func(what string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, l := range lines {
+			if strings.Contains(l, what) {
+				return true
+			}
+		}
+		return false
+	}
+	ctx, cancel := context.WithCancel(f.ctx)
+	in := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks", ""), Options{Schema: f.schema, Interval: 20 * time.Millisecond, Lag: -1, Log: log})
+	done := make(chan error, 1)
+	go func() { done <- in.Run(ctx) }()
+	// stopped before its lock pool closes, should the test fail: a pool waits for its pinned lock
+	t.Cleanup(func() { cancel(); <-done })
+	waitFor(t, 5*time.Second, "the quarantine in the log", func() bool {
+		return said("tenant lm-catalog: refresh read 2 rows: 1 written, 1 quarantined, 0 released, 0 deleted, 0 without an id; 1 in quarantine")
+	})
+	waitFor(t, 5*time.Second, "a pass's report", func() bool { return said("tenant lm-catalog: pass read 0 rows: 0 written, 1 quarantined") })
+	cancel()
 }
