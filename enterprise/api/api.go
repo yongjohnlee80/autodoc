@@ -6,7 +6,7 @@
 //     caller without a valid token learns nothing of tenants or bodies;
 //  3. the body: JSON of at most 64 KiB, no unknown field, a query of at most 1 KiB (400, 413, 415);
 //  4. the tenant, among the client's grants (403; a tenant that does not exist answers the same);
-//  5. the scope, every value granted to the client (403);
+//  5. the scope, every field and value granted to the client (403);
 //  6. the search itself, which holds the scope to the tenant's policy again (400 for a refusal).
 //
 // The token is never logged or kept; neither is the query's text, which may itself be private.
@@ -247,8 +247,14 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	}
 	for field, vals := range req.Scope {
 		g, ok := grants[field]
-		if !ok || slices.Equal(g, []string{"*"}) {
-			continue // a field no grant names is the search's to refuse: it is no access field
+		if !ok {
+			// a field the token has no grant for is refused, whatever the tenant's policy says now:
+			// a field added to the policy since the grants were configured is not the token's
+			a.status, a.code, a.message = http.StatusForbidden, "scope_forbidden", "the token has no grant for "+field
+			return a, response{}
+		}
+		if slices.Equal(g, []string{"*"}) {
+			continue
 		}
 		for _, v := range vals {
 			if !slices.Contains(g, v) {
@@ -325,6 +331,12 @@ func isTimeout(err error) bool {
 // cause logged, not answered.
 func failed(ctx context.Context, err error) answer {
 	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		// first: a provider or a database that ran out the request's budget says so in its own
+		// words (an embedding failure, say), and the answer is still the budget's
+		a := refuse(http.StatusServiceUnavailable, "unavailable", "the search did not finish in time")
+		a.cause = err
+		return a
 	case errors.Is(err, search.ErrScope):
 		return refuse(http.StatusBadRequest, "scope_required", err.Error())
 	case errors.Is(err, search.ErrProtectedFacet):
@@ -339,10 +351,6 @@ func failed(ctx context.Context, err error) answer {
 		return refuse(http.StatusServiceUnavailable, "switching", "the tenant is switching models: search by words, or again later")
 	case errors.Is(err, gsearch.ErrEmbedFailed), errors.Is(err, gsearch.ErrNoProvider):
 		return refuse(http.StatusBadGateway, "embed_failed", "the query could not be embedded")
-	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		a := refuse(http.StatusServiceUnavailable, "unavailable", "the search did not finish in time")
-		a.cause = err
-		return a
 	}
 	a := refuse(http.StatusInternalServerError, "internal", "the search failed")
 	a.cause = err

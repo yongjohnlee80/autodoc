@@ -31,6 +31,8 @@ type fake struct {
 	res  search.Result
 	err  error
 	hold chan struct{}
+	// wrap, when set, is the error answered once ctx ends while held (else ctx's own)
+	wrap func(error) error
 
 	mu    sync.Mutex
 	asked []asked
@@ -49,6 +51,9 @@ func (f *fake) Search(ctx context.Context, scope search.Scope, r search.Request)
 		select {
 		case <-f.hold:
 		case <-ctx.Done():
+			if f.wrap != nil {
+				return search.Result{}, f.wrap(ctx.Err())
+			}
 			return search.Result{}, ctx.Err()
 		}
 	}
@@ -230,6 +235,14 @@ func TestTheTenantAndTheScopeAreTheTokens(t *testing.T) {
 	if r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "x", "scope": {"label_id": ["A", "C"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
 		t.Errorf("a value not granted: %d %s", r.status, r.code())
 	}
+	// a field the token has no grant for (an access field the policy gained since the grants were
+	// written, say) is refused before the search, whatever the policy says
+	if r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "x", "scope": {"label_id": ["A"], "team": ["t1"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
+		t.Errorf("a field not granted: %d %s", r.status, r.code())
+	}
+	if r := post(t, srv, bearer, "application/json", `{"tenant": "any", "query": "x", "scope": {"label_id": ["Z"], "team": ["t1"]}}`); r.status != http.StatusForbidden || r.code() != "scope_forbidden" {
+		t.Errorf("a field not granted beside a * grant: %d %s", r.status, r.code())
+	}
 	if f.calls() != 0 {
 		t.Fatalf("the search was asked %d times for requests refused", f.calls())
 	}
@@ -398,5 +411,18 @@ func TestStoppingDrainsTheRequestsInFlight(t *testing.T) {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
 		t.Fatal("the server did not stop once the search was answered")
+	}
+}
+
+// A search that runs out its budget is 503 unavailable, with Retry-After, though what it waited on
+// (the provider) says so in its own words: an embedding failure wrapping the deadline. The mutant,
+// named here: the error's kind looked at before the deadline (502 embed_failed).
+func TestASearchPastItsBudgetIsUnavailableWhateverItsCause(t *testing.T) {
+	f := &fake{hold: make(chan struct{}), wrap: func(err error) error { return fmt.Errorf("%w: %w", gsearch.ErrEmbedFailed, err) }}
+	srv, _, _ := api(t, f, WithBudget(Budget{Search: 200 * time.Millisecond, Write: 2 * time.Second}))
+	t.Cleanup(func() { close(f.hold) })
+	r := post(t, srv, bearer, "application/json", valid)
+	if r.status != http.StatusServiceUnavailable || r.code() != "unavailable" || r.header.Get("Retry-After") == "" {
+		t.Errorf("an embedding that ran out the budget: %d %s, Retry-After %q", r.status, r.code(), r.header.Get("Retry-After"))
 	}
 }

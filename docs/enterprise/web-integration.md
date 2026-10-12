@@ -161,7 +161,7 @@ caller without a valid token learns nothing about tenants or bodies:
 | 408 | `request_timeout` | The body didn't arrive within 5 s. |
 | 400 | `bad_request` | Not one JSON search request: an unknown field, a second value, a query over 1 KiB. |
 | 403 | `forbidden` | The token isn't granted the tenant. A tenant that doesn't exist answers the same. |
-| 403 | `scope_forbidden` | A scope value the token isn't granted. |
+| 403 | `scope_forbidden` | A scope field or value the token isn't granted. |
 | 400 | `scope_required`, `protected_facet`, `unknown_facet`, `bad_limit`, `bad_mode` | The library's refusals, above. |
 | 503 | `switching` | Semantic mode while the tenant switches models (`Retry-After`). Use auto mode to be answered by words meanwhile. |
 | 502 | `embed_failed` | Semantic mode, and the query couldn't be embedded. |
