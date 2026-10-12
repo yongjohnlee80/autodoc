@@ -42,9 +42,6 @@ type pluginBinding struct {
 	letter, why string
 }
 
-// card is a dialog that does not hold the keys while open.
-func (m *manifest) card() bool { return m.Kind == "dialog" && !m.modal() }
-
 // refreshPlugins rebuilds the Plugins menu and the SPC p card from the plugins found, the user's
 // letters and what is running.
 func (h *Host) refreshPlugins() {
