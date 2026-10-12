@@ -114,3 +114,103 @@ func TestTheUsersLuaCommandsAndTheTableInTheProgram(t *testing.T) {
 	r.keys(t, key('Z'))
 	r.s.WaitForText(t, "| Column1 | Z |")
 }
+
+// luaTUI runs the TUI with the Lua files given, by name, in its lua folder, over a workspace whose
+// a.md says text.
+func luaTUI(t *testing.T, text string, files map[string]string) (*daemon, *running) {
+	t.Helper()
+	dir := t.TempDir()
+	for name, src := range files {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", text}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	return d, r
+}
+
+// runit runs autodoc.run on its words and writes what it answered into the page.
+const runit = `
+autodoc.command{ name = "mark", title = "mark the page", run = function(ed, args, line) ed:insert("<" .. line .. ">") end }
+autodoc.command{ name = "runit", run = function(ed, args)
+  local ok, err = autodoc.run(unpack(args))
+  ed:insert("[" .. tostring(ok) .. " " .. tostring(err) .. "]")
+end }
+autodoc.command{ name = "badarg", run = function(ed)
+  local ok, err = autodoc.run("lua.mark", {})
+  local ok2, err2 = autodoc.run(42)
+  ed:insert("{" .. tostring(ok) .. " " .. err .. "|" .. tostring(ok2) .. " " .. err2 .. "}")
+end }
+`
+
+// TestAutodocRunRunsTheCatalog (ADR 1791762474 §5.6, §5.8): autodoc.run runs a built-in, a
+// feature's and a Lua entry, and answers ok, err, never raising: unknown for an id no entry has, a
+// refusal for a plugin's, and for an argument it cannot pass. A Lua entry run from outside ':'
+// edits the attached editor.
+func TestAutodocRunRunsTheCatalog(t *testing.T) {
+	_, r := luaTUI(t, "a\n", map[string]string{"run.lua": runit})
+	if e := onLoop(r, func() *Entry { return r.h.cat.lookup("lua.mark") }); e == nil || e.Source != SourceLua || e.Title != "mark the page" || e.Owner != "run.lua" {
+		t.Fatalf("the Lua command's entry: %+v", e)
+	}
+	for line, want := range map[string]string{
+		"runit lua.mark 3 4":      "[true nil]",
+		"runit no.such":           "[false unknown: no.such]",
+		"runit plugin.tetris.new": "[false refused: plugin.tetris.new is a plugin's command, which Lua cannot run]",
+		"badarg": "{false autodoc.run: argument 1 is a table; want a string or a number|" +
+			"false autodoc.run: want a command's id, a string, not number}",
+	} {
+		r.command(t, line)
+		r.waitPage(t, want)
+	}
+	r.waitPage(t, "<3 4")
+	// a Lua entry run as a key or a plugin runs it, off the prompt: the attached editor
+	if err := onLoop(r, func() error { return r.h.cat.run("lua.mark", []string{"by", "id"}) }); err != nil {
+		t.Fatal(err)
+	}
+	r.waitPage(t, "<by id")
+	// a built-in, then a feature's (each takes the keyboard, so runit is run by its id)
+	for id, want := range map[string]string{"explorer.toggle": "┌ explorer", "todos.open": "todos · kb"} {
+		if err := onLoop(r, func() error { return r.h.cat.run("lua.runit", []string{id}) }); err != nil {
+			t.Fatal(err)
+		}
+		r.s.WaitForText(t, want)
+	}
+}
+
+// waitPage waits for the editor's text to hold want.
+func (r *running) waitPage(t *testing.T, want string) {
+	t.Helper()
+	r.s.WaitFor(t, "the page holds "+want, func(string) bool { return strings.Contains(r.editorText(), want) })
+}
+
+// TestALuaCommandTakesOnlyTheNameItAsksFor (ADR 1791762474 §4.2, r2): a Lua find replaces :find and
+// leaves the page's find runnable by its id; a Lua term takes :term alone, and :terminal still
+// opens the terminal. A Lua id outside lua.* does not load.
+func TestALuaCommandTakesOnlyTheNameItAsksFor(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("HOME", t.TempDir())
+	_, r := luaTUI(t, "one\ntwo\n", map[string]string{"over.lua": `
+autodoc.command{ name = "find", run = function(ed, args, line) ed:insert("lua find " .. line .. ";") end }
+autodoc.command{ name = "term", run = function(ed) ed:insert("lua term;") end }
+`, "bad.lua": `autodoc.command{ name = "bad", id = "file.bad", run = function(ed) end }`})
+	r.waitNotice(t, "a Lua command did not load: bad.lua")
+	r.waitNotice(t, "a Lua id is lua.<name>")
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.command(t, "find two")
+	r.waitPage(t, "lua find two;")
+	r.command(t, "term")
+	r.waitPage(t, "lua term;")
+	if r.termShown() {
+		t.Fatal(":term opened the terminal")
+	}
+	if err := onLoop(r, func() error { return r.h.cat.run("find.term", []string{"two"}) }); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, `finding "two"`)
+	r.command(t, "terminal")
+	r.s.WaitForText(t, "┌ terminal")
+}

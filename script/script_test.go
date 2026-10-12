@@ -1,6 +1,7 @@
 package script
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -148,5 +149,44 @@ func TestAHostNamesTheGlobalAndAddsFunctions(t *testing.T) {
 	}
 	if err := e.Load("e.lua", []byte(`editor.command{ name = "nope", run = function() end }`)); err == nil {
 		t.Fatal("the default global exists under another name")
+	}
+}
+
+// TestAHostsRegistrarTakesTheCommands: with a registrar, command{…} goes to it, not the editor's
+// registry: its id (lua.<name> unless it names one), its title (its help, else its name), the file
+// that declared it, and a Run that edits the core it is given, or the engine's for none. The
+// registrar's refusal is the script's error.
+func TestAHostsRegistrarTakesTheCommands(t *testing.T) {
+	e, core, _ := engine(t, "abc")
+	var got []Registration
+	e.SetRegistrar(func(r Registration) error {
+		if r.Command.Name == "bad" {
+			return errors.New("refused here")
+		}
+		got = append(got, r)
+		return nil
+	})
+	fsys := fstest.MapFS{"lua/a.lua": {Data: []byte(`
+editor.command{ name = "up", help = "upper", run = function(ed, args, line) ed:insert(line .. "!") end }
+editor.command{ name = "x", id = "lua.mine", title = "my x", run = function(ed) end }
+`)}, "lua/b.lua": {Data: []byte(`editor.command{ name = "bad", run = function(ed) end }`)}}
+	errs := e.LoadDir(fsys, "lua")
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "refused here") {
+		t.Fatalf("the registrar's refusal: %v", errs)
+	}
+	if len(got) != 2 || got[0].ID != "lua.up" || got[0].Title != "upper" || got[0].File != "lua/a.lua" ||
+		got[1].ID != "lua.mine" || got[1].Title != "my x" {
+		t.Fatalf("registered %+v", got)
+	}
+	if _, ok := core.Commands().Lookup("up"); ok {
+		t.Fatal("the editor's registry got a command the registrar took")
+	}
+	// run with no core, as a host's key would: the engine's editor
+	if err := got[0].Command.Run(widget.CommandContext{Line: "x y"}); err != nil || core.Value() != "x y!abc" {
+		t.Fatalf("run with no core: %v, %q", err, core.Value())
+	}
+	other := widget.NewEditorCore()
+	if err := got[0].Command.Run(widget.CommandContext{Core: other, Line: "z"}); err != nil || other.Value() != "z!" {
+		t.Fatalf("run on another core: %v, %q", err, other.Value())
 	}
 }

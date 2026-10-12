@@ -19,7 +19,9 @@
 //	}
 //
 // A command with the name of one already registered (the editor's own, an earlier script's)
-// replaces it. Positions are 1-based, as Lua's and the command line's line numbers are: line 1 is
+// replaces it. A host with a command catalog of its own takes the commands instead (SetRegistrar):
+// the table's id names one there (lua.<name> when it has none) and title is how its lists call
+// it, and the host decides what the name replaces. Positions are 1-based, as Lua's and the command line's line numbers are: line 1 is
 // the first, column 1 the first character (a grapheme cluster). A range runs from its start up
 // to, not including, its end, as the editor's do. The editor object:
 //
@@ -61,6 +63,7 @@
 package script
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -85,6 +88,20 @@ type Engine struct {
 	timeout time.Duration
 	// cur is the core the command running now edits; the editor object's methods reach it
 	cur *widget.EditorCore
+	// register takes command{…} in place of the editor's registry (SetRegistrar); loading is the
+	// file being loaded, which a registration names
+	register func(Registration) error
+	loading  string
+}
+
+// Registration is one command{…} as a host's registrar takes it: its id and title, the file that
+// declared it, and the command. The command's Run takes the core it is given, or the engine's
+// when it is nil: a host running it from elsewhere than the prompt (a key) passes its own.
+type Registration struct {
+	ID      string // the table's id; "lua.<name>" when it has none
+	Title   string // the table's title; its help, or its name, when it has none
+	File    string // the file whose loading declared it; "" for one declared later (a callback)
+	Command widget.Command
 }
 
 // Option configures an Engine under construction.
@@ -153,8 +170,15 @@ func (e *Engine) SetFunction(name string, fn lua.LGFunction) {
 	e.L.SetField(e.global, name, e.L.NewFunction(fn))
 }
 
+// SetRegistrar hands every command{…} to fn in place of the editor's registry: a host's own
+// catalog of commands, which registers it into the editor as it sees fit. fn's error is raised in
+// the script, as a refusal of the command. nil puts the editor's registry back.
+func (e *Engine) SetRegistrar(fn func(Registration) error) { e.register = fn }
+
 // Load runs one script; name is how its errors name it.
 func (e *Engine) Load(name string, src []byte) error {
+	e.loading = name
+	defer func() { e.loading = "" }()
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 	e.L.SetContext(ctx)
@@ -199,8 +223,8 @@ func (e *Engine) LoadDir(fsys fs.FS, dir string) []error {
 	return errs
 }
 
-// luaCommand is the global table's command{name, aliases, args, help, run}: a verb of the command
-// line, replacing any registered under its name.
+// luaCommand is the global table's command{name, aliases, args, help, run, id, title}: a verb of
+// the command line, replacing any registered under its name, or the host's registrar's to place.
 func (e *Engine) luaCommand(L *lua.LState) int {
 	spec := L.CheckTable(1)
 	name := lua.LVAsString(spec.RawGetString("name"))
@@ -220,6 +244,20 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 		Help:    lua.LVAsString(spec.RawGetString("help")),
 		Run:     func(x widget.CommandContext) error { return e.runCommand(name, run, x) },
 	}
+	if e.register != nil {
+		r := Registration{ID: lua.LVAsString(spec.RawGetString("id")), Title: lua.LVAsString(spec.RawGetString("title")),
+			File: e.loading, Command: cmd}
+		if r.ID == "" {
+			r.ID = "lua." + name
+		}
+		if r.Title == "" {
+			r.Title = cmp.Or(cmd.Help, name)
+		}
+		if err := e.register(r); err != nil {
+			L.RaiseError("%s", err.Error())
+		}
+		return 0
+	}
 	cmds := e.core.Commands()
 	if cmds == nil {
 		L.RaiseError("this editor has no command line")
@@ -235,7 +273,7 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandContext) error {
 	L := e.L
 	prev := e.cur
-	e.cur = x.Core
+	e.cur = cmp.Or(x.Core, e.core)
 	defer func() { e.cur = prev }()
 	args := L.NewTable()
 	for _, a := range x.Args {

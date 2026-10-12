@@ -14,6 +14,9 @@ import (
 // SCRIPTS CALL THE DAEMON — the daemon's verbs as Lua functions (ADR 1791719881 §4.8).
 //
 //	autodoc.call(verb, params, cb)   any verb but the protocol's own; params a list, as the wire's
+//	autodoc.run(id, args…)           a command catalog entry, by id (catalog.go): ok, err; never
+//	                                 raises. err is "unknown: <id>", the entry's own, or a refusal:
+//	                                 a plugin's command (plugin.*) is never Lua's to run
 //	autodoc.current_workspace()      the workspace in use; nil before one is entered
 //	autodoc.<domain>.<verb>(…, cb)   each verb the daemon offers scripts, its params in order:
 //	                                 autodoc.search.query("kb", "words", {limit = 5}, cb)
@@ -41,6 +44,8 @@ type scripting struct {
 	// script holding one (local s = autodoc.search) holds the new functions
 	domains map[string]*lua.LTable
 	seq     uint64 // the contracts' fetches: only the latest one's answer is kept
+	// run runs a catalog entry for autodoc.run (Host.runFromLua)
+	run func(id string, args []string) error
 }
 
 // luaVerb is what a script's call needs of a contract.
@@ -68,10 +73,12 @@ func (*scripting) Name() string                 { return "scripting" }
 func (*scripting) State() map[string]any        { return nil }
 func (*scripting) Commands() map[string]Command { return nil }
 
-// bind gives the engine autodoc.call; the namespaces follow once the daemon says its contracts.
-func (s *scripting) bind(eng *script.Engine) {
-	s.eng = eng
+// bind gives the engine autodoc.call and autodoc.run, which runs through run; the namespaces follow
+// once the daemon says its contracts.
+func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) error) {
+	s.eng, s.run = eng, run
 	eng.SetFunction("call", s.luaCall)
+	eng.SetFunction("run", s.luaRun)
 	eng.SetFunction("current_workspace", func(L *lua.LState) int {
 		if ws := s.c.Workspace(); ws != "" {
 			L.Push(lua.LString(ws))
@@ -213,6 +220,36 @@ func (s *scripting) luaCall(L *lua.LState) int {
 	}
 	s.call(verb, params, L.OptFunction(3, nil))
 	return 0
+}
+
+// luaRun is autodoc.run(id, args…): the entry run now, on the loop, as a key runs it. Its
+// arguments are strings, numbers or booleans, passed as their text. It returns true, or false and
+// why; it never raises, so a script can try a command another may not have.
+func (s *scripting) luaRun(L *lua.LState) int {
+	fail := func(msg string) int {
+		L.Push(lua.LFalse)
+		L.Push(lua.LString(msg))
+		return 2
+	}
+	id, ok := L.Get(1).(lua.LString)
+	if !ok {
+		return fail("autodoc.run: want a command's id, a string, not " + L.Get(1).Type().String())
+	}
+	var args []string
+	for i := 2; i <= L.GetTop(); i++ {
+		switch v := L.Get(i).(type) {
+		case lua.LString, lua.LNumber, lua.LBool:
+			args = append(args, v.String())
+		default:
+			return fail(fmt.Sprintf("autodoc.run: argument %d is a %s; want a string or a number", i-1, v.Type()))
+		}
+	}
+	if err := s.run(string(id), args); err != nil {
+		return fail(err.Error())
+	}
+	L.Push(lua.LTrue)
+	L.Push(lua.LNil)
+	return 2
 }
 
 // namespaced is v as autodoc.<domain>.<verb>(…, cb): its params in order, the callback last.
