@@ -35,7 +35,12 @@ PostgreSQL with the `vector` extension available (the migration creates it).
   tenant's documents with their version and indexer; `Delete` removes one document; `Drop`
   removes the tenant whole; `SetModels` records the active and target models, and `Models` reads
   them back.
-- **For an embedding worker:** `Pending` lists the texts with no vector under a model, each once;
+- **For an embedding worker:** `Pending(ctx, PendingQuery{Model, After, Unready, Skip, Limit})`
+  lists the texts with no vector under a model, each once, after a `PendingKey` (a chunk's
+  `(doc, ord)`) and returns the key to resume from (zero at the end), so a worker paging through a
+  tenant reads each chunk about once. The vector's absence is an index probe of `rag_embedding`'s
+  key per chunk read, decided in PostgreSQL; `Unready` reads only the chunks of unready documents,
+  through a partial index, which is right for the active model;
   `DocsWithTexts` the documents holding given texts, looked up by hash, to ask `MarkReady` about
   after their vectors are stored; `Unready` pages the documents not ready, for the ones whose texts
   were all embedded already (a document written again unchanged, or a crash between `Embed` and
@@ -55,7 +60,7 @@ PostgreSQL with the `vector` extension available (the migration creates it).
   is `ErrNoPolicy`, and one with no field is refused (`ErrNoAccess`).
 - **Migrations** through `dao/deploy`, in the ledger `autodoc_schema`: `000001` is the baseline,
   `000002` adds the chunk kind and the ingest tables (`rag_cursor`, `rag_ingest_error`,
-  `rag_tenant_policy`), with its revert.
+  `rag_tenant_policy`), `000003` the partial indexes of unready documents, each with its revert.
 - **One writer per tenant:** `AcquireWriter(ctx, locks, schema, tenant, poll, waiting)` takes the
   tenant's advisory lock (`WriterKey`) on a connection it pins from `locks` for as long as it is
   held, waiting while another session holds it; `Check` confirms it is still this session's (else
