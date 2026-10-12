@@ -534,7 +534,7 @@ func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
-	r.h.p.Post(func() { r.h.loadRelations("gone", "a.md") })
+	r.h.p.Post(func() { r.h.rel.load("gone", "a.md") })
 	r.waitNoticed(t, "relations: no such workspace")
 }
 

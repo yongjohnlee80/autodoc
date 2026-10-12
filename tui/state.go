@@ -61,9 +61,6 @@ func (h *Host) state() map[string]any {
 		"App.diagnosticsShown":   false,
 		"App.diagnosticsLine":    "",
 		"App.syntaxDefinition":   "Markdown",
-		"App.relations":          h.relations.Model(),
-		"App.relationsTitle":     "relations",
-		"App.jumpText":           "",
 
 		// the search picker
 		"App.hits":                  h.searchPick.list.Model(),
@@ -170,10 +167,9 @@ func (h *Host) state() map[string]any {
 		"App.rankerWindow":       "",
 		"App.rankerWindowError":  "",
 		// find in a pane (find.go)
-		"App.findTitle":  "find",
-		"App.findError":  "",
-		"App.lastFind":   "",
-		"App.linksIndex": 0,
+		"App.findTitle": "find",
+		"App.findError": "",
+		"App.lastFind":  "",
 		// the workspace's models and their vectors (vectors.go)
 		"App.vectors":         h.vectors.Model(),
 		"App.vectorsTitle":    "vectors",

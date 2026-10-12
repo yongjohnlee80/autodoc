@@ -205,10 +205,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 			}
 		}
 	case findLinks:
-		for _, r := range h.relations.All() {
-			rows = append(rows, r.label)
-		}
-		cur = h.linksAt
+		rows, cur = h.rel.labels(), h.rel.at
 	}
 	var hits []int
 	cols := map[int]int{}
@@ -252,9 +249,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	case findExplorer:
 		h.keep(h.explorer.moveTo(at[row]))
 	case findLinks:
-		h.set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view
-		h.set("App.linksIndex", row)
-		h.linksAt = row
+		h.rel.moveTo(row)
 	}
 	f.at, f.total = selected+1, len(hits)
 	h.showFind()
@@ -281,9 +276,6 @@ func clusterMatch(line, pattern string) (int, bool) {
 	}
 	return 0, false
 }
-
-// linksMoved is the links' cursor moving.
-func (h *Host) linksMoved(i int) { h.linksAt = i }
 
 // escapeFind is the editor's Esc when it has nothing of its own to cancel (Normal mode, or Text
 // mode; never Insert or Visual, whose Esc goes back to Normal): the page's find ends, as its X

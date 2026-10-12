@@ -97,13 +97,10 @@ type Host struct {
 	openAt            int   // where the next file opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
-	find    findState
-	linksAt int
-	// the Relations drawer (relations.go): its rows, whether it shows depth 2, and back's history
-	relations *rows[relRow]
-	relFor    fileRef // the document relations are of; the zero fileRef when they are of none
-	relDeep   bool
-	history   []fileRef
+	find findState
+	// the Relations drawer and the jump card (relations.go), a feature of its own; back's history
+	rel     *related
+	history []fileRef
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs                          prefs
@@ -370,7 +367,6 @@ func newHost(session *Session, opt Options) *Host {
 		gui:             opt.GUI,
 		panelOpen:       map[string]bool{},
 		termRestore:     true,
-		relations:       newRows(tuidecl.NewListModel("key", "label"), relationRowOf),
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 		pluginOpt:       opt.Plugins,
@@ -381,6 +377,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.recent = newRecent(core{h})
 	h.explorer = newExplorer(core{h})
 	h.outline = newOutline(core{h})
+	h.rel = newRelated(core{h})
 	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)

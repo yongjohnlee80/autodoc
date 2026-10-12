@@ -26,6 +26,7 @@ type scriptedCore struct {
 	spaces  []Workspace // what Workspaces answers
 	page    Page        // what Page answers
 	crumbs  []string    // the breadcrumb last put on the frame
+	focused bool        // what HasFocus answers
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	deferred bool
 	pending  []func()
@@ -56,6 +57,7 @@ func (s *scriptedCore) Say(msg string)             { s.notes = append(s.notes, m
 func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
 func (s *scriptedCore) Files() FileList            { return s.listing }
 func (s *scriptedCore) Workspaces() []Workspace    { return s.spaces }
+func (s *scriptedCore) HasFocus(string) bool       { return s.focused }
 func (s *scriptedCore) TogglePanel(id string)      { s.views = append(s.views, id+".toggle") }
 func (s *scriptedCore) Page() Page                 { return s.page }
 func (s *scriptedCore) Crumbs(parts []string)      { s.crumbs = parts }

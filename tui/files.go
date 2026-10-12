@@ -345,8 +345,7 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 	h.page = h.takePage() // readPage's consumers read it
 	h.feedEdited()        // another note: a new version
 	h.readPage()
-	h.showPage()
-	h.relationsOfOpenFile()
+	h.showPage() // the relations are read for it (relations.go: Shown)
 	h.htmlPaneNoteChanged()
 	h.applyPendingRestore(ws, p)
 }
@@ -483,7 +482,6 @@ func (h *Host) closeFile() {
 	h.set("App.syntaxDefinition", "Markdown")
 	h.setRendered(true) // the draft is Markdown, whatever the file before it was
 	h.set("App.statusCenter", "")
-	h.clearRelations("relations")
 	h.clearDiagnostics()
 	h.showPage()
 	h.feedEdited()

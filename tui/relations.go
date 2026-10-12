@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -18,6 +19,9 @@ import (
 // relations and supersession cycles close the list. SPC j is a card of the first nine neighbours,
 // a digit each; SPC b goes back to the document opened before. The editor's right-click menu has
 // "Go to link", on a link, and "Back".
+//
+// The drawer and the jump card are a feature of their own, a DocWatcher: a page shown loads its
+// relations. Opening a document, the history it leaves and back stay the host's (files.go, below).
 
 // relSection is one heading of the drawer: links out of the document of the kinds out, and links
 // into it of the kinds in.
@@ -54,7 +58,7 @@ type relEdge struct {
 	resolved        bool
 }
 
-// relations is what loadRelations gathered for one document.
+// relations is what load gathered for one document.
 type relations struct {
 	out, in []relEdge
 	cycles  []string    // the raw values of its supersession relations that go round a loop
@@ -62,78 +66,17 @@ type relations struct {
 	err     error
 }
 
-// loadRelations reads the relations of p in workspace ws and shows them in the drawer.
-func (h *Host) loadRelations(ws, p string) {
-	tk, deep := h.ticket(nil, TicketFile), h.relDeep
-	do(h, func(ctx context.Context) relations {
-		var r relations
-		edges := func(verb string) ([]relEdge, error) {
-			res, err := h.call(ctx, verb, ws, p)
-			if code(err) == rpc.CodeNotFound {
-				return nil, nil // not indexed yet (just created or written): no link is known
-			}
-			var out []relEdge
-			for _, l := range asList(res) {
-				m := asMap(l)
-				resolved, _ := m["resolved"].(bool)
-				out = append(out, relEdge{path: str(m, "path"), raw: str(m, "raw"), kind: str(m, "kind"), resolved: resolved})
-			}
-			return out, err
-		}
-		if r.out, r.err = edges("graph.links"); r.err != nil {
-			return r
-		}
-		if r.in, r.err = edges("graph.backlinks"); r.err != nil {
-			return r
-		}
-		// the supersession relations of the workspace that resolve or not, and loop: this one's
-		res, err := h.call(ctx, "graph.unresolved", ws, map[string]any{"kinds": []any{"supersedes", "superseded_by"}})
-		if err != nil {
-			r.err = err
-			return r
-		}
-		for _, u := range asList(res) {
-			if m := asMap(u); str(m, "src") == p && str(m, "reason") == "cycle" {
-				r.cycles = append(r.cycles, str(m, "raw"))
-			}
-		}
-		if deep {
-			res, err := h.call(ctx, "graph.neighborhood", ws, p, 2)
-			if code(err) != rpc.CodeNotFound && err != nil {
-				r.err = err
-				return r
-			}
-			for _, e := range asList(asMap(res)["edges"]) {
-				m := asMap(e)
-				r.edges = append(r.edges, [3]string{str(m, "src"), str(m, "dst"), str(m, "kind")})
-			}
-		}
-		return r
-	}, func(r relations) {
-		if !tk.Current() {
-			return
-		}
-		if r.err != nil {
-			h.failed("relations", r.err)
-			return
-		}
-		h.showRelations(ws, p, r)
-	})
-}
-
-// showRelations lays out the drawer's rows: each section with what it holds, its count in its
-// heading; under each document, at depth 2, the ones it links with that are not a neighbour; then
-// the unresolved relations and cycles.
-func (h *Host) showRelations(ws, p string, r relations) {
+// relationRows are the drawer's rows for p's relations rl, and how many neighbours they list.
+func relationRows(ws, p string, rl relations) ([]relRow, int) {
 	ring := map[string]bool{p: true}
-	for _, e := range append(slices.Clone(r.out), r.in...) {
+	for _, e := range append(slices.Clone(rl.out), rl.in...) {
 		if e.resolved {
 			ring[e.path] = true
 		}
 	}
 	// second[n] are the documents beyond n, each with how it is linked to n
 	second := map[string][]string{}
-	for _, e := range r.edges {
+	for _, e := range rl.edges {
 		src, dst, kind := e[0], e[1], e[2]
 		switch {
 		case ring[src] && src != p && !ring[dst]:
@@ -147,12 +90,12 @@ func (h *Host) showRelations(ws, p string, r relations) {
 	neighbours := 0
 	for _, s := range relSections {
 		var paths []string
-		for _, e := range r.out {
+		for _, e := range rl.out {
 			if e.resolved && slices.Contains(s.out, e.kind) && !slices.Contains(paths, e.path) {
 				paths = append(paths, e.path)
 			}
 		}
-		for _, e := range r.in {
+		for _, e := range rl.in {
 			if slices.Contains(s.in, e.kind) && !slices.Contains(paths, e.path) {
 				paths = append(paths, e.path)
 			}
@@ -176,12 +119,12 @@ func (h *Host) showRelations(ws, p string, r relations) {
 		}
 	}
 	var unresolved []string
-	for _, e := range r.out {
+	for _, e := range rl.out {
 		if !e.resolved {
 			unresolved = append(unresolved, e.raw+"  ("+e.kind+", names no document)")
 		}
 	}
-	for _, c := range r.cycles {
+	for _, c := range rl.cycles {
 		unresolved = append(unresolved, c+"  (supersession goes round a loop)")
 	}
 	if len(unresolved) > 0 {
@@ -190,100 +133,243 @@ func (h *Host) showRelations(ws, p string, r relations) {
 			rows = append(rows, relRow{label: "  " + u})
 		}
 	}
-	h.relFor = fileRef{ws, p}
-	h.relations.Reset(rows)
-	// the cursor on the first document, not a heading: Enter opens it
-	if first := slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" }); first >= 0 {
-		h.set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view
-		h.set("App.linksIndex", first)
-	}
-	title := fmt.Sprintf("relations (%d)", neighbours)
-	if h.relDeep {
-		title += " · depth 2"
-	}
-	h.set("App.relationsTitle", title+" · d depth")
+	return rows, neighbours
 }
 
 // relationRowOf is a row of the drawer: a document, a heading, or what could not be resolved.
 func relationRowOf(i int, r relRow) rowOf { return rowOf{"key": fmt.Sprint(i), "label": r.label} }
 
-// clearRelations empties the drawer, saying why when a file is open.
-func (h *Host) clearRelations(why string) {
-	h.relFor = fileRef{}
-	h.relations.Reset(nil)
-	h.set("App.relationsTitle", why)
+// related is the Relations drawer and the jump card: the shown page's relations, as rows.
+type related struct {
+	c    Core
+	rows *rows[relRow]
+	page Page    // the page shown
+	of   fileRef // the document the rows are of; the zero fileRef when they are of none
+	deep bool    // the drawer shows the second ring (d)
+	at   int     // the drawer's row under its cursor (find.go reads it)
 }
 
-// relationsOfOpenFile reads the open file's relations, or says why it has none.
-func (h *Host) relationsOfOpenFile() {
-	switch {
-	case !h.file.open:
-		h.clearRelations("relations")
-	case h.file.outside():
-		h.clearRelations("relations · " + outsideBadge) // it is in no workspace's graph
+func newRelated(c Core) *related {
+	return &related{c: c, rows: newRows(tuidecl.NewListModel("key", "label"), relationRowOf)}
+}
+
+func (*related) Name() string { return "relations" }
+
+func (r *related) State() map[string]any {
+	return map[string]any{
+		"App.relations":      r.rows.Model(),
+		"App.relationsTitle": "relations",
+		"App.jumpText":       "",
+		"App.linksIndex":     0,
+	}
+}
+
+func (r *related) Commands() map[string]Command {
+	return map[string]Command{
+		"App.toggleLinks":    none(r.toggle),
+		"App.linksMoved":     oneNumber("a row", r.moved),
+		"App.openRelation":   oneNumber("a row", r.open),
+		"App.relationsDepth": none(r.depth),
+		"App.openJumpCard":   none(r.openJumpCard),
+		"App.jumpTo":         oneNumber("1 to 9", r.jumpTo),
+	}
+}
+
+// Catalog is the drawer's and the jump card's user commands (catalog.go).
+func (r *related) Catalog() []Entry {
+	return []Entry{
+		builtin("file.related", "related files, by digit", "App.openJumpCard()", r.openJumpCard),
+		builtin("links.toggle", "the relations", "App.toggleLinks()", r.toggle),
+	}
+}
+
+// Shown reads the relations of the page shown. The rest of the page's lifecycle changes none:
+// a page's links are the ones indexed, read when it is shown or the drawer opens.
+func (r *related) Shown(p Page) {
+	r.page = p
+	r.ofPage()
+}
+func (*related) Edited(Page)    {}
+func (*related) Moved(int, int) {}
+func (*related) Reread(Page)    {}
+func (*related) Closed()        {}
+
+// toggle opens the drawer, or closes it; opening reads the relations again (panels.go).
+func (r *related) toggle() { r.c.TogglePanel("links") }
+
+// moved is the drawer's cursor moving.
+func (r *related) moved(i int) { r.at = i }
+
+// ofPage reads the page's relations, or says why it has none.
+func (r *related) ofPage() {
+	switch ref := r.page.Ref; {
+	case ref.path == "":
+		r.clear("relations")
+	case r.page.Outside:
+		r.clear("relations · " + outsideBadge) // it is in no workspace's graph
 	default:
 		// another document's rows go at once: until this one's are read, the drawer, the card and
 		// the right-click menu have none rather than the last document's
-		if cur := (fileRef{h.file.ws, h.file.path}); h.relFor != cur {
-			h.clearRelations("relations · reading…")
+		if r.of != ref {
+			r.clear("relations · reading…")
 		}
-		h.loadRelations(h.file.ws, h.file.path)
+		r.load(ref.ws, ref.path)
 	}
 }
 
-// openRelation opens the drawer's row i in the editor; the drawer stays open.
-func (h *Host) openRelation(i int) {
-	row, ok := h.relations.At(i)
+// clear empties the drawer, saying why.
+func (r *related) clear(why string) {
+	r.of = fileRef{}
+	r.rows.Reset(nil)
+	r.c.Set("App.relationsTitle", why)
+}
+
+// load reads the relations of p in workspace ws and shows them in the drawer.
+func (r *related) load(ws, p string) {
+	tk, deep := r.c.Ticket(nil, TicketFile), r.deep
+	r.c.Go(func(ctx context.Context) any {
+		var rl relations
+		edges := func(verb string) ([]relEdge, error) {
+			res, err := r.c.Call(ctx, verb, ws, p)
+			if code(err) == rpc.CodeNotFound {
+				return nil, nil // not indexed yet (just created or written): no link is known
+			}
+			var out []relEdge
+			for _, l := range asList(res) {
+				m := asMap(l)
+				resolved, _ := m["resolved"].(bool)
+				out = append(out, relEdge{path: str(m, "path"), raw: str(m, "raw"), kind: str(m, "kind"), resolved: resolved})
+			}
+			return out, err
+		}
+		if rl.out, rl.err = edges("graph.links"); rl.err != nil {
+			return rl
+		}
+		if rl.in, rl.err = edges("graph.backlinks"); rl.err != nil {
+			return rl
+		}
+		// the supersession relations of the workspace that resolve or not, and loop: this one's
+		res, err := r.c.Call(ctx, "graph.unresolved", ws, map[string]any{"kinds": []any{"supersedes", "superseded_by"}})
+		if err != nil {
+			rl.err = err
+			return rl
+		}
+		for _, u := range asList(res) {
+			if m := asMap(u); str(m, "src") == p && str(m, "reason") == "cycle" {
+				rl.cycles = append(rl.cycles, str(m, "raw"))
+			}
+		}
+		if deep {
+			res, err := r.c.Call(ctx, "graph.neighborhood", ws, p, 2)
+			if code(err) != rpc.CodeNotFound && err != nil {
+				rl.err = err
+				return rl
+			}
+			for _, e := range asList(asMap(res)["edges"]) {
+				m := asMap(e)
+				rl.edges = append(rl.edges, [3]string{str(m, "src"), str(m, "dst"), str(m, "kind")})
+			}
+		}
+		return rl
+	}, func(v any) {
+		rl := v.(relations)
+		if !tk.Current() {
+			return
+		}
+		if rl.err != nil {
+			r.c.Failed("relations", rl.err)
+			return
+		}
+		r.show(ws, p, rl)
+	})
+}
+
+// show lays out the drawer's rows: each section with what it holds, its count in its heading;
+// under each document, at depth 2, the ones it links with that are not a neighbour; then the
+// unresolved relations and cycles.
+func (r *related) show(ws, p string, rl relations) {
+	rows, neighbours := relationRows(ws, p, rl)
+	r.of = fileRef{ws, p}
+	r.rows.Reset(rows)
+	// the cursor on the first document, not a heading: Enter opens it
+	if first := slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" }); first >= 0 {
+		r.moveTo(first)
+	}
+	title := fmt.Sprintf("relations (%d)", neighbours)
+	if r.deep {
+		title += " · depth 2"
+	}
+	r.c.Set("App.relationsTitle", title+" · d depth")
+}
+
+// moveTo puts the drawer's cursor on row i.
+func (r *related) moveTo(i int) {
+	r.c.Set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view
+	r.c.Set("App.linksIndex", i)
+	r.at = i
+}
+
+// labels are the drawer's rows as it shows them (find.go finds in them).
+func (r *related) labels() []string {
+	var out []string
+	for _, row := range r.rows.All() {
+		out = append(out, row.label)
+	}
+	return out
+}
+
+// open opens the drawer's row i in the editor; the drawer stays open.
+func (r *related) open(i int) {
+	row, ok := r.rows.At(i)
 	if !ok || row.path == "" {
 		return
 	}
-	h.openIn(row.ws, row.path)
+	r.c.OpenRef(row.ws, row.path)
 }
 
-// relationsDepth is d: the drawer shows the second ring, or no longer does. Only the drawer
-// answers it.
-func (h *Host) relationsDepth() {
-	if comp, ok := h.p.Find(panelView("links")); !ok || !h.p.App().FocusWithin(comp) {
+// depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.
+func (r *related) depth() {
+	if !r.c.HasFocus(panelView("links")) {
 		return
 	}
-	h.relDeep = !h.relDeep
-	h.relationsOfOpenFile()
+	r.deep = !r.deep
+	r.ofPage()
 }
 
 // jumpRows are the jump card's documents: the drawer's first nine, once each.
-func (h *Host) jumpRows() []relRow {
+func (r *related) jumpRows() []relRow {
 	var out []relRow
-	for _, r := range h.relations.All() {
-		if r.path == "" || strings.HasPrefix(r.label, "    ") || slices.ContainsFunc(out, func(o relRow) bool { return o.path == r.path }) {
+	for _, row := range r.rows.All() {
+		if row.path == "" || strings.HasPrefix(row.label, "    ") || slices.ContainsFunc(out, func(o relRow) bool { return o.path == row.path }) {
 			continue
 		}
-		if out = append(out, r); len(out) == 9 {
+		if out = append(out, row); len(out) == 9 {
 			break
 		}
 	}
 	return out
 }
 
-// openJumpCard is SPC j: the open document's neighbours, a digit each.
-func (h *Host) openJumpCard() {
-	rows := h.jumpRows()
+// openJumpCard is SPC j: the page's neighbours, a digit each.
+func (r *related) openJumpCard() {
+	rows := r.jumpRows()
 	if len(rows) == 0 {
-		h.notify("no related documents: SPC l shows what " + h.file.name() + " links with")
+		r.c.Notify("no related documents: SPC l shows what " + pageName(r.page) + " links with")
 		return
 	}
 	var b strings.Builder
-	for i, r := range rows {
-		fmt.Fprintf(&b, "%d  %-14s %s\n", i+1, r.section, r.path)
+	for i, row := range rows {
+		fmt.Fprintf(&b, "%d  %-14s %s\n", i+1, row.section, row.path)
 	}
-	h.set("App.jumpText", strings.TrimRight(b.String(), "\n"))
-	h.open("jumpCard")
+	r.c.Set("App.jumpText", strings.TrimRight(b.String(), "\n"))
+	r.c.Open("jumpCard")
 }
 
 // jumpTo opens the jump card's document n (1 to 9).
-func (h *Host) jumpTo(n int) {
-	h.closeDialog("jumpCard")
-	if rows := h.jumpRows(); n >= 1 && n <= len(rows) {
-		h.openIn(rows[n-1].ws, rows[n-1].path)
+func (r *related) jumpTo(n int) {
+	r.c.Close("jumpCard")
+	if rows := r.jumpRows(); n >= 1 && n <= len(rows) {
+		r.c.OpenRef(rows[n-1].ws, rows[n-1].path)
 	}
 }
 

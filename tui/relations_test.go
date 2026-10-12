@@ -38,7 +38,7 @@ var relationsKB = map[string][]string{"kb": {
 func (r *running) relationLabels() []string {
 	return onLoop(r, func() []string {
 		var out []string
-		for _, row := range r.h.relations.All() {
+		for _, row := range r.h.rel.rows.All() {
 			out = append(out, row.label)
 		}
 		return out
@@ -79,7 +79,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.leader(t, 'l')
 	r.waitRelations(t, docRelations)
 	r.s.WaitForText(t, "relations (10)")
-	if onLoop(r, func() bool { return r.h.relDeep }) {
+	if onLoop(r, func() bool { return r.h.rel.deep }) {
 		t.Fatal("d in the explorer turned the drawer's depth 2 on")
 	}
 
@@ -232,7 +232,7 @@ func TestRelationsEdges(t *testing.T) {
 	r.waitFile(t, "doc.md")
 	r.s.WaitFor(t, "doc's relations", func(string) bool { return slices.Equal(r.relationLabels(), docRelations) })
 	gen := r.file().gen
-	if g := onLoop(r, func() uint64 { r.h.openRelation(0); return r.h.file.gen }); g != gen {
+	if g := onLoop(r, func() uint64 { r.h.rel.open(0); return r.h.file.gen }); g != gen {
 		t.Errorf("Enter on the heading %q opened something", docRelations[0])
 	}
 

@@ -188,7 +188,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
@@ -271,6 +271,9 @@ type Core interface {
 	View(id, method string, args ...any) error
 	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
 	TogglePanel(id string)
+	// HasFocus reports whether the view id, or one inside it, has the keyboard: a key bound across
+	// the window that only one pane answers.
+	HasFocus(id string) bool
 	// Page is the page as it is now (page.go: pageNow), snapshotted again only when typed since the
 	// last: a picker opened mid-typing cannot wait for the pause.
 	Page() Page
@@ -342,8 +345,12 @@ func (c core) Workspaces() []Workspace {
 }
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
 func (c core) TogglePanel(id string)                     { c.h.togglePanel(id) }
-func (c core) Page() Page                                { return c.h.pageNow() }
-func (c core) Crumbs(parts []string)                     { c.h.crumbs = parts; c.h.showTitle() }
+func (c core) HasFocus(id string) bool {
+	comp, ok := c.h.p.Find(id)
+	return ok && c.h.p.App().FocusWithin(comp)
+}
+func (c core) Page() Page            { return c.h.pageNow() }
+func (c core) Crumbs(parts []string) { c.h.crumbs = parts; c.h.showTitle() }
 func (c core) GoToLine(line int) {
 	c.h.core.SetLine(line, 0)
 	c.h.keep(c.h.p.Call("editor", "forceActiveFocus"))

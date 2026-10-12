@@ -44,7 +44,7 @@ func init() {
 		{ID: "links", View: "linksList", Edge: func(p prefs) string { return p.linkEdge }, Places: edges,
 			Keyboard: true,
 			Size:     [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault,
-			Open: func(h *Host) { h.relationsOfOpenFile(); h.openDrawer("links") }},
+			Open: func(h *Host) { h.rel.ofPage(); h.openDrawer("links") }},
 		{ID: "terminal", View: "terminalView", Edge: func(p prefs) string { return p.termEdge }, Places: termEdges,
 			Size: [2]int{10, 90}, Length: [2]int{10, 100}, Default: termDefault,
 			Open: (*Host).openTerminalPanel, Close: (*Host).closeTerminalPanel,

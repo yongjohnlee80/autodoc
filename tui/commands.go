@@ -76,7 +76,6 @@ func (h *Host) commands() map[string]Command {
 		"App.placePlugin":       oneNumber("a row", h.placePlugin),
 
 		// the panels
-		"App.toggleLinks":       none(func() { h.togglePanel("links") }),
 		"App.toggleTerminal":    none(h.toggleTerminal),
 		"App.terminalExited":    oneNumber("an exit code", h.terminalExited),
 		"App.setTerminalEdge":   oneNumber("a row", h.setTerminalEdge),
@@ -88,7 +87,6 @@ func (h *Host) commands() map[string]Command {
 		"App.panelOpened":       oneString("a panel", h.panelOpened),
 		"App.panelClosed":       oneString("a panel", h.panelClosed),
 		"App.movePane":          oneString("h, j, k or l", h.movePane),
-		"App.linksMoved":        oneNumber("a row", h.linksMoved),
 		"App.openFind":          none(h.openFind),
 		"App.toggleVimKeys":     none(h.toggleVimKeys),
 		"App.find":              oneString("a word or phrase", h.startFind),
@@ -99,10 +97,6 @@ func (h *Host) commands() map[string]Command {
 		"App.findAgainPrevious": none(func() { h.findAgain(-1) }),
 		"App.clearFind":         none(h.clearFind),
 		"App.findPrevious":      none(h.findPrevious),
-		"App.openRelation":      oneNumber("a row", h.openRelation),
-		"App.relationsDepth":    none(h.relationsDepth),
-		"App.openJumpCard":      none(h.openJumpCard),
-		"App.jumpTo":            oneNumber("1 to 9", h.jumpTo),
 		"App.goBack":            none(h.goBack),
 
 		// the workspaces

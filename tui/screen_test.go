@@ -1848,7 +1848,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.keys(t, decltest.Type("x.md")...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, `find "x.md": 1 of 1 in the relations`)
-	if at := onLoop(r, func() int { return r.h.linksAt }); at != 2 {
+	if at := onLoop(r, func() int { return r.h.rel.at }); at != 2 {
 		t.Fatalf("the links' cursor is on row %d, want 2 (x.md, under the heading and b.md)", at)
 	}
 	r.keys(t, enter()) // Enter on the row found opens it: the view's own cursor is there

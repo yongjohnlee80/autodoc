@@ -278,11 +278,15 @@ func TestAPagesKindFollowsRawAndDerived(t *testing.T) {
 // theirs, not the host's (B5). A merge that brings a host-owned copy back fails here.
 func TestTheMovedFeaturesAreRegistered(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
+	fs := h.features()
+	if _, err := newRegistry(fs...); err != nil {
+		t.Fatal(err) // a source or a command left behind in the host as well as moved
+	}
 	byName := map[string]Feature{}
-	for _, f := range h.features() {
+	for _, f := range fs {
 		byName[f.Name()] = f
 	}
-	for name, cmd := range map[string]string{"notices": "App.openNotices", "recent": "App.openRecent", "explorer": "App.toggleExplorer", "outline": "App.openOutline"} {
+	for name, cmd := range map[string]string{"notices": "App.openNotices", "recent": "App.openRecent", "explorer": "App.toggleExplorer", "outline": "App.openOutline", "relations": "App.toggleLinks"} {
 		f, ok := byName[name]
 		if !ok {
 			t.Errorf("no %s feature registered", name)
