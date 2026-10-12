@@ -18,5 +18,25 @@
 // the match, so they apply before the rank and the limit; ties fall to path order (byte order)
 // and then the ordinal.
 //
-// Migrate applies the schema through dao/deploy, recording it in its own ledger table.
+// Each chunk has a kind, a section or an abstract (Document.Kinds); WithSectionsOnly leaves the
+// abstracts out of Lexical and Semantic.
+//
+// Access: ViewWithin reads within an access scope, a map of document facet fields to the values
+// a caller may see. Every retrieval of its View (Lexical, Semantic, List, Signals, and
+// SemanticState's count) ANDs it in SQL, apart from the search.Filter: within a field the values
+// are ORed, across fields ANDed, and no filter or query facet can widen it. An empty scope is
+// ErrNoAccess. View is unscoped. A tenant's access fields are its Policy (SetPolicy, Policy).
+//
+// Ingest state (ADR 1791762085): a Batch moves the tenant's (updated_at, id) Cursor, records its
+// last Refresh, and quarantines and releases failed source rows, all in the same transaction as
+// the page's documents. Store.Cursor, Refreshed and Quarantined read them back.
+//
+// Migrate applies the schema through dao/deploy, recording it in its own ledger table. Every object
+// is created and found through the connection's search_path: WithSchema sets it on every
+// connection a pool opens, and EnsureSchema creates the schema, which must exist before Migrate.
+//
+// Concurrency: a Store is safe for concurrent use. A View is valid only inside its fn and belongs to
+// one goroutine; so does a Batch, which is one transaction. Writes conflict per document
+// (ErrWriteRace); keeping a tenant to one writer is the caller's (the enterprise server holds an
+// advisory lock on a dedicated connection).
 package pgstore

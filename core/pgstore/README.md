@@ -34,31 +34,99 @@ PostgreSQL with the `vector` extension available (the migration creates it).
   vector under the model; `Pending` lists the unembedded texts for a worker; `Docs` pages a
   tenant's documents with their version and indexer; `Delete` removes one document; `Drop`
   removes the tenant whole; `SetModels` records the active and target models.
-- **Migrations** through `dao/deploy`, in the ledger `autodoc_schema`.
+- **Chunk kinds:** each chunk is a `section` or an `abstract` (`Document.Kinds`, by position);
+  `WithSectionsOnly(ctx)` leaves the abstracts out of Lexical and Semantic, before the limit.
+- **Ingest state** for a server that indexes a source into a tenant (ADR 1791762085), written
+  through a `Batch` in the same transaction as the page's documents:
+  - `SetCursor(ctx, Cursor{UpdatedAt, ID})`: the `(updated_at, id)` the last committed page passed,
+    kept to the microsecond and rounded down, so a crash replays at most one page and never skips a
+    row; `SetRefreshed` records the last full refresh beside it. `Store.Cursor` and
+    `Store.Refreshed` read them back.
+  - `Quarantine(ctx, sourceID, err)` and `Release(ctx, sourceID)`: a source row that failed, kept
+    with its error and when it first and last failed. `Store.Quarantined(ctx, limit)` pages the row
+    retried longest ago first.
+- **Access policy:** `SetPolicy` / `Policy` keep a tenant's access fields and view name; no policy
+  is `ErrNoPolicy`, and one with no field is refused (`ErrNoAccess`).
+- **Migrations** through `dao/deploy`, in the ledger `autodoc_schema`: `000001` is the baseline,
+  `000002` adds the chunk kind and the ingest tables (`rag_cursor`, `rag_ingest_error`,
+  `rag_tenant_policy`), with its revert.
+- **A schema of its own:** `WithSchema(schema)` sets `search_path` on every pooled connection, and
+  `EnsureSchema` creates the schema (see below).
 
-## Access control is yours, not pgstore's
+## Access control
 
-pgstore enforces two things.
+pgstore enforces three things.
 - **The tenant boundary:** every statement is filtered by the tenant the Store was opened with.
 - **Filters applied before rank and limit:** tags are ANDed, paths ORed, and facet values ORed
   within a field and ANDed across fields. So a filtered query never loses an admitted hit to
   the limit.
+- **An access scope, when you read through `ViewWithin`:**
+  `Store.ViewWithin(ctx, access map[string][]string, fn)` gives `fn` a View whose every retrieval
+  (Lexical, Semantic, List and Signals, and SemanticState's count) ANDs a predicate over the
+  document's facets, in SQL, **apart from the filter**. Within a field the values are the allowed
+  ones (ORed); across fields every one must hold (ANDed); a document with no value for a field is
+  outside. A filter, or a query whose text names an access field, can only narrow what the scope
+  admits: golib's engine OR-merges a query's facets into the filter, which is why a scope must
+  never be one of the filter's facets. Signals counts in-links only from documents the scope
+  admits. An empty scope, a field with no values or a field name with `=` is `ErrNoAccess`:
+  there is no scope that reads everything. `View` stays unscoped.
 
-pgstore knows nothing of users or groups. Mapping a user to the tenants and the facet values
-they may see is your application's business logic. Do it server-side: open the Store with a
-tenant your authorization chose, never one taken from a request, and add the access facets to
-every query's filter yourself.
+pgstore knows nothing of users or groups. Mapping a user to the tenants and the scope values they
+may see is your application's business logic. Do it server-side: open the Store with a tenant your
+authorization chose, never one taken from a request, and read through `ViewWithin` with the scope
+your authorization computed. Checking that a scope names every field of the tenant's `Policy` is
+the caller's (AutoDoc's `enterprise/search` does it).
+
+## A schema of its own
+
+pgstore's tables, its `rag_english` configuration and its ledger are created and found through the
+connection's `search_path`, never by a qualified name. golib's `postgres.Open` is a pool, so a
+`search_path` set once, on one connection, leaves the others in `public`. Set it on every physical
+connection, and create the schema before migrating:
+
+```go
+conn, err := postgres.Open(ctx, dsn, pgstore.WithSchema("autodoc_search"))
+err = pgstore.EnsureSchema(ctx, conn, "autodoc_search") // a plain identifier, or ErrSchemaName
+err = pgstore.Migrate(ctx, conn)
+```
+
+- `WithSchema` runs `SET search_path TO "schema", public` on each connection the pool opens,
+  replacements included, before it serves; `public` stays for a `vector` extension installed
+  there.
+- `EnsureSchema` must come before `Migrate`: PostgreSQL creates an object in the first schema of
+  the path that **exists**, so with the schema missing the tables would land in `public`.
+
+## Concurrency
+
+A `Store` is safe for concurrent use, and so are its readers (`View`, `ViewWithin`, `Docs`,
+`Cursor`, `Quarantined`, `Policy`). A `View` is valid only inside its `fn`, and one `View` belongs
+to one goroutine. A `Batch` is one transaction and belongs to one goroutine: its documents, cursor
+and quarantine commit together or not at all. Writes conflict per document: a `Put` that loses its
+compare-and-set to another writer is retried alone and fails a `Batch` with `ErrWriteRace`. pgstore
+does not make a tenant single-writer: a server that moves a tenant's cursor must hold its own lock
+(ADR 1791762085 pins an advisory lock on a dedicated connection). `WithSchema`'s hook runs on every
+connection the pool opens, so concurrent queries all run in the schema.
 
 ## Example
 
 ```go
 conn, err := postgres.Open(ctx, dsn)
 if err := pgstore.Migrate(ctx, conn); err != nil { … }
-s, err := pgstore.Open(conn, "tenant-42")
+s, err := pgstore.New(conn, "tenant-42")
 id, err := s.Put(ctx, pgstore.Document{Path: "manuals/pump.md", Tags: []string{"pump"}, Chunks: chunks})
 err = s.Embed(ctx, model, vecs)
 ready, err := s.MarkReady(ctx, "manuals/pump.md", model)
 engine := search.NewEngine[int64, *pgstore.View](s, …)
+
+// a page of a source, with the cursor it moved, in one transaction
+b := s.Begin(ctx)
+_, err = b.Put(ctx, doc)
+err = b.Quarantine(ctx, "row-17", renderErr)
+err = b.SetCursor(ctx, pgstore.Cursor{UpdatedAt: last.UpdatedAt, ID: last.ID})
+err = b.Commit()
+
+// a caller's read, within the scope your authorization computed
+err = s.ViewWithin(ctx, map[string][]string{"label_id": {"A"}}, func(v *pgstore.View) error { … })
 ```
 
 ## A destination that holds the old scripts
