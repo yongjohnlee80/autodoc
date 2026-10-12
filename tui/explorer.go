@@ -243,11 +243,11 @@ func (e *explorer) loaded() ([]string, []tuidecl.Index) {
 // moveTo puts the cursor on row ix (a find's hit).
 func (e *explorer) moveTo(ix tuidecl.Index) error {
 	e.at = e.keys(ix)
-	return e.c.View("explorerTree", "setCurrentIndex", ix)
+	return e.c.View(explorerPanelSpec().View, "setCurrentIndex", ix)
 }
 
 func (*explorer) Panels() []PanelSpec {
-	return []PanelSpec{sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })}
+	return []PanelSpec{explorerPanelSpec()}
 }
 
 // listAll is every file of workspace ws, in path order.

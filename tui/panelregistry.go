@@ -97,6 +97,12 @@ func sidePanelSpec(id, view string, priority int, edge func(prefs) string) Panel
 	return PanelSpec{ID: id, View: view, Priority: priority, Edge: edge, Places: slices.Clone(edges),
 		Keyboard: true, Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault}
 }
+func explorerPanelSpec() PanelSpec {
+	return sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
+}
+func linksPanelSpec() PanelSpec {
+	return sidePanelSpec("links", "linksList", 20, func(p prefs) string { return p.linkEdge })
+}
 func terminalPanelSpec() PanelSpec {
 	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30,
 		Edge: func(p prefs) string { return p.termEdge }, Places: slices.Clone(termEdges),
@@ -114,8 +120,7 @@ func legacyPanelSpecs() []PanelSpec {
 }
 func defaultPanelSpecs() []PanelSpec {
 	return []PanelSpec{
-		sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge }),
-		sidePanelSpec("links", "linksList", 20, func(p prefs) string { return p.linkEdge }),
+		explorerPanelSpec(), linksPanelSpec(),
 		terminalPanelSpec(), agentPanelSpec(), legacyPanelSpecs()[0],
 	}
 }
