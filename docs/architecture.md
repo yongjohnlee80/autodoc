@@ -109,6 +109,24 @@ func (t *todos) Commands() map[string]decl.HandlerFunc { … } // its App.* comm
   that takes the keyboard, its edge, the edges whose sizes are kept.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
+- **A list to filter and choose from is a picker, never a fifth layout.**
+  `tui/qml/dialogs/Picker.qml` is the one layout: a field over a list, the item under the cursor
+  previewed beside it. A use sets the Dialog's `title` and its declared properties: `name` and
+  `model` (required), `label`, `fieldText`, `placeholder`, `note`/`noteShown`, `listTitle`,
+  `previewTitle`/`previewText`/`previewAt` and `acceptText`. Its `TableViewColumn`s go into the
+  list. Its handlers call `App.pickFilter`, `pickMove`, `pickChoose`, `pickAccept` and
+  `pickCancel` with the `name`, and Go finds the picker by it. That Go side is a `pick[T]`
+  (`tui/pick.go`):
+  - it holds every item, and filters them into a `rows[T]`;
+  - it previews the row under the cursor off the loop, the latest asked for winning;
+  - `choose` runs once it has closed the dialog, and `cancel` when it is dismissed;
+  - `enter`, `submit` and `query` cover a picker that is not a plain choice: the draft's name, or
+    the search.
+
+  To make a picker, add a `pick[T]` to `h.picks`, its `App.<name>Preview*` sources (and a field
+  source, when `open` should empty the field) to the state, and a `Picker { name: "…" }` use: a
+  component file of its own, like `FileOpen.qml`, or inline in `main.qml`. `open()` shows it.
+  `SearchPicker.qml` keeps its own layout for its stage row, but its handlers are the same.
 
 ### 4.3 Core package rules
 
