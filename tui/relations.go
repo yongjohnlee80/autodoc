@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
-	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -373,64 +372,4 @@ func (r *related) jumpTo(n int) {
 	if rows := r.jumpRows(); n >= 1 && n <= len(rows) {
 		r.c.OpenRef(rows[n-1].ws, rows[n-1].path)
 	}
-}
-
-// fileRef is a document opened: its workspace ("" outside every one) and its path.
-type fileRef struct{ ws, path string }
-
-// maxHistory is how many documents back goes.
-const maxHistory = 32
-
-// rememberLeft puts the document left behind on the history, once at its top.
-func (h *Host) rememberLeft(prev fileRef) {
-	if n := len(h.history); n > 0 && h.history[n-1] == prev {
-		return
-	}
-	h.history = append(h.history, prev)
-	if len(h.history) > maxHistory {
-		h.history = h.history[len(h.history)-maxHistory:]
-	}
-}
-
-// goBack is SPC b: the document opened before this one, which is not remembered again. Its entry
-// leaves the history only once the open goes ahead: Stay at the unsaved question keeps it.
-func (h *Host) goBack() {
-	cur := fileRef{h.file.ws, h.file.path}
-	for n := len(h.history); n > 0; n = len(h.history) {
-		prev := h.history[n-1]
-		if h.file.open && prev == cur {
-			h.history = h.history[:n-1] // the page already: nothing to go back to there
-			continue
-		}
-		h.openRef(prev, false, func() {
-			if k := len(h.history); k > 0 && h.history[k-1] == prev {
-				h.history = h.history[:k-1]
-			}
-		})
-		return
-	}
-	h.notify("nothing to go back to: SPC b returns to the documents opened before this one")
-}
-
-// editorMenu is the editor's right-click menu: the stock rows, then the related documents and back.
-// Its rows act on the core, so every editor widget runs them (installEditorMenu).
-func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
-	items := widget.CoreContextItems(c)
-	l, onLink := linkAt([]byte(c.Value()), h.cursorBytes())
-	link := menuCommand("autodoc.link", "&Go to link", widget.CoreMenuAction{ID: "autodoc.link",
-		Run: func(*widget.EditorCore) { h.goToLink(l) }})
-	link.Enabled = onLink
-	back := menuCommand("autodoc.back", "&Back", widget.CoreMenuAction{ID: "autodoc.back",
-		Run: func(*widget.EditorCore) { h.goBack() }})
-	back.Enabled = len(h.history) > 0
-	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
-	diagram := menuCommand("autodoc.diagram", "View &diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
-		Run: func(*widget.EditorCore) { h.previewDiagram() }})
-	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes())
-	items = append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
-		widget.NewSeparator("autodoc.sep.relations"), link, back)
-	if h.fonts != nil { // the window's zoom; a terminal's is its own
-		items = append(items, widget.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
-	}
-	return items
 }

@@ -40,3 +40,26 @@ func (h *Host) installEditorMenu() {
 // renderedSwitch is an editor whose Rendered view the host can withhold: golib's gui Editor. A plain
 // bool, so this package names no gui type.
 type renderedSwitch interface{ SetRenderedEnabled(on bool) }
+
+// editorMenu is the editor's right-click menu: the stock rows, then the related documents and back.
+// Its rows act on the core, so every editor widget runs them (installEditorMenu).
+func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
+	items := widget.CoreContextItems(c)
+	l, onLink := linkAt([]byte(c.Value()), h.cursorBytes())
+	link := menuCommand("autodoc.link", "&Go to link", widget.CoreMenuAction{ID: "autodoc.link",
+		Run: func(*widget.EditorCore) { h.goToLink(l) }})
+	link.Enabled = onLink
+	back := menuCommand("autodoc.back", "&Back", widget.CoreMenuAction{ID: "autodoc.back",
+		Run: func(*widget.EditorCore) { h.goBack() }})
+	back.Enabled = len(h.history) > 0
+	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
+	diagram := menuCommand("autodoc.diagram", "View &diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
+		Run: func(*widget.EditorCore) { h.previewDiagram() }})
+	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes())
+	items = append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
+		widget.NewSeparator("autodoc.sep.relations"), link, back)
+	if h.fonts != nil { // the window's zoom; a terminal's is its own
+		items = append(items, widget.NewSeparator("autodoc.sep.zoom"), h.zoomMenu())
+	}
+	return items
+}
