@@ -58,15 +58,16 @@ type WriterLock struct {
 }
 
 // AcquireWriter pins a connection of conn, a pool of its own, and takes the writer lock of tenant
-// in schema on it, trying every poll until it is free or ctx ends (ctx.Err() then). waiting is
+// in schema on it, trying every poll until it is free or ctx ends (ctx's error then, whatever the
+// driver reported as the deadline passed). waiting is
 // called once, with the backend that holds it, when the lock is first found held by another
 // session.
 func AcquireWriter(ctx context.Context, conn dao.DataConn, schema, tenant string, poll time.Duration, waiting func(holder int64)) (*WriterLock, error) {
 	key := WriterKey(schema, tenant)
 	pin, err := postgres.PinSessionConn(ctx, conn)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+		if err := ended(ctx); err != nil {
+			return nil, err
 		}
 		return nil, fmt.Errorf("pgstore: pin the writer lock's connection: %w", err)
 	}
@@ -82,10 +83,10 @@ func AcquireWriter(ctx context.Context, conn dao.DataConn, schema, tenant string
 		})
 		if err != nil {
 			pin.Discard()
-			if ctx.Err() != nil {
+			if err := ended(ctx); err != nil {
 				// the caller stopped waiting: the driver's error (an i/o timeout at the deadline)
 				// says nothing more than that
-				return nil, ctx.Err()
+				return nil, err
 			}
 			return nil, fmt.Errorf("pgstore: take the writer lock: %w", err)
 		}
@@ -122,14 +123,28 @@ func (l *WriterLock) Check(ctx context.Context) error {
 			[]any{l.key}, &held)
 	})
 	switch {
-	case err != nil && ctx.Err() != nil:
-		return ctx.Err() // the caller stopped: that says nothing of the lock
+	case err != nil && ended(ctx) != nil:
+		return ended(ctx) // the caller stopped: that says nothing of the lock
 	case err != nil:
 		l.markLost()
 		return fmt.Errorf("%w: %v", ErrWriterLost, err)
 	case !held:
 		l.markLost()
 		return ErrWriterLost
+	}
+	return nil
+}
+
+// ended is ctx's error once it has ended, counting a deadline that has passed though ctx's own
+// timer has not yet fired. The driver bounds a write by the socket's deadline, set to ctx's, and the
+// runtime can fail that write with an i/o timeout a moment before the timer marks ctx done: in that
+// window ctx.Err() is still nil, and the caller's deadline would read as a broken connection.
+func ended(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if d, ok := ctx.Deadline(); ok && !time.Now().Before(d) {
+		return context.DeadlineExceeded
 	}
 	return nil
 }

@@ -101,6 +101,41 @@ func TestTwoServersOnOneTenantNeverWriteTogether(t *testing.T) {
 	}
 }
 
+// lateTimer is a context whose deadline has passed while its timer has not yet fired: Err is nil
+// and Done still open. It is the window in which the driver, which bounds a write by the deadline,
+// fails the write with an i/o timeout before the context says it ended.
+type lateTimer struct {
+	context.Context
+	deadline time.Time
+}
+
+func (c lateTimer) Deadline() (time.Time, bool) { return c.deadline, true }
+
+// A wait whose deadline has passed ends with the caller's error, though the driver's write timed
+// out a moment before the context said so: AcquireWriter and Check answer
+// context.DeadlineExceeded, not a failure to take the lock or the lock lost. The mutant, named
+// here: ctx.Err() alone deciding (the i/o timeout comes back as the connection's failure).
+func TestAWaitPastItsDeadlineEndsWithTheCallersError(t *testing.T) {
+	f := newFixture(t)
+	open, cancel := context.WithCancel(f.ctx)
+	t.Cleanup(cancel)
+	late := lateTimer{Context: open, deadline: time.Now().Add(-time.Millisecond)}
+
+	locks := f.open("locks", "")
+	f.scalar(locks, "SELECT 1") // an idle connection, so the pin succeeds and the write times out
+	if _, err := pgstore.AcquireWriter(late, locks, f.schema, f.tenant, 20*time.Millisecond, nil); !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("AcquireWriter past its deadline: %v, want context.DeadlineExceeded", err)
+	}
+	l, err := pgstore.AcquireWriter(f.ctx, f.open("locks-2", ""), f.schema, f.tenant, 20*time.Millisecond, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(l.Release)
+	if err := l.Check(late); !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, pgstore.ErrWriterLost) {
+		t.Errorf("Check past its deadline: %v, want context.DeadlineExceeded", err)
+	}
+}
+
 // Killing the lock's connection stops the writes: the next commit finds the lock gone, writes
 // nothing and says ErrLockLost, and so does every write after it. The mutant, named here: a commit
 // that does not confirm the lock (the page after the loss is written).
