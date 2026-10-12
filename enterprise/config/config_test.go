@@ -83,6 +83,9 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 	if s.Embedding != (config.Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4}) {
 		t.Errorf("Embedding %+v", s.Embedding)
 	}
+	if s.Embedding.Key() != "sk-embedding-secret" || (config.Embedding{}).Key() != "" {
+		t.Errorf("the key read from key_env: %q; with none named: %q", s.Embedding.Key(), (config.Embedding{}).Key())
+	}
 	if s.HTTP == nil || s.HTTP.Listen != "127.0.0.1:8730" || len(s.HTTP.Clients) != 2 ||
 		!slices.Equal(s.HTTP.Clients[1].Grants["lm-catalog"]["label_id"], []string{"A", "B"}) {
 		t.Errorf("HTTP %+v", s.HTTP)

@@ -77,6 +77,15 @@ type Embedding struct {
 	Slots int
 }
 
+// Key is the provider's API key, read from the environment when called; "" when KeyEnv names none.
+// It is a secret: never log it, and never put it in an error.
+func (e Embedding) Key() string {
+	if e.KeyEnv == "" {
+		return ""
+	}
+	return os.Getenv(e.KeyEnv)
+}
+
 // HTTP is the HTTP API: where it listens and who may call it.
 type HTTP struct {
 	Listen          string
