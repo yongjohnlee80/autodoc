@@ -31,8 +31,9 @@ local function run(fn, ...)
   end)
 end
 
-t.section("the session speaks protocol 20", function()
-  t.eq(client.PROTOCOL, 20, "this plugin's protocol")
+-- the todos verbs arrived in protocol 20: this plugin's protocol (the generated contracts') has them
+t.section("the session speaks a protocol with the todos verbs", function()
+  t.ok(client.PROTOCOL >= 20, "this plugin's protocol has the todos verbs", client.PROTOCOL)
   local _, err = t.await(20000, function(done) session.call("workspace.add", { "kb", kb }, done) end)
   t.ok(err == nil, "workspace.add", err and err.message)
   t.ok(api.todos == todos, "the API carries the todos client")

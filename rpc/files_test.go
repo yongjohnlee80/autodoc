@@ -17,8 +17,10 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/local"
 	"github.com/yongjohnlee80/golib/vfs/memfs"
 
+	"github.com/yongjohnlee80/autodoc/core/derived"
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/index"
+	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/core/store"
 	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
@@ -206,6 +208,14 @@ func TestFileLocateFindsTheWorkspaceThatServesAPath(t *testing.T) {
 // diskWorkspace is workspace kb over root on the disk, Markdown only, its indexer running.
 func diskWorkspace(t *testing.T, root string) (Workspace, *index.Indexer) {
 	t.Helper()
+	return diskWorkspaceOf(t, root, md, nil)
+}
+
+// diskWorkspaceOf is workspace kb over root on the disk, indexing what match admits (nil: every
+// path), with the build's registrations reg (nil: none); its indexer running and no follower, so
+// the index hears of a file only through the API's touch.
+func diskWorkspaceOf(t *testing.T, root string, match func(string) bool, reg *registrations.Table) (Workspace, *index.Indexer) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
 	if err != nil {
@@ -219,11 +229,16 @@ func diskWorkspace(t *testing.T, root string) (Workspace, *index.Indexer) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond))
+	ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(match), index.WithBatching(0, 5*time.Millisecond),
+		index.WithRegistrations(reg))
 	done := make(chan struct{})
 	go func() { _ = ix.Run(ctx); close(done) }()
 	t.Cleanup(func() { cancel(); <-done; _ = fsys.Close(); _ = db.Close() })
-	return Static(WorkspaceInfo{Name: "kb", Root: root, Index: ix, Docs: docs.New(fsys, md)}), ix
+	var opts []docs.Option
+	if reg != nil {
+		opts = []docs.Option{docs.WithRegistrations(reg.Kinds()), docs.WithDeriver(reg)}
+	}
+	return Static(WorkspaceInfo{Name: "kb", Root: root, Index: ix, Docs: docs.New(fsys, match, opts...)}), ix
 }
 
 // TestFileWriteInAWorkspaceIsItsDocWrite: file.write on a file a workspace indexes is that
@@ -279,5 +294,41 @@ func TestFileWriteInAWorkspaceIsItsDocWrite(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 	if _, ok, _ := ix.Store().Version(ctx, "plain.txt"); ok {
 		t.Error("a path the workspace excludes was indexed")
+	}
+}
+
+// TestFileWriteRawInAWorkspaceIsItsDocWriteRaw: file.write_raw on an HTML file a workspace indexes
+// is the workspace's doc.write_raw. With no follower, only the routed write's touch tells the
+// indexer, so the page being indexed shows the write went through the workspace. The plain
+// file.write of the same page is refused, as doc.write refuses a derived document.
+func TestFileWriteRawInAWorkspaceIsItsDocWriteRaw(t *testing.T) {
+	reg, err := registrations.New(nil, registrations.Documents(derived.MaxContainer, derived.MaxText))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	page := filepath.Join(root, "page.html")
+	if err := os.WriteFile(page, []byte("<h1>Title</h1><p>body</p>\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, ix := diskWorkspaceOf(t, root, nil, reg)
+	cli := filesRig(t, "unix", Protocol, w)
+	raw := call(t, cli, "doc.read_raw", "kb", "page.html").(map[string]any) // the version a read through "/" gives too
+	if err := callErr(cli, "file.write", page, []byte("<p>x</p>"), raw["version"]); code(err) != golibrpc.CodeInvalidParams {
+		t.Errorf("file.write of an HTML page in a workspace: %v; want refused, as doc.write refuses it", err)
+	}
+	call(t, cli, "file.write_raw", page, []byte("<h1>Edited</h1>\n"), raw["version"])
+	if b, err := os.ReadFile(page); err != nil || string(b) != "<h1>Edited</h1>\n" {
+		t.Fatalf("the page after file.write_raw: %q, %v", b, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok, err := ix.Store().Version(context.Background(), "page.html"); err == nil && ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the page written by file.write_raw was not indexed: the write did not go through the workspace")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
