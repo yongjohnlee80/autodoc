@@ -273,8 +273,11 @@ func TestQuittingHangsTheShellUpWithItsJobs(t *testing.T) {
 		return true
 	})
 	onLoop(r, func() bool { r.h.p.Quit(); return true })
+	// Ended is gone or a zombie. The shell exits on the hang-up, so its job, ended, is reaped by
+	// whoever adopts it: in a container whose PID 1 is go test itself, nobody, and kill(pid, 0)
+	// still finds it.
 	deadline := time.Now().Add(10 * time.Second)
-	for syscall.Kill(job, 0) == nil {
+	for pidAlive(job) && !zombie(job) {
 		if time.Now().After(deadline) {
 			syscall.Kill(job, syscall.SIGKILL)
 			t.Fatalf("the shell's job %d outlived quitting", job)
