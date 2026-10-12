@@ -12,7 +12,7 @@ type Panel interface{ Panels() []PanelSpec }
 type panelRegistry struct{ specs []PanelSpec }
 
 func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
-	r := &panelRegistry{}
+	r := &panelRegistry{specs: []PanelSpec{}}
 	owners := map[string]string{}
 	views := map[string]string{}
 	for _, f := range fs {

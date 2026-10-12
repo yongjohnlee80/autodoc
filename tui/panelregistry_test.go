@@ -189,3 +189,35 @@ func TestConfigureTerminalRefusesMissingAndOtherViews(t *testing.T) {
 		}
 	}
 }
+
+func TestEmptyProgramPanelSchemaStaysEmpty(t *testing.T) {
+	r, err := newRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := prefsForPanels(map[string]any{"tui.terminal.bottom.size": "50"}, false, r.panels.specs)
+	if len(p.geometrySpecs()) != 0 || len(p.panelGeo) != 0 {
+		t.Fatal("a program with no contributed panels inherited the standalone built-ins")
+	}
+	if st := floatState(p.panelFloat, p.geometrySpecs()); len(st) != 0 {
+		t.Fatalf("empty program invented float sources: %v", st)
+	}
+}
+
+func TestPanelPriorityTiesKeepFeatureContributionOrder(t *testing.T) {
+	a, b, c := fixturePanel(), fixturePanel(), fixturePanel()
+	a.ID, a.View, a.Priority = "third", "thirdView", 20
+	b.ID, b.View, b.Priority = "first", "firstView", 10
+	c.ID, c.View, c.Priority = "second", "secondView", 10
+	r, err := newPanelRegistry([]Feature{
+		&panelFixture{name: "earlier", specs: []PanelSpec{a, b}},
+		&panelFixture{name: "later", specs: []PanelSpec{c}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{r.specs[0].ID, r.specs[1].ID, r.specs[2].ID}
+	if !reflect.DeepEqual(got, []string{"first", "second", "third"}) {
+		t.Fatalf("priority/tie order = %v", got)
+	}
+}

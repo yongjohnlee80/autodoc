@@ -24,7 +24,7 @@ type PanelHost interface {
 }
 
 // agentHost adds only the services needed to configure an agent terminal and
-// populate its profile form. Process ownership remains in the agents feature.
+// populate its profile form. Agent-specific state remains in the agents feature.
 type agentHost interface {
 	PanelHost
 	SetField(name, value string)

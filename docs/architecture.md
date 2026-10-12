@@ -96,17 +96,29 @@ func (m *Manager) Errors() []module.PublicError { … }
 type todos struct{ c Core; … }
 func (t *todos) Name() string                          { return "todos" }
 func (t *todos) State() map[string]any                 { … } // its App.* sources
-func (t *todos) Commands() map[string]decl.HandlerFunc { … } // its App.* commands
-// optional: Connected(), Started(), Entered(ws), Kinds()+Event(kind, ws, detail)
+func (t *todos) Commands() map[string]Command          { … } // its App.* commands
+// optional: Connected(), Started(), Entered(ws), Kinds()+Event(kind, ws, detail),
+// PreferencesChanged(), Panels() []PanelSpec
 ```
 
-- `Host.features()` lists them; the registry merges their sources and commands into the program
-  and refuses a name two features claim.
+- `Host.features()` lists them; the registry snapshots each feature's state once, merges sources
+  and commands into the program, and refuses a name two features claim.
 - **A feature sees `Core`, never `Host`:** set a source, open or close a dialog, notify, call
   the daemon off the loop (`Go`), a latest-answer-wins `Ticket`, open a file.
 - Its QML is a component in `tui/qml/dialogs` or `views`, declared once in `main.qml`.
-- **Docked panels come from one registry** (`panelSpecs` in `panels.go`): a drawer's id, the view
-  that takes the keyboard, its edge, the edges whose sizes are kept.
+- **Panels come from each program's registry**, built from Features implementing `Panel`
+  (`Panels() []PanelSpec`). A spec names its drawer and focus view, edge, places, defaults and
+  percentage bounds. Duplicate ids/views and invalid geometry are refused before state is built;
+  descriptors and place slices are snapshotted. Focus follows declared priority, with stable
+  contribution order for ties. No package-global runtime panel list exists.
+- Panel callbacks receive `PanelHost`, a narrow service boundary extending `Core`, not `*Host`.
+  It supplies view/focus operations and preference persistence. `terminals` owns startup and
+  focus restoration; `agents` owns its profile form/model and running identity. Their state and
+  commands are not part of `legacy`. The agent panel is one contribution; future profile tabs
+  belong inside its Feature, not one panel spec per agent.
+- `PreferencesChanged()` projects each feature's current preferences into its own sources and
+  choosers. Geometry/float readback uses the program's validated panel schema; standalone
+  preference readers use fresh built-in descriptors without runtime callbacks.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
 - **A list to filter and choose from is a picker, never a fifth layout.**
