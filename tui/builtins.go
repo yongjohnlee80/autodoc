@@ -33,8 +33,6 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("find.open", "find in the page", "App.openFindInPage()", h.openFindInPage),
 		builtin("find.next", "find next", "App.findAgainNext()", func() { h.findAgain(+1) }),
 		builtin("find.previous", "find previous", "App.findAgainPrevious()", func() { h.findAgain(-1) }),
-		builtin("agent.toggle", "AI agent", "App.toggleAgent()", h.toggleAgent),
-		builtin("terminal.toggle", "the terminal", "App.toggleTerminal()", h.toggleTerminal),
 		builtin("panel.arrange", "arrange a panel", "App.arrangePanel()", h.arrangePanel),
 		builtin("panel.reset_layout", "reset the panel layout", "App.resetPanelLayout()", h.resetPanelLayout),
 		builtin("workspace.switch", "switch workspace", "App.pickWorkspace()", h.pickWorkspace),
@@ -52,7 +50,6 @@ func (h *Host) builtinEntries() []Entry {
 		// Options, Plugins, System, Help
 		builtin("prefs.editor", "editor preferences", "App.openPrefs()", h.openPrefs),
 		builtin("prefs.fonts", "fonts and zoom", "App.openFonts()", h.openFonts),
-		builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", h.openAgentProfiles),
 		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", h.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", h.managePlugins),
 		builtin("plugins.commands", "plugin commands", "pluginKeys.open()", func() { h.open("pluginKeys") }),

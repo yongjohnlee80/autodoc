@@ -33,6 +33,16 @@ func (t *terminals) State() map[string]any {
 }
 func (t *terminals) Prefs() []PrefSpec { return terminalPrefRows(t) }
 
+func (t *terminals) Catalog() []Entry {
+	open := builtin("terminal.open", "open the terminal", "App.openTerminal()", t.openTerminal)
+	open.Verb, open.Aliases = "terminal", []string{"term"}
+	open.Help = "open the terminal (SPC `)"
+	return []Entry{
+		builtin("terminal.toggle", "the terminal", "App.toggleTerminal()", t.toggleTerminal),
+		open,
+	}
+}
+
 func terminalPrefRows(t *terminals) []PrefSpec {
 	row := choicePref(prefTermEdge, "bottom", termEdges, func(p *prefs) *string { return &p.termEdge }).
 		shows(terminalPreferenceState)

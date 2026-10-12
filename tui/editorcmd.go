@@ -70,11 +70,6 @@ func (h *Host) editorEntries() []Entry {
 			h.clearFind()
 			return nil
 		}},
-		{ID: "terminal.open", Title: "open the terminal", Verb: "terminal", Aliases: []string{"term"},
-			Help: "open the terminal (SPC `)", Run: func(Invocation) error {
-				h.openTerminal()
-				return nil
-			}},
 	}
 }
 

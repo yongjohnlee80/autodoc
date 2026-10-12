@@ -58,6 +58,13 @@ func (a *agents) State() map[string]any {
 }
 func (a *agents) Prefs() []PrefSpec { return agentPrefRows(a) }
 
+func (a *agents) Catalog() []Entry {
+	return []Entry{
+		builtin("agent.toggle", "AI agent", "App.toggleAgent()", a.toggleAgent),
+		builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", a.openAgentProfiles),
+	}
+}
+
 func agentPrefRows(a *agents) []PrefSpec {
 	edge := choicePref(prefAgentEdge, defaultAgentEdge, agentEdges, func(p *prefs) *string { return &p.agentEdge }).
 		shows(agentPreferenceState)
