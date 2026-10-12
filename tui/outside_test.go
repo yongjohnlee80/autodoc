@@ -172,6 +172,20 @@ func TestOpenFileDialogOpensTheFileChosen(t *testing.T) {
 	r.waitOpen(t, "kb", "a.md")
 }
 
+// TestTheFileDialogsFollowALinkToAFolder: a link to a folder, absolute, lists as a folder in
+// Open file…, and Enter goes into it.
+func TestTheFileDialogsFollowALinkToAFolder(t *testing.T) {
+	r, kb, _, abs := runOutside(t)
+	if err := os.Symlink(filepath.Dir(abs), filepath.Join(kb, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	r.leader(t, 'f')
+	r.s.WaitForText(t, "open a file")
+	r.s.WaitForText(t, "linked/")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyDown}, enter()) // ../, linked/
+	r.s.WaitForText(t, "notes.md")
+}
+
 // TestARefusedFileVerbSaysTheDaemonIsRemote: the daemon refuses file.* to a peer not on its unix
 // socket; the TUI says why rather than echoing the refusal.
 func TestARefusedFileVerbSaysTheDaemonIsRemote(t *testing.T) {

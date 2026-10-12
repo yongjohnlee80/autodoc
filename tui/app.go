@@ -424,6 +424,10 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Sources(h.reg.state),
 		tuidecl.Handlers(h.reg.handlers),
 		tuidecl.ErrorSink(h.keep),
+		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
+		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
+		// vfs/local, whose root refuses an absolute link and lists every link as a file.
+		tuidecl.Files(widget.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
 		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit)}, opt.App...)...),
