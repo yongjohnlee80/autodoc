@@ -92,8 +92,7 @@ func TestTheRelationsDepthAndJumps(t *testing.T) {
 }
 
 // An answer for a page no longer shown is dropped: the file kept as the draft (its workspace gone)
-// does not get the gone file's rows when their read answers late, and of two reads for one page
-// (d pressed twice), the later one's rows are the ones shown, whatever order they answer in.
+// does not get the gone file's rows when their read answers late.
 func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
@@ -105,7 +104,15 @@ func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "relations" {
 		t.Fatalf("the draft took the gone file's relations: rows %q, title %q", r.labels(), c.set["App.relationsTitle"])
 	}
+}
 
+// Of two reads for one page (d pressed twice), the later one's rows are the ones shown, whatever
+// order they answer in.
+func TestTheLaterRelationsReadWins(t *testing.T) {
+	c := newScripted("kb")
+	scriptedGraph(c)
+	r := newRelated(c)
+	c.deferred = true
 	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
 	c.deliver(0)
 	c.focused = true
