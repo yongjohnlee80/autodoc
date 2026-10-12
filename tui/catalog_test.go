@@ -89,6 +89,23 @@ func TestTheCatalogRefusesWhatItCannotHold(t *testing.T) {
 	if err := c.add(Entry{ID: "x.quit", Source: SourceBuiltin, Verb: "q", Run: noRun}); err == nil {
 		t.Error("a built-in took golib's q")
 	}
+	// a refusal names whose the name is: AutoDoc's, or a Lua file's
+	_ = c.add(Entry{ID: "lua.zz", Source: SourceLua, Owner: "z.lua", Verb: "zz", Run: noRun})
+	_ = c.add(Entry{ID: "terminal.open", Source: SourceBuiltin, Verb: "terminal", Run: noRun})
+	for want, e := range map[string]Entry{
+		":terminal is both AutoDoc's (terminal.open) and b's (b.t)": {ID: "b.t", Source: SourceFeature, Owner: "b", Verb: "dig", Aliases: []string{"terminal"}, Run: noRun},
+		":zz is both Lua's z.lua (lua.zz) and b's (b.zz)":           {ID: "b.zz", Source: SourceFeature, Owner: "b", Verb: "zz", Run: noRun},
+	} {
+		if err := c.add(e); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("want %q: %v", want, err)
+		}
+	}
+	// what a catalog with nothing, or no entry, answers
+	var none *catalog
+	none.attach(widget.NewEditorCore())
+	if none.lookup("find.term") != nil || c.owned("no.such") != nil {
+		t.Error("an absent catalog or entry answered")
+	}
 }
 
 // TestTheCatalogsNamespacesAreOwned (§5.10): lua.* is Lua's alone, plugin.<name>.* that plugin's.

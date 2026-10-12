@@ -117,6 +117,10 @@ func TestAKeyOnACardIsNamedFromThePage(t *testing.T) {
 	if !strings.Contains(got, "zz.go  — · SPC Z b, F9, SPC p g · go") {
 		t.Errorf("F1's line:\n%s", got)
 	}
+	// a key on a card no key opens (the registry refuses that one) is named as it shows
+	if got := (keyset{keys: []Key{{Card: "lone", Seq: "x"}}}).keyName(Key{Card: "lone", Seq: "x"}, 0); got != "x" {
+		t.Errorf("a key on a card nothing opens: %q", got)
+	}
 	if helpText(keyset{}, nil, nil) != helpKeys+"\n\n\n\n"+helpRest {
 		t.Error("help without a catalog has a COMMANDS section")
 	}

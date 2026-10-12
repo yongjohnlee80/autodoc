@@ -100,10 +100,12 @@ func runTestPlugin(mode string) int {
 				_ = link.Notify(ctx, plugin.MethodReady, plugin.ReadyParams(o.Protocol))
 			case plugin.MethodCommand:
 				switch id, _ := plugin.ReadCommand(p); id {
-				case "dup": // 7 again while 7 waits, then 8
+				case "dup": // a call with no number; 7 again while 7 waits, then 8; 9 malformed
+					_ = link.Notify(ctx, plugin.MethodCall, []any{map[string]any{"id": "lua.mark"}})
 					call(7, "lua.mark", "a")
 					call(7, "lua.mark", "b")
 					call(8, "lua.mark", "c")
+					_ = link.Notify(ctx, plugin.MethodCall, []any{map[string]any{"call": 9, "id": "lua.mark", "args": []any{1}}})
 				case "busy":
 					for i := range 70 {
 						call(int64(i+1), "lua.mark")

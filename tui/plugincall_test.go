@@ -138,20 +138,25 @@ func heldLoop(t *testing.T, r *running, run *pluginRun, command string, until fu
 
 // TestACallReusingAWaitingNumberIsNeverAnswered (ADR 1791762474 r3): a host.call whose number is
 // a call still running is a protocol violation: logged, run never, answered never. The waiting
-// call gets its own answer, the only one with its number.
+// call gets its own answer, the only one with its number. A call with no number is dropped, and
+// a malformed one with a number refused.
 func TestACallReusingAWaitingNumberIsNeverAnswered(t *testing.T) {
 	r, logs, run := rawTUI(t, 3)
-	heldLoop(t, r, run, "dup", func(waiting, dupes, _ int) bool { return waiting == 2 && dupes == 1 })
-	waitSaid(t, logs, "raw", "result 8 ")
-	if got := results(t, logs, "raw"); !slices.Equal(got, []string{"result 7 true ", "result 8 true "}) {
-		t.Fatalf("the results: %q, want 7's and 8's, once each", got)
+	heldLoop(t, r, run, "dup", func(waiting, dupes, _ int) bool { return waiting == 3 && dupes == 1 })
+	waitSaid(t, logs, "raw", "result 9 ")
+	if got := results(t, logs, "raw"); !slices.Equal(got, []string{"result 7 true ", "result 8 true ",
+		"result 9 false refused malformed: plugin: malformed parameters: host.call's args is a list of strings"}) {
+		t.Fatalf("the results: %q, want 7's, 8's and 9's, once each", got)
 	}
 	r.waitPage(t, "<c")
 	if text := r.editorText(); !strings.Contains(text, "<a") || strings.Contains(text, "<b") {
 		t.Fatalf("the page: %q: want 7's mark, and never the reused 7's", text)
 	}
-	if b, _ := os.ReadFile(filepath.Join(logs, "raw.log")); !strings.Contains(string(b), "host.call 7 dropped, unanswered") {
-		t.Fatalf("the reused number is not in the log:\n%s", b)
+	b, _ := os.ReadFile(filepath.Join(logs, "raw.log"))
+	for _, want := range []string{"host.call 7 dropped, unanswered", "host.call dropped: plugin: malformed parameters: host.call wants a call number"} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("%q is not in the log:\n%s", want, b)
+		}
 	}
 }
 
