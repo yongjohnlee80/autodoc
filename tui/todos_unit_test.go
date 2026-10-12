@@ -42,10 +42,15 @@ func (s *scriptedCore) Ask(q Question) Asked {
 }
 
 // yes answers the latest question Yes.
-func (s *scriptedCore) yes()                { s.asked[len(s.asked)-1].OnYes() }
-func (s *scriptedCore) Workspace() string   { return s.ws }
-func (s *scriptedCore) Prefs() prefs        { return prefs{} }
-func (s *scriptedCore) OpenFile(abs string) { s.files = append(s.files, abs) }
+func (s *scriptedCore) yes()                       { s.asked[len(s.asked)-1].OnYes() }
+func (s *scriptedCore) Workspace() string          { return s.ws }
+func (s *scriptedCore) Prefs() prefs               { return prefs{} }
+func (s *scriptedCore) OpenFile(abs string)        { s.files = append(s.files, abs) }
+func (s *scriptedCore) OpenRef(ws, path string)    { s.files = append(s.files, ws+":"+path) }
+func (s *scriptedCore) Say(msg string)             { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
+func (s *scriptedCore) Files() FileList            { return FileList{} }
+func (s *scriptedCore) Workspaces() []string       { return nil }
 func (s *scriptedCore) Failed(what string, err error) {
 	s.failed = append(s.failed, what+": "+err.Error())
 }

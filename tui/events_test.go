@@ -35,7 +35,7 @@ func TestTwoClientsStayIndependentAndSeePeerChanges(t *testing.T) {
 	past := onLoop(one, func() int64 { return one.h.evCursor })
 	two.s.WaitFor(t, "two past the event", func(string) bool { return onLoop(two, func() int64 { return two.h.evCursor }) >= past })
 	if onLoop(two, func() bool {
-		for _, n := range two.h.notices {
+		for _, n := range two.h.noticeLog.items {
 			if strings.Contains(n.text, "changed by another client") {
 				return true
 			}

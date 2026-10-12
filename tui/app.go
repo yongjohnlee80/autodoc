@@ -222,7 +222,10 @@ type Host struct {
 	epoch     uint64
 	listSeq   uint64        // numbers the file list's loads; the latest wins (search.go)
 	listRetry time.Duration // the delay before the file list's next retry after a failure; 0 after a success
-	filesAll  []string
+	files     FileList      // the workspace's files, as last listed (page.go)
+	page      Page          // the page shown, its text as last snapshotted (page.go)
+	pageGen   uint64        // numbers the typing pauses; the latest wins (page.go)
+	typing    bool          // typed since the page was last snapshotted: its pause is to come (page.go)
 
 	// the workspace manager: the row under its cursor, and whether the edition offers the database
 	// settings
@@ -247,14 +250,12 @@ type Host struct {
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
-	toasts      *widget.Toasts
-	early       []widget.Toast
-	notices     []notice
-	noticeList  *tuidecl.ListModel
-	historyOpen bool
-	vimKeys     *widget.Float // the Vim keys' card (vimkeys.go)
-	findChip    *widget.Float // "finding …" and its ✕, under the menu at the top right (find.go)
-	findLabel   *widget.Text
+	toasts    *widget.Toasts
+	early     []widget.Toast
+	noticeLog *notices      // the notifications kept (notices.go)
+	vimKeys   *widget.Float // the Vim keys' card (vimkeys.go)
+	findChip  *widget.Float // "finding …" and its ✕, under the menu at the top right (find.go)
+	findLabel *widget.Text
 	// the plugins (plugins.go): where they are, the folder's as found, the menu's rows, and the open
 	// ones by key
 	pluginOpt  Plugins
@@ -369,13 +370,13 @@ func newHost(session *Session, opt Options) *Host {
 		panelOpen:       map[string]bool{},
 		termRestore:     true,
 		relations:       newRows(tuidecl.NewListModel("key", "label"), relationRowOf),
-		noticeList:      tuidecl.NewListModel("key", "when", "text"),
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 		pluginOpt:       opt.Plugins,
 		pluginRows:      tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
 		pluginKeyRows:   tuidecl.NewListModel("key", "target"),
 		running:         map[string]*pluginRun{}}
+	h.noticeLog = newNotices(core{h})
 	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)

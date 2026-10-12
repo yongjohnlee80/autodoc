@@ -183,7 +183,7 @@ func (h *Host) applyEvents(events []peerEvent) {
 		h.loadWorkspaces()
 	}
 	if recheck {
-		h.validateSoon()
+		h.validateSoon(validateDelay)
 	}
 }
 

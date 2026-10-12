@@ -96,7 +96,7 @@ func (h *Host) recentListed(d recentDoc) bool {
 	if !slices.ContainsFunc(h.workspaces.All(), func(w wsInfo) bool { return w.name == d.Workspace }) {
 		return false
 	}
-	return d.Workspace != h.ws || slices.Contains(h.filesAll, d.Path)
+	return d.Workspace != h.ws || slices.Contains(h.files.Paths, d.Path)
 }
 
 // recentSelect opens the recent file at row i.

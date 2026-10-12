@@ -312,7 +312,7 @@ func attached(t *testing.T, d *daemon) *running {
 
 // listed is the workspace's files, as the pickers filter them.
 func (r *running) listed() []string {
-	return onLoop(r, func() []string { return append([]string(nil), r.h.filesAll...) })
+	return onLoop(r, func() []string { return append([]string(nil), r.h.files.Paths...) })
 }
 
 // waitListed waits for the workspace's files to be the n listed.

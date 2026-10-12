@@ -37,13 +37,17 @@ func (h *Host) feedEdited() {
 }
 
 // feedSoon sends the document once editing and moving have rested; a later call supersedes it.
-func (h *Host) feedSoon() {
+func (h *Host) feedSoon() { h.feedSoonAfter(pluginFeedDelay) }
+
+// feedSoonAfter sends the document after wait: a typing pause waits the rest of pluginFeedDelay,
+// so the document goes pluginFeedDelay after the last keystroke, as a move's does after the move.
+func (h *Host) feedSoonAfter(wait time.Duration) {
 	if !h.feeds() {
 		return
 	}
 	h.feedGen++
 	gen := h.feedGen
-	h.after(pluginFeedDelay, func() {
+	h.after(wait, func() {
 		if gen == h.feedGen {
 			h.feedDocuments()
 		}
@@ -90,7 +94,7 @@ func (h *Host) document() plugin.Document {
 	if h.file.open {
 		d.Workspace, d.Path = h.file.ws, h.file.path // "" and absolute for a file outside every workspace
 	}
-	d.Text = h.core.Value()
+	d.Text = string(h.pageNow().Text) // the page's snapshot; the cursor and selection are taken now
 	row, col := h.core.Line()
 	d.Cursor = plugin.Position{Line: row + 1, Col: col + 1}
 	if r, c, er, ec, ok := h.core.SelectionRange(); ok {

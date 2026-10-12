@@ -165,7 +165,7 @@ func TestATerminalHasNoFonts(t *testing.T) {
 	if m, _ := d.db.Preferences(context.Background()); m["gui.zoom"] != "" {
 		t.Errorf("a terminal stored a zoom: %q", m["gui.zoom"])
 	}
-	said := onLoop(r, func() string { r.h.openFonts(); return r.h.notices[0].text })
+	said := onLoop(r, func() string { r.h.openFonts(); return r.h.noticeLog.items[0].text })
 	if !strings.Contains(said, "its own settings choose them") {
 		t.Errorf("Fonts in a terminal said %q", said)
 	}
@@ -266,13 +266,13 @@ func TestZoomStopsBeforeTheScreenIsTooSmall(t *testing.T) {
 	fonts := &fakeFonts{grid: tuicore.Size{W: 120, H: 40}}
 	d, r := runWindowTUI(t, map[string]string{"gui.zoom": "200"}, fonts)
 	r.s.WaitFor(t, "drawn at 125%", func(string) bool { return slices.Contains(fonts.all(), "zoom 125") })
-	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "drawn at 125%") {
+	if said := onLoop(r, func() string { return r.h.noticeLog.items[0].text }); !strings.Contains(said, "drawn at 125%") {
 		t.Errorf("the clamp said %q", said)
 	}
 	storedPref(t, d, r, "gui.zoom", "200") // the store keeps the choice, for a larger window
 
 	onLoop(r, func() bool { r.h.setZoom(150); return true })
-	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "too large for this window") {
+	if said := onLoop(r, func() string { return r.h.noticeLog.items[0].text }); !strings.Contains(said, "too large for this window") {
 		t.Errorf("zoom 150%% at 120 × 40 said %q", said)
 	}
 	if slices.Contains(fonts.all(), "zoom 150") {
@@ -282,7 +282,7 @@ func TestZoomStopsBeforeTheScreenIsTooSmall(t *testing.T) {
 	r.s.WaitFor(t, "back at 100%", func(string) bool { return slices.Contains(fonts.all(), "zoom 100") })
 
 	onLoop(r, func() bool { r.h.setFontSizeIndex(len(fontSizes) - 1); return true }) // 24 at 100%: 70 columns
-	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "size 24 is too large") {
+	if said := onLoop(r, func() string { return r.h.noticeLog.items[0].text }); !strings.Contains(said, "size 24 is too large") {
 		t.Errorf("size 24 at 120 × 40 said %q", said)
 	}
 }
@@ -298,7 +298,7 @@ func TestTwoQuickZoomsAreJudgedByTheWindowDrawn(t *testing.T) {
 	storedPref(t, d, r, "gui.zoom", "125")
 	// the window still reports 120 × 40, drawn at 100%: 150% would leave 80 columns
 	onLoop(r, func() bool { r.h.zoomStep(1); return true })
-	if said := onLoop(r, func() string { return r.h.notices[0].text }); !strings.Contains(said, "zoom 150% is too large") {
+	if said := onLoop(r, func() string { return r.h.noticeLog.items[0].text }); !strings.Contains(said, "zoom 150% is too large") {
 		t.Errorf("a second quick Ctrl+= said %q", said)
 	}
 }

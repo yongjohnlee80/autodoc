@@ -46,6 +46,8 @@ func (h *Host) checkRegistrations() {
 		}
 		if h.file.open {
 			h.readPage() // a page opened before they came, or under another build's, reads by them now
+			h.page.Kind = h.outlineKind()
+			h.reg.reread(h.page)
 		}
 	})
 }

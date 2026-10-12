@@ -66,7 +66,8 @@ func (h *Host) loadWorkspaces() {
 			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
 		}
 		if pick < 0 {
-			h.ws, h.filesAll = "", nil
+			h.ws = ""
+			h.resetFiles()
 			switch {
 			case h.keepDraft:
 				h.keepDraft = false
@@ -90,6 +91,7 @@ func (h *Host) showWorkspaceRows(list []wsInfo) {
 	h.workspaces.Reset(list)
 	h.managed.Reset(list)
 	h.showManagerDetail()
+	h.reg.listed()
 }
 
 // workspaceLabel is a workspace's name, with its state when it is not ready.
@@ -153,7 +155,8 @@ func (h *Host) useWorkspace(i int) {
 func (h *Host) enter(name string) {
 	again := name == h.ws
 	h.epoch++
-	h.ws, h.entered, h.filesAll = name, true, nil
+	h.ws, h.entered = name, true
+	h.resetFiles()
 	if ws, ok := h.activeWorkspaceInfo(); ok {
 		h.set("App.terminalDir", termDir(ws.root)) // the terminal's next start; a running shell stays
 	}

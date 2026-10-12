@@ -282,7 +282,7 @@ func (r *running) waitNotice(t *testing.T, text string) {
 	t.Helper()
 	deadline := time.Now().Add(20 * time.Second)
 	for !onLoop(r, func() bool {
-		for _, n := range r.h.notices {
+		for _, n := range r.h.noticeLog.items {
 			if strings.Contains(n.text, text) {
 				return true
 			}
@@ -290,7 +290,7 @@ func (r *running) waitNotice(t *testing.T, text string) {
 		return false
 	}) {
 		if time.Now().After(deadline) {
-			t.Fatalf("no notification %q; the history: %v", text, onLoop(r, func() []notice { return r.h.notices }))
+			t.Fatalf("no notification %q; the history: %v", text, onLoop(r, func() []notice { return r.h.noticeLog.items }))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -758,7 +758,7 @@ func (r *running) question(t *testing.T) string {
 			return q
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []notice { return r.h.notices }))
+			t.Fatalf("PluginConfirm never opened; the history: %v", onLoop(r, func() []notice { return r.h.noticeLog.items }))
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

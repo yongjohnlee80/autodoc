@@ -320,8 +320,10 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 	}
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
 	h.file.raw = raw
-	h.feedEdited() // another note: a new version
+	h.page = h.takePage() // readPage's consumers read it
+	h.feedEdited()        // another note: a new version
 	h.readPage()
+	h.showPage()
 	h.relationsOfOpenFile()
 	h.htmlPaneNoteChanged()
 	h.applyPendingRestore(ws, p)
@@ -355,7 +357,7 @@ func (h *Host) readPage() {
 	case h.file.raw:
 		h.set("App.syntaxDefinition", "Plain text")
 		h.setDirty(h.file.dirty)
-		h.validateSoon()
+		h.validateSoon(validateDelay)
 		h.refreshOutline()
 		return
 	}
@@ -363,14 +365,14 @@ func (h *Host) readPage() {
 		if d, ok := h.p.SourceLanguages().DefinitionForFileName(p); ok && !d.DocumentAdapter {
 			h.set("App.syntaxDefinition", d.Name)
 			h.setDirty(h.file.dirty)
-			h.validateSoon()
+			h.validateSoon(validateDelay)
 			h.refreshOutline()
 			return
 		}
 	}
 	h.set("App.syntaxDefinition", syntaxOf.Of(k))
 	h.setDirty(h.file.dirty) // the status line's title carries the badge
-	h.validateSoon()
+	h.validateSoon(validateDelay)
 	h.refreshOutline() // and the frame's
 }
 
@@ -467,6 +469,7 @@ func (h *Host) closeFile() {
 	h.set("App.statusCenter", "")
 	h.clearRelations("relations")
 	h.clearDiagnostics()
+	h.showPage()
 	h.feedEdited()
 	h.htmlPaneNoteChanged()
 }
@@ -474,10 +477,8 @@ func (h *Host) closeFile() {
 // edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.
 func (h *Host) edited() {
 	h.setDirty(true)
-	h.feedEdited()
-	h.validateSoon()
-	h.outlineSoon()
-	h.htmlPaneSoon()
+	h.feedVersion++ // a new version, sent once the page rests (pagePaused)
+	h.pageSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
 }
 

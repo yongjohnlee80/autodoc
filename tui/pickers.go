@@ -355,13 +355,13 @@ func (h *Host) openPicker() {
 
 // pickerFilter keeps the files whose path holds text (case aside), and previews the first.
 func (h *Host) pickerFilter(text string) {
-	h.pickerRows = filterFiles(h.filesAll, text)
+	h.pickerRows = filterFiles(h.files.Paths, text)
 	rows := make([]rowOf, len(h.pickerRows))
 	for i, p := range h.pickerRows {
 		rows[i] = rowOf{"key": p, "path": p}
 	}
 	h.picker.Reset(rows)
-	h.set("App.pickerStatus", fmt.Sprintf("files (%d of %d)", len(rows), len(h.filesAll)))
+	h.set("App.pickerStatus", fmt.Sprintf("files (%d of %d)", len(rows), len(h.files.Paths)))
 	if len(rows) > 0 {
 		h.preview("open", h.pickerRows[0], 0)
 	} else {
@@ -401,7 +401,7 @@ func (h *Host) pickerSelect(i int) {
 
 // newFileFilter lists the files under what the path holds so far, and previews the first.
 func (h *Host) newFileFilter(text string) {
-	h.newRows = filterFiles(h.filesAll, text)
+	h.newRows = filterFiles(h.files.Paths, text)
 	rows := make([]rowOf, len(h.newRows))
 	for i, p := range h.newRows {
 		rows[i] = rowOf{"key": p, "path": p}

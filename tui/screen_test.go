@@ -48,7 +48,7 @@ func runTUISized(t *testing.T, sess *Session, opt Options, w, h int) *running {
 func (r *running) ready(t *testing.T) {
 	t.Helper()
 	r.s.WaitFor(t, "connected, the notes listed", func(string) bool {
-		return onLoop(r, func() bool { return r.h.connected && len(r.h.filesAll) > 0 })
+		return onLoop(r, func() bool { return r.h.connected && len(r.h.files.Paths) > 0 })
 	})
 }
 
@@ -156,7 +156,7 @@ func TestAToastClickedOpensTheNotificationsHistory(t *testing.T) {
 	}
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
-	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.historyOpen }) })
+	r.s.WaitFor(t, "the history open", func(string) bool { return onLoop(r, func() bool { return r.h.noticeLog.shown }) })
 	r.s.WaitForText(t, "TIME")
 }
 
@@ -1886,7 +1886,7 @@ func TestNotificationsAndTheStatusLine(t *testing.T) {
 	})
 	kept := onLoop(r, func() []string {
 		var out []string
-		for _, n := range r.h.notices {
+		for _, n := range r.h.noticeLog.items {
 			out = append(out, n.text)
 		}
 		return out

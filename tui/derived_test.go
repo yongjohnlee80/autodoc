@@ -201,7 +201,7 @@ func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 	startDaemonWith(t, sock, map[string][]string{"kb": {"a.go", goWithAHashLine}}, daemonOpts{goFiles: true, version: "v-community"})
 	r.s.WaitFor(t, "the community daemon's workspace", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.connected && r.h.session.Version() == "v-community" && r.h.entered && len(r.h.filesAll) > 0
+			return r.h.connected && r.h.session.Version() == "v-community" && r.h.entered && len(r.h.files.Paths) > 0
 		})
 	})
 	if f := r.file(); !f.open || f.path != "a.go" {

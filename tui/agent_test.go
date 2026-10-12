@@ -89,7 +89,7 @@ func (r *running) agentTerm() *widget.Terminal {
 
 func (r *running) noticed(text string) bool {
 	return onLoop(r, func() bool {
-		for _, n := range r.h.notices {
+		for _, n := range r.h.noticeLog.items {
 			if strings.Contains(n.text, text) {
 				return true
 			}

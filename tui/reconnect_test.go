@@ -49,7 +49,7 @@ func (x *restarted) restart(t *testing.T, notes map[string][]string, keep bool) 
 	x.d = startDaemonWith(t, x.sock, notes, o)
 	x.r.s.WaitFor(t, "the TUI on the next daemon", func(string) bool {
 		return onLoop(x.r, func() bool {
-			return x.r.h.connected && x.r.h.session.Version() == "v-2" && x.r.h.entered && len(x.r.h.filesAll) > 0
+			return x.r.h.connected && x.r.h.session.Version() == "v-2" && x.r.h.entered && len(x.r.h.files.Paths) > 0
 		})
 	})
 }

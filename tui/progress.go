@@ -139,8 +139,15 @@ func (h *Host) poll() {
 	})
 }
 
+// scheduled, when set (tests only), hears each delay h.after is given, on the loop: the seam that
+// shows a consumer's wait without timing it. Set it before the host runs anything that schedules.
+var scheduled func(time.Duration)
+
 // after runs fn on the loop once d has passed, unless the program stopped.
 func (h *Host) after(d time.Duration, fn func()) {
+	if scheduled != nil {
+		scheduled(d)
+	}
 	ctx := h.ctx
 	go func() {
 		// NOTE: a timer on a goroutine of its own, which posts fn to the loop: the loop never blocks on

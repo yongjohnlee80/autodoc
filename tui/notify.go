@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -86,7 +85,7 @@ func (h *Host) applyToastPrefs() {
 // the notification history"), unless the toast says otherwise.
 func (h *Host) post(t widget.Toast) {
 	if t.OnClick == nil {
-		t.OnClick = h.openNotices
+		t.OnClick = h.noticeLog.open
 	}
 	if h.toasts == nil {
 		h.early = append(h.early, t) // before the Window mounted: shown once it is
@@ -112,40 +111,8 @@ func (h *Host) notifyDone(id, msg string) {
 	h.keepNotice(msg)
 }
 
-// keepNotice adds a notification to the history, newest first.
-func (h *Host) keepNotice(msg string) {
-	h.notices = append([]notice{{at: time.Now(), text: msg}}, h.notices...)
-	if len(h.notices) > maxNotices {
-		h.notices = h.notices[:maxNotices]
-	}
-	if h.historyOpen {
-		h.showNotices()
-	}
-}
-
-// openNotices is Go › Notifications…: every notification kept, newest first.
-func (h *Host) openNotices() {
-	h.historyOpen = true
-	h.showNotices()
-	h.open("notifications")
-}
-
-func (h *Host) noticesClosed() { h.historyOpen = false }
-
-func (h *Host) showNotices() {
-	rows := make([]rowOf, len(h.notices))
-	for i, n := range h.notices {
-		rows[i] = rowOf{"key": fmt.Sprint(i), "when": n.at.Format("15:04:05"), "text": n.text}
-	}
-	h.noticeList.Reset(rows)
-	h.set("App.noticesTitle", fmt.Sprintf("notifications (%d)", len(h.notices)))
-}
-
-// clearNotices empties the history.
-func (h *Host) clearNotices() {
-	h.notices = nil
-	h.showNotices()
-}
+// keepNotice adds a notification to the history (notices.go).
+func (h *Host) keepNotice(msg string) { h.noticeLog.keep(msg) }
 
 // say is a message about the page or the view, on the status line's right until the next.
 func (h *Host) say(msg string) {

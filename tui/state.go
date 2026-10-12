@@ -114,8 +114,6 @@ func (h *Host) state() map[string]any {
 		"App.toastSeconds":        choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
 		"App.prefsError":          "",
 		// the notifications' history (notify.go), and the Vim keys' card
-		"App.notices":         h.noticeList,
-		"App.noticesTitle":    "notifications (0)",
 		"App.providers":       h.providers.Model(),
 		"App.providersStatus": "",
 		"App.providersTitle":  "embedding providers",

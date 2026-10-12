@@ -237,7 +237,7 @@ func TestTheTerminalSaysWhenTheShellExitsAndStartsAnother(t *testing.T) {
 	r.s.WaitForText(t, "[process exited 4]")
 	r.s.WaitFor(t, "the exit in the notifications", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.notices {
+			for _, n := range r.h.noticeLog.items {
 				if strings.Contains(n.text, "exited (4)") {
 					return true
 				}
@@ -307,7 +307,7 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 	onLoop(r, func() bool { r.h.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the failure noticed", func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.notices {
+			for _, n := range r.h.noticeLog.items {
 				if strings.Contains(n.text, "could not start") {
 					return true
 				}

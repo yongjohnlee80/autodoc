@@ -40,9 +40,10 @@ type (
 
 // registry is the program's features, merged.
 type registry struct {
-	features []Feature
-	state    map[string]any
-	handlers map[string]decl.HandlerFunc
+	features  []Feature
+	state     map[string]any
+	handlers  map[string]decl.HandlerFunc
+	pageShown bool // a page was shown to the DocWatchers (page.go): the next one closes it first
 }
 
 // newRegistry merges fs; a source or a command two features both name is an error.
@@ -144,7 +145,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.asker, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.asker, h.noticeLog, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
 	h.prefRows = nil
@@ -195,6 +196,19 @@ type Core interface {
 	// same connection and, as scope says, the same workspace and file, is Current. A nil seq
 	// numbers nothing: the answer is stale only when its scope moves.
 	Ticket(seq *uint64, scope TicketScope) Ticket
+	// OpenRef opens a workspace's file in the editor, as the user's open: asking first over unsaved
+	// changes, and recording where they left for Back.
+	OpenRef(ws, path string)
+	// Say puts a message about the page or the view on the status line, until the next.
+	Say(msg string)
+	// SetPref sets one of the feature's preferences (its PrefSpec row names it): applied to Prefs
+	// at once through the row, then stored, in order with the other preferences written. A name no
+	// row declares is ignored.
+	SetPref(name, value string)
+	// Files is the workspace's files as last listed (page.go): one snapshot, not to be changed.
+	Files() FileList
+	// Workspaces are the daemon's workspaces, by name, as last listed.
+	Workspaces() []string
 }
 
 // TicketScope is what makes an answer stale besides a newer one.
@@ -232,6 +246,24 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 }
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
 func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }
+func (c core) OpenRef(ws, path string)                         { c.h.openIn(ws, path) }
+func (c core) Say(msg string)                                  { c.h.say(msg) }
+func (c core) Files() FileList                                 { return c.h.files }
+func (c core) Workspaces() []string {
+	names := make([]string, 0, c.h.workspaces.Len())
+	for _, w := range c.h.workspaces.All() {
+		names = append(names, w.name)
+	}
+	return names
+}
+func (c core) SetPref(name, value string) {
+	for _, row := range c.h.prefRows {
+		if row.Name == name {
+			c.h.setPref(name, value, func(p *prefs) { row.read(p, value) })
+			return
+		}
+	}
+}
 
 // ticket is Core.Ticket, for the host's own answers too: every stale-answer guard is one.
 func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {

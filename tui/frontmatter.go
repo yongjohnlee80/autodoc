@@ -59,10 +59,11 @@ func (s schemaInfo) state() string {
 	return b.String()
 }
 
-// validateSoon checks the open file once its text has rested; a later call supersedes it.
-func (h *Host) validateSoon() {
+// validateSoon checks the page's text after wait; a later call supersedes it. A typing pause waits
+// the rest of validateDelay, so the check comes validateDelay after the last keystroke.
+func (h *Host) validateSoon(wait time.Duration) {
 	tk := h.ticket(&h.fmGen, TicketFile)
-	h.after(validateDelay, func() {
+	h.after(wait, func() {
 		if tk.Current() {
 			h.validateNow(tk)
 		}
@@ -79,9 +80,9 @@ func (h *Host) validateNow(tk Ticket) {
 		h.showDiagnostics(nil)
 		return
 	}
-	ws, text := h.ws, h.core.Value()
+	ws, text := h.ws, h.page.Text
 	do(h, func(ctx context.Context) answerOf[[]fmDiagnostic] {
-		res, err := h.call(ctx, "doc.validate", ws, p, []byte(text))
+		res, err := h.call(ctx, "doc.validate", ws, p, text)
 		if err != nil {
 			return answerOf[[]fmDiagnostic]{err: err}
 		}

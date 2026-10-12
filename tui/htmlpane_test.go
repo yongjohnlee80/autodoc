@@ -139,7 +139,7 @@ func TestThePaneFollowsTheOpenNote(t *testing.T) {
 		s := r.paneSource()
 		return strings.Contains(s, ">B</h1>") && !strings.Contains(s, "Heading")
 	})
-	time.Sleep(2 * htmlPaneDelay) // anything of a's still landing would have by now
+	time.Sleep(2 * editPause) // anything of a's still landing would have by now
 	if s := r.paneSource(); !strings.Contains(s, ">B</h1>") {
 		t.Fatalf("a's page landed over b's: %q", s)
 	}

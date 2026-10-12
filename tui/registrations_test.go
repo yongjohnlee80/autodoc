@@ -278,7 +278,7 @@ func (r *running) waitKept(t *testing.T, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notification kept: "+text, func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.notices {
+			for _, n := range r.h.noticeLog.items {
 				if strings.Contains(n.text, text) {
 					return true
 				}

@@ -136,7 +136,7 @@ func TestTheRecentListFollowsTheFilesOfAWorkspaceJustEntered(t *testing.T) {
 	r.waitFile(t, "c.md")
 	d.waitRecentStored(t, `[{"workspace":"notes","path":"c.md"},{"workspace":"kb","path":"b.md"},{"workspace":"kb","path":"a.md"}]`)
 	// notes in use, its files not listed yet: as just after entering it
-	onLoop(r, func() bool { r.h.filesAll = nil; r.h.openRecent(); return true })
+	onLoop(r, func() bool { r.h.resetFiles(); r.h.openRecent(); return true })
 	r.s.WaitForText(t, "2 recent files, the newest first") // kb's two; c.md waits for notes' files
 	onLoop(r, func() bool { r.h.listFiles(); return true })
 	r.s.WaitForText(t, "3 recent files, the newest first")

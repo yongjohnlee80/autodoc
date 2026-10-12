@@ -797,7 +797,7 @@ func (h *Host) saved(name string, c map[string]any) {
 	h.notify(fmt.Sprintf("%s: saved %s", to, changed(c)))
 	h.loadWorkspaces()
 	if _, ok := c["schema"]; ok && to == h.ws {
-		h.validateSoon()
+		h.validateSoon(validateDelay)
 	}
 }
 

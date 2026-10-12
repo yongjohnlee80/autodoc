@@ -237,7 +237,7 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 	t.Helper()
 	r.s.WaitFor(t, "the notice "+text, func(string) bool {
 		return onLoop(r, func() bool {
-			for _, n := range r.h.notices {
+			for _, n := range r.h.noticeLog.items {
 				if n.text == text {
 					return true
 				}

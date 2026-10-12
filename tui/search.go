@@ -37,7 +37,7 @@ func (h *Host) listFiles() {
 			return
 		}
 		h.listRetry = 0
-		h.filesAll = a.v
+		h.setFiles(a.v)
 		// the recent files of the workspace in use are listed by these files: a list made before
 		// they came (a workspace just entered) is made again
 		h.listRecent()

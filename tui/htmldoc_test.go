@@ -164,7 +164,7 @@ func TestAPagesResourcesComeFromItsWorkspace(t *testing.T) {
 	said := func(part string) int {
 		return onLoop(r, func() int {
 			c := 0
-			for _, m := range r.h.notices {
+			for _, m := range r.h.noticeLog.items {
 				if strings.Contains(m.text, part) {
 					c++
 				}

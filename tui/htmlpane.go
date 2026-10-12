@@ -5,7 +5,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
-	"time"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -21,9 +20,6 @@ import (
 // The pane follows the editor one way: an edit exports the note again after a moment of quiet,
 // and the cursor's block comes to the pane's top. A link clicked in it opens a note, a file or
 // the browser.
-
-// htmlPaneDelay is the quiet after an edit before the pane shows it.
-const htmlPaneDelay = 150 * time.Millisecond
 
 // htmlPaneState is the pane's: whether it shows the open note, and the latest render.
 type htmlPaneState struct {
@@ -79,7 +75,7 @@ func (h *Host) htmlPaneShown() bool { return h.panelOpen["htmlPane"] }
 // from the note's folder and its blocks carrying their source bytes.
 func (h *Host) renderHTMLPane() {
 	tk := h.ticket(&h.htmlPane.gen, TicketLocal)
-	source, theme := []byte(h.core.Value()), h.exportTheme()
+	source, theme := h.pageNow().Text, h.exportTheme()
 	options := export.Options{SourceSpans: true}
 	dir, root, base := "", "", ""
 	if full := h.diskPath(); full != "" {
@@ -115,19 +111,6 @@ func (h *Host) renderHTMLPane() {
 		}
 		v.SetHTML(a.v)
 		h.followCursorInPane()
-	})
-}
-
-// htmlPaneSoon renders the pane again once the editor has been quiet, when it is open.
-func (h *Host) htmlPaneSoon() {
-	if !h.htmlPaneShown() {
-		return
-	}
-	tk := h.ticket(&h.htmlPane.gen, TicketLocal)
-	h.after(htmlPaneDelay, func() {
-		if tk.Current() && h.htmlPaneShown() {
-			h.renderHTMLPane()
-		}
 	})
 }
 

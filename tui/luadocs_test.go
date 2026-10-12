@@ -92,7 +92,7 @@ func (r *running) cursorAt() (int, int) {
 
 func (r *running) undo() { onLoop(r, func() bool { r.h.core.Undo(); return true }) }
 
-func (r *running) clearNotices() { onLoop(r, func() bool { r.h.notices = nil; return true }) }
+func (r *running) clearNotices() { onLoop(r, func() bool { r.h.noticeLog.items = nil; return true }) }
 
 // mustRun runs a command line that must succeed.
 func (r *running) mustRun(t *testing.T, line string) {

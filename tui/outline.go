@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path"
 	"strings"
-	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
@@ -18,9 +17,6 @@ import (
 // is where Enter jumps, and the breadcrumb on the page's frame follows the cursor. The text is
 // outlined again once it rests after an edit; between, the last outline answers (a breadcrumb a
 // keystroke behind, never a stale jump: the picker outlines the text again when it opens).
-
-// outlineDelay is how long the text must rest after an edit before it is outlined again.
-const outlineDelay = 150 * time.Millisecond
 
 // crumbSep separates the breadcrumb's parts, and the file's name from them.
 const crumbSep = " › "
@@ -43,18 +39,8 @@ func (h *Host) refreshOutline() {
 	if h.file.open {
 		title = strings.TrimSuffix(path.Base(h.file.path), path.Ext(h.file.path))
 	}
-	h.outline = outline.Read([]byte(h.core.Value()), h.outlineKind(), title)
+	h.outline = outline.Read(h.page.Text, h.outlineKind(), title)
 	h.showCrumb()
-}
-
-// outlineSoon outlines the text once it has rested; a later edit supersedes it.
-func (h *Host) outlineSoon() {
-	tk := h.ticket(&h.outlineGen, TicketLocal)
-	h.after(outlineDelay, func() {
-		if tk.Current() {
-			h.refreshOutline()
-		}
-	})
 }
 
 // cursorMoved is the editor's cursor landing elsewhere: the breadcrumb follows it.
@@ -62,6 +48,8 @@ func (h *Host) cursorMoved() {
 	h.showCrumb()
 	h.feedSoon()
 	h.followCursorInPane()
+	line, _ := h.core.Line()
+	h.reg.moved(line, h.cursorBytes())
 }
 
 // showCrumb titles the page with the file's name and the breadcrumb at the cursor.
@@ -112,6 +100,7 @@ func (h *Host) openOutline() {
 		h.notify(fmt.Sprintf("%s has no headings to navigate: the breadcrumb shows %s", h.file.name(), what))
 		return
 	}
+	h.pageNow() // the headings as they are, before the typing pause
 	h.refreshOutline()
 	h.outlineFilter("")
 	h.open("outlinePicker")
