@@ -199,6 +199,37 @@ func TestTheDraftsNameTakesAFilesFolder(t *testing.T) {
 	}
 }
 
+// A picker's note is painted as its label is, an unset colour, unless its use gives one (Search's
+// status); and a picker with no footer gives it no row: under the halves' frames comes the
+// dialog's blank row, then its buttons' rule.
+func TestAPickersNoteAndFooterLookAsBefore(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"notes/a.md", "# A\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 1)
+	r.typeInEditor(t, "draft text")
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	label, ok := r.cellOf("│ path ", "path")
+	note, ok2 := r.cellOf("save the draft", "save")
+	if !ok || !ok2 {
+		t.Fatalf("no label or note on screen:\n%s", r.s)
+	}
+	if note.Attrs != label.Attrs {
+		t.Errorf("the note is styled %+v, the label %+v", note.Attrs, label.Attrs)
+	}
+	lines := strings.Split(r.s.String(), "\n")
+	for i, l := range lines {
+		if !strings.Contains(l, "┘│└") {
+			continue
+		}
+		if i+2 >= len(lines) || strings.Trim(lines[i+1], "│ ") != "" || !strings.Contains(lines[i+2], "├─") {
+			t.Fatalf("under the frames, not one blank row then the rule:\n%s", r.s)
+		}
+		return
+	}
+	t.Fatalf("no frames' bottom on screen:\n%s", r.s)
+}
+
 // Picker.qml's handlers reach a pick by the name they pass; a name no picker has is refused.
 func TestThePickCommandsGoByName(t *testing.T) {
 	p := newTestPick()
