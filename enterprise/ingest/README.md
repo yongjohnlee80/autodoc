@@ -30,8 +30,9 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
   - `Acquire` and `Release` hold the tenant's writer lock, on a pinned connection of `locks`.
   - `Pass` reads the rows past the cursor; `Refresh` reads every row, then deletes the documents of
     rows gone; `Run` does both on schedule. Each returns `Stats`.
-  - `Options`: `Schema` (required), `Refresh`, `Interval`, `Lag`, `PingEvery`, `LockPoll`, `Log`,
-    `Now` (the source's clock) and `Clock` (the time a refresh records).
+  - `Options`: `Schema` (required), `Refresh`, `RefreshRetry` (how soon a failed or incomplete
+    refresh is tried again), `Interval`, `Lag`, `PingEvery`, `LockPoll`, `Log`, `Now` (the
+    source's clock) and `Clock` (the time a refresh records and Run schedules by).
 - **Errors:** `ErrLockLost`, `ErrNotLocked`, `ErrOrder`, `ErrStalled`; `RetryLimit`; the fields
   every row carries, `FieldID`, `FieldUpdatedAt`, `FieldTitle`, `FieldTags`; `CutVersion`.
 

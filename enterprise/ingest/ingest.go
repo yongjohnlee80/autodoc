@@ -18,11 +18,12 @@ import (
 
 // The defaults of Options' durations.
 const (
-	DefaultRefresh   = 24 * time.Hour
-	DefaultInterval  = time.Minute
-	DefaultLag       = time.Minute
-	DefaultPingEvery = 10 * time.Second
-	DefaultLockPoll  = 5 * time.Second
+	DefaultRefresh      = 24 * time.Hour
+	DefaultRefreshRetry = 15 * time.Minute
+	DefaultInterval     = time.Minute
+	DefaultLag          = time.Minute
+	DefaultPingEvery    = 10 * time.Second
+	DefaultLockPoll     = 5 * time.Second
 )
 
 // RetryLimit is how many quarantined rows a pass retries, the ones retried longest ago first: a
@@ -56,6 +57,10 @@ type Options struct {
 	Schema string
 	// Refresh is how often Run reads every row again (DefaultRefresh).
 	Refresh time.Duration
+	// RefreshRetry is how soon Run tries a refresh again after one that failed or could not read
+	// every row (DefaultRefreshRetry, at most Refresh): only a complete refresh deletes the
+	// documents of rows gone, so waiting a whole Refresh would keep them that long.
+	RefreshRetry time.Duration
 	// Interval is how often Run reads the rows past the cursor (DefaultInterval).
 	Interval time.Duration
 	// Lag is how far behind now a pass reads (DefaultLag): a business transaction open longer
@@ -107,12 +112,13 @@ func New(st *pgstore.Store, tenant string, src *Source, business, locks dao.Data
 	for _, d := range []struct {
 		v   *time.Duration
 		def time.Duration
-	}{{&o.Refresh, DefaultRefresh}, {&o.Interval, DefaultInterval}, {&o.Lag, DefaultLag},
-		{&o.PingEvery, DefaultPingEvery}, {&o.LockPoll, DefaultLockPoll}} {
+	}{{&o.Refresh, DefaultRefresh}, {&o.RefreshRetry, DefaultRefreshRetry}, {&o.Interval, DefaultInterval},
+		{&o.Lag, DefaultLag}, {&o.PingEvery, DefaultPingEvery}, {&o.LockPoll, DefaultLockPoll}} {
 		if *d.v == 0 {
 			*d.v = d.def
 		}
 	}
+	o.RefreshRetry = min(o.RefreshRetry, o.Refresh)
 	if o.Lag < 0 {
 		o.Lag = 0
 	}
@@ -592,8 +598,9 @@ func (in *Ingester) count(ctx context.Context, st *Stats) {
 }
 
 // Run holds the tenant's writer lock and indexes on schedule until ctx ends: a refresh when the
-// last one is older than Refresh (or there was none), else a pass, every Interval. A failed run is
-// logged and tried again at the next tick. It confirms the lock every PingEvery; a lost lock stops
+// last complete one is older than Refresh (or there was none), else a pass, every Interval. A failed
+// pass is logged and tried again at the next tick; a refresh that failed or was not complete is
+// logged and tried again RefreshRetry later. It confirms the lock every PingEvery; a lost lock stops
 // it at once with ErrLockLost. It returns nil when ctx ends, with the lock released.
 func (in *Ingester) Run(ctx context.Context) error {
 	if err := in.Acquire(ctx); err != nil {
@@ -649,14 +656,23 @@ func (in *Ingester) loop(ctx context.Context) error {
 	if err != nil {
 		logger.Warning(in.o.Log, err, "tenant "+in.tenant+": reading its last refresh")
 	}
-	last := refreshed.Finished
+	var due time.Time // the next refresh's time; zero: at once
+	if !refreshed.Finished.IsZero() {
+		due = refreshed.Finished.Add(in.o.Refresh)
+	}
 	for {
 		kind := "pass"
 		var st Stats
-		if last.IsZero() || in.o.Clock.Now().Sub(last) >= in.o.Refresh {
+		if !in.o.Clock.Now().Before(due) {
 			kind = "refresh"
 			st, err = in.Refresh(ctx)
-			last = in.o.Clock.Now() // tried: the next one is a period away, whatever this one did
+			if err == nil && st.Complete {
+				due = in.o.Clock.Now().Add(in.o.Refresh)
+			} else {
+				// it deleted nothing, and no pass can: the rows gone keep their documents until a
+				// refresh completes, so the next is tried soon rather than a whole period away
+				due = in.o.Clock.Now().Add(in.o.RefreshRetry)
+			}
 		} else {
 			st, err = in.Pass(ctx)
 		}
@@ -673,7 +689,8 @@ func (in *Ingester) loop(ctx context.Context) error {
 		// NOTE: polled, because nothing can announce it: the business database tells no one when
 		// its rows change (LISTEN/NOTIFY would need triggers in its schema), so the rows past the
 		// cursor are read every Interval, as one batch per page; the refresh is due on this same
-		// tick once Refresh has passed since the last one.
+		// tick once Refresh has passed since the last complete one, or RefreshRetry since one that
+		// failed.
 		if !clock.Sleep(ctx, in.o.Interval) {
 			return nil
 		}

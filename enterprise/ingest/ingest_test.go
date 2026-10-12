@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -433,4 +434,55 @@ func TestRunLogsTheQuarantine(t *testing.T) {
 	})
 	waitFor(t, 5*time.Second, "a pass's report", func() bool { return said("tenant lm-catalog: pass read 0 rows: 0 written, 1 quarantined") })
 	cancel()
+}
+
+// A refresh that fails is tried again RefreshRetry later, not a whole Refresh period away: the
+// documents of rows gone wait only for a refresh that completes. The clock is a test's: frozen, no
+// refresh is tried again however many ticks pass; moved past the retry delay but not the period,
+// one is. The mutant, named here: the next refresh scheduled a period after any attempt, failed or
+// not (track 1's document outlives the source's recovery).
+func TestAFailedRefreshIsTriedAgainSoon(t *testing.T) {
+	f := newFixture(t)
+	for id := 1; id <= 3; id++ {
+		f.track(id, "A", "song", id)
+	}
+	var moved atomic.Int64
+	start := time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC)
+	var mu sync.Mutex
+	var lines []string
+	log := logger.Adapt(func(s logger.Severity, payload any) {
+		mu.Lock()
+		defer mu.Unlock()
+		lines = append(lines, fmt.Sprintf("%v %v", s, payload))
+	})
+	said := func(what string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, what) })
+	}
+	in := f.ingester(f.source(nil), Options{Interval: 20 * time.Millisecond, Refresh: time.Hour, RefreshRetry: 10 * time.Minute,
+		Log: log, Clock: func() time.Time { return start.Add(time.Duration(moved.Load())) }}, "")
+	if _, err := in.Pass(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	f.exec(`DELETE FROM track WHERE id = 1`)
+	broken := &failingConn{DataConn: f.business}
+	broken.n.Store(1) // every read of the view fails
+	in.business = broken
+	ctx, cancel := context.WithCancel(f.ctx)
+	done := make(chan error, 1)
+	go func() { done <- in.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	waitFor(t, 5*time.Second, "the failed refresh in the log", func() bool { return said("went away: tenant lm-catalog: refresh") })
+
+	broken.n.Store(1 << 62) // the source is back
+	reads := broken.calls.Load()
+	waitFor(t, 5*time.Second, "passes after the recovery", func() bool { return broken.calls.Load() >= reads+3 })
+	if got := f.paths(); !slices.Equal(got, trackPaths(1, 2, 3)) {
+		t.Fatalf("documents %v: a refresh ran before its retry delay", got)
+	}
+	moved.Store(int64(10 * time.Minute))
+	waitFor(t, 5*time.Second, "track 1's document deleted by the retried refresh", func() bool {
+		return slices.Equal(f.paths(), trackPaths(2, 3))
+	})
 }
