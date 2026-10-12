@@ -69,6 +69,12 @@ func (l *limiter) drop(ch chan struct{}, query bool) bool {
 func (l *limiter) release() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.handOver()
+}
+
+// handOver is release's: the slot to the first waiting query, else the first waiting batch, else
+// free. l.mu is held.
+func (l *limiter) handOver() {
 	switch {
 	case len(l.queries) > 0:
 		close(l.queries[0])

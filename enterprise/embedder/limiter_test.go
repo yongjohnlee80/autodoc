@@ -88,9 +88,10 @@ func TestAReleasedSlotGoesToAWaitingQueryFirst(t *testing.T) {
 	}
 }
 
-// A waiter whose context ends while it waits leaves the queue; one handed the slot as its context
-// ends passes it on: over many tries of the race, the slot is never lost and never doubled. The
-// mutant, named here: a cancelled waiter that was handed the slot keeping it (the count drops).
+// A waiter whose context ends while it waits leaves the queue; one handed the slot after its
+// context ended, before it could leave, passes the slot on: the slot is never lost and never
+// doubled. The mutant, named here: a cancelled waiter that was handed the slot keeping it (the
+// count drops).
 func TestACancelledWaiterNeverLosesTheSlot(t *testing.T) {
 	l := newLimiter(1)
 	for i := range 300 {
@@ -112,10 +113,16 @@ func TestACancelledWaiterNeverLosesTheSlot(t *testing.T) {
 			}
 			l.release()
 		} else {
-			l.release() // handed the slot, and cancelled at once: either way it is not lost
+			// the slot handed to the waiter after its context ended, before it could leave the
+			// queue: woken by the end, it waits for l.mu, held here while the slot is handed over,
+			// and then finds itself out of the queue, holding a slot it must pass on
+			l.mu.Lock()
 			cancel()
-			if err := <-got; err == nil {
-				l.release()
+			time.Sleep(time.Millisecond) // the waiter wakes to its context and waits for l.mu
+			l.handOver()
+			l.mu.Unlock()
+			if err := <-got; !errors.Is(err, context.Canceled) {
+				t.Fatalf("try %d: a waiter cancelled before its handover answered %v", i, err)
 			}
 		}
 		if q, b := l.queued(); l.free != 1 || q != 0 || b != 0 {
