@@ -82,7 +82,9 @@ func TestAQueryWhileItsTenantSwitchesIsSwitching(t *testing.T) {
 	ctx := context.Background()
 	waitFor(t, "the switch begun", func() bool { _, tg, _ := st.Models(ctx); return tg == fingerprint("m") })
 	calls := p.callCount()
-	if _, _, err := w.QueryEmbedder("t")(ctx, "q"); !errors.Is(err, search.ErrSwitching) {
+	qctx, cancel := context.WithTimeout(ctx, 2*time.Second) // a query that reached the held provider would wait for good
+	defer cancel()
+	if _, _, err := w.QueryEmbedder("t")(qctx, "q"); !errors.Is(err, search.ErrSwitching) {
 		t.Fatalf("mid-switch: %v, want ErrSwitching", err)
 	}
 	if p.callCount() != calls {
