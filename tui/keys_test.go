@@ -110,7 +110,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 	if got := k.cardState()["App.agentsCardText"]; got != "b  send the buffer  f  send the selection" {
 		t.Errorf("the card's text: %q", got)
 	}
-	main, err := k.withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd)
+	main, err := k.withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd + scopeBlocks())
 	if err != nil || !strings.Contains(main, "    AgentsCard { id: agentsCard }\n") || !strings.Contains(main, "    Leader { id: leader }\n") {
 		t.Errorf("the cards' declarations: %v\n%s", err, main)
 	}
@@ -290,4 +290,62 @@ func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
 		return r.h.reg.handlers["App.run"]([]qml.SpecValue{{Kind: qml.SpecValueString, Raw: "no.such"}})
 	})
 	r.waitNotice(t, "unknown: no.such")
+}
+
+// scopeBlocks are every pane's generated block, empty, as main.qml holds them.
+func scopeBlocks() string {
+	var b strings.Builder
+	for _, s := range keyScopes {
+		begin, end := scopeMarkers(s)
+		b.WriteString(begin + end)
+	}
+	return b.String()
+}
+
+// TestAPanesKeysAreItsOwn: a key scoped to a pane is generated into that pane's FocusScope and not
+// the Window's; / n N stay the Window's too, for where find does not reach, while d is the
+// relations' alone. The check refuses a scoped key on a card, one of a pane main.qml does not
+// scope, and a sequence a pane takes twice.
+func TestAPanesKeysAreItsOwn(t *testing.T) {
+	k := keyCatalog(nil)
+	if err := k.check(mainIDs, nil); err != nil {
+		t.Fatal(err)
+	}
+	main, err := k.withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd + scopeBlocks())
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := func(begin, end string) string {
+		return main[strings.Index(main, begin)+len(begin) : strings.Index(main, end)]
+	}
+	window := block(keysBegin, keysEnd)
+	for _, seq := range []string{"/", "n", "Shift+N"} {
+		if !strings.Contains(window, `sequence: "`+seq+`"`) {
+			t.Errorf("the Window lost %s, its fallback where find does not reach", seq)
+		}
+	}
+	if strings.Contains(window, `sequence: "d"`) {
+		t.Error("d is still the Window's")
+	}
+	for _, s := range keyScopes {
+		begin, end := scopeMarkers(s)
+		got := block(begin, end)
+		if !strings.Contains(got, s.Indent+`Shortcut { sequence: "/"; onActivated: App.openFind() }`) {
+			t.Errorf("the %s's keys lack /:\n%s", s.ID, got)
+		}
+		if hasD := strings.Contains(got, `sequence: "d"`); hasD != (s.ID == "links") {
+			t.Errorf("the %s's keys hold d: %v", s.ID, hasD)
+		}
+	}
+	for want, key := range map[string]Key{
+		"a card's keys are the card's":      {Card: leader, Scope: "page", Seq: "x", Run: "App.x()"},
+		"which main.qml does not scope":     {Scope: "nowhere", Seq: "x", Run: "App.x()"},
+		"the pane links's d is taken twice": {Scope: "links", Seq: "d", Run: "App.x()"},
+	} {
+		bad := keyCatalog(nil)
+		bad.keys = append(bad.keys, key)
+		if err := bad.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%+v: err = %v, want %q", key, err, want)
+		}
+	}
 }

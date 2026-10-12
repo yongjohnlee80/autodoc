@@ -65,7 +65,6 @@ Window {
     Shortcut { sequence: "/"; onActivated: App.openFind() }
     Shortcut { sequence: "n"; onActivated: App.findNext() }
     Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
-    Shortcut { sequence: "d"; onActivated: App.relationsDepth() }
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
@@ -229,36 +228,44 @@ Window {
         // the open file's frontmatter, checked against its workspace's schema as it is typed:
         // shown only while something is wrong, and never in the way of a save
         Text { visible: App.diagnosticsShown; text: App.diagnosticsLine; color: Theme.syntax.alert }
-        Editor {
-            id: editor
-            autoIndent: true
-            contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
+        // the page's keys, live while the keyboard is in the Editor (tui/keys.go's page scope)
+        FocusScope {
             Layout.fillHeight: true
-            focus: true
-            palette.highlight: Theme.document.selection
-            palette.highlightedText: Theme.document.selectedText
-            keyset: App.keyset
-            ruler: App.rulerColumn
-            wrap: App.editorWrap
-            lineNumbers: App.lineNumbers
-            // a line's leading spaces as a dimmed ·, its tabs as →: off, the cursor's line, or all
-            indentMarks: App.indentMarks
-            // the theme's accent for the cursor, and its dim tone for the line numbers
-            cursorColor: Theme.document.cursor
-            lineNumberColor: Theme.document.lineNumber
-            onModeChanged: App.syncMode()
-            onTextChanged: App.edited()
-            onCursorPositionChanged: App.cursorMoved()
-            // the command line's (:) w, wq and x, and q and q!: AutoDoc's own save and quit
-            onWriteRequested: App.writeFromEditor(quit)
-            onQuitRequested: App.quitFromEditor(force)
-            SyntaxHighlighter { definition: App.syntaxDefinition }
-            // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
-            // terminal's Editor has no Rendered view and ignores it
-            MarkdownRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
-            // the Rendered view of an HTML file opened raw: its page, drawn natively (htmldoc.go
-            // turns it on for that file and off for any other); a terminal ignores it
-            HTMLDocumentView {}
+            // ---- the page's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+            Shortcut { sequence: "/"; onActivated: App.openFind() }
+            Shortcut { sequence: "n"; onActivated: App.findNext() }
+            Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
+            // ---- end of the page's keys ----
+            Editor {
+                id: editor
+                autoIndent: true
+                contextMenu: true   // right-click: Undo, Redo, Copy, Cut, Paste
+                focus: true
+                palette.highlight: Theme.document.selection
+                palette.highlightedText: Theme.document.selectedText
+                keyset: App.keyset
+                ruler: App.rulerColumn
+                wrap: App.editorWrap
+                lineNumbers: App.lineNumbers
+                // a line's leading spaces as a dimmed ·, its tabs as →: off, the cursor's line, or all
+                indentMarks: App.indentMarks
+                // the theme's accent for the cursor, and its dim tone for the line numbers
+                cursorColor: Theme.document.cursor
+                lineNumberColor: Theme.document.lineNumber
+                onModeChanged: App.syncMode()
+                onTextChanged: App.edited()
+                onCursorPositionChanged: App.cursorMoved()
+                // the command line's (:) w, wq and x, and q and q!: AutoDoc's own save and quit
+                onWriteRequested: App.writeFromEditor(quit)
+                onQuitRequested: App.quitFromEditor(force)
+                SyntaxHighlighter { definition: App.syntaxDefinition }
+                // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
+                // terminal's Editor has no Rendered view and ignores it
+                MarkdownRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
+                // the Rendered view of an HTML file opened raw: its page, drawn natively (htmldoc.go
+                // turns it on for that file and off for any other); a terminal ignores it
+                HTMLDocumentView {}
+            }
         }
         }
     }
@@ -277,18 +284,15 @@ Window {
         Text { text: App.semanticLabel }
     }
 
-    // ---- the panels: drawers over the page, each from the edge its preference names ----
-    Drawer {
+    // ---- the panels: drawers over the page, each from the edge its preference names, in the one
+    // dock style (views/Panel.qml); a panel's own keys are live while the keyboard is in it ----
+    Panel {
         id: explorer
-        modal: false
+        heading: "explorer"
         closeOnQ: true
         edge: App.explorerEdge
         size: App.explorerSize
         length: App.explorerLength
-        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
-        // Alt/Option-right drag resizes it; until then it is at its edge
-        movable: true
-        windowResize: true
         floating: App.explorerFloating
         floatX: App.explorerX; floatY: App.explorerY; floatWidth: App.explorerW; floatHeight: App.explorerH
         onPlaced: App.panelPlaced("explorer", x, y, width, height)
@@ -296,58 +300,47 @@ Window {
         onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
         onClosed: App.panelClosed("explorer")
-        Frame {
-            title: "explorer"
-            // on the page's colour, as the list in it is: a frame's own window tone would show as
-            // a band beside its border, which the GUI draws as a thin line through the cell
-            palette.window: Theme.document.base
-            TreeView {
-                id: explorerTree
-                palette.highlight: Theme.document.highlight
-                palette.highlightedText: Theme.document.highlightedText
-                model: App.explorer
-                textRole: "label"
-                onCurrentIndexChanged: App.explorerMoved(index)
-                onActivated: App.explorerActivated(index)
-            }
+        // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+        Shortcut { sequence: "/"; onActivated: App.openFind() }
+        Shortcut { sequence: "n"; onActivated: App.findNext() }
+        Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
+        // ---- end of the explorer's keys ----
+        TreeView {
+            id: explorerTree
+            palette.highlight: Theme.document.highlight
+            palette.highlightedText: Theme.document.highlightedText
+            model: App.explorer
+            textRole: "label"
+            onCurrentIndexChanged: App.explorerMoved(index)
+            onActivated: App.explorerActivated(index)
         }
     }
     // the native HTML preview (File › Preview HTML under --gui): the note's page beside the editor,
     // live as it is edited and following the cursor (htmlpane.go); a terminal never opens it
-    Drawer {
+    Panel {
         id: htmlPane
-        modal: false
+        heading: "preview"
         edge: Tui.Right
         size: 50
         length: 100
-        movable: true
-        windowResize: true
         floating: App.htmlPaneFloating
         floatX: App.htmlPaneX; floatY: App.htmlPaneY; floatWidth: App.htmlPaneW; floatHeight: App.htmlPaneH
         onPlaced: App.panelPlaced("htmlPane", x, y, width, height)
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
-        Frame {
-            title: "preview"
-            palette.window: Theme.document.base
-            HTMLView {
-                id: htmlView
-                onLinkActivated: App.htmlLink(href)
-            }
+        HTMLView {
+            id: htmlView
+            onLinkActivated: App.htmlLink(href)
         }
     }
-    Drawer {
+    Panel {
         id: links
-        modal: false
+        heading: App.relationsTitle
         closeOnQ: true
         edge: App.relationsEdge
         size: App.linksSize
         length: App.linksLength
-        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
-        // Alt/Option-right drag resizes it; until then it is at its edge
-        movable: true
-        windowResize: true
         floating: App.linksFloating
         floatX: App.linksX; floatY: App.linksY; floatWidth: App.linksW; floatHeight: App.linksH
         onPlaced: App.panelPlaced("links", x, y, width, height)
@@ -355,83 +348,75 @@ Window {
         onResized: App.panelResized("links", size, length)
         onOpened: App.panelOpened("links")
         onClosed: App.panelClosed("links")
-        Frame {
-            title: App.relationsTitle
-            // on the page's colour, as the list in it is: a frame's own window tone would show as
-            // a band beside its border, which the GUI draws as a thin line through the cell
-            palette.window: Theme.document.base
-            ListView {
-                id: relationsList
-                palette.highlight: Theme.document.highlight
-                palette.highlightedText: Theme.document.highlightedText
-                model: App.relations
-                textRole: "label"
-                currentIndex: App.relationsIndex
-                onCurrentIndexChanged: App.relationsMoved(index)
-                onActivated: App.openRelation(index)
-            }
+        // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+        Shortcut { sequence: "/"; onActivated: App.openFind() }
+        Shortcut { sequence: "n"; onActivated: App.findNext() }
+        Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
+        Shortcut { sequence: "d"; onActivated: App.relationsDepth() }
+        // ---- end of the links's keys ----
+        ListView {
+            id: relationsList
+            palette.highlight: Theme.document.highlight
+            palette.highlightedText: Theme.document.highlightedText
+            model: App.relations
+            textRole: "label"
+            currentIndex: App.relationsIndex
+            onCurrentIndexChanged: App.relationsMoved(index)
+            onActivated: App.openRelation(index)
         }
     }
     // the terminal: a shell in the workspace's folder, from the edge (or the centre) its preference
     // names, at that place's size; it keeps running while hidden (terminal.go)
-    Drawer {
+    Panel {
         id: terminal
-        modal: false
+        heading: "terminal"
+        surface: Theme.app.window   // the Window's tone, as a terminal's frame has always had
         edge: App.terminalEdge
         size: App.terminalSize
         length: App.terminalLength
-        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
-        // Alt/Option-right drag resizes it; until then it is at its edge
-        movable: true
-        windowResize: true
         floating: App.terminalFloating
         floatX: App.terminalX; floatY: App.terminalY; floatWidth: App.terminalW; floatHeight: App.terminalH
         onPlaced: App.panelPlaced("terminal", x, y, width, height)
         onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
-        Frame {
-            title: "terminal"
-            Terminal {
-                id: terminalView
-                dir: App.terminalDir
-                vimKeys: App.keymapVim
-                // a program's colours raised until they read on the page: ls's yellow and a
-                // prompt's cyan are written for a dark terminal, and wash out on a light theme
-                minimumContrast: 4.5
-                onExited: App.terminalExited(code)
-            }
+        Terminal {
+            id: terminalView
+            dir: App.terminalDir
+            vimKeys: App.keymapVim
+            // a program's colours raised until they read on the page: ls's yellow and a
+            // prompt's cyan are written for a dark terminal, and wash out on a light theme
+            minimumContrast: 4.5
+            // the editor's caret colour; its shape says the mode: a block in normal, a bar typing
+            cursorColor: Theme.document.cursor
+            onExited: App.terminalExited(code)
         }
     }
 
     // the agent: an AI agent's CLI, as its default profile says, floating over the page; it keeps
     // running while hidden (agent.go)
-    Drawer {
+    Panel {
         id: agent
-        modal: false
+        heading: App.agentTitle
+        surface: Theme.app.window   // the Window's tone, as the agent's frame has always had
         edge: App.agentEdge
         size: App.agentSize
         length: App.agentLength
-        // floats where it is dragged or arranged (panelfloat.go): Alt/Option-left drag moves it,
-        // Alt/Option-right drag resizes it; until then it is at its edge
-        movable: true
-        windowResize: true
         floating: App.agentFloating
         floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
         onPlaced: App.panelPlaced("agent", x, y, width, height)
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)
-        Frame {
-            title: App.agentTitle
-            Terminal {
-                id: agentView
-                vimKeys: App.keymapVim
-                // a program's colours raised until they read on the page: ls's yellow and a
-                // prompt's cyan are written for a dark terminal, and wash out on a light theme
-                minimumContrast: 4.5
-                onExited: App.agentExited(code)
-            }
+        Terminal {
+            id: agentView
+            vimKeys: App.keymapVim
+            // a program's colours raised until they read on the page: ls's yellow and a
+            // prompt's cyan are written for a dark terminal, and wash out on a light theme
+            minimumContrast: 4.5
+            // the editor's caret colour; its shape says the mode: a block in normal, a bar typing
+            cursorColor: Theme.document.cursor
+            onExited: App.agentExited(code)
         }
     }
 

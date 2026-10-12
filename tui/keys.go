@@ -42,7 +42,36 @@ type Key struct {
 	Cmd string
 	// Group is the heading its card lists it under, when the card has Groups: "FIND & OPEN".
 	Group string
+	// Scope is the pane it is live in, by that pane's FocusScope in main.qml (keyScopes): a key of
+	// the Window's ("" Card) answered only while the keyboard is in it, and there before the
+	// Window's own key of that sequence. "" is everywhere.
+	Scope string
 }
+
+// keyScope is a pane whose keys are its own: a FocusScope in main.qml holding a generated block of
+// them, at indent.
+type keyScope struct {
+	ID, Indent string
+}
+
+// keyScopes are the panes with keys of their own: the page (the Editor's FocusScope), and the
+// explorer's and the relations' panels.
+var keyScopes = []keyScope{{"page", "            "}, {"explorer", "        "}, {"links", "        "}}
+
+// scopedKeys are the keys a pane answers itself. / n N find in the pane with the keyboard where
+// find covers it (find.go); the Window's own / n N answer everywhere else, saying where to put the
+// keyboard. d is the relations' alone.
+var scopedKeys = func() []Key {
+	var out []Key
+	for _, scope := range []string{"page", "explorer", "links"} {
+		out = append(out,
+			Key{Scope: scope, Seq: "/", Show: "/", Run: "App.openFind()"},
+			Key{Scope: scope, Seq: "n", Show: "n and N", Run: "App.findNext()"},
+			Key{Scope: scope, Seq: "Shift+N", Show: "n and N", Run: "App.findPrevious()"})
+	}
+	// d in the Relations drawer shows the second ring, or hides it (relations.go)
+	return append(out, Key{Scope: "links", Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"})
+}()
 
 // Card is a card of keys: a Dialog listing its keys, each closing the card before it runs.
 type Card struct {
@@ -94,12 +123,11 @@ var windowKeys = []Key{
 	// the command line in every editor mode, on : with Ctrl: the Text mode types :; a terminal sends
 	// Ctrl+; only with kitty's keyboard protocol, so Search › Command line… is always there
 	{Seq: "Ctrl+;", Show: "Ctrl+;", Run: "App.openCommandLine()"},
-	// / finds in the pane with the keyboard; n and N find again (find.go)
+	// / n N in a pane find does not cover: where to put the keyboard (find.go); in the panes it
+	// covers, their own (scopedKeys) win
 	{Seq: "/", Show: "/", Run: "App.openFind()"},
 	{Seq: "n", Show: "n and N", Run: "App.findNext()"},
 	{Seq: "Shift+N", Show: "n and N", Run: "App.findPrevious()"},
-	// d in the Relations drawer shows the second ring, or hides it (relations.go); elsewhere nothing
-	{Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"},
 	{Seq: "Ctrl+W", Show: "Ctrl+W", Run: "App.pickWorkspace()"},
 	{Seq: "Ctrl+Q", Show: "Ctrl+Q", Run: "App.quit()"},
 	{Seq: "F1", Show: "F1", Run: "help.open()"},
@@ -199,7 +227,7 @@ type keyset struct {
 // keyCatalog is the catalog with every feature's keys and cards after the host's. A key running a
 // catalog entry that says nothing itself is named by the entry's title.
 func keyCatalog(fs []Feature) keyset {
-	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, leaderKeys)}
+	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, scopedKeys, leaderKeys)}
 	titles := map[string]string{}
 	for _, f := range fs {
 		if kf, ok := f.(Keyed); ok {
@@ -219,11 +247,22 @@ func keyCatalog(fs []Feature) keyset {
 	return k
 }
 
-// on are the keys on card ("" the Window's).
+// on are the keys on card ("" the Window's own, everywhere).
 func (k keyset) on(card string) []Key {
 	var out []Key
 	for _, key := range k.keys {
-		if key.Card == card {
+		if key.Card == card && key.Scope == "" {
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
+// in are the keys of the pane scope.
+func (k keyset) in(scope string) []Key {
+	var out []Key
+	for _, key := range k.keys {
+		if key.Scope == scope {
 			out = append(out, key)
 		}
 	}
@@ -281,6 +320,13 @@ func (k keyset) check(taken map[string]bool, cat *catalog) error {
 		if _, ok := k.card(key.Card); key.Card != "" && !ok {
 			errs = append(errs, fmt.Errorf("tui: %s is on the card %s, which is not declared", key.Seq, key.Card))
 		}
+		switch {
+		case key.Scope == "":
+		case key.Card != "":
+			errs = append(errs, fmt.Errorf("tui: %s on the card %s names the pane %s: a card's keys are the card's", key.Seq, key.Card, key.Scope))
+		case !slices.ContainsFunc(keyScopes, func(s keyScope) bool { return s.ID == key.Scope }):
+			errs = append(errs, fmt.Errorf("tui: %s is the pane %s's, which main.qml does not scope", key.Seq, key.Scope))
+		}
 		if key.Opens != "" {
 			c, ok := k.card(key.Opens)
 			switch {
@@ -311,6 +357,17 @@ func (k keyset) check(taken map[string]bool, cat *catalog) error {
 			for _, s := range append([]string{key.Seq}, key.Also...) {
 				if seen[s] {
 					errs = append(errs, fmt.Errorf("tui: %s %s is taken twice", placeName(place), s))
+				}
+				seen[s] = true
+			}
+		}
+	}
+	for _, scope := range keyScopes {
+		seen := map[string]bool{}
+		for _, key := range k.in(scope.ID) {
+			for _, s := range append([]string{key.Seq}, key.Also...) {
+				if seen[s] {
+					errs = append(errs, fmt.Errorf("tui: the pane %s's %s is taken twice", scope.ID, s))
 				}
 				seen[s] = true
 			}
@@ -498,6 +555,12 @@ const (
 	cardsEnd   = "    // ---- end of the generated cards ----\n"
 )
 
+// scopeMarkers are the lines around a pane's generated keys, inside its FocusScope.
+func scopeMarkers(s keyScope) (begin, end string) {
+	return s.Indent + "// ---- the " + s.ID + "'s keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----\n",
+		s.Indent + "// ---- end of the " + s.ID + "'s keys ----\n"
+}
+
 // cardQML is views/<View>.qml for card c and its keys.
 func cardQML(c Card, keys []Key) string {
 	back := ""
@@ -533,6 +596,12 @@ func (k keyset) withGenerated(mainQML string) (string, error) {
 	out, err := replaceBlock(mainQML, keysBegin, keysEnd, shortcuts(k.on(""), "    ", ""))
 	if err != nil {
 		return "", err
+	}
+	for _, scope := range keyScopes {
+		begin, end := scopeMarkers(scope)
+		if out, err = replaceBlock(out, begin, end, shortcuts(k.in(scope.ID), scope.Indent, "")); err != nil {
+			return "", err
+		}
 	}
 	return replaceBlock(out, cardsBegin, cardsEnd, decls.String())
 }
