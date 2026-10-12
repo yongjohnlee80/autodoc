@@ -188,10 +188,26 @@ type DocInfo struct {
 // start), and more says whether any follow. Each path carries its own version and indexer, so a
 // consumer comparing per-path state needs no other read.
 func (s *Store) Docs(ctx context.Context, after string, limit int) (docs []DocInfo, more bool, err error) {
+	return s.docsPage(ctx, after, limit, false)
+}
+
+// Unready pages the tenant's documents not ready for semantic search, as Docs pages them all: the
+// embedding worker's way to the documents whose texts are all embedded but which no MarkReady has
+// marked yet (one written again with texts already embedded, or one a crash left between Embed
+// and MarkReady).
+func (s *Store) Unready(ctx context.Context, after string, limit int) (docs []DocInfo, more bool, err error) {
+	return s.docsPage(ctx, after, limit, true)
+}
+
+// docsPage is Docs, or, with unready, Unready.
+func (s *Store) docsPage(ctx context.Context, after string, limit int, unready bool) (docs []DocInfo, more bool, err error) {
 	if limit <= 0 {
 		return nil, false, nil
 	}
 	d := s.rw.doc.DAO(dao.WithQueryContext(ctx)).With(dTenant, s.tenant)
+	if unready {
+		d = d.With(dReady, false)
+	}
 	if after != "" {
 		d = d.WithPredicate(dao.Gt(string(dByPath), after))
 	}
@@ -280,6 +296,39 @@ func (s *Store) Pending(ctx context.Context, model string, skip map[[32]byte]boo
 			break
 		}
 	}
+	return out, nil
+}
+
+// textsPart bounds the hashes one DocsWithTexts statement looks up: an IN list well inside
+// PostgreSQL's bind limit.
+const textsPart = 500
+
+// DocsWithTexts are the paths of the tenant's documents with a chunk whose text hash is one of
+// hashes, each once, in path order: the documents an embedding worker's new vectors may have
+// completed, which it then asks MarkReady about. Each hash is looked up by the chunk table's
+// (tenant, text_hash) index, so the cost follows the hashes, not the tenant's chunks.
+func (s *Store) DocsWithTexts(ctx context.Context, hashes [][32]byte) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	for start := 0; start < len(hashes); start += textsPart {
+		part := hashes[start:min(start+textsPart, len(hashes))]
+		in := make([]any, len(part))
+		for i, h := range part {
+			in[i] = h[:]
+		}
+		rows, err := s.rw.chunk.DAO(dao.WithQueryContext(ctx)).With(cTenant, s.tenant).Join(joinDoc).
+			WithPredicate(dao.In(qcol(tChunk, string(cHash)), in)).Select(cPath)
+		if err != nil {
+			return nil, fmt.Errorf("pgstore: documents with texts: %w", err)
+		}
+		for _, r := range rows {
+			if !seen[r.Path] {
+				seen[r.Path] = true
+				out = append(out, r.Path)
+			}
+		}
+	}
+	slices.Sort(out)
 	return out, nil
 }
 
@@ -583,6 +632,21 @@ func (s *Store) SetModels(ctx context.Context, active, target string) error {
 		return fmt.Errorf("pgstore: set models: %w", err)
 	}
 	return nil
+}
+
+// Models are the tenant's models as SetModels last recorded them: the one searches answer under
+// (active) and the one a switch fills (target); "" for one not recorded, and both "" before the
+// first SetModels. An embedding worker starting reads them to decide whether its model is the
+// first, the active one, or a switch.
+func (s *Store) Models(ctx context.Context) (active, target string, err error) {
+	m, err := s.rw.meta.DAO(dao.WithQueryContext(ctx)).With(mTenant, s.tenant).Get(mActive, mTarget)
+	switch {
+	case errors.Is(err, dao.ErrNoRows):
+		return "", "", nil
+	case err != nil:
+		return "", "", fmt.Errorf("pgstore: models: %w", err)
+	}
+	return m.Active, m.Target, nil
 }
 
 // reclaimBatch is how many embeddings one ReclaimModels transaction deletes (a variable, so a test

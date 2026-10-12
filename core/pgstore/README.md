@@ -33,7 +33,13 @@ PostgreSQL with the `vector` extension available (the migration creates it).
   `Embed` text; `Embed` stores vectors; `MarkReady` marks a document ready when every chunk has a
   vector under the model; `Pending` lists the unembedded texts for a worker; `Docs` pages a
   tenant's documents with their version and indexer; `Delete` removes one document; `Drop`
-  removes the tenant whole; `SetModels` records the active and target models.
+  removes the tenant whole; `SetModels` records the active and target models, and `Models` reads
+  them back.
+- **For an embedding worker:** `Pending` lists the texts with no vector under a model, each once;
+  `DocsWithTexts` the documents holding given texts, looked up by hash, to ask `MarkReady` about
+  after their vectors are stored; `Unready` pages the documents not ready, for the ones whose texts
+  were all embedded already (a document written again unchanged, or a crash between `Embed` and
+  `MarkReady`).
 - **Chunk kinds:** each chunk is a `section` or an `abstract` (`Document.Kinds`, by position);
   `WithSectionsOnly(ctx)` leaves the abstracts out of Lexical and Semantic, before the limit.
 - **Ingest state** for a server that indexes a source into a tenant (ADR 1791762085), written
