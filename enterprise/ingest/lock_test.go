@@ -20,8 +20,7 @@ const recycling = "pool_max_conn_lifetime=100ms&pool_max_conn_idle_time=50ms&poo
 // holder is the backend holding the tenant's writer lock, or 0.
 func (f *fixture) holder() int64 {
 	f.t.Helper()
-	s := f.scalar(f.business, `SELECT coalesce((SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1
-		AND ((classid::bigint << 32) | objid::bigint) = $1 LIMIT 1), 0)::text`, lockKey(f.schema, f.tenant))
+	s := f.scalar(f.business, `SELECT coalesce((SELECT pid `+heldAs+` LIMIT 1), 0)::text`, lockKey(f.schema, f.tenant))
 	pid, _ := strconv.ParseInt(s, 10, 64)
 	return pid
 }
@@ -162,10 +161,11 @@ func TestRunReleasesItsLockWhenItStops(t *testing.T) {
 	in := New(f.st, f.tenant, src, f.business, f.open("locks", ""), Options{Schema: f.schema, Interval: 50 * time.Millisecond, Lag: -1})
 	done := make(chan error, 1)
 	go func() { done <- in.Run(ctx) }()
-	waitFor(t, 5*time.Second, "the first refresh", func() bool { return len(f.paths()) == 1 })
-	if r := must[pgstore.Refresh](t)(f.st.Refreshed(f.ctx)); r.Finished.IsZero() {
-		t.Error("Run's first run was not a refresh")
-	}
+	// Run's first run is a refresh: its record commits after its documents
+	waitFor(t, 5*time.Second, "the first refresh", func() bool {
+		r := must[pgstore.Refresh](t)(f.st.Refreshed(f.ctx))
+		return !r.Finished.IsZero() && len(f.paths()) == 1
+	})
 	// a second server waits for the lock and never writes
 	waiting := New(f.st, f.tenant, src, f.business, f.open("locks-2", ""), Options{Schema: f.schema, LockPoll: 20 * time.Millisecond})
 	wctx, wcancel := context.WithTimeout(f.ctx, 300*time.Millisecond)

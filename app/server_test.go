@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -116,9 +117,14 @@ func (f *serverFixture) documents() string {
 		ELSE (xpath('/row/c/text()', query_to_xml('SELECT count(*) AS c FROM ` + f.schema + `.rag_document', false, true, '')))[1]::text END`)
 }
 
-// locks is how many advisory locks are held in the database.
+// ownLocks selects the advisory locks held in the fixture's database: pg_locks shows the whole
+// server's, other databases' included.
+const ownLocks = `FROM pg_locks WHERE locktype = 'advisory' AND granted
+	AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`
+
+// locks is how many advisory locks are held in the fixture's database.
 func (f *serverFixture) locks() string {
-	return f.scalar(`SELECT count(*)::text FROM pg_locks WHERE locktype = 'advisory' AND granted`)
+	return f.scalar(`SELECT count(*)::text ` + ownLocks)
 }
 
 func (f *serverFixture) waitFor(what string, cond func() bool) {
@@ -132,17 +138,43 @@ func (f *serverFixture) waitFor(what string, cond func() bool) {
 	}
 }
 
-// serve runs --server in this process until ctx ends, and returns its exit code on the channel.
-func (f *serverFixture) serve(ctx context.Context, args ...string) (<-chan int, *bytes.Buffer) {
-	var stdout, stderr bytes.Buffer
-	done := make(chan int, 1)
-	go func() {
-		done <- run(ctx, append([]string{"--server"}, append(args, f.path)...), testOptions, &stdout, &stderr)
-	}()
-	return done, &stderr
+// syncBuffer is a buffer the server writes from its goroutines while the test reads it.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
 }
 
-func exitOf(t *testing.T, done <-chan int, stderr *bytes.Buffer) int {
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// serve runs --server in this process until ctx ends, and returns its exit code on the channel.
+func (f *serverFixture) serve(ctx context.Context, args ...string) (<-chan int, *syncBuffer) {
+	var stdout bytes.Buffer
+	stderr := &syncBuffer{}
+	done := make(chan int, 1)
+	go func() {
+		done <- run(ctx, append([]string{"--server"}, append(args, f.path)...), testOptions, &stdout, stderr)
+	}()
+	return done, stderr
+}
+
+// started waits for the server to say it serves: every step has started, the migrations committed.
+// (The migrations hold an advisory lock of their own while they run, so a lock held is no sign.)
+func (f *serverFixture) started(stderr *syncBuffer) {
+	f.t.Helper()
+	f.waitFor("the server serving", func() bool { return strings.Contains(stderr.String(), "serving enterprise search") })
+}
+
+func exitOf(t *testing.T, done <-chan int, stderr *syncBuffer) int {
 	t.Helper()
 	select {
 	case code := <-done:
@@ -239,7 +271,7 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	f := newServerFixture(t, serverView)
 	ctx, cancel := context.WithCancel(f.ctx)
 	done, stderr := f.serve(ctx)
-	f.waitFor("the tenant's lock taken", func() bool { return f.locks() == "1" })
+	f.started(stderr)
 	tables := f.scalar(`SELECT coalesce(string_agg(table_name, ',' ORDER BY table_name), '') FROM information_schema.tables WHERE table_schema = '` + f.schema + `'`)
 	if tables != "autodoc_schema,rag_chunk,rag_cursor,rag_document,rag_embedding,rag_ingest_error,rag_link,rag_meta,rag_tenant_policy" {
 		t.Errorf("the schema's tables: %s", tables)
@@ -280,8 +312,9 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 
 	// again, and its lock's connection is killed: it stops, non-zero
 	done, stderr = f.serve(f.ctx)
+	f.started(stderr)
 	f.waitFor("the lock taken", func() bool { return f.locks() == "1" })
-	f.exec(`SELECT pg_terminate_backend(pid) FROM pg_locks WHERE locktype = 'advisory' AND granted`)
+	f.exec(`SELECT pg_terminate_backend(pid) ` + ownLocks)
 	// a row to write: the next pass's commit confirms the lock first, sooner than the ping
 	f.exec(`INSERT INTO track VALUES (4, 'A', 'tern song', now() - interval '1 minute')`)
 	if code := exitOf(t, done, stderr); code != 1 || !strings.Contains(stderr.String(), "writer lock was lost") {

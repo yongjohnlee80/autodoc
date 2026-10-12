@@ -32,6 +32,12 @@ func lockKey(schema, tenant string) int64 {
 	return int64(binary.BigEndian.Uint64(h[:8]) &^ (1 << 63))
 }
 
+// heldAs selects the grants of the advisory lock keyed $1 in this database: an advisory lock is
+// the database's, and pg_locks shows the whole server's.
+const heldAs = `FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1
+	AND ((classid::bigint << 32) | objid::bigint) = $1
+	AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`
+
 // tenantLock is a session advisory lock held on a connection pinned for the ingester's whole life.
 //
 // A pool hands each statement whichever physical connection is free and recycles idle ones, so a
@@ -55,6 +61,9 @@ type tenantLock struct {
 func acquire(ctx context.Context, conn dao.DataConn, key int64, poll time.Duration, waiting func(holder int64)) (*tenantLock, error) {
 	pin, err := postgres.PinSessionConn(ctx, conn)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, fmt.Errorf("ingest: pin the lock's connection: %w", err)
 	}
 	l := &tenantLock{pin: pin, key: key}
@@ -64,12 +73,16 @@ func acquire(ctx context.Context, conn dao.DataConn, key int64, poll time.Durati
 		var holder int64
 		err := l.query(ctx, func(tx dao.ContextTxConn) error {
 			return scanOne(ctx, tx, `SELECT pg_try_advisory_lock($1), pg_backend_pid(),
-				coalesce((SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1
-					AND ((classid::bigint << 32) | objid::bigint) = $1 AND pid <> pg_backend_pid() LIMIT 1), 0)`,
+				coalesce((SELECT pid `+heldAs+` AND pid <> pg_backend_pid() LIMIT 1), 0)`,
 				[]any{key}, &ok, &l.pid, &holder)
 		})
 		if err != nil {
 			pin.Discard()
+			if ctx.Err() != nil {
+				// the caller stopped waiting: the driver's error (an i/o timeout at the deadline)
+				// says nothing more than that
+				return nil, ctx.Err()
+			}
 			return nil, fmt.Errorf("ingest: take the tenant's lock: %w", err)
 		}
 		if ok {
@@ -101,8 +114,7 @@ func (l *tenantLock) check(ctx context.Context) error {
 	}
 	var held bool
 	err := l.query(ctx, func(tx dao.ContextTxConn) error {
-		return scanOne(ctx, tx, `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted
-			AND objsubid = 1 AND ((classid::bigint << 32) | objid::bigint) = $1 AND pid = pg_backend_pid())`,
+		return scanOne(ctx, tx, `SELECT EXISTS (SELECT 1 `+heldAs+` AND pid = pg_backend_pid())`,
 			[]any{l.key}, &held)
 	})
 	switch {
