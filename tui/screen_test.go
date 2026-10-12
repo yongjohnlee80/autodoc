@@ -1822,6 +1822,20 @@ func TestFindInThePanes(t *testing.T) {
 	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
 		t.Fatalf("the explorer's cursor is on %q, want b.md", at)
 	}
+	// from the cursor on: ".md" first holds b.md, under it; n goes on to x.md, N back to b.md
+	r.keys(t, key('/'))
+	r.s.WaitForText(t, "find in the explorer")
+	r.keys(t, decltest.Ctrl('u'))
+	r.keys(t, decltest.Type(".md")...)
+	r.keys(t, enter())
+	r.s.WaitForText(t, `find ".md": 2 of 3 in the explorer`)
+	r.keys(t, key('n'))
+	r.s.WaitForText(t, `find ".md": 3 of 3 in the explorer`)
+	r.keys(t, key('N'))
+	r.s.WaitForText(t, `find ".md": 2 of 3 in the explorer`)
+	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+		t.Fatalf("after n and N the explorer's cursor is on %q, want b.md", at)
+	}
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
 
