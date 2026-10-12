@@ -271,13 +271,14 @@ type Core interface {
 	View(id, method string, args ...any) error
 	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
 	TogglePanel(id string)
-	// Page is the page as it is now (page.go: pageNow), for a reader that cannot wait for the
-	// typing pause: snapshotted again only when typed since the last.
+	// Page is the page as it is now (page.go: pageNow), snapshotted again only when typed since the
+	// last: a picker opened mid-typing cannot wait for the pause.
 	Page() Page
-	// Crumbs puts a breadcrumb after the file's name on the page's frame; nil, the name alone.
+	// Crumbs puts a breadcrumb after the file's name on the page's frame; nil, the name alone. The
+	// host composes the title, so the name and its badges are right with no breadcrumb at all.
 	Crumbs(parts []string)
 	// GoToLine puts the editor's cursor at the start of line (0-based), the page scrolled to it,
-	// and gives the editor the keyboard.
+	// and gives the editor the keyboard: a feature moves the cursor without reaching the editor.
 	GoToLine(line int)
 }
 

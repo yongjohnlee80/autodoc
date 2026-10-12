@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -93,4 +94,29 @@ func TestYAMLAndTextBreadcrumbs(t *testing.T) {
 	if title := r.frameTitle(); strings.Contains(title, "›") {
 		t.Fatalf("plain text's frame = %q: no heading crumb from # lines", title)
 	}
+}
+
+// The frame's title is the host's: with no breadcrumb feature at all, a shown file still has its
+// name and badges, and the draft is untitled.
+func TestTheTitleNeedsNoBreadcrumbFeature(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
+	r := attached(t, d)
+	r.s.WaitFor(t, "the daemon's derived formats", func(string) bool {
+		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
+	})
+	onLoop(r, func() bool {
+		r.h.reg.features = slices.DeleteFunc(r.h.reg.features, func(f Feature) bool { return f.Name() == "outline" })
+		return true
+	})
+	r.h.p.Post(func() { r.h.openPath("manual.pdf") })
+	r.waitFile(t, "manual.pdf")
+	r.s.WaitFor(t, "the name and its badge, no breadcrumb", func(string) bool {
+		t := r.frameTitle()
+		return strings.Contains(t, "manual.pdf  [PDF · read-only]") && !strings.Contains(t, "›")
+	})
+	r.h.p.Post(r.h.closeFile)
+	r.s.WaitFor(t, "the draft untitled", func(string) bool {
+		t := r.frameTitle()
+		return strings.Contains(t, "┌ "+untitled) && !strings.Contains(t, "manual.pdf")
+	})
 }
