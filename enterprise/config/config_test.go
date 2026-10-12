@@ -1,4 +1,4 @@
-package config
+package config_test
 
 import (
 	"crypto/sha256"
@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/enterprise/config"
 )
 
 // hashOf is a token's SHA-256 as token_sha256 holds it.
@@ -57,7 +59,7 @@ access   = ["label_id"]
 
 // load writes src as server.toml in a test directory, with the environment the good file names,
 // and loads it.
-func load(t *testing.T, src string) (*Server, error) {
+func load(t *testing.T, src string) (*config.Server, error) {
 	t.Helper()
 	t.Setenv("TEST_SERVER_DSN", "postgres://u:secret-password@db.internal/app")
 	t.Setenv("TEST_EMBED_KEY", "sk-embedding-secret")
@@ -66,7 +68,7 @@ func load(t *testing.T, src string) (*Server, error) {
 	if err := os.WriteFile(p, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return Load(p)
+	return config.Load(p)
 }
 
 // The good file loads with every field as written, its view resolved against the file's directory.
@@ -78,7 +80,7 @@ func TestAGoodConfigurationLoads(t *testing.T) {
 	if s.Postgres.DSN() != "postgres://u:secret-password@db.internal/app" || s.Postgres.Schema != "autodoc_search" {
 		t.Errorf("Postgres %+v", s.Postgres)
 	}
-	if s.Embedding != (Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4}) {
+	if s.Embedding != (config.Embedding{Provider: "openai", BaseURL: "https://embeddings.example.internal/v1", Model: "text-embedding-3-small", KeyEnv: "TEST_EMBED_KEY", Slots: 4}) {
 		t.Errorf("Embedding %+v", s.Embedding)
 	}
 	if s.HTTP == nil || s.HTTP.Listen != "127.0.0.1:8730" || len(s.HTTP.Clients) != 2 ||
@@ -112,14 +114,14 @@ access = ["org"]
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Postgres.Schema != DefaultSchema || s.Embedding.BaseURL != DefaultOllama || s.Embedding.Slots != DefaultSlots || s.HTTP != nil {
+	if s.Postgres.Schema != config.DefaultSchema || s.Embedding.BaseURL != config.DefaultOllama || s.Embedding.Slots != config.DefaultSlots || s.HTTP != nil {
 		t.Errorf("%+v", s)
 	}
-	if src := s.Sources[0]; src.View != "/abs/t.view" || src.Refresh != DefaultRefresh || src.Interval != DefaultInterval || src.Lag != DefaultLag {
+	if src := s.Sources[0]; src.View != "/abs/t.view" || src.Refresh != config.DefaultRefresh || src.Interval != config.DefaultInterval || src.Lag != config.DefaultLag {
 		t.Errorf("source %+v", src)
 	}
 	s, err = load(t, strings.Replace(good, `base_url = "https://embeddings.example.internal/v1"`, "", 1))
-	if err != nil || s.Embedding.BaseURL != DefaultOpenAI {
+	if err != nil || s.Embedding.BaseURL != config.DefaultOpenAI {
 		t.Errorf("openai's default URL: %v %+v", err, s)
 	}
 }
@@ -195,8 +197,8 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			_, err := load(t, c.src)
-			var r *Refusal
-			if !errors.As(err, &r) || !IsRefusal(err) {
+			var r *config.Refusal
+			if !errors.As(err, &r) || !config.IsRefusal(err) {
 				t.Fatalf("Load: %v, want a refusal", err)
 			}
 			i := slices.Index(r.Fields(), c.field)
@@ -210,7 +212,7 @@ func TestEveryRefusalNamesItsField(t *testing.T) {
 			}
 		})
 	}
-	if _, err := Load(filepath.Join(t.TempDir(), "missing.toml")); err == nil || IsRefusal(err) {
+	if _, err := config.Load(filepath.Join(t.TempDir(), "missing.toml")); err == nil || config.IsRefusal(err) {
 		t.Errorf("a missing file: %v, want an error that is not a refusal", err)
 	}
 }
@@ -239,8 +241,8 @@ func TestWarningsAndTLS(t *testing.T) {
 	if s, err := load(t, strings.Replace(good, `listen = "127.0.0.1:8730"`, `listen = "localhost:8730"`, 1)); err != nil || s.HTTP.Listen != "localhost:8730" {
 		t.Errorf("localhost: %v", err)
 	}
-	r := Refuse("server.toml", "source[0].view", "args: want exactly")
-	if r.Error() != "server.toml: source[0].view: args: want exactly" || !IsRefusal(r) {
+	r := config.Refuse("server.toml", "source[0].view", "args: want exactly")
+	if r.Error() != "server.toml: source[0].view: args: want exactly" || !config.IsRefusal(r) {
 		t.Errorf("Refuse: %v", r)
 	}
 }

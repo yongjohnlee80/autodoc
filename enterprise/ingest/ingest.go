@@ -86,10 +86,12 @@ type Ingester struct {
 	locks    dao.DataConn
 	o        Options
 	lock     *tenantLock
-	// beforeCommit, when set, runs before each commit and fails it with its error: a test's way
-	// to stop the process between a page's writes and its commit, as a crash would.
-	beforeCommit func() error
 }
+
+// beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
+// stop the process between a page's writes and its commit, as a crash would. It is nil in
+// production, and set only by a test, before the ingester runs.
+var beforeCommit func() error
 
 // New is an ingester of src into st, the store of tenant. business is the database the view
 // reads, on the role's own search_path; locks is a pool of its own for the writer lock, which
@@ -473,8 +475,8 @@ func (in *Ingester) apply(ctx context.Context, b *pgstore.Batch, r row, st *Stat
 // commit commits b once the writer lock is confirmed held, and rolls it back otherwise: a server
 // that lost its lock writes nothing more.
 func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
-	if in.beforeCommit != nil {
-		if err := in.beforeCommit(); err != nil {
+	if beforeCommit != nil {
+		if err := beforeCommit(); err != nil {
 			_ = b.Rollback()
 			return err
 		}

@@ -78,12 +78,13 @@ func TestACrashReplaysAtMostThePageItInterrupted(t *testing.T) {
 	in := f.ingester(src, Options{}, "")
 	commits := 0
 	crash := errors.New("crashed")
-	in.beforeCommit = func() error {
+	beforeCommit = func() error {
 		if commits++; commits == 2 {
 			return crash // the second page dies before its commit
 		}
 		return nil
 	}
+	t.Cleanup(func() { beforeCommit = nil })
 	if _, err := in.Pass(f.ctx); !errors.Is(err, crash) {
 		t.Fatalf("Pass: %v, want the crash", err)
 	}
@@ -91,6 +92,7 @@ func TestACrashReplaysAtMostThePageItInterrupted(t *testing.T) {
 		t.Fatalf("after the crash: %v, want the first page alone", got)
 	}
 	in.Release()
+	beforeCommit = nil
 
 	restarted := f.ingester(src, Options{}, "")
 	if _, err := restarted.Pass(f.ctx); err != nil {

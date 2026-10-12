@@ -27,5 +27,7 @@
 //
 // A caller with its own schedule calls Acquire, then Pass and Refresh, then Release.
 //
-// Concurrency: a Source is safe for concurrent use; an Ingester belongs to one goroutine.
+// Concurrency: a Source is immutable and safe for concurrent use. An Ingester belongs to one
+// goroutine: Acquire, Pass, Refresh, Run and Release are called from it alone. Run starts one
+// goroutine of its own, which only checks the lock, and waits for it before returning.
 package ingest
