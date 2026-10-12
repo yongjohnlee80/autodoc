@@ -36,6 +36,9 @@ type (
 		Kinds() []string
 		Event(kind, workspace, detail string)
 	}
+	// Pickers has pickers of its own (pick.go), by the name Picker.qml's handlers pass:
+	// App.pickFilter(name, text) reaches Picks()[name].
+	Pickers interface{ Picks() map[string]picker }
 )
 
 // registry is the program's features, merged.
@@ -43,12 +46,16 @@ type registry struct {
 	features  []Feature
 	state     map[string]any
 	handlers  map[string]decl.HandlerFunc
-	pageShown bool // a page was shown to the DocWatchers (page.go): the next one closes it first
+	picks     map[string]picker // every feature's pickers, which the App.pick* commands reach by name
+	pageShown bool              // a page was shown to the DocWatchers (page.go): the next one closes it first
 }
 
-// newRegistry merges fs; a source or a command two features both name is an error.
+// newRegistry merges fs; a source, a command or a picker two features both name is an error. It
+// adds one feature of its own, pickCommands: the App.pick* commands over every feature's picks.
 func newRegistry(fs ...Feature) (*registry, error) {
-	r := &registry{features: fs, state: map[string]any{}, handlers: map[string]decl.HandlerFunc{}}
+	r := &registry{state: map[string]any{}, handlers: map[string]decl.HandlerFunc{}, picks: map[string]picker{}}
+	fs = append(slices.Clip(fs), registryPicks{r})
+	r.features = fs
 	owner := map[string]string{}
 	claim := func(f Feature, name string) error {
 		if prev, ok := owner[name]; ok {
@@ -83,9 +90,26 @@ func newRegistry(fs ...Feature) (*registry, error) {
 			}
 			r.handlers[name] = cmds[name].handler(name)
 		}
+		if p, ok := f.(Pickers); ok {
+			picks := p.Picks()
+			for _, name := range slices.Sorted(maps.Keys(picks)) {
+				if err := claim(f, "the picker "+name); err != nil {
+					return nil, err
+				}
+				r.picks[name] = picks[name]
+			}
+		}
 	}
 	return r, nil
 }
+
+// registryPicks is the registry's own feature: Picker.qml's handlers, over every feature's picks
+// (the map fills as the registry merges them).
+type registryPicks struct{ r *registry }
+
+func (registryPicks) Name() string                   { return "pickers" }
+func (registryPicks) State() map[string]any          { return nil }
+func (p registryPicks) Commands() map[string]Command { return pickCommands(p.r.picks) }
 
 // connected tells the features that hear connections.
 func (r *registry) connected() {
@@ -175,6 +199,11 @@ func (l legacy) Prefs() []PrefSpec            { return legacyPrefRows(l.h, l.h.g
 func (l legacy) Listed() {
 	l.h.openPick.setAll(l.h.files.Paths)
 	l.h.newPick.setAll(l.h.files.Paths)
+}
+
+// Picks are the host's own pickers.
+func (l legacy) Picks() map[string]picker {
+	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "outline": l.h.outlinePick}
 }
 
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host

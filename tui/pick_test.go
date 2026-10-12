@@ -236,3 +236,16 @@ func TestThePickCommandsGoByName(t *testing.T) {
 		t.Errorf("a row that is not whole: %v", err)
 	}
 }
+
+// File › Open and the draft's name list the workspace's files as last listed: a listing that
+// answers while either is open (Lister) is what the next filter looks through.
+func TestTheFilePickersRelistWhenTheFilesAreListed(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	h.files = FileList{Paths: []string{"a.md", "b/c.md"}, Loaded: true, Gen: 1}
+	legacy{h}.Listed()
+	for name, p := range map[string]*pick[string]{"open": h.openPick, "new": h.newPick} {
+		if !slices.Equal(p.all, h.files.Paths) {
+			t.Errorf("%s lists %v after the listing, want %v", name, p.all, h.files.Paths)
+		}
+	}
+}

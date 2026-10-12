@@ -115,17 +115,19 @@ func (t *todos) Commands() map[string]decl.HandlerFunc { … } // its App.* comm
   `model` (required), `label`, `fieldText`, `placeholder`, `note`/`noteShown`, `listTitle`,
   `previewTitle`/`previewText`/`previewAt` and `acceptText`. Its `TableViewColumn`s go into the
   list. Its handlers call `App.pickFilter`, `pickMove`, `pickChoose`, `pickAccept` and
-  `pickCancel` with the `name`, and Go finds the picker by it. That Go side is a `pick[T]`
-  (`tui/pick.go`):
+  `pickCancel` with the `name`, and Go finds the picker by it. A feature offers its pickers by
+  name from an optional `Picks()`; the registry merges them, refusing a name two features claim,
+  and serves the `App.pick*` commands over them. That Go side is a `pick[T]` (`tui/pick.go`):
   - it holds every item, and filters them into a `rows[T]`;
   - it previews the row under the cursor off the loop, the latest asked for winning;
   - `choose` runs once it has closed the dialog, and `cancel` when it is dismissed;
   - `enter`, `submit` and `query` cover a picker that is not a plain choice: the draft's name, or
     the search.
 
-  To make a picker, add a `pick[T]` to `h.picks`, its `App.<name>Preview*` sources (and a field
-  source, when `open` should empty the field) to the state, and a `Picker { name: "…" }` use: a
-  component file of its own, like `FileOpen.qml`, or inline in `main.qml`. `open()` shows it.
+  To make a picker, return a `pick[T]` from the feature's `Picks()`, its `App.<name>Preview*`
+  sources (and a field source, when `open` should empty the field) from its `State()`, and add a
+  `Picker { name: "…" }` use: a component file of its own, like `FileOpen.qml`, or inline in
+  `main.qml`. `open()` shows it.
   `SearchPicker.qml` keeps its own layout for its stage row, but its handlers are the same.
 
 ### 4.3 Core package rules

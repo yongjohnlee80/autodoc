@@ -1,13 +1,11 @@
 package tui
 
-import "maps"
-
 // THE APP SINGLETON'S COMMANDS — what the document invokes.
 //
 // The table is the whole of it: a handler in main.qml or a component file can reach exactly these,
 // by these names, and nothing else of the program.
 func (h *Host) commands() map[string]Command {
-	cmds := map[string]Command{
+	return map[string]Command{
 		"App.save":               none(h.save),
 		"App.reload":             none(h.reload),
 		"App.previewHTML":        none(h.previewHTML),
@@ -180,6 +178,4 @@ func (h *Host) commands() map[string]Command {
 		"App.saveRanker":        fourStrings("a name, the base URL, the model and the key", h.saveRanker),
 		"App.saveProvider":      fiveStrings("a name, the base URL, the model, the key and the context window", h.saveProvider),
 	}
-	maps.Copy(cmds, pickCommands(h.picks))
-	return cmds
 }

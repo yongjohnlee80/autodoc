@@ -2,8 +2,11 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
 // fake is a feature that records what it hears.
@@ -154,5 +157,43 @@ func TestCoreReachesTheHost(t *testing.T) {
 		t.Error("no answer from the daemon through Core")
 	} else if err, ok := v.(error); ok {
 		t.Error(err)
+	}
+}
+
+// pickFake is a feature with a picker of its own.
+type pickFake struct {
+	fake
+	picks map[string]picker
+}
+
+func (f *pickFake) Picks() map[string]picker { return f.picks }
+
+// A feature's picker is reached by its name through the App.pick* commands the registry serves.
+func TestAFeaturesPickerIsReachedByName(t *testing.T) {
+	p := newTestPick()
+	r, err := newRegistry(&fake{name: "a"}, &pickFake{fake: fake{name: "b"}, picks: map[string]picker{"test": p}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	str := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueString, Raw: s} }
+	num := func(s string) qml.SpecValue { return qml.SpecValue{Kind: qml.SpecValueNumber, Raw: s} }
+	if err := r.handlers["App.pickFilter"]([]qml.SpecValue{str("test"), str("notes")}); err != nil || len(p.shown()) != 2 {
+		t.Fatalf("App.pickFilter(\"test\", \"notes\"): %v, rows %v", err, p.shown())
+	}
+	if err := r.handlers["App.pickChoose"]([]qml.SpecValue{str("test"), num("1")}); err != nil || !slices.Equal(p.chosen, []string{"notes/c.md"}) {
+		t.Errorf("App.pickChoose(\"test\", 1): %v, chose %v", err, p.chosen)
+	}
+}
+
+// Two features naming a picker alike are refused when the registry is built.
+func TestTheRegistryRefusesAPickerTwoFeaturesName(t *testing.T) {
+	a := &pickFake{fake: fake{name: "a"}, picks: map[string]picker{"test": newTestPick()}}
+	b := &pickFake{fake: fake{name: "b"}, picks: map[string]picker{"test": newTestPick()}}
+	if _, err := newRegistry(a, b); err == nil || err.Error() != "tui: the picker test is both a's and b's" {
+		t.Errorf("a picker named twice: %v", err)
+	}
+	b.picks = map[string]picker{"other": newTestPick()}
+	if _, err := newRegistry(a, b); err != nil {
+		t.Errorf("two pickers named apart: %v", err)
 	}
 }

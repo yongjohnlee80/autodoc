@@ -16,8 +16,10 @@ import (
 // pick[T] over its own items, named for Picker.qml's handlers, which call the App.pick* commands
 // with that name; its own file says what it lists and what choosing does.
 //
-// A new picker is a pick[T] in h.picks (newHost), its sources in state(), and a Picker { name: … }
-// use: a component file of its own (dialogs/FileOpen.qml) or an inline use in main.qml.
+// A new picker is a pick[T] a Feature returns from Picks() (feature.go), its sources in the
+// feature's State(), and a Picker { name: … } use: a component file of its own
+// (dialogs/FileOpen.qml) or an inline use in main.qml. The registry merges every feature's picks,
+// refusing a name two claim, and serves the App.pick* commands over them.
 
 // pane is what a picker's preview shows: a title, the text, and the byte the cursor is at.
 type pane struct {
@@ -247,7 +249,7 @@ func cursorAt(text string, at int) int {
 	return n
 }
 
-// pickCommands are Picker.qml's handlers: each names its picker first.
+// pickCommands are Picker.qml's handlers: each names its picker first, one of picks.
 func pickCommands(picks map[string]picker) map[string]Command {
 	named := func(name string) (picker, error) {
 		if p, ok := picks[name]; ok {
