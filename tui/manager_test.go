@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -65,10 +66,10 @@ func startManagedRanking(t *testing.T, roots map[string]string, o serving.Option
 	}
 	// wait until every root's files are indexed, so the first listing has them
 	for _, w := range ws.List() {
-		want, _ := filepath.Glob(filepath.Join(w.Root(), "*.md"))
+		want := admitted(t, w)
 		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
 			st, _ := w.Index().Status(ctx)
-			if st.Docs == int64(len(want)) && st.PendingJobs == 0 {
+			if st.Docs == want && st.PendingJobs == 0 {
 				break
 			}
 			if time.Now().After(deadline) {
@@ -102,6 +103,28 @@ func startManagedRanking(t *testing.T, roots map[string]string, o serving.Option
 		_ = os.RemoveAll(dir)
 	})
 	return &managedDaemon{sock: sock, db: db}
+}
+
+// admitted counts the files under w's root that w indexes: those its documents admit, by its
+// include and exclude and the kinds the build reads. Counting Markdown alone missed its YAML and
+// plain text, so a root holding those waited for a count the indexer had already passed.
+func admitted(t *testing.T, w rpc.Workspace) int64 {
+	t.Helper()
+	var n int64
+	err := filepath.WalkDir(w.Root(), func(p string, d fs.DirEntry, err error) error {
+		if err != nil || !d.Type().IsRegular() {
+			return err
+		}
+		rel, err := filepath.Rel(w.Root(), p)
+		if err == nil && w.Docs().Admits(filepath.ToSlash(rel)) {
+			n++
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // managedDaemon is a managed daemon's handle: its socket, and its store.
