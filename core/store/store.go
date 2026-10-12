@@ -1,13 +1,3 @@
-// Package store is AutoDoc's one store: every workspace, and every workspace's
-// index, in one SQLite file. The schema is sql/deployments, applied by golib
-// dao/deploy; every row is read and written through golib dao, one declaration
-// per table: the store's own (tables.go), and each module's, declared through
-// the seam (declare.go: the index's, the todo journal's); and a workspace's
-// tables are reached only through its Scope, which filters every read and
-// stamps every write with its workspace.
-//
-// One connection writes (a pool of one, BEGIN IMMEDIATE); any number read, each
-// in its own read transaction on the WAL, so a reader sees one commit.
 package store
 
 import (

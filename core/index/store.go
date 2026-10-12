@@ -1,10 +1,3 @@
-// Package index is a workspace's derived index in the store (core/store): documents, their chunks
-// under per-document generations, full-text search over the chunks, tags, aliases, links, and a
-// change log. The files are canonical; everything here can be rebuilt from them. Every row is read
-// and written through the workspace's store.Scope: this package holds no SQL.
-//
-// One goroutine writes (the Indexer's writer); any number read, each through one read transaction
-// on the WAL, so a reader sees every document at one generation, never half-written.
 package index
 
 import (

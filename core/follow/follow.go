@@ -1,10 +1,3 @@
-// Package follow keeps a workspace's index following its root. The index converges on the root's
-// content: watch events, poll events and scans are hints naming paths, and the indexer re-reads each
-// path it is told about.
-//
-// The follower never writes the index. It tells a Queue which paths to re-read, and the indexer
-// behind it (the store's one writer) decides from the file's current state what to do: delete a
-// document that is gone or no longer eligible, skip one whose Version is unchanged, or re-index it.
 package follow
 
 import (

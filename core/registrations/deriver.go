@@ -13,7 +13,8 @@ import (
 
 // Deriver makes text of a build's document formats (ADR 0216 §1.8): every build has Documents, and
 // a Pro build adds one that adapts autorag's derive.Cache. The indexer and doc.read call them
-// through core/derived, as one (byFormat).
+// through core/derived, as one (byFormat). Derive is called from several goroutines at once (the
+// indexer's workers, and every doc.read): an implementation must be safe for concurrent use.
 type Deriver interface {
 	// Formats are the formats it reads: lower-case extensions with their dot, each a derived format.
 	Formats() []string

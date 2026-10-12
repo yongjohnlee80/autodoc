@@ -1,6 +1,3 @@
-// Package workspace opens a workspace's root: its files as a vfs.FS and the matcher of its include
-// and exclude patterns. The workspace itself is a row of the store (core/store), and the store's
-// lease makes the daemon the only one serving it.
 package workspace
 
 import (

@@ -1,11 +1,3 @@
-// Package derived makes a derived document's text through the build's deriver, for the indexer and the
-// document API alike: the file is read at offsets, a cache's eviction miss is retried once, and a
-// text made under another identity than the frozen one is refused.
-//
-// Three bounds apply to a derived document, each its own: MaxContainer bounds the file on disk, so a
-// 50 MB PDF that is mostly images is read; MaxText bounds the text the indexer indexes; and the
-// document API's own limit (core/docs) bounds what one RPC message carries. The deriver may bound
-// its text too (autorag's MaxText); that bound is the deriver's.
 package derived
 
 import (

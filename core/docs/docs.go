@@ -1,7 +1,3 @@
-// Package docs reads and writes a workspace's files for AutoDoc's own apps (ADR 0203 §4.6). Every
-// write goes through the workspace's vfs, conditional on the version the writer read, so the index
-// learns of it the same way it learns of an external edit, and no writer replaces what it has not
-// seen.
 package docs
 
 import (

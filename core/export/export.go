@@ -20,8 +20,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
+// Format is what a Markdown source is rendered as.
 type Format string
 
+// The formats: a standalone HTML page in a theme, or plain text.
 const (
 	HTML Format = "html"
 	Text Format = "text"
@@ -124,6 +126,8 @@ func Render(source []byte, format Format, theme string) ([]byte, error) {
 	return RenderWith(source, format, theme, Options{})
 }
 
+// RenderWith renders the Markdown source as format. HTML is a whole page in the named theme (one
+// of Themes), its Mermaid diagrams drawn by the page's own script; theme is ignored for Text.
 func RenderWith(source []byte, format Format, theme string, options Options) ([]byte, error) {
 	document := kind.ParseMarkdown(source)
 	switch format {

@@ -1,19 +1,3 @@
-// Package config reads AutoDoc's configuration file and resolves the places AutoDoc keeps things:
-// the endpoint the daemon listens on, the state directory, and the store. Workspaces are not
-// configured here: they are rows of the store, added in the TUI or with workspace.add.
-//
-//	[server]
-//	socket = ""                 # default: $XDG_RUNTIME_DIR/autodoc.sock
-//	state_dir = ""              # default: $XDG_STATE_HOME/autodoc
-//	data_dir = ""               # default: $XDG_DATA_HOME/autodoc (the store: autodoc.db)
-//
-//	[follow]
-//	poll_interval = "2s"        # the watch fallback's listing interval
-//	[embedding_queue]
-//	max_inflight = 1           # requests to the shared provider, 1 or 2
-//
-// Nor are the embedding providers: they are the store's too, with their keys sealed, added and
-// chosen in the TUI's Preferences.
 package config
 
 import (

@@ -1,7 +1,3 @@
-// Package registrations is a build's chunkers and deriver, validated once and frozen when it starts
-// (ADR 0216 §1.2): what a main hands app.Main, as the daemon, its indexers and its clients read it. A build
-// with none, the community build, has the nil *Table, and every method answers as for no
-// registrations.
 package registrations
 
 import (

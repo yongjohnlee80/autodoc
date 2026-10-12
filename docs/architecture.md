@@ -25,13 +25,17 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `core/todo` | the todo system: format (versioned schema files), rules, every write; a `Module` |
 | `core/schema` | frontmatter schemas: the KB's `schema.yaml` and the todo formats |
 | `core/docs` | versioned, conditional reads and writes of a workspace's files over a `vfs.FS` |
-| `core/index` | the indexer, links, graph, search |
-| `core/store` | the SQLite store: lease, migrations, its tables, and the seam a module declares its own through |
+| `core/index` | the indexer, links, graph, search, and the writer port its documents are kept through |
+| `core/store` | the SQLite store: lease, migrations, its tables (workspaces, preferences, and the metered services: embedding providers and rankers, keys sealed, calls metered), and the seam a module declares its own through |
 | `core/todo/sqlitejournal` | the todo system's Journal on the store, its tables declared through the seam |
 | `core/follow` | watching and polling a workspace |
 | `core/kind`, `registrations`, `derived` | file kinds, chunkers, derivers |
-| `core/config`, `workspace`, `outline`, `export`, `edition`, `pgstore` | as named |
-| `rpc` | the daemon's socket: registers every verb from its contract; `Catalog` |
+| `core/workspace` | a workspace as it is added (`Spec`, `Normalize`, the default patterns), its glob grammar and matcher, and opening its root |
+| `core/config` | the daemon's own settings (`config.toml`) and its XDG paths, resolved without touching the disk |
+| `core/pgstore`, `pgwriter` | a Postgres search store and the index's second writer (the enterprise destination) |
+| `core/paths`, `clock` | the path helpers and the one clock the core packages share |
+| `core/outline`, `export`, `edition` | as named |
+| `rpc` | the daemon's socket: registers every verb from its contract; `Catalog`. A `file.write` on a file a workspace indexes is that workspace's `doc.write` |
 | `internal/daemon` | the served workspaces; the todo system's disk and roots |
 | `internal/client` | the daemon's client: the session (handshake, spawning `--serve`), restart handoffs |
 | `internal/endpoint` | which socket serves a config's store |
@@ -117,7 +121,27 @@ func (t *todos) Commands() map[string]decl.HandlerFunc { … } // its App.* comm
 | logging | `WithLogger(logger.Logger)` |
 | errors | `errs.Sentinel`; wrap with `%w`; public ones in the module's `Errors()` |
 | wire types | json-tagged structs in the package |
-| tests | black-box `<pkg>_test` for the surface; golib `vfs/memfs` for disks |
+| tests | the surface black-box (`<pkg>_test`), internals white-box; see §4.4 |
+
+### 4.4 Tests
+
+- **The surface is tested from outside.** A test of what callers use (exported types and
+  functions, verbs, a conformance contract) is in the black-box package `<pkg>_test`, so it can
+  only do what a caller can.
+- **Internals are tested inside.** A test that must reach unexported state is in the package
+  itself: a loop's queue, a failure injected at one statement (`failWrites`, `renamed`), a row
+  read back with SQL of its own.
+- **Test-only exports go in `export_test.go`.** A black-box test that needs one internal piece
+  gets it from an `export_test.go` in the package, which only tests compile (index's
+  `BufferedWriter`). It is never production API.
+- **A hook in production code is a nil package variable.** It is set only by a test, before
+  anything runs, and its comment says so (index's `commitFailed`, pgstore's `putHook`).
+- **A contract several implementations meet is a `<pkg>test` package.** Each implementation runs
+  the same cells (`index/writertest`, golib `search/searchtest`, `pgstore/pgtest`, `todotest`).
+- **Disks are golib `vfs/memfs`.** A disk is `vfs/local` over `t.TempDir()` only where the real
+  file system is the point (versions, symlinks, the daemon's `/`).
+- **No mass moves.** An existing white-box test that uses only the exported API moves to
+  `<pkg>_test` when its file is next changed for another reason.
 
 ## 5. Store and migrations
 

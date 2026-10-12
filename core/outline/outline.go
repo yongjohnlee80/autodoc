@@ -1,7 +1,3 @@
-// Package outline is a document's structure for navigation (ADR 0212 §6): a Markdown file's
-// headings, and the breadcrumb at a place in any document — the headings above it in Markdown,
-// the key path in YAML, the title in plain text. The daemon's doc.outline and the editor's live
-// outline both read it, so a saved file and an unsaved buffer are outlined alike.
 package outline
 
 import (
