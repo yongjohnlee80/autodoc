@@ -55,7 +55,9 @@ func runTestPlugin(mode string) int {
 		conn := testStdio()
 		done := make(chan struct{})
 		var link *plugin.Link
+		linked := make(chan struct{}) // plugin.open can arrive before NewLink returns link: see rawcalls
 		link, _ = plugin.NewLink(context.Background(), conn, func(m string, _ []any) {
+			<-linked
 			if m == plugin.MethodOpen {
 				_ = link.Notify(context.Background(), plugin.MethodReady, plugin.ReadyParams(plugin.Protocol+1))
 			}
@@ -63,6 +65,7 @@ func runTestPlugin(mode string) int {
 				close(done)
 			}
 		})
+		close(linked)
 		<-done
 		return 0
 	case "gc": // collects garbage all the time, drawing a count: the SDK's pipes must survive it
@@ -90,10 +93,15 @@ func runTestPlugin(mode string) int {
 		done := make(chan struct{})
 		ctx := context.Background()
 		var link *plugin.Link
+		// The host sends plugin.open as it starts the plugin, so the link's goroutine can pass it on
+		// before NewLink has returned link: the handler waits for it, or it sees nil, panics (which
+		// the link recovers, ending itself), and never answers ready.
+		linked := make(chan struct{})
 		call := func(n int64, id string, args ...string) {
 			_ = link.Notify(ctx, plugin.MethodCall, plugin.CallParams(plugin.Call{Num: n, ID: id, Args: args}))
 		}
 		link, _ = plugin.NewLink(ctx, conn, func(m string, p []any) {
+			<-linked
 			switch m {
 			case plugin.MethodOpen:
 				o, _ := plugin.ReadOpen(p)
@@ -122,6 +130,7 @@ func runTestPlugin(mode string) int {
 				close(done)
 			}
 		})
+		close(linked)
 		<-done
 		return 0
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
