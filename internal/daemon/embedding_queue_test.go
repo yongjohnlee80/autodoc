@@ -66,6 +66,13 @@ func (p *queueProvider) snapshot() ([]string, int) {
 	return append([]string(nil), p.calls...), p.maximum
 }
 
+// called is how many calls p has had.
+func (p *queueProvider) called() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.calls)
+}
+
 func addQueueWorkspace(t *testing.T, m *Workspaces, name string, sections int) {
 	t.Helper()
 	root := t.TempDir()
@@ -82,29 +89,39 @@ func addQueueWorkspace(t *testing.T, m *Workspaces, name string, sections int) {
 	indexed(t, m, name, 1)
 }
 
-func queueReady(t *testing.T, m *Workspaces, names ...string) {
+// queueReady waits until every named workspace's vectors are made. Its deadline is ten seconds
+// from p's last call, not from the start: a wait behind a long run of batches (a focused backlog
+// ahead of the named workspaces) lasts as long as the batches take, which a loaded machine
+// stretches far past ten seconds; a queue that stopped calling still fails ten seconds after.
+func queueReady(t *testing.T, m *Workspaces, p *queueProvider, names ...string) {
 	t.Helper()
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		all := true
-		for _, name := range names {
-			w, ok := m.Get(name)
-			if !ok || w.Index() == nil {
-				all = false
-				break
-			}
-			st, err := w.Index().Status(context.Background())
-			if err != nil || st.Embeddings == nil || st.Embeddings.Semantic != "ready" || st.Embeddings.Pending != 0 {
-				all = false
-				break
-			}
+	calls, deadline := -1, time.Time{}
+	for ; ; time.Sleep(10 * time.Millisecond) {
+		if n := p.called(); n != calls {
+			calls, deadline = n, time.Now().Add(10*time.Second)
 		}
-		if all {
+		if queueFilled(m, names...) {
 			return
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("queue did not fill %v", names)
 		}
 	}
+}
+
+// queueFilled reports whether every named workspace's vectors are made.
+func queueFilled(m *Workspaces, names ...string) bool {
+	for _, name := range names {
+		w, ok := m.Get(name)
+		if !ok || w.Index() == nil {
+			return false
+		}
+		st, err := w.Index().Status(context.Background())
+		if err != nil || st.Embeddings == nil || st.Embeddings.Semantic != "ready" || st.Embeddings.Pending != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func TestOneProviderCallAtATimeAcrossTenWorkspaces(t *testing.T) {
@@ -118,7 +135,7 @@ func TestOneProviderCallAtATimeAcrossTenWorkspaces(t *testing.T) {
 		addQueueWorkspace(t, m, name, 3)
 		names = append(names, name)
 	}
-	queueReady(t, m, names...)
+	queueReady(t, m, p, names...)
 	_, maximum := p.snapshot()
 	if maximum != 1 {
 		t.Errorf("%d concurrent provider calls across 10 workspaces, want 1", maximum)
@@ -163,7 +180,7 @@ func TestConfiguredTwoRequestLimitIsSharedAcrossWorkspaces(t *testing.T) {
 			close(p.release)
 		}
 	}
-	queueReady(t, m, names...)
+	queueReady(t, m, p, names...)
 	_, maximum := p.snapshot()
 	if maximum != 2 {
 		t.Errorf("maximum concurrent calls = %d, want 2", maximum)
@@ -190,7 +207,7 @@ func TestTwoSlotsNeverEmbedTheSameWorkspaceTwice(t *testing.T) {
 		t.Errorf("one focused workspace made %d calls (%d concurrent) before first completed", len(calls), maximum)
 	}
 	close(p.release)
-	queueReady(t, m, "alpha")
+	queueReady(t, m, p, "alpha")
 }
 
 func TestProviderLimitIncludesAQueryWaitingBehindABatch(t *testing.T) {
@@ -291,7 +308,7 @@ func TestBackgroundAdvancesBeforeFocusedBacklogIsDone(t *testing.T) {
 		t.Fatal(err)
 	}
 	close(p.release)
-	queueReady(t, m, "bravo")
+	queueReady(t, m, p, "bravo")
 	w, _ := m.Get("alpha")
 	st, err := w.Index().Status(context.Background())
 	if err != nil {
@@ -327,7 +344,7 @@ func TestNeverAndWhenOpenedPolicies(t *testing.T) {
 	if err := m.Focus("seldom"); err != nil {
 		t.Fatal(err)
 	}
-	queueReady(t, m, "seldom")
+	queueReady(t, m, p, "seldom")
 	m.queue.mu.Lock()
 	m.queue.focusedAt = time.Now().Add(-focusTTL - time.Second)
 	m.queue.mu.Unlock()
@@ -337,7 +354,7 @@ func TestNeverAndWhenOpenedPolicies(t *testing.T) {
 	}
 	w.Index().Touch("later.md")
 	indexed(t, m, "seldom", 2)
-	queueReady(t, m, "seldom")
+	queueReady(t, m, p, "seldom")
 	if policy, err := db.EmbeddingPolicy(context.Background(), 9999); err == nil || policy != "" {
 		t.Errorf("missing workspace policy: %q, %v", policy, err)
 	}
@@ -356,11 +373,12 @@ func TestInFlightBatchStopsBeforeProviderReplacementOrWorkspaceRemoval(t *testin
 			case <-time.After(5 * time.Second):
 				t.Fatal("provider batch never started")
 			}
+			replacement := &queueProvider{}
 			done := make(chan error, 1)
 			go func() {
 				switch action {
 				case "replace":
-					m.SetEmbedding(&queueProvider{})
+					m.SetEmbedding(replacement)
 					done <- nil
 				case "remove":
 					done <- m.Remove(context.Background(), "kb")
@@ -384,7 +402,7 @@ func TestInFlightBatchStopsBeforeProviderReplacementOrWorkspaceRemoval(t *testin
 				t.Errorf("%d old provider calls survived %s", inFlight, action)
 			}
 			if action == "replace" {
-				queueReady(t, m, "kb")
+				queueReady(t, m, replacement, "kb")
 			}
 		})
 	}
