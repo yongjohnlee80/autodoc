@@ -28,11 +28,14 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
   (`CheckRows`, `CheckProbes`).
 - **The ingester:** `New(store, tenant, source, business, locks, Options)`.
   - `Acquire` and `Release` hold the tenant's writer lock, on a pinned connection of `locks`.
+    `Confirm` says, from any goroutine, whether the lock is held now (`ErrNotLocked`,
+    `ErrLockLost`): the embedding worker writes the tenant only while it is.
   - `Pass` reads the rows past the cursor; `Refresh` reads every row, then deletes the documents of
     rows gone; `Run` does both on schedule. Each returns `Stats`.
   - `Options`: `Schema` (required), `Refresh`, `RefreshRetry` (how soon a failed or incomplete
     refresh is tried again), `Interval`, `Lag`, `PingEvery`, `LockPoll`, `Log`, `Now` (the
-    source's clock) and `Clock` (the time a refresh records and Run schedules by).
+    source's clock), `Clock` (the time a refresh records and Run schedules by) and `Committed`
+    (called after each commit: the embedding worker's wake).
 - **Errors:** `ErrLockLost`, `ErrNotLocked`, `ErrOrder`, `ErrStalled`; `RetryLimit`; the fields
   every row carries, `FieldID`, `FieldUpdatedAt`, `FieldTitle`, `FieldTags`; `CutVersion`.
 
@@ -57,5 +60,6 @@ Writing a source view: [docs/enterprise/views.md](../../docs/enterprise/views.md
 ## Concurrency
 
 A `Source` is immutable and safe for concurrent use. An `Ingester` belongs to one goroutine: call
-`Acquire`, `Pass`, `Refresh`, `Run` and `Release` from it alone. `Run` starts one goroutine of its
-own, which only checks the lock, and waits for it before returning.
+`Acquire`, `Pass`, `Refresh`, `Run` and `Release` from it alone; `Confirm` from any goroutine.
+`Run` starts one goroutine of its own, which only checks the lock, and waits for it before
+returning.

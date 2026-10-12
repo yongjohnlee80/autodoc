@@ -221,3 +221,41 @@ func TestRunReleasesItsLockWhenItStops(t *testing.T) {
 		t.Errorf("backend %d still holds the lock after Run stopped", pid)
 	}
 }
+
+// Confirm says whether the tenant is this server's now, for the embedding worker beside the
+// ingester: not before the lock is taken, yes while it is held, lost once its connection is
+// killed, and not after it is let go. Committed is called once per committed batch, and not for a
+// pass that read nothing. The mutants, named here: Confirm answering nil with no lock held (the
+// worker would write a tenant another server holds), and the commit not calling Committed.
+func TestConfirmSaysWhetherTheTenantIsThisServers(t *testing.T) {
+	f := newFixture(t)
+	commits := 0
+	in := New(f.st, f.tenant, f.source(nil), f.business, f.open("locks", ""), Options{Schema: f.schema,
+		LockPoll: 20 * time.Millisecond, Now: func(context.Context) (time.Time, error) { return at(1_000_000), nil }, Lag: -1,
+		Committed: func() { commits++ }})
+	t.Cleanup(in.Release)
+	if err := in.Confirm(f.ctx); !errors.Is(err, ErrNotLocked) {
+		t.Fatalf("Confirm before Acquire: %v, want ErrNotLocked", err)
+	}
+	if err := in.Acquire(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := in.Confirm(f.ctx); err != nil {
+		t.Fatalf("Confirm while the lock is held: %v", err)
+	}
+	for i := 1; i <= 4; i++ {
+		f.track(i, "A", "song", i)
+	}
+	if st, err := in.Pass(f.ctx); err != nil || st.Pages != 2 || commits != 2 {
+		t.Fatalf("a pass of two pages: %+v, %v; Committed called %d times, want 2", st, err, commits)
+	}
+	if _, err := in.Pass(f.ctx); err != nil || commits != 2 {
+		t.Fatalf("a pass that read nothing: %v; Committed called %d times, want still 2", err, commits)
+	}
+	f.exec(`SELECT pg_terminate_backend($1)`, f.holder())
+	waitFor(t, 5*time.Second, "the lock seen lost", func() bool { return errors.Is(in.Confirm(f.ctx), ErrLockLost) })
+	in.Release()
+	if err := in.Confirm(f.ctx); !errors.Is(err, ErrNotLocked) {
+		t.Fatalf("Confirm after Release: %v, want ErrNotLocked", err)
+	}
+}

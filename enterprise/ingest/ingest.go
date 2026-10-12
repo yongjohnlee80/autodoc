@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -78,6 +79,10 @@ type Options struct {
 	Now func(ctx context.Context) (time.Time, error)
 	// Clock is the time a refresh records and Run schedules refreshes by. nil: time.Now.
 	Clock clock.Clock
+	// Committed, when set, is called after each batch commits: the embedding worker's wake, so the
+	// chunks a page wrote are embedded without waiting for the worker's own poll. It runs on the
+	// ingester's goroutine and must not block.
+	Committed func()
 }
 
 // Ingester indexes one source into its tenant: the only writer of the tenant while it holds the
@@ -89,7 +94,7 @@ type Options struct {
 // replays at most the page it interrupted, and writing a page again changes nothing.
 //
 // An Ingester belongs to one goroutine; Run's own ping goroutine is the exception, and it only
-// checks the lock.
+// checks the lock, as Confirm does from any goroutine.
 type Ingester struct {
 	st       *pgstore.Store
 	tenant   string
@@ -97,7 +102,9 @@ type Ingester struct {
 	business dao.DataConn
 	locks    dao.DataConn
 	o        Options
-	lock     *pgstore.WriterLock
+	// lock is the writer lock while it is held, nil otherwise. It is atomic because Confirm reads
+	// it from another goroutine (the embedding worker's) while this one takes and releases it.
+	lock atomic.Pointer[pgstore.WriterLock]
 }
 
 // beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
@@ -136,7 +143,7 @@ func (in *Ingester) Tenant() string { return in.tenant }
 
 // Acquire takes the tenant's writer lock, waiting while another server holds it, until ctx ends.
 func (in *Ingester) Acquire(ctx context.Context) error {
-	if in.lock != nil {
+	if in.lock.Load() != nil {
 		return nil
 	}
 	l, err := pgstore.AcquireWriter(ctx, in.locks, in.o.Schema, in.tenant, in.o.LockPoll, func(holder int64) {
@@ -145,16 +152,29 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	in.lock = l
+	in.lock.Store(l)
 	return nil
 }
 
 // Release lets go of the writer lock.
 func (in *Ingester) Release() {
-	if in.lock != nil {
-		in.lock.Release()
-		in.lock = nil
+	if l := in.lock.Swap(nil); l != nil {
+		l.Release()
 	}
+}
+
+// Confirm reports whether the ingester holds its tenant's writer lock now: nil when it does and
+// the lock answers as this session's; ErrNotLocked while it waits for the lock (another server
+// holds it) or after it let go; ErrLockLost when the lock was lost. It is for another writer of
+// the tenant in the same process, the embedding worker, which writes only while the tenant is
+// this server's, and confirms it before each of its writes as the ingester does before each
+// commit. Unlike the ingester's other methods it may be called from any goroutine.
+func (in *Ingester) Confirm(ctx context.Context) error {
+	l := in.lock.Load()
+	if l == nil {
+		return ErrNotLocked
+	}
+	return l.Check(ctx)
 }
 
 // Stats are what one Pass or Refresh did.
@@ -189,7 +209,7 @@ type Stats struct {
 // costing that; the log reports the quarantine on every pass so it is fixed.
 func (in *Ingester) Pass(ctx context.Context) (Stats, error) {
 	var st Stats
-	if in.lock == nil {
+	if in.lock.Load() == nil {
 		return st, ErrNotLocked
 	}
 	upto, err := in.upto(ctx)
@@ -337,7 +357,7 @@ func (in *Ingester) retry(ctx context.Context, upto time.Time, st *Stats) error 
 // long read does, once per Refresh period.
 func (in *Ingester) Refresh(ctx context.Context) (Stats, error) {
 	var st Stats
-	if in.lock == nil {
+	if in.lock.Load() == nil {
 		return st, ErrNotLocked
 	}
 	st.Complete = true
@@ -564,11 +584,17 @@ func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
 			return err
 		}
 	}
-	if err := in.lock.Check(ctx); err != nil {
+	if err := in.lock.Load().Check(ctx); err != nil {
 		_ = b.Rollback()
 		return err
 	}
-	return b.Commit()
+	if err := b.Commit(); err != nil {
+		return err
+	}
+	if in.o.Committed != nil {
+		in.o.Committed()
+	}
+	return nil
 }
 
 // upto is a pass's upper bound: now − Lag.
@@ -656,7 +682,7 @@ func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := in.lock.Check(ctx); errors.Is(err, ErrLockLost) {
+			if err := in.lock.Load().Check(ctx); errors.Is(err, ErrLockLost) {
 				logger.Error(in.o.Log, err, "tenant "+in.tenant+": stopping")
 				cancel(err)
 				return
