@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/outline"
@@ -102,50 +104,38 @@ func (h *Host) openOutline() {
 	}
 	h.pageNow() // the headings as they are, before the typing pause
 	h.refreshOutline()
-	h.outlineFilter("")
-	h.open("outlinePicker")
-}
-
-// outlineFilter keeps the headings whose text holds text (case aside), and previews the first.
-func (h *Host) outlineFilter(text string) {
-	text = strings.ToLower(strings.TrimSpace(text))
-	h.outlineRows = h.outlineRows[:0]
 	var all []outline.Heading
 	if h.outline != nil {
 		all = h.outline.Headings()
 	}
-	rows := []rowOf{}
-	for _, hd := range all {
-		if !strings.Contains(strings.ToLower(hd.Text), text) {
-			continue
-		}
-		h.outlineRows = append(h.outlineRows, hd)
-		rows = append(rows, rowOf{"key": hd.ID, "heading": strings.Repeat("  ", hd.Level-1) + hd.Text, "line": fmt.Sprint(hd.Line)})
-	}
-	h.outlineList.Reset(rows)
-	h.set("App.outlineStatus", fmt.Sprintf("headings (%d of %d)", len(rows), len(all)))
-	if len(rows) > 0 {
-		h.previewHeading(0)
-	} else {
-		h.showPreview("outline", h.file.name(), h.core.Value(), 0)
-	}
+	h.outlinePick.setAll(all)
+	h.outlinePick.open()
 }
 
-// previewHeading shows the file at the picker's row i.
-func (h *Host) previewHeading(i int) {
-	if i >= 0 && i < len(h.outlineRows) {
-		hd := h.outlineRows[i]
-		h.showPreview("outline", h.file.name()+crumbSep+hd.Text, h.core.Value(), hd.Byte)
-	}
+// newOutlinePick is Go › Outline's picker over the file's headings; its preview is the editor's
+// text at the heading.
+func (h *Host) newOutlinePick() *pick[outline.Heading] {
+	return &pick[outline.Heading]{c: core{h}, dialog: "outlinePicker", name: "outline",
+		list:   newRows(tuidecl.NewListModel("key", "heading", "line"), headingRowOf),
+		status: "App.outlineStatus", noun: "headings",
+		match: func(hd outline.Heading) string { return hd.Text },
+		preview: func(hd outline.Heading) func(context.Context) answerOf[pane] {
+			pn := pane{title: h.file.name() + crumbSep + hd.Text, text: h.core.Value(), at: hd.Byte}
+			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
+		},
+		// no heading: the whole note
+		empty:  func() pane { return pane{title: h.file.name(), text: h.core.Value()} },
+		scope:  TicketFile,
+		choose: h.jumpToHeading}
 }
 
-// jumpToHeading closes the picker and puts the cursor on row i's heading, the page scrolled to it.
-func (h *Host) jumpToHeading(i int) {
-	if i < 0 || i >= len(h.outlineRows) {
-		return
-	}
-	hd := h.outlineRows[i]
-	h.closeDialog("outlinePicker")
+// headingRowOf is a heading's row, indented by its level.
+func headingRowOf(_ int, hd outline.Heading) rowOf {
+	return rowOf{"key": hd.ID, "heading": strings.Repeat("  ", hd.Level-1) + hd.Text, "line": fmt.Sprint(hd.Line)}
+}
+
+// jumpToHeading puts the cursor on heading hd, the page scrolled to it: the picker has closed.
+func (h *Host) jumpToHeading(hd outline.Heading) {
 	h.core.SetLine(hd.Line-1, 0)
 	h.keep(h.p.Call("editor", "forceActiveFocus"))
 	h.showCrumb()

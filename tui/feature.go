@@ -171,6 +171,12 @@ func (l legacy) State() map[string]any        { return l.h.state() }
 func (l legacy) Commands() map[string]Command { return l.h.commands() }
 func (l legacy) Prefs() []PrefSpec            { return legacyPrefRows(l.h, l.h.gui) }
 
+// Listed is the workspace's files listed again: File › Open and the draft's name list them.
+func (l legacy) Listed() {
+	l.h.openPick.setAll(l.h.files.Paths)
+	l.h.newPick.setAll(l.h.files.Paths)
+}
+
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host
 // field. Every method runs on the loop, as the feature's own handlers do.
 type Core interface {

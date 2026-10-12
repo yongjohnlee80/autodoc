@@ -72,31 +72,30 @@ type Host struct {
 	theme     string
 
 	// the models the document binds
-	picker                        *tuidecl.ListModel
-	workspaces, managed           *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
-	outlineList, wsProviders      *tuidecl.ListModel
-	hits, newList, providerModels *tuidecl.ListModel
-	providers                     *rows[providerRow] // the embedding providers (providers.go)
-	rankers                       *rows[rankerRow]   // the re-rankers (rankers.go)
-	vectors                       *rows[vectorRow]   // the workspace's models (vectors.go)
-	explorer                      *tuidecl.TreeListModel
-	explorerPaths                 map[string][]string // by workspace: its files, once listed (explorer.go)
-	explorerTop                   []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
+	workspaces, managed         *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
+	wsProviders, providerModels *tuidecl.ListModel
+	providers                   *rows[providerRow] // the embedding providers (providers.go)
+	rankers                     *rows[rankerRow]   // the re-rankers (rankers.go)
+	vectors                     *rows[vectorRow]   // the workspace's models (vectors.go)
+	explorer                    *tuidecl.TreeListModel
+	explorerPaths               map[string][]string // by workspace: its files, once listed (explorer.go)
+	explorerTop                 []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
 
-	// the pickers (pickers.go): what each lists, the latest answers winning, and the search's words
-	hitList             []hit
-	pickerRows, newRows []string
-	searchSeq           uint64
-	searchCancel        context.CancelFunc
-	searchQuery         string
-	searchOpen          bool
-	lastSearchError     string
-	searchWaiting       bool
-	searchWaitToast     bool
-	previewSeq          uint64
-	marks               marks
-	findMarks           marks // the page find's words, as the page's highlighter marks them (find.go)
-	openAt              int   // where the next file opened puts the cursor, a byte offset; -1 for its start
+	// the pickers (pick.go): the search's, File › Open's, the draft's name and the outline's; the
+	// search's own state, and its words
+	searchPick        *pick[hit]
+	openPick, newPick *pick[string]
+	outlinePick       *pick[outline.Heading]
+	searchSeq         uint64
+	searchCancel      context.CancelFunc
+	searchQuery       string
+	searchOpen        bool
+	lastSearchError   string
+	searchWaiting     bool
+	searchWaitToast   bool
+	marks             marks
+	findMarks         marks // the page find's words, as the page's highlighter marks them (find.go)
+	openAt            int   // where the next file opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find       findState
@@ -120,7 +119,6 @@ type Host struct {
 	kinds                                  kind.Registrations
 	registrationOffered, registrationNoted bool
 	registrationRestart, restartAccepted   bool
-	previewHeld                            bool // the search preview's hit is of a held document
 	panelOpen                              map[string]bool
 	lastPanel                              string      // the panel opened last (Arrange panel)
 	tutorialAt                             int         // the tutorial's page shown (tutorial.go)
@@ -197,11 +195,10 @@ type Host struct {
 	graphicsOverride  func() tuicore.Tri
 	rasterizeOverride func(context.Context, []byte, widget.Page) ([]byte, error)
 	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
-	outline     *outline.Doc
-	outlineGen  uint64
-	outlineRows []outline.Heading
-	focusSent   time.Time
-	entered     bool // ws was entered on this connection's listing
+	outline    *outline.Doc
+	outlineGen uint64
+	focusSent  time.Time
+	entered    bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
@@ -348,11 +345,7 @@ func newHost(session *Session, opt Options) *Host {
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, agentDir: opt.AgentDir, agentConfig: opt.ConfigPath, recoveryDir: opt.RecoveryDir, luaDir: opt.LuaDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
-		picker:          tuidecl.NewListModel("key", "path"),
-		outlineList:     tuidecl.NewListModel("key", "heading", "line"),
 		wsProviders:     tuidecl.NewListModel("key", "label"),
-		hits:            tuidecl.NewListModel("key", "hit", "path", "section"),
-		newList:         tuidecl.NewListModel("key", "path"),
 		providerModels:  tuidecl.NewListModel("key", "name"),
 		agentRows:       tuidecl.NewListModel("key", "default", "name", "command"),
 		cellFontModel:   fontModel(),
@@ -380,6 +373,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
+	h.searchPick, h.openPick, h.newPick, h.outlinePick = h.newSearchPick(), h.newOpenPick(), h.newNewPick(), h.newOutlinePick()
 	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
 	return h

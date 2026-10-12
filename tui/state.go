@@ -67,26 +67,26 @@ func (h *Host) state() map[string]any {
 		"App.jumpText":           "",
 
 		// the search picker
-		"App.hits":                  h.hits,
+		"App.hits":                  h.searchPick.list.Model(),
 		"App.hitsTitle":             "hits",
 		"App.searchPreviewTitle":    "",
 		"App.searchPreviewText":     "",
 		"App.searchPreviewRendered": false,
 		"App.searchPreviewAt":       0,
 		// the outline picker (outline.go)
-		"App.outlineRows":         h.outlineList,
+		"App.outlineRows":         h.outlinePick.list.Model(),
 		"App.outlineStatus":       "headings",
 		"App.outlinePreviewTitle": "",
 		"App.outlinePreviewText":  "",
 		"App.outlinePreviewAt":    0,
 		// the open picker
-		"App.pickerRows":       h.picker,
+		"App.pickerRows":       h.openPick.list.Model(),
 		"App.pickerStatus":     "files",
 		"App.openPreviewTitle": "",
 		"App.openPreviewText":  "",
 		"App.openPreviewAt":    0,
 		// the new-file picker
-		"App.newFiles":        h.newList,
+		"App.newFiles":        h.newPick.list.Model(),
 		"App.newFilePath":     "",
 		"App.fileNameError":   draftHelp,
 		"App.newPreviewTitle": "",

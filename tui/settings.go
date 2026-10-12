@@ -383,10 +383,10 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 		}
 		out["section_tokens"] = n
 	}
-	if p := pick(policyChoices, f.policy); p != w.embeddingPolicy {
+	if p := choiceAt(policyChoices, f.policy); p != w.embeddingPolicy {
 		out["embedding_policy"] = p
 	}
-	if p := pick(b.providers, f.provider); p != w.provider {
+	if p := choiceAt(b.providers, f.provider); p != w.provider {
 		out["provider"] = p
 	}
 	if !b.databases {
@@ -427,11 +427,11 @@ func orNone(s string) string {
 
 func (b settingsBase) databaseChanges(f settingsForm, out map[string]any) error {
 	db := b.w.db
-	dest := pick(destinationChoices, f.dest)
+	dest := choiceAt(destinationChoices, f.dest)
 	if dest != db.destination {
 		out["destination"] = dest
 	}
-	index := pick(indexChoices, f.index)
+	index := choiceAt(indexChoices, f.index)
 	switch dest {
 	case store.DestinationPostgres:
 		schema := strings.TrimSpace(f.destSchema)
@@ -449,7 +449,7 @@ func (b settingsBase) databaseChanges(f settingsForm, out map[string]any) error 
 		out["vector_index"] = index
 	}
 
-	engine, schema := pick(sourceChoices, f.src), strings.TrimSpace(f.srcSchema)
+	engine, schema := choiceAt(sourceChoices, f.src), strings.TrimSpace(f.srcSchema)
 	switch {
 	case engine == "" && db.source != nil:
 		out["source"] = map[string]any{"remove": true}
@@ -468,7 +468,8 @@ func (b settingsBase) databaseChanges(f settingsForm, out map[string]any) error 
 	return nil
 }
 
-func pick(choices []string, i int) string {
+// choiceAt is choice i, "" when there is none.
+func choiceAt(choices []string, i int) string {
 	if i < 0 || i >= len(choices) {
 		return ""
 	}

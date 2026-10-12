@@ -180,10 +180,8 @@ func (h *Host) enter(name string) {
 		h.searchCancel = nil
 	}
 	h.searchSeq++
-	h.hitList = nil
-	h.hits.Reset(nil)
+	h.searchPick.show(nil)
 	h.set("App.hitsTitle", "hits · searching "+name)
-	h.showPreview("search", "", "", 0)
 	h.refreshSearch()
 	h.listFiles()
 	h.poll()

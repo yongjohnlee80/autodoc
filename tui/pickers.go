@@ -13,7 +13,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/parse/markdown"
-	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
 // THE PICKERS — search, open and new file: the picker's layout (the fields over the list on the
@@ -48,10 +48,8 @@ func (h *Host) searchLive(q string) {
 			h.notifyDone(toastSearchWait, "search cleared")
 			h.searchWaitToast = false
 		}
-		h.hitList = nil
-		h.hits.Reset(nil)
+		h.searchPick.show(nil)
 		h.set("App.hitsTitle", "hits")
-		h.showPreview("search", "", "", 0)
 		return
 	}
 	queryCtx, cancel := context.WithCancel(h.ctx)
@@ -105,9 +103,7 @@ func (h *Host) searchLive(q string) {
 				h.notifyDone(toastSearchWait, "search did not complete")
 				h.searchWaitToast = false
 			}
-			h.hitList = nil
-			h.hits.Reset(nil)
-			h.showPreview("search", "", "", 0)
+			h.searchPick.show(nil)
 			h.set("App.hitsTitle", "hits · "+wireMessage(a.err))
 			msg := "search in " + ws + " is unavailable: " + wireMessage(a.err)
 			if msg != h.lastSearchError {
@@ -138,17 +134,11 @@ func (h *Host) searchLive(q string) {
 			h.notifyDone(toastSearchWait, "search has results in "+ws)
 			h.searchWaitToast = false
 		}
-		h.hitList = a.hits
-		h.hits.Reset(hitRows(a.hits))
 		// the order first: a narrow pane keeps what is read first
 		h.hitsRanked = a.ranked
 		h.rankedBy(a.rankedBy)
 		h.set("App.hitsTitle", fmt.Sprintf("hits (%d)%s · %s · semantic %s", len(a.hits), a.ranked, a.mode, a.semantic))
-		if len(a.hits) > 0 {
-			h.previewHit(0)
-		} else {
-			h.showPreview("search", "", "", 0)
-		}
+		h.searchPick.show(a.hits) // the hits, the first previewed
 	})
 }
 
@@ -250,23 +240,23 @@ func (h *Host) refreshSearch() {
 	}
 }
 
-// previewHit shows the file of hit i, at its section.
-func (h *Host) previewHit(i int) {
-	if i < 0 || i >= len(h.hitList) {
-		return
-	}
-	x := h.hitList[i]
-	h.previewHeld = x.hold != ""
-	h.preview("search", x.path, x.byteStart)
+// newSearchPick is the search's picker: its hits are what the daemon found for the words typed.
+func (h *Host) newSearchPick() *pick[hit] {
+	return &pick[hit]{c: core{h}, dialog: "searchPicker", name: "search",
+		list:  newRows(tuidecl.NewListModel("key", "hit", "path", "section"), hitRowOf),
+		query: h.searchLive,
+		preview: func(x hit) func(context.Context) answerOf[pane] {
+			return h.readPreview(x.path, x.byteStart, x.hold != "")
+		},
+		// a hit read as Markdown offers its Rendered view
+		shown:  func(x hit, a answerOf[pane]) { h.previewRendered(x.path, a.err == nil) },
+		scope:  TicketWorkspace,
+		choose: h.openHit,
+		cancel: h.searchClosed}
 }
 
-// openHit opens the file of hit i at its section, and closes the picker.
-func (h *Host) openHit(i int) {
-	if i < 0 || i >= len(h.hitList) {
-		return
-	}
-	x := h.hitList[i]
-	h.closeDialog("searchPicker")
+// openHit opens the file of hit x at its section: the picker has closed.
+func (h *Host) openHit(x hit) {
 	h.searchClosed()
 	h.openAt = x.byteStart
 	h.openPath(x.path)
@@ -278,37 +268,24 @@ func (h *Host) openHit(i int) {
 	}
 }
 
-// preview shows file p of the workspace in the named picker's preview, at byte at: read through
-// the daemon, the latest asked for winning.
-func (h *Host) preview(picker, p string, at int) {
-	tk, ws := h.ticket(&h.previewSeq, TicketWorkspace), h.ws
-	do(h, func(ctx context.Context) (answer answerOf[string]) {
+// readPreview is the work that reads file p of the workspace for a picker's preview, the cursor at
+// byte at: through the daemon, off the loop. held is a hit of a document another backend's build
+// indexed, which says so when this one cannot read it.
+func (h *Host) readPreview(p string, at int, held bool) func(context.Context) answerOf[pane] {
+	ws := h.ws
+	return func(ctx context.Context) answerOf[pane] {
 		res, err := h.call(ctx, "doc.read", ws, p)
 		if err != nil {
-			answer.err = err
-			return
-		}
-		b, _ := asMap(res)["content"].([]byte)
-		answer.v = string(b)
-		return
-	}, func(a answerOf[string]) {
-		if !tk.Current() {
-			return
-		}
-		if picker == "search" {
-			h.previewRendered(p, a.err == nil)
-		}
-		if a.err != nil {
-			why := wireMessage(a.err)
-			if picker == "search" && h.previewHeld {
+			why := wireMessage(err)
+			if held {
 				// a held hit this backend cannot read (a PDF under a community build): say why
 				why = "held: this backend's build does not read this file; it was indexed by another (" + why + ")"
 			}
-			h.showPreview(picker, p+" · "+why, "", 0)
-			return
+			return answerOf[pane]{v: pane{title: p + " · " + why}, err: err}
 		}
-		h.showPreview(picker, p, a.v, at)
-	})
+		b, _ := asMap(res)["content"].([]byte)
+		return answerOf[pane]{v: pane{title: p, text: string(b), at: at}}
+	}
 }
 
 // previewRendered gives the search's preview its Rendered view for a hit read as Markdown, as
@@ -320,113 +297,45 @@ func (h *Host) previewRendered(p string, read bool) {
 	h.set("App.searchPreviewRendered", read && h.resolver().Of(p).Traits().ReadsAs == kind.Markdown)
 }
 
-// showPreview puts text in a picker's preview, the cursor at byte at: the position is moved away
-// first, so the same number on another file still moves it.
-func (h *Host) showPreview(picker, title, text string, at int) {
-	at = min(max(at, 0), len(text))
-	h.set("App."+picker+"PreviewTitle", title)
-	h.set("App."+picker+"PreviewAt", -1)
-	h.set("App."+picker+"PreviewText", text)
-	h.set("App."+picker+"PreviewAt", cursorAt(text, at))
-}
-
-// cursorAt is byte at of text as the editor's cursorPosition counts it: characters (grapheme
-// clusters) before it, a line break (\r\n, \r or \n) one, as the editor splits them. A byte
-// inside a character is that character's start. A count of runes lands late after a combining
-// mark or a joined emoji.
-func cursorAt(text string, at int) int {
-	n, end := 0, 0
-	for c := range tuicore.Graphemes(text) {
-		if end += len(c); end > at {
-			break
-		}
-		n++
-	}
-	return n
-}
-
 // The open picker: a filter over the workspace's files.
+
+// newOpenPick is File › Open's picker over the workspace's files.
+func (h *Host) newOpenPick() *pick[string] {
+	return &pick[string]{c: core{h}, dialog: "fileOpen", name: "open",
+		list:   newRows(tuidecl.NewListModel("key", "path"), pathRowOf),
+		status: "App.pickerStatus", noun: "files",
+		match:   func(p string) string { return p },
+		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },
+		scope:   TicketWorkspace,
+		choose:  h.openPath}
+}
 
 // openPicker opens File › Open over the workspace's files.
 func (h *Host) openPicker() {
-	h.pickerFilter("")
-	h.open("fileOpen")
+	h.openPick.setAll(h.files.Paths)
+	h.openPick.open()
 }
 
-// pickerFilter keeps the files whose path holds text (case aside), and previews the first.
-func (h *Host) pickerFilter(text string) {
-	h.pickerRows = filterFiles(h.files.Paths, text)
-	rows := make([]rowOf, len(h.pickerRows))
-	for i, p := range h.pickerRows {
-		rows[i] = rowOf{"key": p, "path": p}
-	}
-	h.picker.Reset(rows)
-	h.set("App.pickerStatus", fmt.Sprintf("files (%d of %d)", len(rows), len(h.files.Paths)))
-	if len(rows) > 0 {
-		h.preview("open", h.pickerRows[0], 0)
-	} else {
-		h.showPreview("open", "", "", 0)
-	}
-}
-
-func filterFiles(all []string, text string) []string {
-	text = strings.ToLower(strings.TrimSpace(text))
-	var out []string
-	for _, p := range all {
-		if strings.Contains(strings.ToLower(p), text) {
-			out = append(out, p)
-		}
-	}
-	return out
-}
-
-// previewPick shows the open picker's row i.
-func (h *Host) previewPick(i int) {
-	if i >= 0 && i < len(h.pickerRows) {
-		h.preview("open", h.pickerRows[i], 0)
-	}
-}
-
-// pickerSelect opens the open picker's row i.
-func (h *Host) pickerSelect(i int) {
-	if i < 0 || i >= len(h.pickerRows) {
-		return
-	}
-	p := h.pickerRows[i]
-	h.closeDialog("fileOpen")
-	h.openPath(p)
-}
+// pathRowOf is a file's row in a list of paths.
+func pathRowOf(_ int, p string) rowOf { return rowOf{"key": p, "path": p} }
 
 // The new-file picker: a path, over the workspace's files to take a folder from.
 
-// newFileFilter lists the files under what the path holds so far, and previews the first.
-func (h *Host) newFileFilter(text string) {
-	h.newRows = filterFiles(h.files.Paths, text)
-	rows := make([]rowOf, len(h.newRows))
-	for i, p := range h.newRows {
-		rows[i] = rowOf{"key": p, "path": p}
-	}
-	h.newList.Reset(rows)
-	if len(rows) > 0 {
-		h.preview("new", h.newRows[0], 0)
-	} else {
-		h.showPreview("new", "", "", 0)
-	}
+// newNewPick is the draft's name: the path typed, over the workspace's files under it. Enter on a
+// file takes its folder; accept creates the file at the path.
+func (h *Host) newNewPick() *pick[string] {
+	return &pick[string]{c: core{h}, dialog: "fileName", name: "new",
+		list:    newRows(tuidecl.NewListModel("key", "path"), pathRowOf),
+		match:   func(p string) string { return p },
+		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },
+		scope:   TicketWorkspace,
+		enter:   h.newFileFolder,
+		submit:  h.createFile}
 }
 
-// previewNew shows the new-file picker's row i.
-func (h *Host) previewNew(i int) {
-	if i >= 0 && i < len(h.newRows) {
-		h.preview("new", h.newRows[i], 0)
-	}
-}
-
-// newFileFolder writes row i's folder into the path, for a name to follow.
-func (h *Host) newFileFolder(i int) {
-	if i < 0 || i >= len(h.newRows) {
-		return
-	}
-	dir := path.Dir(h.newRows[i])
+// newFileFolder writes file p's folder into the path, for a name to follow.
+func (h *Host) newFileFolder(p string) {
+	dir := path.Dir(p)
 	if dir == "." {
 		dir = ""
 	} else {
@@ -536,15 +445,20 @@ func foldAt(s string, i int, t string) int {
 	return i
 }
 
-// hitRows are the hit list's rows: a held document's hit says so after its section.
+// hitRows are the hit list's rows.
 func hitRows(hits []hit) []rowOf {
 	rows := make([]rowOf, len(hits))
 	for i, x := range hits {
-		section := x.breadcrumb
-		if l := holdLabel(x.hold); l != "" {
-			section += " · " + l
-		}
-		rows[i] = rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": section}
+		rows[i] = hitRowOf(i, x)
 	}
 	return rows
+}
+
+// hitRowOf is hit i's row: a held document's hit says so after its section.
+func hitRowOf(i int, x hit) rowOf {
+	section := x.breadcrumb
+	if l := holdLabel(x.hold); l != "" {
+		section += " · " + l
+	}
+	return rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": section}
 }

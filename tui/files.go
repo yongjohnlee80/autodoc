@@ -460,7 +460,9 @@ func (h *Host) closeFile() {
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
 	h.core.SetReadOnly(false)
-	h.outline, h.outlineRows = nil, nil
+	h.outline = nil
+	h.outlinePick.setAll(nil)
+	h.outlinePick.list.Reset(nil)
 	h.outlineGen++
 	h.set("App.fileTitle", untitled)
 	h.set("App.syntaxDefinition", "Markdown")
@@ -520,7 +522,8 @@ func (h *Host) nameDraft(then func()) {
 	h.draft = &draftSave{then: then}
 	h.set("App.fileNameError", draftHelp)
 	h.setField("App.newFilePath", "")
-	h.newFileFilter("")
+	h.newPick.setAll(h.files.Paths)
+	h.newPick.filter("")
 	h.open("fileName")
 }
 

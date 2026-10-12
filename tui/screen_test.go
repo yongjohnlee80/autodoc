@@ -654,7 +654,7 @@ func TestClearingAndClosingAWaitingSearchCancelsItsRequest(t *testing.T) {
 	r.s.WaitForText(t, "search in kb is waiting: 1 texts still embedding")
 	r.h.p.Post(func() { r.h.searchLive("") })
 	r.s.WaitForText(t, "search cleared")
-	if count := onLoop(r, func() int { return len(r.h.hitList) }); count != 0 {
+	if count := onLoop(r, func() int { return r.h.searchPick.list.Len() }); count != 0 {
 		t.Errorf("clearing search left %d hits", count)
 	}
 	r.h.p.Post(func() { r.h.searchLive("unrelatedquery") })
@@ -693,7 +693,7 @@ func TestSemanticQueryErrorNotifiesOfWordsOnlyFallback(t *testing.T) {
 				r.h.lastSearchError == "semantic search could not answer in kb; results are by words only"
 		})
 	})
-	if hits := onLoop(r, func() int { return len(r.h.hitList) }); hits == 0 {
+	if hits := onLoop(r, func() int { return r.h.searchPick.list.Len() }); hits == 0 {
 		t.Error("query error dropped lexical results")
 	}
 }
@@ -769,7 +769,7 @@ func TestSearchFailureClearsStaleHitsAndSaysWhy(t *testing.T) {
 	r.s.WaitForText(t, "hits (1) · lexical")
 	r.h.p.Post(func() { r.h.ws = "missing"; r.h.searchLive("zebra") })
 	r.s.WaitForText(t, "search in missing is unavailable")
-	if count := onLoop(r, func() int { return len(r.h.hitList) }); count != 0 {
+	if count := onLoop(r, func() int { return r.h.searchPick.list.Len() }); count != 0 {
 		t.Fatalf("%d hits survived a failed search", count)
 	}
 }
