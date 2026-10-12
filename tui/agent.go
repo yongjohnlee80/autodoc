@@ -30,7 +30,7 @@ type agents struct {
 
 func newAgents(c agentHost, dir, config string) *agents {
 	return &agents{c: c, agentDir: dir, agentConfig: config,
-		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command", "problem")}
+		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command")}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
 	host, ok := c.(agentHost)
@@ -149,7 +149,7 @@ func (a *agents) PreferencesChanged() {
 // CLAUDE.md, telling it the workspace and how to call AutoDoc, and its environment names them too.
 // The command is the user's, as written; {root} and {workspace} in it are filled in.
 
-// The agent's preferences: the profiles, as JSON, and the default's name.
+// Profiles are JSON; the canonical default is a codename, with a legacy name mirror.
 const (
 	prefAgentProfiles        = "tui.agent.profiles"
 	prefAgentDefault         = "tui.agent.default"

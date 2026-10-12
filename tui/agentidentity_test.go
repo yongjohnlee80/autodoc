@@ -114,6 +114,18 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		if !ok || p != got[row] || c.p.Value(prefAgentDefaultCodename) != got[row].Codename {
 			t.Fatalf("default selected another Same label: %+v", p)
 		}
+		a.openAgentPanel()
+		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
+			t.Fatal("opening the default started another profile with the same label")
+		}
+		a.stopAgent()
+		c.configuredCommand = ""
+		a.useAgent(row)
+		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
+			t.Fatal("Use started another profile with the same label")
+		}
+		a.stopAgent()
+		c.configuredCommand = ""
 		a.agentRunning, a.agentRunningLabel = "running-orphan", "orphan"
 		a.useAgent(row)
 		if a.switchingAgent != got[row].Codename {
@@ -123,6 +135,26 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
 			t.Fatalf("switch started another Same label: command %q, identity %q", c.configuredCommand, a.agentRunning)
 		}
+	}
+}
+
+func TestGoneProfileActionsAndARefusedSwitchLeaveTheRunningAgentAlone(t *testing.T) {
+	c := newIdentityHost(`[{"name":"Same","command":"one"}]`)
+	a := newAgents(c, "", "")
+	a.agentRunning, a.agentRunningLabel = "orphan", "orphan label"
+	a.startEditAgent(-1)
+	a.makeAgentDefault(9)
+	a.useAgent(-1)
+	a.switchingAgent = "gone"
+	a.switchAgentConfirmed()
+	if a.agentRunning != "orphan" || a.editingAgent != "" {
+		t.Fatal("a stale row/identity changed the running agent")
+	}
+	c.stopErr = errors.New("stop dispatch refused")
+	a.switchingAgent = "same"
+	a.switchAgentConfirmed()
+	if a.agentRunning != "orphan" || c.configuredCommand != "" {
+		t.Fatal("a refused stop still configured the replacement")
 	}
 }
 

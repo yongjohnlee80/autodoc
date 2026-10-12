@@ -29,7 +29,7 @@ func (h *agents) listAgents() {
 			mark += "▶"
 		}
 		rows[i] = rowOf{"key": a.Codename, "default": mark, "name": a.Name, "codename": a.Codename,
-			"command": a.Command, "problem": h.profileProblem(a)}
+			"command": a.Command}
 	}
 	h.agentRows.Reset(rows)
 	switch {
@@ -98,11 +98,6 @@ func (h *agents) fillAgentForm(title string, a agentProfile) {
 	h.c.SetFormText("App.agentName", a.Name)
 	h.c.SetFormText("App.agentCodename", a.Codename)
 	h.c.SetFormText("App.agentCommand", a.Command)
-	if a.Name != "" {
-		if why := h.profileProblem(a); why != "" {
-			h.c.Set("App.agentFormError", "not a target: "+why)
-		}
-	}
 	h.c.Open("agentEdit")
 }
 
@@ -225,10 +220,6 @@ func (h *agents) useAgent(i int) {
 	if !ok {
 		return
 	}
-	if why := h.profileProblem(a); why != "" {
-		h.c.Set("App.agentProfilesStatus", "not a target: "+why)
-		return
-	}
 	if h.agentRunning == a.Codename {
 		h.c.Close("agentProfiles")
 		h.toggleAgentShown()
@@ -248,10 +239,6 @@ func (h *agents) useAgent(i int) {
 func (h *agents) switchAgentConfirmed() {
 	a, ok := h.profile(h.switchingAgent)
 	if !ok {
-		return
-	}
-	if why := h.profileProblem(a); why != "" {
-		h.c.Set("App.agentProfilesStatus", "not a target: "+why)
 		return
 	}
 	if !h.stopAgent() {
