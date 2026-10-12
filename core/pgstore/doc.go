@@ -27,9 +27,11 @@
 // are ORed, across fields ANDed, and no filter or query facet can widen it. An empty scope is
 // ErrNoAccess. View is unscoped. A tenant's access fields are its Policy (SetPolicy, Policy).
 //
-// Ingest state (ADR 1791762085): a Batch moves the tenant's (updated_at, id) Cursor, records its
-// last Refresh, and quarantines and releases failed source rows, all in the same transaction as
-// the page's documents. Store.Cursor, Refreshed and Quarantined read them back.
+// Ingest state, for a server that indexes a database source into a tenant page by page: a Batch
+// moves the tenant's (updated_at, id) Cursor, records its last Refresh, and quarantines and
+// releases failed source rows, all in the same transaction as the page's documents, so a crash
+// replays at most the page it interrupted and a failed row is retried rather than passed for good.
+// Store.Cursor, Refreshed and Quarantined read them back.
 //
 // Migrate applies the schema through dao/deploy, recording it in its own ledger table. Every object
 // is created and found through the connection's search_path: WithSchema sets it on every

@@ -12,10 +12,13 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 )
 
-// The enterprise search server's ingest state (ADR 1791762085 §4.3, §4.6): a tenant's cursor into
+// Ingest state for a server that indexes a database source into a tenant: the tenant's cursor into
 // its source, the source rows that failed and wait in quarantine, and the tenant's access policy.
 // The cursor and the quarantine are written through a Batch, in the same transaction as the
-// documents of the page that moved them; the policy is the server's, written at its start.
+// documents of the page that moved them. A cursor committed without its documents would let a
+// crash pass rows that were never indexed; committed together, a crash replays at most the page it
+// interrupted, and writing a page again is idempotent. The policy is written by the server from its
+// configuration when it starts.
 
 // Cursor is a tenant's position in its source: the (updated_at, id) of the last row a committed
 // page passed, compared lexicographically, so rows sharing a timestamp across a page boundary are

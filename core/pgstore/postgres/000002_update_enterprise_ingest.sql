@@ -1,7 +1,7 @@
--- The enterprise search server's ingest state (ADR 1791762085 §4.6), and the
--- chunk kind. Additive only: three new tables, keyed by tenant first like the
--- rest, and one column with a default, so every row 000001 wrote is kept and
--- reads as before.
+-- The ingest state of a server that indexes a database source into a tenant,
+-- and the chunk kind. Additive only: three new tables, keyed by tenant first
+-- like the rest, and one column with a default, so every row 000001 wrote is
+-- kept and reads as before.
 
 -- A chunk's kind: 'section', a section of the document, or 'abstract', its
 -- abstract, as the local store keeps it (sql/deployments 000014). A search

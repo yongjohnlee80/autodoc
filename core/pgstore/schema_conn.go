@@ -11,7 +11,7 @@ import (
 	"github.com/yongjohnlee80/golib/errs"
 )
 
-// A pgstore in a schema of its own (ADR 1791762085 §4.3, Lector's r0 P1): its tables, its
+// A pgstore in a schema of its own, beside a business database's tables: its tables, its
 // rag_english configuration and its migration ledger are created and found through the
 // connection's search_path, never by a qualified name. A pool's queries run on whichever physical
 // connection is free, so a search_path set once, on one connection, leaves the others in public:

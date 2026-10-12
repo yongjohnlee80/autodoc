@@ -86,7 +86,10 @@ func (s *Store) View(ctx context.Context, fn func(v *View) error) error {
 // facets that no search.Filter can widen. Within one field the values are the ones allowed (ORed);
 // across fields every one must hold (ANDed); a document with no value for a field is outside. The
 // predicate is the View's own, apart from the filter: a filter or a query naming an access field
-// can only narrow what access admits, never add to it (ADR 1791762085 §4.5, R6).
+// can only narrow what access admits, never add to it. It must not be one of the filter's facets:
+// golib's search engine merges the facets parsed from a query's text into the filter, and a
+// field's values are ORed, so a scope placed among them would be widened by a query naming
+// another value of the same field.
 //
 // An access with no field, a field with no name or no values, or a name with '=' is refused with
 // ErrNoAccess before any transaction begins: there is no scope that reads everything. Which fields
