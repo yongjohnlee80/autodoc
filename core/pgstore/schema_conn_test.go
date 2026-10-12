@@ -3,6 +3,7 @@ package pgstore
 import (
 	"context"
 	"errors"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -162,5 +163,59 @@ func TestASchemaNameIsAPlainIdentifier(t *testing.T) {
 	t.Cleanup(func() { conn.Close() })
 	if _, err := conn.ExecContext(ctx, "SELECT 1"); err == nil || !strings.Contains(err.Error(), "not a plain schema name") {
 		t.Errorf("a query on a pool WithSchema(%q): %v, want the connect refused", "Bad-Name", err)
+	}
+}
+
+// A role a DBA gave a schema of its own, with no CREATE on the database, prepares its store there:
+// EnsureSchema finds the schema and creates nothing, and Migrate runs in it, pgvector being already
+// installed in public. The mutant, named here: EnsureSchema running CREATE SCHEMA IF NOT EXISTS
+// when the schema exists (PostgreSQL refuses it: permission denied for the database).
+func TestASchemaOfItsOwnNeedsNoCreateOnTheDatabase(t *testing.T) {
+	ctx := context.Background()
+	admin, err := postgres.Open(ctx, dsnBase(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { admin.Close() })
+	role := "autodoc_pgstore_role_" + randHex(t)
+	if _, err := admin.ExecContext(ctx, "CREATE ROLE "+role+" LOGIN PASSWORD 'scratch'"); err != nil {
+		t.Fatal(err)
+	}
+	// dropped after the database that holds its schema, which the next cleanup drops first
+	t.Cleanup(func() { admin.ExecContext(context.Background(), "DROP ROLE IF EXISTS "+role) })
+	name := scratchName(t, admin, "autodoc_pgstore_")
+	owner, err := postgres.OpenNamed(ctx, name, dsnOf(t, admin, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { owner.Close() })
+	schema := "search_" + randHex(t)
+	for _, q := range []string{"CREATE EXTENSION vector SCHEMA public", "CREATE SCHEMA " + schema + " AUTHORIZATION " + role} {
+		if _, err := owner.ExecContext(ctx, q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	u, err := url.Parse(dsnOf(t, admin, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.UserPassword(role, "scratch")
+	conn, err := postgres.OpenNamed(ctx, name, u.String(), WithSchema(schema))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	if err := EnsureSchema(ctx, conn, schema); err != nil {
+		t.Fatalf("EnsureSchema as the schema's owner, with no CREATE on the database: %v", err)
+	}
+	if err := Migrate(ctx, conn); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if got := scalar(t, owner, "SELECT count(*)::text FROM information_schema.tables WHERE table_schema = '"+schema+"'"); got != "9" {
+		t.Errorf("%s tables in the schema, want 9", got)
+	}
+	// a schema it may not create is still refused, as PostgreSQL says
+	if err := EnsureSchema(ctx, conn, "other_"+randHex(t)); err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("EnsureSchema of a schema the role may not create: %v", err)
 	}
 }

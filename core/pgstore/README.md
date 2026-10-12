@@ -95,6 +95,10 @@ err = pgstore.Migrate(ctx, conn)
   there.
 - `EnsureSchema` must come before `Migrate`: PostgreSQL creates an object in the first schema of
   the path that **exists**, so with the schema missing the tables would land in `public`.
+- `EnsureSchema` creates a missing schema, which needs `CREATE` on the database, and leaves one that
+  exists alone, with no statement that needs it. So a DBA can create the schema for the role
+  (`CREATE SCHEMA autodoc_search AUTHORIZATION role`) and install `vector` in `public`, and the
+  role then needs nothing on the database itself.
 
 ## Concurrency
 

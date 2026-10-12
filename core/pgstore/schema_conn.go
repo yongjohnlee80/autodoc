@@ -56,11 +56,31 @@ func WithSchema(schema string) postgres.Option {
 }
 
 // EnsureSchema checks schema is a plain identifier (ErrSchemaName otherwise, before any I/O) and
-// creates it on conn if it does not exist. The connection's role needs CREATE on the database the
-// first time, and nothing after.
+// creates it on conn if it does not exist. A schema that exists is left as it is, with no CREATE
+// statement: PostgreSQL checks the database's CREATE privilege before it looks for the schema,
+// even under IF NOT EXISTS, so a role a DBA gave a schema of its own, and no CREATE on the
+// database, could not run one. Such a role needs nothing more here; one creating its schema needs
+// CREATE on the database.
 func EnsureSchema(ctx context.Context, conn dao.DataConn, schema string) error {
 	if err := CheckSchema(schema); err != nil {
 		return err
+	}
+	rows, err := conn.QueryContext(ctx, "SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)", schema)
+	if err != nil {
+		return fmt.Errorf("pgstore: look for schema %s: %w", schema, err)
+	}
+	var exists bool
+	if rows.Next() {
+		err = rows.Scan(&exists)
+	}
+	if cerr := rows.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("pgstore: look for schema %s: %w", schema, err)
+	}
+	if exists {
+		return nil
 	}
 	if _, err := conn.ExecContext(ctx, "CREATE SCHEMA IF NOT EXISTS "+quoteIdent(schema)); err != nil {
 		return fmt.Errorf("pgstore: create schema %s: %w", schema, err)
