@@ -78,3 +78,27 @@ func TestCustomProviderWorksForActualSourceAndMarkdownThroughAutoDoc(t *testing.
 		}
 	}
 }
+
+// Lua is highlighted from the standard catalog, as a .lua file and as a ```lua fence in Markdown:
+// local is a keyword in both. A ```text fence is the control: there, local is plain text.
+func TestLuaIsHighlightedInAFileAndAFence(t *testing.T) {
+	r := runTUI(t, NewSession("unused", nil), Options{})
+	styleOf := func(path, text string, line int) highlight.Style {
+		t.Helper()
+		return onLoop(r, func() highlight.Style {
+			r.h.show("", path, text, "v1", false)
+			f := r.h.core.BeginHighlight(0)
+			defer f.Close()
+			return f.Styles(line)[0]
+		})
+	}
+	if got := styleOf("/tmp/init.lua", "local x = 1\n", 0); got != highlight.Keyword {
+		t.Errorf("local in a .lua file is %v, want a keyword", got)
+	}
+	if got := styleOf("/tmp/notes.md", "# Notes\n\n```lua\nlocal x = 1\n```\n", 3); got != highlight.Keyword {
+		t.Errorf("local in a ```lua fence is %v, want a keyword", got)
+	}
+	if got := styleOf("/tmp/notes.md", "# Notes\n\n```text\nlocal x = 1\n```\n", 3); got == highlight.Keyword {
+		t.Error("local in a ```text fence is a keyword: the check cannot tell Lua from no language")
+	}
+}
