@@ -18,8 +18,8 @@ and checked too ([Writing a `.view` source](views.md)).
   secret written in plain text under some other key is refused too.
 - A file that can't be read is exit 1.
 - `autodoc --server --check server.toml` checks the file and the views the same way, then runs each
-  view against your database, read-only, to confirm its order, and exits 0 saying what it checked.
-  It also prints the warnings below.
+  view against your database, read-only, to confirm its order, asks the embedding provider to embed
+  one probe text, and exits 0 saying what it checked. It also prints the warnings below.
 
 **No secret is ever written in the file.** The DSN and the embedding key are read from environment
 variables the file names. An HTTP client's token is kept as its SHA-256, or read from the
@@ -86,16 +86,49 @@ The server opens three connection pools on the DSN:
 
 ## `[embedding]`: the enterprise's embedding model (required)
 
-Every tenant's chunks are embedded centrally, with this model. This section is validated now and
-used from M2.
+Every tenant's chunks are embedded centrally, with this model, by the server's one embedding
+worker.
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
 | `provider` | (required) | `"openai"` (any OpenAI-compatible endpoint) or `"ollama"`. | missing, or another value |
-| `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama | The provider's endpoint. | not an `http` or `https` URL with a host |
-| `model` | (required) | The model's name. | missing or blank |
-| `key_env` | none | The name of the environment variable holding the provider's API key. | given, and the variable is not set or is empty |
+| `base_url` | `https://api.openai.com/v1` for openai, `http://127.0.0.1:11434` for ollama | The provider's endpoint. For openai, the API's root or its `/v1`: either way the server asks `<root>/v1/embeddings`. | not an `http` or `https` URL with a host |
+| `model` | (required) | The model's name. | missing or blank; `--check`: an Ollama server without it |
+| `key_env` | none | The name of the environment variable holding the provider's API key, sent as a bearer token. | given, and the variable is not set or is empty; `--check`: the provider refuses the key |
 | `slots` | `4` | How many embedding requests may be in flight at once, across every tenant. | below 1 or above 64 |
+
+### How the server embeds
+
+- **Once per distinct text.** The worker embeds the chunk texts that have no vector under the
+  model, each distinct text once per tenant, in batches of 64 texts, at most `slots` requests at a
+  time whichever tenants they are for. Vectors are normalized and stored in the index's schema
+  (pgvector).
+- **A document is ready** for search by meaning once every one of its chunks has a vector. Until
+  then it is found by words, and ingestion never waits for the worker: an ingester's commit only
+  wakes it. It also looks every 30 seconds.
+- **Failures are retried.** A provider that is down, rate-limits or refuses the key is asked again
+  after a wait that doubles from a second to a minute; the log says so each time. That includes a
+  provider that does not answer when the server starts: the server runs, ingests, and answers by
+  words until it does.
+- **A text the provider rejects** (too long, say) is set aside for an hour and logged, and the rest
+  of its batch is embedded. Its document is found by words meanwhile.
+- **One writer per tenant.** The worker writes a tenant only while this server's ingester holds the
+  tenant's lock, so a standby server never touches it.
+- **Changing the model is a switch, with no gap in search.** The model's identity is its provider,
+  name, digest (Ollama reports one) and dimensions, so a new `model`, or a model that now answers
+  with another size, is a new model. At the next start the worker records it as the tenant's
+  target and fills it, while the old model stays recorded as active and searches answer by words
+  (`semantic: "switching"`). Once every text is embedded, every document is marked by the new model,
+  it becomes active, and the old model's vectors are deleted. A restart in the middle carries on;
+  configuring the old model again before the switch finishes cancels it.
+- **The key is a secret.** It is read from `key_env` when the provider is set up, and taken out of
+  every error the provider returns before it reaches the log.
+
+`--check` sets the provider up as the server does, which embeds one probe text, and reports the
+model and its dimensions. A key the provider refuses (`401`/`403`) is refused, naming
+`embedding.key_env`; an Ollama server without the model is refused, naming `embedding.model`. A
+provider that can't be reached, or fails otherwise, is a warning: the server would start without
+it and keep trying.
 
 ## `[http]` and `[[http.client]]`: the search API (optional)
 
@@ -160,4 +193,4 @@ policy, which search reads (from M3): a tenant can never be searched unscoped.
 |---|---|
 | 0 | stopped by SIGINT or SIGTERM, with every lock released; or `--check` found nothing wrong |
 | 1 | the file can't be read; the database can't be reached; a tenant's writer lock was lost (restart it: it waits for the lock and takes it again) |
-| 2 | the configuration or a view is refused, the field named; `--check` refused a view's order |
+| 2 | the configuration or a view is refused, the field named; `--check` refused a view's order, or the embedding provider refused the key or has no such model |

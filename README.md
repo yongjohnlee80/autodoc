@@ -910,9 +910,11 @@ They are small beside a chat model and run alongside one.
 
 `autodoc --server server.toml` indexes an enterprise's **database rows**, not files: each row of a
 `.view` query is rendered to a document and kept in PostgreSQL with pgvector, in a schema of its
-own beside the business tables, current as the rows change, for a web application to search with
-an access scope on every query. `autodoc --server --check server.toml` validates the configuration
-and every view, and confirms each view's order against the database, read-only.
+own beside the business tables, current as the rows change, and embedded centrally with the
+enterprise's model, once per distinct text, for a web application to search with an access scope
+on every query. `autodoc --server --check server.toml` validates the configuration and every view,
+confirms each view's order against the database, read-only, and asks the embedding provider for a
+probe.
 
 [`docs/enterprise/`](docs/enterprise/) has all of it: [what it is and when to use
 it](docs/enterprise/README.md), [the server configuration](docs/enterprise/server-config.md), and

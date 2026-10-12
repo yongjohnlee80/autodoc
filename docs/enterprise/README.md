@@ -61,7 +61,13 @@ flowchart LR
   the cursor, so a crash replays at most one page.
 - **One writer per tenant.** An ingester holds its tenant's advisory lock on a connection of its
   own. A second server on the same tenant waits, and takes over if the first goes away.
-- **The embedding worker** embeds every new chunk with your model, once per distinct text.
+- **The embedding worker**, one for the whole server, embeds every new chunk with your model, once
+  per distinct text, and marks each document ready for search by meaning once all its chunks have
+  vectors. It never holds up ingestion: a document answers by words until its vectors are in. A
+  provider that is down is retried, with a growing wait, while the server goes on. Change the model
+  in `server.toml` and the next start switches to it without a gap: searches answer by words while
+  the new model fills, then the tenant flips to it and the old vectors are freed
+  ([how the server embeds](server-config.md#how-the-server-embeds)).
 - **Search** is a Go package your web application can import, and the same code behind an
   HTTP/JSON API. Every query carries an access scope (say, the labels a user may see), and
   PostgreSQL applies it apart from the query, so no query text can widen it.
@@ -73,7 +79,7 @@ views read and `CREATE` on the database for its own schema ([the grants](views.m
 
 1. Write a `.view` file for the rows you want searchable: **[Writing a `.view` source](views.md)**.
 2. Write `server.toml`: **[The server configuration](server-config.md)**.
-3. Check both against your database, read-only:
+3. Check both against your database, read-only, and your embedding provider with one probe:
 
    ```sh
    export AUTODOC_SERVER_DSN='postgres://autodoc_search@db.internal/app'
@@ -96,14 +102,14 @@ Enterprise search ships in four steps, each reviewed on its own:
 
 | | What | Status |
 |---|---|---|
-| **M1** | `autodoc --server` and `--check`, `server.toml`, the `.view` ingestion: the incremental pass, the full refresh, quarantine, the writer lock. These docs. | this release |
-| **M2** | The central embedding worker, and switching models without a gap in search. | next |
-| **M3** | The search package (`enterprise/search`) and the HTTP API, with access scopes and client tokens; the web-integration guide and an end-to-end tutorial. | planned |
+| **M1** | `autodoc --server` and `--check`, `server.toml`, the `.view` ingestion: the incremental pass, the full refresh, quarantine, the writer lock. These docs. | done |
+| **M2** | The central embedding worker, and switching models without a gap in search; `--check` probes the provider. | this release |
+| **M3** | The search package (`enterprise/search`) and the HTTP API, with access scopes and client tokens; the web-integration guide and an end-to-end tutorial. | next |
 | **M4** | Operations: health and status, metrics in the log, a systemd unit and a container example. | planned |
 
-Until M2, documents are searchable by words only; until M3, through pgstore directly
-(`core/pgstore`, `Store.ViewWithin`). The `[embedding]` and `[http]` sections of `server.toml` are
-validated today, so a configuration you write now keeps working when they are used.
+Until M3, the index is searched through pgstore directly (`core/pgstore`, `Store.ViewWithin`), by
+words and by meaning. The `[http]` section of `server.toml` is validated today, so a configuration
+you write now keeps working when it is served.
 
 ## In this folder
 

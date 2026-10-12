@@ -33,6 +33,7 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `core/workspace` | a workspace as it is added (`Spec`, `Normalize`, the default patterns), its glob grammar and matcher, and opening its root |
 | `core/config` | the daemon's own settings (`config.toml`) and its XDG paths, resolved without touching the disk |
 | `core/pgstore`, `pgwriter` | a Postgres search store and the index's second writer (the enterprise destination) |
+| `enterprise/config`, `ingest`, `embedder` | the enterprise search server (`--server`): `server.toml`, the `.view` ingesters (one writer per tenant), and the one central embedding worker |
 | `core/paths`, `clock` | the path helpers and the one clock the core packages share |
 | `core/outline`, `export`, `edition` | as named |
 | `rpc` | the daemon's socket: registers every verb from its contract; `Catalog`. A `file.write` on a file a workspace indexes is that workspace's `doc.write` |

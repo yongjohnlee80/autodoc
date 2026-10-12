@@ -19,7 +19,7 @@ if config.IsRefusal(err) {
   `IsRefusal` tells the two apart; `Refuse(path, field, reason)` makes one for a check made after
   `Load`, such as a view's.
 - **The configuration:** `Server` holds `Postgres` (`DSNEnv`, `Schema`, and `DSN()`, which reads the
-  environment), `Embedding`, `HTTP` (nil when the file has none) with its `Client`s and their
+  environment), `Embedding` (and `Key()`, which reads the environment), `HTTP` (nil when the file has none) with its `Client`s and their
   grants, the `Source`s, and `Warnings` (a token shorter than `MinTokenBytes`).
 - **Defaults and bounds:** `DefaultSchema`, `DefaultListen`, `DefaultSlots`, `DefaultRefresh`,
   `DefaultInterval`, `DefaultLag`, `DefaultOpenAI`, `DefaultOllama`; `MaxSlots`, `MinInterval`,
@@ -37,4 +37,4 @@ being echoed.
 ## Concurrency
 
 `Load` may be called from any goroutine; a `Server` is a value it returns and never changes after.
-`Postgres.DSN` reads the environment when called.
+`Postgres.DSN` and `Embedding.Key` read the environment when called.
