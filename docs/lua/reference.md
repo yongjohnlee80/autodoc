@@ -91,7 +91,7 @@ run`.
 | `ed:lines()` | list of strings | Every line, a copy. |
 | `ed:cursor()` | line, col | Where the cursor is. |
 | `ed:set_cursor(line, col)` | nothing | Moves the cursor, clamped, and scrolls to it. |
-| `ed:insert(text)` | line, col | Inserts at the cursor, and returns the position just after the text, where the cursor goes. `"\n"`, `"\r\n"` and `"\r"` start lines. In Vim's Normal mode the text goes before the character under the cursor. |
+| `ed:insert(text)` | line, col | Inserts at the cursor, and returns the position just after the text. That position is exact even when Vim's Normal mode then rests the cursor on the last character (see Positions). `"\n"`, `"\r\n"` and `"\r"` start lines. In Vim's Normal mode the text goes before the character under the cursor. |
 | `ed:insert_at(line, col, text)` | line, col | `ed:insert` at a position. |
 | `ed:replace(l1, c1, l2, c2, text)` | line, col | Puts text in place of the range; returns the position just after it. |
 | `ed:delete(l1, c1, l2, c2)` | nothing | Removes the range. The cursor goes to its start. |
