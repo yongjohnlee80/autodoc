@@ -478,6 +478,10 @@ func (h *Host) closeFile() {
 func (h *Host) edited() {
 	h.setDirty(true)
 	h.feedVersion++ // a new version, sent once the page rests (pagePaused)
+	// a check or a feed the last pause scheduled is of text this keystroke changed: the next
+	// pause schedules them again, from this keystroke
+	h.fmGen++
+	h.feedGen++
 	h.pageSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
 }

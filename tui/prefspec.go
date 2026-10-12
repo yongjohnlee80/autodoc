@@ -177,6 +177,24 @@ func (h *Host) choosePref(s PrefSpec, i int) {
 	}
 }
 
+// setRowPref sets row's preference to v through the row alone (Core.SetPref): read into the live
+// prefs, its State published and its Changed run when v changed, then stored in order. A row
+// that a feature's code sets (the recent files on every open) does not re-apply every preference,
+// as a choice in the dialog does (choosePref).
+func (h *Host) setRowPref(row PrefSpec, v string) {
+	changed := v != row.value(h.prefs)
+	p := h.prefs
+	row.read(&p, v)
+	h.prefs = p
+	if row.State != nil {
+		h.keep(h.p.SetMany(row.State(p)))
+	}
+	if changed && row.Changed != nil {
+		row.Changed(p)
+	}
+	h.storePref(row.Name, v)
+}
+
 // choosePrefNamed is choosePref by the preference's name: the menu's and the tests' way to a row.
 func (h *Host) choosePrefNamed(name string, i int) {
 	for _, s := range h.prefRows {

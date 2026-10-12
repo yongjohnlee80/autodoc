@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // watching is a feature that records the page's lifecycle and the listings it hears.
@@ -154,5 +156,116 @@ func TestTheNoticesHistoryKeepsAndClears(t *testing.T) {
 	onLoop(r, func() bool { r.h.noticeLog.clear(); return true })
 	if n := onLoop(r, func() int { return r.h.noticeLog.rows.Len() }); n != 0 {
 		t.Errorf("after clearing, %d kept", n)
+	}
+}
+
+// SetPref goes through the row alone: the live prefs read the value at once, the row's State is
+// published, and its Changed runs when the value changed, not when it is set again.
+func TestSetPrefGoesThroughTheRowAlone(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	changed, stated := 0, ""
+	row := ValuePref("test.feature.mode", "a", nil)
+	row.State = func(p prefs) map[string]any { stated = p.Value("test.feature.mode"); return map[string]any{} }
+	row.Changed = func(prefs) { changed++ }
+	onLoop(r, func() bool {
+		r.h.prefRows = append(r.h.prefRows, row)
+		core{r.h}.SetPref("test.feature.mode", "b")
+		core{r.h}.SetPref("test.feature.mode", "b") // the same again: nothing changed
+		return true
+	})
+	got := onLoop(r, func() [2]any { return [2]any{core{r.h}.Prefs().Value("test.feature.mode"), changed} })
+	if got != [2]any{"b", 1} {
+		t.Errorf("value %v, Changed ran %v times; want b, once", got[0], got[1])
+	}
+	if v := onLoop(r, func() string { return stated }); v != "b" {
+		t.Errorf("the row's State was published with %q; want b", v)
+	}
+}
+
+// A keystroke after a pause drops the frontmatter check that pause scheduled: the check of the
+// older text never runs, and the next pause checks the new text.
+func TestAKeystrokeAfterThePauseDropsItsCheck(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
+	sess := NewSession(d.sock, nil)
+	var mu sync.Mutex
+	var checked []string
+	sess.SetBeforeCall(func(method string, params []any) {
+		if method == "doc.validate" && len(params) == 3 {
+			if b, ok := params[2].([]byte); ok {
+				mu.Lock()
+				checked = append(checked, string(b))
+				mu.Unlock()
+			}
+		}
+	})
+	r := runTUI(t, sess, Options{})
+	r.s.WaitForText(t, "· kb")
+	r.h.p.Post(func() { r.h.openPath("guide.md") })
+	r.waitFile(t, "guide.md")
+	r.h.p.Post(func() {
+		r.h.editor.SetValue("# Older\n")
+		r.h.pagePaused() // its check is due validateDelay-editPause from now
+	})
+	// a keystroke after the pause, before its check: the next pause would come after that check
+	time.Sleep((validateDelay - editPause) / 3)
+	r.h.p.Post(func() {
+		r.h.editor.SetValue("# Newer\n")
+		r.h.edited()
+	})
+	r.s.WaitFor(t, "the newer text checked", func(string) bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Contains(checked, "# Newer\n")
+	})
+	mu.Lock()
+	defer mu.Unlock()
+	if slices.Contains(checked, "# Older\n") {
+		t.Errorf("the older text's check ran after a keystroke changed it: %q", checked)
+	}
+}
+
+// Showing another page drops a typing pause still to come: the page shown is not told it was
+// edited by typing that was the page before's.
+func TestShowingAPageDropsThePendingPause(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	w := &watching{fake: fake{name: "w"}}
+	onLoop(r, func() bool { r.h.reg.features = append(r.h.reg.features, w); return true })
+	r.h.p.Post(func() { r.h.openPath("guide.md") })
+	r.waitFile(t, "guide.md")
+	r.s.WaitFor(t, "guide.md shown", func(string) bool { return slices.Contains(w.seen(), "shown guide.md") })
+	onLoop(r, func() bool {
+		r.h.editor.SetValue("typed\n")
+		r.h.edited() // its pause is to come
+		r.h.closeFile()
+		return true
+	})
+	time.Sleep(3 * editPause) // the dropped pause would have come by now
+	if got := w.seen(); slices.Contains(got, "edited") {
+		t.Errorf("the draft was told it was edited by the file before's typing: %q", got)
+	}
+}
+
+// A file opened raw (an HTML file's own bytes) is a page read as plain text; a derived document's
+// text and the draft read as Markdown.
+func TestAPagesKindFollowsRawAndDerived(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "guide.md", guideFile)})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	got := onLoop(r, func() [3]kind.Kind {
+		saved := r.h.file
+		defer func() { r.h.file = saved }()
+		r.h.file = openedFile{ws: "kb", path: "page.html", open: true, raw: true}
+		raw := r.h.pageKind()
+		r.h.file = openedFile{ws: "kb", path: "manual.pdf", open: true, derived: "PDF"}
+		derived := r.h.pageKind()
+		r.h.file = openedFile{}
+		return [3]kind.Kind{raw, derived, r.h.pageKind()}
+	})
+	if got != [3]kind.Kind{kind.Text, kind.Markdown, kind.Markdown} {
+		t.Errorf("kinds: raw %v, derived %v, draft %v; want text, Markdown, Markdown", got[0], got[1], got[2])
 	}
 }

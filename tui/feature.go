@@ -201,9 +201,11 @@ type Core interface {
 	OpenRef(ws, path string)
 	// Say puts a message about the page or the view on the status line, until the next.
 	Say(msg string)
-	// SetPref sets one of the feature's preferences (its PrefSpec row names it): applied to Prefs
-	// at once through the row, then stored, in order with the other preferences written. A name no
-	// row declares is ignored.
+	// SetPref sets one of the feature's preferences (its PrefSpec row names it), through the row
+	// alone: read into Prefs at once, the row's State published and its Changed run when the value
+	// changed, then stored, in order with the other preferences written. Nothing else is applied
+	// again: what a preference changes on screen is its row's State and Changed. A name no row
+	// declares is ignored.
 	SetPref(name, value string)
 	// Files is the workspace's files as last listed (page.go): one snapshot, not to be changed.
 	Files() FileList
@@ -259,7 +261,7 @@ func (c core) Workspaces() []string {
 func (c core) SetPref(name, value string) {
 	for _, row := range c.h.prefRows {
 		if row.Name == name {
-			c.h.setPref(name, value, func(p *prefs) { row.read(p, value) })
+			c.h.setRowPref(row, value)
 			return
 		}
 	}

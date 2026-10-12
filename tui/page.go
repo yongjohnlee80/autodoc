@@ -138,6 +138,7 @@ func (h *Host) resetFiles() {
 // showPage is a page shown, a file read or the draft started: its text snapshotted, and the
 // watchers told (the one before closed first). The host's consumers read h.page from here on.
 func (h *Host) showPage() {
+	h.pageGen++ // a pause still to come was the page before's: it must not reach this one
 	h.page, h.typing = h.takePage(), false
 	h.reg.shown(h.page)
 }
@@ -153,11 +154,20 @@ func (h *Host) pageNow() Page {
 
 // takePage is the page as the editor shows it now, its text one snapshot.
 func (h *Host) takePage() Page {
-	p := Page{Kind: h.outlineKind(), Text: []byte(h.core.Value())}
+	p := Page{Kind: h.pageKind(), Text: []byte(h.core.Value())}
 	if h.file.open {
 		p.Ref, p.Outside = fileRef{h.file.ws, h.file.path}, h.file.outside()
 	}
 	return p
+}
+
+// pageKind is how the page's text is read: a file opened raw (an HTML file's own bytes) as plain
+// text, the rest as the outline reads it (a derived document's text and the draft as Markdown).
+func (h *Host) pageKind() kind.Kind {
+	if h.file.open && h.file.raw {
+		return kind.Text
+	}
+	return h.outlineKind()
 }
 
 // pageSoon is typing: once it has rested editPause, the page's text is snapshotted once and handed
