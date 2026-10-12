@@ -185,6 +185,16 @@ func TestARowBecomesItsDocument(t *testing.T) {
 	if !strings.HasPrefix(d.Version, "2026-10-12T10:00:00Z|") || len(d.Version) != len("2026-10-12T10:00:00Z|")+12 {
 		t.Errorf("Version %q", d.Version)
 	}
+	if d.SourceID != "7" {
+		t.Errorf("SourceID %q, want the row's id", d.SourceID)
+	}
+	other, err := doc(`{` + strings.Replace(base, `"id": 7`, `"id": 8`, 1) + `, "label_id": 42, "region": ["ca", "us"], "tags": ["Live", "live"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Version == d.Version {
+		t.Errorf("rows differing only by id share the Version %q: a document stored without its source id would never be written again with it", d.Version)
+	}
 	moved, err := doc(`{` + base + `, "label_id": 43, "region": ["ca", "us"], "tags": ["Live"]}`)
 	if err != nil {
 		t.Fatal(err)

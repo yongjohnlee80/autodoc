@@ -344,6 +344,34 @@ func TestARefreshRewritesAContentChangeTheTimestampMissed(t *testing.T) {
 	}
 }
 
+// A document carries its row's id as its source id. One stored without it (as before migration
+// 000004, its version from before the id was hashed) is written again by the next refresh, now with
+// its id, though the row did not change. The mutants, named here: the document built without the
+// row's id; the id left out of the version's hash (covered by TestARowBecomesItsDocument).
+func TestADocumentCarriesItsRowsID(t *testing.T) {
+	f := newFixture(t)
+	f.track(1, "A", "Blue", 1)
+	f.track(2, "A", "Green", 2)
+	in := f.ingester(f.source(nil), Options{}, "")
+	if _, err := in.Pass(f.ctx); err != nil {
+		t.Fatal(err)
+	}
+	sid := func(path string) string {
+		return f.scalar(f.store, `SELECT source_id FROM rag_document WHERE path = $1`, path)
+	}
+	if got := sid("track/1.md") + "," + sid("track/2.md"); got != "1,2" {
+		t.Fatalf("the source ids after a pass: %s", got)
+	}
+	f.scalar(f.store, `UPDATE rag_document SET source_id = '', version = 'from before 000004' WHERE path = 'track/1.md' RETURNING path`)
+	st := must[Stats](t)(in.Refresh(f.ctx))
+	if st.Written != 1 || st.Unchanged != 1 {
+		t.Errorf("Refresh: %+v, want the document without its id written again and the other unchanged", st)
+	}
+	if got := sid("track/1.md"); got != "1" {
+		t.Errorf("after the refresh, track 1's source id is %q", got)
+	}
+}
+
 // A view edit changes the indexer, so a refresh cuts every row again, though no row changed.
 func TestAViewEditRecutsEveryRow(t *testing.T) {
 	f := newFixture(t)

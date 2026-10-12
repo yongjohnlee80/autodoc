@@ -259,9 +259,13 @@ func parseTime(s string) (time.Time, error) {
 // title or tags are malformed, and one whose body fails to render, is an error: the row is
 // quarantined, and its document, if it has one, is kept as it was.
 //
+// Its SourceID is the row's id, which a search hit links back to its record by.
+//
 // Its Version is updated_at, then a hash of everything the document keeps from the row (the body,
-// the title, the tags and the access facets), so a refresh writes the document again when any of
-// them changed though updated_at did not.
+// the title, the tags, the access facets and the source id), so a refresh writes the document
+// again when any of them changed though updated_at did not. A document written before it kept a
+// source id hashes differently now, so the first refresh after the upgrade writes it again with
+// its id; its chunks' texts are unchanged, so no vector is embedded again.
 func (s *Source) document(r row, path string) (pgstore.Document, error) {
 	if r.bad != nil {
 		return pgstore.Document{}, r.bad
@@ -292,7 +296,7 @@ func (s *Source) document(r row, path string) (pgstore.Document, error) {
 	if err != nil {
 		return pgstore.Document{}, fmt.Errorf("render: %w", err)
 	}
-	d := pgstore.Document{Path: path, Indexer: s.Indexer(), Facets: facets}
+	d := pgstore.Document{Path: path, Indexer: s.Indexer(), Facets: facets, SourceID: r.id}
 	if s.markdown {
 		doc := kind.ParseMarkdown([]byte(body))
 		meta := chunk.ReadMeta(doc, path)
@@ -343,6 +347,7 @@ func contentHash(body string, d pgstore.Document) string {
 		}
 		part("")
 	}
+	part(d.SourceID)
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
