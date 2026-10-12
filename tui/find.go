@@ -197,9 +197,9 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		rows = h.core.Lines()
 		cur, _ = h.core.Line()
 	case findExplorer:
-		rows, at = h.explorerLoaded()
+		rows, at = h.explorer.loaded()
 		for i, ix := range at {
-			if slices.Equal(h.explorerKeys(ix), h.explorerAt) {
+			if slices.Equal(h.explorer.keys(ix), h.explorer.at) {
 				cur = i
 				break
 			}
@@ -250,8 +250,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 		h.core.SetCurrentMatch(widget.TextRange{From: widget.TextPos{Line: row, Col: cols[row]}, To: widget.TextPos{Line: row, Col: cols[row] + n}})
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 	case findExplorer:
-		h.keep(h.p.Call(panelView("explorer"), "setCurrentIndex", at[row]))
-		h.explorerAt = h.explorerKeys(at[row])
+		h.keep(h.explorer.moveTo(at[row]))
 	case findLinks:
 		h.set("App.linksIndex", -1) // moved away first: the same row twice still reaches the view
 		h.set("App.linksIndex", row)
@@ -283,44 +282,8 @@ func clusterMatch(line, pattern string) (int, bool) {
 	return 0, false
 }
 
-// explorerMoved is the explorer's cursor moving: the row under it, kept by its keys.
-func (h *Host) explorerMoved(ix tuidecl.Index) error {
-	h.explorerAt = h.explorerKeys(ix)
-	return nil
-}
-
 // linksMoved is the links' cursor moving.
 func (h *Host) linksMoved(i int) { h.linksAt = i }
-
-// explorerKeys is a row's identity in the tree: the keys from the top row down to it.
-func (h *Host) explorerKeys(ix tuidecl.Index) []string {
-	var keys []string
-	for p := &ix; p != nil; p = p.Parent {
-		keys = append([]string{h.explorer.Key(*p)}, keys...)
-	}
-	return keys
-}
-
-// explorerLoaded are the explorer's loaded rows in the order the tree shows them, each with its
-// Index: a row's loaded children follow it, whether or not its folder is open now.
-func (h *Host) explorerLoaded() ([]string, []tuidecl.Index) {
-	m := h.explorer
-	var labels []string
-	var at []tuidecl.Index
-	var walk func(parent *tuidecl.Index)
-	walk = func(parent *tuidecl.Index) {
-		for r := 0; r < m.RowCount(parent); r++ {
-			ix := tuidecl.Index{Row: r, Parent: parent}
-			labels = append(labels, m.Data(ix, "label").Raw)
-			at = append(at, ix)
-			if m.RowCount(&ix) > 0 && !m.CanFetchMore(ix) {
-				walk(&ix)
-			}
-		}
-	}
-	walk(nil)
-	return labels, at
-}
 
 // escapeFind is the editor's Esc when it has nothing of its own to cancel (Normal mode, or Text
 // mode; never Insert or Visual, whose Esc goes back to Normal): the page's find ends, as its X

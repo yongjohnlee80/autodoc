@@ -133,7 +133,7 @@ func (r *recent) listed(d recentDoc) bool {
 	if d.Workspace == "" {
 		return true // a file outside every workspace: opening it says when it is gone
 	}
-	if !slices.Contains(r.c.Workspaces(), d.Workspace) {
+	if !slices.ContainsFunc(r.c.Workspaces(), func(w Workspace) bool { return w.Name == d.Workspace }) {
 		return false
 	}
 	return d.Workspace != r.c.Workspace() || slices.Contains(r.c.Files().Paths, d.Path)

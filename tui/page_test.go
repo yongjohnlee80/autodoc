@@ -137,7 +137,7 @@ func TestCoreSetPrefFilesAndListings(t *testing.T) {
 	if !after.Loaded || after.Gen <= before.Gen || !slices.Contains(after.Paths, "guide.md") {
 		t.Errorf("Files after a listing: %+v (before %+v)", after, before)
 	}
-	if ws := onLoop(r, func() []string { return core{r.h}.Workspaces() }); !slices.Equal(ws, []string{"kb"}) {
+	if ws := onLoop(r, func() []Workspace { return core{r.h}.Workspaces() }); len(ws) != 1 || ws[0].Name != "kb" || ws[0].State != "ready" || ws[0].Root == "" {
 		t.Errorf("Workspaces = %v", ws)
 	}
 	onLoop(r, func() bool { r.h.resetFiles(); return true })

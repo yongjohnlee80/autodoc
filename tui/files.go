@@ -159,6 +159,10 @@ func (h *Host) unsaved(answer string) {
 // openPath opens a file of the workspace in use, asking first over unsaved changes.
 func (h *Host) openPath(p string) { h.openRef(fileRef{h.ws, p}, true, nil) }
 
+// openIn opens file p of workspace ws, entering ws first when it is not the one in use; either
+// way, unsaved changes are asked about first.
+func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true, nil) }
+
 // openRef opens ref, asking first over unsaved changes: in the workspace in use, outside every
 // workspace (ws ""), or in another workspace, entering it. The document left behind goes on the
 // history (SPC b) when remember is set; going back does not set it. proceed, when not nil, runs

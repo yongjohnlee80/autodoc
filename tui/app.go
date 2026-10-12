@@ -81,9 +81,6 @@ type Host struct {
 	providers                   *rows[providerRow] // the embedding providers (providers.go)
 	rankers                     *rows[rankerRow]   // the re-rankers (rankers.go)
 	vectors                     *rows[vectorRow]   // the workspace's models (vectors.go)
-	explorer                    *tuidecl.TreeListModel
-	explorerPaths               map[string][]string // by workspace: its files, once listed (explorer.go)
-	explorerTop                 []wsInfo            // the workspaces the explorer's top level shows (explorer.go)
 
 	// the pickers (pick.go): the search's, File › Open's, the draft's name and the outline's; the
 	// search's own state, and its words
@@ -102,9 +99,8 @@ type Host struct {
 	openAt            int   // where the next file opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
-	find       findState
-	explorerAt []string // the explorer's row under its cursor, by its keys
-	linksAt    int
+	find    findState
+	linksAt int
 	// the Relations drawer (relations.go): its rows, whether it shows depth 2, and back's history
 	relations *rows[relRow]
 	relFor    fileRef // the document relations are of; the zero fileRef when they are of none
@@ -147,6 +143,8 @@ type Host struct {
 	termBefore             string
 	// the recent files (recent.go), a feature of its own
 	recent *recent
+	// the explorer (explorer.go), a feature of its own: find.go finds in its rows
+	explorer *explorer
 
 	// the embedding providers (providers.go)
 	activeProvider, editingProvider string
@@ -368,8 +366,6 @@ func newHost(session *Session, opt Options) *Host {
 		families:        opt.FontFamilies,
 		defaultCellFont: opt.DefaultCellFont,
 		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
-		explorer:        tuidecl.NewTreeListModel("key", "label"),
-		explorerPaths:   map[string][]string{},
 		openAt:          -1,
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
@@ -384,11 +380,11 @@ func newHost(session *Session, opt Options) *Host {
 		running:         map[string]*pluginRun{}}
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
+	h.explorer = newExplorer(core{h})
 	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
 	h.searchPick, h.openPick, h.newPick, h.outlinePick = h.newSearchPick(), h.newOpenPick(), h.newNewPick(), h.newOutlinePick()
-	h.explorer.OnFetch = h.fetchExplorer
 	h.loadPlugins()
 	return h
 }

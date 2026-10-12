@@ -16,7 +16,7 @@ type rowOf = tuidecl.Row
 func (h *Host) listFiles() {
 	tk, ws := h.ticket(&h.listSeq, TicketWorkspace), h.ws
 	do(h, func(ctx context.Context) answerOf[[]string] {
-		paths, err := h.listAll(ctx, ws)
+		paths, err := listAll(ctx, h.call, ws)
 		return answered(paths, err)
 	}, func(a answerOf[[]string]) {
 		if !tk.Current() {
@@ -37,7 +37,7 @@ func (h *Host) listFiles() {
 			return
 		}
 		h.listRetry = 0
-		h.setFiles(a.v) // the recent files are listed again by them (recent.go: Listed)
+		h.setFiles(a.v) // the recent files and the explorer are listed again by them (Listed)
 	})
 }
 

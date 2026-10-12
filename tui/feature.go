@@ -188,7 +188,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
@@ -264,8 +264,24 @@ type Core interface {
 	SetPref(name, value string)
 	// Files is the workspace's files as last listed (page.go): one snapshot, not to be changed.
 	Files() FileList
-	// Workspaces are the daemon's workspaces, by name, as last listed.
-	Workspaces() []string
+	// Workspaces are the daemon's workspaces, as last listed.
+	Workspaces() []Workspace
+	// View calls a method of a view of the document, by its id: a drawer's close, a tree's
+	// toggleExpanded.
+	View(id, method string, args ...any) error
+}
+
+// Workspace is one of the daemon's workspaces as a feature reads it: its name, its state, and what
+// decides its files.
+type Workspace struct {
+	Name, Root, State string
+	Include, Exclude  []string
+}
+
+// same reports whether w and o are the same workspace, in the same state, over the same files.
+func (w Workspace) same(o Workspace) bool {
+	return w.Name == o.Name && w.Root == o.Root && w.State == o.State &&
+		slices.Equal(w.Include, o.Include) && slices.Equal(w.Exclude, o.Exclude)
 }
 
 // TicketScope is what makes an answer stale besides a newer one.
@@ -306,13 +322,14 @@ func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.tick
 func (c core) OpenRef(ws, path string)                         { c.h.openIn(ws, path) }
 func (c core) Say(msg string)                                  { c.h.say(msg) }
 func (c core) Files() FileList                                 { return c.h.files }
-func (c core) Workspaces() []string {
-	names := make([]string, 0, c.h.workspaces.Len())
+func (c core) Workspaces() []Workspace {
+	list := make([]Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {
-		names = append(names, w.name)
+		list = append(list, Workspace{Name: w.name, Root: w.root, State: w.state, Include: w.include, Exclude: w.exclude})
 	}
-	return names
+	return list
 }
+func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
 func (c core) SetPref(name, value string) {
 	for _, row := range c.h.prefRows {
 		if row.Name == name {

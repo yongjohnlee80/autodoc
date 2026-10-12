@@ -89,8 +89,6 @@ func (h *Host) commands() map[string]Command {
 		"App.panelOpened":       oneString("a panel", h.panelOpened),
 		"App.panelClosed":       oneString("a panel", h.panelClosed),
 		"App.movePane":          oneString("h, j, k or l", h.movePane),
-		"App.explorerActivated": oneIndex(h.explorerActivated),
-		"App.explorerMoved":     oneIndex(h.explorerMoved),
 		"App.linksMoved":        oneNumber("a row", h.linksMoved),
 		"App.openFind":          none(h.openFind),
 		"App.toggleVimKeys":     none(h.toggleVimKeys),

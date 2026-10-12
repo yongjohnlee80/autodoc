@@ -175,7 +175,6 @@ func (h *Host) showWarming(reasons []string) {
 	case was:
 		h.notifyDone(toastWarming, "ready: search and the files are up to date")
 		h.listFiles()
-		h.relistInExplorer(h.ws)
 	}
 }
 
@@ -218,7 +217,6 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	if pending == 0 && (was || moved) {
 		// the lists taken while indexing were partial, or the files changed since
 		h.listFiles()
-		h.relistInExplorer(h.ws)
 	}
 	h.showSemantic()
 	h.syncStages(false) // a search a model's change affects is refreshed or cleared above

@@ -1099,7 +1099,7 @@ func TestTheExplorerStaysOpenWhenNothingChanged(t *testing.T) {
 			t.Fatalf("after %s the open folder closed:\n%s", what, sc)
 		}
 	}
-	r.h.p.Post(func() { r.h.relistInExplorer("kb") })
+	r.h.p.Post(func() { r.h.listFiles() })
 	settled("a scan's end")
 	r.h.p.Post(func() { r.h.loadWorkspaces() })
 	settled("the workspaces listed again")
@@ -1819,7 +1819,7 @@ func TestFindInThePanes(t *testing.T) {
 	r.keys(t, decltest.Type("b.md")...)
 	r.keys(t, enter())
 	r.s.WaitForText(t, `find "b.md": 1 of 1 in the explorer`)
-	if at := onLoop(r, func() []string { return r.h.explorerAt }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
+	if at := onLoop(r, func() []string { return r.h.explorer.at }); len(at) == 0 || !strings.HasSuffix(at[len(at)-1], "b.md") {
 		t.Fatalf("the explorer's cursor is on %q, want b.md", at)
 	}
 	r.keys(t, esc())

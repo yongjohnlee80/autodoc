@@ -21,6 +21,9 @@ type scriptedCore struct {
 	files   []string
 	notes   []string
 	failed  []string
+	views   []string    // the view methods called, "id.method"
+	listing FileList    // what Files answers
+	spaces  []Workspace // what Workspaces answers
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	deferred bool
 	pending  []func()
@@ -49,14 +52,21 @@ func (s *scriptedCore) OpenFile(abs string)        { s.files = append(s.files, a
 func (s *scriptedCore) OpenRef(ws, path string)    { s.files = append(s.files, ws+":"+path) }
 func (s *scriptedCore) Say(msg string)             { s.notes = append(s.notes, msg) }
 func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
-func (s *scriptedCore) Files() FileList            { return FileList{} }
-func (s *scriptedCore) Workspaces() []string       { return nil }
+func (s *scriptedCore) Files() FileList            { return s.listing }
+func (s *scriptedCore) Workspaces() []Workspace    { return s.spaces }
+func (s *scriptedCore) View(id, method string, _ ...any) error {
+	s.views = append(s.views, id+"."+method)
+	return nil
+}
 func (s *scriptedCore) Failed(what string, err error) {
 	s.failed = append(s.failed, what+": "+err.Error())
 }
 
 // Ticket is the host's latest-wins rule over the sequence (there is no connection to move).
 func (s *scriptedCore) Ticket(seq *uint64, _ TicketScope) Ticket {
+	if seq == nil {
+		return Ticket{}
+	}
 	*seq++
 	n := *seq
 	return Ticket{current: func() bool { return *seq == n }}

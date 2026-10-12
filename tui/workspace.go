@@ -54,7 +54,6 @@ func (h *Host) loadWorkspaces() {
 			h.failed("workspaces", a.err)
 			return
 		}
-		h.showWorkspacesInExplorer(a.v)
 		pick := -1
 		for i, w := range a.v {
 			if w.state == "ready" && (pick < 0 || w.name == h.ws) {

@@ -38,7 +38,6 @@ func (h *Host) state() map[string]any {
 		"App.stageRerankText":    "Rerank",
 		"App.stageRerankShown":   false,
 
-		"App.explorer": h.explorer,
 		// the Plugins menu (plugins.go)
 		"App.plugins":            h.pluginRows,
 		"App.pluginKeys":         h.pluginKeyRows,
