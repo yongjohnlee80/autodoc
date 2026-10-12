@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -113,7 +114,7 @@ type Worker struct {
 	build   Build
 	tenants []*tenant
 	o       options
-	slots   chan struct{}
+	lim     *limiter // the provider's slots, shared with the queries (QueryEmbedder)
 	wake    chan struct{}
 
 	// p, fp and dims are the provider, its model's fingerprint and its size: set by Run once the
@@ -121,6 +122,10 @@ type Worker struct {
 	p    embed.Provider
 	fp   string
 	dims int
+
+	// qs is what the queries read: published by Run's goroutine whenever the provider or a
+	// tenant's switch changes, nil before the provider is set up and after Run returns.
+	qs atomic.Pointer[queryState]
 }
 
 // tenant is a Tenant with what the worker knows of it.
@@ -166,7 +171,7 @@ func New(build Build, tenants []Tenant, opts ...Option) *Worker {
 	if o.log == nil {
 		o.log = logger.Adapt(func(logger.Severity, any) {})
 	}
-	w := &Worker{build: build, o: o, slots: make(chan struct{}, o.slots), wake: make(chan struct{}, 1)}
+	w := &Worker{build: build, o: o, lim: newLimiter(o.slots), wake: make(chan struct{}, 1)}
 	for _, t := range tenants {
 		w.tenants = append(w.tenants, &tenant{Tenant: t, waiting: map[string]int64{}, refused: map[[32]byte]time.Time{}})
 	}
@@ -191,6 +196,7 @@ var sleep = clock.Sleep
 // again, the wait doubling up to the longest. Nothing it meets stops it, and nothing it does
 // holds up ingestion: searches answer by words until the vectors are there.
 func (w *Worker) Run(ctx context.Context) {
+	defer w.qs.Store(nil) // no query reaches a provider the worker has stopped with
 	if !w.setUp(ctx) {
 		return
 	}
@@ -238,6 +244,7 @@ func (w *Worker) setUp(ctx context.Context) bool {
 		cancel()
 		if err == nil {
 			w.p, w.fp, w.dims = p, p.Model().Fingerprint(), p.Model().Dims
+			w.publish()
 			logger.Info(w.o.log, fmt.Sprintf("embedding with %s: %d dimensions, %d slots", w.fp, w.dims, w.o.slots))
 			return true
 		}
@@ -289,7 +296,10 @@ func (w *Worker) round(ctx context.Context, t *tenant) (bool, error) {
 	if err := t.confirm(ctx); err != nil {
 		// another server's tenant for now (it holds the lock), or this one's lost (its ingester
 		// stops the server): its models are read again when it is this server's
-		t.prepared = false
+		if t.prepared {
+			t.prepared = false
+			w.publish()
+		}
 		return false, nil
 	}
 	if !t.prepared {
@@ -396,6 +406,7 @@ func (w *Worker) prepare(ctx context.Context, t *tenant) error {
 	}
 	t.waiting, t.cursor = map[string]int64{}, pgstore.PendingKey{}
 	t.prepared = true
+	w.publish()
 	return nil
 }
 
@@ -426,6 +437,7 @@ func (w *Worker) flip(ctx context.Context, t *tenant) error {
 		return err
 	}
 	t.switching, t.cursor = false, pgstore.PendingKey{}
+	w.publish()
 	logger.Notice(w.o.log, fmt.Sprintf("tenant %s: %s is active: every text is embedded", t.Name, w.fp))
 	return w.reclaim(ctx, t)
 }
@@ -550,16 +562,14 @@ func (w *Worker) embed(ctx context.Context, t *tenant, texts []pgstore.Text) ([]
 	)
 	for start := 0; start < len(texts); start += w.o.batch {
 		batch := texts[start:min(start+w.o.batch, len(texts))]
-		select {
-		case w.slots <- struct{}{}:
-		case <-ctx.Done():
+		if err := w.lim.acquire(ctx, false); err != nil {
 			wg.Wait()
-			return stored, ctx.Err()
+			return stored, err
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() { <-w.slots }()
+			defer w.lim.release()
 			hashes, err := w.embedBatch(ctx, t, batch)
 			mu.Lock()
 			defer mu.Unlock()
