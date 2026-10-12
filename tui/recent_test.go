@@ -20,7 +20,7 @@ func runRecentTUI(t *testing.T, prefs map[string]string) (*daemon, *running) {
 }
 
 func (r *running) recentListedNow() []recentDoc {
-	return onLoop(r, func() []recentDoc { return append([]recentDoc(nil), r.h.recent.All()...) })
+	return onLoop(r, func() []recentDoc { return append([]recentDoc(nil), r.h.recent.rows.All()...) })
 }
 
 // waitRecentStored waits for the daemon's store to hold the recent files want.
@@ -54,7 +54,7 @@ func TestRecentFilesAreTheOnesOpenedNewestFirstAcrossWorkspaces(t *testing.T) {
 	r.s.WaitForText(t, "3 recent files, the newest first")
 	r.s.WaitForText(t, "notes")
 	// The row of another workspace opens there.
-	onLoop(r, func() bool { r.h.recentSelect(1); return true })
+	onLoop(r, func() bool { r.h.recent.choose(1); return true })
 	r.waitFile(t, "c.md")
 	if ws := onLoop(r, func() string { return r.h.ws }); ws != "notes" {
 		t.Fatalf("the recent file of notes opened in %q", ws)
@@ -65,14 +65,18 @@ func TestRecentFilesAreTheOnesOpenedNewestFirstAcrossWorkspaces(t *testing.T) {
 
 	// Kept: a new TUI lists them.
 	again := attached(t, d)
-	if n := onLoop(again, func() int { return len(again.h.prefs.recent) }); n != 3 {
+	if n := onLoop(again, func() int { return len(again.h.recent.docs()) }); n != 3 {
 		t.Errorf("a new TUI reads %d recent files, want 3", n)
 	}
 
-	// Clear list forgets them.
-	onLoop(r, func() bool { r.h.openRecent(); r.h.clearRecent(); return true })
+	// Clear list forgets them, at once: reopening the dialog, and a listing of the workspace's
+	// files, bring none back (the live list is the preference, set through its row).
+	onLoop(r, func() bool { r.h.recent.open(); r.h.recent.clear(); return true })
 	r.s.WaitForText(t, "no recent files")
 	d.waitRecentStored(t, "[]")
+	if n := onLoop(r, func() int { r.h.recent.open(); r.h.listFiles(); return r.h.recent.rows.Len() + len(r.h.recent.docs()) }); n != 0 {
+		t.Errorf("after Clear list and a reopening, %d recent files came back", n)
+	}
 }
 
 // A file of a workspace that is gone, or gone from the workspace in use, is not listed; it stays
@@ -83,13 +87,13 @@ func TestRecentFilesThatAreGoneAreNotListed(t *testing.T) {
 		{Workspace: "kb", Path: "b.md"}, {Workspace: "notes", Path: "c.md"},
 	})})
 	r.s.WaitFor(t, "kb in use", func(string) bool { return onLoop(r, func() string { return r.h.ws }) == "kb" })
-	onLoop(r, func() bool { r.h.openRecent(); return true })
+	onLoop(r, func() bool { r.h.recent.open(); return true })
 	r.s.WaitForText(t, "2 recent files")
 	got := r.recentListedNow()
 	if len(got) != 2 || got[0] != (recentDoc{"kb", "b.md"}) || got[1] != (recentDoc{"notes", "c.md"}) {
 		t.Fatalf("listed %v, want kb/b.md and notes/c.md", got)
 	}
-	if n := onLoop(r, func() int { return len(r.h.prefs.recent) }); n != 4 {
+	if n := onLoop(r, func() int { return len(r.h.recent.docs()) }); n != 4 {
 		t.Fatalf("listing dropped kept files: %d left of 4", n)
 	}
 }
@@ -136,7 +140,7 @@ func TestTheRecentListFollowsTheFilesOfAWorkspaceJustEntered(t *testing.T) {
 	r.waitFile(t, "c.md")
 	d.waitRecentStored(t, `[{"workspace":"notes","path":"c.md"},{"workspace":"kb","path":"b.md"},{"workspace":"kb","path":"a.md"}]`)
 	// notes in use, its files not listed yet: as just after entering it
-	onLoop(r, func() bool { r.h.resetFiles(); r.h.openRecent(); return true })
+	onLoop(r, func() bool { r.h.resetFiles(); r.h.recent.open(); return true })
 	r.s.WaitForText(t, "2 recent files, the newest first") // kb's two; c.md waits for notes' files
 	onLoop(r, func() bool { r.h.listFiles(); return true })
 	r.s.WaitForText(t, "3 recent files, the newest first")
