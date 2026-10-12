@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
