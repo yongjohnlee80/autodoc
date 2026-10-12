@@ -197,7 +197,7 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 		return redact(err, dsn)
 	}
 	defer business.Close()
-	now, err := sourceNow(ctx, business)
+	now, err := pgstore.Now(ctx, business)
 	if err != nil {
 		return redact(err, dsn)
 	}
@@ -222,20 +222,6 @@ func checkServer(ctx context.Context, path string, cfg *config.Server, sources [
 	}
 	fmt.Fprintf(out, "%s: ok\n", path)
 	return nil
-}
-
-// sourceNow is the source database's clock.
-func sourceNow(ctx context.Context, conn dao.DataConn) (time.Time, error) {
-	rows, err := conn.QueryContext(ctx, "SELECT now()")
-	if err != nil {
-		return time.Time{}, err
-	}
-	defer rows.Close()
-	var t time.Time
-	if !rows.Next() {
-		return t, errors.Join(errors.New("SELECT now() returned no row"), rows.Err())
-	}
-	return t, rows.Scan(&t)
 }
 
 // redact is err with every appearance of the DSN, and of its password, replaced: a driver's error

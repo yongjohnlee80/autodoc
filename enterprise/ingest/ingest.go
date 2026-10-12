@@ -33,6 +33,13 @@ const RetryLimit = 1000
 const countCap = 10000
 
 var (
+	// ErrLockLost is the tenant's writer lock gone from under its ingester: its connection closed
+	// or was killed. The ingester stops writing at once (a page it was writing is rolled back) and
+	// Run returns it, so the process exits non-zero and its supervisor restarts it to take the lock
+	// again; it never goes on writing unlocked. It is pgstore.ErrWriterLost.
+	ErrLockLost = pgstore.ErrWriterLost
+	// ErrNotLocked is a write asked of an ingester that does not hold its tenant's lock.
+	ErrNotLocked = errs.Sentinel(errs.ErrPrecondition, "ingest: the tenant's writer lock is not held")
 	// ErrOrder is a page whose rows break the view's contract: not in (updated_at, id) order, or
 	// outside the cursor and upto_ts the page was asked for. Nothing of the page is written: a
 	// cursor moved over misordered rows would skip some for good.
@@ -85,7 +92,7 @@ type Ingester struct {
 	business dao.DataConn
 	locks    dao.DataConn
 	o        Options
-	lock     *tenantLock
+	lock     *pgstore.WriterLock
 }
 
 // beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
@@ -113,7 +120,7 @@ func New(st *pgstore.Store, tenant string, src *Source, business, locks dao.Data
 		o.Log = logger.Adapt(func(logger.Severity, any) {})
 	}
 	if o.Now == nil {
-		o.Now = func(ctx context.Context) (time.Time, error) { return dbNow(ctx, business) }
+		o.Now = func(ctx context.Context) (time.Time, error) { return pgstore.Now(ctx, business) }
 	}
 	return &Ingester{st: st, tenant: tenant, src: src, business: business, locks: locks, o: o}
 }
@@ -126,7 +133,7 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 	if in.lock != nil {
 		return nil
 	}
-	l, err := acquire(ctx, in.locks, lockKey(in.o.Schema, in.tenant), in.o.LockPoll, func(holder int64) {
+	l, err := pgstore.AcquireWriter(ctx, in.locks, in.o.Schema, in.tenant, in.o.LockPoll, func(holder int64) {
 		logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lock, held by backend %d (another server)", in.tenant, holder))
 	})
 	if err != nil {
@@ -139,7 +146,7 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 // Release lets go of the writer lock.
 func (in *Ingester) Release() {
 	if in.lock != nil {
-		in.lock.release()
+		in.lock.Release()
 		in.lock = nil
 	}
 }
@@ -486,7 +493,7 @@ func (in *Ingester) commit(ctx context.Context, b *pgstore.Batch) error {
 			return err
 		}
 	}
-	if err := in.lock.check(ctx); err != nil {
+	if err := in.lock.Check(ctx); err != nil {
 		_ = b.Rollback()
 		return err
 	}
@@ -577,7 +584,7 @@ func (in *Ingester) ping(ctx context.Context, cancel context.CancelCauseFunc) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := in.lock.check(ctx); errors.Is(err, ErrLockLost) {
+			if err := in.lock.Check(ctx); errors.Is(err, ErrLockLost) {
 				logger.Error(in.o.Log, err, "tenant "+in.tenant+": stopping")
 				cancel(err)
 				return
@@ -680,31 +687,3 @@ func stamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
 
 // sameKey reports whether two cursors are one position.
 func sameKey(a, b pgstore.Cursor) bool { return a.UpdatedAt.Equal(b.UpdatedAt) && a.ID == b.ID }
-
-// dbNow is the database's clock.
-func dbNow(ctx context.Context, conn dao.DataConn) (time.Time, error) {
-	rows, err := conn.QueryContext(ctx, "SELECT now()")
-	if err != nil {
-		return time.Time{}, err
-	}
-	var t time.Time
-	err = scanRows(rows, &t)
-	return t, err
-}
-
-// scanRows scans the one row of rows into dest and closes them.
-func scanRows(rows dao.Rows, dest ...any) error {
-	if !rows.Next() {
-		err := rows.Err()
-		_ = rows.Close()
-		if err == nil {
-			err = errors.New("no row")
-		}
-		return err
-	}
-	if err := rows.Scan(dest...); err != nil {
-		_ = rows.Close()
-		return err
-	}
-	return rows.Close()
-}

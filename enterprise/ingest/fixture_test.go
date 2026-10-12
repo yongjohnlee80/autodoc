@@ -208,8 +208,12 @@ func (f *fixture) scalar(conn dao.DataConn, q string, args ...any) string {
 	if err != nil {
 		f.t.Fatal(err)
 	}
+	defer rows.Close()
 	var s string
-	if err := scanRows(rows, &s); err != nil {
+	if !rows.Next() {
+		f.t.Fatalf("%s: no row (%v)", q, rows.Err())
+	}
+	if err := rows.Scan(&s); err != nil {
 		f.t.Fatalf("%s: %v", q, err)
 	}
 	return s

@@ -39,6 +39,6 @@
 //
 // Concurrency: a Store is safe for concurrent use. A View is valid only inside its fn and belongs to
 // one goroutine; so does a Batch, which is one transaction. Writes conflict per document
-// (ErrWriteRace); keeping a tenant to one writer is the caller's (the enterprise server holds an
-// advisory lock on a dedicated connection).
+// (ErrWriteRace); a tenant has one writer when its writer holds the tenant's WriterLock
+// (AcquireWriter), whose methods are safe for concurrent use, and confirms it before each commit.
 package pgstore

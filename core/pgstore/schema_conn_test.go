@@ -219,3 +219,11 @@ func TestASchemaOfItsOwnNeedsNoCreateOnTheDatabase(t *testing.T) {
 		t.Errorf("EnsureSchema of a schema the role may not create: %v", err)
 	}
 }
+
+// A writer lock's key depends on the schema and the tenant alone, and is never negative.
+func TestTheWriterKey(t *testing.T) {
+	a, b, c := WriterKey("s", "t"), WriterKey("s", "u"), WriterKey("r", "t")
+	if a == b || a == c || a != WriterKey("s", "t") || a < 0 || b < 0 || c < 0 {
+		t.Errorf("keys %d %d %d", a, b, c)
+	}
+}

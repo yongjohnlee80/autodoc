@@ -1,9 +1,10 @@
-package ingest
+package pgstore
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -12,33 +13,33 @@ import (
 	"github.com/yongjohnlee80/golib/dao/postgres"
 	"github.com/yongjohnlee80/golib/errs"
 
-	"github.com/yongjohnlee80/autodoc/core/clock"
+	adclock "github.com/yongjohnlee80/autodoc/core/clock"
 )
 
-// ErrLockLost is the tenant's writer lock gone from under its ingester: its connection closed or
-// was killed. The ingester stops writing at once (a page it was writing is rolled back) and Run
-// returns this, so the process exits non-zero and its supervisor restarts it to take the lock
-// again; it never goes on writing unlocked.
-var ErrLockLost = errs.Sentinel(errs.ErrPrecondition, "ingest: the tenant's writer lock was lost")
+// One writer per tenant, for a server that indexes a source into it: the writer holds the
+// tenant's lock (AcquireWriter) and confirms it (Check) before each commit, so a writer that lost it
+// writes nothing more.
 
-// ErrNotLocked is a write asked of an ingester that does not hold its tenant's lock.
-var ErrNotLocked = errs.Sentinel(errs.ErrPrecondition, "ingest: the tenant's writer lock is not held")
+// ErrWriterLost is a tenant's writer lock gone from under its writer: its connection closed or was
+// killed. The writer must stop writing; taking the lock again is a new AcquireWriter.
+var ErrWriterLost = errs.Sentinel(errs.ErrPrecondition, "pgstore: the tenant's writer lock was lost")
 
-// lockKey is the advisory lock key of a tenant in a schema: the first 8 bytes of a SHA-256 over
+// WriterKey is the advisory lock key of a tenant in a schema: the first 8 bytes of a SHA-256 over
 // both, with the sign bit cleared, so pg_locks shows it as a non-negative (classid << 32 | objid)
 // and two servers configured alike agree on it whatever PostgreSQL's hash functions do.
-func lockKey(schema, tenant string) int64 {
+func WriterKey(schema, tenant string) int64 {
 	h := sha256.Sum256([]byte("autodoc-enterprise\x00" + schema + "\x00" + tenant))
 	return int64(binary.BigEndian.Uint64(h[:8]) &^ (1 << 63))
 }
 
-// heldAs selects the grants of the advisory lock keyed $1 in this database: an advisory lock is
+// HeldAs selects the grants of the advisory lock keyed $1 in this database: an advisory lock is
 // the database's, and pg_locks shows the whole server's.
-const heldAs = `FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1
+const HeldAs = `FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsubid = 1
 	AND ((classid::bigint << 32) | objid::bigint) = $1
 	AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`
 
-// tenantLock is a session advisory lock held on a connection pinned for the ingester's whole life.
+// WriterLock is a tenant's writer lock: a session advisory lock held on a connection pinned for
+// the writer's whole life, so the tenant has one writer at a time.
 //
 // A pool hands each statement whichever physical connection is free and recycles idle ones, so a
 // session lock taken through it would stay on a connection that goes back to the pool, or is
@@ -46,34 +47,37 @@ const heldAs = `FROM pg_locks WHERE locktype = 'advisory' AND granted AND objsub
 // connection is therefore pinned (acquired and never returned) from a pool of its own, and every
 // statement of the lock runs on it.
 //
-// Its methods are safe for concurrent use: the ingester checks the lock before each commit while
-// Run's ticker checks it every ping.
-type tenantLock struct {
+// Its methods are safe for concurrent use: a writer checks the lock before each commit while a
+// ticker of its own checks it as well.
+type WriterLock struct {
 	mu   sync.Mutex
 	pin  postgres.PinnedConn
 	key  int64
-	pid  int64 // the pinned connection's backend, for a test that kills it
+	pid  int64 // the pinned connection's backend
 	lost bool
 }
 
-// acquire pins a connection of conn and takes the lock on it, trying every poll until it is free
-// or ctx ends. waiting is called once, when the lock is first found held by another session.
-func acquire(ctx context.Context, conn dao.DataConn, key int64, poll time.Duration, waiting func(holder int64)) (*tenantLock, error) {
+// AcquireWriter pins a connection of conn, a pool of its own, and takes the writer lock of tenant
+// in schema on it, trying every poll until it is free or ctx ends (ctx.Err() then). waiting is
+// called once, with the backend that holds it, when the lock is first found held by another
+// session.
+func AcquireWriter(ctx context.Context, conn dao.DataConn, schema, tenant string, poll time.Duration, waiting func(holder int64)) (*WriterLock, error) {
+	key := WriterKey(schema, tenant)
 	pin, err := postgres.PinSessionConn(ctx, conn)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("ingest: pin the lock's connection: %w", err)
+		return nil, fmt.Errorf("pgstore: pin the writer lock's connection: %w", err)
 	}
-	l := &tenantLock{pin: pin, key: key}
+	l := &WriterLock{pin: pin, key: key}
 	told := false
 	for {
 		var ok bool
 		var holder int64
 		err := l.query(ctx, func(tx dao.ContextTxConn) error {
 			return scanOne(ctx, tx, `SELECT pg_try_advisory_lock($1), pg_backend_pid(),
-				coalesce((SELECT pid `+heldAs+` AND pid <> pg_backend_pid() LIMIT 1), 0)`,
+				coalesce((SELECT pid `+HeldAs+` AND pid <> pg_backend_pid() LIMIT 1), 0)`,
 				[]any{key}, &ok, &l.pid, &holder)
 		})
 		if err != nil {
@@ -83,7 +87,7 @@ func acquire(ctx context.Context, conn dao.DataConn, key int64, poll time.Durati
 				// says nothing more than that
 				return nil, ctx.Err()
 			}
-			return nil, fmt.Errorf("ingest: take the tenant's lock: %w", err)
+			return nil, fmt.Errorf("pgstore: take the writer lock: %w", err)
 		}
 		if ok {
 			return l, nil
@@ -94,27 +98,27 @@ func acquire(ctx context.Context, conn dao.DataConn, key int64, poll time.Durati
 		}
 		// NOTE: polled, not waited on. The lock is held by another server's session, and nothing
 		// tells this one when that session lets go or dies; a blocking pg_advisory_lock could not
-		// be bounded by ctx on a pinned connection. A try every poll (LockPoll) keeps a standby
+		// be bounded by ctx on a pinned connection. A try every poll keeps a standby
 		// server's takeover prompt.
-		if !clock.Sleep(ctx, poll) {
+		if !adclock.Sleep(ctx, poll) {
 			pin.Discard() // nothing is held: the connection only goes
 			return nil, ctx.Err()
 		}
 	}
 }
 
-// check confirms the lock is still this session's: the connection answers and pg_locks shows the
-// lock granted to it. Any failure is ErrLockLost, and stays so.
-func (l *tenantLock) check(ctx context.Context) error {
+// Check confirms the lock is still this session's: the connection answers and pg_locks shows the
+// lock granted to it. Any failure is ErrWriterLost, and stays so; a ctx that ended is its error.
+func (l *WriterLock) Check(ctx context.Context) error {
 	l.mu.Lock()
 	lost := l.lost
 	l.mu.Unlock()
 	if lost {
-		return ErrLockLost
+		return ErrWriterLost
 	}
 	var held bool
 	err := l.query(ctx, func(tx dao.ContextTxConn) error {
-		return scanOne(ctx, tx, `SELECT EXISTS (SELECT 1 `+heldAs+` AND pid = pg_backend_pid())`,
+		return scanOne(ctx, tx, `SELECT EXISTS (SELECT 1 `+HeldAs+` AND pid = pg_backend_pid())`,
 			[]any{l.key}, &held)
 	})
 	switch {
@@ -122,23 +126,23 @@ func (l *tenantLock) check(ctx context.Context) error {
 		return ctx.Err() // the caller stopped: that says nothing of the lock
 	case err != nil:
 		l.markLost()
-		return fmt.Errorf("%w: %v", ErrLockLost, err)
+		return fmt.Errorf("%w: %v", ErrWriterLost, err)
 	case !held:
 		l.markLost()
-		return ErrLockLost
+		return ErrWriterLost
 	}
 	return nil
 }
 
-func (l *tenantLock) markLost() {
+func (l *WriterLock) markLost() {
 	l.mu.Lock()
 	l.lost = true
 	l.mu.Unlock()
 }
 
-// release lets go of the lock and gives its connection back, or closes the connection when the
+// Release lets go of the lock and gives its connection back, or closes the connection when the
 // lock was lost or the unlock fails: a session that ends releases its locks.
-func (l *tenantLock) release() {
+func (l *WriterLock) Release() {
 	l.mu.Lock()
 	lost := l.lost
 	l.mu.Unlock()
@@ -158,9 +162,12 @@ func (l *tenantLock) release() {
 	l.pin.Discard()
 }
 
+// Backend is the process id of the lock's connection on the server.
+func (l *WriterLock) Backend() int64 { return l.pid }
+
 // query runs fn in a transaction on the pinned connection, one at a time. A session advisory lock
 // taken inside a transaction outlives it.
-func (l *tenantLock) query(ctx context.Context, fn func(tx dao.ContextTxConn) error) error {
+func (l *WriterLock) query(ctx context.Context, fn func(tx dao.ContextTxConn) error) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	tx, err := l.pin.BeginSessionTx(ctx, dao.TxOptions{})
@@ -181,4 +188,35 @@ func scanOne(ctx context.Context, q dao.Querier, sql string, args []any, dest ..
 		return err
 	}
 	return scanRows(rows, dest...)
+}
+
+// scanRows scans the one row of rows into dest and closes them.
+func scanRows(rows dao.Rows, dest ...any) error {
+	if !rows.Next() {
+		err := rows.Err()
+		_ = rows.Close()
+		if err == nil {
+			err = errors.New("no row")
+		}
+		return err
+	}
+	if err := rows.Scan(dest...); err != nil {
+		_ = rows.Close()
+		return err
+	}
+	return rows.Close()
+}
+
+// Now is conn's database's clock (now()): the clock a business database's updated_at values are
+// written with, which a reader bounding rows by them reads too, whatever this host's says.
+func Now(ctx context.Context, conn dao.DataConn) (time.Time, error) {
+	rows, err := conn.QueryContext(ctx, "SELECT now()")
+	if err != nil {
+		return time.Time{}, fmt.Errorf("pgstore: the database's time: %w", err)
+	}
+	var t time.Time
+	if err := scanRows(rows, &t); err != nil {
+		return time.Time{}, fmt.Errorf("pgstore: the database's time: %w", err)
+	}
+	return t, nil
 }

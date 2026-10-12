@@ -50,6 +50,13 @@ PostgreSQL with the `vector` extension available (the migration creates it).
 - **Migrations** through `dao/deploy`, in the ledger `autodoc_schema`: `000001` is the baseline,
   `000002` adds the chunk kind and the ingest tables (`rag_cursor`, `rag_ingest_error`,
   `rag_tenant_policy`), with its revert.
+- **One writer per tenant:** `AcquireWriter(ctx, locks, schema, tenant, poll, waiting)` takes the
+  tenant's advisory lock (`WriterKey`) on a connection it pins from `locks` for as long as it is
+  held, waiting while another session holds it; `Check` confirms it is still this session's (else
+  `ErrWriterLost`), `Release` lets it go, `Backend` is its connection's process id. A lock taken
+  through a pool would stay on a connection the pool recycles while another writer takes it.
+- **The database's clock:** `Now(ctx, conn)`, the clock a source's `updated_at` values are written
+  with.
 - **A schema of its own:** `WithSchema(schema)` sets `search_path` on every pooled connection, and
   `EnsureSchema` creates the schema (see below).
 
@@ -106,10 +113,12 @@ A `Store` is safe for concurrent use, and so are its readers (`View`, `ViewWithi
 `Cursor`, `Quarantined`, `Policy`). A `View` is valid only inside its `fn`, and one `View` belongs
 to one goroutine. A `Batch` is one transaction and belongs to one goroutine: its documents, cursor
 and quarantine commit together or not at all. Writes conflict per document: a `Put` that loses its
-compare-and-set to another writer is retried alone and fails a `Batch` with `ErrWriteRace`. pgstore
-does not make a tenant single-writer: a server that moves a tenant's cursor must hold its own lock
-(ADR 1791762085 pins an advisory lock on a dedicated connection). `WithSchema`'s hook runs on every
-connection the pool opens, so concurrent queries all run in the schema.
+compare-and-set to another writer is retried alone and fails a `Batch` with `ErrWriteRace`. A
+`Store` does not make a tenant single-writer by itself: a server that moves a tenant's cursor holds
+the tenant's writer lock (`AcquireWriter`), a session advisory lock on a connection pinned from a
+pool of its own, and confirms it (`WriterLock.Check`, `ErrWriterLost`) before each commit. A
+`WriterLock`'s methods are safe for concurrent use. `WithSchema`'s hook runs on every connection
+the pool opens, so concurrent queries all run in the schema.
 
 ## Example
 

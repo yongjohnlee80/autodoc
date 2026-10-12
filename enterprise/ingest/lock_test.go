@@ -20,7 +20,7 @@ const recycling = "pool_max_conn_lifetime=100ms&pool_max_conn_idle_time=50ms&poo
 // holder is the backend holding the tenant's writer lock, or 0.
 func (f *fixture) holder() int64 {
 	f.t.Helper()
-	s := f.scalar(f.business, `SELECT coalesce((SELECT pid `+heldAs+` LIMIT 1), 0)::text`, lockKey(f.schema, f.tenant))
+	s := f.scalar(f.business, `SELECT coalesce((SELECT pid `+pgstore.HeldAs+` LIMIT 1), 0)::text`, pgstore.WriterKey(f.schema, f.tenant))
 	pid, _ := strconv.ParseInt(s, 10, 64)
 	return pid
 }
@@ -184,13 +184,5 @@ func TestRunReleasesItsLockWhenItStops(t *testing.T) {
 	}
 	if pid := f.holder(); pid != 0 {
 		t.Errorf("backend %d still holds the lock after Run stopped", pid)
-	}
-}
-
-// The lock's key depends on the schema and the tenant alone, and is never negative.
-func TestTheLockKey(t *testing.T) {
-	a, b, c := lockKey("s", "t"), lockKey("s", "u"), lockKey("r", "t")
-	if a == b || a == c || a != lockKey("s", "t") || a < 0 || b < 0 || c < 0 {
-		t.Errorf("keys %d %d %d", a, b, c)
 	}
 }
