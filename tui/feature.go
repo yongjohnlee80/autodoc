@@ -92,7 +92,7 @@ func newRegistry(fs ...Feature) (*registry, error) {
 			}
 		}
 	}
-	if err := keyCatalog(fs).check(mainIDs); err != nil {
+	if err := keyCatalog(fs).check(mainIDs, r.catalog); err != nil {
 		return nil, err
 	}
 	for _, f := range fs {
@@ -189,6 +189,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
 	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
 	h.prefRows = nil

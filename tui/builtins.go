@@ -66,3 +66,11 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("help.about", "about", "about.open()", func() { h.open("about") }),
 	}, h.editorEntries()...)
 }
+
+// runEntry is App.run(id): a key running a catalog entry. What it cannot run is said, as a key's
+// failure is.
+func (h *Host) runEntry(id string) {
+	if err := h.cat.run(id, nil); err != nil {
+		h.notify(err.Error())
+	}
+}

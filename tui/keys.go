@@ -17,6 +17,13 @@ import (
 // The QML is generated: TestKeysAreGenerated fails when a file differs from the catalog, and
 // `go test ./tui -run TestKeysAreGenerated -update` rewrites them. A feature adds keys and cards
 // with the Keyed capability.
+//
+// A key runs exactly one thing: Run's QML, the card it Opens, or Cmd, a command catalog entry by its
+// id (catalog.go), which runs as App.run("<id>") and is named on its card by the entry's title
+// when the key says nothing itself. Cmd names a built-in or a feature's entry only: those are
+// fixed when the registry is built, which checks every key, while Lua's and the plugins' come and
+// go (a Lua command is keyed by autodoc.map, a plugin's on SPC p). The host's own keys below keep
+// Run: every registry checks them, a test's of features alone too, where no built-in entry is.
 
 // Key is one key.
 type Key struct {
@@ -30,6 +37,9 @@ type Key struct {
 	Run  string   // the QML it runs: "App.openSearch()", "help.open()"
 	// Opens is the card the key opens, in place of Run: its card closes and that one opens.
 	Opens string
+	// Cmd is a catalog entry's id, in place of Run and Opens: the key runs App.run("<id>"), and a
+	// card names it by the entry's title when Does is "".
+	Cmd string
 }
 
 // Card is a card of keys: a Dialog listing its keys, each closing the card before it runs.
@@ -141,12 +151,24 @@ type keyset struct {
 	keys  []Key
 }
 
-// keyCatalog is the catalog with every feature's keys and cards after the host's.
+// keyCatalog is the catalog with every feature's keys and cards after the host's. A key running a
+// catalog entry that says nothing itself is named by the entry's title.
 func keyCatalog(fs []Feature) keyset {
 	k := keyset{cards: slices.Clone(cards), keys: slices.Concat(windowKeys, leaderKeys)}
+	titles := map[string]string{}
 	for _, f := range fs {
 		if kf, ok := f.(Keyed); ok {
 			k.cards, k.keys = append(k.cards, kf.Cards()...), append(k.keys, kf.Keys()...)
+		}
+		if c, ok := f.(Cataloged); ok {
+			for _, e := range c.Catalog() {
+				titles[e.ID] = e.Title
+			}
+		}
+	}
+	for i, key := range k.keys {
+		if key.Cmd != "" && key.Does == "" && key.Card != "" {
+			k.keys[i].Does = titles[key.Cmd]
 		}
 	}
 	return k
@@ -182,8 +204,10 @@ var reserved = []string{"q", "Escape"}
 //   - a key opening a card from anywhere but the card's Back (the Window, for a card with none), so
 //     Backspace goes back where the card came from;
 //   - a sequence two keys of one place take, or one a card answers itself: q, Escape, and Backspace
-//     on a card with a Back.
-func (k keyset) check(taken map[string]bool) error {
+//     on a card with a Back;
+//   - a key running none, or more than one, of Run, Opens and Cmd; and a Cmd that is no built-in or
+//     feature's entry of cat.
+func (k keyset) check(taken map[string]bool, cat *catalog) error {
 	var errs []error
 	opened := map[string]bool{}
 	for i, c := range k.cards {
@@ -199,6 +223,16 @@ func (k keyset) check(taken map[string]bool) error {
 		}
 	}
 	for _, key := range k.keys {
+		if n := len(slices.DeleteFunc([]string{key.Run, key.Opens, key.Cmd}, func(s string) bool { return s == "" })); n != 1 {
+			errs = append(errs, fmt.Errorf("tui: %s %s runs %d of Run, Opens and Cmd: a key runs exactly one", placeName(key.Card), key.Seq, n))
+		}
+		switch {
+		case key.Cmd == "":
+		case strings.HasPrefix(key.Cmd, "lua.") || strings.HasPrefix(key.Cmd, "plugin."):
+			errs = append(errs, fmt.Errorf("tui: %s %s runs %s: a key runs a built-in or a feature's command, never Lua's or a plugin's", placeName(key.Card), key.Seq, key.Cmd))
+		case cat.lookup(key.Cmd) == nil:
+			errs = append(errs, fmt.Errorf("tui: %s %s runs %s, which no command is", placeName(key.Card), key.Seq, key.Cmd))
+		}
 		if _, ok := k.card(key.Card); key.Card != "" && !ok {
 			errs = append(errs, fmt.Errorf("tui: %s is on the card %s, which is not declared", key.Seq, key.Card))
 		}
@@ -344,8 +378,11 @@ func shortcuts(keys []Key, indent, close string) string {
 	var b strings.Builder
 	for _, k := range keys {
 		run := k.Run
-		if k.Opens != "" {
+		switch {
+		case k.Opens != "":
 			run = k.Opens + ".open()"
+		case k.Cmd != "":
+			run = "App.run(" + strconv.Quote(k.Cmd) + ")"
 		}
 		if close != "" {
 			run = "{ " + close + ".close(); " + run + " }"

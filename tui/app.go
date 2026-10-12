@@ -274,6 +274,9 @@ type Host struct {
 	pendingPlugin  *pluginChange
 	managedPlugins *rows[managedPlugin]
 	pageWidth      int // the page's width as last set: the ruler, the border, the gutter
+	// moreFeatures follow the host's own in features(): a test's, whose keys and catalog entries
+	// run in the program as any feature's do
+	moreFeatures []Feature
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run

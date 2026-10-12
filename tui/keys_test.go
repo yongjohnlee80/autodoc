@@ -5,6 +5,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yongjohnlee80/golib/parse/qml"
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 var updateKeys = flag.Bool("update", false, "rewrite the files generated from the key catalog (keys.go)")
@@ -13,10 +19,11 @@ var updateKeys = flag.Bool("update", false, "rewrite the files generated from th
 // views/<View>.qml, are the catalog's, the features' keys and cards included; -update rewrites them.
 func TestKeysAreGenerated(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
-	k := keyCatalog(h.features())
-	if err := k.check(mainIDs); err != nil {
+	fs := h.features()
+	if _, err := newRegistry(fs...); err != nil { // checks the keys, against the catalog
 		t.Fatal(err)
 	}
+	k := keyCatalog(fs)
 	mainQML, err := os.ReadFile("qml/main.qml")
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +87,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 			{Card: "agentsCard", Seq: "f", Show: "f", Does: "send the selection", Run: `App.runCommand("agent.selection")`},
 		}}
 	k := keyCatalog([]Feature{agents})
-	if err := k.check(mainIDs); err != nil {
+	if err := k.check(mainIDs, nil); err != nil {
 		t.Fatal(err)
 	}
 	c, _ := k.card("agentsCard")
@@ -147,6 +154,12 @@ func TestTheRegistryRefusesKeysThatDoNotFit(t *testing.T) {
 			keys: []Key{{Card: leader, Seq: "Shift+Y", Opens: "subCard"}}},
 		"subCard's Backspace is taken twice": {cards: []Card{{ID: "subCard", View: "SubCard", Back: leader}},
 			keys: []Key{{Card: leader, Seq: "Shift+Y", Opens: "subCard"}, {Card: "subCard", Seq: "z", Also: []string{"Backspace"}, Run: "App.x()"}}},
+		// a key runs exactly one of Run, Opens and Cmd; Cmd a built-in's or a feature's entry
+		"the card leader's Shift+Z runs 2 of Run, Opens and Cmd":                                 {keys: []Key{{Card: leader, Seq: "Shift+Z", Run: "App.x()", Cmd: "b.hello"}}},
+		"the card leader's Shift+Z runs 0 of Run, Opens and Cmd":                                 {keys: []Key{{Card: leader, Seq: "Shift+Z", Show: "Z"}}},
+		"the card leader's Shift+Z runs no.such, which no command is":                            {keys: []Key{{Card: leader, Seq: "Shift+Z", Cmd: "no.such"}}},
+		"the card leader's Shift+Z runs lua.upper: a key runs a built-in or a feature's command": {keys: []Key{{Card: leader, Seq: "Shift+Z", Cmd: "lua.upper"}}},
+		"the Window's F7 runs plugin.tetris.new: a key runs a built-in":                          {keys: []Key{{Seq: "F7", Cmd: "plugin.tetris.new"}}},
 	} {
 		f.fake = fake{name: "b"}
 		if _, err := newRegistry(f); err == nil || !strings.Contains(err.Error(), want) {
@@ -166,3 +179,72 @@ type keyedFake struct {
 
 func (f *keyedFake) Keys() []Key   { return f.keys }
 func (f *keyedFake) Cards() []Card { return f.cards }
+
+// keyedCatFake is a feature with keys and catalog entries: its card's keys run its entries by id.
+type keyedCatFake struct {
+	keyedFake
+	entries []Entry
+}
+
+func (f *keyedCatFake) Catalog() []Entry { return f.entries }
+
+// TestAKeyRunsACatalogEntryByItsID (ADR 1791762474 §4.3, §5.4): a feature's key with Cmd runs
+// App.run with the id quoted, and its card names it by the entry's title when the key does not.
+func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
+	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"},
+		cards: []Card{{ID: "zzCard", View: "ZzCard", Title: "SPC Z", Back: leader, Help: "SPC Z — ZZ"}},
+		keys: []Key{
+			{Card: leader, Seq: "Shift+Z", Show: "Z", Does: "zz…", Opens: "zzCard"},
+			{Card: "zzCard", Seq: "b", Show: "b", Cmd: "zz.send_buffer"},
+			{Card: "zzCard", Seq: "f", Show: "f", Does: "its own words", Cmd: "zz.send_selection"},
+		}},
+		entries: []Entry{{ID: "zz.send_buffer", Title: "send the buffer", Run: noRun}, {ID: "zz.send_selection", Title: "send the selection", Run: noRun}}}
+	if _, err := newRegistry(f); err != nil {
+		t.Fatal(err)
+	}
+	k := keyCatalog([]Feature{f})
+	if got := k.cardState()["App.zzCardText"]; got != "b  send the buffer  f  its own words" {
+		t.Errorf("the card's text: %q", got)
+	}
+	c, _ := k.card("zzCard")
+	if q := cardQML(c, k.on("zzCard")); !strings.Contains(q, `Shortcut { sequence: "b"; onActivated: { zzCard.close(); App.run("zz.send_buffer") } }`) {
+		t.Errorf("the card's QML does not run the entry:\n%s", q)
+	}
+	if got := shortcuts([]Key{{Seq: "F9", Cmd: `a.b"c`}}, "", ""); got != `Shortcut { sequence: "F9"; onActivated: App.run("a.b\"c") }`+"\n" {
+		t.Errorf("an id is a QML string, quoted: %q", got)
+	}
+}
+
+// TestAFeaturesKeyRunsItsEntryInTheProgram (ADR 1791762474 §5.4): in the running program, a
+// feature's Window key with Cmd runs its entry, through App.run, on the attached editor; App.run of
+// an id no entry has says so.
+func TestAFeaturesKeyRunsItsEntryInTheProgram(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	ran := make(chan *widget.EditorCore, 1)
+	f := &keyedCatFake{keyedFake: keyedFake{fake: fake{name: "zz"}, keys: []Key{{Seq: "F12", Show: "F12", Cmd: "zz.mark"}}},
+		entries: []Entry{{ID: "zz.mark", Title: "mark", Run: func(inv Invocation) error { ran <- inv.Core; return nil }}}}
+	h := newHost(NewSession(d.sock, nil), Options{})
+	h.moreFeatures = []Feature{f}
+	main, err := keyCatalog(h.features()).withGenerated(string(layout))
+	if err != nil {
+		t.Fatal(err)
+	}
+	opt := Options{Layout: []byte(main)}
+	s := decltest.RunWith(t, 100, 30, h.attach, h.options(opt)...)
+	t.Cleanup(h.cancel)
+	r := &running{h: h, s: s}
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF12})
+	select {
+	case core := <-ran:
+		if core != onLoop(r, func() *widget.EditorCore { return r.h.core }) {
+			t.Fatal("the entry ran on another core than the attached editor's")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("F12 did not run zz.mark")
+	}
+	onLoop(r, func() error {
+		return r.h.reg.handlers["App.run"]([]qml.SpecValue{{Kind: qml.SpecValueString, Raw: "no.such"}})
+	})
+	r.waitNotice(t, "unknown: no.such")
+}

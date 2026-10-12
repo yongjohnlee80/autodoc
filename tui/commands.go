@@ -20,6 +20,7 @@ func (h *Host) commands() map[string]Command {
 		"App.createFile":         oneString("a path", h.createFile),
 		"App.quit":               none(h.quit),
 		"App.openCommandLine":    none(h.openCommandLine),
+		"App.run":                oneString("a command's id", h.runEntry),
 		"App.writeFromEditor":    oneBool(h.writeFromEditor),
 		"App.quitFromEditor":     oneBool(h.quitFromEditor),
 		"App.edited":             none(h.edited),
