@@ -540,8 +540,12 @@ func TestTheProviderForm(t *testing.T) {
 		t.Fatalf("stored %+v, key kept %v, %v", info, sealed == "sekrit", err)
 	}
 
-	// edited, its key sealed: another kind that takes a key still keeps it when left empty
-	r.s.WaitForText(t, "cloud")
+	// edited, its key sealed: another kind that takes a key still keeps it when left empty. The
+	// list is read again after the save's notice, so wait for its row: "cloud" is on the screen
+	// already (the notice, the name typed), and editing row 0 of a list not yet read does nothing.
+	r.s.WaitFor(t, "cloud listed, its key sealed", func(string) bool {
+		return onLoop(r, func() bool { p, ok := r.h.ai.providers.at(0); return ok && p.name == "cloud" && p.hasKey })
+	})
 	r.h.p.Post(func() { r.h.ai.providers.startEdit(0) })
 	r.s.WaitForText(t, "API key (sealed; leave empty to keep it)")
 	r.keys(t, tab(), enter()) // the kind
