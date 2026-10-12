@@ -24,6 +24,8 @@ type scriptedCore struct {
 	views   []string    // the view methods called, "id.method"
 	listing FileList    // what Files answers
 	spaces  []Workspace // what Workspaces answers
+	page    Page        // what Page answers
+	crumbs  []string    // the breadcrumb last put on the frame
 	// deferred holds each Go's answer until deliver runs it: answers late and in any order
 	deferred bool
 	pending  []func()
@@ -55,6 +57,11 @@ func (s *scriptedCore) SetPref(name, value string) { s.set[name] = value }
 func (s *scriptedCore) Files() FileList            { return s.listing }
 func (s *scriptedCore) Workspaces() []Workspace    { return s.spaces }
 func (s *scriptedCore) TogglePanel(id string)      { s.views = append(s.views, id+".toggle") }
+func (s *scriptedCore) Page() Page                 { return s.page }
+func (s *scriptedCore) Crumbs(parts []string)      { s.crumbs = parts }
+func (s *scriptedCore) GoToLine(line int) {
+	s.views = append(s.views, fmt.Sprint("editor.line ", line))
+}
 func (s *scriptedCore) View(id, method string, _ ...any) error {
 	s.views = append(s.views, id+"."+method)
 	return nil

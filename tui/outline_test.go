@@ -53,7 +53,7 @@ func TestTheOutlineFollowsUnsavedEdits(t *testing.T) {
 		r.h.edited()
 	})
 	r.s.WaitFor(t, "the note dirty", func(string) bool { return r.file().dirty })
-	r.h.p.Post(func() { r.h.openOutline() })
+	r.h.p.Post(func() { r.h.outline.open() })
 	r.s.WaitForText(t, "headings (5 of 5)")
 	r.s.WaitForText(t, "Preface")
 	r.keys(t, decltest.Type("usage")...)
@@ -85,7 +85,7 @@ func TestYAMLAndTextBreadcrumbs(t *testing.T) {
 	r.s.WaitFor(t, "the key path", func(string) bool {
 		return strings.Contains(r.frameTitle(), "conf.yaml › server › database › host")
 	})
-	r.h.p.Post(func() { r.h.openOutline() })
+	r.h.p.Post(func() { r.h.outline.open() })
 	r.waitNoticed(t, "has no headings to navigate: the breadcrumb shows its key path")
 
 	r.h.p.Post(func() { r.h.openPath("notes.txt") })

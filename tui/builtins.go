@@ -24,7 +24,6 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("file.preview_html", "preview HTML", "App.previewHTML()", h.previewHTML),
 		builtin("file.preview_diagram", "view the diagram", "App.previewDiagram()", h.previewDiagram),
 		builtin("file.open_default_app", "open with the default app", "App.openWithDefaultApp()", h.openWithDefaultApp),
-		builtin("file.outline", "the file's outline", "App.openOutline()", h.openOutline),
 		builtin("file.back", "back", "App.goBack()", h.goBack),
 		builtin("file.related", "related files, by digit", "App.openJumpCard()", h.openJumpCard),
 		builtin("app.quit", "quit", "App.quit()", h.quit),

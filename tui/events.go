@@ -196,7 +196,7 @@ func (h *Host) keepDraftOnLeave() {
 	}
 	h.file.open, h.file.path, h.file.version = false, "", ""
 	h.keepDraft = true
-	h.set("App.fileTitle", untitled)
+	h.showTitle()
 	h.setDirty(true)
 	h.notify("the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace")
 }

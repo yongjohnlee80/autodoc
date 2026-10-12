@@ -188,7 +188,7 @@ func (r *registry) event(kind, workspace, detail string) bool {
 // features are the program's parts, in the order the registry merges them.
 func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
-	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs := []Feature{legacy{h}, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
 	// their choosers are one feature of their own
@@ -223,7 +223,7 @@ func (l legacy) Listed() {
 
 // Picks are the host's own pickers.
 func (l legacy) Picks() map[string]picker {
-	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "outline": l.h.outlinePick}
+	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick}
 }
 
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host
@@ -271,6 +271,14 @@ type Core interface {
 	View(id, method string, args ...any) error
 	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
 	TogglePanel(id string)
+	// Page is the page as it is now (page.go: pageNow), for a reader that cannot wait for the
+	// typing pause: snapshotted again only when typed since the last.
+	Page() Page
+	// Crumbs puts a breadcrumb after the file's name on the page's frame; nil, the name alone.
+	Crumbs(parts []string)
+	// GoToLine puts the editor's cursor at the start of line (0-based), the page scrolled to it,
+	// and gives the editor the keyboard.
+	GoToLine(line int)
 }
 
 // Workspace is one of the daemon's workspaces as a feature reads it: its name, its state, and what
@@ -333,6 +341,12 @@ func (c core) Workspaces() []Workspace {
 }
 func (c core) View(id, method string, args ...any) error { return c.h.p.Call(id, method, args...) }
 func (c core) TogglePanel(id string)                     { c.h.togglePanel(id) }
+func (c core) Page() Page                                { return c.h.pageNow() }
+func (c core) Crumbs(parts []string)                     { c.h.crumbs = parts; c.h.showTitle() }
+func (c core) GoToLine(line int) {
+	c.h.core.SetLine(line, 0)
+	c.h.keep(c.h.p.Call("editor", "forceActiveFocus"))
+}
 func (c core) SetPref(name, value string) {
 	for _, row := range c.h.prefRows {
 		if row.Name == name {

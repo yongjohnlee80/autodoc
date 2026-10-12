@@ -118,7 +118,6 @@ func (h *Host) commands() map[string]Command {
 		"App.browseRoot":             oneString("a directory", h.browseRoot),
 		"App.rootChosen":             oneString("a directory", h.rootChosen),
 		"App.managerClosed":          none(h.managerClosed),
-		"App.openOutline":            none(h.openOutline),
 		"App.cursorMoved":            none(h.cursorMoved),
 		"App.htmlLink":               oneString("a link's target", h.htmlLink),
 		"App.startRemoveWorkspace":   oneNumber("a row", h.startRemoveWorkspace),

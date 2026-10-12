@@ -107,6 +107,9 @@ func (d *Doc) Headings() []Heading { return d.headings }
 // to the value there. Plain text, and a registered chunker's file: the title.
 func (d *Doc) Crumbs(line, col int) []string { return readings.Of(d.kind).crumbs(d, line, col) }
 
+// LineStart is the byte offset where line (1-based) starts, clamped to the text's lines.
+func (d *Doc) LineStart(line int) int { return d.offset(line, 0) }
+
 // offset is the byte offset of line and col, clamped to the text.
 func (d *Doc) offset(line, col int) int {
 	if len(d.lines) == 0 {

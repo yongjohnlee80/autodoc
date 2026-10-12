@@ -46,7 +46,6 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
-	"github.com/yongjohnlee80/autodoc/core/outline"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	"github.com/yongjohnlee80/autodoc/script"
 )
@@ -82,11 +81,10 @@ type Host struct {
 	rankers                     *rows[rankerRow]   // the re-rankers (rankers.go)
 	vectors                     *rows[vectorRow]   // the workspace's models (vectors.go)
 
-	// the pickers (pick.go): the search's, File › Open's, the draft's name and the outline's; the
-	// search's own state, and its words
+	// the pickers (pick.go): the search's, File › Open's and the draft's name (the outline's is
+	// outline.go's); the search's own state, and its words
 	searchPick        *pick[hit]
 	openPick, newPick *pick[string]
-	outlinePick       *pick[outline.Heading]
 	searchSeq         uint64
 	searchCancel      context.CancelFunc
 	searchQuery       string
@@ -196,11 +194,12 @@ type Host struct {
 	htmlPane          htmlPaneState // the native HTML preview beside the editor, under --gui (htmlpane.go)
 	graphicsOverride  func() tuicore.Tri
 	rasterizeOverride func(context.Context, []byte, widget.Page) ([]byte, error)
-	// the editor text's outline (outline.go): outlineGen numbers the refreshes, the latest wins
-	outline    *outline.Doc
-	outlineGen uint64
-	focusSent  time.Time
-	entered    bool // ws was entered on this connection's listing
+	// the outline and the breadcrumb (outline.go), a feature of its own; crumbs is the breadcrumb
+	// it puts after the file's name (Core.Crumbs)
+	outline   *outliner
+	crumbs    []string
+	focusSent time.Time
+	entered   bool // ws was entered on this connection's listing
 	// a restart under way: the version it stops, and its daemon's process, which the reconnect
 	// waits out (restart.go)
 	restartFrom string
@@ -381,10 +380,11 @@ func newHost(session *Session, opt Options) *Host {
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
 	h.explorer = newExplorer(core{h})
+	h.outline = newOutline(core{h})
 	h.providers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "context", "apiKey"), h.providerRowOf)
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.rankers = newRows(tuidecl.NewListModel("key", "use", "name", "kind", "model", "apiKey"), h.rankerRowOf)
-	h.searchPick, h.openPick, h.newPick, h.outlinePick = h.newSearchPick(), h.newOpenPick(), h.newNewPick(), h.newOutlinePick()
+	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.loadPlugins()
 	return h
 }

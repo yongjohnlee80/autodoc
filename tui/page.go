@@ -35,6 +35,8 @@ type Page struct {
 	Kind    kind.Kind // how its text is read: derived, raw and the daemon's registrations applied
 	Text    []byte
 	Outside bool // a file in no workspace
+	// Line and At are the cursor when Text was taken: its line (0-based) and byte offset in Text
+	Line, At int
 }
 
 // More optional parts of a Feature (feature.go).
@@ -141,6 +143,7 @@ func (h *Host) showPage() {
 	h.pageGen++ // a pause still to come was the page before's: it must not reach this one
 	h.page, h.typing = h.takePage(), false
 	h.reg.shown(h.page)
+	h.showTitle() // the file's name, whether or not a feature puts a breadcrumb after it
 }
 
 // pageNow is the page as it is now, for a reader that cannot wait for the pause (a picker opened
@@ -154,20 +157,24 @@ func (h *Host) pageNow() Page {
 
 // takePage is the page as the editor shows it now, its text one snapshot.
 func (h *Host) takePage() Page {
-	p := Page{Kind: h.pageKind(), Text: []byte(h.core.Value())}
+	line, _ := h.core.Line()
+	p := Page{Kind: h.pageKind(), Text: []byte(h.core.Value()), Line: line, At: h.cursorBytes()}
 	if h.file.open {
 		p.Ref, p.Outside = fileRef{h.file.ws, h.file.path}, h.file.outside()
 	}
 	return p
 }
 
-// pageKind is how the page's text is read: a file opened raw (an HTML file's own bytes) as plain
-// text, the rest as the outline reads it (a derived document's text and the draft as Markdown).
+// pageKind is how the page's text is read: the draft and a derived document's text as Markdown, a
+// file opened raw (an HTML file's own bytes) as plain text, the rest by the daemon's registrations.
 func (h *Host) pageKind() kind.Kind {
-	if h.file.open && h.file.raw {
+	switch {
+	case !h.file.open, h.file.derived != "":
+		return kind.Markdown
+	case h.file.raw:
 		return kind.Text
 	}
-	return h.outlineKind()
+	return h.resolver().Of(h.file.path)
 }
 
 // pageSoon is typing: once it has rested editPause, the page's text is snapshotted once and handed
@@ -187,7 +194,6 @@ func (h *Host) pageSoon() {
 // from the same last keystroke, as before), and the watchers.
 func (h *Host) pagePaused() {
 	h.page, h.typing = h.takePage(), false
-	h.refreshOutline()
 	if h.htmlPaneShown() {
 		h.renderHTMLPane()
 	}

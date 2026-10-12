@@ -282,7 +282,7 @@ func TestTheMovedFeaturesAreRegistered(t *testing.T) {
 	for _, f := range h.features() {
 		byName[f.Name()] = f
 	}
-	for name, cmd := range map[string]string{"notices": "App.openNotices", "recent": "App.openRecent", "explorer": "App.toggleExplorer"} {
+	for name, cmd := range map[string]string{"notices": "App.openNotices", "recent": "App.openRecent", "explorer": "App.toggleExplorer", "outline": "App.openOutline"} {
 		f, ok := byName[name]
 		if !ok {
 			t.Errorf("no %s feature registered", name)

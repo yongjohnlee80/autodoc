@@ -380,7 +380,6 @@ func (h *Host) readPage() {
 		h.set("App.syntaxDefinition", "Plain text")
 		h.setDirty(h.file.dirty)
 		h.validateSoon(validateDelay)
-		h.refreshOutline()
 		return
 	}
 	if h.file.derived == "" {
@@ -388,14 +387,12 @@ func (h *Host) readPage() {
 			h.set("App.syntaxDefinition", d.Name)
 			h.setDirty(h.file.dirty)
 			h.validateSoon(validateDelay)
-			h.refreshOutline()
 			return
 		}
 	}
 	h.set("App.syntaxDefinition", syntaxOf.Of(k))
 	h.setDirty(h.file.dirty) // the status line's title carries the badge
 	h.validateSoon(validateDelay)
-	h.refreshOutline() // and the frame's
 }
 
 // syntaxOf is the editor's syntax for a kind, where no source language claims the file's name
@@ -483,11 +480,7 @@ func (h *Host) closeFile() {
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
 	h.core.SetReadOnly(false)
-	h.outline = nil
-	h.outlinePick.setAll(nil)
-	h.outlinePick.list.Reset(nil)
-	h.outlineGen++
-	h.set("App.fileTitle", untitled)
+	h.showTitle()
 	h.set("App.syntaxDefinition", "Markdown")
 	h.setRendered(true) // the draft is Markdown, whatever the file before it was
 	h.set("App.statusCenter", "")
