@@ -128,7 +128,7 @@ func post(t *testing.T, srv *httptest.Server, auth, ctype, body string) reply {
 
 func do(t *testing.T, req *http.Request) reply {
 	t.Helper()
-	res, err := http.DefaultClient.Do(req)
+	res, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,6 +136,9 @@ func do(t *testing.T, req *http.Request) reply {
 	b, _ := io.ReadAll(res.Body)
 	return reply{status: res.StatusCode, header: res.Header, body: b}
 }
+
+// client bounds every request, so a handler that never answers fails a test rather than hanging it.
+var client = &http.Client{Timeout: 10 * time.Second}
 
 const bearer = "Bearer " + token
 const valid = `{"tenant": "lm-catalog", "query": "love song", "scope": {"label_id": ["A"]}}`

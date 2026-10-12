@@ -56,6 +56,7 @@ type serverFixture struct {
 	plain  dao.DataConn
 	emb    *fakeEmbeddings
 	url    string // the endpoint's base URL, as server.toml names it
+	extra  string // more of server.toml, after the source ([http], say)
 }
 
 // embedKey is the embedding endpoint's API key, which the fixture's server.toml names through
@@ -68,6 +69,7 @@ const embedKey = "sk-test-embedding-secret-key"
 type fakeEmbeddings struct {
 	mu    sync.Mutex
 	texts map[string]int
+	gate  func(text string) // when set, called with each text before it is answered
 }
 
 func (f *fakeEmbeddings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +96,14 @@ func (f *fakeEmbeddings) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var out struct {
 		Data []datum `json:"data"`
+	}
+	f.mu.Lock()
+	gate := f.gate
+	f.mu.Unlock()
+	if gate != nil {
+		for _, text := range req.Input {
+			gate(text)
+		}
 	}
 	f.mu.Lock()
 	for i, text := range req.Input {
@@ -160,7 +170,7 @@ view     = "track.view"
 interval = "1s"
 lag      = "0s"
 access   = ["label_id"]
-`
+` + f.extra
 	if err := os.WriteFile(f.path, []byte(cfg), 0o600); err != nil {
 		f.t.Fatal(err)
 	}
@@ -282,13 +292,15 @@ func exitOf(t *testing.T, done <-chan int, stderr *syncBuffer) int {
 
 // TestServerStepsStartInOrder: Postgres opens, the schema is created before pgstore's migrations
 // run in it, the tenants' policies are recorded, the ingesters start, and the embedding worker
-// starts last, so it stops first, while the ingesters still hold their tenants' locks.
+// starts after them, so it stops before them, while they still hold their tenants' locks; the HTTP
+// API starts last, so it stops first, its requests drained while the worker and the pools serve
+// them.
 func TestServerStepsStartInOrder(t *testing.T) {
 	var names []string
 	for _, s := range serverSteps {
 		names = append(names, s.name)
 	}
-	if want := []string{"postgres", "schema", "policy", "ingesters", "embedder"}; !slices.Equal(names, want) {
+	if want := []string{"postgres", "schema", "policy", "ingesters", "embedder", "http"}; !slices.Equal(names, want) {
 		t.Fatalf("serverSteps %v, want %v", names, want)
 	}
 }
