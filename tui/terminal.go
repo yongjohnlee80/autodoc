@@ -16,7 +16,11 @@ type terminals struct {
 }
 
 func newTerminals(c PanelHost) *terminals { return &terminals{c: c, restore: true} }
-func (*terminals) Name() string           { return "terminals" }
+func (t *terminals) BindPanelHost(c PanelHost) error {
+	t.c = c
+	return nil
+}
+func (*terminals) Name() string { return "terminals" }
 func (t *terminals) State() map[string]any {
 	st := map[string]any{
 		"App.terminalDir":         "",
@@ -220,13 +224,15 @@ func (t *terminals) openTerminalPanel() {
 			t.started = true
 		}
 	}
-	t.c.Focus("terminalView")
+	t.c.Keep(t.c.Focus("terminalView"))
 }
 
 // closeTerminalPanel is the terminal's spec Close: it remembers whether the terminal had the
 // keyboard, for the close to give it back, and closes the drawer.
 func (t *terminals) closeTerminalPanel() {
-	t.restore = t.c.Focused("terminalView")
+	focused, err := t.c.Focused("terminalView")
+	t.c.Keep(err)
+	t.restore = focused
 	t.c.CloseDrawer("terminal")
 }
 
@@ -244,7 +250,7 @@ func (t *terminals) toggleTerminal() { t.c.TogglePanel("terminal") }
 // opening it if it is closed (SPC ` toggles it).
 func (t *terminals) openTerminal() {
 	if t.c.PanelOpen("terminal") {
-		t.c.Focus("terminalView")
+		t.c.Keep(t.c.Focus("terminalView"))
 		return
 	}
 	t.toggleTerminal()
@@ -278,7 +284,7 @@ func (t *terminals) terminalClosed() {
 	if target == "" {
 		target = "editor"
 	}
-	t.c.Focus(target)
+	t.c.Keep(t.c.RestoreKeyboardPane(target))
 }
 
 // keyboardPanes are the panes the keyboard can come back to from the terminal: the page, then the

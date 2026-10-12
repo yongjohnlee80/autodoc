@@ -73,14 +73,14 @@ func (h *Host) togglePanel(name string) {
 	}
 	if h.panelOpen[name] {
 		if s.Close != nil {
-			s.Close(core{h})
+			s.Close(h.panelHost(name))
 			return
 		}
 		h.closeDrawer(name)
 		return
 	}
 	if s.Open != nil {
-		s.Open(core{h})
+		s.Open(h.panelHost(name))
 		return
 	}
 	h.openDrawer(name)
@@ -118,7 +118,7 @@ func (h *Host) panelOpened(name string) {
 	h.lastPanel = name
 	h.showFind() // a drawer at the right edge hides "finding …"
 	if s.Opened != nil {
-		s.Opened(core{h})
+		s.Opened(h.panelHost(name))
 	}
 }
 
@@ -130,7 +130,7 @@ func (h *Host) panelClosed(name string) {
 	h.panelOpen[name] = false
 	h.showFind()
 	if s.Closed != nil {
-		s.Closed(core{h})
+		s.Closed(h.panelHost(name))
 		return
 	}
 	h.focusEditor()

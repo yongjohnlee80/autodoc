@@ -355,8 +355,8 @@ func newHost(session *Session, opt Options) *Host {
 	h.rel = newRelated(core{h})
 	h.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), h.managedPluginRowOf)
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
-	h.terminals = newTerminals(core{h})
-	h.agents = newAgents(core{h}, opt.AgentDir, opt.ConfigPath)
+	h.terminals = newTerminals(unboundPanelHost(core{h}))
+	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.loadPlugins()
 	return h
 }
@@ -418,6 +418,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
 	h.reg, h.cat = reg, reg.catalog
+	if err := h.reg.panels.bind(core{h}); err != nil {
+		panic(err) // an invalid service binding cannot build a program
+	}
 	h.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
 	h.refreshPlugins()
 	opts = append(opts,

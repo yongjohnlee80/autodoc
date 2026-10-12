@@ -6,11 +6,19 @@ import "fmt"
 // operations and preference persistence, not Host fields or the program tree.
 // Every method runs on the UI loop.
 type PanelHost interface {
-	Core
+	Set(name string, v any)
+	Open(id string)
+	Close(id string)
+	Notify(msg string)
+	Ask(q Question) Asked
+	Prefs() prefs
 	CallView(id, method string, args ...any) error
 	Keep(err error)
-	Focus(id string)
-	Focused(id string) bool
+	Focus(id string) error
+	Focused(id string) (bool, error)
+	// RestoreKeyboardPane is navigation to the editor or a receiving pane,
+	// never an arbitrary component's method or focus query.
+	RestoreKeyboardPane(id string) error
 	KeyboardPane() string
 	PanelOpen(id string) bool
 	TogglePanel(id string)
@@ -20,6 +28,8 @@ type PanelHost interface {
 	KeepPreference(name, value string, change func(*prefs))
 	KeepPanelGeometry(id, dimension string, percent int)
 	ActiveWorkspace() (wsInfo, bool)
+	// RefreshRelations is transitional while links still belongs to legacy.
+	// Remove it when the relations Feature owns its panel's open hook.
 	RefreshRelations()
 }
 
@@ -27,7 +37,8 @@ type PanelHost interface {
 // populate its profile form. Agent-specific state remains in the agents feature.
 type agentHost interface {
 	PanelHost
-	SetField(name, value string)
+	// SetFormText resets edited form text even if its source value is unchanged.
+	SetFormText(name, value string)
 	ConfigureTerminal(id, command, dir string, args ...string) error
 	DaemonAddress() string
 }
@@ -49,7 +60,7 @@ func (c core) KeepPanelGeometry(id, dimension string, percent int) {
 }
 func (c core) ActiveWorkspace() (wsInfo, bool) { return c.h.activeWorkspaceInfo() }
 func (c core) RefreshRelations()               { c.h.relationsOfOpenFile() }
-func (c core) SetField(name, value string)     { c.h.setField(name, value) }
+func (c core) SetFormText(name, value string)  { c.h.setField(name, value) }
 func (c core) DaemonAddress() string           { return c.h.session.Address() }
 func (c core) ConfigureTerminal(id, command, dir string, args ...string) error {
 	view, ok := c.h.p.Find(id)

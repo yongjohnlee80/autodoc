@@ -111,8 +111,15 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   percentage bounds. Duplicate ids/views and invalid geometry are refused before state is built;
   descriptors and place slices are snapshotted. Focus follows declared priority, with stable
   contribution order for ties. No package-global runtime panel list exists.
-- Panel callbacks receive `PanelHost`, a narrow service boundary extending `Core`, not `*Host`.
-  It supplies view/focus operations and preference persistence. `terminals` owns startup and
+- Panel callbacks receive a contributor-scoped `PanelHost`, not `*Host`. View calls, focus
+  queries and terminal configuration are restricted to that feature's validated ids/views;
+  cross-role id/view collisions are refused. Each contributor receives its own services even
+  when feature labels match. Calls before view attachment report a precondition error.
+  Cross-panel toggles/open/close are navigation actions. Focus return uses
+  `RestoreKeyboardPane`, limited to the editor and the registry's receiving panes, not arbitrary
+  view methods. Form-text reset is `SetFormText`, distinct from ordinary source updates.
+  The legacy links refresh operation is transitional until relations owns its own open hook.
+  `terminals` owns startup and
   focus restoration; `agents` owns its profile form/model and running identity. Their state and
   commands are not part of `legacy`. The agent panel is one contribution; future profile tabs
   belong inside its Feature, not one panel spec per agent.

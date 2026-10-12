@@ -76,8 +76,8 @@ func (h *agents) startEditAgent(i int) {
 func (h *agents) fillAgentForm(title string, a agentProfile) {
 	h.c.Set("App.agentFormTitle", title)
 	h.c.Set("App.agentFormError", "")
-	h.c.SetField("App.agentName", a.Name)
-	h.c.SetField("App.agentCommand", a.Command)
+	h.c.SetFormText("App.agentName", a.Name)
+	h.c.SetFormText("App.agentCommand", a.Command)
 	h.c.Open("agentEdit")
 }
 
@@ -203,5 +203,5 @@ func (h *agents) toggleAgentShown() {
 	if !h.c.PanelOpen("agent") {
 		h.c.OpenDrawer("agent")
 	}
-	h.c.Focus("agentView")
+	h.c.Keep(h.c.Focus("agentView"))
 }

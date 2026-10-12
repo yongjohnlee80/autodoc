@@ -30,6 +30,14 @@ func newAgents(c agentHost, dir, config string) *agents {
 	return &agents{c: c, agentDir: dir, agentConfig: config,
 		agentRows: tuidecl.NewListModel("key", "default", "name", "command")}
 }
+func (a *agents) BindPanelHost(c PanelHost) error {
+	host, ok := c.(agentHost)
+	if !ok {
+		return fmt.Errorf("agents panel requires terminal configuration services")
+	}
+	a.c = host
+	return nil
+}
 func (*agents) Name() string { return "agents" }
 func (a *agents) State() map[string]any {
 	st := map[string]any{
@@ -73,7 +81,7 @@ func (a *agents) Panels() []PanelSpec {
 	s := agentPanelSpec()
 	s.Open = func(PanelHost) { a.openAgentPanel() }
 	s.Opened = func(c PanelHost) { c.Set("App.agentShown", true) }
-	s.Closed = func(c PanelHost) { c.Set("App.agentShown", false); c.Focus("editor") }
+	s.Closed = func(c PanelHost) { c.Set("App.agentShown", false); c.Keep(c.RestoreKeyboardPane("editor")) }
 	return []PanelSpec{s}
 }
 func (a *agents) PreferencesChanged() {
@@ -188,7 +196,7 @@ func (h *agents) startAgent(p agentProfile) {
 		return
 	}
 	h.agentRunning = p.Name
-	h.c.Focus("agentView")
+	h.c.Keep(h.c.Focus("agentView"))
 }
 
 // stopAgent ends the agent running, if one is.

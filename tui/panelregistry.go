@@ -9,17 +9,23 @@ import (
 // snapshots these once per program; each feature owns its lifecycle callbacks.
 type Panel interface{ Panels() []PanelSpec }
 
-type panelRegistry struct{ specs []PanelSpec }
+type panelRegistry struct {
+	specs         []PanelSpec
+	contributions []panelContribution
+	hosts         map[string]PanelHost
+}
 
 func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
 	r := &panelRegistry{specs: []PanelSpec{}}
 	owners := map[string]string{}
 	views := map[string]string{}
+	components := map[string]string{}
 	for _, f := range fs {
 		p, ok := f.(Panel)
 		if !ok {
 			continue
 		}
+		contribution := panelContribution{feature: f}
 		for _, s := range p.Panels() {
 			if s.ID == "" || s.View == "" || s.Edge == nil {
 				return nil, fmt.Errorf("tui: %s contributes a panel without an id, view or edge", f.Name())
@@ -29,6 +35,11 @@ func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
 			}
 			if prev, ok := views[s.View]; ok {
 				return nil, fmt.Errorf("tui: panel view %s belongs to both %s and %s", s.View, prev, s.ID)
+			}
+			for _, id := range []string{s.ID, s.View} {
+				if prev, ok := components[id]; ok {
+					return nil, fmt.Errorf("tui: component %s is shared by panel %s and %s", id, prev, s.ID)
+				}
 			}
 			if len(s.Places) > 0 {
 				if s.Default == nil || !validPercentRange(s.Size) || !validPercentRange(s.Length) {
@@ -47,9 +58,12 @@ func newPanelRegistry(fs []Feature) (*panelRegistry, error) {
 				}
 			}
 			owners[s.ID], views[s.View] = f.Name(), s.ID
+			components[s.ID], components[s.View] = s.ID, s.ID
 			s.Places = slices.Clone(s.Places)
 			r.specs = append(r.specs, s)
+			contribution.specs = append(contribution.specs, s)
 		}
+		r.contributions = append(r.contributions, contribution)
 	}
 	// Priority is declared data; ties keep feature/contribution order. Built-in
 	// priorities preserve the panel order used before Feature contributions.
