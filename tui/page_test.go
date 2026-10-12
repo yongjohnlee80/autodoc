@@ -273,3 +273,26 @@ func TestAPagesKindFollowsRawAndDerived(t *testing.T) {
 		t.Errorf("kinds: raw %v, derived %v, draft %v; want text, Markdown, Markdown", got[0], got[1], got[2])
 	}
 }
+
+// The features moved out of legacy are registered as themselves: their commands and sources are
+// theirs, not the host's (B5). A merge that brings a host-owned copy back fails here.
+func TestTheMovedFeaturesAreRegistered(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{})
+	byName := map[string]Feature{}
+	for _, f := range h.features() {
+		byName[f.Name()] = f
+	}
+	for name, cmd := range map[string]string{"notices": "App.openNotices", "recent": "App.openRecent"} {
+		f, ok := byName[name]
+		if !ok {
+			t.Errorf("no %s feature registered", name)
+			continue
+		}
+		if _, ok := f.Commands()[cmd]; !ok {
+			t.Errorf("%s is not the %s feature's command", cmd, name)
+		}
+		if _, ok := byName["legacy"].Commands()[cmd]; ok {
+			t.Errorf("%s is the host's (legacy) again", cmd)
+		}
+	}
+}

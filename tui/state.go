@@ -136,9 +136,6 @@ func (h *Host) state() map[string]any {
 		"App.providerContextShown": false,
 		"App.providerModels":       h.providerModels,
 		"App.providerModelsStatus": "",
-		// the recent files (recent.go)
-		"App.recentFiles":  h.recent.Model(),
-		"App.recentStatus": "",
 		// the agent terminal and its profiles (agent.go, agentprofiles.go)
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,

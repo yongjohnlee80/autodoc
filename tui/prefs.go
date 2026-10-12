@@ -117,8 +117,6 @@ type prefs struct {
 	agentDefault string
 	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
 	agentEdge string
-	// recent are the files opened last, newest first (recent.go)
-	recent []recentDoc
 	// values are the features' own preferences (ValuePref), by name: read with Value
 	values map[string]string
 }
@@ -264,9 +262,6 @@ func prefsFor(m map[string]any, gui bool) prefs {
 	if s, ok := str(prefAgentDefault); ok {
 		p.agentDefault = s
 	}
-	if s, ok := str(prefRecent); ok {
-		p.recent = recentOf(s)
-	}
 	readPanelPrefs(&p, m)
 	readPanelFloats(&p, m)
 	readFontPrefs(&p, m)
@@ -375,8 +370,8 @@ func (h *Host) setPref(name, value string, change func(*prefs)) {
 	h.storePref(name, value)
 }
 
-// storePref writes one preference to the store, behind those waiting. Alone, it is for one
-// nothing on screen shows: the recent files (recent.go), which every file opened changes.
+// storePref writes one preference to the store, behind those waiting, so they land in the order
+// set: after setPref's full apply, and after a feature's SetPref through its row (setRowPref).
 func (h *Host) storePref(name, value string) {
 	h.prefWrites = append(h.prefWrites, [2]string{name, value})
 	if len(h.prefWrites) == 1 {

@@ -317,8 +317,7 @@ func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
 		if prev != nil && *prev != (fileRef{ws, p}) {
 			h.rememberLeft(*prev)
 		}
-		h.show(ws, p, a.content, a.version, raw)
-		h.noteRecent(ws, p)
+		h.show(ws, p, a.content, a.version, raw) // the recent files note it (recent.go: Shown)
 		h.say("opened " + p)
 		if ws == "" {
 			h.notify(p + ": " + outsideLimits)
