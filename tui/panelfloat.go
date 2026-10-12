@@ -68,11 +68,7 @@ func withFloat(m map[string][4]float64, panel string, r *[4]float64) map[string]
 
 // floatState is what the document reads of a panel's placement: App.<panel>Floating, and its
 // rectangle App.<panel>X, Y, W and H (a docked panel's are where it would float: the middle).
-func floatState(m map[string][4]float64) map[string]any {
-	return floatStateFor(m, defaultPanelSpecs())
-}
-
-func floatStateFor(m map[string][4]float64, specs []PanelSpec) map[string]any {
+func floatState(m map[string][4]float64, specs []PanelSpec) map[string]any {
 	st := map[string]any{}
 	for _, spec := range specs {
 		panel := spec.ID

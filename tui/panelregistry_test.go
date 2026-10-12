@@ -112,7 +112,7 @@ func TestFeaturePanelSchemaControlsPreferenceReadback(t *testing.T) {
 	if size, length := p.panelGeometry("missing", "left"); size != 0 || length != 0 {
 		t.Fatalf("unknown panel got geometry: %d × %d", size, length)
 	}
-	st := floatStateFor(p.panelFloat, r.panels.specs)
+	st := floatState(p.panelFloat, r.panels.specs)
 	if st["App.customFloating"] != true || st["App.customX"] != float64(10) {
 		t.Fatalf("contributed panel's float was ignored: %v", st)
 	}
@@ -173,6 +173,19 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 		}
 		if _, exists := a.reg.handlers[name]; !exists {
 			t.Errorf("feature command %s missing from program", name)
+		}
+	}
+}
+
+func TestConfigureTerminalRefusesMissingAndOtherViews(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	for _, tc := range []struct {
+		id, want string
+	}{{"missingView", "no terminal view"}, {"editor", "not a configurable terminal"}} {
+		err := onLoop(r, func() error { return (core{r.h}).ConfigureTerminal(tc.id, "not-run", "", "arg") })
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("configure %s: %v, want %q", tc.id, err, tc.want)
 		}
 	}
 }

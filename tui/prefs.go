@@ -290,7 +290,7 @@ func panelLength(edge string) int {
 // the fonts'. The rows' are rowState's (prefspec.go); the status line's is statusShown's.
 func prefState(p prefs) map[string]any {
 	m := map[string]any{}
-	for _, part := range []map[string]any{panelState(p), floatStateFor(p.panelFloat, p.geometrySpecs()), fontState(p)} {
+	for _, part := range []map[string]any{panelState(p), floatState(p.panelFloat, p.geometrySpecs()), fontState(p)} {
 		maps.Copy(m, part)
 	}
 	return m
