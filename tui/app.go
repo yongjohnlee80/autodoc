@@ -56,6 +56,7 @@ type Host struct {
 	p        *tuidecl.Program
 	session  *Session
 	reg      *registry          // the features, merged (feature.go)
+	cat      *catalog           // the user commands, every source's (catalog.go): the registry's
 	asker    *asker             // the one yes-or-no question (ask.go)
 	prefRows []PrefSpec         // every preference declared, the host's and the features' (prefspec.go)
 	keys     keyset             // the keys and their cards, the host's and the features' (keys.go)
@@ -396,6 +397,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 		return markedSpans(&h.findMarks, line, semantic)
 	})
 	h.addEditorCommands()            // the command line's find is the page's (editorcmd.go)
+	h.cat.attach(h.core)             // the catalog's verbs on the command line (catalog.go)
 	h.core.SetOnEscape(h.escapeFind) // Esc in the page ends its find (find.go)
 	h.loadScripts()                  // the Lua commands: AutoDoc's own, then the user's (scripts.go)
 	h.core.SetTableEditing(true)     // the untitled draft is Markdown; readPage decides for a file
@@ -435,7 +437,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	if err != nil {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
-	h.reg = reg
+	h.reg, h.cat = reg, reg.catalog
 	opts = append(opts,
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
 		tuidecl.Sources(h.reg.state),

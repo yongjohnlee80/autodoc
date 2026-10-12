@@ -48,12 +48,15 @@ type registry struct {
 	handlers  map[string]decl.HandlerFunc
 	picks     map[string]picker // every feature's pickers, which the App.pick* commands reach by name
 	pageShown bool              // a page was shown to the DocWatchers (page.go): the next one closes it first
+	catalog   *catalog          // the user commands: the features' now, Lua's and the plugins' as they come
 }
 
-// newRegistry merges fs; a source, a command or a picker two features both name is an error. It
-// adds one feature of its own, pickCommands: the App.pick* commands over every feature's picks.
+// newRegistry merges fs; a source, a command or a picker two features both name is an error, and so
+// is a catalog entry the catalog refuses (catalog.go). It adds one feature of its own, pickCommands:
+// the App.pick* commands over every feature's picks.
 func newRegistry(fs ...Feature) (*registry, error) {
-	r := &registry{state: map[string]any{}, handlers: map[string]decl.HandlerFunc{}, picks: map[string]picker{}}
+	r := &registry{state: map[string]any{}, handlers: map[string]decl.HandlerFunc{}, picks: map[string]picker{},
+		catalog: newCatalog()}
 	fs = append(slices.Clip(fs), registryPicks{r})
 	r.features = fs
 	owner := map[string]string{}
@@ -72,6 +75,22 @@ func newRegistry(fs ...Feature) (*registry, error) {
 	}
 	if err := checkRows(rows); err != nil {
 		return nil, err
+	}
+	for _, f := range fs {
+		c, ok := f.(Cataloged)
+		if !ok {
+			continue
+		}
+		src := SourceFeature
+		if _, ok := f.(legacy); ok {
+			src = SourceBuiltin // the host's own, until each moves into a feature
+		}
+		for _, e := range c.Catalog() {
+			e.Source, e.Owner = src, f.Name()
+			if err := r.catalog.add(e); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if err := keyCatalog(fs).check(mainIDs); err != nil {
 		return nil, err
