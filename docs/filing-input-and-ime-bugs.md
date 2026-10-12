@@ -18,7 +18,9 @@ autodoc --ui --debug=r.jsonl
 
 Start it, reproduce the behaviour (type the composition that misbehaves, and note roughly when),
 quit, and send the file it names. `--debug` is refused without `--ui` or `--gui`, and the first
-line of the run says where the recording is going.
+line of the run says where the recording is going. The file is created private (`0600`), and a
+path that already exists — a file or a symlink — is refused, never truncated or followed: choose
+a new one, or omit `=PATH` for the timestamped default.
 
 **Privacy: the file contains everything typed, passwords included.** It is written only where
 the flag says, never anywhere by default. If the recording caught a password, delete the file

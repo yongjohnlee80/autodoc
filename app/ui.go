@@ -12,11 +12,13 @@ import (
 // that directory and follows it. window (--gui) runs the same UI in a window (runGUI).
 //
 // debug (--debug) records the input and event stream to one file, the window's and
-// the TUI's both: the recorder is handed to whichever UI runs, and closed when it
-// ends, which flushes.
+// the TUI's both: the recorder is handed to whichever UI runs, and its owner
+// closes it when the UI exits, which flushes. A recording that could not be
+// written whole fails the command.
 func runUI(ctx context.Context, configPath, dev, workspace string, window bool, b build, debug *debugFlag) error {
 	o := tui.LaunchOptions{ConfigPath: configPath, Dev: dev, Workspace: workspace, Version: b.version, BuildDate: b.buildDate, Registrations: b.reg.Tables(),
 		TermOptions: termOptions()}
+	var dbg *debugRecording
 	if debug.given {
 		path := debug.path
 		if path == "" {
@@ -26,12 +28,15 @@ func runUI(ctx context.Context, configPath, dev, workspace string, window bool, 
 		if err != nil {
 			return err
 		}
-		defer f.Close()
 		o.DebugRecorder = rec
-		defer rec.Close() // the window's backend closes it too; this is the TUI-only flush
+		dbg = &debugRecording{f: f, rec: rec}
 	}
 	if window {
-		return runGUI(ctx, o)
+		return runGUI(ctx, o, dbg)
 	}
-	return tui.Launch(ctx, o)
+	uiErr := tui.Launch(ctx, o)
+	if cerr := dbg.close(); uiErr == nil {
+		uiErr = cerr
+	}
+	return uiErr
 }
