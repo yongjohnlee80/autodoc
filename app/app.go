@@ -148,6 +148,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
+	debug := &debugFlag{}
+	fs.Var(debug, "debug", "--ui and --gui: record the input and event stream to one JSONL file for an input or IME bug report; =PATH names the file (default autodoc-debug-<date>.jsonl in the working directory). The file contains everything typed, passwords included")
 
 	// failed is a mode's error as its exit code: code, after saying why.
 	failed := func(err error, code int) int {
@@ -217,8 +219,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
-		{flag: "ui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, false, b, stderr) }},
-		{flag: "gui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, true, b, stderr) }},
+		{flag: "ui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, false, b, stderr, debug) }},
+		{flag: "gui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, true, b, stderr, debug) }},
 	}
 	companions := []companion{
 		{flags: []string{"ensure", "restart"}, modes: []string{"print-endpoint"}, says: "--ensure and --restart go with --print-endpoint"},
@@ -226,6 +228,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"format"}, modes: []string{"contracts"}},
 		{flags: []string{"dev"}, modes: []string{"ui", "gui"}},
 		{flags: []string{"check"}, modes: []string{"server"}},
+		{flags: []string{"debug"}, modes: []string{"ui", "gui"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)
 	if !ok {
@@ -237,10 +240,10 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 // uiMode is --ui and --gui. SIGTERM and SIGHUP (the terminal gone): the program ends and keeps
 // unsaved work for the next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the
 // TUI's.
-func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, stderr io.Writer) int {
+func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, stderr io.Writer, debug *debugFlag) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
-	if err := runUI(ctx, configPath, dev, ws, gui, b); err != nil && !errors.Is(err, context.Canceled) {
+	if err := runUI(ctx, configPath, dev, ws, gui, b, debug); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}

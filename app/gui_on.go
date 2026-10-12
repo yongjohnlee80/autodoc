@@ -21,7 +21,14 @@ import (
 func runGUI(ctx context.Context, o tui.LaunchOptions) error {
 	configureGUIPreferences()
 	gui.Main(func() error {
-		b := gui.NewBackend(gui.WithTitle("AutoDoc"))
+		opts := []gui.Option{gui.WithTitle("AutoDoc")}
+		if o.DebugRecorder != nil {
+			// --debug: the window's input path records into the same file the
+			// TUI's trace does. The backend's Stop closes the recorder, which
+			// flushes, before the process ends.
+			opts = append(opts, gui.WithRecorder(o.DebugRecorder))
+		}
+		b := gui.NewBackend(opts...)
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
 		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native()))

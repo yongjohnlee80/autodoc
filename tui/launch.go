@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yongjohnlee80/golib/gui/record"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/term"
@@ -61,6 +62,11 @@ type LaunchOptions struct {
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
 	DefaultCellFont string
+	// DebugRecorder, when set, records the TUI's own trace into it as stage "tui"
+	// records — the same recording a window build's backend writes its input path
+	// into, so one file reads platform → IME → tui in order. A window build also
+	// hands it to its backend as the input recorder.
+	DebugRecorder record.Recorder
 }
 
 // Launch runs AutoDoc's TUI until it quits or ctx ends: it reads the config, attaches to the daemon
@@ -111,11 +117,15 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 	if installed == nil {
 		installed = InstalledVersion
 	}
+	appOpts := []tuicore.AppOption{tuicore.WithBackend(backend)}
+	if o.DebugRecorder != nil {
+		appOpts = append(appOpts, tuicore.WithTrace(traceTo(o.DebugRecorder)))
+	}
 	host, err := New(session, Options{
 		GUI:       o.GUI,
 		About:     o.About,
 		AboutInfo: info,
-		App:       []tuicore.AppOption{tuicore.WithBackend(backend)},
+		App:       appOpts,
 		Dev:       o.Dev,
 		Layout:    o.Layout,
 		Workspace: workspace,

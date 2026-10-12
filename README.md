@@ -177,7 +177,16 @@ to do next: re-list, merge a conflict, read after a write that landed, and so on
 ```sh
 autodoc --ui                # attaches to the daemon (starting it when nothing answers), in the last workspace used
 autodoc --ui kb             # in workspace kb; a name the daemon does not have is refused, with the names it has
+autodoc --ui --debug         # also record the event stream to autodoc-debug-<date>.jsonl, for an input or IME bug report
+autodoc --ui --debug=r.jsonl # the same, to r.jsonl
 ```
+
+`--debug` is `--ui` and `--gui`'s: without one of them it is refused. It records the input and
+event stream to one JSONL file — the window's platform events and IME state when there is a
+window, the TUI's own trace in both modes — in the order everything happened, so one file reads
+platform → IME → TUI. **The file contains everything typed, passwords included**: it is written
+only where the flag says, never anywhere by default. How to record, and how a recording becomes
+the test that reproduces a bug on any machine, is in [docs/filing-input-and-ime-bugs.md](docs/filing-input-and-ime-bugs.md).
 
 The screen is a page and nothing else: the file, 120 columns wide and centred, the ruler at its
 right edge. With no file open, the page is an untitled draft: type into it (`i`), and `Ctrl+S`
@@ -455,6 +464,7 @@ edits to it.
 ```sh
 autodoc --gui               # the TUI in a window of its own, attached to the daemon as --ui is
 autodoc --gui kb            # in workspace kb
+autodoc --gui --debug       # also record the window's input stream and the TUI's trace (see The TUI)
 ```
 
 `--gui` runs the same screen as `--ui` in a native window (golib's `gui`, on Gio): the same
