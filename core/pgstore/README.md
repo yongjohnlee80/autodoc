@@ -48,7 +48,8 @@ PostgreSQL with the `vector` extension available (the migration creates it).
 - **Chunk kinds:** each chunk is a `section` or an `abstract` (`Document.Kinds`, by position);
   `WithSectionsOnly(ctx)` leaves the abstracts out of Lexical and Semantic, before the limit.
 - **Ingest state** for a server that indexes a source into a tenant (ADR 1791762085), written
-  through a `Batch` in the same transaction as the page's documents:
+  through a `Batch` beside the documents it covers (a pass's page, or the batch that records a
+  refresh):
   - `SetCursor(ctx, Cursor{UpdatedAt, ID})`: the `(updated_at, id)` the last committed page passed,
     kept to the microsecond and rounded down, so a crash replays at most one page and never skips a
     row; `SetRefreshed` records the last full refresh beside it. `Store.Cursor` and

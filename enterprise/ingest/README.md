@@ -45,8 +45,11 @@ err = in.Run(ctx) // until ctx ends; ErrLockLost if the tenant's lock is lost
 - **One writer per tenant.** The lock is a session advisory lock on a connection pinned for the
   ingester's life, outside the pool, confirmed before every commit and every `PingEvery`. A lost
   lock writes nothing more and stops `Run` with `ErrLockLost`.
-- **A crash replays at most one page.** Each page's documents, quarantined rows and cursor are one
-  transaction.
+- **A crash in a pass replays at most one page.** A pass commits each page's documents, quarantined
+  rows and cursor in one transaction. A refresh commits its pages' documents without the cursor and
+  moves the cursor once, when it finishes, so the cursor is never committed ahead of its documents.
+  A refresh interrupted by a crash is not resumed: its finish is never recorded, so the next refresh
+  starts over and reads every row.
 - **No row is skipped.** The cursor is `(updated_at, id)`, so rows sharing a timestamp across a page
   boundary are read; a pass reads up to `now() − Lag`, behind any business transaction shorter than
   the lag; a row that fails is quarantined and retried on every pass.
