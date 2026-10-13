@@ -248,7 +248,7 @@ WHAT A KEY NEEDS
 const vimKeysText = `MOVE                          EDIT
 h j k l  ← ↓ ↑ →              i a    insert before, after the cursor
 w b e ge words on, back, end  I A    insert at the line's start, end
-W B E gE the same, by spaces  o O    open a line below, above
+W B E gE the same, by blanks  o O    open a line below, above
 0 ^ $    start, text, end     x      delete the character
 Enter -  next, previous line  D      delete to the line's end
 f t F T  to or till a char    dd yy  delete, copy the line
