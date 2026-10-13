@@ -260,11 +260,11 @@ func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
 	v.list()
 	onTask(t, v, "open")
 	v.chooseStatus()
-	if got := s.set["App.todoStatusPreviewText"]; got != "## open\n\nShip is open now: choosing it changes nothing.\n" {
-		t.Errorf("the first row's preview: %q", got)
+	if got := s.set["App.todoStatusPreviewText"]; got != "## open\n\nits status now:\nchoosing it\nchanges nothing\n" || s.set["App.todoStatusPreviewTitle"] != "Ship" {
+		t.Errorf("the first row's preview: %q, titled %q", got, s.set["App.todoStatusPreviewTitle"])
 	}
 	v.statusPick.move(2)
-	if got := s.set["App.todoStatusPreviewText"]; got != "## deferred\n\nShip moves from open to deferred.\n" {
+	if got := s.set["App.todoStatusPreviewText"]; got != "## deferred\n\nfrom open\nto deferred\n" {
 		t.Errorf("deferred's preview: %q", got)
 	}
 	if got := s.set["App.todoStatusList"]; got != "statuses (5 of 5)" {

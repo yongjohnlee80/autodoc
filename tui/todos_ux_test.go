@@ -72,10 +72,10 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	v.model.FetchMore(tuidecl.Index{Row: 0, Parent: &archived})
 	quiet("a month read")
 	v.moved(tuidecl.Index{Row: 0, Parent: &open})
-	v.chooseFolder("load", "load a todo store: its project's folder")
+	v.chooseFolder("load")
 	quiet("the cursor moved, and Load…")
-	if s.set["App.todoFolderTitle"] != "load a todo store: its project's folder" {
-		t.Errorf("the folder dialog's title: %q", s.set["App.todoFolderTitle"])
+	if s.opened[len(s.opened)-1] != "todoFolder" { // its title says what the folder is for
+		t.Errorf("Load… opened %v", s.opened)
 	}
 	openSection(t, v, "root:/p", "deferred")
 	if got := s.set["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in p › Deferred" || s.set["App.todosStatusShown"] != true {
@@ -122,7 +122,7 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 			} else if err := cmds[name].handler(name)(nil); err != nil {
 				t.Errorf("on a read-only %s, %s: %v", kind, key.Show, err)
 			}
-			for _, d := range []string{"todoFolder", "todoNew", "todoStatusPicker", "agentAssignPicker"} {
+			for _, d := range []string{"todoFolderMove", "todoNew", "todoStatusPicker", "agentAssignPicker"} {
 				if slices.Contains(s.opened, d) {
 					t.Errorf("on a read-only %s, %s opened %s", kind, key.Show, d)
 				}

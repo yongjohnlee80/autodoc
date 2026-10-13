@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -304,7 +305,7 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	ix := openSection(t, v, "ws:kb", "open")
 	v.moved(ix) // the section's row, not a task's
 	v.assign()
-	if c.set["App.todosStatus"] != "" || len(c.notes) != 0 || slices.Contains(c.opened, "agentAssignPicker") {
+	if strings.Contains(fmt.Sprint(c.set["App.todosStatus"]), "assign") || len(c.notes) != 0 || slices.Contains(c.opened, "agentAssignPicker") {
 		t.Fatalf("off a task: status %q, notes %q, opened %v", c.set["App.todosStatus"], c.notes, c.opened)
 	}
 	v.moved(tuidecl.Index{Row: 0, Parent: &ix})

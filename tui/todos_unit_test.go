@@ -336,7 +336,7 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	w.add()
 	w.remove()
 	w.chooseStatus()
-	w.chooseFolder("move", "x")
+	w.chooseFolder("move")
 	if len(ro.calls) != n || len(ro.notes) != 0 || len(ro.opened) != 0 || len(ro.asked) != 0 {
 		t.Errorf("a read-only store was written: %v, notes %v, opened %v", ro.calls[n:], ro.notes, ro.opened)
 	}
@@ -365,7 +365,7 @@ func TestTodosSectionsByNumberEventsAndFolders(t *testing.T) {
 	if got := len(s.calls) - n; got != 1 {
 		t.Errorf("%d reads after the events, want the one open section of /p", got)
 	}
-	v.chooseFolder("load", "load")
+	v.chooseFolder("load")
 	if s.opened[len(s.opened)-1] != "todoFolder" {
 		t.Errorf("folder dialog %v", s.opened)
 	}
@@ -514,7 +514,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 			t.Errorf("%s: %v", c, err)
 		}
 	}
-	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolder" { // M on no store: nothing
+	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolderNew" { // M on no store: nothing
 		t.Errorf("the folder dialog opened %q", got)
 	}
 

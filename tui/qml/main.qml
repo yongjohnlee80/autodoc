@@ -604,7 +604,9 @@ Window {
     TodoNew { id: todoNew }
     TodoLabel { id: todoLabel }
     TodoAssign { id: todoAssign }
-    TodoFolder { id: todoFolder }
+    TodoFolder { id: todoFolder; title: "todos: load a store: its project's folder" }
+    TodoFolder { id: todoFolderNew; title: "todos: a new store: the project's folder" }
+    TodoFolder { id: todoFolderMove; title: "todos: move the store: its new folder" }
     Notifications { id: notifications }
     Confirm { id: confirm }
 }

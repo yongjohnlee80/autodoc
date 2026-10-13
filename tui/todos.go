@@ -155,7 +155,7 @@ func (t *todos) State() map[string]any {
 	return map[string]any{
 		"App.todosTitle": "todos", "App.todosStatus": "", "App.todosStatusShown": false, "App.todoDetail": "",
 		"App.todoDetailShown": true,
-		"App.todoFolder":      "", "App.todoFolderTitle": "todos: choose the folder", "App.todoTree": t.model, "App.todoLabelText": "",
+		"App.todoFolder":      "", "App.todoTree": t.model, "App.todoLabelText": "",
 		"App.todoReadOnly": false, "App.todoActAdd": false, "App.todoActRefresh": false, "App.todoActLabel": false,
 		"App.todoActStatus": false, "App.todoActAssign": false, "App.todoActRemove": false,
 		"App.todoStatusRows": t.statusPick.list.Model(), "App.todoStatusField": "", "App.todoStatusList": "statuses",
@@ -185,7 +185,7 @@ func (t *todos) Commands() map[string]Command {
 		"App.todoToggleDetail": none(t.toggleDetail),
 		"App.todoLoad":         none(t.chooseLoad),
 		"App.todoNew":          none(t.chooseNew),
-		"App.todoMove":         none(func() { t.chooseFolder("move", "move the store: its new folder") }),
+		"App.todoMove":         none(func() { t.chooseFolder("move") }),
 		"App.todoFolderChosen": oneString("a folder", t.folderChosen),
 	}
 }
@@ -297,8 +297,12 @@ func (*todos) Cards() []Card {
 		Groups: [][]string{{todoGroupMove, todoGroupStatus}, {todoGroupTask, todoGroupStore}}}}
 }
 
-func (t *todos) chooseLoad() { t.chooseFolder("load", "load a todo store: its project's folder") }
-func (t *todos) chooseNew()  { t.chooseFolder("new", "a new todo store: the project's folder") }
+func (t *todos) chooseLoad() { t.chooseFolder("load") }
+func (t *todos) chooseNew()  { t.chooseFolder("new") }
+
+// todoFolderDialogs are the folder dialog for each of Load, New and M, by what the folder is for:
+// each says it in its title, set when it is built (a FolderDialog's title cannot be bound).
+var todoFolderDialogs = map[string]string{"load": "todoFolder", "new": "todoFolderNew", "move": "todoFolderMove"}
 
 // Kinds: another client's change to a store shows here when its store is listed.
 func (t *todos) Kinds() []string { return []string{"todos.changed"} }
@@ -964,13 +968,12 @@ func (t *todos) refresh() {
 func (t *todos) toggleDetail() { t.detail = !t.detail; t.c.Set("App.todoDetailShown", t.detail) }
 
 // chooseFolder opens the folder dialog for Load, New or M (move).
-func (t *todos) chooseFolder(as, title string) {
+func (t *todos) chooseFolder(as string) {
 	s, _ := t.cursor()
 	if as == "move" && t.readOnly(s) {
 		return
 	}
 	t.folderAs = as
-	t.c.Set("App.todoFolderTitle", title) // the dialog says what the folder is for
 	start := ""
 	if s != nil {
 		start = rootOf(s.at)
@@ -979,13 +982,13 @@ func (t *todos) chooseFolder(as, title string) {
 		}
 	}
 	t.c.Set("App.todoFolder", start)
-	t.c.Open("todoFolder")
+	t.c.Open(todoFolderDialogs[as])
 }
 
 // folderChosen acts on the folder: Load registers the project and lists its store; New registers it
 // and creates its store (a write: after the cutover); M moves the cursor's store there.
 func (t *todos) folderChosen(dir string) {
-	t.c.Close("todoFolder")
+	t.c.Close(todoFolderDialogs[t.folderAs])
 	if dir == "" {
 		return
 	}

@@ -11,7 +11,7 @@ Picker {
     previewText: App.todoStatusPreviewText
     previewAt: App.todoStatusPreviewAt
     acceptText: "&Choose"
-    widthPercent: 60
-    heightPercent: 50
+    widthPercent: 72
+    heightPercent: 60
     TableViewColumn { role: "status"; title: "STATUS"; width: 0 }
 }

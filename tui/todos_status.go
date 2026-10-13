@@ -48,17 +48,17 @@ func statusRowOf(_ int, c todoStatusChoice) rowOf {
 	return rowOf{"key": c.status, "status": mark + c.status}
 }
 
-// statusPane is what choosing c does to the task the picker is for.
+// statusPane is what choosing c does to the task the picker is for, under the task's title: short
+// lines, as the preview does not wrap.
 func (t *todos) statusPane(c todoStatusChoice) pane {
 	if t.statusing == nil {
 		return pane{}
 	}
 	title := str(t.statusing.task, "title")
 	if c.current {
-		return pane{title: c.status, text: fmt.Sprintf("## %s\n\n%s is %s now: choosing it changes nothing.\n", c.status, title, c.status)}
+		return pane{title: title, text: fmt.Sprintf("## %s\n\nits status now:\nchoosing it\nchanges nothing\n", c.status)}
 	}
-	return pane{title: c.status, text: fmt.Sprintf("## %s\n\n%s moves from %s to %s.\n", c.status, title,
-		str(t.statusing.task, "status"), c.status)}
+	return pane{title: title, text: fmt.Sprintf("## %s\n\nfrom %s\nto %s\n", c.status, str(t.statusing.task, "status"), c.status)}
 }
 
 // chooseStatus is s: the task under the cursor, in a store taking writes here, offered every
