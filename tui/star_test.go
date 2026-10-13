@@ -75,6 +75,9 @@ func TestStarWholeWordsAndTheirMarks(t *testing.T) {
 	if marked("foobar") {
 		t.Error("* marks foo inside foobar")
 	}
+	if marked("barfoo") {
+		t.Error("* marks foo at the end of barfoo")
+	}
 	if !marked("bar foo") {
 		t.Error("* doesn't mark a whole foo")
 	}
