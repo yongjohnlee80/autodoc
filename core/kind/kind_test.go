@@ -22,6 +22,10 @@ func TestOf(t *testing.T) {
 	if Of("app.log", nil) != Markdown {
 		t.Error("an undeclared extension is Markdown, the default")
 	}
+	// a build's chunker cannot claim them either: the built-in kind would win
+	if !IsBuiltIn(".mmd") || !IsBuiltIn(".csv") {
+		t.Error(".mmd and .csv are not built-in kinds' extensions")
+	}
 }
 
 func TestTextExtensions(t *testing.T) {
