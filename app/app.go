@@ -17,7 +17,7 @@
 // through .view files into a schema of the same Postgres (docs/enterprise). --check validates its
 // configuration and every view, then exits:
 //
-//	autodoc --server [--check] server.toml
+//	autodoc --server [--check | --health] server.toml
 //
 // The Web-UI (--web-ui) follows.
 package app
@@ -148,6 +148,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("compact", false, "with the daemon stopped: reclaim unused models' vectors and rewrite the store (VACUUM), after a free-space check")
 	fs.Bool("server", false, "run the enterprise search server on the server.toml after the flags (docs/enterprise)")
 	check := fs.Bool("check", false, "--server: validate the configuration and every view, confirm each view's order against its source, and exit")
+	health := fs.Bool("health", false, "--server: ask the running server for its health (GET /v1/health); exit 0 when ok or degraded, 1 otherwise")
 	debug := &debugFlag{}
 	fs.Var(debug, "debug", "--ui and --gui: record the input and event stream to one JSONL file for an input or IME bug report; =PATH names the file (default autodoc-debug-<date>.jsonl in the working directory). The file contains everything typed, passwords included")
 
@@ -192,10 +193,13 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
-		{flag: "server", arg: true, flagsAfter: true, run: func(cfg string) int {
+		{flag: "server", arg: true, flagsAfter: true, oneOf: []string{"check", "health"}, run: func(cfg string) int {
 			if cfg == "" {
-				fmt.Fprintln(stderr, "autodoc: --server needs its configuration: autodoc --server [--check] server.toml")
+				fmt.Fprintln(stderr, "autodoc: --server needs its configuration: autodoc --server [--check | --health] server.toml")
 				return 2
+			}
+			if *health {
+				return probeHealth(ctx, cfg, stdout, stderr)
 			}
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
@@ -227,7 +231,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"base", "output", "theme"}, modes: []string{"export"}},
 		{flags: []string{"format"}, modes: []string{"contracts"}},
 		{flags: []string{"dev"}, modes: []string{"ui", "gui"}},
-		{flags: []string{"check"}, modes: []string{"server"}},
+		{flags: []string{"check", "health"}, modes: []string{"server"}},
 		{flags: []string{"debug"}, modes: []string{"ui", "gui"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)

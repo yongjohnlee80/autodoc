@@ -214,7 +214,7 @@ const opsToken = "an-operators-test-token-longer-than-32-bytes-0123"
 // --server serves its health and status and logs its metrics lines: /v1/health answers ok to
 // anyone; /v1/status answers the operator the tenant's figures as the server holds them, a search
 // client's token 403; a view whose query fails shows in status as the code "view", never the
-// database's words, which only the log holds; a metrics line for the server and one for the tenant
+// failure's words, which only the log holds; a metrics line for the server and one for the tenant
 // come every interval. The mutant, named here: the ops step left out of the stack (no health, no
 // metrics).
 func TestTheServerReportsItsHealthAndStatus(t *testing.T) {
@@ -293,11 +293,10 @@ metrics_interval = "10s"
 		_, body := get("/v1/status", opsToken)
 		return strings.Contains(body, `"last_pass":{`) && strings.Contains(body, `"error":"view"`)
 	})
-	if _, body := get("/v1/status", opsToken); strings.Contains(body, "does not exist") {
-		t.Errorf("the database's words are in status: %s", body)
-	}
-	if !strings.Contains(stderr.String(), "does not exist") {
-		t.Errorf("the log does not hold the view's failure: %s", stderr)
+	// the failure's own words (golib's view: "track returns 0 columns") are the log's alone
+	f.waitFor("the view's failure in the log", func() bool { return strings.Contains(stderr.String(), "returns 0 columns") })
+	if _, body := get("/v1/status", opsToken); strings.Contains(body, "returns 0 columns") || strings.Contains(body, "process must") {
+		t.Errorf("the failure's words are in status: %s", body)
 	}
 	f.exec(`ALTER TABLE track_away RENAME TO track`)
 
