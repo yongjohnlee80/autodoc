@@ -29,8 +29,10 @@
 //
 // Ingest state, for a server that indexes a database source into a tenant page by page: a Batch
 // moves the tenant's (updated_at, id) Cursor, records its last Refresh, and quarantines and
-// releases failed source rows, all in the same transaction as the page's documents, so a crash
-// replays at most the page it interrupted and a failed row is retried rather than passed for good.
+// releases failed source rows, all in the same transaction as the documents it covers. A pass moves
+// the Cursor with each page, so a crash in a pass replays at most the page it interrupted; a
+// refresh moves it once, in the batch that records the Refresh, and an interrupted refresh starts
+// over. A failed row is retried rather than passed for good.
 // Store.Cursor, Refreshed and Quarantined read them back.
 //
 // Migrate applies the schema through dao/deploy, recording it in its own ledger table. Every object

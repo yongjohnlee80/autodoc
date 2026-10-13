@@ -50,9 +50,11 @@ PostgreSQL with the `vector` extension available (the migration creates it).
 - **Ingest state** for a server that indexes a source into a tenant (ADR 1791762085), written
   through a `Batch` beside the documents it covers (a pass's page, or the batch that records a
   refresh):
-  - `SetCursor(ctx, Cursor{UpdatedAt, ID})`: the `(updated_at, id)` the last committed page passed,
-    kept to the microsecond and rounded down, so a crash replays at most one page and never skips a
-    row; `SetRefreshed` records the last full refresh beside it. `Store.Cursor` and
+  - `SetCursor(ctx, Cursor{UpdatedAt, ID})`: the `(updated_at, id)` the cursor has passed, kept to
+    the microsecond and rounded down. A pass sets it with each page, so a crash in a pass replays at
+    most one page and never skips a row. A refresh sets it once, in the batch that records the
+    refresh when it finishes; a refresh interrupted by a crash is not resumed, and the next one
+    starts over. `SetRefreshed` records the last full refresh beside it. `Store.Cursor` and
     `Store.Refreshed` read them back.
   - `Quarantine(ctx, sourceID, err)` and `Release(ctx, sourceID)`: a source row that failed, kept
     with its error and when it first and last failed. `Store.Quarantined(ctx, limit)` pages the row

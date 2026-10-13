@@ -57,8 +57,9 @@ flowchart LR
 - **An ingester** per source keeps its tenant current. Every interval it reads the rows changed
   since its cursor, `(updated_at, id)`. Every refresh period it reads every row, writes the
   documents whose content changed, and deletes the documents of rows gone. A row that fails to
-  render is quarantined and retried, never skipped. Each page of rows is one transaction, with
-  the cursor, so a crash replays at most one page.
+  render is quarantined and retried, never skipped. Each page of a pass is one transaction, with
+  the cursor, so a crash in a pass replays at most one page. A refresh moves the cursor once, when
+  it finishes; one interrupted by a crash starts over at the next refresh.
 - **One writer per tenant.** An ingester holds its tenant's advisory lock on a connection of its
   own. A second server on the same tenant waits, and takes over if the first goes away.
 - **The embedding worker**, one for the whole server, embeds every new chunk with your model, once
