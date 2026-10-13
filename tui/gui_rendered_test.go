@@ -10,6 +10,7 @@ import (
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
 // The window opens in the Rendered view, and the view follows the page's kind: a note renders; a Go file opened after it is Raw and
@@ -143,4 +144,24 @@ func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 	if m := mode(); m != guiwidget.Raw {
 		t.Fatalf("back to a: %v, want the Raw view it was left in", m)
 	}
+}
+
+// TestCtrlWInTheGUIsVimInsert: in the native window too, Ctrl+W in Vim's Insert is the editor's
+// (a word back) and opens no picker; in Normal mode it switches workspace (Johno, 2026-10-13).
+func TestCtrlWInTheGUIsVimInsert(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n"}}, daemonOpts{})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	r.keys(t, decltest.Alt('2'), key('A'))
+	r.keys(t, decltest.Type(" foo bar")...)
+	r.keys(t, decltest.Ctrl('w'), esc())
+	r.waitValue(t, "# A foo \n")
+	if strings.Contains(r.s.String(), "Manage…") {
+		t.Fatal("Ctrl+W in the GUI's Insert opened the workspace picker")
+	}
+	r.keys(t, decltest.Ctrl('w'))
+	r.s.WaitForText(t, "Manage…")
 }
