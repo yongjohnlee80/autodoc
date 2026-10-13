@@ -375,8 +375,7 @@ type ClaimOpts struct {
 // Claim lets the daemon write an At's store: the cutover. The claim is the daemon's record, by the
 // store's id, so it holds before the store's directory exists; the .autodoc-owner marker is
 // written whenever the directory exists, here or by Scaffold. With a LegacyWorkspace, the claim
-// that claims the store then rewrites its legacy $WORKSPACE refs (cutover), archives included;
-// a claim of a store already claimed rewrites nothing, and reads no archive.
+// then rewrites the store's legacy $WORKSPACE refs once (cutover), archives included.
 func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	var o ClaimOpts
 	for _, x := range opts {
@@ -407,9 +406,6 @@ func (m *Manager) Claim(ctx context.Context, at At, opts ...ClaimOpts) error {
 	})
 	if err != nil {
 		return err
-	}
-	if !fresh {
-		o.LegacyWorkspace = "" // the store's own claim ran its cutover; since then the daemon wrote it
 	}
 	if err := m.finishClaim(ctx, w, o); err != nil {
 		// a claim that cannot be served is no cutover: a new one is undone, so the caller sees the
