@@ -154,6 +154,8 @@ var windowKeys = []Key{
 	{Seq: "Shift+N", Show: "n and N", Run: "App.findPrevious()"},
 	{Seq: "Ctrl+W", Show: "Ctrl+W", Run: "App.pickWorkspace()"},
 	{Seq: "Ctrl+Q", Show: "Ctrl+Q", Run: "App.quit()"},
+	// the terminal's or the agents' panel maximized or restored, from inside it too (SPC M off it)
+	{Seq: "F11", Show: "F11", Run: "App.maximizePanel()"},
 	{Seq: "F1", Show: "F1", Run: "help.open()"},
 	// the window's zoom (fonts.go); nothing in a terminal
 	{Seq: "Ctrl+=", Show: "Ctrl+= Ctrl+- Ctrl+0", Run: `App.zoomWindow("in")`},
@@ -197,6 +199,7 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: "l", Show: "l", Does: "the relations", Run: "App.toggleRelations()"},
 		{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
 		{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
+		{Seq: "Shift+M", Show: "M", Does: "maximize panel", Run: "App.maximizePanel()"},
 		{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},
 	}),
 	// a opens the agents' card, which their feature brings (agenttabs.go)

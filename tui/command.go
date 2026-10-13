@@ -66,10 +66,11 @@ func none(fn func()) Command {
 	return Command{Run: func([]qml.SpecValue) error { fn(); return nil }}
 }
 
-// stringAndBool takes a string and true or false: a panel and a Drawer signal's flag.
-func stringAndBool(what string, fn func(string, bool)) Command {
-	return Command{Args: []qml.SpecValueKind{argStr, qml.SpecValueBool}, What: what,
-		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw == "true"); return nil }}
+// twoStringsAndBool takes two strings and true or false: a panel, a Drawer's changed operation and
+// its maximized flag.
+func twoStringsAndBool(what string, fn func(string, string, bool)) Command {
+	return Command{Args: []qml.SpecValueKind{argStr, argStr, qml.SpecValueBool}, What: what,
+		Run: func(a []qml.SpecValue) error { fn(a[0].Raw, a[1].Raw, a[2].Raw == "true"); return nil }}
 }
 
 // oneBool takes true or false: an Editor signal's.

@@ -26,6 +26,7 @@ Dialog {
     Shortcut { sequence: "l"; onActivated: { leader.close(); App.toggleRelations() } }
     Shortcut { sequence: "`"; onActivated: { leader.close(); App.toggleTerminal() } }
     Shortcut { sequence: "x"; onActivated: { leader.close(); App.openTodos() } }
+    Shortcut { sequence: "Shift+M"; onActivated: { leader.close(); App.maximizePanel() } }
     Shortcut { sequence: "h"; onActivated: { leader.close(); App.openNotices() } }
     Shortcut { sequence: "g"; onActivated: { leader.close(); App.toggleAgent() } }
     Shortcut { sequence: "Shift+G"; onActivated: { leader.close(); App.openAgentProfiles() } }

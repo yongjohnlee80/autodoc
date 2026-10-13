@@ -86,9 +86,40 @@ func floatState(m map[string][4]float64, specs []PanelSpec) map[string]any {
 
 // panelPlaced is a panel's move or resize ended: it floats there. While that panel is being
 // arranged the rectangle is only shown, and kept when the arrangement is (arrange.go).
-// panelMaximized follows a panel's Drawer maximized and restored (its changed signal): its tab
-// menu's Maximize reads Restore while it is.
-func (h *Host) panelMaximized(panel string, maximized bool) {
+// maximizable are the panels Maximize reaches: the terminal's and the agents' (their Drawers are
+// maximizable, main.qml).
+var maximizable = []string{"terminal", "agent"}
+
+// toggleMaximize maximizes panel, or restores it: its Drawer's own toggleMaximize. The tab menus'
+// Maximize (Restore), F11 and SPC M all come here.
+func (h *Host) toggleMaximize(panel string) error { return h.p.Call(panel, "toggleMaximize") }
+
+// maximizePanel is F11 and SPC M (panel.maximize): the terminal or the agents, whichever has the
+// keyboard, else the one opened last that is still open.
+func (h *Host) maximizePanel() {
+	target := ""
+	for _, p := range maximizable {
+		if s := h.panelSpec(p); s != nil && h.paneHasKeyboard(s.View) {
+			target = p
+		}
+	}
+	if target == "" && h.panelOpen[h.lastMaximizable] {
+		target = h.lastMaximizable
+	}
+	if target == "" {
+		h.notify("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
+		return
+	}
+	h.keep(h.toggleMaximize(target))
+}
+
+// panelChanged is a panel's Drawer changed signal, as far as the host follows it: a maximize
+// toggle (operation "maximize"), maximized or restored, which its tab menu's Maximize reads as
+// Restore while it is.
+func (h *Host) panelChanged(panel, operation string, maximized bool) {
+	if operation != "maximize" {
+		return
+	}
 	if h.panelMax == nil {
 		h.panelMax = map[string]bool{}
 	}

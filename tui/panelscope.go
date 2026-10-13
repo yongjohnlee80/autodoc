@@ -57,7 +57,15 @@ func (s *scopedPanelHost) OpenTerminalLook() { s.core.h.openTerminalLook() }
 func (s *scopedPanelHost) PanelMaximized(id string) bool { return s.core.h.panelMax[id] }
 
 // ToggleMaximize maximizes panel id, or restores it: its Drawer's own toggleMaximize.
-func (s *scopedPanelHost) ToggleMaximize(id string) error { return s.CallView(id, "toggleMaximize") }
+func (s *scopedPanelHost) ToggleMaximize(id string) error {
+	if err := s.owns(id); err != nil {
+		return err
+	}
+	if err := s.ready(); err != nil {
+		return err
+	}
+	return s.core.h.toggleMaximize(id)
+}
 
 func newScopedPanelHost(c core, f Feature, specs []PanelSpec) *scopedPanelHost {
 	s := &scopedPanelHost{core: c, owner: f.Name(), ids: map[string]bool{}}

@@ -17,6 +17,7 @@ func (h *Host) builtinEntries() []Entry {
 	return append([]Entry{
 		// File
 		builtin("file.new", "new file", "App.newFile()", h.newFile),
+		builtin("panel.maximize", "maximize or restore the terminal or agents", "App.maximizePanel()", h.maximizePanel),
 		builtin("file.open", "open a document", "App.openPicker()", h.openPicker),
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
 		builtin("file.save", "save", "App.save()", h.save),

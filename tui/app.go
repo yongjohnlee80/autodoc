@@ -113,7 +113,8 @@ type Host struct {
 	registrationOffered, registrationNoted bool
 	registrationRestart, restartAccepted   bool
 	panelOpen                              map[string]bool
-	panelMax                               map[string]bool // a panel maximized (its Drawer's changed signal; panelMaximized)
+	panelMax                               map[string]bool // a panel maximized (its Drawer's changed signal; panelChanged)
+	lastMaximizable                        string          // the terminal or the agents, opened last (maximizePanel)
 	lastPanel                              string          // the panel opened last (Arrange panel)
 	tutorialAt                             int             // the tutorial's page shown (tutorial.go)
 	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)

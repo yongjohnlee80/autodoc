@@ -66,6 +66,7 @@ Window {
     Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
+    Shortcut { sequence: "F11"; onActivated: App.maximizePanel() }
     Shortcut { sequence: "F1"; onActivated: help.open() }
     Shortcut { sequence: "Ctrl+="; onActivated: App.zoomWindow("in") }
     Shortcut { sequence: "Ctrl+-"; onActivated: App.zoomWindow("out") }
@@ -379,7 +380,7 @@ Window {
         onPlaced: App.panelPlaced("terminal", x, y, width, height)
         // Maximize on its tab menu: the Drawer's own (toggleMaximize), the menu told by changed
         maximizable: true
-        onChanged: App.panelMaximized("terminal", maximized)
+        onChanged: App.panelChanged("terminal", operation, maximized)
         onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
@@ -414,7 +415,7 @@ Window {
         floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
         onPlaced: App.panelPlaced("agent", x, y, width, height)
         maximizable: true
-        onChanged: App.panelMaximized("agent", maximized)
+        onChanged: App.panelChanged("agent", operation, maximized)
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)

@@ -729,3 +729,34 @@ func TestMaximizeFromThePanelMenus(t *testing.T) {
 		t.Fatalf("the agents' menu: %v", rowIDs(agentRows))
 	}
 }
+
+// TestF11AndSPCMToggleMaximize: F11 maximizes the terminal panel and restores it, from the page (the
+// terminal opened last); SPC M does the same; the tab menu's row follows, Maximize and Restore.
+func TestF11AndSPCMToggleMaximize(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
+	label := func() string {
+		row, _ := menuRow(onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") }), "tabs.maximize")
+		return row.Label
+	}
+	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
+	onLoop(r, func() bool { return r.h.p.Call("editor", "forceActiveFocus") == nil })
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	r.keys(t, f11)
+	r.s.WaitFor(t, "F11 maximized it", func(string) bool { return maximized() })
+	if got := label(); got != "Restore" {
+		t.Errorf("maximized, the menu reads %q", got)
+	}
+	r.keys(t, f11)
+	r.s.WaitFor(t, "F11 restored it", func(string) bool { return !maximized() })
+
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "SPC M maximized it from the page", func(string) bool { return maximized() })
+	if got := label(); got != "Restore" {
+		t.Errorf("maximized by SPC M, the menu reads %q", got)
+	}
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "SPC M restored it", func(string) bool { return !maximized() })
+}
