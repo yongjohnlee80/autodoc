@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -61,16 +63,16 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 		{Name: "Scribe", Codename: "scribe", Command: shellQuote(agent) + " scribe"},
 		{Name: "Critic", Codename: "critic", Command: shellQuote(agent) + " critic"},
 	}, "")
-	tasks := seedTodos(t, d, true, todo.Spec{Title: "Write the guide"}, todo.Spec{Title: "Check the links"},
+	tasks := seedTodos(t, d, true, todo.Spec{Title: "Draft the guide"}, todo.Spec{Title: "Edit the links"},
 		todo.Spec{Title: "Fix the typos"})
 	openTodos(t, r, "· ws kb", '1')
 	r.s.WaitForText(t, "3  Fix the typos")
 	r.keys(t, key('j'))
-	r.s.WaitForText(t, "## Write the guide")
+	r.s.WaitForText(t, "## Draft the guide")
 	unassigned := func(what string) {
 		t.Helper()
 		time.Sleep(200 * time.Millisecond)
-		if x, ok := taskIn(t, d, "open", "Write the guide"); !ok || x.Assignee != "" {
+		if x, ok := taskIn(t, d, "open", "Draft the guide"); !ok || x.Assignee != "" {
 			t.Fatalf("%s wrote the task: %+v (open %v)", what, x, ok)
 		}
 	}
@@ -105,19 +107,20 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.s.WaitForText(t, "start the agent?")
 	r.keys(t, key('y'))
 	r.s.WaitFor(t, "Scribe told", func(string) bool { return len(heard(heardDir, "scribe")) >= 4 })
-	x, ok := taskIn(t, d, "in-progress", "Write the guide")
+	x, ok := taskIn(t, d, "in-progress", "Draft the guide")
 	if !ok || x.Assignee != "autodoc:scribe" {
 		t.Fatalf("after A the task is %+v (in progress %v), want in progress for autodoc:scribe", x, ok)
 	}
 	got := heard(heardDir, "scribe")
 	file := strings.TrimPrefix(got[1], "File: ")
-	if got[0] != "Task: Write the guide" || got[2] != "ID: "+tasks[0].ID || got[3] != "Instruction: "+assignDefault {
+	if got[0] != "Task: Draft the guide" || got[2] != "ID: "+tasks[0].ID || got[3] != "Instruction: "+assignDefault {
 		t.Fatalf("Scribe heard %q", got)
 	}
-	if !filepath.IsAbs(file) || !strings.HasSuffix(file, "/in-progress/"+tasks[0].ID+".md") {
-		t.Fatalf("Scribe was handed %q, want the task's absolute path under in-progress/", file)
+	// the workspace kb is the daemon's /kb: the store is its .todo-list, on the todos' own disk
+	if want := "/kb/.todo-list/in-progress/" + tasks[0].ID + ".md"; file != want || x.Path != "in-progress/"+tasks[0].ID+".md" {
+		t.Fatalf("Scribe was handed %q (the task at %q), want %q: the path the assign returned", file, x.Path, want)
 	}
-	if _, err := os.Stat(file); err != nil {
+	if _, err := d.todoDisk.ReadFile(file); err != nil {
 		t.Fatalf("the path handed over is not the task's file: %v", err)
 	}
 	r.s.WaitFor(t, "the delivery told", func(string) bool { return r.noticed("assigned to Scribe, and handed to its terminal") })
@@ -126,7 +129,7 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	// Critic is stopped, and declining to start it leaves the task assigned, not delivered.
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoTree", "forceActiveFocus")); return true })
 	r.keys(t, key('1'), key('j'))
-	r.s.WaitForText(t, "## Check the links")
+	r.s.WaitForText(t, "## Edit the links")
 	r.keys(t, key('A'))
 	r.s.WaitForText(t, "Critic  (critic)")
 	r.keys(t, decltest.Type("crit")...)
@@ -139,7 +142,7 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.s.WaitFor(t, "the decline told", func(string) bool {
 		return r.noticed("assigned to autodoc:critic, but not delivered (you didn't start it): start the agent, then A on the task")
 	})
-	if x, ok := taskIn(t, d, "in-progress", "Check the links"); !ok || x.Assignee != "autodoc:critic" {
+	if x, ok := taskIn(t, d, "in-progress", "Edit the links"); !ok || x.Assignee != "autodoc:critic" {
 		t.Fatalf("a declined start rolled the assignment back: %+v (in progress %v)", x, ok)
 	}
 	if _, err := os.Stat(filepath.Join(heardDir, "heard-critic")); err == nil {
@@ -152,6 +155,8 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.s.WaitForText(t, "## Fix the typos")
 	r.keys(t, key('A'))
 	r.s.WaitForText(t, "running")
+	r.keys(t, decltest.Type("scribe")...) // the picker's cursor stays on the agent last chosen: name the one wanted
+	r.s.WaitForText(t, "agents (1 of 2)")
 	r.keys(t, enter())
 	r.s.WaitForText(t, "assign to Scribe")
 	r.keys(t, decltest.Type("Read the ADR first")...)
@@ -162,39 +167,6 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	}
 	if strings.Contains(r.s.String(), "start the agent?") {
 		t.Fatal("a running agent was asked about")
-	}
-}
-
-// TestTodosAssignIsRefusedWithoutATaskOrAnAgent: A off a task row says what it needs; with no
-// AutoDoc agent it says how to add one; on a store not claimed it is the store's read-only notice.
-// None opens the picker.
-func TestTodosAssignIsRefusedWithoutATaskOrAnAgent(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
-	r := attached(t, d)
-	openTodos(t, r, "· ws kb", '1')
-	r.s.WaitForText(t, "1  Ship it")
-	r.keys(t, key('A')) // on the Open section's row
-	r.s.WaitForText(t, "A assigns a task: put the cursor on one")
-	r.keys(t, key('j'))
-	r.s.WaitForText(t, "## Ship it")
-	r.keys(t, key('A'))
-	r.s.WaitFor(t, "no agent", func(string) bool { return r.noticed("no AutoDoc agent to assign to: add one in the agent profiles") })
-	if strings.Contains(r.s.String(), "assign to an agent") {
-		t.Fatal("A opened the picker with no agent to list")
-	}
-
-	ro := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	seedTodos(t, ro, false, todo.Spec{Title: "Read only"})
-	rr := attached(t, ro)
-	openTodos(t, rr, "· ws kb  (read-only", '1')
-	rr.s.WaitForText(t, "1  Read only")
-	rr.keys(t, key('j'))
-	rr.s.WaitForText(t, "## Read only")
-	rr.keys(t, key('A'))
-	rr.waitNotice(t, "read-only in AutoDoc until the cutover")
-	if strings.Contains(rr.s.String(), "assign to an agent") {
-		t.Fatal("A on a read-only store opened the picker")
 	}
 }
 
@@ -214,5 +186,141 @@ func TestAssignableAgents(t *testing.T) {
 	}
 	if want := []string{"stopped", "running", "orphan-running"}; !slices.Equal(got, want) {
 		t.Fatalf("assignable = %v, want %v", got, want)
+	}
+}
+
+// agentCore is a scripted daemon with AutoDoc's agents: AgentEntries lists entries, and HandTask
+// records each hand-over, refusing at once with refuse when it is set.
+type agentCore struct {
+	*scriptedCore
+	entries []AgentEntry
+	handed  []handOverCall
+	refuse  error
+}
+
+type handOverCall struct {
+	to          AgentRef
+	task        TaskRef
+	instruction string
+	done        func(error)
+}
+
+func (c *agentCore) AgentEntries() []AgentEntry { return c.entries }
+func (c *agentCore) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
+	if c.refuse != nil {
+		return c.refuse
+	}
+	c.handed = append(c.handed, handOverCall{to, task, instruction, done})
+	return nil
+}
+
+// assigningStore is a claimed store whose open task t1 todos.assign moves to in-progress, as D1
+// does; assigned records each todos.assign's params.
+func assigningStore(entries ...AgentEntry) (*agentCore, *[][]any) {
+	s := scriptedStore(true)
+	var assigned [][]any
+	s.answers["todos.assign"] = func(p []any) (any, error) {
+		assigned = append(assigned, p)
+		return map[string]any{"id": "t1", "rev": "r2", "title": "Ship", "status": "in-progress", "path": "in-progress/t1.md",
+			"assignee": p[3]}, nil
+	}
+	return &agentCore{scriptedCore: s, entries: entries}, &assigned
+}
+
+// TestTodosAssignWritesThenHandsOverAtTheReturnedPath: the assign is written first (autodoc:
+// <codename>, the instruction its reason, an empty one "Task assigned to you."), then the task is
+// handed over at the path the assign returned, the store's root joined: in-progress/, where D1 left
+// the file, not open/, where the row had it. The current incarnation is HandTask's to resolve.
+func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
+	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe", Instance: "7"}, Name: "Scribe", Running: true})
+	v := newTodos(c)
+	v.list()
+	onTask(t, v, "open")
+	v.assign()
+	if !slices.Contains(c.opened, "agentAssignPicker") || c.set["App.agentAssignStatus"] != "agents (1 of 1)" {
+		t.Fatalf("A opened %v, listing %v", c.opened, c.set["App.agentAssignStatus"])
+	}
+	v.assignPick.accept(0, "")
+	if c.opened[len(c.opened)-1] != "todoAssign" || c.set["App.todoAssignText"] != "" || c.set["App.todoAssignTitle"] != "assign to Scribe" {
+		t.Fatalf("the agent chosen: opened %v, text %q, title %v", c.opened, c.set["App.todoAssignText"], c.set["App.todoAssignTitle"])
+	}
+	v.assignSet("   ")
+	if len(*assigned) != 1 {
+		t.Fatalf("todos.assign called %d times", len(*assigned))
+	}
+	if p := (*assigned)[0]; p[1] != "t1" || p[2] != "r1" || p[3] != "autodoc:scribe" || p[4] != assignDefault {
+		t.Fatalf("todos.assign params %v", p)
+	}
+	if len(c.handed) != 1 {
+		t.Fatalf("handed over %d times", len(c.handed))
+	}
+	h := c.handed[0]
+	if h.to != (AgentRef{Codename: "scribe"}) || h.instruction != assignDefault ||
+		h.task != (TaskRef{Title: "Ship", Path: "/kb/.todo-list/in-progress/t1.md", ID: "t1"}) {
+		t.Fatalf("handed %+v", h)
+	}
+	h.done(nil)
+	h.done(ErrAgentCancelled) // as a second A's would: each says how it went
+	if len(c.notes) != 2 || c.notes[0] != "todos: assigned to Scribe, and handed to its terminal" ||
+		!strings.Contains(c.notes[1], "assigned to autodoc:scribe, but not delivered (you didn't start it)") {
+		t.Fatalf("notes %q", c.notes)
+	}
+
+	// a typed instruction is the reason and the instruction; HandTask's refusal at once is told, and
+	// the assignment stands (nothing undoes it)
+	c.refuse = ErrAgentUnavailable
+	v.assign()
+	v.assignPick.accept(0, "")
+	v.assignSet("  Read the ADR first ")
+	if p := (*assigned)[1]; p[4] != "Read the ADR first" {
+		t.Fatalf("todos.assign params %v", p)
+	}
+	if last := c.notes[len(c.notes)-1]; !strings.Contains(last, "not delivered ("+ErrAgentUnavailable.Error()+")") {
+		t.Fatalf("a refused hand-over: %q", last)
+	}
+	if slices.Contains(c.calls, "todos.status") {
+		t.Fatalf("an assignment was undone: %v", c.calls)
+	}
+}
+
+// TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites: A off a task row says what it needs; on a
+// store not claimed it is the store's read-only notice; with no AutoDoc agent to list it says how to
+// add one. None opens the picker. A dismissed picker leaves nothing for a stray accept to write.
+func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
+	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
+	v := newTodos(c)
+	v.list()
+	ix := openSection(t, v, "ws:kb", "open")
+	v.moved(ix) // the section's row, not a task's
+	v.assign()
+	if !strings.Contains(fmt.Sprint(c.set["App.todosStatus"]), "A assigns a task: put the cursor on one") {
+		t.Fatalf("off a task: status %v", c.set["App.todosStatus"])
+	}
+	v.moved(tuidecl.Index{Row: 0, Parent: &ix})
+	v.assign()
+	v.assignPick.dismiss()
+	v.assignSet("") // as a stray App.todoAssignSet after the dismissal would
+	if len(*assigned) != 0 {
+		t.Fatalf("a dismissed picker wrote %v", *assigned)
+	}
+
+	none, _ := assigningStore(AgentEntry{Ref: AgentRef{Codename: "gone"}, Closing: true})
+	v = newTodos(none)
+	v.list()
+	onTask(t, v, "open")
+	v.assign()
+	if len(none.notes) != 1 || none.notes[0] != "todos: no AutoDoc agent to assign to: add one in the agent profiles" ||
+		slices.Contains(none.opened, "agentAssignPicker") {
+		t.Fatalf("no agent: notes %q, opened %v", none.notes, none.opened)
+	}
+
+	ro := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"}}}
+	v = newTodos(ro)
+	v.list()
+	onTask(t, v, "open")
+	v.assign()
+	if len(ro.notes) != 1 || !strings.Contains(ro.notes[0], "read-only in AutoDoc until the cutover") ||
+		slices.Contains(ro.opened, "agentAssignPicker") {
+		t.Fatalf("read-only: notes %q, opened %v", ro.notes, ro.opened)
 	}
 }
