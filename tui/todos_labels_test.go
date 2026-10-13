@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -341,5 +342,94 @@ func TestTodosTheCursorFollowsOnceBothSectionsLand(t *testing.T) {
 		if !slices.Contains(s.views, "todoTree.setCurrentIndex") || len(v.at) != 3 || v.at[1] != bucketKey("ws:kb", "completed") {
 			t.Errorf("destFirst=%v: after both, at %q, views %v", destFirst, v.at, s.views)
 		}
+	}
+}
+
+// TestTodosLabelsAndStepsAtTheEdges: the rarer paths. The home folder shows as ~; a plain folder is
+// its own root; a workspace whose store the daemon has not placed is named for the workspace; a
+// labels answer for an older listing is dropped; < (its command) and > with no task under the
+// cursor, and L with no store, do nothing; a moved task that is not where its section's read says
+// leaves the cursor where it is.
+func TestTodosLabelsAndStepsAtTheEdges(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got := tildePath(home + "/notes/.todo-list"); got != "~/notes/.todo-list" {
+		t.Errorf("tildePath = %q", got)
+	}
+	if got := tildePath("/elsewhere"); got != "/elsewhere" {
+		t.Errorf("tildePath outside home = %q", got)
+	}
+	if got := storeRoot("/p"); got != "/p" {
+		t.Errorf("storeRoot of a plain folder = %q", got)
+	}
+
+	// the workspace's store not placed yet: named for the workspace
+	s := scriptedStore(true)
+	s.answers["todos.resolve"] = func([]any) (any, error) { return map[string]any{"claimed": false}, nil }
+	v := newTodos(s)
+	v.list()
+	if got := treeLabels(v, nil)[0]; got != "  kb · ws kb  (read-only until the cutover)" {
+		t.Errorf("an unplaced workspace store: %q", got)
+	}
+
+	// a labels answer for a listing since replaced is dropped
+	d := labelledStores(map[string]any{"tui.todos.label.S1": "Old"})
+	d.deferred = true
+	w := newTodos(d)
+	w.list()
+	d.deliver(0) // the stores: the labels asked for, held
+	w.list()     // listed again before they answer
+	held := d.pending
+	d.pending = nil
+	held[0]() // the first listing's labels: dropped
+	if len(treeLabels(w, nil)) != 0 {
+		t.Fatalf("a stale labels answer showed the stores: %q", treeLabels(w, nil))
+	}
+	held[1]() // the second listing's stores
+	d.deliver(0)
+	if got := treeLabels(w, nil); len(got) != 3 || got[0] != "● Old" {
+		t.Errorf("the second listing: %q", got)
+	}
+
+	// < by its command, > and L with nothing to act on
+	m, _ := movingStore("in-progress")
+	x := newTodos(m)
+	x.list()
+	x.moved(tuidecl.Index{Row: 0}) // the store's row: no task
+	n := len(m.calls)
+	if err := x.Commands()["App.todoBack"].handler("App.todoBack")(nil); err != nil {
+		t.Fatal(err)
+	}
+	x.step(todoForward, "forward")
+	if len(m.calls) != n {
+		t.Errorf("a step with no task asked %v", m.calls[n:])
+	}
+	none := newTodos(newScripted(""))
+	none.label()
+	if len(none.c.(*scriptedCore).opened) != 0 {
+		t.Error("L with no store opened the prompt")
+	}
+
+	// the moved task not in its new section's read (another client moved it on): no cursor move
+	g, _ := movingStore("open")
+	g.answers["todos.status"] = func([]any) (any, error) { return nil, nil } // the read still finds it nowhere new
+	y := newTodos(g)
+	y.list()
+	onTask(t, y, "open")
+	g.views = nil
+	y.step(todoForward, "forward")
+	if slices.Contains(g.views, "todoTree.setCurrentIndex") || y.follow.store != "" {
+		t.Errorf("a task not found moved the cursor: views %v, follow %+v", g.views, y.follow)
+	}
+
+	// the view refusing the cursor's move is said, as a failure, not lost
+	e, _ := movingStore("open")
+	z := newTodos(e)
+	z.list()
+	onTask(t, z, "open")
+	e.viewErr = errors.New("the row is gone")
+	z.step(todoForward, "forward")
+	if len(e.failed) != 1 || !strings.Contains(e.failed[0], "todos: the moved task: the row is gone") {
+		t.Errorf("failed %v", e.failed)
 	}
 }
