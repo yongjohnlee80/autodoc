@@ -122,9 +122,13 @@ func TestJumpCardAndBack(t *testing.T) {
 	r.leader(t, 'b')
 	r.s.WaitForText(t, "nothing to go back to")
 
-	// the right-click menu: Back goes back
+	// the right-click menu: Back goes back. Back on doc.md its relations are read again, and
+	// until they are the card has none: SPC j then says "no related documents", which "related
+	// documents" matches too, and the digit goes to the page. Wait for doc.md's rows, and for the
+	// card's row the digit opens.
+	r.waitRelations(t, docRelations)
 	r.leader(t, 'j')
-	r.s.WaitForText(t, "related documents")
+	r.s.WaitForText(t, "1  superseded by  new.md")
 	r.keys(t, key('1'))
 	r.waitFile(t, "new.md")
 	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own, not doc.md's
