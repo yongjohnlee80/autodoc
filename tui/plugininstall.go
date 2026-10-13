@@ -328,7 +328,7 @@ const pluginsHelp = "Add… from a git URL · Update… or Remove… the one und
 func (pl *plugins) loadManaged() {
 	pl.c.Set("App.pluginsHelp", pluginsHelp+pl.pluginOpt.Dir)
 	entries := discoverPlugins(pl.pluginOpt.Dir)
-	coreDo(pl.c, func(ctx context.Context) []managedPlugin {
+	coreDo(pl.c, func(ctx context.Context) answerOf[[]managedPlugin] {
 		out := make([]managedPlugin, len(entries))
 		for i, e := range entries {
 			out[i] = managedPlugin{e: e}
@@ -338,9 +338,12 @@ func (pl *plugins) loadManaged() {
 			out[i].source, _ = git(ctx, pluginCloneTimeout, e.dir, "remote", "get-url", "origin")
 			out[i].commit, _ = git(ctx, pluginCloneTimeout, e.dir, "rev-parse", "--short", "HEAD")
 		}
-		return out
-	}, func(ms []managedPlugin) {
-		pl.managedPlugins.Reset(ms)
+		return answered(out, nil)
+	}, func(a answerOf[[]managedPlugin]) {
+		if a.err != nil {
+			pl.c.Failed("the installed plugins", a.err) // it panicked: an empty list, said
+		}
+		pl.managedPlugins.Reset(a.v)
 	})
 }
 

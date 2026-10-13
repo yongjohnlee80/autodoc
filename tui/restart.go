@@ -80,16 +80,20 @@ func (h *Host) startRestart() {
 		h.notify("restart: not connected to a backend")
 		return
 	}
-	do(h, func(context.Context) string {
+	do(h, func(context.Context) answerOf[string] {
 		if h.installed == nil {
-			return ""
+			return answered("", nil)
 		}
 		v, err := h.installed()
 		if err != nil {
-			return "?"
+			return answered("?", nil)
 		}
-		return v
-	}, func(installed string) {
+		return answered(v, nil)
+	}, func(a answerOf[string]) {
+		installed := a.v
+		if a.err != nil {
+			installed = "?" // reading it failed (it panicked): not known, as when it errs
+		}
 		q := fmt.Sprintf("Restart the backend (autodoc %s)? It stops, and starts again", running)
 		switch {
 		case installed == "" || installed == "?":

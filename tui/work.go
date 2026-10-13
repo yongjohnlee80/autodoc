@@ -35,6 +35,16 @@ func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
 // coreDo is do for a feature, through its Core: fn off the loop, then on it with fn's result, typed.
 func coreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
 	c.Go(func(ctx context.Context) any { return fn(ctx) }, func(v any) {
+		if p, panicked := v.(errPanicked); panicked {
+			// fn panicked: then gets the failure in its own answer, never a zero answer that reads as
+			// success (an empty clone, a finished update)
+			if t, ok := failed[T](p); ok {
+				then(t)
+			} else {
+				c.Notify("a background job failed: " + p.Error())
+			}
+			return
+		}
 		t, _ := v.(T) // a nil error comes back as nil, not a failed assertion
 		then(t)
 	})

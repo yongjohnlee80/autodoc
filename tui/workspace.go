@@ -198,13 +198,16 @@ func (h *Host) manageWorkspaces() {
 	h.set("App.managerIndex", 0)
 	h.open("workspaceManager")
 	tk := h.ticket(nil, TicketWorkspace)
-	do(h, func(ctx context.Context) bool {
+	do(h, func(ctx context.Context) answerOf[bool] {
 		caps, err := h.call(ctx, "sys.capabilities")
 		on, _ := asMap(caps)["databases"].(bool)
-		return err == nil && on
-	}, func(on bool) {
+		return answered(err == nil && on, nil)
+	}, func(a answerOf[bool]) {
+		if a.err != nil {
+			h.failed("the backend's capabilities", a.err) // it panicked: no databases, said
+		}
 		if tk.Current() {
-			h.databases = on
+			h.databases = a.v
 			h.showManagerDetail()
 		}
 	})

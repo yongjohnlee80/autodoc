@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -25,9 +28,11 @@ import (
 // the program: Run returns it (PanicReturn), the unsaved work is kept as on any unasked exit
 // (recovery.go), a crash report is written, and the next start says where it is.
 //
-// A crash log holds the panic's own message (cut to 500 characters: it is written by the code, but
-// may echo a path) and the stack, which is function names and file:line, its arguments as hex
-// words. Never the page's text, what was typed, a preference or the environment.
+// A crash log, and a notice, hold the panic's type, and its message only when the Go runtime wrote
+// it (an index out of range, a nil dereference: numbers and fixed words): any other panic's text is
+// the program's, built from whatever it had, so it may hold the page's text, what was typed or a
+// preference, and is withheld. The stack is function names and file:line, its arguments as hex
+// words. So a log never holds the page's text, what was typed, a preference or the environment.
 
 const (
 	crashKeep       = 20  // crash logs kept; the oldest go as a new one is written
@@ -75,7 +80,7 @@ func (h *Host) contained(hp tuicore.HandlerPanic) {
 	}
 	name, value := panicSource(hp.Value, where)
 	path, err := h.writeCrash(crashReport{name: name, phase: hp.Phase, value: value, stack: hp.Stack})
-	msg := fmt.Sprintf("%s failed: %s", name, panicMessage(value))
+	msg := fmt.Sprintf("%s failed: %s", name, panicText(value))
 	if err != nil {
 		msg += " (the crash log could not be written: " + err.Error() + ")"
 	} else {
@@ -92,13 +97,17 @@ type crashReport struct {
 	fatal       bool
 }
 
-// panicMessage is a panic's message, cut to crashMessageMax characters.
-func panicMessage(v any) string {
-	s := fmt.Sprint(v)
-	if r := []rune(s); len(r) > crashMessageMax {
-		s = string(r[:crashMessageMax]) + "…"
+// panicText is what a log or a notice says of a panic's value: the runtime's own message (cut to
+// crashMessageMax characters), or only its type, its message withheld (crash.go's top).
+func panicText(v any) string {
+	if re, ok := v.(runtime.Error); ok {
+		s := re.Error()
+		if r := []rune(s); len(r) > crashMessageMax {
+			s = string(r[:crashMessageMax]) + "…"
+		}
+		return s
 	}
-	return s
+	return fmt.Sprintf("a %T (its message withheld: it may hold the page's text or what was typed)", v)
 }
 
 // writeCrash writes r as a new crash log in the crash folder, keeping the newest crashKeep, and is
@@ -119,10 +128,11 @@ func (h *Host) writeCrash(r crashReport) (string, error) {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "AutoDoc crash report\n\nwhen:    %s\nautodoc: %s\ngolib:   %s\nended:   %s\n", now.Format(time.RFC3339), cmp.Or(h.aboutInfo.Version, "unknown"), golibVersion(), ended)
-	fmt.Fprintf(&b, "where:   %s (%s)\npanic:   %T: %s\n\n%s\n", r.name, cmp.Or(r.phase, "the loop"), r.value, panicMessage(r.value), r.stack)
-	b.WriteString("\nThis log holds the panic's own message and the stack, never the page's text, what was typed, a\n" +
-		"preference or the environment. To reproduce it for a report, run autodoc with --debug, which records\n" +
-		"the input and events to a file (that file does hold everything typed).\n")
+	fmt.Fprintf(&b, "where:   %s (%s)\npanic:   %s\n\n%s\n", r.name, cmp.Or(r.phase, "the loop"), panicText(r.value), r.stack)
+	b.WriteString("\nThis log holds the panic's type, its message only when the Go runtime wrote it, and the stack:\n" +
+		"never the page's text, what was typed, a preference or the environment. To reproduce it for a\n" +
+		"report, run autodoc with --debug, which records the input and events to a file (that file does\n" +
+		"hold everything typed).\n")
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		return "", err
 	}
@@ -206,35 +216,41 @@ type errPanicked struct {
 }
 
 func (e errPanicked) Error() string {
-	s := "it panicked: " + panicMessage(e.value)
+	s := "it panicked: " + panicText(e.value)
 	if e.path != "" {
 		s += " — details in " + e.path
 	}
 	return s
 }
 
-// panicAnswer is a background answer that can carry an error: do hands its caller one for a
-// panicking job, so whatever waits on the answer (a spinner, a disabled row) ends as on a failure.
-type panicAnswer interface{ withPanic(err error) any }
-
-func (answerOf[T]) withPanic(err error) any {
-	var a answerOf[T]
-	a.err = err
-	return a
+// failed is a background answer carrying err, the failure its job ended in: err itself where the
+// answer is an error or any (a Core.Go answer), else the answer's own err field (answerOf, and every
+// struct a job answers with: TestEveryBackgroundAnswerCanCarryAFailure holds each do and coreDo to
+// one). The field is unexported, set through its address; its type is checked first. ok is false
+// for an answer with none, which that test keeps from being written.
+func failed[T any](err error) (v T, ok bool) {
+	if t, isT := any(err).(T); isT {
+		return t, true
+	}
+	rv := reflect.ValueOf(&v).Elem()
+	if rv.Kind() != reflect.Struct {
+		return v, false
+	}
+	f := rv.FieldByName("err")
+	if !f.IsValid() || f.Type() != reflect.TypeFor[error]() {
+		return v, false
+	}
+	reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem().Set(reflect.ValueOf(&err).Elem())
+	return v, true
 }
 
-// backgroundPanicked is a background job's panic, on the loop: logged, said, and its caller handed
-// the failure when its answer can carry one (an error, a Core.Go answer, an answerOf).
+// backgroundPanicked is a background job's panic, on the loop: logged, and its caller handed the
+// failure (failed), so whatever waits on the answer ends as on any failure.
 func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
 	path, _ := h.writeCrash(crashReport{name: "a background job", phase: "background", value: rec, stack: stack})
 	err := errPanicked{value: rec, path: path}
-	if v, ok := any(err).(T); ok {
-		then(v) // the answer is an error, or any: the caller's error path takes it
-		return
-	}
-	var zero T
-	if pa, ok := any(zero).(panicAnswer); ok {
-		then(pa.withPanic(err).(T))
+	if v, ok := failed[T](err); ok {
+		then(v)
 		return
 	}
 	h.notify("a background job failed: " + err.Error())

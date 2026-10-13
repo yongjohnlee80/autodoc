@@ -49,22 +49,37 @@ func TestAFailingCommandIsContainedLoggedAndSaid(t *testing.T) {
 	r, dir := crashTUI(t)
 	r.typeInEditor(t, "SENTINEL-typed-7731")
 	onLoop(r, func() error {
-		return r.h.cat.add(Entry{ID: "lua.boom", Source: SourceLua, Title: "boom", Run: func(Invocation) error { panic("kaboom") }})
+		// its panic's own message carries what a command might well have: the page's text
+		return r.h.cat.add(Entry{ID: "lua.boom", Source: SourceLua, Title: "boom", Run: func(Invocation) error {
+			panic("could not parse: " + r.h.core.Value())
+		}})
 	})
 	r.h.p.Post(func() { _ = r.h.cat.run("lua.boom", nil) }) // an Update: golib's boundary
-	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("lua.boom failed: kaboom — details in " + dir) })
+	r.s.WaitFor(t, "the notice", func(string) bool {
+		return r.noticed("lua.boom failed: a string (its message withheld: it may hold the page's text or what was typed) — details in " + dir)
+	})
 	logs := crashLogs(t, dir)
 	if len(logs) != 1 {
 		t.Fatalf("%d crash logs, want 1", len(logs))
 	}
-	for _, want := range []string{"where:   lua.boom (update)", "panic:   string: kaboom", "ended:   no", "crash_test.go"} {
+	for _, want := range []string{"where:   lua.boom (update)", "panic:   a string (its message withheld", "ended:   no", "crash_test.go"} {
 		if !strings.Contains(logs[0], want) {
 			t.Errorf("the log lacks %q:\n%s", want, logs[0])
 		}
 	}
-	if strings.Contains(logs[0], "SENTINEL") {
-		t.Error("the crash log holds the page's text")
+	if strings.Contains(logs[0], "SENTINEL") || r.noticed("SENTINEL") {
+		t.Error("the page's text reached the crash log or the notice")
 	}
+	// the Go runtime's own message is kept: numbers and fixed words
+	onLoop(r, func() error {
+		return r.h.cat.add(Entry{ID: "lua.index", Source: SourceLua, Title: "index", Run: func(Invocation) error {
+			var xs []int
+			_ = xs[len(r.h.core.Value())]
+			return nil
+		}})
+	})
+	r.h.p.Post(func() { _ = r.h.cat.run("lua.index", nil) })
+	r.s.WaitFor(t, "the runtime's notice", func(string) bool { return r.noticed("lua.index failed: runtime error: index out of range") })
 	r.typeInEditor(t, "STILL-TYPING")
 	r.s.WaitForText(t, "STILL-TYPING")
 }
@@ -128,8 +143,21 @@ func TestCrashLogsKeepTheNewest(t *testing.T) {
 	if len(logs) != crashKeep || filepath.Base(logs[0]) != "2026d.log" {
 		t.Errorf("kept %d, the oldest %s", len(logs), filepath.Base(logs[0]))
 	}
-	if got := panicMessage(strings.Repeat("x", crashMessageMax+10)); len([]rune(got)) != crashMessageMax+1 {
-		t.Errorf("a long message kept %d characters", len([]rune(got)))
+	if got := panicText(errors.New("SENTINEL")); strings.Contains(got, "SENTINEL") || !strings.Contains(got, "*errors.errorString") {
+		t.Errorf("an error's message said: %q", got)
+	}
+}
+
+// TestCrashLogsAreNeverOverwritten: logs written in one millisecond are each their own file.
+func TestCrashLogsAreNeverOverwritten(t *testing.T) {
+	h := &Host{crashDir: t.TempDir()}
+	for range 15 {
+		if _, err := h.writeCrash(crashReport{name: "x", value: "v"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := len(crashLogs(t, h.crashDir)); n != 15 {
+		t.Errorf("15 logs written, %d kept", n)
 	}
 }
 
@@ -138,22 +166,41 @@ func TestCrashLogsKeepTheNewest(t *testing.T) {
 // cannot is said instead.
 func TestABackgroundPanicReachesItsCaller(t *testing.T) {
 	r, dir := crashTUI(t)
-	got := make(chan any, 3)
+	// the shapes the callers answer in: answerOf, Core.Go's any, a struct with its own err (a file
+	// opening's, a workspace dialog's), and coreDo's typed struct (a plugin's clone or update)
+	type opened struct {
+		text string
+		err  error
+	}
+	type cloned struct {
+		dir string
+		err error
+	}
+	got := make(chan any, 5)
 	r.h.p.Post(func() {
 		do(r.h, func(context.Context) answerOf[int] { panic("answer job") }, func(a answerOf[int]) { got <- a.err })
 		core{r.h}.Go(func(context.Context) any { panic("core job") }, func(v any) { got <- v })
-		do(r.h, func(context.Context) struct{} { panic("silent job") }, func(struct{}) { got <- "called" })
+		do(r.h, func(context.Context) opened { panic("open job") }, func(a opened) { got <- a.err })
+		coreDo(core{r.h}, func(context.Context) cloned { panic("clone job") }, func(c cloned) { got <- c.err })
+		do(r.h, func(context.Context) error { panic("error job") }, func(err error) { got <- err })
 	})
-	for range 2 {
+	for range 5 {
 		v := <-got
 		var ep errPanicked
-		if err, ok := v.(error); !ok || !errors.As(err, &ep) || !strings.Contains(err.Error(), "it panicked:") {
+		if err, ok := v.(error); !ok || !errors.As(err, &ep) || !strings.Contains(err.Error(), "it panicked: a string") {
 			t.Errorf("the caller was handed %#v", v)
 		}
 	}
-	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("a background job failed: it panicked: silent job") })
-	if n := len(crashLogs(t, dir)); n != 3 {
-		t.Errorf("%d crash logs, want 3", n)
+	if n := len(crashLogs(t, dir)); n != 5 {
+		t.Errorf("%d crash logs, want 5", n)
+	}
+	// an answer with no err field cannot carry the failure: failed says so (the static test keeps
+	// every do and coreDo from answering in one)
+	if _, ok := failed[struct{ v int }](errors.New("x")); ok {
+		t.Error("failed filled an answer with no err field")
+	}
+	if _, ok := failed[bool](errors.New("x")); ok {
+		t.Error("failed filled a bool")
 	}
 }
 
@@ -170,5 +217,5 @@ func TestABackgroundPanicEndsItsCallersWait(t *testing.T) {
 	r, _ := crashTUI(t)
 	v := newTodos(panickyCall{core{r.h}})
 	r.h.p.Post(v.list)
-	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("todos.stores: it panicked: decode failed") })
+	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("todos.stores: it panicked: a string") })
 }

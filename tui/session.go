@@ -76,14 +76,17 @@ func (h *Host) start() {
 // of the old connection is dropped when it answers.
 func (h *Host) watch() {
 	done, gen := h.session.Done(), h.session.Gen()
-	do(h, func(ctx context.Context) bool {
+	do(h, func(ctx context.Context) answerOf[bool] {
 		select {
 		case <-done:
-			return true
+			return answered(true, nil)
 		case <-ctx.Done():
-			return false
+			return answered(false, nil)
 		}
-	}, func(ended bool) {
+	}, func(a answerOf[bool]) {
+		// the watch failing (it panicked) is the connection's watch gone: connected again, as when
+		// the connection ends, rather than never watched again
+		ended := a.v || a.err != nil
 		if !ended || h.session.Gen() != gen {
 			return
 		}
@@ -93,8 +96,8 @@ func (h *Host) watch() {
 			// a restart: the old daemon lets go of its workspaces after its socket, so the new one
 			// starts once the old process is gone, or it would find them busy
 			h.notifyOngoing(toastConnection, "restarting the backend: waiting for the old one to stop…")
-			do(h, func(ctx context.Context) bool { return h.awaitExit(ctx, pid) }, func(gone bool) {
-				if !gone {
+			do(h, func(ctx context.Context) answerOf[bool] { return answered(h.awaitExit(ctx, pid), nil) }, func(a answerOf[bool]) {
+				if !a.v { // not seen to stop, or the wait failed: reconnected anyway
 					h.notify(fmt.Sprintf("the old backend (pid %d) has not stopped after %s: reconnecting anyway", pid, restartWait))
 				}
 				h.start()
