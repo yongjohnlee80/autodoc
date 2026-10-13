@@ -412,7 +412,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Files(widget.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
-		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit)}, opt.App...)...),
+		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.stopping)}, opt.App...)...),
 	)
 	return append(opts, opt.ProgramOptions...)
 }

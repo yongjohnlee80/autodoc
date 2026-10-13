@@ -29,6 +29,9 @@ type (
 	Connecter interface{ Connected() }
 	// Starter hears once that the program has started: its first preferences are applied.
 	Starter interface{ Started() }
+	// Stopping completes pending UI work synchronously before the program unmounts.
+	// It runs in the loop's Update phase; it must not block or post and wait.
+	Stopping interface{ Stopping() }
 	// Stopper hears once, after the program's loop has ended, that the program is stopping: it stops
 	// what it started (processes, connections). Each stop is bounded by the Stopper's own deadline,
 	// so the session closes after a stop that hangs, not never.
@@ -179,6 +182,18 @@ type registryPicks struct{ r *registry }
 func (registryPicks) Name() string                   { return "pickers" }
 func (registryPicks) State() map[string]any          { return nil }
 func (p registryPicks) Commands() map[string]Command { return pickCommands(p.r.picks) }
+
+// stopping retires pending UI work before the program unmounts its owners.
+func (r *registry) stopping() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if s, ok := f.(Stopping); ok {
+			s.Stopping()
+		}
+	}
+}
 
 // stopped tells the features that stop what they started, once the loop has ended.
 func (r *registry) stopped() {
