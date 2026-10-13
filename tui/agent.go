@@ -202,10 +202,18 @@ func (h *agents) toggleAgent() {
 // openAgentPanel shows the running agent, or starts the default profile. With no
 // default, it opens the profiles dialog instead of an empty terminal.
 func (h *agents) openAgentPanel() {
-	if instance := h.instances[h.selectedAgent]; instance != nil {
+	h.syncInstances()
+	if instance := h.instances[h.selectedAgent]; instance != nil && instance.running {
 		h.c.OpenDrawer("agent")
 		h.c.Keep(h.selectInstance(instance))
 		return
+	}
+	for _, instance := range h.instances {
+		if instance.running {
+			h.c.OpenDrawer("agent")
+			h.c.Keep(h.selectInstance(instance))
+			return
+		}
 	}
 	p, ok := h.profile(h.defaultProfile())
 	if !ok {

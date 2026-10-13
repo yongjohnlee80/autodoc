@@ -130,22 +130,21 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		}
 		a.stopAgent()
 		c.configuredCommand = ""
-		a.agentRunning, a.agentRunningLabel = "running-orphan", "orphan"
+		retainModelInstance(a, c, "running-orphan", "orphan")
 		a.useAgent(row)
-		if a.switchingAgent != got[row].Codename {
-			t.Fatal("switch remembered a label instead of the selected identity")
+		if !a.instances["running-orphan"].running {
+			t.Fatal("starting a saved profile stopped its orphan peer")
 		}
-		a.switchAgentConfirmed()
 		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
 			t.Fatalf("switch started another Same label: command %q, identity %q", c.configuredCommand, a.agentRunning)
 		}
 	}
 }
 
-func TestGoneProfileActionsAndARefusedSwitchLeaveTheRunningAgentAlone(t *testing.T) {
+func TestGoneProfileActionsLeaveOtherRunningInstancesAlone(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Same","command":"one"}]`)
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningLabel = "orphan", "orphan label"
+	retainModelInstance(a, c, "orphan", "orphan label")
 	a.startEditAgent(-1)
 	a.makeAgentDefault(9)
 	a.useAgent(-1)
@@ -153,12 +152,6 @@ func TestGoneProfileActionsAndARefusedSwitchLeaveTheRunningAgentAlone(t *testing
 	a.switchAgentConfirmed()
 	if a.agentRunning != "orphan" || a.editingAgent != "" {
 		t.Fatal("a stale row/identity changed the running agent")
-	}
-	c.stopErr = errors.New("stop dispatch refused")
-	a.switchingAgent = "same"
-	a.switchAgentConfirmed()
-	if a.agentRunning != "orphan" || c.configuredCommand != "" {
-		t.Fatal("a refused stop still configured the replacement")
 	}
 }
 
@@ -247,12 +240,14 @@ func TestAgentDefaultMigrationDistinguishesMissingAndExplicitEmptyAtRestart(t *t
 func TestRunningOrphanReservesItsCodename(t *testing.T) {
 	c := newIdentityHost(`[]`)
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningLabel = "reserved", "removed profile"
+	retainModelInstance(a, c, "reserved", "removed profile")
 	a.saveAgentProfile("Replacement", "replacement", "reserved")
 	if len(a.profiles()) != 0 || !strings.Contains(c.state["App.agentFormError"].(string), "held by a running agent") {
 		t.Fatal("a new profile reused a running orphan's codename")
 	}
-	a.agentRunning, a.agentRunningLabel = "", ""
+	if err := a.removeInstance("reserved"); err != nil {
+		t.Fatal(err)
+	}
 	a.saveAgentProfile("Replacement", "replacement", "reserved")
 	if len(a.profiles()) != 1 || a.profiles()[0].Codename != "reserved" {
 		t.Fatal("a stopped orphan kept its old identity reserved")
@@ -262,7 +257,7 @@ func TestRunningOrphanReservesItsCodename(t *testing.T) {
 func TestLiveProfileCodenameCannotChangeUntilItStops(t *testing.T) {
 	c := newIdentityHost(`[{"name":"Original","command":"one","codename":"original"}]`)
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningLabel = "original", "Original"
+	retainModelInstance(a, c, "original", "Original")
 	a.startEditAgent(0)
 	a.saveAgentProfile("Original", "one", "renamed")
 	if a.profiles()[0].Codename != "original" || !strings.Contains(c.state["App.agentFormError"].(string), "stop the running agent") {
@@ -278,7 +273,7 @@ func TestARefusedStopDoesNotReleaseTheRunningCodename(t *testing.T) {
 	c := newIdentityHost(`[]`)
 	c.stopErr = errors.New("stop refused")
 	a := newAgents(c, "", "")
-	a.agentRunning, a.agentRunningLabel = "reserved", "removed profile"
+	retainModelInstance(a, c, "reserved", "removed profile")
 	if a.stopAgent() || a.agentRunning != "reserved" {
 		t.Fatal("a failed stop released the running identity")
 	}

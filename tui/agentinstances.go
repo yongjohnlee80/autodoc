@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -234,6 +235,17 @@ func (a *agents) instanceExited(instance *agentInstance, code int) {
 	a.listAgents()
 	name := instance.profile.Name
 	switch code {
+	case 0:
+		anyRunning := false
+		for _, other := range a.instances {
+			if other != instance && other.running {
+				anyRunning = true
+			}
+		}
+		if !anyRunning {
+			a.c.CloseDrawer("agent")
+		}
+		a.c.Notify(fmt.Sprintf("the agent %s exited: SPC g starts the default again", name))
 	case 127, 126:
 		why := map[int]string{127: "was not found", 126: "could not run"}[code]
 		a.c.Notify(fmt.Sprintf("the agent %s's command %s (%d): check it in System › Agent profiles…", name, why, code))
@@ -261,24 +273,28 @@ func (a *agents) removeInstance(code string) error {
 	instance.running, instance.closing = false, true
 	a.listAgents()
 	c := a.c.(agentRuntimeHost)
-	go func() {
-		err := result.Wait(context.Background())
-		c.Post(func() {
-			if a.stopping || a.instances[code] != instance {
-				return
-			}
-			if err != nil {
-				instance.cleanupError = err
-				a.c.Notify("the agent did not finish cleanup: " + err.Error())
-				return
-			}
-			delete(a.instances, code)
-			if a.selectedAgent == code {
-				a.selectedAgent, a.agentRunning, a.agentRunningLabel = "", "", ""
-			}
-			a.listAgents()
-		})
-	}()
+	complete := func(err error) {
+		if a.stopping || a.instances[code] != instance {
+			return
+		}
+		if err != nil {
+			instance.cleanupError = err
+			a.c.Notify("the agent did not finish cleanup: " + err.Error())
+			return
+		}
+		delete(a.instances, code)
+		a.instanceOrder = slices.DeleteFunc(a.instanceOrder, func(value string) bool { return value == code })
+		if a.selectedAgent == code {
+			a.selectedAgent, a.agentRunning, a.agentRunningLabel = "", "", ""
+		}
+		a.listAgents()
+	}
+	select {
+	case <-result.Done():
+		complete(result.Wait(context.Background()))
+	default:
+		go func() { err := result.Wait(context.Background()); c.Post(func() { complete(err) }) }()
+	}
 	return nil
 }
 

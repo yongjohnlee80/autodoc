@@ -92,8 +92,9 @@ func (c *identityHost) Terminals(string) (TerminalPanel, error) {
 	}
 	return c.panel, nil
 }
-func (*identityHost) OpenDrawer(string) {}
-func (c *identityHost) Post(fn func())  { c.posts = append(c.posts, fn) }
+func (*identityHost) OpenDrawer(string)  {}
+func (*identityHost) CloseDrawer(string) {}
+func (c *identityHost) Post(fn func())   { c.posts = append(c.posts, fn) }
 func (c *identityHost) Ticket(_ *uint64, _ TicketScope) Ticket {
 	epoch := c.epoch
 	return Ticket{current: func() bool { return c.epoch == epoch }}
@@ -115,6 +116,19 @@ func modelAgents(t *testing.T) (*agents, *identityHost) {
 	c.ws = wsInfo{name: "kb", root: t.TempDir()}
 	a := newAgents(c, t.TempDir(), "")
 	return a, c
+}
+
+func retainModelInstance(a *agents, c *identityHost, code, label string) {
+	panel, _ := c.Terminals("agentView")
+	id, _ := panel.Add(label, TerminalConfig{})
+	_ = panel.Start(id)
+	p, exists := a.profile(code)
+	if !exists {
+		p = agentProfile{Name: label, Codename: code, Command: "orphan"}
+	}
+	a.instances[code] = &agentInstance{profile: p, tab: id, token: "retained-" + code, running: true, owner: panel, generation: 1, workspace: c.ws}
+	a.instanceOrder = append(a.instanceOrder, code)
+	a.selectedAgent, a.agentRunning, a.agentRunningLabel = code, code, label
 }
 
 func TestAgentInstancesRunTogetherAndRefsDoNotFollowRestarts(t *testing.T) {

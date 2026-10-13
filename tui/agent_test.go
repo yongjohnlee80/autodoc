@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
-	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // agent_test.go: the agent — SPC g starts the default profile's command in AutoDoc's own folder for
@@ -87,11 +86,14 @@ func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) 
 	return d, r, calls
 }
 
-func (r *running) agentTerm() *widget.Terminal {
-	return onLoop(r, func() *widget.Terminal {
-		c, _ := r.h.p.Find("agentView")
-		term, _ := c.(*widget.Terminal)
-		return term
+func (r *running) agentRunningNow() bool {
+	return onLoop(r, func() bool {
+		for _, entry := range r.h.agents.AgentEntries() {
+			if entry.Ref.Codename == r.h.agents.selectedAgent {
+				return entry.Running
+			}
+		}
+		return false
 	})
 }
 
@@ -153,7 +155,7 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
 	r.s.WaitFor(t, "hidden", func(sc string) bool { return !strings.Contains(sc, "agent · fake") })
 	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
-	if !r.agentTerm().Running() {
+	if !r.agentRunningNow() {
 		t.Fatal("the agent stopped while hidden")
 	}
 	r.leader(t, 'g')
@@ -379,8 +381,8 @@ func TestRemoveAgentRefusesAProfileEditedWhileAsked(t *testing.T) {
 	}
 }
 
-// Use starts another agent: with one running it asks first, and only Yes stops it.
-func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
+// Use starts another profile while the first keeps its own process and token.
+func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{
 		{Name: "one", Command: agent + " first"},
@@ -396,13 +398,34 @@ func TestUsingAnotherAgentAsksBeforeStoppingTheOneRunning(t *testing.T) {
 		return strings.Contains(sc, "agent · one") && !strings.Contains(sc, "agent profiles") && r.focused("agentView")
 	})
 	onLoop(r, func() bool { r.h.agents.openAgentProfiles(); r.h.agents.useAgent(1); return true })
-	r.s.WaitForText(t, "Stop one and start two?")
-	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "one" {
-		t.Fatalf("asking, %q is running, want one still", n)
-	}
-	onLoop(r, func() bool { r.h.agents.switchAgentConfirmed(); return true })
 	r.s.WaitForText(t, "agent · two")
 	r.s.WaitForText(t, "started second")
+	entries := onLoop(r, func() []AgentEntry { return r.h.agents.AgentEntries() })
+	if len(entries) != 2 || !entries[0].Running || !entries[1].Running || entries[0].Ref.Instance == entries[1].Ref.Instance {
+		t.Fatalf("independent live instances lost: %+v", entries)
+	}
+	delivered := make(chan error, 1)
+	onLoop(r, func() bool {
+		if err := (core{r.h}).HandTask(entries[0].Ref, TaskRef{Title: "only-first", Path: "/tasks/first.md", ID: "first"}, "inspect", func(err error) { delivered <- err }); err != nil {
+			t.Error(err)
+		}
+		return true
+	})
+	select {
+	case err := <-delivered:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("accepted task did not finish delivery")
+	}
+	onLoop(r, func() bool { r.h.agents.useAgent(0); return true })
+	r.s.WaitForText(t, "heard-Task: only-first")
+	onLoop(r, func() bool { r.h.agents.useAgent(1); return true })
+	r.s.WaitForText(t, "started second")
+	if strings.Contains(r.s.String(), "heard-Task: only-first") {
+		t.Fatal("task intended for first instance leaked to second")
+	}
 	if n := onLoop(r, func() string { return r.h.agents.agentRunning }); n != "two" {
 		t.Fatalf("after Yes %q is running, want two", n)
 	}
