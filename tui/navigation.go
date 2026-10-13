@@ -29,57 +29,49 @@ func refOf(doc string) fileRef {
 	return fileRef{ws, p}
 }
 
-// pendingJump is a step into another document, waiting for it to be shown.
-type pendingJump struct {
-	step widget.JumpStep
-	ref  fileRef
+// landing is where the cursor goes when an open is shown: a byte offset in its text (a search
+// hit's section, a draft just saved), or a jump step's line, column and view, committed then. It
+// travels with its own open (openRefTo, loadTo) and no other: an open that doesn't go ahead (Stay
+// at the unsaved question, an HTML file's Cancel, a failed read, a newer open's ticket) drops it,
+// so it never lands on another document, or on a later open of the same one.
+type landing struct {
+	at   int              // a byte offset, when step is nil
+	step *widget.JumpStep // a jump's
 }
 
 // jumpView is the page's view, as the jump list records it: "rendered" in the GUI's Rendered view.
 func (h *Host) jumpView() string { return editorView(h.editor) }
 
-// jumpTo is the editor's step into another document or view: this document's other view at once,
-// another document once it is shown (landJump).
+// jumpTo is the editor's step into another document or view: it opens the document, the step
+// landing when it is shown (a document shown already lands at once).
 func (h *Host) jumpTo(step widget.JumpStep) {
-	ref := refOf(step.To.Doc)
-	if h.file.open && ref == (fileRef{h.file.ws, h.file.path}) {
-		h.landAt(step)
-		return
-	}
-	h.jumpWait = &pendingJump{step: step, ref: ref}
-	h.openRef(ref, false, nil)
+	h.openRefTo(refOf(step.To.Doc), false, nil, &landing{step: &step})
 }
 
-// landJump is a document shown: the step waiting for it, if any, is committed and lands. A step for
-// another document is dropped: a newer open went ahead.
-func (h *Host) landJump(ref fileRef) {
-	w := h.jumpWait
-	h.jumpWait = nil
-	if w != nil && w.ref == ref {
-		h.landAt(w.step)
+// land puts the cursor where land says, on ref just shown (its text content): a jump step is
+// committed first, and lands only if the list takes it (it moved since: nothing changes).
+func (h *Host) land(land *landing, ref fileRef, content string) {
+	switch {
+	case land == nil:
+	case land.step != nil:
+		if !h.jumps.Commit(*land.step) {
+			return
+		}
+		setEditorView(h.editor, land.step.To.View)
+		h.core.SetLine(land.step.To.Line, land.step.To.Col)
+	default:
+		h.core.SetCursorPosition(cursorAt(content, min(max(land.at, 0), len(content))))
 	}
 }
 
-// landAt commits step and puts the page where it goes: its view, its line and column. A step the
-// list no longer takes (it moved since) changes nothing.
-func (h *Host) landAt(step widget.JumpStep) {
-	if !h.jumps.Commit(step) {
+// missedLanding is an open whose read failed: a jump's document gone for good leaves the list, and
+// the user is told; any other failure leaves the list as it was.
+func (h *Host) missedLanding(land *landing, err error) {
+	if land == nil || land.step == nil || code(err) != rpc.CodeNotFound {
 		return
 	}
-	setEditorView(h.editor, step.To.View)
-	h.core.SetLine(step.To.Line, step.To.Col)
-}
-
-// missedJump is a read that failed for ref: a document gone for good leaves the list, and the user
-// is told; any other failure leaves the list as it was.
-func (h *Host) missedJump(ref fileRef, err error) {
-	w := h.jumpWait
-	if w == nil || w.ref != ref {
-		return
-	}
-	h.jumpWait = nil
-	if code(err) == rpc.CodeNotFound && h.jumps.Drop(w.step) {
-		h.notify(ref.path + " is gone: it left the jump list (Ctrl+O again goes further back)")
+	if h.jumps.Drop(*land.step) {
+		h.notify(refOf(land.step.To.Doc).path + " is gone: it left the jump list (Ctrl+O again goes further back)")
 	}
 }
 

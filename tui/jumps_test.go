@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 func ctrlKey(k rune) tuicore.Event {
@@ -114,4 +115,67 @@ func TestCtrlOOpensNoDocument(t *testing.T) {
 	}
 	r.leader(t, 'o')
 	r.s.WaitForText(t, "open a document")
+}
+
+// landingKB is a.md, and b.md whose section "two" starts at byte 10 (line 4). An HTML file's
+// question is asked before any read, so the one the cells open needn't exist.
+var landingKB = map[string][]string{"kb": {
+	"a.md", "# A\n",
+	"b.md", "# B\n\none\n\ntwo\n",
+}}
+
+// A search hit's open that doesn't go ahead takes its section with it: the next open lands at the
+// document's own start, not at the hit's section. Stay at the unsaved question drops it.
+func TestASearchHitRefusedByStayDropsItsSection(t *testing.T) {
+	r := attached(t, startDaemon(t, landingKB))
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.typeInEditor(t, "edit ")
+	// keys and a post are not ordered: every key typed, Esc included, before the hit's open
+	r.s.WaitFor(t, "the typing done", func(string) bool {
+		return onLoop(r, func() bool {
+			return strings.Contains(r.h.core.Value(), "edit ") && r.h.core.Mode() == widget.ModeNormal
+		})
+	})
+	onLoop(r, func() bool { r.h.openHit(hit{path: "b.md", byteStart: 10}); return true })
+	r.s.WaitForText(t, "Save them before")
+	r.h.p.Post(func() { r.h.unsaved("stay") })
+	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "Save them before") })
+	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
+	r.s.WaitForText(t, "Save them before")
+	r.h.p.Post(func() { r.h.unsaved("discard") })
+	r.waitAt(t, "b.md", 0, 0)
+}
+
+// An HTML file's Cancel drops the hit's section: the next open lands at its own start.
+func TestASearchHitRefusedByAnHTMLCancelDropsItsSection(t *testing.T) {
+	r := attached(t, startDaemon(t, landingKB))
+	r.waitListed(t, 2)
+	onLoop(r, func() bool { r.h.openHit(hit{path: "c.html", byteStart: 10}); return true })
+	r.s.WaitFor(t, "the HTML question", func(string) bool { return onLoop(r, func() bool { return r.h.htmlAsk != nil }) })
+	onLoop(r, func() bool { r.h.openHTMLAs("cancel"); return true })
+	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
+	r.waitAt(t, "b.md", 0, 0)
+}
+
+// A read that fails drops the hit's section: the next open lands at its own start.
+func TestASearchHitWhoseReadFailsDropsItsSection(t *testing.T) {
+	r := attached(t, startDaemon(t, landingKB))
+	r.waitListed(t, 2)
+	onLoop(r, func() bool { r.h.openHit(hit{path: "gone.md", byteStart: 10}); return true })
+	r.s.WaitFor(t, "the failure told", func(string) bool { return r.noticed("gone.md") })
+	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
+	r.waitAt(t, "b.md", 0, 0)
+}
+
+// A search hit lands at its section, in another document and in the one shown already.
+func TestASearchHitLandsAtItsSection(t *testing.T) {
+	r := attached(t, startDaemon(t, landingKB))
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.openHit(hit{path: "b.md", byteStart: 10}); return true })
+	r.waitAt(t, "b.md", 4, 0)
+	r.putCursor(0, 0)
+	onLoop(r, func() bool { r.h.openHit(hit{path: "b.md", byteStart: 10}); return true })
+	r.waitAt(t, "b.md", 4, 0)
 }

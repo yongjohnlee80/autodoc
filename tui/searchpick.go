@@ -251,8 +251,7 @@ func (h *Host) newSearchPick() *pick[hit] {
 // openHit opens the file of hit x at its section: the picker has closed.
 func (h *Host) openHit(x hit) {
 	h.searchClosed()
-	h.openAt = x.byteStart
-	h.openPath(x.path)
+	h.openRefTo(fileRef{h.ws, x.path}, true, nil, &landing{at: x.byteStart}) // at its section
 	switch x.hold {
 	case "stale":
 		h.notify(x.path + " changed since this backend's build indexed it: the section may have moved")

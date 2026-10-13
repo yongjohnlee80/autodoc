@@ -92,15 +92,13 @@ type Host struct {
 	searchWaitToast   bool
 	marks             marks
 	findMarks         marks // the page find's words, as the page's highlighter marks them (find.go)
-	openAt            int   // where the next file opened puts the cursor, a byte offset; -1 for its start
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find findState
 	// the Relations drawer (relations.go), a feature of its own; the jump list across the
-	// documents (navigation.go), and a step into another document waiting for it to be shown
-	rel      *related
-	jumps    *widget.JumpList
-	jumpWait *pendingJump
+	// documents (navigation.go)
+	rel   *related
+	jumps *widget.JumpList
 
 	// the preferences (prefs.go), and the panels open now (panels.go)
 	prefs                          prefs
@@ -329,7 +327,6 @@ func newHost(session *Session, opt Options) *Host {
 		families:        opt.FontFamilies,
 		defaultCellFont: opt.DefaultCellFont,
 		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
-		openAt:          -1,
 		jumps:           widget.NewJumpList(0),
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,

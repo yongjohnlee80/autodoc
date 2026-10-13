@@ -169,24 +169,30 @@ func (h *Host) openIn(ws, p string) { h.openRef(fileRef{ws, p}, true, nil) }
 // history (SPC b) when remember is set; going back does not set it. proceed, when not nil, runs
 // once the open goes ahead — after the unsaved question's Save or Discard, never after its Stay.
 func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
+	h.openRefTo(ref, remember, proceed, nil)
+}
+
+// openRefTo is openRef, the cursor landing as land says once the document is shown (navigation.go):
+// land goes with this open and no other, so an open that doesn't go ahead drops it.
+func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landing) {
 	// an HTML file asks how to open it before anything else: entering its workspace closes the
 	// file open now, which Cancel must leave as it is
 	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {
-		h.askHowToOpen(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw) })
+		h.askHowToOpen(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw, land) })
 		return
 	}
-	h.openRefAs(ref, remember, proceed, nil)
+	h.openRefAs(ref, remember, proceed, nil, land)
 }
 
 // openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
 // is no question (load asks for one that is).
-func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool) {
+func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, land *landing) {
 	open := func(prev *widget.JumpPos) {
 		if raw != nil {
-			h.loadAs(ref.ws, ref.path, prev, *raw)
+			h.loadAs(ref.ws, ref.path, prev, *raw, land)
 			return
 		}
-		h.load(ref.ws, ref.path, prev)
+		h.loadTo(ref.ws, ref.path, prev, land)
 	}
 	goAhead := func() {
 		if proceed != nil {
@@ -211,6 +217,7 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool) 
 	}
 	if h.file.open && h.file.ws == ref.ws && h.file.path == ref.path && !h.file.dirty {
 		goAhead()
+		h.land(land, ref, h.core.Value()) // the document is shown already: the open lands at once
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
@@ -233,13 +240,16 @@ func (h *Host) reload() {
 // An HTML file it is not reading again asks first how to open it (ADR 1791474356): Simplified, its
 // derived text read-only as any derived document, or Raw, its own bytes, editable. Read again (a
 // reload, a conflict's), it keeps the way it was opened.
-func (h *Host) load(ws, p string, prev *widget.JumpPos) {
+func (h *Host) load(ws, p string, prev *widget.JumpPos) { h.loadTo(ws, p, prev, nil) }
+
+// loadTo is load, the cursor landing as land says once the document is shown.
+func (h *Host) loadTo(ws, p string, prev *widget.JumpPos, land *landing) {
 	again := h.file.open && h.file.ws == ws && h.file.path == p
 	if !again && kind.RawText(p) {
-		h.askHowToOpen(p, func(raw bool) { h.loadAs(ws, p, prev, raw) })
+		h.askHowToOpen(p, func(raw bool) { h.loadAs(ws, p, prev, raw, land) })
 		return
 	}
-	h.loadAs(ws, p, prev, again && h.file.raw)
+	h.loadAs(ws, p, prev, again && h.file.raw, land)
 }
 
 // htmlOpen is the open question: what opens the HTML file once it is answered.
@@ -291,7 +301,7 @@ func (h *Host) openHTMLAs(how string) {
 }
 
 // loadAs is load, raw or not.
-func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool) {
+func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool, land *landing) {
 	tk := h.ticket(&h.file.gen, TicketWorkspace)
 	again, read := h.file.open && h.file.ws == ws && h.file.path == p, h.file.version
 	type answer struct {
@@ -317,7 +327,7 @@ func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool) {
 		}
 		if a.err != nil {
 			h.failed("open "+p, a.err)
-			h.missedJump(fileRef{ws, p}, a.err)
+			h.missedLanding(land, a.err)
 			h.restoreOpenFailed(ws, p) // a kept copy's file gone: its text becomes the draft
 			return
 		}
@@ -325,7 +335,7 @@ func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool) {
 			h.jumps.Push(*prev) // a jump: the place left, once the new document is shown
 		}
 		h.show(ws, p, a.content, a.version, raw) // the recent files note it (recent.go: Shown)
-		h.landJump(fileRef{ws, p})
+		h.land(land, fileRef{ws, p}, a.content)
 		h.say("opened " + p)
 		if ws == "" {
 			h.notify(p + ": " + outsideLimits)
@@ -339,11 +349,6 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 	h.documentFor(ws, p, raw)  // before the text: a page shown for the last file must not get this one's
 	h.editor.SetValue(content) // reports no textChanged: only typing does
 	h.syncPageWidth()
-	if at := h.openAt; at >= 0 {
-		// opened from a search hit: the cursor at its section
-		h.openAt = -1
-		h.core.SetCursorPosition(cursorAt(content, min(at, len(content))))
-	}
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
 	h.core.SetJumpDoc(docKey(fileRef{ws, p}))
 	h.file.raw = raw
@@ -723,6 +728,7 @@ func (h *Host) createFile(name string) {
 			return
 		}
 		h.draft = nil
+		var land *landing // the draft's cursor, when the page was the draft
 		if draft != nil {
 			// the draft's text is on disk now: the copy it was restored from goes (not another
 			// draft's, which Later kept for the next start)
@@ -738,10 +744,10 @@ func (h *Host) createFile(name string) {
 				h.notify("saved the draft as " + name)
 				return
 			}
-			h.openAt = h.cursorBytes()
-			h.setDirty(false) // written: the load below finds it saved
+			land = &landing{at: h.cursorBytes()} // the cursor where it was in the draft
+			h.setDirty(false)                    // written: the load below finds it saved
 		}
-		h.load(ws, name, nil)
+		h.loadTo(ws, name, nil, land)
 		h.listFiles()
 		h.loadWorkspaces() // the explorer lists it
 		if draft != nil && draft.then != nil {
