@@ -869,18 +869,35 @@ func clickMaximizeAndRestore(t *testing.T, r *running, panel string) {
 	maxed := func(want bool) func(string) bool {
 		return func(string) bool { return onLoop(r, func() bool { return r.h.panelMax[panel] }) == want }
 	}
-	// where ≡ is drawn: the maximized panel's strip is drawn elsewhere, and the next click must find
-	// it there, not where the frame before showed it
-	strip := func() [2]int { x, y := r.textAt("≡"); return [2]int{x, y} }
-	r.s.WaitForText(t, "≡")
-	docked := strip()
+	// the panel as drawn: the next click must find its strip where the maximized frame shows it,
+	// not where the frame before did (a bottom panel's strip moves up; a top panel's grows down)
+	r.s.WaitForText(t, "┌ "+panel)
+	docked := panelHeight(r.s.String(), panel)
 	clickMenuRow(t, r, "Maximize")
 	r.s.WaitFor(t, "the "+panel+" maximized by a click", maxed(true))
-	r.s.WaitFor(t, "the maximized "+panel+" drawn", func(string) bool { return strip() != docked })
+	r.s.WaitFor(t, "the maximized "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) > docked })
 	clickMenuRow(t, r, "Restore")
 	r.s.WaitFor(t, "the "+panel+" restored by a click", maxed(false))
-	r.s.WaitFor(t, "the restored "+panel+" drawn", func(string) bool { return strip() == docked })
+	r.s.WaitFor(t, "the restored "+panel+" drawn", func(sc string) bool { return panelHeight(sc, panel) == docked })
 	if errs := onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) }); len(errs) != 0 {
 		t.Errorf("refused: %v", errs)
 	}
+}
+
+// panelHeight is how many rows the panel titled title spans on screen, both corners counted; 0 when
+// it is not drawn.
+func panelHeight(screen, title string) int {
+	lines := strings.Split(screen, "\n")
+	for y, l := range lines {
+		c := col(l, "┌ "+title)
+		if c < 0 {
+			continue
+		}
+		for y2 := y + 1; y2 < len(lines); y2++ {
+			if rs := []rune(lines[y2]); c < len(rs) && rs[c] == '└' {
+				return y2 - y + 1
+			}
+		}
+	}
+	return 0
 }
