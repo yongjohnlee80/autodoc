@@ -103,3 +103,27 @@ func TestLuaIsHighlightedInAFileAndAFence(t *testing.T) {
 		t.Errorf("local in a ```text fence is %v, want the code block's own style, %v", got, highlight.String)
 	}
 }
+
+// SQL is highlighted in a Markdown fence under each dialect's labels (golib v0.6.82): select is a
+// keyword in ```sql, ```postgres, ```sqlite and ```mysql, where before it was the code block's String.
+func TestSQLIsHighlightedInAFence(t *testing.T) {
+	r := runTUI(t, NewSession("unused", nil), Options{})
+	styleOf := func(path, text string, line int) highlight.Style {
+		t.Helper()
+		return onLoop(r, func() highlight.Style {
+			r.h.show("", path, text, "v1", false)
+			f := r.h.core.BeginHighlight(0)
+			defer f.Close()
+			return f.Styles(line)[0]
+		})
+	}
+	for _, label := range []string{"sql", "postgres", "sqlite", "mysql"} {
+		text := "# Notes\n\n```" + label + "\nselect 1;\n```\n"
+		if got := styleOf("/tmp/notes.md", text, 3); got != highlight.Keyword {
+			t.Errorf("select in a ```%s fence is %v, want a keyword", label, got)
+		}
+	}
+	if got := styleOf("/tmp/schema.sql", "select 1;\n", 0); got != highlight.Keyword {
+		t.Errorf("select in a .sql file is %v, want a keyword", got)
+	}
+}
