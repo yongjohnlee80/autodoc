@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -232,11 +233,12 @@ func TestAnOutsideFileGoneFromDiskIsClosedOnRecheck(t *testing.T) {
 func TestTheDefaultAppOpensAnOutsideFileAtItsPath(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	opened := make(chan string, 2)
-	fail := false
+	// set on the loop, read by the browser stub on openWithDefaultApp's worker: atomic
+	var fail atomic.Bool
 	r.h.p.Post(func() {
 		r.h.browser = func(_ context.Context, p string) error {
 			opened <- p
-			if fail {
+			if fail.Load() {
 				return errors.New("no viewer")
 			}
 			return nil
@@ -248,7 +250,7 @@ func TestTheDefaultAppOpensAnOutsideFileAtItsPath(t *testing.T) {
 	if p := <-opened; p != abs {
 		t.Errorf("the viewer was given %q, want %q", p, abs)
 	}
-	r.h.p.Post(func() { fail = true; r.h.openWithDefaultApp() })
+	r.h.p.Post(func() { fail.Store(true); r.h.openWithDefaultApp() })
 	<-opened
 	r.waitKeptNotice(t, "open with the default app: no viewer")
 }
