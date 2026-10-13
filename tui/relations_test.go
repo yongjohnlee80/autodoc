@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -114,6 +115,28 @@ var linksKB = map[string][]string{"kb": {
 // link, as the right-click menu's Go to link does; SPC b returns, and returns no further than the
 // first document; the right-click menu has Back. Off a link, or with no file open, SPC j opens
 // nothing and says so.
+// TestSPCjInADraftFollowsAWebLink: in a draft, with no file open, SPC j follows the link as the
+// right-click Go to link does: a web address goes to the browser as written.
+func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
+	r := attached(t, startDaemon(t, linksKB))
+	opened := make(chan string, 1)
+	onLoop(r, func() bool {
+		r.h.browser = func(_ context.Context, p string) error { opened <- p; return nil }
+		r.h.core.SetValue("read [the site](https://example.com) first\n")
+		return true
+	})
+	r.putCursor(0, strings.Index("read [the site]", "the site"))
+	r.leader(t, 'j')
+	select {
+	case p := <-opened:
+		if p != "https://example.com" {
+			t.Errorf("the browser was given %q, want https://example.com", p)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("SPC j on a draft's web link opened nothing")
+	}
+}
+
 func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r := attached(t, startDaemon(t, linksKB))
 	r.leader(t, 'j') // the draft, empty: no link

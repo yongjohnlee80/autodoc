@@ -45,7 +45,9 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 }
 
 // followLink is SPC j: the link under the editor's cursor, followed as the right-click menu's Go to
-// link follows it. Off a link it says so, and where the page's links are listed.
+// link follows it. Off a link it says so, and where the page's links are listed. In a draft (no
+// file open) it does what Go to link does there: a link goes as written, a web address to the
+// browser, since there is no workspace to resolve it in.
 func (h *Host) followLink() {
 	l, ok := linkAt([]byte(h.core.Value()), h.cursorBytes())
 	if !ok {
