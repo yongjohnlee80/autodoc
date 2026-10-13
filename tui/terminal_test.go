@@ -813,3 +813,27 @@ func TestMaximizePanelPrefersThePanelWithTheKeyboard(t *testing.T) {
 		t.Error("a move restored the agents' Maximize row")
 	}
 }
+
+// TestF11WorksWithTheKeyboardInTheShell: with the keyboard in a running shell, F11 maximizes the
+// terminal panel and restores it (the panels' hostKeys leave it to the Window), and the shell
+// never gets it: it answers as before.
+func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
+	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
+	r.keys(t, f11)
+	r.s.WaitFor(t, "F11 in the shell maximized it", maximizedNow(maximized, true))
+	r.keys(t, f11)
+	r.s.WaitFor(t, "F11 in the shell restored it", maximizedNow(maximized, false))
+	if !r.focused("terminalView") {
+		t.Error("F11 took the keyboard out of the shell")
+	}
+	r.keys(t, decltest.Type("echo f11-never-sent-$((40+6))\r")...)
+	r.s.WaitForText(t, "f11-never-sent-46")
+}
+
+func maximizedNow(maximized func() bool, want bool) func(string) bool {
+	return func(string) bool { return maximized() == want }
+}

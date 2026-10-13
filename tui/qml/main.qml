@@ -387,6 +387,8 @@ Window {
         // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
         TerminalTabs {
             id: terminalView
+            // F11 (maximize) reaches the Window with the keyboard in a shell: its program never gets it
+            hostKeys: "F11"
             emptyText: "No shell running. Press + to start one."
             vimKeys: App.keymapVim
             // the terminals' theme (terminal.go): its text and background, the strip's the page's
@@ -423,6 +425,8 @@ Window {
         // tab's menu goes to another, restarts or closes it, or opens the profiles
         TerminalTabs {
             id: agentView
+            // F11 (maximize) reaches the Window with the keyboard in a shell: its program never gets it
+            hostKeys: "F11"
             emptyText: "No agent running. Press + to start one of the profiles."
             vimKeys: App.keymapVim
             // as the terminal's: the terminals' theme and face, the contrast raised against it
