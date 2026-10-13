@@ -236,4 +236,8 @@ func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoTree", "forceActiveFocus")); return true })
 	r.keys(t, key('s')) // the list's: open → in progress
 	r.s.WaitFor(t, "in progress", func(string) bool { return listed("in-progress") == 1 })
+	// and the task buttons' below the details: the same keys, on a button
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoRefreshButton", "forceActiveFocus")); return true })
+	r.keys(t, key('>')) // in progress → completed
+	r.s.WaitFor(t, "completed, from a task button", func(string) bool { return listed("completed") == 1 })
 }

@@ -52,12 +52,19 @@ type Key struct {
 // them, at indent.
 type keyScope struct {
 	ID, Indent string
+	// Label names the block in its markers, "<ID>'s" when empty. A scope's keys can go into more
+	// than one block: the todos' are its list's and its task buttons', on either side of the
+	// details pane, which must have none.
+	Label string
 }
 
 // keyScopes are the panes with keys of their own: the page (the Editor's FocusScope), the todos'
-// panel (its keys the todos feature's), and the
-// explorer's and the relations' panels.
-var keyScopes = []keyScope{{"page", "            "}, {"explorer", "        "}, {"links", "        "}, {"todos", "                "}}
+// panel (its keys the todos feature's: its list's, and again its task buttons', never its details
+// pane's), and the explorer's and the relations' panels.
+var keyScopes = []keyScope{
+	{ID: "page", Indent: "            "}, {ID: "explorer", Indent: "        "}, {ID: "links", Indent: "        "},
+	{ID: "todos", Indent: "                "}, {ID: "todos", Indent: "                ", Label: "todos task buttons'"},
+}
 
 // findKeys are / n N in each pane find searches that has keys of its own (FindPane.Scope), in the
 // features' order (which is find's, the registry keeping it): the pane answers them itself (find.go). The Window's own / n N answer everywhere else,
@@ -569,8 +576,12 @@ const (
 
 // scopeMarkers are the lines around a pane's generated keys, inside its FocusScope.
 func scopeMarkers(s keyScope) (begin, end string) {
-	return s.Indent + "// ---- the " + s.ID + "'s keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----\n",
-		s.Indent + "// ---- end of the " + s.ID + "'s keys ----\n"
+	label := s.Label
+	if label == "" {
+		label = s.ID + "'s"
+	}
+	return s.Indent + "// ---- the " + label + " keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----\n",
+		s.Indent + "// ---- end of the " + label + " keys ----\n"
 }
 
 // cardQML is views/<View>.qml for card c and its keys.

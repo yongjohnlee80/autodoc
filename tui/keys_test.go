@@ -344,13 +344,24 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 			t.Errorf("the %s's keys hold d: %v", s.ID, hasD)
 		}
 	}
-	// the todos' keys are autofinder's, in its panel alone
-	todosBegin, todosEnd := scopeMarkers(keyScope{ID: "todos", Indent: "        "})
-	todosKeys := block(todosBegin, todosEnd)
-	for _, seq := range []string{"a", "d", "s", "<", ">", "i", "o", "Shift+R", "Shift+M", "Shift+L", "?", "1", "2", "3", "4", "5"} {
-		if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
-			t.Errorf("the todos panel lacks %s:\n%s", seq, todosKeys)
+	// the todos' keys are autofinder's, in its panel alone: its list's and its task buttons' blocks,
+	// both of them every key (and its details pane, between them, none)
+	todosBlocks := 0
+	for _, s := range keyScopes {
+		if s.ID != "todos" {
+			continue
 		}
+		todosBlocks++
+		todosBegin, todosEnd := scopeMarkers(s)
+		todosKeys := block(todosBegin, todosEnd)
+		for _, seq := range []string{"a", "d", "s", "<", ">", "i", "o", "Shift+R", "Shift+M", "Shift+L", "?", "1", "2", "3", "4", "5"} {
+			if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
+				t.Errorf("the todos panel's %q block lacks %s:\n%s", s.Label, seq, todosKeys)
+			}
+		}
+	}
+	if todosBlocks != 2 {
+		t.Errorf("the todos panel has %d blocks of keys, want 2: its list's and its task buttons'", todosBlocks)
 	}
 	for want, key := range map[string]Key{
 		"a card's keys are the card's":      {Card: leader, Scope: "page", Seq: "x", Run: "App.x()"},
