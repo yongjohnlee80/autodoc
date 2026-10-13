@@ -332,5 +332,6 @@ func (c *catalog) run(id string, args []string) error {
 	if e == nil {
 		return fmt.Errorf("%w: %s", errUnknownCommand, id)
 	}
+	defer renamePanic(id) // a panic says which command it came out of (crash.go)
 	return e.Run(Invocation{Args: args, Line: strings.Join(args, " "), Core: c.core})
 }

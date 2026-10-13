@@ -209,6 +209,7 @@ type Host struct {
 	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
 	// still to ask about, and the one being restored once its file opens
 	recoveryDir     string
+	crashDir        string
 	recoveryOffered bool
 	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
 	scripts        *script.Engine
@@ -281,6 +282,9 @@ type Options struct {
 	// RecoveryDir is where unsaved work is kept when AutoDoc ends without being asked to, and offered
 	// back at the next start (recovery.go); "" keeps nothing.
 	RecoveryDir string
+	// CrashDir is where a contained panic's crash log goes, and a fatal one's report (crash.go); ""
+	// writes none, the notice still said.
+	CrashDir string
 	// LuaDir holds the user's Lua commands, every *.lua in it (scripts.go); "" loads only AutoDoc's
 	// own.
 	LuaDir string
@@ -313,7 +317,7 @@ func New(session *Session, opt Options) (*Host, error) {
 func newHost(session *Session, opt Options) *Host {
 	ctx, cancel := context.WithCancel(context.Background())
 	h := &Host{session: session, ctx: ctx, cancel: cancel, about: opt.About, aboutInfo: opt.AboutInfo, dev: opt.Dev,
-		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, luaDir: opt.LuaDir,
+		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, crashDir: opt.CrashDir, luaDir: opt.LuaDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
@@ -412,7 +416,10 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Files(widget.FileSource{FS: os.DirFS("/"), Root: "/", Async: true}),
 		// The too-small screen's Quit is AutoDoc's own, which asks before unsaved changes are lost;
 		// the caller's options come after, and may set another.
-		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.stopping)}, opt.App...)...),
+		tuidecl.AppOptions(append([]tuicore.AppOption{tuicore.WithQuit(h.quit), tuicore.WithOnStopping(h.reg.stopping),
+			// one failing command never takes AutoDoc down; a panic golib will not contain ends Run with
+			// it, so the unsaved work is kept and a report written (crash.go)
+			tuicore.WithHandlerRecover(h.contained), tuicore.WithPanicPolicy(tuicore.PanicReturn)}, opt.App...)...),
 	)
 	return append(opts, opt.ProgramOptions...)
 }
@@ -422,9 +429,9 @@ func (h *Host) Run(ctx context.Context) error {
 	defer h.cancel()
 	defer h.session.Close()
 	defer h.reg.stopped() // after the loop: what each feature started stopped, bounded, before the session ends
+	h.sayLastCrash()
 	err := h.p.Run(ctx)
-	// ended unasked (a signal) with unsaved work: kept, and offered at the next start
-	keepErr := h.keepRecovery()
+	keepErr := h.ended(err)
 	if h.scripts != nil {
 		h.scripts.Close()
 	}

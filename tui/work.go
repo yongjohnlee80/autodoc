@@ -1,6 +1,9 @@
 package tui
 
-import "context"
+import (
+	"context"
+	"runtime/debug"
+)
 
 // BACKGROUND WORK — off the loop, and back onto it.
 //
@@ -11,6 +14,16 @@ import "context"
 func do[T any](h *Host, fn func(context.Context) T, then func(T)) {
 	ctx := h.ctx
 	go func() {
+		// a panic here is on a goroutine of its own, where no loop boundary reaches: kept, said, and
+		// handed to then as the failure it is where its answer can carry one (crash.go)
+		defer func() {
+			if rec := recover(); rec != nil {
+				stack := debug.Stack()
+				if ctx.Err() == nil {
+					h.p.Post(func() { backgroundPanicked(h, rec, stack, then) })
+				}
+			}
+		}()
 		v := fn(ctx)
 		if ctx.Err() != nil {
 			return // the program stopped; nobody is waiting

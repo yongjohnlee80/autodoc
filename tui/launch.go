@@ -136,6 +136,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		Registrations: o.Registrations,
 		AgentDir:      filepath.Join(stateDir, "agent"),
 		RecoveryDir:   filepath.Join(stateDir, "recovery"),
+		CrashDir:      filepath.Join(stateDir, "crash"),
 		// the user's Lua commands, beside the config as the plugins are
 		LuaDir:          filepath.Join(filepath.Dir(configPath), "lua"),
 		ConfigPath:      configPath,

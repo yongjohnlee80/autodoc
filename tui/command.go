@@ -34,6 +34,7 @@ func (e argError) Error() string { return string(e) }
 // handler is c as golib calls it under name: its arguments checked, each refusal naming it.
 func (c Command) handler(name string) decl.HandlerFunc {
 	return func(args []qml.SpecValue) error {
+		defer renamePanic(name) // a panic says which command it came out of (crash.go)
 		if len(c.Args) == 0 && len(args) > 0 {
 			return fmt.Errorf("%s takes no arguments, and was given %d", name, len(args))
 		}
