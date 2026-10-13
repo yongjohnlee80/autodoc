@@ -93,6 +93,7 @@ var sqliteSuites = []struct {
 	{"ReadingNeverWrites", TestReadingNeverWrites},
 	{"AddWithAnAssigneeIsAnAssignment", TestAddWithAnAssigneeIsAnAssignment},
 	{"ClaimRewritesLegacyWorkspaceRefs", TestClaimRewritesLegacyWorkspaceRefs},
+	{"EachRootsClaimRewritesItsOwnLegacyRefs", TestEachRootsClaimRewritesItsOwnLegacyRefs},
 	{"TheFirstWriteKeepsTheBaseline", TestTheFirstWriteKeepsTheBaseline},
 	{"TheVerbsServeTheManager", TestTheVerbsServeTheManager},
 	{"EveryVerbAnswers", TestEveryVerbAnswers},

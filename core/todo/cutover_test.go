@@ -109,3 +109,38 @@ func TestClaimRewritesLegacyWorkspaceRefs(t *testing.T) {
 		t.Errorf("a relative legacy workspace: %v", err)
 	}
 }
+
+// TestEachRootsClaimRewritesItsOwnLegacyRefs: several Neovim roots share one store (the KB's), and
+// auto-core's shim claims it once per root, each with that root as legacy_workspace. The rewrite is
+// per root: A's claim rewrites only the refs that resolve under A; B's later claim, of a store
+// already claimed, rewrites B's; a repeat of A's claim changes nothing.
+func TestEachRootsClaimRewritesItsOwnLegacyRefs(t *testing.T) {
+	e := newEnv(t)
+	a, b := "/home/u/src/a", "/home/u/src/b"
+	e.disk.WriteFile(a+"/docs/x.md", []byte("x"))
+	e.disk.WriteFile(b+"/docs/y.md", []byte("y"))
+	e.disk.WriteFile(kbStore+"/open/ta.md", []byte(taskFile("ta", "open", "adr:\n  - $WORKSPACE/docs/x.md")))
+	e.disk.WriteFile(kbStore+"/open/tb.md", []byte(taskFile("tb", "open", "adr:\n  - $WORKSPACE/docs/y.md")))
+
+	e.must(e.m.Claim(ctx, kb, todo.ClaimOpts{LegacyWorkspace: a}))
+	if got := e.get("ta").ADR; !reflect.DeepEqual(got, []string{"$HOME/src/a/docs/x.md"}) {
+		t.Errorf("A's claim, A's ref: %v", got)
+	}
+	if got := e.get("tb").ADR; !reflect.DeepEqual(got, []string{"$WORKSPACE/docs/y.md"}) {
+		t.Errorf("A's claim rewrote B's ref: %v", got)
+	}
+
+	e.must(e.m.Claim(ctx, kb, todo.ClaimOpts{LegacyWorkspace: b})) // the store is claimed already
+	if got := e.get("tb").ADR; !reflect.DeepEqual(got, []string{"$HOME/src/b/docs/y.md"}) {
+		t.Errorf("B's claim of the claimed store, B's ref: %v", got)
+	}
+	if got := e.get("ta").ADR; !reflect.DeepEqual(got, []string{"$HOME/src/a/docs/x.md"}) {
+		t.Errorf("B's claim changed A's ref: %v", got)
+	}
+
+	rows, files := len(e.rows()), []string{e.read(kbStore + "/open/ta.md"), e.read(kbStore + "/open/tb.md")}
+	e.must(e.m.Claim(ctx, kb, todo.ClaimOpts{LegacyWorkspace: a}))
+	if len(e.rows()) != rows || e.read(kbStore+"/open/ta.md") != files[0] || e.read(kbStore+"/open/tb.md") != files[1] {
+		t.Error("a repeat of A's claim changed something")
+	}
+}
