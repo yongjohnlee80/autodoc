@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/clock"
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
+	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
 )
 
 // The defaults of Options' durations.
@@ -110,6 +111,10 @@ type Ingester struct {
 	// lock is the writer lock while it is held, nil otherwise. It is atomic because Confirm reads
 	// it from another goroutine (the embedding worker's) while this one takes and releases it.
 	lock atomic.Pointer[pgstore.WriterLock]
+	// state is the last pass's and refresh's outcome (State), and waiting whether Acquire waits for
+	// another server's lock: an operator's status reads them from another goroutine
+	state   atomic.Pointer[State]
+	waiting atomic.Bool
 }
 
 // beforeCommit, when set, runs before each commit and fails it with its error: a test's way to
@@ -151,7 +156,9 @@ func (in *Ingester) Acquire(ctx context.Context) error {
 	if in.lock.Load() != nil {
 		return nil
 	}
+	defer in.waiting.Store(false)
 	l, err := pgstore.AcquireWriter(ctx, in.locks, in.o.Schema, in.tenant, in.o.LockPoll, func(holder int64) {
+		in.waiting.Store(true)
 		logger.Notice(in.o.Log, fmt.Sprintf("tenant %s: waiting for its writer lock, held by backend %d (another server)", in.tenant, holder))
 	})
 	if err != nil {
@@ -638,6 +645,70 @@ func (in *Ingester) docs(ctx context.Context) (map[string]pgstore.DocInfo, error
 	}
 }
 
+// viewError is a view's query failing on the business database, as an operator's status tells it
+// from the index's own database (opcode.View).
+type viewError struct{ error }
+
+func (e viewError) Unwrap() error { return e.error }
+
+// Outcome is how a pass or a refresh ended: when, what it did, and its failure's code.
+type Outcome struct {
+	At    time.Time // the zero time: none yet
+	Stats Stats
+	Error opcode.Code
+}
+
+// State is what an ingester shows an operator (enterprise/ops): whether it holds its tenant's
+// writer lock or waits for another server's, and how its last pass and refresh ended. It is
+// published whole after each change, and safe to read from any goroutine.
+type State struct {
+	Locked, Waiting       bool
+	LastPass, LastRefresh Outcome
+}
+
+// State is the ingester's state now.
+func (in *Ingester) State() State {
+	st := State{}
+	if p := in.state.Load(); p != nil {
+		st = *p
+	}
+	st.Locked = in.lock.Load() != nil
+	st.Waiting = !st.Locked && in.waiting.Load()
+	return st
+}
+
+// record publishes how a run ended, as its kind's outcome.
+func (in *Ingester) record(kind string, st Stats, err error) {
+	next := State{}
+	if p := in.state.Load(); p != nil {
+		next = *p
+	}
+	o := Outcome{At: in.o.Clock.Now(), Stats: st, Error: codeOf(err)}
+	if kind == "refresh" {
+		next.LastRefresh = o
+	} else {
+		next.LastPass = o
+	}
+	in.state.Store(&next)
+}
+
+// codeOf is err's code for an operator: the lock, the view's order, the view's query, or the
+// index's database, which every other failure of a run is.
+func codeOf(err error) opcode.Code {
+	var ve viewError
+	switch {
+	case err == nil:
+		return opcode.None
+	case errors.Is(err, ErrLockLost):
+		return opcode.LockLost
+	case errors.Is(err, ErrOrder), errors.Is(err, ErrStalled):
+		return opcode.Order
+	case errors.As(err, &ve):
+		return opcode.View
+	}
+	return opcode.Database
+}
+
 // count records how many rows wait in quarantine.
 func (in *Ingester) count(ctx context.Context, st *Stats) {
 	if held, err := in.st.Quarantined(ctx, countCap); err == nil {
@@ -727,6 +798,9 @@ func (in *Ingester) loop(ctx context.Context) error {
 		} else {
 			st, err = in.Pass(ctx)
 		}
+		if ctx.Err() == nil {
+			in.record(kind, st, err)
+		}
 		switch {
 		case errors.Is(err, ErrLockLost):
 			return err
@@ -779,7 +853,7 @@ func readPage(ctx context.Context, src *Source, conn dao.DataConn, after pgstore
 	}
 	rows, err := src.v.WithArgs(after.UpdatedAt, afterID, upto).Query(ctx, conn)
 	if err != nil {
-		return nil, err
+		return nil, viewError{err}
 	}
 	var out []row
 	prev := after.UpdatedAt

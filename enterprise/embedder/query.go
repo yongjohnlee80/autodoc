@@ -2,11 +2,15 @@ package embedder
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/search/embed"
 	"github.com/yongjohnlee80/golib/search/vector"
+
+	"github.com/yongjohnlee80/autodoc/enterprise/opcode"
 )
 
 // queryState is what a search's query needs of the worker, published whole by Run's goroutine and
@@ -62,4 +66,60 @@ func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
 		}
 		return st.fp, vector.Normalize(vecs[0]), nil
 	}
+}
+
+// The provider's states, as Health reports them.
+const (
+	ProviderStarting = "starting" // not set up yet
+	ProviderUp       = "up"       // set up, and its last call succeeded
+	ProviderDown     = "down"     // failing: searches answer by words, and the worker keeps trying
+)
+
+// Health is the provider's state as an operator sees it (enterprise/ops): starting, up or down, the
+// model's fingerprint once it is set up, and the last failure's code, never its text.
+type Health struct {
+	State string
+	Model string
+	Error opcode.Code
+}
+
+// Health is the provider's state now. It may be called from any goroutine.
+func (w *Worker) Health() Health {
+	if h := w.health.Load(); h != nil {
+		return *h
+	}
+	return Health{State: ProviderStarting}
+}
+
+// healthy publishes the provider up, or down with err's code. Run's goroutine alone calls it.
+func (w *Worker) healthy(err error) {
+	h := Health{State: ProviderUp, Model: w.fp}
+	if err != nil {
+		h.State, h.Error = ProviderDown, providerCode(err)
+	}
+	if w.p == nil {
+		h.Model = "" // not set up yet
+	}
+	w.health.Store(&h)
+}
+
+// providerCode is a worker's failure as an operator's code: the provider's three, the index's
+// database (every store call is one), or other.
+func providerCode(err error) opcode.Code {
+	switch {
+	case errors.Is(err, embed.ErrUnauthorized):
+		return opcode.ProviderRefused
+	case errors.Is(err, embed.ErrUnreachable):
+		return opcode.ProviderUnreachable
+	case errors.Is(err, embed.ErrRejected):
+		return opcode.ProviderRejected
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return opcode.Other
+	}
+	var dbErr interface{ SQLState() string }
+	var netErr *net.OpError
+	if errors.As(err, &dbErr) || errors.As(err, &netErr) {
+		return opcode.Database // the provider's own network failures are ErrUnreachable, above
+	}
+	return opcode.Other
 }
