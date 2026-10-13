@@ -250,8 +250,8 @@ terminal, as below; where it cannot, it shows the block's source and why.
   todos panel shows them, in a large panel at the left (about 65% of the window wide and 80% tall
   until you size it; the size and the side you leave it at are kept). Along the top, a dropdown
   chooses the store shown among the ones AutoDoc knows (the workspace's first), by its label or its
-  name; beside it, icons make a new store (`✚`), load one from a folder (`⎘`), rename the store
-  shown (`✎`, its label, AutoDoc's own) and refresh it (`⟳`). Under them the tabs, Open, In
+  name; under it, buttons make a new store (New), load one from a folder (Load), rename the store
+  shown (Edit: its label, AutoDoc's own) and refresh it (Refresh), framed; then the tabs, Open, In
   progress, Deferred, Completed and Archived, each a numbered table of its tasks; Archived lists
   its months, a month's tasks beside them. Under the tabs the task under the cursor's details,
   then one row of the actions that apply: Status…, Assign and Remove on a task, and Add. A store

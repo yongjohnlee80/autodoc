@@ -13,10 +13,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
-// Under --gui's style the todos panel is the TUI's, the same QML: the store's dropdown and the icons
-// along the top, a tab per status; on a task its action row is Status…, Assign, Remove and Add on one
-// line, nothing greyed; ? opens the card of its keys and ? closes it; s's picker moves the task to
-// deferred, the Deferred tab showing.
+// Under --gui's style the todos panel is the TUI's, the same QML: the store's dropdown, its buttons
+// as words (a glyph the window's font lacks was a box), framed above the tabs, a tab per status; on
+// a task its action row is Status…, Assign, Remove and Add on one line, nothing greyed; ? opens the
+// card of its keys and ? closes it; s's picker moves the task to deferred, the Deferred tab showing.
 func TestTheGUITodosPanelActionRowCardAndStatusPicker(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
@@ -43,9 +43,10 @@ func TestTheGUITodosPanelActionRowCardAndStatusPicker(t *testing.T) {
 		return err == nil && len(l.Tasks) == 1
 	})
 	r.s.WaitForText(t, "status: deferred")
-	for _, icon := range []string{"✚", "⎘", "✎", "⟳"} {
-		if !strings.Contains(r.s.String(), icon) {
-			t.Errorf("the top bar lacks %s", icon)
-		}
-	}
+	// the store bar's buttons are words, not icon glyphs a window font may lack, under the
+	// dropdown, the bar framed above the tabs
+	r.s.WaitFor(t, "the store bar, framed, its words", func(sc string) bool {
+		_, left, right := panelFrame(sc)
+		return right > 0 && storeBar(sc, left, right)
+	})
 }

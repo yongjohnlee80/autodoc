@@ -51,7 +51,7 @@ func labelledStores(prefs map[string]any) *scriptedCore {
 }
 
 // TestTodosLabelAStoreAndClearIt: the dropdown shows the stores by their derived names; L (the top
-// bar's ✎) renames the store shown (a read-only one too: the label is AutoDoc's), kept as a
+// bar's Edit) renames the store shown (a read-only one too: the label is AutoDoc's), kept as a
 // preference by the store's id, so a new panel (a restart) shows it, and the store stays shown; an
 // empty label is the derived name again. Two stores may share a label: the heading, the store's
 // folder, tells them apart. The store's files are never written.

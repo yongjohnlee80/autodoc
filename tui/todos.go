@@ -989,7 +989,7 @@ func (t *todos) followTask(task map[string]any, status string) {
 	t.focusTab()
 }
 
-// label is L, and the top bar's ✎: the store shown's label asked for (todoLabel), its own filled
+// label is L, and the store bar's Edit: the store shown's label asked for (todoLabel), its own filled
 // in. A label is AutoDoc's alone, so a read-only store takes one too.
 func (t *todos) label() {
 	s := t.cur
@@ -1020,7 +1020,7 @@ func (t *todos) labelSet(text string) {
 	})
 }
 
-// refresh is R, and the top bar's ⟳: the daemon reconciles the store's active buckets, then the
+// refresh is R, and the store bar's Refresh: the daemon reconciles the store's active buckets, then the
 // tab shown is read again.
 func (t *todos) refresh() {
 	s := t.cur

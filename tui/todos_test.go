@@ -245,6 +245,33 @@ func TestTodosStoreDropdownShowsOneStore(t *testing.T) {
 	r.s.WaitFor(t, "kb's task gone", func(sc string) bool { return !strings.Contains(sc, "A kb task") })
 }
 
+// storeBar reports whether the panel, its frame from column left to right, shows the store bar as
+// Johno asked: framed, titled store, so a line runs across the panel between it and the tabs; in it
+// the dropdown (kb) on a row of its own, and under it the buttons as words, on one row, whole.
+func storeBar(sc string, left, right int) bool {
+	lines := strings.Split(sc, "\n")
+	inside := func(l string) string {
+		r := []rune(l)
+		if len(r) <= right || r[left] != '│' || r[right] != '│' {
+			return ""
+		}
+		return string(r[left+1 : right])
+	}
+	for i := 0; i+4 < len(lines); i++ {
+		top := inside(lines[i])
+		if !strings.HasPrefix(top, "┌ store ") {
+			continue
+		}
+		store, words, bottom := inside(lines[i+1]), inside(lines[i+2]), inside(lines[i+3])
+		width := right - left - 1
+		return strings.Contains(store, "kb") && strings.Contains(store, "▾") &&
+			strings.Contains(words, "[ New ] [ Load ] [ Edit ] [ Refresh ] [ ? ]") &&
+			bottom == "└"+strings.Repeat("─", width-2)+"┘" &&
+			strings.Contains(lines[i+4], "Open") && strings.Contains(lines[i+4], "In progress")
+	}
+	return false
+}
+
 // panelFrame is where the todos panel's frame is on the screen: its heading's row and its left and
 // right corners' columns, or -1.
 func panelFrame(sc string) (row, left, right int) {
@@ -264,8 +291,9 @@ func panelFrame(sc string) (row, left, right int) {
 }
 
 // TestTodosPanelOpensLargeWithOneActionRow: on an 80 × 40 screen the panel opens large at the left
-// edge, 65% of the width (52 columns) and 80% of the height (32 rows, centred); its top bar is the
-// store's dropdown and the icons on one line; on a task its actions are one row, Status…, Assign,
+// edge, 65% of the width (52 columns) and 80% of the height (32 rows, centred); along the top the
+// store's dropdown, under it its buttons as words (New, Load, Edit, Refresh, ?) on one row, whole,
+// framed, so a line runs across the panel above the tabs; on a task its actions are one row, Status…, Assign,
 // Remove and Add, whole, and nothing else. A click on Status… opens the picker, and the task moves
 // to the status chosen, the cursor following it. A size the user gives the panel is kept, and wins.
 func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
@@ -279,15 +307,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 		row, left, right := panelFrame(sc)
 		return row == 4 && left == 0 && right == 51
 	})
-	r.s.WaitFor(t, "the top bar on one line", func(sc string) bool {
-		for _, line := range strings.Split(sc, "\n") {
-			if strings.Contains(line, "kb") && strings.Contains(line, "[ ✚ ]") && strings.Contains(line, "[ ⎘ ]") &&
-				strings.Contains(line, "[ ✎ ]") && strings.Contains(line, "[ ⟳ ]") {
-				return true
-			}
-		}
-		return false
-	})
+	r.s.WaitFor(t, "the store bar, framed, its words", func(sc string) bool { return storeBar(sc, 0, 51) })
 	var x, y int
 	r.s.WaitFor(t, "the task's action row", func(sc string) bool {
 		for i, line := range strings.Split(sc, "\n") {
@@ -299,7 +319,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 		return false
 	})
 	sc := r.s.String()
-	for _, absent := range []string{"Preview (i)", "Status ▶", "◀ Status", "read-only until"} {
+	for _, absent := range []string{"Preview (i)", "Status ▶", "◀ Status", "read-only until", "✚", "⎘", "✎", "⟳"} {
 		if strings.Contains(sc, absent) {
 			t.Errorf("on a task the panel shows %q:\n%s", absent, sc)
 		}

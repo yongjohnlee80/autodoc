@@ -486,29 +486,37 @@ Window {
                 // ---- end of the todos's keys ----
                 Flex {
                     direction: Tui.Vertical
-                    // the top bar: the store shown, the others in its dropdown; on the right, icons
-                    // (narrow glyphs, one cell in a terminal as in the window) for a new store, one
-                    // loaded from a folder, the store's name (its label), refresh, and the keys
-                    Flex {
-                        direction: Tui.Horizontal
-                        ComboBox {
-                            id: todoStore
-                            toolTipText: "the todo store shown: choose another (S)"
-                            model: App.todoStores
-                            textRole: "label"
-                            currentIndex: App.todoStoreIndex
-                            onActivated: App.todoStoreChosen(index)
+                    // the store bar, framed, so a line runs between it and the tabs (golib's Text
+                    // cuts a rule with an ellipsis): the store shown, the others in its dropdown, on
+                    // a row of its own; under it the store's buttons, words (an icon glyph is a box in
+                    // a font that lacks it), on the right. The words and a store's name do not fit
+                    // one row of the panel's 52 columns on an 80-column screen, so each has its own.
+                    Frame {
+                        title: "store"
+                        Flex {
+                            direction: Tui.Vertical
+                            ComboBox {
+                                id: todoStore
+                                toolTipText: "the todo store shown: choose another (S)"
+                                model: App.todoStores
+                                textRole: "label"
+                                currentIndex: App.todoStoreIndex
+                                onActivated: App.todoStoreChosen(index)
+                            }
+                            Flex {
+                                direction: Tui.Horizontal
+                                Text { text: " "; Layout.fillWidth: true }
+                                Button { text: "New"; toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
+                                Text { text: " " }
+                                Button { text: "Load"; toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
+                                Text { text: " " }
+                                Button { text: "Edit"; toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
+                                Text { text: " " }
+                                Button { text: "Refresh"; toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
+                                Text { text: " " }
+                                Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
+                            }
                         }
-                        Text { text: " "; Layout.fillWidth: true }
-                        Button { text: "✚"; toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
-                        Text { text: " " }
-                        Button { text: "⎘"; toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
-                        Text { text: " " }
-                        Button { text: "✎"; toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
-                        Text { text: " " }
-                        Button { text: "⟳"; toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
-                        Text { text: " " }
-                        Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
                     }
                     // a tab per status, each a numbered table of its tasks; Archived its months, and
                     // the open month's tasks beside them
