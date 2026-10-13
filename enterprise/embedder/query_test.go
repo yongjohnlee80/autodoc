@@ -175,6 +175,9 @@ func TestQueriesAcrossTheWorkersLifeAreCoherent(t *testing.T) {
 	}
 	st.active = "fake|old||4"
 	p := newProvider("m")
+	// the fill's batches wait until a query has met the switch, so the switch is exercised
+	// whatever the scheduler does: a fill that finished before any query ran would skip it
+	p.hold = make(chan struct{})
 	var builds atomic.Int32
 	build := func(context.Context) (embed.Provider, error) {
 		if builds.Add(1) <= 2 {
@@ -213,6 +216,8 @@ func TestQueriesAcrossTheWorkersLifeAreCoherent(t *testing.T) {
 		}()
 	}
 	stop := run(t, w)
+	waitFor(t, "a query meeting the switch", func() bool { return switching.Load() > 0 })
+	close(p.hold)
 	waitFor(t, "queries embedded after the flip", func() bool { return embedded.Load() > 10 })
 	stop()
 	cancel()
