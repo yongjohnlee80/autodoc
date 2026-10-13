@@ -99,6 +99,20 @@ expanded before matching. Existing workspaces keep their stored include patterns
 that still has a `[[workspace]]` section is
 refused with a message saying so.
 
+**A document's resources.** A design doc often shows files beside it, as `![flow](plan/flow.mmd)`:
+diagrams, tables, pages. Include the ones that hold text, and they are searched with it and tied to
+it:
+
+```
+**/*.md   **/*.mmd   **/*.csv   **/*.html
+```
+
+- Mermaid (`.mmd`) and CSV (`.csv`) are read as plain text, and HTML as the text derived from the
+  page. Leave pictures and other binary files out: a file AutoDoc does not know is read as Markdown.
+- `![alt](path)` is an embed of the workspace path it names, as `![[./path]]` is: the resource's
+  backlinks name the document that shows it. It is a link only to a note or to a file the
+  workspace indexes, so a picture left out is not a missing link.
+
 `Go › Manage workspaces…` lists the workspaces by title and directory on the left, and the settings
 of the one under the cursor on the right. **Its settings are one dialog with two tabs**, opened by
 Add…, Edit… or Advanced…; Ctrl+PageUp and Ctrl+PageDown switch tabs, and Enter in a field saves:
@@ -995,7 +1009,7 @@ func main() {
 ```
 
 - **They are checked once, at the start.** A chunker's extension that is upper-case, built in (`.md`,
-  `.txt`, `.yaml`, `.yml`), one of golib's code types or a derived format; a deriver's format that
+  `.txt`, `.yaml`, `.yml`, `.mmd`, `.csv`), one of golib's code types or a derived format; a deriver's format that
   every build already derives (`.docx`, `.htm`, `.html`); or a version outside `[A-Za-z0-9._+-]{1,32}` (a deriver's id
   may hold `/` too, up to 64), stops the binary, naming it. Each version is read once.
 - **A registered file is code, read as text.** Its kind is the chunker's, after the built-in kinds and

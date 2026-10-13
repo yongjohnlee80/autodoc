@@ -62,7 +62,7 @@ type Registrations struct{ Chunked, Derived []string }
 func (r Registrations) Of(p string, text []string) Kind {
 	ext := Ext(p)
 	switch ext {
-	case ".txt":
+	case ".txt", ".mmd", ".csv":
 		return Text
 	case ".yaml", ".yml":
 		return YAML
@@ -98,8 +98,13 @@ type ErrExtension struct{ Ext, Why string }
 
 func (e *ErrExtension) Error() string { return fmt.Sprintf("kind: %q: %s", e.Ext, e.Why) }
 
-// builtIn are the extensions whose kind is fixed.
-var builtIn = []string{".md", ".txt", ".yaml", ".yml"}
+// builtIn are the extensions whose kind is fixed. Mermaid diagrams (.mmd) and CSV tables are plain
+// text everywhere: read as Markdown they would be cut and parsed as prose.
+var builtIn = []string{".md", ".txt", ".yaml", ".yml", ".mmd", ".csv"}
+
+// nowBuiltIn are built-in text extensions a workspace could declare before they were built in. One
+// is still accepted, and dropped as already read as text, so a workspace's saved list saves again.
+var nowBuiltIn = []string{".mmd", ".csv"}
 
 // IsBuiltIn reports whether ext (lowercased, with its dot) is a built-in kind's.
 func IsBuiltIn(ext string) bool { return slices.Contains(builtIn, ext) }
@@ -121,7 +126,7 @@ func ValidExtension(e string) bool {
 
 // TextExtensions normalizes a workspace's own plain-text extensions: each lowercased with its dot,
 // 1 to 16 letters, digits, '_', '+' or '-' after it, none a built-in kind's or a derived format's, in
-// the order given without repeats. They are plain text by declaration: nothing is sniffed.
+// the order given without repeats. A now built-in text extension (nowBuiltIn) is dropped, not refused. They are plain text by declaration: nothing is sniffed.
 func TextExtensions(in []string) ([]string, error) {
 	out := []string{}
 	for _, raw := range in {
@@ -137,6 +142,8 @@ func TextExtensions(in []string) ([]string, error) {
 			return nil, &ErrExtension{raw, "an extension is a dot and 1 to 16 letters, digits, _, + or -"}
 		case slices.Contains(DerivedExtensions, e):
 			return nil, &ErrExtension{raw, "a derived document format, read as its derived text"}
+		case slices.Contains(nowBuiltIn, e):
+			continue
 		case slices.Contains(builtIn, e):
 			return nil, &ErrExtension{raw, "already a built-in kind"}
 		}

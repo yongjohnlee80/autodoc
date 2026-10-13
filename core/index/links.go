@@ -46,8 +46,10 @@ var attachments = map[string]bool{
 	".mkv": true, ".mov": true, ".mp4": true, ".ogv": true,
 }
 
-// extractLinks takes the links of file p, in source order: wikilinks and embeds, and markdown
-// links. Left out: a link to a heading or block of p itself, a URL, a path out of the workspace, and
+// extractLinks takes the links of file p, in source order: wikilinks and embeds, markdown links, and
+// markdown images, which embed a workspace path as a relative-path embed does (![d](flow.mmd) is
+// ![[./flow.mmd]]). An image counts only as a markdown link does: with ".md" or no extension, or when
+// eligible indexes it, so a picture the workspace leaves out is not a missing link. Left out: a link to a heading or block of p itself, a URL, a path out of the workspace, and
 // a file that is not a file. A wikilink names a file unless it names an attachment (a page may hold
 // dots: "Meeting 2024.05.01"); a markdown link, which names files of every kind (a KB links to its
 // code), only with ".md" or no extension. Either counts when eligible (nil: nothing) indexes it,
@@ -98,6 +100,10 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 			case markdown.KindLink:
 				if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
 					out = append(out, DocLink{Raw: string(doc.Source[c.Span.Start:c.Span.End]), Name: target, Anchor: anchor, Kind: LinkMarkdown})
+				}
+			case markdown.KindImage:
+				if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
+					out = append(out, DocLink{Raw: string(doc.Source[c.Span.Start:c.Span.End]), Name: exactName(wikiName(target)), Anchor: anchor, Kind: LinkEmbed})
 				}
 			}
 			walk(c)

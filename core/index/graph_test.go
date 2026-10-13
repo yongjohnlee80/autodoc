@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/parse/markdown"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // put writes and indexes files, path then content.
@@ -110,6 +112,43 @@ func TestExtractLinks(t *testing.T) {
 		pdf = append(pdf, l.Name)
 	}
 	eq(t, "indexed attachment types", pdf, []string{"doc.pdf", "notes/run.sh", "/assets/d.pdf", "assets/e.pdf"})
+
+	// a markdown image embeds the workspace path it names, as a relative-path embed does: a note, or a
+	// file the workspace indexes; a picture it leaves out, a URL and a path out of the root are not links
+	var imgs []string
+	src = "![flow](d/flow.mmd \"height=420\") ![p](pic.png) ![n](../top.md#Sec) ![w](https://x.io/a.png) ![o](../../out.mmd) ![b](plain)\n"
+	for _, l := range extractLinks(markdown.Parse([]byte(src), markdown.GFM(), markdown.Obsidian()), "notes/n.md",
+		func(p string) bool { return strings.HasSuffix(p, ".mmd") }) {
+		imgs = append(imgs, fmt.Sprintf("%s %s #%s %s", l.Kind, l.Name, l.Anchor, l.Raw))
+	}
+	eq(t, "images", imgs, []string{
+		`embed /notes/d/flow.mmd # ![flow](d/flow.mmd "height=420")`,
+		"embed /top #Sec ![n](../top.md#Sec)",
+		"embed /notes/plain # ![b](plain)",
+	})
+}
+
+// TestAnImageTiesAResourceToItsDocument: ![](flow.mmd) resolves to the indexed resource, which then
+// names the document among its backlinks, and is read as text; a picture left out of the workspace
+// is no link at all, so not a missing one.
+func TestAnImageTiesAResourceToItsDocument(t *testing.T) {
+	e := newEnv(t, options{Match: func(p string) bool { return strings.HasSuffix(p, ".md") || strings.HasSuffix(p, ".mmd") }})
+	e.put("docs/plan.md", "# Plan\n\n![The flow](plan/flow.mmd)\n\n![shot](plan/shot.png)\n",
+		"docs/plan/flow.mmd", "graph TD\n  drain --> claim\n")
+	eq(t, "links", e.targets("docs/plan.md"), []string{"![The flow](plan/flow.mmd) -> docs/plan/flow.mmd"})
+	bs, err := e.store.Backlinks(context.Background(), "docs/plan/flow.mmd", nil)
+	if err != nil || len(bs) != 1 || bs[0].Path != "docs/plan.md" || bs[0].Kind != LinkEmbed {
+		t.Fatalf("the resource's backlinks = %+v, %v; want the document that shows it", bs, err)
+	}
+	eq(t, "unresolved", e.unresolved(), nil)
+	if k := e.ix.Kind("docs/plan/flow.mmd"); k != kind.Text {
+		t.Errorf("flow.mmd is read as %v, want text", k)
+	}
+	// the edge follows the resource: gone, the link is missing; back, it resolves again
+	e.remove("docs/plan/flow.mmd")
+	eq(t, "resource gone", e.targets("docs/plan.md"), []string{"![The flow](plan/flow.mmd) -> -"})
+	e.put("docs/plan/flow.mmd", "graph TD\n  a --> b\n")
+	eq(t, "resource back", e.targets("docs/plan.md"), []string{"![The flow](plan/flow.mmd) -> docs/plan/flow.mmd"})
 }
 
 // TestResolutionRules: each rule of ADR 0204 §4.6, and the markdown forms.

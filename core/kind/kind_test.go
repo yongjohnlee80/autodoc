@@ -11,6 +11,7 @@ func TestOf(t *testing.T) {
 	for p, want := range map[string]Kind{
 		"a.md": Markdown, "a.MD": Markdown, "README": Markdown, "x.adoc": Markdown,
 		"n.txt": Text, "n.TXT": Text, "app.log": Text, "doc.rst": Text,
+		"flow.mmd": Text, "flow.MMD": Text, "rows.csv": Text, // diagrams and tables are plain text everywhere
 		"c.yaml": YAML, "c.YML": YAML,
 		"r.pdf": Derived, "r.DOCX": Derived, "r.doc": Derived, "r.odt": Derived,
 	} {
@@ -27,6 +28,12 @@ func TestTextExtensions(t *testing.T) {
 	got, err := TextExtensions([]string{"log", " .RST ", ".log", "", "c++"})
 	if err != nil || !reflect.DeepEqual(got, []string{".log", ".rst", ".c++"}) {
 		t.Fatalf("TextExtensions = %v, %v", got, err)
+	}
+	// .mmd and .csv were a workspace's to declare before they were built in: a saved list holding them
+	// still saves, without them
+	got, err = TextExtensions([]string{".mmd", "log", "CSV"})
+	if err != nil || !reflect.DeepEqual(got, []string{".log"}) {
+		t.Fatalf("TextExtensions with the now built-in .mmd and .csv = %v, %v", got, err)
 	}
 	for _, bad := range []string{".pdf", "DOCX", ".md", "txt", ".yml", "a b", ".", ".toolongextension17", "../x"} {
 		var e *ErrExtension
