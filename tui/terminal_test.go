@@ -396,7 +396,7 @@ func TestTheTerminalCommandOpensTheTerminal(t *testing.T) {
 	r.command(t, "terminal")
 	r.s.WaitForText(t, "┌ terminal")
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.keys(t, esc(), esc()) // Normal mode, then hidden
+	r.keys(t, ctrlKey('t'), esc()) // Normal mode, then hidden
 	r.s.WaitFor(t, "the pane hidden", func(sc string) bool { return !strings.Contains(sc, "┌ terminal") })
 	r.command(t, "term")
 	r.s.WaitForText(t, "┌ terminal")
