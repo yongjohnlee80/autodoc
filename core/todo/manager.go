@@ -48,11 +48,12 @@ type Manager struct {
 }
 
 type options struct {
-	now    func() time.Time
-	log    logger.Logger
-	home   string
-	env    func(string) string
-	events func(Event)
+	now          func() time.Time
+	log          logger.Logger
+	home         string
+	env          func(string) string
+	events       func(Event)
+	refreshCheck time.Duration
 }
 
 // Option configures New.
@@ -73,9 +74,13 @@ func WithEnv(env func(string) string) Option { return func(o *options) { o.env =
 // WithEvents receives what the host records in sys.events beyond the verbs' own events.
 func WithEvents(fn func(Event)) Option { return func(o *options) { o.events = fn } }
 
+// WithRefreshCheck sets how often RefreshDaily looks for a claimed store due its daily refresh;
+// an hour by default. Whether a store is due is the clock's (WithClock), not this interval's.
+func WithRefreshCheck(d time.Duration) Option { return func(o *options) { o.refreshCheck = d } }
+
 // New is the todo system over the daemon's workspaces, its disk and its journal.
 func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manager {
-	o := options{now: time.Now, log: logger.Nop{}}
+	o := options{now: time.Now, log: logger.Nop{}, refreshCheck: time.Hour}
 	for _, opt := range opts {
 		opt(&o)
 	}
@@ -481,22 +486,28 @@ func (m *Manager) writable(ctx context.Context, at At) (where, error) {
 	if err != nil {
 		return w, err
 	}
+	return w, m.mayWrite(ctx, w)
+}
+
+// mayWrite reports why a resolved store may not be written: not writable, not claimed, or blocked
+// by an ambiguous move.
+func (m *Manager) mayWrite(ctx context.Context, w where) error {
 	if !w.writable {
-		return w, fmt.Errorf("%w: %s", ErrNotWritable, w.rec.Path)
+		return fmt.Errorf("%w: %s", ErrNotWritable, w.rec.Path)
 	}
 	if !w.rec.Claimed {
-		return w, fmt.Errorf("%w: %s", ErrUnclaimed, w.rec.Path)
+		return fmt.Errorf("%w: %s", ErrUnclaimed, w.rec.Path)
 	}
 	if err := m.recoverMoves(ctx, w.rec.ID, false); err != nil {
-		return w, err
+		return err
 	}
 	m.mu.Lock()
 	why := m.blocked[w.rec.ID]
 	m.mu.Unlock()
 	if why != "" {
-		return w, fmt.Errorf("%w: %s: %s", ErrNotWritable, w.rec.Path, why)
+		return fmt.Errorf("%w: %s: %s", ErrNotWritable, w.rec.Path, why)
 	}
-	return w, nil
+	return nil
 }
 
 // Scaffold creates an At's store directory and its buckets, and the owner marker. It is a write:

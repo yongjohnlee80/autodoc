@@ -228,9 +228,11 @@ func (d *process) openFiles() error {
 // the lease-info beside the store: the lease and the socket are both this process's now.
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
+	deps := &moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log}
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files),
-		rpc.WithModules(modules(&moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log})...))
+		rpc.WithModules(modules(deps)...))
+	d.refreshTodos(deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
 	if err := store.WriteLeaseInfo(d.p.Store, li); err != nil {
@@ -241,6 +243,18 @@ func (d *process) buildServer() error {
 	return nil
 }
 
+// refreshTodos runs the todo system's daily refresh of claimed stores (ADR 1791532020 §2.3) for as
+// long as the daemon serves. It stops, its refresh in progress ended, before the store closes.
+func (d *process) refreshTodos(m *todo.Manager) {
+	ctx, cancel := context.WithCancel(d.ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.RefreshDaily(ctx)
+	}()
+	d.stops.push(func() { cancel(); <-done })
+}
+
 // moduleDeps are what the modules' handlers use. nil builds the modules for their contracts alone
 // (--contracts), which never touch them.
 type moduleDeps struct {
@@ -248,6 +262,8 @@ type moduleDeps struct {
 	workspaces rpc.Workspaces
 	journal    todo.Journal // the todos' change log, in the store
 	log        logger.Logger
+
+	todos *todo.Manager // the todo system modules built, for its daily refresh
 }
 
 // modules are the daemon's core Modules, the one list of them: runServe serves them, and
@@ -256,15 +272,17 @@ func modules(d *moduleDeps) []module.Module {
 	if d == nil {
 		return []module.Module{todo.New(nil, nil, nil)}
 	}
-	return []module.Module{todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal,
-		todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) }))}
+	d.todos = todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal,
+		todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) }))
+	return []module.Module{d.todos}
 }
 
 // todoEvent records in sys.events what the todo system saw beyond its verbs' own events: an
-// ambiguous change, a blocked store move, a consumer dropped, a root registered.
+// ambiguous change, a blocked store move, a consumer dropped, a root registered, a daily refresh
+// that changed a store or failed.
 func todoEvent(d *moduleDeps, e todo.Event) {
 	detail := strings.Join(slices.DeleteFunc([]string{e.Path, e.ID, e.Detail}, func(s string) bool { return s == "" }), " · ")
-	if _, err := d.store.AppendEvent(context.Background(), store.Event{Kind: e.Kind, Detail: detail}); err != nil {
+	if _, err := d.store.AppendEvent(context.Background(), store.Event{Kind: e.Kind, Workspace: e.Workspace, Detail: detail}); err != nil {
 		logger.Warning(d.log, err, "logging event "+e.Kind)
 	}
 }

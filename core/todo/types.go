@@ -215,9 +215,13 @@ func (c Consumer) resyncing(now time.Time) bool {
 
 // Event is something the host records in sys.events that no verb's own event covers.
 type Event struct {
-	Kind   string // "todos.ambiguous", "todos.store_move_blocked", "todos.consumer_dropped", "todos.set_dir", "todos.register"
-	Store  string // the store's id
-	Path   string
-	ID     string
-	Detail string
+	// "todos.ambiguous", "todos.store_move_blocked", "todos.consumer_dropped", "todos.set_dir",
+	// "todos.register", "todos.refresh_failed"; and "todos.changed" for a daily refresh that
+	// changed a store, as the verbs log it
+	Kind      string
+	Workspace string // the store's workspace, for a todos.changed of a workspace's store
+	Store     string // the store's id
+	Path      string
+	ID        string
+	Detail    string
 }

@@ -56,6 +56,13 @@ the timestamp shape, a file-safe id).
 `Refresh` reads the active buckets only: archives are never rewritten by it, so an archived
 task's `errors[]` reflect the time it was archived.
 
+The daemon also refreshes each claimed store once a day by itself (`RefreshDaily`, run for as long
+as it serves): at its start for every store whose last daily run is a day old or that never ran,
+then a day after each run. The run is kept in the store's record (`RefreshedAt`), so a restart
+neither repeats nor skips a day. A run that changed the store logs `todos.changed`, as the verb
+does; one that failed is logged and recorded in `sys.events` as `todos.refresh_failed`, and is
+tried again a day later.
+
 ## Cutover
 
 `Claim(ctx, at, ClaimOpts{LegacyWorkspace: dir})` claims the store and then, once, rewrites the

@@ -437,7 +437,19 @@ func (m *Manager) RemoveMalformed(ctx context.Context, at At, p string) error {
 // an interrupted move removed. Archives are not read: a refresh never rewrites them. A refresh
 // that finds nothing to change writes nothing.
 func (m *Manager) Refresh(ctx context.Context, at At) (RefreshSummary, error) {
-	w, st, err := m.writing(ctx, at)
+	w, err := m.resolve(ctx, at)
+	if err != nil {
+		return RefreshSummary{}, err
+	}
+	return m.refresh(ctx, w)
+}
+
+// refresh is Refresh of a resolved store: the verb's, and the daily one's (RefreshDue).
+func (m *Manager) refresh(ctx context.Context, w where) (RefreshSummary, error) {
+	if err := m.mayWrite(ctx, w); err != nil {
+		return RefreshSummary{}, err
+	}
+	w, st, err := m.locked(ctx, w)
 	if err != nil {
 		return RefreshSummary{}, err
 	}

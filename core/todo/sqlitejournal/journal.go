@@ -16,10 +16,11 @@ import (
 )
 
 // THE TODO JOURNAL ON THE STORE — core/todo's Journal port (ADR 1791532020 §2.5) on the store's
-// todo tables (migration 000017; 000018 adds a consumer's resync): each todo store's change log,
-// snapshot and consumers' cursors, and the store, root and var records, all keyed by the store's
-// stable id, never its path. The tables are declared through core/store's seam (store.Declare), so
-// neither core/store nor core/todo imports the other: this package joins them.
+// todo tables (migration 000017; 000018 adds a consumer's resync, 000019 a store's daily refresh):
+// each todo store's change log, snapshot and consumers' cursors, and the store, root and var
+// records, all keyed by the store's stable id, never its path. The tables are declared through
+// core/store's seam (store.Declare), so neither core/store nor core/todo imports the other: this
+// package joins them.
 //
 // Every method is one transaction. A write runs on the store's single writer connection, so Commit
 // and Record write their row and apply their Edit together, and UpdateSettings reads, changes and
@@ -75,6 +76,7 @@ const (
 	tcClaimed      todoCol = "claimed"
 	tcClaimedAt    todoCol = "claimed_at"
 	tcLastUse      todoCol = "last_use"
+	tcRefreshedAt  todoCol = "refreshed_at"
 	tcRoot         todoCol = "root"
 	tcOverride     todoCol = "override"
 	tcRegistered   todoCol = "registered"
@@ -86,9 +88,9 @@ const (
 // The rows, as the tables hold them.
 type (
 	todoStoreRow struct {
-		ID, Path           string
-		Claimed            int64
-		ClaimedAt, LastUse *int64
+		ID, Path                        string
+		Claimed                         int64
+		ClaimedAt, LastUse, RefreshedAt *int64
 	}
 	todoRootRow struct {
 		Root, Override, KBRoot   string
@@ -164,11 +166,12 @@ func todoTable[R any](c dao.DataConn, table string, fields map[todoCol]func(R) a
 func newTodoTables(c dao.DataConn) *todoTables {
 	return &todoTables{
 		stores: todoTable(c, "todo_store", map[todoCol]func(*todoStoreRow) any{
-			tcID:        func(r *todoStoreRow) any { return &r.ID },
-			tcPath:      func(r *todoStoreRow) any { return &r.Path },
-			tcClaimed:   func(r *todoStoreRow) any { return &r.Claimed },
-			tcClaimedAt: func(r *todoStoreRow) any { return &r.ClaimedAt },
-			tcLastUse:   func(r *todoStoreRow) any { return &r.LastUse },
+			tcID:          func(r *todoStoreRow) any { return &r.ID },
+			tcPath:        func(r *todoStoreRow) any { return &r.Path },
+			tcClaimed:     func(r *todoStoreRow) any { return &r.Claimed },
+			tcClaimedAt:   func(r *todoStoreRow) any { return &r.ClaimedAt },
+			tcLastUse:     func(r *todoStoreRow) any { return &r.LastUse },
+			tcRefreshedAt: func(r *todoStoreRow) any { return &r.RefreshedAt },
 		}, []todoCol{tcID}, map[todoSort]string{byKey: `"todo_store"."id"`}),
 		roots: todoTable(c, "todo_root", map[todoCol]func(*todoRootRow) any{
 			tcRoot:         func(r *todoRootRow) any { return &r.Root },
@@ -504,7 +507,7 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 	}
 	for _, r := range stores {
 		s.Stores[r.ID] = todo.StoreRecord{ID: r.ID, Path: r.Path, Claimed: r.Claimed != 0,
-			ClaimedAt: fromNanos(r.ClaimedAt), LastUse: fromNanos(r.LastUse)}
+			ClaimedAt: fromNanos(r.ClaimedAt), LastUse: fromNanos(r.LastUse), RefreshedAt: fromNanos(r.RefreshedAt)}
 	}
 	roots, err := t.roots.On(tx).Select()
 	if err != nil {
@@ -526,7 +529,7 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 func saveSettings(tx *dao.Transaction, t *todoTables, before, after todo.Settings) error {
 	err := syncRecords(after.Stores, before.Stores, func(id string, r todo.StoreRecord) error {
 		return t.stores.On(tx).SetMap(map[todoCol]any{tcID: id, tcPath: r.Path, tcClaimed: flag(r.Claimed),
-			tcClaimedAt: nanos(r.ClaimedAt), tcLastUse: nanos(r.LastUse)}).Upsert()
+			tcClaimedAt: nanos(r.ClaimedAt), tcLastUse: nanos(r.LastUse), tcRefreshedAt: nanos(r.RefreshedAt)}).Upsert()
 	}, func(id string) error { return t.stores.On(tx).With(tcID, id).Delete() })
 	if err != nil {
 		return err

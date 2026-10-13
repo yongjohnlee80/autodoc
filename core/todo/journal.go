@@ -78,11 +78,12 @@ type Settings struct {
 // StoreRecord is a store: a stable id given the first time a root resolves to it, and its
 // canonical path now.
 type StoreRecord struct {
-	ID        string
-	Path      string
-	Claimed   bool
-	ClaimedAt time.Time
-	LastUse   time.Time
+	ID          string
+	Path        string
+	Claimed     bool
+	ClaimedAt   time.Time
+	LastUse     time.Time
+	RefreshedAt time.Time // the daily refresh's last run (RefreshDue); zero for never
 }
 
 // RootRecord is a project root the daemon knows: one registered with Register, one whose store

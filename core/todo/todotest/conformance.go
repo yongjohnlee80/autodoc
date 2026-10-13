@@ -188,7 +188,8 @@ func conformConsumers(t *testing.T, h Harness) {
 func fullSettings() todo.Settings {
 	return todo.Settings{
 		Stores: map[string]todo.StoreRecord{
-			"s1": {ID: "s1", Path: "/p/.todo-list", Claimed: true, ClaimedAt: t0, LastUse: t0.Add(time.Minute).In(pdt)},
+			"s1": {ID: "s1", Path: "/p/.todo-list", Claimed: true, ClaimedAt: t0, LastUse: t0.Add(time.Minute).In(pdt),
+				RefreshedAt: t0.Add(time.Hour)},
 			"s2": {ID: "s2", Path: "/elsewhere/todos"},
 		},
 		Roots: map[string]todo.RootRecord{
@@ -450,7 +451,7 @@ func norm(v any) any {
 	case todo.Settings:
 		out := todo.Settings{Stores: map[string]todo.StoreRecord{}, Roots: map[string]todo.RootRecord{}, Vars: map[string]string{}}
 		for k, r := range v.Stores {
-			r.ClaimedAt, r.LastUse = instant(r.ClaimedAt), instant(r.LastUse)
+			r.ClaimedAt, r.LastUse, r.RefreshedAt = instant(r.ClaimedAt), instant(r.LastUse), instant(r.RefreshedAt)
 			out.Stores[k] = r
 		}
 		for k, r := range v.Roots {
