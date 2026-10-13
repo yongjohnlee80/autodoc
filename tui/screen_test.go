@@ -1994,6 +1994,11 @@ func TestTheVimKeysCard(t *testing.T) {
 	r.s.WaitFor(t, "the card", func(sc string) bool {
 		return strings.Contains(sc, "Vim keys · Normal mode") && strings.Contains(sc, "dd yy  delete, copy the line")
 	})
+	for _, k := range []string{"f t F T  to or till a char", "H M L    top, middle, bottom", "Ctrl+d Ctrl+u  half a page", "w b e ge words on, back, end"} {
+		if !strings.Contains(r.s.String(), k) {
+			t.Errorf("the card does not show %q:\n%s", k, r.s)
+		}
+	}
 	rows := strings.Split(r.s.String(), "\n")
 	for i, row := range rows {
 		if strings.Contains(row, "your own: ~/.config/autodoc/lua") && i != len(rows)-3 {

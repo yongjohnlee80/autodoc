@@ -243,23 +243,26 @@ WHAT A KEY NEEDS
   autodoc --ui <name> opens that workspace; without a name, the one used last.
   Opening, switching or quitting over unsaved changes asks first: Save, Discard or Stay.`
 
-// vimKeysText is the Vim editor mode's card (? in Normal mode, views/VimKeys.qml): golib's Vim
+// vimKeysText is the Vim editor mode's card (? in Normal mode, vimkeys.go): golib's Vim
 // keyset as autodoc's page takes it.
 const vimKeysText = `MOVE                          EDIT
 h j k l  ← ↓ ↑ →              i a    insert before, after the cursor
-w b e    word on, back, end   I A    insert at the line's start, end
-0 $      line's start, end    o O    open a line below, above
-{ }      paragraph back, on   x      delete the character
-gg G     first, last line     D      delete to the line's end
-Ctrl+b Ctrl+f  page up, down  dd yy  delete, copy the line
-                              p P    paste after, before
-SELECT                        u      undo;  Ctrl+r  redo
-v V      characters, lines    Esc    back to Normal
-y d x    copy, delete them
-                              AUTODOC
-FIND                          SPC    the leader card: every command
-/        a word in the pane   SPC SPC, SPC /, Ctrl+G  search the workspace
-n N      again, forward, back ?      this card
+w b e ge words on, back, end  I A    insert at the line's start, end
+W B E gE the same, by spaces  o O    open a line below, above
+0 ^ $    start, text, end     x      delete the character
+Enter -  next, previous line  D      delete to the line's end
+f t F T  to or till a char    dd yy  delete, copy the line
+; ,      that again, back     p P    paste after, before
+%        matching bracket     u      undo;  Ctrl+r  redo
+{ }      paragraph back, on   Esc    back to Normal
+gg G 50% first, last, 50%     SELECT
+H M L    top, middle, bottom  v V    characters, lines
+Ctrl+d Ctrl+u  half a page    y d x  copy, delete them
+Ctrl+b Ctrl+f  page up, down
+FIND                          AUTODOC
+/        a word in the pane   SPC    the leader card: every command
+n N      again, forward, back SPC SPC, SPC /, Ctrl+G  search the workspace
+                              ?      this card
 
 COMMANDS (:, Tab completes)
 :12  go to line 12      :w :q :wq :x :q!  save, quit
