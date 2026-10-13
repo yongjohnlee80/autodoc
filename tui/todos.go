@@ -130,7 +130,7 @@ type todos struct {
 	stores    []*todoStore
 	storeRows *rows[*todoStore]
 	cur       *todoStore
-	// storeIndex is the dropdown's row as last set or chosen
+	// storeIndex is the dropdown's row as last set (-2 before the first)
 	storeIndex int
 	// want is the store to show once the stores are listed again (one just loaded); "" keeps cur
 	want string
@@ -168,7 +168,7 @@ type todos struct {
 }
 
 func newTodos(c Core) *todos {
-	t := &todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -1,
+	t := &todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -2,
 		storeRows: newRows(tuidecl.NewListModel("key", "label"), func(_ int, s *todoStore) rowOf {
 			return rowOf{"key": s.id, "label": s.title()}
 		}),
@@ -570,7 +570,7 @@ func (t *todos) storeChosen(i int) {
 	if i < 0 || i >= len(t.stores) {
 		return
 	}
-	t.storeIndex = i // the dropdown shows it already
+	t.selectStore(i) // the dropdown shows it already: its source follows
 	if t.cur == t.stores[i] {
 		return
 	}
