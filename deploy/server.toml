@@ -1,0 +1,39 @@
+# An example server.toml for the deployment examples (deploy/systemd, deploy/container).
+# Every secret is read from the environment: put them in the unit's EnvironmentFile, or the
+# container's environment, never in this file. docs/enterprise/server-config.md has every field.
+
+[postgres]
+dsn_env = "AUTODOC_SERVER_DSN"
+schema  = "autodoc_search"
+
+[embedding]
+provider = "ollama"
+base_url = "http://ollama:11434"
+model    = "nomic-embed-text"
+
+[http]
+# On every address, in a container: the proxy in front terminates TLS (docs/enterprise/operations.md).
+# Outside a container, keep 127.0.0.1, or give tls_cert and tls_key.
+listen = "0.0.0.0:8730"
+proxy  = true
+
+[[http.client]]
+name      = "lm-web"
+token_env = "LM_WEB_TOKEN"
+[http.client.grants.lm-catalog]
+label_id = ["*"]
+
+[[http.operator]]
+name      = "ops"
+token_env = "AUTODOC_OPS_TOKEN"
+tenants   = ["*"]
+
+[log]
+metrics_interval = "1m"
+
+[[source]]
+tenant        = "lm-catalog"
+view          = "views/track.view"
+access        = ["label_id"]
+refresh       = "24h"
+refresh_retry = "15m"

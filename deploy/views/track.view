@@ -1,0 +1,25 @@
+---
+version: 1
+name: track
+source: postgres
+args: [after_ts, after_id, upto_ts]
+process: |
+  SELECT jsonb_build_object(
+    'id',         t.id,
+    'label_id',   t.label_id,
+    'title',      t.title,
+    'artist',     a.name,
+    'lyric',      t.lyric,
+    'updated_at', GREATEST(t.updated_at, a.updated_at))
+  FROM track t
+  JOIN artist a ON a.id = t.artist_id
+  WHERE (GREATEST(t.updated_at, a.updated_at), t.id) > ($1, $2)
+    AND GREATEST(t.updated_at, a.updated_at) <= $3
+  ORDER BY GREATEST(t.updated_at, a.updated_at), t.id
+  LIMIT 500
+export: track/{{.id}}.md
+---
+# {{.title}}
+by {{.artist}}
+
+{{if .lyric}}{{.lyric}}{{else}}*(Instrumental)*{{end}}

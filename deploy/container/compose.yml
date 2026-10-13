@@ -1,0 +1,42 @@
+# PostgreSQL with pgvector, and autodoc --server beside it: docs/enterprise/operations.md.
+#
+#   docker compose -f deploy/container/compose.yml up -d --build
+#   docker compose -f deploy/container/compose.yml --profile ollama up -d   # with a local model
+#
+# The secrets come from .env next to this file (AUTODOC_SERVER_DSN, LM_WEB_TOKEN, AUTODOC_OPS_TOKEN),
+# never from server.toml.
+
+services:
+  db:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: catalog
+      POSTGRES_PASSWORD: catalog
+      POSTGRES_DB: catalog
+    volumes: ["pgdata:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "catalog"]
+      interval: 5s
+
+  server:
+    build:
+      context: ../..
+      dockerfile: deploy/container/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    volumes:
+      - ../server.toml:/etc/autodoc/server.toml:ro
+      - ../views:/etc/autodoc/views:ro
+    ports: ["8730:8730"]
+    stop_grace_period: 60s
+
+  ollama:
+    image: ollama/ollama
+    profiles: ["ollama"]
+    volumes: ["ollama:/root/.ollama"]
+
+volumes:
+  pgdata:
+  ollama:

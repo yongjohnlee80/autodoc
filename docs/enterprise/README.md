@@ -104,8 +104,8 @@ Enterprise search ships in four steps, each reviewed on its own:
 |---|---|---|
 | **M1** | `autodoc --server` and `--check`, `server.toml`, the `.view` ingestion: the incremental pass, the full refresh, quarantine, the writer lock. These docs. | done |
 | **M2** | The central embedding worker, and switching models without a gap in search; `--check` probes the provider. | done |
-| **M3** | The search package (`enterprise/search`) and the HTTP API, with access scopes and client tokens; each hit's `source_id`; the web-integration guide and an end-to-end tutorial. | this release |
-| **M4** | Operations: health and status, metrics in the log, a systemd unit and a container example. | planned |
+| **M3** | The search package (`enterprise/search`) and the HTTP API, with access scopes and client tokens; each hit's `source_id`; the web-integration guide and an end-to-end tutorial. | done |
+| **M4** | Operations: health and status, metrics in the log, a systemd unit and a container example; `proxy` and `refresh_retry`. | this release |
 
 A web application searches the index through the Go library or the HTTP API: see
 [web-integration](web-integration.md), and run the [tutorial](tutorial.md) for the whole path.
@@ -114,6 +114,8 @@ A web application searches the index through the Go library or the HTTP API: see
 
 - **[The tutorial](tutorial.md)**: a music catalog indexed, embedded and searched from curl and from
   Go, end to end; CI runs it.
+- **[Running the server](operations.md)**: health, status for operators, the metrics lines, a proxy in
+  front, systemd and a container.
 - **[Searching from a web application](web-integration.md)**: the Go library and the HTTP API, scopes,
   tokens, the errors, and highlighting.
 - **[The server configuration](server-config.md)**: every field of `server.toml`, its default, and

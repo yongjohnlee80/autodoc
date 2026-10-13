@@ -138,8 +138,9 @@ through the library ([web-integration](web-integration.md)). With it, the server
 
 | Field | Default | Meaning | Refused when |
 |---|---|---|---|
-| `listen` | `127.0.0.1:8730` | The address the API listens on. | not `host:port`; not loopback and no TLS |
-| `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file. Required to listen beyond loopback; or keep it on loopback behind your own proxy. | only one given; a file can't be read |
+| `listen` | `127.0.0.1:8730` | The address the API listens on. | not `host:port`; not loopback with neither TLS nor `proxy` |
+| `tls_cert`, `tls_key` | none | The certificate and key files, relative to this file: to listen beyond loopback over HTTPS. | only one given; a file can't be read |
+| `proxy` | `false` | `true`: a proxy in front terminates TLS, so the API may listen beyond loopback over plain HTTP. `--check` warns that requests cross the network between the two in clear text: keep it private ([operations](operations.md#behind-a-proxy)). | given with `tls_cert` |
 
 Each `[[http.client]]` is one caller of the API, with its token and what it may search. There must
 be at least one.
@@ -172,6 +173,22 @@ printf %s "$token" | sha256sum | cut -d' ' -f1    # → token_sha256
 A hash protects where the token is stored, not a token short enough to guess. `--check` warns when
 a `token_env` value is shorter than 32 bytes.
 
+## `[[http.operator]]`: who reads the status
+
+An operator reads `GET /v1/status` for its tenants ([operations](operations.md#status-get-v1status)), and can't search. A search client can't read status: its grants are per access value, and status is tenant-wide.
+
+| Field | Meaning | Refused when |
+|---|---|---|
+| `name` | Names the operator in the log. | missing; a client or another operator has it |
+| `token_sha256`, `token_env` | As a client's: exactly one. | as a client's; **the same token as a client's** (one token, one role) |
+| `tenants` | The tenants whose status it reads, or `["*"]` for every one. | missing or empty; not a configured tenant; a tenant twice; `"*"` with others |
+
+## `[log]`: the metrics lines
+
+| Field | Default | Meaning | Refused when |
+|---|---|---|---|
+| `metrics_interval` | `1m` | How often the server logs its metrics lines ([operations](operations.md#metrics-in-the-log)). `"0s"` logs none. | under `10s`, other than `0s` |
+
 ## `[[source]]`: what is indexed
 
 Each source is one `.view` file, indexed into a tenant of its own. There must be at least one.
@@ -182,11 +199,12 @@ Each source is one `.view` file, indexed into a tenant of its own. There must be
 | `view` | (required) | The `.view` file, relative to this file. | missing; the view is refused ([its rules](views.md)) |
 | `interval` | `1m` | How often the rows changed since the cursor are read. | under `1s` |
 | `refresh` | `24h` | How often every row is read again: content changes the rows' `updated_at` missed are written, and the documents of rows gone are deleted. | shorter than `interval` |
+| `refresh_retry` | `15m` | How soon a refresh that failed, or couldn't read every row, is tried again: the documents of rows gone wait only for a refresh that completes. | under `1m`; over `refresh` |
 | `lag` | `1m` | How far behind the database's clock a pass reads. A transaction open longer than this could commit a row behind the cursor, which only the next refresh would read. `"0s"` is none. | negative |
 | `access` | (required) | The row fields every search of the tenant must be scoped by: say, `["label_id"]`. Each row must carry every one. | missing or empty; a name empty, repeated or containing `=` |
 
 When the server starts it records each tenant's access fields and view name as the tenant's
-policy, which search reads (from M3): a tenant can never be searched unscoped.
+policy, which search reads: a tenant can never be searched unscoped.
 
 ## Exit codes
 
