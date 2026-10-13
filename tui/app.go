@@ -113,9 +113,11 @@ type Host struct {
 	registrationOffered, registrationNoted bool
 	registrationRestart, restartAccepted   bool
 	panelOpen                              map[string]bool
-	lastPanel                              string      // the panel opened last (Arrange panel)
-	tutorialAt                             int         // the tutorial's page shown (tutorial.go)
-	fonts                                  FontControl // the window's fonts; nil in a terminal (fonts.go)
+	panelMax                               map[string]bool // a panel maximized (its Drawer's changed signal; panelChanged)
+	maximizableOpened                      []string        // the terminal and the agents, the most recently opened first (maximizePanel)
+	lastPanel                              string          // the panel opened last (Arrange panel)
+	tutorialAt                             int             // the tutorial's page shown (tutorial.go)
+	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)
 	families                               func(mono bool) []string
 	defaultCellFont                        string
 	fontsApplied                           appliedFonts
@@ -123,6 +125,7 @@ type Host struct {
 	cellFonts, proseFonts                  []string                // the Fonts dialog's choices, "" the default first
 	cellFontModel, proseFontModel          *tuidecl.ListModel
 	termFontModel                          *tuidecl.ListModel // the terminals' face chooser: the cell font's first, then cellFonts
+	lookWas                                lookWas            // the terminals' look when Theme and font… opened (terminallook.go)
 	arrange                                *arrangeState      // an arrangement in progress (arrange.go)
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals *terminals

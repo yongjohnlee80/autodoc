@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/yongjohnlee80/golib/tui/widget"
+import (
+	"slices"
+
+	"github.com/yongjohnlee80/golib/tui/widget"
+)
 
 // THE PANELS — the explorer and the relations, drawers over the page: toggled (SPC e, SPC l, the Go
 // menu), each from the edge its preference names, the page beneath never moving. Ctrl+h/j/k/l
@@ -116,6 +120,10 @@ func (h *Host) panelOpened(name string) {
 	}
 	h.panelOpen[name] = true
 	h.lastPanel = name
+	if slices.Contains(maximizable, name) {
+		// the newest first: F11 and SPC M off the panels reach the newest still open
+		h.maximizableOpened = append([]string{name}, slices.DeleteFunc(h.maximizableOpened, func(p string) bool { return p == name })...)
+	}
 	h.showFind() // a drawer at the right edge hides "finding …"
 	if s.Opened != nil {
 		s.Opened(h.panelHost(name))
