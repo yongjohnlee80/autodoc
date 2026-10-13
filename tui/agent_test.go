@@ -568,7 +568,8 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 
 // TestF11WorksWithTheKeyboardInARunningAgent: with the keyboard in a running agent, F11 maximizes
 // the agent panel and restores it (its hostKeys leave F11 to the Window), and the agent never gets
-// it: a line typed after reaches it as typed.
+// it: "exit 7" typed after starts its line, as the agent's own exit* match needs, so it exits 7 (F11's
+// bytes before it would make the line not match and the agent run on).
 func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	agent, _ := fakeAgent(t)
 	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
@@ -584,6 +585,6 @@ func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
 	if !r.focused("agentView") {
 		t.Error("F11 took the keyboard out of the agent")
 	}
-	r.keys(t, decltest.Type("ping\r")...)
-	r.s.WaitForText(t, "heard-ping")
+	r.keys(t, decltest.Type("exit 7\r")...)
+	r.s.WaitFor(t, "the agent exited 7", func(string) bool { return r.noticed("fake exited (7)") })
 }
