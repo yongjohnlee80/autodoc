@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -148,5 +149,53 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	if s.called("todos.scaffold") || len(s.notes) != 1 || s.notes[0] != "todos: /n is loaded, read-only: its new store waits for the cutover" ||
 		!slices.Contains(s.calls[n:], "todos.stores[]") {
 		t.Errorf("New… on a folder not claimed: calls %v, notes %q", s.calls[n:], s.notes)
+	}
+}
+
+// TestTodosEnterOnTheCardOfKeysOpensTheRow: Enter on ?'s card is Enter in the tree, on the row
+// under the cursor: a task's file opens, a store or a section opens or closes; with the cursor not
+// yet moved it is the first store's; a row gone does nothing, and a refused open is said. A write
+// asked of a store not claimed is never sent.
+func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
+	s := scriptedStore(true)
+	v := newTodos(s)
+	v.list()
+	v.openRow() // the cursor not yet moved: the first store
+	if !slices.Equal(s.views, []string{"todoTree.toggleExpanded"}) {
+		t.Errorf("Enter before the cursor moved: views %v", s.views)
+	}
+	open := openSection(t, v, "ws:kb", "open")
+	v.moved(tuidecl.Index{Row: 0, Parent: &open})
+	if err := v.Commands()["App.todoOpen"].handler("App.todoOpen")(nil); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(s.files, []string{"/kb/.todo-list/open/t1.md"}) {
+		t.Errorf("Enter on a task: files %v", s.files)
+	}
+	s.viewErr = errors.New("the panel is gone")
+	v.moved(open)
+	v.openRow()
+	if len(s.failed) != 1 || s.failed[0] != "todos: open: the panel is gone" {
+		t.Errorf("a refused open: failed %v", s.failed)
+	}
+	v.at = []string{"ws:kb", bucketKey("ws:kb", "nowhere")}
+	n := len(s.views)
+	v.openRow()
+	if len(s.views) != n {
+		t.Errorf("Enter on a row gone: views %v", s.views[n:])
+	}
+	none := newScripted("")
+	newTodos(none).openRow() // no store: nothing
+	if len(none.views) != 0 {
+		t.Errorf("Enter with no store: views %v", none.views)
+	}
+
+	ro := scriptedStore(false)
+	w := newTodos(ro)
+	w.list()
+	n = len(ro.calls)
+	w.write(w.stores[0], "todos.add", []any{"kb", map[string]any{"title": "x"}}, nil)
+	if len(ro.calls) != n {
+		t.Errorf("a write to a store not claimed was sent: %v", ro.calls[n:])
 	}
 }
