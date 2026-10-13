@@ -58,6 +58,9 @@ func (w *Worker) QueryEmbedder(tenant string) search.QueryEmbedder {
 		}
 		defer w.lim.release()
 		vecs, err := st.p.Embed(ctx, []string{q})
+		if ctx.Err() == nil {
+			w.answered(st.fp, err) // a query that ran out its own time says nothing of the provider
+		}
 		if err != nil {
 			return "", nil, fmt.Errorf("%w: %w", search.ErrEmbedFailed, err)
 		}
@@ -91,14 +94,14 @@ func (w *Worker) Health() Health {
 	return Health{State: ProviderStarting}
 }
 
-// healthy publishes the provider up, or down with err's code. Run's goroutine alone calls it.
-func (w *Worker) healthy(err error) {
-	h := Health{State: ProviderUp, Model: w.fp}
+// answered publishes how the provider's last call went: up when it answered (err nil), down with
+// err's code when it failed. Only a provider call (its setup, a batch, a query) publishes, so a round
+// that called nothing leaves the health as the last call left it. model is the fingerprint the
+// caller holds ("" before the provider is set up); any goroutine may call it.
+func (w *Worker) answered(model string, err error) {
+	h := Health{State: ProviderUp, Model: model}
 	if err != nil {
 		h.State, h.Error = ProviderDown, providerCode(err)
-	}
-	if w.p == nil {
-		h.Model = "" // not set up yet
 	}
 	w.health.Store(&h)
 }

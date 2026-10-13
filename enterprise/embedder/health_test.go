@@ -73,3 +73,41 @@ func TestTheProvidersHealthIsPublished(t *testing.T) {
 	w.Wake()
 	waitFor(t, "up again", func() bool { h := w.Health(); return h.State == embedder.ProviderUp && h.Error == "" })
 }
+
+// The health follows the provider's last call, never a round that called nothing: a query the
+// provider fails publishes it down, and the worker's idle rounds that follow (nothing pending, no
+// provider call) leave it down; the next call that succeeds publishes it up. The mutant, named here:
+// an error-free round publishing the provider up (Lector, #131 r0 P2).
+func TestAnIdleRoundLeavesAFailedProviderDown(t *testing.T) {
+	st := newStore()
+	st.put("a.md", "alpha")
+	p := newProvider("m")
+	w := embedder.New(built(p), []embedder.Tenant{{Name: "t", Store: st}}, embedder.WithPoll(10*time.Millisecond))
+	run(t, w)
+	waitFor(t, "a.md ready, the provider up", func() bool { return st.isReady("a.md") && w.Health().State == embedder.ProviderUp })
+	p.mu.Lock()
+	p.fail = 1 << 20
+	p.mu.Unlock()
+	if _, _, err := w.QueryEmbedder("t")(context.Background(), "q"); err == nil {
+		t.Fatal("a query the provider fails answered")
+	}
+	if h := w.Health(); h.State != embedder.ProviderDown || h.Error != opcode.ProviderUnreachable {
+		t.Fatalf("after a failed query: %+v", h)
+	}
+	for range 5 { // idle rounds: nothing pending, no provider call
+		w.Wake()
+		time.Sleep(20 * time.Millisecond)
+	}
+	if h := w.Health(); h.State != embedder.ProviderDown {
+		t.Fatalf("idle rounds flipped a failed provider: %+v", h)
+	}
+	p.mu.Lock()
+	p.fail = 0
+	p.mu.Unlock()
+	if _, _, err := w.QueryEmbedder("t")(context.Background(), "q"); err != nil {
+		t.Fatal(err)
+	}
+	if h := w.Health(); h.State != embedder.ProviderUp || h.Error != "" {
+		t.Errorf("after a query that succeeds: %+v", h)
+	}
+}

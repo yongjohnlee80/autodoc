@@ -156,3 +156,18 @@ func TestTheCountsAreTakenPerInterval(t *testing.T) {
 		t.Errorf("taken again: %+v", c)
 	}
 }
+
+// /v1/status takes GET only (405 with Allow), and a server without ops has no status (404).
+func TestStatusTakesGetAndNeedsOps(t *testing.T) {
+	srv := opsAPI(t, nil)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+StatusPath, nil)
+	req.Header.Set("Authorization", "Bearer "+opsToken)
+	if r := do(t, req); r.status != http.StatusMethodNotAllowed || r.header.Get("Allow") != http.MethodGet {
+		t.Errorf("POST status: %d, Allow %q", r.status, r.header.Get("Allow"))
+	}
+	bare := httptest.NewServer(New(nil, nil))
+	t.Cleanup(bare.Close)
+	if r := get(t, bare, StatusPath, opsToken); r.status != http.StatusNotFound {
+		t.Errorf("status without ops: %d", r.status)
+	}
+}

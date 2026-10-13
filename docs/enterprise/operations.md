@@ -141,12 +141,17 @@ journalctl -u autodoc-server -f
 
 ```sh
 docker build -f deploy/container/Dockerfile -t autodoc-server .
-docker run -d --env-file .env -p 8730:8730 \
+docker run -d --env-file .env -p 127.0.0.1:8730:8730 \
   -v "$PWD/server.toml:/etc/autodoc/server.toml:ro" -v "$PWD/views:/etc/autodoc/views:ro" \
   autodoc-server
 ```
 
 [`deploy/container/compose.yml`](../../deploy/container/compose.yml) runs it beside PostgreSQL with pgvector (and Ollama, with `--profile ollama`), using [`deploy/server.toml`](../../deploy/server.toml) and `deploy/views/`.
+
+**Publish the port on loopback only.** The example's `server.toml` sets `proxy = true`, so the API in the container is plain HTTP, and the bearer tokens cross the wire in clear text. Both the `docker run` above and the compose file publish `127.0.0.1:8730`.
+- Put your TLS-terminating proxy (Caddy, nginx, a load balancer's agent) on the same host, in front of it.
+- Never publish `8730` on every interface.
+- Or set `tls_cert` and `tls_key` and drop `proxy`, and the server serves HTTPS itself.
 
 ### `autodoc --server --health`
 

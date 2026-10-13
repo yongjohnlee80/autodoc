@@ -214,7 +214,6 @@ func (w *Worker) Run(ctx context.Context) {
 		case ctx.Err() != nil:
 			return
 		case err != nil:
-			w.healthy(err)
 			logger.Warning(w.o.log, err, fmt.Sprintf("embedding: trying again in %v", wait))
 			// NOTE: a provider or a database that failed is not asked again at once: the wait
 			// doubles from the first to the longest, and ctx ends it.
@@ -225,9 +224,6 @@ func (w *Worker) Run(ctx context.Context) {
 			continue
 		}
 		wait = w.o.retry
-		if h := w.health.Load(); h == nil || h.State != ProviderUp || h.Error != "" {
-			w.healthy(nil)
-		}
 		if worked {
 			continue
 		}
@@ -251,14 +247,14 @@ func (w *Worker) setUp(ctx context.Context) bool {
 		if err == nil {
 			w.p, w.fp, w.dims = p, p.Model().Fingerprint(), p.Model().Dims
 			w.publish()
-			w.healthy(nil)
+			w.answered(w.fp, nil)
 			logger.Info(w.o.log, fmt.Sprintf("embedding with %s: %d dimensions, %d slots", w.fp, w.dims, w.o.slots))
 			return true
 		}
 		if ctx.Err() != nil {
 			return false
 		}
-		w.healthy(err)
+		w.answered("", err)
 		logger.Warning(w.o.log, err, fmt.Sprintf("embedding: the provider is not set up, so searches answer by words; trying again in %v", wait))
 		// NOTE: a provider that cannot be set up (down, or refusing the key or the model) is
 		// asked again after a wait that doubles to the longest, so an outage at start costs
@@ -600,6 +596,10 @@ func (w *Worker) embedBatch(ctx context.Context, t *tenant, batch []pgstore.Text
 		in[i] = x.Text
 	}
 	vecs, rejected, err := embed.Bisect(ctx, w.p, in, w.dims, batchTimeout)
+	if ctx.Err() == nil {
+		// the provider answered, or failed on its own: a texts' rejection is an answer, per text
+		w.answered(w.fp, err)
+	}
 	if err != nil {
 		return nil, err
 	}

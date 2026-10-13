@@ -29,7 +29,9 @@ services:
     volumes:
       - ../server.toml:/etc/autodoc/server.toml:ro
       - ../views:/etc/autodoc/views:ro
-    ports: ["8730:8730"]
+    # loopback only: the API is plain HTTP here (proxy = true). Put your TLS-terminating proxy on
+    # this host in front of it; never publish 8730 on every interface.
+    ports: ["127.0.0.1:8730:8730"]
     stop_grace_period: 60s
 
   ollama:

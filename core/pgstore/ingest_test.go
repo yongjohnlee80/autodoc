@@ -305,3 +305,14 @@ func TestCountsAreTheTenantsDocumentsReadinessAndQuarantine(t *testing.T) {
 		t.Errorf("counts %+v, want 5 documents, 1 unready, 2 quarantined", c)
 	}
 }
+
+// Counts on a context already ended is an error, naming Counts, and counts nothing.
+func TestCountsOnAnEndedContextFails(t *testing.T) {
+	conn := scratch(t)
+	s := openCorpus(t, conn, "t", accessDocs[:1])
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if c, err := s.Counts(ctx); err == nil || !strings.Contains(err.Error(), "pgstore: counts") || c != (Counts{}) {
+		t.Errorf("an ended context: %+v, %v", c, err)
+	}
+}
