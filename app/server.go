@@ -155,7 +155,7 @@ func (s *server) startIngesters() error {
 			return err
 		}
 		in := ingest.New(st, src.Tenant, s.sources[i], s.business, s.locks, ingest.Options{Schema: s.cfg.Postgres.Schema,
-			Refresh: src.Refresh, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
+			Refresh: src.Refresh, RefreshRetry: src.RefreshRetry, Interval: src.Interval, Lag: lagOf(src.Lag), Log: s.log, Committed: s.wakeEmbedder, Locked: s.wakeEmbedder})
 		s.ingesters = append(s.ingesters, in)
 		wg.Add(1)
 		go func() {

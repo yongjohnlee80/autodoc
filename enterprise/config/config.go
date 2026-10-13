@@ -1,6 +1,7 @@
 package config
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -29,12 +30,18 @@ const (
 	DefaultLag      = time.Minute
 	DefaultOpenAI   = "https://api.openai.com/v1"
 	DefaultOllama   = "http://127.0.0.1:11434"
+	// DefaultMetricsInterval is how often the server logs its metrics lines.
+	DefaultMetricsInterval = time.Minute
 )
 
 // Bounds a field is refused outside of.
 const (
 	MaxSlots    = 64
 	MinInterval = time.Second
+	// MinRefreshRetry is the soonest a failed refresh may be tried again.
+	MinRefreshRetry = time.Minute
+	// MinMetricsInterval is the most often the metrics lines may be logged.
+	MinMetricsInterval = 10 * time.Second
 	// MinTokenBytes is the shortest bearer token --server --check accepts without a warning: 32
 	// random bytes, as `openssl rand -hex 32` makes. A token's hash protects where it is stored,
 	// not a token short enough to guess.
@@ -49,6 +56,7 @@ type Server struct {
 	// request, and a web application reaches the index through the Go library alone.
 	HTTP    *HTTP
 	Sources []Source
+	Log     Log
 	// Warnings are what is allowed but unwise, such as a short bearer token: --server --check
 	// prints them.
 	Warnings []string
@@ -89,8 +97,12 @@ func (e Embedding) Key() string {
 // HTTP is the HTTP API: where it listens and who may call it.
 type HTTP struct {
 	Listen          string
-	TLSCert, TLSKey string // both or neither; required off loopback
-	Clients         []Client
+	TLSCert, TLSKey string // both or neither; required off loopback, unless Proxy
+	// Proxy is the operator's word that a proxy in front terminates TLS: the API may listen off
+	// loopback without TLS. It contradicts TLSCert.
+	Proxy     bool
+	Clients   []Client
+	Operators []Operator
 }
 
 // Client is one caller of the HTTP API and what it may search.
@@ -105,6 +117,24 @@ type Client struct {
 	Grants map[string]map[string][]string
 }
 
+// Log is what the server logs beyond its events.
+type Log struct {
+	// MetricsInterval is how often the metrics lines are logged; 0 logs none.
+	MetricsInterval time.Duration
+}
+
+// Operator is one reader of the API's status (/v1/status), for the tenants it names: a role of
+// its own, apart from the search clients, whose grants are per access value and so cannot
+// authorise what status shows tenant-wide.
+type Operator struct {
+	Name string
+	// TokenSHA256 or TokenEnv, exactly one, as a Client's.
+	TokenSHA256 string
+	TokenEnv    string
+	// Tenants are the tenants whose status it may read: configured ones, or ["*"] for every one.
+	Tenants []string
+}
+
 // Source is a .view file indexed into a tenant of its own.
 type Source struct {
 	Tenant string
@@ -117,6 +147,9 @@ type Source struct {
 	// Lag is how far behind the database's clock a pass reads, so a business transaction still
 	// open cannot commit a row behind the cursor.
 	Lag time.Duration
+	// RefreshRetry is how soon a refresh that failed or did not complete is tried again; 0 is the
+	// ingester's default.
+	RefreshRetry time.Duration
 	// Access are the row fields every search of the tenant must be scoped by.
 	Access []string
 }
@@ -176,19 +209,30 @@ type file struct {
 		Listen  string `toml:"listen"`
 		TLSCert string `toml:"tls_cert"`
 		TLSKey  string `toml:"tls_key"`
+		Proxy   bool   `toml:"proxy"`
 		Clients []struct {
 			Name        string                         `toml:"name"`
 			TokenSHA256 string                         `toml:"token_sha256"`
 			TokenEnv    string                         `toml:"token_env"`
 			Grants      map[string]map[string][]string `toml:"grants"`
 		} `toml:"client"`
+		Operators []struct {
+			Name        string   `toml:"name"`
+			TokenSHA256 string   `toml:"token_sha256"`
+			TokenEnv    string   `toml:"token_env"`
+			Tenants     []string `toml:"tenants"`
+		} `toml:"operator"`
 	} `toml:"http"`
+	Log *struct {
+		MetricsInterval *duration `toml:"metrics_interval"`
+	} `toml:"log"`
 	Sources []struct {
 		Tenant   string    `toml:"tenant"`
 		View     string    `toml:"view"`
 		Refresh  *duration `toml:"refresh"`
 		Interval *duration `toml:"interval"`
 		Lag      *duration `toml:"lag"`
+		Retry    *duration `toml:"refresh_retry"`
 		Access   []string  `toml:"access"`
 	} `toml:"source"`
 }
@@ -227,6 +271,7 @@ func Load(path string) (*Server, error) {
 	s.Sources = v.sources(f)
 	s.Embedding = v.embedding(f)
 	s.HTTP = v.http(f, s.Sources)
+	s.Log = v.log(f)
 	s.Warnings = v.warnings
 	if len(v.errs) > 0 {
 		return nil, &Refusal{Path: path, Errors: v.errs}
@@ -383,6 +428,12 @@ func (v *validator) sources(f file) []Source {
 		if s.Lag < 0 {
 			v.refuse(at("lag"), "%v: want zero or more", s.Lag)
 		}
+		if raw.Retry != nil {
+			s.RefreshRetry = raw.Retry.Duration
+			if s.RefreshRetry < MinRefreshRetry || s.RefreshRetry > s.Refresh {
+				v.refuse(at("refresh_retry"), "%v: want %v up to the refresh (%v)", s.RefreshRetry, MinRefreshRetry, s.Refresh)
+			}
+		}
 		if len(s.Access) == 0 {
 			v.refuse(at("access"), "required: the row fields every search of the tenant is scoped by")
 		} else if err := pgstore.CheckAccessFields(s.Access); err != nil {
@@ -397,7 +448,7 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	if f.HTTP == nil {
 		return nil
 	}
-	h := &HTTP{Listen: f.HTTP.Listen, TLSCert: f.HTTP.TLSCert, TLSKey: f.HTTP.TLSKey}
+	h := &HTTP{Listen: f.HTTP.Listen, TLSCert: f.HTTP.TLSCert, TLSKey: f.HTTP.TLSKey, Proxy: f.HTTP.Proxy}
 	if h.Listen == "" {
 		h.Listen = DefaultListen
 	}
@@ -406,6 +457,8 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		v.refuse("http.listen", "%q: want host:port", h.Listen)
 	}
 	switch {
+	case h.Proxy && h.TLSCert != "":
+		v.refuse("http.proxy", "a proxy terminating TLS and tls_cert contradict: give one or the other")
 	case (h.TLSCert == "") != (h.TLSKey == ""):
 		v.refuse("http.tls_cert", "tls_cert and tls_key go together: give both or neither")
 	case h.TLSCert != "":
@@ -420,8 +473,10 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 				v.refuse(p.field, "%s cannot be read", *p.path)
 			}
 		}
+	case err == nil && !loopback(host) && !h.Proxy:
+		v.refuse("http.listen", "%q is not loopback: listening beyond this host needs tls_cert and tls_key, or proxy = true behind a proxy that terminates TLS", h.Listen)
 	case err == nil && !loopback(host):
-		v.refuse("http.listen", "%q is not loopback: listening beyond this host needs tls_cert and tls_key", h.Listen)
+		v.warnings = append(v.warnings, fmt.Sprintf("http.proxy: %s serves plain HTTP off loopback: every request crosses the network from your proxy in clear text, so keep that network private", h.Listen))
 	}
 	access := map[string][]string{}
 	for _, s := range sources {
@@ -430,7 +485,8 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 	if len(f.HTTP.Clients) == 0 {
 		v.refuse("http.client", "at least one [[http.client]] is required: the API answers no one else")
 	}
-	names := map[string]int{}
+	names := map[string]string{}  // a name → the client or operator that has it
+	tokens := map[string]string{} // a token's identity → the client that holds it
 	for i, raw := range f.HTTP.Clients {
 		at := func(k string) string { return fmt.Sprintf("http.client[%d].%s", i, k) }
 		c := Client{Name: raw.Name, TokenSHA256: strings.ToLower(raw.TokenSHA256), TokenEnv: raw.TokenEnv, Grants: raw.Grants}
@@ -441,10 +497,10 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		case c.Name == "":
 			v.refuse(at("name"), "required: it names the client in the log")
 		default:
-			if j, dup := names[c.Name]; dup {
-				v.refuse(at("name"), "http.client[%d] has this name too: names are unique", j)
+			if other, dup := names[c.Name]; dup {
+				v.refuse(at("name"), "%s has this name too: names are unique", other)
 			}
-			names[c.Name] = i
+			names[c.Name] = fmt.Sprintf("http.client[%d]", i)
 		}
 		switch {
 		case c.TokenSHA256 != "" && c.TokenEnv != "":
@@ -461,6 +517,9 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 				v.warnings = append(v.warnings, fmt.Sprintf("%s: the token in %s is shorter than %d bytes: use a random token of at least 32 bytes (openssl rand -hex 32)",
 					at("token_env"), c.TokenEnv, MinTokenBytes))
 			}
+		}
+		if id := tokenIdentity(c.TokenSHA256, c.TokenEnv); id != "" {
+			tokens[id] = fmt.Sprintf("http.client[%d]", i)
 		}
 		if len(c.Grants) == 0 {
 			v.refuse(at("grants"), "required: the tenants the client may search, and per tenant the values of each access field")
@@ -488,7 +547,101 @@ func (v *validator) http(f file, sources []Source) *HTTP {
 		}
 		h.Clients = append(h.Clients, c)
 	}
+	for i, raw := range f.HTTP.Operators {
+		at := func(k string) string { return fmt.Sprintf("http.operator[%d].%s", i, k) }
+		o := Operator{Name: raw.Name, TokenSHA256: strings.ToLower(raw.TokenSHA256), TokenEnv: raw.TokenEnv, Tenants: raw.Tenants}
+		if o.Name != "" {
+			at = func(k string) string { return fmt.Sprintf("http.operator[%d] (%s).%s", i, o.Name, k) }
+		}
+		switch {
+		case o.Name == "":
+			v.refuse(at("name"), "required: it names the operator in the log")
+		default:
+			if other, dup := names[o.Name]; dup {
+				v.refuse(at("name"), "%s has this name too: names are unique across clients and operators", other)
+			}
+			names[o.Name] = fmt.Sprintf("http.operator[%d]", i)
+		}
+		v.token(at, o.TokenSHA256, o.TokenEnv)
+		if id := tokenIdentity(o.TokenSHA256, o.TokenEnv); id != "" {
+			if holder, both := tokens[id]; both {
+				// never the token: only who holds it twice
+				v.refuse(at("token_sha256"), "%s holds the same token: one token, one role", holder)
+			}
+			tokens[id] = fmt.Sprintf("http.operator[%d]", i)
+		}
+		v.tenants(at("tenants"), o.Tenants, access)
+		h.Operators = append(h.Operators, o)
+	}
 	return h
+}
+
+// token checks a token given one way or the other, as a client's is.
+func (v *validator) token(at func(string) string, sha, env string) {
+	switch {
+	case sha != "" && env != "":
+		v.refuse(at("token_sha256"), "give token_sha256 or token_env, not both")
+	case sha == "" && env == "":
+		v.refuse(at("token_sha256"), "required: token_sha256 (the token's SHA-256) or token_env (a variable holding the token)")
+	case sha != "":
+		if b, err := hex.DecodeString(sha); err != nil || len(b) != 32 {
+			v.refuse(at("token_sha256"), "want the 64 hex digits of the token's SHA-256, never the token itself")
+		}
+	default:
+		if v.envSet(at("token_env"), env) && len(os.Getenv(env)) < MinTokenBytes {
+			v.warnings = append(v.warnings, fmt.Sprintf("%s: the token in %s is shorter than %d bytes: use a random token of at least 32 bytes (openssl rand -hex 32)",
+				at("token_env"), env, MinTokenBytes))
+		}
+	}
+}
+
+// tokenIdentity is a token as the API compares it, its SHA-256 in hex, from either form; "" when
+// neither gives one. Two roles holding one token have the same identity.
+func tokenIdentity(sha, env string) string {
+	switch {
+	case sha != "":
+		return sha
+	case env != "" && os.Getenv(env) != "":
+		sum := sha256.Sum256([]byte(os.Getenv(env)))
+		return hex.EncodeToString(sum[:])
+	}
+	return ""
+}
+
+// tenants checks an operator's tenants: configured ones, each once, or ["*"] alone.
+func (v *validator) tenants(field string, tenants []string, access map[string][]string) {
+	if len(tenants) == 0 {
+		v.refuse(field, `required: the tenants whose status the operator reads, or ["*"]`)
+		return
+	}
+	if slices.Contains(tenants, "*") {
+		if len(tenants) > 1 {
+			v.refuse(field, `"*" stands alone: it already names every tenant`)
+		}
+		return
+	}
+	seen := map[string]bool{}
+	for _, t := range tenants {
+		if _, ok := access[t]; !ok {
+			v.refuse(field, "%q is not a configured source's tenant", t)
+		}
+		if seen[t] {
+			v.refuse(field, "%q is named twice", t)
+		}
+		seen[t] = true
+	}
+}
+
+// log reads [log]: the metrics lines' interval, at least MinMetricsInterval, or 0 for none.
+func (v *validator) log(f file) Log {
+	l := Log{MetricsInterval: DefaultMetricsInterval}
+	if f.Log != nil && f.Log.MetricsInterval != nil {
+		l.MetricsInterval = f.Log.MetricsInterval.Duration
+		if l.MetricsInterval != 0 && l.MetricsInterval < MinMetricsInterval {
+			v.refuse("log.metrics_interval", "%v: want 0 (none) or at least %v", l.MetricsInterval, MinMetricsInterval)
+		}
+	}
+	return l
 }
 
 // grant checks one field's grant: ["*"] alone, or distinct, non-empty values.
