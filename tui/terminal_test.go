@@ -607,3 +607,83 @@ func TestTheTerminalThemeRowSaysWhatItColours(t *testing.T) {
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseMotion, X: x, Y: y})
 	r.s.WaitForText(t, "16 colours")
 }
+
+// TestHideClosesThePanelAndKeepsTheShells: Hide on a shell tab's menu closes the terminal panel,
+// its shells running on, the same tabs; opening it again shows them, the same one active, and no
+// new shell. An empty panel's menu has Hide and Theme and font…, and no Close.
+func TestHideClosesThePanelAndKeepsTheShells(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	onLoop(r, func() bool { r.h.terminals.newShell(); return true })
+	r.s.WaitFor(t, "two shells", func(string) bool { return r.shellsRunning() == 2 })
+	active := func() (id widget.TerminalTabID) {
+		return onLoop(r, func() widget.TerminalTabID {
+			c, _ := r.h.p.Find("terminalView")
+			tabs, _ := tuidecl.TerminalTabsOf(c)
+			return tabs.Active()
+		})
+	}
+	before, was := r.shellTabs(), active()
+	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(was) })
+	row, ok := menuRow(rows, "tabs.hide")
+	if !ok || row.Label != "Hide" || row.Hotkey != 'd' {
+		t.Fatalf("no Hide (d) in %v", rowIDs(rows))
+	}
+	if _, ok := menuRow(rows, "tabs.look"); !ok {
+		t.Fatalf("no Theme and font… in %v", rowIDs(rows))
+	}
+	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(was); return true })
+	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
+	after := r.shellTabs()
+	if len(after) != 2 || r.shellsRunning() != 2 || after[0].ID != before[0].ID || after[0].Generation != before[0].Generation || after[1].Generation != before[1].Generation {
+		t.Fatalf("Hide changed the shells: %+v, before %+v", after, before)
+	}
+	r.leader(t, '`')
+	r.s.WaitFor(t, "shown again", func(string) bool { return r.termShown() })
+	if got := active(); got != was || r.shellsRunning() != 2 || len(r.shellTabs()) != 2 {
+		t.Fatalf("reopened on %s (want %s), %d running of %d", got, was, r.shellsRunning(), len(r.shellTabs()))
+	}
+	empty := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+	if row, _ := menuRow(empty, "terminal.close"); row.Enabled {
+		t.Error("an empty panel's menu offers Close")
+	}
+	for _, id := range []string{"tabs.hide", "tabs.look", "terminal.new"} {
+		if _, ok := menuRow(empty, id); !ok {
+			t.Errorf("an empty panel's menu lacks %s", id)
+		}
+	}
+}
+
+// TestTheTerminalsLookDialogSetsTheSameSettings: Theme and font… from a panel's menu opens a dialog
+// over the terminals' theme; a choice shows at once and is the one Preferences keeps; Esc puts back
+// what was chosen before, OK keeps the choice.
+func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
+	d, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	look := func() {
+		t.Helper()
+		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+		row, ok := menuRow(rows, "tabs.look")
+		if !ok {
+			t.Fatalf("no Theme and font… in %v", rowIDs(rows))
+		}
+		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+		r.s.WaitForText(t, "the terminals' theme and font")
+	}
+	light := slices.Index(termThemes(), "light")
+	look()
+	r.s.WaitForText(t, "a terminal draws in its own") // the terminal UI: no font row
+	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(light); return true })
+	storedPref(t, d, r, prefTermTheme, "light")
+	r.keys(t, esc())
+	storedPref(t, d, r, prefTermTheme, "page") // Esc: what was chosen before
+	look()
+	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(light); return true })
+	storedPref(t, d, r, prefTermTheme, "light")
+	onLoop(r, func() bool { r.h.terminalLookKept(); r.h.closeDialog("terminalLook"); return true })
+	if got := onLoop(r, func() string { return r.h.prefs.termTheme }); got != "light" {
+		t.Errorf("OK kept %q", got)
+	}
+}

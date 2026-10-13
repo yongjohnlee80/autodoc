@@ -204,8 +204,10 @@ THE PANELS
   It starts in AutoDoc's own folder for the workspace, told about the workspace in AGENTS.md and
   CLAUDE.md there, and keeps running while hidden. Each agent has a tab, named by its codename:
   + on the strip offers the profiles (a running one goes to its tab, a stopped one starts), and
-  a tab's menu (≡, a right click on the tab, or Enter on the strip) has Go to ›, Restart, Close
-  (asked first while the agent runs) and Profiles…; Use in the profiles starts another too.
+  a tab's menu (≡, a right click anywhere on the strip or on an empty panel, or Enter on the
+  strip) has Go to ›, Restart, Close (asked first while the agent runs), Profiles…, Theme and
+  font… and Hide, which closes the panel and leaves every agent running; Use in the profiles
+  starts another too.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
   card, g and G on it the panel and the profiles. No Enter is added: an agent CLI that takes
@@ -213,9 +215,10 @@ THE PANELS
   The terminal (SPC ` + "`" + `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
-  + adds one, and a tab's menu has Go to ›, New and Close. Preferences' terminal row sets the
-  terminals' theme (the page's, or another): their text, background and cursor only, a program's
-  own colours staying its own. Every key goes to the
+  + adds one, and a tab's menu has Go to ›, New, Close, Theme and font… and Hide (the panel
+  closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
+  and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
+  own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
   shell; Ctrl+\ Ctrl+n leaves for Normal mode, where h j k l, w b e, gg G, Ctrl+u/d/b/f, / and ?
   move over its history, v or V selects and y copies, and i or Enter goes back. In the Vim
   editor mode, Esc leaves too, except in a full-screen program (vim, less), which needs it.

@@ -26,10 +26,7 @@ type scopedPanelHost struct {
 	ids   map[string]bool
 }
 
-func (s *scopedPanelHost) Set(name string, v any) { s.core.Set(name, v) }
-
-// PageTheme is the theme the page is drawn in: a terminal theme of "the page's" follows it.
-func (s *scopedPanelHost) PageTheme() string               { return s.core.Theme() }
+func (s *scopedPanelHost) Set(name string, v any)          { s.core.Set(name, v) }
 func (s *scopedPanelHost) Open(id string)                  { s.core.Open(id) }
 func (s *scopedPanelHost) Close(id string)                 { s.core.Close(id) }
 func (s *scopedPanelHost) Notify(msg string)               { s.core.Notify(msg) }
@@ -49,6 +46,12 @@ func (s *scopedPanelHost) DaemonAddress() string           { return s.core.Daemo
 func (s *scopedPanelHost) KeepPanelGeometry(id, dimension string, percent int) {
 	s.core.KeepPanelGeometry(id, dimension, percent)
 }
+
+// PageTheme is the theme the page is drawn in: a terminal theme of "the page's" follows it.
+func (s *scopedPanelHost) PageTheme() string { return s.core.Theme() }
+
+// OpenTerminalLook is the panels' Theme and font… (terminallook.go).
+func (s *scopedPanelHost) OpenTerminalLook() { s.core.h.openTerminalLook() }
 
 func newScopedPanelHost(c core, f Feature, specs []PanelSpec) *scopedPanelHost {
 	s := &scopedPanelHost{core: c, owner: f.Name(), ids: map[string]bool{}}

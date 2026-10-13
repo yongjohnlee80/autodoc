@@ -562,6 +562,7 @@ Window {
     AgentAssign { id: agentAssignPicker }
     LuaPick { id: luaPicker }
     TodoStatus { id: todoStatusPicker }
+    TerminalLook { id: terminalLook }
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }

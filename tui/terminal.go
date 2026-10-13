@@ -408,13 +408,17 @@ func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	if err != nil {
 		return nil
 	}
-	return []widget.MenuItemModel{
+	closing := tabMenuRow("terminal.close", "Close", t.closeShell)
+	closing.Enabled = id != "" // an empty panel's menu has no shell to close
+	rows := []widget.MenuItemModel{
 		goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, func(target widget.TerminalTabID) {
 			t.c.Keep(panel.Select(target))
 		}),
 		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }),
-		tabMenuRow("terminal.close", "Close", t.closeShell),
+		closing,
 	}
+	// Hide is SPC `'s own toggle (terminal.toggle): the panel closed, every shell running on
+	return append(rows, panelRows(lookOf(t.c), t.toggleTerminal)...)
 }
 
 // closeShell is Close on a tab's menu: the shell hung up and its tab closed. The panel stays open,

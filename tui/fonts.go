@@ -136,6 +136,13 @@ func (h *Host) openFonts() {
 		h.notify("fonts and zoom are the window's: in a terminal, its own settings choose them")
 		return
 	}
+	h.listFonts()
+	h.open("fonts")
+}
+
+// listFonts lists the installed families in the font choosers, the current ones chosen: the Fonts
+// dialog's and the terminals' look's (terminallook.go).
+func (h *Host) listFonts() {
 	mono, all := h.familyList(true), h.familyList(false)
 	h.cellFonts, h.proseFonts = append([]string{""}, mono...), append([]string{""}, all...)
 	h.cellFontModel.Reset(fontRows(h.cellFonts))
@@ -144,7 +151,6 @@ func (h *Host) openFonts() {
 	h.set("App.proseFontIndex", max(slices.Index(h.proseFonts, h.prefs.proseFont), 0))
 	h.termFontModel.Reset(termFontRows(h.cellFonts))
 	h.set("App.terminalFontIndex", max(slices.Index(h.cellFonts, h.prefs.termFont), 0))
-	h.open("fonts")
 }
 
 // familyList is the installed families, mono only or all; none where the system cannot list them.
