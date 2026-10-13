@@ -194,7 +194,7 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
 		{Seq: "h", Show: "h", Does: "notifications", Run: "App.openNotices()"},
 	}),
-	// a is the agents' card's, which their feature brings
+	// a opens the agents' card, which their feature brings (agenttabs.go)
 	inGroup(groupAgents, []Key{
 		{Seq: "g", Show: "g", Does: "AI agent", Run: "App.toggleAgent()"},
 		{Seq: "Shift+G", Show: "G", Does: "agent profiles", Run: "App.openAgentProfiles()"},

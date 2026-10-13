@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -152,4 +153,33 @@ func TestSendTextSharesHandTasksDelivery(t *testing.T) {
 	if len(got) != 2 || got[1] != nil || len(c.panel.pastes) != 2 || !strings.HasSuffix(c.panel.pastes[1], ":for two") {
 		t.Fatalf("started and sent: done %v, pastes %q", got, c.panel.pastes)
 	}
+}
+
+// SPC a opens the agents' card, its keys listed; b sends the page to the agent running, f the
+// selection, and Backspace goes back to SPC's card.
+func TestTheAgentsCardSendsThePage(t *testing.T) {
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	onLoop(r, func() bool {
+		r.h.core.SetValue("card-sent-page")
+		return r.h.p.Call("editor", "forceActiveFocus") == nil
+	})
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	r.leader(t, 'a')
+	r.s.WaitForText(t, "SPC a — agents")
+	for _, does := range []string{"send the page to an agent", "send the selection or the clipboard", "the agent panel", "agent profiles"} {
+		if !strings.Contains(r.s.String(), does) {
+			t.Errorf("the card does not list %q:\n%s", does, r.s.String())
+		}
+	}
+	r.keys(t, key('b'))
+	r.s.WaitForText(t, "card-sent-page")
+	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
+
+	r.leader(t, 'a')
+	r.s.WaitForText(t, "SPC a — agents")
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyBackspace})
+	r.s.WaitForText(t, "SPC — commands")
 }

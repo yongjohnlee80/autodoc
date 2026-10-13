@@ -594,6 +594,7 @@ Window {
     Vectors { id: vectorsDialog }
     // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }
+    AgentsCard { id: agentsCard }
     // ---- end of the generated cards ----
     PluginKeys { id: pluginKeys }
     Help { id: help }

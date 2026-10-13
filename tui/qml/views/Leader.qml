@@ -41,5 +41,6 @@ Dialog {
     Shortcut { sequence: "."; onActivated: { leader.close(); App.openContextMenu() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
     Shortcut { sequence: "Shift+L"; onActivated: { leader.close(); App.arrangePanel() } }
+    Shortcut { sequence: "a"; onActivated: { leader.close(); agentsCard.open() } }
     Shortcut { sequence: "p"; onActivated: { leader.close(); pluginKeys.open() } }
 }

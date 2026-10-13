@@ -132,3 +132,25 @@ func (a *agents) closeAgent(code string) {
 	a.c.Ask(Question{Title: "close the agent?", Text: "Close " + instance.profile.Name + "? Its process is stopped.",
 		Yes: "&Yes, close it", OnYes: closeIt})
 }
+
+// THE AGENTS' CARD — SPC a: the page to an agent (b, :agent-buffer), the selection or the
+// clipboard (f, :agent-forward), the agent panel (g) and the profiles (G). b and f run agents.lua's
+// commands by their ids, which a user's script of the same name replaces.
+
+const agentsCard = "agentsCard"
+
+// Keys are SPC a, and the card it opens.
+func (*agents) Keys() []Key {
+	return []Key{
+		{Card: leader, Seq: "a", Show: "a", Does: "agents…", Opens: agentsCard, Group: groupAgents},
+		{Card: agentsCard, Seq: "b", Show: "b", Does: "send the page to an agent", Run: `App.run("lua.agent-buffer")`},
+		{Card: agentsCard, Seq: "f", Show: "f", Does: "send the selection or the clipboard", Run: `App.run("lua.agent-forward")`},
+		{Card: agentsCard, Seq: "g", Show: "g", Does: "the agent panel", Run: "App.toggleAgent()"},
+		{Card: agentsCard, Seq: "Shift+G", Show: "G", Does: "agent profiles", Run: "App.openAgentProfiles()"},
+	}
+}
+
+// Cards are the agents' card, Backspace returning to SPC's.
+func (*agents) Cards() []Card {
+	return []Card{{ID: agentsCard, View: "AgentsCard", Title: "SPC a — agents", Back: leader, Help: "THE AGENTS CARD (SPC a)"}}
+}
