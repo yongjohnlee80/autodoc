@@ -48,3 +48,15 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 		t.Fatal("reopened on another agent or tab")
 	}
 }
+
+// TestAClickOnMaximizeInTheAgentsMenu: with an agent running (the panel opens as it starts), a click
+// on Maximize in the agents' ≡ menu maximizes the panel, and a click on Restore restores it; nothing
+// is refused.
+func TestAClickOnMaximizeInTheAgentsMenu(t *testing.T) {
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "heron", Command: shellQuote(agent), Codename: "heron"}}, "heron")
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent running", func(string) bool { return r.agentRunningNow() })
+	r.s.WaitFor(t, "the agents' panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
+	clickMaximizeAndRestore(t, r, "agent")
+}
