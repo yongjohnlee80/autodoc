@@ -40,10 +40,14 @@ func newScripted(ws string) *scriptedCore {
 	return &scriptedCore{ws: ws, answers: map[string]func([]any) (any, error){}, set: map[string]any{}}
 }
 
-func (s *scriptedCore) Set(name string, v any) { s.set[name] = v }
-func (s *scriptedCore) Open(id string)         { s.opened = append(s.opened, id) }
-func (s *scriptedCore) Close(id string)        { s.closed = append(s.closed, id) }
-func (s *scriptedCore) Notify(msg string)      { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) Set(name string, v any)   { s.set[name] = v }
+func (*scriptedCore) AgentEntries() []AgentEntry { return nil }
+func (*scriptedCore) HandTask(AgentRef, TaskRef, string, func(error)) error {
+	return ErrAgentUnavailable
+}
+func (s *scriptedCore) Open(id string)    { s.opened = append(s.opened, id) }
+func (s *scriptedCore) Close(id string)   { s.closed = append(s.closed, id) }
+func (s *scriptedCore) Notify(msg string) { s.notes = append(s.notes, msg) }
 
 // Ask records the question and holds it for answer: its OnYes runs when the test says Yes.
 func (s *scriptedCore) Ask(q Question) Asked {

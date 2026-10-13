@@ -26,10 +26,15 @@ type agents struct {
 	editingAgentProfile    *agentProfile // exact record shown in the form; stale edits are refused
 	switchingAgent         string
 	agentRows              *tuidecl.ListModel
+	instances              map[string]*agentInstance
+	instanceOrder          []string
+	selectedAgent          string
+	deliveries             map[*agentDelivery]bool
+	stopping               bool
 }
 
 func newAgents(c agentHost, dir, config string) *agents {
-	return &agents{c: c, agentDir: dir, agentConfig: config,
+	return &agents{c: c, agentDir: dir, agentConfig: config, instances: map[string]*agentInstance{}, deliveries: map[*agentDelivery]bool{},
 		agentRows: tuidecl.NewListModel("key", "default", "name", "codename", "command")}
 }
 func (a *agents) BindPanelHost(c PanelHost) error {
@@ -113,6 +118,7 @@ func (a *agents) Commands() map[string]Command {
 		"App.useAgent":             oneNumber("a row", a.useAgent),
 		"App.switchAgentConfirmed": none(a.switchAgentConfirmed),
 		"App.agentExited":          oneNumber("an exit code", a.agentExited),
+		"App.agentTabsChanged":     none(a.agentTabsChanged),
 		"App.setAgentEdge":         oneNumber("a row", a.setAgentEdge),
 		"App.setAgentSize":         oneNumber("a row", a.setAgentSize),
 		"App.setAgentLength":       oneNumber("a row", a.setAgentLength),
@@ -196,8 +202,9 @@ func (h *agents) toggleAgent() {
 // openAgentPanel shows the running agent, or starts the default profile. With no
 // default, it opens the profiles dialog instead of an empty terminal.
 func (h *agents) openAgentPanel() {
-	if h.agentRunning != "" {
+	if instance := h.instances[h.selectedAgent]; instance != nil {
 		h.c.OpenDrawer("agent")
+		h.c.Keep(h.selectInstance(instance))
 		return
 	}
 	p, ok := h.profile(h.defaultProfile())
@@ -214,52 +221,20 @@ func (h *agents) startAgent(p agentProfile) {
 	if p.Codename == "" {
 		p.Codename = agentCodename(p.Name)
 	}
-	if why := h.profileProblem(p); why != "" {
-		h.c.Notify("the agent cannot start: " + why)
-		return
-	}
-	ws, ok := h.c.ActiveWorkspace()
-	if !ok {
-		h.c.Set("App.status", "the agent works in a workspace: open one first")
-		return
-	}
-	command := fillAgentCommand(p.Command, ws)
-	dir, err := h.writeAgentGuide(ws)
-	if err != nil {
-		h.c.Notify("the agent's folder could not be written: " + err.Error())
-		return
-	}
-	path, args, err := agentArgv(command, h.agentEnv(ws, dir))
-	if err != nil {
+	if _, err := h.startInstance(p); err != nil {
 		h.c.Notify("the agent could not start: " + err.Error())
-		return
 	}
-	if err := h.c.ConfigureTerminal("agentView", path, dir, args...); err != nil {
-		h.c.Notify("the agent could not start: " + err.Error())
-		return
-	}
-	h.c.Set("App.agentTitle", "agent · "+p.Name)
-	h.c.Keep(h.c.CallView("agent", "open"))
-	if err := h.c.CallView("agentView", "start"); err != nil {
-		h.c.Notify("the agent could not start (" + err.Error() + ")")
-		return
-	}
-	h.agentRunning = p.Codename
-	h.agentRunningLabel = p.Name
-	h.c.Keep(h.c.Focus("agentView"))
 }
 
 // stopAgent releases the running identity only after the terminal accepts stop.
 func (h *agents) stopAgent() bool {
-	if h.agentRunning == "" {
+	if h.selectedAgent == "" {
 		return true
 	}
-	if err := h.c.CallView("agentView", "stop"); err != nil {
+	if err := h.removeInstance(h.selectedAgent); err != nil {
 		h.c.Keep(err)
 		return false
 	}
-	h.agentRunning = ""
-	h.agentRunningLabel = ""
 	return true
 }
 

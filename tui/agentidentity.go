@@ -102,7 +102,7 @@ func (a *agents) profileProblem(p agentProfile) string {
 			return fmt.Sprintf("codename taken by %s", other.Name)
 		}
 	}
-	if a.agentRunning != "" && a.agentRunning == p.Codename {
+	if instance := a.instances[p.Codename]; instance != nil {
 		for _, saved := range a.profiles() {
 			if saved.Codename == p.Codename {
 				return ""

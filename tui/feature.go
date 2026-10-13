@@ -346,6 +346,10 @@ func (l legacy) Picks() map[string]picker {
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host
 // field. Every method runs on the loop, as the feature's own handlers do.
 type Core interface {
+	// AgentEntries and HandTask are AutoDoc's own agent capability, not an
+	// AutoVim mailbox. Snapshots carry exact incarnation tokens for delivery.
+	AgentEntries() []AgentEntry
+	HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error
 	Set(name string, v any)
 	Open(id string)
 	Close(id string)

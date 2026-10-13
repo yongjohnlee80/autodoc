@@ -409,15 +409,9 @@ Window {
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)
-        Terminal {
+        TerminalTabs {
             id: agentView
-            vimKeys: App.keymapVim
-            // a program's colours raised until they read on the page: ls's yellow and a
-            // prompt's cyan are written for a dark terminal, and wash out on a light theme
-            minimumContrast: 4.5
-            // the editor's caret colour; its shape says the mode: a block in normal, a bar typing
-            cursorColor: Theme.document.cursor
-            onExited: App.agentExited(code)
+            onChanged: App.agentTabsChanged()
         }
     }
 

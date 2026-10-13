@@ -25,7 +25,7 @@ func (h *agents) listAgents() {
 		if a.Codename == def {
 			mark = "●"
 		}
-		if h.agentRunning != "" && a.Codename == h.agentRunning {
+		if instance := h.instances[a.Codename]; instance != nil && instance.running {
 			mark += "▶"
 		}
 		rows[i] = rowOf{"key": a.Codename, "default": mark, "name": a.Name, "codename": a.Codename,
@@ -143,15 +143,15 @@ func (h *agents) saveAgentProfile(name, command, codename string) {
 		refuse("the agent profile changed; open it again before saving")
 		return
 	}
-	if h.agentRunning != "" {
-		if at >= 0 && agents[at].Codename == h.agentRunning && codename != h.agentRunning {
+	if at >= 0 {
+		if instance := h.instances[agents[at].Codename]; instance != nil && codename != agents[at].Codename {
 			refuse("stop the running agent before changing its codename")
 			return
 		}
-		if codename == h.agentRunning && (at < 0 || agents[at].Codename != codename) {
-			refuse("codename held by a running agent")
-			return
-		}
+	}
+	if instance := h.instances[codename]; instance != nil && (at < 0 || agents[at].Codename != codename) {
+		refuse("codename held by a running agent")
+		return
 	}
 	def := h.defaultProfile()
 	if at >= 0 {
@@ -214,21 +214,16 @@ func (h *agents) makeAgentDefault(i int) {
 	h.c.Set("App.status", "SPC g opens "+a.Name)
 }
 
-// useAgent starts profile i now. Another running is stopped first, after asking.
+// useAgent starts or selects profile i without stopping other profiles.
 func (h *agents) useAgent(i int) {
 	a, ok := h.agentAt(i)
 	if !ok {
 		return
 	}
-	if h.agentRunning == a.Codename {
+	if instance := h.instances[a.Codename]; instance != nil && instance.running {
 		h.c.Close("agentProfiles")
-		h.toggleAgentShown()
-		return
-	}
-	if h.agentRunning != "" {
-		h.switchingAgent = a.Codename
-		h.c.Set("App.agentSwitchQuestion", "Stop "+h.agentRunningLabel+" and start "+a.Name+"? What "+h.agentRunningLabel+" was doing ends.")
-		h.c.Open("agentSwitch")
+		h.c.OpenDrawer("agent")
+		h.c.Keep(h.selectInstance(instance))
 		return
 	}
 	h.c.Close("agentProfiles")
@@ -239,9 +234,6 @@ func (h *agents) useAgent(i int) {
 func (h *agents) switchAgentConfirmed() {
 	a, ok := h.profile(h.switchingAgent)
 	if !ok {
-		return
-	}
-	if !h.stopAgent() {
 		return
 	}
 	h.c.Close("agentProfiles")

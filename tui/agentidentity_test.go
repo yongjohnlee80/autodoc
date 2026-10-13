@@ -19,6 +19,10 @@ type identityHost struct {
 	stopErr           error
 	ws                wsInfo
 	configuredCommand string
+	panel             *modelPanel
+	posts             []func()
+	questions         []Question
+	epoch             int
 }
 
 func newIdentityHost(raw string) *identityHost {
