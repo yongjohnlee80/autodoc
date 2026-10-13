@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -13,12 +12,12 @@ import (
 )
 
 // relations_test.go: the Relations drawer (ADR 1791430651 §4.4) — each relation in its section by
-// kind and direction, depth 2, the unresolved and the cycles; the jump card; back; and the editor's
-// right-click rows.
+// kind and direction, depth 2, the unresolved and the cycles; SPC j to the link under the cursor;
+// back; and the editor's right-click rows.
 
 // relationsKB is doc.md and what it is connected to: every relation kind out of it, two into it,
 // three body links, one that names nothing, a supersession loop with loop.md, and two links away
-// far.md (new.md links to it) and hub.md (it links to src.md): ten neighbours, one past the card.
+// far.md (new.md links to it) and hub.md (it links to src.md): ten neighbours.
 var relationsKB = map[string][]string{"kb": {
 	"doc.md", "---\nsuperseded_by: [new.md]\nsupersedes: [loop.md]\nsources: [src.md]\namends: [base.md]\nrelated: [rel.md]\n---\n# Doc\n\nsee [[body]], [[body2]], [[body3]] and [[missing-one]]\n",
 	"new.md", "# New\n\n[[far]]\n",
@@ -99,41 +98,51 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	}
 }
 
-// TestJumpCardAndBack: SPC j numbers the neighbours, a digit opens one; SPC b returns, and
-// returns no further than the first document; the right-click menu has Back.
-func TestJumpCardAndBack(t *testing.T) {
-	d := startDaemon(t, relationsKB)
-	r := attached(t, d)
-	r.openByPicker(t, "doc.md")
-	r.waitFile(t, "doc.md")
-	r.s.WaitFor(t, "doc's relations", func(string) bool { return len(r.relationLabels()) > 0 })
-	r.leader(t, 'j')
-	r.s.WaitForText(t, "related documents")
-	r.s.WaitForText(t, "3  supersedes     old.md")
-	r.s.WaitForText(t, "9  links          body2.md") // ten neighbours: the card holds nine
-	if strings.Contains(r.s.String(), "body3.md") {
-		t.Error("the card holds a tenth neighbour")
-	}
-	r.keys(t, key('3'))
-	r.waitFile(t, "old.md")
+// putCursor puts the editor's cursor at line, col, 0-based.
+func (r *running) putCursor(line, col int) {
+	onLoop(r, func() bool { r.h.core.SetLine(line, col); return true })
+}
 
+// linksKB is a.md, with a wikilink and a Markdown link to documents of the workspace.
+var linksKB = map[string][]string{"kb": {
+	"a.md", "# A\n\nsee [[b]] and [the c](c.md), then nothing\n",
+	"b.md", "# B\n",
+	"c.md", "# C\n",
+}}
+
+// TestSPCjFollowsTheLinkAndBack: SPC j goes to the link under the cursor, a wikilink or a Markdown
+// link, as the right-click menu's Go to link does; SPC b returns, and returns no further than the
+// first document; the right-click menu has Back. Off a link, or with no file open, SPC j opens
+// nothing and says so.
+func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
+	r := attached(t, startDaemon(t, linksKB))
+	r.leader(t, 'j') // the draft, empty: no link
+	r.waitKeptNotice(t, "no link under the cursor: SPC l shows what untitled links with")
+
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	line := "see [[b]] and [the c](c.md), then nothing"
+	r.putCursor(2, strings.Index(line, "b]]"))
+	r.leader(t, 'j')
+	r.waitFile(t, "b.md")
 	r.leader(t, 'b')
-	r.waitFile(t, "doc.md")
+	r.waitFile(t, "a.md")
 	r.leader(t, 'b')
 	r.s.WaitForText(t, "nothing to go back to")
 
-	// the right-click menu: Back goes back. Back on doc.md its relations are read again, and
-	// until they are the card has none: SPC j then says "no related documents", which "related
-	// documents" matches too, and the digit goes to the page. Wait for doc.md's rows, and for the
-	// card's row the digit opens.
-	r.waitRelations(t, docRelations)
+	r.putCursor(2, strings.Index(line, "the c"))
 	r.leader(t, 'j')
-	r.s.WaitForText(t, "1  superseded by  new.md")
-	r.keys(t, key('1'))
-	r.waitFile(t, "new.md")
-	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own, not doc.md's
-	r.menuRow(t, "Back")
-	r.waitFile(t, "doc.md")
+	r.waitFile(t, "c.md")
+	r.menuRow(t, "Back") // the right-click menu: Back goes back
+	r.waitFile(t, "a.md")
+
+	gen := r.file().gen
+	r.putCursor(2, strings.Index(line, "then"))
+	r.leader(t, 'j')
+	r.waitKeptNotice(t, "no link under the cursor: SPC l shows what a.md links with")
+	if f := r.file(); f.gen != gen || f.path != "a.md" {
+		t.Errorf("SPC j off a link opened %s (generation %d, was %d)", f.path, f.gen, gen)
+	}
 }
 
 // menuRow right-clicks the page and clicks the menu's row label.
@@ -149,16 +158,13 @@ func (r *running) menuRow(t *testing.T, label string) {
 	click(tuicore.MouseLeft, x, y)
 }
 
-// TestAnOutsideFileHasNoRelations: the drawer says why it is empty, and the card has nothing.
+// TestAnOutsideFileHasNoRelations: the drawer says why it is empty.
 func TestAnOutsideFileHasNoRelations(t *testing.T) {
 	r, _, _, abs := runOutside(t)
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "relations · "+outsideBadge)
-	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEscape})
-	r.leader(t, 'j')
-	r.s.WaitForText(t, "no related documents")
 }
 
 // TestBackKeepsItsDocumentWhenStayIsChosen: back over unsaved changes asks first; Stay keeps the
@@ -168,18 +174,16 @@ func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
 	r := attached(t, d)
 	r.openByPicker(t, "doc.md")
 	r.waitFile(t, "doc.md")
-	r.s.WaitFor(t, "doc's relations", func(string) bool { return len(r.relationLabels()) > 0 })
+	r.putCursor(9, strings.Index("see [[body]]", "body")) // [[body]]
 	r.leader(t, 'j')
-	r.s.WaitForText(t, "related documents")
-	r.keys(t, key('1'))
-	r.waitFile(t, "new.md")
+	r.waitFile(t, "body.md")
 	r.typeInEditor(t, "edit ")
 	r.leader(t, 'b')
 	r.s.WaitForText(t, "Save them before")
 	r.h.p.Post(func() { r.h.unsaved("stay") }) // the dialog's Stay
 	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "Save them before") })
-	if f := r.file(); f.path != "new.md" || !f.dirty {
-		t.Fatalf("Stay left %s (dirty %v), want new.md unsaved", f.path, f.dirty)
+	if f := r.file(); f.path != "body.md" || !f.dirty {
+		t.Fatalf("Stay left %s (dirty %v), want body.md unsaved", f.path, f.dirty)
 	}
 	r.leader(t, 'b')
 	r.s.WaitForText(t, "Save them before")
@@ -188,38 +192,6 @@ func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
 	if hist := onLoop(r, func() []fileRef { return append([]fileRef(nil), r.h.history...) }); len(hist) != 0 {
 		t.Errorf("history after going back: %v, want it spent", hist)
 	}
-}
-
-// TestTheJumpCardIsTheOpenDocuments: until the new document's relations are read, the card has
-// none — never the previous document's — and once they are, it has the new one's.
-func TestTheJumpCardIsTheOpenDocuments(t *testing.T) {
-	d := startDaemon(t, relationsKB)
-	sess := NewSession(d.sock, nil)
-	hold := make(chan struct{})
-	var once sync.Once
-	release := func() { once.Do(func() { close(hold) }) }
-	t.Cleanup(release)
-	sess.SetBeforeCall(func(method string, params []any) {
-		if method == "graph.links" && len(params) > 1 && params[1] == "new.md" {
-			<-hold
-		}
-	})
-	r := runTUI(t, sess, Options{})
-	r.s.WaitForText(t, "connected — autodoc v-test")
-	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
-	r.openByPicker(t, "doc.md")
-	r.waitFile(t, "doc.md")
-	r.s.WaitFor(t, "doc's relations", func(string) bool { return slices.Equal(r.relationLabels(), docRelations) })
-	r.leader(t, 'j')
-	r.s.WaitForText(t, "related documents")
-	r.keys(t, key('1'))
-	r.waitFile(t, "new.md") // its relations held
-	r.leader(t, 'j')
-	r.waitKeptNotice(t, "no related documents: SPC l shows what new.md links with")
-	release()
-	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"})
-	r.leader(t, 'j')
-	r.s.WaitForText(t, "1  supersedes     doc.md")
 }
 
 // TestRelationsEdges: with no file open the drawer is empty; Enter on a heading opens nothing; the

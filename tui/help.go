@@ -190,9 +190,9 @@ THE PANELS
   supersession loops. d in the relations shows the files two links away, under the one that
   reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
   its key again closes it. Enter on a file opens it; the relations stay open.
-  SPC j numbers the first nine related files: a digit opens one. SPC b goes back to the file
-  opened before. The page's right-click menu has Go to link (on a link: the document it names)
-  and Back.
+  SPC j goes to the link under the cursor: the document it names, else its web address or file.
+  SPC b goes back to the file opened before. The page's right-click menu has both, Go to link
+  (on a link) and Back.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).

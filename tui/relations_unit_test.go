@@ -73,16 +73,11 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 	}
 }
 
-// d shows the second ring only when the drawer has the keyboard; Enter on a row and a digit on
-// the jump card open documents; the card says when there are none.
-func TestTheRelationsDepthAndJumps(t *testing.T) {
+// d shows the second ring only when the drawer has the keyboard; Enter on a row opens its document.
+func TestTheRelationsDepthAndOpen(t *testing.T) {
 	c := newScripted("kb")
 	scriptedGraph(c)
 	r := newRelated(c)
-	r.openJumpCard() // nothing shown yet
-	if len(c.notes) != 1 || !strings.Contains(c.notes[0], "no related documents") {
-		t.Fatalf("an empty jump card said %q", c.notes)
-	}
 	r.Shown(Page{Ref: fileRef{"kb", "a.md"}})
 	r.depth() // the keyboard elsewhere: d is not the drawer's
 	if r.deep || slices.ContainsFunc(c.calls, func(s string) bool { return strings.HasPrefix(s, "graph.neighborhood") }) {
@@ -95,10 +90,8 @@ func TestTheRelationsDepthAndJumps(t *testing.T) {
 	}
 	r.open(0) // a heading: nothing opens
 	r.open(1) // b.md
-	r.openJumpCard()
-	r.jumpTo(2) // c.md, the second neighbour (d.md is under b.md, not a neighbour)
-	if !slices.Equal(c.files, []string{"kb:b.md", "kb:c.md"}) || !slices.Equal(c.opened, []string{"jumpCard"}) || !slices.Equal(c.closed, []string{"jumpCard"}) {
-		t.Fatalf("opened files %v, dialogs opened %v closed %v", c.files, c.opened, c.closed)
+	if !slices.Equal(c.files, []string{"kb:b.md"}) {
+		t.Fatalf("opened files %v, want b.md", c.files)
 	}
 }
 

@@ -16,7 +16,7 @@ Dialog {
     Shortcut { sequence: "o"; onActivated: { leader.close(); App.openPicker() } }
     Shortcut { sequence: "f"; onActivated: { leader.close(); App.openFileDialog() } }
     Shortcut { sequence: "r"; onActivated: { leader.close(); App.openRecent() } }
-    Shortcut { sequence: "j"; onActivated: { leader.close(); App.openJumpCard() } }
+    Shortcut { sequence: "j"; onActivated: { leader.close(); App.followLink() } }
     Shortcut { sequence: "b"; onActivated: { leader.close(); App.goBack() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newFile() } }
     Shortcut { sequence: "Shift+O"; onActivated: { leader.close(); App.openOutline() } }

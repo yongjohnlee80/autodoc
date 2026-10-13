@@ -19,7 +19,7 @@
 //	filepick.go   File › Open and the draft's name: pickers over the workspace's files
 //	marks.go      words marked over Markdown's highlighting: the search's and the find's
 //	explorer.go   the explorer: every workspace's folders and files, as a tree
-//	relations.go  the Relations drawer, the jump card and back (SPC l, j, b)
+//	relations.go  the Relations drawer (SPC l)
 //	outside.go    files outside every workspace: Open file…, New file…
 //	panels.go     the panels' drawers, and moving between them and the page
 //	progress.go   the daemon's work left, on the status line
@@ -96,7 +96,7 @@ type Host struct {
 
 	// find in a pane (find.go): the last find, and the cursors of the panes it moves
 	find findState
-	// the Relations drawer and the jump card (relations.go), a feature of its own; back's history
+	// the Relations drawer (relations.go), a feature of its own; back's history
 	rel     *related
 	history []fileRef
 

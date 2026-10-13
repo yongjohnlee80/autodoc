@@ -230,8 +230,8 @@ terminal, as below; where it cannot, it shows the block's source and why.
   name nothing and the supersession loops; `d` there adds the files two links away, under the one
   that reaches them. `Enter` opens a row and the drawer stays. Each opens over the page, which
   does not move, from the side the editor's preferences name; `Escape` or its key again closes
-  it. `SPC j` numbers the first nine related files (a digit opens one); `SPC b` goes back to the
-  file opened before; the page's right-click menu has both.
+  it. `SPC j` goes to the link under the cursor (the document it names, else its web address or
+  file); `SPC b` goes back to the file opened before; the page's right-click menu has both.
 - **Every panel moves and resizes**: the explorer, the relations, the terminal, the agent and the
   HTML preview. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
   with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
@@ -289,7 +289,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
 | `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
-| `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, related files by digit, back |
+| `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, the link under the cursor, back |
 | `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |
 | `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |
 | `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |

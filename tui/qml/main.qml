@@ -581,7 +581,6 @@ Window {
     // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }
     // ---- end of the generated cards ----
-    JumpCard { id: jumpCard }
     PluginKeys { id: pluginKeys }
     Help { id: help }
     Arrange { id: arrange }

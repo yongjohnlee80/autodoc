@@ -69,6 +69,7 @@ func (h *Host) commands() map[string]Command {
 		"App.clearFind":         none(h.clearFind),
 		"App.findPrevious":      none(h.findPrevious),
 		"App.goBack":            none(h.goBack),
+		"App.followLink":        none(h.followLink),
 
 		// the workspaces
 		"App.pickWorkspace":          none(h.pickWorkspace),

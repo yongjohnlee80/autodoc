@@ -178,8 +178,7 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: "o", Show: "o", Does: "open a document", Run: "App.openPicker()"},
 		{Seq: "f", Show: "f", Does: "open a file anywhere", Run: "App.openFileDialog()"},
 		{Seq: "r", Show: "r", Does: "recent files", Run: "App.openRecent()"},
-		// no comma: with it SPC's card is 77 cells across, one more than the screen leaves it
-		{Seq: "j", Show: "j", Does: "related files by digit", Run: "App.openJumpCard()"},
+		{Seq: "j", Show: "j", Does: "go to link", Run: "App.followLink()"},
 		{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
 	}),
 	inGroup(groupFile, []Key{

@@ -44,6 +44,21 @@ func linkAt(source []byte, cursor int) (cursorLink, bool) {
 	return found, ok
 }
 
+// followLink is SPC j: the link under the editor's cursor, followed as the right-click menu's Go to
+// link follows it. Off a link it says so, and where the page's links are listed.
+func (h *Host) followLink() {
+	l, ok := linkAt([]byte(h.core.Value()), h.cursorBytes())
+	if !ok {
+		name := untitled
+		if h.file.open {
+			name = h.file.path
+		}
+		h.notify("no link under the cursor: SPC l shows what " + name + " links with")
+		return
+	}
+	h.goToLink(l)
+}
+
 // goToLink opens what the link under the cursor names: the document the daemon resolves it to now
 // (graph.resolve: as the index will, so a link just typed, saved or not, goes where it will lead);
 // else a web or mail address in the browser, or a Markdown link's file, as the HTML pane opens

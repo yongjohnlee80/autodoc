@@ -15,12 +15,12 @@ import (
 // grouped by the edge's kind and direction, from its frontmatter's relations and its body's links
 // both ways. Enter opens a row in the editor and the drawer stays; d, in the drawer, shows the
 // second ring (graph.neighborhood at depth 2) under each first-ring document; the unresolved
-// relations and supersession cycles close the list. SPC j is a card of the first nine neighbours,
-// a digit each; SPC b goes back to the document opened before. The editor's right-click menu has
-// "Go to link", on a link, and "Back".
+// relations and supersession cycles close the list. SPC j goes to the link under the cursor and
+// SPC b back to the document opened before (golink.go, navigation.go); the editor's right-click
+// menu has both, "Go to link", on a link, and "Back".
 //
-// The drawer and the jump card are a feature of their own, a DocWatcher: a page shown loads its
-// relations. Opening a document, the history it leaves and back stay the host's (files.go, below).
+// The drawer is a feature of its own, a DocWatcher: a page shown loads its relations. Opening a
+// document, following a link, the history it leaves and back stay the host's (files.go, below).
 
 // relSection is one heading of the drawer: links out of the document of the kinds out, and links
 // into it of the kinds in.
@@ -138,7 +138,7 @@ func relationRows(ws, p string, rl relations) ([]relRow, int) {
 // relationRowOf is a row of the drawer: a document, a heading, or what could not be resolved.
 func relationRowOf(i int, r relRow) rowOf { return rowOf{"key": fmt.Sprint(i), "label": r.label} }
 
-// related is the Relations drawer and the jump card: the shown page's relations, as rows.
+// related is the Relations drawer: the shown page's relations, as rows.
 type related struct {
 	c    Core
 	rows *rows[relRow]
@@ -168,7 +168,6 @@ func (r *related) State() map[string]any {
 	return map[string]any{
 		"App.relations":      r.rows.Model(),
 		"App.relationsTitle": "relations",
-		"App.jumpText":       "",
 		"App.relationsIndex": 0,
 	}
 }
@@ -179,15 +178,12 @@ func (r *related) Commands() map[string]Command {
 		"App.relationsMoved":  oneNumber("a row", r.moved),
 		"App.openRelation":    oneNumber("a row", r.open),
 		"App.relationsDepth":  none(r.depth),
-		"App.openJumpCard":    none(r.openJumpCard),
-		"App.jumpTo":          oneNumber("1 to 9", r.jumpTo),
 	}
 }
 
-// Catalog is the drawer's and the jump card's user commands (catalog.go).
+// Catalog is the drawer's user command (catalog.go).
 func (r *related) Catalog() []Entry {
 	return []Entry{
-		builtin("file.related", "related files, by digit", "App.openJumpCard()", r.openJumpCard),
 		builtin("links.toggle", "the relations", "App.toggleRelations()", r.toggle),
 	}
 }
@@ -217,8 +213,8 @@ func (r *related) ofPage() {
 	case r.page.Outside:
 		r.clear("relations · " + outsideBadge) // it is in no workspace's graph
 	default:
-		// another document's rows go at once: until this one's are read, the drawer, the card and
-		// the right-click menu have none rather than the last document's
+		// another document's rows go at once: until this one's are read, the drawer has none
+		// rather than the last document's
 		if r.of != ref {
 			r.clear("relations · reading…")
 		}
@@ -351,41 +347,4 @@ func (r *related) depth() {
 	}
 	r.deep = !r.deep
 	r.ofPage()
-}
-
-// jumpRows are the jump card's documents: the drawer's first nine, once each.
-func (r *related) jumpRows() []relRow {
-	var out []relRow
-	for _, row := range r.rows.All() {
-		if row.path == "" || strings.HasPrefix(row.label, "    ") || slices.ContainsFunc(out, func(o relRow) bool { return o.path == row.path }) {
-			continue
-		}
-		if out = append(out, row); len(out) == 9 {
-			break
-		}
-	}
-	return out
-}
-
-// openJumpCard is SPC j: the page's neighbours, a digit each.
-func (r *related) openJumpCard() {
-	rows := r.jumpRows()
-	if len(rows) == 0 {
-		r.c.Notify("no related documents: SPC l shows what " + pageName(r.page) + " links with")
-		return
-	}
-	var b strings.Builder
-	for i, row := range rows {
-		fmt.Fprintf(&b, "%d  %-14s %s\n", i+1, row.section, row.path)
-	}
-	r.c.Set("App.jumpText", strings.TrimRight(b.String(), "\n"))
-	r.c.Open("jumpCard")
-}
-
-// jumpTo opens the jump card's document n (1 to 9).
-func (r *related) jumpTo(n int) {
-	r.c.Close("jumpCard")
-	if rows := r.jumpRows(); n >= 1 && n <= len(rows) {
-		r.c.OpenRef(rows[n-1].ws, rows[n-1].path)
-	}
 }
