@@ -106,7 +106,7 @@ func TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover(t *testing.T) {
 	r.keys(t, key('a'), key('s'), key('d'), key('A'), key('M'))
 	time.Sleep(300 * time.Millisecond)
 	sc := r.s.String()
-	for _, absent := range []string{"[ Add ]", "[ Status… ]", "[ Remove ]", "[ Assign ]",
+	for _, absent := range []string{"[ Add ]", "[ Status… ]", "[ Remove (d) ]", "[ Assign ]",
 		"new task", "statuses (", "remove the task?", "assign to an agent", "move the store"} {
 		if strings.Contains(sc, absent) {
 			t.Errorf("a read-only store shows %q:\n%s", absent, sc)
@@ -139,7 +139,7 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the prompt closed", func(sc string) bool { return !strings.Contains(sc, "new task") })
 	r.s.WaitForText(t, "status: open") // the cursor on the task added
-	r.s.WaitForText(t, "[ Status… ] [ Assign ] [ Remove ] [ Add ]")
+	r.s.WaitForText(t, "[ Status… ] [ Assign ] [ Remove (d) ] [ Add ]")
 	for _, status := range []string{"in-progress", "deferred", "completed"} {
 		chooseStatusOf(t, r, status)
 		r.s.WaitFor(t, status, func(string) bool { return len(listedIn(t, d, status)) == 1 })
@@ -265,7 +265,7 @@ func storeBar(sc string, left, right int) bool {
 		store, words, bottom := inside(lines[i+1]), inside(lines[i+2]), inside(lines[i+3])
 		width := right - left - 1
 		return strings.Contains(store, "kb") && strings.Contains(store, "▾") &&
-			strings.Contains(words, "[ New ] [ Load ] [ Edit ] [ Refresh ] [ ? ]") &&
+			strings.Contains(words, "[ New ] [ Load ] [ Edit (L) ] [ Refresh ] [ ? ]") &&
 			bottom == "└"+strings.Repeat("─", width-2)+"┘" &&
 			strings.Contains(lines[i+4], "Open") && strings.Contains(lines[i+4], "In progress")
 	}
@@ -311,7 +311,7 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	var x, y int
 	r.s.WaitFor(t, "the task's action row", func(sc string) bool {
 		for i, line := range strings.Split(sc, "\n") {
-			if j := strings.Index(line, "[ Status… ] [ Assign ] [ Remove ] [ Add ]"); j >= 0 {
+			if j := strings.Index(line, "[ Status… ] [ Assign ] [ Remove (d) ] [ Add ]"); j >= 0 {
 				x, y = len([]rune(line[:j])), i
 				return true
 			}
@@ -322,6 +322,37 @@ func TestTodosPanelOpensLargeWithOneActionRow(t *testing.T) {
 	for _, absent := range []string{"Preview (i)", "Status ▶", "◀ Status", "read-only until", "✚", "⎘", "✎", "⟳"} {
 		if strings.Contains(sc, absent) {
 			t.Errorf("on a task the panel shows %q:\n%s", absent, sc)
+		}
+	}
+	// each button marks the letter of its key, as every other button does: underlined, the rest of
+	// the word not
+	underlined := func(row, col int) bool {
+		return r.s.Backend.Snapshot()[row][col].Attrs.Mask&tuicore.AttrUnderline != 0
+	}
+	marks := func(row int, line, button, key string) {
+		t.Helper()
+		j := strings.Index(line, button)
+		if j < 0 {
+			t.Fatalf("no %q on row %d: %q", button, row, line)
+		}
+		col := len([]rune(line[:j]))
+		for i, ch := range []rune(button) {
+			if want := string(ch) == key; underlined(row, col+i) != want {
+				t.Errorf("%q: column %d (%q) underlined %v, want %v", button, i, ch, !want, want)
+			}
+		}
+	}
+	lines := strings.Split(sc, "\n")
+	marks(y, lines[y], "Status…", "S")
+	marks(y, lines[y], "Assign", "A")
+	marks(y, lines[y], "Remove (d)", "d")
+	marks(y, lines[y], "Add ]", "A")
+	for i, line := range lines {
+		if strings.Contains(line, "[ New ] [ Load ] [ Edit (L) ] [ Refresh ]") {
+			marks(i, line, "New", "N")
+			marks(i, line, "Load", "o")
+			marks(i, line, "Edit (L)", "L")
+			marks(i, line, "Refresh", "R")
 		}
 	}
 	// the pointer comes to the button first, as a mouse does: a press with no motion before it, at a

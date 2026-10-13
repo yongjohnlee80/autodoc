@@ -513,13 +513,13 @@ Window {
                             Flex {
                                 direction: Tui.Horizontal
                                 Text { text: " "; Layout.fillWidth: true }
-                                Button { text: "New"; toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
+                                Button { text: "&New"; toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
                                 Text { text: " " }
-                                Button { text: "Load"; toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
+                                Button { text: "L&oad"; toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
                                 Text { text: " " }
-                                Button { text: "Edit"; toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
+                                Button { text: "Edit (&L)"; toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
                                 Text { text: " " }
-                                Button { text: "Refresh"; toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
+                                Button { text: "&Refresh"; toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
                                 Text { text: " " }
                                 Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
                             }
@@ -670,13 +670,13 @@ Window {
                 Flex {
                     direction: Tui.Horizontal
                     Text { text: "read-only until the cutover"; visible: App.todoReadOnly }
-                    Button { id: todoStatusButton; text: "Status…"; toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
+                    Button { id: todoStatusButton; text: "&Status…"; toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
                     Text { text: " "; visible: App.todoActAssign }
-                    Button { text: "Assign"; toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
+                    Button { text: "&Assign"; toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
                     Text { text: " "; visible: App.todoActRemove }
-                    Button { text: "Remove"; toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
+                    Button { text: "Remove (&d)"; toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
                     Text { text: " "; visible: App.todoActStatus }
-                    Button { id: todoAddButton; text: "Add"; toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
+                    Button { id: todoAddButton; text: "&Add"; toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
                 }
             }
         }
