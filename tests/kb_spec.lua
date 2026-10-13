@@ -754,17 +754,21 @@ do
   ok("G7: git ran in the sandbox", env_ok)
 end
 
-section("[T] todo stores from auto-core")
+section("[T] todo stores from the daemon")
 do
-  -- auto-core's persisted todo state lives under the sandboxed stdpath("state")
+  -- auto-core's persisted dir_overrides, written before anything reads its todo state
   local st = vim.fn.stdpath("state") .. "/auto-core/todo.json"
-  util.write_file(st, vim.json.encode({
-    known_dirs = { ["/x/a/.todo-list"] = { todo_dir = "/x/a/.todo-list", workspace_roots = { "/x/a" } } },
-    dir_overrides = { ["/x/b"] = "/x/b-store" },
-  }))
-  local list, from_core = migrate.known_todo_stores()
-  ok("T1: the dry run collects auto-core.todo.known_dirs() and its overrides",
-    from_core and vim.tbl_contains(list, "/x/a/.todo-list") and vim.tbl_contains(list, "/x/b-store"), vim.inspect(list))
+  util.write_file(st, vim.json.encode({ dir_overrides = { ["/x/c"] = "/x/c-store" } }))
+  -- the daemon's todos.stores, faked: each store's .todo-list directory; a duplicate is listed once
+  local list, answered = migrate.known_todo_stores(function(cb)
+    cb({ { id = "a", path = "/x/a/.todo-list" }, { id = "b", path = "/x/b/.todo-list" }, { id = "a2", path = "/x/a/.todo-list" } })
+  end)
+  ok("T1: the dry run lists the stores the daemon knows, and auto-core's overrides, each once",
+    answered and vim.deep_equal(list, { "/x/a/.todo-list", "/x/b/.todo-list", "/x/c-store" }), vim.inspect(list))
+  -- the daemon answering with an error is not an answer: the plan says so, the overrides stay
+  local list2, answered2 = migrate.known_todo_stores(function(cb) cb(nil, { message = "down" }) end)
+  ok("T2: an error is no answer; the overrides are still listed",
+    answered2 == false and vim.deep_equal(list2, { "/x/c-store" }), vim.inspect(list2))
 end
 
 print(string.format("\n%d passed, %d failed", pass, fail))

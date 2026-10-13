@@ -172,36 +172,56 @@ local function is_git(root)
   return true, vim.trim(out)
 end
 
----The todo stores auto-core knows: known_dirs() entries and dir_overrides values.
-function M.known_todo_stores()
+---How long known_todo_stores waits for the daemon's answer.
+M.STORES_WAIT_MS = 5000
+
+---The todo stores the daemon knows (todos.stores: each store's .todo-list directory), and the
+---dir_overrides a Neovim root points elsewhere in auto-core's persisted todo state. The second
+---result is whether the daemon answered. Before the cutover's end auto-core.todo.known_dirs() was
+---asked; that module is gone from auto-core v0.4.1, and the daemon has known every store since
+---the cutover (ADR 1791532020).
+---@param list_stores fun(cb: fun(result: table?, err: table?))?  -- for tests; the daemon's todos.stores by default
+---@return string[] dirs, boolean answered
+function M.known_todo_stores(list_stores)
   local out, seen = {}, {}
-  local ok, todo = pcall(require, "auto-core.todo")
-  if ok and type(todo) == "table" and type(todo.known_dirs) == "function" then
-    local okk, list = pcall(todo.known_dirs)
-    if okk and type(list) == "table" then
-      for _, e in ipairs(list) do
-        if type(e.todo_dir) == "string" and not seen[e.todo_dir] then
-          seen[e.todo_dir] = true
-          out[#out + 1] = e.todo_dir
-        end
+  local function add(d)
+    if type(d) == "string" and d ~= "" and not seen[d] then
+      seen[d] = true
+      out[#out + 1] = d
+    end
+  end
+  if not list_stores then
+    local okt, todos = pcall(require, "autodoc.todos")
+    if okt and type(todos) == "table" and type(todos.stores) == "function" then
+      list_stores = todos.stores
+    end
+  end
+  local answered = false
+  if list_stores then
+    local result, finished = nil, false
+    local okc = pcall(list_stores, function(r, e)
+      if not e then result = r end
+      finished = true
+    end)
+    -- NOTE: deadline: the dry run is synchronous and the daemon may be down; a missing answer is
+    -- "none known", said in the plan, not a hang.
+    if okc then vim.wait(M.STORES_WAIT_MS, function() return finished end, 10) end
+    if type(result) == "table" then
+      answered = true
+      for _, st in ipairs(result) do
+        if type(st) == "table" then add(st.path) end
       end
     end
   end
-  local oks, st = pcall(require, "auto-core.state")
-  if oks and type(st) == "table" and type(st.namespace) == "function" then
-    local okn, ns = pcall(st.namespace, "todo", { persist = "json" })
+  local oks, state = pcall(require, "auto-core.state")
+  if oks and type(state) == "table" and type(state.namespace) == "function" then
+    local okn, ns = pcall(state.namespace, "todo", { persist = "json" })
     if okn and ns then
-      local overrides = ns:get("dir_overrides") or {}
-      for _, d in pairs(overrides) do
-        if type(d) == "string" and not seen[d] then
-          seen[d] = true
-          out[#out + 1] = d
-        end
-      end
+      for _, d in pairs(ns:get("dir_overrides") or {}) do add(d) end
     end
   end
   table.sort(out)
-  return out, ok
+  return out, answered
 end
 
 -- ─── edits ──────────────────────────────────────────────────────────
@@ -768,10 +788,10 @@ function M.plan(opts)
 
   -- ── todo stores outside the KB (§8.3a) ──
   local stores = opts.todo_stores
-  local from_auto_core = false
-  if stores == nil then stores, from_auto_core = M.known_todo_stores() end
-  plan.todo_stores.source = opts.todo_stores and "opts.todo_stores" or (from_auto_core and "auto-core.todo.known_dirs() + dir_overrides" or "none (auto-core.todo unavailable)")
-  plan.todo_stores.note = "a todo store auto-core does not know cannot be found; the stores checked are listed"
+  local from_daemon = false
+  if stores == nil then stores, from_daemon = M.known_todo_stores() end
+  plan.todo_stores.source = opts.todo_stores and "opts.todo_stores" or (from_daemon and "the daemon's todos.stores + auto-core's dir_overrides" or "auto-core's dir_overrides only (the daemon did not answer)")
+  plan.todo_stores.note = "a todo store the daemon does not know cannot be found; the stores checked are listed"
   for _, dir in ipairs(stores) do
     dir = util.normpath(dir)
     local entry = { dir = dir }
