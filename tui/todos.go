@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -24,17 +26,86 @@ var todoBuckets = []struct{ bucket, title string }{
 	{"open", "Open"}, {"in-progress", "In progress"}, {"deferred", "Deferred"}, {"completed", "Completed"}, {"archived", "Archived"},
 }
 
-// todoCycle is s: the next status, as autofinder's todos panel cycles it.
-var todoCycle = map[string]string{"open": "completed", "completed": "deferred", "deferred": "open", "in-progress": "completed"}
+// todoCycle is s: the next status, every one but archived in turn: open → in progress →
+// completed → deferred → open.
+var todoCycle = map[string]string{"open": "in-progress", "in-progress": "completed", "completed": "deferred", "deferred": "open"}
+
+// todoForward and todoBack are > and <: a step along open → in progress → completed. Deferred is
+// off that line (s reaches it), and archived is the daemon's to move.
+var (
+	todoForward = map[string]string{"open": "in-progress", "in-progress": "completed"}
+	todoBack    = map[string]string{"completed": "in-progress", "in-progress": "open"}
+)
+
+// todoLabelPref is the preference holding a store's label, by the store's id: AutoDoc's own name
+// for it, which survives the store's move (M) and never touches its files.
+const todoLabelPref = "tui.todos.label."
+
+// todoFollow is a moved task the cursor is to follow: its store's row key, its id, the section it
+// is in now, and the sections whose reads are still to land.
+type todoFollow struct {
+	store, id, bucket string
+	waiting           map[string]bool
+}
 
 // todoStore is one root of the tree: where it is, as the todos.* verbs take it, and what the
 // daemon says of it.
 type todoStore struct {
 	id      string // the row's key: "ws:<name>" or "root:<dir>"
 	at      any    // a workspace name, or {root: …}
-	label   string
+	sid     string // the daemon's id of the store, its label's key; "" when not known
+	name    string // the derived name (storeName)
+	alias   string // the user's label; "" shows the name
+	ws      string // the workspace it is the store of, or ""
 	path    string // the store directory, once known
 	claimed bool   // the daemon writes it: ● and writes allowed
+}
+
+// title is how the store is called: its label, or its derived name, and the workspace it is the
+// store of.
+func (s *todoStore) title() string {
+	t := cmp.Or(s.alias, s.name)
+	if s.ws != "" {
+		t += " · ws " + s.ws
+	}
+	return t
+}
+
+// labelKey is the store's label's preference: by its id, or its path while the id is not known.
+func (s *todoStore) labelKey() string { return todoLabelPref + cmp.Or(s.sid, s.path) }
+
+// storeName is a store's derived name: its project's folder. A KB folder (kb, alone or in
+// .auto-agents or .auto-agents-config) is named for the project that holds it, the first folder
+// above it that is none of those: …/LabelManager/.auto-agents/kb is LabelManager.
+func storeName(root string) string {
+	dir := filepath.Clean(root)
+	if filepath.Base(dir) != "kb" {
+		return filepath.Base(dir)
+	}
+	for d := filepath.Dir(dir); filepath.Dir(d) != d; d = filepath.Dir(d) {
+		switch b := filepath.Base(d); b {
+		case "kb", ".auto-agents", ".auto-agents-config":
+		default:
+			return b
+		}
+	}
+	return filepath.Base(dir)
+}
+
+// tildePath is path with the home directory as ~, as the panel shows a store's place.
+func tildePath(path string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" && (path == home || strings.HasPrefix(path, home+string(filepath.Separator))) {
+		return "~" + strings.TrimPrefix(path, home)
+	}
+	return path
+}
+
+// storeRoot is the project root of a store directory: the folder holding its .todo-list.
+func storeRoot(path string) string {
+	if filepath.Base(path) == ".todo-list" {
+		return filepath.Dir(path)
+	}
+	return path
 }
 
 // todos is the feature.
@@ -58,8 +129,14 @@ type todos struct {
 	// older tree is dropped, its rows not this tree's
 	gen      uint64
 	folderAs string // what the folder chosen is for: "load", "new" or "move"
-	detail   bool   // the details show (i, o)
-	help     bool   // the keys show (?)
+	// labelling is the store L is labelling, while its prompt is open
+	labelling *todoStore
+	// follow is the task a move (<, >, s) sent to another section: the cursor goes to it there once
+	// the reads of both sections, the one it left and the one it is in, have landed, in either
+	// order (a section that changes after the cursor is placed moves the rows under it)
+	follow todoFollow
+	detail bool // the details show (i, o)
+	help   bool // the keys show (?)
 }
 
 func newTodos(c Core) *todos {
@@ -75,7 +152,9 @@ func (t *todos) State() map[string]any {
 	return map[string]any{
 		"App.todosTitle": "todos", "App.todosStatus": "", "App.todoDetail": "",
 		"App.todoDetailShown": true, "App.todoHelpShown": false,
-		"App.todoFolder": "", "App.todoTree": t.model,
+		"App.todoFolder": "", "App.todoTree": t.model, "App.todoLabelText": "",
+		"App.todoCanPreview": false, "App.todoCanAdd": false, "App.todoCanBack": false,
+		"App.todoCanForward": false, "App.todoCanRemove": false,
 	}
 }
 
@@ -89,6 +168,10 @@ func (t *todos) Commands() map[string]Command {
 		"App.todoAddTitle":     oneString("a title", t.addTitle),
 		"App.todoRemove":       none(t.remove),
 		"App.todoCycle":        none(t.cycle),
+		"App.todoForward":      none(func() { t.step(todoForward, "forward") }),
+		"App.todoBack":         none(func() { t.step(todoBack, "back") }),
+		"App.todoLabel":        none(t.label),
+		"App.todoLabelSet":     oneString("a label", t.labelSet),
 		"App.todoRefresh":      none(t.refresh),
 		"App.todoToggleDetail": none(t.toggleDetail),
 		"App.todoToggleHelp":   none(t.toggleHelp),
@@ -106,6 +189,7 @@ func (t *todos) Catalog() []Entry {
 			Run: func(Invocation) error { t.toggle(); return nil }},
 		builtin("todos.new_store", "a new todo store", "App.todoNew()", t.chooseNew),
 		builtin("todos.load_store", "load a todo store", "App.todoLoad()", t.chooseLoad),
+		builtin("todos.label_store", "label the todo store", "App.todoLabel()", t.label),
 	}
 }
 
@@ -129,10 +213,13 @@ func (*todos) Keys() []Key {
 		{Scope: "todos", Seq: "a", Show: "a", Run: "App.todoAdd()"},
 		{Scope: "todos", Seq: "d", Show: "d", Run: "App.todoRemove()"},
 		{Scope: "todos", Seq: "s", Show: "s", Run: "App.todoCycle()"},
+		{Scope: "todos", Seq: "<", Show: "<", Run: "App.todoBack()"},
+		{Scope: "todos", Seq: ">", Show: ">", Run: "App.todoForward()"},
 		{Scope: "todos", Seq: "i", Show: "i", Run: "App.todoToggleDetail()"},
 		{Scope: "todos", Seq: "o", Show: "o", Run: "App.todoToggleDetail()"},
 		{Scope: "todos", Seq: "Shift+R", Show: "R", Run: "App.todoRefresh()"},
 		{Scope: "todos", Seq: "Shift+M", Show: "M", Run: "App.todoMove()"},
+		{Scope: "todos", Seq: "Shift+L", Show: "L", Run: "App.todoLabel()"},
 		{Scope: "todos", Seq: "?", Show: "?", Run: "App.todoToggleHelp()"},
 	}
 	for i := range todoBuckets {
@@ -210,32 +297,70 @@ func (t *todos) call(verb string, params []any, seq *uint64, then func(any)) {
 type answer struct{ v any }
 
 // list reads the stores: the workspace's first, as todos.resolve finds it, then every other the
-// daemon knows by a root of its own; each shows with its buckets, all closed.
+// daemon knows by a root of its own; each shows with its buckets, all closed, called by its label
+// or its derived name.
 func (t *todos) list() {
 	t.call("todos.stores", nil, &t.rootsSeq, func(v any) {
 		var stores []*todoStore
+		ids := map[string]string{} // store path → the daemon's id
 		for _, x := range asList(v) {
 			m := asMap(x)
+			ids[str(m, "path")] = str(m, "id")
 			roots := asList(m["roots"])
 			if len(roots) == 0 {
 				continue // a store with no project root is not one the verbs can reach
 			}
 			root, _ := roots[0].(string)
-			stores = append(stores, &todoStore{id: "root:" + root, at: map[string]any{"root": root}, label: root,
-				path: str(m, "path"), claimed: m["claimed"] == true})
+			stores = append(stores, &todoStore{id: "root:" + root, at: map[string]any{"root": root}, sid: str(m, "id"),
+				name: storeName(root), path: str(m, "path"), claimed: m["claimed"] == true})
 		}
-		ws := t.c.Workspace()
-		if ws == "" {
-			t.show(stores)
+		t.labels(func(labels map[string]string) {
+			for _, s := range stores {
+				s.alias = labels[s.labelKey()]
+			}
+			ws := t.c.Workspace()
+			if ws == "" {
+				t.show(stores)
+				return
+			}
+			t.call("todos.resolve", []any{ws}, &t.rootsSeq, func(v any) {
+				r := asMap(v)
+				path := str(r, "store")
+				w := &todoStore{id: "ws:" + ws, at: ws, ws: ws, sid: ids[path], name: storeName(storeRoot(path)), path: path,
+					claimed: r["claimed"] == true}
+				if path == "" {
+					w.name = ws
+				}
+				w.alias = labels[w.labelKey()]
+				// the workspace's store listed by its root as well shows once, as the workspace's
+				stores = slices.DeleteFunc(stores, func(s *todoStore) bool { return w.path != "" && s.path == w.path })
+				t.show(append([]*todoStore{w}, stores...))
+			})
+		})
+	})
+}
+
+// labels reads the stores' labels, by their preference: none when the daemon keeps no
+// preferences, so the stores still list, by their derived names.
+func (t *todos) labels(then func(map[string]string)) {
+	tk := t.c.Ticket(&t.rootsSeq, TicketSession)
+	t.c.Go(func(ctx context.Context) any {
+		v, err := t.c.Call(ctx, "preference.list")
+		if err != nil {
+			return map[string]any{}
+		}
+		return asMap(v)
+	}, func(v any) {
+		if !tk.Current() {
 			return
 		}
-		t.call("todos.resolve", []any{ws}, &t.rootsSeq, func(v any) {
-			r := asMap(v)
-			w := &todoStore{id: "ws:" + ws, at: ws, label: ws, path: str(r, "store"), claimed: r["claimed"] == true}
-			// the workspace's store listed by its root as well shows once, as the workspace's
-			stores = slices.DeleteFunc(stores, func(s *todoStore) bool { return w.path != "" && s.path == w.path })
-			t.show(append([]*todoStore{w}, stores...))
-		})
+		labels := map[string]string{}
+		for k, x := range v.(map[string]any) {
+			if l, ok := x.(string); ok && strings.HasPrefix(k, todoLabelPref) && l != "" {
+				labels[k] = l
+			}
+		}
+		then(labels)
 	})
 }
 
@@ -243,13 +368,14 @@ func (t *todos) list() {
 func (t *todos) show(stores []*todoStore) {
 	t.gen++
 	t.stores, t.open, t.tasks = stores, map[string]bool{}, map[string]map[string]any{}
+	t.follow = todoFollow{} // a move asked of the old tree follows nothing in the new
 	var rows []tuidecl.TreeRow
 	for _, s := range stores {
 		mark := "  "
 		if s.claimed {
 			mark = "● "
 		}
-		label := mark + s.label
+		label := mark + s.title()
 		if !s.claimed {
 			label += "  (read-only until the cutover)"
 		}
@@ -368,6 +494,7 @@ func (t *todos) read(s *todoStore, kind, rest string) {
 			rows = append(rows, tuidecl.TreeRow{Row: rowOf{"key": k, "label": label}})
 		}
 		t.model.SetChildren(&ix, rows)
+		t.landed(key)
 		msg := fmt.Sprintf("%d tasks", len(tasks))
 		if bad := len(asList(l["malformed"])); bad > 0 {
 			msg += fmt.Sprintf(" · %d malformed files", bad)
@@ -411,7 +538,7 @@ func (t *todos) indexOf(keys ...string) (tuidecl.Index, bool) {
 }
 
 func (t *todos) status(s string) {
-	t.c.Set("App.todosStatus", s+"   a add · s status · d remove · R refresh · i details · M move · ? keys")
+	t.c.Set("App.todosStatus", s+"   ? keys") // the buttons name their own keys; ? lists them all
 }
 
 // keysOf is a row's identity: the keys from the root down to it.
@@ -446,35 +573,85 @@ func (t *todos) cursor() (*todoStore, map[string]any) {
 	return t.store(id), t.tasks[last]
 }
 
-// showDetail shows the task under the cursor's details, as autofinder's i does.
+// showDetail shows the details of the row under the cursor (a task's, as autofinder's i does; a
+// store's, where it is and what it is called), the store's place as the heading, and which of the
+// task buttons apply. It runs when the cursor moves and when an answer lands, never inside a
+// button's own click, so no button disables itself (a golib Button's handler must not).
 func (t *todos) showDetail() {
-	_, x := t.cursor()
-	if x == nil {
-		t.c.Set("App.todoDetail", "")
-		return
+	s, x := t.cursor()
+	heading := "todos"
+	if s != nil && s.path != "" {
+		heading += " · " + tildePath(s.path)
 	}
-	t.c.Set("App.todoDetail", todoDetail(x))
+	t.c.Set("App.todosTitle", heading)
+	switch {
+	case x != nil:
+		t.c.Set("App.todoDetail", todoDetail(x))
+	case s != nil && len(t.at) == 1:
+		t.c.Set("App.todoDetail", storeDetail(s))
+	default:
+		t.c.Set("App.todoDetail", "")
+	}
+	// Posted: the cursor's move reaches here from the tree's currentIndexChanged, a Bus delivery,
+	// and a button disabled there could not end a gesture it held (golib's Bus subscribers enqueue
+	// an Update for that). Read when it runs, so the cursor is where it is then.
+	t.c.Post(t.syncButtons)
+}
+
+// syncButtons sets which task buttons apply to the row under the cursor, as their keys refuse the
+// others: a task for Preview, Remove and the steps; a store taking writes here for Add and the
+// writes; a step only where the task's status has one.
+func (t *todos) syncButtons() {
+	s, x := t.cursor()
+	writable := s != nil && s.claimed
+	status := str(x, "status")
+	_, back := todoBack[status]
+	_, forward := todoForward[status]
+	t.c.Set("App.todoCanPreview", x != nil)
+	t.c.Set("App.todoCanAdd", writable)
+	t.c.Set("App.todoCanBack", x != nil && writable && back)
+	t.c.Set("App.todoCanForward", x != nil && writable && forward)
+	t.c.Set("App.todoCanRemove", x != nil && writable)
+}
+
+// storeDetail is a store's details, Markdown: what it is called, where it is, who writes it.
+func storeDetail(s *todoStore) string {
+	var b strings.Builder
+	b.WriteString("## " + s.title() + "\n\n")
+	fmt.Fprintf(&b, "- folder: %s\n", tildePath(cmp.Or(s.path, rootOf(s.at))))
+	fmt.Fprintf(&b, "- name: %s\n", s.name)
+	if s.alias != "" {
+		fmt.Fprintf(&b, "- label: %s (L to change it; empty is the name)\n", s.alias)
+	} else {
+		b.WriteString("- label: none (L gives it one)\n")
+	}
+	if s.claimed {
+		b.WriteString("- writes: here (●)\n")
+	} else {
+		b.WriteString("- writes: read-only until the cutover\n")
+	}
+	return b.String()
 }
 
 // todoDetail is a task's details, as autofinder's i shows them.
 func todoDetail(x map[string]any) string {
 	var b strings.Builder
-	b.WriteString(str(x, "title") + "\n\n")
+	b.WriteString("## " + str(x, "title") + "\n\n")
 	for _, f := range []string{"status", "priority", "assignee", "due", "created", "updated"} {
 		if v := str(x, f); v != "" {
-			fmt.Fprintf(&b, "%-9s %s\n", f+":", v)
+			fmt.Fprintf(&b, "- %s: %s\n", f, v)
 		}
 	}
 	for _, f := range []string{"tags", "adr", "review", "blocked"} {
 		for _, v := range asList(x[f]) {
-			fmt.Fprintf(&b, "%-9s %v\n", f+":", v)
+			fmt.Fprintf(&b, "- %s: %v\n", f, v)
 		}
 	}
 	if errs := asList(x["errors"]); len(errs) > 0 {
-		b.WriteString("\nerrors:\n")
+		b.WriteString("\nerrors:\n\n")
 		for _, e := range errs {
 			m := asMap(e)
-			fmt.Fprintf(&b, "  %s %s: %s\n", str(m, "field"), str(m, "code"), str(m, "message"))
+			fmt.Fprintf(&b, "- %s %s: %s\n", str(m, "field"), str(m, "code"), str(m, "message"))
 		}
 	}
 	if d := strings.TrimSpace(str(x, "description")); d != "" {
@@ -574,7 +751,7 @@ func (t *todos) removeConfirmed(s *todoStore, x map[string]any) {
 	t.write(s, "todos.remove", []any{s.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify("todos: removed " + str(x, "id")) })
 }
 
-// cycle is s: open → completed → deferred → open.
+// cycle is s: open → in progress → completed → deferred → open.
 func (t *todos) cycle() {
 	s, x := t.cursor()
 	if x == nil {
@@ -584,7 +761,85 @@ func (t *todos) cycle() {
 	if !ok {
 		return // archived: Status from the daemon's verbs, not this key
 	}
-	t.write(s, "todos.status", []any{s.at, str(x, "id"), str(x, "rev"), next}, nil)
+	t.moveTo(s, x, next)
+}
+
+// step is > (forward) and <: the task a step along open → in progress → completed. At an end, on a
+// deferred or an archived task, nothing moves, and the status line says why.
+func (t *todos) step(steps map[string]string, way string) {
+	s, x := t.cursor()
+	if x == nil {
+		return
+	}
+	next, ok := steps[str(x, "status")]
+	if !ok {
+		t.status(fmt.Sprintf("%s: nothing %s of %s", str(x, "title"), way, str(x, "status")))
+		return
+	}
+	t.moveTo(s, x, next)
+}
+
+// moveTo gives task x of store s its next status, through todos.status so its events fire; the
+// cursor follows the task into its new section once the daemon has moved it.
+func (t *todos) moveTo(s *todoStore, x map[string]any, next string) {
+	from, to := bucketKey(s.id, str(x, "status")), bucketKey(s.id, next)
+	t.write(s, "todos.status", []any{s.at, str(x, "id"), str(x, "rev"), next}, func(any) {
+		t.follow = todoFollow{store: s.id, id: str(x, "id"), bucket: next, waiting: map[string]bool{from: true, to: true}}
+		t.open[to] = true // the write's reread reads it, open or not, with the section the task left
+	})
+}
+
+// landed is section key's read applied: once the moved task's two sections have both landed, the
+// cursor goes to the task where it is now.
+func (t *todos) landed(key string) {
+	f := &t.follow
+	if f.store == "" || !f.waiting[key] {
+		return
+	}
+	delete(f.waiting, key)
+	if len(f.waiting) > 0 {
+		return
+	}
+	row, ok := t.indexOf(f.store, bucketKey(f.store, f.bucket), taskKey(f.store, f.id))
+	f.store = ""
+	if !ok {
+		return
+	}
+	t.at = t.keysOf(row)
+	if err := t.c.View(todosPanelSpec().View, "setCurrentIndex", row); err != nil {
+		t.c.Failed("todos: the moved task", err)
+	}
+}
+
+// label is L: the store under the cursor's label asked for (todoLabel), its own filled in. A label
+// is AutoDoc's alone, so a read-only store takes one too.
+func (t *todos) label() {
+	s, _ := t.cursor()
+	if s == nil {
+		return
+	}
+	t.labelling = s
+	t.c.Set("App.todoLabelText", s.alias)
+	t.c.Open("todoLabel")
+}
+
+// labelSet keeps the label typed for the store L asked about; an empty one is the derived name.
+func (t *todos) labelSet(text string) {
+	t.c.Close("todoLabel")
+	s := t.labelling
+	t.labelling = nil
+	if s == nil {
+		return
+	}
+	text = strings.TrimSpace(text)
+	t.call("preference.set", []any{s.labelKey(), text}, nil, func(any) {
+		if text == "" {
+			t.c.Notify(fmt.Sprintf("todos: %s shows as %s again", tildePath(s.path), s.name))
+		} else {
+			t.c.Notify(fmt.Sprintf("todos: %s is labelled %s", tildePath(s.path), text))
+		}
+		t.list()
+	})
 }
 
 // refresh is R: the daemon reconciles the store's active buckets, then what was open is read again.
@@ -643,7 +898,7 @@ func (t *todos) folderChosen(dir string) {
 	case "new":
 		t.call("todos.register", []any{dir}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
-				s := &todoStore{id: "root:" + dir, at: at, label: dir, claimed: asMap(v)["claimed"] == true}
+				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), claimed: asMap(v)["claimed"] == true}
 				t.write(s, "todos.scaffold", []any{at}, func(any) { t.c.Notify("todos: a new store in " + dir); t.list() })
 			})
 		})

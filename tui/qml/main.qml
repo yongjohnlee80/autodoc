@@ -155,6 +155,7 @@ Window {
             MenuSeparator {}
             MenuItem { text: "&New store…"; onTriggered: App.todoNew() }
             MenuItem { text: "&Load store…"; onTriggered: App.todoLoad() }
+            MenuItem { text: "La&bel store…  (L)"; onTriggered: App.todoLabel() }
         }
         Menu {
             title: "&Options"
@@ -432,7 +433,9 @@ Window {
         floating: App.todosFloating
         floatX: App.todosX; floatY: App.todosY; floatWidth: App.todosW; floatHeight: App.todosH
         onPlaced: App.panelPlaced("todos", x, y, width, height)
-        minimumSize: 15
+        // 25%, not the side panels' 15: the task buttons' widest, "[ Status ▶ (>) ]", whole inside
+        // the frame on an 80-column screen, the Flow wrapping the rest one to a line
+        minimumSize: 25
         onResized: App.panelResized("todos", size, length)
         onOpened: App.panelOpened("todos")
         onClosed: App.panelClosed("todos")
@@ -440,10 +443,13 @@ Window {
         Shortcut { sequence: "a"; onActivated: App.todoAdd() }
         Shortcut { sequence: "d"; onActivated: App.todoRemove() }
         Shortcut { sequence: "s"; onActivated: App.todoCycle() }
+        Shortcut { sequence: "<"; onActivated: App.todoBack() }
+        Shortcut { sequence: ">"; onActivated: App.todoForward() }
         Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
         Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
         Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
         Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
+        Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
         Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
         Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
         Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
@@ -471,19 +477,39 @@ Window {
                 onCurrentIndexChanged: App.todoMoved(index)
                 onActivated: App.todoActivated(index)
             }
-            // the task under the cursor's details (i, o): at most half the panel, scrolled, so a long
-            // description never pushes the tree away
+            // the row under the cursor's details (i, o), Markdown, rendered as the pickers' previews
+            // are (the GUI's Editor draws it; a terminal's shows the source): at most half the panel,
+            // scrolled, so a long description never pushes the tree away
             Frame {
                 title: "details"
                 visible: App.todoDetailShown
                 Layout.fillHeight: true
-                Editor { readOnly: true; text: App.todoDetail; wrap: true }
+                Editor {
+                    readOnly: true
+                    text: App.todoDetail
+                    wrap: true
+                    view: Editor.Rendered
+                    SyntaxHighlighter { definition: "Markdown" }
+                    MarkdownRenderer {}
+                }
             }
             Text { text: App.todosStatus; wrapMode: Tui.WordWrap }
             Text {
                 visible: App.todoHelpShown
                 wrapMode: Tui.WordWrap
-                text: "Enter open the task's file, or a section   a add   d remove   s status (open → completed → deferred → open)   i, o details   R refresh   M move the store   1–5 a section   ? these keys   q close"
+                text: "Enter open the task's file, or a section   a add   d remove   s status (open → in progress → completed → deferred → open)   > a step on (open → in progress → completed)   < a step back   i, o details   R refresh   L label the store   M move the store   1–5 a section   ? these keys   q close"
+            }
+            // the task actions, each its key's: a Flow, so a narrow panel wraps them, never clips.
+            // Which apply follows the cursor (todos.go: showDetail), never a button's own click.
+            Flow {
+                spacing: 1
+                rowSpacing: 0
+                Button { text: "Preview (i)"; enabled: App.todoCanPreview; onClicked: App.todoToggleDetail() }
+                Button { text: "Add (a)"; enabled: App.todoCanAdd; onClicked: App.todoAdd() }
+                Button { text: "◀ Status (<)"; enabled: App.todoCanBack; onClicked: App.todoBack() }
+                Button { text: "Status ▶ (>)"; enabled: App.todoCanForward; onClicked: App.todoForward() }
+                Button { text: "Remove (d)"; enabled: App.todoCanRemove; onClicked: App.todoRemove() }
+                Button { text: "Refresh (R)"; onClicked: App.todoRefresh() }
             }
         }
     }
@@ -531,6 +557,7 @@ Window {
     Tutorial { id: tutorial }
     About { id: about }
     TodoNew { id: todoNew }
+    TodoLabel { id: todoLabel }
     TodoFolder { id: todoFolder }
     Notifications { id: notifications }
     Confirm { id: confirm }

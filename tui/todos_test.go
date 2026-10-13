@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -58,7 +59,7 @@ func TestTodosShowsTheWorkspacesStoreReadOnlyUntilTheCutover(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, false, todo.Spec{Title: "Write the view", Priority: "high"})
 	r := attached(t, d)
-	openTodos(t, r, "kb  (read-only", '1') // the label is cut to the panel's width
+	openTodos(t, r, "· ws kb  (read-only", '1') // the label is cut to the panel's width
 	r.s.WaitForText(t, "1  Write the view")
 	r.s.WaitForText(t, "1 tasks")
 	r.keys(t, key('a'))
@@ -77,7 +78,7 @@ func TestTodosAddsCyclesAndRemoves(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
-	openTodos(t, r, "● kb", '1')
+	openTodos(t, r, "· ws kb", '1')
 	r.s.WaitForText(t, "0 tasks")
 	r.keys(t, key('a'))
 	r.s.WaitForText(t, "new task")
@@ -95,14 +96,13 @@ func TestTodosAddsCyclesAndRemoves(t *testing.T) {
 		t.Fatalf("open after a: %+v", got)
 	}
 	r.keys(t, key('j'))
-	r.s.WaitForText(t, "status:") // the task under the cursor: the details show it (a key and the move are not ordered)
-	r.keys(t, key('s'))           // open → completed
+	r.s.WaitForText(t, "status: open") // the task under the cursor: the details show it (a key and the move are not ordered)
+	r.keys(t, key('s'))                // open → in progress, the cursor following the task
+	r.s.WaitFor(t, "in progress", func(string) bool { return len(listed("in-progress")) == 1 })
+	r.s.WaitForText(t, "status: in-progress")
+	r.keys(t, key('>')) // a step on: completed, the cursor following again
 	r.s.WaitFor(t, "completed", func(string) bool { return len(listed("completed")) == 1 })
-	r.s.WaitForText(t, "0 tasks")
-	r.keys(t, key('4'), key('l')) // Completed, opened
-	r.s.WaitForText(t, "Ship the todos")
-	r.keys(t, key('j'))
-	r.s.WaitForText(t, "status:   completed")
+	r.s.WaitForText(t, "status: completed")
 	// d with the keyboard in the page is not the panel's
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("editor", "forceActiveFocus")); return true })
 	r.keys(t, key('d'))
@@ -123,7 +123,7 @@ func TestTodosArchiveIsReadByMonth(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Old and done", Status: "archived"}, todo.Spec{Title: "Still open"})
 	r := attached(t, d)
-	openTodos(t, r, "● kb", '5')
+	openTodos(t, r, "· ws kb", '5')
 	month := time.Now().Format("2006/01")
 	r.s.WaitForText(t, month)
 	if strings.Contains(r.s.String(), "Old and done") {
@@ -139,7 +139,7 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true)
 	r := attached(t, d)
-	openTodos(t, r, "● kb", '1')
+	openTodos(t, r, "· ws kb", '1')
 	r.s.WaitForText(t, "0 tasks")
 	// another client's add arrives as an event, as sys.events carries it
 	if _, err := d.todos.Add(context.Background(), kbTodos, todo.Spec{Title: "From an agent"}); err != nil {
@@ -147,4 +147,62 @@ func TestTodosRefreshesOnAnotherClientsChange(t *testing.T) {
 	}
 	onLoop(r, func() bool { return r.h.reg.event("todos.changed", "kb", "x") })
 	r.s.WaitForText(t, "From an agent")
+}
+
+// TestTodosTaskButtonsFitTheNarrowestPanel: at its minimum width on an 80-column screen the task
+// buttons wrap, every one whole, and a click runs its key's action: Status ▶ moves the task on, the
+// cursor following it.
+func TestTodosTaskButtonsFitTheNarrowestPanel(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 80, 40)
+	r.ready(t)
+	openTodos(t, r, "· ws kb", '1')
+	r.keys(t, key('j'))
+	r.s.WaitForText(t, "status: open")
+	onLoop(r, func() bool { r.h.panelResized("todos", 25, 100); return true })
+	// each whole: its decoration's both ends on the screen, so nothing of it is cut
+	for _, b := range []string{"Preview (i)", "Add (a)", "◀ Status (<)", "Status ▶ (>)", "Remove (d)", "Refresh (R)"} {
+		r.s.WaitForText(t, "[ "+b+" ]")
+	}
+	// the resize lands in steps (its size, then its length): click where the button is once the
+	// panel has its final place, 25% of 80 columns at the right edge, its whole height (its heading
+	// at row 0, column 60), not where an earlier step drew it
+	var x, y int
+	r.s.WaitFor(t, "the panel at its minimum", func(sc string) bool {
+		lines := strings.Split(sc, "\n")
+		if i := strings.Index(lines[0], "┌ todos"); i < 0 || len([]rune(lines[0][:i])) != 60 {
+			return false
+		}
+		for i, line := range lines {
+			if j := strings.Index(line, "[ Status ▶ (>) ]"); j >= 0 {
+				x, y = len([]rune(line[:j])), i
+				return true
+			}
+		}
+		return false
+	})
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x + 2, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x + 2, Y: y})
+	r.s.WaitFor(t, "moved on", func(string) bool {
+		l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{Buckets: []string{"in-progress"}})
+		return err == nil && len(l.Tasks) == 1
+	})
+	// the cursor followed it into In progress: its details are its (the narrow pane wraps the line)
+	r.s.WaitFor(t, "the cursor on the moved task", func(string) bool {
+		return onLoop(r, func() bool {
+			_, x := todosOf(r).cursor()
+			return str(x, "title") == "Ship it" && str(x, "status") == "in-progress"
+		})
+	})
+}
+
+// todosOf is the running TUI's todos feature.
+func todosOf(r *running) *todos {
+	for _, f := range r.h.reg.features {
+		if v, ok := f.(*todos); ok {
+			return v
+		}
+	}
+	return nil
 }

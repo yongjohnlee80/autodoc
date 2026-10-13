@@ -189,7 +189,7 @@ func TestTodosListsTheStoresAsTheTreesRoots(t *testing.T) {
 		t.Errorf("SPC x: views %v", s.views)
 	}
 	v.Panels()[0].Opened(nil)
-	if got, want := treeLabels(v, nil), []string{"  kb  (read-only until the cutover)", "● /p"}; !slices.Equal(got, want) {
+	if got, want := treeLabels(v, nil), []string{"  kb · ws kb  (read-only until the cutover)", "● p"}; !slices.Equal(got, want) {
 		t.Fatalf("roots %q, want %q (the rootless store left out)", got, want)
 	}
 	if got := treeLabels(v, &tuidecl.Index{Row: 0}); !slices.Equal(got, []string{"Open", "In progress", "Deferred", "Completed", "Archived"}) {
@@ -299,7 +299,7 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	}
 	s.yes()
 	v.cycle()
-	for _, want := range []string{"todos.add[kb map[title:Write it]]", "todos.remove[kb t1 r1]", "todos.status[kb t1 r1 completed]"} {
+	for _, want := range []string{"todos.add[kb map[title:Write it]]", "todos.remove[kb t1 r1]", "todos.status[kb t1 r1 in-progress]"} {
 		if !s.called(want) {
 			t.Errorf("no %s: %v", want, s.calls)
 		}
@@ -399,7 +399,8 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	if len(s.failed) != 0 {
 		t.Errorf("a stale answer's error was shown: %v", s.failed)
 	}
-	s.deliver(0) // the workspace's resolve the newer listing asked for
+	s.deliver(0) // the labels the newer listing asked for
+	s.deliver(0) // then the workspace's resolve
 	if got := treeLabels(v, nil); len(got) != 1 {
 		t.Fatalf("roots %q", got)
 	}
@@ -422,12 +423,14 @@ func TestTodosAStaleReadIsNotTheNewTrees(t *testing.T) {
 	s.deferred = true
 	v := newTodos(s)
 	v.list()
-	s.deliver(0) // the stores; the workspace's resolve held
+	s.deliver(0) // the stores; the labels held
+	s.deliver(0) // the labels; the workspace's resolve held
 	s.deliver(0) // the resolve: the tree
 	openSection(t, v, "ws:kb", "open")
 	old := s.pending[0] // the section's read, held
 	s.pending = nil
 	v.list()
+	s.deliver(0)
 	s.deliver(0)
 	s.deliver(0) // listed again: a new tree, the section closed
 	old()        // the old read answers late
@@ -482,7 +485,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 	s.ws = ""
 	v := newTodos(s)
 	v.list()
-	if got := treeLabels(v, nil); !slices.Equal(got, []string{"● /p"}) {
+	if got := treeLabels(v, nil); !slices.Equal(got, []string{"● p"}) {
 		t.Errorf("no workspace: roots %q", got)
 	}
 

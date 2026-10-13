@@ -347,7 +347,7 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 	// the todos' keys are autofinder's, in its panel alone
 	todosBegin, todosEnd := scopeMarkers(keyScope{ID: "todos", Indent: "        "})
 	todosKeys := block(todosBegin, todosEnd)
-	for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "?", "1", "2", "3", "4", "5"} {
+	for _, seq := range []string{"a", "d", "s", "<", ">", "i", "o", "Shift+R", "Shift+M", "Shift+L", "?", "1", "2", "3", "4", "5"} {
 		if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
 			t.Errorf("the todos panel lacks %s:\n%s", seq, todosKeys)
 		}
