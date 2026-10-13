@@ -351,13 +351,29 @@ func (t *terminals) closeShell(id widget.TerminalTabID) {
 	if err != nil {
 		return
 	}
+	active := panel.Active()
 	if _, err := panel.Remove(id); err != nil {
 		t.c.Notify("the shell's tab could not close: " + err.Error())
 		return
 	}
-	if next := liveShell(panel, ""); next != "" && next != id {
-		t.c.Keep(panel.Select(next))
+	t.replaceActive(panel, id, active)
+}
+
+// replaceActive follows tab id's removal: the shell that was active stays so, and only when id
+// was the active one does the keyboard go to the next live shell. It reports whether a live shell
+// is left.
+func (t *terminals) replaceActive(panel TerminalPanel, id, active widget.TerminalTabID) bool {
+	if id != active {
+		if keep := liveShell(panel, active); keep == active {
+			return true
+		}
 	}
+	next := liveShell(panel, "")
+	if next == "" || next == id {
+		return false
+	}
+	t.c.Keep(panel.Select(next))
+	return true
 }
 
 // closeTerminalPanel is the terminal's spec Close: it remembers whether the terminal had the
@@ -453,8 +469,8 @@ func (h *Host) paneHasKeyboard(id string) bool {
 	return ok && h.p.App().FocusWithin(c)
 }
 
-// shellExited is a shell gone (exit, Ctrl+D, or it ended): its tab closes, and the keyboard goes to
-// the next shell. The last one gone, the panel closes as SPC ` closes it, its geometry kept and
+// shellExited is a shell gone (exit, Ctrl+D, or it ended): its tab closes, and if it was the
+// active one the keyboard goes to the next shell; a background shell's exit moves nothing. The last one gone, the panel closes as SPC ` closes it, its geometry kept and
 // the keyboard back where it was, and the next open starts a fresh shell. A non-zero exit is kept
 // as a notice, as it may be an error. golib's Terminal says it in an App.Update, where closing the
 // drawer may move the keyboard.
@@ -466,11 +482,11 @@ func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
 	if err != nil {
 		return
 	}
+	active := panel.Active()
 	if _, err := panel.Remove(id); err != nil {
 		return // the tab of a parent rebuilt since, or already closing
 	}
-	if next := liveShell(panel, ""); next != "" && next != id {
-		t.c.Keep(panel.Select(next))
+	if t.replaceActive(panel, id, active) {
 		return
 	}
 	if t.c.PanelOpen("terminal") {

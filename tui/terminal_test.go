@@ -474,3 +474,66 @@ func TestTheTerminalsShellsAreTabs(t *testing.T) {
 	r.leader(t, '`')
 	r.s.WaitFor(t, "a fresh shell", func(string) bool { return r.shellsRunning() == 1 })
 }
+
+// TestABackgroundShellLeavingKeepsTheActiveOne: with three shells and the last active, a background
+// shell's exit, and Close on a background tab's menu, leave the active shell selected with the
+// keyboard; only the active tab's going moves it.
+func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	tabsOf := func(fn func(*widget.TerminalTabs)) {
+		onLoop(r, func() bool {
+			c, _ := r.h.p.Find("terminalView")
+			tabs, _ := tuidecl.TerminalTabsOf(c)
+			fn(tabs)
+			return true
+		})
+	}
+	active := func() (id widget.TerminalTabID) {
+		tabsOf(func(tabs *widget.TerminalTabs) { id = tabs.Active() })
+		return id
+	}
+	live := func() []widget.TerminalTabID {
+		var out []widget.TerminalTabID
+		for _, tab := range r.shellTabs() {
+			if !tab.Closing {
+				out = append(out, tab.ID)
+			}
+		}
+		return out
+	}
+	onLoop(r, func() bool { r.h.terminals.newShell(); r.h.terminals.newShell(); return true })
+	r.s.WaitFor(t, "three shells", func(string) bool { return r.shellsRunning() == 3 })
+	ids := live()
+	a, b, c := ids[0], ids[1], ids[2]
+	if active() != c {
+		t.Fatalf("the newest shell is not active: %s", active())
+	}
+
+	// a background shell exits
+	tabsOf(func(tabs *widget.TerminalTabs) {
+		if err := tabs.SendText(b, "exit\r"); err != nil {
+			t.Error(err)
+		}
+	})
+	r.s.WaitFor(t, "the background shell gone", func(string) bool { return slices.Equal(live(), []widget.TerminalTabID{a, c}) })
+	if got := active(); got != c {
+		t.Fatalf("a background exit selected %s, want the active %s", got, c)
+	}
+	r.s.WaitFor(t, "the active shell's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.keys(t, decltest.Type("echo kept-$((40+3))\r")...)
+	r.s.WaitForText(t, "kept-43")
+
+	// Close on a background tab's menu
+	rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(a) })
+	row, ok := menuRow(rows, "terminal.close")
+	if !ok {
+		t.Fatalf("no Close in %v", rowIDs(rows))
+	}
+	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(a); return true })
+	r.s.WaitFor(t, "the background tab closed", func(string) bool { return slices.Equal(live(), []widget.TerminalTabID{c}) })
+	if got := active(); got != c {
+		t.Fatalf("a background Close selected %s, want the active %s", got, c)
+	}
+}
