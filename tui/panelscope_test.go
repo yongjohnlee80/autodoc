@@ -200,3 +200,26 @@ func TestFailedPanelAssemblyKeepsThePublishedRegistry(t *testing.T) {
 		t.Fatal("an invalid schema changed the published registry/schema")
 	}
 }
+
+// TestPanelMaximizeStaysWithItsOwnPanels: a feature maximizes only its own panels, and none before
+// its views exist; attached, the terminals' feature cannot maximize the agents' panel.
+func TestPanelMaximizeStaysWithItsOwnPanels(t *testing.T) {
+	f := &panelFixture{name: "owner", specs: []PanelSpec{fixturePanel()}}
+	s := newScopedPanelHost(core{}, f, f.specs)
+	if err := s.ToggleMaximize("terminal"); !errors.Is(err, ErrPanelViewAccess) {
+		t.Errorf("a foreign panel maximized: %v", err)
+	}
+	if err := s.ToggleMaximize("custom"); !errors.Is(err, errs.ErrPrecondition) {
+		t.Errorf("maximized before attachment: %v", err)
+	}
+
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	err := onLoop(r, func() error { return r.h.terminals.c.(*scopedPanelHost).ToggleMaximize("agent") })
+	if !errors.Is(err, ErrPanelViewAccess) {
+		t.Errorf("the terminals maximized the agents' panel: %v", err)
+	}
+	if onLoop(r, func() bool { return r.h.panelMax["agent"] }) {
+		t.Error("the refused toggle maximized the agents' panel")
+	}
+}

@@ -435,3 +435,40 @@ func TestTheTerminalsFontIsTheirs(t *testing.T) {
 	storedPref(t, d, r, "gui.font.terminal", "")
 	r.s.WaitFor(t, "the shell back in the window's face", func(string) bool { shell, _ := faced(); return !shell })
 }
+
+// TestTheTerminalsLookInAWindowPutsTheFontBack: in a window, Theme and font… lists the terminals'
+// fonts (no "draws in its own" note); a font chosen there is stored, and Esc puts back the one
+// before. Once OK has kept a choice, a late cancel puts nothing back.
+func TestTheTerminalsLookInAWindowPutsTheFontBack(t *testing.T) {
+	d, r := runWindowTUI(t, nil, &fakeFonts{})
+	look := func() {
+		t.Helper()
+		onLoop(r, func() bool { r.h.openTerminalLook(); return true })
+		r.s.WaitForText(t, "the terminals' theme and font")
+	}
+	look()
+	if strings.Contains(r.s.String(), "a terminal draws in its own") {
+		t.Error("a window's look dialog says the font is not its own")
+	}
+	if got := onLoop(r, func() int { return r.h.termFontModel.Len() }); got != 3 {
+		t.Fatalf("the dialog lists %d fonts, want the cell font's and the 2 monospace families", got)
+	}
+	jet := onLoop(r, func() int { return slices.Index(r.h.cellFonts, "JetBrains Mono") })
+	onLoop(r, func() bool { r.h.setTerminalFontIndex(jet); return true })
+	storedPref(t, d, r, prefTermFont, "JetBrains Mono")
+	r.keys(t, esc())
+	storedPref(t, d, r, prefTermFont, "") // Esc: the cell font's, as before
+
+	look()
+	onLoop(r, func() bool { r.h.setTerminalFontIndex(jet); return true })
+	storedPref(t, d, r, prefTermFont, "JetBrains Mono")
+	onLoop(r, func() bool {
+		r.h.terminalLookKept()
+		r.h.closeDialog("terminalLook")
+		r.h.terminalLookCancelled()
+		return true
+	})
+	if got := onLoop(r, func() string { return r.h.prefs.termFont }); got != "JetBrains Mono" {
+		t.Errorf("a cancel after OK put back %q", got)
+	}
+}

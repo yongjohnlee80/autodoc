@@ -776,3 +776,39 @@ func TestSPCMReachesTheNewestPanelStillOpen(t *testing.T) {
 	r.leader(t, 'M')
 	r.s.WaitFor(t, "the terminal maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) })
 }
+
+// TestSPCMWithNoPanelOpenSaysWhatItMaximizes: neither the terminal nor the agents open, SPC M
+// maximizes nothing and says which panels it is for.
+func TestSPCMWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "the notice", func(string) bool {
+		return r.noticed("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
+	})
+	if onLoop(r, func() bool { return r.h.panelMax["terminal"] || r.h.panelMax["agent"] }) {
+		t.Error("a closed panel maximized")
+	}
+}
+
+// TestF11MaximizesThePanelWithTheKeyboard: the agents opened, then the terminal, the keyboard back
+// in the agents: F11 (panel.maximize) maximizes the agents, the panel with the keyboard, not the
+// terminal opened last. A Drawer's change that is not a maximize leaves Restore as it was.
+func TestF11MaximizesThePanelWithTheKeyboard(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	onLoop(r, func() bool { r.h.openDrawer("agent"); return true })
+	r.s.WaitFor(t, "the agents open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	onLoop(r, func() bool { return r.h.p.Call("agentView", "forceActiveFocus") == nil })
+	r.s.WaitFor(t, "the agents' keyboard", func(string) bool { return r.focused("agentView") })
+	onLoop(r, func() bool { r.h.maximizePanel(); return true })
+	r.s.WaitFor(t, "the agents maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) })
+	if onLoop(r, func() bool { return r.h.panelMax["terminal"] }) {
+		t.Error("the terminal, opened last, maximized instead")
+	}
+	onLoop(r, func() bool { r.h.panelChanged("agent", "move", false); return true })
+	if !onLoop(r, func() bool { return r.h.panelMax["agent"] }) {
+		t.Error("a move restored the agents' Maximize row")
+	}
+}
