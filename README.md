@@ -239,8 +239,26 @@ terminal, as below; where it cannot, it shows the block's source and why.
   `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
   keeps it and `Esc` puts it back. A panel opens where it was left, kept in the store as
   percentages of the window; its side in the preferences says only where it first appears.
-- **The todos** (`SPC x`): the workspace's todo stores, as autofinder's todos panel shows them; `?`
-  there lists its keys. **`A` assigns the task under the cursor to one of AutoDoc's own agents**:
+- **The todos** (`SPC x`): the workspace's todo stores, as autofinder's todos panel shows them, in a
+  large panel (about 65% of the window wide and 80% tall until you size it; the size you leave it
+  at is kept). `?` there opens the card of its keys, by purpose; `?` again or `Esc` closes it. Under
+  the tree, one row holds only the actions that apply to the row under the cursor: on a store Add,
+  Refresh and Label; on a section Add and Refresh; on a task Status…, Assign and Remove. A store
+  AutoDoc does not write yet (before the cutover) shows none, only "read-only until the cutover".
+
+  | Key | In the todos panel |
+  | --- | --- |
+  | `Enter` | open the task's file, or a section |
+  | `1`–`5` | a section of the store |
+  | `i`, `o` | the details, shown or hidden |
+  | `a` | add a task |
+  | `d` | remove the task |
+  | `s` | Status…: a picker of every status (open, in-progress, deferred, completed, archived), the task's own marked; choosing one moves the task there |
+  | `A` | assign the task to an agent |
+  | `R`, `L`, `M` | refresh, label or move the store |
+  | `?` | the card of these keys |
+
+  **`A` assigns the task under the cursor to one of AutoDoc's own agents**:
   pick the agent, then type an optional instruction (`Esc` cancels; empty is "Task assigned to
   you."). The task's assignee becomes `autodoc:<codename>`, and an open task moves to in progress.
   The agent is then handed the task in its terminal: its title, its file and the instruction. If

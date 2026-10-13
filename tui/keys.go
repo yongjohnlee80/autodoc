@@ -105,6 +105,12 @@ type Card struct {
 	// Groups are the headings its keys are listed under, a column of them each, left to right; a
 	// key whose Group none is goes under MORE, last. nil lists the keys two a row, unheaded.
 	Groups [][]string
+	// Toggle, when set, is the sequence that opened the card, which closes it too, as q and Esc do:
+	// "?" for the todos panel's.
+	Toggle string
+	// Note, when set, is the card's footer's first words: what its keys cannot say (the list's own
+	// arrows, say).
+	Note string
 }
 
 // Keyed is a feature with keys of its own, and cards of its own for keys to open.
@@ -304,8 +310,8 @@ var reserved = []string{"q", "Escape"}
 //   - a key on, or opening, a card that is not declared, and a card nothing opens;
 //   - a key opening a card from anywhere but the card's Back (the Window, for a card with none), so
 //     Backspace goes back where the card came from;
-//   - a sequence two keys of one place take, or one a card answers itself: q, Escape, and Backspace
-//     on a card with a Back;
+//   - a sequence two keys of one place take, or one a card answers itself: q, Escape, Backspace
+//     on a card with a Back, and its Toggle;
 //   - a key running none, or more than one, of Run, Opens and Cmd; and a Cmd that is no built-in or
 //     feature's entry of cat.
 func (k keyset) check(taken map[string]bool, cat *catalog) error {
@@ -368,6 +374,9 @@ func (k keyset) check(taken map[string]bool, cat *catalog) error {
 			}
 			if c.Back != "" {
 				seen["Backspace"] = true
+			}
+			if c.Toggle != "" {
+				seen[c.Toggle] = true
 			}
 		}
 		for _, key := range k.on(place) {
@@ -588,9 +597,17 @@ func cardQML(c Card, keys []Key) string {
 	if c.Back != "" {
 		back = fmt.Sprintf("    Shortcut { sequence: \"Backspace\"; onActivated: { %s.close(); %s.open() } }\n", c.ID, c.Back)
 	}
-	help := "a key runs its command · q or Esc closes"
+	closes := "q or Esc closes"
+	if c.Toggle != "" {
+		back += fmt.Sprintf("    Shortcut { sequence: %q; onActivated: %s.close() }\n", c.Toggle, c.ID)
+		closes = c.Toggle + ", q or Esc closes"
+	}
+	help := "a key runs its command · " + closes
 	if c.Back != "" {
-		help = "a key runs its command · Backspace goes back · q or Esc closes"
+		help = "a key runs its command · Backspace goes back · " + closes
+	}
+	if c.Note != "" {
+		help = c.Note + " · " + help
 	}
 	return `// ` + c.View + `.qml — a card of keys, as AutoDB's: every command here, by key. GENERATED from
 // tui/keys.go (go test ./tui -run TestKeysAreGenerated -update): edit the catalog there, not this

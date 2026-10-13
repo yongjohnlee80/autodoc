@@ -87,14 +87,11 @@ func assignable(entries []AgentEntry) []AgentEntry {
 }
 
 // assign is A: the task under the cursor, in a store taking writes here, offered to AutoDoc's
-// agents in the picker.
+// agents in the picker. Off a task, or on a store not claimed, it does nothing: the action row
+// offers it only where it applies.
 func (t *todos) assign() {
 	s, x := t.cursor()
-	if x == nil {
-		t.status("A assigns a task: put the cursor on one")
-		return
-	}
-	if t.readOnly(s) {
+	if x == nil || t.readOnly(s) {
 		return
 	}
 	agents := assignable(t.c.AgentEntries())

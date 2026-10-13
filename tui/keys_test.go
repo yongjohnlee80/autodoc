@@ -3,6 +3,7 @@ package tui
 import (
 	"flag"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -354,7 +355,7 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		todosBlocks++
 		todosBegin, todosEnd := scopeMarkers(s)
 		todosKeys := block(todosBegin, todosEnd)
-		for _, seq := range []string{"a", "d", "s", "<", ">", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "?", "1", "2", "3", "4", "5"} {
+		for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "?", "1", "2", "3", "4", "5"} {
 			if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
 				t.Errorf("the todos panel's %q block lacks %s:\n%s", s.Label, seq, todosKeys)
 			}
@@ -373,5 +374,63 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		if err := bad.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%+v: err = %v, want %q", key, err, want)
 		}
+	}
+}
+
+// TestTodosQuestionMarkOpensItsCardOfKeys: ? in the todos panel opens a card of its keys, the floating
+// card SPC's is, by purpose (MOVE, TASK, STATUS, STORE); a key on it closes it and runs, and ? again
+// closes it, as q and Esc do. No key on the card may take its ?, and < and > are no key of the panel.
+func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
+	fs := newHost(NewSession("unused", nil), Options{}).features()
+	k := keyCatalog(fs)
+	if err := k.check(mainIDs, nil); err != nil {
+		t.Fatal(err)
+	}
+	c, ok := k.card(todoKeysCard)
+	if !ok {
+		t.Fatal("no todos card of keys")
+	}
+	opens := false
+	for _, key := range k.in("todos") {
+		if key.Seq == "?" && key.Opens == todoKeysCard {
+			opens = true
+		}
+		if key.Seq == "<" || key.Seq == ">" {
+			t.Errorf("the todos panel still answers %s", key.Seq)
+		}
+	}
+	if !opens {
+		t.Error("? in the todos panel does not open its card")
+	}
+	text := cardText(c.Groups, k.on(todoKeysCard))
+	for _, want := range []string{"MOVE", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a section", "1–5  a section of the store",
+		"s  status…: choose the task's", "a  add a task", "A  assign it to an agent", "R  refresh", "M  move the store"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the card lacks %q:\n%s", want, text)
+		}
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if n := len([]rune(line)); n > 76 {
+			t.Errorf("a line of %d cells: wider than the 80 × 20 screen's card\n%s", n, text)
+		}
+	}
+	q := cardQML(c, k.on(todoKeysCard))
+	for _, want := range []string{
+		`Shortcut { sequence: "?"; onActivated: todoKeys.close() }`,
+		`Shortcut { sequence: "s"; onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
+		`Shortcut { sequence: "o"; onActivated: { todoKeys.close(); App.todoToggleDetail() } }`,
+		`helpText: "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"`,
+	} {
+		if !strings.Contains(q, want) {
+			t.Errorf("the card's QML lacks %q:\n%s", want, q)
+		}
+	}
+	if lq, _ := k.card(leader); strings.Contains(cardQML(lq, k.on(leader)), "onActivated: leader.close() }") {
+		t.Error("SPC's card, which has no Toggle, closes on a key of its own")
+	}
+	bad := k
+	bad.keys = append(slices.Clone(k.keys), Key{Card: todoKeysCard, Seq: "?", Show: "?", Run: "App.x()"})
+	if err := bad.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), "the card todoKeys's ? is taken twice") {
+		t.Errorf("a card key on its Toggle: %v", err)
 	}
 }

@@ -153,7 +153,8 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   `tui/qml/dialogs/Picker.qml` is the one layout: a field over a list, the item under the cursor
   previewed beside it. A use sets the Dialog's `title` and its declared properties: `name` and
   `model` (required), `label`, `fieldText`, `placeholder`, `note`/`noteShown`, `listTitle`,
-  `previewTitle`/`previewText`/`previewAt` and `acceptText`. Its `TableViewColumn`s go into the
+  `previewTitle`/`previewText`/`previewAt`, `acceptText`, and `widthPercent`/`heightPercent` (the most of
+  the Window it takes; a short list, such as the todos' Status…, asks for less). Its `TableViewColumn`s go into the
   list. Its handlers call `App.pickFilter`, `pickMove`, `pickChoose`, `pickAccept` and
   `pickCancel` with the `name`, and Go finds the picker by it. A feature offers its pickers by
   name from an optional `Picks()`; the registry merges them, refusing a name two features claim,

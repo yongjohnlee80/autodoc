@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -294,9 +293,10 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	}
 }
 
-// TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites: A off a task row says what it needs; on a
-// store not claimed it is the store's read-only notice; with no AutoDoc agent to list it says how to
-// add one. None opens the picker. A dismissed picker has chosen no agent: nothing is written.
+// TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites: A off a task row, or on a store not claimed,
+// does nothing and says nothing (the action row offers it on neither); with no AutoDoc agent to list
+// it says how to add one. None opens the picker. A dismissed picker has chosen no agent: nothing is
+// written.
 func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	v := newTodos(c)
@@ -304,8 +304,8 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	ix := openSection(t, v, "ws:kb", "open")
 	v.moved(ix) // the section's row, not a task's
 	v.assign()
-	if !strings.Contains(fmt.Sprint(c.set["App.todosStatus"]), "A assigns a task: put the cursor on one") {
-		t.Fatalf("off a task: status %v", c.set["App.todosStatus"])
+	if c.set["App.todosStatus"] != "" || len(c.notes) != 0 || slices.Contains(c.opened, "agentAssignPicker") {
+		t.Fatalf("off a task: status %q, notes %q, opened %v", c.set["App.todosStatus"], c.notes, c.opened)
 	}
 	v.moved(tuidecl.Index{Row: 0, Parent: &ix})
 	v.assign()
@@ -330,9 +330,8 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	v.list()
 	onTask(t, v, "open")
 	v.assign()
-	if len(ro.notes) != 1 || !strings.Contains(ro.notes[0], "read-only in AutoDoc until the cutover") ||
-		slices.Contains(ro.opened, "agentAssignPicker") {
-		t.Fatalf("read-only: notes %q, opened %v", ro.notes, ro.opened)
+	if len(ro.notes) != 0 || len(ro.failed) != 0 || slices.Contains(ro.opened, "agentAssignPicker") {
+		t.Fatalf("read-only: notes %q, failed %q, opened %v", ro.notes, ro.failed, ro.opened)
 	}
 }
 

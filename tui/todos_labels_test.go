@@ -10,8 +10,8 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// todos_labels_test.go: what a store is called (its derived name, the user's label), the < and >
-// steps and the s cycle with the cursor following the task, and the task buttons' states.
+// todos_labels_test.go: what a store is called (its derived name, the user's label), s's Status…
+// picker with the cursor following the task, and the action row.
 
 // TestStoreNamesDeriveFromTheirFolders: a KB folder is named for the project holding it; any other
 // store for its own folder.
@@ -162,122 +162,192 @@ func onTask(t *testing.T, v *todos, bucket string) {
 	v.moved(tuidecl.Index{Row: 0, Parent: &ix})
 }
 
-// TestTodosStepsATaskAndTheCursorFollows: > is a step on (open → in progress → completed), < a step
-// back; the cursor goes with the task into its new section. At the ends, and on a deferred or an
-// archived task, nothing moves and the status line says why.
-func TestTodosStepsATaskAndTheCursorFollows(t *testing.T) {
-	s, cur := movingStore("open")
-	v := newTodos(s)
-	v.list()
-	onTask(t, v, "open")
-	v.step(todoBack, "back")
-	if s.called("todos.status") || !strings.Contains(fmt.Sprint(s.set["App.todosStatus"]), "nothing back of open") {
-		t.Fatalf("< on open: %v, status %v", s.calls, s.set["App.todosStatus"])
+// statusRows are the rows s's picker lists.
+func statusRows(v *todos) []string {
+	m := v.statusPick.list.Model()
+	var out []string
+	for i := 0; i < m.Len(); i++ {
+		out = append(out, m.Data(tuidecl.Index{Row: i}, "status").Raw)
 	}
-	for _, want := range []string{"in-progress", "completed"} {
-		s.views = nil
-		v.step(todoForward, "forward")
-		if *cur != want {
-			t.Fatalf("> moved the task to %s, want %s", *cur, want)
-		}
-		if got := v.at; len(got) != 3 || got[1] != bucketKey("ws:kb", want) || got[2] != taskKey("ws:kb", "t1") || !slices.Contains(s.views, "todoTree.setCurrentIndex") {
-			t.Fatalf("the cursor did not follow into %s: at %q, views %v", want, got, s.views)
-		}
-	}
-	n := len(s.calls)
-	v.step(todoForward, "forward")
-	if len(s.calls) != n || !strings.Contains(fmt.Sprint(s.set["App.todosStatus"]), "nothing forward of completed") {
-		t.Errorf("> on completed: %v", s.calls[n:])
-	}
-	v.step(todoBack, "back")
-	if *cur != "in-progress" || v.at[1] != bucketKey("ws:kb", "in-progress") {
-		t.Errorf("< from completed: %s, at %q", *cur, v.at)
-	}
-	for _, off := range []string{"deferred", "archived"} {
-		s, _ := movingStore(off)
-		w := newTodos(s)
-		w.list()
-		if off == "archived" {
-			// an archived task is under a month; put it under the cursor as read
-			w.tasks[taskKey("ws:kb", "t1")] = map[string]any{"id": "t1", "status": "archived"}
-			w.at = []string{"ws:kb", bucketKey("ws:kb", "archived"), taskKey("ws:kb", "t1")}
-		} else {
-			onTask(t, w, off)
-		}
-		w.step(todoForward, "forward")
-		w.step(todoBack, "back")
-		if s.called("todos.status") {
-			t.Errorf("a %s task moved: %v", off, s.calls)
-		}
-	}
+	return out
 }
 
-// TestTodosCycleTakesInProgress: s goes open → in progress → completed → deferred → open, the
-// cursor following.
-func TestTodosCycleTakesInProgress(t *testing.T) {
-	s, cur := movingStore("open")
-	v := newTodos(s)
-	v.list()
-	onTask(t, v, "open")
-	for _, want := range []string{"in-progress", "completed", "deferred", "open"} {
-		v.cycle()
-		if *cur != want || v.at[1] != bucketKey("ws:kb", want) {
-			t.Fatalf("s: %s, at %q; want %s", *cur, v.at, want)
-		}
+// pickStatus is s on the task under the cursor, then the row of status chosen in its picker.
+func pickStatus(t *testing.T, v *todos, status string) {
+	t.Helper()
+	v.chooseStatus()
+	i := slices.Index(todoStatuses, status)
+	if i < 0 || v.statusing == nil {
+		t.Fatalf("no picker for %s: statusing %v", status, v.statusing)
 	}
+	v.statusPick.accept(i, "")
 }
 
-// TestTodosButtonsFollowTheCursor: which task buttons apply follows the row under the cursor and
-// the store's writes; a button's own click never changes its state at once, only the answer that
-// lands later (a golib Button must never disable itself from its click).
-func TestTodosButtonsFollowTheCursor(t *testing.T) {
-	can := func(s *scriptedCore) string {
-		var on []string
-		for _, b := range []string{"Preview", "Add", "Back", "Forward", "Remove"} {
-			if s.set["App.todoCan"+b] == true {
-				on = append(on, b)
-			}
-		}
-		return strings.Join(on, " ")
-	}
-	for _, tc := range []struct {
-		status, want string
-	}{
-		{"open", "Preview Add Forward Remove"},
-		{"in-progress", "Preview Add Back Forward Remove"},
-		{"completed", "Preview Add Back Remove"},
-		{"deferred", "Preview Add Remove"},
-	} {
-		s, _ := movingStore(tc.status)
+// TestTodosStatusPickerSetsEveryStatus: s opens a picker of every status, the task's own marked;
+// choosing one moves the task there through todos.status, deferred and archived too, and the
+// cursor follows it into its new section (Archived lists months, so there it stays). An archived
+// task comes back the same way. Choosing the status the task has, or dismissing the picker, asks
+// nothing of the daemon.
+func TestTodosStatusPickerSetsEveryStatus(t *testing.T) {
+	for _, want := range []string{"in-progress", "deferred", "completed", "archived"} {
+		s, cur := movingStore("open")
 		v := newTodos(s)
 		v.list()
-		onTask(t, v, tc.status)
-		if got := can(s); got != tc.want {
-			t.Errorf("on a %s task: %q, want %q", tc.status, got, tc.want)
+		onTask(t, v, "open")
+		v.chooseStatus()
+		if !slices.Contains(s.opened, "todoStatusPicker") {
+			t.Fatalf("s opened %v", s.opened)
 		}
-		v.moved(tuidecl.Index{Row: 0}) // the store's row: no task
-		if got := can(s); got != "Add" {
-			t.Errorf("on the store: %q", got)
+		if got := statusRows(v); !slices.Equal(got, []string{"● open", "  in-progress", "  deferred", "  completed", "  archived"}) {
+			t.Fatalf("the statuses offered: %q", got)
 		}
-	}
-	ro := scriptedStore(false)
-	v := newTodos(ro)
-	v.list()
-	open := openSection(t, v, "ws:kb", "open")
-	v.moved(tuidecl.Index{Row: 0, Parent: &open})
-	if got := can(ro); got != "Preview" {
-		t.Errorf("on a read-only store's task: %q", got)
+		s.views = nil
+		v.statusPick.accept(slices.Index(todoStatuses, want), "")
+		if *cur != want || !s.called("todos.status[kb t1 r1 "+want+"]") || !slices.Contains(s.closed, "todoStatusPicker") {
+			t.Fatalf("chose %s: the task is %s, calls %v, closed %v", want, *cur, s.calls, s.closed)
+		}
+		following := slices.Contains(s.views, "todoTree.setCurrentIndex")
+		if want == "archived" {
+			if following || v.follow.store != "" || v.at[1] != bucketKey("ws:kb", "open") {
+				t.Errorf("archived: the cursor went %q (views %v, follow %+v)", v.at, s.views, v.follow)
+			}
+			continue
+		}
+		if !following || len(v.at) != 3 || v.at[1] != bucketKey("ws:kb", want) || v.at[2] != taskKey("ws:kb", "t1") {
+			t.Errorf("chose %s: the cursor did not follow: at %q, views %v", want, v.at, s.views)
+		}
 	}
 
-	// > clicked on an in-progress task: Status ▶ stays as it was until the move's answer lands
+	// an archived task, under its month as read, back to open: the cursor follows it into Open
+	s, cur := movingStore("archived")
+	v := newTodos(s)
+	v.list()
+	v.tasks[taskKey("ws:kb", "t1")] = map[string]any{"id": "t1", "rev": "r1", "title": "Ship", "status": "archived"}
+	v.at = []string{"ws:kb", bucketKey("ws:kb", "archived"), monthKey("ws:kb", "2026/09"), taskKey("ws:kb", "t1")}
+	v.chooseStatus()
+	if got := statusRows(v); got[4] != "● archived" {
+		t.Fatalf("an archived task's statuses: %q", got)
+	}
+	v.statusPick.accept(0, "")
+	if *cur != "open" || len(v.at) != 3 || v.at[1] != bucketKey("ws:kb", "open") {
+		t.Errorf("archived → open: the task is %s, the cursor at %q", *cur, v.at)
+	}
+
+	// its own status, or the picker dismissed: nothing asked
+	for _, way := range []string{"its own", "dismissed"} {
+		s, _ := movingStore("deferred")
+		v := newTodos(s)
+		v.list()
+		onTask(t, v, "deferred")
+		v.chooseStatus()
+		if way == "dismissed" {
+			v.statusPick.dismiss()
+			v.statusChosen(todoStatusChoice{status: "open"}) // a stray choice after the dismissal
+		} else {
+			v.statusPick.accept(2, "")
+		}
+		if s.called("todos.status") || v.statusing != nil {
+			t.Errorf("%s: calls %v, statusing %v", way, s.calls, v.statusing)
+		}
+	}
+}
+
+// TestTodosStatusPickerPreviewsTheMove: the picker's preview says what choosing a status does to the
+// task, and that its own status changes nothing.
+func TestTodosStatusPickerPreviewsTheMove(t *testing.T) {
+	s, _ := movingStore("open")
+	v := newTodos(s)
+	v.list()
+	onTask(t, v, "open")
+	v.chooseStatus()
+	if got := s.set["App.todoStatusPreviewText"]; got != "## open\n\nShip is open now: choosing it changes nothing.\n" {
+		t.Errorf("the first row's preview: %q", got)
+	}
+	v.statusPick.move(2)
+	if got := s.set["App.todoStatusPreviewText"]; got != "## deferred\n\nShip moves from open to deferred.\n" {
+		t.Errorf("deferred's preview: %q", got)
+	}
+	if got := s.set["App.todoStatusList"]; got != "statuses (5 of 5)" {
+		t.Errorf("the list's title: %q", got)
+	}
+	v.statusPick.filter("arch")
+	if got := statusRows(v); !slices.Equal(got, []string{"  archived"}) {
+		t.Errorf("filtered: %q", got)
+	}
+	v.statusing = nil
+	if got := v.statusPane(todoStatusChoice{status: "open"}); got != (pane{}) {
+		t.Errorf("no task: %+v", got)
+	}
+}
+
+// actions is the action row as syncActions last set it: the actions shown, and the read-only note.
+func actions(s *scriptedCore) string {
+	var on []string
+	if s.set["App.todoReadOnly"] == true {
+		on = append(on, "read-only")
+	}
+	for _, a := range []string{"Add", "Status", "Refresh", "Label", "Assign", "Remove"} {
+		if s.set["App.todoAct"+a] == true {
+			on = append(on, a)
+		}
+	}
+	return strings.Join(on, " ")
+}
+
+// TestTodosActionRowFollowsTheRowKind: the action row shows only the actions that apply to the row
+// under the cursor: on a claimed store's row Add, Refresh and Label; on a section's, or an archived
+// month's, Add and Refresh; on a task's, whatever its status, Status…, Assign and Remove. A store
+// the daemon has not claimed shows none, on any row, only its note. A button's own click changes
+// nothing at once, only the answer that lands later (a golib Button must never hide itself from
+// its click).
+func TestTodosActionRowFollowsTheRowKind(t *testing.T) {
+	for _, claimed := range []bool{true, false} {
+		s := scriptedStore(claimed)
+		v := newTodos(s)
+		v.list()
+		want := map[string]string{"store": "Add Refresh Label", "section": "Add Refresh", "month": "Add Refresh", "task": "Status Assign Remove"}
+		if !claimed {
+			want = map[string]string{"store": "read-only", "section": "read-only", "month": "read-only", "task": "read-only"}
+		}
+		if got := actions(s); got != want["store"] { // the cursor not yet moved: the first store
+			t.Errorf("claimed %v, before the cursor moves: %q, want %q", claimed, got, want["store"])
+		}
+		open := openSection(t, v, "ws:kb", "open")
+		archived := openSection(t, v, "ws:kb", "archived")
+		for kind, ix := range map[string]tuidecl.Index{"store": {Row: 0}, "section": open,
+			"month": {Row: 0, Parent: &archived}, "task": {Row: 0, Parent: &open}} {
+			v.moved(ix)
+			if got := actions(s); got != want[kind] {
+				t.Errorf("claimed %v, on a %s: %q, want %q", claimed, kind, got, want[kind])
+			}
+		}
+	}
+	for _, status := range []string{"in-progress", "deferred", "completed"} {
+		s, _ := movingStore(status)
+		v := newTodos(s)
+		v.list()
+		onTask(t, v, status)
+		if got := actions(s); got != "Status Assign Remove" {
+			t.Errorf("on a %s task: %q", status, got)
+		}
+	}
+	none := newScripted("")
+	newTodos(none).syncActions()
+	if got := actions(none); got != "" {
+		t.Errorf("no store listed: %q", got)
+	}
+
+	// Status… chosen on an in-progress task: its button stays until the move's answer lands, and the
+	// cursor, following the task, keeps it shown
 	s, _ := movingStore("in-progress")
 	w := newTodos(s)
 	w.list()
 	onTask(t, w, "in-progress")
+	w.chooseStatus()
 	s.deferred = true
-	w.step(todoForward, "forward")
-	if s.set["App.todoCanForward"] != true {
-		t.Fatal("Status ▶ changed inside its own click")
+	w.statusPick.accept(slices.Index(todoStatuses, "completed"), "")
+	if s.set["App.todoActStatus"] != true {
+		t.Fatal("Status… changed inside its own choice")
 	}
 	for len(s.pending) > 0 { // every answer held, in the order asked, until none is left
 		order := make([]int, len(s.pending))
@@ -286,8 +356,8 @@ func TestTodosButtonsFollowTheCursor(t *testing.T) {
 		}
 		s.deliver(order...)
 	}
-	if s.set["App.todoCanForward"] != false || s.set["App.todoCanBack"] != true {
-		t.Errorf("after the move landed: forward %v, back %v", s.set["App.todoCanForward"], s.set["App.todoCanBack"])
+	if s.set["App.todoActStatus"] != true || w.at[1] != bucketKey("ws:kb", "completed") {
+		t.Errorf("after the move landed: Status… %v, at %q", s.set["App.todoActStatus"], w.at)
 	}
 }
 
@@ -312,8 +382,9 @@ func TestTodosTheCursorFollowsOnceBothSectionsLand(t *testing.T) {
 		v := newTodos(s)
 		v.list()
 		onTask(t, v, "in-progress")
+		v.chooseStatus()
 		s.deferred = true
-		v.step(todoForward, "forward")
+		v.statusPick.accept(slices.Index(todoStatuses, "completed"), "")
 		s.deliver(0) // the move's answer: the store's sections read again, held
 		reads := map[string]int{}
 		for i, c := range s.calls[len(s.calls)-len(s.pending):] {
@@ -347,9 +418,9 @@ func TestTodosTheCursorFollowsOnceBothSectionsLand(t *testing.T) {
 
 // TestTodosLabelsAndStepsAtTheEdges: the rarer paths. The home folder shows as ~; a plain folder is
 // its own root; a workspace whose store the daemon has not placed is named for the workspace; a
-// labels answer for an older listing is dropped; < (its command) and > with no task under the
-// cursor, and L with no store, do nothing; a moved task that is not where its section's read says
-// leaves the cursor where it is.
+// labels answer for an older listing is dropped; s (its command) with no task under the cursor, and
+// L with no store, do nothing; a moved task that is not where its section's read says leaves the
+// cursor where it is.
 func TestTodosLabelsAndStepsAtTheEdges(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -391,18 +462,17 @@ func TestTodosLabelsAndStepsAtTheEdges(t *testing.T) {
 		t.Errorf("the second listing: %q", got)
 	}
 
-	// < by its command, > and L with nothing to act on
+	// s by its command, and L, with nothing to act on
 	m, _ := movingStore("in-progress")
 	x := newTodos(m)
 	x.list()
 	x.moved(tuidecl.Index{Row: 0}) // the store's row: no task
 	n := len(m.calls)
-	if err := x.Commands()["App.todoBack"].handler("App.todoBack")(nil); err != nil {
+	if err := x.Commands()["App.todoChooseStatus"].handler("App.todoChooseStatus")(nil); err != nil {
 		t.Fatal(err)
 	}
-	x.step(todoForward, "forward")
-	if len(m.calls) != n {
-		t.Errorf("a step with no task asked %v", m.calls[n:])
+	if len(m.calls) != n || slices.Contains(m.opened, "todoStatusPicker") {
+		t.Errorf("s with no task asked %v, opened %v", m.calls[n:], m.opened)
 	}
 	none := newTodos(newScripted(""))
 	none.label()
@@ -417,7 +487,7 @@ func TestTodosLabelsAndStepsAtTheEdges(t *testing.T) {
 	y.list()
 	onTask(t, y, "open")
 	g.views = nil
-	y.step(todoForward, "forward")
+	pickStatus(t, y, "in-progress")
 	if slices.Contains(g.views, "todoTree.setCurrentIndex") || y.follow.store != "" {
 		t.Errorf("a task not found moved the cursor: views %v, follow %+v", g.views, y.follow)
 	}
@@ -428,7 +498,7 @@ func TestTodosLabelsAndStepsAtTheEdges(t *testing.T) {
 	z.list()
 	onTask(t, z, "open")
 	e.viewErr = errors.New("the row is gone")
-	z.step(todoForward, "forward")
+	pickStatus(t, z, "in-progress")
 	if len(e.failed) != 1 || !strings.Contains(e.failed[0], "todos: the moved task: the row is gone") {
 		t.Errorf("failed %v", e.failed)
 	}

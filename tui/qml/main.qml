@@ -430,7 +430,8 @@ Window {
     }
 
     // the todos (todos.go): the stores open, each its buckets and tasks, as autofinder's todos panel;
-    // at the right edge unless moved, so the explorer's left one stays beside it
+    // at the right edge unless moved, and large: 65% of the window across, 80% along, centred
+    // (todosDefault), until the user sizes or places it
     Panel {
         id: todos
         heading: App.todosTitle
@@ -441,8 +442,8 @@ Window {
         floating: App.todosFloating
         floatX: App.todosX; floatY: App.todosY; floatWidth: App.todosW; floatHeight: App.todosH
         onPlaced: App.panelPlaced("todos", x, y, width, height)
-        // 25%, not the side panels' 15: the task buttons' widest, "[ Status ▶ (>) ]", whole inside
-        // the frame on an 80-column screen, the Flow wrapping the rest one to a line
+        // 25%, not the side panels' 15: the widest action, "[ Refresh (R) ]", whole inside the frame
+        // on an 80-column screen; the action row's three at most fit whole from 60% there
         minimumSize: 25
         onResized: App.panelResized("todos", size, length)
         onOpened: App.panelOpened("todos")
@@ -457,16 +458,14 @@ Window {
                 // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                 Shortcut { sequence: "a"; onActivated: App.todoAdd() }
                 Shortcut { sequence: "d"; onActivated: App.todoRemove() }
-                Shortcut { sequence: "s"; onActivated: App.todoCycle() }
-                Shortcut { sequence: "<"; onActivated: App.todoBack() }
-                Shortcut { sequence: ">"; onActivated: App.todoForward() }
+                Shortcut { sequence: "s"; onActivated: App.todoChooseStatus() }
                 Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
                 Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
                 Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
                 Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
                 Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
                 Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
-                Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
+                Shortcut { sequence: "?"; onActivated: todoKeys.open() }
                 Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
                 Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
                 Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
@@ -480,6 +479,8 @@ Window {
                         Button { text: "&New…"; onClicked: App.todoNew() }
                         Text { text: " " }
                         Button { text: "&Load…"; onClicked: App.todoLoad() }
+                        Text { text: " " }
+                        Button { text: "Keys (?)"; onClicked: todoKeys.open() }
                         Text { text: " " }
                         Button { text: "Close (&q)"; onClicked: todos.close() }
                     }
@@ -512,45 +513,43 @@ Window {
                     MarkdownRenderer {}
                 }
             }
-            Text { text: App.todosStatus; wrapMode: Tui.WordWrap }
-            Text {
-                visible: App.todoHelpShown
-                wrapMode: Tui.WordWrap
-                text: "Enter open the task's file, or a section   a add   d remove   s status (open → in progress → completed → deferred → open)   > a step on (open → in progress → completed)   < a step back   i, o details   R refresh   A assign to an agent   L label the store   M move the store   1–5 a section   ? these keys   q close"
-            }
-            // the task actions, each its key's: a Flow, so a narrow panel wraps them, never clips.
-            // Which apply follows the cursor (todos.go: showDetail), never a button's own click.
+            // what needs the user: a file a section could not list; hidden while there is none
+            Text { text: App.todosStatus; visible: App.todosStatusShown; wrapMode: Tui.WordWrap }
+            // the action row: one line, only the actions that apply to the row under the cursor, each
+            // its key's, the others hidden, never greyed; on a store not claimed none, only a note.
+            // Which apply follows the cursor (todos.go: syncActions), never a button's own click.
             // the task list's keys again, live on these buttons too (the details pane above has none)
             FocusScope {
                 // ---- the todos task buttons' keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                 Shortcut { sequence: "a"; onActivated: App.todoAdd() }
                 Shortcut { sequence: "d"; onActivated: App.todoRemove() }
-                Shortcut { sequence: "s"; onActivated: App.todoCycle() }
-                Shortcut { sequence: "<"; onActivated: App.todoBack() }
-                Shortcut { sequence: ">"; onActivated: App.todoForward() }
+                Shortcut { sequence: "s"; onActivated: App.todoChooseStatus() }
                 Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
                 Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
                 Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
                 Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
                 Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
                 Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
-                Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
+                Shortcut { sequence: "?"; onActivated: todoKeys.open() }
                 Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
                 Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
                 Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
                 Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
                 Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
                 // ---- end of the todos task buttons' keys ----
-                Flow {
-                    spacing: 1
-                    rowSpacing: 0
-                    Button { text: "Preview (i)"; enabled: App.todoCanPreview; onClicked: App.todoToggleDetail() }
-                    Button { text: "Add (a)"; enabled: App.todoCanAdd; onClicked: App.todoAdd() }
-                    Button { text: "◀ Status (<)"; enabled: App.todoCanBack; onClicked: App.todoBack() }
-                    Button { text: "Status ▶ (>)"; enabled: App.todoCanForward; onClicked: App.todoForward() }
-                    Button { text: "Remove (d)"; enabled: App.todoCanRemove; onClicked: App.todoRemove() }
-                    Button { text: "Assign (A)"; enabled: App.todoCanAssign; onClicked: App.todoAssign() }
-                    Button { id: todoRefreshButton; text: "Refresh (R)"; onClicked: App.todoRefresh() }
+                Flex {
+                    direction: Tui.Horizontal
+                    Text { text: "read-only until the cutover"; visible: App.todoReadOnly }
+                    Button { text: "Add (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
+                    Button { id: todoStatusButton; text: "Status… (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
+                    Text { text: " "; visible: App.todoActRefresh }
+                    Button { id: todoRefreshButton; text: "Refresh (R)"; visible: App.todoActRefresh; enabled: App.todoActRefresh; onClicked: App.todoRefresh() }
+                    Text { text: " "; visible: App.todoActLabel }
+                    Button { text: "Label (L)"; visible: App.todoActLabel; enabled: App.todoActLabel; onClicked: App.todoLabel() }
+                    Text { text: " "; visible: App.todoActAssign }
+                    Button { text: "Assign (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
+                    Text { text: " "; visible: App.todoActRemove }
+                    Button { text: "Remove (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
                 }
             }
         }
@@ -562,6 +561,7 @@ Window {
     OutlinePicker { id: outlinePicker }
     AgentAssign { id: agentAssignPicker }
     LuaPick { id: luaPicker }
+    TodoStatus { id: todoStatusPicker }
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }
@@ -594,6 +594,7 @@ Window {
     // ---- the cards of keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
     Leader { id: leader }
     AgentsCard { id: agentsCard }
+    TodoKeys { id: todoKeys }
     // ---- end of the generated cards ----
     PluginKeys { id: pluginKeys }
     Help { id: help }

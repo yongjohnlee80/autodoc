@@ -26,16 +26,9 @@ var todoBuckets = []struct{ bucket, title string }{
 	{"open", "Open"}, {"in-progress", "In progress"}, {"deferred", "Deferred"}, {"completed", "Completed"}, {"archived", "Archived"},
 }
 
-// todoCycle is s: the next status, every one but archived in turn: open → in progress →
-// completed → deferred → open.
-var todoCycle = map[string]string{"open": "in-progress", "in-progress": "completed", "completed": "deferred", "deferred": "open"}
-
-// todoForward and todoBack are > and <: a step along open → in progress → completed. Deferred is
-// off that line (s reaches it), and archived is the daemon's to move.
-var (
-	todoForward = map[string]string{"open": "in-progress", "in-progress": "completed"}
-	todoBack    = map[string]string{"completed": "in-progress", "in-progress": "open"}
-)
+// todoStatuses are every status a task can have, in the order s's picker lists them; choosing one
+// is todos.status, whatever the status now (the daemon moves an archived task too).
+var todoStatuses = []string{"open", "in-progress", "deferred", "completed", "archived"}
 
 // todoLabelPref is the preference holding a store's label, by the store's id: AutoDoc's own name
 // for it, which survives the store's move (M) and never touches its files.
@@ -134,19 +127,25 @@ type todos struct {
 	// assignPick is A's picker of AutoDoc's agents; assigning the A in progress (todos_assign.go)
 	assignPick *pick[AgentEntry]
 	assigning  *todoAssign
-	// follow is the task a move (<, >, s) sent to another section: the cursor goes to it there once
-	// the reads of both sections, the one it left and the one it is in, have landed, in either
-	// order (a section that changes after the cursor is placed moves the rows under it)
+	// statusPick is s's picker of the statuses; statusing is the task it is for, while it is open
+	statusPick *pick[todoStatusChoice]
+	statusing  *todoStatusing
+	// follow is the task a move (s, A) sent to another section: the cursor goes to it there once
+	// the reads of the sections it left and went to have landed, in either order (a section that
+	// changes after the cursor is placed moves the rows under it)
 	follow todoFollow
 	detail bool // the details show (i, o)
-	help   bool // the keys show (?)
+	// malformed are the files a section's read could not list, by the section's name: the one
+	// thing the status line says (show empties it)
+	malformed map[string]int
 }
 
 func newTodos(c Core) *todos {
 	t := &todos{c: c, detail: true, model: tuidecl.NewTreeListModel("key", "label"),
-		tasks: map[string]map[string]any{}, open: map[string]bool{}, seqs: map[string]*uint64{}}
+		tasks: map[string]map[string]any{}, open: map[string]bool{}, seqs: map[string]*uint64{}, malformed: map[string]int{}}
 	t.model.OnFetch = t.fetch
 	t.assignPick = newAssignPick(t)
+	t.statusPick = newStatusPick(t)
 	return t
 }
 
@@ -154,11 +153,13 @@ func (*todos) Name() string { return "todos" }
 
 func (t *todos) State() map[string]any {
 	return map[string]any{
-		"App.todosTitle": "todos", "App.todosStatus": "", "App.todoDetail": "",
-		"App.todoDetailShown": true, "App.todoHelpShown": false,
-		"App.todoFolder": "", "App.todoTree": t.model, "App.todoLabelText": "",
-		"App.todoCanPreview": false, "App.todoCanAdd": false, "App.todoCanBack": false,
-		"App.todoCanForward": false, "App.todoCanRemove": false, "App.todoCanAssign": false,
+		"App.todosTitle": "todos", "App.todosStatus": "", "App.todosStatusShown": false, "App.todoDetail": "",
+		"App.todoDetailShown": true,
+		"App.todoFolder":      "", "App.todoFolderTitle": "todos: choose the folder", "App.todoTree": t.model, "App.todoLabelText": "",
+		"App.todoReadOnly": false, "App.todoActAdd": false, "App.todoActRefresh": false, "App.todoActLabel": false,
+		"App.todoActStatus": false, "App.todoActAssign": false, "App.todoActRemove": false,
+		"App.todoStatusRows": t.statusPick.list.Model(), "App.todoStatusField": "", "App.todoStatusList": "statuses",
+		"App.todoStatusPreviewTitle": "", "App.todoStatusPreviewText": "", "App.todoStatusPreviewAt": 0,
 		"App.agentAssignRows": t.assignPick.list.Model(), "App.agentAssignField": "", "App.agentAssignStatus": "agents",
 		"App.agentAssignPreviewTitle": "", "App.agentAssignPreviewText": "", "App.agentAssignPreviewAt": 0,
 		"App.todoAssignTitle": "assign", "App.todoAssignText": "",
@@ -171,19 +172,17 @@ func (t *todos) Commands() map[string]Command {
 		"App.todosTab":         oneNumber("a section", t.section),
 		"App.todoMoved":        oneIndex(t.moved),
 		"App.todoActivated":    oneIndex(t.activated),
+		"App.todoOpen":         none(t.openRow),
 		"App.todoAdd":          none(t.add),
 		"App.todoAddTitle":     oneString("a title", t.addTitle),
 		"App.todoRemove":       none(t.remove),
-		"App.todoCycle":        none(t.cycle),
-		"App.todoForward":      none(func() { t.step(todoForward, "forward") }),
-		"App.todoBack":         none(func() { t.step(todoBack, "back") }),
+		"App.todoChooseStatus": none(t.chooseStatus),
 		"App.todoLabel":        none(t.label),
 		"App.todoLabelSet":     oneString("a label", t.labelSet),
 		"App.todoAssign":       none(t.assign),
 		"App.todoAssignSet":    oneString("an instruction", t.assignSet),
 		"App.todoRefresh":      none(t.refresh),
 		"App.todoToggleDetail": none(t.toggleDetail),
-		"App.todoToggleHelp":   none(t.toggleHelp),
 		"App.todoLoad":         none(t.chooseLoad),
 		"App.todoNew":          none(t.chooseNew),
 		"App.todoMove":         none(func() { t.chooseFolder("move", "move the store: its new folder") }),
@@ -202,10 +201,23 @@ func (t *todos) Catalog() []Entry {
 	}
 }
 
-// todosPanelSpec is the todos panel: at the right edge by default, where the explorer's left one
-// leaves room, its geometry kept per edge like the side panels'.
+// todosPanelSpec is the todos panel: at the right edge by default, its geometry kept per edge like
+// the side panels', and large until the user sizes it (todosDefault).
 func todosPanelSpec() PanelSpec {
-	return sidePanelSpec("todos", "todoTree", 60, func(p prefs) string { return p.todosEdge })
+	s := sidePanelSpec("todos", "todoTree", 60, func(p prefs) string { return p.todosEdge })
+	s.Default = todosDefault
+	return s
+}
+
+// todosDefault is the todos panel's size and length before the user sets them: about 65% of the
+// window wide and 80% tall, centred along its edge, so the tree, the details and the action row
+// read whole (an 80-column screen gives it 52 columns). A size the user leaves it at, or a place
+// they float it to, is kept and wins (panelGeometry, panelfloat.go).
+func todosDefault(edge string) (size, length int) {
+	if edge == "top" || edge == "bottom" {
+		return 80, 65
+	}
+	return 65, 80
 }
 
 // Panels: the panel, its stores listed afresh each time it opens.
@@ -215,35 +227,75 @@ func (t *todos) Panels() []PanelSpec {
 	return []PanelSpec{s}
 }
 
+// todoKeysCard is ? in the todos panel: its keys by purpose, on the floating card of keys SPC's is
+// (keys.go). A key on it runs, the card closing first; ? again, q or Esc closes it.
+const todoKeysCard = "todoKeys"
+
+// The headings of the todos' card of keys, by purpose.
+const (
+	todoGroupMove   = "MOVE"
+	todoGroupTask   = "TASK"
+	todoGroupStatus = "STATUS"
+	todoGroupStore  = "STORE"
+)
+
 // Keys are autofinder's todos panel's, live while the keyboard is in the task list or its buttons,
 // not in the details pane (a read-only Editor that lets the edit keys it refuses bubble): Enter is
-// the tree's own (activated). 1–5 put the cursor on that section of its store.
+// the tree's own (activated). 1–5 put the cursor on that section of its store. ? opens their card,
+// whose keys are the same, by purpose.
 func (*todos) Keys() []Key {
 	keys := []Key{
 		{Scope: "todos", Seq: "a", Show: "a", Run: "App.todoAdd()"},
 		{Scope: "todos", Seq: "d", Show: "d", Run: "App.todoRemove()"},
-		{Scope: "todos", Seq: "s", Show: "s", Run: "App.todoCycle()"},
-		{Scope: "todos", Seq: "<", Show: "<", Run: "App.todoBack()"},
-		{Scope: "todos", Seq: ">", Show: ">", Run: "App.todoForward()"},
+		{Scope: "todos", Seq: "s", Show: "s", Run: "App.todoChooseStatus()"},
 		{Scope: "todos", Seq: "i", Show: "i", Run: "App.todoToggleDetail()"},
 		{Scope: "todos", Seq: "o", Show: "o", Run: "App.todoToggleDetail()"},
 		{Scope: "todos", Seq: "Shift+R", Show: "R", Run: "App.todoRefresh()"},
 		{Scope: "todos", Seq: "Shift+M", Show: "M", Run: "App.todoMove()"},
 		{Scope: "todos", Seq: "Shift+L", Show: "L", Run: "App.todoLabel()"},
 		{Scope: "todos", Seq: "Shift+A", Show: "A", Run: "App.todoAssign()"},
-		{Scope: "todos", Seq: "?", Show: "?", Run: "App.todoToggleHelp()"},
+		{Scope: "todos", Seq: "?", Show: "?", Opens: todoKeysCard},
 	}
 	for i := range todoBuckets {
 		keys = append(keys, Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–5", Run: fmt.Sprintf("App.todosTab(%d)", i)})
 	}
-	return keys
+	card := slices.Concat(
+		inGroup(todoGroupMove, []Key{
+			{Seq: "Return", Show: "Enter", Does: "open the task's file, or a section", Run: "App.todoOpen()"},
+			{Seq: "1", Show: "1–5", Does: "a section of the store", Run: "App.todosTab(0)"},
+			{Seq: "2", Run: "App.todosTab(1)"}, {Seq: "3", Run: "App.todosTab(2)"},
+			{Seq: "4", Run: "App.todosTab(3)"}, {Seq: "5", Run: "App.todosTab(4)"},
+			{Seq: "i", Also: []string{"o"}, Show: "i o", Does: "the details, shown or hidden", Run: "App.todoToggleDetail()"},
+		}),
+		inGroup(todoGroupTask, []Key{
+			{Seq: "a", Show: "a", Does: "add a task", Run: "App.todoAdd()"},
+			{Seq: "d", Show: "d", Does: "remove the task", Run: "App.todoRemove()"},
+			{Seq: "Shift+A", Show: "A", Does: "assign it to an agent", Run: "App.todoAssign()"},
+		}),
+		inGroup(todoGroupStatus, []Key{
+			{Seq: "s", Show: "s", Does: "status…: choose the task's", Run: "App.todoChooseStatus()"},
+		}),
+		inGroup(todoGroupStore, []Key{
+			{Seq: "Shift+R", Show: "R", Does: "refresh", Run: "App.todoRefresh()"},
+			{Seq: "Shift+L", Show: "L", Does: "label the store", Run: "App.todoLabel()"},
+			{Seq: "Shift+M", Show: "M", Does: "move the store", Run: "App.todoMove()"},
+		}),
+	)
+	return append(keys, onCard(todoKeysCard, card)...)
 }
 
-// Picks: A's picker of AutoDoc's agents (todos_assign.go).
-func (t *todos) Picks() map[string]picker { return map[string]picker{"agentAssign": t.assignPick} }
+// Picks: A's picker of AutoDoc's agents (todos_assign.go), and s's of the statuses.
+func (t *todos) Picks() map[string]picker {
+	return map[string]picker{"agentAssign": t.assignPick, "todoStatus": t.statusPick}
+}
 
-// Cards: the todos have no card of keys.
-func (*todos) Cards() []Card { return nil }
+// Cards: ?'s card of the panel's keys.
+func (*todos) Cards() []Card {
+	return []Card{{ID: todoKeysCard, View: "TodoKeys", Title: "todos — keys", Toggle: "?",
+		Note:   "↑ ↓ or j k move · q closes the panel",
+		Help:   "THE TODOS PANEL'S KEYS (? in the todos panel)",
+		Groups: [][]string{{todoGroupMove, todoGroupStatus}, {todoGroupTask, todoGroupStore}}}}
+}
 
 func (t *todos) chooseLoad() { t.chooseFolder("load", "load a todo store: its project's folder") }
 func (t *todos) chooseNew()  { t.chooseFolder("new", "a new todo store: the project's folder") }
@@ -405,7 +457,8 @@ func (t *todos) show(stores []*todoStore) {
 		t.model.SetChildren(&ix, buckets)
 	}
 	t.at = nil
-	t.status(fmt.Sprintf("%d stores: open a section for its tasks", len(stores)))
+	t.malformed = map[string]int{}
+	t.status()
 	t.showDetail()
 }
 
@@ -471,7 +524,6 @@ func (t *todos) read(s *todoStore, kind, rest string) {
 					"label": fmt.Sprintf("%s  (%v)", str(m, "month"), m["files"])}, HasChildren: true})
 			}
 			t.model.SetChildren(&ix, months)
-			t.status(fmt.Sprintf("%d months archived: open one for its tasks", len(months)))
 			// the months open before are new rows now, empty: each is read again under its new row
 			for k := range t.open {
 				if kind, id, month := splitTodoKey(k); kind == "m" && id == s.id {
@@ -509,11 +561,8 @@ func (t *todos) read(s *todoStore, kind, rest string) {
 		}
 		t.model.SetChildren(&ix, rows)
 		t.landed(key)
-		msg := fmt.Sprintf("%d tasks", len(tasks))
-		if bad := len(asList(l["malformed"])); bad > 0 {
-			msg += fmt.Sprintf(" · %d malformed files", bad)
-		}
-		t.status(msg)
+		t.malformed[sectionName(s, kind, rest)] = len(asList(l["malformed"]))
+		t.status()
 		t.showDetail()
 	})
 }
@@ -551,8 +600,35 @@ func (t *todos) indexOf(keys ...string) (tuidecl.Index, bool) {
 	return ix, len(keys) > 0
 }
 
-func (t *todos) status(s string) {
-	t.c.Set("App.todosStatus", s+"   ? keys") // the buttons name their own keys; ? lists them all
+// sectionName is how the status line names a section or a month of store s: "kb › Open".
+func sectionName(s *todoStore, kind, rest string) string {
+	name := rest
+	if i := slices.IndexFunc(todoBuckets, func(b struct{ bucket, title string }) bool { return b.bucket == rest }); kind == "b" && i >= 0 {
+		name = todoBuckets[i].title
+	} else if kind == "m" {
+		name = "Archived " + rest
+	}
+	return cmp.Or(s.alias, s.name) + " › " + name
+}
+
+// status is the panel's status line: the one thing it says is a file a section could not list,
+// which needs fixing by hand; nothing else, so it is hidden while none is.
+func (t *todos) status() {
+	var where []string
+	n := 0
+	for name, bad := range t.malformed {
+		if bad > 0 {
+			where = append(where, fmt.Sprintf("%d in %s", bad, name))
+			n += bad
+		}
+	}
+	slices.Sort(where)
+	msg := ""
+	if n > 0 {
+		msg = fmt.Sprintf("⚠ %d malformed files not listed: %s", n, strings.Join(where, ", "))
+	}
+	t.c.Set("App.todosStatus", msg)
+	t.c.Set("App.todosStatusShown", msg != "")
 }
 
 // keysOf is a row's identity: the keys from the root down to it.
@@ -588,9 +664,9 @@ func (t *todos) cursor() (*todoStore, map[string]any) {
 }
 
 // showDetail shows the details of the row under the cursor (a task's, as autofinder's i does; a
-// store's, where it is and what it is called), the store's place as the heading, and which of the
-// task buttons apply. It runs when the cursor moves and when an answer lands, never inside a
-// button's own click, so no button disables itself (a golib Button's handler must not).
+// store's, where it is and what it is called), the store's place as the heading, and the actions
+// that apply to it. It runs when the cursor moves and when an answer lands, never inside a
+// button's own click, so no button hides itself (a golib Button's handler must not).
 func (t *todos) showDetail() {
 	s, x := t.cursor()
 	heading := "todos"
@@ -609,24 +685,44 @@ func (t *todos) showDetail() {
 	// Posted: the cursor's move reaches here from the tree's currentIndexChanged, a Bus delivery,
 	// and a button disabled there could not end a gesture it held (golib's Bus subscribers enqueue
 	// an Update for that). Read when it runs, so the cursor is where it is then.
-	t.c.Post(t.syncButtons)
+	t.c.Post(t.syncActions)
 }
 
-// syncButtons sets which task buttons apply to the row under the cursor, as their keys refuse the
-// others: a task for Preview, Remove, Assign and the steps; a store taking writes here for Add and the
-// writes; a step only where the task's status has one.
-func (t *todos) syncButtons() {
+// rowKind is what the row under the cursor is: "store", "section" (a bucket, or an archived
+// month), "task", or "" with no store listed. With the cursor not yet moved it is the first store.
+func (t *todos) rowKind() string {
+	if len(t.at) == 0 {
+		if len(t.stores) > 0 {
+			return "store"
+		}
+		return ""
+	}
+	switch kind, _, _ := splitTodoKey(t.at[len(t.at)-1]); kind {
+	case "store":
+		return "store"
+	case "t":
+		return "task"
+	default:
+		return "section"
+	}
+}
+
+// syncActions sets the action row: the actions that apply to the row under the cursor, the others
+// hidden, never shown greyed. A store taking writes here: on its row Add, Refresh and Label; on a
+// section's Add and Refresh; on a task's Status…, Assign and Remove. A store not claimed shows no
+// action at all, only that it is read-only until the cutover, and its writes' keys do nothing.
+func (t *todos) syncActions() {
 	s, x := t.cursor()
+	kind := t.rowKind()
 	writable := s != nil && s.claimed
-	status := str(x, "status")
-	_, back := todoBack[status]
-	_, forward := todoForward[status]
-	t.c.Set("App.todoCanPreview", x != nil)
-	t.c.Set("App.todoCanAdd", writable)
-	t.c.Set("App.todoCanBack", x != nil && writable && back)
-	t.c.Set("App.todoCanForward", x != nil && writable && forward)
-	t.c.Set("App.todoCanRemove", x != nil && writable)
-	t.c.Set("App.todoCanAssign", x != nil && writable)
+	task := writable && kind == "task" && x != nil
+	t.c.Set("App.todoReadOnly", s != nil && !s.claimed)
+	t.c.Set("App.todoActAdd", writable && (kind == "store" || kind == "section"))
+	t.c.Set("App.todoActRefresh", writable && (kind == "store" || kind == "section"))
+	t.c.Set("App.todoActLabel", writable && kind == "store")
+	t.c.Set("App.todoActStatus", task)
+	t.c.Set("App.todoActAssign", task)
+	t.c.Set("App.todoActRemove", task)
 }
 
 // storeDetail is a store's details, Markdown: what it is called, where it is, who writes it.
@@ -692,6 +788,22 @@ func (t *todos) activated(ix tuidecl.Index) error {
 	return err
 }
 
+// openRow is Enter on the card of keys: the row under the cursor activated, as Enter in the tree
+// does.
+func (t *todos) openRow() {
+	keys := t.at
+	if len(keys) == 0 && len(t.stores) > 0 {
+		keys = []string{t.stores[0].id}
+	}
+	ix, ok := t.indexOf(keys...)
+	if !ok {
+		return
+	}
+	if err := t.activated(ix); err != nil {
+		t.c.Failed("todos: open", err)
+	}
+}
+
 // section is 1–5: the cursor to that section of the store it is in, the first store's when it is
 // in none.
 func (t *todos) section(i int) {
@@ -709,16 +821,10 @@ func (t *todos) section(i int) {
 	}
 }
 
-// readOnly reports, and says, that store s takes no writes here: the daemon has not claimed it.
-func (t *todos) readOnly(s *todoStore) bool {
-	if s == nil {
-		return true
-	}
-	if !s.claimed {
-		t.c.Notify("todos: this store is read-only in AutoDoc until the cutover; change it through AutoVim")
-	}
-	return !s.claimed
-}
+// readOnly reports that store s takes no writes here: the daemon has not claimed it. It says
+// nothing: the action row says the store is read-only, and offers no write (syncActions), so a
+// write's key there does nothing rather than answer with an error.
+func (t *todos) readOnly(s *todoStore) bool { return s == nil || !s.claimed }
 
 // write runs a todos verb that changes store s, once s takes writes here, and reads it again.
 func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
@@ -766,41 +872,23 @@ func (t *todos) removeConfirmed(s *todoStore, x map[string]any) {
 	t.write(s, "todos.remove", []any{s.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify("todos: removed " + str(x, "id")) })
 }
 
-// cycle is s: open → in progress → completed → deferred → open.
-func (t *todos) cycle() {
-	s, x := t.cursor()
-	if x == nil {
-		return
-	}
-	next, ok := todoCycle[str(x, "status")]
-	if !ok {
-		return // archived: Status from the daemon's verbs, not this key
-	}
-	t.moveTo(s, x, next)
-}
-
-// step is > (forward) and <: the task a step along open → in progress → completed. At an end, on a
-// deferred or an archived task, nothing moves, and the status line says why.
-func (t *todos) step(steps map[string]string, way string) {
-	s, x := t.cursor()
-	if x == nil {
-		return
-	}
-	next, ok := steps[str(x, "status")]
-	if !ok {
-		t.status(fmt.Sprintf("%s: nothing %s of %s", str(x, "title"), way, str(x, "status")))
-		return
-	}
-	t.moveTo(s, x, next)
-}
-
 // moveTo gives task x of store s its next status, through todos.status so its events fire; the
-// cursor follows the task into its new section once the daemon has moved it.
+// cursor follows the task into its new section once the daemon has moved it. Archived lists months,
+// not tasks, so the cursor follows no task into it, and a task leaving it waits only for the section
+// it goes to.
 func (t *todos) moveTo(s *todoStore, x map[string]any, next string) {
-	from, to := bucketKey(s.id, str(x, "status")), bucketKey(s.id, next)
+	prev := str(x, "status")
+	from, to := bucketKey(s.id, prev), bucketKey(s.id, next)
 	t.write(s, "todos.status", []any{s.at, str(x, "id"), str(x, "rev"), next}, func(any) {
-		t.follow = todoFollow{store: s.id, id: str(x, "id"), bucket: next, waiting: map[string]bool{from: true, to: true}}
 		t.open[to] = true // the write's reread reads it, open or not, with the section the task left
+		if next == "archived" {
+			return
+		}
+		waiting := map[string]bool{to: true}
+		if prev != "archived" {
+			waiting[from] = true
+		}
+		t.follow = todoFollow{store: s.id, id: str(x, "id"), bucket: next, waiting: waiting}
 	})
 }
 
@@ -874,7 +962,6 @@ func (t *todos) refresh() {
 }
 
 func (t *todos) toggleDetail() { t.detail = !t.detail; t.c.Set("App.todoDetailShown", t.detail) }
-func (t *todos) toggleHelp()   { t.help = !t.help; t.c.Set("App.todoHelpShown", t.help) }
 
 // chooseFolder opens the folder dialog for Load, New or M (move).
 func (t *todos) chooseFolder(as, title string) {
@@ -883,7 +970,7 @@ func (t *todos) chooseFolder(as, title string) {
 		return
 	}
 	t.folderAs = as
-	t.status(title)
+	t.c.Set("App.todoFolderTitle", title) // the dialog says what the folder is for
 	start := ""
 	if s != nil {
 		start = rootOf(s.at)
@@ -914,6 +1001,11 @@ func (t *todos) folderChosen(dir string) {
 		t.call("todos.register", []any{dir}, nil, func(any) {
 			t.call("todos.resolve", []any{at}, nil, func(v any) {
 				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), claimed: asMap(v)["claimed"] == true}
+				if !s.claimed { // the folder is loaded; the store it asked for waits for the cutover
+					t.c.Notify("todos: " + tildePath(dir) + " is loaded, read-only: its new store waits for the cutover")
+					t.list()
+					return
+				}
 				t.write(s, "todos.scaffold", []any{at}, func(any) { t.c.Notify("todos: a new store in " + dir); t.list() })
 			})
 		})

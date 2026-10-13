@@ -19,6 +19,9 @@ Dialog {
     property string previewText: ""
     property int previewAt: 0
     property string acceptText: "&Open"
+    // the most of the Window it takes, in percent: a short list (s's statuses) asks for less
+    property int widthPercent: 92
+    property int heightPercent: 90
     // the note's colour; by default the window's text, which an unset colour shows
     property var noteColor: Theme.app.windowText
     property string syntax: "Markdown"
@@ -26,8 +29,8 @@ Dialog {
     default property alias columns: list.data
     property alias footer: footerRow.data
     closeOnQ: true
-    maxWidthPercent: 92
-    maxHeightPercent: 90
+    maxWidthPercent: widthPercent
+    maxHeightPercent: heightPercent
     dim: false
     Flex {
         direction: Tui.Vertical

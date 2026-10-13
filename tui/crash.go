@@ -22,7 +22,7 @@ import (
 // boundaries where its loop calls AutoDoc (WithHandlerRecover: an event, an action, an Update, a Bus
 // delivery); AutoDoc writes a crash log to the state folder's crash/ and says what failed, and the
 // program goes on. The App.* commands and the catalog's entries name a panic on its way up
-// (renamePanic), so the notice says "App.todoForward failed", not only where golib caught it.
+// (renamePanic), so the notice says "App.todoRemove failed", not only where golib caught it.
 //
 // A panic golib will not contain (in Layout or Render, part way through a change to its tree) ends
 // the program: Run returns it (PanicReturn), the unsaved work is kept as on any unasked exit

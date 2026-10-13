@@ -226,8 +226,8 @@ func TestTodosReadsASectionWhenItOpens(t *testing.T) {
 	if got, want := treeLabels(v, &open), []string{"⚠ 1  Ship", "2  Clean"}; !slices.Equal(got, want) {
 		t.Fatalf("tasks %q, want %q", got, want)
 	}
-	if !strings.Contains(fmt.Sprint(s.set["App.todosStatus"]), "2 tasks · 1 malformed files") {
-		t.Errorf("status %v", s.set["App.todosStatus"])
+	if s.set["App.todosStatus"] != "⚠ 1 malformed files not listed: 1 in kb › Open" || s.set["App.todosStatusShown"] != true {
+		t.Errorf("status %v (shown %v)", s.set["App.todosStatus"], s.set["App.todosStatusShown"])
 	}
 	ship := tuidecl.Index{Row: 0, Parent: &open}
 	v.moved(ship)
@@ -253,7 +253,7 @@ func TestTodosReadsASectionWhenItOpens(t *testing.T) {
 }
 
 // TestTodosReadsTheArchiveByMonth: Archived lists its months with their counts, and a month's tasks
-// are read only when it opens; s leaves an archived task alone.
+// are read only when it opens; s on an archived task offers every status, archived marked.
 func TestTodosReadsTheArchiveByMonth(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
@@ -271,15 +271,18 @@ func TestTodosReadsTheArchiveByMonth(t *testing.T) {
 		t.Fatalf("the month: calls %v, rows %q", s.calls, treeLabels(v, &month))
 	}
 	v.moved(tuidecl.Index{Row: 0, Parent: &month})
-	v.cycle()
-	if s.called("todos.status") {
-		t.Error("s moved an archived task")
+	v.chooseStatus()
+	if s.called("todos.status") || !slices.Contains(s.opened, "todoStatusPicker") {
+		t.Fatalf("s on an archived task: calls %v, opened %v", s.calls, s.opened)
+	}
+	if got := statusRows(v); !slices.Equal(got, []string{"  open", "  in-progress", "  deferred", "  completed", "● archived"}) {
+		t.Errorf("the statuses offered: %q", got)
 	}
 }
 
 // TestTodosWritesAClaimedStoreAndNotAReadOnlyOne: on the claimed store a, s, d, R and M write to the
-// cursor's store; on one the daemon has not claimed each says so and writes nothing, and R reads it
-// again.
+// cursor's store; on one the daemon has not claimed each writes nothing and says nothing (the action
+// row says it is read-only), and R reads it again.
 func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	s := scriptedStore(true)
 	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "new"}, nil }
@@ -303,7 +306,8 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 		t.Fatalf("asked %v", s.asked)
 	}
 	s.yes()
-	v.cycle()
+	v.chooseStatus()
+	v.statusPick.accept(1, "") // in-progress
 	for _, want := range []string{"todos.add[kb map[title:Write it]]", "todos.remove[kb t1 r1]", "todos.status[kb t1 r1 in-progress]"} {
 		if !s.called(want) {
 			t.Errorf("no %s: %v", want, s.calls)
@@ -314,9 +318,8 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 		t.Errorf("refresh: %v %v", s.calls, s.notes)
 	}
 	v.toggleDetail()
-	v.toggleHelp()
-	if s.set["App.todoDetailShown"] != false || s.set["App.todoHelpShown"] != true {
-		t.Errorf("toggles %v %v", s.set["App.todoDetailShown"], s.set["App.todoHelpShown"])
+	if s.set["App.todoDetailShown"] != false {
+		t.Errorf("i: details shown %v", s.set["App.todoDetailShown"])
 	}
 	s.answers["todos.remove"] = func([]any) (any, error) { return nil, errors.New("-32071 the task changed") }
 	s.yes()
@@ -332,10 +335,10 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	n := len(ro.calls)
 	w.add()
 	w.remove()
-	w.cycle()
+	w.chooseStatus()
 	w.chooseFolder("move", "x")
-	if len(ro.calls) != n || len(ro.notes) != 4 {
-		t.Errorf("a read-only store was written: %v, notes %v", ro.calls[n:], ro.notes)
+	if len(ro.calls) != n || len(ro.notes) != 0 || len(ro.opened) != 0 || len(ro.asked) != 0 {
+		t.Errorf("a read-only store was written: %v, notes %v, opened %v", ro.calls[n:], ro.notes, ro.opened)
 	}
 	w.refresh() // read-only: the open section read again, nothing reconciled
 	if len(ro.calls) == n || ro.called("todos.refresh") {
@@ -498,7 +501,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 	w := newTodos(idle) // nothing listed: no store under the cursor
 	n := len(idle.calls)
 	w.add()
-	w.cycle()
+	w.chooseStatus()
 	w.refresh()
 	w.folderAs = "move"
 	w.folderChosen("/m")
@@ -511,7 +514,7 @@ func TestTodosAtTheEdges(t *testing.T) {
 			t.Errorf("%s: %v", c, err)
 		}
 	}
-	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolder" { // M on no store: read-only, said
+	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolder" { // M on no store: nothing
 		t.Errorf("the folder dialog opened %q", got)
 	}
 
