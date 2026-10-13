@@ -26,11 +26,18 @@ type TerminalRemoval interface {
 	Generation() int
 }
 
+type TerminalCompletion interface {
+	Done() <-chan struct{}
+	Wait(context.Context) error
+}
+
 // TerminalPanel is the bounded capability for one contributed parent view.
 // It exposes runtime IDs and value snapshots, never the program tree, child
 // component IDs or a PTY writer. Every operation except result waiting is on
 // the UI loop. Hiding the owning drawer does not remove its children.
 type TerminalPanel interface {
+	SameOwner(TerminalPanel) bool
+	Shutdown() TerminalCompletion
 	Add(label string, config TerminalConfig) (widget.TerminalTabID, error)
 	Select(widget.TerminalTabID) error
 	Start(widget.TerminalTabID) error
@@ -43,6 +50,12 @@ type TerminalPanel interface {
 }
 
 type terminalPanel struct{ tabs *widget.TerminalTabs }
+
+func (p terminalPanel) SameOwner(other TerminalPanel) bool {
+	peer, ok := other.(terminalPanel)
+	return ok && p.tabs == peer.tabs
+}
+func (p terminalPanel) Shutdown() TerminalCompletion { return p.tabs.ShutdownWithResult() }
 
 func (p terminalPanel) Add(label string, config TerminalConfig) (widget.TerminalTabID, error) {
 	return p.tabs.Add(label, widget.WithCommand(config.Command, append([]string(nil), config.Args...)...),

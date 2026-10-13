@@ -29,6 +29,21 @@ type modelPanel struct {
 	removal *modelRemoval
 }
 
+func (p *modelPanel) SameOwner(other TerminalPanel) bool {
+	peer, ok := other.(*modelPanel)
+	return ok && p == peer
+}
+func (p *modelPanel) Shutdown() TerminalCompletion {
+	for i := range p.tabs {
+		p.tabs[i].Running = false
+	}
+	if p.removal == nil {
+		p.removal = &modelRemoval{done: make(chan struct{})}
+		close(p.removal.done)
+	}
+	return p.removal
+}
+
 func (p *modelPanel) Add(label string, config TerminalConfig) (widget.TerminalTabID, error) {
 	p.next++
 	id := widget.TerminalTabID(fmt.Sprintf("tab-%d", p.next))
@@ -258,5 +273,71 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 				t.Fatal("deferred failure sent or missed completion")
 			}
 		})
+	}
+}
+
+func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
+	a, c := modelAgents(t)
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldConfig := c.panel.configs[instance.tab]
+	c.panel.exit(instance.tab, 3)
+	c.ws = wsInfo{name: "other", root: t.TempDir()}
+	c.epoch++
+	done := 0
+	var outcome error
+	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "other task", Path: "/other/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+		t.Fatal(err)
+	}
+	c.questions[len(c.questions)-1].OnYes()
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.name != "kb" || len(c.panel.sends) != 0 {
+		t.Fatal("workspace B reused or relabelled workspace A process")
+	}
+	if c.panel.configs[instance.tab].Dir != oldConfig.Dir || c.panel.configs[instance.tab].Args[len(oldConfig.Args)-1] != oldConfig.Args[len(oldConfig.Args)-1] {
+		t.Fatal("refused cross-workspace start mutated old configuration")
+	}
+}
+
+func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T) {
+	a, c := modelAgents(t)
+	p, _ := a.profile("one")
+	instance, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldRef := AgentRef{Codename: "one", Instance: instance.token}
+	oldOwner := c.panel
+	done := 0
+	var outcome error
+	if err := a.HandTask(oldRef, TaskRef{Title: "queued", Path: "/task.md"}, "work", func(err error) { done++; outcome = err }); err != nil {
+		t.Fatal(err)
+	}
+	c.panel = &modelPanel{owner: c, next: 100}
+	c.drainPosts()
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || len(oldOwner.sends) != 0 || len(c.panel.sends) != 0 {
+		t.Fatal("queued old-parent request sent or lost completion")
+	}
+	callbacks := 0
+	if err := a.HandTask(oldRef, TaskRef{Title: "stale", Path: "/task.md"}, "work", func(error) { callbacks++ }); !errors.Is(err, ErrAgentStale) || callbacks != 0 {
+		t.Fatal("old ref survived parent retirement")
+	}
+	fresh, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh == instance || fresh.token == oldRef.Instance || !fresh.owner.SameOwner(c.panel) || fresh.tab == instance.tab {
+		t.Fatal("new instance still belongs to rebuilt old parent")
+	}
+	if err := a.selectInstance(fresh); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.removeInstance("one"); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.instances) != 0 {
+		t.Fatal("current-owner removal used old-parent id")
 	}
 }

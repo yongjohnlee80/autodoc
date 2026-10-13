@@ -45,6 +45,7 @@ type agentInstance struct {
 	cleanupError     error
 	owner            TerminalPanel
 	generation       int
+	retirement       TerminalCompletion
 }
 
 type agentRuntimeHost interface {
@@ -102,8 +103,21 @@ func (a *agents) AgentEntries() []AgentEntry {
 // syncInstances observes explicit terminal-side restarts and owner destruction.
 // A new process generation gets a new token even when its native tab survives.
 func (a *agents) syncInstances() {
+	current, err := a.runtime()
+	if err != nil {
+		for _, instance := range a.instances {
+			instance.running = false
+		}
+		return
+	}
 	for _, instance := range a.instances {
 		if instance.owner == nil {
+			continue
+		}
+		if !instance.owner.SameOwner(current) {
+			if instance.retirement == nil {
+				a.awaitInstanceRetirement(instance, instance.owner.Shutdown())
+			}
 			continue
 		}
 		found := false
@@ -181,6 +195,9 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	}
 	a.c.OpenDrawer("agent") // Start must return the actual startup outcome, not a pre-mount promise
 	instance := a.instances[p.Codename]
+	if instance != nil && (instance.workspace.name != ws.name || instance.workspace.root != ws.root) {
+		return nil, fmt.Errorf("close the old workspace's agent tab before starting in another workspace: %w", ErrAgentStale)
+	}
 	if instance != nil && instance.running {
 		return instance, a.selectInstance(instance)
 	}
@@ -255,6 +272,7 @@ func (a *agents) instanceExited(instance *agentInstance, code int) {
 }
 
 func (a *agents) removeInstance(code string) error {
+	a.syncInstances()
 	instance := a.instances[code]
 	if instance == nil {
 		return ErrAgentUnavailable
@@ -270,7 +288,15 @@ func (a *agents) removeInstance(code string) error {
 	if err != nil {
 		return err
 	}
-	instance.running, instance.closing = false, true
+	a.awaitInstanceRetirement(instance, result)
+	return nil
+}
+
+// Retire through the captured owner's cleanup result, not by sending old IDs
+// to a new parent. Failed cleanup keeps the incarnation and codename reserved.
+func (a *agents) awaitInstanceRetirement(instance *agentInstance, result TerminalCompletion) {
+	instance.running, instance.closing, instance.retirement = false, true, result
+	code := instance.profile.Codename
 	a.listAgents()
 	c := a.c.(agentRuntimeHost)
 	complete := func(err error) {
@@ -295,7 +321,6 @@ func (a *agents) removeInstance(code string) error {
 	default:
 		go func() { err := result.Wait(context.Background()); c.Post(func() { complete(err) }) }()
 	}
-	return nil
 }
 
 // HandTask accepts a task for one exact agent incarnation. An immediate error
