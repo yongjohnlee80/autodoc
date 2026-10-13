@@ -229,7 +229,10 @@ jobs:
           if [ -d core/pgstore ]; then
             export AUTODOC_TEST_PGURL="$PGURL"
           fi
-          go test -count=1 -timeout 20m -skip '^TestAPreferenceRebindsAPluginCommand$' -covermode=atomic \
+          # The todos' dropdown: a base at #161's merge (4b37f2a) fails TestTodosLabelAStoreAndClearIt and
+          # TestTodosAtTheEdges, which #164 fixes; the head still runs both. These two entries can go once
+          # every base this job sees includes #164.
+          go test -count=1 -timeout 20m -skip '^(TestAPreferenceRebindsAPluginCommand|TestTodosLabelAStoreAndClearIt|TestTodosAtTheEdges)$' -covermode=atomic \
             -coverpkg=./... -coverprofile="$RUNNER_TEMP/coverage-base.out" ./...
 
       # covercheck is golib's, at the version go.mod requires: no install step
