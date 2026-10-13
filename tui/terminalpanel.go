@@ -42,6 +42,7 @@ type TerminalPanel interface {
 	Select(widget.TerminalTabID) error
 	Start(widget.TerminalTabID) error
 	SendText(widget.TerminalTabID, string) error
+	SendPaste(widget.TerminalTabID, string) error
 	Remove(widget.TerminalTabID) (TerminalRemoval, error)
 	ForceRemove(widget.TerminalTabID) error
 	Tabs() []widget.TerminalTab
@@ -69,6 +70,9 @@ func (p terminalPanel) Select(id widget.TerminalTabID) error { return p.tabs.Sel
 func (p terminalPanel) Start(id widget.TerminalTabID) error  { return p.tabs.Start(id) }
 func (p terminalPanel) SendText(id widget.TerminalTabID, text string) error {
 	return p.tabs.SendText(id, text)
+}
+func (p terminalPanel) SendPaste(id widget.TerminalTabID, text string) error {
+	return p.tabs.SendPaste(id, text)
 }
 func (p terminalPanel) Remove(id widget.TerminalTabID) (TerminalRemoval, error) {
 	return p.tabs.Remove(id)

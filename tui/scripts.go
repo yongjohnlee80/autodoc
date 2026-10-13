@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/script"
@@ -35,6 +36,7 @@ func (h *Host) loadScripts() {
 	}
 	// autodoc.call and autodoc.run now; autodoc.<domain> once connected (scripting.go)
 	h.luaFeature().bind(h.scripts, h.runFromLua)
+	h.luaFeature().bindHost(h.scripts, luaHostOf{h}) // autodoc.clipboard, .ui, .agents (luahost.go)
 	errs := h.scripts.LoadDir(ownScripts, "lua")
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)
@@ -70,3 +72,17 @@ func (h *Host) runFromLua(id string, args []string) error {
 	}
 	return h.cat.run(id, args)
 }
+
+// luaHostOf is the program as the script functions reach it (luahost.go).
+type luaHostOf struct{ h *Host }
+
+func (l luaHostOf) copyText(text string) bool { return l.h.p.App().CopyToClipboard(text) }
+func (l luaHostOf) readText(done func(string, error)) error {
+	_, err := l.h.p.App().ReadClipboard(0, func(_ tuicore.ClipboardRead, text string, err error) { done(text, err) })
+	return err
+}
+func (l luaHostOf) agentEntries() []AgentEntry { return l.h.agents.AgentEntries() }
+func (l luaHostOf) sendText(to AgentRef, text string, done func(error)) error {
+	return l.h.agents.SendText(to, text, done)
+}
+func (l luaHostOf) post(fn func()) { l.h.p.Post(fn) }

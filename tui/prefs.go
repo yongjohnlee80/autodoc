@@ -98,6 +98,9 @@ type prefs struct {
 	toastSeconds                int    // how long a finished one stays
 	// the terminal: the edge it opens from; its geometry is in panelGeo
 	termEdge string
+	// termTheme is the theme the terminals' area is drawn in: "page" (or "") the page's, else one
+	// golib ships (terminal.go)
+	termTheme string
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
@@ -116,7 +119,9 @@ type prefs struct {
 	panelFloat map[string][4]float64
 	// the GUI's fonts and zoom (fonts.go): "" and 0 are the window's defaults
 	cellFont, proseFont string
-	fontSize, zoom      int
+	// termFont is the terminals' own face (gui.font.terminal): "" the cell font's (fonts.go)
+	termFont       string
+	fontSize, zoom int
 	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
 	agentEdge string
 	// values are the features' own preferences (ValuePref), by name: read with Value

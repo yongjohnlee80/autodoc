@@ -230,6 +230,32 @@ autodoc.command{
 }
 ```
 
+## The program's own functions
+
+Beside the daemon's verbs, AutoDoc gives scripts its clipboard, a picker and its agents. They are
+there from the start, connected or not. As the daemon's do, each `cb` runs later on the loop as
+`cb(result, err)`, never inside the call: a refusal known at once is a callback on the next turn.
+
+| Domain | Functions |
+|---|---|
+| `agents` | `list`, `send` |
+| `clipboard` | `read`, `write` |
+| `ui` | `pick` |
+
+| Call | Answers |
+|---|---|
+| `autodoc.clipboard.write(text)` | `ok, err` at once: the system clipboard set (a terminal's, by OSC 52) |
+| `autodoc.clipboard.read(cb)` | `cb(text, err)`: `""` for an empty clipboard or one holding no text; `err` `"unsupported"` where AutoDoc cannot read it (in a terminal, its own paste is the way in), `"timeout"`, `"closed"` |
+| `autodoc.ui.pick({title, items}, cb)` | a picker over `items`, each a string or `{label, detail, value}` (`detail` is previewed, `value` given to `cb`, the item itself without one): `cb(value)`; `err` `"cancelled"` (Esc), or `"busy"` while another script's picker is open |
+| `autodoc.agents.list()` | at once: `{{codename, name, running, closing, instance, orphan}, …}`, the saved profiles first; a `closing` one refuses a send |
+| `autodoc.agents.send(agent, text, cb)` | `text` pasted into the agent's prompt, no Enter added after it: `agent` a codename, or `{codename, instance}` for that exact run. A stopped agent is started once the user agrees. `cb(true)` once it is typed; `err` `"cancelled"`, `"stale"` (that run is gone), `"unavailable"`, or why |
+
+A paste is as the terminal's own: an agent CLI that asked for bracketed paste gets the text whole,
+held at its prompt for Enter; elsewhere its newlines are Enter, so its earlier lines are submitted
+as they arrive and only its last waits. AutoDoc's own `agents.lua` uses these: `:agent-buffer` sends the
+page, and `:agent-forward` the selection, else the clipboard, to the agent running (with several,
+or none, a picker asks which; one not running is started once you agree).
+
 ## The daemon's verbs
 
 Each verb the daemon offers scripts is a function `autodoc.<domain>.<verb>`. They are made from

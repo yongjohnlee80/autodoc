@@ -46,6 +46,11 @@ type scripting struct {
 	seq     uint64 // the contracts' fetches: only the latest one's answer is kept
 	// run runs a catalog entry for autodoc.run (Host.runFromLua)
 	run func(id string, args []string) error
+	// host is the clipboard and the agents for the host functions (luahost.go); pick is
+	// autodoc.ui.pick's picker, pickCB the callback of the one open
+	host   luaHost
+	pick   *pick[luaItem]
+	pickCB *lua.LFunction
 }
 
 // luaVerb is what a script's call needs of a contract.
@@ -69,8 +74,12 @@ func (h *Host) luaFeature() *scripting {
 	return h.scripting
 }
 
-func (*scripting) Name() string                 { return "scripting" }
-func (*scripting) State() map[string]any        { return nil }
+func (*scripting) Name() string { return "scripting" }
+func (s *scripting) State() map[string]any {
+	return map[string]any{"App.luaPickRows": s.luaPicker().list.Model(), "App.luaPickField": "",
+		"App.luaPickStatus": "items", "App.luaPickTitle": "choose",
+		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0}
+}
 func (*scripting) Commands() map[string]Command { return nil }
 
 // bind gives the engine autodoc.call and autodoc.run, which runs through run; the namespaces follow

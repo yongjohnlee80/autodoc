@@ -122,7 +122,8 @@ type Host struct {
 	fontGens                               map[uint64]appliedFonts // the fonts set at each generation, for the grid's (fontsFit)
 	cellFonts, proseFonts                  []string                // the Fonts dialog's choices, "" the default first
 	cellFontModel, proseFontModel          *tuidecl.ListModel
-	arrange                                *arrangeState // an arrangement in progress (arrange.go)
+	termFontModel                          *tuidecl.ListModel // the terminals' face chooser: the cell font's first, then cellFonts
+	arrange                                *arrangeState      // an arrangement in progress (arrange.go)
 	// Stateful terminal and agent behavior is owned by these Features.
 	terminals *terminals
 	agents    *agents
@@ -322,6 +323,7 @@ func newHost(session *Session, opt Options) *Host {
 		browser:         openDefaultApp,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
 		cellFontModel:   fontModel(),
+		termFontModel:   termFontModel(),
 		proseFontModel:  fontModel(),
 		fonts:           opt.Fonts,
 		families:        opt.FontFamilies,

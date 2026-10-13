@@ -163,10 +163,11 @@ func (h *Host) state() map[string]any {
 		"App.tutorialTitle": "", "App.tutorialText": "", "App.tutorialNextText": "&Next",
 		"App.gui":           h.gui,
 		"App.cellFonts":     h.cellFontModel,
+		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
 		"App.fontSizes":     choices(fontSizeLabels()...),
 		"App.zoomSteps":     choices(zoomLabels()...),
-		"App.cellFontIndex": 0, "App.proseFontIndex": 0,
+		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0,
 	}
 	for k, v := range h.keys.cardState() {
 		st[k] = v

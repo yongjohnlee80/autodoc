@@ -385,11 +385,16 @@ Window {
             id: terminalView
             emptyText: "No shell running. Press + to start one."
             vimKeys: App.keymapVim
-            // a program's colours raised until they read on the page: ls's yellow and a
+            // the terminals' theme (terminal.go): its text and background, the strip's the page's
+            palette.base: App.terminalBase
+            palette.text: App.terminalText
+            // the terminals' own face, in a window (fonts.go); a terminal draws in its own font
+            cellFont: App.terminalFont
+            // a program's colours raised until they read on that background: ls's yellow and a
             // prompt's cyan are written for a dark terminal, and wash out on a light theme
             minimumContrast: 4.5
-            // the editor's caret colour; its shape says the mode: a block in normal, a bar typing
-            cursorColor: Theme.document.cursor
+            // the theme's caret colour; its shape says the mode: a block in normal, a bar typing
+            cursorColor: App.terminalCursor
         }
     }
 
@@ -414,8 +419,12 @@ Window {
             id: agentView
             emptyText: "No agent running. Press + to start one of the profiles."
             vimKeys: App.keymapVim
-            minimumContrast: 4.5      // as the terminal's
-            cursorColor: Theme.document.cursor
+            // as the terminal's: the terminals' theme and face, the contrast raised against it
+            palette.base: App.terminalBase
+            palette.text: App.terminalText
+            cellFont: App.terminalFont
+            minimumContrast: 4.5
+            cursorColor: App.terminalCursor
             onChanged: App.agentTabsChanged()
         }
     }
@@ -552,6 +561,7 @@ Window {
     FileOpen { id: fileOpen }
     OutlinePicker { id: outlinePicker }
     AgentAssign { id: agentAssignPicker }
+    LuaPick { id: luaPicker }
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }

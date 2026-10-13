@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -37,7 +39,9 @@ func (t *terminals) State() map[string]any {
 		"App.terminalEdges":   choices(termEdgeLabels...),
 		"App.terminalSizes":   choices(percentLabels(termSizes)...),
 		"App.terminalLengths": choices(percentLabels(termLengths)...),
+		"App.terminalThemes":  choices(termThemeLabels()...),
 	}
+	maps.Copy(st, t.lookState())
 	return st
 }
 func (t *terminals) Prefs() []PrefSpec { return terminalPrefRows(t) }
@@ -55,11 +59,71 @@ func (t *terminals) Catalog() []Entry {
 func terminalPrefRows(t *terminals) []PrefSpec {
 	row := choicePref(prefTermEdge, "bottom", termEdges, func(p *prefs) *string { return &p.termEdge }).
 		shows(terminalPreferenceState)
+	theme := choicePref(prefTermTheme, "page", termThemes(), func(p *prefs) *string { return &p.termTheme }).
+		shows(func(p prefs) map[string]any {
+			return map[string]any{"App.terminalThemeIndex": max(indexOf(termThemes(), cmp.Or(p.termTheme, "page")), 0)}
+		})
 	if t != nil {
 		row = row.then(func(prefs) { t.c.DockPanel("terminal") })
+		theme = theme.then(func(prefs) { t.showLook() })
 	}
-	return []PrefSpec{row}
+	return []PrefSpec{row, theme}
 }
+
+// THE TERMINALS' THEME — the colours the terminal's and the agents' shells are drawn in, on their
+// own: the page's (the default), or one of the themes golib ships, chosen in Preferences. It is
+// their default text, background and cursor, and only theirs: the panel's frame and tab strip stay
+// the page's, and the minimum contrast raises a program's colours against the theme's background.
+// A program's own 16 colours (ls's, a prompt's) stay the program's: no theme recolours them.
+
+const prefTermTheme = "tui.terminal.theme"
+
+// termThemes are the choices, "page" first.
+func termThemes() []string { return append([]string{"page"}, themeNames...) }
+
+func termThemeLabels() []string { return append([]string{"the page's"}, themeNames...) }
+
+// termLook is the theme the terminals are drawn in for p on a page drawn in page: its document's
+// text, background and cursor colours. One golib does not ship falls back to the page's, and a page
+// theme it does not ship (a layout of one's own) to its first.
+func termLook(p prefs, page string) map[string]any {
+	name := p.termTheme
+	if name == "" || name == "page" || !isTheme(name) {
+		name = page
+	}
+	if !isTheme(name) {
+		name = themeNames[0]
+	}
+	v, _ := themes.Values(name)
+	return map[string]any{
+		"App.terminalBase":   v["document.base"],
+		"App.terminalText":   v["document.text"],
+		"App.terminalCursor": v["document.cursor"],
+	}
+}
+
+// lookState is the terminals' colours now.
+func (t *terminals) lookState() map[string]any {
+	page := ""
+	if c, ok := t.c.(interface{ PageTheme() string }); ok {
+		page = c.PageTheme()
+	}
+	var p prefs
+	if t.c != nil {
+		p = t.c.Prefs()
+	}
+	return termLook(p, page)
+}
+
+// showLook puts the terminals' colours on screen: a theme chosen, the page's changed.
+func (t *terminals) showLook() {
+	for k, v := range t.lookState() {
+		t.c.Set(k, v)
+	}
+}
+
+// ThemeChanged is the page's theme switched (View › Theme): a terminal theme of the page's follows.
+func (t *terminals) ThemeChanged() { t.showLook() }
 
 func terminalPreferenceState(p prefs) map[string]any {
 	st := termState(p)
@@ -78,6 +142,7 @@ func (t *terminals) Commands() map[string]Command {
 		"App.setTerminalEdge":   oneNumber("a row", t.setTerminalEdge),
 		"App.setTerminalSize":   oneNumber("a row", t.setTerminalSize),
 		"App.setTerminalLength": oneNumber("a row", t.setTerminalLength),
+		"App.setTerminalTheme":  oneNumber("a row", t.setTerminalTheme),
 	}
 }
 func (t *terminals) Panels() []PanelSpec {
@@ -93,6 +158,7 @@ func (t *terminals) PreferencesChanged() {
 		t.c.Set(name, value)
 	}
 	t.syncTermDialog()
+	t.showLook()
 }
 
 // THE TERMINAL — shells in a drawer over the page (SPC `, Go › Terminal), each in a tab of its own:
@@ -207,6 +273,13 @@ func (t *terminals) setTerminalEdge(i int) {
 func (t *terminals) setTerminalSize(i int) {
 	if i >= 0 && i < len(termSizes) {
 		t.c.KeepPanelGeometry("terminal", "size", termSizes[i])
+	}
+}
+
+// setTerminalTheme is the Preferences row: the terminals' theme, kept.
+func (t *terminals) setTerminalTheme(i int) {
+	if all := termThemes(); i >= 0 && i < len(all) {
+		t.c.SetPref(prefTermTheme, all[i])
 	}
 }
 
