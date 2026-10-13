@@ -57,3 +57,26 @@ func TestAboutWithoutADateAndWithAReplacement(t *testing.T) {
 		t.Errorf("replacement %q", got)
 	}
 }
+
+// About dims what is behind it: the status line under the dialog is drawn faint while it is open.
+func TestAboutDimsTheBackground(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{AboutInfo: AboutInfo{Version: "v9.9.9"}})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	faint := func() bool {
+		rows := strings.Split(r.s.String(), "\n")
+		snap := r.s.Backend.Snapshot()
+		for y, row := range rows {
+			if x := strings.Index(row, "connected"); x >= 0 {
+				return snap[y][len([]rune(row[:x]))].Attrs.Mask&tuicore.AttrFaint != 0
+			}
+		}
+		return false
+	}
+	if faint() {
+		t.Fatal("the status line is faint before About opens")
+	}
+	r.leader(t, 'A')
+	r.s.WaitForText(t, "AutoDoc v9.9.9")
+	r.s.WaitFor(t, "the status line dimmed behind About", func(string) bool { return faint() })
+}

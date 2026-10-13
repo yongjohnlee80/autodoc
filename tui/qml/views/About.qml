@@ -7,7 +7,7 @@ Dialog {
     maxWidthPercent: 80
     maxHeightPercent: 80
     title: "about autodoc"
-    dim: false
+    dim: true
     standardButtons: Dialog.Close
     defaultButton: Dialog.Close
     Flex {
