@@ -591,3 +591,19 @@ func TestTheTerminalsThemeIsTheirsAlone(t *testing.T) {
 	onLoop(r, func() bool { r.h.switchTheme("light"); return true })
 	r.s.WaitFor(t, "the page's, after the switch: light", func(string) bool { _, bg := pale(); return bg == light })
 }
+
+// The Preferences terminal row's tooltip says the theme is the shells' and leaves a program's own
+// colours alone: the pointer resting on the row's description shows it.
+func TestTheTerminalThemeRowSaysWhatItColours(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, ',')
+	r.s.WaitForText(t, "the terminal: from")
+	x, y := -1, -1
+	for row, line := range strings.Split(r.s.String(), "\n") {
+		if c := col(line, "the terminal: from"); c >= 0 {
+			x, y = c+2, row
+		}
+	}
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseMotion, X: x, Y: y})
+	r.s.WaitForText(t, "16 colours")
+}

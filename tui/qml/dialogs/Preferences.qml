@@ -54,7 +54,7 @@ Dialog {
                     Text { text: "" }
                     // the theme is the terminal's and the agents' shells' (terminal.go): their text, background
                     // and cursor; a program's own 16 colours stay its own
-                    Text { text: "the terminal: from · size · length · theme (text and background)" }
+                    Text { text: "the terminal: from · size · length · theme (text and background)"; toolTipText: "The terminal's and the agents' shells: their text, background and cursor. A program's own 16 colours (ls's, a prompt's) stay its own." }
                     Flex {
                         direction: Tui.Horizontal
                         ComboBox { model: App.terminalEdges; textRole: "label"; currentIndex: App.terminalEdgeIndex; onActivated: App.setTerminalEdge(index) }
@@ -63,7 +63,7 @@ Dialog {
                         Text { text: "  " }
                         ComboBox { model: App.terminalLengths; textRole: "label"; currentIndex: App.terminalLengthIndex; onActivated: App.setTerminalLength(index) }
                         Text { text: "  " }
-                        ComboBox { model: App.terminalThemes; textRole: "label"; currentIndex: App.terminalThemeIndex; onActivated: App.setTerminalTheme(index) }
+                        ComboBox { toolTipText: "The terminal's and the agents' shells: their text, background and cursor. A program's own 16 colours (ls's, a prompt's) stay its own."; model: App.terminalThemes; textRole: "label"; currentIndex: App.terminalThemeIndex; onActivated: App.setTerminalTheme(index) }
                     }
                 }
                 Text { text: " " }
