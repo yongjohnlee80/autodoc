@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/search"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 )
@@ -115,13 +116,19 @@ func (r *running) headings() int {
 	})
 }
 
-// typeOnPage types text in Insert mode, and waits for the page to take it.
+// typeOnPage types text in Insert mode and goes back to Normal, and waits for the page to take it
+// all: the text, and the Esc after it, which moves the cursor back one. The keys come by the
+// terminal's queue, unordered with onLoop's reads: the text alone on the page is not the Esc taken.
 func (r *running) typeOnPage(t *testing.T, text string) {
 	t.Helper()
 	r.keys(t, key('i'))
 	r.keys(t, decltest.Type(text)...)
 	r.keys(t, esc())
-	r.s.WaitFor(t, "the page edited", func(string) bool { return strings.Contains(r.editorText(), text) && r.file().dirty })
+	r.s.WaitFor(t, "the page edited, back in Normal mode", func(string) bool {
+		return onLoop(r, func() bool {
+			return strings.Contains(r.h.core.Value(), text) && r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal
+		})
+	})
 }
 
 // TestADerivedPageIsReadOnlyBeforeTheRegistrationsCome: a PDF read before the daemon's
