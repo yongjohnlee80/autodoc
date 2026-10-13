@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -536,4 +537,57 @@ func TestABackgroundShellLeavingKeepsTheActiveOne(t *testing.T) {
 	if got := active(); got != c {
 		t.Fatalf("a background Close selected %s, want the active %s", got, c)
 	}
+}
+
+// TestTheTerminalsThemeIsTheirsAlone: the terminals' theme is the shell's background and default
+// colours, the panel's strip staying the page's; a program's colour is raised against the theme's
+// background, not the page's; "the page's" follows the page, a theme switch included.
+func TestTheTerminalsThemeIsTheirsAlone(t *testing.T) {
+	_, r := runShellTUI(t, map[string]string{"tui.terminal.theme": "light"}) // on the dark page
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	// a pale grey: unreadable on light's background, plain on dark's; typed split, so only the
+	// output says PALE
+	r.keys(t, decltest.Type("printf '\\033[38;2;240;240;240mPA''LE\\033[0m\\n'\r")...)
+	r.s.WaitForText(t, "PALE")
+	pale := func() (fg, bg tuicore.CellColor) {
+		for _, row := range r.s.Backend.Snapshot() {
+			for x := 0; x+3 < len(row); x++ {
+				if row[x].Content == "P" && row[x+1].Content == "A" && row[x+2].Content == "L" && row[x+3].Content == "E" {
+					return row[x].Attrs.FG, row[x].Attrs.BG
+				}
+			}
+		}
+		t.Fatalf("no PALE on screen:\n%s", r.s.String())
+		return
+	}
+	rgb := func(r, g, b uint8) tuicore.CellColor {
+		return tuicore.CellColor{Kind: tuicore.CellColorRGB, R: r, G: g, B: b}
+	}
+	light, dark, grey := rgb(0xf6, 0xf2, 0xe7), rgb(0x1c, 0x1c, 0x1c), rgb(240, 240, 240)
+	if fg, bg := pale(); bg != light || fg == grey {
+		t.Fatalf("light terminals on a dark page: PALE in %+v on %+v; want light's background, the grey raised", fg, bg)
+	}
+	strip := func() tuicore.CellColor {
+		for _, row := range r.s.Backend.Snapshot() {
+			for x := 0; x+4 < len(row); x++ {
+				if row[x].Content == "s" && row[x+1].Content == "h" && row[x+2].Content == "e" && row[x+3].Content == "l" && row[x+4].Content == "l" {
+					return row[x].Attrs.BG
+				}
+			}
+		}
+		t.Fatalf("no tab strip on screen:\n%s", r.s.String())
+		return tuicore.CellColor{}
+	}
+	if bg := strip(); bg == light {
+		t.Errorf("the strip took the terminals' theme: %+v", bg)
+	}
+
+	onLoop(r, func() bool { r.h.terminals.setTerminalTheme(0); return true }) // the page's: dark
+	r.s.WaitFor(t, "the page's dark background", func(string) bool { _, bg := pale(); return bg == dark })
+	if fg, _ := pale(); fg != grey {
+		t.Errorf("the grey on dark was changed: %+v", fg)
+	}
+	onLoop(r, func() bool { r.h.switchTheme("light"); return true })
+	r.s.WaitFor(t, "the page's, after the switch: light", func(string) bool { _, bg := pale(); return bg == light })
 }

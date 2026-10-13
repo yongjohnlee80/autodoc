@@ -26,7 +26,10 @@ type scopedPanelHost struct {
 	ids   map[string]bool
 }
 
-func (s *scopedPanelHost) Set(name string, v any)          { s.core.Set(name, v) }
+func (s *scopedPanelHost) Set(name string, v any) { s.core.Set(name, v) }
+
+// PageTheme is the theme the page is drawn in: a terminal theme of "the page's" follows it.
+func (s *scopedPanelHost) PageTheme() string               { return s.core.Theme() }
 func (s *scopedPanelHost) Open(id string)                  { s.core.Open(id) }
 func (s *scopedPanelHost) Close(id string)                 { s.core.Close(id) }
 func (s *scopedPanelHost) Notify(msg string)               { s.core.Notify(msg) }

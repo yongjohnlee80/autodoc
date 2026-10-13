@@ -52,7 +52,9 @@ Dialog {
                         ComboBox { model: App.openAsChoices; textRole: "label"; currentIndex: App.openAsIndex; onActivated: App.setOpenAsIndex(index) }
                     }
                     Text { text: "" }
-                    Text { text: "the terminal: from · size · length" }
+                    // the theme is the terminal's and the agents' shells' (terminal.go): their text, background
+                    // and cursor; a program's own 16 colours stay its own
+                    Text { text: "the terminal: from · size · length · theme (text and background)" }
                     Flex {
                         direction: Tui.Horizontal
                         ComboBox { model: App.terminalEdges; textRole: "label"; currentIndex: App.terminalEdgeIndex; onActivated: App.setTerminalEdge(index) }
@@ -60,6 +62,8 @@ Dialog {
                         ComboBox { model: App.terminalSizes; textRole: "label"; currentIndex: App.terminalSizeIndex; onActivated: App.setTerminalSize(index) }
                         Text { text: "  " }
                         ComboBox { model: App.terminalLengths; textRole: "label"; currentIndex: App.terminalLengthIndex; onActivated: App.setTerminalLength(index) }
+                        Text { text: "  " }
+                        ComboBox { model: App.terminalThemes; textRole: "label"; currentIndex: App.terminalThemeIndex; onActivated: App.setTerminalTheme(index) }
                     }
                 }
                 Text { text: " " }

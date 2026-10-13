@@ -98,6 +98,9 @@ type prefs struct {
 	toastSeconds                int    // how long a finished one stays
 	// the terminal: the edge it opens from; its geometry is in panelGeo
 	termEdge string
+	// termTheme is the theme the terminals' area is drawn in: "page" (or "") the page's, else one
+	// golib ships (terminal.go)
+	termTheme string
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
