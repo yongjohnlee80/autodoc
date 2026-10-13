@@ -320,7 +320,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, the link under the cursor, back |
 | `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |
 | `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |
-| `Ctrl+W` | switch workspace; its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them |
+| `Ctrl+W` | switch workspace (`SPC w` too); its `Manage…` (or `Go › Manage workspaces…`) adds, edits and deletes them. In the Vim editor mode's Insert, `Ctrl+W` is Vim's: it deletes the word before the cursor (`Esc` first to switch), as Insert's `Ctrl+U` deletes back to the indent and `Ctrl+O` runs one Normal-mode command |
 | `Ctrl+h` `j` `k` `l` | in Normal mode, to the open panel on that side, and back to the page |
 | `SPC L` | arrange the panel with the keyboard: move and resize it (`Go › Arrange panel…`) |
 | `Shift+F10`, the Menu key, `SPC .` | the page's right-click menu, at the cursor (the Menu key where the terminal sends it) |

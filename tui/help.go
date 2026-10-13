@@ -146,7 +146,10 @@ const helpKeys = `KEYS
   Ctrl+;      the command line, in every editor mode (:, in Vim's Normal mode): :w, :find,
               :table, your Lua commands … (Search › Command line…; a terminal needs kitty's
               keyboard protocol to send Ctrl+;)
-  Ctrl+W      switch workspace; Manage… adds, renames and deletes them
+  Ctrl+W      switch workspace (SPC w too); Manage… adds, renames and deletes them. In the Vim
+              editor mode's Insert, Ctrl+W is Vim's: it deletes the word before the cursor (Esc
+              first to switch). Insert's Ctrl+U deletes back to the indent, and Ctrl+O runs one
+              Normal-mode command
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
   SPC m       show and focus the menu bar; again hides it
@@ -276,8 +279,13 @@ H M L    top, middle, bottom  p P    paste after, before
 Ctrl+d Ctrl+u  half a page    u      undo;  Ctrl+r  redo
 Ctrl+b Ctrl+f  page up, down  Esc    back to Normal
 Ctrl+o Ctrl+i  jump back, on  SELECT
-  (across documents too)      v V    characters, lines
-                              y d x  copy, delete them
+  (across documents too)      v V Ctrl+v  characters, lines, block
+                              y d x c  copy, delete, change them
+INSERT                        r ~ u U > <  on the selection
+Ctrl+w  delete a word back    I A    a block: type before, after
+Ctrl+u  delete to the indent  o O    other end; a block's side
+Ctrl+o  one Normal command
+  (Ctrl+W switches workspace in Normal mode; in Insert it is Vim's)
 MARKS, REGISTERS, MACROS      FIND
 ma  'a  ` + "`" + `a   set; to its line, place   /      a word in the pane
 ''  ` + "`" + `` + "`" + `      back to the last jump     n N    again, forward, back
