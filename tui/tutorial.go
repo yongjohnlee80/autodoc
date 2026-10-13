@@ -9,7 +9,9 @@ import (
 
 // THE TUTORIAL — Help › Tutorial…: a few pages, each Markdown, embedded in the binary and
 // read in order (tutorial/NN-name.md). The dialog shows one at a time, Rendered under --gui and as
-// text in a terminal, with Back and Next (views/Tutorial.qml).
+// text in a terminal, with Previous and Next (views/Tutorial.qml). Neither is ever disabled, so neither
+// disables itself from its own click: Previous on the first page does nothing, and Next on the last
+// is Close.
 
 //go:embed tutorial/*.md
 var tutorialFS embed.FS
@@ -32,12 +34,16 @@ func (h *Host) openTutorial() {
 	h.open("tutorial")
 }
 
-// tutorialPage is Back ("back") and Next ("next").
+// tutorialPage is Previous ("back") and Next ("next"), which on the last page closes the tutorial.
 func (h *Host) tutorialPage(which string) {
 	switch which {
 	case "back":
 		h.tutorialStep(-1)
 	case "next":
+		if h.tutorialAt == len(tutorialPages)-1 {
+			h.closeDialog("tutorial")
+			return
+		}
 		h.tutorialStep(1)
 	}
 }
@@ -50,13 +56,17 @@ func (h *Host) tutorialStep(dir int) {
 	}
 }
 
-// showTutorialPage sets the dialog's page, its title (the page's heading, numbered) and its buttons.
+// showTutorialPage sets the dialog's page, its title (the page's heading, numbered) and Next's label:
+// Close on the last page, with Next's key, so n through the pages ends by closing them.
 func (h *Host) showTutorialPage() {
 	page := tutorialPages[h.tutorialAt]
 	heading, body, _ := strings.Cut(page, "\n")
 	title := strings.TrimSpace(strings.TrimPrefix(heading, "# "))
 	h.set("App.tutorialTitle", strconv.Itoa(h.tutorialAt+1)+" of "+strconv.Itoa(len(tutorialPages))+" · "+title)
 	h.set("App.tutorialText", strings.TrimLeft(body, "\n"))
-	h.set("App.tutorialBack", h.tutorialAt > 0)
-	h.set("App.tutorialNext", h.tutorialAt < len(tutorialPages)-1)
+	next := "&Next"
+	if h.tutorialAt == len(tutorialPages)-1 {
+		next = "Close (&n)"
+	}
+	h.set("App.tutorialNextText", next)
 }

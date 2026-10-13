@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -200,6 +201,58 @@ func TestTheTutorialPagesStopAtTheEnds(t *testing.T) {
 			t.Errorf("a page without its heading: %.40q", p)
 		}
 	}
+}
+
+// TestTheTutorialsButtonsWalkItAndCloseIt: the dialog's own buttons, clicked, walk the tutorial.
+// Neither disables itself on its own click (golib's activation would once panic there): Previous on
+// page 1 stays there, and Next on the last page reads Close and closes the tutorial. Enter on the
+// focused Next does the same.
+func TestTheTutorialsButtonsWalkItAndCloseIt(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	n := len(tutorialPages)
+	page := func(i int) string { return fmt.Sprintf("%d of %d · ", i, n) }
+	click := func(label string) {
+		t.Helper()
+		r.s.WaitForText(t, label)
+		x, y := r.textAt(label)
+		r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x + 1, Y: y},
+			tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x + 1, Y: y})
+	}
+	closed := func(sc string) bool { return !strings.Contains(sc, " of "+strconv.Itoa(n)+" · ") }
+
+	onLoop(r, func() bool { r.h.openTutorial(); return true })
+	r.s.WaitForText(t, page(1))
+	click("Previous")
+	click("Next")
+	r.s.WaitForText(t, page(2))
+	click("Previous")
+	r.s.WaitForText(t, page(1))
+	click("Previous") // on page 1: nothing, and nothing breaks
+	if got := onLoop(r, func() int { return r.h.tutorialAt }); got != 0 {
+		t.Fatalf("Previous on page 1 went to page %d", got+1)
+	}
+	for i := 2; i <= n; i++ {
+		click("Next")
+		r.s.WaitForText(t, page(i))
+	}
+	if strings.Contains(r.s.String(), "Next") {
+		t.Errorf("the last page still offers Next:\n%s", r.s.String())
+	}
+	click("Close (n)")
+	r.s.WaitFor(t, "the tutorial closed by its last Next", closed)
+
+	// by key: Enter on the focused Next, through to Close
+	onLoop(r, func() bool { r.h.openTutorial(); return true })
+	r.s.WaitForText(t, page(1))
+	click("Next")
+	r.s.WaitForText(t, page(2))
+	for i := 3; i <= n; i++ {
+		r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
+		r.s.WaitForText(t, page(i))
+	}
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
+	r.s.WaitFor(t, "the tutorial closed by Enter on Close", closed)
 }
 
 // TestSpacePeriodOpensTheRightClickMenu: SPC . opens the page's right-click menu at the cursor, and

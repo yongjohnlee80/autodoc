@@ -1,6 +1,7 @@
 // Tutorial.qml — Help › Tutorial…: a page at a time (tutorial.go), Markdown shown Rendered
 // in the GUI's window (a terminal's Editor stays Raw, as the source reads), read-only, with Previous
-// and Next (not B for Back: the page's Editor takes b, a word back). At most 80% of the window's
+// and Next (not B for Back: the page's Editor takes b, a word back). Neither is ever disabled: on the
+// first page Previous does nothing, and on the last Next is Close. At most 80% of the window's
 // height. q or Esc closes it.
 Dialog {
     id: tutorial
@@ -23,8 +24,8 @@ Dialog {
         }
     }
     DialogButtonBox {
-        Button { text: "P&revious"; enabled: App.tutorialBack; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("back") }
-        Button { text: "&Next"; enabled: App.tutorialNext; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("next") }
+        Button { text: "P&revious"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("back") }
+        Button { text: App.tutorialNextText; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("next") }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }
