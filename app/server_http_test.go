@@ -235,7 +235,12 @@ metrics_interval = "10s"
 	defer cancel()
 	done, stderr := f.serve(ctx)
 	f.started(stderr)
-	f.waitFor("both rows embedded", func() bool { return f.documents() == "2" && f.embedded("openai|fake-model||4") })
+	// the first refresh's page commits the documents, which the worker may embed before the refresh
+	// finishes and moves the cursor: status reports a lag only once it has
+	f.waitFor("both rows embedded, the cursor moved", func() bool {
+		return f.documents() == "2" && f.embedded("openai|fake-model||4") && f.cursorMoved()
+	})
+	moved := time.Now()
 	m := listening.FindStringSubmatch(stderr.String())
 	if m == nil {
 		t.Fatalf("the server does not say where it listens: %s", stderr)
@@ -276,7 +281,17 @@ metrics_interval = "10s"
 			} `json:"models"`
 		} `json:"tenants"`
 	}
-	status, body := get("/v1/status", opsToken)
+	// status's database figures are read at most every ops.CacheFor (as_of says when): the metrics
+	// report may have read them before the cursor moved, so the figures checked are a read since
+	var status int
+	var body string
+	f.waitFor("a status read since the cursor moved", func() bool {
+		status, body = get("/v1/status", opsToken)
+		var s struct {
+			AsOf time.Time `json:"as_of"`
+		}
+		return status != http.StatusOK || json.Unmarshal([]byte(body), &s) != nil || !s.AsOf.Before(moved)
+	})
 	if err := json.Unmarshal([]byte(body), &snap); err != nil || status != http.StatusOK || len(snap.Tenants) != 1 {
 		t.Fatalf("status: %d %s", status, body)
 	}

@@ -217,6 +217,13 @@ func (f *serverFixture) embedded(model string) bool {
 		AND NOT EXISTS (SELECT 1 FROM `+s+`.rag_document WHERE NOT semantic_ready)), false)::text`) == "true"
 }
 
+// cursorMoved reports whether the tenant's cursor has moved: a pass committed a page, or a refresh
+// finished. A refresh commits its pages' documents first and moves the cursor only when it finishes,
+// in a transaction of its own, so documents written (or embedded) are no sign of it.
+func (f *serverFixture) cursorMoved() bool {
+	return f.scalar(`SELECT EXISTS (SELECT 1 FROM `+f.schema+`.rag_cursor WHERE tenant = 'lm-catalog' AND updated_at IS NOT NULL)::text`) == "true"
+}
+
 // vectors is how many vectors the server stored under model.
 func (f *serverFixture) vectors(model string) string {
 	return f.scalar(`SELECT count(*)::text FROM ` + f.schema + `.rag_embedding WHERE model = '` + model + `'`)
