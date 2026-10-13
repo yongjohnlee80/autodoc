@@ -100,7 +100,7 @@ type crashReport struct {
 // panicText is what a log or a notice says of a panic's value: the runtime's own message (cut to
 // crashMessageMax characters), or only its type, its message withheld (crash.go's top).
 func panicText(v any) string {
-	if re, ok := v.(runtime.Error); ok {
+	if re, ok := v.(runtime.Error); ok && runtimeAuthored(v) {
 		s := re.Error()
 		if r := []rune(s); len(r) > crashMessageMax {
 			s = string(r[:crashMessageMax]) + "…"
@@ -207,6 +207,18 @@ func (h *Host) keepRecoverySafely() (err error) {
 		}
 	}()
 	return h.keepRecovery()
+}
+
+// runtimeAuthored is whether the Go runtime itself raised v: its type is declared in package runtime
+// (an index out of range, a nil dereference, a failed type assertion). runtime.Error alone is an
+// open interface any type can implement, carrying whatever text it likes; no other package can
+// declare a type in runtime.
+func runtimeAuthored(v any) bool {
+	t := reflect.TypeOf(v)
+	for t != nil && t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t != nil && t.PkgPath() == "runtime"
 }
 
 // errPanicked is a background job's panic, as the error its caller is handed.

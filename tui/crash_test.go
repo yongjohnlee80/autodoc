@@ -146,7 +146,27 @@ func TestCrashLogsKeepTheNewest(t *testing.T) {
 	if got := panicText(errors.New("SENTINEL")); strings.Contains(got, "SENTINEL") || !strings.Contains(got, "*errors.errorString") {
 		t.Errorf("an error's message said: %q", got)
 	}
+	// a runtime.Error of a type of its own is not the runtime's: its text is withheld too
+	if got := panicText(fakeRuntimeError("SENTINEL page text")); strings.Contains(got, "SENTINEL") {
+		t.Errorf("a look-alike runtime.Error's message said: %q", got)
+	}
+	// the runtime's own, a failed type assertion among them, keep theirs
+	var assert any
+	func() {
+		defer func() { assert = recover() }()
+		var v any = "x"
+		_ = v.(int)
+	}()
+	if got := panicText(assert); !strings.Contains(got, "interface conversion") {
+		t.Errorf("the runtime's type assertion said: %q", got)
+	}
 }
+
+// fakeRuntimeError implements runtime.Error, as any type may, with text of its own.
+type fakeRuntimeError string
+
+func (e fakeRuntimeError) Error() string { return string(e) }
+func (fakeRuntimeError) RuntimeError()   {}
 
 // TestCrashLogsAreNeverOverwritten: logs written in one millisecond are each their own file.
 func TestCrashLogsAreNeverOverwritten(t *testing.T) {
