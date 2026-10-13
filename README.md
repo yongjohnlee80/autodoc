@@ -231,7 +231,8 @@ terminal, as below; where it cannot, it shows the block's source and why.
   that reaches them. `Enter` opens a row and the drawer stays. Each opens over the page, which
   does not move, from the side the editor's preferences name; `Escape` or its key again closes
   it. `SPC j` goes to the link under the cursor (the document it names, else its web address or
-  file); `SPC b` goes back to the file opened before; the page's right-click menu has both.
+  file); `SPC b` goes back to the previous document, where you left it (`Ctrl+O` steps back
+  one jump at a time, within a document too); the page's right-click menu has both.
 - **Every panel moves and resizes**: the explorer, the relations, the terminal, the agent and the
   HTML preview. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
   with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
@@ -254,7 +255,7 @@ terminal, as below; where it cannot, it shows the block's source and why.
   workspace: it edits, saves (a change on disk since it was read asks first), exports and
   reaches the plugins, but has no search, relations or frontmatter check, and the status line
   badges it `[no workspace]`. It stays open when the workspace changes. `File › Open document…`
-  (`Ctrl+O`, `SPC o`) is the fast picker over the workspace's own files.
+  (`SPC o`) is the fast picker over the workspace's own files.
 - **The status line** (`SPC t`): the editor's mode, the workspace, and the file, with `[+]` while
   it has unsaved changes. It shows while the TUI is not connected, whatever the preference says.
 - **The breadcrumb** on the page's frame follows the cursor: the headings it is under in Markdown
@@ -296,7 +297,8 @@ terminal, as below; where it cannot, it shows the block's source and why.
 | `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `s` …), listed by purpose: find and open, this file, the panels, the agents, help, managing, the window |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
 | `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
-| `Ctrl+O`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
+| `SPC o`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
+| `Ctrl+O`, `Ctrl+I` | back and forward along the jumps, Vim's jump list (Normal mode): links followed, documents opened, and the page's own jumps (`G`, `gg`, `%`, `{ }`, a mark's); back to another document opens it where you left it, in the view you left it in. `Ctrl+O` no longer opens a document: `SPC o` does |
 | `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, the link under the cursor, back |
 | `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |
 | `File › Open with Default App` | the file in the desktop's default app: `xdg-open`, or `open` on a Mac |

@@ -1,4 +1,4 @@
-// FileOpen.qml — File › Open document… (Ctrl+O, SPC o): the picker over the workspace's notes. On the
+// FileOpen.qml — File › Open document… (SPC o): the picker over the workspace's notes. On the
 // left a filter, then the notes; on the right the note under the cursor. Enter opens it.
 Picker {
     name: "open"

@@ -12,7 +12,7 @@ import (
 // FILES ANYWHERE — File › Open file… (SPC f) and File › New file… (Ctrl+N, SPC n), the desktop's
 // file dialogs over the local disk (ADR 1791430651 §4.3). A file chosen is asked of file.locate
 // first: inside a workspace's root it opens as that workspace's file, entering the workspace;
-// elsewhere it opens outside every workspace (files.go). Open document… (Ctrl+O, SPC o) stays the
+// elsewhere it opens outside every workspace (files.go). Open document… (SPC o) stays the
 // fast picker over the workspace in use.
 
 // errRemote is what a file.* refusal says: the daemon serves another machine's disk, so the files

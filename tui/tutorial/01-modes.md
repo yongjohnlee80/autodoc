@@ -11,4 +11,4 @@ It edits in one of two modes. **SPC k** (Options › Editor mode) switches them.
 
 **The menu bar** hides until **F10** or **Alt+letter** brings it up (on a Mac, Option+letter). **SPC m** shows it and keeps it.
 
-**Ctrl+S** saves. **Ctrl+O** opens a document of the workspace, **Ctrl+N** makes a new one, **Ctrl+Q** quits.
+**Ctrl+S** saves. **SPC o** opens a document of the workspace, **Ctrl+N** makes a new one, **Ctrl+Q** quits. In Normal mode **Ctrl+O** goes back to where you were, a link or a document ago, and **Ctrl+I** forward again.

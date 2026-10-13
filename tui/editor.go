@@ -51,7 +51,7 @@ func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
 	link.Enabled = onLink
 	back := menuCommand("autodoc.back", "&Back", widget.CoreMenuAction{ID: "autodoc.back",
 		Run: func(*widget.EditorCore) { h.goBack() }})
-	back.Enabled = len(h.history) > 0
+	_, back.Enabled = h.backToDocument()
 	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
 	diagram := menuCommand("autodoc.diagram", "View &diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
 		Run: func(*widget.EditorCore) { h.previewDiagram() }})

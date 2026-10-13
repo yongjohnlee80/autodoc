@@ -156,13 +156,13 @@ func TestTheOpenPickerOpensEmpty(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n", "b/zq.md", "# C\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 2)
-	r.keys(t, decltest.Ctrl('o'))
+	r.leader(t, 'o')
 	r.s.WaitForText(t, "files (2 of 2)")
 	r.keys(t, decltest.Type("zq")...)
 	r.s.WaitForText(t, "files (1 of 2)")
 	r.keys(t, esc())
 	r.s.WaitFor(t, "the picker closed", func(sc string) bool { return !strings.Contains(sc, "open a document") })
-	r.keys(t, decltest.Ctrl('o'))
+	r.leader(t, 'o')
 	r.s.WaitForText(t, "files (2 of 2)")
 	for _, line := range strings.Split(r.s.String(), "\n") {
 		if strings.Contains(line, "│ zq") {

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -191,7 +190,7 @@ func TestAnOutsideFileHasNoRelations(t *testing.T) {
 }
 
 // TestBackKeepsItsDocumentWhenStayIsChosen: back over unsaved changes asks first; Stay keeps the
-// page and the history as they were, so back again asks again, and Discard then goes back.
+// page and the jump list as they were, so back again asks again, and Discard then goes back.
 func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
@@ -212,14 +211,13 @@ func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
 	r.s.WaitForText(t, "Save them before")
 	r.h.p.Post(func() { r.h.unsaved("discard") })
 	r.waitFile(t, "doc.md")
-	if hist := onLoop(r, func() []fileRef { return append([]fileRef(nil), r.h.history...) }); len(hist) != 0 {
-		t.Errorf("history after going back: %v, want it spent", hist)
+	if more := onLoop(r, func() bool { _, ok := r.h.backToDocument(); return ok }); more {
+		t.Error("after going back to the first document, back goes further")
 	}
 }
 
-// TestRelationsEdges: with no file open the drawer is empty; Enter on a heading opens nothing; the
-// history keeps one copy of a document at its top and the last 32; back skips the page already
-// open.
+// TestRelationsEdges: with no file open the drawer is empty; Enter on a heading opens nothing; back
+// skips the page already open (its own entries on the jump list).
 func TestRelationsEdges(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
@@ -235,34 +233,15 @@ func TestRelationsEdges(t *testing.T) {
 		t.Errorf("Enter on the heading %q opened something", docRelations[0])
 	}
 
-	hist := onLoop(r, func() []fileRef {
-		r.h.history = nil
-		a := fileRef{"kb", "a.md"}
-		r.h.rememberLeft(a)
-		r.h.rememberLeft(a)
-		for i := range maxHistory + 5 {
-			r.h.rememberLeft(fileRef{"kb", fmt.Sprintf("n%d.md", i)})
-		}
-		return append([]fileRef(nil), r.h.history...)
-	})
-	if len(hist) != maxHistory || hist[len(hist)-1].path != fmt.Sprintf("n%d.md", maxHistory+4) {
-		t.Errorf("history %d long ending %v, want the last %d", len(hist), hist[len(hist)-1], maxHistory)
-	}
-	two := onLoop(r, func() []fileRef {
-		r.h.history = nil
-		r.h.rememberLeft(fileRef{"kb", "a.md"})
-		r.h.rememberLeft(fileRef{"kb", "a.md"})
-		return append([]fileRef(nil), r.h.history...)
-	})
-	if len(two) != 1 {
-		t.Errorf("leaving a.md twice in a row: %v, want it once", two)
-	}
-
 	// the page itself on top (old.md, then doc.md): back goes to old.md, past it
-	r.h.p.Post(func() { r.h.history = []fileRef{{"kb", "old.md"}, {"kb", "doc.md"}}; r.h.goBack() })
+	r.h.p.Post(func() {
+		r.h.jumps.Push(widget.JumpPos{Doc: docKey(fileRef{"kb", "old.md"})})
+		r.h.jumps.Push(widget.JumpPos{Doc: docKey(fileRef{"kb", "doc.md"}), Line: 1})
+		r.h.goBack()
+	})
 	r.waitFile(t, "old.md")
-	if h := onLoop(r, func() int { return len(r.h.history) }); h != 0 {
-		t.Errorf("history after going back past the page: %d entries, want none", h)
+	if more := onLoop(r, func() bool { _, ok := r.h.backToDocument(); return ok }); more {
+		t.Error("after going back past the page, back goes further")
 	}
 }
 

@@ -58,7 +58,6 @@ Window {
     Shortcut { sequence: "Ctrl+K"; onActivated: App.movePane("k") }
     Shortcut { sequence: "Ctrl+L"; onActivated: App.movePane("l") }
     Shortcut { sequence: "Ctrl+S"; onActivated: App.save() }
-    Shortcut { sequence: "Ctrl+O"; onActivated: App.openPicker() }
     Shortcut { sequence: "Ctrl+N"; onActivated: App.newFile() }
     Shortcut { sequence: "Ctrl+G"; onActivated: App.openSearch() }
     Shortcut { sequence: "Ctrl+;"; onActivated: App.openCommandLine() }

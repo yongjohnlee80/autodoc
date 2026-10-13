@@ -157,7 +157,7 @@ autodoc.command{ name = "term", help = "my term", run = function(ed) ed:insert("
 		"find.term":     "find.term — · — · find a term in the page",
 		"lua.term":      "lua.term :term · — · my term",
 		"terminal.open": "terminal.open :terminal · — · open the terminal",
-		"file.open":     "file.open — · Ctrl+O, SPC o · open a document",
+		"file.open":     "file.open — · SPC o · open a document",
 		"help.keys":     "help.keys — · F1, SPC ? · help",
 		"todos.open":    "todos.open :todos · SPC x · todos",
 	} {

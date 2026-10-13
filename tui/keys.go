@@ -135,7 +135,6 @@ var windowKeys = []Key{
 	{Seq: "Ctrl+K", Show: "Ctrl+h/j/k/l", Run: `App.movePane("k")`},
 	{Seq: "Ctrl+L", Show: "Ctrl+h/j/k/l", Run: `App.movePane("l")`},
 	{Seq: "Ctrl+S", Show: "Ctrl+S", Run: "App.save()"},
-	{Seq: "Ctrl+O", Show: "Ctrl+O", Run: "App.openPicker()"},
 	{Seq: "Ctrl+N", Show: "Ctrl+N", Run: "App.newFile()"},
 	// as vim's search; the Vim keyset takes Ctrl+F and Ctrl+B to page
 	{Seq: "Ctrl+G", Show: "Ctrl+G", Run: "App.openSearch()"},

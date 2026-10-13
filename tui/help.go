@@ -126,7 +126,11 @@ const helpKeys = `KEYS
               n and N find it again, forward and back. In the page its words are marked, and
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
-  Ctrl+O      open a document: a filter over the workspace's files, with a preview
+  SPC o       open a document: a filter over the workspace's files, with a preview
+  Ctrl+O Ctrl+I  back and forward along the jumps (Vim's jump list, in Normal mode): a link
+              followed, a document opened from a picker, the explorer, the relations or the
+              recent files, and the page's own jumps (G, gg, %, { }, a mark's). Back to another
+              document opens it where you left it, in the view you left it in
   SPC f       open a file anywhere on the disk (File › Open file…), with a preview: one in a
               workspace's folder opens there; any other is in no workspace, so it has no
               search, links, backlinks, frontmatter check or embeddings (the status line says so)
@@ -191,8 +195,9 @@ THE PANELS
   reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
   its key again closes it. Enter on a file opens it; the relations stay open.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
-  SPC b goes back to the file opened before. The page's right-click menu has both, Go to link
-  (on a link) and Back.
+  SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
+  time, within a document too). The page's right-click menu has both, Go to link (on a link)
+  and Back.
   The agent (SPC g, Go › Agent) runs an AI agent's CLI over the page, from the top unless
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
@@ -255,19 +260,26 @@ h j k l  ← ↓ ↑ →              i a    insert before, after the cursor
 w b e ge words on, back, end  I A    insert at the line's start, end
 W B E gE the same, by blanks  o O    open a line below, above
 0 ^ $    start, text, end     x      delete the character
-Enter -  next, previous line  D      delete to the line's end
+Enter -  next, previous line  D C    delete, change to the line's end
 f t F T  to or till a char    dd yy  delete, copy the line
-; ,      that again, back     p P    paste after, before
-%        matching bracket     u      undo;  Ctrl+r  redo
-{ }      paragraph back, on   Esc    back to Normal
-gg G 50% first, last, 50%     SELECT
-H M L    top, middle, bottom  v V    characters, lines
-Ctrl+d Ctrl+u  half a page    y d x  copy, delete them
-Ctrl+b Ctrl+f  page up, down
-FIND                          AUTODOC
-/        a word in the pane   SPC    the leader card: every command
-n N      again, forward, back SPC SPC, SPC /, Ctrl+G  search the workspace
-                              ?      this card
+; ,      that again, back     cc S   change the line
+%        matching bracket     d c y  + a move or object: dw c$ yiw
+{ }      paragraph back, on   r J ~  replace a char, join, case
+gg G 50% first, last, 50%     > <    indent, outdent;  .  repeat
+H M L    top, middle, bottom  p P    paste after, before
+Ctrl+d Ctrl+u  half a page    u      undo;  Ctrl+r  redo
+Ctrl+b Ctrl+f  page up, down  Esc    back to Normal
+Ctrl+o Ctrl+i  jump back, on  SELECT
+  (across documents too)      v V    characters, lines
+                              y d x  copy, delete them
+MARKS, REGISTERS, MACROS      FIND
+ma  'a  ` + "`" + `a   set; to its line, place   /      a word in the pane
+''  ` + "`" + `` + "`" + `      back to the last jump     n N    again, forward, back
+"a  before y d c p: register a        AUTODOC
+"+p the clipboard: in the GUI, what   SPC    the leader card: every command
+    any app copied; in a terminal,    SPC SPC, SPC /, Ctrl+G  search
+    what this editor last copied      ?      this card
+qa … q  record a macro;  @a @@  play
 
 COMMANDS (:, Tab completes)
 :12  go to line 12      :w :q :wq :x :q!  save, quit

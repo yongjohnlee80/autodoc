@@ -3,6 +3,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	guidecl "github.com/yongjohnlee80/golib/gui/decl"
@@ -114,4 +115,32 @@ func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
 	show("a.md", "true")
 	show("a.go", "false")
 	show("a.md", "true")
+}
+
+// Ctrl+O returns to a document in the view it was left in, at its place: a link followed from a's
+// Raw view, b shown Rendered meanwhile, comes back to a's Raw view at the link.
+func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n\nsee [[b]]\n", "b.md", "# B\n"}}, daemonOpts{})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
+	mode := func() guiwidget.EditorMode {
+		return onLoop(r, func() guiwidget.EditorMode { return r.h.editor.(*guiwidget.Editor).Mode() })
+	}
+	setMode := func(m guiwidget.EditorMode) {
+		onLoop(r, func() bool { r.h.editor.(*guiwidget.Editor).SetMode(m); return true })
+	}
+	onLoop(r, func() bool { r.h.openPath("a.md"); return true })
+	r.waitFile(t, "a.md")
+	setMode(guiwidget.Raw)
+	col := strings.Index("see [[b]]", "b]]")
+	r.putCursor(2, col)
+	onLoop(r, func() bool { r.h.followLink(); return true })
+	r.waitFile(t, "b.md")
+	setMode(guiwidget.Rendered)
+	r.keys(t, ctrlKey('o'))
+	r.waitAt(t, "a.md", 2, col)
+	if m := mode(); m != guiwidget.Raw {
+		t.Fatalf("back to a: %v, want the Raw view it was left in", m)
+	}
 }

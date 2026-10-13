@@ -9,6 +9,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -180,7 +181,7 @@ func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
 // openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
 // is no question (load asks for one that is).
 func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool) {
-	open := func(prev *fileRef) {
+	open := func(prev *widget.JumpPos) {
 		if raw != nil {
 			h.loadAs(ref.ws, ref.path, prev, *raw)
 			return
@@ -192,11 +193,12 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool) 
 			proceed()
 		}
 	}
-	leaving := func() *fileRef {
+	leaving := func() *widget.JumpPos {
 		if !remember || !h.file.open {
 			return nil
 		}
-		return &fileRef{h.file.ws, h.file.path}
+		at := h.core.JumpHere() // the place left, with the cursor and the view, for Ctrl+O
+		return &at
 	}
 	if ref.ws != "" && ref.ws != h.ws {
 		h.guard("open "+path.Base(ref.path)+" in "+ref.ws, func() {
@@ -231,7 +233,7 @@ func (h *Host) reload() {
 // An HTML file it is not reading again asks first how to open it (ADR 1791474356): Simplified, its
 // derived text read-only as any derived document, or Raw, its own bytes, editable. Read again (a
 // reload, a conflict's), it keeps the way it was opened.
-func (h *Host) load(ws, p string, prev *fileRef) {
+func (h *Host) load(ws, p string, prev *widget.JumpPos) {
 	again := h.file.open && h.file.ws == ws && h.file.path == p
 	if !again && kind.RawText(p) {
 		h.askHowToOpen(p, func(raw bool) { h.loadAs(ws, p, prev, raw) })
@@ -289,7 +291,7 @@ func (h *Host) openHTMLAs(how string) {
 }
 
 // loadAs is load, raw or not.
-func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
+func (h *Host) loadAs(ws, p string, prev *widget.JumpPos, raw bool) {
 	tk := h.ticket(&h.file.gen, TicketWorkspace)
 	again, read := h.file.open && h.file.ws == ws && h.file.path == p, h.file.version
 	type answer struct {
@@ -315,13 +317,15 @@ func (h *Host) loadAs(ws, p string, prev *fileRef, raw bool) {
 		}
 		if a.err != nil {
 			h.failed("open "+p, a.err)
+			h.missedJump(fileRef{ws, p}, a.err)
 			h.restoreOpenFailed(ws, p) // a kept copy's file gone: its text becomes the draft
 			return
 		}
-		if prev != nil && *prev != (fileRef{ws, p}) {
-			h.rememberLeft(*prev)
+		if prev != nil && prev.Doc != docKey(fileRef{ws, p}) {
+			h.jumps.Push(*prev) // a jump: the place left, once the new document is shown
 		}
 		h.show(ws, p, a.content, a.version, raw) // the recent files note it (recent.go: Shown)
+		h.landJump(fileRef{ws, p})
 		h.say("opened " + p)
 		if ws == "" {
 			h.notify(p + ": " + outsideLimits)
@@ -341,6 +345,7 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 		h.core.SetCursorPosition(cursorAt(content, min(at, len(content))))
 	}
 	h.file.ws, h.file.path, h.file.version, h.file.open, h.file.dirty = ws, p, version, true, false
+	h.core.SetJumpDoc(docKey(fileRef{ws, p}))
 	h.file.raw = raw
 	h.page = h.takePage() // readPage's consumers read it
 	h.readPage()
@@ -477,6 +482,7 @@ func (h *Host) closeFile() {
 	h.editor.SetValue("")
 	h.syncPageWidth()
 	h.file = openedFile{gen: h.file.gen}
+	h.core.SetJumpDoc("")
 	h.core.SetReadOnly(false)
 	h.set("App.syntaxDefinition", "Markdown")
 	h.setRendered(true) // the draft is Markdown, whatever the file before it was

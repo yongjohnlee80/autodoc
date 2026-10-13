@@ -400,7 +400,7 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 // openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
-	r.keys(t, decltest.Ctrl('o'))
+	r.leader(t, 'o')
 	r.s.WaitForText(t, "open a document")
 	r.keys(t, decltest.Type(p)...)
 	r.s.WaitFor(t, "the filter applied", func(sc string) bool { return strings.Contains(sc, "1 of ") })
@@ -468,7 +468,7 @@ func TestThePickerKeepsTheFileName(t *testing.T) {
 	deep := "archive/2026/09/projects/autodoc/reviews/2026-09-29-the-review-of-the-store.md"
 	d := startDaemon(t, map[string][]string{"kb": {deep, "# R\n\nreview\n"}})
 	r := attached(t, d)
-	r.keys(t, decltest.Ctrl('o'))
+	r.leader(t, 'o')
 	r.s.WaitFor(t, "the note's file name", func(sc string) bool {
 		return strings.Contains(sc, "files (1 of 1)") && strings.Contains(sc, "the-store.md")
 	})
