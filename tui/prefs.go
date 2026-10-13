@@ -119,7 +119,9 @@ type prefs struct {
 	panelFloat map[string][4]float64
 	// the GUI's fonts and zoom (fonts.go): "" and 0 are the window's defaults
 	cellFont, proseFont string
-	fontSize, zoom      int
+	// termFont is the terminals' own face (gui.font.terminal): "" the cell font's (fonts.go)
+	termFont       string
+	fontSize, zoom int
 	// agentEdge is where the agent panel opens: an edge or the centre (agentplace.go)
 	agentEdge string
 	// values are the features' own preferences (ValuePref), by name: read with Value

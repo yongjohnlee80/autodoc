@@ -14,6 +14,9 @@ Dialog {
         Text { text: "the cell font (monospace): the page, the panels, the menus"; toolTipText: "the cell font (monospace): the page, the panels, the menus" }
         ComboBox { toolTipText: "the cell font (monospace): the page, the panels, the menus"; model: App.cellFonts; textRole: "label"; currentIndex: App.cellFontIndex; onActivated: App.setCellFontIndex(index) }
         Text { text: "" }
+        Text { text: "the terminals' font: the terminal's and the agents' shells, at the cell size"; toolTipText: "the terminals' font: the terminal's and the agents' shells, at the cell size" }
+        ComboBox { toolTipText: "the terminals' font: the terminal's and the agents' shells, at the cell size"; model: App.terminalFonts; textRole: "label"; currentIndex: App.terminalFontIndex; onActivated: App.setTerminalFontIndex(index) }
+        Text { text: "" }
         Text { text: "its size" }
         ComboBox { model: App.fontSizes; textRole: "label"; currentIndex: App.fontSizeIndex; onActivated: App.setFontSizeIndex(index) }
         Text { text: "" }

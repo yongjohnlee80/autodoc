@@ -322,7 +322,8 @@ terminal, as below; where it cannot, it shows the block's source and why.
   itself. A build that is not a release (`dev`, or a commit after a tag) does not look. Both are on
   until you turn them off.
 - **Fonts and zoom…** (the GUI's): the cell font everything on the grid is drawn in and its size,
-  the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
+  the terminals' font (the terminal's and the agents' shells, at the cell size; the cell font's
+  unless chosen), the prose font of the Rendered view and the HTML preview, and the zoom, 100 % to 200 %; each
   applies at once. **Zoom in**, **Zoom out** and **Actual size** are below it. A zoom or a size
   that would leave the window under 80 × 20 is refused, so the screen never needs enlarging to get
   back; a stored zoom a smaller window cannot hold is drawn at the largest step it can. A

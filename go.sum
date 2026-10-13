@@ -53,8 +53,12 @@ github.com/yongjohnlee80/golib v0.6.87 h1:Xt6CZdQeS4OD4WakbG3KSoKDP5oDdDbz9hJHbf
 github.com/yongjohnlee80/golib v0.6.87/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
 github.com/yongjohnlee80/golib v0.6.88 h1:aPtx/1T2sNWG9QAAgZMVISCe7pkDV8xklLM97z2gWz0=
 github.com/yongjohnlee80/golib v0.6.88/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
+github.com/yongjohnlee80/golib v0.6.90 h1:pB6CX59u8djvo24TxH/nrh8Q+oxJCQOoYqvOfHC4vQg=
+github.com/yongjohnlee80/golib v0.6.90/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
 github.com/yongjohnlee80/golib/gui v0.1.30 h1:xwrQ7VgQy5ZIvZhlOmd6j4U8619Q/MUkSjWrzXGwvBM=
 github.com/yongjohnlee80/golib/gui v0.1.30/go.mod h1:lWYRX7aeew+XDjuedWmMuLDxyYB7iSSaXI+Ef2T+4jU=
+github.com/yongjohnlee80/golib/gui v0.1.31 h1:60dEAGhol7a9633Q4aApUGh7QS3JyHIJtMal1WFbpx8=
+github.com/yongjohnlee80/golib/gui v0.1.31/go.mod h1:mL0VM/NJarYWYyLeVIxslTIVb1EYeLZojn60gMXARN0=
 github.com/yuin/gopher-lua v1.1.2 h1:yF/FjE3hD65tBbt0VXLE13HWS9h34fdzJmrWRXwobGA=
 github.com/yuin/gopher-lua v1.1.2/go.mod h1:7aRmXIWl37SqRf0koeyylBEzJ+aPt8A+mmkQ4f1ntR8=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 h1:R84qjqJb5nVJMxqWYb3np9L5ZsaDtB+a39EqjV0JSUM=

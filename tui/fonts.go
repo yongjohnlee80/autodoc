@@ -31,6 +31,7 @@ type FontControl interface {
 
 const (
 	prefCellFont  = "gui.font.cell"
+	prefTermFont  = "gui.font.terminal"
 	prefFontSize  = "gui.font.size"
 	prefProseFont = "gui.font.prose"
 	prefZoom      = "gui.zoom"
@@ -48,7 +49,7 @@ const defaultFontSize = 14
 // readFontPrefs reads the fonts and the zoom; a value out of range is the default's.
 func readFontPrefs(p *prefs, m map[string]any) {
 	str := func(k string) string { s, _ := m[k].(string); return s }
-	p.cellFont, p.proseFont = str(prefCellFont), str(prefProseFont)
+	p.cellFont, p.proseFont, p.termFont = str(prefCellFont), str(prefProseFont), str(prefTermFont)
 	if n, err := strconv.Atoi(str(prefFontSize)); err == nil && slices.Contains(fontSizes, n) {
 		p.fontSize = n
 	}
@@ -62,7 +63,9 @@ func zoomOf(p prefs) int { return max(p.zoom, 100) }
 
 // fontState is what the document reads of the fonts: the zoom's radio set, the dialog's choices.
 func fontState(p prefs) map[string]any {
-	st := map[string]any{"App.zoomText": strconv.Itoa(zoomOf(p)) + "%"}
+	// the terminals' face is every window's, and none in a terminal (golib's cellFont there is not
+	// drawn): "" is the cell font's
+	st := map[string]any{"App.zoomText": strconv.Itoa(zoomOf(p)) + "%", "App.terminalFont": p.termFont}
 	size := p.fontSize
 	if size == 0 {
 		size = defaultFontSize
@@ -139,6 +142,8 @@ func (h *Host) openFonts() {
 	h.proseFontModel.Reset(fontRows(h.proseFonts))
 	h.set("App.cellFontIndex", max(slices.Index(h.cellFonts, h.prefs.cellFont), 0))
 	h.set("App.proseFontIndex", max(slices.Index(h.proseFonts, h.prefs.proseFont), 0))
+	h.termFontModel.Reset(termFontRows(h.cellFonts))
+	h.set("App.terminalFontIndex", max(slices.Index(h.cellFonts, h.prefs.termFont), 0))
 	h.open("fonts")
 }
 
@@ -175,6 +180,33 @@ func (h *Host) setCellFontIndex(i int) {
 	if i >= 0 && i < len(h.cellFonts) {
 		f := h.cellFonts[i]
 		h.setPref(prefCellFont, f, func(p *prefs) { p.cellFont = f })
+	}
+}
+
+// THE TERMINALS' FACE — Options › Fonts and zoom…'s terminal row: the monospace the terminal's and
+// the agents' shells are drawn in, at the cell size (golib's cellFont, a window's only); the cell
+// font's by default. A menu or tooltip over them keeps the cell font.
+
+// termFontModel is the terminals' face chooser before the families are listed: the cell font's.
+func termFontModel() *tuidecl.ListModel {
+	m := tuidecl.NewListModel("key", "label")
+	m.Reset(termFontRows([]string{""}))
+	return m
+}
+
+// termFontRows are its rows: the cell font's first, then each monospace family.
+func termFontRows(families []string) []rowOf {
+	rows := fontRows(families)
+	if len(rows) > 0 {
+		rows[0]["label"] = "(the cell font's)"
+	}
+	return rows
+}
+
+func (h *Host) setTerminalFontIndex(i int) {
+	if i >= 0 && i < len(h.cellFonts) {
+		f := h.cellFonts[i]
+		h.setPref(prefTermFont, f, func(p *prefs) { p.termFont = f })
 	}
 }
 

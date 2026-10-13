@@ -399,3 +399,39 @@ func TestAGridMeasuredBeforeAZoomIsJudgedByItsOwnFonts(t *testing.T) {
 		t.Errorf("accepted 175%% after an older 125%% frame published after the 150%% request: told %v", fonts.all())
 	}
 }
+
+// TestTheTerminalsFontIsTheirs: a stored terminals' font draws the shell's cells in a face of their
+// own, the tab strip in the window's; the Fonts dialog's terminal row lists the cell font's first
+// and the monospace families, and choosing the cell font's puts the shell back in the window's face.
+func TestTheTerminalsFontIsTheirs(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	t.Setenv("PS1", "$ ")
+	fonts := &fakeFonts{}
+	d, r := runWindowTUI(t, map[string]string{"gui.font.terminal": "JetBrains Mono"}, fonts)
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
+	faced := func() (shell, strip bool) {
+		for _, row := range r.s.Backend.Snapshot() {
+			for x, c := range row {
+				if c.Face != 0 {
+					shell = true
+				}
+				if x+4 < len(row) && c.Content == "s" && row[x+1].Content == "h" && row[x+2].Content == "e" && row[x+3].Content == "l" && row[x+4].Content == "l" && c.Face != 0 {
+					strip = true
+				}
+			}
+		}
+		return shell, strip
+	}
+	r.s.WaitFor(t, "the shell in its own face", func(string) bool { shell, _ := faced(); return shell })
+	if _, strip := faced(); strip {
+		t.Error("the tab strip took the terminals' face")
+	}
+	onLoop(r, func() bool { r.h.openFonts(); return true })
+	r.s.WaitForText(t, "the terminals' font")
+	if got := onLoop(r, func() int { return r.h.termFontModel.Len() }); got != 3 {
+		t.Errorf("the terminal row lists %d, want the cell font's and the 2 monospace families", got)
+	}
+	onLoop(r, func() bool { r.h.setTerminalFontIndex(0); return true }) // the cell font's
+	storedPref(t, d, r, "gui.font.terminal", "")
+	r.s.WaitFor(t, "the shell back in the window's face", func(string) bool { shell, _ := faced(); return !shell })
+}

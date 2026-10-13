@@ -389,6 +389,8 @@ Window {
             // the terminals' theme (terminal.go): its text and background, the strip's the page's
             palette.base: App.terminalBase
             palette.text: App.terminalText
+            // the terminals' own face, in a window (fonts.go); a terminal draws in its own font
+            cellFont: App.terminalFont
             // a program's colours raised until they read on that background: ls's yellow and a
             // prompt's cyan are written for a dark terminal, and wash out on a light theme
             minimumContrast: 4.5
@@ -418,9 +420,10 @@ Window {
             id: agentView
             emptyText: "No agent running. Press + to start one of the profiles."
             vimKeys: App.keymapVim
-            // as the terminal's: the terminals' theme, the contrast raised against it
+            // as the terminal's: the terminals' theme and face, the contrast raised against it
             palette.base: App.terminalBase
             palette.text: App.terminalText
+            cellFont: App.terminalFont
             minimumContrast: 4.5
             cursorColor: App.terminalCursor
             onChanged: App.agentTabsChanged()
