@@ -4,6 +4,7 @@ import (
 	"os"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // THE APP SINGLETON'S STATE — what the document reads.
@@ -211,12 +212,16 @@ func (h *Host) set(name string, v any) { h.record(h.p.Set(name, v)) }
 func (h *Host) setField(name, text string) { setField(core{h}, name, text) }
 
 // setWhere is the status line's left: the editor's mode, then where the TUI is attached. While
-// Insert's Ctrl+O runs its one Normal-mode command, the mode is (INSERT), as Vim's -- (insert) --.
+// Insert's (or Replace's) Ctrl+O runs its one Normal-mode command, the mode is (INSERT) or
+// (REPLACE), as Vim's -- (insert) --.
 func (h *Host) setWhere(where string) {
 	h.where = where
 	mode := h.core.Mode().String()
-	if h.core.InsertOneShot() {
+	switch h.core.OneShotMode() {
+	case widget.ModeInsert:
 		mode = "(INSERT)"
+	case widget.ModeReplace:
+		mode = "(REPLACE)"
 	}
 	h.set("App.statusLeft", mode+"  "+where)
 }

@@ -126,6 +126,8 @@ const helpKeys = `KEYS
               n and N find it again, forward and back. In the page its words are marked, and
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
+  * #         in the page, in Vim's Normal mode, find the word under the cursor, whole, on or
+              back (g* g# as part of a word too): it becomes the page's find, so n and N go on
   SPC o       open a document: a filter over the workspace's files, with a preview
   Ctrl+O Ctrl+I  back and forward along the jumps (Vim's jump list, in Normal mode): a link
               followed, a document opened from a picker, the explorer, the relations or the
@@ -273,7 +275,7 @@ WHAT A KEY NEEDS
 // vimKeysText is the Vim editor mode's card (? in Normal mode, vimkeys.go): golib's Vim
 // keyset as autodoc's page takes it.
 const vimKeysText = `MOVE                          EDIT
-h j k l  ← ↓ ↑ →              i a    insert before, after the cursor
+h j k l  ← ↓ ↑ →  gj gk rows  i a    insert before, after the cursor
 w b e ge words on, back, end  I A    insert at the line's start, end
 W B E gE the same, by blanks  o O    open a line below, above
 0 ^ $    start, text, end     x      delete the character
@@ -281,7 +283,7 @@ Enter -  next, previous line  D C    delete, change to the line's end
 f t F T  to or till a char    dd yy  delete, copy the line
 ; ,      that again, back     cc S   change the line
 %        matching bracket     d c y  + a move or object: dw c$ yiw
-{ }      paragraph back, on   r J ~  replace a char, join, case
+{ } ( )  paragraph, sentence  r J ~  replace a char, join, case
 gg G 50% first, last, 50%     > <    indent, outdent;  .  repeat
 H M L    top, middle, bottom  p P    paste after, before
 Ctrl+d Ctrl+u  half a page    u      undo;  Ctrl+r  redo
@@ -292,11 +294,17 @@ Ctrl+o Ctrl+i  jump back, on  SELECT
 INSERT                        r ~ u U > <  on the selection
 Ctrl+w  delete a word back    I A    a block: type before, after
 Ctrl+u  delete to the indent  o O    other end; a block's side
-Ctrl+o  one Normal command
+Ctrl+o  one Normal command    is as  a sentence, with d c y
+R       Replace: typing              or in Visual
+        overwrites, Backspace
+        restores
   (Ctrl+W switches workspace in Normal mode; in Insert it is Vim's)
+  (( ) and { } take a line of only blanks as empty, unlike Vim)
 MARKS, REGISTERS, MACROS      FIND
 ma  'a  ` + "`" + `a   set; to its line, place   /      a word in the pane
 ''  ` + "`" + `` + "`" + `      back to the last jump     n N    again, forward, back
+                                      * #    the word under the cursor;
+                                      g* g#  as part of a word too
 "a  before y d c p: register a        AUTODOC
 "+p the clipboard: in the GUI, what   SPC    the leader card: every command
     any app copied; in a terminal,    SPC SPC, SPC /, Ctrl+G  search

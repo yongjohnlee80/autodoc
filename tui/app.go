@@ -364,6 +364,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	}
 	h.core = h.editor.Core()
 	h.core.SetJumps(h.jumps, h.jumpTo) // Ctrl+O and Ctrl+I walk the one list (navigation.go)
+	h.core.SetFindHost(h.starFind)     // * and # are the page's find (find.go)
 	h.core.SetJumpView(h.jumpView)
 	startRendered(h.editor) // the GUI's page opens in its Rendered view (rendered_gui.go)
 	h.core.SetHighlightOverlay(func(line string, semantic []highlight.Span) []highlight.Span {

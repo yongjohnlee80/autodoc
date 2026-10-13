@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/yongjohnlee80/golib/tui/widget"
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
@@ -13,7 +14,14 @@ import (
 // the page find's on the page.
 
 // marks is the search's words, as the preview's highlighter marks them.
-type marks struct{ terms atomic.Pointer[[]string] }
+type marks struct {
+	terms atomic.Pointer[[]string]
+	// whole marks only whole words (Vim's * and #): a term beginning or ending with a keyword
+	// character (widget.IsKeyword) is marked only where no keyword character touches it there.
+	// The editor's own matching (FindAll) also ends a word where two scripts' keywords meet
+	// (漢字abc); these marks don't, a difference only there.
+	whole atomic.Bool
+}
 
 func (m *marks) Store(terms []string) { m.terms.Store(&terms) }
 
@@ -68,7 +76,7 @@ func markedSpans(m *marks, line string, spans []highlight.Span) []highlight.Span
 	marked := false
 	for i := 0; i < len(line); {
 		for _, t := range terms {
-			if end := foldAt(line, i, t); end > i {
+			if end := foldAt(line, i, t); end > i && (!m.whole.Load() || wholeAt(line, i, end)) {
 				for j := i; j < end; j++ {
 					styles[j] = highlight.Alert
 				}
@@ -93,6 +101,24 @@ func markedSpans(m *marks, line string, spans []highlight.Span) []highlight.Span
 		i = j
 	}
 	return out
+}
+
+// wholeAt reports line[i:end] standing as a whole word: a keyword character at either end of it
+// has no keyword character beside it outside.
+func wholeAt(line string, i, end int) bool {
+	first, _ := utf8.DecodeRuneInString(line[i:])
+	last, _ := utf8.DecodeLastRuneInString(line[:end])
+	if widget.IsKeyword(string(first)) && i > 0 {
+		if prev, _ := utf8.DecodeLastRuneInString(line[:i]); widget.IsKeyword(string(prev)) {
+			return false
+		}
+	}
+	if widget.IsKeyword(string(last)) && end < len(line) {
+		if next, _ := utf8.DecodeRuneInString(line[end:]); widget.IsKeyword(string(next)) {
+			return false
+		}
+	}
+	return true
 }
 
 // foldAt is where term t (lower case) ends when it matches s from byte i, case aside; -1 when it

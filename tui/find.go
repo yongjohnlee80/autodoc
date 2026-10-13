@@ -48,6 +48,7 @@ const findPage = "page"
 
 type findState struct {
 	query, target string
+	whole         bool   // whole words only: Vim's * and #, through the editor (SetFindHost)
 	pending       string // the pane / was pressed in, while the question is open
 	// at and total are where the last jump went, x of y rows holding the query: "finding" shows
 	// them; 0 before the first jump
@@ -125,7 +126,7 @@ func (h *Host) startFind(pattern string) {
 		return
 	}
 	h.find.target, h.find.pending = h.find.pending, ""
-	h.find.query = pattern
+	h.find.query, h.find.whole = pattern, false
 	h.find.at, h.find.total = 0, 0
 	h.core.SetFind("", widget.FindOptions{}) // n and N are this find's, not a replace's leftover
 	h.set("App.lastFind", pattern)
@@ -161,7 +162,9 @@ func (h *Host) showFind() {
 	if h.find.query != "" && h.find.target == findPage {
 		terms = []string{strings.ToLower(h.find.query)}
 	}
-	if !slices.Equal(terms, h.findMarks.load()) {
+	whole := h.find.whole && len(terms) > 0
+	if !slices.Equal(terms, h.findMarks.load()) || whole != h.findMarks.whole.Load() {
+		h.findMarks.whole.Store(whole)
 		h.findMarks.Store(terms)
 		h.core.InvalidateHighlightPaint()
 	}
@@ -234,6 +237,10 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	pane, ok := h.findPane(f.target)
 	if !ok {
 		h.say("nothing to find again: / asks what to find")
+		return
+	}
+	if f.target == findPage {
+		h.pageFindJump(dir, includeCurrent, 1)
 		return
 	}
 	rows, cur, moveTo := pane.Rows()
@@ -328,5 +335,70 @@ func (h *Host) escapeFind() bool {
 		return false
 	}
 	h.clearFind()
+	return true
+}
+
+// pageFindJump is the page's find from the cursor: its occurrences, every one on a line counting,
+// as the editor finds them (FindAll: case-blind; whole words for * and #). It steps count of them
+// on (dir +1) or back, wrapping; includeCurrent lets one at the cursor count, for the first.
+func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
+	f := &h.find
+	all := h.core.FindAll(f.query, widget.FindOptions{IgnoreCase: true, WholeWord: f.whole})
+	if len(all) == 0 {
+		f.at, f.total = 0, 0
+		h.showFind()
+		h.say(fmt.Sprintf("find: no %q in the %s", f.query, f.target))
+		return
+	}
+	ln, col := h.core.Line()
+	cur := widget.TextPos{Line: ln, Col: col}
+	before := func(a, b widget.TextPos) bool { return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col }
+	sel := -1
+	if dir > 0 {
+		for i, r := range all {
+			if before(cur, r.From) || includeCurrent && r.From == cur {
+				sel = i
+				break
+			}
+		}
+		if sel < 0 {
+			sel = 0
+		}
+	} else {
+		for i := len(all) - 1; i >= 0; i-- {
+			if before(all[i].From, cur) {
+				sel = i
+				break
+			}
+		}
+		if sel < 0 {
+			sel = len(all) - 1
+		}
+	}
+	for range max(count, 1) - 1 {
+		sel = (sel + dir + len(all)) % len(all)
+	}
+	r := all[sel]
+	_, _, moveTo := h.pageFindPane().Rows()
+	h.keep(moveTo(r.From.Line, r.From.Col))
+	f.at, f.total = sel+1, len(all)
+	h.showFind()
+	h.say(fmt.Sprintf("find %q: %d of %d in the %s", f.query, sel+1, len(all), f.target))
+}
+
+// starFind is the editor's * and # (and g* g#): the word becomes the page's find, whole words or
+// not, and the cursor steps count occurrences on or back from the word's start. One find state:
+// AutoDoc's, its marks, "finding …", n and N.
+func (h *Host) starFind(r widget.FindRequest) bool {
+	f := &h.find
+	f.pending, f.target, f.query, f.whole = "", findPage, r.Term, r.Options.WholeWord
+	f.at, f.total = 0, 0
+	h.core.SetFind("", widget.FindOptions{})
+	h.set("App.lastFind", r.Term)
+	dir := +1
+	if r.Backward {
+		dir = -1
+	}
+	h.pageFindJump(dir, false, r.Count)
 	return true
 }
