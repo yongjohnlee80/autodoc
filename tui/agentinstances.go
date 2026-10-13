@@ -472,6 +472,10 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, submit bo
 				return
 			}
 			instance = started
+			// the incarnation just started is the one sent to: a restart in its tab before the
+			// Enter (a new generation, a new token) makes the delivery stale, as a running
+			// target's captured token does
+			to.Instance = instance.token
 		}
 		if err := validate(); err != nil {
 			finish(err)

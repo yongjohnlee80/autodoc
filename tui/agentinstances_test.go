@@ -362,6 +362,31 @@ func TestHandTaskEnterIsCheckedAgainAfterThePause(t *testing.T) {
 	}
 }
 
+// TestHandTaskToAStartedAgentIsStaleIfItRestartsInThePause: a stopped agent HandTask starts is the
+// incarnation the task goes to. Restarted in its tab between the paste and the Enter (a new
+// generation), it gets no Enter, and done hears ErrAgentStale once.
+func TestHandTaskToAStartedAgentIsStaleIfItRestartsInThePause(t *testing.T) {
+	a, c := modelAgents(t)
+	calls := 0
+	var outcome error
+	if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+		t.Fatal(err)
+	}
+	c.questions[0].OnYes()
+	c.drainPosts()
+	instance := a.instances["one"]
+	if instance == nil || !instance.running || len(c.panel.pastes) != 1 || calls != 0 {
+		t.Fatalf("the started agent was not pasted to before the pause: pastes=%q calls=%d", c.panel.pastes, calls)
+	}
+	if err := c.panel.Start(instance.tab); err != nil { // a new generation in the same tab
+		t.Fatal(err)
+	}
+	c.fireAfters()
+	if len(c.panel.sends) != 0 || calls != 1 || !errors.Is(outcome, ErrAgentStale) {
+		t.Fatalf("restarted in the pause: sends=%q calls=%d outcome=%v", c.panel.sends, calls, outcome)
+	}
+}
+
 // TestSendTextAddsNoEnter: Lua's SendText stays one paste with no Enter after it.
 func TestSendTextAddsNoEnter(t *testing.T) {
 	a, c := modelAgents(t)
