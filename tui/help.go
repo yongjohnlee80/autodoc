@@ -205,7 +205,8 @@ THE PANELS
   move over its history, v or V selects and y copies, and i or Enter goes back. In the Vim
   editor mode, Esc leaves too, except in a full-screen program (vim, less), which needs it.
   Escape in Normal mode, or SPC ` + "`" + ` again, hides it; the keyboard goes back where it was. When
-  the shell exits the pane says so, and Enter starts another.
+  the shell exits (exit, Ctrl+D) the pane closes, a failing exit kept as a notice, and the next
+  SPC ` + "`" + ` starts another.
   Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It

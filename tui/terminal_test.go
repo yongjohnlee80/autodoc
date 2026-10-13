@@ -229,25 +229,50 @@ func TestTheTerminalsVimKeysFollowTheEditorsKeymap(t *testing.T) {
 	r.s.WaitFor(t, "Normal mode with the Vim keymap", func(string) bool { return r.termMode() == widget.TerminalNormal })
 }
 
-func TestTheTerminalSaysWhenTheShellExitsAndStartsAnother(t *testing.T) {
+// TestTheTerminalClosesWhenItsShellExits: exit (or Ctrl+D) closes the panel as SPC ` would, the
+// keyboard back on the page; exit 0 says nothing, a non-zero exit keeps a notice; SPC ` then starts a
+// fresh shell.
+func TestTheTerminalClosesWhenItsShellExits(t *testing.T) {
 	_, r := runShellTUI(t, nil)
-	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
-	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.keys(t, decltest.Type("exit 4\r")...)
-	r.s.WaitForText(t, "[process exited 4]")
-	r.s.WaitFor(t, "the exit in the notifications", func(string) bool {
+	exitNoticed := func(code string) bool {
 		return onLoop(r, func() bool {
 			for _, n := range r.h.noticeLog.items {
-				if strings.Contains(n.text, "exited (4)") {
+				if strings.Contains(n.text, "shell exited ("+code+")") {
 					return true
 				}
 			}
 			return false
 		})
-	})
-	r.keys(t, enter())
+	}
+	open := func() {
+		t.Helper()
+		r.leader(t, '`')
+		r.s.WaitForText(t, "┌ terminal")
+		r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	}
+	closed := func(why string) {
+		t.Helper()
+		r.s.WaitFor(t, why, func(sc string) bool { return !strings.Contains(sc, "┌ terminal") })
+		r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	}
+
+	open()
+	r.keys(t, decltest.Type("exit\r")...)
+	closed("closed by exit")
+	if exitNoticed("0") {
+		t.Error("exit 0 left a notice")
+	}
+
+	open() // a fresh shell: it answers
 	r.keys(t, decltest.Type("echo again-$((40+2))\r")...)
 	r.s.WaitForText(t, "again-42")
+	r.keys(t, decltest.Type("exit 4\r")...)
+	closed("closed by exit 4")
+	r.s.WaitFor(t, "the exit in the notifications", func(string) bool { return exitNoticed("4") })
+
+	open() // and fresh again after a failing exit
+	r.keys(t, decltest.Type("echo third-$((40+3))\r")...)
+	r.s.WaitForText(t, "third-43")
 }
 
 // A shell that forwards its hang-up to its jobs (bash and zsh do; dash, Ubuntu's /bin/sh, does not)

@@ -325,7 +325,16 @@ func (h *Host) paneHasKeyboard(id string) bool {
 	return ok && h.p.App().FocusWithin(c)
 }
 
-// terminalExited says the shell is gone, and how to start another.
+// terminalExited is the shell gone (exit, Ctrl+D, or it ended): the panel closes as SPC ` closes it,
+// its geometry kept and the keyboard back where it was, and the next open starts a fresh shell. A
+// non-zero exit is kept as a notice, as it may be an error; exit 0 is said by the panel closing.
+// golib's Terminal says it in an App.Update, where closing the drawer may move the keyboard.
 func (t *terminals) terminalExited(code int) {
-	t.c.Notify("the terminal's shell exited (" + strconv.Itoa(code) + "): Enter in it starts another")
+	t.started = false
+	if code != 0 {
+		t.c.Notify("the terminal's shell exited (" + strconv.Itoa(code) + ")")
+	}
+	if t.c.PanelOpen("terminal") {
+		t.c.TogglePanel("terminal")
+	}
 }
