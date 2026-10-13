@@ -11,6 +11,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/search/embed"
 
+	"github.com/yongjohnlee80/golib/dao"
+
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 )
@@ -257,4 +259,25 @@ func TestRoundsResumeWhereTheLastStopped(t *testing.T) {
 	if !slices.Contains(afters, pgstore.PendingKey{Doc: 7, Ord: 0}) {
 		t.Errorf("no round resumed after g: %+v", afters)
 	}
+}
+
+// A document written again while the worker decided to mark it (pgstore.ErrWriteRace), or deleted
+// meanwhile (dao.ErrNoRows), is passed over, not a failure: the round goes on, marking the others,
+// and a later round marks the first once it is there to mark. The mutant, named here: either answer
+// treated as the round's failure (the worker backs off and the others wait).
+func TestAMarkThatRacesAWriteOrADeleteMovesOn(t *testing.T) {
+	st := newStore()
+	for _, d := range []string{"a", "b", "c"} {
+		st.put(d+".md", "text of "+d)
+	}
+	st.markErr = map[string]error{"a.md": pgstore.ErrWriteRace, "b.md": dao.ErrNoRows}
+	p := newProvider("m")
+	restore := embedder.SetSleep(func(ctx context.Context, d time.Duration) bool {
+		t.Errorf("the worker backed off %v: a raced or deleted mark failed its round", d)
+		return ctx.Err() == nil
+	})
+	t.Cleanup(restore)
+	w := embedder.New(built(p), []embedder.Tenant{{Name: "t", Store: st}}, embedder.WithPoll(10*time.Millisecond))
+	run(t, w)
+	waitFor(t, "every document ready", func() bool { return st.isReady("a.md") && st.isReady("b.md") && st.isReady("c.md") })
 }

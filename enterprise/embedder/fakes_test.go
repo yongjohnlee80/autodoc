@@ -157,6 +157,9 @@ type store struct {
 	afters  []pgstore.PendingKey // every Pending's After, in order
 	unready []bool               // every Pending's Unready, in order
 	nextID  int64
+	// markErr is what MarkReady answers for a path, once, before it marks it: a document written
+	// again (pgstore.ErrWriteRace) or deleted (dao.ErrNoRows) while the worker decided
+	markErr map[string]error
 }
 
 type doc struct {
@@ -308,6 +311,10 @@ func (s *store) Embed(_ context.Context, model string, vecs []pgstore.Embedding)
 func (s *store) MarkReady(_ context.Context, path, model string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err, ok := s.markErr[path]; ok {
+		delete(s.markErr, path)
+		return false, err
+	}
 	d := s.docs[path]
 	if d == nil {
 		return false, errors.New("no such document")
