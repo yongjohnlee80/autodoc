@@ -8,8 +8,8 @@ import (
 	"github.com/yongjohnlee80/golib/dao"
 )
 
-// Batch is documents written in one transaction, with the ingest state their page moved (SetCursor,
-// SetRefreshed, Quarantine, Release, in ingest.go): kept together, or none of them. A Put that loses
+// Batch is documents written in one transaction, with the ingest state written beside them
+// (SetCursor, SetRefreshed, Quarantine, Release, in ingest.go): kept together, or none of them. A Put that loses
 // its compare-and-set to another writer fails with ErrWriteRace and is not written again: the
 // other writer's row is newer than the one the batch read, and versions are opaque, so writing
 // over it would silently drop that writer's work. Any error, that one or another (a first insert

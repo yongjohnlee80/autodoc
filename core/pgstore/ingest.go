@@ -14,21 +14,24 @@ import (
 
 // Ingest state for a server that indexes a database source into a tenant: the tenant's cursor into
 // its source, the source rows that failed and wait in quarantine, and the tenant's access policy.
-// The cursor and the quarantine are written through a Batch, in the same transaction as the
-// documents of the page that moved them. A cursor committed without its documents would let a
-// crash pass rows that were never indexed; committed together, a crash replays at most the page it
-// interrupted, and writing a page again is idempotent. The policy is written by the server from its
+// The cursor and the quarantine are written through a Batch. A pass moves the cursor in the same
+// transaction as the documents of the page that moved it; a refresh commits its pages' documents
+// without it, and moves it once, in the batch that records the refresh when it finishes. Either
+// way the cursor is never committed ahead of its documents: that would let a crash pass rows that
+// were never indexed. A crash replays at most the page it interrupted (or, for a refresh, the
+// refresh), and writing a page again is idempotent. The policy is written by the server from its
 // configuration when it starts.
 
-// Cursor is a tenant's position in its source: the (updated_at, id) of the last row a committed
-// page passed, compared lexicographically, so rows sharing a timestamp across a page boundary are
-// never skipped. The zero Cursor is the source's start.
+// Cursor is a tenant's position in its source: the (updated_at, id) of the last row a pass's
+// committed page passed, or a finished refresh read up to, compared lexicographically, so rows
+// sharing a timestamp across a page boundary are never skipped. The zero Cursor is the source's
+// start.
 type Cursor struct {
 	UpdatedAt time.Time
 	ID        string
 }
 
-// IsZero says no page has moved the cursor.
+// IsZero says the cursor has not moved: no pass has committed a page, and no refresh has finished.
 func (c Cursor) IsZero() bool { return c.UpdatedAt.IsZero() && c.ID == "" }
 
 // Refresh is a tenant's last full refresh: when it started and when it finished. The zero Refresh
@@ -62,8 +65,9 @@ var (
 // clock is the time a quarantine records (a variable, so a cell can step it).
 var clock = time.Now
 
-// SetCursor moves the tenant's cursor to c inside the batch: it commits with the page's documents,
-// or not at all, so a crash replays at most that page. Its time is kept to the microsecond, as
+// SetCursor moves the tenant's cursor to c inside the batch: it commits with what the batch holds
+// (a pass's page's documents, a finished refresh's record), or not at all, so a crash replays at
+// most that page. Its time is kept to the microsecond, as
 // PostgreSQL keeps a timestamptz, and the driver rounds it down (TestACursorCommitsWithItsPage pins
 // that): a cursor never passes a row it did not read, and a replayed row is written again,
 // idempotently. The last refresh's times are left as they are.
@@ -114,7 +118,7 @@ func (b *Batch) Release(ctx context.Context, sourceID string) error {
 	return nil
 }
 
-// Cursor is the tenant's committed cursor; the zero Cursor when no page has moved it.
+// Cursor is the tenant's committed cursor; the zero Cursor when it has not moved (IsZero).
 func (s *Store) Cursor(ctx context.Context) (Cursor, error) {
 	r, err := s.rw.cursor.DAO(dao.WithQueryContext(ctx)).With(kTenant, s.tenant).Get(kUpdated, kID)
 	switch {

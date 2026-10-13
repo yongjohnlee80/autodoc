@@ -168,11 +168,14 @@ type TenantStatus struct {
 	Error       opcode.Code `json:"error"` // reading the tenant's state failed: its other figures are absent
 }
 
-// CursorState is where the tenant's incremental pass is, and how far behind the database's clock.
+// CursorState is where the tenant's cursor is, and how far behind the database's clock. The cursor
+// moves when a pass commits a page, and when a refresh finishes (its pages commit their documents
+// without it), so its figures are absent before either: before the first pass's first page
+// commits, or before the first refresh finishes.
 type CursorState struct {
 	UpdatedAt  *time.Time `json:"updated_at"`
 	ID         string     `json:"id"`
-	LagSeconds *int64     `json:"lag_seconds"` // nil before the first page
+	LagSeconds *int64     `json:"lag_seconds"` // nil until the cursor first moves
 }
 
 // RunState is how a pass or a refresh last ended. For a refresh, Complete says whether it read every

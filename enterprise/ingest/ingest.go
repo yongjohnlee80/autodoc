@@ -95,9 +95,10 @@ type Options struct {
 // tenant's lock. Pass reads the rows changed since the cursor, Refresh reads every row and deletes
 // the documents of rows gone, and Run does both on their schedules.
 //
-// Every write is a pgstore.Batch, one per page of the view: its documents, its quarantined and
-// released rows and its cursor commit together, after the writer lock is confirmed. A crash
-// replays at most the page it interrupted, and writing a page again changes nothing.
+// Every write is a pgstore.Batch, one per page of the view: its documents and its quarantined and
+// released rows commit together, after the writer lock is confirmed. A pass's page commits its
+// cursor with them; a refresh moves the cursor only when it finishes, in the batch that records it.
+// A crash replays at most the page it interrupted, and writing a page again changes nothing.
 //
 // An Ingester belongs to one goroutine; Run's own ping goroutine is the exception, and it only
 // checks the lock, as Confirm does from any goroutine.
