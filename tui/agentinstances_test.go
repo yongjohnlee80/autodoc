@@ -75,6 +75,17 @@ func (p *modelPanel) Tabs() []widget.TerminalTab               { return append([
 func (p *modelPanel) Active() widget.TerminalTabID             { return p.active }
 func (*modelPanel) Actions(func(), func(widget.TerminalTabID)) {}
 
+func (p *modelPanel) exit(id widget.TerminalTabID, code int) {
+	for i := range p.tabs {
+		if p.tabs[i].ID == id {
+			p.tabs[i].Running = false
+		}
+	}
+	if config, found := p.configs[id]; found && config.Exited != nil {
+		config.Exited(code)
+	}
+}
+
 func (c *identityHost) Terminals(string) (TerminalPanel, error) {
 	if c.panel == nil {
 		c.panel = &modelPanel{owner: c}
@@ -121,7 +132,7 @@ func TestAgentInstancesRunTogetherAndRefsDoNotFollowRestarts(t *testing.T) {
 	if !first.running || len(a.AgentEntries()) != 2 || !a.instances["two"].running {
 		t.Fatal("starting another agent stopped the first")
 	}
-	a.instanceExited(first, 0)
+	c.panel.exit(first.tab, 0)
 	if _, err := a.startInstance(one); err != nil {
 		t.Fatal(err)
 	}
