@@ -277,6 +277,10 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Clean open") {
 		t.Errorf("the cursor moved: %v", s.set["App.todoDetail"])
 	}
+	v.moved(0, -1) // a table with rows moved away for a moment (selectRow): the cursor stays
+	if v.cursors[0] != 1 {
+		t.Errorf("a passing -1 took the cursor: %d", v.cursors[0])
+	}
 	v.moved(2, 0) // a table not shown moves its own cursor only
 	if !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Clean open") {
 		t.Errorf("a hidden table moved the details: %v", s.set["App.todoDetail"])
@@ -295,6 +299,16 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 			t.Fatalf("a step of %d: tab %d, want %d", step.by, v.tab, step.want)
 		}
 	}
+	s.views = nil
+	v.tabShown(3) // the bar's echo of the tab shown: nothing
+	if len(s.views) != 0 {
+		t.Errorf("the bar's echo took the keyboard: %v", s.views)
+	}
+	v.tabShown(0) // a click on Open's title
+	if v.tab != 0 || !slices.Contains(s.views, "todoOpenTable.forceActiveFocus") {
+		t.Errorf("a click on a title: tab %d, views %v", v.tab, s.views)
+	}
+	v.showTab(2)
 	n := len(s.calls)
 	v.showTab(2) // read already, nothing changed
 	v.showTab(7) // no such tab

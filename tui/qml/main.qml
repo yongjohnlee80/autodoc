@@ -510,7 +510,7 @@ Window {
                         id: todoTabs
                         Layout.fillHeight: true
                         currentIndex: App.todoTab
-                        onCurrentIndexChanged: App.todosTab(index)
+                        onCurrentIndexChanged: App.todoTabShown(index)
                         Tab {
                             title: "Open"
                             TableView {

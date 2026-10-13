@@ -41,8 +41,8 @@ func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
 	}
 	var kept prefs
 	readRows(&kept, map[string]any{prefTodosEdge: "right"}, legacyPrefRows(nil, false))
-	if kept.todosEdge != "right" {
-		t.Errorf("a kept right edge read as %q", kept.todosEdge)
+	if kept.todosEdge != "right" || todosPanelSpec().Edge(kept) != "right" {
+		t.Errorf("a kept right edge read as %q, the panel's %q", kept.todosEdge, todosPanelSpec().Edge(kept))
 	}
 	r := [4]float64{5, 6, 30, 40}
 	st := floatState(map[string][4]float64{"todos": r}, p.panelDefs)

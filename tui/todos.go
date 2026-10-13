@@ -130,6 +130,8 @@ type todos struct {
 	stores    []*todoStore
 	storeRows *rows[*todoStore]
 	cur       *todoStore
+	// storeIndex is the dropdown's row as last set or chosen
+	storeIndex int
 	// want is the store to show once the stores are listed again (one just loaded); "" keeps cur
 	want string
 	// tab is the tab shown; month the archived month open in the Archived tab, "" for none
@@ -163,12 +165,10 @@ type todos struct {
 	// malformed are the files a tab's read could not list, by the tab's name: the one thing the
 	// status line says (a store shown afresh empties it)
 	malformed map[string]int
-	// acts are the action row's sources as last set (syncActions)
-	acts map[string]bool
 }
 
 func newTodos(c Core) *todos {
-	t := &todos{c: c, detail: true, malformed: map[string]int{}, acts: map[string]bool{},
+	t := &todos{c: c, detail: true, malformed: map[string]int{}, storeIndex: -1,
 		storeRows: newRows(tuidecl.NewListModel("key", "label"), func(_ int, s *todoStore) rowOf {
 			return rowOf{"key": s.id, "label": s.title()}
 		}),
@@ -234,6 +234,7 @@ func (t *todos) Commands() map[string]Command {
 	return map[string]Command{
 		"App.openTodos":        none(t.toggle),
 		"App.todosTab":         oneNumber("a tab", t.showTab),
+		"App.todoTabShown":     oneNumber("a tab", t.tabShown),
 		"App.todoTabBefore":    none(func() { t.stepTab(-1) }),
 		"App.todoTabAfter":     none(func() { t.stepTab(1) }),
 		"App.todoStoreChosen":  oneNumber("a store", t.storeChosen),
@@ -538,8 +539,7 @@ func (t *todos) show(stores []*todoStore) {
 	if i < 0 && len(stores) > 0 {
 		i = 0
 	}
-	t.c.Set("App.todoStoreIndex", -1) // moved away first, so the same row twice still shows it
-	t.c.Set("App.todoStoreIndex", i)
+	t.selectStore(i)
 	t.c.Set("App.todoHasStore", i >= 0)
 	if i < 0 {
 		t.cur = nil
@@ -556,9 +556,22 @@ func (t *todos) show(stores []*todoStore) {
 	t.showStore()
 }
 
+// selectStore puts the dropdown on row i, -1 for none: only when it is not there already, as a
+// dropdown set again under the user could take the keyboard from where it is.
+func (t *todos) selectStore(i int) {
+	if i != t.storeIndex {
+		t.storeIndex = i
+		t.c.Set("App.todoStoreIndex", i)
+	}
+}
+
 // storeChosen is a store chosen in the dropdown: its tabs, read afresh.
 func (t *todos) storeChosen(i int) {
-	if i < 0 || i >= len(t.stores) || t.cur == t.stores[i] {
+	if i < 0 || i >= len(t.stores) {
+		return
+	}
+	t.storeIndex = i // the dropdown shows it already
+	if t.cur == t.stores[i] {
 		return
 	}
 	t.cur = t.stores[i]
@@ -725,6 +738,15 @@ func (t *todos) showTab(i int) {
 	t.focusTab()
 }
 
+// tabShown is the tab bar's own change (a click on a title, Ctrl+PageUp/Down), and its echo of a
+// change made here: only a change shows the tab, so an echo arriving late never takes the keyboard
+// from where it went since.
+func (t *todos) tabShown(i int) {
+	if i != t.tab {
+		t.showTab(i)
+	}
+}
+
 // stepTab is [ and ]: the tab before or after, round.
 func (t *todos) stepTab(step int) {
 	n := len(todoBuckets)
@@ -801,15 +823,11 @@ func (t *todos) syncActions() {
 	s, x := t.cursor()
 	writable := s != nil && s.claimed
 	task := writable && x != nil
-	for name, on := range map[string]bool{"App.todoReadOnly": s != nil && !s.claimed, "App.todoActAdd": writable,
-		"App.todoActStatus": task, "App.todoActAssign": task, "App.todoActRemove": task} {
-		// only a change is set: a button set again, even to what it shows, could lose a click
-		// pressed on it (the cursor's every move runs this)
-		if was, ok := t.acts[name]; !ok || was != on {
-			t.acts[name] = on
-			t.c.Set(name, on)
-		}
-	}
+	t.c.Set("App.todoReadOnly", s != nil && !s.claimed)
+	t.c.Set("App.todoActAdd", writable)
+	t.c.Set("App.todoActStatus", task)
+	t.c.Set("App.todoActAssign", task)
+	t.c.Set("App.todoActRemove", task)
 }
 
 // todoDetail is a task's details, as autofinder's i shows them.

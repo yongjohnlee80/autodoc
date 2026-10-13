@@ -51,6 +51,14 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 	tabRead(t, r, 0)
 	r.keys(t, key(n))
 	tabRead(t, r, int(n-'1'))
+	// the key's own focus landed: a later focus the test gives is not taken back by it
+	table := todoTabs[n-'1'].table
+	if n == '5' {
+		table = "todoMonths"
+	}
+	r.s.WaitFor(t, "the keyboard in "+table, func(string) bool {
+		return onLoop(r, func() bool { c, ok := r.h.p.Find(table); return ok && r.h.p.App().FocusWithin(c) })
+	})
 }
 
 // tabRead waits for tab's tasks (for Archived, its months) to have been read.
@@ -125,10 +133,11 @@ func TestTodosAddsChoosesAStatusAndRemoves(t *testing.T) {
 	r.s.WaitForText(t, "new task")
 	r.keys(t, decltest.Type("Ship the todos")...)
 	r.keys(t, enter())
-	r.s.WaitForText(t, "Ship the todos")
-	if got := listedIn(t, d, "open"); len(got) != 1 || got[0].Title != "Ship the todos" {
+	r.s.WaitFor(t, "the task added", func(string) bool { return len(listedIn(t, d, "open")) == 1 })
+	if got := listedIn(t, d, "open"); got[0].Title != "Ship the todos" {
 		t.Fatalf("open after a: %+v", got)
 	}
+	r.s.WaitFor(t, "the prompt closed", func(sc string) bool { return !strings.Contains(sc, "new task") })
 	r.s.WaitForText(t, "status: open") // the cursor on the task added
 	r.s.WaitForText(t, "[ Status… ] [ Assign ] [ Remove ] [ Add ]")
 	for _, status := range []string{"in-progress", "deferred", "completed"} {
@@ -406,9 +415,20 @@ func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
 	r := attached(t, d)
 	openTodos(t, r, "kb", '1')
 	r.s.WaitForText(t, "status: open")
-	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoDetails", "forceActiveFocus")); return true })
+	inDetails := func() bool {
+		return onLoop(r, func() bool { c, ok := r.h.p.Find("todoDetails"); return ok && r.h.p.App().FocusWithin(c) })
+	}
+	// given until it holds: just after the panel opens, a first focus asked of the details can be
+	// refused (the keys below then reach the table, which this cell is not about)
+	r.s.WaitFor(t, "the keyboard in the details", func(string) bool {
+		onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoDetails", "forceActiveFocus")); return true })
+		return inDetails()
+	})
 	r.keys(t, key('s'), key('d'), key('i'), key('a'))
 	time.Sleep(300 * time.Millisecond)
+	if !inDetails() {
+		t.Error("the keyboard left the details")
+	}
 	if sc := r.s.String(); strings.Contains(sc, "remove the task?") || strings.Contains(sc, "new task") || strings.Contains(sc, "statuses (") ||
 		!strings.Contains(sc, "status: open") || len(listedIn(t, d, "open")) != 1 {
 		t.Fatalf("keys in the details pane acted on the task:\n%s", sc)
@@ -421,4 +441,40 @@ func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
 	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoStatusButton", "forceActiveFocus")); return true })
 	chooseStatusOf(t, r, "completed")
 	r.s.WaitFor(t, "completed, from a task button", func(string) bool { return len(listedIn(t, d, "completed")) == 1 })
+}
+
+// TestTodosTabKeysInThePanel: ] and [ step through the tabs, round, 1–5 pick one, and a click on a
+// tab's title shows it: each read, the keyboard in its table.
+func TestTodosTabKeysInThePanel(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, d, true, todo.Spec{Title: "Ship it"}, todo.Spec{Title: "Later", Status: "deferred"})
+	r := attached(t, d)
+	openTodos(t, r, "kb", '1')
+	for _, step := range []struct {
+		key  rune
+		want int
+	}{{']', 1}, {']', 2}, {'[', 1}, {'[', 0}, {'[', 4}, {']', 0}, {'3', 2}} {
+		r.keys(t, key(step.key))
+		tabRead(t, r, step.want)
+	}
+	r.s.WaitForText(t, "Later")
+	r.keys(t, key('1'))
+	tabRead(t, r, 0)
+	var x, y int
+	r.s.WaitFor(t, "the tabs' titles", func(sc string) bool {
+		for i, line := range strings.Split(sc, "\n") {
+			if j := strings.Index(line, "Completed"); j >= 0 && strings.Contains(line, "In progress") {
+				x, y = len([]rune(line[:j])), i
+				return true
+			}
+		}
+		return false
+	})
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseMotion, X: x + 1, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x + 1, Y: y},
+		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x + 1, Y: y})
+	tabRead(t, r, 3)
+	r.s.WaitFor(t, "the keyboard in Completed's table", func(string) bool {
+		return onLoop(r, func() bool { c, ok := r.h.p.Find("todoCompletedTable"); return ok && r.h.p.App().FocusWithin(c) })
+	})
 }
