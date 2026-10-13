@@ -562,6 +562,7 @@ Window {
     FileOpen { id: fileOpen }
     OutlinePicker { id: outlinePicker }
     AgentAssign { id: agentAssignPicker }
+    LuaPick { id: luaPicker }
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }

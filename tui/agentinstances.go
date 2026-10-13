@@ -32,6 +32,7 @@ var (
 	ErrAgentCancelled    = errs.Sentinel(errs.ErrPrecondition, "agent delivery was cancelled")
 	ErrAgentShuttingDown = errs.Sentinel(errs.ErrPrecondition, "agent owner is shutting down")
 	ErrAgentTask         = errs.Sentinel(errs.ErrInvalidArgument, "task needs a title and absolute file path")
+	ErrAgentText         = errs.Sentinel(errs.ErrInvalidArgument, "text to send must be non-empty and fit the terminal's input")
 )
 
 var agentIncarnation atomic.Uint64
@@ -342,12 +343,44 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 // once on the UI loop, including cancellation and orderly owner shutdown.
 // Success means typed delivery, not agent completion.
 func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
+	check := func() error {
+		if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
+			return ErrAgentTask
+		}
+		return nil
+	}
+	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s\n", task.Title, task.Path, task.ID, instruction)
+	return a.deliver(to, check, "this task", func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendText(tab, payload)
+	}, done)
+}
+
+// SendText accepts text for one agent incarnation, as HandTask accepts a task, through the same
+// delivery: the same refusals, the same consent to start a stopped agent, the same checks before
+// anything is sent. The text goes as one paste — whole, bracketed for a CLI that asked for that —
+// and is not submitted: the agent's user reads it and presses Enter. Success means typed delivery.
+func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
+	check := func() error {
+		if text == "" || len(text) > widget.TerminalInputLimit {
+			return ErrAgentText
+		}
+		return nil
+	}
+	return a.deliver(to, check, "this text", func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendPaste(tab, text)
+	}, done)
+}
+
+// deliver is HandTask's and SendText's one path: to resolved, check's refusal after the owner's
+// own, a stopped agent started once the user agrees (what names what is sent), everything checked
+// again before send runs on the agent's tab, and done completed once on the loop.
+func (a *agents) deliver(to AgentRef, check func() error, what string, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
 	a.syncInstances()
 	if a.stopping {
 		return ErrAgentShuttingDown
 	}
-	if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
-		return ErrAgentTask
+	if err := check(); err != nil {
+		return err
 	}
 	instance := a.instances[to.Codename]
 	if to.Instance != "" && (instance == nil || !instance.running || instance.token != to.Instance) {
@@ -406,7 +439,6 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 		}
 		return nil
 	}
-	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s\n", task.Title, task.Path, task.ID, instruction)
 	deliver := func() {
 		if accepted.finished {
 			return
@@ -435,7 +467,7 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 			err = ErrAgentStale // its tab is the old parent's: never sent to the new one
 		}
 		if err == nil {
-			err = panel.SendText(instance.tab, payload)
+			err = send(panel, instance.tab)
 		}
 		finish(err)
 	}
@@ -443,7 +475,7 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn
 		c.Post(deliver)
 	} else {
-		a.c.Ask(Question{Title: "start the agent?", Text: "Start " + p.Name + " and send this task?", Yes: "&Yes, start and send",
+		a.c.Ask(Question{Title: "start the agent?", Text: "Start " + p.Name + " and send " + what + "?", Yes: "&Yes, start and send",
 			OnYes: deliver, OnCancel: func() {
 				if a.stopping {
 					finish(ErrAgentShuttingDown)
@@ -472,4 +504,7 @@ func (a *agents) Stopping() {
 func (c core) AgentEntries() []AgentEntry { return c.h.agents.AgentEntries() }
 func (c core) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
 	return c.h.agents.HandTask(to, task, instruction, done)
+}
+func (c core) SendText(to AgentRef, text string, done func(error)) error {
+	return c.h.agents.SendText(to, text, done)
 }

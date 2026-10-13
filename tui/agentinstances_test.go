@@ -25,6 +25,7 @@ type modelPanel struct {
 	active  widget.TerminalTabID
 	next    int
 	sends   []string
+	pastes  []string
 	sendErr error
 	removal *modelRemoval
 	addMenu func() []widget.MenuItemModel
@@ -75,6 +76,13 @@ func (p *modelPanel) SendText(id widget.TerminalTabID, text string) error {
 		return p.sendErr
 	}
 	p.sends = append(p.sends, string(id)+":"+text)
+	return nil
+}
+func (p *modelPanel) SendPaste(id widget.TerminalTabID, text string) error {
+	if p.sendErr != nil {
+		return p.sendErr
+	}
+	p.pastes = append(p.pastes, string(id)+":"+text)
 	return nil
 }
 func (p *modelPanel) Remove(id widget.TerminalTabID) (TerminalRemoval, error) {

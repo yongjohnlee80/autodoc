@@ -334,8 +334,13 @@ func TestTheLuaReferenceIsComplete(t *testing.T) {
 	}
 	refMethods := listed("(?m)^\\| `ed:([a-z_]+)\\(")
 	refFunctions := listed("(?m)^\\| `autodoc\\.([a-z_]+)[({]")
-	_, verbs, _ := strings.Cut(ref, "\n## The daemon's verbs\n")
-	verbs, _, _ = strings.Cut(verbs, "\n## ")
+	// the domains: the daemon's verbs', and the program's own functions' (luahost.go)
+	section := func(title string) string {
+		_, s, _ := strings.Cut(ref, "\n## "+title+"\n")
+		s, _, _ = strings.Cut(s, "\n## ")
+		return s
+	}
+	verbs := section("The daemon's verbs") + "\n" + section("The program's own functions")
 	refDomains := map[string][]string{}
 	for _, m := range regexp.MustCompile("(?m)^\\| `([a-z_]+)` \\| (.+) \\|$").FindAllStringSubmatch(verbs, -1) {
 		for _, v := range regexp.MustCompile("`([a-z_]+)`").FindAllStringSubmatch(m[2], -1) {

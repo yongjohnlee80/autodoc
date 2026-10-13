@@ -45,9 +45,10 @@ func (*scriptedCore) AgentEntries() []AgentEntry { return nil }
 func (*scriptedCore) HandTask(AgentRef, TaskRef, string, func(error)) error {
 	return ErrAgentUnavailable
 }
-func (s *scriptedCore) Open(id string)    { s.opened = append(s.opened, id) }
-func (s *scriptedCore) Close(id string)   { s.closed = append(s.closed, id) }
-func (s *scriptedCore) Notify(msg string) { s.notes = append(s.notes, msg) }
+func (*scriptedCore) SendText(AgentRef, string, func(error)) error { return ErrAgentUnavailable }
+func (s *scriptedCore) Open(id string)                             { s.opened = append(s.opened, id) }
+func (s *scriptedCore) Close(id string)                            { s.closed = append(s.closed, id) }
+func (s *scriptedCore) Notify(msg string)                          { s.notes = append(s.notes, msg) }
 
 // Ask records the question and holds it for answer: its OnYes runs when the test says Yes.
 func (s *scriptedCore) Ask(q Question) Asked {
