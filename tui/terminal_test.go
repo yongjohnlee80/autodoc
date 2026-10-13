@@ -791,10 +791,11 @@ func TestSPCMWithNoPanelOpenSaysWhatItMaximizes(t *testing.T) {
 	}
 }
 
-// TestF11MaximizesThePanelWithTheKeyboard: the agents opened, then the terminal, the keyboard back
-// in the agents: F11 (panel.maximize) maximizes the agents, the panel with the keyboard, not the
-// terminal opened last. A Drawer's change that is not a maximize leaves Restore as it was.
-func TestF11MaximizesThePanelWithTheKeyboard(t *testing.T) {
+// TestMaximizePanelPrefersThePanelWithTheKeyboard: the agents opened, then the terminal, the
+// keyboard back in the agents: maximizePanel (what F11 and SPC M run; TestF11AndSPCMToggleMaximize
+// presses the keys) maximizes the agents, the panel with the keyboard, not the terminal opened
+// last. A Drawer's change that is not a maximize leaves Restore as it was.
+func TestMaximizePanelPrefersThePanelWithTheKeyboard(t *testing.T) {
 	_, r := runShellTUI(t, nil)
 	onLoop(r, func() bool { r.h.openDrawer("agent"); return true })
 	r.s.WaitFor(t, "the agents open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
