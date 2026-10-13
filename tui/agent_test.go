@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
@@ -563,4 +564,26 @@ func TestAnAgentsCleanExitClosesItsPanel(t *testing.T) {
 	if open := onLoop(r, func() bool { return r.h.panelOpen["agent"] }); open {
 		t.Fatal("the agent's panel is still open after a clean exit")
 	}
+}
+
+// TestF11WorksWithTheKeyboardInARunningAgent: with the keyboard in a running agent, F11 maximizes
+// the agent panel and restores it (its hostKeys leave F11 to the Window), and the agent never gets
+// it: a line typed after reaches it as typed.
+func TestF11WorksWithTheKeyboardInARunningAgent(t *testing.T) {
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	r.leader(t, 'g')
+	r.s.WaitForText(t, "started")
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	maximized := func() bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) }
+	f11 := tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyF11}
+	r.keys(t, f11)
+	r.s.WaitFor(t, "F11 in the agent maximized it", maximizedNow(maximized, true))
+	r.keys(t, f11)
+	r.s.WaitFor(t, "F11 in the agent restored it", maximizedNow(maximized, false))
+	if !r.focused("agentView") {
+		t.Error("F11 took the keyboard out of the agent")
+	}
+	r.keys(t, decltest.Type("ping\r")...)
+	r.s.WaitForText(t, "heard-ping")
 }
