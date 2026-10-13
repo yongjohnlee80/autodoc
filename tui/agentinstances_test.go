@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -123,6 +125,22 @@ func (c *identityHost) Terminals(string) (TerminalPanel, error) {
 func (*identityHost) OpenDrawer(string)  {}
 func (*identityHost) CloseDrawer(string) {}
 func (c *identityHost) Post(fn func())   { c.posts = append(c.posts, fn) }
+func (c *identityHost) After(d time.Duration, fn func()) {
+	c.delays = append(c.delays, d)
+	c.afters = append(c.afters, fn)
+}
+
+// fireAfters runs the waits After scheduled, as their timers would, then what they posted.
+func (c *identityHost) fireAfters() {
+	for len(c.afters) > 0 {
+		afters := c.afters
+		c.afters = nil
+		for _, f := range afters {
+			f()
+		}
+		c.drainPosts()
+	}
+}
 func (c *identityHost) Ticket(_ *uint64, _ TicketScope) Ticket {
 	epoch := c.epoch
 	return Ticket{current: func() bool { return c.epoch == epoch }}
@@ -207,8 +225,16 @@ func TestHandTaskAcceptedDeliverySnapshotsAndCompletesOnce(t *testing.T) {
 		t.Fatal("running delivery completed outside its later loop turn")
 	}
 	c.drainPosts()
-	if done != 1 || len(c.panel.sends) != 1 || c.panel.sends[0] != string(instance.tab)+":Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect\n" {
-		t.Fatalf("delivery done=%d sends=%q", done, c.panel.sends)
+	tab := string(instance.tab)
+	if done != 0 || !slices.Equal(c.panel.pastes, []string{tab + ":Task: original\nFile: /tasks/one.md\nID: one\nInstruction: inspect"}) || len(c.panel.sends) != 0 {
+		t.Fatalf("the task goes as one paste, its Enter not yet: done=%d pastes=%q sends=%q", done, c.panel.pastes, c.panel.sends)
+	}
+	if !slices.Equal(c.delays, []time.Duration{agentSubmitDelay}) {
+		t.Fatalf("the Enter waits agentSubmitDelay: %v", c.delays)
+	}
+	c.fireAfters()
+	if done != 1 || !slices.Equal(c.panel.sends, []string{tab + ":\r"}) {
+		t.Fatalf("after the pause one Enter, a carriage return, and done: done=%d sends=%q", done, c.panel.sends)
 	}
 	c.drainPosts()
 	a.Stopping()
@@ -246,15 +272,16 @@ func TestHandTaskStoppedConsentRevalidatesAndNeverSendsAfterCancellation(t *test
 				q.OnYes()
 			}
 			c.drainPosts()
+			c.fireAfters()
 			if done != 1 {
 				t.Fatalf("completion count %d", done)
 			}
 			if ending == "yes" {
-				if outcome != nil || c.panel == nil || len(c.panel.sends) != 1 {
+				if outcome != nil || c.panel == nil || len(c.panel.pastes) != 1 || len(c.panel.sends) != 1 {
 					t.Fatal("consented target was not started and delivered")
 				}
 			} else {
-				if outcome == nil || len(a.instances) != 0 || (c.panel != nil && len(c.panel.sends) > 0) {
+				if outcome == nil || len(a.instances) != 0 || (c.panel != nil && len(c.panel.sends)+len(c.panel.pastes) > 0) {
 					t.Fatal("cancelled/stale request started or sent")
 				}
 			}
@@ -282,10 +309,79 @@ func TestHandTaskQueuedTargetReplacementAndSendFailureAreCompletionErrors(t *tes
 				c.panel.sendErr = errors.New("queue full")
 			}
 			c.drainPosts()
-			if outcome == nil || calls != 1 || len(c.panel.sends) != 0 {
+			c.fireAfters()
+			if outcome == nil || calls != 1 || len(c.panel.sends)+len(c.panel.pastes) != 0 {
 				t.Fatal("deferred failure sent or missed completion")
 			}
 		})
+	}
+}
+
+// TestHandTaskEnterIsCheckedAgainAfterThePause: the Enter that follows the task's paste is typed
+// only into the same running agent, on the same parent, with the delivery still open. An agent
+// that exited, a rebuilt parent, a shutdown or a failed write in the pause types no Enter, and done
+// hears the reason once.
+func TestHandTaskEnterIsCheckedAgainAfterThePause(t *testing.T) {
+	for _, during := range []string{"exited", "rebuilt", "shutdown", "write"} {
+		t.Run(during, func(t *testing.T) {
+			a, c := modelAgents(t)
+			p, _ := a.profile("one")
+			instance, err := a.startInstance(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			var outcome error
+			if err := a.HandTask(AgentRef{Codename: "one"}, TaskRef{Title: "task", Path: "/task.md"}, "work", func(err error) { calls++; outcome = err }); err != nil {
+				t.Fatal(err)
+			}
+			c.drainPosts()
+			if len(c.panel.pastes) != 1 || calls != 0 {
+				t.Fatalf("the task was not pasted before the pause: pastes=%q calls=%d", c.panel.pastes, calls)
+			}
+			first := c.panel
+			switch during {
+			case "exited":
+				c.panel.exit(instance.tab, 0)
+			case "rebuilt":
+				c.panel = &modelPanel{owner: c, next: 100}
+			case "shutdown":
+				a.Stopping()
+			case "write":
+				c.panel.sendErr = errors.New("queue full")
+			}
+			c.fireAfters()
+			if len(first.sends) != 0 || len(c.panel.sends) != 0 {
+				t.Fatalf("an Enter was typed after %s: %q %q", during, first.sends, c.panel.sends)
+			}
+			want := map[string]error{"exited": ErrAgentStale, "rebuilt": ErrAgentStale, "shutdown": ErrAgentShuttingDown}[during]
+			if calls != 1 || outcome == nil || (want != nil && !errors.Is(outcome, want)) {
+				t.Fatalf("done after %s: calls=%d outcome=%v", during, calls, outcome)
+			}
+		})
+	}
+}
+
+// TestSendTextAddsNoEnter: Lua's SendText stays one paste with no Enter after it.
+func TestSendTextAddsNoEnter(t *testing.T) {
+	a, c := modelAgents(t)
+	p, _ := a.profile("one")
+	if _, err := a.startInstance(p); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	if err := a.SendText(AgentRef{Codename: "one"}, "draft", func(err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		calls++
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c.drainPosts()
+	c.fireAfters()
+	if calls != 1 || len(c.panel.pastes) != 1 || len(c.panel.sends) != 0 || len(c.delays) != 0 {
+		t.Fatalf("SendText: calls=%d pastes=%q sends=%q delays=%v", calls, c.panel.pastes, c.panel.sends, c.delays)
 	}
 }
 
@@ -306,7 +402,7 @@ func TestStoppedAgentDoesNotRelabelItsOldWorkspaceConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.questions[len(c.questions)-1].OnYes()
-	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.name != "kb" || len(c.panel.sends) != 0 {
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || instance.running || instance.workspace.name != "kb" || len(c.panel.sends)+len(c.panel.pastes) != 0 {
 		t.Fatal("workspace B reused or relabelled workspace A process")
 	}
 	if c.panel.configs[instance.tab].Dir != oldConfig.Dir || c.panel.configs[instance.tab].Args[len(oldConfig.Args)-1] != oldConfig.Args[len(oldConfig.Args)-1] {
@@ -330,7 +426,7 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 	}
 	c.panel = &modelPanel{owner: c, next: 100}
 	c.drainPosts()
-	if done != 1 || !errors.Is(outcome, ErrAgentStale) || len(oldOwner.sends) != 0 || len(c.panel.sends) != 0 {
+	if done != 1 || !errors.Is(outcome, ErrAgentStale) || len(oldOwner.sends)+len(oldOwner.pastes) != 0 || len(c.panel.sends)+len(c.panel.pastes) != 0 {
 		t.Fatal("queued old-parent request sent or lost completion")
 	}
 	callbacks := 0

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -54,8 +55,16 @@ type agentRuntimeHost interface {
 	agentHost
 	Terminals(string) (TerminalPanel, error)
 	Post(func())
+	After(time.Duration, func())
 	Ticket(*uint64, TicketScope) Ticket
 }
+
+// agentSubmitDelay is how long a task's paste has before its Enter, as auto-agents gives a notice
+// (send_slot's submit_delay_ms). A CLI that gets the Enter in the same read as the paste can take
+// it as part of the paste and not submit.
+// NOTE: can't announce: an agent CLI says nothing when it has taken in a paste, so the Enter waits
+// a fixed pause after it.
+const agentSubmitDelay = 60 * time.Millisecond
 
 type agentDelivery struct {
 	done     func(error)
@@ -341,7 +350,10 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 // HandTask accepts a task for one exact agent incarnation. An immediate error
 // rejects it without calling done; accepted calls return nil and complete done
 // once on the UI loop, including cancellation and orderly owner shutdown.
-// Success means typed delivery, not agent completion.
+// The task goes as one paste, then an Enter of its own agentSubmitDelay later
+// (a carriage return, the key's byte), so the agent starts on it, as AutoVim's
+// assign has auto-agents do. Success means the task typed and submitted, not
+// the agent's completion.
 func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error {
 	check := func() error {
 		if task.Title == "" || !filepath.IsAbs(task.Path) || strings.ContainsAny(instruction, "\r\n") {
@@ -349,9 +361,9 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 		}
 		return nil
 	}
-	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s\n", task.Title, task.Path, task.ID, instruction)
-	return a.deliver(to, check, "this task", func(panel TerminalPanel, tab widget.TerminalTabID) error {
-		return panel.SendText(tab, payload)
+	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s", task.Title, task.Path, task.ID, instruction)
+	return a.deliver(to, check, "this task", true, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+		return panel.SendPaste(tab, payload)
 	}, done)
 }
 
@@ -368,15 +380,16 @@ func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 		}
 		return nil
 	}
-	return a.deliver(to, check, "this text", func(panel TerminalPanel, tab widget.TerminalTabID) error {
+	return a.deliver(to, check, "this text", false, func(panel TerminalPanel, tab widget.TerminalTabID) error {
 		return panel.SendPaste(tab, text)
 	}, done)
 }
 
 // deliver is HandTask's and SendText's one path: to resolved, check's refusal after the owner's
 // own, a stopped agent started once the user agrees (what names what is sent), everything checked
-// again before send runs on the agent's tab, and done completed once on the loop.
-func (a *agents) deliver(to AgentRef, check func() error, what string, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
+// again before send runs on the agent's tab, and done completed once on the loop. With submit, an
+// Enter follows send agentSubmitDelay later, after the same checks again, and done waits for it.
+func (a *agents) deliver(to AgentRef, check func() error, what string, submit bool, send func(TerminalPanel, widget.TerminalTabID) error, done func(error)) error {
 	a.syncInstances()
 	if a.stopping {
 		return ErrAgentShuttingDown
@@ -471,7 +484,29 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, send func
 		if err == nil {
 			err = send(panel, instance.tab)
 		}
-		finish(err)
+		if err != nil || !submit {
+			finish(err)
+			return
+		}
+		tab := instance.tab
+		c.After(agentSubmitDelay, func() {
+			if accepted.finished {
+				return // shutdown finished it in the pause: nothing more is typed
+			}
+			a.syncInstances()
+			if err := validate(); err != nil {
+				finish(err)
+				return
+			}
+			panel, err := a.runtime()
+			if err == nil && (!instance.running || instance.tab != tab || !instance.owner.SameOwner(panel)) {
+				err = ErrAgentStale
+			}
+			if err == nil {
+				err = panel.SendText(tab, "\r")
+			}
+			finish(err)
+		})
 	}
 	if instance != nil && instance.running {
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn

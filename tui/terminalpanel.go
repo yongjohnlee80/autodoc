@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -107,7 +108,13 @@ func (s *scopedPanelHost) Terminals(id string) (TerminalPanel, error) {
 	return terminalPanel{tabs: tabs}, nil
 }
 
-func (s *scopedPanelHost) Post(fn func()) { s.core.Post(fn) }
+func (s *scopedPanelHost) Post(fn func())                   { s.core.Post(fn) }
+func (s *scopedPanelHost) After(d time.Duration, fn func()) { s.core.After(d, fn) }
+
+// The agents feature asserts its host is an agentRuntimeHost at run time; this makes a method the
+// scoped host lacks a build error instead of agents that never start.
+var _ agentRuntimeHost = (*scopedPanelHost)(nil)
+
 func (s *scopedPanelHost) Ticket(seq *uint64, scope TicketScope) Ticket {
 	return s.core.Ticket(seq, scope)
 }

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 )
@@ -21,6 +22,8 @@ type identityHost struct {
 	configuredCommand string
 	panel             *modelPanel
 	posts             []func()
+	afters            []func()
+	delays            []time.Duration
 	questions         []Question
 	epoch             int
 }
