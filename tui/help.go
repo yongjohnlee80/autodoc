@@ -204,7 +204,9 @@ THE PANELS
   The terminal (SPC ` + "`" + `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
-  + adds one, and a tab's menu has Go to ›, New and Close. Every key goes to the
+  + adds one, and a tab's menu has Go to ›, New and Close. Preferences' terminal row sets the
+  terminals' theme (the page's, or another): their text, background and cursor only, a program's
+  own colours staying its own. Every key goes to the
   shell; Ctrl+\ Ctrl+n leaves for Normal mode, where h j k l, w b e, gg G, Ctrl+u/d/b/f, / and ?
   move over its history, v or V selects and y copies, and i or Enter goes back. In the Vim
   editor mode, Esc leaves too, except in a full-screen program (vim, less), which needs it.
