@@ -135,6 +135,8 @@ func TestDuplicateLabelsEditEachExactProfileAndResolveTargetsByCodename(t *testi
 		if !a.instances["running-orphan"].running {
 			t.Fatal("starting a saved profile stopped its orphan peer")
 		}
+		a.switchingAgent = got[row].Codename
+		a.switchAgentConfirmed() // retained compatibility command selects without stopping peers
 		if c.configuredCommand != got[row].Command || a.agentRunning != got[row].Codename {
 			t.Fatalf("switch started another Same label: command %q, identity %q", c.configuredCommand, a.agentRunning)
 		}

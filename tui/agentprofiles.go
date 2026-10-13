@@ -239,11 +239,3 @@ func (h *agents) switchAgentConfirmed() {
 	h.c.Close("agentProfiles")
 	h.startAgent(a)
 }
-
-// toggleAgentShown shows the agent running, its panel open.
-func (h *agents) toggleAgentShown() {
-	if !h.c.PanelOpen("agent") {
-		h.c.OpenDrawer("agent")
-	}
-	h.c.Keep(h.c.Focus("agentView"))
-}

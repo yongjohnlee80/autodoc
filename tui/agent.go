@@ -117,7 +117,6 @@ func (a *agents) Commands() map[string]Command {
 		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
 		"App.useAgent":             oneNumber("a row", a.useAgent),
 		"App.switchAgentConfirmed": none(a.switchAgentConfirmed),
-		"App.agentExited":          oneNumber("an exit code", a.agentExited),
 		"App.agentTabsChanged":     none(a.agentTabsChanged),
 		"App.setAgentEdge":         oneNumber("a row", a.setAgentEdge),
 		"App.setAgentSize":         oneNumber("a row", a.setAgentSize),
@@ -244,34 +243,6 @@ func (h *agents) stopAgent() bool {
 		return false
 	}
 	return true
-}
-
-// agentExited is the agent's program ending: the next SPC g starts the default again. The shell's
-// 127 and 126 are its command not found and not runnable: the profile's command is wrong.
-func (h *agents) agentExited(code int) {
-	name := h.agentRunningLabel
-	if name == "" {
-		name = h.agentRunning
-	}
-	h.agentRunning = ""
-	h.agentRunningLabel = ""
-	if name == "" {
-		return
-	}
-	switch code {
-	case 0:
-		// a clean exit (the user quit the agent): its panel goes with it
-		if h.c.PanelOpen("agent") {
-			h.c.CloseDrawer("agent")
-		}
-		h.c.Notify(fmt.Sprintf("the agent %s exited: SPC g starts the default again", name))
-	case 127, 126:
-		why := map[int]string{127: "was not found", 126: "could not run"}[code]
-		h.c.Notify(fmt.Sprintf("the agent %s's command %s (%d): check it in System › Agent profiles…", name, why, code))
-	default:
-		// a failure: the panel stays, with what the agent printed before it ended
-		h.c.Notify(fmt.Sprintf("the agent %s exited (%d): SPC g starts the default again", name, code))
-	}
 }
 
 // fillAgentCommand fills {root} and {workspace} in a profile's command, each quoted for the shell.
