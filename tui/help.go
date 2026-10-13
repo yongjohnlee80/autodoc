@@ -202,7 +202,8 @@ THE PANELS
   a tab's menu (≡, a right click on the tab, or Enter on the strip) has Go to ›, Restart, Close
   (asked first while the agent runs) and Profiles…; Use in the profiles starts another too.
   :agent-buffer pastes the page into an agent's prompt, and :agent-forward the selection, else
-  the clipboard: to the agent running, or one chosen; it waits there for Enter.
+  the clipboard: to the agent running, or one chosen. No Enter is added: an agent CLI that takes
+  bracketed paste holds it all at its prompt; elsewhere each line break is Enter.
   The terminal (SPC ` + "`" + `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:

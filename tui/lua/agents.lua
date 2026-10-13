@@ -1,6 +1,7 @@
 -- agents.lua — the page to one of AutoDoc's agents: :agent-buffer sends the whole page, and
 -- :agent-forward the selection, else what the clipboard holds. The text is pasted into the agent's
--- prompt, not submitted: read it there, add to it, press Enter.
+-- prompt with no Enter after it: an agent CLI that takes bracketed paste holds it all there for you
+-- to read, add to and submit; elsewhere each line break is Enter.
 --
 -- The agent: the one running; with several, the choice of them; with none, the choice of the
 -- profiles, the one chosen started once you agree.
@@ -13,11 +14,16 @@ end
 -- choose calls with(ref) with the agent to send to, asking when it must.
 local function choose(with)
   local all, running = autodoc.agents.list(), {}
+  local open = {}
   for _, a in ipairs(all) do
-    if a.running then
-      running[#running + 1] = a
+    if not a.closing then -- a closing agent refuses a send: never offered
+      open[#open + 1] = a
+      if a.running then
+        running[#running + 1] = a
+      end
     end
   end
+  all = open
   if #running == 1 then
     return with({ codename = running[1].codename, instance = running[1].instance }, running[1].name)
   end
@@ -52,7 +58,7 @@ local function send(text, what)
   choose(function(ref, name)
     autodoc.agents.send(ref, text, function(ok, err)
       if ok then
-        autodoc.notify("sent " .. what .. " to " .. name .. ": press Enter there to submit it")
+        autodoc.notify("sent " .. what .. " to " .. name)
       elseif err ~= "cancelled" then
         autodoc.notify("not sent to " .. name .. ": " .. err)
       end

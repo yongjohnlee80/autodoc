@@ -357,8 +357,10 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 
 // SendText accepts text for one agent incarnation, as HandTask accepts a task, through the same
 // delivery: the same refusals, the same consent to start a stopped agent, the same checks before
-// anything is sent. The text goes as one paste — whole, bracketed for a CLI that asked for that —
-// and is not submitted: the agent's user reads it and presses Enter. Success means typed delivery.
+// anything is sent. The text goes as one paste: to a CLI that asked for bracketed paste it is
+// whole and waits at the prompt for Enter; elsewhere its newlines are Enter, so its earlier lines
+// are submitted as they arrive and only its last waits. No Enter is added after it. Success means
+// typed delivery.
 func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 	check := func() error {
 		if text == "" || len(text) > widget.TerminalInputLimit {

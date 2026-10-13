@@ -87,14 +87,14 @@ func TestScriptsSendTextToAnAgent(t *testing.T) {
 	r.luaLoad(t, `
 autodoc.command{ name = "ag", run = function()
   local all = autodoc.agents.list()
-  autodoc.notify("agents " .. #all .. " " .. all[1].codename .. " running " .. tostring(all[1].running))
+  autodoc.notify("agents " .. #all .. " " .. all[1].codename .. " running " .. tostring(all[1].running) .. " closing " .. tostring(all[1].closing))
   autodoc.agents.send("heron", "first-line\nsecond-line", function(ok, err) autodoc.notify("sent " .. tostring(ok) .. " " .. tostring(err)) end)
   autodoc.agents.send("nobody", "x", function(ok, err) autodoc.notify("nobody " .. tostring(err)) end)
 end }`)
 	if err := r.luaRun("ag"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitFor(t, "the list", func(string) bool { return r.noticed("agents 1 heron running true") })
+	r.s.WaitFor(t, "the list", func(string) bool { return r.noticed("agents 1 heron running true closing false") })
 	r.s.WaitFor(t, "sent", func(string) bool { return r.noticed("sent true nil") })
 	// a paste's newline is Enter where the program did not ask for bracketed paste: the first line is
 	// heard; the last is typed and left for the user to submit

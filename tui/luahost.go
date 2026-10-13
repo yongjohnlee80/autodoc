@@ -24,10 +24,12 @@ import (
 //	                                       another script's picker is open. An item is a string, or a
 //	                                       table: label (shown), detail (previewed), value (given to
 //	                                       cb; the item itself when it has none)
-//	autodoc.agents.list()                  AutoDoc's agents: { codename, name, running, instance,
-//	                                       orphan }, saved profiles first
-//	autodoc.agents.send(ref, text, cb)     text pasted to an agent (Core.SendText): ref a codename, or
-//	                                       { codename, instance } for that exact incarnation. A
+//	autodoc.agents.list()                  AutoDoc's agents: { codename, name, running, closing,
+//	                                       instance, orphan }, saved profiles first; a closing one
+//	                                       refuses a send
+//	autodoc.agents.send(ref, text, cb)     text pasted to an agent, no Enter added (Core.SendText):
+//	                                       ref a codename, or { codename, instance } for that exact
+//	                                       incarnation. A
 //	                                       stopped agent is started once the user agrees. cb(true) once
 //	                                       typed, or cb(nil, err): err "cancelled", "stale" (that
 //	                                       incarnation is gone), "unavailable", or why
@@ -210,6 +212,7 @@ func (s *scripting) luaAgentsList(L *lua.LState) int {
 			L.SetField(t, "codename", lua.LString(e.Ref.Codename))
 			L.SetField(t, "name", lua.LString(e.Name))
 			L.SetField(t, "running", lua.LBool(e.Running))
+			L.SetField(t, "closing", lua.LBool(e.Closing))
 			L.SetField(t, "orphan", lua.LBool(e.Orphan))
 			if e.Ref.Instance != "" {
 				L.SetField(t, "instance", lua.LString(e.Ref.Instance))

@@ -350,7 +350,7 @@ type Core interface {
 	// AutoVim mailbox. Snapshots carry exact incarnation tokens for delivery.
 	AgentEntries() []AgentEntry
 	HandTask(to AgentRef, task TaskRef, instruction string, done func(error)) error
-	// SendText is HandTask's delivery for text: one paste, not submitted (agentinstances.go)
+	// SendText is HandTask's delivery for text: one paste, no Enter added (agentinstances.go)
 	SendText(to AgentRef, text string, done func(error)) error
 	Set(name string, v any)
 	Open(id string)
