@@ -239,23 +239,31 @@ terminal, as below; where it cannot, it shows the block's source and why.
   `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
   keeps it and `Esc` puts it back. A panel opens where it was left, kept in the store as
   percentages of the window; its side in the preferences says only where it first appears.
-- **The todos** (`SPC x`): the workspace's todo stores, as autofinder's todos panel shows them, in a
-  large panel (about 65% of the window wide and 80% tall until you size it; the size you leave it
-  at is kept). `?` there opens the card of its keys, by purpose; `?` again or `Esc` closes it. Under
-  the tree, one row holds only the actions that apply to the row under the cursor: on a store Add,
-  Refresh and Label; on a section Add and Refresh; on a task Status…, Assign and Remove. A store
+- **The todos** (`SPC x`): one todo store at a time, its tasks a tab per status, as autofinder's
+  todos panel shows them, in a large panel at the left (about 65% of the window wide and 80% tall
+  until you size it; the size and the side you leave it at are kept). Along the top, a dropdown
+  chooses the store shown among the ones AutoDoc knows (the workspace's first), by its label or its
+  name; beside it, icons make a new store (`✚`), load one from a folder (`⎘`), rename the store
+  shown (`✎`, its label, AutoDoc's own) and refresh it (`⟳`). Under them the tabs, Open, In
+  progress, Deferred, Completed and Archived, each a numbered table of its tasks; Archived lists
+  its months, a month's tasks beside them. Under the tabs the task under the cursor's details,
+  then one row of the actions that apply: Status…, Assign and Remove on a task, and Add. A store
   AutoDoc does not write yet (before the cutover) shows none, only "read-only until the cutover".
+  `?` opens the card of the panel's keys, by purpose; `?` again or `Esc` closes it.
 
   | Key | In the todos panel |
   | --- | --- |
-  | `Enter` | open the task's file, or a section |
-  | `1`–`5` | a section of the store |
+  | `Enter` | open the task's file; on Archived's months, open a month |
+  | `Backspace` | back to Archived's months |
+  | `1`–`5`, `[` `]` | a tab; the tab before, after |
   | `i`, `o` | the details, shown or hidden |
   | `a` | add a task |
   | `d` | remove the task |
-  | `s` | Status…: a picker of every status (open, in-progress, deferred, completed, archived), the task's own marked; choosing one moves the task there |
+  | `s` | Status…: a picker of every status (open, in-progress, deferred, completed, archived), the task's own marked; choosing one moves the task there, its tab showing with the cursor on it |
   | `A` | assign the task to an agent |
-  | `R`, `L`, `M` | refresh, label or move the store |
+  | `S` | the store dropdown (`Enter` opens it) |
+  | `N`, `O` | a new store; load a store from a folder |
+  | `L`, `R`, `M` | rename (label), refresh or move the store |
   | `?` | the card of these keys |
 
   **`A` assigns the task under the cursor to one of AutoDoc's own agents**:

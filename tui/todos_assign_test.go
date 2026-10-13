@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -65,9 +64,8 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	}, "")
 	tasks := seedTodos(t, d, true, todo.Spec{Title: "Draft the guide"}, todo.Spec{Title: "Edit the links"},
 		todo.Spec{Title: "Fix the typos"})
-	openTodos(t, r, "· ws kb", '1')
-	r.s.WaitForText(t, "3  Fix the typos")
-	r.keys(t, key('j'))
+	openTodos(t, r, "kb", '1')
+	r.s.WaitForText(t, "Fix the typos")
 	r.s.WaitForText(t, "## Draft the guide")
 	unassigned := func(what string) {
 		t.Helper()
@@ -127,8 +125,8 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	r.s.WaitForText(t, "status: in-progress") // the cursor followed the task
 
 	// Critic is stopped, and declining to start it leaves the task assigned, not delivered.
-	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoTree", "forceActiveFocus")); return true })
-	r.keys(t, key('1'), key('j'))
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoInProgressTable", "forceActiveFocus")); return true })
+	r.keys(t, key('1'))
 	r.s.WaitForText(t, "## Edit the links")
 	r.keys(t, key('A'))
 	r.s.WaitForText(t, "Critic  (critic)")
@@ -150,8 +148,8 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 	}
 
 	// Scribe runs now: a typed instruction, and no question.
-	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoTree", "forceActiveFocus")); return true })
-	r.keys(t, key('1'), key('j'))
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoInProgressTable", "forceActiveFocus")); return true })
+	r.keys(t, key('1'))
 	r.s.WaitForText(t, "## Fix the typos")
 	r.keys(t, key('A'))
 	r.s.WaitForText(t, "running")
@@ -280,6 +278,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 	// a typed instruction is the reason and the instruction; HandTask's refusal at once is told, and
 	// the assignment stands (nothing undoes it)
 	c.refuse = ErrAgentUnavailable
+	v.showTab(0) // the task followed to In progress; this store's answers keep it in Open
 	v.assign()
 	v.assignPick.accept(0, "")
 	v.assignSet("  Read the ADR first ")
@@ -302,13 +301,12 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	v := newTodos(c)
 	v.list()
-	ix := openSection(t, v, "ws:kb", "open")
-	v.moved(ix) // the section's row, not a task's
+	v.showTab(1) // In progress: no task under the cursor
 	v.assign()
 	if strings.Contains(fmt.Sprint(c.set["App.todosStatus"]), "assign") || len(c.notes) != 0 || slices.Contains(c.opened, "agentAssignPicker") {
 		t.Fatalf("off a task: status %q, notes %q, opened %v", c.set["App.todosStatus"], c.notes, c.opened)
 	}
-	v.moved(tuidecl.Index{Row: 0, Parent: &ix})
+	v.showTab(0)
 	v.assign()
 	v.assignPick.dismiss()
 	v.assignSet("") // as a stray App.todoAssignSet after the dismissal would

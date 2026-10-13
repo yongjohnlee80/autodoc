@@ -429,9 +429,9 @@ Window {
         }
     }
 
-    // the todos (todos.go): the stores open, each its buckets and tasks, as autofinder's todos panel;
-    // at the right edge unless moved, and large: 65% of the window across, 80% along, centred
-    // (todosDefault), until the user sizes or places it
+    // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
+    // tab per status, as autofinder's todos panel; at the left edge unless moved, and large: 65% of
+    // the window across, 80% along, centred (todosDefault), until the user sizes or places it
     Panel {
         id: todos
         heading: App.todosTitle
@@ -442,15 +442,15 @@ Window {
         floating: App.todosFloating
         floatX: App.todosX; floatY: App.todosY; floatWidth: App.todosW; floatHeight: App.todosH
         onPlaced: App.panelPlaced("todos", x, y, width, height)
-        // 25%, not the side panels' 15: the widest action, "[ Refresh (R) ]", whole inside the frame
-        // on an 80-column screen; the action row's three at most fit whole from 60% there
+        // 25%, not the side panels' 15: the top bar's icons, and the action row's widest button,
+        // "[ Status… ]", whole inside the frame on an 80-column screen; its four fit from 55% there
         minimumSize: 25
         onResized: App.panelResized("todos", size, length)
         onOpened: App.panelOpened("todos")
         onClosed: App.panelClosed("todos")
         Flex {
             direction: Tui.Vertical
-            // the task list's keys, live while the keyboard is in the list or its buttons: NOT in the
+            // the panel's keys, live while the keyboard is in the top bar or the tabs: NOT in the
             // details pane below, whose read-only Editor lets the edit keys it refuses (a d s i o)
             // bubble, and a key read there must never change or remove the task being read
             FocusScope {
@@ -461,10 +461,16 @@ Window {
                 Shortcut { sequence: "s"; onActivated: App.todoChooseStatus() }
                 Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
                 Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
+                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
+                Shortcut { sequence: "["; onActivated: App.todoTabBefore() }
+                Shortcut { sequence: "]"; onActivated: App.todoTabAfter() }
+                Shortcut { sequence: "Backspace"; onActivated: App.todoMonthsBack() }
+                Shortcut { sequence: "Shift+S"; onActivated: App.todoFocusStore() }
+                Shortcut { sequence: "Shift+N"; onActivated: App.todoNew() }
+                Shortcut { sequence: "Shift+O"; onActivated: App.todoLoad() }
+                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
                 Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
                 Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
-                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
-                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
                 Shortcut { sequence: "?"; onActivated: todoKeys.open() }
                 Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
                 Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
@@ -474,31 +480,128 @@ Window {
                 // ---- end of the todos's keys ----
                 Flex {
                     direction: Tui.Vertical
+                    // the top bar: the store shown, the others in its dropdown; on the right, icons
+                    // (narrow glyphs, one cell in a terminal as in the window) for a new store, one
+                    // loaded from a folder, the store's name (its label), refresh, and the keys
                     Flex {
                         direction: Tui.Horizontal
-                        Button { text: "&New…"; onClicked: App.todoNew() }
+                        ComboBox {
+                            id: todoStore
+                            toolTipText: "the todo store shown: choose another (S)"
+                            model: App.todoStores
+                            textRole: "label"
+                            currentIndex: App.todoStoreIndex
+                            onActivated: App.todoStoreChosen(index)
+                        }
+                        Text { text: " "; Layout.fillWidth: true }
+                        Button { text: "✚"; toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
                         Text { text: " " }
-                        Button { text: "&Load…"; onClicked: App.todoLoad() }
+                        Button { text: "⎘"; toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
                         Text { text: " " }
-                        Button { text: "Keys (?)"; onClicked: todoKeys.open() }
+                        Button { text: "✎"; toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
                         Text { text: " " }
-                        Button { text: "Close (&q)"; onClicked: todos.close() }
+                        Button { text: "⟳"; toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
+                        Text { text: " " }
+                        Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
                     }
-                    TreeView {
-                        id: todoTree
+                    // a tab per status, each a numbered table of its tasks; Archived its months, and
+                    // the open month's tasks beside them
+                    TabView {
+                        id: todoTabs
                         Layout.fillHeight: true
-                        palette.highlight: Theme.document.highlight
-                        palette.highlightedText: Theme.document.highlightedText
-                        model: App.todoTree
-                        textRole: "label"
-                        onCurrentIndexChanged: App.todoMoved(index)
-                        onActivated: App.todoActivated(index)
+                        currentIndex: App.todoTab
+                        onCurrentIndexChanged: App.todosTab(index)
+                        Tab {
+                            title: "Open"
+                            TableView {
+                                id: todoOpenTable
+                                palette.highlight: Theme.document.highlight
+                                palette.highlightedText: Theme.document.highlightedText
+                                model: App.todoOpenRows
+                                currentIndex: App.todoOpenIndex
+                                onCurrentIndexChanged: App.todoMoved(0, index)
+                                onActivated: App.todoActivated(0, index)
+                                TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                            }
+                        }
+                        Tab {
+                            title: "In progress"
+                            TableView {
+                                id: todoInProgressTable
+                                palette.highlight: Theme.document.highlight
+                                palette.highlightedText: Theme.document.highlightedText
+                                model: App.todoInProgressRows
+                                currentIndex: App.todoInProgressIndex
+                                onCurrentIndexChanged: App.todoMoved(1, index)
+                                onActivated: App.todoActivated(1, index)
+                                TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                            }
+                        }
+                        Tab {
+                            title: "Deferred"
+                            TableView {
+                                id: todoDeferredTable
+                                palette.highlight: Theme.document.highlight
+                                palette.highlightedText: Theme.document.highlightedText
+                                model: App.todoDeferredRows
+                                currentIndex: App.todoDeferredIndex
+                                onCurrentIndexChanged: App.todoMoved(2, index)
+                                onActivated: App.todoActivated(2, index)
+                                TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                            }
+                        }
+                        Tab {
+                            title: "Completed"
+                            TableView {
+                                id: todoCompletedTable
+                                palette.highlight: Theme.document.highlight
+                                palette.highlightedText: Theme.document.highlightedText
+                                model: App.todoCompletedRows
+                                currentIndex: App.todoCompletedIndex
+                                onCurrentIndexChanged: App.todoMoved(3, index)
+                                onActivated: App.todoActivated(3, index)
+                                TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                            }
+                        }
+                        Tab {
+                            title: "Archived"
+                            Split {
+                                orientation: Tui.Horizontal
+                                ratio: 0.3
+                                TableView {
+                                    id: todoMonths
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoMonths
+                                    currentIndex: App.todoMonthIndex
+                                    onCurrentIndexChanged: App.todoMonthMoved(index)
+                                    onActivated: App.todoMonthChosen(index)
+                                    TableViewColumn { role: "month"; title: "MONTH"; width: 8 }
+                                    TableViewColumn { role: "count"; title: "TASKS"; width: 0 }
+                                }
+                                TableView {
+                                    id: todoArchivedTable
+                                    palette.highlight: Theme.document.highlight
+                                    palette.highlightedText: Theme.document.highlightedText
+                                    model: App.todoArchivedRows
+                                    currentIndex: App.todoArchivedIndex
+                                    onCurrentIndexChanged: App.todoMoved(4, index)
+                                    onActivated: App.todoActivated(4, index)
+                                    TableViewColumn { role: "n"; title: "#"; width: 4 }
+                                    TableViewColumn { role: "title"; title: "TITLE"; width: 0 }
+                                }
+                            }
+                        }
                     }
                 }
             }
-            // the row under the cursor's details (i, o), Markdown, rendered as the pickers' previews
+            // the task under the cursor's details (i, o), Markdown, rendered as the pickers' previews
             // are (the GUI's Editor draws it; a terminal's shows the source): at most half the panel,
-            // scrolled, so a long description never pushes the tree away
+            // scrolled, so a long description never pushes the tabs away
             Frame {
                 title: "details"
                 visible: App.todoDetailShown
@@ -513,12 +616,12 @@ Window {
                     MarkdownRenderer {}
                 }
             }
-            // what needs the user: a file a section could not list; hidden while there is none
+            // what needs the user: a file a tab could not list; hidden while there is none
             Text { text: App.todosStatus; visible: App.todosStatusShown; wrapMode: Tui.WordWrap }
-            // the action row: one line, only the actions that apply to the row under the cursor, each
-            // its key's, the others hidden, never greyed; on a store not claimed none, only a note.
-            // Which apply follows the cursor (todos.go: syncActions), never a button's own click.
-            // the task list's keys again, live on these buttons too (the details pane above has none)
+            // the action row: one line, only the actions that apply to the task under the cursor,
+            // each its key's (its tooltip says which), the others hidden, never greyed; on a store not claimed none, only a
+            // note. Which apply follows the cursor (todos.go: syncActions), never a button's own click.
+            // the panel's keys again, live on these buttons too (the details pane above has none)
             FocusScope {
                 // ---- the todos task buttons' keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
                 Shortcut { sequence: "a"; onActivated: App.todoAdd() }
@@ -526,10 +629,16 @@ Window {
                 Shortcut { sequence: "s"; onActivated: App.todoChooseStatus() }
                 Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
                 Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
+                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
+                Shortcut { sequence: "["; onActivated: App.todoTabBefore() }
+                Shortcut { sequence: "]"; onActivated: App.todoTabAfter() }
+                Shortcut { sequence: "Backspace"; onActivated: App.todoMonthsBack() }
+                Shortcut { sequence: "Shift+S"; onActivated: App.todoFocusStore() }
+                Shortcut { sequence: "Shift+N"; onActivated: App.todoNew() }
+                Shortcut { sequence: "Shift+O"; onActivated: App.todoLoad() }
+                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
                 Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
                 Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
-                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
-                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
                 Shortcut { sequence: "?"; onActivated: todoKeys.open() }
                 Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
                 Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
@@ -540,16 +649,13 @@ Window {
                 Flex {
                     direction: Tui.Horizontal
                     Text { text: "read-only until the cutover"; visible: App.todoReadOnly }
-                    Button { text: "Add (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
-                    Button { id: todoStatusButton; text: "Status… (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
-                    Text { text: " "; visible: App.todoActRefresh }
-                    Button { id: todoRefreshButton; text: "Refresh (R)"; visible: App.todoActRefresh; enabled: App.todoActRefresh; onClicked: App.todoRefresh() }
-                    Text { text: " "; visible: App.todoActLabel }
-                    Button { text: "Label (L)"; visible: App.todoActLabel; enabled: App.todoActLabel; onClicked: App.todoLabel() }
+                    Button { id: todoStatusButton; text: "Status…"; toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
                     Text { text: " "; visible: App.todoActAssign }
-                    Button { text: "Assign (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
+                    Button { text: "Assign"; toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
                     Text { text: " "; visible: App.todoActRemove }
-                    Button { text: "Remove (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
+                    Button { text: "Remove"; toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
+                    Text { text: " "; visible: App.todoActStatus }
+                    Button { id: todoAddButton; text: "Add"; toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
                 }
             }
         }

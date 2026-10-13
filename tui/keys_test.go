@@ -355,7 +355,8 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		todosBlocks++
 		todosBegin, todosEnd := scopeMarkers(s)
 		todosKeys := block(todosBegin, todosEnd)
-		for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "?", "1", "2", "3", "4", "5"} {
+		for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "Shift+S", "Shift+N", "Shift+O",
+			"[", "]", "Backspace", "?", "1", "2", "3", "4", "5"} {
 			if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
 				t.Errorf("the todos panel's %q block lacks %s:\n%s", s.Label, seq, todosKeys)
 			}
@@ -378,7 +379,7 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 }
 
 // TestTodosQuestionMarkOpensItsCardOfKeys: ? in the todos panel opens a card of its keys, the floating
-// card SPC's is, by purpose (MOVE, TASK, STATUS, STORE); a key on it closes it and runs, and ? again
+// card SPC's is, by purpose (MOVE, TABS, TASK, STATUS, STORE); a key on it closes it and runs, and ? again
 // closes it, as q and Esc do. No key on the card may take its ?, and < and > are no key of the panel.
 func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	fs := newHost(NewSession("unused", nil), Options{}).features()
@@ -403,8 +404,9 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 		t.Error("? in the todos panel does not open its card")
 	}
 	text := cardText(c.Groups, k.on(todoKeysCard))
-	for _, want := range []string{"MOVE", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a section", "1–5  a section of the store",
-		"s  status…: choose the task's", "a  add a task", "A  assign it to an agent", "R  refresh", "M  move the store"} {
+	for _, want := range []string{"MOVE", "TABS", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a month", "1–5  a tab",
+		"[ ]  the tab before, after", "s  status…: move the task", "a  add a task", "A  assign it to an agent", "S  choose the store",
+		"N  a new store", "O  load a store", "L  rename it (its label)", "R  refresh", "M  move the store"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the card lacks %q:\n%s", want, text)
 		}
@@ -418,6 +420,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	for _, want := range []string{
 		`Shortcut { sequence: "?"; onActivated: todoKeys.close() }`,
 		`Shortcut { sequence: "s"; onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
+		`Shortcut { sequence: "]"; onActivated: { todoKeys.close(); App.todoTabAfter() } }`,
 		`Shortcut { sequence: "o"; onActivated: { todoKeys.close(); App.todoToggleDetail() } }`,
 		`helpText: "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"`,
 	} {

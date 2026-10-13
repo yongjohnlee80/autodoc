@@ -139,10 +139,8 @@ func (t *todos) assignSet(text string) {
 			return
 		}
 		task := asMap(v)
-		if to := str(task, "status"); to != "" && to != from { // an open task is in progress now (D1)
-			t.follow = todoFollow{store: s.id, id: str(x, "id"), bucket: to,
-				waiting: map[string]bool{bucketKey(s.id, from): true, bucketKey(s.id, to): true}}
-			t.open[bucketKey(s.id, to)] = true
+		if to := str(task, "status"); to != "" && to != from && s == t.cur { // an open task is in progress now (D1)
+			t.followTask(task, to)
 		}
 		t.handOver(a, s, task, assignee, instruction)
 	})

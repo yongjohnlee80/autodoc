@@ -149,6 +149,12 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   mirror, not a lookup key after migration.
 - Today's host is the `legacy` feature; features move out of it one file at a time (follow-up
   2/7).
+- **Two panels may open at one edge** (the explorer and the todos at the left, by default): each
+  is its own drawer over the page, the one opened later drawn over the other; Ctrl+h/j/k/l from
+  the page goes to the first by declared priority. No panel moves or resizes another.
+- **One choice among a few, always in view, is a `ComboBox`** (the todos' store, Fonts' faces):
+  its rows a `ListModel`, its `currentIndex` a source, `onActivated` the command. A list to
+  filter is a picker.
 - **A list to filter and choose from is a picker, never a fifth layout.**
   `tui/qml/dialogs/Picker.qml` is the one layout: a field over a list, the item under the cursor
   previewed beside it. A use sets the Dialog's `title` and its declared properties: `name` and

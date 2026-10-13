@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -157,31 +158,32 @@ func scriptedStore(claimed bool) *scriptedCore {
 	return s
 }
 
-// treeLabels are the labels of the rows under parent (nil: the roots).
-func treeLabels(v *todos, parent *tuidecl.Index) []string {
+// tabRows are tab's rows as its table shows them: "<#>  <title>".
+func tabRows(v *todos, tab int) []string {
+	m := v.tasks[tab].Model()
 	var out []string
-	for r := 0; r < v.model.RowCount(parent); r++ {
-		out = append(out, v.model.Data(tuidecl.Index{Row: r, Parent: parent}, "label").Raw)
+	for i := 0; i < m.Len(); i++ {
+		out = append(out, m.Data(tuidecl.Index{Row: i}, "n").Raw+"  "+m.Data(tuidecl.Index{Row: i}, "title").Raw)
 	}
 	return out
 }
 
-// openSection opens a section of a store, as the tree does when it first opens one, and is its row.
-func openSection(t *testing.T, v *todos, store, bucket string) tuidecl.Index {
-	t.Helper()
-	ix, ok := v.indexOf(store, bucketKey(store, bucket))
-	if !ok {
-		t.Fatalf("no section %s of %s: %v", bucket, store, treeLabels(v, nil))
+// storeLabels are the dropdown's rows.
+func storeLabels(v *todos) []string {
+	m := v.storeRows.Model()
+	var out []string
+	for i := 0; i < m.Len(); i++ {
+		out = append(out, m.Data(tuidecl.Index{Row: i}, "label").Raw)
 	}
-	v.model.FetchMore(ix)
-	return ix
+	return out
 }
 
-// TestTodosListsTheStoresAsTheTreesRoots: SPC x toggles the panel, saying so when there is no
-// workspace and no store; opened, the workspace's store is the first root and every other with a
-// root of its own follows, ● on those the daemon writes; each has the five sections, read only when
-// one opens.
-func TestTodosListsTheStoresAsTheTreesRoots(t *testing.T) {
+// TestTodosShowsOneStoreChosenInADropdown: SPC x toggles the panel, saying so when there is no
+// workspace and no store. Opened, the dropdown lists the workspace's store first and every other
+// with a root of its own, by label or name; only the store shown is read, its Open tab. Choosing
+// another in the dropdown empties the tabs and reads its own; a read of the store before, answered
+// late, is dropped.
+func TestTodosShowsOneStoreChosenInADropdown(t *testing.T) {
 	none := newScripted("")
 	newTodos(none).toggle()
 	if len(none.notes) != 1 || len(none.views) != 0 {
@@ -194,103 +196,179 @@ func TestTodosListsTheStoresAsTheTreesRoots(t *testing.T) {
 		t.Errorf("SPC x: views %v", s.views)
 	}
 	v.Panels()[0].Opened(nil)
-	if got, want := treeLabels(v, nil), []string{"  kb · ws kb  (read-only until the cutover)", "● p"}; !slices.Equal(got, want) {
-		t.Fatalf("roots %q, want %q (the rootless store left out)", got, want)
+	if got, want := storeLabels(v), []string{"kb", "p"}; !slices.Equal(got, want) {
+		t.Fatalf("the dropdown %q, want %q (the rootless store left out)", got, want)
 	}
-	if got := treeLabels(v, &tuidecl.Index{Row: 0}); !slices.Equal(got, []string{"Open", "In progress", "Deferred", "Completed", "Archived"}) {
-		t.Errorf("sections %q", got)
+	if s.set["App.todoStoreIndex"] != 0 || v.cur.id != "ws:kb" || s.set["App.todoHasStore"] != true {
+		t.Errorf("the store shown: index %v, %+v", s.set["App.todoStoreIndex"], v.cur)
 	}
-	if s.called("todos.list") {
-		t.Error("a section was read before it opened")
+	var reads []string
+	for _, c := range s.calls {
+		if strings.HasPrefix(c, "todos.list") {
+			reads = append(reads, c)
+		}
 	}
-	if spec := v.Panels()[0]; spec.ID != "todos" || spec.Edge(prefs{todosEdge: "right"}) != "right" {
+	if !slices.Equal(reads, []string{"todos.list[kb map[buckets:[open]]]"}) {
+		t.Errorf("reads %q: only the store shown's Open tab", reads)
+	}
+	if got := tabRows(v, 0); !slices.Equal(got, []string{"1  ⚠ Ship"}) {
+		t.Errorf("Open: %q", got)
+	}
+	if spec := v.Panels()[0]; spec.ID != "todos" || spec.Edge(prefs{todosEdge: "left"}) != "left" {
 		t.Errorf("the panel %+v", spec)
+	}
+
+	// another store chosen: the tabs emptied, its Open read; the old store's late answer dropped
+	s.answers["todos.list"] = func(p []any) (any, error) {
+		return map[string]any{"tasks": []any{map[string]any{"id": "x", "title": fmt.Sprint(p[0])}}}, nil
+	}
+	s.deferred = true
+	v.reload() // kb's Open, held
+	held := s.pending
+	s.pending = nil
+	s.deferred = false
+	v.storeChosen(1)
+	if v.cur.id != "root:/p" || !s.called("todos.list[map[root:/p] map[buckets:[open]]]") {
+		t.Fatalf("p chosen: %+v, calls %v", v.cur, s.calls)
+	}
+	held[0]() // kb's Open, late
+	if got := tabRows(v, 0); !slices.Equal(got, []string{"1  map[root:/p]"}) {
+		t.Errorf("p's Open after kb's late answer: %q", got)
+	}
+	n := len(s.calls)
+	v.storeChosen(1) // the same store: nothing read
+	v.storeChosen(9) // no such store
+	if len(s.calls) != n {
+		t.Errorf("the same store chosen again read %v", s.calls[n:])
 	}
 }
 
-// TestTodosReadsASectionWhenItOpens: a section's tasks are read as it opens, errored ones first
-// and marked, the open section's numbered; the details are the task under the cursor's; Enter opens
-// its file and closes the panel, and on a section opens or closes it.
-func TestTodosReadsASectionWhenItOpens(t *testing.T) {
-	s := scriptedStore(false)
+// TestTodosTabsAreNumberedTablesReadWhenShown: a tab's tasks are read when it first shows, errored
+// ones first and marked, every row numbered; the details are the task under the cursor's; 1–5 and
+// [ ] change the tab, round, the keyboard in its table; a tab read already is not read again until
+// a change; Enter opens the task's file and closes the panel.
+func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
+	s := scriptedStore(true)
 	s.answers["todos.list"] = func(p []any) (any, error) {
+		b := p[1].(map[string]any)["buckets"].([]any)[0].(string)
+		if b == "archived" {
+			return map[string]any{"partitions": []any{}}, nil
+		}
 		return map[string]any{"tasks": []any{
-			map[string]any{"id": "t1", "rev": "r1", "title": "Clean", "status": "open", "path": "open/t1.md"},
-			map[string]any{"id": "t2", "rev": "r2", "title": "Ship", "status": "open", "priority": "high", "path": "open/t2.md",
-				"tags": []any{"x"}, "description": "the notes", "errors": []any{map[string]any{"field": "adr[0]", "code": "not-found", "message": "gone"}}}},
-			"malformed": []any{map[string]any{"path": "open/bad.md"}}}, nil
+			map[string]any{"id": b + "1", "rev": "r1", "title": "Clean " + b, "status": b, "path": b + "/1.md"},
+			map[string]any{"id": b + "2", "rev": "r2", "title": "Ship " + b, "status": b, "priority": "high", "path": b + "/2.md",
+				"tags": []any{"x"}, "description": "the notes", "errors": []any{map[string]any{"field": "adr[0]", "code": "not-found", "message": "gone"}}}}}, nil
 	}
 	v := newTodos(s)
 	v.list()
-	open := openSection(t, v, "ws:kb", "open")
-	if got, want := treeLabels(v, &open), []string{"⚠ 1  Ship", "2  Clean"}; !slices.Equal(got, want) {
-		t.Fatalf("tasks %q, want %q", got, want)
+	if got, want := tabRows(v, 0), []string{"1  ⚠ Ship open", "2  Clean open"}; !slices.Equal(got, want) {
+		t.Fatalf("Open %q, want %q", got, want)
 	}
-	if s.set["App.todosStatus"] != "⚠ 1 malformed files not listed: 1 in kb › Open" || s.set["App.todosStatusShown"] != true {
-		t.Errorf("status %v (shown %v)", s.set["App.todosStatus"], s.set["App.todosStatusShown"])
+	if s.set["App.todoOpenIndex"] != 0 {
+		t.Errorf("the cursor %v", s.set["App.todoOpenIndex"])
 	}
-	ship := tuidecl.Index{Row: 0, Parent: &open}
-	v.moved(ship)
 	d := fmt.Sprint(s.set["App.todoDetail"])
-	for _, want := range []string{"Ship", "priority: high", "tags:", "errors:", "adr[0] not-found: gone", "the notes"} {
+	for _, want := range []string{"Ship open", "priority: high", "tags:", "errors:", "adr[0] not-found: gone", "the notes"} {
 		if !strings.Contains(d, want) {
 			t.Errorf("details lack %q:\n%s", want, d)
 		}
 	}
-	v.moved(open)
-	if s.set["App.todoDetail"] != "" {
-		t.Error("details for a section")
+	v.moved(0, 1)
+	if !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Clean open") {
+		t.Errorf("the cursor moved: %v", s.set["App.todoDetail"])
 	}
-	if err := v.activated(ship); err != nil {
-		t.Fatal(err)
+	v.moved(2, 0) // a table not shown moves its own cursor only
+	if !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Clean open") {
+		t.Errorf("a hidden table moved the details: %v", s.set["App.todoDetail"])
 	}
-	if len(s.files) != 1 || s.files[0] != "/kb/.todo-list/open/t2.md" || !slices.Contains(s.views, "todos.close") {
+	s.views = nil
+	v.showTab(2)
+	if s.set["App.todoTab"] != 2 || !s.called("todos.list[kb map[buckets:[deferred]]]") || !slices.Contains(s.views, "todoDeferredTable.forceActiveFocus") {
+		t.Fatalf("3: tab %v, views %v", s.set["App.todoTab"], s.views)
+	}
+	if got := tabRows(v, 2); len(got) != 2 {
+		t.Errorf("Deferred %q", got)
+	}
+	for _, step := range []struct{ by, want int }{{1, 3}, {1, 4}, {1, 0}, {-1, 4}, {-1, 3}} {
+		v.stepTab(step.by)
+		if v.tab != step.want || s.set["App.todoTab"] != step.want {
+			t.Fatalf("a step of %d: tab %d, want %d", step.by, v.tab, step.want)
+		}
+	}
+	n := len(s.calls)
+	v.showTab(2) // read already, nothing changed
+	v.showTab(7) // no such tab
+	if len(s.calls) != n {
+		t.Errorf("a tab read already was read again: %v", s.calls[n:])
+	}
+	v.activated(2, 1)
+	if !slices.Equal(s.files, []string{"/kb/.todo-list/deferred/1.md"}) || !slices.Contains(s.views, "todos.close") {
 		t.Errorf("Enter on a task: files %v, views %v", s.files, s.views)
 	}
-	if err := v.activated(open); err != nil || !slices.Contains(s.views, "todoTree.toggleExpanded") {
-		t.Errorf("Enter on a section: %v, views %v", err, s.views)
+	v.activated(2, 9) // no such row
+	if len(s.files) != 1 {
+		t.Errorf("Enter on no row opened %v", s.files)
 	}
 }
 
-// TestTodosReadsTheArchiveByMonth: Archived lists its months with their counts, and a month's tasks
-// are read only when it opens; s on an archived task offers every status, archived marked.
-func TestTodosReadsTheArchiveByMonth(t *testing.T) {
+// TestTodosArchivedTabListsItsMonths: Archived lists its months with their counts, and a month's
+// tasks are read only when it opens; Backspace puts the keyboard back in the months; a read again
+// keeps the month open, or closes it when it is gone.
+func TestTodosArchivedTabListsItsMonths(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	archived := openSection(t, v, "ws:kb", "archived")
-	if got := treeLabels(v, &archived); !slices.Equal(got, []string{"2026/09  (3)"}) {
-		t.Fatalf("months %q", got)
+	s.views = nil
+	v.showTab(archivedTab)
+	if v.months.Len() != 1 || !slices.Contains(s.views, "todoMonths.forceActiveFocus") {
+		t.Fatalf("months %d, views %v", v.months.Len(), s.views)
 	}
 	if s.called("todos.list[kb map[buckets:[archived/2026/09]]]") {
 		t.Fatal("a month was read before it opened")
 	}
-	month := tuidecl.Index{Row: 0, Parent: &archived}
-	v.model.FetchMore(month)
-	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || !slices.Equal(treeLabels(v, &month), []string{"Old"}) {
-		t.Fatalf("the month: calls %v, rows %q", s.calls, treeLabels(v, &month))
+	v.monthMoved(0)
+	v.enter() // Enter on the card: the month under the cursor opens
+	if !s.called("todos.list[kb map[buckets:[archived/2026/09]]]") || !slices.Equal(tabRows(v, archivedTab), []string{"1  Old"}) {
+		t.Fatalf("the month: calls %v, rows %q", s.calls, tabRows(v, archivedTab))
 	}
-	v.moved(tuidecl.Index{Row: 0, Parent: &month})
-	v.chooseStatus()
-	if s.called("todos.status") || !slices.Contains(s.opened, "todoStatusPicker") {
-		t.Fatalf("s on an archived task: calls %v, opened %v", s.calls, s.opened)
+	if !slices.Contains(s.views, "todoArchivedTable.forceActiveFocus") || !strings.Contains(fmt.Sprint(s.set["App.todoDetail"]), "## Old") {
+		t.Errorf("the month's tasks: views %v, details %v", s.views, s.set["App.todoDetail"])
 	}
-	if got := statusRows(v); !slices.Equal(got, []string{"  open", "  in-progress", "  deferred", "  completed", "● archived"}) {
-		t.Errorf("the statuses offered: %q", got)
+	s.views = nil
+	v.monthsBack()
+	if !slices.Equal(s.views, []string{"todoMonths.forceActiveFocus"}) {
+		t.Errorf("Backspace: %v", s.views)
+	}
+	v.reload()
+	if v.month != "2026/09" || len(tabRows(v, archivedTab)) != 1 {
+		t.Errorf("read again: month %q, rows %q", v.month, tabRows(v, archivedTab))
+	}
+	s.answers["todos.list"] = func([]any) (any, error) {
+		return map[string]any{"partitions": []any{map[string]any{"month": "2026/10", "files": int64(1)}}}, nil
+	}
+	v.reload()
+	if v.month != "" || len(tabRows(v, archivedTab)) != 0 {
+		t.Errorf("the month gone: month %q, rows %q", v.month, tabRows(v, archivedTab))
+	}
+	v.monthChosen(5) // no such month
+	v.showTab(0)
+	s.views = nil
+	v.monthsBack() // not on Archived: nothing
+	if len(s.views) != 0 {
+		t.Errorf("Backspace off Archived: %v", s.views)
 	}
 }
 
 // TestTodosWritesAClaimedStoreAndNotAReadOnlyOne: on the claimed store a, s, d, R and M write to the
-// cursor's store; on one the daemon has not claimed each writes nothing and says nothing (the action
-// row says it is read-only), and R reads it again.
+// store shown, an added task shown in Open under the cursor; on one the daemon has not claimed each
+// writes nothing and says nothing (the action row says it is read-only), and R reads it again.
 func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	s := scriptedStore(true)
-	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "new"}, nil }
+	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "t1", "status": "open"}, nil }
 	s.answers["todos.refresh"] = func([]any) (any, error) { return map[string]any{"moved": int64(1)}, nil }
 	v := newTodos(s)
 	v.list()
-	open := openSection(t, v, "ws:kb", "open")
-	v.moved(tuidecl.Index{Row: 0, Parent: &open})
+	v.showTab(2)
 	v.add()
 	if s.opened[len(s.opened)-1] != "todoNew" {
 		t.Fatalf("opened %v", s.opened)
@@ -300,7 +378,9 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 		t.Error("an empty title was added")
 	}
 	v.addTitle(" Write it ")
-	v.moved(tuidecl.Index{Row: 0, Parent: &open})
+	if v.tab != 0 || s.set["App.todoTab"] != 0 || s.set["App.todoOpenIndex"] != 0 {
+		t.Errorf("the added task: tab %d, cursor %v", v.tab, s.set["App.todoOpenIndex"])
+	}
 	v.remove()
 	if len(s.asked) != 1 || s.asked[0].Title != "remove the task?" {
 		t.Fatalf("asked %v", s.asked)
@@ -330,8 +410,6 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	ro := scriptedStore(false)
 	w := newTodos(ro)
 	w.list()
-	ropen := openSection(t, w, "ws:kb", "open")
-	w.moved(tuidecl.Index{Row: 0, Parent: &ropen})
 	n := len(ro.calls)
 	w.add()
 	w.remove()
@@ -340,45 +418,49 @@ func TestTodosWritesAClaimedStoreAndNotAReadOnlyOne(t *testing.T) {
 	if len(ro.calls) != n || len(ro.notes) != 0 || len(ro.opened) != 0 || len(ro.asked) != 0 {
 		t.Errorf("a read-only store was written: %v, notes %v, opened %v", ro.calls[n:], ro.notes, ro.opened)
 	}
-	w.refresh() // read-only: the open section read again, nothing reconciled
+	w.refresh() // read-only: the tab read again, nothing reconciled
 	if len(ro.calls) == n || ro.called("todos.refresh") {
 		t.Errorf("refresh on a read-only store: %v", ro.calls[n:])
 	}
 }
 
-// TestTodosSectionsByNumberEventsAndFolders: 1–5 put the cursor on that section of its store; an
-// event for a store listed reads its open sections again, another's nothing; Load registers and
-// lists, New registers and scaffolds, M moves the cursor's store.
-func TestTodosSectionsByNumberEventsAndFolders(t *testing.T) {
+// TestTodosEventsAndFolders: an event for the store shown reads its tab again, another's nothing;
+// Load registers the folder and shows its store; New registers and scaffolds it; M moves the store
+// shown.
+func TestTodosEventsAndFolders(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	v.section(3)
-	if want := []string{"ws:kb", bucketKey("ws:kb", "completed")}; !slices.Equal(v.at, want) || !slices.Contains(s.views, "todoTree.setCurrentIndex") {
-		t.Errorf("4: at %q, views %v", v.at, s.views)
-	}
-	v.section(9) // no such section: nothing
-	openSection(t, v, "root:/p", "open")
 	n := len(s.calls)
-	v.Event("todos.changed", "", "/p#t9")
+	v.Event("todos.changed", "kb", "")
 	v.Event("todos.changed", "elsewhere", "x")
 	if got := len(s.calls) - n; got != 1 {
-		t.Errorf("%d reads after the events, want the one open section of /p", got)
+		t.Errorf("%d reads after the events, want the one tab shown of kb", got)
+	}
+	v.storeChosen(1)
+	n = len(s.calls)
+	v.Event("todos.changed", "", "/p#t9")
+	if got := len(s.calls) - n; got != 1 {
+		t.Errorf("%d reads after /p's event", got)
 	}
 	v.chooseFolder("load")
 	if s.opened[len(s.opened)-1] != "todoFolder" {
 		t.Errorf("folder dialog %v", s.opened)
 	}
+	s.answers["todos.stores"] = func([]any) (any, error) {
+		return []any{map[string]any{"path": "/p/.todo-list", "roots": []any{"/p"}, "claimed": true},
+			map[string]any{"path": "/r/.todo-list", "roots": []any{"/r"}}}, nil
+	}
 	v.folderChosen("/r/.todo-list")
-	if !s.called("todos.register[/r]") {
-		t.Errorf("load: %v", s.calls)
+	if !s.called("todos.register[/r]") || v.cur == nil || v.cur.id != "root:/r" || s.set["App.todoStoreIndex"] != 2 {
+		t.Errorf("load: calls %v, shown %+v, index %v", s.calls, v.cur, s.set["App.todoStoreIndex"])
 	}
 	v.folderAs = "new"
 	v.folderChosen("/n")
 	if !s.called("todos.scaffold[map[root:/n]]") {
 		t.Errorf("new: %v", s.calls)
 	}
-	v.at = []string{"ws:kb"}
+	v.storeChosen(0)
 	v.folderAs = "move"
 	v.folderChosen("/m")
 	if !s.called("todos.move_store[kb /m/.todo-list]") {
@@ -388,7 +470,7 @@ func TestTodosSectionsByNumberEventsAndFolders(t *testing.T) {
 }
 
 // TestTodosAnswersDoNotCancelEachOther: a newer listing of the stores drops an older one's answer
-// and its error; two reads of one section, the older is dropped; a write is never dropped.
+// and its error; a write is never dropped.
 func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	s := scriptedStore(true)
 	s.deferred = true
@@ -409,8 +491,8 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	}
 	s.deliver(0) // the labels the newer listing asked for
 	s.deliver(0) // then the workspace's resolve
-	if got := treeLabels(v, nil); len(got) != 1 {
-		t.Fatalf("roots %q", got)
+	if got := storeLabels(v); len(got) != 1 {
+		t.Fatalf("stores %q", got)
 	}
 	// a write is never dropped: two adds both land
 	s.answers["todos.add"] = func([]any) (any, error) { return map[string]any{"id": "x"}, nil }
@@ -423,93 +505,38 @@ func TestTodosAnswersDoNotCancelEachOther(t *testing.T) {
 	}
 }
 
-// TestTodosAStaleReadIsNotTheNewTrees: a section's read on its way when the stores are listed
-// again answers into nothing: the new tree's section stays closed and unread, and once opened it
-// is read, and a change reads it again.
-func TestTodosAStaleReadIsNotTheNewTrees(t *testing.T) {
-	s := scriptedStore(true)
-	s.deferred = true
-	v := newTodos(s)
-	v.list()
-	s.deliver(0) // the stores; the labels held
-	s.deliver(0) // the labels; the workspace's resolve held
-	s.deliver(0) // the resolve: the tree
-	openSection(t, v, "ws:kb", "open")
-	old := s.pending[0] // the section's read, held
-	s.pending = nil
-	v.list()
-	s.deliver(0)
-	s.deliver(0)
-	s.deliver(0) // listed again: a new tree, the section closed
-	old()        // the old read answers late
-	section, ok := v.indexOf("ws:kb", bucketKey("ws:kb", "open"))
-	if !ok || v.model.RowCount(&section) != 0 || !v.model.CanFetchMore(section) {
-		t.Fatalf("the old read filled the new tree: rows %q", treeLabels(v, &section))
-	}
-	v.model.FetchMore(section)
-	s.deliver(0)
-	if got := treeLabels(v, &section); len(got) != 1 {
-		t.Fatalf("the new tree's section, opened: %q", got)
-	}
-	n := len(s.calls)
-	v.Event("todos.changed", "kb", "")
-	if len(s.calls) == n {
-		t.Error("a change did not read the opened section again")
-	}
-}
-
-// TestTodosARefreshKeepsAnOpenMonthsTasks: a store read again with an archived month open reads the
-// month after its Archived section, under the month's new row, so the month keeps its tasks
-// whichever answer comes first.
-func TestTodosARefreshKeepsAnOpenMonthsTasks(t *testing.T) {
-	for _, monthFirst := range []bool{false, true} {
-		s := scriptedStore(true)
-		v := newTodos(s)
-		v.list()
-		archived := openSection(t, v, "ws:kb", "archived")
-		v.model.FetchMore(tuidecl.Index{Row: 0, Parent: &archived})
-		s.deferred = true
-		v.reread(v.stores[0]) // held: [0] Archived
-		if monthFirst {
-			v.read(v.stores[0], "m", "2026/09") // a read of the month already on its way: [1]
-			s.deliver(1, 0)                     // the month answers first, then Archived replaces its row
-		} else {
-			s.deliver(0)
-		}
-		s.deliver(0) // the month read again under its new row
-		month, ok := v.indexOf("ws:kb", bucketKey("ws:kb", "archived"), monthKey("ws:kb", "2026/09"))
-		if got := treeLabels(v, &month); !ok || !slices.Equal(got, []string{"Old"}) {
-			t.Errorf("month first %v: the month's tasks after a refresh: %q", monthFirst, got)
-		}
-	}
-}
-
-// TestTodosAtTheEdges: with no workspace the stores alone are the roots; with nothing under the
-// cursor, or a row whose store is gone, the keys do nothing; Load, New and M open the folder dialog;
-// a section the tree no longer shows is not jumped to, and a refused jump is said; a month gone from
-// Archived is no longer read again.
+// TestTodosAtTheEdges: with no workspace the stores alone are listed; with no store the keys do
+// nothing; a refused focus or close is said.
 func TestTodosAtTheEdges(t *testing.T) {
 	s := scriptedStore(true)
 	s.ws = ""
 	v := newTodos(s)
 	v.list()
-	if got := treeLabels(v, nil); !slices.Equal(got, []string{"● p"}) {
-		t.Errorf("no workspace: roots %q", got)
+	if got := storeLabels(v); !slices.Equal(got, []string{"p"}) || v.cur.id != "root:/p" {
+		t.Errorf("no workspace: stores %q", got)
 	}
 
-	idle := scriptedStore(true)
-	w := newTodos(idle) // nothing listed: no store under the cursor
+	idle := newScripted("")
+	idle.answers["todos.stores"] = func([]any) (any, error) { return []any{}, nil }
+	w := newTodos(idle)
+	w.list()
+	if w.cur != nil || idle.set["App.todoHasStore"] != false || idle.set["App.todoStoreIndex"] != -1 {
+		t.Errorf("no store: %+v, index %v", w.cur, idle.set["App.todoStoreIndex"])
+	}
 	n := len(idle.calls)
 	w.add()
 	w.chooseStatus()
 	w.refresh()
+	w.label()
+	w.enter()
 	w.folderAs = "move"
 	w.folderChosen("/m")
+	w.Event("todos.changed", "kb", "")
 	if len(idle.calls) != n {
 		t.Errorf("with no store, the keys asked %v", idle.calls[n:])
 	}
 	cmds := w.Commands()
-	for _, c := range []string{"App.todoLoad", "App.todoNew", "App.todoMove"} {
+	for _, c := range []string{"App.todoLoad", "App.todoNew", "App.todoMove", "App.todoFocusStore"} {
 		if err := cmds[c].Run(nil); err != nil {
 			t.Errorf("%s: %v", c, err)
 		}
@@ -517,46 +544,16 @@ func TestTodosAtTheEdges(t *testing.T) {
 	if got := strings.Join(idle.opened, ","); got != "todoFolder,todoFolderNew" { // M on no store: nothing
 		t.Errorf("the folder dialog opened %q", got)
 	}
+	if err := cmds["App.todoMoved"].Run([]qml.SpecValue{{Kind: qml.SpecValueNumber, Raw: "x"}, {Kind: qml.SpecValueNumber, Raw: "1"}}); err == nil {
+		t.Error("a tab that is no number was taken")
+	}
+	w.moved(9, 0) // no such tab
 
-	v = newTodos(scriptedStore(true))
-	v.list()
-	open := openSection(t, v, "ws:kb", "open")
-	task := tuidecl.Index{Row: 0, Parent: &open}
-	v.stores[0].path = "" // a store not yet resolved: Enter has no file to open
-	if err := v.activated(task); err != nil {
-		t.Fatal(err)
-	}
-	v.stores = v.stores[1:] // the task's store is gone
-	if err := v.activated(task); err != nil {
-		t.Fatal(err)
-	}
-	if f := v.c.(*scriptedCore).files; len(f) != 0 {
-		t.Errorf("Enter opened %v", f)
-	}
-	v.stores = append(v.stores, &todoStore{id: "root:/z"})
-	v.at = []string{"root:/z"} // a store the tree does not show
-	v.section(0)
-	sc := v.c.(*scriptedCore)
-	if slices.Contains(sc.views, "todoTree.setCurrentIndex") {
-		t.Error("jumped to a section the tree does not show")
-	}
-	sc.viewErr = errors.New("no such row")
-	v.at = []string{"root:/p"}
-	v.section(0)
-	if len(sc.failed) != 1 || !strings.Contains(sc.failed[0], "a section") {
-		t.Errorf("a refused jump: failed %v", sc.failed)
-	}
-
-	m := scriptedStore(true)
-	a := newTodos(m)
-	a.list()
-	archived := openSection(t, a, "ws:kb", "archived")
-	a.model.FetchMore(tuidecl.Index{Row: 0, Parent: &archived})
-	m.answers["todos.list"] = func(p []any) (any, error) {
-		return map[string]any{"partitions": []any{map[string]any{"month": "2026/10", "files": int64(1)}}}, nil
-	}
-	a.reread(a.stores[0])
-	if a.open[monthKey("ws:kb", "2026/09")] {
-		t.Error("a month gone from Archived is still read again")
+	sc := newScripted("kb")
+	sc.viewErr = errors.New("no such view")
+	x := newTodos(sc)
+	x.focus("todoMonths")
+	if len(sc.failed) != 1 || !strings.Contains(sc.failed[0], "todos: the keyboard") {
+		t.Errorf("a refused focus: %v", sc.failed)
 	}
 }

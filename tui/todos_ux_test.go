@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/parse/qml"
 )
 
 // todos_ux_test.go: the todos panel as Johno asked for it after v0.1.41-rc1: it opens large, the
@@ -15,8 +15,8 @@ import (
 // no key as an error.
 
 // TestTodosPanelOpensLargeAndKeepsTheUsersSize: before the user sizes it the panel is about 65% of
-// the window wide and 80% tall, at any edge; a size the user leaves it at is kept, per edge, and
-// wins, and so does a place they float it to.
+// the window wide and 80% tall, at any edge, the left one unless chosen; a size the user leaves it
+// at is kept, per edge, and wins, and so do an edge they chose and a place they float it to.
 func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
 	p := prefs{panelDefs: []PanelSpec{todosPanelSpec()}}
 	for edge, want := range map[string][2]int{"right": {65, 80}, "left": {65, 80}, "top": {80, 65}, "bottom": {80, 65}} {
@@ -35,6 +35,15 @@ func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
 	if s, l := p.panelGeometry("todos", "top"); s != 80 || l != 65 {
 		t.Errorf("an out-of-bounds size kept: %d × %d, want the default", s, l)
 	}
+	// the edge: the left by default, a kept one (the right) winning
+	if p := defaultPrefs(); p.todosEdge != "left" {
+		t.Errorf("a fresh state's todos edge: %q, want left", p.todosEdge)
+	}
+	var kept prefs
+	readRows(&kept, map[string]any{prefTodosEdge: "right"}, legacyPrefRows(nil, false))
+	if kept.todosEdge != "right" {
+		t.Errorf("a kept right edge read as %q", kept.todosEdge)
+	}
 	r := [4]float64{5, 6, 30, 40}
 	st := floatState(map[string][4]float64{"todos": r}, p.panelDefs)
 	if st["App.todosFloating"] != true || st["App.todosX"] != 5.0 || st["App.todosW"] != 30.0 || st["App.todosH"] != 40.0 {
@@ -42,10 +51,10 @@ func TestTodosPanelOpensLargeAndKeepsTheUsersSize(t *testing.T) {
 	}
 }
 
-// TestTodosStatusLineSaysOnlyWhatNeedsTheUser: listing the stores, opening sections and months, and
-// moving the cursor put nothing in the status line, which stays hidden: no count of stores, months
-// or tasks, no guidance. A file a section could not list is said, where it is, until the stores
-// are listed again.
+// TestTodosStatusLineSaysOnlyWhatNeedsTheUser: listing the stores, showing tabs and months, choosing
+// another store and moving the cursor put nothing in the status line, which stays hidden: no count
+// of stores, months or tasks, no guidance. A file a tab could not list is said, where it is, until
+// another store shows.
 func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 	s := scriptedStore(true)
 	s.answers["todos.list"] = func(p []any) (any, error) {
@@ -65,78 +74,81 @@ func TestTodosStatusLineSaysOnlyWhatNeedsTheUser(t *testing.T) {
 		}
 	}
 	v.list()
-	quiet("the stores listed")
-	open := openSection(t, v, "ws:kb", "open")
-	quiet("a section read")
-	archived := openSection(t, v, "ws:kb", "archived")
-	quiet("Archived read")
-	v.model.FetchMore(tuidecl.Index{Row: 0, Parent: &archived})
+	quiet("the stores listed, Open read")
+	v.showTab(1)
+	quiet("a tab shown")
+	v.showTab(archivedTab)
+	quiet("Archived's months")
+	v.monthChosen(0)
 	quiet("a month read")
-	v.moved(tuidecl.Index{Row: 0, Parent: &open})
+	v.moved(archivedTab, 0)
 	v.chooseFolder("load")
 	quiet("the cursor moved, and Load…")
 	if s.opened[len(s.opened)-1] != "todoFolder" { // its title says what the folder is for
 		t.Errorf("Load… opened %v", s.opened)
 	}
-	openSection(t, v, "root:/p", "deferred")
-	if got := s.set["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in p › Deferred" || s.set["App.todosStatusShown"] != true {
+	v.showTab(2)
+	if got := s.set["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in Deferred" || s.set["App.todosStatusShown"] != true {
 		t.Errorf("malformed files: %q (shown %v)", got, s.set["App.todosStatusShown"])
 	}
-	openSection(t, v, "ws:kb", "deferred")
-	if got := s.set["App.todosStatus"]; got != "⚠ 4 malformed files not listed: 2 in kb › Deferred, 2 in p › Deferred" {
-		t.Errorf("malformed files in two stores: %q", got)
+	v.showTab(0)
+	if got := s.set["App.todosStatus"]; got != "⚠ 2 malformed files not listed: 2 in Deferred" {
+		t.Errorf("another tab shown: %q", got)
 	}
-	v.list()
-	quiet("listed again")
+	v.storeChosen(1)
+	quiet("another store")
 	for name, val := range s.set {
 		if text := fmt.Sprint(val); strings.Contains(text, "open a section") || strings.Contains(text, "open one for its tasks") ||
-			strings.Contains(text, " tasks") || strings.Contains(text, "? keys") {
+			strings.Contains(text, " tasks") || strings.Contains(text, "? keys") || strings.Contains(text, "stores:") {
 			t.Errorf("%s says %q", name, text)
 		}
 	}
 }
 
 // TestTodosAReadOnlyStoreTakesNoKeyAsAnError: on a store the daemon has not claimed, every key of
-// the panel, on its row, a section's and a task's, writes nothing, says nothing and fails nothing:
-// the action row says it is read-only. R reads it again, and L labels it (AutoDoc's own name for
-// it). New… on a folder whose store is not claimed loads it and says its store waits.
+// the panel, on a task, on an empty tab and on Archived's months, writes nothing, says nothing and
+// fails nothing: the action row says it is read-only. R reads it again, and L labels it (AutoDoc's
+// own name for it). New… on a folder whose store is not claimed loads it and says its store waits.
 func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	writes := []string{"todos.add", "todos.remove", "todos.status", "todos.assign", "todos.move_store", "todos.scaffold", "todos.refresh"}
 	s := &agentCore{scriptedCore: scriptedStore(false), entries: []AgentEntry{{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true}}}
 	v := newTodos(s)
 	v.list()
-	open := openSection(t, v, "ws:kb", "open")
 	cmds := v.Commands()
-	for kind, ix := range map[string]tuidecl.Index{"store": {Row: 0}, "section": open, "task": {Row: 0, Parent: &open}} {
-		v.moved(ix)
+	for _, where := range []struct {
+		kind string
+		tab  int
+	}{{"task", 0}, {"empty tab", 1}, {"months", archivedTab}} {
+		place := func() { v.showTab(where.tab) }
+		place()
 		for _, key := range v.Keys() {
 			if key.Scope != "todos" || key.Run == "" {
 				continue // ? opens its card: the QML's
 			}
 			name, arg, _ := strings.Cut(strings.TrimSuffix(key.Run, ")"), "(")
-			if arg != "" { // 1–5: a section
-				var i int
-				if _, err := fmt.Sscan(arg, &i); err != nil {
-					t.Fatal(err)
-				}
-				v.section(i)
-			} else if err := cmds[name].handler(name)(nil); err != nil {
-				t.Errorf("on a read-only %s, %s: %v", kind, key.Show, err)
+			var err error
+			if arg != "" {
+				err = cmds[name].Run([]qml.SpecValue{{Kind: qml.SpecValueNumber, Raw: arg}})
+			} else {
+				err = cmds[name].handler(name)(nil)
+			}
+			if err != nil {
+				t.Errorf("on a read-only %s, %s: %v", where.kind, key.Show, err)
 			}
 			for _, d := range []string{"todoFolderMove", "todoNew", "todoStatusPicker", "agentAssignPicker"} {
 				if slices.Contains(s.opened, d) {
-					t.Errorf("on a read-only %s, %s opened %s", kind, key.Show, d)
+					t.Errorf("on a read-only %s, %s opened %s", where.kind, key.Show, d)
 				}
 			}
-			v.moved(ix) // where the key left the cursor, back on the row
+			place() // where the key left the tab, back
 		}
 		for _, w := range writes {
 			if s.called(w) {
-				t.Errorf("on a read-only %s, a key wrote: %v", kind, s.calls)
+				t.Errorf("on a read-only %s, a key wrote: %v", where.kind, s.calls)
 			}
 		}
 		if len(s.notes) != 0 || len(s.failed) != 0 || len(s.asked) != 0 {
-			t.Errorf("on a read-only %s: notes %q, failed %q, asked %v", kind, s.notes, s.failed, s.asked)
+			t.Errorf("on a read-only %s: notes %q, failed %q, asked %v", where.kind, s.notes, s.failed, s.asked)
 		}
 	}
 	if !s.called("todos.list") || !slices.Contains(s.opened, "todoLabel") {
@@ -152,42 +164,36 @@ func TestTodosAReadOnlyStoreTakesNoKeyAsAnError(t *testing.T) {
 	}
 }
 
-// TestTodosEnterOnTheCardOfKeysOpensTheRow: Enter on ?'s card is Enter in the tree, on the row
-// under the cursor: a task's file opens, a store or a section opens or closes; with the cursor not
-// yet moved it is the first store's; a row gone does nothing, and a refused open is said. A write
-// asked of a store not claimed is never sent.
+// TestTodosEnterOnTheCardOfKeysOpensTheRow: Enter on ?'s card is Enter in the tab shown: the task
+// under the cursor's file opens; on Archived's months, the month under their cursor; with no task,
+// nothing. A write asked of a store not claimed is never sent.
 func TestTodosEnterOnTheCardOfKeysOpensTheRow(t *testing.T) {
 	s := scriptedStore(true)
 	v := newTodos(s)
 	v.list()
-	v.openRow() // the cursor not yet moved: the first store
-	if !slices.Equal(s.views, []string{"todoTree.toggleExpanded"}) {
-		t.Errorf("Enter before the cursor moved: views %v", s.views)
-	}
-	open := openSection(t, v, "ws:kb", "open")
-	v.moved(tuidecl.Index{Row: 0, Parent: &open})
-	if err := v.Commands()["App.todoOpen"].handler("App.todoOpen")(nil); err != nil {
+	if err := v.Commands()["App.todoEnter"].handler("App.todoEnter")(nil); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(s.files, []string{"/kb/.todo-list/open/t1.md"}) {
 		t.Errorf("Enter on a task: files %v", s.files)
 	}
 	s.viewErr = errors.New("the panel is gone")
-	v.moved(open)
-	v.openRow()
+	v.enter()
 	if len(s.failed) != 1 || s.failed[0] != "todos: open: the panel is gone" {
-		t.Errorf("a refused open: failed %v", s.failed)
+		t.Errorf("a refused close: failed %v", s.failed)
 	}
-	v.at = []string{"ws:kb", bucketKey("ws:kb", "nowhere")}
-	n := len(s.views)
-	v.openRow()
-	if len(s.views) != n {
-		t.Errorf("Enter on a row gone: views %v", s.views[n:])
+	s.viewErr = nil
+	v.showTab(archivedTab)
+	v.monthMoved(0)
+	v.enter()
+	if v.month != "2026/09" || len(tabRows(v, archivedTab)) != 1 {
+		t.Errorf("Enter on a month: %q, rows %q", v.month, tabRows(v, archivedTab))
 	}
-	none := newScripted("")
-	newTodos(none).openRow() // no store: nothing
-	if len(none.views) != 0 {
-		t.Errorf("Enter with no store: views %v", none.views)
+	v.showTab(1) // empty
+	n := len(s.files)
+	v.enter()
+	if len(s.files) != n {
+		t.Errorf("Enter on an empty tab opened %v", s.files[n:])
 	}
 
 	ro := scriptedStore(false)
