@@ -397,6 +397,9 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 		if accepted.finished {
 			return
 		}
+		// the terminal's parent may have been rebuilt since the task was accepted: its instances are
+		// retired before anything is checked, so an old-parent instance reads as stale here
+		a.syncInstances()
 		if err := validate(); err != nil {
 			finish(err)
 			return
@@ -414,6 +417,9 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 			return
 		}
 		panel, err := a.runtime()
+		if err == nil && !instance.owner.SameOwner(panel) {
+			err = ErrAgentStale // its tab is the old parent's: never sent to the new one
+		}
 		if err == nil {
 			err = panel.SendText(instance.tab, payload)
 		}
