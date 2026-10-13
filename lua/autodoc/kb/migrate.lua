@@ -15,7 +15,7 @@
 --   * frontmatter normalization (type mapping, synonym keys), keyed by file;
 --   * collisions, with a deterministic `--from-<old-parent-slug>` suffix; an unexpected existing
 --     target aborts;
---   * todo stores outside the KB that reference it (auto-core.todo's known directories and overrides).
+--   * todo stores outside the KB that reference it (the stores the daemon knows, and auto-core's dir_overrides).
 -- The todo store inside the KB stays in place: only its links are maintained.
 --
 -- Apply re-hashes everything, writes and verifies a pre-image under stdpath("state")/autodoc/
