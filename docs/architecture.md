@@ -125,8 +125,9 @@ func (t *todos) Commands() map[string]Command          { … } // its App.* comm
   including the page's graph refresh; no links-refresh operation remains on `PanelHost`.
   `terminals` owns startup and
   focus restoration; `agents` owns its profile form/model and running identity. Their state and
-  commands are not part of `legacy`. The agent panel is one contribution; future profile tabs
-  belong inside its Feature, not one panel spec per agent.
+  commands are not part of `legacy`. The agent panel is one contribution, its agents tabs inside
+  it (agenttabs.go), not one panel spec per agent; the terminal's shells are tabs too. Both
+  strips' + and tab menus come from one helper (tabmenus.go) over `TerminalPanel.Menus`.
   Their `Catalog()` entries own terminal toggle/open (`:terminal` / `:term`), agent toggle,
   and profile settings, so catalog invocations and their QML twins reach the same Feature.
 - `PreferencesChanged()` projects each feature's current preferences into its own sources and

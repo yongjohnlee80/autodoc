@@ -197,16 +197,20 @@ THE PANELS
   Preferences sets another edge or the centre: the default of System › Agent profiles… (SPC G),
   each profile a name and the command that starts it (claude, codex…).
   It starts in AutoDoc's own folder for the workspace, told about the workspace in AGENTS.md and
-  CLAUDE.md there, and keeps running while hidden; Use in the profiles starts another.
-  The terminal (SPC ` + "`" + `, Go › Terminal) runs your shell in the workspace's folder, at the bottom
+  CLAUDE.md there, and keeps running while hidden. Each agent has a tab, named by its codename:
+  + on the strip offers the profiles (a running one goes to its tab, a stopped one starts), and
+  a tab's menu (≡, a right click on the tab, or Enter on the strip) has Go to ›, Restart, Close
+  (asked first while the agent runs) and Profiles…; Use in the profiles starts another too.
+  The terminal (SPC ` + "`" + `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
-  It starts the first time it opens, and keeps running while hidden. Every key goes to the
+  A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
+  + adds one, and a tab's menu has Go to ›, New and Close. Every key goes to the
   shell; Ctrl+\ Ctrl+n leaves for Normal mode, where h j k l, w b e, gg G, Ctrl+u/d/b/f, / and ?
   move over its history, v or V selects and y copies, and i or Enter goes back. In the Vim
   editor mode, Esc leaves too, except in a full-screen program (vim, less), which needs it.
   Escape in Normal mode, or SPC ` + "`" + ` again, hides it; the keyboard goes back where it was. When
-  the shell exits (exit, Ctrl+D) the pane closes, a failing exit kept as a notice, and the next
-  SPC ` + "`" + ` starts another.
+  a shell exits (exit, Ctrl+D) its tab closes, a failing exit kept as a notice; the last one's
+  exit closes the pane, and the next SPC ` + "`" + ` starts another.
   Every panel moves and resizes. Alt (Option on a Mac) with the left button drags it anywhere,
   with the right button resizes it; SPC L (Go › Arrange panel…) does both by keys: h j k l or the
   arrows move it, H J K L or Shift with them resize it, Enter keeps it, Esc puts it back. It

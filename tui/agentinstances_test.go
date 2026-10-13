@@ -27,6 +27,8 @@ type modelPanel struct {
 	sends   []string
 	sendErr error
 	removal *modelRemoval
+	addMenu func() []widget.MenuItemModel
+	tabMenu func(widget.TerminalTabID) []widget.MenuItemModel
 }
 
 func (p *modelPanel) SameOwner(other TerminalPanel) bool {
@@ -89,6 +91,9 @@ func (*modelPanel) ForceRemove(widget.TerminalTabID) error     { return nil }
 func (p *modelPanel) Tabs() []widget.TerminalTab               { return append([]widget.TerminalTab(nil), p.tabs...) }
 func (p *modelPanel) Active() widget.TerminalTabID             { return p.active }
 func (*modelPanel) Actions(func(), func(widget.TerminalTabID)) {}
+func (p *modelPanel) Menus(add func() []widget.MenuItemModel, tab func(widget.TerminalTabID) []widget.MenuItemModel) {
+	p.addMenu, p.tabMenu = add, tab
+}
 
 func (p *modelPanel) exit(id widget.TerminalTabID, code int) {
 	for i := range p.tabs {

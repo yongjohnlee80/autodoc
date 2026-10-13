@@ -42,6 +42,7 @@ type agentInstance struct {
 	token            string
 	workspace        wsInfo
 	running, closing bool
+	restart          bool // Restart closed it: its profile starts again, in a new tab, once it is gone
 	cleanupError     error
 	owner            TerminalPanel
 	generation       int
@@ -65,7 +66,12 @@ func (a *agents) runtime() (TerminalPanel, error) {
 	if !ok {
 		return nil, ErrAgentUnavailable
 	}
-	return c.Terminals("agentView")
+	panel, err := c.Terminals("agentView")
+	if err == nil {
+		// a rebuilt parent has none of the old one's menus: every lookup gives them again
+		panel.Menus(a.addRows, a.tabRows)
+	}
+	return panel, err
 }
 
 // AgentEntries lists saved profiles first and retained orphan instances after
@@ -172,6 +178,7 @@ func (a *agents) agentTabsChanged() {
 		return
 	}
 	a.selectedAgent, a.agentRunning, a.agentRunningLabel = "", "", ""
+	a.c.Set("App.agentTitle", "agent")
 }
 
 func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
@@ -214,7 +221,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	}
 	if instance == nil {
 		instance = &agentInstance{profile: p, workspace: ws, owner: panel}
-		id, err := panel.Add(p.Name, TerminalConfig{Command: path, Args: args, Dir: dir, VimKeys: a.c.Prefs().keymap == "vim",
+		id, err := panel.Add(p.Codename, TerminalConfig{Command: path, Args: args, Dir: dir, VimKeys: a.c.Prefs().keymap == "vim",
 			Exited: func(code int) { a.instanceExited(instance, code) }})
 		if err != nil {
 			return nil, err
@@ -314,6 +321,13 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 			a.selectedAgent, a.agentRunning, a.agentRunningLabel = "", "", ""
 		}
 		a.listAgents()
+		if instance.restart {
+			p, saved := a.profile(code)
+			if !saved {
+				p = instance.profile
+			}
+			a.startAgent(p)
+		}
 	}
 	select {
 	case <-result.Done():

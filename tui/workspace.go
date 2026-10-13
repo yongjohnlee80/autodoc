@@ -156,9 +156,6 @@ func (h *Host) enter(name string) {
 	h.epoch++
 	h.ws, h.entered = name, true
 	h.resetFiles()
-	if ws, ok := h.activeWorkspaceInfo(); ok {
-		h.set("App.terminalDir", termDir(ws.root)) // the terminal's next start; a running shell stays
-	}
 	h.focusSent = time.Time{}
 	if h.remember != nil {
 		h.remember(name)

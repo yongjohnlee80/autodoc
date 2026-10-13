@@ -153,10 +153,9 @@ func TestTerminalAndAgentFeaturesAreProgramOwned(t *testing.T) {
 	if a.reg.panels == b.reg.panels || a.agents.agentRows == b.agents.agentRows {
 		t.Fatal("programs share a panel registry or agent model")
 	}
-	a.terminals.started = true
 	a.terminals.before = "relationsList"
 	a.agents.agentRunning = "first"
-	if b.terminals.started || b.terminals.before != "" || b.agents.agentRunning != "" {
+	if b.terminals.before != "" || b.agents.agentRunning != "" {
 		t.Fatal("programs share terminal or agent runtime state")
 	}
 	for _, name := range []string{"App.terminalShown", "App.agentShown"} {

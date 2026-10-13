@@ -1,18 +1,28 @@
 package tui
 
 import (
+	"fmt"
 	"maps"
 	"os"
+	"slices"
 	"strconv"
+
+	"github.com/yongjohnlee80/golib/errs"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // terminals owns shell startup and keyboard restoration. The host contributes
 // only its PanelHost services; none of this state is shared between programs.
 type terminals struct {
 	c       PanelHost
-	started bool
 	restore bool
 	before  string
+}
+
+// terminalRuntimeHost is the PanelHost with the terminal panel's tabs (terminalpanel.go).
+type terminalRuntimeHost interface {
+	PanelHost
+	Terminals(string) (TerminalPanel, error)
 }
 
 func newTerminals(c PanelHost) *terminals { return &terminals{c: c, restore: true} }
@@ -23,7 +33,6 @@ func (t *terminals) BindPanelHost(c PanelHost) error {
 func (*terminals) Name() string { return "terminals" }
 func (t *terminals) State() map[string]any {
 	st := map[string]any{
-		"App.terminalDir":     "",
 		"App.terminalShown":   false,
 		"App.terminalEdges":   choices(termEdgeLabels...),
 		"App.terminalSizes":   choices(percentLabels(termSizes)...),
@@ -66,7 +75,6 @@ func (t *terminals) Commands() map[string]Command {
 	return map[string]Command{
 		"App.toggleTerminal":    none(t.toggleTerminal),
 		"App.openTerminal":      none(t.openTerminal),
-		"App.terminalExited":    oneNumber("an exit code", t.terminalExited),
 		"App.setTerminalEdge":   oneNumber("a row", t.setTerminalEdge),
 		"App.setTerminalSize":   oneNumber("a row", t.setTerminalSize),
 		"App.setTerminalLength": oneNumber("a row", t.setTerminalLength),
@@ -87,13 +95,14 @@ func (t *terminals) PreferencesChanged() {
 	t.syncTermDialog()
 }
 
-// THE TERMINAL — a shell in a drawer over the page (SPC `, Go › Terminal): at the bottom, or the
-// top, a side, or centred, as its preference says, each place with its own size. It starts in the
-// workspace's folder the first time it opens and keeps running while hidden. Opening it gives it
-// the keyboard; hiding it gives the keyboard back to the pane that had it, and hiding it while
-// another pane has the keyboard moves nothing. Its keys are golib's Terminal's: everything goes to
-// the shell, and Ctrl+\ Ctrl+n (or Esc in the Vim editor mode, outside full-screen programs) leaves
-// for Normal mode over its history.
+// THE TERMINAL — shells in a drawer over the page (SPC `, Go › Terminal), each in a tab of its own:
+// at the bottom, or the top, a side, or centred, as its preference says, each place with its own
+// size. Opening it with no shell starts one in the workspace's folder; the shells keep running
+// while hidden. + adds another; a tab's menu goes to another tab, adds one, or closes it. Opening
+// it gives the keyboard to its shell; hiding it gives the keyboard back to the pane that had it,
+// and hiding it while another pane has the keyboard moves nothing. Its keys are golib's
+// Terminal's: everything goes to the shell, and Ctrl+\ Ctrl+n (or Esc in the Vim editor mode,
+// outside full-screen programs) leaves for Normal mode over its history.
 
 // The terminal's preference: where it opens. Its sizes are the panels' one way (panelsize.go), and
 // its defaults and bounds are its spec's (panels.go).
@@ -218,24 +227,137 @@ func withEntry(m map[string]int, k string, v int) map[string]int {
 }
 
 // openTerminalPanel is the terminal's spec Open (panels.go): it remembers which pane had the
-// keyboard, for hiding it to give it back, opens the drawer, starts the shell the first time, and
-// gives the terminal the keyboard. SPC ` and Go › Terminal are togglePanel, which comes here.
+// keyboard, for hiding it to give it back, opens the drawer, starts a shell when none runs, and
+// gives the shell the keyboard. SPC ` and Go › Terminal are togglePanel, which comes here.
 func (t *terminals) openTerminalPanel() {
 	t.before = t.c.KeyboardPane()
 	t.c.Keep(t.c.CallView("terminal", "open"))
-	if !t.started {
-		if ws, ok := t.c.ActiveWorkspace(); ok {
-			t.c.Set("App.terminalDir", termDir(ws.root))
-		}
-		// Started only once it starts: a shell that fails to launch is tried again on the next
-		// open (and Enter in the pane tries it at once).
-		if err := t.c.CallView("terminalView", "start"); err != nil {
-			t.c.Notify("the terminal could not start (" + err.Error() + "): SPC ` or Enter in it tries again")
-		} else {
-			t.started = true
+	panel, err := t.panel()
+	if err != nil {
+		t.c.Keep(err)
+		return
+	}
+	// a shell that failed to launch is dropped, and a fresh one tried: its command is read again
+	// ($SHELL fixed since, say); Enter in its tab tries it at once
+	for _, tab := range panel.Tabs() {
+		if !tab.Running && !tab.Closing && tab.StartError != nil {
+			_, err := panel.Remove(tab.ID)
+			t.c.Keep(err)
 		}
 	}
-	t.c.Keep(t.c.Focus("terminalView"))
+	if id := liveShell(panel, panel.Active()); id != "" {
+		t.c.Keep(panel.Select(id))
+		return
+	}
+	t.newShell()
+}
+
+// panel is the terminal's tabs, its strip's + and menu given (tabmenus.go): a rebuilt parent has
+// none of the old one's, so every lookup gives them again.
+func (t *terminals) panel() (TerminalPanel, error) {
+	c, ok := t.c.(terminalRuntimeHost)
+	if !ok {
+		return nil, fmt.Errorf("the terminal has no tabs to run in: %w", errs.ErrPrecondition)
+	}
+	panel, err := c.Terminals("terminalView")
+	if err != nil {
+		return nil, err
+	}
+	panel.Actions(t.newShell, nil)
+	panel.Menus(nil, t.tabRows)
+	return panel, nil
+}
+
+// liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
+// first; "" for none.
+func liveShell(panel TerminalPanel, prefer widget.TerminalTabID) widget.TerminalTabID {
+	first := widget.TerminalTabID("")
+	for _, tab := range panel.Tabs() {
+		if tab.Closing || (!tab.Running && tab.StartError != nil) {
+			continue
+		}
+		if tab.ID == prefer {
+			return tab.ID
+		}
+		if first == "" {
+			first = tab.ID
+		}
+	}
+	return first
+}
+
+// newShell adds a shell, in the workspace's folder when this machine has it, starts it and gives
+// it the keyboard: opening the panel with none, its +, and New on a tab's menu. A shell that fails
+// to start says so, in its tab and in a notice.
+func (t *terminals) newShell() {
+	panel, err := t.panel()
+	if err != nil {
+		t.c.Keep(err)
+		return
+	}
+	root := ""
+	if ws, ok := t.c.ActiveWorkspace(); ok {
+		root = ws.root
+	}
+	var id widget.TerminalTabID
+	id, err = panel.Add(shellLabel(panel), TerminalConfig{Dir: termDir(root), VimKeys: t.c.Prefs().keymap == "vim",
+		Exited: func(code int) { t.shellExited(id, code) }})
+	if err != nil {
+		t.c.Notify("the terminal could not add a shell: " + err.Error())
+		return
+	}
+	if err := panel.Start(id); err != nil {
+		t.c.Notify("the terminal could not start (" + err.Error() + "): SPC ` or Enter in it tries again")
+	}
+	t.c.Keep(panel.Select(id))
+}
+
+// shellLabel names a new shell's tab: shell, then shell 2, shell 3, …, the first not on panel.
+func shellLabel(panel TerminalPanel) string {
+	var labels []string
+	for _, tab := range panel.Tabs() {
+		labels = append(labels, tab.Label)
+	}
+	for n := 1; ; n++ {
+		label := "shell"
+		if n > 1 {
+			label += " " + strconv.Itoa(n)
+		}
+		if !slices.Contains(labels, label) {
+			return label
+		}
+	}
+}
+
+// tabRows are a shell tab's menu: Go to ›, New, Close.
+func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
+	panel, err := t.panel()
+	if err != nil {
+		return nil
+	}
+	return []widget.MenuItemModel{
+		goToRows(panel, func(tab widget.TerminalTab) string { return tab.Label }, func(target widget.TerminalTabID) {
+			t.c.Keep(panel.Select(target))
+		}),
+		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }),
+		tabMenuRow("terminal.close", "Close", t.closeShell),
+	}
+}
+
+// closeShell is Close on a tab's menu: the shell hung up and its tab closed. The panel stays open,
+// on its next shell or its empty text; SPC ` then starts a fresh one.
+func (t *terminals) closeShell(id widget.TerminalTabID) {
+	panel, err := t.panel()
+	if err != nil {
+		return
+	}
+	if _, err := panel.Remove(id); err != nil {
+		t.c.Notify("the shell's tab could not close: " + err.Error())
+		return
+	}
+	if next := liveShell(panel, ""); next != "" && next != id {
+		t.c.Keep(panel.Select(next))
+	}
 }
 
 // closeTerminalPanel is the terminal's spec Close: it remembers whether the terminal had the
@@ -261,7 +383,13 @@ func (t *terminals) toggleTerminal() { t.c.TogglePanel("terminal") }
 // opening it if it is closed (SPC ` toggles it).
 func (t *terminals) openTerminal() {
 	if t.c.PanelOpen("terminal") {
-		t.c.Keep(t.c.Focus("terminalView"))
+		if panel, err := t.panel(); err == nil {
+			if id := liveShell(panel, panel.Active()); id != "" {
+				t.c.Keep(panel.Select(id))
+				return
+			}
+		}
+		t.newShell()
 		return
 	}
 	t.toggleTerminal()
@@ -325,14 +453,25 @@ func (h *Host) paneHasKeyboard(id string) bool {
 	return ok && h.p.App().FocusWithin(c)
 }
 
-// terminalExited is the shell gone (exit, Ctrl+D, or it ended): the panel closes as SPC ` closes it,
-// its geometry kept and the keyboard back where it was, and the next open starts a fresh shell. A
-// non-zero exit is kept as a notice, as it may be an error; exit 0 is said by the panel closing.
-// golib's Terminal says it in an App.Update, where closing the drawer may move the keyboard.
-func (t *terminals) terminalExited(code int) {
-	t.started = false
+// shellExited is a shell gone (exit, Ctrl+D, or it ended): its tab closes, and the keyboard goes to
+// the next shell. The last one gone, the panel closes as SPC ` closes it, its geometry kept and
+// the keyboard back where it was, and the next open starts a fresh shell. A non-zero exit is kept
+// as a notice, as it may be an error. golib's Terminal says it in an App.Update, where closing the
+// drawer may move the keyboard.
+func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
 	if code != 0 {
 		t.c.Notify("the terminal's shell exited (" + strconv.Itoa(code) + ")")
+	}
+	panel, err := t.panel()
+	if err != nil {
+		return
+	}
+	if _, err := panel.Remove(id); err != nil {
+		return // the tab of a parent rebuilt since, or already closing
+	}
+	if next := liveShell(panel, ""); next != "" && next != id {
+		t.c.Keep(panel.Select(next))
+		return
 	}
 	if t.c.PanelOpen("terminal") {
 		t.c.TogglePanel("terminal")

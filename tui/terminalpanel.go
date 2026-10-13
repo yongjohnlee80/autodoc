@@ -47,6 +47,9 @@ type TerminalPanel interface {
 	Tabs() []widget.TerminalTab
 	Active() widget.TerminalTabID
 	Actions(add func(), menu func(widget.TerminalTabID))
+	// Menus gives the strip menus of its own (tabmenus.go): add builds what + offers, tab what a
+	// tab's menu does (≡, a right click on the tab, Enter on the strip). nil keeps Actions' callback.
+	Menus(add func() []widget.MenuItemModel, tab func(widget.TerminalTabID) []widget.MenuItemModel)
 }
 
 type terminalPanel struct{ tabs *widget.TerminalTabs }
@@ -75,6 +78,10 @@ func (p terminalPanel) Tabs() []widget.TerminalTab                { return p.tab
 func (p terminalPanel) Active() widget.TerminalTabID              { return p.tabs.Active() }
 func (p terminalPanel) Actions(add func(), menu func(widget.TerminalTabID)) {
 	p.tabs.SetActions(add, menu)
+}
+func (p terminalPanel) Menus(add func() []widget.MenuItemModel, tab func(widget.TerminalTabID) []widget.MenuItemModel) {
+	p.tabs.SetAddMenu(add)
+	p.tabs.SetMenu(tab)
 }
 
 // Terminals resolves only a parent registered by this contributor. A fresh

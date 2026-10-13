@@ -220,16 +220,21 @@ func (h *agents) useAgent(i int) {
 	if !ok {
 		return
 	}
+	h.c.Close("agentProfiles")
+	h.useProfile(a)
+}
+
+// useProfile goes to a's tab while it runs, and starts it otherwise: the dialog's Use and the
+// strip's +.
+func (h *agents) useProfile(a agentProfile) {
 	// the terminal panel may have been rebuilt since the dialog listed it: an instance of the old
 	// parent is retired here, never selected by its old tab on the new one
 	h.syncInstances()
 	if instance := h.instances[a.Codename]; instance != nil && instance.running {
-		h.c.Close("agentProfiles")
 		h.c.OpenDrawer("agent")
 		h.c.Keep(h.selectInstance(instance))
 		return
 	}
-	h.c.Close("agentProfiles")
 	h.startAgent(a)
 }
 

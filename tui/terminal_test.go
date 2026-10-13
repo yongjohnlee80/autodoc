@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -76,19 +78,27 @@ func TestTerminalExistingGeometryPreferencesReadBack(t *testing.T) {
 	}
 }
 
-func (r *running) terminal() *widget.Terminal {
-	return onLoop(r, func() *widget.Terminal {
+// shellTabs are the terminal panel's tabs, a snapshot taken on the loop.
+func (r *running) shellTabs() []widget.TerminalTab {
+	return onLoop(r, func() []widget.TerminalTab {
 		c, _ := r.h.p.Find("terminalView")
-		term, _ := c.(*widget.Terminal)
-		return term
+		tabs, ok := tuidecl.TerminalTabsOf(c)
+		if !ok {
+			return nil
+		}
+		return tabs.Tabs()
 	})
 }
 
-func (r *running) termMode() widget.TerminalMode {
-	return onLoop(r, func() widget.TerminalMode {
-		c, _ := r.h.p.Find("terminalView")
-		return c.(*widget.Terminal).Mode()
-	})
+// shellsRunning is how many of the terminal's shells run.
+func (r *running) shellsRunning() int {
+	n := 0
+	for _, tab := range r.shellTabs() {
+		if tab.Running {
+			n++
+		}
+	}
+	return n
 }
 
 func (r *running) termShown() bool {
@@ -120,7 +130,7 @@ func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 
 	// Esc in input mode (Vim keys, the default keymap) leaves for Normal mode; the pane stays.
 	r.keys(t, esc())
-	r.s.WaitFor(t, "Normal mode", func(string) bool { return r.termMode() == widget.TerminalNormal })
+	time.Sleep(150 * time.Millisecond)
 	if !r.termShown() {
 		t.Fatal("Esc in input mode closed the pane")
 	}
@@ -133,8 +143,8 @@ func TestTheTerminalTogglesFromTheLeaderAndGivesTheKeyboardBack(t *testing.T) {
 	r.leader(t, '`')
 	r.s.WaitForText(t, "┌ terminal")
 	r.s.WaitFor(t, "the same shell", func(sc string) bool { return strings.Contains(sc, root[max(0, len(root)-30):]) })
-	if !r.terminal().Running() {
-		t.Error("the shell stopped while hidden")
+	if r.shellsRunning() != 1 {
+		t.Errorf("the shell stopped while hidden: %+v", r.shellTabs())
 	}
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "hidden by its key", func(sc string) bool { return !strings.Contains(sc, "┌ terminal") })
@@ -215,18 +225,21 @@ func TestTheTerminalsPlaceAndSizeFollowThePreferences(t *testing.T) {
 	}
 }
 
+// The keymap reaches a shell already running: with the Text keymap Esc is the shell's, and the
+// panel stays; with the Vim keymap the first Esc is Normal mode and the second hides the panel.
 func TestTheTerminalsVimKeysFollowTheEditorsKeymap(t *testing.T) {
 	_, r := runShellTUI(t, map[string]string{"tui.editor.keymap": "text"})
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.keys(t, esc())
-	time.Sleep(100 * time.Millisecond)
-	if r.termMode() != widget.TerminalInput {
-		t.Fatal("Esc left input mode with the Text keymap")
+	r.keys(t, esc(), esc())
+	r.keys(t, decltest.Type("\recho still-$((40+2))\r")...) // the shell had both Escs (a line of its own), and answers
+	r.s.WaitForText(t, "still-42")
+	if !r.termShown() || !r.focused("terminalView") {
+		t.Fatal("Esc left the shell with the Text keymap")
 	}
 	onLoop(r, func() bool { r.h.setKeymap("vim"); return true })
-	r.keys(t, esc())
-	r.s.WaitFor(t, "Normal mode with the Vim keymap", func(string) bool { return r.termMode() == widget.TerminalNormal })
+	r.keys(t, esc(), esc())
+	r.s.WaitFor(t, "Normal mode, then hidden, with the Vim keymap", func(string) bool { return !r.termShown() })
 }
 
 // TestTheTerminalClosesWhenItsShellExits: exit (or Ctrl+D) closes the panel as SPC ` would, the
@@ -343,17 +356,17 @@ func TestTheTerminalRetriesAShellThatFailedToStart(t *testing.T) {
 			return false
 		})
 	})
-	if onLoop(r, func() bool { return r.h.terminals.started }) {
-		t.Fatal("a shell that failed to start counts as started")
+	if tabs := r.shellTabs(); len(tabs) != 1 || tabs[0].Running || tabs[0].StartError == nil {
+		t.Fatalf("a shell that failed to start: tabs %+v", tabs)
 	}
-	// The command works now (as a fixed $SHELL would make it at the next run); the next open starts it.
-	term := r.terminal() // outside onLoop: it runs on the loop itself
-	onLoop(r, func() bool { term.SetCommand("/bin/sh"); return true })
+	// $SHELL is fixed; the next open drops the failed tab and starts a shell with it
+	t.Setenv("SHELL", "/bin/sh")
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // hide
 	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // open again
 	r.s.WaitFor(t, "the shell started on the retry", func(string) bool {
-		return onLoop(r, func() bool { return term.Running() })
+		tabs := r.shellTabs()
+		return len(tabs) == 1 && tabs[0].Running
 	})
 }
 
@@ -379,4 +392,85 @@ func TestTheTerminalCommandOpensTheTerminal(t *testing.T) {
 	if !r.termShown() {
 		t.Fatal(":terminal over an open terminal closed it")
 	}
+}
+
+// TestTheTerminalsShellsAreTabs: New on a tab's menu (as +) adds a shell in a tab of its own, named
+// shell 2; an exit closes only its tab, the keyboard going to the next shell; Go to › selects a
+// tab; Close on the last leaves the panel open on its empty text, and SPC ` then starts a fresh one.
+func TestTheTerminalsShellsAreTabs(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitForText(t, "┌ terminal")
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	menu := func(id string) {
+		t.Helper()
+		rows, tab := onLoop(r, func() []widget.MenuItemModel {
+			c, _ := r.h.p.Find("terminalView")
+			tabs, _ := tuidecl.TerminalTabsOf(c)
+			return r.h.terminals.tabRows(tabs.Active())
+		}), onLoop(r, func() widget.TerminalTabID {
+			c, _ := r.h.p.Find("terminalView")
+			tabs, _ := tuidecl.TerminalTabsOf(c)
+			return tabs.Active()
+		})
+		row, ok := menuRow(rows, id)
+		if !ok {
+			t.Fatalf("no row %s in %v", id, rowIDs(rows))
+		}
+		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+	}
+	labels := func() []string {
+		var out []string
+		for _, tab := range r.shellTabs() {
+			if !tab.Closing {
+				out = append(out, tab.Label)
+			}
+		}
+		return out
+	}
+
+	menu("terminal.new")
+	r.s.WaitFor(t, "two shells running", func(string) bool { return r.shellsRunning() == 2 })
+	if got := labels(); !slices.Equal(got, []string{"shell", "shell 2"}) {
+		t.Fatalf("tabs %v", got)
+	}
+	r.s.WaitFor(t, "the new shell's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.keys(t, decltest.Type("echo two-$((40+2))\r")...)
+	r.s.WaitForText(t, "two-42")
+
+	// its exit closes its tab only: the panel stays, on the first shell, which answers
+	r.keys(t, decltest.Type("exit\r")...)
+	r.s.WaitFor(t, "one shell left", func(string) bool { return slices.Equal(labels(), []string{"shell"}) })
+	if !r.termShown() {
+		t.Fatal("a shell's exit closed the panel with another shell running")
+	}
+	r.s.WaitFor(t, "the first shell's keyboard", func(string) bool { return r.focused("terminalView") })
+	r.keys(t, decltest.Type("echo one-$((40+1))\r")...)
+	r.s.WaitForText(t, "one-41")
+
+	// Go to › selects a tab
+	menu("terminal.new")
+	r.s.WaitFor(t, "two shells again", func(string) bool { return r.shellsRunning() == 2 })
+	first := r.shellTabs()[0].ID
+	menu("tabs.goto." + string(first))
+	r.s.WaitFor(t, "the first selected", func(string) bool {
+		return onLoop(r, func() bool {
+			c, _ := r.h.p.Find("terminalView")
+			tabs, _ := tuidecl.TerminalTabsOf(c)
+			return tabs.Active() == first
+		})
+	})
+
+	// Close on each: the last leaves the panel open on its empty text
+	menu("terminal.close")
+	r.s.WaitFor(t, "one shell after Close", func(string) bool { return len(labels()) == 1 })
+	menu("terminal.close")
+	r.s.WaitForText(t, "No shell running")
+	if !r.termShown() {
+		t.Fatal("Close on the last tab closed the panel")
+	}
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
+	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
+	r.leader(t, '`')
+	r.s.WaitFor(t, "a fresh shell", func(string) bool { return r.shellsRunning() == 1 })
 }

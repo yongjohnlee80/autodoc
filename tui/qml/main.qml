@@ -381,16 +381,16 @@ Window {
         onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
-        Terminal {
+        // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
+        TerminalTabs {
             id: terminalView
-            dir: App.terminalDir
+            emptyText: "No shell running. Press + to start one."
             vimKeys: App.keymapVim
             // a program's colours raised until they read on the page: ls's yellow and a
             // prompt's cyan are written for a dark terminal, and wash out on a light theme
             minimumContrast: 4.5
             // the editor's caret colour; its shape says the mode: a block in normal, a bar typing
             cursorColor: Theme.document.cursor
-            onExited: App.terminalExited(code)
         }
     }
 
@@ -409,8 +409,14 @@ Window {
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)
+        // a tab an agent, named by its codename (agenttabs.go): + starts or goes to a profile, a
+        // tab's menu goes to another, restarts or closes it, or opens the profiles
         TerminalTabs {
             id: agentView
+            emptyText: "No agent running. Press + to start one of the profiles."
+            vimKeys: App.keymapVim
+            minimumContrast: 4.5      // as the terminal's
+            cursorColor: Theme.document.cursor
             onChanged: App.agentTabsChanged()
         }
     }
