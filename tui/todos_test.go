@@ -206,3 +206,34 @@ func todosOf(r *running) *todos {
 	}
 	return nil
 }
+
+// TestTodosKeysAreTheListsNotTheDetails: with the keyboard in the details pane, the task list's keys
+// do nothing — s and > change no status, d asks to remove nothing, i hides nothing — since a key
+// read there must never change the task being read. The details' read-only Editor lets the edit
+// keys it refuses (a d s i o) bubble, and > it does not bind at all. In the list they still work.
+func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	seedTodos(t, d, true, todo.Spec{Title: "Read me"})
+	r := attached(t, d)
+	openTodos(t, r, "· ws kb", '1')
+	r.s.WaitForText(t, "1  Read me")
+	r.keys(t, key('j'))
+	r.s.WaitForText(t, "status: open")
+	listed := func(bucket string) int {
+		l, err := d.todos.List(context.Background(), kbTodos, todo.ListOpts{Buckets: []string{bucket}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(l.Tasks)
+	}
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoDetails", "forceActiveFocus")); return true })
+	r.keys(t, key('s'), key('>'), key('d'), key('i'), key('a'))
+	time.Sleep(300 * time.Millisecond)
+	if sc := r.s.String(); strings.Contains(sc, "remove the task?") || strings.Contains(sc, "new task") ||
+		!strings.Contains(sc, "status: open") || listed("open") != 1 {
+		t.Fatalf("keys in the details pane acted on the task (open %d):\n%s", listed("open"), sc)
+	}
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("todoTree", "forceActiveFocus")); return true })
+	r.keys(t, key('s')) // the list's: open → in progress
+	r.s.WaitFor(t, "in progress", func(string) bool { return listed("in-progress") == 1 })
+}

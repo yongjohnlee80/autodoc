@@ -439,43 +439,52 @@ Window {
         onResized: App.panelResized("todos", size, length)
         onOpened: App.panelOpened("todos")
         onClosed: App.panelClosed("todos")
-        // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-        Shortcut { sequence: "a"; onActivated: App.todoAdd() }
-        Shortcut { sequence: "d"; onActivated: App.todoRemove() }
-        Shortcut { sequence: "s"; onActivated: App.todoCycle() }
-        Shortcut { sequence: "<"; onActivated: App.todoBack() }
-        Shortcut { sequence: ">"; onActivated: App.todoForward() }
-        Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
-        Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
-        Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
-        Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
-        Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
-        Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
-        Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
-        Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
-        Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
-        Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
-        Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
-        // ---- end of the todos's keys ----
         Flex {
             direction: Tui.Vertical
-            Flex {
-                direction: Tui.Horizontal
-                Button { text: "&New…"; onClicked: App.todoNew() }
-                Text { text: " " }
-                Button { text: "&Load…"; onClicked: App.todoLoad() }
-                Text { text: " " }
-                Button { text: "Close (&q)"; onClicked: todos.close() }
-            }
-            TreeView {
-                id: todoTree
+            // the task list's keys, live while the keyboard is in the list or its buttons: NOT in the
+            // details pane below, whose read-only Editor lets the edit keys it refuses (a d s i o)
+            // bubble, and a key read there must never change or remove the task being read
+            FocusScope {
                 Layout.fillHeight: true
-                palette.highlight: Theme.document.highlight
-                palette.highlightedText: Theme.document.highlightedText
-                model: App.todoTree
-                textRole: "label"
-                onCurrentIndexChanged: App.todoMoved(index)
-                onActivated: App.todoActivated(index)
+                // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+                Shortcut { sequence: "a"; onActivated: App.todoAdd() }
+                Shortcut { sequence: "d"; onActivated: App.todoRemove() }
+                Shortcut { sequence: "s"; onActivated: App.todoCycle() }
+                Shortcut { sequence: "<"; onActivated: App.todoBack() }
+                Shortcut { sequence: ">"; onActivated: App.todoForward() }
+                Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
+                Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
+                Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
+                Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
+                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
+                Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
+                Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
+                Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
+                Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
+                Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
+                Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
+                // ---- end of the todos's keys ----
+                Flex {
+                    direction: Tui.Vertical
+                    Flex {
+                        direction: Tui.Horizontal
+                        Button { text: "&New…"; onClicked: App.todoNew() }
+                        Text { text: " " }
+                        Button { text: "&Load…"; onClicked: App.todoLoad() }
+                        Text { text: " " }
+                        Button { text: "Close (&q)"; onClicked: todos.close() }
+                    }
+                    TreeView {
+                        id: todoTree
+                        Layout.fillHeight: true
+                        palette.highlight: Theme.document.highlight
+                        palette.highlightedText: Theme.document.highlightedText
+                        model: App.todoTree
+                        textRole: "label"
+                        onCurrentIndexChanged: App.todoMoved(index)
+                        onActivated: App.todoActivated(index)
+                    }
+                }
             }
             // the row under the cursor's details (i, o), Markdown, rendered as the pickers' previews
             // are (the GUI's Editor draws it; a terminal's shows the source): at most half the panel,
@@ -485,6 +494,7 @@ Window {
                 visible: App.todoDetailShown
                 Layout.fillHeight: true
                 Editor {
+                    id: todoDetails
                     readOnly: true
                     text: App.todoDetail
                     wrap: true

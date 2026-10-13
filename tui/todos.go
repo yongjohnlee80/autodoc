@@ -206,8 +206,9 @@ func (t *todos) Panels() []PanelSpec {
 	return []PanelSpec{s}
 }
 
-// Keys are autofinder's todos panel's, live while the keyboard is in the panel: Enter is the tree's
-// own (activated). 1–5 put the cursor on that section of its store.
+// Keys are autofinder's todos panel's, live while the keyboard is in the task list or its buttons,
+// not in the details pane (a read-only Editor that lets the edit keys it refuses bubble): Enter is
+// the tree's own (activated). 1–5 put the cursor on that section of its store.
 func (*todos) Keys() []Key {
 	keys := []Key{
 		{Scope: "todos", Seq: "a", Show: "a", Run: "App.todoAdd()"},
