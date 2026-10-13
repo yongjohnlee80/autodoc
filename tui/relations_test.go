@@ -111,10 +111,6 @@ var linksKB = map[string][]string{"kb": {
 	"c.md", "# C\n",
 }}
 
-// TestSPCjFollowsTheLinkAndBack: SPC j goes to the link under the cursor, a wikilink or a Markdown
-// link, as the right-click menu's Go to link does; SPC b returns, and returns no further than the
-// first document; the right-click menu has Back. Off a link, or with no file open, SPC j opens
-// nothing and says so.
 // TestSPCjInADraftFollowsAWebLink: in a draft, with no file open, SPC j follows the link as the
 // right-click Go to link does: a web address goes to the browser as written.
 func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
@@ -137,6 +133,10 @@ func TestSPCjInADraftFollowsAWebLink(t *testing.T) {
 	}
 }
 
+// TestSPCjFollowsTheLinkAndBack: SPC j goes to the link under the cursor, a wikilink or a Markdown
+// link, as the right-click menu's Go to link does; SPC b returns, and returns no further than the
+// first document; the right-click menu has Back. Off a link (the empty draft's included), SPC j
+// opens nothing and says so.
 func TestSPCjFollowsTheLinkAndBack(t *testing.T) {
 	r := attached(t, startDaemon(t, linksKB))
 	r.leader(t, 'j') // the draft, empty: no link
