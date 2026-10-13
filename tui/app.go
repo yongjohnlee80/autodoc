@@ -450,8 +450,8 @@ func (h *Host) Run(ctx context.Context) error {
 }
 
 // keep records a handler's error for Run, and shows it: a notification, once for each error's
-// text, so one asked again and again (a binding set on every keystroke) does not flood them. Run
-// still returns every one.
+// text in this session, so one asked again and again does not flood them. Run still returns every
+// one. For what the user asked for; a background path records instead.
 func (h *Host) keep(err error) {
 	if err == nil {
 		return
@@ -470,4 +470,16 @@ func (h *Host) keep(err error) {
 	if first && h.p != nil {
 		h.p.Post(func() { h.notify("Something went wrong: " + msg) })
 	}
+}
+
+// record keeps an error for Run without a notification, for the background paths: a source
+// projected on a daemon event or a status change, the preferences applied again on each connection.
+// A notice there is one the user did not cause, and it would come back with every reconnect.
+func (h *Host) record(err error) {
+	if err == nil {
+		return
+	}
+	h.mu.Lock()
+	h.errs = append(h.errs, err)
+	h.mu.Unlock()
 }

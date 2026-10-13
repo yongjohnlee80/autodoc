@@ -205,7 +205,7 @@ func homeDir() string {
 }
 
 // set publishes one source; a failure is kept for Run.
-func (h *Host) set(name string, v any) { h.keep(h.p.Set(name, v)) }
+func (h *Host) set(name string, v any) { h.record(h.p.Set(name, v)) }
 
 // setField is the host's form fields written as a feature's are (endpoints.go: setField).
 func (h *Host) setField(name, text string) { setField(core{h}, name, text) }

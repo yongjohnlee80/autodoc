@@ -316,7 +316,7 @@ func (h *Host) applyPrefs(p prefs) {
 	st := prefState(p)
 	maps.Copy(st, rowState(p, h.prefRows))
 	st["App.statusShown"] = h.statusShown()
-	h.keep(h.p.SetMany(st))
+	h.record(h.p.SetMany(st))
 	h.syncPageWidth()
 	h.applyFonts(p)
 	h.reg.preferencesChanged() // the SPC p letters the user chose among them (plugins: PreferencesChanged)
