@@ -24,11 +24,14 @@ const assignDefault = "Task assigned to you."
 // assigneePrefix is an AutoDoc agent's assignee: autodoc:<codename>, never AutoVim's agent:<name>.
 const assigneePrefix = "autodoc:"
 
-// todoAssign is one A in progress: the task, and the agent once the picker has chosen it.
+// todoAssign is one A in progress: the task, the agent once the picker has chosen it, and the
+// workspace it began in: HandTask delivers to the workspace in use, so an assign answered after a
+// switch is handed to no one there.
 type todoAssign struct {
 	store *todoStore
 	task  map[string]any
 	agent AgentEntry
+	ws    Ticket
 }
 
 // newAssignPick is the picker of AutoDoc's agents that A opens.
@@ -99,7 +102,7 @@ func (t *todos) assign() {
 		t.c.Notify("todos: no AutoDoc agent to assign to: add one in the agent profiles")
 		return
 	}
-	t.assigning = &todoAssign{store: s, task: x}
+	t.assigning = &todoAssign{store: s, task: x, ws: t.c.Ticket(nil, TicketWorkspace)}
 	t.assignPick.setAll(agents)
 	t.assignPick.open()
 }
@@ -133,6 +136,11 @@ func (t *todos) assignSet(text string) {
 	s, x := a.store, a.task
 	from := str(x, "status")
 	t.write(s, "todos.assign", []any{s.at, str(x, "id"), str(x, "rev"), assignee, instruction}, func(v any) {
+		if !a.ws.Current() { // the assignment stands; another workspace's agent never hears of it
+			t.c.Notify(fmt.Sprintf("todos: assigned to %s, but not delivered (the workspace changed before the assign landed): "+
+				"A on the task in its own workspace delivers it", assignee))
+			return
+		}
 		task := asMap(v)
 		if to := str(task, "status"); to != "" && to != from { // an open task is in progress now (D1)
 			t.follow = todoFollow{store: s.id, id: str(x, "id"), bucket: to,

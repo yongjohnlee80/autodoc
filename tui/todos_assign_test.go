@@ -190,12 +190,23 @@ func TestAssignableAgents(t *testing.T) {
 }
 
 // agentCore is a scripted daemon with AutoDoc's agents: AgentEntries lists entries, and HandTask
-// records each hand-over, refusing at once with refuse when it is set.
+// records each hand-over, refusing at once with refuse when it is set. switchWorkspace moves the
+// workspace on: a TicketWorkspace taken before it is stale.
 type agentCore struct {
 	*scriptedCore
 	entries []AgentEntry
 	handed  []handOverCall
 	refuse  error
+	wsGen   int
+}
+
+func (c *agentCore) switchWorkspace() { c.wsGen++ }
+func (c *agentCore) Ticket(seq *uint64, scope TicketScope) Ticket {
+	if seq != nil || scope != TicketWorkspace {
+		return c.scriptedCore.Ticket(seq, scope)
+	}
+	gen := c.wsGen
+	return Ticket{current: func() bool { return c.wsGen == gen }}
 }
 
 type handOverCall struct {
@@ -322,5 +333,36 @@ func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	if len(ro.notes) != 1 || !strings.Contains(ro.notes[0], "read-only in AutoDoc until the cutover") ||
 		slices.Contains(ro.opened, "agentAssignPicker") {
 		t.Fatalf("read-only: notes %q, opened %v", ro.notes, ro.opened)
+	}
+}
+
+// TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne: HandTask delivers to the workspace in
+// use, so an assign whose answer lands after a switch is not handed over: the assignment stands,
+// and the notice says to deliver it from the task's own workspace. Answered late in the same
+// workspace, it is handed over as ever.
+func TestTodosAssignAnsweredAfterAWorkspaceSwitchIsHandedToNoOne(t *testing.T) {
+	for _, switched := range []bool{false, true} {
+		c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe", Running: true})
+		v := newTodos(c)
+		v.list()
+		onTask(t, v, "open")
+		v.assign()
+		v.assignPick.accept(0, "")
+		c.deferred = true
+		v.assignSet("")
+		if len(*assigned) != 1 || len(c.pending) != 1 {
+			t.Fatalf("switched %v: assigned %v, answers held %d", switched, *assigned, len(c.pending))
+		}
+		if switched {
+			c.switchWorkspace()
+		}
+		c.deliver(0) // the assign's answer, late
+		switch {
+		case switched && (len(c.handed) != 0 || len(c.notes) != 1 ||
+			!strings.Contains(c.notes[0], "assigned to autodoc:scribe, but not delivered (the workspace changed before the assign landed)")):
+			t.Fatalf("after a switch: handed %+v, notes %q", c.handed, c.notes)
+		case !switched && (len(c.handed) != 1 || c.handed[0].task.Path != "/kb/.todo-list/in-progress/t1.md"):
+			t.Fatalf("same workspace, answered late: handed %+v", c.handed)
+		}
 	}
 }
