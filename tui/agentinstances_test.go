@@ -341,3 +341,26 @@ func TestParentRebuildRetiresOldRefsAndCreatesCurrentOwnerInstances(t *testing.T
 		t.Fatal("current-owner removal used old-parent id")
 	}
 }
+
+// TestUseAfterAParentRebuildNeverSelectsTheOldTab: the profiles dialog's Use, pressed after the
+// terminal panel was rebuilt, retires the old parent's instance rather than selecting its tab on
+// the new panel; once retired, Use starts a fresh instance on the current owner.
+func TestUseAfterAParentRebuildNeverSelectsTheOldTab(t *testing.T) {
+	a, c := modelAgents(t)
+	p, _ := a.profile("one")
+	old, err := a.startInstance(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.panel = &modelPanel{owner: c, next: 100} // the parent rebuilt (a reload)
+	a.useAgent(0)
+	if c.panel.active == old.tab {
+		t.Fatal("Use selected the old parent's tab on the new panel")
+	}
+	c.drainPosts() // the old owner's retirement completes
+	a.useAgent(0)
+	fresh := a.instances["one"]
+	if fresh == nil || fresh == old || !fresh.running || !fresh.owner.SameOwner(c.panel) || c.panel.active != fresh.tab {
+		t.Fatalf("after retirement Use did not start a current-owner instance: %+v", fresh)
+	}
+}

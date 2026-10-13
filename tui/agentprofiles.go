@@ -220,6 +220,9 @@ func (h *agents) useAgent(i int) {
 	if !ok {
 		return
 	}
+	// the terminal panel may have been rebuilt since the dialog listed it: an instance of the old
+	// parent is retired here, never selected by its old tab on the new one
+	h.syncInstances()
 	if instance := h.instances[a.Codename]; instance != nil && instance.running {
 		h.c.Close("agentProfiles")
 		h.c.OpenDrawer("agent")
