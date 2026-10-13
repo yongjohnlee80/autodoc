@@ -59,7 +59,8 @@ func TestCtrlWSwitchesWorkspaceOutsideInsert(t *testing.T) {
 }
 
 // TestCtrlOInVimInsertRunsOneCommand: Ctrl+O in Insert runs one Normal-mode command (0, to the
-// line's start) and Insert resumes there; it is no jump to another document.
+// line's start), the status line saying (INSERT) meanwhile, and Insert resumes there; it is no
+// jump to another document.
 func TestCtrlOInVimInsertRunsOneCommand(t *testing.T) {
 	r := attached(t, startDaemon(t, landingKB))
 	r.openByPicker(t, "a.md")
@@ -67,7 +68,9 @@ func TestCtrlOInVimInsertRunsOneCommand(t *testing.T) {
 	r.openByPicker(t, "b.md")
 	r.waitFile(t, "b.md")
 	r.keys(t, decltest.Alt('2'), key('A'))
-	r.keys(t, decltest.Ctrl('o'), key('0'))
+	r.keys(t, decltest.Ctrl('o'))
+	r.s.WaitForText(t, "(INSERT)") // the status line, while the command runs
+	r.keys(t, key('0'))
 	r.keys(t, decltest.Type("X")...)
 	r.keys(t, esc())
 	r.waitValue(t, "X# B\n\none\n\ntwo\n")

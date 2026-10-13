@@ -210,10 +210,15 @@ func (h *Host) set(name string, v any) { h.keep(h.p.Set(name, v)) }
 // setField is the host's form fields written as a feature's are (endpoints.go: setField).
 func (h *Host) setField(name, text string) { setField(core{h}, name, text) }
 
-// setWhere is the status line's left: the editor's mode, then where the TUI is attached.
+// setWhere is the status line's left: the editor's mode, then where the TUI is attached. While
+// Insert's Ctrl+O runs its one Normal-mode command, the mode is (INSERT), as Vim's -- (insert) --.
 func (h *Host) setWhere(where string) {
 	h.where = where
-	h.set("App.statusLeft", h.core.Mode().String()+"  "+where)
+	mode := h.core.Mode().String()
+	if h.core.InsertOneShot() {
+		mode = "(INSERT)"
+	}
+	h.set("App.statusLeft", mode+"  "+where)
 }
 
 // open opens a dialog the layout declares, by id.
