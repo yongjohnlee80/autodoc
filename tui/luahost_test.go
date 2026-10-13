@@ -178,6 +178,33 @@ func TestTheAgentsCardSendsThePage(t *testing.T) {
 	r.s.WaitForText(t, "card-sent-page")
 	r.s.WaitFor(t, "said", func(string) bool { return r.noticed("sent the page to heron") })
 
+	// f: the selection
+	onLoop(r, func() bool { r.h.core.SetValue("ignored card-selected ignored"); return true })
+	onLoop(r, func() bool {
+		r.h.core.Select(widget.TextRange{From: widget.TextPos{Col: 8}, To: widget.TextPos{Col: 21}})
+		return r.h.p.Call("editor", "forceActiveFocus") == nil
+	})
+	r.leader(t, 'a')
+	r.s.WaitForText(t, "SPC a — agents")
+	r.keys(t, key('f'))
+	r.s.WaitForText(t, "card-selected")
+
+	// g: the agent panel, hidden; G: the profiles
+	shown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
+	onLoop(r, func() bool { return r.h.p.Call("editor", "forceActiveFocus") == nil })
+	r.leader(t, 'a')
+	r.s.WaitForText(t, "SPC a — agents")
+	r.keys(t, key('g'))
+	r.s.WaitFor(t, "the panel hidden by g", func(string) bool { return !shown() })
+	if !r.agentRunningNow() {
+		t.Error("g stopped the agent")
+	}
+	r.leader(t, 'a')
+	r.s.WaitForText(t, "SPC a — agents")
+	r.keys(t, key('G'))
+	r.s.WaitForText(t, "CODENAME") // the profiles dialog's column, on no card
+	r.keys(t, esc())
+
 	r.leader(t, 'a')
 	r.s.WaitForText(t, "SPC a — agents")
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyBackspace})
