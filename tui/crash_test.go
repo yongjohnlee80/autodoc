@@ -239,3 +239,53 @@ func TestABackgroundPanicEndsItsCallersWait(t *testing.T) {
 	r.h.p.Post(v.list)
 	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("todos.stores: it panicked: a string") })
 }
+
+// TestRestartsQuestionWhenTheInstalledVersionIsNotKnown: the restart question names the installed
+// version only when it is read: none to read, a reading that errs, and one that panics (its job's
+// failure, in its answer) all ask without one; the same version says so.
+func TestRestartsQuestionWhenTheInstalledVersionIsNotKnown(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		installed func() (string, error)
+		want      string
+	}{
+		{"none", nil, "It stops, and starts again. Indexing"},
+		{"an error", func() (string, error) { return "", errors.New("no binary") }, "It stops, and starts again. Indexing"},
+		{"a panic", func() (string, error) { panic("reading the version") }, "It stops, and starts again. Indexing"},
+		{"the same", func() (string, error) { return "v1", nil }, "at the same version, v1: no newer one is installed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, err := os.MkdirTemp("", "adr")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.RemoveAll(dir)
+			sock := filepath.Join(dir, "s.sock")
+			startDaemonWith(t, sock, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{version: "v1"})
+			sess := NewSession(sock, func() (string, error) { return "", errors.New("not in this test") })
+			r := runTUI(t, sess, Options{Installed: tc.installed, CrashDir: t.TempDir()})
+			r.ready(t)
+			r.h.p.Post(r.h.startRestart)
+			r.s.WaitFor(t, "the question", func(sc string) bool {
+				text := strings.Join(strings.Fields(strings.ReplaceAll(sc, "│", " ")), " ")
+				return strings.Contains(text, "Restart the backend (autodoc v1)?") && strings.Contains(text, tc.want)
+			})
+		})
+	}
+}
+
+// TestCoreDoSaysAFailureItsAnswerCannotCarry: coreDo hands a job's panic to then in its own
+// answer; one that cannot carry it (no production job answers so: the static test) is said.
+func TestCoreDoSaysAFailureItsAnswerCannotCarry(t *testing.T) {
+	r, _ := crashTUI(t)
+	called := make(chan bool, 1)
+	r.h.p.Post(func() {
+		coreDo(core{r.h}, func(context.Context) bool { panic("a flag job") }, func(bool) { called <- true })
+	})
+	r.s.WaitFor(t, "the notice", func(string) bool { return r.noticed("a background job failed: it panicked: a string") })
+	select {
+	case <-called:
+		t.Error("then ran with a zero answer")
+	default:
+	}
+}
