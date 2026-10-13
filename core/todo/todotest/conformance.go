@@ -174,7 +174,7 @@ func conformConsumers(t *testing.T, h Harness) {
 	j := h.New(t)
 	same(t, "none", consumers(t, j, "A"), []todo.Consumer(nil))
 	a := todo.Consumer{Name: "auto-core", Acked: 3, SeenAt: t0.In(pdt)}
-	b := todo.Consumer{Name: "a-tui", Unregistered: true}
+	b := todo.Consumer{Name: "a-tui", Unregistered: true, Resync: 7, SeenAt: t0}
 	must(t, j.PutConsumer(cctx, "A", a))
 	must(t, j.PutConsumer(cctx, "A", b))
 	must(t, j.PutConsumer(cctx, "B", a))

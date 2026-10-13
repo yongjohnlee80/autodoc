@@ -147,16 +147,98 @@ func TestPruningAndResync(t *testing.T) {
 	}
 	e.m.Assign(ctx, kb, a.ID, e.get(a.ID).Rev, "agent:x", "")
 	e.advance(91 * 24 * time.Hour)
-	e.m.Changes(ctx, kb, "panel", 10)
-	e.m.Refresh(ctx, kb) // auto-core has been silent 91 days
-	if kinds := e.eventKinds(); len(kinds) != 1 || kinds[0] != "todos.consumer_dropped" {
-		t.Errorf("events %v", kinds)
+	e.m.Changes(ctx, kb, "panel", 10) // silent 91 days too: dropped by its own ask, and answered a resync
+	e.m.Refresh(ctx, kb)              // auto-core has been silent 91 days
+	var dropped []string
+	for _, ev := range e.events {
+		if ev.Kind == "todos.consumer_dropped" {
+			dropped = append(dropped, ev.Detail)
+		}
+	}
+	if !reflect.DeepEqual(dropped, []string{"panel", "auto-core"}) || len(e.events) != 2 {
+		t.Errorf("events %+v", e.events)
 	}
 	page, err := e.m.Changes(ctx, kb, "auto-core", 10)
 	if err != nil || !page.Resync || len(page.Snapshot) != 1 || page.Snapshot[0].Assignee != "agent:x" {
 		t.Fatalf("the returning consumer: %+v %v", page, err)
 	}
+	e.must(e.m.Ack(ctx, kb, "auto-core", page.Cursor))
 	if page, _ := e.m.Changes(ctx, kb, "auto-core", 10); page.Resync || len(page.Changes) != 0 {
 		t.Errorf("after the resync: %+v", page)
+	}
+}
+
+// A resync is delivered at least once, as a page is (ADR 1791532020 §2.5): until the consumer
+// acknowledges its cursor, every ask is answered the resync again, across a restart too. The ack
+// registers the consumer again at that cursor, what came after the cursor kept for it, and it is
+// not dropped again for the silence before. An ack from before the silence never registers it.
+func TestAResyncIsDeliveredAtLeastOnce(t *testing.T) {
+	e := claimed(t)
+	a := e.add(todo.Spec{Title: "a"})
+	page, _ := e.m.Changes(ctx, kb, "auto-core", 10)
+	e.must(e.m.Ack(ctx, kb, "auto-core", page.Cursor))
+	e.m.Assign(ctx, kb, a.ID, e.get(a.ID).Rev, "agent:x", "do it")
+	before, _ := e.m.Changes(ctx, kb, "auto-core", 10) // a page it never acknowledges
+	e.advance(91 * 24 * time.Hour)
+	e.m.Refresh(ctx, kb) // drops it: silent 91 days
+	if err := e.m.Ack(ctx, kb, "auto-core", before.Cursor); !is(err, todo.ErrNotFound) {
+		t.Fatalf("an ack from before the silence, no resync answered: %v", err)
+	}
+	e.add(todo.Spec{Title: "b"})
+
+	first, err := e.m.Changes(ctx, kb, "auto-core", 10)
+	if err != nil || !first.Resync || len(first.Snapshot) != 2 || first.Cursor <= before.Cursor {
+		t.Fatalf("the returning consumer: %+v %v", first, err)
+	}
+	// it dies before handling the resync: the next ask, after a restart, is the resync again
+	e.restart()
+	again, err := e.m.Changes(ctx, kb, "auto-core", 10)
+	if err != nil || !again.Resync || again.Cursor != first.Cursor || !reflect.DeepEqual(again.Snapshot, first.Snapshot) {
+		t.Fatalf("a resync not acknowledged was not answered again: %+v %v", again, err)
+	}
+	if err := e.m.Ack(ctx, kb, "auto-core", before.Cursor); !is(err, todo.ErrNotFound) {
+		t.Errorf("an ack below the cursor of the resync answered: %v", err)
+	}
+	if page, _ := e.m.Changes(ctx, kb, "auto-core", 10); !page.Resync {
+		t.Fatalf("a refused ack registered the consumer: %+v", page)
+	}
+
+	// a change after the resync's cursor is kept for its ack, however old: a prune 31 days on keeps it
+	c := e.add(todo.Spec{Title: "c"})
+	e.advance(31 * 24 * time.Hour)
+	e.m.Refresh(ctx, kb)
+	e.must(e.m.Ack(ctx, kb, "auto-core", first.Cursor))
+	page, err = e.m.Changes(ctx, kb, "auto-core", 10)
+	if err != nil || page.Resync || len(page.Changes) != 1 || page.Changes[0].ID != c.ID {
+		t.Fatalf("after the resync's ack, the change that followed its cursor: %+v %v", page, err)
+	}
+	e.advance(24 * time.Hour)
+	if page, _ := e.m.Changes(ctx, kb, "auto-core", 10); page.Resync {
+		t.Error("the consumer was dropped again for the silence before its ack")
+	}
+	if kinds := e.eventKinds(); len(kinds) != 1 || kinds[0] != "todos.consumer_dropped" {
+		t.Errorf("events %v", kinds)
+	}
+}
+
+// A consumer silent too long that asks before any prune has dropped it is dropped by the ask: it
+// is answered a resync, and the event says so.
+func TestASilentConsumerIsDroppedByItsAsk(t *testing.T) {
+	e := claimed(t)
+	e.add(todo.Spec{Title: "a"})
+	page, _ := e.m.Changes(ctx, kb, "auto-core", 10)
+	e.must(e.m.Ack(ctx, kb, "auto-core", page.Cursor))
+	e.advance(91 * 24 * time.Hour)
+	first, _ := e.m.Changes(ctx, kb, "auto-core", 10)
+	again, _ := e.m.Changes(ctx, kb, "auto-core", 10)
+	if !first.Resync || !again.Resync {
+		t.Fatalf("%+v then %+v", first, again)
+	}
+	if kinds := e.eventKinds(); len(kinds) != 1 || kinds[0] != "todos.consumer_dropped" {
+		t.Errorf("events %v", kinds)
+	}
+	e.must(e.m.Ack(ctx, kb, "auto-core", again.Cursor))
+	if page, _ := e.m.Changes(ctx, kb, "auto-core", 10); page.Resync {
+		t.Errorf("after the ack: %+v", page)
 	}
 }

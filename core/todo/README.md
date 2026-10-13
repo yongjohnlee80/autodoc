@@ -75,8 +75,10 @@ row goes and the event says so.
 
 Edits made by hand are found by diffing the files with the snapshot and logged as `update`
 (fields named), never `assign`. Consumers pull committed changes with `Changes` and `Ack` them;
-a consumer silent 90 days is unregistered and gets a resync when it returns; changes older than
-30 days that every consumer acknowledged are pruned.
+a consumer silent 90 days is unregistered and gets a resync when it returns. A resync is
+delivered at least once, as a page is: the consumer is answered it again on every ask until it
+acknowledges the resync's cursor, which registers it again there; what follows that cursor is
+kept for it meanwhile. Changes older than 30 days that every consumer acknowledged are pruned.
 
 ## Tests
 

@@ -195,12 +195,22 @@ type SnapshotRow struct {
 }
 
 // Consumer is a change-log reader and how far it has acknowledged. One silent too long is
-// unregistered, and kept so that its return gets a resync.
+// unregistered, and kept so that its return gets a resync. It stays unregistered, answered the
+// resync again on every ask, until it acknowledges the resync's cursor: Resync, the cursor of the
+// resync last answered, and SeenAt, when.
 type Consumer struct {
 	Name         string    `json:"name"`
 	Acked        int64     `json:"acked_seq"`
 	SeenAt       time.Time `json:"seen_at"`
 	Unregistered bool      `json:"unregistered,omitempty"`
+	Resync       int64     `json:"resync_seq,omitempty"`
+}
+
+// resyncing reports an unregistered consumer answered a resync within ConsumerSilence that it has
+// not acknowledged yet. An unregistered consumer's SeenAt moves only when it is answered a resync,
+// so one dropped and not back since was last seen more than ConsumerSilence ago.
+func (c Consumer) resyncing(now time.Time) bool {
+	return c.Unregistered && now.Sub(c.SeenAt) <= ConsumerSilence
 }
 
 // Event is something the host records in sys.events that no verb's own event covers.

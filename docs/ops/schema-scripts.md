@@ -88,7 +88,7 @@ A new workspace-owned table follows the same rule.
 | `todo_var` | a user's todo ref variable (000017) | `name` |
 | `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017) | `seq` |
 | `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017) | `(store, path)` |
-| `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017) | `(store, name)` |
+| `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017); the cursor of the resync it was last answered (000018) | `(store, name)` |
 
 Each script says, in its comments, what every table and column is for.
 

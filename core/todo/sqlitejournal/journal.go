@@ -16,10 +16,10 @@ import (
 )
 
 // THE TODO JOURNAL ON THE STORE — core/todo's Journal port (ADR 1791532020 §2.5) on the store's
-// todo tables (migration 000017): each todo store's change log, snapshot and consumers' cursors,
-// and the store, root and var records, all keyed by the store's stable id, never its path. The
-// tables are declared through core/store's seam (store.Declare), so neither core/store nor
-// core/todo imports the other: this package joins them.
+// todo tables (migration 000017; 000018 adds a consumer's resync): each todo store's change log,
+// snapshot and consumers' cursors, and the store, root and var records, all keyed by the store's
+// stable id, never its path. The tables are declared through core/store's seam (store.Declare), so
+// neither core/store nor core/todo imports the other: this package joins them.
 //
 // Every method is one transaction. A write runs on the store's single writer connection, so Commit
 // and Record write their row and apply their Edit together, and UpdateSettings reads, changes and
@@ -71,6 +71,7 @@ const (
 	tcAcked        todoCol = "acked_seq"
 	tcSeenAt       todoCol = "seen_at"
 	tcUnregistered todoCol = "unregistered"
+	tcResync       todoCol = "resync_seq"
 	tcClaimed      todoCol = "claimed"
 	tcClaimedAt    todoCol = "claimed_at"
 	tcLastUse      todoCol = "last_use"
@@ -113,6 +114,7 @@ type (
 		Acked        int64
 		SeenAt       *int64
 		Unregistered int64
+		Resync       int64
 	}
 )
 
@@ -212,6 +214,7 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcAcked:        func(r *todoConsumerRow) any { return &r.Acked },
 			tcSeenAt:       func(r *todoConsumerRow) any { return &r.SeenAt },
 			tcUnregistered: func(r *todoConsumerRow) any { return &r.Unregistered },
+			tcResync:       func(r *todoConsumerRow) any { return &r.Resync },
 		}, []todoCol{tcStore, tcName}, map[todoSort]string{byKey: `"todo_consumer"."name"`}),
 	}
 }
@@ -452,7 +455,8 @@ func (j *todoJournal) Consumers(ctx context.Context, store string) ([]todo.Consu
 	err := j.read(ctx, func(tx *dao.Transaction, t *todoTables) error {
 		rows, err := t.consumers.On(tx).With(tcStore, store).OrderBy(dao.Asc(byKey)).Select()
 		for _, r := range rows {
-			out = append(out, todo.Consumer{Name: r.Name, Acked: r.Acked, SeenAt: fromNanos(r.SeenAt), Unregistered: r.Unregistered != 0})
+			out = append(out, todo.Consumer{Name: r.Name, Acked: r.Acked, SeenAt: fromNanos(r.SeenAt), Unregistered: r.Unregistered != 0,
+				Resync: r.Resync})
 		}
 		return err
 	})
@@ -462,7 +466,7 @@ func (j *todoJournal) Consumers(ctx context.Context, store string) ([]todo.Consu
 func (j *todoJournal) PutConsumer(ctx context.Context, store string, c todo.Consumer) error {
 	return j.write(ctx, func(tx *dao.Transaction, t *todoTables) error {
 		return t.consumers.On(tx).SetMap(map[todoCol]any{tcStore: store, tcName: c.Name, tcAcked: c.Acked,
-			tcSeenAt: nanos(c.SeenAt), tcUnregistered: flag(c.Unregistered)}).Upsert()
+			tcSeenAt: nanos(c.SeenAt), tcUnregistered: flag(c.Unregistered), tcResync: c.Resync}).Upsert()
 	})
 }
 

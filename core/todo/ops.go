@@ -574,6 +574,10 @@ func (m *Manager) prune(ctx context.Context, st *store) {
 		return
 	}
 	for _, c := range cs {
+		if c.resyncing(now) {
+			// what follows its resync's cursor is kept for it: its ack resumes there
+			upTo = min(upTo, c.Resync)
+		}
 		if c.Unregistered {
 			continue
 		}
@@ -593,7 +597,9 @@ func (m *Manager) prune(ctx context.Context, st *store) {
 
 // Changes is a consumer's next committed changes after what it acknowledged. A consumer seen for
 // the first time starts at the beginning of the retained log; one unregistered for its silence
-// gets a resync: the store's current snapshot, and a cursor at the head.
+// gets a resync: the store's current snapshot, and a cursor at the head. A resync is delivered at
+// least once, as a page of changes is: the consumer stays unregistered, and is answered a resync
+// again, until it acknowledges the resync's cursor.
 func (m *Manager) Changes(ctx context.Context, at At, consumer string, limit int) (ChangesPage, error) {
 	if consumer == "" {
 		return ChangesPage{}, fmt.Errorf("%w: a consumer name is required", ErrInvalid)
@@ -619,8 +625,16 @@ func (m *Manager) Changes(ctx context.Context, at At, consumer string, limit int
 		if err != nil {
 			return ChangesPage{}, err
 		}
-		err = m.j.PutConsumer(ctx, id, Consumer{Name: consumer, Acked: head, SeenAt: now})
-		return ChangesPage{Resync: true, Snapshot: snap, Cursor: head}, err
+		if !c.Unregistered { // silent too long, and no prune has dropped it yet
+			m.event(Event{Kind: "todos.consumer_dropped", Store: id, Detail: consumer})
+		}
+		// Acked stays: the cursor moves only when the client acknowledges this page, after it has
+		// durably handled it (ADR 1791532020 §2.5). A client that dies first is answered it again.
+		c.Unregistered, c.SeenAt, c.Resync = true, now, head
+		if err := m.j.PutConsumer(ctx, id, c); err != nil {
+			return ChangesPage{}, err
+		}
+		return ChangesPage{Resync: true, Snapshot: snap, Cursor: head}, nil
 	}
 	if !found {
 		c = Consumer{Name: consumer}
@@ -637,7 +651,9 @@ func (m *Manager) Changes(ctx context.Context, at At, consumer string, limit int
 }
 
 // Ack advances a consumer's cursor to seq, once it has durably handled every change up to it. A
-// cursor never moves back.
+// cursor never moves back. An unregistered consumer is registered again by acknowledging the
+// resync it was answered, at its cursor or later; any other ack of it is from before its silence,
+// for changes that may be pruned since, and is refused.
 func (m *Manager) Ack(ctx context.Context, at At, consumer string, seq int64) error {
 	w, err := m.resolve(ctx, at)
 	if err != nil {
@@ -647,8 +663,13 @@ func (m *Manager) Ack(ctx context.Context, at At, consumer string, seq int64) er
 	if err != nil {
 		return err
 	}
-	if !found || c.Unregistered {
+	now := m.now()
+	if !found {
 		return fmt.Errorf("%w: consumer %q (todos.changes registers it)", ErrNotFound, consumer)
+	}
+	if c.Unregistered && (!c.resyncing(now) || seq < c.Resync) {
+		return fmt.Errorf("%w: consumer %q was unregistered for its silence: todos.changes answers a resync, and acknowledging its cursor registers it again",
+			ErrNotFound, consumer)
 	}
 	head, err := m.j.Head(ctx, w.rec.ID)
 	if err != nil {
@@ -657,7 +678,7 @@ func (m *Manager) Ack(ctx context.Context, at At, consumer string, seq int64) er
 	if seq > head {
 		return fmt.Errorf("%w: seq %d is past the log's head %d", ErrInvalid, seq, head)
 	}
-	c.Acked, c.SeenAt = max(c.Acked, seq), m.now()
+	c.Acked, c.SeenAt, c.Unregistered, c.Resync = max(c.Acked, seq), now, false, 0
 	return m.j.PutConsumer(ctx, w.rec.ID, c)
 }
 

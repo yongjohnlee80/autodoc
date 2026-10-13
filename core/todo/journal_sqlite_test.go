@@ -65,6 +65,8 @@ var sqliteSuites = []struct {
 	{"FirstSightIsABaseline", TestFirstSightIsABaseline},
 	{"Consumers", TestConsumers},
 	{"PruningAndResync", TestPruningAndResync},
+	{"AResyncIsDeliveredAtLeastOnce", TestAResyncIsDeliveredAtLeastOnce},
+	{"ASilentConsumerIsDroppedByItsAsk", TestASilentConsumerIsDroppedByItsAsk},
 	{"AddWritesAutoCoresFile", TestAddWritesAutoCoresFile},
 	{"TransitionsAnyToAny", TestTransitionsAnyToAny},
 	{"AssignD1", TestAssignD1},
