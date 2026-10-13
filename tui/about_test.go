@@ -58,25 +58,28 @@ func TestAboutWithoutADateAndWithAReplacement(t *testing.T) {
 	}
 }
 
-// About dims what is behind it: the status line under the dialog is drawn faint while it is open.
+// About dims what is behind it: the status bar's cell (NORMAL), outside the dialog, is drawn faint by
+// the scrim while About is open; before, it is not. (The "connected" toast stays above the scrim.)
 func TestAboutDimsTheBackground(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{AboutInfo: AboutInfo{Version: "v9.9.9"}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
-	faint := func() bool {
-		rows := strings.Split(r.s.String(), "\n")
-		snap := r.s.Backend.Snapshot()
-		for y, row := range rows {
-			if x := strings.Index(row, "connected"); x >= 0 {
-				return snap[y][len([]rune(row[:x]))].Attrs.Mask&tuicore.AttrFaint != 0
-			}
+	r.s.WaitForText(t, "NORMAL")
+	y, x := -1, -1
+	for row, line := range strings.Split(r.s.String(), "\n") {
+		if i := strings.Index(line, "NORMAL"); i >= 0 {
+			y, x = row, len([]rune(line[:i]))
+			break
 		}
-		return false
 	}
+	if y < 0 {
+		t.Fatal("the status bar is not on screen")
+	}
+	faint := func() bool { return r.s.Backend.Snapshot()[y][x].Attrs.Mask&tuicore.AttrFaint != 0 }
 	if faint() {
-		t.Fatal("the status line is faint before About opens")
+		t.Fatal("the status bar is faint before About opens")
 	}
 	r.leader(t, 'A')
 	r.s.WaitForText(t, "AutoDoc v9.9.9")
-	r.s.WaitFor(t, "the status line dimmed behind About", func(string) bool { return faint() })
+	r.s.WaitFor(t, "the status bar dimmed behind About", func(string) bool { return faint() })
 }
