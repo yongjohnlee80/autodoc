@@ -9,6 +9,7 @@ Dialog {
     dim: false
     onAccepted: App.askAccepted()
     onRejected: App.askRejected()
+    onClosed: App.askClosed()
     Text { wrapMode: Tui.WordWrap; text: App.askText }
     DialogButtonBox {
         Button { text: App.askNo; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
