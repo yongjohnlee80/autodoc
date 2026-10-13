@@ -81,6 +81,31 @@ func TestCtrlOThatDoesntGoAheadKeepsTheList(t *testing.T) {
 	r.waitFile(t, "a.md")
 }
 
+// TestAJumpWhoseListMovedLandsNowhere: a step proposed, then the list moved before its document
+// was shown (here, while the unsaved question is asked): the document opens, but the step is not
+// committed, so the cursor stays at the document's start and the list where the move left it.
+func TestAJumpWhoseListMovedLandsNowhere(t *testing.T) {
+	r := attached(t, startDaemon(t, linksKB))
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.putCursor(2, strings.Index("see [[b]] and [the c](c.md), then nothing", "b]]"))
+	r.leader(t, 'j')
+	r.waitFile(t, "b.md")
+	r.typeInEditor(t, "edit ")
+	r.keys(t, ctrlKey('o'))
+	r.s.WaitForText(t, "Save them before")
+	onLoop(r, func() bool { r.h.jumps.Push(widget.JumpPos{Doc: "elsewhere", Line: 1}); return true })
+	n, idx := r.jumpIndex()
+	r.h.p.Post(func() { r.h.unsaved("discard") })
+	r.waitFile(t, "a.md")
+	if at := r.cursor(); at != [2]int{0, 0} {
+		t.Fatalf("a step whose list moved landed at %v, want the document's start", at)
+	}
+	if n2, idx2 := r.jumpIndex(); n2 != n || idx2 != idx {
+		t.Fatalf("a refused step moved the list: %d at %d, was %d at %d", n2, idx2, n, idx)
+	}
+}
+
 // TestCtrlOToADocumentGoneDropsIt: a document removed since it was left is dropped from the list,
 // and the user told; the page stays.
 func TestCtrlOToADocumentGoneDropsIt(t *testing.T) {
