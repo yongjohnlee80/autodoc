@@ -207,3 +207,109 @@ func TestTheClientsTokensAreResolvedToTheirHashes(t *testing.T) {
 		t.Errorf("a malformed hash: %v", err)
 	}
 }
+
+// opsToken is the fixture's operator's bearer token, read through AUTODOC_TEST_OPS_TOKEN.
+const opsToken = "an-operators-test-token-longer-than-32-bytes-0123"
+
+// --server serves its health and status and logs its metrics lines: /v1/health answers ok to
+// anyone; /v1/status answers the operator the tenant's figures as the server holds them, a search
+// client's token 403; a view whose query fails shows in status as the code "view", never the
+// database's words, which only the log holds; a metrics line for the server and one for the tenant
+// come every interval. The mutant, named here: the ops step left out of the stack (no health, no
+// metrics).
+func TestTheServerReportsItsHealthAndStatus(t *testing.T) {
+	f := newServerFixture(t, serverView)
+	t.Setenv("AUTODOC_TEST_HTTP_TOKEN", httpToken)
+	t.Setenv("AUTODOC_TEST_OPS_TOKEN", opsToken)
+	f.extra = httpBlock + `
+[[http.operator]]
+name      = "ops"
+token_env = "AUTODOC_TEST_OPS_TOKEN"
+tenants   = ["lm-catalog"]
+
+[log]
+metrics_interval = "10s"
+`
+	f.configure("fake-model", f.url)
+	ctx, cancel := context.WithCancel(f.ctx)
+	defer cancel()
+	done, stderr := f.serve(ctx)
+	f.started(stderr)
+	f.waitFor("both rows embedded", func() bool { return f.documents() == "2" && f.embedded("openai|fake-model||4") })
+	m := listening.FindStringSubmatch(stderr.String())
+	if m == nil {
+		t.Fatalf("the server does not say where it listens: %s", stderr)
+	}
+	get := func(path, token string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, "http://"+m[1]+path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+	f.waitFor("health ok", func() bool {
+		status, body := get("/v1/health", "")
+		return status == http.StatusOK && strings.Contains(body, `"status":"ok"`)
+	})
+	var snap struct {
+		Tenants []struct {
+			Tenant    string `json:"tenant"`
+			Lock      string `json:"lock"`
+			Documents struct {
+				Total, Ready int
+			} `json:"documents"`
+			Cursor struct {
+				LagSeconds *int64 `json:"lag_seconds"`
+			} `json:"cursor"`
+			LastPass struct {
+				Error string `json:"error"`
+			} `json:"last_pass"`
+			Models struct {
+				Semantic string `json:"semantic"`
+			} `json:"models"`
+		} `json:"tenants"`
+	}
+	status, body := get("/v1/status", opsToken)
+	if err := json.Unmarshal([]byte(body), &snap); err != nil || status != http.StatusOK || len(snap.Tenants) != 1 {
+		t.Fatalf("status: %d %s", status, body)
+	}
+	if ts := snap.Tenants[0]; ts.Tenant != "lm-catalog" || ts.Lock != "held" || ts.Documents.Total != 2 || ts.Documents.Ready != 2 ||
+		ts.Models.Semantic != "ready" || ts.Cursor.LagSeconds == nil {
+		t.Errorf("the tenant's status: %+v", ts)
+	}
+	if status, _ := get("/v1/status", httpToken); status != http.StatusForbidden {
+		t.Errorf("a search client's token on status: %d", status)
+	}
+
+	f.exec(`ALTER TABLE track RENAME TO track_away`)
+	f.waitFor("the view's failure in status", func() bool {
+		_, body := get("/v1/status", opsToken)
+		return strings.Contains(body, `"last_pass":{`) && strings.Contains(body, `"error":"view"`)
+	})
+	if _, body := get("/v1/status", opsToken); strings.Contains(body, "does not exist") {
+		t.Errorf("the database's words are in status: %s", body)
+	}
+	if !strings.Contains(stderr.String(), "does not exist") {
+		t.Errorf("the log does not hold the view's failure: %s", stderr)
+	}
+	f.exec(`ALTER TABLE track_away RENAME TO track`)
+
+	f.waitFor("the metrics lines", func() bool {
+		log := stderr.String()
+		return strings.Contains(log, "metrics scope=server provider=up") && strings.Contains(log, "metrics scope=tenant tenant=lm-catalog lock=held documents=2")
+	})
+	cancel()
+	if code := exitOf(t, done, stderr); code != 0 {
+		t.Fatalf("--server exited %d: %s", code, stderr)
+	}
+	if strings.Contains(stderr.String(), opsToken) {
+		t.Errorf("the operator's token is in the log")
+	}
+}

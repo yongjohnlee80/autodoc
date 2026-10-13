@@ -27,16 +27,23 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
 	gsearch "github.com/yongjohnlee80/golib/search"
 
+	"github.com/yongjohnlee80/autodoc/enterprise/ops"
 	"github.com/yongjohnlee80/autodoc/enterprise/search"
 )
 
-// Path is the one path the API answers.
-const Path = "/v1/search"
+// The paths the API answers: search (POST, a client's token), health (GET, public) and status
+// (GET, an operator's token).
+const (
+	Path       = "/v1/search"
+	HealthPath = "/v1/health"
+	StatusPath = "/v1/status"
+)
 
 // The request's bounds.
 const (
@@ -67,6 +74,14 @@ type Client struct {
 	Grants map[string]map[string][]string
 }
 
+// Operator is one reader of the API's status as the server resolved it: its name for the log, its
+// token's SHA-256, and the tenants whose status it reads (["*"]: every one). It cannot search.
+type Operator struct {
+	Name    string
+	Token   [sha256.Size]byte
+	Tenants []string
+}
+
 // Searcher searches one tenant: *search.Searcher.
 type Searcher interface {
 	Search(ctx context.Context, scope search.Scope, r search.Request) (search.Result, error)
@@ -78,6 +93,12 @@ type Option func(*Handler)
 // WithLogger is where the Handler logs each request: the client, the tenant, the status, the hits,
 // the query's length and the time taken. The default logs nothing.
 func WithLogger(l logger.Logger) Option { return func(h *Handler) { h.log = l } }
+
+// WithOps serves health and status from c: without it, /v1/health and /v1/status are not found.
+func WithOps(c *ops.Collector) Option { return func(h *Handler) { h.ops = c } }
+
+// WithOperators are the tokens that may read /v1/status.
+func WithOperators(o []Operator) Option { return func(h *Handler) { h.operators = slices.Clone(o) } }
 
 // WithBudget sets each request's budget; a zero part keeps the default's.
 func WithBudget(b Budget) Option {
@@ -96,11 +117,41 @@ func WithBudget(b Budget) Option {
 
 // Handler is the API. It is safe for concurrent use.
 type Handler struct {
-	clients []Client
-	tenants map[string]Searcher
-	log     logger.Logger
-	budget  Budget
-	active  sync.WaitGroup // the requests being answered (Wait)
+	clients   []Client
+	operators []Operator
+	tenants   map[string]Searcher
+	ops       *ops.Collector
+	log       logger.Logger
+	budget    Budget
+	active    sync.WaitGroup // the requests being answered (Wait)
+
+	// the requests answered since TakeCounts last took them, by status class, and the slowest
+	ok, client4xx, server5xx, slowest atomic.Int64
+}
+
+// TakeCounts are the requests answered since it was last called, which it starts again from zero:
+// the metrics lines' figures for their interval.
+func (h *Handler) TakeCounts() ops.HTTPCounts {
+	return ops.HTTPCounts{OK: h.ok.Swap(0), Client: h.client4xx.Swap(0), Server: h.server5xx.Swap(0),
+		Slowest: time.Duration(h.slowest.Swap(0))}
+}
+
+// count adds one answered request to the counts.
+func (h *Handler) count(status int, took time.Duration) {
+	switch {
+	case status >= 500:
+		h.server5xx.Add(1)
+	case status >= 400:
+		h.client4xx.Add(1)
+	default:
+		h.ok.Add(1)
+	}
+	for {
+		cur := h.slowest.Load()
+		if int64(took) <= cur || h.slowest.CompareAndSwap(cur, int64(took)) {
+			return
+		}
+	}
 }
 
 // New is the API for clients over tenants.
@@ -180,8 +231,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = rc.SetWriteDeadline(start.Add(h.budget.Write))
 	ctx, cancel := context.WithDeadline(r.Context(), start.Add(h.budget.Search))
 	defer cancel()
+	switch r.URL.Path {
+	case HealthPath:
+		h.count(h.serveHealth(ctx, w, r), time.Since(start))
+		return
+	case StatusPath:
+		h.count(h.serveStatus(ctx, w, r, start), time.Since(start))
+		return
+	}
 	var queryLen int
 	a, res := h.answer(ctx, w, r, &queryLen)
+	defer func() { h.count(a.status, time.Since(start)) }()
 	if a.status == http.StatusOK {
 		writeJSON(w, http.StatusOK, res)
 	} else {
@@ -279,21 +339,89 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 	return a, out
 }
 
-// client is the client whose token the Authorization header bears, or nil. Every client's hash is
-// compared, whichever matches, so the time taken does not tell which did, or how far one matched.
+// client is the client whose token the Authorization header bears, or nil.
 func (h *Handler) client(auth string) *Client {
+	c, _ := h.holder(auth)
+	return c
+}
+
+// holder is the client or the operator whose token the Authorization header bears, or neither.
+// Every client's and operator's hash is compared, whichever matches, so the time taken does not tell
+// which did, of which role, or how far one matched.
+func (h *Handler) holder(auth string) (*Client, *Operator) {
 	scheme, token, ok := strings.Cut(auth, " ")
 	if !ok || !strings.EqualFold(scheme, "Bearer") || token == "" {
-		return nil
+		return nil, nil
 	}
 	sum := sha256.Sum256([]byte(token))
-	var found *Client
+	var client *Client
+	var operator *Operator
 	for i := range h.clients {
-		if subtle.ConstantTimeCompare(sum[:], h.clients[i].Token[:]) == 1 && found == nil {
-			found = &h.clients[i]
+		if subtle.ConstantTimeCompare(sum[:], h.clients[i].Token[:]) == 1 && client == nil {
+			client = &h.clients[i]
 		}
 	}
-	return found
+	for i := range h.operators {
+		if subtle.ConstantTimeCompare(sum[:], h.operators[i].Token[:]) == 1 && operator == nil {
+			operator = &h.operators[i]
+		}
+	}
+	return client, operator
+}
+
+// serveHealth answers GET /v1/health, to anyone: 200 for ok and degraded, 503 for unavailable. It
+// is not logged: a supervisor asks every few seconds. It returns the status answered.
+func (h *Handler) serveHealth(ctx context.Context, w http.ResponseWriter, r *http.Request) int {
+	switch {
+	case h.ops == nil:
+		return refuseNow(w, http.StatusNotFound, "not_found", "this server has no health endpoint")
+	case r.Method != http.MethodGet:
+		w.Header().Set("Allow", http.MethodGet)
+		return refuseNow(w, http.StatusMethodNotAllowed, "method_not_allowed", HealthPath+" takes GET")
+	}
+	health := h.ops.Health(ctx)
+	status := http.StatusOK
+	if health.Status == ops.StatusUnavailable {
+		status = http.StatusServiceUnavailable
+	}
+	writeJSON(w, status, health)
+	return status
+}
+
+// serveStatus answers GET /v1/status, to an operator's token, for its tenants: a search client's
+// token is 403 (its grants are per access value; status is tenant-wide), any other 401. It returns
+// the status answered.
+func (h *Handler) serveStatus(ctx context.Context, w http.ResponseWriter, r *http.Request, start time.Time) int {
+	if h.ops == nil {
+		return refuseNow(w, http.StatusNotFound, "not_found", "this server has no status endpoint")
+	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		return refuseNow(w, http.StatusMethodNotAllowed, "method_not_allowed", StatusPath+" takes GET")
+	}
+	client, op := h.holder(r.Header.Get("Authorization"))
+	name, status := "-", http.StatusOK
+	switch {
+	case op != nil:
+		name = op.Name
+		snap := h.ops.Snapshot(ctx).Only(op.Tenants)
+		writeJSON(w, status, snap)
+	case client != nil:
+		name, status = client.Name, refuseNow(w, http.StatusForbidden, "forbidden", "status is for an operator's token: a search client's grants do not cover it")
+	default:
+		w.Header().Set("WWW-Authenticate", `Bearer realm="autodoc"`)
+		status = refuseNow(w, http.StatusUnauthorized, "unauthorized", "an operator's bearer token is required")
+	}
+	logger.Info(h.log, fmt.Sprintf("status: %s: %d, in %v", name, status, time.Since(start).Round(time.Millisecond)))
+	return status
+}
+
+// refuseNow writes a refusal and returns its status.
+func refuseNow(w http.ResponseWriter, status int, code, message string) int {
+	var f failure
+	f.Error.Code, f.Error.Message = code, message
+	writeJSON(w, status, f)
+	return status
 }
 
 // readRequest reads the body: at most MaxBody bytes of one JSON object with no unknown field, read

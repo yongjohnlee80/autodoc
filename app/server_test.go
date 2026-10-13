@@ -300,7 +300,7 @@ func TestServerStepsStartInOrder(t *testing.T) {
 	for _, s := range serverSteps {
 		names = append(names, s.name)
 	}
-	if want := []string{"postgres", "schema", "policy", "ingesters", "embedder", "http"}; !slices.Equal(names, want) {
+	if want := []string{"postgres", "schema", "policy", "ingesters", "embedder", "ops", "http"}; !slices.Equal(names, want) {
 		t.Fatalf("serverSteps %v, want %v", names, want)
 	}
 }

@@ -16,9 +16,11 @@ import (
 	"github.com/yongjohnlee80/golib/logger"
 
 	"github.com/yongjohnlee80/autodoc/core/pgstore"
+	"github.com/yongjohnlee80/autodoc/enterprise/api"
 	"github.com/yongjohnlee80/autodoc/enterprise/config"
 	"github.com/yongjohnlee80/autodoc/enterprise/embedder"
 	"github.com/yongjohnlee80/autodoc/enterprise/ingest"
+	"github.com/yongjohnlee80/autodoc/enterprise/ops"
 )
 
 // runServer is --server: the enterprise search server, headless, with no socket, no TUI and no
@@ -42,7 +44,7 @@ func runServer(ctx context.Context, path string, check bool, stdout, stderr io.W
 	if check {
 		return checkServer(ctx, path, cfg, sources, stdout)
 	}
-	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr)), failed: make(chan error, len(sources)+1)}
+	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr)), failed: make(chan error, len(sources)+1), version: version}
 	defer s.stops.unwind()
 	for _, step := range serverSteps {
 		if err := step.start(s); err != nil {
@@ -77,6 +79,11 @@ type server struct {
 	// worker is the embedding worker once it has started, which an ingester's commit wakes; nil
 	// before, when a commit has nothing to wake (the worker's first round reads what it wrote).
 	worker atomic.Pointer[embedder.Worker]
+	// ops tells an operator the server's health and status, and logs the metrics lines; api is the
+	// HTTP API once it serves, whose counts the metrics lines take
+	ops     *ops.Collector
+	api     atomic.Pointer[api.Handler]
+	version string
 }
 
 // serverSteps are --server's subsystems in the order they start. The schema must exist before
@@ -91,6 +98,7 @@ var serverSteps = []struct {
 	{"policy", (*server).setPolicies},
 	{"ingesters", (*server).startIngesters},
 	{"embedder", (*server).startEmbedder},
+	{"ops", (*server).startOps},
 	{"http", (*server).startHTTP},
 }
 
