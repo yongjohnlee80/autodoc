@@ -285,7 +285,7 @@ func TestTodosAssignWritesThenHandsOverAtTheReturnedPath(t *testing.T) {
 
 // TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites: A off a task row says what it needs; on a
 // store not claimed it is the store's read-only notice; with no AutoDoc agent to list it says how to
-// add one. None opens the picker. A dismissed picker leaves nothing for a stray accept to write.
+// add one. None opens the picker. A dismissed picker has chosen no agent: nothing is written.
 func TestTodosAssignIsRefusedWithoutATaskAnAgentOrWrites(t *testing.T) {
 	c, assigned := assigningStore(AgentEntry{Ref: AgentRef{Codename: "scribe"}, Name: "Scribe"})
 	v := newTodos(c)

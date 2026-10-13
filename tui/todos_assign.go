@@ -43,8 +43,7 @@ func newAssignPick(t *todos) *pick[AgentEntry] {
 			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
 		},
 		scope:  TicketWorkspace,
-		choose: t.assignTo,
-		cancel: func() { t.assigning = nil }}
+		choose: t.assignTo}
 }
 
 func agentRowOf(_ int, e AgentEntry) rowOf {
