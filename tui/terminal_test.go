@@ -901,3 +901,36 @@ func panelHeight(screen, title string) int {
 	}
 	return 0
 }
+
+// TestARefusedMaximizeSaysWhatItRefused: with a modal dialog over the page (Theme and font…), the
+// terminal's Drawer refuses a window operation from outside it, so F11 and SPC M's maximizePanel
+// cannot maximize the panel: what was refused is kept and shown, naming the operation and the panel
+// (Maximize, docked; Restore, maximized), and the panel stays as it was.
+func TestARefusedMaximizeSaysWhatItRefused(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	maxed := func() bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) }
+	refused := func(op string) {
+		t.Helper()
+		onLoop(r, func() bool { r.h.openTerminalLook(); return true })
+		r.s.WaitForText(t, "the terminals' theme and font")
+		was := maxed()
+		onLoop(r, func() bool { r.h.maximizePanel(); return true })
+		want := op + " the terminal panel: "
+		r.s.WaitFor(t, op+" refused, shown", func(string) bool { return r.noticed(want) })
+		errs := onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) })
+		if len(errs) == 0 || !strings.HasPrefix(errs[len(errs)-1].Error(), want) {
+			t.Errorf("kept %v, want one starting %q", errs, want)
+		}
+		if maxed() != was {
+			t.Errorf("the refused %s changed the panel", op)
+		}
+		r.keys(t, esc())
+		r.s.WaitFor(t, "the dialog closed", func(sc string) bool { return !strings.Contains(sc, "the terminals' theme and font") })
+	}
+	refused("Maximize")
+	onLoop(r, func() bool { r.h.maximizePanel(); return true }) // no dialog now: it maximizes
+	r.s.WaitFor(t, "maximized", func(string) bool { return maxed() })
+	refused("Restore")
+}
