@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -33,14 +35,14 @@ func panelRows(c any, panel string, hide func()) []widget.MenuItemModel {
 		PanelMaximized(string) bool
 		ToggleMaximize(string) error
 	}); ok {
-		label := "&Maximize"
+		label, op := "&Maximize", "Maximize"
 		if m.PanelMaximized(panel) {
-			label = "Re&store"
+			label, op = "Re&store", "Restore"
 		}
 		rows = append(rows, tabMenuRow("tabs.maximize", label, func(widget.TerminalTabID) {
 			if err := m.ToggleMaximize(panel); err != nil {
 				if k, ok := c.(interface{ Keep(error) }); ok {
-					k.Keep(err)
+					k.Keep(fmt.Errorf("%s the %s panel: %w", op, panel, err))
 				}
 			}
 		}))

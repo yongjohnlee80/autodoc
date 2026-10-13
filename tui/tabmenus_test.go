@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -49,7 +50,7 @@ func TestPanelRowsOfferOnlyWhatTheHostHas(t *testing.T) {
 }
 
 // TestPanelRowsMaximizeTheirOwnPanel: Maximize toggles the menu's own panel; maximized, the row reads
-// Restore (s); a toggle that fails is kept, not lost.
+// Restore (s); a toggle that fails is kept, not lost, named for what failed.
 func TestPanelRowsMaximizeTheirOwnPanel(t *testing.T) {
 	m := &maximizeHost{}
 	rows := panelRows(m, "agent", func() {})
@@ -67,7 +68,7 @@ func TestPanelRowsMaximizeTheirOwnPanel(t *testing.T) {
 		t.Errorf("maximized, the row reads %q (%q)", row.Label, row.Hotkey)
 	}
 	runRow(t, rows, "tabs.maximize")
-	if len(m.kept) != 1 || !errors.Is(m.kept[0], m.err) {
-		t.Errorf("a failed toggle kept %v", m.kept)
+	if len(m.kept) != 1 || !errors.Is(m.kept[0], m.err) || !strings.HasPrefix(m.kept[0].Error(), "Restore the agent panel: ") {
+		t.Errorf("a failed toggle kept %v, not naming what failed", m.kept)
 	}
 }

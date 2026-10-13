@@ -837,3 +837,45 @@ func TestF11WorksWithTheKeyboardInTheShell(t *testing.T) {
 func maximizedNow(maximized func() bool, want bool) func(string) bool {
 	return func(string) bool { return maximized() == want }
 }
+
+// clickMenuRow opens the open panel's ≡ menu with the pointer and clicks its row label.
+func clickMenuRow(t *testing.T, r *running, label string) {
+	t.Helper()
+	click := func(x, y int) {
+		r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
+			tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
+	}
+	r.s.WaitForText(t, "≡")
+	click(r.textAt("≡"))
+	r.s.WaitForText(t, label)
+	x, y := r.textAt(label)
+	click(x+1, y)
+}
+
+// TestAClickOnMaximizeInEachPanelsMenu: a click on Maximize in the terminal's ≡ menu maximizes the
+// panel, and a click on Restore restores it; the agents' menu does the same for theirs; nothing is
+// refused. (rc2: the click was refused, the row running while its menu still held the input.)
+func TestAClickOnMaximizeInEachPanelsMenu(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	maxed := func(panel string, want bool) func(string) bool {
+		return func(string) bool { return onLoop(r, func() bool { return r.h.panelMax[panel] }) == want }
+	}
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	clickMenuRow(t, r, "Maximize")
+	r.s.WaitFor(t, "the terminal maximized by a click", maxed("terminal", true))
+	clickMenuRow(t, r, "Restore")
+	r.s.WaitFor(t, "the terminal restored by a click", maxed("terminal", false))
+
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
+	r.s.WaitFor(t, "the terminal hidden", func(string) bool { return !r.termShown() })
+	onLoop(r, func() bool { r.h.openDrawer("agent"); return true })
+	r.s.WaitFor(t, "the agents open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
+	clickMenuRow(t, r, "Maximize")
+	r.s.WaitFor(t, "the agents maximized by a click", maxed("agent", true))
+	clickMenuRow(t, r, "Restore")
+	r.s.WaitFor(t, "the agents restored by a click", maxed("agent", false))
+	if errs := onLoop(r, func() []error { r.h.mu.Lock(); defer r.h.mu.Unlock(); return append([]error(nil), r.h.errs...) }); len(errs) != 0 {
+		t.Errorf("refused: %v", errs)
+	}
+}

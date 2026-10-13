@@ -249,6 +249,8 @@ type Host struct {
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
+	// keptShown is each error text keep has notified, shown once (h.mu)
+	keptShown map[string]bool
 }
 
 // Options are what New needs from the program around it.
@@ -447,12 +449,25 @@ func (h *Host) Run(ctx context.Context) error {
 	return errors.Join(append([]error{err, keepErr}, h.errs...)...)
 }
 
-// keep records a handler's error for Run, and shows it.
+// keep records a handler's error for Run, and shows it: a notification, once for each error's
+// text, so one asked again and again (a binding set on every keystroke) does not flood them. Run
+// still returns every one.
 func (h *Host) keep(err error) {
 	if err == nil {
 		return
 	}
+	msg := err.Error()
 	h.mu.Lock()
 	h.errs = append(h.errs, err)
+	first := !h.keptShown[msg]
+	if first {
+		if h.keptShown == nil {
+			h.keptShown = map[string]bool{}
+		}
+		h.keptShown[msg] = true
+	}
 	h.mu.Unlock()
+	if first && h.p != nil {
+		h.p.Post(func() { h.notify("Something went wrong: " + msg) })
+	}
 }

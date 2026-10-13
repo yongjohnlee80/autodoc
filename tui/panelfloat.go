@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -112,7 +113,13 @@ func (h *Host) maximizePanel() {
 		h.notify("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
 		return
 	}
-	h.keep(h.toggleMaximize(target))
+	if err := h.toggleMaximize(target); err != nil {
+		op := "Maximize"
+		if h.panelMax[target] {
+			op = "Restore"
+		}
+		h.keep(fmt.Errorf("%s the %s panel: %w", op, target, err))
+	}
 }
 
 // panelChanged is a panel's Drawer changed signal, as far as the host follows it: a maximize
