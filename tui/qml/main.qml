@@ -451,6 +451,7 @@ Window {
                 Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
                 Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
                 Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
+                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
                 Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
                 Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
                 Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
@@ -501,7 +502,7 @@ Window {
             Text {
                 visible: App.todoHelpShown
                 wrapMode: Tui.WordWrap
-                text: "Enter open the task's file, or a section   a add   d remove   s status (open → in progress → completed → deferred → open)   > a step on (open → in progress → completed)   < a step back   i, o details   R refresh   L label the store   M move the store   1–5 a section   ? these keys   q close"
+                text: "Enter open the task's file, or a section   a add   d remove   s status (open → in progress → completed → deferred → open)   > a step on (open → in progress → completed)   < a step back   i, o details   R refresh   A assign to an agent   L label the store   M move the store   1–5 a section   ? these keys   q close"
             }
             // the task actions, each its key's: a Flow, so a narrow panel wraps them, never clips.
             // Which apply follows the cursor (todos.go: showDetail), never a button's own click.
@@ -518,6 +519,7 @@ Window {
                 Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
                 Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
                 Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
+                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
                 Shortcut { sequence: "?"; onActivated: App.todoToggleHelp() }
                 Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
                 Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
@@ -533,6 +535,7 @@ Window {
                     Button { text: "◀ Status (<)"; enabled: App.todoCanBack; onClicked: App.todoBack() }
                     Button { text: "Status ▶ (>)"; enabled: App.todoCanForward; onClicked: App.todoForward() }
                     Button { text: "Remove (d)"; enabled: App.todoCanRemove; onClicked: App.todoRemove() }
+                    Button { text: "Assign (A)"; enabled: App.todoCanAssign; onClicked: App.todoAssign() }
                     Button { id: todoRefreshButton; text: "Refresh (R)"; onClicked: App.todoRefresh() }
                 }
             }
@@ -543,6 +546,7 @@ Window {
     Find { id: findDialog }
     FileOpen { id: fileOpen }
     OutlinePicker { id: outlinePicker }
+    AgentAssign { id: agentAssignPicker }
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }
@@ -582,6 +586,7 @@ Window {
     About { id: about }
     TodoNew { id: todoNew }
     TodoLabel { id: todoLabel }
+    TodoAssign { id: todoAssign }
     TodoFolder { id: todoFolder }
     Notifications { id: notifications }
     Confirm { id: confirm }

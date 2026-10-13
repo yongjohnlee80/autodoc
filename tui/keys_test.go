@@ -354,7 +354,7 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		todosBlocks++
 		todosBegin, todosEnd := scopeMarkers(s)
 		todosKeys := block(todosBegin, todosEnd)
-		for _, seq := range []string{"a", "d", "s", "<", ">", "i", "o", "Shift+R", "Shift+M", "Shift+L", "?", "1", "2", "3", "4", "5"} {
+		for _, seq := range []string{"a", "d", "s", "<", ">", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "?", "1", "2", "3", "4", "5"} {
 			if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
 				t.Errorf("the todos panel's %q block lacks %s:\n%s", s.Label, seq, todosKeys)
 			}

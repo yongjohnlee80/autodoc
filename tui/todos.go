@@ -131,6 +131,9 @@ type todos struct {
 	folderAs string // what the folder chosen is for: "load", "new" or "move"
 	// labelling is the store L is labelling, while its prompt is open
 	labelling *todoStore
+	// assignPick is A's picker of AutoDoc's agents; assigning the A in progress (todos_assign.go)
+	assignPick *pick[AgentEntry]
+	assigning  *todoAssign
 	// follow is the task a move (<, >, s) sent to another section: the cursor goes to it there once
 	// the reads of both sections, the one it left and the one it is in, have landed, in either
 	// order (a section that changes after the cursor is placed moves the rows under it)
@@ -143,6 +146,7 @@ func newTodos(c Core) *todos {
 	t := &todos{c: c, detail: true, model: tuidecl.NewTreeListModel("key", "label"),
 		tasks: map[string]map[string]any{}, open: map[string]bool{}, seqs: map[string]*uint64{}}
 	t.model.OnFetch = t.fetch
+	t.assignPick = newAssignPick(t)
 	return t
 }
 
@@ -154,7 +158,10 @@ func (t *todos) State() map[string]any {
 		"App.todoDetailShown": true, "App.todoHelpShown": false,
 		"App.todoFolder": "", "App.todoTree": t.model, "App.todoLabelText": "",
 		"App.todoCanPreview": false, "App.todoCanAdd": false, "App.todoCanBack": false,
-		"App.todoCanForward": false, "App.todoCanRemove": false,
+		"App.todoCanForward": false, "App.todoCanRemove": false, "App.todoCanAssign": false,
+		"App.agentAssignRows": t.assignPick.list.Model(), "App.agentAssignField": "", "App.agentAssignStatus": "agents",
+		"App.agentAssignPreviewTitle": "", "App.agentAssignPreviewText": "", "App.agentAssignPreviewAt": 0,
+		"App.todoAssignTitle": "assign", "App.todoAssignText": "",
 	}
 }
 
@@ -172,6 +179,8 @@ func (t *todos) Commands() map[string]Command {
 		"App.todoBack":         none(func() { t.step(todoBack, "back") }),
 		"App.todoLabel":        none(t.label),
 		"App.todoLabelSet":     oneString("a label", t.labelSet),
+		"App.todoAssign":       none(t.assign),
+		"App.todoAssignSet":    oneString("an instruction", t.assignSet),
 		"App.todoRefresh":      none(t.refresh),
 		"App.todoToggleDetail": none(t.toggleDetail),
 		"App.todoToggleHelp":   none(t.toggleHelp),
@@ -221,6 +230,7 @@ func (*todos) Keys() []Key {
 		{Scope: "todos", Seq: "Shift+R", Show: "R", Run: "App.todoRefresh()"},
 		{Scope: "todos", Seq: "Shift+M", Show: "M", Run: "App.todoMove()"},
 		{Scope: "todos", Seq: "Shift+L", Show: "L", Run: "App.todoLabel()"},
+		{Scope: "todos", Seq: "Shift+A", Show: "A", Run: "App.todoAssign()"},
 		{Scope: "todos", Seq: "?", Show: "?", Run: "App.todoToggleHelp()"},
 	}
 	for i := range todoBuckets {
@@ -228,6 +238,9 @@ func (*todos) Keys() []Key {
 	}
 	return keys
 }
+
+// Picks: A's picker of AutoDoc's agents (todos_assign.go).
+func (t *todos) Picks() map[string]picker { return map[string]picker{"agentAssign": t.assignPick} }
 
 // Cards: the todos have no card of keys.
 func (*todos) Cards() []Card { return nil }
@@ -600,7 +613,7 @@ func (t *todos) showDetail() {
 }
 
 // syncButtons sets which task buttons apply to the row under the cursor, as their keys refuse the
-// others: a task for Preview, Remove and the steps; a store taking writes here for Add and the
+// others: a task for Preview, Remove, Assign and the steps; a store taking writes here for Add and the
 // writes; a step only where the task's status has one.
 func (t *todos) syncButtons() {
 	s, x := t.cursor()
@@ -613,6 +626,7 @@ func (t *todos) syncButtons() {
 	t.c.Set("App.todoCanBack", x != nil && writable && back)
 	t.c.Set("App.todoCanForward", x != nil && writable && forward)
 	t.c.Set("App.todoCanRemove", x != nil && writable)
+	t.c.Set("App.todoCanAssign", x != nil && writable)
 }
 
 // storeDetail is a store's details, Markdown: what it is called, where it is, who writes it.

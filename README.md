@@ -238,6 +238,14 @@ terminal, as below; where it cannot, it shows the block's source and why.
   `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
   keeps it and `Esc` puts it back. A panel opens where it was left, kept in the store as
   percentages of the window; its side in the preferences says only where it first appears.
+- **The todos** (`SPC x`): the workspace's todo stores, as autofinder's todos panel shows them; `?`
+  there lists its keys. **`A` assigns the task under the cursor to one of AutoDoc's own agents**:
+  pick the agent, then type an optional instruction (`Esc` cancels; empty is "Task assigned to
+  you."). The task's assignee becomes `autodoc:<codename>`, and an open task moves to in progress.
+  The agent is then handed the task in its terminal: its title, its file and the instruction. If
+  the agent isn't running, you're asked first, and it's handed over once it starts. If you decline,
+  or the agent can't take it, the task stays assigned and a notice says so; `A` again delivers it.
+  AutoDoc assigns only to its own agents, never to AutoVim's.
   `Go › Reset panel layout` docks every panel at its side again, as choosing a new side does for
   one. A terminal may keep `Alt`+click for itself; the keys always work.
 - **Files anywhere.** `File › Open file…` (`SPC f`) opens any file on this machine's disk in a
