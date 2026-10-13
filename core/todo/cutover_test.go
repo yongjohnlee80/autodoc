@@ -53,7 +53,8 @@ func TestTheFirstWriteKeepsTheBaseline(t *testing.T) {
 
 // The cutover's claim rewrites the refs auto-core wrote against Neovim's project root: only
 // $WORKSPACE refs that the store's workspace lacks and the legacy root holds, archives included,
-// each task one journaled rewrite; a second claim rewrites nothing.
+// each task one journaled rewrite. It runs at the claim that claims the store only: a second claim
+// rewrites nothing, not even a legacy ref written since, and reads no archive.
 func TestClaimRewritesLegacyWorkspaceRefs(t *testing.T) {
 	e := newEnv(t)
 	legacy := "/home/u/src/plugins"
@@ -98,12 +99,19 @@ func TestClaimRewritesLegacyWorkspaceRefs(t *testing.T) {
 	if len(cut) != 2 || cut[0].Kind != todo.KindRefresh || cut[0].Op != todo.OpInPlace {
 		t.Fatalf("rows %+v", cut)
 	}
+	since := taskFile("d", "open", "adr:\n  - $WORKSPACE/golib/x.md") // a legacy ref, written after the claim
+	e.disk.WriteFile(kbStore+"/archived/2026/05/d.md", []byte(since))
 	before := []string{e.read(kbStore + "/open/a.md"), e.read(kbStore + "/archived/2026/05/b.md")}
 	rows := len(e.rows())
+	e.disk.ResetReads()
 	e.must(e.m.Claim(ctx, kb, todo.ClaimOpts{LegacyWorkspace: legacy}))
 	e.must(e.m.Claim(ctx, kb))
-	if len(e.rows()) != rows || e.read(kbStore+"/open/a.md") != before[0] || e.read(kbStore+"/archived/2026/05/b.md") != before[1] {
-		t.Error("a second cutover changed something")
+	if len(e.rows()) != rows || e.read(kbStore+"/open/a.md") != before[0] || e.read(kbStore+"/archived/2026/05/b.md") != before[1] ||
+		e.read(kbStore+"/archived/2026/05/d.md") != since {
+		t.Error("a second claim ran the cutover again")
+	}
+	if got := e.disk.Reads(kbStore + "/archived/"); got != 0 {
+		t.Errorf("a second claim read %d archive files", got)
 	}
 	if err := e.m.Claim(ctx, kb, todo.ClaimOpts{LegacyWorkspace: "relative/dir"}); !is(err, todo.ErrInvalid) {
 		t.Errorf("a relative legacy workspace: %v", err)

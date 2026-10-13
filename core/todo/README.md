@@ -70,7 +70,8 @@ refs auto-core wrote against its own `$WORKSPACE` (Neovim's project root, `dir`)
 `review` ref `$WORKSPACE/<rest>` that the store's `$WORKSPACE` lacks and `dir` holds becomes that
 path, symbolized again (`$HOME/…` for a root under home). A ref that resolves nowhere stays. Each
 task is one journaled `refresh` change with the reason `cutover: $WORKSPACE was <dir>`. This pass
-reads archives too, because a claim asks for it explicitly; a second one rewrites nothing.
+reads archives too, because a claim asks for it explicitly. It runs at the claim that claims the
+store only: a claim of a store already claimed rewrites nothing and reads no archive.
 
 ## Change log
 
