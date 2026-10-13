@@ -53,6 +53,12 @@ func (s *scopedPanelHost) PageTheme() string { return s.core.Theme() }
 // OpenTerminalLook is the panels' Theme and font… (terminallook.go).
 func (s *scopedPanelHost) OpenTerminalLook() { s.core.h.openTerminalLook() }
 
+// PanelMaximized is whether panel id fills the dock area now (its Drawer's changed signal).
+func (s *scopedPanelHost) PanelMaximized(id string) bool { return s.core.h.panelMax[id] }
+
+// ToggleMaximize maximizes panel id, or restores it: its Drawer's own toggleMaximize.
+func (s *scopedPanelHost) ToggleMaximize(id string) error { return s.CallView(id, "toggleMaximize") }
+
 func newScopedPanelHost(c core, f Feature, specs []PanelSpec) *scopedPanelHost {
 	s := &scopedPanelHost{core: c, owner: f.Name(), ids: map[string]bool{}}
 	for _, p := range specs {

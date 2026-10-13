@@ -27,6 +27,16 @@ func TestHideClosesTheAgentPanelAndKeepsTheAgents(t *testing.T) {
 	if _, ok := menuRow(rows, "tabs.look"); !ok {
 		t.Fatalf("no Theme and font… in %v", rowIDs(rows))
 	}
+	// Maximize first: the agent panel fills the dock area, and Hide still keeps the agent
+	max, ok := menuRow(rows, "tabs.maximize")
+	if !ok || max.Label != "Maximize" {
+		t.Fatalf("no Maximize in %v", rowIDs(rows))
+	}
+	onLoop(r, func() bool { max.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
+	r.s.WaitFor(t, "the agent panel maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) })
+	if again, _ := menuRow(onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows(tab) }), "tabs.maximize"); again.Label != "Restore" {
+		t.Errorf("maximized, the row reads %q", again.Label)
+	}
 	onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
 	r.s.WaitFor(t, "hidden", func(string) bool { return !shown() })
 	if !r.agentRunningNow() || token() != was {

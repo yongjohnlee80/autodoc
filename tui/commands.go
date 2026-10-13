@@ -34,6 +34,7 @@ func (h *Host) commands() map[string]Command {
 		"App.openSearch":            none(h.openSearch),
 		"App.panelResized":          stringAndTwoNumbers("a panel and its size and length", h.panelResized),
 		"App.panelPlaced":           stringAndFourNumbers("a panel and its x, y, width and height", h.panelPlaced),
+		"App.panelMaximized":        stringAndBool("a panel and whether it is maximized", h.panelMaximized),
 		"App.arrangePanel":          none(h.arrangePanel),
 		"App.arrangeStep":           oneString("a step", h.arrangeStep),
 		"App.arrangeKeep":           none(h.arrangeKeep),

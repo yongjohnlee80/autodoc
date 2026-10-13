@@ -86,6 +86,15 @@ func floatState(m map[string][4]float64, specs []PanelSpec) map[string]any {
 
 // panelPlaced is a panel's move or resize ended: it floats there. While that panel is being
 // arranged the rectangle is only shown, and kept when the arrangement is (arrange.go).
+// panelMaximized follows a panel's Drawer maximized and restored (its changed signal): its tab
+// menu's Maximize reads Restore while it is.
+func (h *Host) panelMaximized(panel string, maximized bool) {
+	if h.panelMax == nil {
+		h.panelMax = map[string]bool{}
+	}
+	h.panelMax[panel] = maximized
+}
+
 func (h *Host) panelPlaced(panel string, x, y, w, ht float64) {
 	r := [4]float64{x, y, w, ht}
 	if a := h.arrange; a != nil && a.panel == panel {

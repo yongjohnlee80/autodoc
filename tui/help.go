@@ -206,7 +206,8 @@ THE PANELS
   + on the strip offers the profiles (a running one goes to its tab, a stopped one starts), and
   a tab's menu (≡, a right click anywhere on the strip or on an empty panel, or Enter on the
   strip) has Go to ›, Restart, Close (asked first while the agent runs), Profiles…, Theme and
-  font… and Hide, which closes the panel and leaves every agent running; Use in the profiles
+  font…, Maximize (Restore while it fills the dock area) and Hide, which closes the panel and
+  leaves every agent running; Use in the profiles
   starts another too.
   SPC a b (:agent-buffer) pastes the page into an agent's prompt, and SPC a f (:agent-forward)
   the selection, else the clipboard: to the agent running, or one chosen; SPC a is the agents'
@@ -215,8 +216,8 @@ THE PANELS
   The terminal (SPC ` + "`" + `, Go › Terminal) runs your shells in the workspace's folder, at the bottom
   or wherever Preferences puts it (top, left, right, or centred), each place with its own size.
   A shell starts when it opens with none, and keeps running while hidden. Each shell has a tab:
-  + adds one, and a tab's menu has Go to ›, New, Close, Theme and font… and Hide (the panel
-  closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
+  + adds one, and a tab's menu has Go to ›, New, Close, Theme and font…, Maximize (Restore)
+  and Hide (the panel closed, every shell running on). Theme and font… (Preferences' terminal row and Options › Fonts
   and zoom… too) sets the terminals' theme, their text, background and cursor only, a program's
   own colours staying its own, and in a window their font; Esc in it puts back what was there. Every key goes to the
   shell; Ctrl+\ Ctrl+n leaves for Normal mode, where h j k l, w b e, gg G, Ctrl+u/d/b/f, / and ?

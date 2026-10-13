@@ -377,6 +377,9 @@ Window {
         floating: App.terminalFloating
         floatX: App.terminalX; floatY: App.terminalY; floatWidth: App.terminalW; floatHeight: App.terminalH
         onPlaced: App.panelPlaced("terminal", x, y, width, height)
+        // Maximize on its tab menu: the Drawer's own (toggleMaximize), the menu told by changed
+        maximizable: true
+        onChanged: App.panelMaximized("terminal", maximized)
         onResized: App.panelResized("terminal", size, length)
         onOpened: App.panelOpened("terminal")
         onClosed: App.panelClosed("terminal")
@@ -410,6 +413,8 @@ Window {
         floating: App.agentFloating
         floatX: App.agentX; floatY: App.agentY; floatWidth: App.agentW; floatHeight: App.agentH
         onPlaced: App.panelPlaced("agent", x, y, width, height)
+        maximizable: true
+        onChanged: App.panelMaximized("agent", maximized)
         onOpened: App.panelOpened("agent")
         onClosed: App.panelClosed("agent")
         onResized: App.panelResized("agent", size, length)

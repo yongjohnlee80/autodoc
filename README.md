@@ -237,8 +237,9 @@ terminal, as below; where it cannot, it shows the block's source and why.
   strip's menu (`≡`, a right click anywhere on the strip or an empty panel, or Enter on the strip)
   has **Go to ›**, the panel's own rows (the terminal: **New**, **Close**; the agents: **Restart**,
   **Close**, **Profiles…**), **Theme and font…** (the terminals' theme, and in the GUI their font:
-  the same settings as Preferences and Fonts and zoom…; Esc puts them back) and **Hide**, which
-  closes the panel and leaves every shell and agent running.
+  the same settings as Preferences and Fonts and zoom…; Esc puts them back), **Maximize** (the
+  panel filling the dock area; **Restore** while it does) and **Hide**, which closes the panel and
+  leaves every shell and agent running.
 - **Every panel moves and resizes**: the explorer, the relations, the terminal, the agent and the
   HTML preview. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
   with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:

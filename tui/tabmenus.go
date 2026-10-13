@@ -8,8 +8,8 @@ import (
 // THE TAB MENUS — one shape for the strips of the agent and terminal panels (golib's
 // TerminalTabs): + offers what to add, and a tab's menu (≡, a right click anywhere on the strip or
 // on an empty panel, Enter on the strip) starts with Go to ›, every tab of the panel, and ends with
-// the panel's own rows: Theme and font… (the terminals' look, terminallook.go) and Hide (the panel
-// closed, every tab still running). Each panel says what its other rows are and do; a row runs on
+// the panel's own rows: Theme and font… (the terminals' look, terminallook.go), Maximize (Restore)
+// and Hide (the panel closed, every tab still running). Each panel says what its other rows are and do; a row runs on
 // the loop with the tab its menu was opened for ("" with none).
 
 // tabMenuRow is a row of a strip's menu: run, with the tab the menu was opened for, when chosen.
@@ -21,12 +21,29 @@ func tabMenuRow(id, label string, run func(widget.TerminalTabID)) widget.MenuIte
 	return row
 }
 
-// panelRows end a panel's tab menu: Theme and font…, which opens the terminals' look (look; nil
-// where the host has none), and Hide, the panel's own toggle (hide), its tabs running on.
-func panelRows(look, hide func()) []widget.MenuItemModel {
+// panelRows end panel's tab menu: Theme and font…, which opens the terminals' look (nil where the
+// host has none); Maximize, or Restore while it is maximized, its Drawer's own toggleMaximize (none
+// where the host has none); and Hide, the panel's own toggle (hide), its tabs running on.
+func panelRows(c any, panel string, hide func()) []widget.MenuItemModel {
 	rows := []widget.MenuItemModel{widget.NewSeparator("tabs.panel")}
-	if look != nil {
+	if look := lookOf(c); look != nil {
 		rows = append(rows, tabMenuRow("tabs.look", "&Theme and font…", func(widget.TerminalTabID) { look() }))
+	}
+	if m, ok := c.(interface {
+		PanelMaximized(string) bool
+		ToggleMaximize(string) error
+	}); ok {
+		label := "&Maximize"
+		if m.PanelMaximized(panel) {
+			label = "Re&store"
+		}
+		rows = append(rows, tabMenuRow("tabs.maximize", label, func(widget.TerminalTabID) {
+			if err := m.ToggleMaximize(panel); err != nil {
+				if k, ok := c.(interface{ Keep(error) }); ok {
+					k.Keep(err)
+				}
+			}
+		}))
 	}
 	return append(rows, tabMenuRow("tabs.hide", "Hi&de", func(widget.TerminalTabID) { hide() }))
 }

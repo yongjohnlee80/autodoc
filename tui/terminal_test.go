@@ -687,3 +687,45 @@ func TestTheTerminalsLookDialogSetsTheSameSettings(t *testing.T) {
 		t.Errorf("OK kept %q", got)
 	}
 }
+
+// TestMaximizeFromThePanelMenus: Maximize on the terminal's tab menu fills the dock area (its
+// Drawer's own toggleMaximize), the row then reads Restore, and Restore puts the frame back; Hide
+// while maximized keeps the shells. The agents' menu maximizes the agent panel the same way.
+func TestMaximizeFromThePanelMenus(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	row0, _ := frameAt(r.s.String())
+	maximize := func(want string) {
+		t.Helper()
+		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows("") })
+		row, ok := menuRow(rows, "tabs.maximize")
+		if !ok || row.Label != want {
+			t.Fatalf("the maximize row reads %q (want %q) in %v", row.Label, want, rowIDs(rows))
+		}
+		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(""); return true })
+	}
+	maximize("Maximize")
+	r.s.WaitFor(t, "the terminal fills the dock area", func(sc string) bool { y, _ := frameAt(sc); return y >= 0 && y < row0 })
+	r.s.WaitFor(t, "maximized told", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) })
+	maximize("Restore")
+	r.s.WaitFor(t, "the frame back", func(sc string) bool { y, _ := frameAt(sc); return y == row0 })
+
+	maximize("Maximize")
+	r.s.WaitFor(t, "maximized again", func(sc string) bool { y, _ := frameAt(sc); return y >= 0 && y < row0 })
+	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true }) // Hide
+	r.s.WaitFor(t, "hidden", func(string) bool { return !r.termShown() })
+	if r.shellsRunning() != 1 {
+		t.Fatalf("Hide while maximized stopped the shell: %+v", r.shellTabs())
+	}
+	r.leader(t, '`')
+	r.s.WaitFor(t, "shown again", func(string) bool { return r.termShown() })
+	if r.shellsRunning() != 1 || len(r.shellTabs()) != 1 {
+		t.Fatalf("reopened with %+v", r.shellTabs())
+	}
+
+	agentRows := onLoop(r, func() []widget.MenuItemModel { return r.h.agents.tabRows("") })
+	if row, ok := menuRow(agentRows, "tabs.maximize"); !ok || row.Label != "Maximize" {
+		t.Fatalf("the agents' menu: %v", rowIDs(agentRows))
+	}
+}

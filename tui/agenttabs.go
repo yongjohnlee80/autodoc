@@ -45,7 +45,7 @@ func (a *agents) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 	}
 	rows = append(rows, widget.NewSeparator("agents.tab.profiles"), a.profilesRow())
 	// Hide is SPC g's own toggle (agent.toggle): the panel closed, every agent running on
-	return append(rows, panelRows(lookOf(a.c), a.toggleAgent)...)
+	return append(rows, panelRows(a.c, "agent", a.toggleAgent)...)
 }
 
 func (a *agents) profilesRow() widget.MenuItemModel {

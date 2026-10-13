@@ -113,9 +113,10 @@ type Host struct {
 	registrationOffered, registrationNoted bool
 	registrationRestart, restartAccepted   bool
 	panelOpen                              map[string]bool
-	lastPanel                              string      // the panel opened last (Arrange panel)
-	tutorialAt                             int         // the tutorial's page shown (tutorial.go)
-	fonts                                  FontControl // the window's fonts; nil in a terminal (fonts.go)
+	panelMax                               map[string]bool // a panel maximized (its Drawer's changed signal; panelMaximized)
+	lastPanel                              string          // the panel opened last (Arrange panel)
+	tutorialAt                             int             // the tutorial's page shown (tutorial.go)
+	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)
 	families                               func(mono bool) []string
 	defaultCellFont                        string
 	fontsApplied                           appliedFonts
