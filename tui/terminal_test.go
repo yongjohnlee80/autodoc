@@ -760,3 +760,19 @@ func TestF11AndSPCMToggleMaximize(t *testing.T) {
 	r.leader(t, 'M')
 	r.s.WaitFor(t, "SPC M restored it", func(string) bool { return !maximized() })
 }
+
+// TestSPCMReachesTheNewestPanelStillOpen: the terminal opened, then the agents opened and hidden,
+// the keyboard on the page: SPC M maximizes the terminal, the newest of them still open.
+func TestSPCMReachesTheNewestPanelStillOpen(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	r.leader(t, '`')
+	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
+	onLoop(r, func() bool { r.h.openDrawer("agent"); return true })
+	r.s.WaitFor(t, "the agents open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
+	onLoop(r, func() bool { r.h.closeDrawer("agent"); return true })
+	r.s.WaitFor(t, "the agents hidden", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen["agent"] }) })
+	onLoop(r, func() bool { return r.h.p.Call("editor", "forceActiveFocus") == nil })
+	r.s.WaitFor(t, "the page's keyboard", func(string) bool { return r.focused("editor") })
+	r.leader(t, 'M')
+	r.s.WaitFor(t, "the terminal maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["terminal"] }) })
+}

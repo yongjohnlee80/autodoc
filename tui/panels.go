@@ -121,7 +121,8 @@ func (h *Host) panelOpened(name string) {
 	h.panelOpen[name] = true
 	h.lastPanel = name
 	if slices.Contains(maximizable, name) {
-		h.lastMaximizable = name // F11 and SPC M off the panels reach it
+		// the newest first: F11 and SPC M off the panels reach the newest still open
+		h.maximizableOpened = append([]string{name}, slices.DeleteFunc(h.maximizableOpened, func(p string) bool { return p == name })...)
 	}
 	h.showFind() // a drawer at the right edge hides "finding …"
 	if s.Opened != nil {

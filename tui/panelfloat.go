@@ -95,7 +95,7 @@ var maximizable = []string{"terminal", "agent"}
 func (h *Host) toggleMaximize(panel string) error { return h.p.Call(panel, "toggleMaximize") }
 
 // maximizePanel is F11 and SPC M (panel.maximize): the terminal or the agents, whichever has the
-// keyboard, else the one opened last that is still open.
+// keyboard, else the most recently opened of them that is still open.
 func (h *Host) maximizePanel() {
 	target := ""
 	for _, p := range maximizable {
@@ -103,8 +103,10 @@ func (h *Host) maximizePanel() {
 			target = p
 		}
 	}
-	if target == "" && h.panelOpen[h.lastMaximizable] {
-		target = h.lastMaximizable
+	for _, p := range h.maximizableOpened {
+		if target == "" && h.panelOpen[p] {
+			target = p
+		}
 	}
 	if target == "" {
 		h.notify("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
