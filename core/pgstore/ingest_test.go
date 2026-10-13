@@ -272,3 +272,36 @@ func TestATenantsAccessPolicy(t *testing.T) {
 		t.Errorf("another tenant's policy: %v, want ErrNoPolicy", err)
 	}
 }
+
+// Counts are a tenant's documents, the unready ones and its quarantined rows, one tenant's only:
+// another tenant's documents and quarantine are not counted. The mutants, named here: the unready
+// count without its ready predicate (every document); the counts unfiltered by tenant.
+func TestCountsAreTheTenantsDocumentsReadinessAndQuarantine(t *testing.T) {
+	ctx := context.Background()
+	conn := scratch(t)
+	s := openCorpus(t, conn, "t", accessDocs) // five documents, b2.md unready
+	other := openCorpus(t, conn, "u", accessDocs[:2])
+	b := other.Begin(ctx)
+	if err := b.Quarantine(ctx, "elsewhere", errors.New("a bad row")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	b = s.Begin(ctx)
+	for _, id := range []string{"x", "y"} {
+		if err := b.Quarantine(ctx, id, errors.New("a bad row")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := b.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	c, err := s.Counts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c != (Counts{Documents: 5, Unready: 1, Quarantined: 2}) {
+		t.Errorf("counts %+v, want 5 documents, 1 unready, 2 quarantined", c)
+	}
+}

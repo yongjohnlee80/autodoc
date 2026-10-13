@@ -220,3 +220,30 @@ func checkField(f string) error {
 	}
 	return nil
 }
+
+// Counts are a tenant's documents, how many of them are not ready for semantic search, and how many
+// of its source rows wait in quarantine: what an operator's status shows (enterprise/ops).
+type Counts struct {
+	Documents, Unready, Quarantined uint64
+}
+
+// Counts reads the tenant's counts in one snapshot, so they agree with one another. The unready
+// count is 000003's partial index's; the quarantine is rag_ingest_error's rows of the tenant.
+func (s *Store) Counts(ctx context.Context) (Counts, error) {
+	var c Counts
+	err := dao.RunTx(ctx, func(tx *dao.Transaction) error {
+		var err error
+		if c.Documents, err = s.ro.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).Count(); err != nil {
+			return err
+		}
+		if c.Unready, err = s.ro.doc.On(tx, dao.WithQueryContext(ctx)).With(dTenant, s.tenant).With(dReady, false).Count(); err != nil {
+			return err
+		}
+		c.Quarantined, err = s.ro.ingErr.On(tx, dao.WithQueryContext(ctx)).With(qTenant, s.tenant).Count()
+		return err
+	})
+	if err != nil {
+		return Counts{}, fmt.Errorf("pgstore: counts: %w", err)
+	}
+	return c, nil
+}
