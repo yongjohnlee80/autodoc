@@ -55,10 +55,20 @@ func (h *Host) imageMode() (bool, string) {
 	case tuicore.TriUnknown:
 		return false, "the terminal did not confirm kitty graphics (inside tmux: set -g allow-passthrough on)"
 	}
-	if _, ok := widget.HTMLRasterizer(); !ok && h.rasterizeOverride == nil {
+	if !h.browserFound() {
 		return false, "no headless Chromium or Chrome to render with"
 	}
 	return true, ""
+}
+
+// browserFound reports whether a headless browser draws mermaid.js and pages here: golib's
+// HTMLRasterizer (a browser on the PATH, or installed as a macOS application), or a test's.
+func (h *Host) browserFound() bool {
+	if h.browserOverride != nil {
+		return h.browserOverride()
+	}
+	_, ok := widget.HTMLRasterizer()
+	return ok || h.rasterizeOverride != nil
 }
 
 // graphics is the terminal's kitty graphics answer; graphicsOverride replaces it in tests.
@@ -112,11 +122,29 @@ const diagramMaxHeight = 4096
 
 // showDiagram shows a Mermaid block: an image where it can be, else its source, saying why.
 func (h *Host) showDiagram(source string) {
-	if h.native() {
-		h.showDiagramNative(source)
+	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. A window without a
+	// browser draws it natively, by golib's Mermaid, where golib draws its type; else its source
+	ok, why := h.imageMode()
+	if ok || !h.native() {
+		h.showDiagramImage(source, "")
 		return
 	}
+	do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
+		if err == nil {
+			h.showDiagramNative(source, why)
+			return
+		}
+		h.showDiagramText(source, "Diagram source · "+why+"; not drawn natively ("+err.Error()+")")
+	})
+}
+
+// showDiagramImage shows source as an image drawn by mermaid.js in a headless browser, where one
+// can, else its source, saying why; declined is said with why, "" for nothing more.
+func (h *Host) showDiagramImage(source, declined string) {
 	ok, why := h.imageMode()
+	if declined != "" {
+		why = declined + "; " + why
+	}
 	if !ok {
 		h.showDiagramText(source, "Diagram source · "+why)
 		return
@@ -136,22 +164,24 @@ func (h *Host) showDiagram(source string) {
 	h.open("diagram")
 	h.imagePreview = previewing{dialog: "diagram", page: page, wide: true, maxHeight: diagramMaxHeight, zoom: zoomDefault,
 		background: export.Background(theme)}
-	h.renderPreview(func(why string) { h.showDiagramText(source, "Diagram source · "+why) })
+	h.renderPreview(func(why string) {
+		if declined != "" {
+			why = declined + "; " + why
+		}
+		h.showDiagramText(source, "Diagram source · "+why)
+	})
 }
 
-// showDiagramText shows the diagram's source (or a diagnostic), with help saying why it is not an
-// image.
 // showDiagramNative shows source in a GUI window drawn natively, by golib's Mermaid in the
-// dialog's HTML view, as the HTML pane draws a page's diagrams: no browser. A diagram golib does not
-// draw shows its source there.
-func (h *Host) showDiagramNative(source string) {
+// dialog's HTML view: where no browser draws mermaid.js (why), and golib draws its type.
+func (h *Host) showDiagramNative(source, why string) {
 	theme := h.exportTheme()
 	page, err := export.DiagramPage(source, theme)
 	if err != nil {
 		h.showDiagramText(source, "Diagram source · "+err.Error())
 		return
 	}
-	h.diagramImage, h.diagramHelpText = false, "Drawn natively in the "+theme+" theme · scroll: arrows, j k, PgUp/PgDn, wheel"
+	h.diagramImage, h.diagramHelpText = false, "Drawn natively, as mermaid.js is not ("+why+") · scroll: arrows, j k, PgUp/PgDn, wheel"
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramImageShown", false)
 	h.set("App.diagramNativeShown", true)
@@ -162,6 +192,8 @@ func (h *Host) showDiagramNative(source string) {
 	}
 }
 
+// showDiagramText shows the diagram's source (or a diagnostic), with help saying why it is not an
+// image.
 func (h *Host) showDiagramText(text, help string) {
 	h.diagramImage, h.diagramHelpText = false, help
 	h.set("App.diagramImageShown", false)

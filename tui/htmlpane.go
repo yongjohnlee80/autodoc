@@ -75,6 +75,9 @@ func (h *Host) openPaneInBrowser() {
 	})
 }
 
+// closeHTMLPane closes the HTML preview pane: its Close (q).
+func (h *Host) closeHTMLPane() { h.keep(h.p.Call("htmlPane", "close")) }
+
 // openHTMLPane shows the open note in the pane beside the editor.
 func (h *Host) openHTMLPane() {
 	if !h.previewable() {
@@ -82,6 +85,9 @@ func (h *Host) openHTMLPane() {
 		return
 	}
 	h.keep(h.p.Call("htmlPane", "open"))
+	if v, ok := h.htmlView(); ok {
+		h.paneDiagrams(v) // its diagrams drawn by mermaid.js, where a browser is (mermaidjs_gui.go)
+	}
 	h.renderHTMLPane()
 }
 

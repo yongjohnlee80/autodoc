@@ -330,6 +330,10 @@ Window {
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
+        // ---- the HTML preview's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
+        Shortcut { sequence: "b"; onActivated: App.openPaneInBrowser() }
+        Shortcut { sequence: "q"; onActivated: App.closeHTMLPane() }
+        // ---- end of the HTML preview's keys ----
         Flex {
             direction: Tui.Vertical
             HTMLView {
@@ -337,14 +341,17 @@ Window {
                 Layout.fillHeight: true
                 onLinkActivated: App.htmlLink(href)
             }
-            // as the terminal preview's dialog has them: the page in the browser (its links,
-            // selection and scripts there), and Close
+            // as the terminal preview's dialog has them, centred under a rule: the page in the
+            // browser (its links, selection and scripts there), and Close; b and q in the pane
+            // press them
+            Text { text: "────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────"; color: Theme.document.windowText }
             Flex {
                 direction: Tui.Horizontal
                 Text { text: " "; Layout.fillWidth: true }
                 Button { text: "Open in &browser"; toolTipText: "the note's page in the browser"; onClicked: App.openPaneInBrowser() }
                 Text { text: " " }
-                Button { text: "Close (&q)"; toolTipText: "close the preview"; onClicked: htmlPane.close() }
+                Button { text: "Close (&q)"; toolTipText: "close the preview"; onClicked: App.closeHTMLPane() }
+                Text { text: " "; Layout.fillWidth: true }
             }
         }
     }

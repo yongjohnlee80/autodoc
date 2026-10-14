@@ -242,3 +242,29 @@ func buttonsUnder(p *tuidecl.Program, id string) []*widget.Button {
 	}
 	return out
 }
+
+// TestThePanesKeysPressItsButtons: with the keyboard in the pane, b opens its page in the browser
+// and q closes it, as its buttons do.
+func TestThePanesKeysPressItsButtons(t *testing.T) {
+	r, _ := runPane(t)
+	opened := make(chan string, 1)
+	r.h.p.Post(func() { r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil } })
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitFor(t, "the pane's page", func(string) bool { return r.paneSource() != "" })
+	focus := func() {
+		onLoop(r, func() bool { v, _ := r.h.htmlView(); v.Context().RequestFocus(); return true })
+	}
+	focus()
+	r.keys(t, key('b'))
+	select {
+	case path := <-opened:
+		if !strings.HasSuffix(path, ".html") {
+			t.Fatalf("b opened %q", path)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("b in the pane did not open the browser")
+	}
+	focus()
+	r.keys(t, key('q'))
+	r.s.WaitFor(t, "q closed the pane", func(string) bool { return onLoop(r, func() bool { return !r.h.panelOpen["htmlPane"] }) })
+}

@@ -188,8 +188,11 @@ type Host struct {
 	nativeViews func() bool   // whether the backend draws native views (--gui); tests stand in for a GUI
 	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
 	noteFile    func(string)  // told the open note's file (Options.NoteFile); nil: none
-	htmlAsk     *htmlOpen     // the HTML file the open question is about (OpenHTML.qml)
-	pageDir     string        // the root and base the page's resources load from (htmldoc.go)
+	// browserOverride stands in for finding a headless browser in tests; nil: golib's HTMLRasterizer
+	browserOverride func() bool
+	paneMermaid     any       // the GUI pane's mermaid.js Diagrammer (mermaidjs_gui.go); nil until the pane opens
+	htmlAsk         *htmlOpen // the HTML file the open question is about (OpenHTML.qml)
+	pageDir         string    // the root and base the page's resources load from (htmldoc.go)
 	// refusedNoted: the open page's refused resource was said (resourceRefused)
 	refusedNoted bool
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the

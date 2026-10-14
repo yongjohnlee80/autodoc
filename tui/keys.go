@@ -60,10 +60,11 @@ type keyScope struct {
 
 // keyScopes are the panes with keys of their own: the page (the Editor's FocusScope), the todos'
 // panel (its keys the todos feature's: its list's, and again its task buttons', never its details
-// pane's), and the explorer's and the relations' panels.
+// pane's), the explorer's and the relations' panels, and the GUI's HTML preview pane.
 var keyScopes = []keyScope{
 	{ID: "page", Indent: "            "}, {ID: "explorer", Indent: "        "}, {ID: "links", Indent: "        "},
 	{ID: "todos", Indent: "                "}, {ID: "todos", Indent: "                ", Label: "todos task buttons'"},
+	{ID: "htmlPane", Indent: "        ", Label: "HTML preview's"},
 }
 
 // findKeys are / n N in each pane find searches that has keys of its own (FindPane.Scope), in the
@@ -89,8 +90,11 @@ func findKeys(fs []Feature) []Key {
 }
 
 // scopedKeys are the other keys a pane answers itself: d in the Relations drawer shows the second
-// ring, or hides it (relations.go).
-var scopedKeys = []Key{{Scope: "links", Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"}}
+// ring, or hides it (relations.go); b and q in the HTML preview pane are its buttons.
+var scopedKeys = []Key{{Scope: "links", Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"},
+	// the HTML preview pane's buttons (htmlpane.go): b opens its page in the browser, q closes it
+	{Scope: "htmlPane", Seq: "b", Show: "b in the HTML preview", Run: "App.openPaneInBrowser()"},
+	{Scope: "htmlPane", Seq: "q", Show: "q in the HTML preview", Run: "App.closeHTMLPane()"}}
 
 // Card is a card of keys: a Dialog listing its keys, each closing the card before it runs.
 type Card struct {
