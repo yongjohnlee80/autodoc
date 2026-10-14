@@ -139,7 +139,9 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 	// reference.md
 	"-- shape.lua: :shape shows every field autodoc.command takes": func(t *testing.T, r *running) {
 		r.mustRun(t, "sh  one  two ")
-		r.waitNotice(t, "shape: 2 args, line 'one  two'")
+		r.waitNotice(t, "shape: 2 args, line 'one  two', as :sh")
+		r.mustRun(t, "shape! x")
+		r.waitNotice(t, "shape: 1 args, line 'x', as :shape!")
 		cmd := onLoop(r, func() widget.Command { c, _ := r.h.core.Commands().Lookup("shape"); return c })
 		if cmd.Args != "[words]" || cmd.Help != "show what run gets" || !slices.Equal(cmd.Aliases, []string{"sh"}) {
 			t.Fatalf(":shape registered as %+v", cmd)
@@ -147,7 +149,7 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 	},
 	"-- again.lua: :again <id> [args] runs a command of the catalog by its id, and says how it went": func(t *testing.T, r *running) {
 		r.mustRun(t, "again lua.shape one two")
-		r.waitNotice(t, "shape: 2 args, line 'one two'")
+		r.waitNotice(t, "shape: 2 args, line 'one two', as :shape") // by its id: no bang, its own name
 		r.waitNotice(t, "again: ran lua.shape")
 		r.mustRun(t, "again no.such")
 		r.waitNotice(t, "again: unknown: no.such")

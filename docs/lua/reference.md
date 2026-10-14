@@ -61,8 +61,9 @@ autodoc.command{
   aliases = {"sh"},          -- other names
   args = "[words]",          -- what Tab shows after the name
   help = "show what run gets", -- what Tab shows after that
-  run = function(ed, args, line)
-    autodoc.notify("shape: " .. #args .. " args, line '" .. line .. "'")
+  run = function(ed, args, line, cmd)
+    autodoc.notify("shape: " .. #args .. " args, line '" .. line .. "', as :" .. cmd.name
+      .. (cmd.bang and "!" or ""))
   end,
 }
 ```
