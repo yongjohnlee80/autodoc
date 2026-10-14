@@ -118,6 +118,9 @@ func (*scripting) Keys() []Key {
 	return []Key{{Card: leader, Seq: "u", Show: "u", Does: "your Lua keys", Run: "luaKeys.open()", Group: groupWindow}}
 }
 
+// Cards is none: SPC u's card is the scripts' own (views/LuaKeys.qml).
+func (*scripting) Cards() []Card { return nil }
+
 // bind gives the engine autodoc.call and autodoc.run, which runs through run; the namespaces follow
 // once the daemon says its contracts.
 func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) error) {
