@@ -248,16 +248,14 @@ func TestPanelLookAndMaximizedWaitForTheViews(t *testing.T) {
 	}
 }
 
-// TestPanelMaximizedIsOnlyOwnPanels: the agents' panel maximized reads so to the agents' feature,
-// and not to the terminals'.
+// TestPanelMaximizedIsOnlyOwnPanels: attached, with the agents' panel down as maximized (its
+// Drawer's changed signal: the read is under test, not the toggle), it reads so to the agents'
+// feature and not to the terminals'.
 func TestPanelMaximizedIsOnlyOwnPanels(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	if err := onLoop(r, func() error { return r.h.agents.c.(*scopedPanelHost).ToggleMaximize("agent") }); err != nil {
-		t.Fatal(err)
-	}
-	r.s.WaitFor(t, "the agents maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) })
 	read := onLoop(r, func() [2]bool {
+		r.h.panelChanged("agent", "maximize", true)
 		return [2]bool{r.h.agents.c.(*scopedPanelHost).PanelMaximized("agent"), r.h.terminals.c.(*scopedPanelHost).PanelMaximized("agent")}
 	})
 	if !read[0] {
