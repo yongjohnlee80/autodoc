@@ -77,7 +77,8 @@ end }`,
 	r.s.WaitForText(t, "install the Lua package hello?")
 	onLoop(r, func() bool { r.h.asker.accepted(); return true })
 	r.waitNotice(t, "installed the Lua package hello")
-	r.waitNotice(t, "reloaded the Lua scripts")
+	// the reload runs at once; it says bad/ did not load again, the test's own broken package
+	r.waitNotice(t, "lua-reload: 1 of the scripts did not load")
 	if _, err := os.Stat(filepath.Join(dir, "hello", "init.lua")); err != nil {
 		t.Fatalf("hello was not put in lua/: %v", err)
 	}
