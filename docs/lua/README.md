@@ -99,6 +99,20 @@ requires = ["workspace.read"] # what it must be allowed to do
 [The reference](reference.md#packages-and-capabilities) lists the capabilities a package can ask
 for, and what each allows.
 
+## Agents and the page
+
+The agents AutoDoc starts (SPC a) can work on the page you are writing, its unsaved text included,
+through `autodoc --editor` (the guide AutoDoc gives each agent lists the verbs). They are held as a
+package is:
+
+- **Each agent asks once** for what it does: reading the page (`editor.read`), editing it
+  (`editor.write`) or running commands (`commands`). Until you allow it, its calls are refused and
+  it is told why.
+- **Each edit an agent makes is one undo step.** An edit of a page you changed since the agent read
+  it is refused, not misplaced.
+- **An agent can offer you a Lua command:** a card shows its source, and only **Add it** writes it
+  into `lua/` and loads it. A file already there is never replaced.
+
 ## The sandbox
 
 Scripts get Lua 5.1's **base**, **table**, **string** and **math** libraries, and the `autodoc`
