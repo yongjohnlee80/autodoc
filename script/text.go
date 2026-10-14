@@ -7,15 +7,16 @@ import (
 	lua "github.com/yuin/gopher-lua"
 )
 
-// textFunction is one function of the global table's text: its documentation and its function.
-type textFunction struct {
+// function is one function of the global table (its text table's among them): its documentation
+// and its function.
+type function struct {
 	name, args, returns, notes string
 	fn                         lua.LGFunction
 }
 
 // textFunctions are <global>.text's: a string counted in characters, as the editor's columns are,
 // where Lua's # and string.sub count bytes.
-var textFunctions = []textFunction{
+var textFunctions = []function{
 	{"columns", "s", "number", "How many characters (grapheme clusters) s has: the columns it takes in the editor. `#s` counts bytes.", textColumns},
 	{"sub", "s, i, j", "string", "Characters i to j of s, both included, as `string.sub` takes bytes: `j` is the last by default, and a negative position counts from the end (`-1` the last).", textSub},
 	{"chars", "s", "list of strings", "s's characters, in order: `é` written as `e` and an accent is one.", textChars},

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
 	lua "github.com/yuin/gopher-lua"
@@ -234,6 +235,27 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.mustRun(t, "tasks")
 		r.s.WaitFor(t, ":tasks went to the open task", func(string) bool { l, _ := r.cursorAt(); return l == 3 })
 	},
+	"-- stamp.lua: :stamp inserts today's date, and :stamp! the time too": func(t *testing.T, r *running) {
+		r.page("", 1, 1)
+		r.mustRun(t, "stamp")
+		if got := r.editorText(); !regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`).MatchString(got) || got != time.Now().Format("2006-01-02") && got != time.Now().Add(-time.Minute).Format("2006-01-02") {
+			t.Fatalf(":stamp inserted %q", got)
+		}
+		r.page("", 1, 1)
+		r.mustRun(t, "stamp!")
+		if got := r.editorText(); !regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$`).MatchString(got) {
+			t.Fatalf(":stamp! inserted %q", got)
+		}
+	},
+	"-- tagged.lua: :tagged says the page's tags, from its frontmatter": func(t *testing.T, r *running) {
+		r.page("---\ntitle: Plan\ntags: [kestrel, notes]\n---\n# Plan", 1, 1)
+		r.mustRun(t, "tagged")
+		r.waitNotice(t, ": kestrel, notes")
+		r.page("# no frontmatter", 1, 1)
+		r.mustRefuse(t, "tagged", "has no tags")
+		r.page("---\ntags: [a\n---\n", 1, 1) // not YAML: no frontmatter, and why
+		r.mustRefuse(t, "tagged", "has no tags")
+	},
 	"-- tail.lua: :tail <n> selects the last n characters of the cursor's line": func(t *testing.T, r *running) {
 		r.page("abc de\u0301f", 1, 1) // é as e and an accent: one column
 		r.mustRun(t, "tail 3")
@@ -277,6 +299,23 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.mustRun(t, "link kestrel")
 		r.waitNotice(t, "link: [[a]]")
 		r.wantText(t, ":link kestrel", "See [[a]] for more.")
+		// the page edited before the answer comes: the link goes to the cursor, not where run was
+		r.page("See  for more.", 1, 5)
+		r.clearNotices()
+		if err := onLoop(r, func() error {
+			if err := r.h.core.RunCommand("link kestrel"); err != nil {
+				return err
+			}
+			if _, err := r.h.core.Insert(widget.TextPos{}, ">> "); err != nil {
+				return err
+			}
+			r.h.core.SetCursor(widget.TextPos{})
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		r.waitNotice(t, "link: [[a]]")
+		r.wantText(t, ":link kestrel, the page edited meanwhile", "[[a]]>> See  for more.")
 		r.mustRun(t, "link zebrafinch")
 		r.waitNotice(t, "link: nothing matches zebrafinch")
 		r.mustRefuse(t, "link", "link <term>")

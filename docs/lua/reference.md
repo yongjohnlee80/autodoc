@@ -31,7 +31,61 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | `autodoc.notify(message)` | Shows a notification: a toast in the corner, kept in the history (SPC h). | nothing |
 | `autodoc.call(verb, params, cb)` | Calls any daemon verb by its name, with `params` a list of its params in order (`nil` or `{}` for none). `cb` is optional. | nothing; the answer goes to `cb` |
 | `autodoc.current_workspace()` | The workspace in use. | a string, or `nil` before one is entered |
+| `autodoc.document()` | The page in the editor ([below](#autodocdocument)). | a table |
 | `autodoc.<domain>.<verb>(…, cb)` | Calls the daemon's `<domain>.<verb>`: its params in order, then `cb`. Made when AutoDoc connects ([the daemon's verbs](#the-daemons-verbs)). | nothing; the answer goes to `cb` |
+
+The engine's own functions, beside `command` and `notify`:
+
+<!-- autodoc:lua-globals:start -->
+<!-- generated from the script package's own tables by go generate ./tui. Do not edit. -->
+
+| Function | Returns | Notes |
+|---|---|---|
+| `autodoc.now()` | number | The time, in seconds since 1970-01-01 UTC, with a fraction: `os.time()`'s, to the millisecond. |
+| `autodoc.date(format, t)` | string, or a table | The time t (seconds, `now()` by default) written by format, as `os.date` does: `%Y-%m-%d`, `%H:%M`, …; `%c` by default. A format starting with `!` is in UTC, else local time; `"*t"` gives a table: `year`, `month`, `day`, `hour`, `min`, `sec`, `wday`, `yday`, `isdst`. |
+| `autodoc.commands()` | list of tables | Every command, in the order they were added: `{id, name, aliases, args, help, title, source}`. `name` is its `:` name, `""` for one only a key or its id runs; `source` says whose it is (`"lua"`, `"plugin"`, `"editor"`, …). A command that takes another's `:` name finds that one here, under its id and with no `name`, and runs it with `autodoc.run`. |
+
+<!-- autodoc:lua-globals:end -->
+
+```lua
+-- stamp.lua: :stamp inserts today's date, and :stamp! the time too
+autodoc.command{
+  name = "stamp",
+  help = "insert the date (with !, the time too)",
+  run = function(ed, args, line, cmd)
+    ed:insert(autodoc.date(cmd.bang and "%Y-%m-%d %H:%M" or "%Y-%m-%d"))
+  end,
+}
+```
+
+### `autodoc.document()`
+
+The page in the editor, as a table. It can be called anywhere, a file's top level too.
+
+| Field | What it is |
+|---|---|
+| `path` | its path in its workspace; `nil` for the untitled draft |
+| `workspace` | the workspace it is in; `nil` for the draft, or a file outside every workspace |
+| `kind` | how AutoDoc reads it: `"markdown"`, `"text"`, `"yaml"`, `"derived"` or `"registered"` (source code) |
+| `derived` | a derived document's format, `"PDF"` or `"DOCX"`: its text is read-only |
+| `frontmatter` | a Markdown page's frontmatter, as Lua values, read from the editor's text now: `{title = "Plan", tags = {"a", "b"}}`; `nil` without one |
+| `frontmatter_error` | why the frontmatter could not be read, when it is not YAML |
+
+```lua
+-- tagged.lua: :tagged says the page's tags, from its frontmatter
+autodoc.command{
+  name = "tagged",
+  help = "say the page's tags",
+  run = function(ed)
+    local doc = autodoc.document()
+    local tags = doc.frontmatter and doc.frontmatter.tags
+    if type(tags) ~= "table" or #tags == 0 then
+      error((doc.path or "the draft") .. " has no tags", 0)
+    end
+    autodoc.notify((doc.path or "the draft") .. ": " .. table.concat(tags, ", "))
+  end,
+}
+```
 
 ### `autodoc.command{…}`
 
@@ -155,6 +209,7 @@ run`.
 | `ed:replace_all(term, text, opts)` | number | Puts text in place of every match of term, as one edit, and returns how many. `opts` as `ed:find_all`'s. |
 | `ed:mode()` | string | The editor's mode: `"normal"`, `"insert"`, `"replace"`, `"visual"`, `"visual_line"` or `"visual_block"`. Without Vim's keys it is `"insert"`, or `"visual"` with a selection. |
 | `ed:read_only()` | boolean | Whether edits are refused: a PDF's or DOCX's derived text, say. |
+| `ed:revision()` | number | Names the text as it is now: every edit and every new document gives a new one, and an undo gives back the one the text had. A callback compares the revision its command read with `ed:revision()` to know whether the page changed while it waited. |
 | `ed:modified()` | boolean | Whether the text has changed since it was opened or last saved, as `:x` asks before it writes. |
 | `ed:run(line)` | nothing | Runs a command line as the prompt does, without the `:`: `"12"`, `"find TODO"`, `"table 2 3"`. Raises the command's error. |
 
@@ -232,8 +287,9 @@ once; the daemon's answer goes to the callback later, as `cb(result, err)`:
 - **`err` is a string**, and `result` is `nil`: the daemon's code and message (`"-32061 not
   found"`), or what went wrong before the daemon answered (no connection, say).
 - **The callback runs as a command does:** on AutoDoc's loop, with 2 seconds, `ed` reachable, and
-  its edits one undo step of their own. The page may have changed since the call: read positions
-  again.
+  its edits one undo step of their own. The page may have changed since the call: keep
+  `ed:revision()` from before the call, and compare it in the callback. Equal, the text is the one
+  the command read, positions included; else read again, or give up.
 - **Its error is a notification**, `a Lua callback failed: <verb>'s callback: <error>`, since no
   prompt waits for it.
 - **With no callback**, a failed call is a notification: `autodoc.call(<verb>): <err>`. A call that
@@ -349,8 +405,8 @@ The ones a command reaches for most:
 | `string`, `table`, `math` | `os`, `io`, `coroutine`, `debug`, `package` |
 | `assert`, `error`, `pcall`, `xpcall`, `select`, `type`, `tostring`, `tonumber` | `require`, `module` |
 | `pairs`, `ipairs`, `next`, `unpack`, `rawget`, `rawset`, `rawequal` | `load`, `loadstring`, `dofile`, `loadfile` |
-| `setmetatable`, `getmetatable`, `getfenv`, `setfenv`, `collectgarbage`, `newproxy` | |
-| `print`: to AutoDoc's standard output, not the page; use `autodoc.notify` | |
+| `setmetatable`, `getmetatable`, `collectgarbage` | `getfenv`, `setfenv`, `newproxy`, `_printregs` |
+| `print`: a notification, its values joined by tabs, as `autodoc.notify` | `os.time`, `os.date`: `autodoc.now` and `autodoc.date` instead |
 | `_G`, `_VERSION` | |
 
 **The deadline.** A command's `run`, a callback and a file's loading each have 2 seconds. Past

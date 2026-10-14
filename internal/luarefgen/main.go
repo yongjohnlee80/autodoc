@@ -1,5 +1,6 @@
 // Command luarefgen writes the Lua reference's tables that the script engine documents itself
-// (script.EditorDocs, script.TextDocs): docs/lua/reference.md's editor-object and text tables,
+// (script.GlobalDocs, script.EditorDocs, script.TextDocs): docs/lua/reference.md's tables of the
+// engine's own autodoc functions, the editor object and text,
 // only the text between each block's markers, so the guide around them stays hand-written. go
 // generate ./tui runs it; TestTheLuaReferenceIsGenerated fails when the file differs.
 package main
@@ -25,6 +26,7 @@ type block struct{ name, text string }
 // blocks are the reference's generated tables.
 func blocks() []block {
 	return []block{
+		{"globals", table("Function", script.GlobalDocs(global))},
 		{"ed", table("Method", script.EditorDocs())},
 		{"text", table("Function", script.TextDocs(global))},
 	}

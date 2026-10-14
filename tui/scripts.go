@@ -22,7 +22,8 @@ import (
 // …), which runs any entry but a plugin's; autodoc.notify(…); and call the daemon through it:
 // autodoc.call(…), autodoc.search.query(…) (scripting.go). A command takes its name on the command
 // line from whatever has it, and only that name; a later one of the same id replaces an earlier,
-// so a user's command named as one of AutoDoc's replaces it.
+// so a user's command named as one of AutoDoc's replaces it. autodoc.commands() lists the catalog
+// and autodoc.document() the page (luadocument.go); print, now and date are the engine's.
 
 // ownScripts are AutoDoc's own Lua commands.
 //
@@ -39,6 +40,7 @@ func (h *Host) loadScripts() {
 	// autodoc.call and autodoc.run now; autodoc.<domain> once connected (scripting.go)
 	h.luaFeature().bind(h.scripts, h.runFromLua)
 	h.luaFeature().bindHost(h.scripts, luaHostOf{h}) // autodoc.clipboard, .ui, .agents (luahost.go)
+	h.bindDocument(h.scripts)                        // autodoc.document, autodoc.commands (luadocument.go)
 	errs := h.scripts.LoadDir(ownScripts, "lua")
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)

@@ -50,6 +50,7 @@ var editorMethods = []method{
 	{"replace_all", "term, text, opts", "number", "Puts text in place of every match of term, as one edit, and returns how many. `opts` as `ed:find_all`'s.", (*Engine).edReplaceAll},
 	{"mode", "", "string", "The editor's mode: `\"normal\"`, `\"insert\"`, `\"replace\"`, `\"visual\"`, `\"visual_line\"` or `\"visual_block\"`. Without Vim's keys it is `\"insert\"`, or `\"visual\"` with a selection.", (*Engine).edMode},
 	{"read_only", "", "boolean", "Whether edits are refused: a PDF's or DOCX's derived text, say.", (*Engine).edReadOnly},
+	{"revision", "", "number", "Names the text as it is now: every edit and every new document gives a new one, and an undo gives back the one the text had. A callback compares the revision its command read with `ed:revision()` to know whether the page changed while it waited.", (*Engine).edRevision},
 	{"modified", "", "boolean", "Whether the text has changed since it was opened or last saved, as `:x` asks before it writes.", (*Engine).edModified},
 	{"run", "line", "nothing", "Runs a command line as the prompt does, without the `:`: `\"12\"`, `\"find TODO\"`, `\"table 2 3\"`. Raises the command's error.", (*Engine).edRun},
 }
@@ -331,6 +332,11 @@ func (e *Engine) edMode(L *lua.LState) int {
 
 func (e *Engine) edReadOnly(L *lua.LState) int {
 	L.Push(lua.LBool(e.ed(L).ReadOnly()))
+	return 1
+}
+
+func (e *Engine) edRevision(L *lua.LState) int {
+	L.Push(lua.LNumber(e.ed(L).Revision()))
 	return 1
 }
 

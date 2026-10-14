@@ -316,6 +316,7 @@ autodoc.command{
     if line == "" then error("link <term>", 0) end
     local workspace = autodoc.current_workspace()
     if not workspace then error("enter a workspace first", 0) end
+    local rev, l, c = ed:revision(), ed:cursor() -- the page as run found it
     autodoc.search.query(workspace, line, {limit = 1}, function(res, err)
       if err then
         autodoc.notify("link: the search failed: " .. err)
@@ -327,7 +328,11 @@ autodoc.command{
         return
       end
       local target = hit.path:gsub("%.md$", "")
-      ed:insert("[[" .. target .. "]]")
+      if ed:revision() == rev then
+        ed:insert_at(l, c, "[[" .. target .. "]]") -- the page is as it was: where run was asked
+      else
+        ed:insert("[[" .. target .. "]]") -- it changed: where the cursor is now
+      end
       autodoc.notify("link: [[" .. target .. "]]")
     end)
   end,
@@ -346,8 +351,10 @@ Put the cursor where the link should go and run `:link kestrel`.
   `"-32060 no such workspace"`. Without the check, `res` is `nil` and `res.hits` fails.
 - **The callback runs as a command does.** It has the same 2 seconds, it can use `ed`, and its
   edits are one undo step of their own.
-- **The page may have changed meanwhile.** You may have moved, or opened another document. Read
-  the cursor in the callback, as `ed:insert` does, rather than a position `run` saved.
+- **The page may have changed meanwhile.** You may have typed, or opened another document.
+  `ed:revision()` names the text: `run` keeps it, and the callback compares. The same revision is
+  the same text, so the position `run` saved still holds; another means it may not, and `:link`
+  inserts at the cursor instead.
 - **`autodoc.current_workspace()`** is the workspace in use, or `nil` before you enter one. Most
   verbs take it first.
 - **The result is Lua tables.** `res.hits` is a list; each hit has a `path`, relative to the

@@ -102,6 +102,11 @@ type Engine struct {
 	// file being loaded, which a registration names
 	register func(Registration) error
 	loading  string
+	// list is what commands() lists in place of the editor's registry (SetCommandList)
+	list func() []CommandInfo
+	// clock and location are now's and date's (WithClock)
+	clock    func() time.Time
+	location *time.Location
 }
 
 // Registration is one command{…} as a host's registrar takes it: its id and title, the file that
@@ -118,9 +123,11 @@ type Registration struct {
 type Option func(*config)
 
 type config struct {
-	global  string
-	notify  func(string)
-	timeout time.Duration
+	global   string
+	notify   func(string)
+	timeout  time.Duration
+	clock    func() time.Time
+	location *time.Location
 }
 
 // WithGlobal names the global table scripts register through ("editor" by default): AutoDoc's is
@@ -134,9 +141,15 @@ func WithNotify(fn func(string)) Option { return func(c *config) { c.notify = fn
 // WithTimeout is how long one command's script may run before it is stopped (DefaultTimeout).
 func WithTimeout(d time.Duration) Option { return func(c *config) { c.timeout = d } }
 
+// WithClock is where now() and date() read the time, and the zone date() writes local time in
+// (time.Now and time.Local by default): a test's fixed time, say.
+func WithClock(now func() time.Time, loc *time.Location) Option {
+	return func(c *config) { c.clock, c.location = now, loc }
+}
+
 // New is an engine registering into core's commands.
 func New(core *widget.EditorCore, opts ...Option) *Engine {
-	cfg := config{global: "editor", timeout: DefaultTimeout}
+	cfg := config{global: "editor", timeout: DefaultTimeout, clock: time.Now, location: time.Local}
 	for _, o := range opts {
 		o(&cfg)
 	}
@@ -149,11 +162,14 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 		L.Push(lua.LString(lib.name))
 		L.Call(1, 0)
 	}
-	// the base library reads files and loads code: a script has neither
-	for _, name := range []string{"dofile", "loadfile", "load", "loadstring", "require", "module"} {
+	// the base library reads files and loads code, which a script may not; reaches other
+	// functions' environments (getfenv, setfenv) and makes userdata (newproxy), which a sandbox
+	// keeps to itself; and writes to standard output (_printregs; print is notify's, below)
+	for _, name := range []string{"dofile", "loadfile", "load", "loadstring", "require", "module",
+		"getfenv", "setfenv", "newproxy", "_printregs"} {
 		L.SetGlobal(name, lua.LNil)
 	}
-	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout}
+	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
 	L.SetField(e.global, "notify", L.NewFunction(func(L *lua.LState) int {
@@ -165,6 +181,7 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 	L.SetGlobal(cfg.global, e.global)
 	e.registerEditorType()
 	e.registerText()
+	e.registerGlobals()
 	return e
 }
 
