@@ -519,6 +519,30 @@ The ones a command reaches for most:
 | `autodoc.workspace.list(cb)` | `{{name, root, state, …}, …}` |
 | `autodoc.todos.add(store, task, cb)` | the task filed, with its `id` (Help › Tutorial…, page 9) |
 
+## Packages and capabilities
+
+A package (`lua/<name>/` with a `package.toml`, [Lua in AutoDoc](README.md#packages-scripts-to-share))
+runs **gated**: each kind of call below needs its capability, granted by you once. Without it, the
+call answers `nil` and `needs <capability>: not granted`, and does nothing.
+
+| Capability | Lets a package |
+|---|---|
+| `workspace.read` | call the daemon's reading verbs: `autodoc.search`, `autodoc.doc.read`, `autodoc.graph`, … |
+| `workspace.write` | call its writing verbs: write, rename and remove documents and tasks |
+| `settings` | change AutoDoc's settings: workspaces, models, rankers, preferences |
+| `clipboard` | `autodoc.clipboard.read` and `.write` |
+| `agents` | `autodoc.agents.list` and `.send` |
+| `commands` | run commands: `autodoc.run`, `ed:run`, and bind keys or menu rows (`autodoc.map`, `autodoc.menu`) |
+
+- **Every daemon verb says which of the first three it needs** (its effect, in `autodoc
+  --contracts`). A verb whose effect the daemon does not say (an older daemon) is refused to a
+  package whatever it was granted.
+- **A package declares what it needs** in `package.toml`'s `requires`, or as it loads,
+  `autodoc.requires{"workspace.read"}`. AutoDoc asks after the scripts load.
+- **Its own calls are its own:** a function a package defines runs with the package's grants
+  wherever it runs from (a callback, an event, a key).
+- **`require(name)`** loads the package's `name.lua` or `name/init.lua` once; `a.b` is `a/b.lua`.
+
 ## The sandbox
 
 | There | Not there |

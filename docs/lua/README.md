@@ -70,6 +70,35 @@ folder in file-name order.
 - A script cannot reload from inside itself: `autodoc.run("scripts.reload")` answers `false` and
   why.
 
+## Packages: scripts to share
+
+A **package** is a folder of the `lua/` folder: `~/.config/autodoc/lua/<name>/`, holding `init.lua`
+and a `package.toml`.
+
+```toml
+name = "wordcount"            # the folder's name
+version = "1.0.0"
+description = "word counts for the page"
+requires = ["workspace.read"] # what it must be allowed to do
+```
+
+- **A package is held to what you allow.** It asks, once, for what its `requires` (and any
+  `autodoc.requires{…}` in its code) names: reading the workspace, writing it, the clipboard, the
+  agents, AutoDoc's settings, or running commands. Until you allow one, its calls of that kind
+  answer `nil` and `needs <capability>: not granted`. **Not now** asks again at the next start.
+- **Its globals are its own,** and so are its copies of `string`, `table` and `math`: it changes
+  nothing another script sees.
+- **`require("lib")` reads the package's own `lib.lua`** (or `lib/init.lua`), once; a name outside
+  the folder is refused.
+- **Your own `lua/*.lua` files are not packages:** they are yours, and are never asked about.
+- **`:lua-install <git-url>`** clones a package whose repository has `package.toml` at its top. It
+  asks before anything goes into `lua/`, naming the package, its version, its source and commit, and
+  what it requires; **Install** puts it there and reloads the scripts. To remove one, delete its
+  folder and run `:lua-reload`.
+
+[The reference](reference.md#packages-and-capabilities) lists the capabilities a package can ask
+for, and what each allows.
+
 ## The sandbox
 
 Scripts get Lua 5.1's **base**, **table**, **string** and **math** libraries, and the `autodoc`
