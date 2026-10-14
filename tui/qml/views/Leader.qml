@@ -44,4 +44,5 @@ Dialog {
     Shortcut { sequence: "Shift+L"; onActivated: { leader.close(); App.arrangePanel() } }
     Shortcut { sequence: "a"; onActivated: { leader.close(); agentsCard.open() } }
     Shortcut { sequence: "p"; onActivated: { leader.close(); pluginKeys.open() } }
+    Shortcut { sequence: "u"; onActivated: { leader.close(); luaKeys.open() } }
 }
