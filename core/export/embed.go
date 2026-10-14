@@ -17,6 +17,10 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/yongjohnlee80/golib/parse/markdown"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // EMBEDS — a page's ![alt](path) of a file beside its document is drawn in the page, as xmd draws
@@ -319,7 +323,84 @@ func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 	return markdownTable(t), true
 }
 
+// EmbedLine is a source line that holds an image and nothing else, as Markdown is parsed for the
+// page (kind.ParseMarkdown): an editor draws Dest in the line's place when the image is Alone, its
+// paragraph's only content, as the page draws a diagram or a table. From and To are the lines of
+// the paragraph (or setext heading) it is in, whose shape decides whether it is alone.
+type EmbedLine struct {
+	Line     int
+	Dest     string
+	Alone    bool
+	From, To int
+}
+
+// EmbedLines are source's lines that hold only an image, in order.
+func EmbedLines(source []byte) []EmbedLine {
+	if !bytes.Contains(source, []byte("![")) {
+		return nil
+	}
+	document := kind.ParseMarkdown(source)
+	starts := []int{0} // each line's first byte
+	for i, c := range source {
+		if c == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	lineOf := func(offset int) int {
+		lo, hi := 0, len(starts)-1
+		for lo < hi {
+			mid := (lo + hi + 1) / 2
+			if starts[mid] <= offset {
+				lo = mid
+			} else {
+				hi = mid - 1
+			}
+		}
+		return lo
+	}
+	lineText := func(ln int) []byte {
+		end := len(source)
+		if ln+1 < len(starts) {
+			end = starts[ln+1] - 1
+		}
+		return bytes.TrimRight(source[starts[ln]:end], "\r")
+	}
+	var out []EmbedLine
+	forEach(document.Root, func(node *markdown.Node) {
+		parent := node.Parent
+		if node.Kind != markdown.KindImage || parent == nil || parent.Kind != markdown.KindParagraph && parent.Kind != markdown.KindHeading {
+			return
+		}
+		start, end := node.Span.Start, node.Span.End
+		ln := lineOf(start)
+		if end <= start || lineOf(end-1) != ln || !bytes.Equal(bytes.TrimSpace(lineText(ln)), source[start:end]) {
+			return // the image shares its line, or spans lines
+		}
+		from, to := lineOf(parent.Span.Start), lineOf(max(parent.Span.End-1, parent.Span.Start))+1
+		alone := parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node && to-from == 1
+		out = append(out, EmbedLine{Line: ln, Dest: string(node.Dest), Alone: alone, From: from, To: to})
+	})
+	return out
+}
+
 var backticks = regexp.MustCompile("`+")
+
+// EmbedDiagram is the Mermaid source of an embed of dest (.mmd) in the document at doc, read as
+// the page reads it: beside the document, then in its resources folder, never out of its folder.
+// ok is false for any other embed, and for a file that is missing, refused or too large.
+func EmbedDiagram(doc, dest string) (string, bool) {
+	p, ok := embedPath(dest)
+	if !ok || strings.ToLower(path.Ext(p)) != ".mmd" {
+		return "", false
+	}
+	e := newEmbedder(doc, tableFit{})
+	if e == nil {
+		return "", false
+	}
+	defer e.close()
+	data, ok := e.read(p, maxEmbedText)
+	return string(data), ok
+}
 
 // mermaidFence is src in a mermaid fence, its backticks more than any run src holds.
 func mermaidFence(src string) string {
@@ -332,14 +413,14 @@ func mermaidFence(src string) string {
 }
 
 // markdownTable is t as a Markdown table: its header, the delimiter row, its body, and what is not
-// shown as a last row. A cell is one line, its | and \ escaped.
+// shown as a last row. A cell is one line, shown as the file has it: every ASCII punctuation
+// character escaped, so none is read as Markdown (emphasis, code, a link, an entity, a pipe).
 func markdownTable(t csvShown) string {
-	cell := strings.NewReplacer(`\`, `\\`, "|", `\|`, "\r\n", " ", "\n", " ", "\r", " ")
 	var b strings.Builder
 	row := func(cells []string) {
 		b.WriteString("|")
 		for _, c := range cells {
-			b.WriteString(" " + cell.Replace(c) + " |")
+			b.WriteString(" " + literalCell(c) + " |")
 		}
 		b.WriteString("\n")
 	}
@@ -354,6 +435,19 @@ func markdownTable(t csvShown) string {
 		row(last)
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// literalCell is a CSV value as a Markdown table cell's literal text: on one line, each ASCII
+// punctuation character backslash-escaped, which CommonMark reads as the character itself.
+func literalCell(s string) string {
+	var b strings.Builder
+	for _, r := range strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ").Replace(s) {
+		if r < utf8.RuneSelf && strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // fitting is how many of a table's first columns fit in width characters as drawn, one at least:

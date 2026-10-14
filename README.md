@@ -228,8 +228,9 @@ title instead.
 
 In the GUI's Rendered view the note stays editable, and a diagram or table embed alone in its
 paragraph is drawn in its line's place, natively, as if the file were written there: a diagram as a
-`mermaid` fence, a table as a Markdown table of 16 rows. With the cursor on the line it is its
-source again. Images are drawn in the preview and the pane.
+`mermaid` fence, a table as a Markdown table of 16 rows, its values as the file has them. While
+typing on the line (Insert) it is its source again. Only the note's own editor draws them: the
+search preview and a todo's details show other files' text, not the note's.
 
 **Relative links reach their files wherever the page is written.** An HTML export reads each
 link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's
@@ -249,7 +250,8 @@ ER, gantt, mindmaps, …) is drawn as the Mermaid project draws it, offline. An 
 policy allows that script and the one that starts it, by digest, and no other, and a page without
 a diagram has no script at all. A diagram mermaid cannot read shows mermaid's own error in its
 place. `File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
-terminal, as below; where it cannot, it shows the block's source and why.
+terminal, as below; where it cannot, it shows the block's source and why. A line embedding a
+`.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a fence is, read as the preview reads it.
 
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`

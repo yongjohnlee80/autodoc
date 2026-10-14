@@ -259,9 +259,10 @@ Window {
                 onWriteRequested: App.writeFromEditor(quit)
                 onQuitRequested: App.quitFromEditor(force)
                 SyntaxHighlighter { definition: App.syntaxDefinition }
-                // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it; the
-                // terminal's Editor has no Rendered view and ignores it
-                MarkdownRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
+                // the Rendered view's Markdown (Ctrl+T switches): the GUI's Editor draws it, the
+                // open note's embeds drawn in place (noterenderer.go); the terminal's Editor has no
+                // Rendered view and ignores it
+                NoteRenderer { mermaid: true }  // mermaid fences as diagrams: flowcharts natively
                 // the Rendered view of an HTML file opened raw: its page, drawn natively (htmldoc.go
                 // turns it on for that file and off for any other); a terminal ignores it
                 HTMLDocumentView {}

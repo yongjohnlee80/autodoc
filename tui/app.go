@@ -426,6 +426,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Sources(h.reg.state),
 		tuidecl.Handlers(h.reg.handlers),
 		tuidecl.ErrorSink(h.keep),
+		tuidecl.Types(noteRendererType), // the note editor's renderer (noterenderer.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
 		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
 		// vfs/local, whose root refuses an absolute link and lists every link as a file.

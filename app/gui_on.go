@@ -32,12 +32,13 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, dbg *debugRecording) error
 		b := gui.NewBackend(opts...)
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
-		// a note's Rendered view draws its embeds (gui_embeds.go): the host tells the renderers
-		// which note is open, and its diagrams draw through one chain, as golib's renderer's do
-		notes := &noteEmbeds{}
-		o.NoteFile = notes.setNote
-		markdown := guidecl.WithRendererFor("markdown", notes.renderer(guiwidget.Diagrams(nil)))
-		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native(markdown)))
+		// the note editor's Rendered view draws the open note's embeds (tui/embeds_gui.go): the
+		// host tells it which note is open, and its diagrams draw through one chain, as golib's
+		// renderer's do. Every other Editor keeps golib's MarkdownRenderer.
+		notes := &tui.NoteEmbeds{}
+		o.NoteFile = notes.SetNote
+		note := guidecl.WithRendererFor(tui.NoteRendererKind, notes.Renderer(guiwidget.Diagrams(nil)))
+		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native(note)))
 		// gui.Main ends the process when this callback returns, so this is the last
 		// code that runs: the recording's owner closes here, with the TUI's trace
 		// stopped, Launch having returned. gui.Main prints a returned error and

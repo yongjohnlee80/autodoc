@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -331,11 +332,15 @@ func TestEmbedMarkdownIsTheInjectedBlock(t *testing.T) {
 		"docs/ticks.mmd":     "graph TD\n  a[\"```\"] --> b\n",
 		"docs/plan/data.csv": "name,count\nclaims,\"3,000\"\n\"a|b\",\"two\nlines\"\nc,1\nd,2\n",
 		"docs/pic.png":       "\x89PNG",
+		"docs/literal.csv":   "value\n**strong** `code` [l](u) ![i](p) &amp; a|b c\\d\n",
 	})
 	for _, c := range []struct{ dest, want string }{
 		{"flow.mmd", "```mermaid\ngraph TD\n  a --> b\n```"},
 		{"ticks.mmd", "````mermaid\ngraph TD\n  a[\"```\"] --> b\n````"},
-		{"data.csv", "| name | count |\n| --- | --- |\n| claims | 3,000 |\n| a\\|b | two lines |\n| … 2 more rows |  |"},
+		{"data.csv", "| name | count |\n| --- | --- |\n| claims | 3\\,000 |\n| a\\|b | two lines |\n| … 2 more rows |  |"},
+		// every ASCII punctuation character escaped: emphasis, code, a link, an image, an entity,
+		// a pipe and a backslash are the value's own characters
+		{"literal.csv", "| value |\n| --- |\n| \\*\\*strong\\*\\* \\`code\\` \\[l\\]\\(u\\) \\!\\[i\\]\\(p\\) \\&amp\\; a\\|b c\\\\d |"},
 	} {
 		got, ok := export.EmbedMarkdown(doc, c.dest, 2)
 		if !ok || got != c.want {
@@ -349,6 +354,68 @@ func TestEmbedMarkdownIsTheInjectedBlock(t *testing.T) {
 	}
 	if _, ok := export.EmbedMarkdown("", "flow.mmd", 0); ok {
 		t.Error("with no document an embed was injected")
+	}
+}
+
+// A line that holds only an image is found as the page's parser reads it: alone in its paragraph
+// beside a heading or a blank, with a destination in balanced parentheses or a title; not alone in
+// a paragraph of more lines, nor in a setext heading, which are named by their lines; and not at
+// all when it shares its line, is in code, or is a list item.
+func TestEmbedLinesAreTheParsersImages(t *testing.T) {
+	source := strings.Join([]string{
+		"# Note",              // 0
+		"![a](a.mmd)",         // 1: alone, after a heading
+		"# Next",              // 2
+		"",                    // 3
+		"![b](flow(v2).mmd)",  // 4: alone, balanced parentheses
+		"",                    // 5
+		`![c](c.csv "title")`, // 6: alone, a title
+		"",                    // 7
+		"![d](d.mmd)",         // 8: a paragraph of two lines
+		"more text",           // 9
+		"",                    // 10
+		"![e](e.mmd)",         // 11: a setext heading
+		"===",                 // 12
+		"",                    // 13
+		"see ![f](f.mmd)",     // 14: shares its line
+		"",                    // 15
+		"    ![g](g.mmd)",     // 16: indented code
+		"",                    // 17
+		"- ![h](h.mmd)",       // 18: a list item
+	}, "\n")
+	want := []export.EmbedLine{
+		{Line: 1, Dest: "a.mmd", Alone: true, From: 1, To: 2},
+		{Line: 4, Dest: "flow(v2).mmd", Alone: true, From: 4, To: 5},
+		{Line: 6, Dest: "c.csv", Alone: true, From: 6, To: 7},
+		{Line: 8, Dest: "d.mmd", From: 8, To: 10},
+		{Line: 11, Dest: "e.mmd", From: 11, To: 13},
+	}
+	if got := export.EmbedLines([]byte(source)); !reflect.DeepEqual(got, want) {
+		t.Errorf("embed lines:\n got %+v\nwant %+v", got, want)
+	}
+	if got := export.EmbedLines([]byte("# no images\n")); got != nil {
+		t.Errorf("no images: %+v", got)
+	}
+}
+
+// An embedded diagram's source is read as the page reads it, beside the document or in its
+// resources folder; any other embed, a file out of the folder and a missing one have none.
+func TestEmbedDiagramIsTheFilesSource(t *testing.T) {
+	doc := embedDoc(t, map[string]string{
+		"secret.mmd":         "graph TD\n  secret --> out\n",
+		"docs/flow.mmd":      "graph TD\n  a --> b\n",
+		"docs/plan/deep.mmd": "graph TD\n  deep --> here\n",
+		"docs/data.csv":      "a,b\n",
+	})
+	for dest, want := range map[string]string{"flow.mmd": "graph TD\n  a --> b\n", "deep.mmd?v=2": "graph TD\n  deep --> here\n"} {
+		if got, ok := export.EmbedDiagram(doc, dest); !ok || got != want {
+			t.Errorf("%s: %q (ok %v), want %q", dest, got, ok, want)
+		}
+	}
+	for _, dest := range []string{"data.csv", "../secret.mmd", "missing.mmd"} {
+		if got, ok := export.EmbedDiagram(doc, dest); ok {
+			t.Errorf("%s: read %q", dest, got)
+		}
 	}
 }
 

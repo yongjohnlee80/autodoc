@@ -55,7 +55,7 @@ func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
 	// the diagram at the cursor, else the file's first, as File › Preview Mermaid diagram shows it
 	diagram := menuCommand("autodoc.diagram", "View &diagram", widget.CoreMenuAction{ID: "autodoc.diagram",
 		Run: func(*widget.EditorCore) { h.previewDiagram() }})
-	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes())
+	_, diagram.Enabled = mermaidBlock([]byte(c.Value()), h.cursorBytes(), h.diagramReader())
 	items = append(items, widget.NewSeparator("autodoc.sep.diagram"), diagram,
 		widget.NewSeparator("autodoc.sep.relations"), link, back)
 	if h.fonts != nil { // the window's zoom; a terminal's is its own
