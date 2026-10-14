@@ -71,7 +71,9 @@ func (h *Host) startEditorSocket(dir string) {
 		return
 	}
 	path := filepath.Join(dir, fmt.Sprintf("%d.sock", os.Getpid()))
-	err := os.MkdirAll(dir, 0o700)
+	// the folder is the user's alone before anything listens in it (editorsocket_unix.go): the
+	// socket's own chmod after Listen is a second lock, not the first
+	err := privateDir(dir)
 	if err == nil {
 		_ = os.Remove(path) // a socket left by a crash of an earlier run with this pid
 	}
