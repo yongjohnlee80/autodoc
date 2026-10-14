@@ -215,11 +215,14 @@ func csvTable(data []byte, fit tableFit) (string, bool) {
 	if fit.rows > 0 {
 		limit = min(limit, fit.rows)
 	}
+	// the columns are fitted first, to the rows that may show; the cells then bound the rows at
+	// the width drawn, so a table fitted narrower shows as many rows as its cells allow
 	width := min(columns, maxTableColumns)
-	shown := min(len(rows)-1, limit, maxTableCells/width-1)
+	shown := min(len(rows)-1, limit)
 	if fit.width > 0 {
 		width = fitting(rows[:1+shown], width, fit.width)
 	}
+	shown = min(shown, maxTableCells/width-1)
 	var b strings.Builder
 	cells := func(tag string, row []string) {
 		b.WriteString("<tr>")

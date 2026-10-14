@@ -445,3 +445,25 @@ func TestATableFitsItsView(t *testing.T) {
 		t.Errorf("with no fit the whole table is shown:\n%s", page)
 	}
 }
+
+// The cells bound a table's rows at the width it is drawn: a 64-column table fitted to one column
+// shows its 1000 rows, as one column's cells allow, not the 311 that 64 columns would (Lector, #173
+// r1).
+func TestAFittedTableShowsTheRowsItsCellsAllow(t *testing.T) {
+	csv := strings.TrimSuffix(strings.Repeat("h,", 64), ",") + "\n" + strings.Repeat("x\n", 1000)
+	doc := embedDoc(t, map[string]string{"docs/wide.csv": csv})
+	content, err := export.RenderWith([]byte("![wide](wide.csv)\n"), export.HTML, "light", export.Options{Document: doc, TableWidth: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	if n := strings.Count(page, "<th>"); n != 1 {
+		t.Errorf("%d columns shown; want the one that fits", n)
+	}
+	if n := strings.Count(page, "<tr><td>"); n != 1000 {
+		t.Errorf("%d rows shown; want all 1000", n)
+	}
+	if !strings.Contains(page, "… 63 more columns</td>") {
+		t.Errorf("the table does not say only its hidden columns:\n%s", page[strings.LastIndex(page, "<tr>"):])
+	}
+}

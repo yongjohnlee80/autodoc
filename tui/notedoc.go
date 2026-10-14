@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
@@ -34,6 +35,34 @@ type NoteDocumentView struct {
 
 // NewNoteDocumentView is v as the editor's document view.
 func NewNoteDocumentView(v *widget.HTMLView) *NoteDocumentView { return &NoteDocumentView{HTMLView: v} }
+
+// pageOf is a document view's HTMLView: golib's, or the one a NoteDocumentView wraps.
+func pageOf(c tuicore.Component) (*widget.HTMLView, bool) {
+	switch v := c.(type) {
+	case *NoteDocumentView:
+		return v.HTMLView, true
+	case *widget.HTMLView:
+		return v, true
+	}
+	return nil, false
+}
+
+// linkNote has the editor's document view, when it is a NoteDocumentView, ask the host to render
+// a note's text (showNote).
+func (h *Host) linkNote() {
+	if dc, ok := h.editor.(documentComponent); ok {
+		linkNoteDocument(dc.DocumentComponent(), h.showNote)
+	}
+}
+
+// linkNoteDocument gives c, when it is a NoteDocumentView, show; it reports whether it is one.
+func linkNoteDocument(c tuicore.Component, show func(text []byte) bool) bool {
+	d, ok := c.(*NoteDocumentView)
+	if ok {
+		d.show = show
+	}
+	return ok
+}
 
 // ShowDocument shows text: the page the host renders from it, or text itself.
 func (d *NoteDocumentView) ShowDocument(text []byte) {

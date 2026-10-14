@@ -29,13 +29,7 @@ func (h *Host) pageView() (*widget.HTMLView, bool) {
 	if !ok {
 		return nil, false
 	}
-	switch v := dc.DocumentComponent().(type) {
-	case *NoteDocumentView:
-		return v.HTMLView, true
-	case *widget.HTMLView:
-		return v, true
-	}
-	return nil, false
+	return pageOf(dc.DocumentComponent())
 }
 
 // documentFor turns the page on under --gui for a raw HTML file and for a note (notedoc.go), and off
@@ -121,11 +115,7 @@ func refusalNotice(src, ws string) string {
 // linkPage gives the page its links, once the editor is built: they open as the preview pane's do,
 // against the open file's folder.
 func (h *Host) linkPage() {
-	if dc, ok := h.editor.(documentComponent); ok {
-		if d, ok := dc.DocumentComponent().(*NoteDocumentView); ok {
-			d.show = h.showNote
-		}
-	}
+	h.linkNote()
 	if v, ok := h.pageView(); ok {
 		v.SetOnLink(h.htmlLink)
 		v.SetOnRefused(h.resourceRefused)
