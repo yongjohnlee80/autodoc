@@ -56,7 +56,7 @@ func (h *Host) loadScripts() {
 func (h *Host) registerLua(r script.Registration) error {
 	cmd := r.Command
 	return h.cat.add(Entry{ID: r.ID, Source: SourceLua, Owner: cmp.Or(r.File, "a script"), Title: r.Title,
-		Verb: cmd.Name, Aliases: cmd.Aliases, Args: cmd.Args, Help: cmd.Help,
+		Verb: cmd.Name, Aliases: cmd.Aliases, Args: cmd.Args, Help: cmd.Help, Complete: cmd.Complete,
 		Run: func(inv Invocation) error {
 			core := cmp.Or(inv.Core, h.core)
 			return core.Batch(func() error {

@@ -74,6 +74,7 @@ autodoc.command{
   name = "mermaid",
   args = "<" .. table.concat(names, "|") .. ">",
   help = "insert a Mermaid diagram to start from",
+  complete = names, -- Tab offers the types
   run = function(ed, args)
     local kind = args[1]
     if not kind then

@@ -34,7 +34,6 @@ func TestLuaSeesTheDocument(t *testing.T) {
 	r.mustRun(t, "doc")
 	r.waitNotice(t, "doc: notes/a.md/kb/markdown/nil/Plan/x,y/3/v/year/nil")
 
-
 	// the editor's text now, not the file's: an edit not yet saved shows
 	r.page("---\ntitle: Edited\n---\n", 1, 1)
 	r.mustRun(t, "doc")

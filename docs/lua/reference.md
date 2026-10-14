@@ -26,7 +26,7 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 
 | Function | Does | Returns |
 |---|---|---|
-| `autodoc.command{name, aliases, args, help, run, id, title}` | Registers a `:` command, an entry of AutoDoc's command catalog ([what it takes](#what-a-command-takes)). Runs as the file loads. | nothing |
+| `autodoc.command{name, aliases, args, help, run, complete, id, title}` | Registers a `:` command, an entry of AutoDoc's command catalog ([what it takes](#what-a-command-takes)). Runs as the file loads. | nothing |
 | `autodoc.run(id, …)` | Runs a command of the catalog by its id, AutoDoc's or yours, with the rest as its arguments ([below](#autodocrunid-)). | `true`, or `false` and why |
 | `autodoc.notify(message)` | Shows a notification: a toast in the corner, kept in the history (SPC h). | nothing |
 | `autodoc.call(verb, params, cb)` | Calls any daemon verb by its name, with `params` a list of its params in order (`nil` or `{}` for none). `cb` is optional. | nothing; the answer goes to `cb` |
@@ -95,6 +95,7 @@ autodoc.command{
 | `run` | function | yes | `run(ed, args, line, cmd)`: what the command does. |
 | `aliases` | list of strings | no | Other names for it, under the same rules as `name`. |
 | `args` | string | no | Its arguments, as Tab shows them: `"<term>"`, `"[depth]"`. A hint only: nothing checks it. |
+| `complete` | list of strings, or function | no | What Tab offers for an argument ([below](#completing-arguments)). |
 | `help` | string | no | What it does, in one line, as Tab shows it. |
 | `id` | string | no | Its id in the command catalog, which `autodoc.run` and F1 name it by: `lua.<something>`. `lua.<name>` when left out. |
 | `title` | string | no | What F1's COMMANDS calls it. Its `help`, or its `name`, when left out. |
@@ -147,6 +148,55 @@ autodoc.command{
 by `autodoc.run`, `cmd.bang` is `false` and `cmd.name` is the command's name.
 
 **One undo.** Everything `run` edits is one undo step, `ed:run`'s commands included.
+
+### Completing arguments
+
+After the name and a space, Tab completes the word being typed from `complete`:
+
+- **A list** is the candidates: `complete = {"flowchart", "sequence"}`. AutoDoc's `:mermaid`
+  offers its diagram types this way.
+- **A function** is called as `complete(ed, word, args, cmd)` each time Tab starts on a word:
+  `word` is the word typed so far (`""` after a space), `args` the words before it, `cmd` as
+  `run`'s. It returns a list of strings. It runs as `run` does, with 2 seconds and `ed`, so it
+  can offer what is on the page.
+- **Tab keeps the candidates that start with the word**, so return them all. One is filled in
+  with a space after it; several are listed, and Tab and Shift+Tab go through them. With none,
+  Tab shows `args` and `help`.
+- **A function's error** is a notification, `<name>'s complete: <error>`, and Tab shows `args`.
+
+```lua
+-- heading.lua: :heading <name> goes to a heading of the page; Tab offers them
+local function headings(ed)
+  local out = {}
+  for n, text in ipairs(ed:lines()) do
+    local title = text:match("^#+%s+(.-)%s*$")
+    if title then out[#out + 1] = {name = (title:gsub("%s+", "-")), line = n} end
+  end
+  return out
+end
+
+autodoc.command{
+  name = "heading",
+  args = "<name>",
+  help = "go to a heading of the page",
+  complete = function(ed, word)
+    local names = {}
+    for _, h in ipairs(headings(ed)) do names[#names + 1] = h.name end
+    return names
+  end,
+  run = function(ed, args)
+    for _, h in ipairs(headings(ed)) do
+      if h.name == args[1] then
+        ed:set_cursor(h.line, 1)
+        return
+      end
+    end
+    error("heading: no " .. (args[1] or "name") .. " on the page", 0)
+  end,
+}
+```
+
+A heading's spaces become `-`, so each name is one word.
 
 ### `autodoc.run(id, …)`
 

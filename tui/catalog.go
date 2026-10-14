@@ -66,6 +66,8 @@ type Entry struct {
 	// running it is the entry's key, as F1 lists it.
 	Twin string
 	Run  func(Invocation) error // on the UI loop
+	// Complete is what ':' Tab offers for its arguments (golib's Command.Complete); nil for none
+	Complete func(widget.CompleteContext) []string
 }
 
 // Invocation is how an entry was run: what ':' passes, so nothing is lost on the way.
@@ -314,7 +316,7 @@ func (c *catalog) sync(affected map[string]bool) {
 			}
 			e := c.byID[id]
 			// Set: a Lua command replaces golib's verb of its name, as it always has
-			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: e.Help,
+			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: e.Help, Complete: e.Complete,
 				Run: func(x widget.CommandContext) error {
 					return e.Run(Invocation{Name: x.Name, Args: x.Args, Line: x.Line, Bang: x.Bang, Core: x.Core})
 				}})

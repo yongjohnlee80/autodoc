@@ -251,8 +251,9 @@ func (e *Engine) LoadDir(fsys fs.FS, dir string) []error {
 	return errs
 }
 
-// luaCommand is the global table's command{name, aliases, args, help, run, id, title}: a verb of
-// the command line, replacing any registered under its name, or the host's registrar's to place.
+// luaCommand is the global table's command{name, aliases, args, help, run, complete, id, title}: a
+// verb of the command line, replacing any registered under its name, or the host's registrar's to
+// place.
 func (e *Engine) luaCommand(L *lua.LState) int {
 	spec := L.CheckTable(1)
 	name := lua.LVAsString(spec.RawGetString("name"))
@@ -265,12 +266,18 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 	if t, ok := spec.RawGetString("aliases").(*lua.LTable); ok {
 		t.ForEach(func(_, v lua.LValue) { aliases = append(aliases, lua.LVAsString(v)) })
 	}
+	complete, err := e.completer(name, spec.RawGetString("complete"))
+	if err != nil {
+		L.ArgError(1, err.Error())
+		return 0
+	}
 	cmd := widget.Command{
-		Name:    name,
-		Aliases: aliases,
-		Args:    lua.LVAsString(spec.RawGetString("args")),
-		Help:    lua.LVAsString(spec.RawGetString("help")),
-		Run:     func(x widget.CommandContext) error { return e.runCommand(name, run, x) },
+		Name:     name,
+		Aliases:  aliases,
+		Args:     lua.LVAsString(spec.RawGetString("args")),
+		Help:     lua.LVAsString(spec.RawGetString("help")),
+		Run:      func(x widget.CommandContext) error { return e.runCommand(name, run, x) },
+		Complete: complete,
 	}
 	if e.register != nil {
 		r := Registration{ID: lua.LVAsString(spec.RawGetString("id")), Title: lua.LVAsString(spec.RawGetString("title")),
@@ -332,6 +339,13 @@ func (e *Engine) Callback(name string, fn *lua.LFunction, args ...lua.LValue) er
 // protect calls fn with args under the deadline; an error, fn's or the deadline's, names name. The
 // deadline of a call it runs inside (a command running another through ed:run) is restored after.
 func (e *Engine) protect(name string, fn *lua.LFunction, args ...lua.LValue) error {
+	_, err := e.call(name, fn, 0, args...)
+	return err
+}
+
+// call is protect for a function that answers: its first nret results (nil for one it did not
+// give), read before the deadline is lifted.
+func (e *Engine) call(name string, fn *lua.LFunction, nret int, args ...lua.LValue) ([]lua.LValue, error) {
 	L := e.L
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
@@ -348,10 +362,67 @@ func (e *Engine) protect(name string, fn *lua.LFunction, args ...lua.LValue) err
 	for _, a := range args {
 		L.Push(a)
 	}
-	if err := L.PCall(len(args), 0, nil); err != nil {
-		return e.failure(name, ctx, err)
+	if err := L.PCall(len(args), nret, nil); err != nil {
+		return nil, e.failure(name, ctx, err)
 	}
-	return nil
+	out := make([]lua.LValue, nret)
+	for i := range out {
+		out[i] = L.Get(-nret + i)
+	}
+	L.Pop(nret)
+	return out, nil
+}
+
+// completer is a command's complete field as golib's Command.Complete: a list is its candidates
+// as they are; a function is called as complete(ed, word, args, cmd) on the loop, as run is
+// called, and answers a list of strings. A function's error, or an answer that is not a list, is
+// said through notify, and Tab then shows the command's arguments.
+func (e *Engine) completer(name string, v lua.LValue) (func(widget.CompleteContext) []string, error) {
+	switch x := v.(type) {
+	case *lua.LNilType:
+		return nil, nil
+	case *lua.LTable:
+		fixed := stringList(x)
+		return func(widget.CompleteContext) []string { return fixed }, nil
+	case *lua.LFunction:
+		return func(c widget.CompleteContext) []string {
+			L := e.L
+			prev := e.cur
+			e.cur = cmp.Or(c.Core, e.core)
+			defer func() { e.cur = prev }()
+			args := L.NewTable()
+			for _, a := range c.Args {
+				args.Append(lua.LString(a))
+			}
+			cmd := L.CreateTable(0, 2)
+			L.SetField(cmd, "name", lua.LString(cmp.Or(c.Name, name)))
+			L.SetField(cmd, "bang", lua.LBool(c.Bang))
+			out, err := e.call(name+"'s complete", x, 1, e.editorValue(), lua.LString(c.Word), args, cmd)
+			if err == nil {
+				if t, ok := out[0].(*lua.LTable); ok {
+					return stringList(t)
+				}
+				err = fmt.Errorf("%s's complete: answered a %s, not a list of strings", name, out[0].Type())
+			}
+			if e.notify != nil {
+				e.notify(err.Error())
+			}
+			return nil
+		}, nil
+	}
+	return nil, fmt.Errorf("complete is a list of strings or a function, not a %s", v.Type())
+}
+
+// stringList is t's list part as strings: a string or a number as written, anything else left out.
+func stringList(t *lua.LTable) []string {
+	var out []string
+	for i := 1; i <= t.Len(); i++ {
+		switch v := t.RawGetInt(i).(type) {
+		case lua.LString, lua.LNumber:
+			out = append(out, v.String())
+		}
+	}
+	return out
 }
 
 // failure is err, a script's failure under ctx, as its message, named name: the deadline said as

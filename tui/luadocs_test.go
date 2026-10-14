@@ -256,6 +256,22 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.page("---\ntags: [a\n---\n", 1, 1) // not YAML: no frontmatter, and why
 		r.mustRefuse(t, "tagged", "has no tags")
 	},
+	"-- heading.lua: :heading <name> goes to a heading of the page; Tab offers them": func(t *testing.T, r *running) {
+		r.page("# Plan\n\n## Install it\ntext\n## Use", 1, 1)
+		got := onLoop(r, func() []string {
+			c, _ := r.h.core.Commands().Lookup("heading")
+			if c.Complete == nil {
+				return nil
+			}
+			return c.Complete(widget.CompleteContext{Core: r.h.core, Name: "heading", Word: "In"})
+		})
+		if strings.Join(got, " ") != "Plan Install-it Use" {
+			t.Fatalf(":heading's complete gave %q", got)
+		}
+		r.mustRun(t, "heading Install-it")
+		r.wantCursor(t, ":heading Install-it", 3, 1)
+		r.mustRefuse(t, "heading Nope", "heading: no Nope on the page")
+	},
 	"-- tail.lua: :tail <n> selects the last n characters of the cursor's line": func(t *testing.T, r *running) {
 		r.page("abc de\u0301f", 1, 1) // é as e and an accent: one column
 		r.mustRun(t, "tail 3")
