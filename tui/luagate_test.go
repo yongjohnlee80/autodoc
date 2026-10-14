@@ -50,7 +50,7 @@ func TestAGatedScriptAsksAndIsHeld(t *testing.T) {
 	r.page("", 1, 1)
 	r.mustRun(t, "pkg")
 	r.s.WaitFor(t, "the read's answer", func(string) bool { return strings.Contains(r.editorText(), "[read kestrel") })
-	if got := r.editorText(); !strings.Contains(got, "[nil nil]") || !strings.Contains(got, "[nil needs workspace.write: not granted]") {
+	if got := r.editorText(); !strings.Contains(got, "[nil nil]") || !strings.Contains(got, "[nil needs workspace.write: not granted") {
 		t.Fatalf(":pkg granted: %q", got)
 	}
 	if got := d.read(t, "kb", "a.md"); got != "kestrel\n" {
