@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"unicode"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
@@ -175,41 +174,9 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 			// under the scope this search checked, so nothing of it is answered
 			return Result{}, fmt.Errorf("search: the hit %s is not among the candidates of its view", h.Path)
 		}
-		h.Snippet = wordHighlights(h.Snippet)
 		out.Hits = append(out.Hits, Hit{Hit: h, SourceID: id})
 	}
 	return out, nil
-}
-
-// wordHighlights keeps the highlighter's match and window, but moves punctuation at a matched
-// token's edges outside the markers. The underlying highlighter already ignores these edges when
-// matching; letters and digits delimit the same word here. Interior punctuation is preserved.
-func wordHighlights(snippet string) string {
-	var out strings.Builder
-	for {
-		before, rest, found := strings.Cut(snippet, gsearch.HighlightStart)
-		out.WriteString(before)
-		if !found {
-			return out.String()
-		}
-		marked, after, closed := strings.Cut(rest, gsearch.HighlightEnd)
-		if !closed {
-			out.WriteString(gsearch.HighlightStart)
-			out.WriteString(rest)
-			return out.String()
-		}
-		edge := func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }
-		left := strings.TrimLeftFunc(marked, edge)
-		word := strings.TrimRightFunc(left, edge)
-		out.WriteString(marked[:len(marked)-len(left)])
-		if word != "" {
-			out.WriteString(gsearch.HighlightStart)
-			out.WriteString(word)
-			out.WriteString(gsearch.HighlightEnd)
-		}
-		out.WriteString(left[len(word):])
-		snippet = after
-	}
 }
 
 // refusal is err with the store's refusal of a scope (pgstore.ErrNoAccess) said as ErrScope.

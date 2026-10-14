@@ -103,7 +103,7 @@ func TestDocumentGroupingBeforeTheLimit(t *testing.T) {
 		{Ord: 1, Body: "crimson grapes!", ByteStart: 14, ByteEnd: 28},
 		{Ord: 2, Body: "crimson fox.", ByteStart: 28, ByteEnd: 40},
 	}
-	if _, err := f.st.Put(f.ctx, pgstore.Document{Path: "track/1.md", SourceID: "1", Tags: []string{"song"},
+	if _, err := f.st.Put(f.ctx, pgstore.Document{Path: "track/1.md", SourceID: "1", Title: "crimson crimson crimson", Tags: []string{"song"},
 		Facets: map[string][]string(scopeA), Chunks: chunks}); err != nil {
 		t.Fatal(err)
 	}
@@ -116,11 +116,15 @@ func TestDocumentGroupingBeforeTheLimit(t *testing.T) {
 		t.Fatalf("mark ready: %v, %v", ready, err)
 	}
 	f.put("track/2.md", "1", map[string][]string(scopeA), "crimson anthem.")
+	f.put("track/3.md", "3", map[string][]string{"label_id": {"B"}}, "crimson secret river.")
 	s := f.open(qe)
 	for _, mode := range []gsearch.Mode{gsearch.ModeLexical, gsearch.ModeSemantic, gsearch.ModeAuto} {
 		ungrouped, err := s.Search(f.ctx, scopeA, Request{Query: "crimson", Mode: mode})
 		if err != nil || len(ungrouped.Hits) < 4 {
 			t.Fatalf("%s chunks: %v, %v", mode, hits(ungrouped), err)
+		}
+		if ungrouped.Hits[0].Path != ungrouped.Hits[1].Path {
+			t.Fatalf("%s: fixture must put two chunks of one document first: %v", mode, hits(ungrouped))
 		}
 		for _, group := range []string{"", "chunk"} {
 			got, err := s.Search(f.ctx, scopeA, Request{Query: "crimson", Mode: mode, Limit: 2, Group: group})
@@ -137,17 +141,18 @@ func TestDocumentGroupingBeforeTheLimit(t *testing.T) {
 			if h.ByteStart != best.ByteStart || h.Score != best.Score || h.SourceID != "1" || h.Path == "track/3.md" {
 				t.Errorf("%s: not the best scoped chunk: %+v, want %+v", mode, h, best)
 			}
-			if mode != gsearch.ModeSemantic && !strings.Contains(h.Snippet, "\x02crimson\x03") {
-				t.Errorf("punctuation inside highlight: %q", h.Snippet)
-			}
 		}
 	}
 	if _, err := s.Search(f.ctx, scopeA, Request{Group: "unknown"}); !errors.Is(err, ErrGroup) {
 		t.Errorf("unknown group: %v", err)
 	}
 	got, err := s.Search(f.ctx, scopeA, Request{Filter: gsearch.Filter{Tags: []string{"song"}}, Group: "document", Limit: 2})
-	if err != nil || len(got.Hits) != 2 || got.Hits[0].Path == got.Hits[1].Path {
+	if err != nil || len(got.Hits) != 2 || got.Hits[0].Path == got.Hits[1].Path || slices.ContainsFunc(got.Hits, func(h Hit) bool { return h.Path == "track/3.md" }) {
 		t.Errorf("grouped listing: %v, %v", hits(got), err)
+	}
+	got, err = s.Search(f.ctx, scopeA, Request{Query: "river", Mode: gsearch.ModeLexical, Group: "document"})
+	if err != nil || len(got.Hits) != 1 || !strings.Contains(got.Hits[0].Snippet, "\x02river\x03.") {
+		t.Errorf("punctuation-adjacent query: %+v, %v", got.Hits, err)
 	}
 }
 
