@@ -41,7 +41,7 @@ func exportMain(sourcePath, format, destination, theme, base string) error {
 	if err != nil {
 		return err
 	}
-	content, err := export.RenderWith(source, export.Format(format), theme, export.Options{Base: base})
+	content, err := export.RenderWith(source, export.Format(format), theme, export.Options{Base: base, Document: sourcePath})
 	if err != nil {
 		return fmt.Errorf("%s: %w", sourcePath, err)
 	}

@@ -2,7 +2,9 @@
 // a single Mermaid diagram as a page of its own, for an export and for a preview.
 //
 // An HTML page is whole: its colours are one of the shipped themes' (Themes, ThemeOf, Background),
-// its Content-Security-Policy allows no network access, and an image is shown as its alt text. A
+// its Content-Security-Policy allows no network access, and an image is shown as its alt text,
+// unless Options.Document names the source's file: then an embed of a file beside it (a Mermaid
+// diagram, a CSV table, an image) is drawn in the page (embed.go), an image as a data: URI. A
 // ```mermaid block is drawn in the page by the vendored mermaid.js (core/export/mermaid); the page
 // then holds that script, and its policy admits it and the one that starts it by their digests. A
 // page without a diagram has no script. Options.Base makes the source's relative links file: URLs
@@ -12,6 +14,7 @@
 // Concurrency: every exported function may be called from any number of goroutines. Each call
 // parses its own tree from the source and does not change the source; the package's shared state
 // is read-only after init (the themes, the mermaid regexp) or built once under a sync.Once (the
-// vendored script and its digest). The package does not read the disk; RenderWith reads the
-// process's working directory when Options.Base is relative.
+// vendored script and its digest). The package reads the disk only for Options.Document's embeds,
+// inside the document's folder; RenderWith reads the process's working directory when
+// Options.Base or Options.Document is relative.
 package export

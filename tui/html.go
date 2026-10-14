@@ -107,7 +107,7 @@ func (h *Host) previewHTML() {
 	// they reach the files beside it. An untitled draft's are written as it has them
 	var options export.Options
 	if full := h.diskPath(); full != "" {
-		options.Base = filepath.Dir(full)
+		options.Base, options.Document = filepath.Dir(full), full
 	}
 	image, why := h.imageMode()
 	h.say("opening HTML preview…")

@@ -215,6 +215,17 @@ overwrite its source. Remote images are represented by their alt text in HTML ex
 and remote resources are not loaded. `--output`, `--theme` and `--base` are refused without
 `--export`.
 
+**Embeds are drawn.** In the preview, the GUI's pane and an HTML export, `![title](path)` of a file
+beside the note is drawn in the page, as xmd draws it:
+- a Mermaid diagram (`.mmd`) as the diagram;
+- a `.csv` as a table, its first row the header;
+- an image (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, …) as the image.
+
+The file is looked for beside the note, then in its resources folder (the note's name without
+`.x.md` or `.md`: `plan.x.md`'s is `plan/`), and nowhere else. A diagram or table drawn this way
+must be alone in its paragraph. A file that is missing, too large or of another kind shows its
+title instead.
+
 **Relative links reach their files wherever the page is written.** An HTML export reads each
 link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's
 own directory and writes it as the `file://` URL of the file it names, percent-encoded (a space,

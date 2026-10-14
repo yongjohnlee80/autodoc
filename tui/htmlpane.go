@@ -80,7 +80,7 @@ func (h *Host) renderHTMLPane() {
 	dir, root, base := "", "", ""
 	if full := h.diskPath(); full != "" {
 		dir = filepath.Dir(full)
-		options.Base = dir
+		options.Base, options.Document = dir, full
 		root, base = h.resourcesFor(h.file.ws, h.file.path)
 	}
 	do(h, func(context.Context) answerOf[[]byte] {

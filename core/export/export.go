@@ -119,6 +119,10 @@ type Options struct {
 	// SourceSpans puts each block element's source bytes on it (data-src="start-end"), for a
 	// view that follows the editor: the GUI's native HTML preview scrolls to the cursor's block.
 	SourceSpans bool
+	// Document is the source's own file on disk. Its embeds (![alt](path)) of a Mermaid diagram
+	// (.mmd), a table (.csv) or an image are read beside it, or in its resources folder, and drawn
+	// in the page (embed.go). "" draws each as its alt text.
+	Document string
 }
 
 // Render is RenderWith without options: every link as the source has it.
@@ -147,11 +151,32 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		// unless every raw HTML block is written too), so a resolved link is rendered as a
 		// placeholder and its URL written in its place. The placeholder holds the source's digest,
 		// which the source cannot hold, so no text of its own is taken for one.
-		placeholder := fmt.Sprintf("autodoc-link-%x-", sha256.Sum256(source))
+		digest := sha256.Sum256(source)
+		placeholder := fmt.Sprintf("autodoc-link-%x-", digest)
 		var resolved []string
+		embedder := newEmbedder(options.Document)
+		if embedder != nil {
+			defer embedder.close()
+		}
+		drawn := embeds{placeholder: fmt.Sprintf("autodoc-embed-%x-", digest)}
+		diagrams := false
 		forEach(document.Root, func(node *markdown.Node) {
 			switch node.Kind {
 			case markdown.KindImage:
+				if embedder != nil {
+					parent := node.Parent
+					alone := parent != nil && parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node
+					var alt bytes.Buffer
+					for child := node.FirstChild; child != nil; child = child.Next {
+						writeText(&alt, child, document.Source)
+					}
+					if html, block, diagram, ok := embedder.embed(node.Dest, alt.String(), alone); ok {
+						diagrams = diagrams || diagram
+						node.Kind, node.Literal = markdown.KindText, []byte(drawn.add(html, block))
+						node.FirstChild, node.LastChild = nil, nil
+						return
+					}
+				}
 				node.Kind = markdown.KindEmph
 			case markdown.KindLink:
 				if base == "" {
@@ -172,8 +197,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		if err := markdownhtml.Render(&body, document, renderOpts...); err != nil {
 			return nil, err
 		}
-		diagrams := false
-		rendered := strings.NewReplacer(resolved...).Replace(body.String())
+		rendered := drawn.place(strings.NewReplacer(resolved...).Replace(body.String()))
 		rendered = mermaidBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 			diagrams = true
 			// the source stays escaped: mermaid reads the element's text
@@ -215,6 +239,7 @@ func page(colors palette, body string, diagrams, diagramPage bool) []byte {
 		output.WriteString("body{max-width:76ch;margin:3rem auto;padding:0 1.5rem;background:var(--background);color:var(--foreground);font:1rem/1.6 system-ui,sans-serif}")
 		output.WriteString("a{color:var(--accent)}pre,code{background:var(--surface)}pre{padding:1rem;overflow:auto;border:1px solid var(--border)}")
 		output.WriteString("blockquote{border-left:.2rem solid var(--accent);padding-left:1rem;color:var(--muted)}table{border-collapse:collapse}th,td{border:1px solid var(--border);padding:.3rem .6rem}")
+		output.WriteString("img{max-width:100%}div.embed{margin:1rem 0;overflow:auto}")
 	}
 	output.WriteString("pre.mermaid{background:none;border:0;text-align:center;color:var(--foreground)}")
 	output.WriteString("</style></head><body>\n")

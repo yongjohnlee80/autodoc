@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -258,5 +259,125 @@ func TestAResolvedLinkIsFollowedInABrowser(t *testing.T) {
 	want := "at " + fileURL(dir) + "/source%20docs/sub%20dir/%EB%85%B8%ED%8A%B8%20%231.md#sec shows # Target\n\nthe target file"
 	if !strings.Contains(out, want) {
 		t.Fatalf("the browser did not follow the link to the target: %s", out)
+	}
+}
+
+// embedDoc is a document, plan.x.md, in a temporary folder with files: each path, relative to the
+// folder, holds its text. It returns the document's path.
+func embedDoc(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, text := range files {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return filepath.Join(dir, "docs", "plan.x.md")
+}
+
+func renderEmbeds(t *testing.T, source, doc string, spans bool) string {
+	t.Helper()
+	content, err := export.RenderWith([]byte(source), export.HTML, "light", export.Options{Document: doc, SourceSpans: spans})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(content, []byte("autodoc-embed-")) {
+		t.Fatalf("a placeholder was left in the page:\n%s", content)
+	}
+	return string(content)
+}
+
+// An embed of a file beside the document, or in its resources folder, is drawn as xmd draws it: a
+// Mermaid diagram as a diagram (the page then holds mermaid's script), a CSV as a table with its
+// first row the header, and an image as the image, written in as a data: URI.
+func TestEmbedsAreDrawn(t *testing.T) {
+	png := "\x89PNG\r\n\x1a\nnot really, but bytes"
+	doc := embedDoc(t, map[string]string{
+		"docs/flow.mmd":      "graph TD\n  a --> b\n",
+		"docs/plan/data.csv": "name,count\nclaims,\"3,000\"\n",
+		"docs/plan/pic.png":  png,
+	})
+	page := renderEmbeds(t, "# Plan\n\n![The flow](flow.mmd)\n\n![Data](data.csv)\n\nSee ![a picture](pic.png) here.\n", doc, false)
+	for _, want := range []string{
+		`<div class="embed"><pre class="mermaid">graph TD
+  a --&gt; b
+</pre></div>`,
+		`data-mermaid="default"`, mermaid.Script()[:40],
+		`<div class="embed"><table>`, `<th>name</th><th>count</th>`, `<td>claims</td><td>3,000</td>`,
+		`<p>See <img src="data:image/png;base64,` + base64.StdEncoding.EncodeToString([]byte(png)) + `" alt="a picture" /> here.</p>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q:\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "<em>") {
+		t.Errorf("an embed was drawn as its alt text:\n%s", page)
+	}
+}
+
+// The file is looked for beside the document, then in its resources folder, and nowhere else: a
+// path out of the folder, an absolute path, a symlink pointing out and another folder's file are
+// drawn as their alt text, as is every embed when the render names no document.
+func TestEmbedsStayInTheDocumentsFolder(t *testing.T) {
+	doc := embedDoc(t, map[string]string{
+		"secret.mmd":         "graph TD\n  secret --> out\n",
+		"docs/other/far.mmd": "graph TD\n  far --> away\n",
+		"docs/near.mmd":      "graph TD\n  near --> here\n",
+	})
+	outside := filepath.Join(filepath.Dir(filepath.Dir(doc)), "secret.mmd")
+	if err := os.Symlink(outside, filepath.Join(filepath.Dir(doc), "link.mmd")); err != nil {
+		t.Fatal(err)
+	}
+	source := "![up](../secret.mmd)\n\n![abs](" + filepath.ToSlash(outside) + ")\n\n![link](link.mmd)\n\n![far](far.mmd)\n\n![url](https://example.com/a.mmd)\n"
+	page := renderEmbeds(t, source, doc, false)
+	for _, alt := range []string{"up", "abs", "link", "far", "url"} {
+		if !strings.Contains(page, "<em>"+alt+"</em>") {
+			t.Errorf("%s was not drawn as its alt text:\n%s", alt, page)
+		}
+	}
+	if strings.Contains(page, "secret") || strings.Contains(page, "far --") || strings.Contains(page, "data-mermaid") {
+		t.Errorf("a file outside the document's folder was drawn:\n%s", page)
+	}
+	if page := renderEmbeds(t, "![near](near.mmd)\n", "", false); !strings.Contains(page, "<em>near</em>") {
+		t.Errorf("with no document the embed is drawn:\n%s", page)
+	}
+}
+
+// A diagram or a table is a block: drawn when it is its paragraph's only content, on a div that
+// keeps the paragraph's source bytes; beside other text it is its alt text. A table shows 1000 rows
+// and counts the rest; a file over the size bound is its alt text.
+func TestBlockEmbedsAndBounds(t *testing.T) {
+	var rows strings.Builder
+	rows.WriteString("n\n")
+	for i := range 1002 {
+		rows.WriteString(strconv.Itoa(i) + "\n")
+	}
+	doc := embedDoc(t, map[string]string{
+		"docs/flow.mmd":  "graph TD\n  a --> b\n",
+		"docs/rows.csv":  rows.String(),
+		"docs/huge.csv":  "h\n" + strings.Repeat("x", 1<<20) + "\n",
+		"docs/empty.csv": "",
+	})
+	source := "Text ![inline](flow.mmd) beside.\n\n![flow](flow.mmd)\n\n![rows](rows.csv)\n\n![huge](huge.csv)\n\n![empty](empty.csv)\n"
+	page := renderEmbeds(t, source, doc, true)
+	for _, want := range []string{`<p data-src="[0-9]+-[0-9]+">Text <em>inline</em> beside\.</p>`, `<div class="embed" data-src="[0-9]+-[0-9]+"><pre class="mermaid">`} {
+		if !regexp.MustCompile(want).MatchString(page) {
+			t.Errorf("the page lacks %s:\n%s", want, page)
+		}
+	}
+	for _, want := range []string{
+		`<td>999</td>`, `<tr><td colspan="1">… 2 more rows</td></tr>`,
+		`<em>huge</em>`, `<em>empty</em>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q:\n%s", want, page)
+		}
+	}
+	if strings.Contains(page, "<td>1000</td>") {
+		t.Error("the table shows more than 1000 rows")
 	}
 }
