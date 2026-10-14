@@ -86,6 +86,8 @@ func TestServeRefusesAWorkspaceSection(t *testing.T) {
 // TestMainReturnsItsExitCodes: Main returns what the process would exit with, and writes where it
 // is told: the version on stdout, usage and refusals on stderr; -h is not an error.
 func TestMainReturnsItsExitCodes(t *testing.T) {
+	t.Setenv("AUTODOC_EDITOR", "") // --editor's cases: this test may run in an agent's shell
+	t.Setenv("AUTODOC_EDITOR_TOKEN", "")
 	bad := filepath.Join(t.TempDir(), "autodoc.toml")
 	if err := os.WriteFile(bad, []byte("not = [toml\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -122,6 +124,9 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		// --dev is the UI's: without it, it is refused
 		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
 		{[]string{"--gui", "kb", "extra"}, 2, "", "only --contracts, --server, --call, --editor, --export, --ui and --gui take one argument"},
+		// --editor outside an agent AutoDoc started: no page to reach, and it says what is missing
+		{[]string{"--editor", "editor.read"}, 1, "", "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set"},
+		{[]string{"--editor", "editor.read", "[1]", "extra"}, 2, "", "take one argument"},
 	} {
 		var stdout, stderr bytes.Buffer
 		code := run(context.Background(), c.args, Options{Version: "v1.2.3"}, &stdout, &stderr)
