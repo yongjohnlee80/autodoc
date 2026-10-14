@@ -113,6 +113,13 @@ type Engine struct {
 	// clock and location are now's and date's (WithClock)
 	clock    func() time.Time
 	location *time.Location
+	// gated scripts (gate.go): the global table's name, the gates hosts set, every gated script's
+	// environment, and base, the sandbox's globals a gated environment starts from
+	globalName  string
+	gates       map[string]Gate
+	domainGates map[string]Gate
+	envs        map[*lua.LTable]bool
+	base        *lua.LTable
 }
 
 // Registration is one command{…} as a host's registrar takes it: its id and title, the file that
@@ -175,7 +182,8 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 		"getfenv", "setfenv", "newproxy", "_printregs"} {
 		L.SetGlobal(name, lua.LNil)
 	}
-	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location}
+	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location,
+		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]bool{}}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
 	L.SetField(e.global, "notify", L.NewFunction(func(L *lua.LState) int {
@@ -188,6 +196,17 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 	e.registerEditorType()
 	e.registerText()
 	e.registerGlobals()
+	// a string's methods are the string library itself: no script reaches it through a string
+	if mt, ok := L.GetMetatable(lua.LString("")).(*lua.LTable); ok {
+		mt.RawSetString("__metatable", lua.LString("the string library"))
+	}
+	// the sandbox as it stands now is what a gated script's environment starts from
+	e.base = L.NewTable()
+	L.G.Global.ForEach(func(k, v lua.LValue) {
+		if k != lua.LString(cfg.global) && k != lua.LString("_G") {
+			e.base.RawSet(k, v)
+		}
+	})
 	return e
 }
 
@@ -225,6 +244,21 @@ func (e *Engine) Load(name string, src []byte) error {
 	if err != nil {
 		return e.failure(name, ctx, err)
 	}
+	e.L.Push(fn)
+	if err := e.L.PCall(0, 0, nil); err != nil {
+		return e.failure(name, ctx, err)
+	}
+	return nil
+}
+
+// run runs a compiled script, fn, as Load runs one: name being loaded, under the deadline.
+func (e *Engine) run(name string, fn *lua.LFunction) error {
+	e.loading = name
+	defer func() { e.loading = "" }()
+	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
+	defer cancel()
+	e.L.SetContext(ctx)
+	defer e.L.RemoveContext()
 	e.L.Push(fn)
 	if err := e.L.PCall(0, 0, nil); err != nil {
 		return e.failure(name, ctx, err)
@@ -338,8 +372,9 @@ func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandCon
 // then than the command that asked had; a callback reads where things are now. name names fn in
 // the error ("search.query's callback").
 func (e *Engine) Callback(name string, fn *lua.LFunction, args ...lua.LValue) error {
-	// a function's environment is its engine's globals: no script can change it (no setfenv)
-	if fn.Env != e.L.G.Global {
+	// a function's environment is its engine's globals or a gated script's: no script can change it
+	// (no setfenv)
+	if !e.owns(fn) {
 		return ErrStale
 	}
 	return e.core.Batch(func() error {

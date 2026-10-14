@@ -73,6 +73,9 @@ func (e *Engine) registerEditorType() {
 		methods[m.name] = func(L *lua.LState) int { return m.fn(e, L) }
 	}
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), methods))
+	// getmetatable(ed) is a copy: a script may list the methods, and change no one else's
+	L.SetField(mt, "__metatable", L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{}))
+	L.SetField(L.GetField(mt, "__metatable"), "__index", L.SetFuncs(L.NewTable(), methods))
 }
 
 // editorValue is the editor object for the command running now.
