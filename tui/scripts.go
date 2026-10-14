@@ -52,6 +52,8 @@ func (h *Host) startScripts() []error {
 	h.luaFeature().bindHost(h.scripts, luaHostOf{h}) // autodoc.clipboard, .ui, .agents (luahost.go)
 	h.bindDocument(h.scripts)                        // autodoc.document, autodoc.commands (luadocument.go)
 	h.luaFeature().reload = h.reloadScripts
+	h.luaFeature().line = h.core.RunCommand
+	h.core.SetChordHook(h.luaFeature().chord) // a script's chords, through golib (luakeys.go)
 	errs := h.scripts.LoadDir(ownScripts, "lua")
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)

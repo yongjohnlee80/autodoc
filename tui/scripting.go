@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+
 	"github.com/yongjohnlee80/autodoc/script"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -50,6 +52,11 @@ type scripting struct {
 	// (Host.reloadScripts)
 	run    func(id string, args []string) error
 	reload func() error
+	// line runs a key's or a menu row's command line (Host: core.RunCommand); ui is the running
+	// engine's keys and rows, menuRows the Plugins menu's model of them (luakeys.go)
+	line     func(string) error
+	ui       luaUI
+	menuRows *tuidecl.ListModel
 	// host is the clipboard and the agents for the host functions (luahost.go); pick is
 	// autodoc.ui.pick's picker, pickCB the callback of the one open
 	host   luaHost
@@ -94,10 +101,22 @@ func (h *Host) luaFeature() *scripting {
 func (*scripting) Name() string { return "scripting" }
 func (s *scripting) State() map[string]any {
 	return map[string]any{"App.luaPickRows": s.luaPicker().list.Model(), "App.luaPickField": "",
+		"App.luaKeysText": s.luaKeysText(), "App.luaMenus": s.luaMenuRows(),
 		"App.luaPickStatus": "items", "App.luaPickTitle": "choose",
 		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0}
 }
-func (*scripting) Commands() map[string]Command { return nil }
+func (s *scripting) Commands() map[string]Command {
+	return map[string]Command{
+		"App.luaKey":  oneString("a Lua key's letter", s.luaKey),
+		"App.luaMenu": oneString("a Lua menu row", s.luaMenu),
+	}
+}
+
+// Keys is SPC u, the Lua keys' card (views/LuaKeys.qml): its letters are the scripts', bound as
+// they load, so it is not a key card of the catalog's.
+func (*scripting) Keys() []Key {
+	return []Key{{Card: leader, Seq: "u", Show: "u", Does: "your Lua keys", Run: "luaKeys.open()", Group: groupWindow}}
+}
 
 // bind gives the engine autodoc.call and autodoc.run, which runs through run; the namespaces follow
 // once the daemon says its contracts.
@@ -106,6 +125,10 @@ func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) 
 	// a gated script's calls need the capability the verb's effect asks (ADR 1792004705 §4.2)
 	eng.SetGate("call", func(_ string, L *lua.LState) string { return s.capabilityOf(L.CheckString(1)) })
 	eng.SetGate("run", func(string, *lua.LState) string { return "commands" })
+	// keys and rows run any command line: commands, as run (luakeys.go)
+	s.mapUI(eng)
+	eng.SetGate("map", func(string, *lua.LState) string { return "commands" })
+	eng.SetGate("menu", func(string, *lua.LState) string { return "commands" })
 	// a new engine (a reload): the namespaces are made again in it, from the contracts known
 	s.domains = map[string]*lua.LTable{}
 	if s.verbs != nil {

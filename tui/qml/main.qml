@@ -200,6 +200,7 @@ Window {
                         Instantiator { model: model.rows; MenuItem { text: model.label; enabled: model.enabled; onTriggered: App.pluginEntry(model.target) } } } }
                 }
             }
+            Instantiator { model: App.luaMenus; MenuItem { text: model.label; onTriggered: App.luaMenu(model.target) } }
             MenuSeparator {}
             MenuItem { text: "&Add from a git URL…"; onTriggered: App.startAddPlugin() }
             MenuItem { text: "&Manage plugins…"; onTriggered: App.managePlugins() }
@@ -753,6 +754,7 @@ Window {
     TodoKeys { id: todoKeys }
     // ---- end of the generated cards ----
     PluginKeys { id: pluginKeys }
+    LuaKeys { id: luaKeys }
     Help { id: help }
     Arrange { id: arrange }
     Tutorial { id: tutorial }

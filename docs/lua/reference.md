@@ -32,6 +32,8 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | `autodoc.call(verb, params, cb)` | Calls any daemon verb by its name, with `params` a list of its params in order (`nil` or `{}` for none). `cb` is optional. | nothing; the answer goes to `cb` |
 | `autodoc.current_workspace()` | The workspace in use. | a string, or `nil` before one is entered |
 | `autodoc.document()` | The page in the editor ([below](#autodocdocument)). | a table |
+| `autodoc.map{mode, keys, command, title}` | Binds a key to a command line ([keys and menus](#keys-and-menus)). | nothing |
+| `autodoc.menu{where, title, command}` | Adds a menu row that runs a command line ([keys and menus](#keys-and-menus)). | nothing |
 | `autodoc.<domain>.<verb>(…, cb)` | Calls the daemon's `<domain>.<verb>`: its params in order, then `cb`. Made when AutoDoc connects ([the daemon's verbs](#the-daemons-verbs)). | nothing; the answer goes to `cb` |
 
 The engine's own functions, beside `command` and `notify`:
@@ -329,6 +331,38 @@ autodoc.command{
     autodoc.notify("lastsaved: " .. p .. " " .. (saved[p] or "not saved yet"))
   end,
 }
+```
+
+## Keys and menus
+
+`autodoc.map` binds a key, and `autodoc.menu` adds a menu row. Each runs its `command` line as `:`
+does: a command's name and its arguments, `"table 2 3"`. Its error is a notification.
+
+| `autodoc.map` field | What it is |
+|---|---|
+| `mode` | `"normal"` or `"visual"`: a key of the page in Vim's Normal or Visual mode; `"leader"`: a letter of **SPC u**, your Lua keys' card |
+| `keys` | Normal and Visual: one character, `"Q"`, or a control chord, `"<C-k>"`. Leader: a letter or digit, not `q` (it closes the card) |
+| `command` | the command line it runs |
+| `title` | how SPC u's card names a leader key; the command line when left out |
+
+- **A page key runs only with nothing pending:** after a count (`3`), an operator (`d`) or an armed
+  key (`f`, `m`, `q`, `"`), the key is Vim's as always. It is not repeated by `.` or recorded in a
+  macro.
+- **A page key replaces Vim's** for that key. Pick one you don't use (`Q`, a `<C-…>` chord).
+- **`autodoc.menu`'s `where`** is `"editor"`, the page's right-click menu, or `"plugins"`, the
+  Plugins menu. `title` takes `&` before the mnemonic letter: `"&Word count"`.
+- **`:lua-reload` drops every key and row** with the scripts; loading them again binds them again.
+
+```lua
+-- keys.lua: :stamp on Q, on SPC u s, and in the right-click menu
+autodoc.command{
+  name = "stamp",
+  help = "insert the date",
+  run = function(ed) ed:insert(autodoc.date("%Y-%m-%d")) end,
+}
+autodoc.map{ mode = "normal", keys = "Q", command = "stamp" }
+autodoc.map{ mode = "leader", keys = "s", command = "stamp", title = "today's date" }
+autodoc.menu{ where = "editor", title = "Insert the &date", command = "stamp" }
 ```
 
 ## Characters: `autodoc.text`

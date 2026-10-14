@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
 	lua "github.com/yuin/gopher-lua"
 )
@@ -287,6 +288,35 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 				return false
 			})
 		})
+	},
+	"-- keys.lua: :stamp on Q, on SPC u s, and in the right-click menu": func(t *testing.T, r *running) {
+		today := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+		r.page("", 1, 1)
+		if !onLoop(r, func() bool { return r.h.core.HandleKey(tuicore.KeyEvent{Code: 'Q', Text: "Q"}) }) {
+			t.Fatal("Q was not taken")
+		}
+		if got := r.editorText(); !today.MatchString(got) {
+			t.Fatalf("Q inserted %q", got)
+		}
+		r.page("", 1, 1)
+		onLoop(r, func() bool { r.h.luaFeature().luaKey("s"); return true })
+		if got := r.editorText(); !today.MatchString(got) {
+			t.Fatalf("SPC u s inserted %q", got)
+		}
+		text := onLoop(r, func() string { return r.h.luaFeature().luaKeysText() })
+		if !strings.Contains(text, "s  today's date") {
+			t.Fatalf("SPC u's card says %q", text)
+		}
+		labels := onLoop(r, func() []string {
+			var out []string
+			for _, it := range r.h.editorMenu(r.h.core) {
+				out = append(out, it.Label)
+			}
+			return out
+		})
+		if !slices.Contains(labels, "Insert the date") {
+			t.Fatalf("the right-click menu: %q", labels)
+		}
 	},
 	"-- tail.lua: :tail <n> selects the last n characters of the cursor's line": func(t *testing.T, r *running) {
 		r.page("abc de\u0301f", 1, 1) // é as e and an accent: one column
