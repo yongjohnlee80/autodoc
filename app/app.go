@@ -9,6 +9,10 @@
 //
 //	autodoc --call search.query '["kb", "a query", {"limit": 5}]'
 //
+// --editor is one verb of the page in the AutoDoc that started this agent (ADR 1792014854):
+//
+//	autodoc --editor editor.read '[1, 20]'
+//
 // --contracts prints the verbs' contracts and the error codes, built in this process with no daemon:
 //
 //	autodoc --contracts [verb | domain.*] [--format json|md]
