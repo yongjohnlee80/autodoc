@@ -108,7 +108,9 @@ func DiagramPage(source, theme string) ([]byte, error) {
 	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true), nil
 }
 
-var mermaidBlock = regexp.MustCompile(`(?s)<pre><code class="language-mermaid">(.*?)</code></pre>`)
+// mermaidBlock is a mermaid fence as the renderer writes it: its pre's attributes (data-src, with
+// SourceSpans) and its escaped source.
+var mermaidBlock = regexp.MustCompile(`(?s)<pre((?:\s+[a-zA-Z-]+="[^"]*")*)><code class="language-mermaid">(.*?)</code></pre>`)
 
 // Options are what a render reads besides the source, its format and its theme.
 type Options struct {
@@ -205,8 +207,10 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		rendered := drawn.place(strings.NewReplacer(resolved...).Replace(body.String()))
 		rendered = mermaidBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 			diagrams = true
-			// the source stays escaped: mermaid reads the element's text
-			return `<pre class="mermaid">` + mermaidBlock.FindStringSubmatch(block)[1] + `</pre>`
+			// the source stays escaped: mermaid reads the element's text. The pre keeps its
+			// attributes: a pane that follows the cursor finds the diagram by its data-src
+			m := mermaidBlock.FindStringSubmatch(block)
+			return `<pre class="mermaid"` + m[1] + `>` + m[2] + `</pre>`
 		})
 		return page(colors, rendered, diagrams, false), nil
 	case Text:

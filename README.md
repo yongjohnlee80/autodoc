@@ -252,7 +252,8 @@ ER, gantt, mindmaps, …) is drawn as the Mermaid project draws it, offline. An 
 policy allows that script and the one that starts it, by digest, and no other, and a page without
 a diagram has no script at all. A diagram mermaid cannot read shows mermaid's own error in its
 place. `File › Preview Mermaid diagram…` draws the block under the cursor (else the first) in the
-terminal, as below; where it cannot, it shows the block's source and why. A line embedding a
+terminal, as below; where it cannot, it shows the block's source and why. In the GUI it is drawn
+natively, by golib's Mermaid, as the HTML pane draws a page's diagrams: no browser. A line embedding a
 `.mmd` file (`![flow](flow.mmd)`) is a diagram for it as a fence is, read as the preview reads it.
 
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`

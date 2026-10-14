@@ -1,6 +1,7 @@
 // Diagram.qml — File › Preview Mermaid diagram: the block at the cursor drawn by mermaid as an
 // image, where the terminal draws one and View › Image previews is on, else its source; the help
-// line says which, and why (preview.go). The image scrolls as the HTML preview's does, and Zoom in
+// line says which, and why (preview.go). In a GUI window it is drawn natively, by golib's Mermaid,
+// in the HTML view: no browser. The image scrolls as the HTML preview's does, and Zoom in
 // and Zoom out draw it larger or smaller in the same dialog.
 Dialog {
     closeOnQ: true
@@ -16,6 +17,7 @@ Dialog {
         direction: Tui.Vertical
         Text { visible: App.diagramTextShown; text: App.diagramText; color: Theme.document.text }
         Image { id: diagramImage; visible: App.diagramImageShown; scrollable: true; Layout.fillHeight: true }
+        HTMLView { visible: App.diagramNativeShown; Layout.fillHeight: true }
     }
     DialogButtonBox {
         Button { text: "Zoom &in"; visible: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }

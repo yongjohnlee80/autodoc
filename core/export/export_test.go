@@ -404,6 +404,25 @@ func TestEmbedLinesAreTheParsersImages(t *testing.T) {
 	}
 }
 
+// A mermaid fence is a diagram with its blocks' source bytes on (SourceSpans), as the GUI's HTML
+// pane renders it: the pre keeps its data-src, so the pane draws the diagram and follows the cursor
+// to it.
+func TestAFenceIsADiagramWithSourceSpans(t *testing.T) {
+	page, err := export.RenderWith([]byte("# A\n\n```mermaid\ngraph TD\n  a --> b\n```\n"), export.HTML, "light", export.Options{SourceSpans: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<pre class="mermaid" data-src="5-38">graph TD
+  a --&gt; b
+</pre>`
+	if !strings.Contains(string(page), want) {
+		t.Errorf("the fence is not a diagram keeping its source bytes; want %q in:\n%s", want, page)
+	}
+	if strings.Contains(string(page), "language-mermaid") {
+		t.Error("the fence was left as code")
+	}
+}
+
 // An embedded diagram's source is read as the page reads it, beside the document or in its
 // resources folder; any other embed, a file out of the folder and a missing one have none.
 func TestEmbedDiagramIsTheFilesSource(t *testing.T) {

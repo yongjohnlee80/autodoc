@@ -112,6 +112,10 @@ const diagramMaxHeight = 4096
 
 // showDiagram shows a Mermaid block: an image where it can be, else its source, saying why.
 func (h *Host) showDiagram(source string) {
+	if h.native() {
+		h.showDiagramNative(source)
+		return
+	}
 	ok, why := h.imageMode()
 	if !ok {
 		h.showDiagramText(source, "Diagram source · "+why)
@@ -126,6 +130,7 @@ func (h *Host) showDiagram(source string) {
 	h.diagramImage = true
 	h.diagramHelpText = "Image · drawn offline by mermaid " + mermaid.Version + " in the " + theme + " theme · scroll: arrows, j k h l, PgUp/PgDn, wheel"
 	h.set("App.diagramTextShown", false)
+	h.set("App.diagramNativeShown", false)
 	h.set("App.diagramImageShown", true)
 	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
@@ -136,9 +141,31 @@ func (h *Host) showDiagram(source string) {
 
 // showDiagramText shows the diagram's source (or a diagnostic), with help saying why it is not an
 // image.
+// showDiagramNative shows source in a GUI window drawn natively, by golib's Mermaid in the
+// dialog's HTML view, as the HTML pane draws a page's diagrams: no browser. A diagram golib does not
+// draw shows its source there.
+func (h *Host) showDiagramNative(source string) {
+	theme := h.exportTheme()
+	page, err := export.DiagramPage(source, theme)
+	if err != nil {
+		h.showDiagramText(source, "Diagram source · "+err.Error())
+		return
+	}
+	h.diagramImage, h.diagramHelpText = false, "Drawn natively in the "+theme+" theme · scroll: arrows, j k, PgUp/PgDn, wheel"
+	h.set("App.diagramTextShown", false)
+	h.set("App.diagramImageShown", false)
+	h.set("App.diagramNativeShown", true)
+	h.set("App.diagramHelp", h.diagramHelpText)
+	h.open("diagram")
+	if v, ok := componentUnder[*widget.HTMLView](h.p, "diagram"); ok {
+		v.SetHTML(page)
+	}
+}
+
 func (h *Host) showDiagramText(text, help string) {
 	h.diagramImage, h.diagramHelpText = false, help
 	h.set("App.diagramImageShown", false)
+	h.set("App.diagramNativeShown", false)
 	h.set("App.diagramText", text)
 	h.set("App.diagramTextShown", true)
 	h.set("App.diagramHelp", help)
@@ -241,22 +268,29 @@ func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(
 // imageUnder is the Image in the subtree of the node with id: a dialog's own ids are its file's,
 // out of the program's reach, so the dialog's Image is found by its type.
 func imageUnder(p *tuidecl.Program, id string) (*widget.Image, bool) {
+	return componentUnder[*widget.Image](p, id)
+}
+
+// componentUnder is the first T in the subtree of the node id names, breadth first: a dialog's
+// content, whose ids are its own.
+func componentUnder[T any](p *tuidecl.Program, id string) (T, bool) {
+	var zero T
 	root, ok := p.Tree().NodeByID(id)
 	if !ok {
-		return nil, false
+		return zero, false
 	}
 	queue := []decl.NodeID{root}
 	for len(queue) > 0 {
 		n := queue[0]
 		queue = queue[1:]
 		if c, ok := p.Adapter().Component(n); ok {
-			if img, ok := c.(*widget.Image); ok {
-				return img, true
+			if t, ok := c.(T); ok {
+				return t, true
 			}
 		}
 		queue = append(queue, p.Tree().Children(n)...)
 	}
-	return nil, false
+	return zero, false
 }
 
 // lastDiagramImage reports whether the Mermaid preview is in image mode (not its fallback).
