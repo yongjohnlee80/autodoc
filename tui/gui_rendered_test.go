@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -20,7 +19,7 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{
 		"kb": {"a.md", "# Alpha\n\n## a heading\n", "a.go", goWithAHashLine, "b.md", "# Bravo\n"},
 	}, daemonOpts{goChunker: wholeGo{}})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	ed := func() *guiwidget.Editor {
@@ -104,7 +103,7 @@ func TestCtrlTIsTheTerminalsInItAndThePagesOnThePage(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PS1", "$ ")
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# Alpha\n\nsome text\n"}}, daemonOpts{})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	mode := func() guiwidget.EditorMode {
@@ -150,7 +149,7 @@ func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{
 		"kb": {"a.md", "# Alpha\n\n- one\n", "a.go", goWithAHashLine},
 	}, daemonOpts{goChunker: wholeGo{}})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	onLoop(r, func() bool { r.h.openSearch(); return true })
@@ -174,7 +173,7 @@ func TestTheSearchPreviewRendersAMarkdownHit(t *testing.T) {
 // Raw view, b shown Rendered meanwhile, comes back to a's Raw view at the link.
 func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n\nsee [[b]]\n", "b.md", "# B\n"}}, daemonOpts{})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	mode := func() guiwidget.EditorMode {
@@ -202,7 +201,7 @@ func TestCtrlOReturnsToTheViewItLeft(t *testing.T) {
 // (a word back) and opens no picker; in Normal mode it switches workspace (Johno, 2026-10-13).
 func TestCtrlWInTheGUIsVimInsert(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n"}}, daemonOpts{})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
 	onLoop(r, func() bool { r.h.openPath("a.md"); return true })

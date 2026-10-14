@@ -3,7 +3,6 @@
 package tui
 
 import (
-	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	"github.com/yongjohnlee80/golib/highlight"
 	"github.com/yongjohnlee80/golib/indent"
@@ -24,7 +23,7 @@ func TestAutoDocNativeConstructionUsesAnInjectedSourceProvider(t *testing.T) {
 			return []highlight.Span{{Start: at, End: at + 5, Style: highlight.Keyword}}, s
 		}), Indenter: indent.PolicyFunc(func(r indent.Request) (indent.Decision, bool) { return indent.Decision{Prefix: "  "}, r.StateKnown })}
 	}}
-	r := runTUI(t, NewSession("unused", nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native()), tuidecl.Highlighters(def)}})
+	r := runTUI(t, NewSession("unused", nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{})), tuidecl.Highlighters(def)}})
 	for _, tc := range []struct {
 		path, text string
 		ln         int

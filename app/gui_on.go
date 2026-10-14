@@ -7,8 +7,6 @@ import (
 	"errors"
 
 	"github.com/yongjohnlee80/golib/gui"
-	guidecl "github.com/yongjohnlee80/golib/gui/decl"
-	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/tui"
@@ -37,8 +35,7 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, dbg *debugRecording) error
 		// renderer's do. Every other Editor keeps golib's MarkdownRenderer.
 		notes := &tui.NoteEmbeds{}
 		o.NoteFile = notes.SetNote
-		note := guidecl.WithRendererFor(tui.NoteRendererKind, notes.Renderer(guiwidget.Diagrams(nil)))
-		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native(note)))
+		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(tui.GUIStyle(notes)))
 		// gui.Main ends the process when this callback returns, so this is the last
 		// code that runs: the recording's owner closes here, with the TUI's trace
 		// stopped, Launch having returned. gui.Main prints a returned error and

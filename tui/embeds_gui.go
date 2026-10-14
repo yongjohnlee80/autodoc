@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"github.com/yongjohnlee80/golib/gui"
+	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
@@ -43,6 +44,15 @@ func (n *NoteEmbeds) file() string {
 		return *p
 	}
 	return ""
+}
+
+// GUIStyle is the window's native style for AutoDoc's layout: golib's, opts added, with the note
+// editor's renderer (NoteRenderer) drawing the open note's embeds, which notes is told. main.qml's
+// note editor declares NoteRenderer, which golib's style alone has no renderer for: a window
+// running AutoDoc's layout takes its style from here, or its note editor has no Rendered view.
+func GUIStyle(notes *NoteEmbeds, opts ...guidecl.NativeOption) tuidecl.Style {
+	note := guidecl.WithRendererFor(NoteRendererKind, notes.Renderer(guiwidget.Diagrams(nil)))
+	return guidecl.Native(append([]guidecl.NativeOption{note}, opts...)...)
 }
 
 // Renderer makes the note editor's renderer for its NoteRenderer declaration (NoteRendererKind):

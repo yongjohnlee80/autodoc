@@ -5,7 +5,6 @@ package tui
 import (
 	"testing"
 
-	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
@@ -14,7 +13,7 @@ import (
 // its core is the host's, and the MarkdownRenderer gives it a Rendered view. No window opens: the
 // session runs on the test backend.
 func TestTheGUIStyleBuildsTheGUIEditor(t *testing.T) {
-	r := runTUI(t, NewSession("unused", nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession("unused", nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	got := onLoop(r, func() bool {
 		e, ok := r.h.editor.(*guiwidget.Editor)
 		return ok && r.h.core == e.Core()

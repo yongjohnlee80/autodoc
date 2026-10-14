@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
@@ -14,7 +13,7 @@ import (
 // keyboard: Escape closes it, rather than reaching the page the leader card gave the keyboard back to.
 func TestTheGUISpacePeriodMenuHasTheKeyboard(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.leader(t, '.')
 	r.s.WaitForText(t, "View diagram")

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	guidecl "github.com/yongjohnlee80/golib/gui/decl"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
@@ -20,7 +19,7 @@ import (
 func TestTheGUITodosPanelActionRowCardAndStatusPicker(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	seedTodos(t, d, true, todo.Spec{Title: "Ship it"})
-	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(guidecl.Native())}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	openTodos(t, r, "kb", '1')
 	r.s.WaitForText(t, "Ship it")
