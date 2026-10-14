@@ -61,9 +61,29 @@ cluster). A range runs from its start up to, not including, its end.
 | `ed:insert(text)` / `ed:insert_at(line, col, text)` | insert; returns the line and column after it |
 | `ed:replace(l1, c1, l2, c2, text)`, `ed:delete(l1, c1, l2, c2)` | edit a range |
 | `ed:text(l1, c1, l2, c2)` | a range's text |
-| `ed:selection()` | the selection's range, or `nil` |
-| `ed:find(term, {ignore_case=, backward=, wrap=})` | the next match from the cursor, or `nil` |
+| `ed:selection()` / `ed:select(l1, c1, l2, c2)` / `ed:unselect()` | the selection's range, or `nil`; select a range; end the selection |
+| `ed:find(term, {ignore_case=, whole_word=, backward=, wrap=, at_cursor=})` | the next match from the cursor, or `nil` |
+| `ed:find_all(term, opts)` / `ed:replace_all(term, text, opts)` | every match, as `{l1, c1, l2, c2}`; replace them all as one edit, and say how many |
+| `ed:mode()`, `ed:read_only()`, `ed:modified()` | `"normal"`, `"insert"`, `"visual"`…; whether edits are refused; whether the text is unsaved |
 | `ed:run(line)` | run a command line, as the prompt does |
+
+`run` gets a fourth argument, `cmd`: `cmd.name` is the verb as typed (an alias, say), and
+`cmd.bang` whether it ended in `!`. `EditorDocs()` documents every method, a row each, for a
+host's own reference; AutoDoc's `docs/lua/reference.md` is generated from it.
+
+## Characters
+
+`#s` and `string.sub` count bytes; the editor's columns are characters (grapheme clusters). The
+global table's `text` counts as the editor does (`TextDocs`):
+
+| Function | Does |
+|---|---|
+| `myapp.text.columns(s)` | how many characters s has |
+| `myapp.text.sub(s, i, j)` | characters i to j, as `string.sub` takes positions |
+| `myapp.text.chars(s)` | s's characters, a list |
+
+An error is said by its value: a table raised by its `__tostring`, its `message` field, or its
+fields; never with Lua's stack trace, and a script past its deadline as `ran past <timeout>`.
 
 ## Host functions that wait
 

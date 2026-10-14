@@ -38,7 +38,7 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | Field | Type | Required | What it is |
 |---|---|---|---|
 | `name` | string | yes | What you type after `:`. Letters, digits, `-` and `_`, not all digits. |
-| `run` | function | yes | `run(ed, args, line)`: what the command does. |
+| `run` | function | yes | `run(ed, args, line, cmd)`: what the command does. |
 | `aliases` | list of strings | no | Other names for it, under the same rules as `name`. |
 | `args` | string | no | Its arguments, as Tab shows them: `"<term>"`, `"[depth]"`. A hint only: nothing checks it. |
 | `help` | string | no | What it does, in one line, as Tab shows it. |
@@ -52,6 +52,7 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | `ed` | the editor object, below |
 | `args` | the words after the command, a list of strings: `:hi Ada Lovelace` gives `{"Ada", "Lovelace"}` |
 | `line` | the rest of the line, trimmed at its ends only: `"Ada Lovelace"`; `""` with none |
+| `cmd` | how it was called: `cmd.name`, the name as typed (an alias, say), and `cmd.bang`, `true` for `:hi!` |
 
 ```lua
 -- shape.lua: :shape shows every field autodoc.command takes
@@ -87,7 +88,8 @@ autodoc.command{
   catalog entries. An alias `write` replaces `:w` and `:write` both. `:w`, `:q`, `:x`, `:wq` and
   `:replace` are the editor's.
 
-**The bang.** `:hello!` runs `hello`; the `!` is dropped, and `run` cannot tell it was typed.
+**The bang.** `:hello!` runs `hello` with `cmd.bang` `true`; `:hello` with `false`. Run by a key or
+by `autodoc.run`, `cmd.bang` is `false` and `cmd.name` is the command's name.
 
 **One undo.** Everything `run` edits is one undo step, `ed:run`'s commands included.
 
@@ -127,6 +129,9 @@ autodoc.command{
 file's top level, as it loads) its methods raise `the editor is only reachable inside a command's
 run`.
 
+<!-- autodoc:lua-ed:start -->
+<!-- generated from the script package's own tables by go generate ./tui. Do not edit. -->
+
 | Method | Returns | Notes |
 |---|---|---|
 | `ed:value()` | string | The whole text, lines joined by `"\n"`. |
@@ -142,10 +147,20 @@ run`.
 | `ed:delete(l1, c1, l2, c2)` | nothing | Removes the range. The cursor goes to its start. |
 | `ed:text(l1, c1, l2, c2)` | string | The range's text, line breaks as `"\n"`. |
 | `ed:selection()` | l1, c1, l2, c2, or `nil` | The selection's range. A line-wise selection (`V`) runs from column 1 of its first line to the end of its last. `nil` outside Visual mode. |
-| `ed:find(term, opts)` | l1, c1, l2, c2, or `nil` | The next match of term after the cursor. It does not move the cursor. `opts` is optional: `{ignore_case = true, backward = true, wrap = true}`. |
+| `ed:select(l1, c1, l2, c2)` | nothing | Selects the range, as Visual mode does, with the cursor on its last character: `ed:mode()` is then `"visual"`, whatever the keys. An empty range leaves the selection as it was. |
+| `ed:unselect()` | nothing | Ends the selection; the cursor stays where it is. Nothing without one. |
+| `ed:find(term, opts)` | l1, c1, l2, c2, or `nil` | The next match of term after the cursor. It does not move the cursor. `opts` is optional: `{ignore_case = true, whole_word = true, backward = true, wrap = true, at_cursor = true}`. |
+| `ed:find_all(term, opts)` | list of `{l1, c1, l2, c2}` | Every match of term, in order: `{}` with none. `opts` as `ed:find`'s; only `ignore_case` and `whole_word` apply. |
+| `ed:replace_all(term, text, opts)` | number | Puts text in place of every match of term, as one edit, and returns how many. `opts` as `ed:find_all`'s. |
+| `ed:mode()` | string | The editor's mode: `"normal"`, `"insert"`, `"replace"`, `"visual"`, `"visual_line"` or `"visual_block"`. Without Vim's keys it is `"insert"`, or `"visual"` with a selection. |
+| `ed:read_only()` | boolean | Whether edits are refused: a PDF's or DOCX's derived text, say. |
+| `ed:modified()` | boolean | Whether the text has changed since it was opened or last saved, as `:x` asks before it writes. |
 | `ed:run(line)` | nothing | Runs a command line as the prompt does, without the `:`: `"12"`, `"find TODO"`, `"table 2 3"`. Raises the command's error. |
 
-**Edits.** `ed:set_value`, `ed:insert`, `ed:insert_at`, `ed:replace` and `ed:delete` edit.
+<!-- autodoc:lua-ed:end -->
+
+**Edits.** `ed:set_value`, `ed:insert`, `ed:insert_at`, `ed:replace`, `ed:delete` and
+`ed:replace_all` edit.
 
 - **An edit ends the selection.** Read `ed:selection()` before the first edit.
 - **On a read-only page** (a PDF's or DOCX's derived text) every edit raises `widget: the editor
@@ -155,8 +170,12 @@ run`.
 
 - Forward, the match is the first that **starts after** the cursor, so finding again from a match
   moves on. Backward (`backward = true`), it is the last that starts before the cursor.
+- With `at_cursor = true` a match starting under the cursor counts too: the word the cursor is on,
+  found forward from where it starts.
 - With `wrap = true` it goes round from the other end; without, it is `nil` at the end.
 - A term matches within one line, and literally: no patterns. `ignore_case` folds case.
+  `whole_word` matches only whole words, as Vim's `*` does: where the term starts with a letter,
+  digit or `_`, the match must start a word, and where it ends with one, end a word.
 - `ed:find` neither marks the matches nor sets `n` and `N`. For that, `ed:run("find " .. term)`.
 
 **`ed:run`.** `ed:run("x")` raises `widget: not an editor command: x` for a command that does not
@@ -168,6 +187,39 @@ them, and its jump to the first match comes just after your command ends.
 `#2`: `ed:line("3")` raises `bad argument #2 to line (number expected, got string)`. A position is
 a number; `args` are strings, so convert them with `tonumber`. A fraction is cut to a whole number.
 A text argument may be a string or a number.
+
+## Characters: `autodoc.text`
+
+Lua's `#s` and `string.sub` count bytes; the editor's columns count characters (grapheme clusters).
+`autodoc.text` counts as the editor does, so a column worked out from a string is right for
+`ed:set_cursor` and the ranges, whatever the script the text is in.
+
+<!-- autodoc:lua-text:start -->
+<!-- generated from the script package's own tables by go generate ./tui. Do not edit. -->
+
+| Function | Returns | Notes |
+|---|---|---|
+| `autodoc.text.columns(s)` | number | How many characters (grapheme clusters) s has: the columns it takes in the editor. `#s` counts bytes. |
+| `autodoc.text.sub(s, i, j)` | string | Characters i to j of s, both included, as `string.sub` takes bytes: `j` is the last by default, and a negative position counts from the end (`-1` the last). |
+| `autodoc.text.chars(s)` | list of strings | s's characters, in order: `é` written as `e` and an accent is one. |
+
+<!-- autodoc:lua-text:end -->
+
+```lua
+-- tail.lua: :tail <n> selects the last n characters of the cursor's line
+autodoc.command{
+  name = "tail",
+  args = "<n>",
+  help = "select the end of the line",
+  run = function(ed, args)
+    local l = ed:cursor()
+    local cols = autodoc.text.columns(ed:line(l))
+    local n = math.min(tonumber(args[1]) or 1, cols)
+    if n < 1 then error("tail: an empty line", 0) end
+    ed:select(l, cols - n + 1, l, cols + 1)
+  end,
+}
+```
 
 ## Callbacks
 
@@ -304,4 +356,9 @@ The ones a command reaches for most:
 them the script is stopped: `<command>: the script ran past 2s and was stopped`.
 
 **Errors.** `error("text")` puts the file and line first (`wc.lua:7: text`); `error("text", 0)`
-does not. A command's error shows in the prompt as `<command>: <error>`.
+does not. A command's error shows in the prompt as `<command>: <error>`, and a file's that failed
+to load in a notification as `<file>: <error>`, neither with Lua's stack trace.
+
+- A table raised as the error is said by its `__tostring`, else its `message` field, else its
+  fields: `error({code = 7})` is `an error {code = 7}`.
+- `error(nil)` is `an error with no message`.

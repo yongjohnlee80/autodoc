@@ -1,5 +1,7 @@
 package tui
 
+//go:generate go run ../internal/luarefgen -ref ../docs/lua/reference.md
+
 import (
 	"cmp"
 	"embed"
@@ -56,7 +58,7 @@ func (h *Host) registerLua(r script.Registration) error {
 		Run: func(inv Invocation) error {
 			core := cmp.Or(inv.Core, h.core)
 			return core.Batch(func() error {
-				return cmd.Run(widget.CommandContext{Core: core, Name: cmd.Name, Bang: inv.Bang, Args: inv.Args, Line: inv.Line})
+				return cmd.Run(widget.CommandContext{Core: core, Name: cmp.Or(inv.Name, cmd.Name), Bang: inv.Bang, Args: inv.Args, Line: inv.Line})
 			})
 		}})
 }

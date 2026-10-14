@@ -232,6 +232,22 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.mustRun(t, "tasks")
 		r.s.WaitFor(t, ":tasks went to the open task", func(string) bool { l, _ := r.cursorAt(); return l == 3 })
 	},
+	"-- tail.lua: :tail <n> selects the last n characters of the cursor's line": func(t *testing.T, r *running) {
+		r.page("abc de\u0301f", 1, 1) // é as e and an accent: one column
+		r.mustRun(t, "tail 3")
+		sel := onLoop(r, func() [4]int {
+			s, ok := r.h.core.Selection()
+			if !ok {
+				return [4]int{}
+			}
+			return [4]int{s.From.Line + 1, s.From.Col + 1, s.To.Line + 1, s.To.Col + 1}
+		})
+		if sel != [4]int{1, 5, 1, 8} {
+			t.Fatalf(":tail 3 selected %v; want 1,5 to 1,8", sel)
+		}
+		r.page("", 1, 1)
+		r.mustRefuse(t, "tail 2", "tail: an empty line")
+	},
 	"-- wc.lua: :wc counts the selection's words, or the page's": func(t *testing.T, r *running) {
 		r.page("héllo wörld\nsecond line", 1, 1)
 		r.mustRun(t, "wc")
@@ -239,6 +255,9 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.selectText(1, 7, 1, 12)
 		r.mustRun(t, "wc")
 		r.waitNotice(t, "the selection: 1 word, 1 line, 5 characters")
+		r.page("cafe\u0301", 1, 1) // é as e and an accent: three bytes, one character
+		r.mustRun(t, "wc")
+		r.waitNotice(t, "the page: 1 word, 1 line, 4 characters")
 	},
 	"-- toc.lua: :toc [depth] inserts a table of contents of the page's headings": func(t *testing.T, r *running) {
 		const page = "# Title\n\n## Install\n\n### From source ###\n\n```sh\n## not a heading\n```\n\n## Use\n#### Deep"
@@ -342,6 +361,10 @@ func TestTheLuaReferenceIsComplete(t *testing.T) {
 	}
 	verbs := section("The daemon's verbs") + "\n" + section("The program's own functions")
 	refDomains := map[string][]string{}
+	// autodoc.text's table is a function a row, generated (internal/luarefgen)
+	for _, m := range regexp.MustCompile("(?m)^\\| `autodoc\\.text\\.([a-z_]+)\\(").FindAllStringSubmatch(ref, -1) {
+		refDomains["text"] = append(refDomains["text"], m[1])
+	}
 	for _, m := range regexp.MustCompile("(?m)^\\| `([a-z_]+)` \\| (.+) \\|$").FindAllStringSubmatch(verbs, -1) {
 		for _, v := range regexp.MustCompile("`([a-z_]+)`").FindAllStringSubmatch(m[2], -1) {
 			refDomains[m[1]] = append(refDomains[m[1]], v[1])

@@ -38,12 +38,20 @@
 //	ed:delete(l1, c1, l2, c2)
 //	ed:text(l1, c1, l2, c2)       a range's text
 //	ed:selection()                l1, c1, l2, c2, or nil with none
+//	ed:select(l1, c1, l2, c2)     select a range; ed:unselect() ends the selection
 //	ed:find(term, opts)           the next match from the cursor: l1, c1, l2, c2, or nil;
-//	                              opts: { ignore_case = true, backward = true, wrap = true }
+//	                              opts: { ignore_case, whole_word, backward, wrap, at_cursor }
+//	ed:find_all(term, opts)       every match, a list of {l1, c1, l2, c2}
+//	ed:replace_all(term, text, opts)  every match replaced, as one edit; how many
+//	ed:mode()                     "normal", "insert", "replace", "visual", "visual_line", "visual_block"
+//	ed:read_only(), ed:modified() whether edits are refused; whether the text is unsaved
 //	ed:run(line)                  run a command line, as the prompt does
 //
-// and the global table's notify(message) says something where the host shows messages
-// (WithNotify). A host adds functions of its own to the global table with SetFunction, and tables
+// EditorDocs documents each, as a reference lists them. run gets a fourth argument, cmd: cmd.name
+// is the verb as typed (an alias, say), and cmd.bang whether it ended in '!'. The global table's
+// notify(message) says something where the host shows messages (WithNotify), and its text table
+// counts a string in characters, as the editor's columns do (TextDocs): text.columns(s),
+// text.sub(s, i, j), text.chars(s). A host adds functions of its own to the global table with SetFunction, and tables
 // of them through Global.
 //
 // A host function that must wait (a call to a server) never waits on the loop: it takes a Lua
@@ -53,7 +61,8 @@
 //
 // A command's edits are one undo step (the editor runs every command in one). A script runs on the
 // UI loop, as everything that touches the editor does, with a deadline (WithTimeout); an error, a
-// script's or the deadline's, is the command's, shown in the prompt and never a crash. Scripts get
+// script's or the deadline's, is the command's, shown in the prompt and never a crash; it is said
+// by the error's value (a table's message, or its fields), without Lua's stack trace. Scripts get
 // Lua's base, table, string and math libraries: no os, io, files or modules.
 //
 // # Concurrency Model
@@ -70,6 +79,7 @@ import (
 	"io/fs"
 	"path"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -154,6 +164,7 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 	}))
 	L.SetGlobal(cfg.global, e.global)
 	e.registerEditorType()
+	e.registerText()
 	return e
 }
 
@@ -185,11 +196,11 @@ func (e *Engine) Load(name string, src []byte) error {
 	defer e.L.RemoveContext()
 	fn, err := e.L.Load(bytesReader(src), name)
 	if err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		return e.failure(name, ctx, err)
 	}
 	e.L.Push(fn)
 	if err := e.L.PCall(0, 0, nil); err != nil {
-		return fmt.Errorf("%s: %w", name, err)
+		return e.failure(name, ctx, err)
 	}
 	return nil
 }
@@ -269,7 +280,8 @@ func (e *Engine) luaCommand(L *lua.LState) int {
 	return 0
 }
 
-// runCommand calls a script's run function for one command line, with the deadline.
+// runCommand calls a script's run function for one command line, with the deadline: run(ed, args,
+// line, cmd), cmd the verb as typed (an alias, say) and its bang.
 func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandContext) error {
 	L := e.L
 	prev := e.cur
@@ -279,7 +291,10 @@ func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandCon
 	for _, a := range x.Args {
 		args.Append(lua.LString(a))
 	}
-	return e.protect(name, run, e.editorValue(), args, lua.LString(x.Line))
+	cmd := L.CreateTable(0, 2)
+	L.SetField(cmd, "name", lua.LString(cmp.Or(x.Name, name)))
+	L.SetField(cmd, "bang", lua.LBool(x.Bang))
+	return e.protect(name, run, e.editorValue(), args, lua.LString(x.Line), cmd)
 }
 
 // Callback calls fn with args later, on the UI loop: when the answer a host function went to fetch
@@ -317,14 +332,84 @@ func (e *Engine) protect(name string, fn *lua.LFunction, args ...lua.LValue) err
 		L.Push(a)
 	}
 	if err := L.PCall(len(args), 0, nil); err != nil {
-		if ctx.Err() != nil {
-			return fmt.Errorf("%s: the script ran past %s and was stopped", name, e.timeout)
-		}
-		var lerr *lua.ApiError
-		if errors.As(err, &lerr) {
-			return fmt.Errorf("%s: %s", name, lua.LVAsString(lerr.Object))
-		}
-		return fmt.Errorf("%s: %w", name, err)
+		return e.failure(name, ctx, err)
 	}
 	return nil
+}
+
+// failure is err, a script's failure under ctx, as its message, named name: the deadline said as
+// such, and a Lua error by its value, without the stack trace a notification has no room for.
+func (e *Engine) failure(name string, ctx context.Context, err error) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("%s: the script ran past %s and was stopped", name, e.timeout)
+	}
+	var lerr *lua.ApiError
+	if errors.As(err, &lerr) {
+		return fmt.Errorf("%s: %s", name, e.describe(lerr.Object))
+	}
+	return fmt.Errorf("%s: %w", name, err)
+}
+
+// describe is an error's value as words: a string or a number as it is; a table by its __tostring,
+// its message field, or else its fields; anything else by its type, so that error({…}) or
+// error(nil) is never an empty message.
+func (e *Engine) describe(v lua.LValue) string {
+	switch x := v.(type) {
+	case lua.LString:
+		return string(x)
+	case lua.LNumber:
+		return x.String()
+	case *lua.LNilType:
+		return "an error with no message"
+	case *lua.LTable:
+		if f := e.L.GetMetaField(x, "__tostring"); f != lua.LNil {
+			if err := e.L.CallByParam(lua.P{Fn: f, NRet: 1, Protect: true}, x); err == nil {
+				s := e.L.Get(-1)
+				e.L.Pop(1)
+				if s, ok := s.(lua.LString); ok {
+					return string(s)
+				}
+			}
+		}
+		if m, ok := x.RawGetString("message").(lua.LString); ok {
+			return string(m)
+		}
+		return "an error " + literal(x)
+	}
+	return "an error value, a " + v.Type().String() + ": " + v.String()
+}
+
+// literal is t written as a Lua table, one level deep: its list, then its string keys in order,
+// a nested table as {…}; past eight fields, ….
+func literal(t *lua.LTable) string {
+	var fields []string
+	value := func(v lua.LValue) string {
+		switch x := v.(type) {
+		case lua.LString:
+			return fmt.Sprintf("%q", string(x))
+		case lua.LNumber, lua.LBool:
+			return x.String()
+		case *lua.LTable:
+			return "{…}"
+		}
+		return v.Type().String()
+	}
+	n := t.Len()
+	for i := 1; i <= n; i++ {
+		fields = append(fields, value(t.RawGetInt(i)))
+	}
+	var keys []string
+	t.ForEach(func(k, _ lua.LValue) {
+		if s, ok := k.(lua.LString); ok {
+			keys = append(keys, string(s))
+		}
+	})
+	sort.Strings(keys)
+	for _, k := range keys {
+		fields = append(fields, k+" = "+value(t.RawGetString(k)))
+	}
+	if len(fields) > 8 {
+		fields = append(fields[:8], "…")
+	}
+	return "{" + strings.Join(fields, ", ") + "}"
 }

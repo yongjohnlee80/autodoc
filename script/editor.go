@@ -13,26 +13,63 @@ const editorType = "autodoc.editor"
 
 func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }
 
+// Doc is one function of the script API as its reference lists it: how it is called, what it
+// returns, and what to know (Markdown, one row of a table). EditorDocs and TextDocs are the
+// engine's own tables, so the reference made from them lists what the engine has.
+type Doc struct {
+	Call    string // "ed:line(n)"
+	Returns string // "string"
+	Notes   string // "Line n's text, …"
+}
+
+// method is one method of the editor object: its documentation and its function.
+type method struct {
+	name, args, returns, notes string
+	fn                         func(*Engine, *lua.LState) int
+}
+
+// editorMethods are the editor object's methods, in the order the reference lists them.
+var editorMethods = []method{
+	{"value", "", "string", "The whole text, lines joined by `\"\\n\"`.", (*Engine).edValue},
+	{"set_value", "text", "nothing", "Replaces the whole text, as one edit: `u` brings the old text back.", (*Engine).edSetValue},
+	{"line_count", "", "number", "How many lines. A text ending in `\"\\n\"` has an empty last line.", (*Engine).edLineCount},
+	{"line", "n", "string", "Line n's text, without its line break. Raises `no such line` for n outside 1 to `ed:line_count()`.", (*Engine).edLine},
+	{"lines", "", "list of strings", "Every line, a copy.", (*Engine).edLines},
+	{"cursor", "", "line, col", "Where the cursor is.", (*Engine).edCursor},
+	{"set_cursor", "line, col", "nothing", "Moves the cursor, clamped, and scrolls to it.", (*Engine).edSetCursor},
+	{"insert", "text", "line, col", "Inserts at the cursor, and returns the position just after the text. That position is exact even when Vim's Normal mode then rests the cursor on the last character (see Positions). `\"\\n\"`, `\"\\r\\n\"` and `\"\\r\"` start lines. In Vim's Normal mode the text goes before the character under the cursor.", (*Engine).edInsert},
+	{"insert_at", "line, col, text", "line, col", "`ed:insert` at a position.", (*Engine).edInsertAt},
+	{"replace", "l1, c1, l2, c2, text", "line, col", "Puts text in place of the range; returns the position just after it.", (*Engine).edReplace},
+	{"delete", "l1, c1, l2, c2", "nothing", "Removes the range. The cursor goes to its start.", (*Engine).edDelete},
+	{"text", "l1, c1, l2, c2", "string", "The range's text, line breaks as `\"\\n\"`.", (*Engine).edText},
+	{"selection", "", "l1, c1, l2, c2, or `nil`", "The selection's range. A line-wise selection (`V`) runs from column 1 of its first line to the end of its last. `nil` outside Visual mode.", (*Engine).edSelection},
+	{"select", "l1, c1, l2, c2", "nothing", "Selects the range, as Visual mode does, with the cursor on its last character: `ed:mode()` is then `\"visual\"`, whatever the keys. An empty range leaves the selection as it was.", (*Engine).edSelect},
+	{"unselect", "", "nothing", "Ends the selection; the cursor stays where it is. Nothing without one.", (*Engine).edUnselect},
+	{"find", "term, opts", "l1, c1, l2, c2, or `nil`", "The next match of term after the cursor. It does not move the cursor. `opts` is optional: `{ignore_case = true, whole_word = true, backward = true, wrap = true, at_cursor = true}`.", (*Engine).edFind},
+	{"find_all", "term, opts", "list of `{l1, c1, l2, c2}`", "Every match of term, in order: `{}` with none. `opts` as `ed:find`'s; only `ignore_case` and `whole_word` apply.", (*Engine).edFindAll},
+	{"replace_all", "term, text, opts", "number", "Puts text in place of every match of term, as one edit, and returns how many. `opts` as `ed:find_all`'s.", (*Engine).edReplaceAll},
+	{"mode", "", "string", "The editor's mode: `\"normal\"`, `\"insert\"`, `\"replace\"`, `\"visual\"`, `\"visual_line\"` or `\"visual_block\"`. Without Vim's keys it is `\"insert\"`, or `\"visual\"` with a selection.", (*Engine).edMode},
+	{"read_only", "", "boolean", "Whether edits are refused: a PDF's or DOCX's derived text, say.", (*Engine).edReadOnly},
+	{"modified", "", "boolean", "Whether the text has changed since it was opened or last saved, as `:x` asks before it writes.", (*Engine).edModified},
+	{"run", "line", "nothing", "Runs a command line as the prompt does, without the `:`: `\"12\"`, `\"find TODO\"`, `\"table 2 3\"`. Raises the command's error.", (*Engine).edRun},
+}
+
+// EditorDocs is the editor object's methods as the reference lists them, in its order.
+func EditorDocs() []Doc {
+	out := make([]Doc, len(editorMethods))
+	for i, m := range editorMethods {
+		out[i] = Doc{Call: "ed:" + m.name + "(" + m.args + ")", Returns: m.returns, Notes: m.notes}
+	}
+	return out
+}
+
 // registerEditorType gives the editor object its methods.
 func (e *Engine) registerEditorType() {
 	L := e.L
 	mt := L.NewTypeMetatable(editorType)
-	methods := map[string]lua.LGFunction{
-		"value":      e.edValue,
-		"set_value":  e.edSetValue,
-		"line_count": e.edLineCount,
-		"line":       e.edLine,
-		"lines":      e.edLines,
-		"cursor":     e.edCursor,
-		"set_cursor": e.edSetCursor,
-		"insert":     e.edInsert,
-		"insert_at":  e.edInsertAt,
-		"replace":    e.edReplace,
-		"delete":     e.edDelete,
-		"text":       e.edText,
-		"selection":  e.edSelection,
-		"find":       e.edFind,
-		"run":        e.edRun,
+	methods := make(map[string]lua.LGFunction, len(editorMethods))
+	for _, m := range editorMethods {
+		methods[m.name] = func(L *lua.LState) int { return m.fn(e, L) }
 	}
 	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), methods))
 }
@@ -170,20 +207,136 @@ func (e *Engine) edSelection(L *lua.LState) int {
 	return pushRange(L, r)
 }
 
+func (e *Engine) edSelect(L *lua.LState) int {
+	e.ed(L).Select(rng(L, 2))
+	return 0
+}
+
+func (e *Engine) edUnselect(L *lua.LState) int {
+	e.ed(L).Unselect()
+	return 0
+}
+
+// findOptions reads a find's opts table, argument i, if there is one; atCursor is its at_cursor.
+func findOptions(L *lua.LState, i int) (o widget.FindOptions, atCursor bool) {
+	switch v := L.Get(i).(type) {
+	case *lua.LNilType:
+	case *lua.LTable:
+		o.IgnoreCase = lua.LVAsBool(v.RawGetString("ignore_case"))
+		o.WholeWord = lua.LVAsBool(v.RawGetString("whole_word"))
+		o.Backward = lua.LVAsBool(v.RawGetString("backward"))
+		o.Wrap = lua.LVAsBool(v.RawGetString("wrap"))
+		atCursor = lua.LVAsBool(v.RawGetString("at_cursor"))
+	default:
+		L.TypeError(i, lua.LTTable)
+	}
+	return o, atCursor
+}
+
 func (e *Engine) edFind(L *lua.LState) int {
 	c := e.ed(L)
-	var o widget.FindOptions
-	if t, ok := L.Get(3).(*lua.LTable); ok {
-		o.IgnoreCase = lua.LVAsBool(t.RawGetString("ignore_case"))
-		o.Backward = lua.LVAsBool(t.RawGetString("backward"))
-		o.Wrap = lua.LVAsBool(t.RawGetString("wrap"))
+	term := L.CheckString(2)
+	o, atCursor := findOptions(L, 3)
+	var (
+		r  widget.TextRange
+		ok bool
+	)
+	if atCursor {
+		r, ok = findFrom(c.FindAll(term, o), c.Cursor(), o)
+	} else {
+		r, ok = c.Find(term, c.Cursor(), o)
 	}
-	r, ok := c.Find(L.CheckString(2), c.Cursor(), o)
 	if !ok {
 		L.Push(lua.LNil)
 		return 1
 	}
 	return pushRange(L, r)
+}
+
+// findFrom is Find's choice among all with a match starting at the cursor counted: forward, the
+// first starting at or after at; backward, the last starting at or before it; Wrap goes round.
+func findFrom(all []widget.TextRange, at widget.TextPos, o widget.FindOptions) (widget.TextRange, bool) {
+	if len(all) == 0 {
+		return widget.TextRange{}, false
+	}
+	cmp := func(r widget.TextRange) int {
+		switch {
+		case r.From.Line != at.Line:
+			return r.From.Line - at.Line
+		default:
+			return r.From.Col - at.Col
+		}
+	}
+	if !o.Backward {
+		for _, r := range all {
+			if cmp(r) >= 0 {
+				return r, true
+			}
+		}
+		return all[0], o.Wrap
+	}
+	for i := len(all) - 1; i >= 0; i-- {
+		if cmp(all[i]) <= 0 {
+			return all[i], true
+		}
+	}
+	return all[len(all)-1], o.Wrap
+}
+
+func (e *Engine) edFindAll(L *lua.LState) int {
+	c := e.ed(L)
+	term := L.CheckString(2)
+	o, _ := findOptions(L, 3)
+	t := L.NewTable()
+	for _, r := range c.FindAll(term, o) {
+		m := L.CreateTable(4, 0)
+		for _, n := range []int{r.From.Line, r.From.Col, r.To.Line, r.To.Col} {
+			m.Append(lua.LNumber(n + 1))
+		}
+		t.Append(m)
+	}
+	L.Push(t)
+	return 1
+}
+
+func (e *Engine) edReplaceAll(L *lua.LState) int {
+	c := e.ed(L)
+	term, with := L.CheckString(2), L.CheckString(3)
+	o, _ := findOptions(L, 4)
+	n, err := c.ReplaceAll(term, with, o)
+	check(L, err)
+	L.Push(lua.LNumber(n))
+	return 1
+}
+
+// modeNames are ed:mode's answers.
+var modeNames = map[widget.EditorMode]string{
+	widget.ModeNormal:      "normal",
+	widget.ModeInsert:      "insert",
+	widget.ModeReplace:     "replace",
+	widget.ModeVisual:      "visual",
+	widget.ModeVisualLine:  "visual_line",
+	widget.ModeVisualBlock: "visual_block",
+}
+
+func (e *Engine) edMode(L *lua.LState) int {
+	m := e.ed(L).Mode()
+	name, ok := modeNames[m]
+	if !ok {
+		name = m.String() // a mode golib added since: its own name, rather than nothing
+	}
+	L.Push(lua.LString(name))
+	return 1
+}
+
+func (e *Engine) edReadOnly(L *lua.LState) int {
+	L.Push(lua.LBool(e.ed(L).ReadOnly()))
+	return 1
+}
+
+func (e *Engine) edModified(L *lua.LState) int {
+	L.Push(lua.LBool(e.ed(L).Modified()))
+	return 1
 }
 
 func (e *Engine) edRun(L *lua.LState) int {

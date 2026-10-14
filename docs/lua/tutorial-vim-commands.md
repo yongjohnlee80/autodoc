@@ -107,8 +107,9 @@ So `ed:text(2, 6, 2, 11)` on that line is `gamma`, and `ed:selection()` with `ga
 returns `2, 6, 2, 11`.
 
 **A column is a character, not a byte.** `é` is one column. Lua's `#text` counts bytes, so it is
-the column count only for plain ASCII. A column past a line's end means its end, so `#text + 1` is
-always a safe "end of the line": it is never short of it.
+the column count only for plain ASCII; `autodoc.text.columns(text)` counts as the editor does
+([the reference](reference.md#characters-autodoctext)). A column past a line's end means its end,
+so `#text + 1` is always a safe "end of the line": it is never short of it.
 
 ## 4. Editing, and one undo for each command
 
@@ -212,7 +213,7 @@ last.
 - **`ed:find(term, opts)`** returns the next match after the cursor as four numbers, or `nil`. It
   does not move the cursor: `:next` moves it with `ed:set_cursor`.
 - **The match starts after the cursor.** A match the cursor is on is not found again, so calling
-  `:next` again moves on.
+  `:next` again moves on. `{at_cursor = true}` counts a match starting under the cursor too.
 - **`opts`** is optional: `ignore_case`, `backward` (the match before the cursor) and `wrap` (go
   round from the other end). Like `:find`, `:next` ignores case when the term is all lower case.
 - **A term matches within one line.** It cannot hold a line break.
@@ -250,8 +251,7 @@ autodoc.command{
       words = words + 1
     end
     local _, breaks = text:gsub("\n", "")
-    -- a character is a byte that does not continue one before it (UTF-8)
-    local _, chars = text:gsub("[^\128-\191]", "")
+    local chars = autodoc.text.columns(text)
     autodoc.notify(what .. ": " .. count(words, "word") .. ", " .. count(breaks + 1, "line")
       .. ", " .. count(chars, "character"))
   end,
@@ -261,7 +261,8 @@ autodoc.command{
 - **`ed:value()`** is the whole page as one string, lines joined by `"\n"`.
 - **`gmatch` and `gsub`** come from Lua's string library: `gsub` returns how many it replaced as
   its second value, which makes it a counter.
-- **The characters are counted from the UTF-8.** `#text` would count bytes, and `é` is two.
+- **`autodoc.text.columns`** counts the characters as the editor does. `#text` would count bytes,
+  and `é` is two; written as `e` and an accent, it is three bytes and still one character.
 
 `:toc` inserts a table of contents under the cursor's line: a list of the page's headings, `##`
 and deeper, as Obsidian heading links.

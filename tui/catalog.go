@@ -70,6 +70,7 @@ type Entry struct {
 
 // Invocation is how an entry was run: what ':' passes, so nothing is lost on the way.
 type Invocation struct {
+	Name string   // the verb as typed, an alias say, without the bang; "" for a key or autodoc.run
 	Args []string // the words after the verb; a key's or autodoc.run's arguments
 	Line string   // everything after the verb, as typed: ":find two words" is "two words"
 	Bang bool     // the verb ended in '!'
@@ -315,7 +316,7 @@ func (c *catalog) sync(affected map[string]bool) {
 			// Set: a Lua command replaces golib's verb of its name, as it always has
 			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: e.Help,
 				Run: func(x widget.CommandContext) error {
-					return e.Run(Invocation{Args: x.Args, Line: x.Line, Bang: x.Bang, Core: x.Core})
+					return e.Run(Invocation{Name: x.Name, Args: x.Args, Line: x.Line, Bang: x.Bang, Core: x.Core})
 				}})
 			c.synced[id] = own
 		}
