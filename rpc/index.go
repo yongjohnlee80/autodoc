@@ -195,7 +195,7 @@ func (s *Server) indexVerbs() []module.Verb {
 		// client renders instead of a hand-kept one (Protocol 13). opts.diagnosed keeps the
 		// documents the schema diagnoses, each with its diagnostics: the KB's frontmatter scan
 		// (Protocol 15).
-		module.Handle(module.Contract{Verb: "index.documents", Since: 13, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "index.documents", Effect: module.EffectRead, Since: 13, Scope: ws, Audience: agent,
 			Result: "{docs: [{path, generation, title, updated, indexed_at, fields, diagnostics?}], more, next}",
 			Errors: []int64{CodeNoSuchWorkspace},
 			Doc:    "The files with their frontmatter, most recently updated first. sort is updated, path or indexed; fields the frontmatter fields to return (default title, type, status, updated, tags, abstract); tags every one; paths folders or files; facets as search's; missing the files that lack one of these fields; diagnosed (protocol 15) the files the schema diagnoses, with their diagnostics; after the previous page's next; limit up to 500, default 100."},
@@ -222,7 +222,7 @@ func (s *Server) indexVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "index.status", Since: 1, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "index.status", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "{docs, chunks, pending_jobs, cursor, oldest_retained, diagnosed, failing, held, held_stale, held_unchecked, following, warming?, embeddings?, …}",
 			Errors: []int64{CodeNoSuchWorkspace},
 			Doc:    "diagnosed counts files whose frontmatter has a problem; held the files another build indexed that this one holds, held_stale and held_unchecked among them."},
@@ -235,7 +235,7 @@ func (s *Server) indexVerbs() []module.Verb {
 				out := statusOf(st, w)
 				return &out, nil
 			}),
-		module.Handle(module.Contract{Verb: "index.list", Since: 1, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "index.list", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "{docs: [{path, generation, version}], more}", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "Every file in path order, after after."},
 			func(ctx context.Context, p indexList) (*listedJSON, error) {
@@ -249,7 +249,7 @@ func (s *Server) indexVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "index.changes", Since: 1, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "index.changes", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "{cursor, changes: [{path, op, generation}], more}", Errors: []int64{CodeNoSuchWorkspace, CodeCursorExpired},
 			Doc: "What changed after cursor since."},
 			func(ctx context.Context, p indexChanges) (*changesJSON, error) {
@@ -263,12 +263,12 @@ func (s *Server) indexVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "index.reindex", Since: 1, Scope: ws, Audience: user,
+		module.Handle(module.Contract{Verb: "index.reindex", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound}, Doc: "Indexes one file again; a held file is refused, naming the way out."},
 			func(ctx context.Context, p indexPath) (any, error) {
 				return nil, workspaceOf(ctx).Index().Reindex(ctx, p.Path)
 			}),
-		module.Handle(module.Contract{Verb: "index.models", Since: 4, Scope: ws, Audience: user,
+		module.Handle(module.Contract{Verb: "index.models", Effect: module.EffectRead, Since: 4, Scope: ws, Audience: user,
 			Result: "[{fp, provider, name, dims, state, vectors, f32_bytes, bits_bytes, key_bytes}]", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "The workspace's models and the room their vectors take."},
 			func(ctx context.Context, _ indexWorkspace) ([]modelJSON, error) {
@@ -283,7 +283,7 @@ func (s *Server) indexVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "index.purge_model", Since: 1, Scope: ws, Audience: user,
+		module.Handle(module.Contract{Verb: "index.purge_model", Effect: module.EffectSettings, Since: 1, Scope: ws, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace}, Doc: "Deletes a model's vectors; the active model and the target are refused."},
 			func(ctx context.Context, p indexModel) (any, error) {
 				return nil, workspaceOf(ctx).Index().PurgeModel(ctx, p.Model)

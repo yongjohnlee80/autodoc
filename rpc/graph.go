@@ -67,7 +67,7 @@ type resolvedJSON struct {
 func (s *Server) graphVerbs() []module.Verb {
 	agent, ws := module.AudienceAgent, module.ScopeWorkspace
 	links := func(verb, doc string, backlinks bool) module.Verb {
-		return module.Handle(module.Contract{Verb: verb, Since: 1, Scope: ws, Audience: agent,
+		return module.Handle(module.Contract{Verb: verb, Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "[{path, raw, anchor, kind, resolved}]", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound}, Doc: doc},
 			func(ctx context.Context, p graphPath) ([]linkJSON, error) {
 				kinds, err := graphKinds(ctx, p.Options.raw)
@@ -92,7 +92,7 @@ func (s *Server) graphVerbs() []module.Verb {
 	return []module.Verb{
 		links("graph.links", "The links the file makes.", false),
 		links("graph.backlinks", "The files that link to it.", true),
-		module.Handle(module.Contract{Verb: "graph.neighborhood", Since: 1, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "graph.neighborhood", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "{nodes, edges: [{src, dst, kind}]}", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
 			Doc: "The files within depth links."},
 			func(ctx context.Context, p graphNeighborhood) (*neighborhoodJSON, error) {
@@ -110,7 +110,7 @@ func (s *Server) graphVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "graph.unresolved", Since: 1, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "graph.unresolved", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "[{src, raw, reason}]", Errors: []int64{CodeNoSuchWorkspace}, Doc: "Links that name no file."},
 			func(ctx context.Context, p graphUnresolved) ([]unresolvedJSON, error) {
 				kinds, err := graphKinds(ctx, p.Options.raw)
@@ -129,7 +129,7 @@ func (s *Server) graphVerbs() []module.Verb {
 			}),
 		// graph.resolve: where one link, as written in the file at from, reaches now, saved or not, as
 		// the index will resolve it (Protocol 18)
-		module.Handle(module.Contract{Verb: "graph.resolve", Since: 18, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "graph.resolve", Effect: module.EffectRead, Since: 18, Scope: ws, Audience: agent,
 			Result: "{path, reason}", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "Where one link reaches now, saved or not, as the index resolves links: path \"\" with reason missing or ambiguous, or \"\" when raw is no link the index keeps (a URL, a heading of from)."},
 			func(ctx context.Context, p graphResolve) (*resolvedJSON, error) {

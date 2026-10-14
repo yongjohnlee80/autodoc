@@ -59,12 +59,12 @@ type eventJSON struct {
 func (s *Server) sysVerbs() []module.Verb {
 	agent, internal := module.AudienceAgent, module.AudienceInternal
 	return []module.Verb{
-		module.Handle(module.Contract{Verb: "sys.hello", Since: 1, Audience: internal,
+		module.Handle(module.Contract{Verb: "sys.hello", Effect: module.EffectRead, Since: 1, Audience: internal,
 			Result: "{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}",
 			Errors: []int64{CodeProtocolMismatch},
 			Doc:    "Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head."},
 			s.hello),
-		module.Handle(module.Contract{Verb: "sys.shutdown", Since: 1, Scope: module.ScopeLocalPeer, Audience: internal,
+		module.Handle(module.Contract{Verb: "sys.shutdown", Effect: module.EffectSettings, Since: 1, Scope: module.ScopeLocalPeer, Audience: internal,
 			Errors: []int64{golibrpc.CodeAccessDenied}, Doc: "Stops the daemon. Frozen across protocols."},
 			func(context.Context, struct{}) (any, error) {
 				s.RequestShutdown()
@@ -75,7 +75,7 @@ func (s *Server) sysVerbs() []module.Verb {
 		// registrations are always there, empty for the community build (Protocol 10). verbs is what
 		// the session may call at the protocol it declared, so a client asks before it calls
 		// (Protocol 13). It stays a map: an edition's capabilities are keys of its own.
-		module.Handle(module.Contract{Verb: "sys.capabilities", Since: 9, Audience: agent,
+		module.Handle(module.Contract{Verb: "sys.capabilities", Effect: module.EffectRead, Since: 9, Audience: agent,
 			Result: "{databases, registrations, ranker, verbs}",
 			Doc:    "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}."},
 			func(ctx context.Context, _ struct{}) (map[string]any, error) {
@@ -88,7 +88,7 @@ func (s *Server) sysVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "sys.events", Since: 8, Audience: agent,
+		module.Handle(module.Contract{Verb: "sys.events", Effect: module.EffectRead, Since: 8, Audience: agent,
 			Result: "{cursor, events: [{seq, kind, workspace, client, detail, at}], more}",
 			Errors: []int64{CodeUnsupported, CodeCursorExpired},
 			Doc:    "Configuration and lifecycle changes after cursor since, each with the token of the client that made it (\"\" for the daemon itself)."},
@@ -109,7 +109,7 @@ func (s *Server) sysVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "sys.contracts", Since: 20, Audience: agent,
+		module.Handle(module.Contract{Verb: "sys.contracts", Effect: module.EffectRead, Since: 20, Audience: agent,
 			Result: "{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}",
 			Doc:    "These tables: the verbs this session may call, and the codes they may answer."},
 			func(ctx context.Context, p sysContracts) (catalogJSON, error) {

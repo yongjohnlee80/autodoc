@@ -157,7 +157,7 @@ func TestTheCatalogJSONIsTheContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"scope":"workspace"`, `"audience":"agent"`, `"scope":"local-peer"`,
+	for _, want := range []string{`"scope":"workspace"`, `"audience":"agent"`, `"effect":"read"`, `"effect":"write"`, `"effect":"settings"`, `"scope":"local-peer"`,
 		`{"code":-32071,"name":"todos.stale","next":"todos.get","messages":["the task changed"]}`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("the catalog's JSON lacks %s: %s", want, b)
@@ -214,7 +214,7 @@ func TestCatalogMarkdown(t *testing.T) {
 	md := New(Fixed(), "v").Catalog(Protocol, "").Markdown()
 	for _, want := range []string{
 		"Verbs at protocol 21; the daemon serves sessions from protocol 12.",
-		"\n### `graph`\n\n| verb | params | result | since | audience |\n",
+		"\n### `graph`\n\n| verb | params | result | since | audience | effect |\n",
 		"| `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
 		"| `file.locate` | `path` string (absolute and clean) |",
 		"| agent; unix socket only |",

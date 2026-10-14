@@ -210,7 +210,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 	}
 	fixed := []int64{CodeNoSuchWorkspace, CodeUnsupported}
 	return []module.Verb{
-		module.Handle(module.Contract{Verb: "workspace.list", Since: 1, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "workspace.list", Effect: module.EffectRead, Since: 1, Audience: module.AudienceAgent,
 			Result: "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]",
 			Doc:    "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."},
 			func(context.Context, struct{}) ([]workspaceJSON, error) {
@@ -220,7 +220,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "workspace.add", Since: 2, Audience: user,
+		module.Handle(module.Contract{Verb: "workspace.add", Effect: module.EffectSettings, Since: 2, Audience: user,
 			Result: "{name, root, state, …}", Errors: []int64{CodeConflict, CodeUnsupported},
 			Event: ev("workspace.added", "name", ""), Doc: "Adds a workspace and starts serving it; answers it as workspace.list does."},
 			func(ctx context.Context, p workspaceAdd) (*workspaceJSON, error) {
@@ -231,17 +231,17 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				out := listed(w)
 				return &out, nil
 			}),
-		module.Handle(module.Contract{Verb: "workspace.rename", Since: 2, Audience: user,
+		module.Handle(module.Contract{Verb: "workspace.rename", Effect: module.EffectSettings, Since: 2, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeConflict, CodeUnsupported}, Event: ev("workspace.renamed", "name", "to")},
 			func(ctx context.Context, p workspaceRename) (any, error) {
 				return nil, s.workspaces.Rename(ctx, p.Name, p.To)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.remove", Since: 2, Audience: user, Errors: fixed,
+		module.Handle(module.Contract{Verb: "workspace.remove", Effect: module.EffectSettings, Since: 2, Audience: user, Errors: fixed,
 			Event: ev("workspace.removed", "name", ""), Doc: "Stops serving a workspace and deletes its index; its files stay."},
 			func(ctx context.Context, p workspaceName) (any, error) {
 				return nil, s.workspaces.Remove(ctx, p.Name)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.set_patterns", Since: 7, Audience: user, Errors: fixed,
+		module.Handle(module.Contract{Verb: "workspace.set_patterns", Effect: module.EffectSettings, Since: 7, Audience: user, Errors: fixed,
 			Event: ev("workspace.patterns", "workspace", ""), Doc: "Replaces the workspace's validated globs and reconciles it."},
 			func(ctx context.Context, p workspacePatterns) (any, error) {
 				if s.setters.patterns == nil {
@@ -249,7 +249,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return nil, s.setters.patterns.SetPatterns(ctx, p.Workspace, p.Include, p.Exclude)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.set_provider", Since: 8, Audience: user,
+		module.Handle(module.Contract{Verb: "workspace.set_provider", Effect: module.EffectSettings, Since: 8, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported, CodeProviderRefused},
 			Event:  ev("workspace.provider", "workspace", "provider"),
 			Doc:    "Gives the workspace a stored embedding provider of its own; it is set up first, and only that workspace re-embeds."},
@@ -259,7 +259,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return nil, s.setters.provider.SetProvider(ctx, p.Workspace, p.Provider)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.set_text_extensions", Since: 8, Audience: user,
+		module.Handle(module.Contract{Verb: "workspace.set_text_extensions", Effect: module.EffectSettings, Since: 8, Audience: user,
 			Result: "[string]", Errors: fixed, Event: ev("workspace.text_extensions", "workspace", ""),
 			Doc: "Declares the workspace's own plain-text extensions; answers them normalized. One the build reads with a registered chunker is refused."},
 			func(ctx context.Context, p workspaceTexts) ([]string, error) {
@@ -268,7 +268,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return s.setters.texts.SetTextExtensions(ctx, p.Workspace, p.Extensions)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.set_schema", Since: 8, Audience: user,
+		module.Handle(module.Contract{Verb: "workspace.set_schema", Effect: module.EffectSettings, Since: 8, Audience: user,
 			Result: "{path, active, fields, error, line}", Errors: fixed, Event: ev("workspace.schema", "workspace", ""),
 			Doc: "Names the workspace's frontmatter schema file; answers its status."},
 			func(ctx context.Context, p workspaceSchema) (*schemaJSON, error) {
@@ -282,7 +282,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				out := schemaOf(st)
 				return &out, nil
 			}),
-		module.Handle(module.Contract{Verb: "workspace.section_size", Since: 5, Audience: user, Errors: fixed,
+		module.Handle(module.Contract{Verb: "workspace.section_size", Effect: module.EffectSettings, Since: 5, Audience: user, Errors: fixed,
 			Event: ev("workspace.section_size", "workspace", "")},
 			func(ctx context.Context, p workspaceSection) (any, error) {
 				if s.setters.section == nil {
@@ -290,7 +290,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return nil, s.setters.section.SetSectionTokens(ctx, p.Workspace, p.Tokens)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.focus", Since: 6, Audience: user, Errors: fixed,
+		module.Handle(module.Contract{Verb: "workspace.focus", Effect: module.EffectSettings, Since: 6, Audience: user, Errors: fixed,
 			Doc: "Embeds this workspace's files first."},
 			func(_ context.Context, p workspaceOnly) (any, error) {
 				if s.setters.focus == nil {
@@ -298,7 +298,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 				}
 				return nil, s.setters.focus.Focus(p.Workspace)
 			}),
-		module.Handle(module.Contract{Verb: "workspace.embedding_policy", Since: 6, Audience: user, Errors: fixed,
+		module.Handle(module.Contract{Verb: "workspace.embedding_policy", Effect: module.EffectSettings, Since: 6, Audience: user, Errors: fixed,
 			Event: ev("workspace.embedding_policy", "workspace", "policy")},
 			func(ctx context.Context, p workspacePolicy) (any, error) {
 				if s.setters.policy == nil {

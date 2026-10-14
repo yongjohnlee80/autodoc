@@ -121,6 +121,7 @@ type contractJSON struct {
 	Since    int64             `json:"since"`
 	Scope    string            `json:"scope"`
 	Audience string            `json:"audience"`
+	Effect   string            `json:"effect"` // read, write or settings (ADR 1792004705 §4.1)
 	Params   []module.Param    `json:"params"`
 	Result   string            `json:"result,omitempty"`
 	Errors   []int64           `json:"errors,omitempty"`
@@ -146,7 +147,7 @@ func (c Catalog) wire() catalogJSON {
 			params = []module.Param{}
 		}
 		out.Verbs = append(out.Verbs, contractJSON{Verb: v.Verb, Since: v.Since, Scope: v.Scope.String(), Audience: v.Audience.String(),
-			Params: params, Result: v.Result, Errors: v.Errors, Event: v.Event, Doc: v.Doc})
+			Effect: v.Effect.String(), Params: params, Result: v.Result, Errors: v.Errors, Event: v.Event, Doc: v.Doc})
 	}
 	return out
 }
@@ -154,7 +155,8 @@ func (c Catalog) wire() catalogJSON {
 // MarshalJSON is c as --contracts prints it and sys.contracts answers it.
 func (c Catalog) MarshalJSON() ([]byte, error) { return json.Marshal(c.wire()) }
 
-// Markdown is c as AGENTS.md's tables: the verbs by domain (verb, params, result, since, audience),
+// Markdown is c as AGENTS.md's tables: the verbs by domain (verb, params, result, since, audience,
+// effect),
 // then the errors (code, name, next, messages).
 func (c Catalog) Markdown() string {
 	var b strings.Builder
@@ -163,9 +165,9 @@ func (c Catalog) Markdown() string {
 	for _, v := range c.Verbs {
 		if d, _, _ := strings.Cut(v.Verb, "."); d != domain {
 			domain = d
-			fmt.Fprintf(&b, "\n### `%s`\n\n| verb | params | result | since | audience |\n| --- | --- | --- | --- | --- |\n", d)
+			fmt.Fprintf(&b, "\n### `%s`\n\n| verb | params | result | since | audience | effect |\n| --- | --- | --- | --- | --- | --- |\n", d)
 		}
-		fmt.Fprintf(&b, "| `%s` | %s | %s | %d | %s |\n", v.Verb, paramsCell(v.Params), resultCell(v), v.Since, audienceCell(v))
+		fmt.Fprintf(&b, "| `%s` | %s | %s | %d | %s | %s |\n", v.Verb, paramsCell(v.Params), resultCell(v), v.Since, audienceCell(v), v.Effect)
 	}
 	b.WriteString("\n### Errors\n\n| code | name | next | messages |\n| --- | --- | --- | --- |\n")
 	for _, e := range c.Errors {

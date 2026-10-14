@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/app"
+	"github.com/yongjohnlee80/autodoc/core/module"
 )
 
 // TestAgentsMDIsGenerated: AGENTS.md's tables are what the contracts say; a hand edit between the
@@ -23,6 +24,35 @@ func TestAgentsMDIsGenerated(t *testing.T) {
 	}
 	if string(b) != want {
 		t.Error("AGENTS.md's tables differ from the contracts: run go generate ./rpc")
+	}
+}
+
+// TestEveryContractHasAnEffect: every verb this build serves says what it does to the store, as a
+// gated Lua script's capability is checked against (ADR 1792004705 §4.1); a new verb that forgets
+// fails here, rather than passing for read. The protocol's own verbs are classified too.
+func TestEveryContractHasAnEffect(t *testing.T) {
+	c := app.Contracts("")
+	if len(c.Verbs) < 80 {
+		t.Fatalf("%d verbs: the catalog did not build", len(c.Verbs))
+	}
+	for _, v := range c.Verbs {
+		if v.Effect == module.EffectUnset {
+			t.Errorf("%s has no Effect", v.Verb)
+		}
+	}
+	// a sample of each kind, so a classification swapped wholesale fails too
+	want := map[string]module.Effect{"doc.read": module.EffectRead, "search.query": module.EffectRead,
+		"doc.write": module.EffectWrite, "doc.remove": module.EffectWrite, "todos.add": module.EffectWrite,
+		"todos.changes": module.EffectRead, "todos.set_dir": module.EffectSettings, "workspace.add": module.EffectSettings,
+		"preference.set": module.EffectSettings, "graph.backlinks": module.EffectRead}
+	for _, v := range c.Verbs {
+		if e, ok := want[v.Verb]; ok && v.Effect != e {
+			t.Errorf("%s is %s; want %s", v.Verb, v.Effect, e)
+		}
+		delete(want, v.Verb)
+	}
+	if len(want) > 0 {
+		t.Errorf("verbs missing from the catalog: %v", want)
 	}
 }
 

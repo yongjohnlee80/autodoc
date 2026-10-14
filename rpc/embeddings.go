@@ -237,7 +237,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 	user := module.AudienceUser
 	ev := func(kind, detail string) *module.EventSpec { return &module.EventSpec{Kind: kind, Detail: detail} }
 	return []module.Verb{
-		module.Handle(module.Contract{Verb: "embedding.providers", Since: 3, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.providers", Effect: module.EffectRead, Since: 3, Audience: user,
 			Result: "{providers: [{name, kind, base_url, model, context, has_key}], active, error}", Errors: []int64{CodeUnsupported},
 			Doc: "The stored embedding providers, the one in use, and why the one chosen is not in use."},
 			func(ctx context.Context, _ struct{}) (*providersJSON, error) {
@@ -254,7 +254,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "embedding.add", Since: 3, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.add", Effect: module.EffectSettings, Since: 3, Audience: user,
 			Result: "{name, kind, base_url, model, context, has_key}", Errors: []int64{CodeUnsupported, CodeConflict, CodeProviderRefused},
 			Event: ev("embedding.providers", "")},
 			func(ctx context.Context, p providerAdd) (*providerJSON, error) {
@@ -271,7 +271,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				}
 				return providerOf(info), nil
 			}),
-		module.Handle(module.Contract{Verb: "embedding.update", Since: 3, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.update", Effect: module.EffectSettings, Since: 3, Audience: user,
 			Errors: []int64{CodeUnsupported, CodeNotFound, CodeConflict, CodeProviderRefused}, Event: ev("embedding.providers", "name")},
 			func(ctx context.Context, p providerUpdate) (any, error) {
 				if err := need(); err != nil {
@@ -283,7 +283,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				}
 				return nil, s.embeddings.UpdateProvider(ctx, p.Name, sp)
 			}),
-		module.Handle(module.Contract{Verb: "embedding.remove", Since: 3, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.remove", Effect: module.EffectSettings, Since: 3, Audience: user,
 			Errors: []int64{CodeUnsupported, CodeNotFound}, Event: ev("embedding.providers", "name"),
 			Doc: "Deletes the provider and its model's vectors (refused below protocol 16)."},
 			func(ctx context.Context, p providerName) (any, error) {
@@ -295,7 +295,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				}
 				return nil, s.embeddings.RemoveProvider(ctx, p.Name)
 			}),
-		module.Handle(module.Contract{Verb: "embedding.use", Since: 3, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.use", Effect: module.EffectSettings, Since: 3, Audience: user,
 			Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Event: ev("embedding.switched", "name"),
 			Doc: "Switches the daemon's provider; the new model fills while the old one answers."},
 			func(ctx context.Context, p providerName) (any, error) {
@@ -305,7 +305,7 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				return nil, s.embeddings.Use(ctx, p.Name)
 			}),
 		// the model switch under way ends: the provider in use goes back to the model still active
-		module.Handle(module.Contract{Verb: "embedding.cancel_switch", Since: 4, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.cancel_switch", Effect: module.EffectSettings, Since: 4, Audience: user,
 			Result: "{model}", Errors: []int64{CodeUnsupported}, Event: ev("embedding.cancelled", ""),
 			Doc: "Ends the model switch under way and deletes the partial target's vectors (refused below protocol 16)."},
 			func(ctx context.Context, _ struct{}) (map[string]string, error) {
@@ -321,12 +321,12 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				}
 				return map[string]string{"model": model}, nil
 			}),
-		module.Handle(module.Contract{Verb: "embedding.models", Since: 3, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.models", Effect: module.EffectRead, Since: 3, Audience: user,
 			Result: "[string]", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused}, Doc: "The models a provider offers."},
 			func(ctx context.Context, p providerModels) ([]string, error) {
 				return m.modelsOf(ctx, "embedding.models", p.Provider, p.Spec)
 			}),
-		module.Handle(module.Contract{Verb: "embedding.model_context", Since: 5, Audience: user,
+		module.Handle(module.Contract{Verb: "embedding.model_context", Effect: module.EffectRead, Since: 5, Audience: user,
 			Result: "{maximum}", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
 			Doc: "The context window the provider's model reports, in tokens."},
 			func(ctx context.Context, p providerContext) (map[string]int, error) {
@@ -346,10 +346,10 @@ func (s *Server) embeddingVerbs() []module.Verb {
 				}
 				return map[string]int{"maximum": maximum}, nil
 			}),
-		m.usageVerb(module.Contract{Verb: "embedding.usage", Since: 3, Audience: user,
+		m.usageVerb(module.Contract{Verb: "embedding.usage", Effect: module.EffectRead, Since: 3, Audience: user,
 			Result: "[{day, requests, texts, tokens, failures, limited}]", Errors: []int64{CodeUnsupported, CodeNotFound},
 			Doc: "A provider's usage by day."}),
-		m.logVerb(module.Contract{Verb: "embedding.log", Since: 3, Audience: user,
+		m.logVerb(module.Contract{Verb: "embedding.log", Effect: module.EffectRead, Since: 3, Audience: user,
 			Result: "[{at, texts, tokens, millis, outcome}]", Errors: []int64{CodeUnsupported, CodeNotFound},
 			Doc: "A provider's recent calls."}),
 	}

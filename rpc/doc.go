@@ -98,17 +98,17 @@ func (s *Server) docVerbs() []module.Verb {
 	readErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeUnsupported}
 	writeErrs := []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported}
 	return []module.Verb{
-		read(module.Contract{Verb: "doc.read", Since: 1, Scope: ws, Audience: agent, Result: "{content, version}", Errors: readErrs,
+		read(module.Contract{Verb: "doc.read", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent, Result: "{content, version}", Errors: readErrs,
 			Doc: "The file's text and its version. A format a build derives (PDF, DOCX) answers its derived Markdown, read-only; when that is longer than one answer carries, it is cut at a paragraph's end and its last line, after a --- rule, begins [autodoc: truncated]: that line is AutoDoc's, not the document's."}, false),
-		read(module.Contract{Verb: "doc.read_raw", Since: 19, Scope: ws, Audience: agent, Result: "{content, version}", Errors: readErrs,
+		read(module.Contract{Verb: "doc.read_raw", Effect: module.EffectRead, Since: 19, Scope: ws, Audience: agent, Result: "{content, version}", Errors: readErrs,
 			Doc: "doc.read on an HTML file's own bytes, where doc.read gives its derived text."}, true),
-		write(module.Contract{Verb: "doc.write", Since: 1, Scope: ws, Audience: user, Result: "{version}", Errors: writeErrs,
+		write(module.Contract{Verb: "doc.write", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user, Result: "{version}", Errors: writeErrs,
 			Doc: "Writes the file at version; a stale version is a conflict."}, false),
-		write(module.Contract{Verb: "doc.write_raw", Since: 19, Scope: ws, Audience: user, Result: "{version}", Errors: writeErrs,
+		write(module.Contract{Verb: "doc.write_raw", Effect: module.EffectWrite, Since: 19, Scope: ws, Audience: user, Result: "{version}", Errors: writeErrs,
 			Doc: "doc.write on an HTML file's own bytes, which doc.write refuses."}, true),
 		// doc.outline is a saved file's headings, with the version they were read at, for a client
 		// to navigate by (ADR 0212 §6). A document of another kind has none.
-		module.Handle(module.Contract{Verb: "doc.outline", Since: 8, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "doc.outline", Effect: module.EffectRead, Since: 8, Scope: ws, Audience: agent,
 			Result: "{version, headings: [{id, level, text, line, byte}]}", Errors: readErrs,
 			Doc: "A Markdown file's headings in order, with the version they were read at; other kinds have none."},
 			func(ctx context.Context, p docPath) (*outlineJSON, error) {
@@ -130,7 +130,7 @@ func (s *Server) docVerbs() []module.Verb {
 			}),
 		// doc.validate checks a file's text, saved or not, against the workspace's frontmatter
 		// schema with the validator the indexer uses (ADR 0212 §5). Only Markdown has frontmatter.
-		module.Handle(module.Contract{Verb: "doc.validate", Since: 8, Scope: ws, Audience: agent,
+		module.Handle(module.Contract{Verb: "doc.validate", Effect: module.EffectRead, Since: 8, Scope: ws, Audience: agent,
 			Result: "{diagnostics: [{field, line, rule, message}]}", Errors: []int64{CodeNoSuchWorkspace},
 			Doc: "The text's frontmatter checked against the workspace's schema (with a version 2 schema, against its document type's fields; a type the schema does not name is rule unknown_type); only Markdown has frontmatter."},
 			func(ctx context.Context, p docValidate) (*diagnosticsJSON, error) {
@@ -146,7 +146,7 @@ func (s *Server) docVerbs() []module.Verb {
 				}
 				return &diagnosticsJSON{Diagnostics: diagnosticsOf(ds)}, nil
 			}),
-		module.Handle(module.Contract{Verb: "doc.rename", Since: 1, Scope: ws, Audience: user,
+		module.Handle(module.Contract{Verb: "doc.rename", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported}},
 			func(ctx context.Context, p docRename) (any, error) {
 				w := workspaceOf(ctx)
@@ -156,7 +156,7 @@ func (s *Server) docVerbs() []module.Verb {
 				touch(w, p.From, p.To)
 				return nil, nil
 			}),
-		module.Handle(module.Contract{Verb: "doc.remove", Since: 1, Scope: ws, Audience: user,
+		module.Handle(module.Contract{Verb: "doc.remove", Effect: module.EffectWrite, Since: 1, Scope: ws, Audience: user,
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound, CodeConflict, CodeUnsupported}},
 			func(ctx context.Context, p docRemove) (any, error) {
 				w := workspaceOf(ctx)

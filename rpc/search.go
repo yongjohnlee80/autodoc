@@ -74,7 +74,7 @@ func resultOf(r index.Result) searchJSON {
 
 func (s *Server) searchVerbs() []module.Verb {
 	return []module.Verb{
-		module.Handle(module.Contract{Verb: "search.query", Since: 1, Scope: module.ScopeWorkspace, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "search.query", Effect: module.EffectRead, Since: 1, Scope: module.ScopeWorkspace, Audience: module.AudienceAgent,
 			Result: "{hits: [{path, breadcrumb, snippet, byte_start, byte_end, line_start?, line_end?, relevance, score, via, rank_score?, superseded_by?, generation, hold}], mode_used, semantic, rank, stages, semantic_error?}",
 			Errors: []int64{CodeNoSuchWorkspace, CodeUnsupported, CodeEmbedFailed, CodeSwitching, CodeRankUnavailable},
 			Doc:    "The search, ranked: see search.query above."},

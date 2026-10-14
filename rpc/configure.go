@@ -218,7 +218,7 @@ const configureKinds = "workspace.renamed | workspace.patterns | workspace.schem
 	"workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval"
 
 func (s *Server) configureVerb() module.Verb {
-	v := module.Handle(module.Contract{Verb: "workspace.configure", Since: 9, Audience: module.AudienceUser,
+	v := module.Handle(module.Contract{Verb: "workspace.configure", Effect: module.EffectSettings, Since: 9, Audience: module.AudienceUser,
 		Errors: []int64{CodeNoSuchWorkspace, CodeConflict, CodeNotFound, CodeUnsupported, CodeProviderRefused},
 		Event:  &module.EventSpec{Kind: configureKinds, Workspace: "workspace"},
 		Doc:    "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."},

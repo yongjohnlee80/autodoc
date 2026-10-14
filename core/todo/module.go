@@ -135,18 +135,21 @@ type none = any
 // resolves nothing for them, so they are ScopeGlobal.
 func (m *Manager) Verbs() []module.Verb {
 	// read is a verb that changes no store; quiet, one that changes daemon state the view does not
-	// show; write, one whose success logs todos.changed, so every view of the store refreshes.
+	// show, its effect named (ADR 1792004705 §4.1); write, one whose success logs todos.changed, so
+	// every view of the store refreshes. settings marks a write that moves which store the daemon
+	// writes, not a task.
 	read := func(verb, result, doc string, codes ...int64) module.Contract {
-		return module.Contract{Verb: verb, Since: protocol, Audience: module.AudienceAgent, Result: result,
+		return module.Contract{Verb: verb, Effect: module.EffectRead, Since: protocol, Audience: module.AudienceAgent, Result: result,
 			Errors: append([]int64{codeNoWorkspace}, codes...), Doc: doc}
 	}
-	quiet := func(verb, result, doc string, audience module.Audience, codes ...int64) module.Contract {
+	quiet := func(verb string, effect module.Effect, result, doc string, audience module.Audience, codes ...int64) module.Contract {
 		c := read(verb, result, doc, codes...)
-		c.Audience = audience
+		c.Audience, c.Effect = audience, effect
 		return c
 	}
+	settings := func(c module.Contract) module.Contract { c.Effect = module.EffectSettings; return c }
 	write := func(verb, result, doc string, audience module.Audience, codes ...int64) module.Contract {
-		c := quiet(verb, result, doc, audience, codes...)
+		c := quiet(verb, module.EffectWrite, result, doc, audience, codes...)
 		c.Event = &module.EventSpec{Kind: "todos.changed"}
 		return c
 	}
@@ -163,21 +166,21 @@ func (m *Manager) Verbs() []module.Verb {
 		module.Handle(write("todos.scaffold", "{store_id, store, scaffolded}",
 			"Creates the at's .todo-list and its buckets.", agent, append(writes, CodeExists)...),
 			func(ctx context.Context, p atParams) (Opened, error) { return m.Scaffold(ctx, p.At) }),
-		module.Handle(quiet("todos.register", "{new}",
+		module.Handle(quiet("todos.register", module.EffectSettings, "{new}",
 			"Enrolls a project root that is no AutoDoc workspace, so its .todo-list may be written; allowed before any claim.",
 			agent, CodeInvalid),
 			func(ctx context.Context, p registerParams) (map[string]bool, error) {
 				fresh, err := m.Register(ctx, p.Root)
 				return map[string]bool{"new": fresh}, err
 			}),
-		module.Handle(write("todos.set_dir", "{store_id, store, root, override?, writable, claimed}",
-			"Points an at's root at another store directory, or back at <root>/.todo-list.", user, CodeInvalid),
+		module.Handle(settings(write("todos.set_dir", "{store_id, store, root, override?, writable, claimed}",
+			"Points an at's root at another store directory, or back at <root>/.todo-list.", user, CodeInvalid)),
 			func(ctx context.Context, p setDirParams) (Resolved, error) { return m.SetDir(ctx, p.At, p.Dir) }),
 		module.Handle(read("todos.stores", "[{id, path, roots, claimed, last_use}]", "The stores the daemon knows."),
 			func(ctx context.Context, _ struct{}) ([]StoreInfo, error) { return m.Stores(ctx) }),
-		module.Handle(write("todos.move_store", "{store_id, store, root, override?, writable, claimed}",
+		module.Handle(settings(write("todos.move_store", "{store_id, store, root, override?, writable, claimed}",
 			"Moves an at's store to a new directory; its claim, change log and cursors move with it.",
-			user, append(writes, CodeExists)...),
+			user, append(writes, CodeExists)...)),
 			func(ctx context.Context, p moveParams) (Resolved, error) { return m.MoveStore(ctx, p.At, p.To) }),
 		module.Handle(read("todos.list", "{tasks: ["+task+"], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
 			"The active buckets' tasks; archives only by month, on request.", CodeNotAStore, CodeInvalid),
@@ -217,22 +220,22 @@ func (m *Manager) Verbs() []module.Verb {
 			"Reconciles the active buckets: misplaced files, errors[], the 28-day archive. Never reads archives.",
 			agent, writes...),
 			func(ctx context.Context, p atParams) (RefreshSummary, error) { return m.Refresh(ctx, p.At) }),
-		module.Handle(quiet("todos.changes", "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, hand?, at}], resync?, snapshot?, cursor}",
+		module.Handle(quiet("todos.changes", module.EffectRead, "{changes?: [{seq, id, kind, op, from?, to?, fields?, reason?, hand?, at}], resync?, snapshot?, cursor}",
 			"A consumer's committed changes after its cursor, or a resync when it was away too long.", user),
 			func(ctx context.Context, p changesParams) (ChangesPage, error) {
 				return m.Changes(ctx, p.At, p.Consumer, int(p.Limit))
 			}),
-		module.Handle(quiet("todos.ack", "nil", "Advances a consumer's cursor once it has handled the changes up to seq.", user, CodeNoTask),
+		module.Handle(quiet("todos.ack", module.EffectWrite, "nil", "Advances a consumer's cursor once it has handled the changes up to seq.", user, CodeNoTask),
 			func(ctx context.Context, p ackParams) (none, error) { return nil, m.Ack(ctx, p.At, p.Consumer, p.Seq) }),
-		module.Handle(write("todos.claim", "nil",
+		module.Handle(settings(write("todos.claim", "nil",
 			"The cutover: the daemon writes the store from now on. Only the release that removes auto-core's writer calls it.",
-			user, CodeNotWritable, CodeInvalid),
+			user, CodeNotWritable, CodeInvalid)),
 			func(ctx context.Context, p claimParams) (none, error) { return nil, m.Claim(ctx, p.At, p.Opts) }),
-		module.Handle(write("todos.release", "nil", "The cutover's rollback: the daemon only reads the store again.", user),
+		module.Handle(settings(write("todos.release", "nil", "The cutover's rollback: the daemon only reads the store again.", user)),
 			func(ctx context.Context, p atParams) (none, error) { return nil, m.Release(ctx, p.At) }),
 		module.Handle(read("todos.vars", "[{name, value?, builtin}]", "The variables a ref may start with, for an at's store."),
 			func(ctx context.Context, p atParams) ([]Var, error) { return m.Vars(ctx, p.At) }),
-		module.Handle(quiet("todos.set_var", "nil", "Sets or removes a user variable; built-ins are read-only.", user, CodeInvalid),
+		module.Handle(quiet("todos.set_var", module.EffectSettings, "nil", "Sets or removes a user variable; built-ins are read-only.", user, CodeInvalid),
 			func(ctx context.Context, p setVarParams) (none, error) { return nil, m.SetVar(ctx, p.Name, p.Value) }),
 	}
 	for i := range verbs {

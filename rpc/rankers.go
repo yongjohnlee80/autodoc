@@ -137,7 +137,7 @@ func (s *Server) rankerVerbs() []module.Verb {
 	user := module.AudienceUser
 	ev := func(kind, detail string) *module.EventSpec { return &module.EventSpec{Kind: kind, Detail: detail} }
 	return []module.Verb{
-		module.Handle(module.Contract{Verb: "ranker.list", Since: 11, Audience: user,
+		module.Handle(module.Contract{Verb: "ranker.list", Effect: module.EffectRead, Since: 11, Audience: user,
 			Result: "{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}", Errors: []int64{CodeUnsupported},
 			Doc: "The stored rankers (kind tei or rerank-api), the one in use, how many of the top candidates it ranks, why the one chosen is not in use, and the model of the build's own ranker (\"\" for none), which is then the one in use."},
 			func(ctx context.Context, _ struct{}) (*rankersJSON, error) {
@@ -154,7 +154,7 @@ func (s *Server) rankerVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
-		module.Handle(module.Contract{Verb: "ranker.add", Since: 11, Audience: user,
+		module.Handle(module.Contract{Verb: "ranker.add", Effect: module.EffectSettings, Since: 11, Audience: user,
 			Result: "{name, kind, base_url, model, has_key}", Errors: []int64{CodeUnsupported, CodeConflict, CodeProviderRefused},
 			Event: ev("ranker.providers", "")},
 			func(ctx context.Context, p rankerAdd) (*rankerJSON, error) {
@@ -171,7 +171,7 @@ func (s *Server) rankerVerbs() []module.Verb {
 				}
 				return rankerOf(info), nil
 			}),
-		module.Handle(module.Contract{Verb: "ranker.update", Since: 11, Audience: user,
+		module.Handle(module.Contract{Verb: "ranker.update", Effect: module.EffectSettings, Since: 11, Audience: user,
 			Errors: []int64{CodeUnsupported, CodeNotFound, CodeConflict, CodeProviderRefused}, Event: ev("ranker.providers", "name")},
 			func(ctx context.Context, p rankerUpdate) (any, error) {
 				if err := need(); err != nil {
@@ -183,7 +183,7 @@ func (s *Server) rankerVerbs() []module.Verb {
 				}
 				return nil, s.rankers.UpdateRanker(ctx, p.Name, sp)
 			}),
-		module.Handle(module.Contract{Verb: "ranker.remove", Since: 11, Audience: user, Errors: []int64{CodeUnsupported, CodeNotFound},
+		module.Handle(module.Contract{Verb: "ranker.remove", Effect: module.EffectSettings, Since: 11, Audience: user, Errors: []int64{CodeUnsupported, CodeNotFound},
 			Event: ev("ranker.providers", "name")},
 			func(ctx context.Context, p providerName) (any, error) {
 				if err := need(); err != nil {
@@ -191,7 +191,7 @@ func (s *Server) rankerVerbs() []module.Verb {
 				}
 				return nil, s.rankers.RemoveRanker(ctx, p.Name)
 			}),
-		module.Handle(module.Contract{Verb: "ranker.use", Since: 11, Audience: user, Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
+		module.Handle(module.Contract{Verb: "ranker.use", Effect: module.EffectSettings, Since: 11, Audience: user, Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
 			Event: ev("ranker.switched", "name"), Doc: "Refused while the build supplies its ranker."},
 			func(ctx context.Context, p rankerUse) (any, error) {
 				if err := need(); err != nil {
@@ -199,7 +199,7 @@ func (s *Server) rankerVerbs() []module.Verb {
 				}
 				return nil, s.rankers.Use(ctx, p.Name)
 			}),
-		module.Handle(module.Contract{Verb: "ranker.window", Since: 11, Audience: user, Errors: []int64{CodeUnsupported},
+		module.Handle(module.Contract{Verb: "ranker.window", Effect: module.EffectSettings, Since: 11, Audience: user, Errors: []int64{CodeUnsupported},
 			Event: ev("ranker.switched", ""), Doc: "Refused while the build supplies its ranker."},
 			func(ctx context.Context, p rankerWindow) (any, error) {
 				if err := need(); err != nil {
@@ -208,16 +208,16 @@ func (s *Server) rankerVerbs() []module.Verb {
 				return nil, s.rankers.SetWindow(ctx, p.Window)
 			}),
 		// a ranker's models: a TEI server's one model, none for a rerank-API endpoint (its model is typed)
-		module.Handle(module.Contract{Verb: "ranker.models", Since: 11, Audience: user,
+		module.Handle(module.Contract{Verb: "ranker.models", Effect: module.EffectRead, Since: 11, Audience: user,
 			Result: "[string]", Errors: []int64{CodeUnsupported, CodeNotFound, CodeProviderRefused},
 			Doc: "A TEI server's one model; none for a rerank-API endpoint, whose model is typed."},
 			func(ctx context.Context, p rankerModels) ([]string, error) {
 				return m.modelsOf(ctx, "ranker.models", p.Ranker, p.Spec)
 			}),
-		m.usageVerb(module.Contract{Verb: "ranker.usage", Since: 11, Audience: user,
+		m.usageVerb(module.Contract{Verb: "ranker.usage", Effect: module.EffectRead, Since: 11, Audience: user,
 			Result: "[{day, requests, texts, tokens, failures, limited}]", Errors: []int64{CodeUnsupported, CodeNotFound},
 			Doc: "A ranker's usage by day."}),
-		m.logVerb(module.Contract{Verb: "ranker.log", Since: 11, Audience: user,
+		m.logVerb(module.Contract{Verb: "ranker.log", Effect: module.EffectRead, Since: 11, Audience: user,
 			Result: "[{at, texts, tokens, millis, outcome}]", Errors: []int64{CodeUnsupported, CodeNotFound},
 			Doc: "A ranker's recent calls."}),
 	}

@@ -17,7 +17,7 @@ type preferenceSet struct {
 
 func (s *Server) preferenceVerbs() []module.Verb {
 	return []module.Verb{
-		module.Handle(module.Contract{Verb: "preference.list", Since: 3, Audience: module.AudienceUser,
+		module.Handle(module.Contract{Verb: "preference.list", Effect: module.EffectRead, Since: 3, Audience: module.AudienceUser,
 			Result: "{name: value}", Errors: []int64{CodeUnsupported}, Doc: "What clients keep between runs."},
 			func(ctx context.Context, _ struct{}) (map[string]string, error) {
 				if s.preferences == nil {
@@ -25,7 +25,7 @@ func (s *Server) preferenceVerbs() []module.Verb {
 				}
 				return s.preferences.Preferences(ctx)
 			}),
-		module.Handle(module.Contract{Verb: "preference.set", Since: 3, Audience: module.AudienceUser,
+		module.Handle(module.Contract{Verb: "preference.set", Effect: module.EffectSettings, Since: 3, Audience: module.AudienceUser,
 			Errors: []int64{CodeUnsupported}, Event: &module.EventSpec{Kind: "preference.changed", Detail: "name"},
 			Doc: "A preference that has a verb of its own (embedding.use, ranker.use, ranker.window) is refused."},
 			func(ctx context.Context, p preferenceSet) (any, error) {

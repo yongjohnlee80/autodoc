@@ -51,6 +51,35 @@ func (a Audience) String() string {
 	return "agent"
 }
 
+// Effect is what a verb does to the store: what a gated Lua script's capability must cover to call
+// it (ADR 1792004705 §4.1). Every contract names one; EffectUnset is a contract that forgot.
+type Effect int
+
+const (
+	// EffectUnset is no effect named: TestEveryContractHasAnEffect fails on it, and a gated script
+	// treats it as EffectSettings.
+	EffectUnset Effect = iota
+	// EffectRead reads only: search, a document, an outline, a listing, a status.
+	EffectRead
+	// EffectWrite creates, changes or removes documents and tasks.
+	EffectWrite
+	// EffectSettings changes the daemon's own configuration: workspaces, models, rankers,
+	// preferences, which store it writes.
+	EffectSettings
+)
+
+func (e Effect) String() string {
+	switch e {
+	case EffectRead:
+		return "read"
+	case EffectWrite:
+		return "write"
+	case EffectSettings:
+		return "settings"
+	}
+	return ""
+}
+
 // Param is one positional parameter, as AGENTS.md names it.
 type Param struct {
 	Name     string `json:"name"`
@@ -66,6 +95,7 @@ type Contract struct {
 	Since    int64      `json:"since"` // the protocol it arrived in; a session below it gets "unknown method"
 	Scope    Scope      `json:"-"`
 	Audience Audience   `json:"-"`
+	Effect   Effect     `json:"-"`
 	Params   []Param    `json:"params"`
 	Result   string     `json:"result,omitempty"` // the result's shape, for people: "{tasks[], malformed[]}"
 	Errors   []int64    `json:"errors,omitempty"` // the public codes it may answer, beyond invalid params

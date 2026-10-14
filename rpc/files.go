@@ -140,15 +140,15 @@ func (s *Server) fileVerbs() []module.Verb {
 	readErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeUnsupported}
 	writeErrs := []int64{golibrpc.CodeAccessDenied, CodeNotFound, CodeConflict, CodeCommitted, CodeUnsupported}
 	return []module.Verb{
-		read(module.Contract{Verb: "file.read", Since: 17, Scope: local, Audience: module.AudienceAgent, Result: "{content, version}",
+		read(module.Contract{Verb: "file.read", Effect: module.EffectRead, Since: 17, Scope: local, Audience: module.AudienceAgent, Result: "{content, version}",
 			Errors: readErrs, Doc: "A UTF-8 text file anywhere on the daemon's disk, as doc.read; a file that is not text is invalid params."}, false),
-		read(module.Contract{Verb: "file.read_raw", Since: 19, Scope: local, Audience: module.AudienceAgent, Result: "{content, version}",
+		read(module.Contract{Verb: "file.read_raw", Effect: module.EffectRead, Since: 19, Scope: local, Audience: module.AudienceAgent, Result: "{content, version}",
 			Errors: readErrs, Doc: "file.read on an HTML file's own bytes."}, true),
-		write(module.Contract{Verb: "file.write", Since: 17, Scope: local, Audience: module.AudienceUser, Result: "{version}",
+		write(module.Contract{Verb: "file.write", Effect: module.EffectWrite, Since: 17, Scope: local, Audience: module.AudienceUser, Result: "{version}",
 			Errors: writeErrs, Doc: "As doc.write, on a file anywhere on the daemon's disk. A file a workspace indexes (file.locate's answer) is written by that workspace's doc.write, and indexed at once."}, false),
-		write(module.Contract{Verb: "file.write_raw", Since: 19, Scope: local, Audience: module.AudienceUser, Result: "{version}",
+		write(module.Contract{Verb: "file.write_raw", Effect: module.EffectWrite, Since: 19, Scope: local, Audience: module.AudienceUser, Result: "{version}",
 			Errors: writeErrs, Doc: "file.write on an HTML file's own bytes; in a workspace, its doc.write_raw."}, true),
-		module.Handle(module.Contract{Verb: "file.locate", Since: 17, Scope: local, Audience: module.AudienceAgent,
+		module.Handle(module.Contract{Verb: "file.locate", Effect: module.EffectRead, Since: 17, Scope: local, Audience: module.AudienceAgent,
 			Result: "{workspace, path} | nil", Errors: []int64{golibrpc.CodeAccessDenied},
 			Doc: "The workspace that indexes the file (the most specific root, symlinks resolved) and its path there; nil for none."},
 			func(_ context.Context, p filePath) (*locatedJSON, error) {
