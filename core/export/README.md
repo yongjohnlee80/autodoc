@@ -20,7 +20,8 @@ page without a diagram has no script.
 HTML shows an image as its alt text, unless `Options.Document` names the source's file. Then an
 embed, `![alt](path)`, of a file beside the document is drawn, as xmd draws it:
 - a Mermaid diagram (`.mmd`) as a diagram;
-- a table (`.csv`) as a table, with its first row as the header (1000 rows at most, then a count);
+- a table (`.csv`) as a table, with its first row as the header. It shows 1000 rows, 64 columns
+  and 20,000 cells at most, then says how many rows and columns are not shown;
 - an image (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.avif`, `.bmp`) as the image, written in as a
   `data:` URI, so the page stays whole.
 

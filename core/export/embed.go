@@ -30,14 +30,18 @@ import (
 // A diagram or a table is a block: it is drawn when the embed is its paragraph's only content, and
 // takes the paragraph's place. An image is drawn wherever it is.
 
-// The bounds: a diagram or table file's size, an image's, every image of a page together, and the
-// rows a table shows.
+// The bounds: a diagram or table file's size, an image's, every image of a page together, and what
+// a table shows: its rows, its columns, and its cells, the header's included. A row is padded to the
+// table's width, so the cells bound the page a sparse file makes (a wide header over short rows):
+// what is drawn grows with the file, never with rows times the widest row.
 const (
 	maxEmbedText = 1 << 20
 	// an image's, so its data: URI stays under the 8 MiB golib's native view decodes
-	maxEmbedImage  = 6 << 20
-	maxEmbedImages = 32 << 20
-	maxTableRows   = 1000
+	maxEmbedImage   = 6 << 20
+	maxEmbedImages  = 32 << 20
+	maxTableRows    = 1000
+	maxTableColumns = 64
+	maxTableCells   = 20000
 )
 
 // imageTypes are the image files an embed draws, by extension, with their media types.
@@ -183,8 +187,9 @@ func (e *embedder) readAt(p string, limit int64) ([]byte, error) {
 	return data, nil
 }
 
-// csvTable is a CSV file as a table, its first row the header; rows past maxTableRows are counted
-// in a last row. ok is false for a file with no rows, or one that is not CSV.
+// csvTable is a CSV file as a table, its first row the header. It shows maxTableColumns columns at
+// most, and as many rows as maxTableRows and maxTableCells allow; a last row says how many rows and
+// columns are not shown. ok is false for a file with no rows, or one that is not CSV.
 func csvTable(data []byte) (string, bool) {
 	r := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
 	r.FieldsPerRecord = -1
@@ -193,10 +198,12 @@ func csvTable(data []byte) (string, bool) {
 	if err != nil || len(rows) == 0 {
 		return "", false
 	}
-	width := 0
+	columns := 0
 	for _, row := range rows {
-		width = max(width, len(row))
+		columns = max(columns, len(row))
 	}
+	width := min(columns, maxTableColumns)
+	shown := min(len(rows)-1, maxTableRows, maxTableCells/width-1)
 	var b strings.Builder
 	cells := func(tag string, row []string) {
 		b.WriteString("<tr>")
@@ -212,13 +219,20 @@ func csvTable(data []byte) (string, bool) {
 	b.WriteString("<table>\n<thead>\n")
 	cells("th", rows[0])
 	b.WriteString("</thead>\n")
-	if body := rows[1:]; len(body) > 0 {
+	var hidden []string
+	if more := len(rows) - 1 - shown; more > 0 {
+		hidden = append(hidden, strconv.Itoa(more)+" more rows")
+	}
+	if more := columns - width; more > 0 {
+		hidden = append(hidden, strconv.Itoa(more)+" more columns")
+	}
+	if shown > 0 || len(hidden) > 0 {
 		b.WriteString("<tbody>\n")
-		for _, row := range body[:min(len(body), maxTableRows)] {
+		for _, row := range rows[1 : 1+shown] {
 			cells("td", row)
 		}
-		if more := len(body) - maxTableRows; more > 0 {
-			b.WriteString(`<tr><td colspan="` + strconv.Itoa(width) + `">… ` + strconv.Itoa(more) + " more rows</td></tr>\n")
+		if len(hidden) > 0 {
+			b.WriteString(`<tr><td colspan="` + strconv.Itoa(width) + `">… ` + strings.Join(hidden, ", ") + "</td></tr>\n")
 		}
 		b.WriteString("</tbody>\n")
 	}

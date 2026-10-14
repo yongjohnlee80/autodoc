@@ -314,8 +314,34 @@ func TestEmbedsAreDrawn(t *testing.T) {
 			t.Errorf("the page lacks %q:\n%s", want, page)
 		}
 	}
-	if strings.Contains(page, "<em>") {
-		t.Errorf("an embed was drawn as its alt text:\n%s", page)
+	// the page's mermaid script has <em> of its own: the body, before it, is the document's
+	if body, _, _ := strings.Cut(page, "\n<script>"); strings.Contains(body, "<em>") {
+		t.Errorf("an embed was drawn as its alt text:\n%s", body)
+	}
+}
+
+// A sparse table, a wide header over short rows, is drawn within the cell bound: what is drawn
+// grows with the file, not with its rows times its widest row; a last row says what is not shown.
+func TestAWideSparseTableIsBounded(t *testing.T) {
+	for _, columns := range []int{1000, 100000} {
+		var csv strings.Builder
+		csv.WriteString(strings.TrimSuffix(strings.Repeat("h,", columns), ","))
+		csv.WriteString("\n" + strings.Repeat("x\n", 1000))
+		doc := embedDoc(t, map[string]string{"docs/wide.csv": csv.String()})
+		page := renderEmbeds(t, "![wide](wide.csv)\n", doc, false)
+		if len(page) > 1<<20 {
+			t.Errorf("%d columns: a %d-byte file drew a %d-byte page", columns, csv.Len(), len(page))
+		}
+		if n := strings.Count(page, "<th>"); n != 64 {
+			t.Errorf("%d columns: %d header cells; want 64", columns, n)
+		}
+		if n := strings.Count(page, "<td>") + strings.Count(page, "<th>"); n > 20000+1 {
+			t.Errorf("%d columns: %d cells; want 20000 at most", columns, n)
+		}
+		want := "… " + strconv.Itoa(1000-(20000/64-1)) + " more rows, " + strconv.Itoa(columns-64) + " more columns"
+		if !strings.Contains(page, want) {
+			t.Errorf("%d columns: the page does not say %q", columns, want)
+		}
 	}
 }
 
