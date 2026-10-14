@@ -92,26 +92,24 @@ type embedRenderer struct {
 type aloneEmbed struct{ text, dest string }
 
 // Blocks are golib's, with a line holding an image alone a block of its own, and a paragraph of more
-// lines holding an image on a line of its own one block.
+// lines holding an image on a line of its own one block: the paragraphs are found once, and golib's
+// blocks are joined in one pass, so a note of many such paragraphs costs no more than its length.
 func (r *embedRenderer) Blocks(lines []string, from, to int) []guiwidget.Block {
 	blocks := r.MarkdownRenderer.Blocks(lines, 0, len(lines))
 	r.alone, r.joined = nil, nil
+	var joins []guiwidget.Block // in order: EmbedLines walks the source in order
 	for _, e := range export.EmbedLines([]byte(strings.Join(lines, "\n"))) {
-		if e.Alone {
+		switch {
+		case e.Alone:
 			if r.alone == nil {
 				r.alone = map[int]aloneEmbed{}
 			}
 			r.alone[e.Line] = aloneEmbed{text: lines[e.Line], dest: e.Dest}
-			continue
-		}
-		var ok bool
-		if blocks, ok = joinLines(blocks, e.From, e.To); ok {
-			if r.joined == nil {
-				r.joined = map[guiwidget.Block]bool{}
-			}
-			r.joined[guiwidget.Block{From: e.From, To: e.To}] = true
+		case len(joins) == 0 || joins[len(joins)-1].From != e.From: // a paragraph's first such line
+			joins = append(joins, guiwidget.Block{From: e.From, To: e.To})
 		}
 	}
+	blocks, r.joined = joinRuns(blocks, joins)
 	var out []guiwidget.Block
 	for _, b := range blocks {
 		if b.To > from && b.From < to {
@@ -121,21 +119,36 @@ func (r *embedRenderer) Blocks(lines []string, from, to int) []guiwidget.Block {
 	return out
 }
 
-// joinLines makes lines [from, to) one block, when golib has them as blocks of one line each; ok
-// reports that it did.
-func joinLines(blocks []guiwidget.Block, from, to int) (_ []guiwidget.Block, ok bool) {
-	i := 0
-	for i < len(blocks) && blocks[i].From < from {
+// joinRuns makes each of joins (in order) one block where golib has its lines as blocks of one
+// line each, in one pass over blocks; joined are those it made.
+func joinRuns(blocks, joins []guiwidget.Block) (out []guiwidget.Block, joined map[guiwidget.Block]bool) {
+	if len(joins) == 0 {
+		return blocks, nil
+	}
+	out = make([]guiwidget.Block, 0, len(blocks))
+	k := 0
+	for i := 0; i < len(blocks); {
+		for k < len(joins) && joins[k].From < blocks[i].From {
+			k++
+		}
+		if k < len(joins) && joins[k].From == blocks[i].From {
+			j := i
+			for j < len(blocks) && blocks[j].To <= joins[k].To && blocks[j].To-blocks[j].From == 1 {
+				j++
+			}
+			if j-i > 1 && blocks[j-1].To == joins[k].To {
+				if joined == nil {
+					joined = map[guiwidget.Block]bool{}
+				}
+				out, joined[joins[k]] = append(out, joins[k]), true
+				i, k = j, k+1
+				continue
+			}
+		}
+		out = append(out, blocks[i])
 		i++
 	}
-	j := i
-	for j < len(blocks) && blocks[j].To <= to && blocks[j].To-blocks[j].From == 1 {
-		j++
-	}
-	if i == len(blocks) || blocks[i].From != from || j == i || blocks[j-1].To != to || j-i == 1 {
-		return blocks, false
-	}
-	return append(append(blocks[:i:i], guiwidget.Block{From: from, To: to}), blocks[j:]...), true
+	return out, joined
 }
 
 // LayOut lays block b out: an embed line off the cursor as its file, a joined paragraph line by

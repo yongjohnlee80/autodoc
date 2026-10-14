@@ -230,7 +230,9 @@ In the GUI's Rendered view the note stays editable, and a diagram or table embed
 paragraph is drawn in its line's place, natively, as if the file were written there: a diagram as a
 `mermaid` fence, a table as a Markdown table of 16 rows, its values as the file has them. While
 typing on the line (Insert) it is its source again. Only the note's own editor draws them: the
-search preview and a todo's details show other files' text, not the note's.
+search preview and a todo's details show other files' text, not the note's. An embed by reference
+(`![flow][ref]`) stays as written there, as its file is named elsewhere in the note; the preview
+draws it.
 
 **Relative links reach their files wherever the page is written.** An HTML export reads each
 link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's

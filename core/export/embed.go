@@ -327,6 +327,10 @@ func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 // page (kind.ParseMarkdown): an editor draws Dest in the line's place when the image is Alone, its
 // paragraph's only content, as the page draws a diagram or a table. From and To are the lines of
 // the paragraph (or setext heading) it is in, whose shape decides whether it is alone.
+//
+// Only an inline image (![t](path)) is Alone: an editor keeps a line's layout while the lines
+// around it are unchanged, and a reference's (![t][ref]) destination is its definition's, which
+// may be anywhere in the source. The page draws it all the same.
 type EmbedLine struct {
 	Line     int
 	Dest     string
@@ -377,7 +381,8 @@ func EmbedLines(source []byte) []EmbedLine {
 			return // the image shares its line, or spans lines
 		}
 		from, to := lineOf(parent.Span.Start), lineOf(max(parent.Span.End-1, parent.Span.Start))+1
-		alone := parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node && to-from == 1
+		inline := source[end-1] == ')' // ![t](path); a reference's ends with its label's ']'
+		alone := inline && parent.Kind == markdown.KindParagraph && parent.FirstChild == node && parent.LastChild == node && to-from == 1
 		out = append(out, EmbedLine{Line: ln, Dest: string(node.Dest), Alone: alone, From: from, To: to})
 	})
 	return out

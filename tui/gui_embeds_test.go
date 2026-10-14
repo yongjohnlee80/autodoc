@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -338,4 +339,44 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 			t.Error("the text under the embed deleted: it is not drawn as its file again")
 		}
 	})
+}
+
+// An embed by reference (![data][file]) stays as written in the Rendered view (Lector #175 r1 A2):
+// its destination is its definition's, which may be anywhere in the note, and the editor keeps a
+// line's layout while the lines around it are unchanged. The page still draws it.
+func TestAnEmbedByReferenceStaysAsWritten(t *testing.T) {
+	notes, _ := embedNote(t, nil)
+	r := notes.Renderer(nil)(NoteRendererSpec{})
+	for _, lines := range [][]string{
+		{"# Note", "", "![data][file]", "", "[file]: note/data.csv"},
+		{"# Note", "", "![data][]", "", "[data]: note/data.csv"},
+		{"# Note", "", "![data]", "", "[data]: note/data.csv"},
+	} {
+		if _, bl := layOut(r, lines, 2, false, nil); bl.Picture != nil {
+			t.Errorf("%q was drawn as its file", lines[2])
+		}
+	}
+}
+
+// Finding a note's embeds costs what its length does (Lector #175 r1 A1): Blocks on five times the
+// paragraphs holding an image allocates about five times as much, not twenty-five.
+func TestBlocksScaleWithTheNote(t *testing.T) {
+	notes, _ := embedNote(t, nil)
+	r := notes.Renderer(nil)(NoteRendererSpec{})
+	allocated := func(paragraphs int) uint64 {
+		lines := strings.Split(strings.Repeat("![flow](flow.mmd)\ncontinuation\n\n", paragraphs), "\n")
+		r.Blocks(lines, 0, len(lines)) // warm
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		blocks := r.Blocks(lines, 0, len(lines))
+		runtime.ReadMemStats(&after)
+		if len(blocks) != 2*paragraphs+1 {
+			t.Fatalf("%d paragraphs: %d blocks, want each paragraph one and its blank", paragraphs, len(blocks))
+		}
+		return after.TotalAlloc - before.TotalAlloc
+	}
+	small, large := allocated(1000), allocated(5000)
+	if ratio := float64(large) / float64(small); ratio > 10 {
+		t.Errorf("5× the paragraphs allocated %.1f× the bytes (%d vs %d): Blocks grows faster than the note", ratio, large, small)
+	}
 }

@@ -359,8 +359,9 @@ func TestEmbedMarkdownIsTheInjectedBlock(t *testing.T) {
 
 // A line that holds only an image is found as the page's parser reads it: alone in its paragraph
 // beside a heading or a blank, with a destination in balanced parentheses or a title; not alone in
-// a paragraph of more lines, nor in a setext heading, which are named by their lines; and not at
-// all when it shares its line, is in code, or is a list item.
+// a paragraph of more lines, nor in a setext heading, which are named by their lines, nor by
+// reference, whose destination is its definition's; and not at all when it shares its line, is in
+// code, or is a list item.
 func TestEmbedLinesAreTheParsersImages(t *testing.T) {
 	source := strings.Join([]string{
 		"# Note",              // 0
@@ -382,6 +383,10 @@ func TestEmbedLinesAreTheParsersImages(t *testing.T) {
 		"    ![g](g.mmd)",     // 16: indented code
 		"",                    // 17
 		"- ![h](h.mmd)",       // 18: a list item
+		"",                    // 19
+		"![r][ref]",           // 20: by reference: its destination is elsewhere
+		"",                    // 21
+		"[ref]: r.mmd",        // 22
 	}, "\n")
 	want := []export.EmbedLine{
 		{Line: 1, Dest: "a.mmd", Alone: true, From: 1, To: 2},
@@ -389,6 +394,7 @@ func TestEmbedLinesAreTheParsersImages(t *testing.T) {
 		{Line: 6, Dest: "c.csv", Alone: true, From: 6, To: 7},
 		{Line: 8, Dest: "d.mmd", From: 8, To: 10},
 		{Line: 11, Dest: "e.mmd", From: 11, To: 13},
+		{Line: 20, Dest: "r.mmd", From: 20, To: 21},
 	}
 	if got := export.EmbedLines([]byte(source)); !reflect.DeepEqual(got, want) {
 		t.Errorf("embed lines:\n got %+v\nwant %+v", got, want)
