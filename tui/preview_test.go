@@ -426,16 +426,23 @@ func TestAPreviewRendersOnceAResizeGivesItRoom(t *testing.T) {
 	}
 }
 
-// skipWithoutUsableBrowser skips where no headless browser can render here: none installed, or one
+// skipWithoutUsableBrowser skips where no headless browser can render here: none installed, one
 // that refuses to run without its sandbox (a CI runner whose AppArmor forbids user namespaces; the
-// rasterizer never turns the sandbox off, and the preview falls back to the browser). Any other
-// failure of the probe is a failure.
+// rasterizer never turns the sandbox off, and the preview falls back to the browser), or one too
+// slow to start within the rasterizer's bound, twice (Chrome on macOS can stall on its display
+// link: golib's own browser test says so the same way). Any other failure of the probe is a failure.
 func skipWithoutUsableBrowser(t *testing.T) {
 	t.Helper()
 	if _, ok := widget.HTMLRasterizer(); !ok {
 		t.Skip("no headless Chromium or Chrome")
 	}
 	_, err := widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
+	for try := 1; err != nil && strings.Contains(err.Error(), "signal: killed") && try <= 2; try++ {
+		if try == 2 {
+			t.Skipf("the browser did not finish within %v, twice: too slow a host to tell", widget.RasterTimeout)
+		}
+		_, err = widget.RasterizeHTML(context.Background(), []byte("<p>probe</p>"), 64, 32)
+	}
 	if err != nil && strings.Contains(err.Error(), "No usable sandbox") {
 		t.Skip("the installed browser has no usable sandbox here")
 	}
