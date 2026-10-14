@@ -120,6 +120,8 @@ type Engine struct {
 	domainGates map[string]Gate
 	envs        map[*lua.LTable]bool
 	base        *lua.LTable
+	// handlers are on's, by event (events.go)
+	handlers map[string][]*lua.LFunction
 }
 
 // Registration is one command{…} as a host's registrar takes it: its id and title, the file that
@@ -183,9 +185,11 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 		L.SetGlobal(name, lua.LNil)
 	}
 	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location,
-		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]bool{}}
+		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]bool{},
+		handlers: map[string][]*lua.LFunction{}}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
+	L.SetField(e.global, "on", L.NewFunction(e.luaOn))
 	L.SetField(e.global, "notify", L.NewFunction(func(L *lua.LState) int {
 		if e.notify != nil {
 			e.notify(L.CheckString(1))

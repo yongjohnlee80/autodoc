@@ -57,3 +57,42 @@ func TestAGatedScriptAsksAndIsHeld(t *testing.T) {
 		t.Fatalf("a.md is %q: the refused write wrote", got)
 	}
 }
+
+// TestAnOldDaemonsVerbsFailClosed: contracts without an effect (a daemon older than effects) give a
+// gated script nothing, whatever it was granted: doc.remove is not settings' to cover.
+func TestAnOldDaemonsVerbsFailClosed(t *testing.T) {
+	old := decodeVerbs(map[string]any{"verbs": []any{
+		map[string]any{"verb": "doc.remove", "audience": "user", "params": []any{}},
+		map[string]any{"verb": "doc.read", "audience": "agent", "params": []any{}, "effect": "read"},
+	}})
+	if old["doc.remove"].effect != "" || old["doc.read"].effect != "read" {
+		t.Fatalf("decoded %+v", old)
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := attached(t, d)
+	r.waitNamespaces(t)
+	onLoop(r, func() bool {
+		// as an old daemon answers sys.contracts: no effects
+		for k, v := range r.h.scripting.verbs {
+			v.effect = ""
+			r.h.scripting.verbs[k] = v
+		}
+		r.h.prefs.luaGrants = map[string]map[string]bool{"pkg": {"settings": true, "workspace.read": true, "workspace.write": true}}
+		return true
+	})
+	if err := onLoop(r, func() error {
+		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.command{ name = "rm", run = function(ed)
+  local ok, err = autodoc.call("doc.remove", {autodoc.current_workspace(), "a.md", ""})
+  local rok, rerr = autodoc.doc.read(autodoc.current_workspace(), "a.md")
+  ed:insert(tostring(ok) .. "|" .. tostring(err) .. "|" .. tostring(rok) .. "|" .. tostring(rerr))
+end }`))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r.page("", 1, 1)
+	r.mustRun(t, "rm")
+	r.wantText(t, ":rm on an old daemon", "nil|refused: call's effect is not known, so no grant covers it|nil|refused: read's effect is not known, so no grant covers it")
+	if got := d.read(t, "kb", "a.md"); got != "kestrel\n" {
+		t.Fatalf("a.md is %q: the unclassified remove ran", got)
+	}
+}

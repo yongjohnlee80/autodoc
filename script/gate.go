@@ -31,7 +31,13 @@ type Grants interface {
 	Request(script string, capabilities []string)
 }
 
-// Gate names the capability a call of a gated function needs, "" for none. name is the function's
+// Unclassified is a Gate's answer for a call it cannot classify (a daemon verb whose effect the
+// daemon does not say): refused whatever the script was granted, since no grant can be known to
+// cover it.
+const Unclassified = "\x00unclassified"
+
+// Gate names the capability a call of a gated function needs, "" for none, Unclassified for one it
+// cannot say. name is the function's
 // key in its table ("call", "read"); L holds the call's arguments, from 1, for a gate that depends
 // on them (autodoc.call: its verb).
 type Gate func(name string, L *lua.LState) string
@@ -127,7 +133,12 @@ func (e *Engine) proxy(real *lua.LTable, script string, grants Grants, gateOf fu
 // and does nothing; any other is fn's.
 func (e *Engine) gated(fn *lua.LFunction, name string, g Gate, script string, grants Grants) *lua.LFunction {
 	return e.L.NewFunction(func(L *lua.LState) int {
-		if c := g(name, L); c != "" && !grants.Granted(script, c) {
+		switch c := g(name, L); {
+		case c == Unclassified:
+			L.Push(lua.LNil)
+			L.Push(lua.LString(fmt.Sprintf("refused: %s's effect is not known, so no grant covers it", name)))
+			return 2
+		case c != "" && !grants.Granted(script, c):
 			L.Push(lua.LNil)
 			L.Push(lua.LString(fmt.Sprintf("needs %s: not granted", c)))
 			return 2

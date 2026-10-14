@@ -222,16 +222,20 @@ func (s *scripting) define(verbs map[string]luaVerb) {
 	}
 }
 
-// capabilityOf is the capability a gated script needs to call verb: its effect's, and settings for
-// a verb whose effect is not known (an older daemon, or no contracts yet), the strictest.
+// capabilityOf is the capability a gated script needs to call verb: its effect's. A verb whose
+// effect is not known (an older daemon, no contracts yet, a verb it does not list) is refused
+// outright, script.Unclassified: mapped to any one capability, a grant of it could cover what it
+// does not (an old daemon's doc.remove under settings).
 func (s *scripting) capabilityOf(verb string) string {
 	switch s.verbs[verb].effect {
 	case "read":
 		return "workspace.read"
 	case "write":
 		return "workspace.write"
+	case "settings":
+		return "settings"
 	}
-	return "settings"
+	return script.Unclassified
 }
 
 func clearTable(t *lua.LTable) {

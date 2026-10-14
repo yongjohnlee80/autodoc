@@ -159,3 +159,18 @@ end }`)); err != nil {
 		t.Fatalf("a gated callback: %v %q", err, *said)
 	}
 }
+
+// A call its gate cannot classify is refused whatever the script was granted.
+func TestAnUnclassifiedCallIsRefusedWhateverIsGranted(t *testing.T) {
+	e, g, said := gatedEngine(t)
+	e.SetFunction("odd", func(L *lua.LState) int { L.Push(lua.LString("ran")); return 1 })
+	e.SetGate("odd", func(string, *lua.LState) string { return Unclassified })
+	g.granted["pkg"] = map[string]bool{Unclassified: true, "settings": true, "workspace.write": true}
+	if err := e.LoadGated("pkg", "pkg.lua", []byte(`editor.requires{"settings"}
+editor.command{ name = "odd", run = function(ed) local a, b = editor.odd(); editor.notify(tostring(a) .. "|" .. tostring(b)) end }`), g); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.core.RunCommand("odd"); err != nil || strings.Join(*said, ",") != "nil|refused: odd's effect is not known, so no grant covers it" {
+		t.Fatalf("%v %q", err, *said)
+	}
+}
