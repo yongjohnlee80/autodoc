@@ -46,6 +46,9 @@ type asker struct {
 	pending       bool
 	answerClosing bool // accepted/rejected already answered; its following closed is notification only
 	stopped       bool
+	// onIdle hears that the card is free again, once an answer left no question open: a queue of
+	// questions waiting their turn (the Lua grants, luagate.go) asks its next one then
+	onIdle func()
 }
 
 func newAsker(c Core) *asker { return &asker{c: c} }
@@ -103,6 +106,14 @@ func (a *asker) accepted() {
 	if yes != nil {
 		yes()
 	}
+	a.idle()
+}
+
+// idle tells onIdle the card is free, when the answer's callback asked nothing new.
+func (a *asker) idle() {
+	if !a.pending && !a.stopped && a.onIdle != nil {
+		a.onIdle()
+	}
 }
 
 func (a *asker) rejected() {
@@ -130,6 +141,7 @@ func (a *asker) cancelCurrent() {
 	if cancel != nil {
 		cancel()
 	}
+	a.idle()
 }
 
 // Stopping retires pending work while the host is stopping. Stopped is the

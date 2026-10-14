@@ -52,6 +52,9 @@ func (h *Host) askLuaGrants() {
 	if !h.luaPrefsRead || h.luaAsking {
 		return
 	}
+	if h.asker.pending {
+		return // another card is open: a grant waits its turn rather than replace it (onIdle resumes)
+	}
 	for len(h.luaAsks) > 0 {
 		a := h.luaAsks[0]
 		h.luaAsks = h.luaAsks[1:]
