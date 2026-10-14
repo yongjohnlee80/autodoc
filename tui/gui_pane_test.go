@@ -279,3 +279,68 @@ func TestViewDiagramAgainDropsTheLastPicture(t *testing.T) {
 		return !has && loading
 	})
 }
+
+// A View diagram whose native check is withdrawn before it answers shows nothing: the dialog
+// closed, or a newer preview asked for, on the same turn. An engine changed meanwhile draws it:
+// mermaid.js, not golib.
+func TestAWithdrawnNativeViewDiagramStaysWithdrawn(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		withdraw func(h *Host)
+	}{
+		{"the dialog closed", func(h *Host) { h.previewClosed() }},
+		{"a newer preview", func(h *Host) { h.ticket(&h.previewGen, TicketLocal) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, browser := range []bool{true, false} { // the chosen engine; no browser to draw with
+				r := runGUINote(t, fencedNote, func(h *Host) {
+					h.browserOverride = func() bool { return browser }
+					h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+					h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+						return tallPage(t, p.Width, 300), nil
+					}
+					if browser {
+						h.setMermaidEngine("native")
+					}
+				})
+				before := onLoop(r, func() uint64 { return r.h.dialogSeq })
+				r.h.p.Post(func() { r.h.previewDiagram(); tc.withdraw(r.h) })
+				time.Sleep(500 * time.Millisecond) // golib lays a flowchart out in milliseconds
+				seq, native := onLoop2(r)
+				if seq != before || native {
+					t.Errorf("browser %v: a withdrawn preview opened the dialog (%d opens) or drew natively (%v)", browser, seq-before, native)
+				}
+			}
+		})
+	}
+
+	r := runGUINote(t, fencedNote, func(h *Host) {
+		h.browserOverride = func() bool { return true }
+		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			return tallPage(t, p.Width, 300), nil
+		}
+		h.setMermaidEngine("native")
+	})
+	r.h.p.Post(func() { r.h.previewDiagram(); r.h.setMermaidEngine("mermaidjs") })
+	r.s.WaitFor(t, "mermaid.js's image, the engine changed meanwhile", func(string) bool {
+		return onLoop(r, func() bool {
+			img, _ := r.h.p.Tree().Source("App.diagramImageShown")
+			native, _ := r.h.p.Tree().Source("App.diagramNativeShown")
+			return img.Raw == "true" && native.Raw == "false" && r.h.lastDiagramImage()
+		})
+	})
+}
+
+// onLoop2 is the dialogs opened so far and whether the diagram is drawn natively.
+func onLoop2(r *running) (uint64, bool) {
+	s := onLoop(r, func() [2]uint64 {
+		native, _ := r.h.p.Tree().Source("App.diagramNativeShown")
+		n := uint64(0)
+		if native.Raw == "true" {
+			n = 1
+		}
+		return [2]uint64{r.h.dialogSeq, n}
+	})
+	return s[0], s[1] == 1
+}

@@ -157,14 +157,21 @@ const diagramMaxHeight = 4096
 func (h *Host) showDiagram(source string) {
 	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. A window without a
 	// browser, or one whose File › Preview option is the native engine, draws it natively, by
-	// golib's Mermaid, where golib draws its type; else mermaid.js, else its source
+	// golib's Mermaid, where golib draws its type; else mermaid.js, else its source. Whether golib
+	// draws it is learned off the loop: a newer preview, or the dialog closed, meanwhile withdraws
+	// this one (its ticket), and an engine changed meanwhile is the one it is drawn by
+	tk := h.ticket(&h.previewGen, TicketLocal)
 	if h.mermaidNative() {
 		do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
-			if err == nil {
+			switch {
+			case !tk.Current():
+			case !h.mermaidNative():
+				h.showDiagramImage(source, "")
+			case err == nil:
 				h.showDiagramNative(source, "")
-				return
+			default:
+				h.showDiagramImage(source, "not drawn natively ("+err.Error()+")")
 			}
-			h.showDiagramImage(source, "not drawn natively ("+err.Error()+")")
 		})
 		return
 	}
@@ -174,11 +181,13 @@ func (h *Host) showDiagram(source string) {
 		return
 	}
 	do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
-		if err == nil {
+		switch {
+		case !tk.Current():
+		case err == nil:
 			h.showDiagramNative(source, why)
-			return
+		default:
+			h.showDiagramText(source, "Diagram source · "+why+"; not drawn natively ("+err.Error()+")")
 		}
-		h.showDiagramText(source, "Diagram source · "+why+"; not drawn natively ("+err.Error()+")")
 	})
 }
 
