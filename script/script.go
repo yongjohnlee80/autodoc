@@ -338,14 +338,21 @@ func (e *Engine) protect(name string, fn *lua.LFunction, args ...lua.LValue) err
 }
 
 // failure is err, a script's failure under ctx, as its message, named name: the deadline said as
-// such, and a Lua error by its value, without the stack trace a notification has no room for.
+// such, and a Lua error by its value, without the stack trace a notification has no room for. The
+// deadline is asked again after the value is described: describing a table runs its __tostring,
+// script code under the same deadline, and a formatter that ran out the time is the deadline's.
 func (e *Engine) failure(name string, ctx context.Context, err error) error {
+	stopped := fmt.Errorf("%s: the script ran past %s and was stopped", name, e.timeout)
 	if ctx.Err() != nil {
-		return fmt.Errorf("%s: the script ran past %s and was stopped", name, e.timeout)
+		return stopped
 	}
 	var lerr *lua.ApiError
 	if errors.As(err, &lerr) {
-		return fmt.Errorf("%s: %s", name, e.describe(lerr.Object))
+		msg := e.describe(lerr.Object)
+		if ctx.Err() != nil {
+			return stopped
+		}
+		return fmt.Errorf("%s: %s", name, msg)
 	}
 	return fmt.Errorf("%s: %w", name, err)
 }

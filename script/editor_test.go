@@ -189,7 +189,7 @@ end }`, "t")
 
 // An error is said by its value: a table by __tostring, by message, or by its fields; nil and
 // other values by their type. A file that fails to load is said without Lua's stack trace, and one
-// that runs past the deadline says so.
+// that runs past the deadline says so, as does an error whose __tostring runs past it.
 func TestErrorsAreSaidClearly(t *testing.T) {
 	e, core, _ := engine(t, "")
 	if err := e.Load("errs.lua", []byte(`
@@ -226,7 +226,20 @@ end }`)); err != nil {
 	if err == nil || strings.Contains(err.Error(), "stack traceback") || !strings.HasPrefix(err.Error(), "syntax.lua: ") {
 		t.Fatalf("a syntax error: %q", err)
 	}
+	// an error table whose __tostring runs out the time is the deadline's, run or loaded
+	const slow = `setmetatable({}, {__tostring = function() while true do end end})`
+	if err := e.Load("slow.lua", []byte(`editor.command{ name = "slow", run = function(ed) error(`+slow+`) end }`)); err != nil {
+		t.Fatal(err)
+	}
 	start := time.Now()
+	if err := core.RunCommand("slow"); err == nil || err.Error() != "slow: the script ran past 300ms and was stopped" || time.Since(start) > 2*time.Second {
+		t.Fatalf("a formatter past the deadline, run: %v after %v", err, time.Since(start))
+	}
+	start = time.Now()
+	if err := e.Load("slowload.lua", []byte(`error(`+slow+`)`)); err == nil || err.Error() != "slowload.lua: the script ran past 300ms and was stopped" || time.Since(start) > 2*time.Second {
+		t.Fatalf("a formatter past the deadline, loaded: %v after %v", err, time.Since(start))
+	}
+	start = time.Now()
 	err = e.Load("spin.lua", []byte("while true do end"))
 	if err == nil || err.Error() != "spin.lua: the script ran past 300ms and was stopped" || time.Since(start) > 2*time.Second {
 		t.Fatalf("a runaway load: %v after %v", err, time.Since(start))
