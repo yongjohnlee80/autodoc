@@ -83,6 +83,10 @@ for _, h := range res.Hits {
   - `Request.Mode` is `""` (auto: hybrid when vectors can answer, else words), `"lexical"` or
     `"semantic"`.
   - `Limit` is 1 to 200; 0 is 20.
+  - `Group` is `""` or `"chunk"` (the default: up to three matching chunks per document), or
+    `"document"` (the highest-scoring chunk per document). `Limit` counts the returned chunks or
+    documents respectively. Grouping happens before the result limit, within the same scoped
+    search snapshot; it does not merge scores or change retrieval's bounded candidate pool.
   - A request with no words and only a filter lists what the filter admits.
 - **`Result`** has the hits, `ModeUsed`, and `Semantic`:
   - `"ready"`: every record can be found by meaning;
@@ -100,6 +104,7 @@ Each is a sentinel; test with `errors.Is`.
 | `search.ErrProtectedFacet` | The query or the filter names an access field. |
 | `search.ErrUnknownFacet` | The filter has a facet; a tenant keeps none but its access fields. Filter by tags or paths. |
 | `search.ErrLimit` | The limit is below 0 or above the most. |
+| `search.ErrGroup` | The group isn't `""`, `"chunk"` or `"document"`. |
 | `search.ErrNoPolicy` | The tenant has no policy: the server hasn't recorded it (check the tenant's name and that the server has started). |
 | `gsearch.ErrUnknownMode` | The mode isn't one of the three. |
 | `gsearch.ErrSwitching`, `gsearch.ErrEmbedFailed` | Semantic mode only: it can't answer by meaning now. Auto mode answers by words instead. |
@@ -127,6 +132,7 @@ curl -s http://127.0.0.1:8730/v1/search \
 | `mode` | | `"auto"` (the default), `"lexical"` or `"semantic"`. |
 | `filter` | | `{"tags": […], "paths": […]}`: narrows within the scope. |
 | `limit` | | 1 to 200; 0 or absent is 20. |
+| `group` | | `"chunk"` (default), or `"document"`: one hit per document, its highest-scoring chunk. `limit` counts documents in this mode. |
 
 The body is one JSON object of at most 64 KiB, with no other field.
 
@@ -143,6 +149,11 @@ The body is one JSON object of at most 64 KiB, with no other field.
   It's `""` for a record indexed before the server kept source ids (AutoDoc before M3), until the
   tenant's next full refresh writes it.
 - **`path`** is the view's `export` path (`track/{{.id}}.md`).
+  Within the requested tenant it identifies the document. By default, hits are chunks: the same
+  path can appear up to three times, with different byte ranges. Send `"group": "document"` for
+  one row per path. The row keeps the best chunk's snippet, byte range, score and `via`; it has no
+  combined score or extra snippets. `source_id` links to the source row, but is not the grouping
+  key (older records may have an empty id).
 - **`via`** says which ways found the hit: `lexical`, `semantic`, or `facet` for a filter-only list.
 - **`relevance`** is 0 to 1, comparable across queries; **`score`** orders hits within one answer.
 
@@ -153,8 +164,8 @@ caller without a valid token learns nothing about tenants or bodies:
 
 | Status | `code` | When |
 |---|---|---|
-| 404 | `not_found` | Any path but `/v1/search`. |
-| 405 | `method_not_allowed` | Any method but POST (`Allow: POST`). |
+| 404 | `not_found` | Any path but `/v1/search`, `/v1/health` or `/v1/status`. |
+| 405 | `method_not_allowed` | A method other than POST for `/v1/search` (`Allow: POST`), or GET for `/v1/health` and `/v1/status` (`Allow: GET`). |
 | 401 | `unauthorized` | No `Authorization: Bearer …`, or no client has that token (`WWW-Authenticate: Bearer`). |
 | 415 | `unsupported_media_type` | The body isn't `application/json`. |
 | 413 | `too_large` | The body is over 64 KiB. |
@@ -162,11 +173,14 @@ caller without a valid token learns nothing about tenants or bodies:
 | 400 | `bad_request` | Not one JSON search request: an unknown field, a second value, a query over 1 KiB. |
 | 403 | `forbidden` | The token isn't granted the tenant. A tenant that doesn't exist answers the same. |
 | 403 | `scope_forbidden` | A scope field or value the token isn't granted. |
-| 400 | `scope_required`, `protected_facet`, `unknown_facet`, `bad_limit`, `bad_mode` | The library's refusals, above. |
+| 400 | `scope_required`, `protected_facet`, `unknown_facet`, `bad_limit`, `bad_group`, `bad_mode` | The library's refusals, above. |
 | 503 | `switching` | Semantic mode while the tenant switches models (`Retry-After`). Use auto mode to be answered by words meanwhile. |
 | 502 | `embed_failed` | Semantic mode, and the query couldn't be embedded. |
 | 503 | `unavailable` | The search didn't finish within 25 s, or the server is stopping (`Retry-After`). |
 | 500 | `internal` | Anything else. The cause is in the server's log, never in the answer. |
+
+This table describes search requests. `GET /v1/health` is public, and `GET /v1/status` requires an
+operator's token; their answers and errors are described in [operations](operations.md).
 
 ### Time and shutdown
 
@@ -179,8 +193,11 @@ caller without a valid token learns nothing about tenants or bodies:
 ## Highlighting
 
 A snippet marks each matched word between `\u0002` and `\u0003` (golib's highlight markers): control
-characters no document text contains. To show them as `<mark>`, split on the markers and escape
-**every** segment, so a record's own text can never inject markup:
+characters no document text contains. Punctuation at a matched token's edges stays outside the markers: `word.` is
+`\u0002word\u0003.`. Interior punctuation (such as the apostrophe in `don't`) stays with the word.
+
+To show them as `<mark>`, split on the markers and escape **every** segment, so a record's own text
+can never inject markup:
 
 ```js
 function highlight(snippet) {

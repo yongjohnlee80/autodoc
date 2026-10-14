@@ -177,6 +177,7 @@ type (
 		Scope  map[string][]string `json:"scope"`
 		Filter filter              `json:"filter"`
 		Limit  int                 `json:"limit"`
+		Group  string              `json:"group"`
 	}
 	filter struct {
 		Tags   []string            `json:"tags"`
@@ -278,7 +279,7 @@ func refuse(status int, code, message string) answer {
 // answer runs the request's checks and its search, in order.
 func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Request, queryLen *int) (answer, response) {
 	if r.URL.Path != Path {
-		return refuse(http.StatusNotFound, "not_found", "the API answers "+Path), response{}
+		return refuse(http.StatusNotFound, "not_found", "the API answers "+Path+", "+HealthPath+" and "+StatusPath), response{}
 	}
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
@@ -323,7 +324,7 @@ func (h *Handler) answer(ctx context.Context, w http.ResponseWriter, r *http.Req
 			}
 		}
 	}
-	res, err := s.Search(ctx, search.Scope(req.Scope), search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit,
+	res, err := s.Search(ctx, search.Scope(req.Scope), search.Request{Query: req.Query, Mode: gsearch.Mode(req.Mode), Limit: req.Limit, Group: req.Group,
 		Filter: gsearch.Filter{Tags: req.Filter.Tags, Paths: req.Filter.Paths, Facets: req.Filter.Facets}})
 	if err != nil {
 		e := failed(ctx, err)
@@ -473,6 +474,8 @@ func failed(ctx context.Context, err error) answer {
 		return refuse(http.StatusBadRequest, "unknown_facet", err.Error())
 	case errors.Is(err, search.ErrLimit):
 		return refuse(http.StatusBadRequest, "bad_limit", err.Error())
+	case errors.Is(err, search.ErrGroup):
+		return refuse(http.StatusBadRequest, "bad_group", err.Error())
 	case errors.Is(err, gsearch.ErrUnknownMode):
 		return refuse(http.StatusBadRequest, "bad_mode", err.Error())
 	case errors.Is(err, gsearch.ErrSwitching):

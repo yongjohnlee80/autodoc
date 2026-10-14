@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -92,6 +93,63 @@ func hits(r Result) []string {
 }
 
 var scopeA = Scope{"label_id": {"A"}}
+
+// Several matching chunks must not consume the document limit. Scope remains applied before
+// retrieval, including semantic hits; a different export path with the same source id is distinct.
+func TestDocumentGroupingBeforeTheLimit(t *testing.T) {
+	f := newFixture(t)
+	chunks := []gsearch.Chunk{
+		{Ord: 0, Body: "crimson river.", ByteEnd: 14},
+		{Ord: 1, Body: "crimson grapes!", ByteStart: 14, ByteEnd: 28},
+		{Ord: 2, Body: "crimson fox.", ByteStart: 28, ByteEnd: 40},
+	}
+	if _, err := f.st.Put(f.ctx, pgstore.Document{Path: "track/1.md", SourceID: "1", Tags: []string{"song"},
+		Facets: map[string][]string(scopeA), Chunks: chunks}); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range chunks {
+		if err := f.st.Embed(f.ctx, model, []pgstore.Embedding{{TextHash: c.TextHash(), Vec: searchtest.Embed(c.Body)}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if ready, err := f.st.MarkReady(f.ctx, "track/1.md", model); err != nil || !ready {
+		t.Fatalf("mark ready: %v, %v", ready, err)
+	}
+	f.put("track/2.md", "1", map[string][]string(scopeA), "crimson anthem.")
+	s := f.open(qe)
+	for _, mode := range []gsearch.Mode{gsearch.ModeLexical, gsearch.ModeSemantic, gsearch.ModeAuto} {
+		ungrouped, err := s.Search(f.ctx, scopeA, Request{Query: "crimson", Mode: mode})
+		if err != nil || len(ungrouped.Hits) < 4 {
+			t.Fatalf("%s chunks: %v, %v", mode, hits(ungrouped), err)
+		}
+		for _, group := range []string{"", "chunk"} {
+			got, err := s.Search(f.ctx, scopeA, Request{Query: "crimson", Mode: mode, Limit: 2, Group: group})
+			if err != nil || len(got.Hits) != 2 || got.Hits[0].Path != ungrouped.Hits[0].Path || got.Hits[1].Path != ungrouped.Hits[1].Path {
+				t.Fatalf("%s %q: %v, %v", mode, group, hits(got), err)
+			}
+		}
+		got, err := s.Search(f.ctx, scopeA, Request{Query: "crimson", Mode: mode, Limit: 2, Group: "document"})
+		if err != nil || len(got.Hits) != 2 || got.Hits[0].Path == got.Hits[1].Path {
+			t.Fatalf("%s documents: %v, %v", mode, hits(got), err)
+		}
+		for _, h := range got.Hits {
+			best := ungrouped.Hits[slices.IndexFunc(ungrouped.Hits, func(x Hit) bool { return x.Path == h.Path })]
+			if h.ByteStart != best.ByteStart || h.Score != best.Score || h.SourceID != "1" || h.Path == "track/3.md" {
+				t.Errorf("%s: not the best scoped chunk: %+v, want %+v", mode, h, best)
+			}
+			if mode != gsearch.ModeSemantic && !strings.Contains(h.Snippet, "\x02crimson\x03") {
+				t.Errorf("punctuation inside highlight: %q", h.Snippet)
+			}
+		}
+	}
+	if _, err := s.Search(f.ctx, scopeA, Request{Group: "unknown"}); !errors.Is(err, ErrGroup) {
+		t.Errorf("unknown group: %v", err)
+	}
+	got, err := s.Search(f.ctx, scopeA, Request{Filter: gsearch.Filter{Tags: []string{"song"}}, Group: "document", Limit: 2})
+	if err != nil || len(got.Hits) != 2 || got.Hits[0].Path == got.Hits[1].Path {
+		t.Errorf("grouped listing: %v, %v", hits(got), err)
+	}
+}
 
 // A search answers only within its scope, whichever way it finds: by words, by meaning (a query
 // nearest to a B track answers A tracks only), and by a filter alone; a scope of A and B answers

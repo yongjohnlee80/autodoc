@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/errs"
@@ -38,7 +39,8 @@ type Request struct {
 	// Filter narrows by tags and path prefixes. Its Facets must be empty: a tenant keeps no facet
 	// but its access fields, and those are the scope's alone (ErrProtectedFacet, ErrUnknownFacet).
 	Filter gsearch.Filter
-	Limit  int // 0 is the default (20); above the most (200) is refused
+	Limit  int    // 0 is the default (20); above the most (200) is refused
+	Group  string // "" or "chunk" (default), or "document": the best chunk per export path
 }
 
 // Result is a search's answer: golib's, each hit with the source row it was rendered from.
@@ -69,6 +71,8 @@ var (
 	ErrUnknownFacet = errs.Sentinel(errs.ErrInvalidArgument, "search: the tenant keeps no such facet")
 	// ErrLimit is a limit below zero or above the most.
 	ErrLimit = errs.Sentinel(errs.ErrInvalidArgument, "search: the limit is out of range")
+	// ErrGroup is a grouping mode other than the default chunks or one best chunk per document.
+	ErrGroup = errs.Sentinel(errs.ErrInvalidArgument, "search: the group must be chunk or document")
 	// ErrNoPolicy is a tenant the server has recorded no policy for: it is not searchable.
 	ErrNoPolicy = pgstore.ErrNoPolicy
 )
@@ -99,9 +103,10 @@ func WithLimits(def, most int) Option {
 
 // Searcher searches one tenant. It is safe for concurrent use.
 type Searcher struct {
-	st  *pgstore.Store
-	eng *gsearch.Engine[int64, *pgstore.View]
-	max int
+	st     *pgstore.Store
+	eng    *gsearch.Engine[int64, *pgstore.View]
+	docEng *gsearch.Engine[int64, *pgstore.View]
+	max    int
 }
 
 // Open binds a Searcher to tenant over conn: a pool whose connections have the server's schema on
@@ -125,7 +130,8 @@ func Open(ctx context.Context, conn dao.DataConn, tenant string, qe gsearch.Quer
 	if qe != nil {
 		eopts = append(eopts, gsearch.WithQueryEmbedder(qe))
 	}
-	return &Searcher{st: st, eng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, eopts...), max: o.max}, nil
+	return &Searcher{st: st, eng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, eopts...),
+		docEng: gsearch.NewEngine[int64, *pgstore.View](scoped{st}, append(eopts, gsearch.WithPerDocument(1))...), max: o.max}, nil
 }
 
 // Search answers r within scope.
@@ -137,6 +143,9 @@ func Open(ctx context.Context, conn dao.DataConn, tenant string, qe gsearch.Quer
 func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, error) {
 	if r.Limit < 0 || r.Limit > s.max {
 		return Result{}, fmt.Errorf("%w: %d (0 to %d)", ErrLimit, r.Limit, s.max)
+	}
+	if r.Group != "" && r.Group != "chunk" && r.Group != "document" {
+		return Result{}, fmt.Errorf("%w: %q", ErrGroup, r.Group)
 	}
 	check := func(p pgstore.Policy, access map[string][]string) error { return checkRequest(p, access, r) }
 	p, err := s.st.Policy(ctx)
@@ -150,7 +159,11 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 		return Result{}, err
 	}
 	c := &call{scope: scope, check: check}
-	res, err := s.eng.Search(context.WithValue(ctx, callKey{}, c), gsearch.Query{Text: r.Query, Mode: r.Mode, Limit: r.Limit, Filter: r.Filter})
+	eng := s.eng
+	if r.Group == "document" {
+		eng = s.docEng
+	}
+	res, err := eng.Search(context.WithValue(ctx, callKey{}, c), gsearch.Query{Text: r.Query, Mode: r.Mode, Limit: r.Limit, Filter: r.Filter})
 	if err != nil {
 		return Result{}, refusal(err)
 	}
@@ -162,9 +175,41 @@ func (s *Searcher) Search(ctx context.Context, scope Scope, r Request) (Result, 
 			// under the scope this search checked, so nothing of it is answered
 			return Result{}, fmt.Errorf("search: the hit %s is not among the candidates of its view", h.Path)
 		}
+		h.Snippet = wordHighlights(h.Snippet)
 		out.Hits = append(out.Hits, Hit{Hit: h, SourceID: id})
 	}
 	return out, nil
+}
+
+// wordHighlights keeps the highlighter's match and window, but moves punctuation at a matched
+// token's edges outside the markers. The underlying highlighter already ignores these edges when
+// matching; letters and digits delimit the same word here. Interior punctuation is preserved.
+func wordHighlights(snippet string) string {
+	var out strings.Builder
+	for {
+		before, rest, found := strings.Cut(snippet, gsearch.HighlightStart)
+		out.WriteString(before)
+		if !found {
+			return out.String()
+		}
+		marked, after, closed := strings.Cut(rest, gsearch.HighlightEnd)
+		if !closed {
+			out.WriteString(gsearch.HighlightStart)
+			out.WriteString(rest)
+			return out.String()
+		}
+		edge := func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }
+		left := strings.TrimLeftFunc(marked, edge)
+		word := strings.TrimRightFunc(left, edge)
+		out.WriteString(marked[:len(marked)-len(left)])
+		if word != "" {
+			out.WriteString(gsearch.HighlightStart)
+			out.WriteString(word)
+			out.WriteString(gsearch.HighlightEnd)
+		}
+		out.WriteString(left[len(word):])
+		snippet = after
+	}
 }
 
 // refusal is err with the store's refusal of a scope (pgstore.ErrNoAccess) said as ErrScope.

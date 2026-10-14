@@ -265,6 +265,7 @@ func TestTheSearchsErrorsAreAnsweredByKind(t *testing.T) {
 		{search.ErrProtectedFacet, http.StatusBadRequest, "protected_facet"},
 		{search.ErrUnknownFacet, http.StatusBadRequest, "unknown_facet"},
 		{search.ErrLimit, http.StatusBadRequest, "bad_limit"},
+		{search.ErrGroup, http.StatusBadRequest, "bad_group"},
 		{gsearch.ErrUnknownMode, http.StatusBadRequest, "bad_mode"},
 		{gsearch.ErrSwitching, http.StatusServiceUnavailable, "switching"},
 		{gsearch.ErrEmbedFailed, http.StatusBadGateway, "embed_failed"},
@@ -294,7 +295,7 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 	}}
 	f := &fake{res: res}
 	srv, _, _ := api(t, f)
-	r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "love song", "mode": "lexical", "limit": 5,
+	r := post(t, srv, bearer, "application/json", `{"tenant": "lm-catalog", "query": "love song", "mode": "lexical", "limit": 5, "group": "document",
 		"scope": {"label_id": ["A", "B"]}, "filter": {"tags": ["single"], "paths": ["track/"]}}`)
 	if r.status != http.StatusOK {
 		t.Fatalf("%d %s", r.status, r.body)
@@ -308,7 +309,7 @@ func TestTheAnswerIsTheSearchsResult(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("the answer:\n%+v\nwant\n%+v", got, want)
 	}
-	wantAsked := asked{scope: search.Scope{"label_id": {"A", "B"}}, req: search.Request{Query: "love song", Mode: gsearch.ModeLexical, Limit: 5,
+	wantAsked := asked{scope: search.Scope{"label_id": {"A", "B"}}, req: search.Request{Query: "love song", Mode: gsearch.ModeLexical, Limit: 5, Group: "document",
 		Filter: gsearch.Filter{Tags: []string{"single"}, Paths: []string{"track/"}}}}
 	if f.calls() != 1 || !reflect.DeepEqual(f.asked[0], wantAsked) {
 		t.Errorf("the search was asked %+v, want %+v", f.asked, wantAsked)

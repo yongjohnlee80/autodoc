@@ -44,7 +44,7 @@ func runServer(ctx context.Context, path string, check bool, stdout, stderr io.W
 	if check {
 		return checkServer(ctx, path, cfg, sources, stdout)
 	}
-	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr)), failed: make(chan error, len(sources)+1), version: version}
+	s := &server{ctx: ctx, cfg: cfg, sources: sources, log: logger.New(logger.WithWriter(stderr), logger.WithContext("autodoc-server")), failed: make(chan error, len(sources)+1), version: version}
 	defer s.stops.unwind()
 	for _, step := range serverSteps {
 		if err := step.start(s); err != nil {
