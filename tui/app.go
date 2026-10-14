@@ -187,10 +187,9 @@ type Host struct {
 	browser     func(context.Context, string) error
 	nativeViews func() bool   // whether the backend draws native views (--gui); tests stand in for a GUI
 	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
+	noteFile    func(string)  // told the open note's file (Options.NoteFile); nil: none
 	htmlAsk     *htmlOpen     // the HTML file the open question is about (OpenHTML.qml)
 	pageDir     string        // the root and base the page's resources load from (htmldoc.go)
-	noteDoc     noteDocState  // the note the page shows, rendered (notedoc.go)
-	notePage    func([]byte)  // stands in for the page's SetHTML in tests; nil: the page's
 	// refusedNoted: the open page's refused resource was said (resourceRefused)
 	refusedNoted bool
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the
@@ -302,6 +301,10 @@ type Options struct {
 	// ProgramOptions come after the program's own options (options): a build's choice of how
 	// the document runs, such as tuidecl.WithStyle for the window's native widgets. nil: none.
 	ProgramOptions []tuidecl.ProgramOption
+	// NoteFile is told, as a document opens and before its text reaches the editor, the file on
+	// disk of a note read as Markdown, or "" for any other document: a window build's Rendered view
+	// draws the note's embeds from it. nil: nothing is told.
+	NoteFile func(path string)
 	// Fonts are the window's fonts (--gui's backend); nil in a terminal. FontFamilies lists the
 	// installed families, and DefaultCellFont is the cell font the window draws in by default.
 	Fonts           FontControl
@@ -335,6 +338,7 @@ func newHost(session *Session, opt Options) *Host {
 		fonts:           opt.Fonts,
 		families:        opt.FontFamilies,
 		defaultCellFont: opt.DefaultCellFont,
+		noteFile:        opt.NoteFile,
 		vectors:         newRows(tuidecl.NewListModel("key", "state", "model", "dims", "vectors", "f32", "bits", "keys", "total"), vectorRowOf),
 		jumps:           widget.NewJumpList(0),
 		prefs:           defaultPrefsFor(opt.GUI),

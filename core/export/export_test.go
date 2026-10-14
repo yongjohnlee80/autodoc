@@ -320,6 +320,38 @@ func TestEmbedsAreDrawn(t *testing.T) {
 	}
 }
 
+// An editor's Rendered view draws an embed as Markdown in the line's place, read as the page reads
+// it: a diagram as a mermaid fence (longer than a fence in the file), a table as a Markdown table,
+// its cells on one line with | escaped, and a last row saying what is not shown. An image, a file
+// out of the folder and a missing one have none: the line stays as written.
+func TestEmbedMarkdownIsTheInjectedBlock(t *testing.T) {
+	doc := embedDoc(t, map[string]string{
+		"secret.mmd":         "graph TD\n  secret --> out\n",
+		"docs/flow.mmd":      "graph TD\n  a --> b\n",
+		"docs/ticks.mmd":     "graph TD\n  a[\"```\"] --> b\n",
+		"docs/plan/data.csv": "name,count\nclaims,\"3,000\"\n\"a|b\",\"two\nlines\"\nc,1\nd,2\n",
+		"docs/pic.png":       "\x89PNG",
+	})
+	for _, c := range []struct{ dest, want string }{
+		{"flow.mmd", "```mermaid\ngraph TD\n  a --> b\n```"},
+		{"ticks.mmd", "````mermaid\ngraph TD\n  a[\"```\"] --> b\n````"},
+		{"data.csv", "| name | count |\n| --- | --- |\n| claims | 3,000 |\n| a\\|b | two lines |\n| … 2 more rows |  |"},
+	} {
+		got, ok := export.EmbedMarkdown(doc, c.dest, 2)
+		if !ok || got != c.want {
+			t.Errorf("%s: %q (ok %v), want %q", c.dest, got, ok, c.want)
+		}
+	}
+	for _, dest := range []string{"pic.png", "../secret.mmd", "missing.mmd", "https://example.com/a.mmd"} {
+		if got, ok := export.EmbedMarkdown(doc, dest, 0); ok {
+			t.Errorf("%s: injected %q, want the line as written", dest, got)
+		}
+	}
+	if _, ok := export.EmbedMarkdown("", "flow.mmd", 0); ok {
+		t.Error("with no document an embed was injected")
+	}
+}
+
 // A sparse table, a wide header over short rows, is drawn within the cell bound: what is drawn
 // grows with the file, not with its rows times its widest row; a last row says what is not shown.
 func TestAWideSparseTableIsBounded(t *testing.T) {

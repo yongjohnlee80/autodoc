@@ -226,6 +226,11 @@ The file is looked for beside the note, then in its resources folder (the note's
 must be alone in its paragraph. A file that is missing, too large or of another kind shows its
 title instead.
 
+In the GUI's Rendered view the note stays editable, and a diagram or table embed alone in its
+paragraph is drawn in its line's place, natively, as if the file were written there: a diagram as a
+`mermaid` fence, a table as a Markdown table of 16 rows. With the cursor on the line it is its
+source again. Images are drawn in the preview and the pane.
+
 **Relative links reach their files wherever the page is written.** An HTML export reads each
 link to a path (`[x](notes/a.md#intro)`, `../x.md`, `<my notes/b c.md>`) from the source file's
 own directory and writes it as the `file://` URL of the file it names, percent-encoded (a space,
@@ -547,15 +552,6 @@ chooses the fonts it draws in, and `Ctrl+=` and `Ctrl+-` zoom everything in it t
 On macOS, holding a letter repeats it instead of opening the accent picker, so holding `j` or
 `k` continues moving through the document. AutoDoc sets this preference for its GUI process at
 startup; no `defaults` command is needed, and other apps and saved preferences are unaffected.
-
-**A note's Rendered view is its page in the GUI.** The note is drawn natively as its export is,
-so it matches `File › Preview HTML`:
-- its embeds: a Mermaid diagram, a `.csv` table (16 rows, and the columns that fit the page),
-  an image;
-- its raw HTML and its links.
-
-The page is read-only: `Ctrl+T` shows the note's source to edit, and showing the page again draws
-what was typed. The untitled draft keeps the editable Rendered view, which draws Markdown in place.
 
 **`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
 It shows the note's export drawn natively, with proportional text and the export's own styles, so

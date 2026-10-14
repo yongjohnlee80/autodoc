@@ -58,6 +58,9 @@ type LaunchOptions struct {
 	// ProgramOptions are added to the program's own (Options.ProgramOptions): a build's choice of
 	// how the document runs, such as the native style a window build passes. nil: none.
 	ProgramOptions []tuidecl.ProgramOption
+	// NoteFile is told the open note's file as it opens (Options.NoteFile): --gui's Rendered view
+	// draws its embeds from it. nil: nothing is told.
+	NoteFile func(path string)
 	// Fonts, FontFamilies and DefaultCellFont are the window's fonts (Options.Fonts): --gui's.
 	Fonts           FontControl
 	FontFamilies    func(mono bool) []string
@@ -141,6 +144,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		LuaDir:          filepath.Join(filepath.Dir(configPath), "lua"),
 		ConfigPath:      configPath,
 		ProgramOptions:  o.ProgramOptions,
+		NoteFile:        o.NoteFile,
 		Fonts:           o.Fonts,
 		FontFamilies:    o.FontFamilies,
 		DefaultCellFont: o.DefaultCellFont,

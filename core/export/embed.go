@@ -200,12 +200,53 @@ type tableFit struct {
 // last row says how many rows and columns are not shown. ok is false for a file with no rows, or one
 // that is not CSV.
 func csvTable(data []byte, fit tableFit) (string, bool) {
+	t, ok := csvRows(data, fit)
+	if !ok {
+		return "", false
+	}
+	var b strings.Builder
+	cells := func(tag string, row []string) {
+		b.WriteString("<tr>")
+		for _, cell := range row {
+			b.WriteString("<" + tag + ">" + stdhtml.EscapeString(cell) + "</" + tag + ">")
+		}
+		b.WriteString("</tr>\n")
+	}
+	b.WriteString("<table>\n<thead>\n")
+	cells("th", t.header)
+	b.WriteString("</thead>\n")
+	if len(t.body) > 0 || t.hidden != "" {
+		b.WriteString("<tbody>\n")
+		for _, row := range t.body {
+			cells("td", row)
+		}
+		if t.hidden != "" {
+			b.WriteString(`<tr><td colspan="` + strconv.Itoa(len(t.header)) + `">` + t.hidden + "</td></tr>\n")
+		}
+		b.WriteString("</tbody>\n")
+	}
+	b.WriteString("</table>")
+	return b.String(), true
+}
+
+// csvShown is what a table shows of a CSV file: its header and body rows, each padded or cut to
+// the columns shown, and what is not shown ("… 4 more rows, 2 more columns"; "" for nothing).
+type csvShown struct {
+	header []string
+	body   [][]string
+	hidden string
+}
+
+// csvRows is a CSV file's rows as a table shows them, as fit allows: the columns that fit (one at
+// least, maxTableColumns at most), and fit's rows, as many as maxTableCells allow too. ok is false
+// for a file with no rows, or one that is not CSV.
+func csvRows(data []byte, fit tableFit) (csvShown, bool) {
 	r := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
 	r.FieldsPerRecord = -1
 	r.LazyQuotes = true
 	rows, err := r.ReadAll()
 	if err != nil || len(rows) == 0 {
-		return "", false
+		return csvShown{}, false
 	}
 	columns := 0
 	for _, row := range rows {
@@ -223,21 +264,15 @@ func csvTable(data []byte, fit tableFit) (string, bool) {
 		width = fitting(rows[:1+shown], width, fit.width)
 	}
 	shown = min(shown, maxTableCells/width-1)
-	var b strings.Builder
-	cells := func(tag string, row []string) {
-		b.WriteString("<tr>")
-		for i := range width {
-			cell := ""
-			if i < len(row) {
-				cell = row[i]
-			}
-			b.WriteString("<" + tag + ">" + stdhtml.EscapeString(cell) + "</" + tag + ">")
-		}
-		b.WriteString("</tr>\n")
+	pad := func(row []string) []string {
+		out := make([]string, width)
+		copy(out, row)
+		return out
 	}
-	b.WriteString("<table>\n<thead>\n")
-	cells("th", rows[0])
-	b.WriteString("</thead>\n")
+	t := csvShown{header: pad(rows[0])}
+	for _, row := range rows[1 : 1+shown] {
+		t.body = append(t.body, pad(row))
+	}
 	var hidden []string
 	if more := len(rows) - 1 - shown; more > 0 {
 		hidden = append(hidden, strconv.Itoa(more)+" more rows")
@@ -245,18 +280,80 @@ func csvTable(data []byte, fit tableFit) (string, bool) {
 	if more := columns - width; more > 0 {
 		hidden = append(hidden, strconv.Itoa(more)+" more columns")
 	}
-	if shown > 0 || len(hidden) > 0 {
-		b.WriteString("<tbody>\n")
-		for _, row := range rows[1 : 1+shown] {
-			cells("td", row)
-		}
-		if len(hidden) > 0 {
-			b.WriteString(`<tr><td colspan="` + strconv.Itoa(width) + `">… ` + strings.Join(hidden, ", ") + "</td></tr>\n")
-		}
-		b.WriteString("</tbody>\n")
+	if len(hidden) > 0 {
+		t.hidden = "… " + strings.Join(hidden, ", ")
 	}
-	b.WriteString("</table>")
-	return b.String(), true
+	return t, true
+}
+
+// EmbedMarkdown is the Markdown an editor's Rendered view draws in place of a line that embeds
+// dest in the document at doc, read as the page reads it (beside the document, then in its
+// resources folder, never out of its folder): a Mermaid diagram (.mmd) as a mermaid fence, a table
+// (.csv) as a Markdown table of at most rows rows (0: maxTableRows). ok is false for any other
+// embed, and for a file that is missing, refused, too large or not CSV: the line stays as written.
+func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
+	p, ok := embedPath(dest)
+	if !ok {
+		return "", false
+	}
+	ext := strings.ToLower(path.Ext(p))
+	if ext != ".mmd" && ext != ".csv" {
+		return "", false
+	}
+	e := newEmbedder(doc, tableFit{rows: rows})
+	if e == nil {
+		return "", false
+	}
+	defer e.close()
+	data, ok := e.read(p, maxEmbedText)
+	if !ok {
+		return "", false
+	}
+	if ext == ".mmd" {
+		return mermaidFence(string(data)), true
+	}
+	t, ok := csvRows(data, e.fit)
+	if !ok {
+		return "", false
+	}
+	return markdownTable(t), true
+}
+
+var backticks = regexp.MustCompile("`+")
+
+// mermaidFence is src in a mermaid fence, its backticks more than any run src holds.
+func mermaidFence(src string) string {
+	n := 3
+	for _, m := range backticks.FindAllString(src, -1) {
+		n = max(n, len(m)+1)
+	}
+	fence := strings.Repeat("`", n)
+	return fence + "mermaid\n" + strings.TrimRight(src, "\r\n") + "\n" + fence
+}
+
+// markdownTable is t as a Markdown table: its header, the delimiter row, its body, and what is not
+// shown as a last row. A cell is one line, its | and \ escaped.
+func markdownTable(t csvShown) string {
+	cell := strings.NewReplacer(`\`, `\\`, "|", `\|`, "\r\n", " ", "\n", " ", "\r", " ")
+	var b strings.Builder
+	row := func(cells []string) {
+		b.WriteString("|")
+		for _, c := range cells {
+			b.WriteString(" " + cell.Replace(c) + " |")
+		}
+		b.WriteString("\n")
+	}
+	row(t.header)
+	b.WriteString("|" + strings.Repeat(" --- |", len(t.header)) + "\n")
+	for _, r := range t.body {
+		row(r)
+	}
+	if t.hidden != "" {
+		last := make([]string, len(t.header))
+		last[0] = t.hidden
+		row(last)
+	}
+	return strings.TrimSuffix(b.String(), "\n")
 }
 
 // fitting is how many of a table's first columns fit in width characters as drawn, one at least:
