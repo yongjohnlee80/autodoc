@@ -15,9 +15,9 @@ autodoc.command{ name = "pkg", run = function(ed)
   local ok, err = autodoc.doc.read(ws, "a.md", function(res, e)
     ed:insert("[read " .. tostring(res and res.content) .. "]")
   end)
-  ed:insert("[" .. tostring(ok) .. " " .. tostring(err) .. "]")
   local wok, werr = autodoc.call("doc.write", {ws, "a.md", "gone", ""})
-  ed:insert("[" .. tostring(wok) .. " " .. tostring(werr) .. "]")
+  -- one insert: the answers in the order made, whatever Normal mode does with the cursor
+  ed:insert("[" .. tostring(ok) .. " " .. tostring(err) .. "][" .. tostring(wok) .. " " .. tostring(werr) .. "]")
 end }`
 
 // TestAGatedScriptAsksAndIsHeld: a script loaded gated is held to what it was granted. Before the
