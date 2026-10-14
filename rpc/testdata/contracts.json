@@ -7,6 +7,7 @@
       "since": 8,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -30,6 +31,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -53,6 +55,7 @@
       "since": 19,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -76,6 +79,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "workspace",
@@ -103,6 +107,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "workspace",
@@ -129,6 +134,7 @@
       "since": 8,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -155,6 +161,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "workspace",
@@ -190,6 +197,7 @@
       "since": 19,
       "scope": "workspace",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "workspace",
@@ -225,6 +233,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "provider",
@@ -247,6 +256,7 @@
       "since": 4,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [],
       "result": "{model}",
       "errors": [
@@ -262,6 +272,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "name",
@@ -284,6 +295,7 @@
       "since": 5,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "stored",
@@ -309,6 +321,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "provider",
@@ -335,6 +348,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [],
       "result": "{providers: [{name, kind, base_url, model, context, has_key}], active, error}",
       "errors": [
@@ -347,6 +361,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -368,6 +383,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -395,6 +411,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "name",
@@ -417,6 +434,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -439,6 +457,7 @@
       "since": 17,
       "scope": "local-peer",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "path",
@@ -457,6 +476,7 @@
       "since": 17,
       "scope": "local-peer",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "path",
@@ -477,6 +497,7 @@
       "since": 19,
       "scope": "local-peer",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "path",
@@ -497,6 +518,7 @@
       "since": 17,
       "scope": "local-peer",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "path",
@@ -529,6 +551,7 @@
       "since": 19,
       "scope": "local-peer",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "path",
@@ -561,6 +584,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -589,6 +613,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -617,6 +642,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -649,6 +675,7 @@
       "since": 18,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -676,6 +703,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -699,6 +727,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -726,6 +755,7 @@
       "since": 13,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -749,6 +779,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -775,6 +806,7 @@
       "since": 4,
       "scope": "workspace",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -792,6 +824,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -813,6 +846,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "user",
+      "effect": "write",
       "params": [
         {
           "name": "workspace",
@@ -834,6 +868,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -851,6 +886,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [],
       "result": "{name: value}",
       "errors": [
@@ -863,6 +899,7 @@
       "since": 3,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -887,6 +924,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "ranker",
@@ -909,6 +947,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [],
       "result": "{rankers: [{name, kind, base_url, model, has_key}], active, window, error, supplied}",
       "errors": [
@@ -921,6 +960,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "name",
@@ -943,6 +983,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "ranker",
@@ -969,6 +1010,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -989,6 +1031,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -1016,6 +1059,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "read",
       "params": [
         {
           "name": "name",
@@ -1038,6 +1082,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -1061,6 +1106,7 @@
       "since": 11,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "window",
@@ -1081,6 +1127,7 @@
       "since": 1,
       "scope": "workspace",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "workspace",
@@ -1113,6 +1160,7 @@
       "since": 9,
       "scope": "global",
       "audience": "agent",
+      "effect": "read",
       "params": [],
       "result": "{databases, registrations, ranker, verbs}",
       "doc": "verbs is what this session may call at its protocol; the rest is what this edition offers beyond the core (a client hides what is false), the build's registrations ({chunkers: {ext: version}, formats: {ext: {id, version}}, fingerprint}, empty for the community build) and ranker, {supplied, model}."
@@ -1122,6 +1170,7 @@
       "since": 20,
       "scope": "global",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "filter",
@@ -1138,6 +1187,7 @@
       "since": 8,
       "scope": "global",
       "audience": "agent",
+      "effect": "read",
       "params": [
         {
           "name": "since",
@@ -1162,6 +1212,7 @@
       "since": 1,
       "scope": "global",
       "audience": "internal",
+      "effect": "read",
       "params": [
         {
           "name": "info",
@@ -1181,6 +1232,7 @@
       "since": 1,
       "scope": "local-peer",
       "audience": "internal",
+      "effect": "settings",
       "params": [],
       "errors": [
         -32001
@@ -1192,6 +1244,7 @@
       "since": 2,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -1231,6 +1284,7 @@
       "since": 9,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1260,6 +1314,7 @@
       "since": 6,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1286,6 +1341,7 @@
       "since": 6,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1303,6 +1359,7 @@
       "since": 1,
       "scope": "global",
       "audience": "agent",
+      "effect": "read",
       "params": [],
       "result": "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]",
       "doc": "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."
@@ -1312,6 +1369,7 @@
       "since": 2,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -1333,6 +1391,7 @@
       "since": 2,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "name",
@@ -1359,6 +1418,7 @@
       "since": 5,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1384,6 +1444,7 @@
       "since": 7,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1415,6 +1476,7 @@
       "since": 8,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1444,6 +1506,7 @@
       "since": 8,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
@@ -1471,6 +1534,7 @@
       "since": 8,
       "scope": "global",
       "audience": "user",
+      "effect": "settings",
       "params": [
         {
           "name": "workspace",
