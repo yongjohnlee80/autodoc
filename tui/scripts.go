@@ -85,10 +85,13 @@ func (h *Host) reloadScripts() error {
 	for _, id := range lua {
 		h.cat.remove(id)
 	}
+	oldRoots := h.luaRoots
+	h.luaRoots = nil
 	errs := h.startScripts()
 	if old != nil {
 		old.Close()
 	}
+	closeRoots(oldRoots)
 	h.luaChangeGen++ // a change timer set for the old engine's handlers emits nothing
 	if len(errs) > 0 {
 		for _, err := range errs {
@@ -98,6 +101,13 @@ func (h *Host) reloadScripts() error {
 	}
 	h.notify("reloaded the Lua scripts")
 	return nil
+}
+
+// closeRoots closes the package folders an engine read from (luapackages.go).
+func closeRoots(roots []*os.Root) {
+	for _, r := range roots {
+		_ = r.Close()
+	}
 }
 
 // reloadOnSave reloads the scripts when the file just saved, p of workspace ws ("" outside every

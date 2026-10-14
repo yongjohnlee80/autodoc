@@ -99,3 +99,48 @@ end }`,
 		t.Fatalf(":lua-install with no URL: %v", err)
 	}
 }
+
+// TestAPackageReadsOnlyItsOwnFolder: a link inside a package that leads outside its folder is not
+// the package's: a module linked out, a folder of modules linked out and an init.lua linked out are
+// refused, while a link that stays inside the folder is followed.
+func TestAPackageReadsOnlyItsOwnFolder(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	writeFiles(t, outside, map[string]string{
+		"secret.lua":     `return "outside"`,
+		"mods/inner.lua": `return "outside too"`,
+		"init.lua":       `autodoc.command{ name = "linked-init", run = function() end }`,
+	})
+	writeFiles(t, dir, map[string]string{
+		"sly/package.toml":    "name = \"sly\"\n",
+		"sly/real.lua":        `return "inside"`,
+		"linked/package.toml": "name = \"linked\"\n",
+		"sly/init.lua": `autodoc.command{ name = "sly", run = function(ed)
+  local out = {}
+  for _, m in ipairs({"alias", "secret", "mods.inner"}) do
+    local ok, v = pcall(require, m)
+    out[#out + 1] = m .. "=" .. (ok and v or "refused")
+  end
+  ed:insert(table.concat(out, " "))
+end }`,
+	})
+	for link, target := range map[string]string{
+		filepath.Join(dir, "sly", "alias.lua"):   "real.lua", // inside: followed
+		filepath.Join(dir, "sly", "secret.lua"):  filepath.Join(outside, "secret.lua"),
+		filepath.Join(dir, "sly", "mods"):        filepath.Join(outside, "mods"),
+		filepath.Join(dir, "linked", "init.lua"): filepath.Join(outside, "init.lua"),
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{LuaDir: dir})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	r.waitNotice(t, "the Lua package linked: no init.lua in the package's folder")
+	r.page("", 1, 1)
+	r.mustRun(t, "sly")
+	r.wantText(t, ":sly", "alias=inside secret=refused mods.inner=refused")
+	if err := r.luaRun("linked-init"); err == nil {
+		t.Fatal("the init.lua linked outside its package ran")
+	}
+}

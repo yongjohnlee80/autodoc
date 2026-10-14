@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,8 +37,23 @@ type packageManifest struct {
 
 // readPackage reads dir's manifest: its name must be the folder's, and its init.lua there.
 func readPackage(dir string) (packageManifest, error) {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return packageManifest{}, fmt.Errorf("package.toml: %s", firstLine(err.Error()))
+	}
+	defer root.Close()
+	return readPackageIn(root.FS(), dir)
+}
+
+// readPackageIn reads the manifest of the package whose folder is dir, through fsys, its root: a
+// file there that links outside the folder is not the package's (os.Root refuses it).
+func readPackageIn(fsys fs.FS, dir string) (packageManifest, error) {
 	var m packageManifest
-	if _, err := toml.DecodeFile(filepath.Join(dir, "package.toml"), &m); err != nil {
+	src, err := fs.ReadFile(fsys, "package.toml")
+	if err == nil {
+		_, err = toml.Decode(string(src), &m)
+	}
+	if err != nil {
 		return m, fmt.Errorf("package.toml: %s", firstLine(err.Error()))
 	}
 	switch {
@@ -46,8 +62,8 @@ func readPackage(dir string) (packageManifest, error) {
 	case m.Name != filepath.Base(dir) && !strings.HasPrefix(filepath.Base(dir), stagePrefix):
 		return m, fmt.Errorf("package.toml names %s, but its folder is %s", m.Name, filepath.Base(dir))
 	}
-	if _, err := os.Stat(filepath.Join(dir, "init.lua")); err != nil {
-		return m, errors.New("no init.lua")
+	if _, err := fs.Stat(fsys, "init.lua"); err != nil {
+		return m, errors.New("no init.lua in the package's folder")
 	}
 	return m, nil
 }
@@ -78,7 +94,15 @@ func (h *Host) loadPackages() []error {
 			continue
 		}
 		dir := filepath.Join(h.luaDir, en.Name())
-		m, err := readPackage(dir)
+		// the package reads its own folder only, links included: os.Root refuses a path, or a
+		// link, that leads outside it. It stays open while the engine may require from it.
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("the Lua package %s: %w", en.Name(), err))
+			continue
+		}
+		h.luaRoots = append(h.luaRoots, root)
+		m, err := readPackageIn(root.FS(), dir)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("the Lua package %s: %w", en.Name(), err))
 			continue
@@ -87,7 +111,7 @@ func (h *Host) loadPackages() []error {
 		if len(m.Requires) > 0 {
 			grants.Request(m.Name, m.Requires)
 		}
-		if err := h.scripts.LoadPackage(m.Name, os.DirFS(dir), grants); err != nil {
+		if err := h.scripts.LoadPackage(m.Name, root.FS(), grants); err != nil {
 			errs = append(errs, err)
 		}
 	}

@@ -229,7 +229,9 @@ type Host struct {
 	luaAsking, luaPrefsRead bool
 	// Lua events (luaevents.go): the change debounce's generation, the revision the last change emit
 	// (or open) saw, and the mode last emitted
-	luaChangeGen   uint64
+	luaChangeGen uint64
+	// luaRoots are the running engine's package folders, open while it may require from them
+	luaRoots       []*os.Root
 	luaChangeRev   uint64
 	luaMode        string
 	recoveryQueue  []recovered
@@ -464,6 +466,7 @@ func (h *Host) Run(ctx context.Context) error {
 	if h.scripts != nil {
 		h.scripts.Close()
 	}
+	closeRoots(h.luaRoots)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return errors.Join(append([]error{err, keepErr}, h.errs...)...)
