@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -18,6 +19,7 @@ import (
 //	                                 raises. err is "unknown: <id>", the entry's own, or a refusal:
 //	                                 a plugin's command (plugin.*) is never Lua's to run
 //	autodoc.current_workspace()      the workspace in use; nil before one is entered
+//	:lua-reload                      every script loaded again on a new engine (Host.reloadScripts)
 //	autodoc.<domain>.<verb>(…, cb)   each verb the daemon offers scripts, its params in order:
 //	                                 autodoc.search.query("kb", "words", {limit = 5}, cb)
 //
@@ -44,13 +46,27 @@ type scripting struct {
 	// script holding one (local s = autodoc.search) holds the new functions
 	domains map[string]*lua.LTable
 	seq     uint64 // the contracts' fetches: only the latest one's answer is kept
-	// run runs a catalog entry for autodoc.run (Host.runFromLua)
-	run func(id string, args []string) error
+	// run runs a catalog entry for autodoc.run (Host.runFromLua); reload is :lua-reload's
+	// (Host.reloadScripts)
+	run    func(id string, args []string) error
+	reload func() error
 	// host is the clipboard and the agents for the host functions (luahost.go); pick is
 	// autodoc.ui.pick's picker, pickCB the callback of the one open
 	host   luaHost
 	pick   *pick[luaItem]
 	pickCB *lua.LFunction
+}
+
+// Catalog is :lua-reload (catalog.go).
+func (s *scripting) Catalog() []Entry {
+	return []Entry{{ID: "scripts.reload", Title: "reload the Lua scripts", Verb: "lua-reload",
+		Help: "load every Lua script again: AutoDoc's, then the config folder's lua/",
+		Run: func(Invocation) error {
+			if s.reload == nil {
+				return errors.New("lua-reload: the scripts have not started")
+			}
+			return s.reload()
+		}}}
 }
 
 // luaVerb is what a script's call needs of a contract.
@@ -86,6 +102,11 @@ func (*scripting) Commands() map[string]Command { return nil }
 // once the daemon says its contracts.
 func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) error) {
 	s.eng, s.run = eng, run
+	// a new engine (a reload): the namespaces are made again in it, from the contracts known
+	s.domains = map[string]*lua.LTable{}
+	if s.verbs != nil {
+		defer s.define(s.verbs)
+	}
 	eng.SetFunction("call", s.luaCall)
 	eng.SetFunction("run", s.luaRun)
 	eng.SetFunction("current_workspace", func(L *lua.LState) int {
@@ -376,7 +397,7 @@ func (s *scripting) answer(verb string, cb *lua.LFunction, a luaAnswer) {
 		}
 		return
 	}
-	if err := s.eng.Callback(verb+"'s callback", cb, res, errv); err != nil {
+	if err := s.eng.Callback(verb+"'s callback", cb, res, errv); err != nil && !errors.Is(err, script.ErrStale) {
 		s.c.Notify("a Lua callback failed: " + err.Error())
 	}
 }

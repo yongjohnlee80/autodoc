@@ -1,7 +1,7 @@
 # Tutorial: your own Vim commands
 
 This tutorial builds `:` commands in Lua, one step at a time. Each step is a whole script: paste it
-into a file in `~/.config/autodoc/lua/`, restart AutoDoc, and run it. By the end you have a word
+into a file in `~/.config/autodoc/lua/`, run `:lua-reload`, and run it. By the end you have a word
 count, a table of contents, a command that links to the workspace's documents, and your own
 version of a built-in.
 
@@ -27,7 +27,7 @@ autodoc.command{
 }
 ```
 
-Save it as `~/.config/autodoc/lua/hello.lua`, restart AutoDoc, then type `:hello` and Enter. A
+Save it as `~/.config/autodoc/lua/hello.lua`, run `:lua-reload`, then type `:hello` and Enter. A
 notification says "Hello from Lua".
 
 - **`autodoc.command{…}`** registers a command. It runs once, when the file loads.
@@ -53,7 +53,7 @@ autodoc.command{
 }
 ```
 
-Replace `hello.lua` with this, restart, and try `:hello`, `:hello Ada` and `:hi Ada Lovelace`.
+Replace `hello.lua` with this, `:lua-reload`, and try `:hello`, `:hello Ada` and `:hi Ada Lovelace`.
 
 - **`aliases`** are other names for the command: `:hi` runs it too.
 - **`args`** and **`help`** are what Tab shows. Type `:he` and Tab: the line completes to
@@ -452,7 +452,8 @@ autodoc.command{
 - Check **SPC h** for `a Lua command did not load`. It names the file, the line, and the error:
   a syntax error, a misspelt field, a name with a space.
 - Check the folder: `~/.config/autodoc/lua/`, and the file ends in `.lua`.
-- AutoDoc reads the folder only when it starts: **restart it**.
+- AutoDoc reads the folder when it starts and on **`:lua-reload`**: run it after an edit made
+  outside AutoDoc (saving the file in AutoDoc reloads by itself).
 
 **"the script ran past 2s and was stopped".** A command, a callback or a file's loading has 2
 seconds. A loop that never ends is the usual cause, such as a `while` waiting for something that

@@ -5,8 +5,10 @@ package tui
 import (
 	"cmp"
 	"embed"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -33,6 +35,14 @@ var ownScripts embed.FS
 // loadScripts starts the Lua engine on the editor and loads the scripts. A script that fails to
 // load is said once the program runs; the others still load.
 func (h *Host) loadScripts() {
+	for _, err := range h.startScripts() {
+		h.p.Post(func() { h.failed("a Lua command did not load", err) })
+	}
+}
+
+// startScripts makes a new engine, binds the program's functions into it and loads AutoDoc's
+// scripts, then the user's: what failed to load.
+func (h *Host) startScripts() []error {
 	h.scripts = script.New(h.core, script.WithGlobal("autodoc"), script.WithNotify(h.notify))
 	if h.cat != nil {
 		h.scripts.SetRegistrar(h.registerLua)
@@ -41,12 +51,66 @@ func (h *Host) loadScripts() {
 	h.luaFeature().bind(h.scripts, h.runFromLua)
 	h.luaFeature().bindHost(h.scripts, luaHostOf{h}) // autodoc.clipboard, .ui, .agents (luahost.go)
 	h.bindDocument(h.scripts)                        // autodoc.document, autodoc.commands (luadocument.go)
+	h.luaFeature().reload = h.reloadScripts
 	errs := h.scripts.LoadDir(ownScripts, "lua")
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)
 	}
-	for _, err := range errs {
-		h.p.Post(func() { h.failed("a Lua command did not load", err) })
+	return errs
+}
+
+// reloadScripts is :lua-reload: every script loaded again, on a new engine, so an edited file is
+// read anew and a removed one is gone. The old engine's commands leave the catalog first, giving
+// back the names they took; a callback of the old engine still on its way is dropped when it
+// comes (script.ErrStale). A script cannot reload from inside itself: its engine is running.
+func (h *Host) reloadScripts() error {
+	old := h.scripts
+	if old != nil && old.Running() {
+		return errors.New("lua-reload: not from inside a script")
+	}
+	if h.cat == nil {
+		// without the catalog the commands are the editor's registry's, which keeps no record of
+		// whose they are: the old engine's would stay, bound to a closed state
+		return errors.New("lua-reload: this editor has no command catalog")
+	}
+	var lua []string
+	for _, e := range h.cat.entries() {
+		if e.Source == SourceLua {
+			lua = append(lua, e.ID)
+		}
+	}
+	for _, id := range lua {
+		h.cat.remove(id)
+	}
+	errs := h.startScripts()
+	if old != nil {
+		old.Close()
+	}
+	if len(errs) > 0 {
+		for _, err := range errs {
+			h.failed("a Lua command did not load", err)
+		}
+		return fmt.Errorf("lua-reload: %d of the scripts did not load", len(errs))
+	}
+	h.notify("reloaded the Lua scripts")
+	return nil
+}
+
+// reloadOnSave reloads the scripts when the file just saved is one of the user's: a .lua file in
+// the config folder's lua/.
+func (h *Host) reloadOnSave(p string) {
+	if h.luaDir == "" || filepath.Ext(p) != ".lua" || !filepath.IsAbs(p) {
+		return
+	}
+	dir, err := filepath.Abs(h.luaDir)
+	if err != nil {
+		return
+	}
+	if rel, err := filepath.Rel(dir, p); err != nil || rel != filepath.Base(p) {
+		return
+	}
+	if err := h.reloadScripts(); err != nil {
+		h.notify(err.Error())
 	}
 }
 

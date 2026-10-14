@@ -39,7 +39,8 @@ autodoc.command{
 }
 ```
 
-Save that as `~/.config/autodoc/lua/lines.lua`, restart AutoDoc, and type `:lines` and Enter.
+Save that as `~/.config/autodoc/lua/lines.lua`, run `:lua-reload` (or restart AutoDoc), and type
+`:lines` and Enter.
 
 **The command line.** **:** opens it in Vim's Normal and Visual modes, **Ctrl+;** in any mode
 (the Text mode's way in), and **Search › Command line…** where a terminal cannot send Ctrl+;.
@@ -58,8 +59,16 @@ folder in file-name order.
 - **Every file shares one Lua state.** A global one file sets, a later file sees. Keep helpers
   `local` unless you mean to share them.
 
-**Reloading is a restart.** AutoDoc reads the folder once, when it starts. After you edit a script,
-quit (`:q`) and start AutoDoc again.
+**Reloading.** AutoDoc reads the folder when it starts, and again on `:lua-reload`:
+
+- **`:lua-reload` loads every script again**, AutoDoc's and yours, on a fresh Lua state. An edited
+  file's commands are the new ones, a removed file's are gone, and a name your command had taken
+  goes back to whatever had it before. Globals a script set are gone too.
+- **Saving a script of the folder in AutoDoc reloads at once**: open
+  `~/.config/autodoc/lua/lines.lua` (File › Open any file), edit it, and `:w`.
+- **A daemon answer still on its way** to a callback of the old scripts is dropped when it comes.
+- A script cannot reload from inside itself: `autodoc.run("scripts.reload")` answers `false` and
+  why.
 
 ## The sandbox
 

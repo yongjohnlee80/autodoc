@@ -618,6 +618,9 @@ func (h *Host) write(content, want string, after func()) {
 				h.settleRecovery(ws, p)
 			}
 			h.notify("saved " + p)
+			if !newer && ws == "" {
+				h.reloadOnSave(p) // the user's own script: loaded again at once
+			}
 			switch {
 			case after == nil:
 			case newer:

@@ -87,7 +87,7 @@ func (s *scripting) callback(name string, cb *lua.LFunction, res lua.LValue, err
 	if res == nil {
 		res = lua.LNil
 	}
-	if e := s.eng.Callback(name+"'s callback", cb, res, errv); e != nil {
+	if e := s.eng.Callback(name+"'s callback", cb, res, errv); e != nil && !errors.Is(e, script.ErrStale) {
 		s.c.Notify("a Lua callback failed: " + e.Error())
 	}
 }

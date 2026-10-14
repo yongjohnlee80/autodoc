@@ -57,7 +57,9 @@
 // A host function that must wait (a call to a server) never waits on the loop: it takes a Lua
 // function, does its work elsewhere, and hands the answer back on the loop with Callback, which
 // runs the function as a command runs (the deadline, the editor, one undo step). ToGo and ToLua
-// carry the values across, shaped as msgpack carries them.
+// carry the values across, shaped as msgpack carries them. To reload its scripts a host makes a new
+// engine and closes the old one (never while Running); an answer coming back for a function of
+// the old one is Callback's ErrStale, and dropped.
 //
 // A command's edits are one undo step (the editor runs every command in one). A script runs on the
 // UI loop, as everything that touches the editor does, with a deadline (WithTimeout); an error, a
@@ -88,6 +90,10 @@ import (
 
 // DefaultTimeout is how long one command's script, or one file's loading, may run.
 const DefaultTimeout = 2 * time.Second
+
+// ErrStale is Callback's answer for a function another engine made: an engine a reload replaced,
+// whose host function's answer came after. The function is not run.
+var ErrStale = errors.New("script: a callback of a replaced engine")
 
 // Engine is one Lua state registering into one editor's commands.
 type Engine struct {
@@ -187,6 +193,10 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 
 // Close releases the Lua state.
 func (e *Engine) Close() { e.L.Close() }
+
+// Running reports whether a script is running now: a file loading, a command, a completion or a
+// callback. A host does not close the engine (a reload) from inside one.
+func (e *Engine) Running() bool { return e.cur != nil || e.loading != "" }
 
 // Global is the global table scripts register through: a host adds its own fields to it, tables
 // of functions among them (AutoDoc's autodoc.search.query). Only the loop touches it.
@@ -328,6 +338,10 @@ func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandCon
 // then than the command that asked had; a callback reads where things are now. name names fn in
 // the error ("search.query's callback").
 func (e *Engine) Callback(name string, fn *lua.LFunction, args ...lua.LValue) error {
+	// a function's environment is its engine's globals: no script can change it (no setfenv)
+	if fn.Env != e.L.G.Global {
+		return ErrStale
+	}
 	return e.core.Batch(func() error {
 		prev := e.cur
 		e.cur = e.core
