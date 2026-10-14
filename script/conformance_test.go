@@ -56,7 +56,7 @@ func TestAutoDocsScriptsRunOnABareEditor(t *testing.T) {
 	if err := core.RunCommand("table 2 1"); err != nil {
 		t.Fatal(err)
 	}
-	if got := core.Value(); got != "Intro\n\n| Column1 | Column2 |\n| ----- | ----- |\n|  |  |" {
+	if got := core.Value(); got != "Intro\n\n| Column1 | Column2 |\n| ----- | ----- |\n| Item1.1 | Item2.1 |" {
 		t.Fatalf(":table 2 1 on a bare editor: %q", got)
 	}
 	core.SetValue("")
