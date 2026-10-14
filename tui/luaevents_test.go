@@ -56,7 +56,11 @@ func TestLuaHearsThePagesEvents(t *testing.T) {
 
 	r.keys(t, key('i'))
 	wait("insert mode", "mode mode=insert")
-	r.keys(t, decltest.Type("abc")...)
+	// keys half the pause apart, the burst longer than the pause: one change, from the last key
+	for _, k := range "abc" {
+		r.keys(t, decltest.Type(string(k))...)
+		time.Sleep(luaChangeWait / 2)
+	}
 	r.keys(t, esc())
 	wait("normal mode", "mode mode=normal previous=insert")
 	wait("one change", "change rev")
