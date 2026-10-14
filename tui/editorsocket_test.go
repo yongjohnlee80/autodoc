@@ -107,15 +107,14 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	onLoop(r, func() bool { r.h.prefs.luaGrants["agent:zen"]["editor.write"] = true; return true })
 
 	// a request that stopped waiting before the loop reached it does nothing when the loop does
+	r.h.editorSock.wait.Store(int64(200 * time.Millisecond))
 	release := make(chan struct{})
 	r.h.p.Post(func() { <-release })
-	short, cancelShort := context.WithTimeout(ctx, 200*time.Millisecond)
-	_, err = cli.Call(short, "editor.insert", token, 1, 1, "LATE")
-	cancelShort()
-	if err == nil {
-		t.Fatal("an edit past its deadline answered")
+	if _, err := cli.Call(ctx, "editor.insert", token, 1, 1, "LATE"); err == nil {
+		t.Fatal("an edit the loop did not reach in time answered")
 	}
 	close(release)
+	r.h.editorSock.wait.Store(int64(editorRequestWait))
 	if text := r.editorText(); strings.Contains(text, "LATE") {
 		t.Fatalf("the expired edit ran: %q", text)
 	}

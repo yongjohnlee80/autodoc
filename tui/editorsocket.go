@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
@@ -48,11 +50,19 @@ const (
 	codeEditorRefused    int64 = -32097                    // the user said no, or the command line failed
 )
 
-// editorSocket is the socket being served: its path, and how to stop it.
+// editorSocket is the socket being served: its path, how to stop it, and how long a request waits
+// for the loop (nanoseconds; a test shortens it).
 type editorSocket struct {
 	path string
 	stop context.CancelFunc
+	wait atomic.Int64
 }
+
+// editorRequestWait is how long a request waits for the UI loop to reach it.
+// NOTE: deadline: msgpack-rpc carries no cancellation, so an agent's own timeout never reaches the
+// TUI; past this, a request the loop has not reached is refused and, when the loop gets to it, does
+// nothing.
+const editorRequestWait = 10 * time.Second
 
 // startEditorSocket listens on <dir>/<pid>.sock and serves editor.* until the host stops. A
 // failure is said and the TUI runs on without it.
@@ -83,6 +93,7 @@ func (h *Host) startEditorSocket(dir string) {
 	ctx, cancel := context.WithCancel(h.ctx)
 	go func() { _ = srv.Run(ctx) }()
 	h.editorSock = &editorSocket{path: path, stop: func() { cancel(); _ = os.Remove(path) }}
+	h.editorSock.wait.Store(int64(editorRequestWait))
 }
 
 // editorSocketPath is where the agents reach the page; "" without the socket.
@@ -93,9 +104,11 @@ func (h *Host) editorSocketPath() string {
 	return h.editorSock.path
 }
 
-// onLoopFor runs fn on the UI loop and waits for its answer, or for ctx: the request's, which ends
-// when the agent hangs up.
+// onLoopFor runs fn on the UI loop and waits for its answer, or for ctx (the connection's, which
+// ends when the agent hangs up) or the request's deadline, whichever ends first.
 func onLoopFor[T any](ctx context.Context, h *Host, fn func() (T, error)) (T, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(h.editorSock.wait.Load()))
+	defer cancel()
 	type answer struct {
 		v   T
 		err error
