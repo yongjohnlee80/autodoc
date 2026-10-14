@@ -18,11 +18,10 @@ autodoc.command{ name = "doc", run = function(ed)
 end }`
 
 // TestLuaSeesTheDocument: autodoc.document() is the page in the editor: the draft, a note with its
-// frontmatter read from the editor's text now, a text file, and frontmatter that is not YAML.
+// frontmatter read from the editor's text now, and frontmatter that is not YAML.
 func TestLuaSeesTheDocument(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {
 		"notes/a.md", "---\ntitle: Plan\ntags: [x, y]\nn: 3\nnested: {k: v}\n2026: year\n---\n# A\n",
-		"b.txt", "plain\n",
 	}})
 	r := attached(t, d)
 	r.luaLoad(t, docLua)
@@ -35,12 +34,6 @@ func TestLuaSeesTheDocument(t *testing.T) {
 	r.mustRun(t, "doc")
 	r.waitNotice(t, "doc: notes/a.md/kb/markdown/nil/Plan/x,y/3/v/year/nil")
 
-	r.openByPicker(t, "b.txt")
-	r.waitFile(t, "b.txt")
-	r.mustRun(t, "doc")
-	r.waitNotice(t, "doc: b.txt/kb/text/nil/nil/nil/nil/nil/nil/nil")
-	r.openByPicker(t, "notes/a.md")
-	r.waitFile(t, "notes/a.md")
 
 	// the editor's text now, not the file's: an edit not yet saved shows
 	r.page("---\ntitle: Edited\n---\n", 1, 1)

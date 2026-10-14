@@ -26,14 +26,17 @@ func TestTheLuaReferenceIsGenerated(t *testing.T) {
 // TestGenerate: only the text between each block's markers changes, a file already current is
 // left as it is, and a file missing a block is refused.
 func TestGenerate(t *testing.T) {
+	globalsStart, globalsEnd := markers("globals")
 	edStart, edEnd := markers("ed")
 	textStart, textEnd := markers("text")
-	doc := "# Ref\n\n" + edStart + "\nstale\n" + edEnd + "\n\nprose\n\n" + textStart + "\n" + textEnd + "\n"
+	doc := "# Ref\n\n" + edStart + "\nstale\n" + edEnd + "\n\nprose\n\n" + textStart + "\n" + textEnd + "\n" +
+		globalsStart + "\n" + globalsEnd + "\n"
 	got, err := generate(doc)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(got, "| `ed:find_all(term, opts)` |") || !strings.Contains(got, "| `autodoc.text.columns(s)` |") ||
+		!strings.Contains(got, "| `autodoc.date(format, t)` |") ||
 		strings.Contains(got, "stale") || !strings.HasPrefix(got, "# Ref\n\n"+edStart+"\n"+note+"\n\n| Method | Returns | Notes |\n") ||
 		!strings.Contains(got, edEnd+"\n\nprose\n\n"+textStart+"\n"+note+"\n\n| Function |") {
 		t.Fatalf("generated\n%s", got)
@@ -41,17 +44,18 @@ func TestGenerate(t *testing.T) {
 	if again, err := generate(got); err != nil || again != got {
 		t.Fatalf("a current file changed: %v\n%s", err, again)
 	}
-	if _, err := generate("# Ref\n" + edStart + "\n" + edEnd + "\n"); err == nil || !strings.Contains(err.Error(), "no "+textStart) {
+	if _, err := generate("# Ref\n" + globalsStart + "\n" + globalsEnd + "\n" + edStart + "\n" + edEnd + "\n"); err == nil || !strings.Contains(err.Error(), "no "+textStart) {
 		t.Errorf("a file without the text block: %v", err)
 	}
 }
 
 // TestRun: -ref names the file run rewrites; a missing file and an unknown flag are refused.
 func TestRun(t *testing.T) {
+	globalsStart, globalsEnd := markers("globals")
 	edStart, edEnd := markers("ed")
 	textStart, textEnd := markers("text")
 	path := filepath.Join(t.TempDir(), "reference.md")
-	if err := os.WriteFile(path, []byte(edStart+"\n"+edEnd+"\n"+textStart+"\n"+textEnd+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(globalsStart+"\n"+globalsEnd+"\n"+edStart+"\n"+edEnd+"\n"+textStart+"\n"+textEnd+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"-ref", path}); err != nil {
