@@ -18,7 +18,8 @@ import (
 // holds only an image, ![title](flow.mmd), ![title](sales.chart.json) or ![title](data.csv), alone
 // in its paragraph as the page's parser reads it (export.EmbedLines), is drawn as if the file were
 // written there: a Mermaid diagram as a mermaid fence and a Vega-Lite chart as a vega-lite fence,
-// each drawn natively as golib draws one (a chart golib does not draw shows its spec as code), and
+// each drawn natively as golib draws one (a chart golib does not draw is a short notice, not its
+// spec: chartNotice), and
 // a table as a Markdown table of literal cells, laid out natively by golib's own renderer. The file
 // is read as the HTML preview reads it (export.EmbedMarkdown). The line stays the note's: while
 // typing on it, it is its source, editable, and a click on what it draws puts the cursor on it.
@@ -54,8 +55,14 @@ func (n *NoteEmbeds) file() string {
 // note editor declares NoteRenderer, which golib's style alone has no renderer for: a window
 // running AutoDoc's layout takes its style from here, or its note editor has no Rendered view.
 func GUIStyle(notes *NoteEmbeds, opts ...guidecl.NativeOption) tuidecl.Style {
-	note := guidecl.WithRendererFor(NoteRendererKind, notes.Renderer(guiwidget.Diagrams(nil)))
+	note := guidecl.WithRendererFor(NoteRendererKind, noteRenderer(notes))
 	return guidecl.Native(append([]guidecl.NativeOption{note}, opts...)...)
+}
+
+// noteRenderer is the note editor's renderer as GUIStyle installs it: notes' embeds, drawn through
+// golib's native chain with AutoDoc's notice for a chart it declines.
+func noteRenderer(notes *NoteEmbeds) func(tuidecl.RendererSpec) guiwidget.Renderer {
+	return notes.Renderer(nativeDiagrams())
 }
 
 // Renderer makes the note editor's renderer for its NoteRenderer declaration (NoteRendererKind):
@@ -229,7 +236,8 @@ func csvFence(lines []string, b guiwidget.Block) (string, bool) {
 // layEmbed lays the embed of block b out as md, the Markdown its file stands for, drawn as the
 // block's picture: the line's source identity and clicks stay the line's. A diagram or a chart is
 // asked of the window's host for this block, as a mermaid or vega-lite fence's is; while it is not
-// ready, or when it is declined, md is laid out as golib lays it, the source as code.
+// ready, or when it is declined (a chart that is not JSON), md is laid out as golib lays it, the
+// source as code.
 func (r *embedRenderer) layEmbed(b guiwidget.Block, md string, width float32, t *gui.TextShaper, th guiwidget.Theme, host guiwidget.DiagramHost) guiwidget.BlockLayout {
 	injected := strings.Split(md, "\n")
 	if lang := strings.TrimLeft(injected[0], "`"); (lang == "mermaid" || lang == "vega-lite") && host != nil && r.diagrams != nil && len(injected) > 2 {

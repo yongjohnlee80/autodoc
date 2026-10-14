@@ -267,3 +267,25 @@ func TestARequestEndedWhileTheOthersAreWokenIsNotWoken(t *testing.T) {
 		t.Errorf("woken %v; the second ended before its turn", woken)
 	}
 }
+
+// The pane's chain answers a chart golib declines with AutoDoc's notice, not its spec: a chart is
+// never mermaid.js's, browser or not, so it goes to the native chain with the notice behind it.
+func TestThePanesDeclinedChartIsTheNotice(t *testing.T) {
+	r, m := paneDrawer(t, &fakeBrowser{})
+	req := guiwidget.DiagramRequest{Lang: "vega-lite", Src: `{"data":{"values":[]},"mark":"bar","transform":[]}`, Width: 400, Scale: 1}
+	ready := make(chan struct{}, 1)
+	a := onLoop(r, func() guiwidget.DiagramAnswer {
+		return m.Diagram(context.Background(), req, func() { ready <- struct{}{} })
+	})
+	if a.State == guiwidget.Pending {
+		select {
+		case <-ready:
+		case <-time.After(10 * time.Second):
+			t.Fatal("the chain never called ready")
+		}
+		a = onLoop(r, func() guiwidget.DiagramAnswer { return m.Diagram(context.Background(), req, func() {}) })
+	}
+	if n, ok := a.Pic.(noticeView); a.State != guiwidget.Ready || !ok || n.text != chartNoticeText {
+		t.Errorf("a declined chart in the pane: %+v, want the notice", a)
+	}
+}

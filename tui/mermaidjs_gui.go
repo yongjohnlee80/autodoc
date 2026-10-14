@@ -68,7 +68,7 @@ func newMermaidJS(h *Host) *mermaidJS {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return &mermaidJS{h: h, native: guiwidget.Diagrams(nil), parent: parent, now: time.Now,
+	return &mermaidJS{h: h, native: nativeDiagrams(), parent: parent, now: time.Now,
 		done: newPictures(), jobs: map[mermaidKey]*mermaidJob{}}
 }
 
