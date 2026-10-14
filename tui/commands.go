@@ -117,6 +117,7 @@ func (h *Host) commands() map[string]Command {
 		"App.closeHTMLPane":        none(h.closeHTMLPane),
 		"App.previewClosed":        none(h.previewClosed),
 		"App.setIndentMarks":       oneString("off, cursorLine or all", h.setIndentMarks),
+		"App.setMermaidEngine":     oneString("native or mermaidjs", h.setMermaidEngine),
 		"App.setRuler":             oneString("a number of columns", h.setRuler),
 
 		// the workspace's models (vectors.go)

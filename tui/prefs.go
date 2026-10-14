@@ -31,6 +31,7 @@ const (
 	prefNumbers       = "tui.editor.linenumbers"
 	prefIndent        = "tui.editor.indentmarks"
 	prefImages        = "tui.preview.images"
+	prefMermaid       = "tui.preview.mermaid"
 	prefOpenAs        = "tui.documents.open"
 	prefCorner        = "tui.toast.corner"
 	prefAboutAt       = "tui.about.atstart"
@@ -91,6 +92,7 @@ type prefs struct {
 	wrap, lineNumbers           bool   // the page: long lines wrapped at its width; each line's number
 	indentMarks                 string // which lines show their indentation as marks (indentMarks)
 	images                      bool   // previews as images where the terminal draws them (preview.go)
+	mermaid                     string // what draws a Mermaid diagram in a GUI window: "mermaidjs" or "native" (preview.go)
 	openAs                      string // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
 	aboutAtStart                bool   // About opens when the program starts (startup.go)
 	updateCheck                 bool   // a newer release is looked for when the program starts (startup.go)
@@ -200,6 +202,11 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		boolPref(prefImages, true, func(p *prefs) *bool { return &p.images }).
 			chooser("App.imagesIndex", "App.setImagesIndex").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.imagePreviews": p.images} }),
+		choicePref(prefMermaid, "mermaidjs", mermaidEngines, func(p *prefs) *string { return &p.mermaid }).
+			shows(func(p prefs) map[string]any {
+				// File › Preview option's radio set
+				return map[string]any{"App.mermaidNative": p.mermaid == "native", "App.mermaidJS": p.mermaid != "native"}
+			}),
 		choicePref(prefOpenAs, "prompt", openAsChoices, func(p *prefs) *string { return &p.openAs }).
 			chooser("App.openAsIndex", "App.setOpenAsIndex"),
 		boolPref(prefAboutAt, true, func(p *prefs) *bool { return &p.aboutAtStart }).

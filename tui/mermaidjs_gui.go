@@ -118,14 +118,19 @@ func picture(p mermaidPic, width float32) gui.View {
 	})
 }
 
-// paneDiagrams has the pane's page draw its diagrams by mermaid.js (mermaidJS), once.
+// paneDiagrams has the pane's page draw its diagrams by the engine File › Preview option chose:
+// mermaid.js (mermaidJS), or golib's Mermaid natively. A view given the other one asks it again.
 func (h *Host) paneDiagrams(v *widget.HTMLView) {
 	m, ok := h.paneMermaid.(*mermaidJS)
 	if !ok {
 		m = newMermaidJS(h)
 		h.paneMermaid = m
 	}
-	if d, _ := v.Diagrams().(*mermaidJS); d != m {
-		widget.WithDiagrams(m)(v)
+	var want guiwidget.Diagrammer = m
+	if h.mermaidNative() {
+		want = m.native
+	}
+	if d, _ := v.Diagrams().(guiwidget.Diagrammer); d != want {
+		widget.WithDiagrams(want)(v)
 	}
 }

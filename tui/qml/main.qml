@@ -96,6 +96,13 @@ Window {
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
             MenuSeparator {}
             MenuItem { text: "Preview &HTML"; onTriggered: App.previewHTML() }
+            // what draws a window's Mermaid diagrams (preview.go); the terminal's are mermaid.js's
+            Menu {
+                title: "Preview o&ption"
+                visible: App.gui
+                MenuItem { text: "&Native Mermaid engine"; group: "mermaidEngine"; checked: App.mermaidNative; onTriggered: App.setMermaidEngine("native") }
+                MenuItem { text: "Mermaid.&js";            group: "mermaidEngine"; checked: App.mermaidJS;     onTriggered: App.setMermaidEngine("mermaidjs") }
+            }
             MenuItem { text: "Preview &Mermaid diagram…"; onTriggered: App.previewDiagram() }
             MenuItem { text: "Open with Default &App"; onTriggered: App.openWithDefaultApp() }
             MenuSeparator {}

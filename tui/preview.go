@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -104,6 +105,38 @@ func (h *Host) toggleImagePreviews() {
 	h.say("image previews " + map[bool]string{true: "on", false: "off: diagram sources and the browser"}[v])
 }
 
+// mermaidEngines are what can draw a Mermaid diagram in a GUI window (File › Preview option):
+// mermaid.js in a headless browser, as the terminal does and a browser would, or golib's Mermaid,
+// natively, at once but for the types golib draws. The terminal always uses mermaid.js.
+var mermaidEngines = []string{"mermaidjs", "native"}
+
+// mermaidNative reports whether golib's Mermaid draws a GUI window's diagrams: the window's choice.
+func (h *Host) mermaidNative() bool { return h.native() && h.prefs.mermaid == "native" }
+
+// setMermaidEngine is File › Preview option: "native" or "mermaidjs".
+func (h *Host) setMermaidEngine(name string) {
+	if !slices.Contains(mermaidEngines, name) {
+		h.say("no Mermaid engine " + strconv.Quote(name) + " (native or mermaidjs)")
+		return
+	}
+	if name == h.prefs.mermaid {
+		return
+	}
+	h.setPref(prefMermaid, name, func(p *prefs) { p.mermaid = name })
+	h.mermaidEngineChanged()
+}
+
+// mermaidEngineChanged has the open HTML pane draw its diagrams by the engine chosen, and says it.
+func (h *Host) mermaidEngineChanged() {
+	if h.htmlPaneShown() {
+		if v, ok := h.htmlView(); ok {
+			h.paneDiagrams(v)
+			h.renderHTMLPane()
+		}
+	}
+	h.say("Mermaid diagrams: " + map[bool]string{true: "drawn natively (no zoom)", false: "drawn by mermaid.js"}[h.prefs.mermaid == "native"])
+}
+
 // previewing is the image preview open: its dialog, the page it renders, whether that page is as
 // wide as its content (a diagram) and how tall it may be, and its zoom step.
 type previewing struct {
@@ -123,7 +156,18 @@ const diagramMaxHeight = 4096
 // showDiagram shows a Mermaid block: an image where it can be, else its source, saying why.
 func (h *Host) showDiagram(source string) {
 	// mermaid.js draws it, as an image, in a terminal and a GUI window alike. A window without a
-	// browser draws it natively, by golib's Mermaid, where golib draws its type; else its source
+	// browser, or one whose File › Preview option is the native engine, draws it natively, by
+	// golib's Mermaid, where golib draws its type; else mermaid.js, else its source
+	if h.mermaidNative() {
+		do(h, func(context.Context) error { return nativeDiagram(source) }, func(err error) {
+			if err == nil {
+				h.showDiagramNative(source, "")
+				return
+			}
+			h.showDiagramImage(source, "not drawn natively ("+err.Error()+")")
+		})
+		return
+	}
 	ok, why := h.imageMode()
 	if ok || !h.native() {
 		h.showDiagramImage(source, "")
@@ -157,14 +201,18 @@ func (h *Host) showDiagramImage(source, declined string) {
 	}
 	h.diagramImage = true
 	h.diagramHelpText = "Image · drawn offline by mermaid " + mermaid.Version + " in the " + theme + " theme · scroll: arrows, j k h l, PgUp/PgDn, wheel"
+	if declined != "" {
+		h.diagramHelpText = "Image, " + declined + " · drawn offline by mermaid " + mermaid.Version + " in the " + theme + " theme · scroll: arrows, j k h l, PgUp/PgDn, wheel"
+	}
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramNativeShown", false)
 	h.set("App.diagramImageShown", true)
+	h.set("App.diagramDrawn", true)
 	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
 	h.imagePreview = previewing{dialog: "diagram", page: page, wide: true, maxHeight: diagramMaxHeight, zoom: zoomDefault,
 		background: export.Background(theme)}
-	h.renderPreview(func(why string) {
+	h.renderPreview(true, func(why string) {
 		if declined != "" {
 			why = declined + "; " + why
 		}
@@ -173,7 +221,8 @@ func (h *Host) showDiagramImage(source, declined string) {
 }
 
 // showDiagramNative shows source in a GUI window drawn natively, by golib's Mermaid in the
-// dialog's HTML view: where no browser draws mermaid.js (why), and golib draws its type.
+// dialog's HTML view, where golib draws its type: chosen (why is ""), or where no browser draws
+// mermaid.js (why).
 func (h *Host) showDiagramNative(source, why string) {
 	theme := h.exportTheme()
 	page, err := export.DiagramPage(source, theme)
@@ -181,10 +230,15 @@ func (h *Host) showDiagramNative(source, why string) {
 		h.showDiagramText(source, "Diagram source · "+err.Error())
 		return
 	}
-	h.diagramImage, h.diagramHelpText = false, "Drawn natively, as mermaid.js is not ("+why+") · scroll: arrows, j k, PgUp/PgDn, wheel"
+	drawn := "Drawn natively (File › Preview option), no zoom"
+	if why != "" {
+		drawn = "Drawn natively, as mermaid.js is not (" + why + ")"
+	}
+	h.diagramImage, h.diagramHelpText = false, drawn+" · scroll: arrows, j k, PgUp/PgDn, wheel"
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramImageShown", false)
 	h.set("App.diagramNativeShown", true)
+	h.set("App.diagramDrawn", true)
 	h.set("App.diagramHelp", h.diagramHelpText)
 	h.open("diagram")
 	if v, ok := componentUnder[*widget.HTMLView](h.p, "diagram"); ok {
@@ -200,20 +254,26 @@ func (h *Host) showDiagramText(text, help string) {
 	h.set("App.diagramNativeShown", false)
 	h.set("App.diagramText", text)
 	h.set("App.diagramTextShown", true)
+	h.set("App.diagramDrawn", false)
 	h.set("App.diagramHelp", help)
 	h.open("diagram")
 }
 
 // renderPreview renders the open preview's page into its Image at its zoom, once the Image has its
-// cells, keeping the part of it shown where it was; fallback is the preview's, for an image that
-// cannot be had.
-func (h *Host) renderPreview(fallback func(why string)) {
+// cells; fallback is the preview's, for an image that cannot be had. A fresh page drops the picture
+// the Image has, another diagram's or page's, so the spinner shows until it is drawn; a zoom of the
+// same page keeps it until the new one comes, and keeps the part of it shown where it was.
+func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 	pv := h.imagePreview
 	h.withImageCells(pv.dialog, fallback, func(tk Ticket, img *widget.Image, cols, rows int) {
 		shown, w, ht := img.Scroll()
+		if fresh {
+			img.Clear()
+			w, ht = 0, 0
+		}
 		rasterize := h.rasterizer()
 		// a spinner while the page renders (a headless browser takes a moment), where the Image has
-		// no picture yet; a zoom keeps the picture it has until the new one comes
+		// no picture
 		img.SetLoadingText(map[bool]string{true: "drawing the diagram…", false: "rendering the page…"}[pv.dialog == "diagram"])
 		img.SetLoading(true)
 		// a page taller than a terminal shows an image (widget.MaxImagePixels) is cut into strips
@@ -259,7 +319,7 @@ func (h *Host) zoomPreview(step int) {
 	pv.zoom = z
 	h.say(fmt.Sprintf("zoom %d%%", int(zooms[z]*100+0.5)))
 	fallback := func(why string) { h.say("zoom: " + why) }
-	h.renderPreview(fallback)
+	h.renderPreview(false, fallback)
 }
 
 // withImageCells runs fn once the Image in the dialog (main.qml's id for it) has been laid out with
@@ -340,7 +400,7 @@ func (h *Host) previewHTMLImage(content []byte, path string) {
 		" theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser")
 	h.open("htmlPreview")
 	h.imagePreview = previewing{dialog: "htmlPreview", page: content, zoom: zoomDefault, background: export.Background(h.exportTheme())}
-	h.renderPreview(func(why string) {
+	h.renderPreview(true, func(why string) {
 		h.closeDialog("htmlPreview")
 		h.notify("HTML preview: " + why + "; opening it in the browser")
 		h.openPreviewInBrowser()

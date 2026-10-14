@@ -156,3 +156,126 @@ func TestViewDiagramInTheGUIWithoutABrowser(t *testing.T) {
 		})
 	})
 }
+
+// File › Preview option's native engine: View diagram in a GUI window is drawn by golib's Mermaid
+// though a browser is found, the browser never asked; the Zoom buttons show, disabled.
+func TestTheNativeEngineDrawsViewDiagram(t *testing.T) {
+	calls := make(chan struct{}, 8)
+	r := runGUINote(t, fencedNote, func(h *Host) {
+		h.browserOverride = func() bool { return true }
+		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			calls <- struct{}{}
+			return tallPage(t, p.Width, 300), nil
+		}
+		h.setMermaidEngine("native")
+	})
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitFor(t, "the diagram drawn natively", func(string) bool {
+		return onLoop(r, func() bool {
+			native, _ := r.h.p.Tree().Source("App.diagramNativeShown")
+			return native.Raw == "true"
+		})
+	})
+	state := onLoop(r, func() map[string]string {
+		m := map[string]string{}
+		for _, k := range []string{"App.diagramImageShown", "App.diagramDrawn", "App.mermaidNative", "App.mermaidJS"} {
+			v, _ := r.h.p.Tree().Source(k)
+			m[k] = v.Raw
+		}
+		return m
+	})
+	want := map[string]string{"App.diagramImageShown": "false", "App.diagramDrawn": "true", "App.mermaidNative": "true", "App.mermaidJS": "false"}
+	for k, v := range want {
+		if state[k] != v {
+			t.Errorf("%s = %s; want %s", k, state[k], v)
+		}
+	}
+	if help := onLoop(r, func() string { return r.h.diagramHelpText }); !strings.Contains(help, "File › Preview option") {
+		t.Errorf("help = %q, want it drawn natively as chosen", help)
+	}
+	select {
+	case <-calls:
+		t.Error("the browser was asked to draw a diagram the native engine draws")
+	default:
+	}
+}
+
+// Under the native engine a type golib does not draw is drawn by mermaid.js, saying why.
+func TestTheNativeEngineLeavesAnUndrawnTypeToMermaidJS(t *testing.T) {
+	r := runGUINote(t, "# P\n\n```mermaid\npie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85\n```\n", func(h *Host) {
+		h.browserOverride = func() bool { return true }
+		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			return tallPage(t, p.Width, 300), nil
+		}
+		h.setMermaidEngine("native")
+	})
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitFor(t, "the pie as mermaid.js's image, saying why", func(string) bool {
+		return onLoop(r, func() bool {
+			img, _ := r.h.p.Tree().Source("App.diagramImageShown")
+			return img.Raw == "true" && r.h.lastDiagramImage() && strings.Contains(r.h.diagramHelpText, "not drawn natively")
+		})
+	})
+}
+
+// The open HTML pane follows File › Preview option: its diagram, mermaid.js's picture, is drawn
+// natively once the native engine is chosen, and is mermaid.js's again after.
+func TestTheHTMLPaneFollowsTheMermaidEngine(t *testing.T) {
+	r := runGUINote(t, fencedNote, func(h *Host) {
+		h.browserOverride = func() bool { return true }
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			return tallPage(t, 300, 200), nil
+		}
+	})
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitFor(t, "mermaid.js's picture in the pane", func(string) bool { return slices.Contains(paneOps(r), "DrawImage") })
+	r.h.p.Post(func() { r.h.setMermaidEngine("native") })
+	r.s.WaitFor(t, "the diagram drawn natively in the pane", func(string) bool {
+		ops := paneOps(r)
+		return slices.Contains(ops, "StrokePath") && !slices.Contains(ops, "DrawImage")
+	})
+	r.h.p.Post(func() { r.h.setMermaidEngine("mermaidjs") })
+	r.s.WaitFor(t, "mermaid.js's picture again", func(string) bool {
+		ops := paneOps(r)
+		return slices.Contains(ops, "DrawImage") && !slices.Contains(ops, "FillEllipse")
+	})
+}
+
+// View diagram again, for the same or another diagram, drops the picture shown and shows the
+// spinner until the new one is drawn: the last diagram is never shown as the new one.
+func TestViewDiagramAgainDropsTheLastPicture(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	calls := 0
+	r := runGUINote(t, fencedNote, func(h *Host) {
+		h.browserOverride = func() bool { return true }
+		h.graphicsOverride = func() tuicore.Tri { return tuicore.TriYes }
+		h.rasterizeOverride = func(_ context.Context, _ []byte, p widget.Page) ([]byte, error) {
+			mu.Lock()
+			calls++
+			n := calls
+			mu.Unlock()
+			if n > 1 {
+				<-release
+			}
+			return tallPage(t, p.Width, 300), nil
+		}
+	})
+	defer close(release)
+	image := func() (has, loading bool) {
+		s := onLoop(r, func() [2]bool {
+			img, ok := imageUnder(r.h.p, "diagram")
+			return [2]bool{ok && img.HasImage(), ok && img.Loading()}
+		})
+		return s[0], s[1]
+	}
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitFor(t, "the first picture", func(string) bool { has, _ := image(); return has })
+	r.h.p.Post(func() { r.h.previewDiagram() })
+	r.s.WaitFor(t, "the spinner, the first picture gone", func(string) bool {
+		has, loading := image()
+		return !has && loading
+	})
+}

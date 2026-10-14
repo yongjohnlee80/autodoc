@@ -45,6 +45,7 @@ func (h *Host) state() map[string]any {
 		"App.diagramTextShown":   true,
 		"App.diagramImageShown":  false,
 		"App.diagramNativeShown": false,
+		"App.diagramDrawn":       false, // an image or a native drawing: the Zoom buttons show
 		"App.htmlPreviewTitle":   "HTML preview",
 		"App.htmlPreviewHelp":    "",
 		"App.diagramText":        "",

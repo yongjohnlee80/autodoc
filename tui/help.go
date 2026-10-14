@@ -262,6 +262,10 @@ WHAT A KEY NEEDS
   Under --gui, Preview HTML opens a pane beside the editor instead: the note's page drawn
   natively, live as you type, following the cursor, its text selectable, its links opening
   notes, files and the browser.
+  Under --gui, File › Preview option chooses what draws Mermaid diagrams, in Preview Mermaid
+  diagram and the pane: Mermaid.js (the default; a headless browser, a few seconds a diagram, with
+  zoom) or the Native Mermaid engine (golib's, at once, no zoom; a type it does not draw is still
+  mermaid.js's).
   field:value in a search (type:adr) filters by a frontmatter field, and the line over the page
   names a file's frontmatter problems, only once the workspace has a schema: Manage… › Edit…
   names the file (suggested: .autodoc/schema.yaml). Without one, field:value is searched as words.
