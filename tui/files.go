@@ -356,6 +356,9 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 	h.readPage()
 	h.showPage() // the relations are read for it (relations.go: Shown)
 	h.htmlPaneNoteChanged()
+	// a script hears the file once it is in (luaevents.go); before a restored copy, which is an edit
+	// of it: readPage again (registrations arriving) is no new page
+	h.emitOpen()
 	h.applyPendingRestore(ws, p)
 }
 
@@ -372,7 +375,6 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 //
 // Unsaved text stays as it is: only how it is read changes.
 func (h *Host) readPage() {
-	defer h.emitOpen() // a script hears the page once it is set up (luaevents.go)
 	p := h.file.path
 	h.file.derived = ""
 	if kind.Of(p, nil) == kind.Derived && !h.file.raw {
@@ -496,6 +498,7 @@ func (h *Host) closeFile() {
 	h.clearDiagnostics()
 	h.showPage()
 	h.htmlPaneNoteChanged()
+	h.emitOpen() // the draft is the page now (luaevents.go)
 }
 
 // edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.

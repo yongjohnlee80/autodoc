@@ -9,7 +9,8 @@ import (
 
 // LUA EVENTS (ADR 1792004705 §4.4): autodoc.on(event, fn) hears what happens to the page.
 //
-//	open    a page set up in the editor (readPage): { path, workspace }; path nil for the draft
+//	open    a file shown in the editor (show), or the draft after a close: { path, workspace }; path
+//	        nil for the draft. Not readPage's: it runs again on an open page when registrations come
 //	save    a save that wrote the editor's text: { path, workspace }
 //	mode    the editor's mode changed (App.syncMode): { mode, previous }, as ed:mode() says them
 //	change  the text changed, once a pause follows the edits: { revision }, as ed:revision() says it

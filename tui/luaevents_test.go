@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // eventsLua records every event as a line of the global events; the first change's handler edits
@@ -74,4 +75,34 @@ func TestLuaHearsThePagesEvents(t *testing.T) {
 
 	r.command(t, "w")
 	wait("save", "save path=a.md workspace=kb")
+}
+
+// TestARegistrationRefreshKeepsAPendingChange: readPage runs again on an open page when the
+// daemon's registrations arrive; that is no new page: open is not emitted again, and a change
+// pending from an edit just before it is still emitted.
+func TestARegistrationRefreshKeepsAPendingChange(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := attached(t, d)
+	r.luaLoad(t, eventsLua)
+	events := func() string {
+		return onLoop(r, func() string {
+			if err := r.h.scripts.L.DoString(`events_text = table.concat(events, "; ")`); err != nil {
+				return err.Error()
+			}
+			return r.h.scripts.L.GetGlobal("events_text").String()
+		})
+	}
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "open", func(string) bool { return strings.Contains(events(), "open path=a.md") })
+	onLoop(r, func() bool {
+		_, _ = r.h.core.Insert(widget.TextPos{}, "x") // an edit: change pending
+		r.h.edited()
+		r.h.readPage() // registrations arriving within the pause
+		return true
+	})
+	r.s.WaitFor(t, "the pending change", func(string) bool { return strings.Contains(events(), "change rev") })
+	if n := strings.Count(events(), "open path=a.md"); n != 1 {
+		t.Fatalf("open emitted %d times: %s", n, events())
+	}
 }
