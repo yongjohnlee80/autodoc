@@ -66,13 +66,12 @@ func (q *embeddingQueue) setPolicy(name, policy string) bool {
 func (q *embeddingQueue) rename(from, to string) {
 	q.mu.Lock()
 	q.policy[to], q.activated[to], q.searched[to], q.idle[to] = q.policy[from], q.activated[from], q.searched[from], q.idle[from]
-	if q.woken[from] {
-		q.woken[to] = true
-	}
 	delete(q.policy, from)
 	delete(q.activated, from)
 	delete(q.searched, from)
 	delete(q.idle, from)
+	// woken is not carried over: a batch running now is still from's, and its finish cannot clear
+	// to's flag. Nothing is lost: rouse cleared from's idle mark, which to has just taken.
 	delete(q.woken, from)
 	if q.focus == from {
 		q.focus = to

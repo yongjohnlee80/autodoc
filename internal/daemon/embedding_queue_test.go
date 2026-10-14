@@ -455,3 +455,25 @@ func TestARousingDuringABatchOutlivesItsEmptyAnswer(t *testing.T) {
 		t.Errorf("woken after its batch: chose %q (woken kept %v), want kb, nothing kept", name, woken)
 	}
 }
+
+// A workspace renamed while a roused batch of its own runs keeps no rousing flag past that batch:
+// the batch ends under its old name, and the new name is chosen at once all the same.
+func TestARenameDuringARousedBatchLeavesNoFlag(t *testing.T) {
+	m, _ := open(t)
+	q := m.queue
+	if name, _ := q.choose(map[string]*served{"kb": {}}); name != "kb" {
+		t.Fatalf("chose %q, want kb", name)
+	}
+	q.wakeWorkspace("kb") // its chunks committed while its batch ran
+	q.rename("kb", "notes")
+	q.mu.Lock()
+	q.finish("kb", false, nil) // the batch ends under the name it started with
+	left := len(q.woken)
+	q.mu.Unlock()
+	if left != 0 {
+		t.Errorf("%d rousing flags left after the batch ended, want none", left)
+	}
+	if name, _ := q.choose(map[string]*served{"notes": {}}); name != "notes" {
+		t.Errorf("the renamed workspace: chose %q, want notes at once", name)
+	}
+}
