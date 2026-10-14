@@ -220,15 +220,19 @@ type Host struct {
 	crashDir        string
 	recoveryOffered bool
 	// the Lua commands (scripts.go): the engine, and the user's folder of scripts
-	scripts        *script.Engine
-	scripting      *scripting // the daemon's verbs in the engine: autodoc.call, autodoc.<domain> (scripting.go)
-	luaDir         string
-	recoveryQueue  []recovered
-	pendingRestore *recovered
-	restoreWaiting bool       // a restore is under way: its open, or the unsaved question before it
-	restoredCopy   *fileRef   // the copy whose text is in the editor, unsaved: kept until saved or discarded
-	draft          *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
-	prog           progress   // the daemon's work left (progress.go)
+	scripts   *script.Engine
+	scripting *scripting // the daemon's verbs in the engine: autodoc.call, autodoc.<domain> (scripting.go)
+	luaDir    string
+	// gated Lua scripts' questions (luagate.go): those waiting, one open, and whether the store's
+	// answers have been read
+	luaAsks                 []luaAsk
+	luaAsking, luaPrefsRead bool
+	recoveryQueue           []recovered
+	pendingRestore          *recovered
+	restoreWaiting          bool       // a restore is under way: its open, or the unsaved question before it
+	restoredCopy            *fileRef   // the copy whose text is in the editor, unsaved: kept until saved or discarded
+	draft                   *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
+	prog                    progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
 	// and the history
 	toasts    *widget.Toasts

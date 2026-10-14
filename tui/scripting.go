@@ -72,6 +72,7 @@ func (s *scripting) Catalog() []Entry {
 // luaVerb is what a script's call needs of a contract.
 type luaVerb struct {
 	verb, audience string
+	effect         string // read, write or settings; "" from a daemon older than effects
 	params         []luaParam
 	required       int
 }
@@ -102,6 +103,9 @@ func (*scripting) Commands() map[string]Command { return nil }
 // once the daemon says its contracts.
 func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) error) {
 	s.eng, s.run = eng, run
+	// a gated script's calls need the capability the verb's effect asks (ADR 1792004705 §4.2)
+	eng.SetGate("call", func(_ string, L *lua.LState) string { return s.capabilityOf(L.CheckString(1)) })
+	eng.SetGate("run", func(string, *lua.LState) string { return "commands" })
 	// a new engine (a reload): the namespaces are made again in it, from the contracts known
 	s.domains = map[string]*lua.LTable{}
 	if s.verbs != nil {
@@ -155,7 +159,7 @@ func decodeVerbs(res any) map[string]luaVerb {
 	out := map[string]luaVerb{}
 	for _, raw := range asList(asMap(res)["verbs"]) {
 		m := asMap(raw)
-		v := luaVerb{verb: str(m, "verb"), audience: str(m, "audience")}
+		v := luaVerb{verb: str(m, "verb"), audience: str(m, "audience"), effect: str(m, "effect")}
 		ps := asList(m["params"])
 		v.required = len(ps)
 		for i, rp := range ps {
@@ -208,6 +212,7 @@ func (s *scripting) define(verbs map[string]luaVerb) {
 			}
 			t = L.NewTable()
 			s.domains[domain] = t
+			s.eng.SetDomainGate(domain, func(name string, _ *lua.LState) string { return s.capabilityOf(domain + "." + name) })
 		}
 		global.RawSetString(domain, t)
 		for _, v := range byDomain[domain] {
@@ -215,6 +220,18 @@ func (s *scripting) define(verbs map[string]luaVerb) {
 			t.RawSetString(name, L.NewFunction(s.namespaced(v)))
 		}
 	}
+}
+
+// capabilityOf is the capability a gated script needs to call verb: its effect's, and settings for
+// a verb whose effect is not known (an older daemon, or no contracts yet), the strictest.
+func (s *scripting) capabilityOf(verb string) string {
+	switch s.verbs[verb].effect {
+	case "read":
+		return "workspace.read"
+	case "write":
+		return "workspace.write"
+	}
+	return "settings"
 }
 
 func clearTable(t *lua.LTable) {

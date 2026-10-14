@@ -33,6 +33,7 @@ const (
 	prefImages        = "tui.preview.images"
 	prefMermaid       = "tui.preview.mermaid"
 	prefOpenAs        = "tui.documents.open"
+	prefLuaGrants     = "lua.grants" // a JSON map: gated script → capability → true (luagate.go)
 	prefCorner        = "tui.toast.corner"
 	prefAboutAt       = "tui.about.atstart"
 	prefUpdates       = "tui.update.check"
@@ -89,15 +90,16 @@ type prefs struct {
 	todosEdge                   string // where the todos panel opens: the left edge unless chosen
 	ruler                       int
 	keymap                      string
-	wrap, lineNumbers           bool   // the page: long lines wrapped at its width; each line's number
-	indentMarks                 string // which lines show their indentation as marks (indentMarks)
-	images                      bool   // previews as images where the terminal draws them (preview.go)
-	mermaid                     string // what draws a Mermaid diagram in a GUI window: "mermaidjs" or "native" (preview.go)
-	openAs                      string // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
-	aboutAtStart                bool   // About opens when the program starts (startup.go)
-	updateCheck                 bool   // a newer release is looked for when the program starts (startup.go)
-	toastCorner                 string // where the notifications stack
-	toastSeconds                int    // how long a finished one stays
+	wrap, lineNumbers           bool                       // the page: long lines wrapped at its width; each line's number
+	indentMarks                 string                     // which lines show their indentation as marks (indentMarks)
+	images                      bool                       // previews as images where the terminal draws them (preview.go)
+	mermaid                     string                     // what draws a Mermaid diagram in a GUI window: "mermaidjs" or "native" (preview.go)
+	openAs                      string                     // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
+	luaGrants                   map[string]map[string]bool // what each gated Lua script may do (luagate.go)
+	aboutAtStart                bool                       // About opens when the program starts (startup.go)
+	updateCheck                 bool                       // a newer release is looked for when the program starts (startup.go)
+	toastCorner                 string                     // where the notifications stack
+	toastSeconds                int                        // how long a finished one stays
 	// the terminal: the edge it opens from; its geometry is in panelGeo
 	termEdge string
 	// termTheme is the theme the terminals' area is drawn in: "page" (or "") the page's, else one
@@ -258,6 +260,9 @@ func prefsForPanels(m map[string]any, gui bool, specs []PanelSpec) prefs {
 	if s, ok := str(prefSearchStages); ok {
 		p.searchStages = stageChoiceOf(s)
 	}
+	if s, ok := str(prefLuaGrants); ok {
+		p.luaGrants = luaGrantsOf(s)
+	}
 	for k, v := range m {
 		readPluginPref(&p, k, v)
 	}
@@ -308,6 +313,8 @@ func (h *Host) loadPrefs() {
 		p := prefsForPanels(values, h.gui, h.panelSpecs())
 		readRows(&p, values, h.prefRows) // the features' own rows too
 		h.applyPrefs(p)
+		h.luaPrefsRead = true
+		h.askLuaGrants() // a gated script's question waits for the answers already given
 		if migrated {
 			// The row setter persists even when the projected value already matches.
 			core{h}.SetPref(prefAgentDefaultCodename, p.Value(prefAgentDefaultCodename))
