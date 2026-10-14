@@ -218,3 +218,32 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 func askText(r *running) string {
 	return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return fmt.Sprint(v.Raw) })
 }
+
+// TestTheTokenRegistryIsTheLoops: agents starting (their tokens made on the UI loop) while other
+// agents call the socket: every lookup is the loop's too, so -race sees no shared access.
+func TestTheTokenRegistryIsTheLoops(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{EditorDir: t.TempDir()})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	path := onLoop(r, r.h.editorSocketPath)
+	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	ctx := context.Background()
+	cli, err := golibrpc.Dial(ctx, path, msgpackrpc.New(nil), golibrpc.ClientNetwork("unix"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cli.Close()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 100 {
+			r.h.p.Post(func() { r.h.agents.editorToken(fmt.Sprintf("agent%d", i)) })
+		}
+	}()
+	for range 100 {
+		if _, err := cli.Call(ctx, "editor.read", token); err == nil {
+			t.Fatal("an ungranted read answered") // zen has no grant: each call is refused, after the lookup
+		}
+	}
+	<-done
+}

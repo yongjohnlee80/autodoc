@@ -200,6 +200,7 @@ func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 
 // agentOf is the agent a request comes from: its first param is the secret the agent was started
 // with ($AUTODOC_EDITOR_TOKEN), never a name it chooses, so one agent cannot use another's grants.
+// It reads the token registry, which agent launches write on the UI loop: call it on the loop only.
 func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 	tok := ""
 	if len(req.Params) > 0 {
@@ -216,11 +217,11 @@ func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 // editorVerb is fn as a handler: run on the loop, for an agent granted capability.
 func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs) (any, error)) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
-		agent, a, err := h.agentOf(req)
-		if err != nil {
-			return nil, err
-		}
 		return onLoopFor(ctx, h, func() (any, error) {
+			agent, a, err := h.agentOf(req) // on the loop, where agent launches write the tokens
+			if err != nil {
+				return nil, err
+			}
 			who := "agent:" + agent
 			if g := (luaGrants{h}); !g.Granted(who, capability) {
 				g.Request(who, []string{capability})
@@ -384,10 +385,10 @@ func (h *Host) editorRun(_ string, a editorArgs) (any, error) {
 // showing it; Yes writes lua/<name>.lua (never over a file there) and reloads the scripts. The call
 // waits for the answer, never the loop.
 func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any, error) {
-	agent, a, err := h.agentOf(req)
-	if err != nil {
-		return nil, err
+	if len(req.Params) == 0 {
+		return nil, invalid("param 1 is the agent's token ($AUTODOC_EDITOR_TOKEN)")
 	}
+	a := editorArgs(req.Params[1:]) // the agent behind the token is looked up on the loop, below
 	name, err := a.str(0, "the command file's name")
 	if err != nil {
 		return nil, err
@@ -412,6 +413,10 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 	}
 	answered := make(chan error, 1)
 	if _, err := onLoopFor(ctx, h, func() (bool, error) {
+		agent, _, err := h.agentOf(req)
+		if err != nil {
+			return false, err
+		}
 		if h.luaDir == "" {
 			return false, &golibrpc.Error{Code: codeEditorRefused, Message: "no Lua folder"}
 		}
