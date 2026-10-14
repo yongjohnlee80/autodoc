@@ -440,3 +440,53 @@ func TestACSVFenceIsATable(t *testing.T) {
 		t.Error("a go fence was drawn as a table")
 	}
 }
+
+// realHost answers as the editor's host does: it asks the Diagrammer it is given, and its ready
+// is the test's.
+type realHost struct{ ready chan struct{} }
+
+func (h *realHost) Diagram(d guiwidget.Diagrammer, _ guiwidget.Block, req guiwidget.DiagramRequest) guiwidget.DiagramAnswer {
+	return d.Diagram(context.Background(), req, func() {
+		select {
+		case h.ready <- struct{}{}:
+		default:
+		}
+	})
+}
+
+// End to end, with golib's own chain: a chart embed is drawn as a chart, laid out by
+// gui/vegalite. It is Pending first, then, once laid, a picture that paints its labels; a spec
+// outside golib's subset falls back to its JSON as code.
+func TestAChartEmbedIsDrawnByGolib(t *testing.T) {
+	spec := `{"data":{"values":[{"a":"apples","b":3},{"a":"pears","b":5}]},"mark":"bar","encoding":{"x":{"field":"a","type":"nominal"},"y":{"field":"b","type":"quantitative"}}}`
+	notes, _ := embedNote(t, map[string]string{"note/fruit.chart.json": spec, "note/other.chart.json": `{"data":{"values":[]},"mark":"bar","transform":[]}`})
+	r := notes.Renderer(guiwidget.Diagrams(nil))(NoteRendererSpec{})
+	lines := []string{"![Fruit](fruit.chart.json)", "", "![Other](other.chart.json)"}
+	draw := func(ln int) guiwidget.BlockLayout {
+		host := &realHost{ready: make(chan struct{}, 1)}
+		_, bl := layOut(r, lines, ln, false, host)
+		select {
+		case <-host.ready:
+			_, bl = layOut(r, lines, ln, false, host)
+		case <-time.After(10 * time.Second):
+			t.Fatalf("line %d: the chain never called ready", ln)
+		}
+		return bl
+	}
+	bl := draw(0)
+	if bl.Picture == nil || bl.Height <= 0 {
+		t.Fatalf("the chart: %#v, want its picture", bl)
+	}
+	if _, code := bl.Picture.(laidBlock); code {
+		t.Fatalf("the chart was drawn as its source: %q", visible(bl.Picture.(laidBlock).bl))
+	}
+	rc := gui.NewRecordingCanvas(gui.Size{W: 600, H: bl.Height}, gui.Size{W: 8, H: 16})
+	bl.Picture.Paint(rc)
+	if !slices.Contains(rc.Ops(), "DrawText") || !slices.Contains(rc.Ops(), "FillPath") {
+		t.Errorf("the chart painted %v: want its bars and labels", rc.Ops())
+	}
+	bl = draw(2)
+	if code, ok := bl.Picture.(laidBlock); !ok || !strings.Contains(visible(code.bl), `"transform"`) {
+		t.Errorf("a chart outside the subset is not its spec as code: %#v", bl)
+	}
+}
