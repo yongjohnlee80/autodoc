@@ -344,16 +344,18 @@ func TestEmbedsAreDrawn(t *testing.T) {
 // out of the folder and a missing one have none: the line stays as written.
 func TestEmbedMarkdownIsTheInjectedBlock(t *testing.T) {
 	doc := embedDoc(t, map[string]string{
-		"secret.mmd":         "graph TD\n  secret --> out\n",
-		"docs/flow.mmd":      "graph TD\n  a --> b\n",
-		"docs/ticks.mmd":     "graph TD\n  a[\"```\"] --> b\n",
-		"docs/plan/data.csv": "name,count\nclaims,\"3,000\"\n\"a|b\",\"two\nlines\"\nc,1\nd,2\n",
-		"docs/pic.png":       "\x89PNG",
-		"docs/literal.csv":   "value\n**strong** `code` [l](u) ![i](p) &amp; a|b c\\d\n",
+		"secret.mmd":            "graph TD\n  secret --> out\n",
+		"docs/flow.mmd":         "graph TD\n  a --> b\n",
+		"docs/ticks.mmd":        "graph TD\n  a[\"```\"] --> b\n",
+		"docs/plan/data.csv":    "name,count\nclaims,\"3,000\"\n\"a|b\",\"two\nlines\"\nc,1\nd,2\n",
+		"docs/sales.chart.json": "{\"mark\": \"bar\"}\n",
+		"docs/pic.png":          "\x89PNG",
+		"docs/literal.csv":      "value\n**strong** `code` [l](u) ![i](p) &amp; a|b c\\d\n",
 	})
 	for _, c := range []struct{ dest, want string }{
 		{"flow.mmd", "```mermaid\ngraph TD\n  a --> b\n```"},
 		{"ticks.mmd", "````mermaid\ngraph TD\n  a[\"```\"] --> b\n````"},
+		{"sales.chart.json", "```vega-lite\n{\"mark\": \"bar\"}\n```"},
 		{"data.csv", "| name | count |\n| --- | --- |\n| claims | 3\\,000 |\n| a\\|b | two lines |\n| … 2 more rows |  |"},
 		// every ASCII punctuation character escaped: emphasis, code, a link, an image, an entity,
 		// a pipe and a backslash are the value's own characters
@@ -364,7 +366,7 @@ func TestEmbedMarkdownIsTheInjectedBlock(t *testing.T) {
 			t.Errorf("%s: %q (ok %v), want %q", c.dest, got, ok, c.want)
 		}
 	}
-	for _, dest := range []string{"pic.png", "../secret.mmd", "missing.mmd", "https://example.com/a.mmd"} {
+	for _, dest := range []string{"pic.png", "../secret.mmd", "missing.mmd", "https://example.com/a.mmd", "missing.chart.json"} {
 		if got, ok := export.EmbedMarkdown(doc, dest, 0); ok {
 			t.Errorf("%s: injected %q, want the line as written", dest, got)
 		}
@@ -606,5 +608,37 @@ func TestAFittedTableShowsTheRowsItsCellsAllow(t *testing.T) {
 	}
 	if !strings.Contains(page, "… 63 more columns</td>") {
 		t.Errorf("the table does not say only its hidden columns:\n%s", page[strings.LastIndex(page, "<tr>"):])
+	}
+}
+
+// A Vega-Lite chart, embedded (.chart.json) or in a vega-lite fence, is a <pre class="vega-lite">
+// of its spec, which the GUI's HTML view draws (a browser shows the spec), and no mermaid script;
+// a csv fence is a table, as a .csv embed is, keeping its data-src. A csv fence with no rows stays
+// code, and a chart that shares its paragraph is its alt text.
+func TestChartsAndCSVFencesAreDrawn(t *testing.T) {
+	doc := embedDoc(t, map[string]string{"docs/plan/sales.chart.json": "{\"mark\": \"bar\", \"title\": \"a<b\"}\n"})
+	source := "![Sales](sales.chart.json)\n\n```vega-lite\n{\"mark\": \"line\"}\n```\n\n" +
+		"```csv\nname, age, address\njohn, 25, 1234 Howe St.\n```\n\n```csv\n```\n\nSee ![s](sales.chart.json).\n"
+	page := renderEmbeds(t, source, doc, false)
+	for _, want := range []string{
+		`<div class="embed"><pre class="vega-lite">{&#34;mark&#34;: &#34;bar&#34;, &#34;title&#34;: &#34;a&lt;b&#34;}`,
+		`<div class="embed"><table>`, `<th>name</th><th> age</th><th> address</th>`, `<td>john</td><td> 25</td><td> 1234 Howe St.</td>`,
+		`<code class="language-csv"></code>`,
+		`<p>See <em>s</em>.</p>`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q:\n%s", want, page)
+		}
+	}
+	if fence := regexp.MustCompile(`<pre class="vega-lite">\{(&#34;|&quot;)mark(&#34;|&quot;): (&#34;|&quot;)line`); !fence.MatchString(page) {
+		t.Errorf("the vega-lite fence is not a chart's pre:\n%s", page)
+	}
+	if strings.Contains(page, "data-mermaid") || strings.Contains(page, "<script>") {
+		t.Errorf("a page with charts and no diagram has mermaid's script:\n%s", page)
+	}
+	spans := renderEmbeds(t, "```vega-lite\n{}\n```\n\n```csv\na,b\n```\n", doc, true)
+	if !regexp.MustCompile(`<pre class="vega-lite" data-src="[0-9]+-[0-9]+">`).MatchString(spans) ||
+		!regexp.MustCompile(`<div class="embed" data-src="[0-9]+-[0-9]+"><table>`).MatchString(spans) {
+		t.Errorf("a fence's data-src was not kept:\n%s", spans)
 	}
 }

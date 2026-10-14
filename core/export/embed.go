@@ -24,18 +24,20 @@ import (
 )
 
 // EMBEDS — a page's ![alt](path) of a file beside its document is drawn in the page, as xmd draws
-// it: a Mermaid diagram (.mmd) as a diagram, a table (.csv) as a table, its first row the header,
-// and an image as the image. The path is looked for beside the document, then in its resources
+// it: a Mermaid diagram (.mmd) as a diagram, a Vega-Lite chart (.chart.json) as a chart, a table
+// (.csv) as a table, its first row the header, and an image as the image. A chart is a <pre
+// class="vega-lite"> of its spec: the GUI's HTML view draws it natively, and a browser shows the
+// spec. The path is looked for beside the document, then in its resources
 // folder (the document's name without .x.md or .md: plan.x.md's is plan/), and nowhere else: a
 // path that climbs out of the document's folder, an absolute path and a URL are not looked for,
 // and os.Root refuses a symlink that points out. An image is written into the page as a data: URI,
 // so the page stays whole (its policy admits data: images and nothing from the network). A file
 // that is missing, refused, too large or of another kind is drawn as its alt text, as before.
 //
-// A diagram or a table is a block: it is drawn when the embed is its paragraph's only content, and
-// takes the paragraph's place. An image is drawn wherever it is.
+// A diagram, a chart or a table is a block: it is drawn when the embed is its paragraph's only
+// content, and takes the paragraph's place. An image is drawn wherever it is.
 
-// The bounds: a diagram or table file's size, an image's, every image of a page together, and what
+// The bounds: a diagram, chart or table file's size, an image's, every image of a page together, and what
 // a table shows: its rows, its columns, and its cells, the header's included. A row is padded to the
 // table's width, so the columns and cells bound the page a sparse file makes (a wide header over
 // short rows): what is drawn grows with the file, never with rows times the widest row.
@@ -116,6 +118,12 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 			return "", false, false, false
 		}
 		return `<pre class="mermaid">` + stdhtml.EscapeString(string(data)) + `</pre>`, true, true, true
+	case isChart(p):
+		data, ok := e.read(p, maxEmbedText)
+		if !ok {
+			return "", false, false, false
+		}
+		return `<pre class="vega-lite">` + stdhtml.EscapeString(string(data)) + `</pre>`, true, false, true
 	case ext == ".csv":
 		data, ok := e.read(p, maxEmbedText)
 		if !ok {
@@ -126,6 +134,9 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 	}
 	return "", false, false, false
 }
+
+// isChart reports whether p names a Vega-Lite chart: x.chart.json, as xmd names one.
+func isChart(p string) bool { return strings.HasSuffix(strings.ToLower(p), ".chart.json") }
 
 // embedPath is an embed's destination as a path in the document's folder: decoded, without its
 // query or fragment. A URL, an absolute path and one that climbs out are not.
@@ -292,16 +303,17 @@ func csvRows(data []byte, fit tableFit) (csvShown, bool) {
 
 // EmbedMarkdown is the Markdown an editor's Rendered view draws in place of a line that embeds
 // dest in the document at doc, read as the page reads it (beside the document, then in its
-// resources folder, never out of its folder): a Mermaid diagram (.mmd) as a mermaid fence, a table
-// (.csv) as a Markdown table of at most rows rows (0: maxTableRows). ok is false for any other
-// embed, and for a file that is missing, refused, too large or not CSV: the line stays as written.
+// resources folder, never out of its folder): a Mermaid diagram (.mmd) as a mermaid fence, a
+// Vega-Lite chart (.chart.json) as a vega-lite fence, a table (.csv) as a Markdown table of at
+// most rows rows (0: maxTableRows). ok is false for any other embed, and for a file that is
+// missing, refused, too large or not CSV: the line stays as written.
 func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 	p, ok := embedPath(dest)
 	if !ok {
 		return "", false
 	}
 	ext := strings.ToLower(path.Ext(p))
-	if ext != ".mmd" && ext != ".csv" {
+	if ext != ".mmd" && ext != ".csv" && !isChart(p) {
 		return "", false
 	}
 	e := newEmbedder(doc, tableFit{rows: rows})
@@ -313,10 +325,20 @@ func EmbedMarkdown(doc, dest string, rows int) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if ext == ".mmd" {
-		return mermaidFence(string(data)), true
+	switch {
+	case ext == ".mmd":
+		return fenced("mermaid", string(data)), true
+	case isChart(p):
+		return fenced("vega-lite", string(data)), true
 	}
-	t, ok := csvRows(data, e.fit)
+	return CSVMarkdown(data, rows)
+}
+
+// CSVMarkdown is CSV (a file's, or a csv fence's) as the Rendered view draws it: a Markdown table
+// of literal cells, its first row the header, of at most rows rows (0: maxTableRows), and a last
+// row saying what is not shown. ok is false for no rows, or what is not CSV.
+func CSVMarkdown(data []byte, rows int) (string, bool) {
+	t, ok := csvRows(data, tableFit{rows: rows})
 	if !ok {
 		return "", false
 	}
@@ -407,14 +429,14 @@ func EmbedDiagram(doc, dest string) (string, bool) {
 	return string(data), ok
 }
 
-// mermaidFence is src in a mermaid fence, its backticks more than any run src holds.
-func mermaidFence(src string) string {
+// fenced is src in a fence of lang, its backticks more than any run src holds.
+func fenced(lang, src string) string {
 	n := 3
 	for _, m := range backticks.FindAllString(src, -1) {
 		n = max(n, len(m)+1)
 	}
 	fence := strings.Repeat("`", n)
-	return fence + "mermaid\n" + strings.TrimRight(src, "\r\n") + "\n" + fence
+	return fence + lang + "\n" + strings.TrimRight(src, "\r\n") + "\n" + fence
 }
 
 // markdownTable is t as a Markdown table: its header, the delimiter row, its body, and what is not

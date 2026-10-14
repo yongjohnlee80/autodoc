@@ -15,12 +15,15 @@ import (
 )
 
 // A NOTE'S EMBEDS IN THE RENDERED VIEW, under --gui. In the note editor (NoteRenderer), a line that
-// holds only an image, ![title](flow.mmd) or ![title](data.csv), alone in its paragraph as the
-// page's parser reads it (export.EmbedLines), is drawn as if the file were written there: a
-// Mermaid diagram as a mermaid fence, drawn natively as golib draws one, and a table as a Markdown
-// table of literal cells, laid out natively by golib's own renderer. The file is read as the HTML
-// preview reads it (export.EmbedMarkdown). The line stays the note's: while typing on it, it is its
-// source, editable, and a click on what it draws puts the cursor on it.
+// holds only an image, ![title](flow.mmd), ![title](sales.chart.json) or ![title](data.csv), alone
+// in its paragraph as the page's parser reads it (export.EmbedLines), is drawn as if the file were
+// written there: a Mermaid diagram as a mermaid fence and a Vega-Lite chart as a vega-lite fence,
+// each drawn natively as golib draws one (a chart golib does not draw shows its spec as code), and
+// a table as a Markdown table of literal cells, laid out natively by golib's own renderer. The file
+// is read as the HTML preview reads it (export.EmbedMarkdown). The line stays the note's: while
+// typing on it, it is its source, editable, and a click on what it draws puts the cursor on it.
+//
+// A ```csv fence is drawn as that table too, off the cursor, once its closing fence is written.
 //
 // Whether an image is alone depends on the lines around it, and the editor keeps the layout of a
 // block wholly before an edit while the blocks before it are unchanged. So the paragraph's shape is
@@ -161,6 +164,9 @@ func (r *embedRenderer) LayOut(b guiwidget.Block, lines []string, width float32,
 		if md, ok := r.embedded(lines, b); ok {
 			return r.layEmbed(b, md, width, t, th, host)
 		}
+		if md, ok := csvFence(lines, b); ok {
+			return r.layEmbed(b, md, width, t, th, host)
+		}
 	}
 	return r.MarkdownRenderer.LayOut(b, lines, width, inside, t, th, host)
 }
@@ -194,15 +200,41 @@ func (r *embedRenderer) embedded(lines []string, b guiwidget.Block) (string, boo
 	return export.EmbedMarkdown(note, e.dest, embedTableRows)
 }
 
+// csvFence is the table a ```csv fence, block b, is drawn as: its rows as a .csv embed's
+// (export.CSVMarkdown). Only a whole fence, its closing fence written, is: one being typed, or
+// clipped, stays code, as does one that is not CSV.
+func csvFence(lines []string, b guiwidget.Block) (string, bool) {
+	if b.To-b.From < 2 || b.To > len(lines) {
+		return "", false
+	}
+	open := strings.TrimLeft(lines[b.From], " ")
+	if len(lines[b.From])-len(open) > 3 || len(open) < 3 || (open[0] != '`' && open[0] != '~') {
+		return "", false
+	}
+	ch, n := open[0], 0
+	for n < len(open) && open[n] == ch {
+		n++
+	}
+	info := strings.Fields(open[n:])
+	if n < 3 || len(info) == 0 || !strings.EqualFold(info[0], "csv") || (ch == '`' && strings.Contains(open[n:], "`")) {
+		return "", false
+	}
+	last := strings.TrimLeft(lines[b.To-1], " ")
+	if len(lines[b.To-1])-len(last) > 3 || len(last) < n || strings.Trim(strings.TrimRight(last, " \t"), string(ch)) != "" {
+		return "", false // not closed in the block
+	}
+	return export.CSVMarkdown([]byte(strings.Join(lines[b.From+1:b.To-1], "\n")), embedTableRows)
+}
+
 // layEmbed lays the embed of block b out as md, the Markdown its file stands for, drawn as the
-// block's picture: the line's source identity and clicks stay the line's. A diagram is asked of the
-// window's host for this block, as a mermaid fence's is; while it is not ready, or when it is
-// declined, md is laid out as golib lays it, the diagram's source as code.
+// block's picture: the line's source identity and clicks stay the line's. A diagram or a chart is
+// asked of the window's host for this block, as a mermaid or vega-lite fence's is; while it is not
+// ready, or when it is declined, md is laid out as golib lays it, the source as code.
 func (r *embedRenderer) layEmbed(b guiwidget.Block, md string, width float32, t *gui.TextShaper, th guiwidget.Theme, host guiwidget.DiagramHost) guiwidget.BlockLayout {
 	injected := strings.Split(md, "\n")
-	if fence := strings.TrimLeft(injected[0], "`"); fence == "mermaid" && host != nil && r.diagrams != nil && len(injected) > 2 {
+	if lang := strings.TrimLeft(injected[0], "`"); (lang == "mermaid" || lang == "vega-lite") && host != nil && r.diagrams != nil && len(injected) > 2 {
 		src := strings.Join(injected[1:len(injected)-1], "\n")
-		a := host.Diagram(r.diagrams, b, guiwidget.DiagramRequest{Lang: "mermaid", Src: src, Width: width, Scale: t.Scale(), Theme: th})
+		a := host.Diagram(r.diagrams, b, guiwidget.DiagramRequest{Lang: lang, Src: src, Width: width, Scale: t.Scale(), Theme: th})
 		if a.State != guiwidget.Declined && a.Pic != nil {
 			return guiwidget.BlockLayout{Picture: a.Pic, PictureSize: a.Size, Height: a.Size.H}
 		}

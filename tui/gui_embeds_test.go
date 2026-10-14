@@ -25,11 +25,12 @@ import (
 type diagramHost struct {
 	asked  []guiwidget.Block
 	src    []string
+	lang   []string
 	answer guiwidget.DiagramAnswer
 }
 
 func (h *diagramHost) Diagram(_ guiwidget.Diagrammer, b guiwidget.Block, req guiwidget.DiagramRequest) guiwidget.DiagramAnswer {
-	h.asked, h.src = append(h.asked, b), append(h.src, req.Src)
+	h.asked, h.src, h.lang = append(h.asked, b), append(h.src, req.Src), append(h.lang, req.Lang)
 	return h.answer
 }
 
@@ -378,5 +379,64 @@ func TestBlocksScaleWithTheNote(t *testing.T) {
 	small, large := allocated(1000), allocated(5000)
 	if ratio := float64(large) / float64(small); ratio > 10 {
 		t.Errorf("5× the paragraphs allocated %.1f× the bytes (%d vs %d): Blocks grows faster than the note", ratio, large, small)
+	}
+}
+
+// A chart embed (.chart.json) is asked of the host as a vega-lite block, for the line's own block,
+// and drawn as its picture; a chart the chain declines (outside golib's subset) is its spec as
+// code, in the picture, so the line keeps its identity.
+func TestARenderedNoteDrawsItsCharts(t *testing.T) {
+	spec := `{"data":{"values":[{"a":"x","b":1}]},"mark":"bar","encoding":{"x":{"field":"a","type":"nominal"},"y":{"field":"b","type":"quantitative"}}}`
+	notes, _ := embedNote(t, map[string]string{"note/sales.chart.json": spec + "\n"})
+	r := notes.Renderer(guiwidget.Diagrams(nil))(NoteRendererSpec{})
+	lines := []string{"# Note", "", "![Sales](sales.chart.json)", ""}
+	pic := gui.ViewFunc(func(gui.Canvas) {})
+	host := &diagramHost{answer: guiwidget.DiagramAnswer{State: guiwidget.Ready, Pic: pic, Size: gui.Size{W: 300, H: 200}}}
+	b, bl := layOut(r, lines, 2, false, host)
+	if bl.Picture == nil || len(bl.Lines) != 0 || bl.Height != 200 {
+		t.Fatalf("the chart embed: picture %v, %d lines, height %v; want the host's picture", bl.Picture != nil, len(bl.Lines), bl.Height)
+	}
+	if len(host.asked) != 1 || host.asked[0] != b || host.lang[0] != "vega-lite" || host.src[0] != spec {
+		t.Fatalf("the host was asked %v for %q %q; want the line's block, vega-lite, the file's spec", host.asked, host.lang, host.src)
+	}
+	_, bl = layOut(r, lines, 2, false, &diagramHost{answer: guiwidget.DiagramAnswer{State: guiwidget.Declined}})
+	if code, ok := bl.Picture.(laidBlock); !ok || len(bl.Lines) != 0 || !strings.Contains(visible(code.bl), `"mark":"bar"`) {
+		t.Fatalf("a declined chart is not its spec as code: %#v", bl)
+	}
+}
+
+// A csv fence, off the cursor and closed, is drawn as a .csv embed's table; under the cursor, or
+// while its closing fence is not written, it is its source.
+func TestACSVFenceIsATable(t *testing.T) {
+	notes, _ := embedNote(t, nil)
+	r := notes.Renderer(nil)(NoteRendererSpec{})
+	lines := []string{"# Note", "", "```csv", "name, age, address", "john, 25, 1234 Howe St.", "```", ""}
+	b, bl := layOut(r, lines, 3, false, nil)
+	table, ok := bl.Picture.(laidBlock)
+	if b != (guiwidget.Block{From: 2, To: 6}) || !ok || len(bl.Lines) != 0 {
+		t.Fatalf("block %v: %#v, want the fence's block drawn as a table", b, bl)
+	}
+	for _, want := range []string{"name", "age", "address", "john", "25", "1234 Howe St."} {
+		if !strings.Contains(visible(table.bl), want) {
+			t.Errorf("the table lacks %q: %q", want, visible(table.bl))
+		}
+	}
+	if strings.Contains(visible(table.bl), "```") {
+		t.Errorf("the fence lines were drawn: %q", visible(table.bl))
+	}
+	if _, bl = layOut(r, lines, 3, true, nil); bl.Picture != nil || len(bl.Lines) != 4 {
+		t.Errorf("under the cursor: %#v, want the fence's four lines", bl)
+	}
+	open := lines[:5]
+	if _, bl = layOut(r, open, 3, false, nil); bl.Picture != nil {
+		t.Error("an unclosed csv fence was drawn as a table")
+	}
+	tilde := []string{"~~~~ CSV", "a,b", "1,2", "~~~~~"}
+	if _, bl = layOut(r, tilde, 0, false, nil); bl.Picture == nil {
+		t.Error("a tilde fence, CSV in capitals, was not drawn as a table")
+	}
+	other := []string{"```go", "a,b", "```"}
+	if _, bl = layOut(r, other, 0, false, nil); bl.Picture != nil {
+		t.Error("a go fence was drawn as a table")
 	}
 }

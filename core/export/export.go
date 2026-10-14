@@ -110,7 +110,22 @@ func DiagramPage(source, theme string) ([]byte, error) {
 
 // mermaidBlock is a mermaid fence as the renderer writes it: its pre's attributes (data-src, with
 // SourceSpans) and its escaped source.
-var mermaidBlock = regexp.MustCompile(`(?s)<pre((?:\s+[a-zA-Z-]+="[^"]*")*)><code class="language-mermaid">(.*?)</code></pre>`)
+var mermaidBlock = fenceBlock("mermaid")
+
+// CHARTS AND TABLES IN FENCES — a ```vega-lite fence is a chart, as a .chart.json embed is: a <pre
+// class="vega-lite"> of its spec, which the GUI's HTML view draws natively and a browser shows as
+// the spec. A ```csv fence is a table, as a .csv embed is (its first row the header, fit as
+// Options say); one that is not CSV stays code.
+var (
+	chartBlock = fenceBlock("vega-lite")
+	csvBlock   = fenceBlock("csv")
+)
+
+// fenceBlock matches a fence of lang as the renderer writes it: its pre's attributes and its
+// escaped source.
+func fenceBlock(lang string) *regexp.Regexp {
+	return regexp.MustCompile(`(?s)<pre((?:\s+[a-zA-Z-]+="[^"]*")*)><code class="language-` + regexp.QuoteMeta(lang) + `">(.*?)</code></pre>`)
+}
 
 // Options are what a render reads besides the source, its format and its theme.
 type Options struct {
@@ -122,13 +137,13 @@ type Options struct {
 	// view that follows the editor: the GUI's native HTML preview scrolls to the cursor's block.
 	SourceSpans bool
 	// Document is the source's own file on disk. Its embeds (![alt](path)) of a Mermaid diagram
-	// (.mmd), a table (.csv) or an image are read beside it, or in its resources folder, and drawn
-	// in the page (embed.go). "" draws each as its alt text.
+	// (.mmd), a Vega-Lite chart (.chart.json), a table (.csv) or an image are read beside it, or in
+	// its resources folder, and drawn in the page (embed.go). "" draws each as its alt text.
 	Document string
-	// TableRows is how many rows an embedded table shows (0: 1000); TableWidth is the width, in
-	// characters, its columns are fit in: those that fit are shown, and the table says how many
-	// are not (0: any width, 64 columns at most). For a view narrower than a browser: the GUI's
-	// Rendered view of a note.
+	// TableRows is how many rows an embedded table, or a csv fence's, shows (0: 1000); TableWidth
+	// is the width, in characters, its columns are fit in: those that fit are shown, and the table
+	// says how many are not (0: any width, 64 columns at most). For a view narrower than a
+	// browser: the GUI's Rendered view of a note.
 	TableRows, TableWidth int
 }
 
@@ -211,6 +226,19 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 			// attributes: a pane that follows the cursor finds the diagram by its data-src
 			m := mermaidBlock.FindStringSubmatch(block)
 			return `<pre class="mermaid"` + m[1] + `>` + m[2] + `</pre>`
+		})
+		rendered = chartBlock.ReplaceAllStringFunc(rendered, func(block string) string {
+			m := chartBlock.FindStringSubmatch(block)
+			return `<pre class="vega-lite"` + m[1] + `>` + m[2] + `</pre>`
+		})
+		fit := tableFit{rows: options.TableRows, width: options.TableWidth}
+		rendered = csvBlock.ReplaceAllStringFunc(rendered, func(block string) string {
+			m := csvBlock.FindStringSubmatch(block)
+			table, ok := csvTable([]byte(stdhtml.UnescapeString(m[2])), fit)
+			if !ok {
+				return block
+			}
+			return `<div class="embed"` + m[1] + `>` + table + `</div>`
 		})
 		return page(colors, rendered, diagrams, false), nil
 	case Text:
