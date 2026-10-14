@@ -72,3 +72,28 @@ func TestPanelRowsMaximizeTheirOwnPanel(t *testing.T) {
 		t.Errorf("a failed toggle kept %v, not naming what failed", m.kept)
 	}
 }
+
+// lookHost is a panel host with Theme and font…, failing with err.
+type lookHost struct {
+	err    error
+	opened int
+	kept   []error
+}
+
+func (l *lookHost) OpenTerminalLook() error { l.opened++; return l.err }
+func (l *lookHost) Keep(err error)          { l.kept = append(l.kept, err) }
+
+// TestPanelRowsKeepARefusedLook: Theme and font… opens the host's look; refused, the refusal is
+// kept, named for what failed, not lost.
+func TestPanelRowsKeepARefusedLook(t *testing.T) {
+	l := &lookHost{}
+	runRow(t, panelRows(l, "terminal", func() {}), "tabs.look")
+	if l.opened != 1 || len(l.kept) != 0 {
+		t.Fatalf("opened %d, kept %v", l.opened, l.kept)
+	}
+	l.err = errors.New("views are not attached")
+	runRow(t, panelRows(l, "terminal", func() {}), "tabs.look")
+	if len(l.kept) != 1 || !errors.Is(l.kept[0], l.err) || !strings.HasPrefix(l.kept[0].Error(), "Theme and font… for the terminal panel: ") {
+		t.Errorf("a refused look kept %v, not naming what failed", l.kept)
+	}
+}

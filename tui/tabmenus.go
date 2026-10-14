@@ -29,7 +29,11 @@ func tabMenuRow(id, label string, run func(widget.TerminalTabID)) widget.MenuIte
 func panelRows(c any, panel string, hide func()) []widget.MenuItemModel {
 	rows := []widget.MenuItemModel{widget.NewSeparator("tabs.panel")}
 	if look := lookOf(c); look != nil {
-		rows = append(rows, tabMenuRow("tabs.look", "&Theme and font…", func(widget.TerminalTabID) { look() }))
+		rows = append(rows, tabMenuRow("tabs.look", "&Theme and font…", func(widget.TerminalTabID) {
+			if err := look(); err != nil {
+				keepFailure(c, fmt.Errorf("Theme and font… for the %s panel: %w", panel, err))
+			}
+		}))
 	}
 	if m, ok := c.(interface {
 		PanelMaximized(string) bool
@@ -41,18 +45,23 @@ func panelRows(c any, panel string, hide func()) []widget.MenuItemModel {
 		}
 		rows = append(rows, tabMenuRow("tabs.maximize", label, func(widget.TerminalTabID) {
 			if err := m.ToggleMaximize(panel); err != nil {
-				if k, ok := c.(interface{ Keep(error) }); ok {
-					k.Keep(fmt.Errorf("%s the %s panel: %w", op, panel, err))
-				}
+				keepFailure(c, fmt.Errorf("%s the %s panel: %w", op, panel, err))
 			}
 		}))
 	}
 	return append(rows, tabMenuRow("tabs.hide", "Hi&de", func(widget.TerminalTabID) { hide() }))
 }
 
+// keepFailure gives err to the host to keep, where c keeps errors.
+func keepFailure(c any, err error) {
+	if k, ok := c.(interface{ Keep(error) }); ok {
+		k.Keep(err)
+	}
+}
+
 // lookOf is the host's Theme and font… (Host.openTerminalLook), nil where c has none.
-func lookOf(c any) func() {
-	if l, ok := c.(interface{ OpenTerminalLook() }); ok {
+func lookOf(c any) func() error {
+	if l, ok := c.(interface{ OpenTerminalLook() error }); ok {
 		return l.OpenTerminalLook
 	}
 	return nil

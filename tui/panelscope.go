@@ -50,11 +50,20 @@ func (s *scopedPanelHost) KeepPanelGeometry(id, dimension string, percent int) {
 // PageTheme is the theme the page is drawn in: a terminal theme of "the page's" follows it.
 func (s *scopedPanelHost) PageTheme() string { return s.core.Theme() }
 
-// OpenTerminalLook is the panels' Theme and font… (terminallook.go).
-func (s *scopedPanelHost) OpenTerminalLook() { s.core.h.openTerminalLook() }
+// OpenTerminalLook is the panels' Theme and font… (terminallook.go); none before the views exist.
+func (s *scopedPanelHost) OpenTerminalLook() error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	s.core.h.openTerminalLook()
+	return nil
+}
 
-// PanelMaximized is whether panel id fills the dock area now (its Drawer's changed signal).
-func (s *scopedPanelHost) PanelMaximized(id string) bool { return s.core.h.panelMax[id] }
+// PanelMaximized is whether panel id fills the dock area now (its Drawer's changed signal): false
+// for another feature's panel, and before the views exist.
+func (s *scopedPanelHost) PanelMaximized(id string) bool {
+	return s.owns(id) == nil && s.ready() == nil && s.core.h.panelMax[id]
+}
 
 // ToggleMaximize maximizes panel id, or restores it: its Drawer's own toggleMaximize.
 func (s *scopedPanelHost) ToggleMaximize(id string) error {

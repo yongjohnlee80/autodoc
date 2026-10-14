@@ -223,3 +223,47 @@ func TestPanelMaximizeStaysWithItsOwnPanels(t *testing.T) {
 		t.Error("the refused toggle maximized the agents' panel")
 	}
 }
+
+// TestPanelLookAndMaximizedWaitForTheViews: before its views exist, a feature's Theme and font…
+// is refused (no dialog half opened, nothing to put back), and no panel reads as maximized, even
+// one the host has down as maximized; a host whose program exists but is not attached is not ready.
+func TestPanelLookAndMaximizedWaitForTheViews(t *testing.T) {
+	f := &panelFixture{name: "owner", specs: []PanelSpec{fixturePanel()}}
+	if lookOf(newScopedPanelHost(core{}, f, f.specs)) == nil {
+		t.Fatal("the panel services offer no Theme and font…")
+	}
+	h := newHost(NewSession("", nil), Options{})
+	defer h.cancel()
+	h.panelMax = map[string]bool{"custom": true}
+	for _, s := range []*scopedPanelHost{newScopedPanelHost(core{}, f, f.specs), newScopedPanelHost(core{h}, f, f.specs)} {
+		if err := s.OpenTerminalLook(); !errors.Is(err, errs.ErrPrecondition) {
+			t.Errorf("Theme and font… before attachment: %v", err)
+		}
+		if s.PanelMaximized("custom") {
+			t.Error("a panel read as maximized before its views existed")
+		}
+	}
+	if h.lookWas.open {
+		t.Error("a refused Theme and font… left Esc something to put back")
+	}
+}
+
+// TestPanelMaximizedIsOnlyOwnPanels: the agents' panel maximized reads so to the agents' feature,
+// and not to the terminals'.
+func TestPanelMaximizedIsOnlyOwnPanels(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	if err := onLoop(r, func() error { return r.h.agents.c.(*scopedPanelHost).ToggleMaximize("agent") }); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "the agents maximized", func(string) bool { return onLoop(r, func() bool { return r.h.panelMax["agent"] }) })
+	read := onLoop(r, func() [2]bool {
+		return [2]bool{r.h.agents.c.(*scopedPanelHost).PanelMaximized("agent"), r.h.terminals.c.(*scopedPanelHost).PanelMaximized("agent")}
+	})
+	if !read[0] {
+		t.Error("the agents' own maximized panel did not read as maximized")
+	}
+	if read[1] {
+		t.Error("the terminals' feature read the agents' panel state")
+	}
+}
