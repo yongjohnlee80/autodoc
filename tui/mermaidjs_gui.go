@@ -48,9 +48,10 @@ type mermaidJob struct {
 	next    int
 }
 
-// mermaidWaiter is a request waiting: its ready, and the watch that withdraws it when its context
-// ends.
+// mermaidWaiter is a request waiting: its context, its ready, and the watch that withdraws it when
+// its context ends.
 type mermaidWaiter struct {
+	ctx   context.Context
 	ready func()
 	stop  func() bool
 }
@@ -95,7 +96,7 @@ func (m *mermaidJS) Diagram(ctx context.Context, req guiwidget.DiagramRequest, r
 	}
 	id := job.next
 	job.next++
-	job.waiters[id] = mermaidWaiter{ready: ready, stop: context.AfterFunc(ctx, func() { m.withdraw(k, job, id) })}
+	job.waiters[id] = mermaidWaiter{ctx: ctx, ready: ready, stop: context.AfterFunc(ctx, func() { m.withdraw(k, job, id) })}
 	m.mu.Unlock()
 	return guiwidget.DiagramAnswer{State: guiwidget.Pending, Size: gui.Size{W: req.Width, H: req.Width * 0.5}}
 }
@@ -143,9 +144,12 @@ func (m *mermaidJS) draw(ctx context.Context, k mermaidKey, job *mermaidJob, ras
 	waiters := job.waiters
 	m.mu.Unlock()
 	job.cancel()
+	// a request that ended once the drawing was done, before or while the others were woken, is
+	// not woken: its watch already ran (stop false), or its context ends just now
 	for _, w := range waiters {
-		w.stop()
-		w.ready()
+		if w.stop() && w.ctx.Err() == nil {
+			w.ready()
+		}
 	}
 }
 

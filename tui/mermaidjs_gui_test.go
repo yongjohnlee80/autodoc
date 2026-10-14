@@ -222,3 +222,48 @@ func TestThePanesPicturesAreReusedAndBounded(t *testing.T) {
 		t.Error("a failure was never drawn again")
 	}
 }
+
+// A request that ends while the drawing it waited for wakes the others is not woken: the first
+// woken holds the rest back while both requests end.
+func TestARequestEndedWhileTheOthersAreWokenIsNotWoken(t *testing.T) {
+	b := newFakeBrowser()
+	r, m := paneDrawer(t, b)
+	ctxs := map[string]context.CancelFunc{}
+	inFirst, release := make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	var woken []string
+	wake := func(who string) func() {
+		return func() {
+			mu.Lock()
+			woken = append(woken, who)
+			first := len(woken) == 1
+			mu.Unlock()
+			if first {
+				close(inFirst)
+				<-release
+			}
+		}
+	}
+	for _, who := range []string{"one", "two"} {
+		ctx, cancel := context.WithCancel(context.Background())
+		ctxs[who] = cancel
+		ask(r, m, ctx, "graph TD\n  A --> B", 600, wake(who))
+	}
+	startedIn(t, b)
+	close(b.release)
+	select {
+	case <-inFirst:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no request was woken")
+	}
+	for _, cancel := range ctxs {
+		cancel()
+	}
+	close(release)
+	time.Sleep(100 * time.Millisecond) // the drawing's goroutine wakes the rest, or not
+	mu.Lock()
+	defer mu.Unlock()
+	if len(woken) != 1 {
+		t.Errorf("woken %v; the second ended before its turn", woken)
+	}
+}
