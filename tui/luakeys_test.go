@@ -28,12 +28,12 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 	r.luaLoad(t, keysLua)
 	press := func(k tuicore.KeyEvent) bool { return onLoop(r, func() bool { return r.h.core.HandleKey(k) }) }
 
-	r.page("", 1, 1)
-	if !press(tuicore.KeyEvent{Code: 'Q', Text: "Q"}) || !press(tuicore.KeyEvent{Code: 'y', Mods: tuicore.ModCtrl}) {
-		t.Fatal("a mapped chord was not taken")
-	}
-	if got := r.editorText(); !strings.Contains(got, "<q>") || !strings.Contains(got, "<cy>") || strings.Contains(got, "<vq>") {
-		t.Fatalf("the Normal chords: %q", got)
+	for k, want := range map[tuicore.KeyEvent]string{{Code: 'Q', Text: "Q"}: "<q>", {Code: 'y', Mods: tuicore.ModCtrl}: "<cy>"} {
+		r.page("", 1, 1)
+		if !press(k) {
+			t.Fatalf("%+v was not taken", k)
+		}
+		r.wantText(t, "a mapped Normal chord", want) // the Normal one: never the Visual Q's
 	}
 
 	// SPC u t, as keys: the leader, its card, the letter
