@@ -8,6 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/decl"
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -172,3 +175,70 @@ func TestThePaneTakesTheKeyboardByCtrlL(t *testing.T) {
 }
 
 var _ = widget.DirImages
+
+// TestThePaneOpensItsPageInTheBrowser: under its page the pane has the terminal preview's buttons,
+// Open in browser and Close (q); Open in browser writes the note's page and opens it in the browser.
+func TestThePaneOpensItsPageInTheBrowser(t *testing.T) {
+	r, _ := runPane(t)
+	opened := make(chan string, 1)
+	r.h.p.Post(func() { r.h.browser = func(_ context.Context, path string) error { opened <- path; return nil } })
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitFor(t, "the pane's page", func(string) bool { return r.paneSource() != "" })
+	labels := onLoop(r, func() []string {
+		var out []string
+		for _, b := range buttonsUnder(r.h.p, "htmlPane") {
+			out = append(out, b.Label())
+		}
+		return out
+	})
+	if len(labels) != 2 || !strings.Contains(labels[0], "browser") || !strings.Contains(labels[1], "Close") {
+		t.Fatalf("the pane's buttons are %q, want Open in browser and Close (q)", labels)
+	}
+	if !onLoop(r, func() bool { return buttonsUnder(r.h.p, "htmlPane")[0].Activate(tuicore.OriginUser) }) {
+		t.Fatal("Open in browser did not press")
+	}
+	select {
+	case path := <-opened:
+		page, err := os.ReadFile(path)
+		if err != nil || !strings.HasSuffix(path, ".html") || !strings.Contains(string(page), "paragraph a of the note") {
+			t.Fatalf("opened %q (%v), want the note's page", path, err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the browser was not opened")
+	}
+}
+
+// TestThePanesCloseClosesIt: Close (q) under the pane's page closes the pane.
+func TestThePanesCloseClosesIt(t *testing.T) {
+	r, _ := runPane(t)
+	r.h.p.Post(func() { r.h.previewHTML() })
+	r.s.WaitFor(t, "the pane open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen["htmlPane"] }) })
+	if !onLoop(r, func() bool {
+		bs := buttonsUnder(r.h.p, "htmlPane")
+		return len(bs) == 2 && bs[1].Activate(tuicore.OriginUser)
+	}) {
+		t.Fatal("Close did not press")
+	}
+	r.s.WaitFor(t, "the pane closed", func(string) bool { return onLoop(r, func() bool { return !r.h.panelOpen["htmlPane"] }) })
+}
+
+// buttonsUnder are the Buttons under the node id names, in order.
+func buttonsUnder(p *tuidecl.Program, id string) []*widget.Button {
+	root, ok := p.Tree().NodeByID(id)
+	if !ok {
+		return nil
+	}
+	var out []*widget.Button
+	queue := []decl.NodeID{root}
+	for len(queue) > 0 {
+		n := queue[0]
+		queue = queue[1:]
+		if c, ok := p.Adapter().Component(n); ok {
+			if b, ok := c.(*widget.Button); ok {
+				out = append(out, b)
+			}
+		}
+		queue = append(queue, p.Tree().Children(n)...)
+	}
+	return out
+}

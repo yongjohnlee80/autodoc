@@ -330,9 +330,22 @@ Window {
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
-        HTMLView {
-            id: htmlView
-            onLinkActivated: App.htmlLink(href)
+        Flex {
+            direction: Tui.Vertical
+            HTMLView {
+                id: htmlView
+                Layout.fillHeight: true
+                onLinkActivated: App.htmlLink(href)
+            }
+            // as the terminal preview's dialog has them: the page in the browser (its links,
+            // selection and scripts there), and Close
+            Flex {
+                direction: Tui.Horizontal
+                Text { text: " "; Layout.fillWidth: true }
+                Button { text: "Open in &browser"; toolTipText: "the note's page in the browser"; onClicked: App.openPaneInBrowser() }
+                Text { text: " " }
+                Button { text: "Close (&q)"; toolTipText: "close the preview"; onClicked: htmlPane.close() }
+            }
         }
     }
     Panel {

@@ -41,6 +41,40 @@ func (h *Host) htmlView() (*widget.HTMLView, bool) {
 	return tuidecl.FindAs[*widget.HTMLView](h.p, "htmlView")
 }
 
+// openPaneInBrowser opens the note's page, as the pane shows it, in the browser: the pane's Open in
+// browser, as the terminal preview's button is. The page is written to the preview's file, its
+// relative links and embeds read from the note's folder.
+func (h *Host) openPaneInBrowser() {
+	if !h.previewable() {
+		h.notify("HTML preview currently accepts Markdown files")
+		return
+	}
+	source, theme := []byte(h.pageNow().Text), h.exportTheme()
+	var options export.Options
+	if full := h.diskPath(); full != "" {
+		options.Base, options.Document = filepath.Dir(full), full
+	}
+	h.say("opening the page in the browser…")
+	do(h, func(ctx context.Context) answerOf[string] {
+		content, err := export.RenderWith(source, export.HTML, theme, options)
+		if err != nil {
+			return answerOf[string]{err: err}
+		}
+		path, err := htmlPreviewFile(content)
+		if err != nil {
+			return answerOf[string]{err: err}
+		}
+		return answerOf[string]{v: path, err: h.browser(ctx, path)}
+	}, func(a answerOf[string]) {
+		if a.err != nil {
+			h.failed("the browser did not open", a.err)
+			return
+		}
+		h.htmlPreviewPath = a.v
+		h.say("HTML preview opened in the browser: " + filepath.Base(a.v))
+	})
+}
+
 // openHTMLPane shows the open note in the pane beside the editor.
 func (h *Host) openHTMLPane() {
 	if !h.previewable() {
