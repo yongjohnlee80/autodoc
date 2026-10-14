@@ -2,8 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/yongjohnlee80/golib/parse/markdown"
 	pyaml "github.com/yongjohnlee80/golib/parse/yaml"
 	"github.com/yongjohnlee80/golib/yaml"
 	lua "github.com/yuin/gopher-lua"
@@ -63,14 +63,14 @@ func (h *Host) luaDocument(L *lua.LState) int {
 }
 
 // frontmatterOf is a Markdown text's frontmatter as Go values (maps with string keys, in no
-// order); nil for a text without any.
+// order); nil for a text without any. Only the frontmatter is read, never the body after it: a
+// script may ask on every keystroke of a long page.
 func frontmatterOf(text string) (any, error) {
-	doc := kind.ParseMarkdown([]byte(text))
-	fm := doc.Root.FirstChild
-	if fm == nil || fm.Kind != markdown.KindFrontmatter {
+	lit, ok := leadingFrontmatter(text)
+	if !ok {
 		return nil, nil
 	}
-	st, err := pyaml.Parse(fm.Literal)
+	st, err := pyaml.Parse([]byte(lit))
 	if err != nil {
 		return nil, fmt.Errorf("the frontmatter is not YAML: %w", err)
 	}
@@ -82,6 +82,38 @@ func frontmatterOf(text string) (any, error) {
 		return nil, fmt.Errorf("the frontmatter is not YAML: %w", err)
 	}
 	return plainYAML(v)
+}
+
+// leadingFrontmatter is the text between text's frontmatter fences, as golib's Markdown parser
+// finds them (kind.ParseMarkdown; parse/markdown's frontmatter): a first line of "---" and a later
+// line of "---", trailing spaces or tabs allowed on both, a line ending at "\n", "\r\n" or "\r".
+// Without a closing line there is none. It reads the lines up to the closing one, and no further.
+func leadingFrontmatter(text string) (string, bool) {
+	fence := func(line string) bool { return strings.TrimRight(line, " \t") == "---" }
+	// line is the line at s, and where the next begins
+	line := func(s int) (string, int) {
+		i := strings.IndexAny(text[s:], "\r\n")
+		if i < 0 {
+			return text[s:], len(text)
+		}
+		next := s + i + 1
+		if text[s+i] == '\r' && next < len(text) && text[next] == '\n' {
+			next++
+		}
+		return text[s : s+i], next
+	}
+	first, body := line(0)
+	if !fence(first) {
+		return "", false
+	}
+	for s := body; s < len(text); {
+		l, next := line(s)
+		if fence(l) {
+			return text[body:s], true
+		}
+		s = next
+	}
+	return "", false
 }
 
 // plainYAML is v with every yaml.Map a map[string]any, which ToLua carries: a key that is not a

@@ -3,6 +3,11 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/yongjohnlee80/golib/parse/markdown"
+
+	"github.com/yongjohnlee80/autodoc/core/kind"
 )
 
 // docLua says what autodoc.document() gives, a field a part: path, workspace, kind, derived, then
@@ -83,5 +88,55 @@ end }`)
 		if !strings.Contains(list, want) {
 			t.Errorf("autodoc.commands() lacks %q:\n%s", want, strings.ReplaceAll(list, ";", "\n"))
 		}
+	}
+}
+
+// TestLeadingFrontmatterIsTheParsers: the frontmatter autodoc.document() reads is the one
+// kind.ParseMarkdown finds, whatever the fences' spacing and the line ends, and none where the
+// parser finds none.
+func TestLeadingFrontmatterIsTheParsers(t *testing.T) {
+	for _, src := range []string{
+		"---\ntitle: a\n---\nbody",
+		"---  \ntitle: a\n---\t\nbody",
+		"---\r\ntitle: a\r\n---\r\nbody",
+		"---\rtitle: a\r---\rbody",
+		"---\n---\n",
+		"---\ntitle: a\n---",
+		"---\ntitle: a\n",       // no closing fence: no frontmatter
+		"---",                   // a lone fence
+		" ---\ntitle: a\n---\n", // a fence must start the line
+		"----\ntitle: a\n---\n",
+		"---\ntitle: a\n----\nmore\n---\nbody", // "----" does not close it
+		"# no frontmatter\n---\nx: 1\n---\n",
+		"",
+	} {
+		want, wantOK := "", false
+		if fm := kind.ParseMarkdown([]byte(src)).Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
+			want, wantOK = string(fm.Literal), true
+		}
+		if got, ok := leadingFrontmatter(src); got != want || ok != wantOK {
+			t.Errorf("%q: %q %v; the parser finds %q %v", src, got, ok, want, wantOK)
+		}
+	}
+}
+
+// TestDocumentDoesNotReadTheBody: the frontmatter is read without the body, so asking about a page
+// of megabytes costs what a short one does. A whole-page parse took 160 ms a call on 1 MB
+// (Lector, 2026-10-14); 100 calls on 4 MB, with frontmatter and without, have 2 s together.
+func TestDocumentDoesNotReadTheBody(t *testing.T) {
+	body := strings.Repeat("A paragraph of a long page, with *emphasis* and a [[link]].\n\n", 4<<20/60)
+	with, without := "---\ntitle: Long\n---\n"+body, "# Long\n"+body
+	start := time.Now()
+	for range 100 {
+		fm, err := frontmatterOf(with)
+		if m, _ := fm.(map[string]any); err != nil || m["title"] != "Long" {
+			t.Fatalf("frontmatter %v, %v", fm, err)
+		}
+		if fm, err := frontmatterOf(without); fm != nil || err != nil {
+			t.Fatalf("no frontmatter: %v, %v", fm, err)
+		}
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("200 calls on a 4 MB page took %v: the body is being read", d)
 	}
 }
