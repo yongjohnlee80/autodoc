@@ -89,7 +89,7 @@ func (e *Engine) gatedEnv(script string, grants Grants) *lua.LTable {
 		return 0
 	}))
 	env.RawSetString(e.globalName, proxy)
-	e.envs[env] = true
+	e.envs[env] = &gatedScript{script: script, grants: grants}
 	return env
 }
 
@@ -154,4 +154,10 @@ func (e *Engine) gated(fn *lua.LFunction, name string, g Gate, script string, gr
 }
 
 // owns reports whether fn is this engine's: made in its globals or in one of its gated scripts'.
-func (e *Engine) owns(fn *lua.LFunction) bool { return fn.Env == e.L.G.Global || e.envs[fn.Env] }
+func (e *Engine) owns(fn *lua.LFunction) bool { return fn.Env == e.L.G.Global || e.envs[fn.Env] != nil }
+
+// gatedScript is a gated environment's script and grants: what its editor object asks.
+type gatedScript struct {
+	script string
+	grants Grants
+}

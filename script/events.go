@@ -42,7 +42,7 @@ func (e *Engine) Emit(event string, info map[string]any) []error {
 	}
 	var errs []error
 	for _, fn := range hs {
-		if err := e.Callback(event+"'s handler", fn, e.editorValue(), v); err != nil {
+		if err := e.Callback(event+"'s handler", fn, e.editorValueFor(fn), v); err != nil {
 			errs = append(errs, err)
 		}
 	}

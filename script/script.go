@@ -118,7 +118,7 @@ type Engine struct {
 	globalName  string
 	gates       map[string]Gate
 	domainGates map[string]Gate
-	envs        map[*lua.LTable]bool
+	envs        map[*lua.LTable]*gatedScript
 	base        *lua.LTable
 	// handlers are on's, by event (events.go)
 	handlers map[string][]*lua.LFunction
@@ -185,7 +185,7 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 		L.SetGlobal(name, lua.LNil)
 	}
 	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location,
-		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]bool{},
+		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]*gatedScript{},
 		handlers: map[string][]*lua.LFunction{}}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
@@ -365,7 +365,7 @@ func (e *Engine) runCommand(name string, run *lua.LFunction, x widget.CommandCon
 	cmd := L.CreateTable(0, 2)
 	L.SetField(cmd, "name", lua.LString(cmp.Or(x.Name, name)))
 	L.SetField(cmd, "bang", lua.LBool(x.Bang))
-	return e.protect(name, run, e.editorValue(), args, lua.LString(x.Line), cmd)
+	return e.protect(name, run, e.editorValueFor(run), args, lua.LString(x.Line), cmd)
 }
 
 // Callback calls fn with args later, on the UI loop: when the answer a host function went to fetch
@@ -449,7 +449,7 @@ func (e *Engine) completer(name string, v lua.LValue) (func(widget.CompleteConte
 			cmd := L.CreateTable(0, 2)
 			L.SetField(cmd, "name", lua.LString(cmp.Or(c.Name, name)))
 			L.SetField(cmd, "bang", lua.LBool(c.Bang))
-			out, err := e.call(name+"'s complete", x, 1, e.editorValue(), lua.LString(c.Word), args, cmd)
+			out, err := e.call(name+"'s complete", x, 1, e.editorValueFor(x), lua.LString(c.Word), args, cmd)
 			if err == nil {
 				if t, ok := out[0].(*lua.LTable); ok {
 					return stringList(t)

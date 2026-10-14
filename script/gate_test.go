@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/tui/widget"
 	lua "github.com/yuin/gopher-lua"
 )
 
@@ -172,5 +173,39 @@ editor.command{ name = "odd", run = function(ed) local a, b = editor.odd(); edit
 	}
 	if err := e.core.RunCommand("odd"); err != nil || strings.Join(*said, ",") != "nil|refused: odd's effect is not known, so no grant covers it" {
 		t.Fatalf("%v %q", err, *said)
+	}
+}
+
+// A gated script's ed:run runs any command, so it needs the commands grant, as autodoc.run does:
+// refused as a value without it, run with it. The editor object an event handler gets is the
+// gated script's too; an ungated script's ed:run is as it was.
+func TestAGatedEdRunNeedsCommands(t *testing.T) {
+	e, g, said := gatedEngine(t)
+	ran := 0
+	if err := e.core.Commands().Set(widget.Command{Name: "boom", Run: func(widget.CommandContext) error { ran++; return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.LoadGated("pkg", "pkg.lua", []byte(`
+editor.command{ name = "go", run = function(ed) local a, b = ed:run("boom"); editor.notify(tostring(a) .. "|" .. tostring(b)) end }
+editor.on("ping", function(ed) local a, b = ed:run("boom"); editor.notify("handler " .. tostring(a) .. "|" .. tostring(b)) end)`), g); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.core.RunCommand("go"); err != nil {
+		t.Fatal(err)
+	}
+	e.Emit("ping", nil)
+	if strings.Join(*said, ",") != "nil|needs commands: not granted,handler nil|needs commands: not granted" || ran != 0 {
+		t.Fatalf("ungranted: %q, boom ran %d", *said, ran)
+	}
+	g.granted["pkg"] = map[string]bool{"commands": true}
+	*said = nil
+	if err := e.core.RunCommand("go"); err != nil || ran != 1 || strings.Join(*said, ",") != "nil|nil" {
+		t.Fatalf("granted: %v %q, boom ran %d", err, *said, ran)
+	}
+	if err := e.Load("mine.lua", []byte(`editor.command{ name = "mine", run = function(ed) ed:run("boom"); ed:run("nope") end }`)); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.core.RunCommand("mine"); err == nil || !strings.Contains(err.Error(), "not an editor command: nope") || ran != 2 {
+		t.Fatalf("an ungated ed:run: %v, boom ran %d", err, ran)
 	}
 }

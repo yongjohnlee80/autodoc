@@ -3,13 +3,18 @@ package script
 import (
 	"bytes"
 	"io"
+	"maps"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
 	lua "github.com/yuin/gopher-lua"
 )
 
-// editorType is the metatable of the editor object a command's run gets.
-const editorType = "autodoc.editor"
+// editorType is the metatable of the editor object a command's run gets; gatedEditorType a gated
+// script's, whose run needs the commands grant (ADR 1792004705 §4.2).
+const (
+	editorType      = "autodoc.editor"
+	gatedEditorType = "autodoc.editor.gated"
+)
 
 func bytesReader(b []byte) io.Reader { return bytes.NewReader(b) }
 
@@ -72,10 +77,26 @@ func (e *Engine) registerEditorType() {
 	for _, m := range editorMethods {
 		methods[m.name] = func(L *lua.LState) int { return m.fn(e, L) }
 	}
-	L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), methods))
-	// getmetatable(ed) is a copy: a script may list the methods, and change no one else's
-	L.SetField(mt, "__metatable", L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{}))
-	L.SetField(L.GetField(mt, "__metatable"), "__index", L.SetFuncs(L.NewTable(), methods))
+	lock := func(mt *lua.LTable, methods map[string]lua.LGFunction) {
+		L.SetField(mt, "__index", L.SetFuncs(L.NewTable(), methods))
+		// getmetatable(ed) is a copy: a script may list the methods, and change no one else's
+		L.SetField(mt, "__metatable", L.SetFuncs(L.NewTable(), map[string]lua.LGFunction{}))
+		L.SetField(L.GetField(mt, "__metatable"), "__index", L.SetFuncs(L.NewTable(), methods))
+	}
+	lock(mt, methods)
+	// a gated script's ed: the same methods, but run runs any command (:w, a catalog entry's), which
+	// is the commands capability's to allow, as autodoc.run is
+	gated := maps.Clone(methods)
+	gated["run"] = func(L *lua.LState) int {
+		g := L.CheckUserData(1).Value.(*gatedScript)
+		if !g.grants.Granted(g.script, "commands") {
+			L.Push(lua.LNil)
+			L.Push(lua.LString("needs commands: not granted"))
+			return 2
+		}
+		return e.edRun(L)
+	}
+	lock(L.NewTypeMetatable(gatedEditorType), gated)
 }
 
 // editorValue is the editor object for the command running now.
@@ -83,6 +104,18 @@ func (e *Engine) editorValue() lua.LValue {
 	ud := e.L.NewUserData()
 	ud.Value = e
 	e.L.SetMetatable(ud, e.L.GetTypeMetatable(editorType))
+	return ud
+}
+
+// editorValueFor is the editor object fn is given: a gated script's own when fn is one of its.
+func (e *Engine) editorValueFor(fn *lua.LFunction) lua.LValue {
+	g := e.envs[fn.Env]
+	if g == nil {
+		return e.editorValue()
+	}
+	ud := e.L.NewUserData()
+	ud.Value = g
+	e.L.SetMetatable(ud, e.L.GetTypeMetatable(gatedEditorType))
 	return ud
 }
 
