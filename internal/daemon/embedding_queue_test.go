@@ -407,3 +407,51 @@ func TestInFlightBatchStopsBeforeProviderReplacementOrWorkspaceRemoval(t *testin
 		})
 	}
 }
+
+// A workspace roused while a batch of its own runs (its chunks committed, it was focused, searched
+// or its policy set) is chosen again as soon as that batch ends, even when the batch found no work:
+// the rousing outlives the batch. Without one, a batch with no work still idles the workspace for
+// queuePoll, so an idle workspace is not polled in a loop.
+func TestARousingDuringABatchOutlivesItsEmptyAnswer(t *testing.T) {
+	for _, c := range []struct {
+		how   string
+		rouse func(q *embeddingQueue, name string)
+	}{
+		{"its chunks committed", func(q *embeddingQueue, name string) { q.wakeWorkspace(name) }},
+		{"focused", func(q *embeddingQueue, name string) { q.focusWorkspace(name) }},
+		{"searched", func(q *embeddingQueue, name string) { q.searchWorkspace(name) }},
+		{"its policy set", func(q *embeddingQueue, name string) { q.setPolicy(name, "always") }},
+	} {
+		m, _ := open(t)
+		q := m.queue
+		candidates := map[string]*served{"kb": {}}
+		if name, _ := q.choose(candidates); name != "kb" {
+			t.Fatalf("%s: chose %q, want kb", c.how, name)
+		}
+		c.rouse(q, "kb") // while kb's batch runs
+		q.mu.Lock()
+		q.finish("kb", false, nil) // the batch found no work: it ran before the commit
+		q.mu.Unlock()
+		if name, _ := q.choose(candidates); name != "kb" {
+			t.Errorf("%s while its batch ran, then an empty batch: chose %q, want kb at once", c.how, name)
+		}
+	}
+
+	m, _ := open(t)
+	q := m.queue
+	candidates := map[string]*served{"kb": {}}
+	q.choose(candidates)
+	q.mu.Lock()
+	q.finish("kb", false, nil)
+	q.mu.Unlock()
+	if name, _ := q.choose(candidates); name != "" {
+		t.Errorf("an empty batch with no rousing: chose %q, want kb idle for queuePoll", name)
+	}
+	q.wakeWorkspace("kb") // roused after its batch: an ordinary wake, nothing kept for later
+	q.mu.Lock()
+	woken := q.woken["kb"]
+	q.mu.Unlock()
+	if name, _ := q.choose(candidates); name != "kb" || woken {
+		t.Errorf("woken after its batch: chose %q (woken kept %v), want kb, nothing kept", name, woken)
+	}
+}

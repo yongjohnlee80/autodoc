@@ -30,6 +30,9 @@ type embeddingQueue struct {
 	focusedAt time.Time
 	searched  map[string]time.Time
 	idle      map[string]time.Time
+	// woken are the workspaces roused while a batch of their own ran: that batch's empty answer
+	// must not idle them again, or the rousing is lost and they wait out queuePoll twice
+	woken     map[string]bool
 	policy    map[string]string
 	activated map[string]bool
 	running   map[string]bool
@@ -43,7 +46,7 @@ type embeddingQueue struct {
 }
 
 func newEmbeddingQueue(host *Workspaces) *embeddingQueue {
-	return &embeddingQueue{host: host, wake: make(chan struct{}, 1), searched: map[string]time.Time{}, idle: map[string]time.Time{},
+	return &embeddingQueue{host: host, wake: make(chan struct{}, 1), searched: map[string]time.Time{}, idle: map[string]time.Time{}, woken: map[string]bool{},
 		policy: map[string]string{}, activated: map[string]bool{}, running: map[string]bool{}}
 }
 
@@ -54,7 +57,7 @@ func (q *embeddingQueue) setPolicy(name, policy string) bool {
 		q.activated[name] = true
 	}
 	active := policy == "always" || (policy == "when opened" && q.activated[name])
-	delete(q.idle, name)
+	q.rouse(name)
 	q.mu.Unlock()
 	q.signal()
 	return active
@@ -63,10 +66,14 @@ func (q *embeddingQueue) setPolicy(name, policy string) bool {
 func (q *embeddingQueue) rename(from, to string) {
 	q.mu.Lock()
 	q.policy[to], q.activated[to], q.searched[to], q.idle[to] = q.policy[from], q.activated[from], q.searched[from], q.idle[from]
+	if q.woken[from] {
+		q.woken[to] = true
+	}
 	delete(q.policy, from)
 	delete(q.activated, from)
 	delete(q.searched, from)
 	delete(q.idle, from)
+	delete(q.woken, from)
 	if q.focus == from {
 		q.focus = to
 	}
@@ -80,6 +87,7 @@ func (q *embeddingQueue) forget(name string) {
 	delete(q.activated, name)
 	delete(q.searched, name)
 	delete(q.idle, name)
+	delete(q.woken, name)
 	if q.focus == name {
 		q.focus = ""
 	}
@@ -95,9 +103,29 @@ func (q *embeddingQueue) signal() {
 
 func (q *embeddingQueue) wakeWorkspace(name string) {
 	q.mu.Lock()
-	delete(q.idle, name)
+	q.rouse(name)
 	q.mu.Unlock()
 	q.signal()
+}
+
+// rouse makes name a candidate at once: its idle mark goes, and when a batch of its own is running,
+// woken keeps the rousing past that batch's end (finish). Called with q.mu held.
+func (q *embeddingQueue) rouse(name string) {
+	delete(q.idle, name)
+	if q.running[name] {
+		q.woken[name] = true
+	}
+}
+
+// finish ends a batch of name: a batch with no work, or a failed one, idles name for queuePoll,
+// unless name was roused while it ran: work that arrived meanwhile (a commit's chunks) is taken at
+// once. Called with q.mu held.
+func (q *embeddingQueue) finish(name string, worked bool, err error) {
+	delete(q.running, name)
+	if (err != nil || !worked) && !q.woken[name] {
+		q.idle[name] = time.Now().Add(queuePoll)
+	}
+	delete(q.woken, name)
 }
 
 func (q *embeddingQueue) start() {
@@ -137,7 +165,7 @@ func (q *embeddingQueue) focusWorkspace(name string) bool {
 	q.mu.Lock()
 	q.focus, q.focusedAt = name, time.Now()
 	q.activated[name] = true
-	delete(q.idle, name)
+	q.rouse(name)
 	active := q.policy[name] != "never"
 	q.mu.Unlock()
 	q.signal()
@@ -147,7 +175,7 @@ func (q *embeddingQueue) focusWorkspace(name string) bool {
 func (q *embeddingQueue) searchWorkspace(name string) {
 	q.mu.Lock()
 	q.searched[name] = time.Now()
-	delete(q.idle, name)
+	q.rouse(name)
 	q.mu.Unlock()
 	q.signal()
 }
@@ -202,10 +230,7 @@ func (q *embeddingQueue) run(ctx context.Context) {
 		stop()
 		cancel()
 		q.mu.Lock()
-		delete(q.running, name)
-		if err != nil || !worked {
-			q.idle[name] = time.Now().Add(queuePoll)
-		}
+		q.finish(name, worked, err)
 		q.mu.Unlock()
 		if err != nil && ctx.Err() == nil && s.ctx.Err() == nil {
 			logger.Warning(q.host.opts.Log, err, logger.Fields{"event": "embedding.queue.batch.failed", "workspace": name})
