@@ -34,6 +34,11 @@ import (
 //	editor.delete l1 c1 l2 c2 [rev]         {revision}                                                       editor.write
 //	editor.run line                         {ok}                                                             commands
 //	editor.add_command name source          {installed}, once the user answered                              asked each time
+//
+// Param 1 of every verb is the agent's token, $AUTODOC_EDITOR_TOKEN: a secret made when AutoDoc
+// started the agent, which the socket knows it by. A process of the same user can read another's
+// environment, so the grants keep the user's agents to what each was allowed; they are no defense
+// against the user's own hostile programs (ADR 1792014854 §R4).
 
 // The codes an editor verb refuses with, beside golib's invalid params.
 const (
@@ -97,6 +102,12 @@ func onLoopFor[T any](ctx context.Context, h *Host, fn func() (T, error)) (T, er
 	}
 	ch := make(chan answer, 1)
 	h.p.Post(func() {
+		// a request that stopped waiting (its agent hung up, its deadline passed) does nothing: no
+		// edit, no card, after the agent was told it failed
+		if err := ctx.Err(); err != nil {
+			ch <- answer{err: err}
+			return
+		}
 		v, err := fn()
 		ch <- answer{v, err}
 	})
@@ -172,14 +183,17 @@ func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 	}
 }
 
-// agentOf is a request's first param: the agent's codename.
-func agentOf(req *golibrpc.Request) (string, editorArgs, error) {
-	if len(req.Params) == 0 {
-		return "", nil, invalid("param 1 is the agent's codename ($AUTODOC_AGENT)")
+// agentOf is the agent a request comes from: its first param is the secret the agent was started
+// with ($AUTODOC_EDITOR_TOKEN), never a name it chooses, so one agent cannot use another's grants.
+func (h *Host) agentOf(req *golibrpc.Request) (string, editorArgs, error) {
+	tok := ""
+	if len(req.Params) > 0 {
+		tok, _ = req.Params[0].(string)
 	}
-	agent, ok := req.Params[0].(string)
-	if !ok || !validPackageName(agent) {
-		return "", nil, invalid("param 1, the agent's codename, is letters, digits, - and _")
+	agent := h.agents.agentOfToken(tok)
+	if agent == "" {
+		return "", nil, &golibrpc.Error{Code: codeEditorNotGranted,
+			Message: "param 1 is not an agent's token: only the agents AutoDoc started reach the page ($AUTODOC_EDITOR_TOKEN)"}
 	}
 	return agent, editorArgs(req.Params[1:]), nil
 }
@@ -187,7 +201,7 @@ func agentOf(req *golibrpc.Request) (string, editorArgs, error) {
 // editorVerb is fn as a handler: run on the loop, for an agent granted capability.
 func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs) (any, error)) golibrpc.Handler {
 	return func(ctx context.Context, req *golibrpc.Request) (any, error) {
-		agent, a, err := agentOf(req)
+		agent, a, err := h.agentOf(req)
 		if err != nil {
 			return nil, err
 		}
@@ -355,7 +369,7 @@ func (h *Host) editorRun(_ string, a editorArgs) (any, error) {
 // showing it; Yes writes lua/<name>.lua (never over a file there) and reloads the scripts. The call
 // waits for the answer, never the loop.
 func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any, error) {
-	agent, a, err := agentOf(req)
+	agent, a, err := h.agentOf(req)
 	if err != nil {
 		return nil, err
 	}
@@ -369,6 +383,11 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 	}
 	if !validPackageName(name) {
 		return nil, invalid("the name is letters, digits, - and _, not %q", name)
+	}
+	// the card shows the whole source, and what is written is exactly what it showed
+	if lines := strings.Count(src, "\n") + 1; lines > maxAgentScriptLines || len(src) > maxAgentScriptBytes {
+		return nil, invalid("the source is %d lines, %d bytes: a command the user is asked about is at most %d lines and %d bytes, shown whole",
+			lines, len(src), maxAgentScriptLines, maxAgentScriptBytes)
 	}
 	L := lua.NewState(lua.Options{SkipOpenLibs: true})
 	_, cerr := L.Load(strings.NewReader(src), name+".lua")
@@ -387,9 +406,14 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 		}
 		h.ask(Question{
 			Title: fmt.Sprintf("let the agent %s add the Lua command file %s.lua?", agent, name),
-			Text:  luaSourcePreview(src),
+			Text:  src,
 			Yes:   "&Add it", No: "&No",
 			OnYes: func() {
+				if ctx.Err() != nil { // the agent stopped waiting: nothing is written for no one
+					h.notify("not added: the agent " + agent + " stopped waiting")
+					answered <- ctx.Err()
+					return
+				}
 				answered <- h.writeAgentScript(path, src)
 			},
 			OnCancel: func() {
@@ -411,7 +435,9 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 	}
 }
 
-// writeAgentScript writes an agent's command file, new, then reloads the scripts.
+// writeAgentScript writes an agent's command file, new, then reloads the scripts. It is created at
+// the Yes, exclusively: a file there by then (the user's, another card's, a link) is never
+// replaced, and the agent is told so.
 func (h *Host) writeAgentScript(path, src string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -433,11 +459,8 @@ func (h *Host) writeAgentScript(path, src string) error {
 	return nil
 }
 
-// luaSourcePreview is the card's view of an agent's script: its first lines.
-func luaSourcePreview(src string) string {
-	lines := strings.Split(src, "\n")
-	if len(lines) > 12 {
-		lines = append(lines[:12], fmt.Sprintf("… %d more lines", len(lines)-12))
-	}
-	return strings.Join(lines, "\n")
-}
+// The largest command an agent may offer: the card shows it whole.
+const (
+	maxAgentScriptLines = 60
+	maxAgentScriptBytes = 4096
+)

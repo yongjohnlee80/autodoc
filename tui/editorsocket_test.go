@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,7 +31,8 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		t.Fatalf("the socket %s: %v %v", path, fi, err)
 	}
 	env := strings.Join(onLoop(r, func() []string { return r.h.agents.agentEnv(wsInfo{name: "kb"}, t.TempDir(), "zen") }), "\n")
-	if !strings.Contains(env, "AUTODOC_EDITOR="+path) || !strings.Contains(env, "AUTODOC_AGENT=zen") {
+	if !strings.Contains(env, "AUTODOC_EDITOR="+path) || !strings.Contains(env, "AUTODOC_AGENT=zen") ||
+		!strings.Contains(env, "AUTODOC_EDITOR_TOKEN=") {
 		t.Fatalf("the agent's environment: %s", env)
 	}
 
@@ -40,9 +42,10 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cli.Close()
-	call := func(verb string, params ...any) (map[string]any, *golibrpc.Error) {
+	token := onLoop(r, func() string { return r.h.agents.editorToken("zen") })
+	callAs := func(tok, verb string, params ...any) (map[string]any, *golibrpc.Error) {
 		t.Helper()
-		res, err := cli.Call(ctx, verb, append([]any{"zen"}, params...)...)
+		res, err := cli.Call(ctx, verb, append([]any{tok}, params...)...)
 		var re *golibrpc.Error
 		if errors.As(err, &re) {
 			return nil, re
@@ -52,6 +55,10 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 		}
 		m, _ := res.(map[string]any)
 		return m, nil
+	}
+	call := func(verb string, params ...any) (map[string]any, *golibrpc.Error) {
+		t.Helper()
+		return callAs(token, verb, params...)
 	}
 
 	if _, re := call("editor.read"); re == nil || re.Code != codeEditorNotGranted || !strings.Contains(re.Message, "needs editor.read") {
@@ -84,6 +91,35 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	r.undo()
 	r.wantText(t, "one undo", "kestrel\n")
 
+	// another agent, granted write, is known by its own token: zen naming it gets nothing of its
+	onLoop(r, func() bool {
+		r.h.agents.editorToken("other")
+		r.h.prefs.luaGrants["agent:other"] = map[string]bool{"editor.write": true, "commands": true}
+		r.h.prefs.luaGrants["agent:zen"]["editor.write"] = false
+		return true
+	})
+	if _, re := callAs("other", "editor.insert", 1, 1, "X"); re == nil || re.Code != codeEditorNotGranted || !strings.Contains(re.Message, "not an agent's token") {
+		t.Fatalf("a codename for a token: %v", re)
+	}
+	if _, re := call("editor.insert", 1, 1, "X"); re == nil || !strings.Contains(re.Message, "needs editor.write") {
+		t.Fatalf("zen after its write was taken away: %v", re)
+	}
+	onLoop(r, func() bool { r.h.prefs.luaGrants["agent:zen"]["editor.write"] = true; return true })
+
+	// a request that stopped waiting before the loop reached it does nothing when the loop does
+	release := make(chan struct{})
+	r.h.p.Post(func() { <-release })
+	short, cancelShort := context.WithTimeout(ctx, 200*time.Millisecond)
+	_, err = cli.Call(short, "editor.insert", token, 1, 1, "LATE")
+	cancelShort()
+	if err == nil {
+		t.Fatal("an edit past its deadline answered")
+	}
+	close(release)
+	if text := r.editorText(); strings.Contains(text, "LATE") {
+		t.Fatalf("the expired edit ran: %q", text)
+	}
+
 	if _, re := call("editor.run", "table 1 1"); re == nil || re.Code != codeEditorNotGranted {
 		t.Fatalf("an ungranted run: %v", re)
 	}
@@ -96,7 +132,7 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	ask := func(name, src string) chan answer {
 		ch := make(chan answer, 1)
 		go func() {
-			res, err := cli.Call(ctx, "editor.add_command", "zen", name, src)
+			res, err := cli.Call(ctx, "editor.add_command", token, name, src)
 			var re *golibrpc.Error
 			errors.As(err, &re)
 			m, _ := res.(map[string]any)
@@ -128,6 +164,46 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	if _, re := call("editor.add_command", "hi", `autodoc.notify("again")`); re == nil || !strings.Contains(re.Message, "exists") {
 		t.Fatalf("a second hi.lua: %v", re)
 	}
+	// the whole source is shown: what the card says is what is written; a longer one is refused
+	long := "-- a long command\n" + strings.Repeat("local x = 1\n", 60)
+	if _, re := call("editor.add_command", "long", long); re == nil || !strings.Contains(re.Message, "at most 60 lines") {
+		t.Fatalf("a source longer than the card: %v", re)
+	}
+	deep := "local a = 1\n" + strings.Repeat("local b = 2\n", 30) + `autodoc.notify("the deep line")`
+	ch = ask("deep", deep)
+	r.s.WaitForText(t, "let the agent zen add the Lua command file deep.lua?")
+	if txt := askText(r); txt != deep {
+		t.Fatalf("the card shows %q, not the whole source", txt)
+	}
+	// a file created while the card is open is never replaced
+	if err := os.WriteFile(filepath.Join(luaDir, "deep.lua"), []byte("-- the user's"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	if a := <-ch; a.re == nil || a.re.Code != codeEditorRefused {
+		t.Fatalf("Yes over a file made meanwhile: %v %v", a.res, a.re)
+	}
+	if b, _ := os.ReadFile(filepath.Join(luaDir, "deep.lua")); string(b) != "-- the user's" {
+		t.Fatalf("deep.lua replaced: %q", b)
+	}
+	// two cards for one name: the first is replaced (refused), the second's Yes writes
+	first := ask("twin", `autodoc.notify("one")`)
+	r.s.WaitForText(t, "let the agent zen add the Lua command file twin.lua?")
+	second := ask("twin", `autodoc.notify("two")`)
+	if a := <-first; a.re == nil || a.re.Code != codeEditorRefused {
+		t.Fatalf("the replaced card: %v %v", a.res, a.re)
+	}
+	r.s.WaitFor(t, "the second card", func(string) bool {
+		return strings.Contains(askText(r), `"two"`)
+	})
+	onLoop(r, func() bool { r.h.asker.accepted(); return true })
+	if a := <-second; a.re != nil {
+		t.Fatalf("the second card's Yes: %v", a.re)
+	}
+	if b, _ := os.ReadFile(filepath.Join(luaDir, "twin.lua")); string(b) != `autodoc.notify("two")` {
+		t.Fatalf("twin.lua is %q", b)
+	}
+
 	ch = ask("nope", `autodoc.notify("never")`)
 	r.s.WaitForText(t, "let the agent zen add the Lua command file nope.lua?")
 	onLoop(r, func() bool { r.h.asker.rejected(); return true })
@@ -137,4 +213,9 @@ func TestAgentsReachThePageThroughTheEditorSocket(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(luaDir, "nope.lua")); err == nil {
 		t.Fatal("a refused command was written")
 	}
+}
+
+// askText is the question card's text as the screen has it.
+func askText(r *running) string {
+	return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return fmt.Sprint(v.Raw) })
 }

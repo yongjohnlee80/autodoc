@@ -12,7 +12,7 @@ import (
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
 )
 
-// TestEditorCallsThePageAsTheAgent: --editor dials $AUTODOC_EDITOR and passes $AUTODOC_AGENT first,
+// TestEditorCallsThePageAsTheAgent: --editor dials $AUTODOC_EDITOR and passes $AUTODOC_EDITOR_TOKEN first,
 // then the params; a refusal comes back as the CallError --call prints; without the environment it
 // says what is missing.
 func TestEditorCallsThePageAsTheAgent(t *testing.T) {
@@ -30,13 +30,13 @@ func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 	defer cancel()
 	go func() { _ = srv.Run(ctx) }()
 	env := func(k string) string {
-		return map[string]string{"AUTODOC_EDITOR": sock, "AUTODOC_AGENT": "zen"}[k]
+		return map[string]string{"AUTODOC_EDITOR": sock, "AUTODOC_EDITOR_TOKEN": "tok"}[k]
 	}
 	var out bytes.Buffer
 	if err := runEditor(ctx, "editor.echo", `[3, "x"]`, env, &out); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(strings.Fields(out.String()), ""); got != `["zen",3,"x"]` {
+	if got := strings.Join(strings.Fields(out.String()), ""); got != `["tok",3,"x"]` {
 		t.Fatalf("echo: %s", out.String())
 	}
 	err = runEditor(ctx, "editor.no", "", env, &out)
@@ -44,7 +44,7 @@ func TestEditorCallsThePageAsTheAgent(t *testing.T) {
 		t.Fatalf("a refusal: %v", err)
 	}
 	if err := runEditor(ctx, "editor.echo", "", func(string) string { return "" }, &out); err == nil ||
-		!strings.Contains(err.Error(), "$AUTODOC_EDITOR and $AUTODOC_AGENT are not set") {
+		!strings.Contains(err.Error(), "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set") {
 		t.Fatalf("no environment: %v", err)
 	}
 }

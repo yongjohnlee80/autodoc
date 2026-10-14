@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -23,15 +26,18 @@ type agents struct {
 	agentConfig            string
 	agentBinPath           string
 	editorPath             func() string // the TUI's editor socket, "" without one (editorsocket.go)
-	editingAgent           string
-	editingAgentProfile    *agentProfile // exact record shown in the form; stale edits are refused
-	switchingAgent         string
-	agentRows              *tuidecl.ListModel
-	instances              map[string]*agentInstance
-	instanceOrder          []string
-	selectedAgent          string
-	deliveries             map[*agentDelivery]bool
-	stopping               bool
+	// editorTokens are the agents' secrets on the editor socket, by codename: made at an agent's
+	// first start in this run, and what the socket knows an agent by (editorsocket.go)
+	editorTokens        map[string]string
+	editingAgent        string
+	editingAgentProfile *agentProfile // exact record shown in the form; stale edits are refused
+	switchingAgent      string
+	agentRows           *tuidecl.ListModel
+	instances           map[string]*agentInstance
+	instanceOrder       []string
+	selectedAgent       string
+	deliveries          map[*agentDelivery]bool
+	stopping            bool
 }
 
 func newAgents(c agentHost, dir, config string) *agents {
@@ -283,10 +289,35 @@ func (h *agents) agentEnv(ws wsInfo, dir, codename string) []string {
 	// the page in this TUI's editor, for `autodoc --editor` (ADR 1792014854)
 	if h.editorPath != nil {
 		if path := h.editorPath(); path != "" {
-			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename)
+			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename, "AUTODOC_EDITOR_TOKEN="+h.editorToken(codename))
 		}
 	}
 	return env
+}
+
+// editorToken is codename's secret on the editor socket: random, made once a run.
+func (h *agents) editorToken(codename string) string {
+	if h.editorTokens == nil {
+		h.editorTokens = map[string]string{}
+	}
+	if t, ok := h.editorTokens[codename]; ok {
+		return t
+	}
+	b := make([]byte, 16)
+	_, _ = rand.Read(b) // crypto/rand: never fails on the platforms AutoDoc runs on
+	t := hex.EncodeToString(b)
+	h.editorTokens[codename] = t
+	return t
+}
+
+// agentOfToken is the codename whose editor token t is; "" for none.
+func (h *agents) agentOfToken(t string) string {
+	for codename, tok := range h.editorTokens {
+		if t != "" && subtle.ConstantTimeCompare([]byte(t), []byte(tok)) == 1 {
+			return codename
+		}
+	}
+	return ""
 }
 
 // agentBin is the autodoc binary the agent calls: this one, unless a test says otherwise.
@@ -394,7 +425,7 @@ func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 // editorGuide is the agents' guide to the page in the editor (editorsocket.go, ADR 1792014854).
 const editorGuide = "## The page the user is writing\n\n" +
 	"`autodoc --editor <verb> '[params]'` reaches the page open in the AutoDoc that started you, its unsaved text " +
-	"included (`$AUTODOC_EDITOR`, as `$AUTODOC_AGENT`). Positions are 1-based lines and columns (a column is a character).\n\n" +
+	"included (`$AUTODOC_EDITOR`; it knows you by `$AUTODOC_EDITOR_TOKEN`, which `autodoc --editor` passes). Positions are 1-based lines and columns (a column is a character).\n\n" +
 	"- `editor.document`: path, kind, modified, revision, cursor, selection.\n" +
 	"- `editor.read '[from_line, to_line]'`, `editor.find '[\"term\", {\"ignore_case\": true}]'`.\n" +
 	"- `editor.insert '[line, col, \"text\", revision]'`, `editor.replace '[l1, c1, l2, c2, \"text\", revision]'`, " +

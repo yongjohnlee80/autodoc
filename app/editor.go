@@ -13,12 +13,13 @@ import (
 )
 
 // runEditor is --editor <verb> [params]: one call to the page of the TUI that started this agent
-// (ADR 1792014854), at $AUTODOC_EDITOR, as the agent $AUTODOC_AGENT. params is a JSON array, as
-// --call's; the agent's codename goes first, and the answer is written to out as JSON.
+// (ADR 1792014854), at $AUTODOC_EDITOR, with the secret it was started with, $AUTODOC_EDITOR_TOKEN,
+// which the TUI knows it by. params is a JSON array, as --call's; the token goes first, and the
+// answer is written to out as JSON.
 func runEditor(ctx context.Context, verb, params string, env func(string) string, out io.Writer) error {
-	sock, agent := env("AUTODOC_EDITOR"), env("AUTODOC_AGENT")
-	if sock == "" || agent == "" {
-		return errors.New("--editor reaches the page of the AutoDoc that started this agent: $AUTODOC_EDITOR and $AUTODOC_AGENT are not set")
+	sock, token := env("AUTODOC_EDITOR"), env("AUTODOC_EDITOR_TOKEN")
+	if sock == "" || token == "" {
+		return errors.New("--editor reaches the page of the AutoDoc that started this agent: $AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set")
 	}
 	args, err := callParams(params)
 	if err != nil {
@@ -29,7 +30,7 @@ func runEditor(ctx context.Context, verb, params string, env func(string) string
 		return fmt.Errorf("--editor: the editor at %s does not answer: %w", sock, err)
 	}
 	defer cli.Close()
-	res, err := cli.Call(ctx, verb, append([]any{agent}, args...)...)
+	res, err := cli.Call(ctx, verb, append([]any{token}, args...)...)
 	if err != nil {
 		var re *golibrpc.Error
 		if errors.As(err, &re) {
