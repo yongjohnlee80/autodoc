@@ -138,6 +138,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
+	editor := fs.String("editor", "", `call a verb of the page in the AutoDoc that started this agent ($AUTODOC_EDITOR, as $AUTODOC_AGENT) and print its answer as JSON; its parameters, a JSON array, after the flags: --editor editor.read '[1, 20]'`)
 	exportFormat := fs.String("export", "", "export a Markdown file as html or text")
 	exportOutput := fs.String("output", "", "--export: destination file (required)")
 	exportTheme := fs.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
@@ -216,6 +217,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			return callMain(ctx, *configPath, *call, params, stdout, stderr)
+		}},
+		{flag: "editor", asked: func() bool { return *editor != "" }, arg: true, run: func(params string) int {
+			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+			return editorMain(ctx, *editor, params, stdout, stderr)
 		}},
 		{flag: "export", asked: func() bool { return *exportFormat != "" }, arg: true, run: func(src string) int {
 			if err := exportMain(src, *exportFormat, *exportOutput, *exportTheme, *exportBase); err != nil {

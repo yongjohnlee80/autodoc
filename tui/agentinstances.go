@@ -225,7 +225,7 @@ func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
 	if err != nil {
 		return nil, err
 	}
-	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), a.agentEnv(ws, dir))
+	path, args, err := agentArgv(fillAgentCommand(p.Command, ws), a.agentEnv(ws, dir, p.Codename))
 	if err != nil {
 		return nil, err
 	}

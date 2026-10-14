@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/script"
@@ -31,6 +32,11 @@ func (g luaGrants) Granted(script, capability string) bool {
 
 // Request queues the question, asked once the file has loaded and the answers given are known.
 func (g luaGrants) Request(script string, caps []string) {
+	for _, a := range g.h.luaAsks {
+		if a.script == script && slices.Equal(a.caps, caps) {
+			return // asked already, not answered yet: an agent retrying asks once
+		}
+	}
 	g.h.luaAsks = append(g.h.luaAsks, luaAsk{script, caps})
 	g.h.p.Post(g.h.askLuaGrants)
 }

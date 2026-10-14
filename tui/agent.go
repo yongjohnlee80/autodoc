@@ -22,6 +22,7 @@ type agents struct {
 	agentRunningLabel      string // label captured at start; agentRunning itself is the codename
 	agentConfig            string
 	agentBinPath           string
+	editorPath             func() string // the TUI's editor socket, "" without one (editorsocket.go)
 	editingAgent           string
 	editingAgentProfile    *agentProfile // exact record shown in the form; stale edits are refused
 	switchingAgent         string
@@ -265,12 +266,13 @@ func agentArgv(command string, env []string) (string, []string, error) {
 	return envPath, args, nil
 }
 
-// agentEnv are the variables the agent is started with, in its folder dir: the workspace, its root,
-// the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose first
-// folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
-// store, not the default config's, and is found when no autodoc is installed.
-func (h *agents) agentEnv(ws wsInfo, dir string) []string {
-	return []string{
+// agentEnv are the variables the agent codename is started with, in its folder dir: the workspace,
+// its root, the daemon the TUI is attached to, the build and the config it runs on, and a PATH whose
+// first folder holds the autodoc that runs them (agentWrapper), so `autodoc --call` reaches the TUI's
+// store, not the default config's, and is found when no autodoc is installed; and, with the editor
+// socket, where the page is (AUTODOC_EDITOR) and who the agent is there (AUTODOC_AGENT).
+func (h *agents) agentEnv(ws wsInfo, dir, codename string) []string {
+	env := []string{
 		"AUTODOC_WORKSPACE=" + ws.name,
 		"AUTODOC_ROOT=" + ws.root,
 		"AUTODOC_SOCKET=" + h.c.DaemonAddress(),
@@ -278,6 +280,13 @@ func (h *agents) agentEnv(ws wsInfo, dir string) []string {
 		"AUTODOC_CONFIG=" + h.agentConfig,
 		"PATH=" + filepath.Join(dir, "bin") + string(os.PathListSeparator) + os.Getenv("PATH"),
 	}
+	// the page in this TUI's editor, for `autodoc --editor` (ADR 1792014854)
+	if h.editorPath != nil {
+		if path := h.editorPath(); path != "" {
+			env = append(env, "AUTODOC_EDITOR="+path, "AUTODOC_AGENT="+codename)
+		}
+	}
+	return env
 }
 
 // agentBin is the autodoc binary the agent calls: this one, unless a test says otherwise.
@@ -376,7 +385,23 @@ func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 	b.WriteString("- Editing the user's files under the root, when asked. AutoDoc follows the edits, as it follows any editor's.\n")
 	b.WriteString("- Keeping search precise: `.view` files and the frontmatter schema, so a term means one thing and is not diluted across unrelated files.\n")
 	b.WriteString("- Explaining AutoDoc's state: `index.status`, `workspace.list`, `sys.capabilities`.\n\n")
+	b.WriteString(editorGuide)
 	b.WriteString("---\n\n")
 	b.WriteString(autodoc.AgentsGuide)
 	return b.String()
 }
+
+// editorGuide is the agents' guide to the page in the editor (editorsocket.go, ADR 1792014854).
+const editorGuide = "## The page the user is writing\n\n" +
+	"`autodoc --editor <verb> '[params]'` reaches the page open in the AutoDoc that started you, its unsaved text " +
+	"included (`$AUTODOC_EDITOR`, as `$AUTODOC_AGENT`). Positions are 1-based lines and columns (a column is a character).\n\n" +
+	"- `editor.document`: path, kind, modified, revision, cursor, selection.\n" +
+	"- `editor.read '[from_line, to_line]'`, `editor.find '[\"term\", {\"ignore_case\": true}]'`.\n" +
+	"- `editor.insert '[line, col, \"text\", revision]'`, `editor.replace '[l1, c1, l2, c2, \"text\", revision]'`, " +
+	"`editor.delete '[l1, c1, l2, c2, revision]'`: pass the revision you read, so an edit of a page the user has " +
+	"changed since is refused rather than misplaced. Each edit is one undo step for the user.\n" +
+	"- `editor.run '[\"command line\"]'`: a `:` command, as the user would type it.\n" +
+	"- `editor.add_command '[\"name\", \"lua source\"]'`: offer the user a Lua command (docs/lua); it is added " +
+	"to their lua/ folder only if they say yes.\n\n" +
+	"The first call of each kind asks the user to allow it: until they do, it is refused with `needs <capability>`. " +
+	"Say so to the user, and try again once they have answered.\n\n"
