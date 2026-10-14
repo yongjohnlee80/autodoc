@@ -372,6 +372,7 @@ func (h *Host) show(ws, p, content, version string, raw bool) {
 //
 // Unsaved text stays as it is: only how it is read changes.
 func (h *Host) readPage() {
+	defer h.emitOpen() // a script hears the page once it is set up (luaevents.go)
 	p := h.file.path
 	h.file.derived = ""
 	if kind.Of(p, nil) == kind.Derived && !h.file.raw {
@@ -506,6 +507,7 @@ func (h *Host) edited() {
 	h.fmGen++
 	h.pageSoon()
 	h.syncPageWidth() // a line count with another number of digits widens the gutter
+	h.changeSoon()    // a script's change handlers, after the pause (luaevents.go)
 }
 
 func (h *Host) setDirty(v bool) {
@@ -522,7 +524,10 @@ func (h *Host) setDirty(v bool) {
 }
 
 // syncMode brings the status line's mode up to date with the editor's.
-func (h *Host) syncMode() { h.setWhere(h.where) }
+func (h *Host) syncMode() {
+	h.setWhere(h.where)
+	h.emitMode() // luaevents.go
+}
 
 // save writes the file at the version it was read at; the draft is named first.
 func (h *Host) save() {
@@ -620,6 +625,9 @@ func (h *Host) write(content, want string, after func()) {
 			h.notify("saved " + p)
 			if !newer && ws == "" {
 				h.reloadOnSave(p) // the user's own script: loaded again at once
+			}
+			if !newer {
+				h.emitLua("save", map[string]any{"path": p, "workspace": ws})
 			}
 			switch {
 			case after == nil:

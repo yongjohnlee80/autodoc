@@ -272,6 +272,22 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 		r.wantCursor(t, ":heading Install-it", 3, 1)
 		r.mustRefuse(t, "heading Nope", "heading: no Nope on the page")
 	},
+	"-- lastsaved.lua: :lastsaved <path> says when a page was last saved in this run": func(t *testing.T, r *running) {
+		r.mustRun(t, "lastsaved a.md")
+		r.waitNotice(t, "lastsaved: a.md not saved yet")
+		onLoop(r, func() bool { r.h.emitLua("save", map[string]any{"path": "a.md", "workspace": "kb"}); return true })
+		r.mustRun(t, "lastsaved a.md")
+		r.s.WaitFor(t, "a time", func(string) bool {
+			return onLoop(r, func() bool {
+				for _, n := range r.h.noticeLog.items {
+					if regexp.MustCompile(`^lastsaved: a\.md \d\d:\d\d:\d\d$`).MatchString(n.text) {
+						return true
+					}
+				}
+				return false
+			})
+		})
+	},
 	"-- tail.lua: :tail <n> selects the last n characters of the cursor's line": func(t *testing.T, r *running) {
 		r.page("abc de\u0301f", 1, 1) // é as e and an accent: one column
 		r.mustRun(t, "tail 3")

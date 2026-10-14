@@ -323,13 +323,16 @@ var modeNames = map[widget.EditorMode]string{
 	widget.ModeVisualBlock: "visual_block",
 }
 
-func (e *Engine) edMode(L *lua.LState) int {
-	m := e.ed(L).Mode()
-	name, ok := modeNames[m]
-	if !ok {
-		name = m.String() // a mode golib added since: its own name, rather than nothing
+// ModeName is m as ed:mode() says it: "normal", "insert", "visual_line", ….
+func ModeName(m widget.EditorMode) string {
+	if name, ok := modeNames[m]; ok {
+		return name
 	}
-	L.Push(lua.LString(name))
+	return m.String() // a mode golib added since: its own name, rather than nothing
+}
+
+func (e *Engine) edMode(L *lua.LState) int {
+	L.Push(lua.LString(ModeName(e.ed(L).Mode())))
 	return 1
 }
 

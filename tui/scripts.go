@@ -86,6 +86,7 @@ func (h *Host) reloadScripts() error {
 	if old != nil {
 		old.Close()
 	}
+	h.luaChangeGen++ // a change timer set for the old engine's handlers emits nothing
 	if len(errs) > 0 {
 		for _, err := range errs {
 			h.failed("a Lua command did not load", err)

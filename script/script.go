@@ -189,7 +189,6 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 		handlers: map[string][]*lua.LFunction{}}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
-	L.SetField(e.global, "on", L.NewFunction(e.luaOn))
 	L.SetField(e.global, "notify", L.NewFunction(func(L *lua.LState) int {
 		if e.notify != nil {
 			e.notify(L.CheckString(1))

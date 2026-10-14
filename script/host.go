@@ -24,15 +24,19 @@ type CommandInfo struct {
 func (e *Engine) SetCommandList(fn func() []CommandInfo) { e.list = fn }
 
 // GlobalDocs is the global table's own functions as the reference lists them, beside command and
-// notify, the table named global: now, date and commands.
+// notify, the table named global: now, date, commands and on.
 func GlobalDocs(global string) []Doc {
 	var e Engine
-	fns := append(e.timeFunctions(), e.commandsFunction())
+	fns := append(e.timeFunctions(), e.commandsFunction(), e.onFunction())
 	out := make([]Doc, len(fns))
 	for i, f := range fns {
 		out[i] = Doc{Call: global + "." + f.name + "(" + f.args + ")", Returns: f.returns, Notes: f.notes}
 	}
 	return out
+}
+
+func (e *Engine) onFunction() function {
+	return function{"on", "event, fn", "nothing", "Calls `fn(ed, info)` each time event happens, from now until the scripts reload. The host says which events there are ([events](#events)). A handler runs as a callback does, and its error is a notification.", e.luaOn}
 }
 
 func (e *Engine) commandsFunction() function {
@@ -42,7 +46,7 @@ func (e *Engine) commandsFunction() function {
 // registerGlobals adds now, date and commands to the global table, and makes print say what it
 // prints where notify does.
 func (e *Engine) registerGlobals() {
-	for _, f := range append(e.timeFunctions(), e.commandsFunction()) {
+	for _, f := range append(e.timeFunctions(), e.commandsFunction(), e.onFunction()) {
 		e.L.SetField(e.global, f.name, e.L.NewFunction(f.fn))
 	}
 	e.L.SetGlobal("print", e.L.NewFunction(e.luaPrint))

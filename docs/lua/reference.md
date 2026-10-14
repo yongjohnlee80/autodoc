@@ -44,6 +44,7 @@ The engine's own functions, beside `command` and `notify`:
 | `autodoc.now()` | number | The time, in seconds since 1970-01-01 UTC, with a fraction: `os.time()`'s, to the millisecond. |
 | `autodoc.date(format, t)` | string, or a table | The time t (seconds, `now()` by default) written by format, as `os.date` does: `%Y-%m-%d`, `%H:%M`, …; `%c` by default. A format starting with `!` is in UTC, else local time; `"*t"` gives a table: `year`, `month`, `day`, `hour`, `min`, `sec`, `wday`, `yday`, `isdst`. |
 | `autodoc.commands()` | list of tables | Every command, in the order they were added: `{id, name, aliases, args, help, title, source}`. `name` is its `:` name, `""` for one only a key or its id runs; `source` says whose it is (`"lua"`, `"plugin"`, `"editor"`, …). A command that takes another's `:` name finds that one here, under its id and with no `name`, and runs it with `autodoc.run`. |
+| `autodoc.on(event, fn)` | nothing | Calls `fn(ed, info)` each time event happens, from now until the scripts reload. The host says which events there are ([events](#events)). A handler runs as a callback does, and its error is a notification. |
 
 <!-- autodoc:lua-globals:end -->
 
@@ -293,6 +294,42 @@ them, and its jump to the first match comes just after your command ends.
 `#2`: `ed:line("3")` raises `bad argument #2 to line (number expected, got string)`. A position is
 a number; `args` are strings, so convert them with `tonumber`. A fraction is cut to a whole number.
 A text argument may be a string or a number.
+
+## Events
+
+`autodoc.on(event, fn)` calls `fn(ed, info)` each time event happens:
+
+| Event | When | `info` |
+|---|---|---|
+| `open` | a page is set up in the editor: a file opened, or the draft after a close | `{path, workspace}`; `path` is `nil` for the draft |
+| `save` | a save wrote the editor's text | `{path, workspace}` |
+| `mode` | the editor's mode changed | `{mode, previous}`, as `ed:mode()` names them |
+| `change` | the text changed, once typing pauses (300 ms): a burst of keys is one change | `{revision}`, as `ed:revision()` |
+
+- **A handler runs as a callback does:** on AutoDoc's loop, with 2 seconds, `ed` reachable and its
+  edits one undo step. Its error is a notification, `a Lua handler failed: …`; the other handlers
+  still run, and it stays.
+- **A handler's own edits do not emit `change` again,** so a `change` handler may tidy the page.
+- **`:lua-reload` drops every handler** with the scripts that set them; loading them again sets
+  them again.
+
+```lua
+-- lastsaved.lua: :lastsaved <path> says when a page was last saved in this run
+local saved = {}
+autodoc.on("save", function(ed, info)
+  saved[info.path] = autodoc.date("%H:%M:%S")
+end)
+
+autodoc.command{
+  name = "lastsaved",
+  args = "<path>",
+  help = "say when a page was last saved",
+  run = function(ed, args)
+    local p = args[1] or (autodoc.document().path or "")
+    autodoc.notify("lastsaved: " .. p .. " " .. (saved[p] or "not saved yet"))
+  end,
+}
+```
 
 ## Characters: `autodoc.text`
 
