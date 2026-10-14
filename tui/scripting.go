@@ -50,8 +50,9 @@ type scripting struct {
 	seq     uint64 // the contracts' fetches: only the latest one's answer is kept
 	// run runs a catalog entry for autodoc.run (Host.runFromLua); reload is :lua-reload's
 	// (Host.reloadScripts)
-	run    func(id string, args []string) error
-	reload func() error
+	run     func(id string, args []string) error
+	reload  func() error
+	install func(url string) error // :lua-install's (Host.installPackage)
 	// line runs a key's or a menu row's command line (Host: core.RunCommand); ui is the running
 	// engine's keys and rows, menuRows the Plugins menu's model of them (luakeys.go)
 	line     func(string) error
@@ -73,7 +74,16 @@ func (s *scripting) Catalog() []Entry {
 				return errors.New("lua-reload: the scripts have not started")
 			}
 			return s.reload()
-		}}}
+		}},
+		{ID: "scripts.install", Title: "install a Lua package", Verb: "lua-install", Args: "<git-url>",
+			Help: "clone a Lua package into the config folder's lua/, once you agree",
+			Run: func(inv Invocation) error {
+				if s.install == nil {
+					return errors.New("lua-install: the scripts have not started")
+				}
+				return s.install(inv.Line)
+			}},
+	}
 }
 
 // luaVerb is what a script's call needs of a contract.
