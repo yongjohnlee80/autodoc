@@ -122,6 +122,8 @@ type Engine struct {
 	base        *lua.LTable
 	// handlers are on's, by event (events.go)
 	handlers map[string][]*lua.LFunction
+	// calling is the gated script whose proxy called the host function running now (Caller)
+	calling *gatedScript
 }
 
 // Registration is one command{…} as a host's registrar takes it: its id and title, the file that

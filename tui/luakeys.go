@@ -10,6 +10,8 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 	lua "github.com/yuin/gopher-lua"
+
+	"github.com/yongjohnlee80/autodoc/script"
 )
 
 // LUA KEYS AND MENU ROWS (ADR 1792004705 §4.5–4.7): a script binds a command line to a key or a
@@ -24,17 +26,55 @@ import (
 // is the right-click menu's (editorMenu) or the Plugins menu's. Each runs its command line as ':'
 // does, its error a notification. They belong to the engine that made them: a reload drops them
 // with it (bind), and the scripts make them again as they load. A gated script needs commands for
-// any of them, as for autodoc.run: what they run is any command.
+// any of them to run, as for autodoc.run: what they run is any command. Its keys and rows register
+// whatever it was granted, and ask for the grant when they run, so an Allow given after it loaded
+// works at once.
 
 // luaKey is a letter of SPC u.
-type luaKey struct{ letter, title, line string }
+type luaKey struct {
+	letter, title, line string
+	by                  luaBinder
+}
 
 // luaMenu is a menu row a script added.
-type luaMenu struct{ where, title, line string }
+type luaMenu struct {
+	where, title, line string
+	by                 luaBinder
+}
+
+// luaBinder is who bound a key or a row: a gated script's needs commands when it runs; an
+// ungated script's (zero) does not.
+type luaBinder struct {
+	script string
+	grants script.Grants
+}
+
+// allowed reports whether what b bound may run now, and says why not when it may not.
+func (b luaBinder) allowed(s *scripting) bool {
+	if b.grants == nil || b.grants.Granted(b.script, "commands") {
+		return true
+	}
+	s.c.Notify(b.script + ": its keys and menu rows need commands: not granted")
+	return false
+}
+
+// binder is the script calling map or menu now.
+func (s *scripting) binder() luaBinder {
+	if name, g, ok := s.eng.Caller(); ok {
+		return luaBinder{name, g}
+	}
+	return luaBinder{}
+}
+
+// luaChord is a page key: its command line, and who bound it.
+type luaChord struct {
+	line string
+	by   luaBinder
+}
 
 // luaUI is one engine's keys and rows.
 type luaUI struct {
-	chords map[widget.KeyChord]string
+	chords map[widget.KeyChord]luaChord
 	leader []luaKey
 	menus  []luaMenu
 }
@@ -46,7 +86,7 @@ const luaLetters = "abcdefghijklmnoprstuvwxyz0123456789"
 func (s *scripting) mapUI(eng interface {
 	SetFunction(string, lua.LGFunction)
 }) {
-	s.ui = luaUI{chords: map[widget.KeyChord]string{}}
+	s.ui = luaUI{chords: map[widget.KeyChord]luaChord{}}
 	s.refreshLuaUI()
 	eng.SetFunction("map", s.luaMap)
 	eng.SetFunction("menu", s.luaMenuFn)
@@ -66,7 +106,7 @@ func (s *scripting) luaMap(L *lua.LState) int {
 		if err != nil {
 			L.ArgError(1, err.Error())
 		}
-		s.ui.chords[kc] = line
+		s.ui.chords[kc] = luaChord{line, s.binder()}
 	case "leader":
 		if utf8.RuneCountInString(keys) != 1 || !strings.Contains(luaLetters, keys) {
 			L.ArgError(1, fmt.Sprintf("a leader key is one of %s (q closes the card), not %q", luaLetters, keys))
@@ -74,7 +114,7 @@ func (s *scripting) luaMap(L *lua.LState) int {
 		if title == "" {
 			title = line
 		}
-		k := luaKey{keys, title, line}
+		k := luaKey{keys, title, line, s.binder()}
 		replaced := false
 		for i := range s.ui.leader {
 			if s.ui.leader[i].letter == keys {
@@ -120,7 +160,7 @@ func (s *scripting) luaMenuFn(L *lua.LState) int {
 	if title == "" || line == "" {
 		L.ArgError(1, "menu needs a title and a command")
 	}
-	s.ui.menus = append(s.ui.menus, luaMenu{where, title, line})
+	s.ui.menus = append(s.ui.menus, luaMenu{where, title, line, s.binder()})
 	s.refreshLuaUI()
 	return 0
 }
@@ -164,7 +204,9 @@ func (s *scripting) luaKey(letter string) {
 	for _, k := range s.ui.leader {
 		if k.letter == letter {
 			s.c.Close("luaKeys")
-			s.runLuaLine(k.line)
+			if k.by.allowed(s) {
+				s.runLuaLine(k.line)
+			}
 			return
 		}
 	}
@@ -172,19 +214,21 @@ func (s *scripting) luaKey(letter string) {
 
 // luaMenu is a Plugins-menu row of a script's, chosen.
 func (s *scripting) luaMenu(target string) {
-	if i, err := strconv.Atoi(target); err == nil && i >= 0 && i < len(s.ui.menus) {
+	if i, err := strconv.Atoi(target); err == nil && i >= 0 && i < len(s.ui.menus) && s.ui.menus[i].by.allowed(s) {
 		s.runLuaLine(s.ui.menus[i].line)
 	}
 }
 
 // chord is the page's chord hook: a script's Normal or Visual chord runs its command line.
 func (s *scripting) chord(kc widget.KeyChord) bool {
-	line, ok := s.ui.chords[kc]
+	ch, ok := s.ui.chords[kc]
 	if !ok {
 		return false
 	}
-	s.runLuaLine(line)
-	return true
+	if ch.by.allowed(s) {
+		s.runLuaLine(ch.line)
+	}
+	return true // the script's key all the same: it does nothing else while refused
 }
 
 // runLuaLine runs a key's or a row's command line as ':' does; its error is a notification.
@@ -204,10 +248,14 @@ func (s *scripting) editorRows() []widget.MenuItemModel {
 		if m.where != "editor" {
 			continue
 		}
-		line := m.line
+		line, by := m.line, m.by
 		id := "lua.menu." + strconv.Itoa(i)
 		rows = append(rows, menuCommand(widget.ItemID(id), m.title, widget.CoreMenuAction{ID: tuicore.ActionID(id),
-			Run: func(*widget.EditorCore) { s.runLuaLine(line) }}))
+			Run: func(*widget.EditorCore) {
+				if by.allowed(s) {
+					s.runLuaLine(line)
+				}
+			}}))
 	}
 	if len(rows) == 0 {
 		return nil

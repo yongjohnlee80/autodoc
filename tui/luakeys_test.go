@@ -21,7 +21,8 @@ autodoc.menu{ where = "editor", title = "&Mark here", command = "mark em" }`
 // TestLuaKeysAndMenusRunTheirCommands: a script's Normal chord and control chord reach the page
 // through golib's hook (and a Visual one only in Visual mode); SPC u t, pressed as keys, runs the
 // leader key; the Plugins menu's row and the right-click menu's run theirs. Bad specs are the
-// script's errors; a gated script needs commands to bind any; :lua-reload drops them all.
+// script's errors; a gated script's key needs commands when it runs, and works at once when it is
+// granted; :lua-reload drops them all.
 func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
 	r := attached(t, d)
@@ -80,22 +81,26 @@ func TestLuaKeysAndMenusRunTheirCommands(t *testing.T) {
 		}
 	}
 
-	// a gated script without commands binds nothing
+	// a gated script's key registers whatever it was granted, and needs commands when it runs: a
+	// grant given after it loaded works at once
 	r.page("", 1, 1)
 	if err := onLoop(r, func() error {
-		return r.h.loadGated("pkg", "pkg.lua", []byte(`local ok, err = autodoc.map{ mode = "normal", keys = "W", command = "mark w" }
-autodoc.command{ name = "said", run = function(ed) ed:insert(tostring(ok) .. " " .. tostring(err)) end }`))
+		return r.h.loadGated("pkg", "pkg.lua", []byte(`autodoc.map{ mode = "normal", keys = "W", command = "mark w" }`))
 	}); err != nil {
 		t.Fatal(err)
 	}
-	r.mustRun(t, "said")
-	r.wantText(t, "a gated map", "nil needs commands: not granted")
-	if onLoop(r, func() bool {
-		_, ok := r.h.luaFeature().ui.chords[widget.KeyChord{Mode: widget.ModeNormal, Code: 'W'}]
-		return ok
-	}) {
-		t.Fatal("a gated script without commands bound W")
+	r.clearNotices()
+	if !press(tuicore.KeyEvent{Code: 'W', Text: "W"}) {
+		t.Fatal("the gated script's W is not its key")
 	}
+	r.waitNotice(t, "pkg: its keys and menu rows need commands: not granted")
+	r.wantText(t, "W ungranted", "")
+	onLoop(r, func() bool {
+		r.h.prefs.luaGrants = map[string]map[string]bool{"pkg": {"commands": true}}
+		return true
+	})
+	press(tuicore.KeyEvent{Code: 'W', Text: "W"})
+	r.wantText(t, "W granted", "<w>")
 
 	// a reload drops the test's script, and every key and row with it
 	r.mustRun(t, "lua-reload")

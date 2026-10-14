@@ -148,9 +148,23 @@ func (e *Engine) gated(fn *lua.LFunction, name string, g Gate, script string, gr
 		for i := 1; i <= top; i++ {
 			L.Push(L.Get(i))
 		}
+		prev := e.calling
+		e.calling = &gatedScript{script: script, grants: grants}
+		defer func() { e.calling = prev }()
 		L.Call(top, lua.MultRet)
 		return L.GetTop() - top
 	})
+}
+
+// Caller is the gated script calling the host function running now, through its proxy: its name
+// and grants, for a host function that keeps something of the script's (a key) and checks its
+// grant later, when it runs. ok is false for an ungated caller. A host function gated with a Gate
+// that answers "" is one that checks later: the call goes through, with Caller set.
+func (e *Engine) Caller() (script string, grants Grants, ok bool) {
+	if e.calling == nil {
+		return "", nil, false
+	}
+	return e.calling.script, e.calling.grants, true
 }
 
 // owns reports whether fn is this engine's: made in its globals or in one of its gated scripts'.

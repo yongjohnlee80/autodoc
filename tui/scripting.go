@@ -140,8 +140,10 @@ func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) 
 	eng.SetGate("run", func(string, *lua.LState) string { return "commands" })
 	// keys and rows run any command line: commands, as run (luakeys.go)
 	s.mapUI(eng)
-	eng.SetGate("map", func(string, *lua.LState) string { return "commands" })
-	eng.SetGate("menu", func(string, *lua.LState) string { return "commands" })
+	// map and menu always register: a gated script's key or row checks commands when it runs, so a
+	// grant given after the script loaded works at once (luakeys.go)
+	eng.SetGate("map", func(string, *lua.LState) string { return "" })
+	eng.SetGate("menu", func(string, *lua.LState) string { return "" })
 	// a new engine (a reload): the namespaces are made again in it, from the contracts known
 	s.domains = map[string]*lua.LTable{}
 	if s.verbs != nil {
