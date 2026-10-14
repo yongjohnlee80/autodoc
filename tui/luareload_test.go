@@ -118,3 +118,25 @@ end }`)
 	}
 	r.wantText(t, ":greet after saving a.lua", "v3")
 }
+
+// TestSavingAScriptInAWorkspaceReloads: the config's lua/ may lie inside a workspace, so a script
+// saved there is a workspace path: it reloads too, once resolved on disk. Another file of the
+// workspace, or a script in another folder, does not.
+func TestSavingAScriptInAWorkspaceReloads(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "kestrel\n"}})
+	r := attached(t, d)
+	root := onLoop(r, func() string { return r.h.rootOf("kb") })
+	if root == "" {
+		t.Fatal("the workspace's root is not listed")
+	}
+	onLoop(r, func() bool { r.h.luaDir = filepath.Join(root, "config", "lua"); return true })
+	for _, p := range []string{"a.md", "config/lua/x.txt", "config/other/x.lua", "config/lua/deeper/x.lua"} {
+		r.clearNotices()
+		onLoop(r, func() bool { r.h.reloadOnSave("kb", p); return true })
+		if onLoop(r, func() bool { return len(r.h.noticeLog.items) > 0 }) {
+			t.Fatalf("saving %s reloaded", p)
+		}
+	}
+	onLoop(r, func() bool { r.h.reloadOnSave("kb", "config/lua/x.lua"); return true })
+	r.waitNotice(t, "reloaded the Lua scripts")
+}

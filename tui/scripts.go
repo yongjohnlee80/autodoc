@@ -97,9 +97,11 @@ func (h *Host) reloadScripts() error {
 	return nil
 }
 
-// reloadOnSave reloads the scripts when the file just saved is one of the user's: a .lua file in
-// the config folder's lua/.
-func (h *Host) reloadOnSave(p string) {
+// reloadOnSave reloads the scripts when the file just saved, p of workspace ws ("" outside every
+// workspace), is one of the user's: a .lua file directly in the config folder's lua/, wherever it
+// was opened from (that folder may lie inside a workspace).
+func (h *Host) reloadOnSave(ws, p string) {
+	p = h.pathOnDisk(ws, p)
 	if h.luaDir == "" || filepath.Ext(p) != ".lua" || !filepath.IsAbs(p) {
 		return
 	}

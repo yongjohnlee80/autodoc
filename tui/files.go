@@ -623,8 +623,8 @@ func (h *Host) write(content, want string, after func()) {
 				h.settleRecovery(ws, p)
 			}
 			h.notify("saved " + p)
-			if !newer && ws == "" {
-				h.reloadOnSave(p) // the user's own script: loaded again at once
+			if !newer {
+				h.reloadOnSave(ws, p) // the user's own script: loaded again at once
 			}
 			if !newer {
 				h.emitLua("save", map[string]any{"path": p, "workspace": ws})
