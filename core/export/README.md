@@ -9,7 +9,7 @@ page without a diagram has no script.
 | Name | What |
 | --- | --- |
 | `Format` | an output format: `HTML` (`"html"`) or `Text` (`"text"`) |
-| `Options` | what a render reads besides the source: `Base`, the directory relative links are resolved from (each becomes a `file:` URL; `""` keeps links as written); `SourceSpans`, which puts each block's source byte range on it (`data-src`); and `Document`, the source's file, whose embeds are drawn (below) |
+| `Options` | what a render reads besides the source: `Base`, the directory relative links are resolved from (each becomes a `file:` URL; `""` keeps links as written); `SourceSpans`, which puts each block's source byte range on it (`data-src`); `Document`, the source's file, whose embeds are drawn (below); and `TableRows` and `TableWidth`, which fit its tables to a narrower view |
 | `Render(source, format, theme)` | `RenderWith` with no options |
 | `RenderWith(source, format, theme, options)` | the page or text; an unknown theme (for HTML) or format is an error |
 | `DiagramPage(source, theme)` | a page of one Mermaid diagram at its own size on the theme's background |
@@ -21,7 +21,9 @@ HTML shows an image as its alt text, unless `Options.Document` names the source'
 embed, `![alt](path)`, of a file beside the document is drawn, as xmd draws it:
 - a Mermaid diagram (`.mmd`) as a diagram;
 - a table (`.csv`) as a table, with its first row as the header. It shows 1000 rows, 64 columns
-  and 20,000 cells at most, then says how many rows and columns are not shown;
+  and 20,000 cells at most, then says how many rows and columns are not shown. `Options.TableRows`
+  and `Options.TableWidth` fit it to a narrower view: that many rows, and the first columns that fit
+  in that many characters (one at least);
 - an image (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.avif`, `.bmp`) as the image, written in as a
   `data:` URI, so the page stays whole.
 

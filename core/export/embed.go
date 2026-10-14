@@ -16,6 +16,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // EMBEDS — a page's ![alt](path) of a file beside its document is drawn in the page, as xmd draws
@@ -32,8 +33,8 @@ import (
 
 // The bounds: a diagram or table file's size, an image's, every image of a page together, and what
 // a table shows: its rows, its columns, and its cells, the header's included. A row is padded to the
-// table's width, so the cells bound the page a sparse file makes (a wide header over short rows):
-// what is drawn grows with the file, never with rows times the widest row.
+// table's width, so the columns and cells bound the page a sparse file makes (a wide header over
+// short rows): what is drawn grows with the file, never with rows times the widest row.
 const (
 	maxEmbedText = 1 << 20
 	// an image's, so its data: URI stays under the 8 MiB golib's native view decodes
@@ -54,12 +55,13 @@ var imageTypes = map[string]string{
 type embedder struct {
 	root      *os.Root
 	resources string
+	fit       tableFit
 	images    int64 // the images' bytes so far, against maxEmbedImages
 }
 
 // newEmbedder is the embedder for the document at doc; nil when there is none ("") or its folder
 // cannot be opened.
-func newEmbedder(doc string) *embedder {
+func newEmbedder(doc string, fit tableFit) *embedder {
 	if doc == "" {
 		return nil
 	}
@@ -79,7 +81,7 @@ func newEmbedder(doc string) *embedder {
 			break
 		}
 	}
-	return &embedder{root: root, resources: name}
+	return &embedder{root: root, resources: name, fit: fit}
 }
 
 func (e *embedder) close() { e.root.Close() }
@@ -115,7 +117,7 @@ func (e *embedder) embed(dest []byte, alt string, block bool) (html string, isBl
 		if !ok {
 			return "", false, false, false
 		}
-		table, ok := csvTable(data)
+		table, ok := csvTable(data, e.fit)
 		return table, true, false, ok
 	}
 	return "", false, false, false
@@ -187,10 +189,17 @@ func (e *embedder) readAt(p string, limit int64) ([]byte, error) {
 	return data, nil
 }
 
-// csvTable is a CSV file as a table, its first row the header. It shows maxTableColumns columns at
-// most, and as many rows as maxTableRows and maxTableCells allow; a last row says how many rows and
-// columns are not shown. ok is false for a file with no rows, or one that is not CSV.
-func csvTable(data []byte) (string, bool) {
+// tableFit is how much of a table a page shows: its rows (0: maxTableRows), and the width, in
+// characters, its columns are fit in (0: any width, within maxTableColumns).
+type tableFit struct {
+	rows, width int
+}
+
+// csvTable is a CSV file as a table, its first row the header, as fit allows: the columns that fit
+// (one at least, maxTableColumns at most), and fit's rows, as many as maxTableCells allow too. A
+// last row says how many rows and columns are not shown. ok is false for a file with no rows, or one
+// that is not CSV.
+func csvTable(data []byte, fit tableFit) (string, bool) {
 	r := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))))
 	r.FieldsPerRecord = -1
 	r.LazyQuotes = true
@@ -202,8 +211,15 @@ func csvTable(data []byte) (string, bool) {
 	for _, row := range rows {
 		columns = max(columns, len(row))
 	}
+	limit := maxTableRows
+	if fit.rows > 0 {
+		limit = min(limit, fit.rows)
+	}
 	width := min(columns, maxTableColumns)
-	shown := min(len(rows)-1, maxTableRows, maxTableCells/width-1)
+	shown := min(len(rows)-1, limit, maxTableCells/width-1)
+	if fit.width > 0 {
+		width = fitting(rows[:1+shown], width, fit.width)
+	}
 	var b strings.Builder
 	cells := func(tag string, row []string) {
 		b.WriteString("<tr>")
@@ -238,6 +254,24 @@ func csvTable(data []byte) (string, bool) {
 	}
 	b.WriteString("</table>")
 	return b.String(), true
+}
+
+// fitting is how many of a table's first columns fit in width characters as drawn, one at least:
+// each column is its widest cell among rows, and three for its padding and border.
+func fitting(rows [][]string, columns, width int) int {
+	total := 1
+	for i := range columns {
+		w := 0
+		for _, row := range rows {
+			if i < len(row) {
+				w = max(w, utf8.RuneCountInString(row[i]))
+			}
+		}
+		if total += w + 3; total > width && i > 0 {
+			return i
+		}
+	}
+	return columns
 }
 
 // embeds are a render's drawn embeds, each written in the page in its placeholder's place.

@@ -407,3 +407,41 @@ func TestBlockEmbedsAndBounds(t *testing.T) {
 		t.Error("the table shows more than 1000 rows")
 	}
 }
+
+// A view narrower than a browser fits its tables: TableRows rows, and the first columns that fit in
+// TableWidth characters, one at least; the table says how many rows and columns are not shown.
+func TestATableFitsItsView(t *testing.T) {
+	var csv strings.Builder
+	cell := strings.Repeat("c", 20)
+	for range 31 {
+		csv.WriteString(strings.TrimSuffix(strings.Repeat(cell+",", 10), ",") + "\n")
+	}
+	doc := embedDoc(t, map[string]string{
+		"docs/grid.csv": csv.String(),
+		"docs/one.csv":  "h\n" + strings.Repeat("w", 300) + "\n",
+	})
+	fit := func(source string) string {
+		content, err := export.RenderWith([]byte(source), export.HTML, "light", export.Options{Document: doc, TableRows: 16, TableWidth: 120})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(content)
+	}
+	// each column is 20 characters and 3 more: 5 fit in 120 (1 + 5×23 = 116)
+	page := fit("![grid](grid.csv)\n")
+	if n := strings.Count(page, "<th>"); n != 5 {
+		t.Errorf("%d columns shown; want the 5 that fit", n)
+	}
+	if n := strings.Count(page, "<tr><td>"); n != 16 {
+		t.Errorf("%d rows shown; want 16", n)
+	}
+	if !strings.Contains(page, "… 14 more rows, 5 more columns") {
+		t.Errorf("the table does not say what is not shown:\n%s", page)
+	}
+	if page := fit("![one](one.csv)\n"); !strings.Contains(page, "<th>h</th>") || strings.Contains(page, "more columns") {
+		t.Errorf("a column wider than the view is not shown alone:\n%s", page)
+	}
+	if page := renderEmbeds(t, "![grid](grid.csv)\n", doc, false); strings.Count(page, "<th>") != 10 || strings.Contains(page, "more") {
+		t.Errorf("with no fit the whole table is shown:\n%s", page)
+	}
+}

@@ -123,6 +123,11 @@ type Options struct {
 	// (.mmd), a table (.csv) or an image are read beside it, or in its resources folder, and drawn
 	// in the page (embed.go). "" draws each as its alt text.
 	Document string
+	// TableRows is how many rows an embedded table shows (0: 1000); TableWidth is the width, in
+	// characters, its columns are fit in: those that fit are shown, and the table says how many
+	// are not (0: any width, 64 columns at most). For a view narrower than a browser: the GUI's
+	// Rendered view of a note.
+	TableRows, TableWidth int
 }
 
 // Render is RenderWith without options: every link as the source has it.
@@ -154,7 +159,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		digest := sha256.Sum256(source)
 		placeholder := fmt.Sprintf("autodoc-link-%x-", digest)
 		var resolved []string
-		embedder := newEmbedder(options.Document)
+		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth})
 		if embedder != nil {
 			defer embedder.close()
 		}
