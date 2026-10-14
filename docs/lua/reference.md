@@ -532,7 +532,7 @@ call answers `nil` and `needs <capability>: not granted`, and does nothing.
 | `settings` | change AutoDoc's settings: workspaces, models, rankers, preferences |
 | `clipboard` | `autodoc.clipboard.read` and `.write` |
 | `agents` | `autodoc.agents.list` and `.send` |
-| `commands` | run commands: `autodoc.run`, `ed:run`, and bind keys or menu rows (`autodoc.map`, `autodoc.menu`) |
+| `commands` | run commands: `autodoc.run`, `ed:run`, and the keys and menu rows it binds (`autodoc.map`, `autodoc.menu`: they register either way, and say they need it when pressed) |
 
 - **Every daemon verb says which of the first three it needs** (its effect, in `autodoc
   --contracts`). A verb whose effect the daemon does not say (an older daemon) is refused to a
