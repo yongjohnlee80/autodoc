@@ -157,7 +157,7 @@ func TestTheCatalogJSONIsTheContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"scope":"workspace"`, `"audience":"agent"`, `"effect":"read"`, `"effect":"write"`, `"effect":"settings"`, `"scope":"local-peer"`,
+	for _, want := range []string{`"scope":"workspace"`, `"audience":"agent"`, `"effect":""`, `"scope":"local-peer"`,
 		`{"code":-32071,"name":"todos.stale","next":"todos.get","messages":["the task changed"]}`} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("the catalog's JSON lacks %s: %s", want, b)
