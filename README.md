@@ -548,6 +548,15 @@ On macOS, holding a letter repeats it instead of opening the accent picker, so h
 `k` continues moving through the document. AutoDoc sets this preference for its GUI process at
 startup; no `defaults` command is needed, and other apps and saved preferences are unaffected.
 
+**A note's Rendered view is its page in the GUI.** The note is drawn natively as its export is,
+so it matches `File › Preview HTML`:
+- its embeds: a Mermaid diagram, a `.csv` table (16 rows, and the columns that fit the page),
+  an image;
+- its raw HTML and its links.
+
+The page is read-only: `Ctrl+T` shows the note's source to edit, and showing the page again draws
+what was typed. The untitled draft keeps the editable Rendered view, which draws Markdown in place.
+
 **`File › Preview HTML` opens a pane beside the editor in the GUI**, not an image or the browser.
 It shows the note's export drawn natively, with proportional text and the export's own styles, so
 it matches `autodoc --export html`. The text in it can be selected and copied (`Ctrl+C`).

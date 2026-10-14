@@ -189,6 +189,8 @@ type Host struct {
 	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
 	htmlAsk     *htmlOpen     // the HTML file the open question is about (OpenHTML.qml)
 	pageDir     string        // the root and base the page's resources load from (htmldoc.go)
+	noteDoc     noteDocState  // the note the page shows, rendered (notedoc.go)
+	notePage    func([]byte)  // stands in for the page's SetHTML in tests; nil: the page's
 	// refusedNoted: the open page's refused resource was said (resourceRefused)
 	refusedNoted bool
 	// awaitExit waits for a stopped daemon's process to go (waitGone); a test's daemon shares the

@@ -185,6 +185,9 @@ const helpRest = `THE PAGE
   frame and the status line say [PDF · read-only]. Motions, find, copy and the outline work;
   edits and saves do not. File › Open with Default App opens the original. A long one shows as much as one read
   carries, and says where it was cut.
+  In the GUI a note's Rendered view (Ctrl+T) is its page, drawn as the HTML preview draws it: its
+  embeds of a diagram (.mmd), a table (.csv: 16 rows, the columns that fit) or an image, beside
+  the note or in its folder named after it. Ctrl+T again shows its source to edit.
   An HTML file asks first: Simplified, its derived text read-only as above, or Raw, the HTML
   itself to edit and save. In the GUI a raw file's Rendered view (Ctrl+T) is its page: j k or
   the arrows scroll, Ctrl+D Ctrl+U half a page, g G the ends, and its links open as notes,

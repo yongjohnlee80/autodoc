@@ -8,7 +8,9 @@ import (
 
 	"github.com/yongjohnlee80/golib/gui"
 	guidecl "github.com/yongjohnlee80/golib/gui/decl"
+	guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	tuiwidget "github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/tui"
 )
@@ -31,7 +33,14 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, dbg *debugRecording) error
 		b := gui.NewBackend(opts...)
 		o.Backend, o.Fonts, o.FontFamilies, o.DefaultCellFont = b, b, gui.Families, gui.MonospaceFamily()
 		o.GUI = true
-		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native()))
+		// the editor's document view is AutoDoc's: a note's page is rendered from its Markdown
+		// (tui/notedoc.go). Its diagrams draw through a chain of its own, as golib's does.
+		document := guidecl.WithDocumentViewFor("html", func(tuidecl.DocumentSpec) guiwidget.DocumentView {
+			v := tuiwidget.NewHTMLView(tuiwidget.WithDiagrams(guiwidget.Diagrams(nil)))
+			guiwidget.BindHTML(v)
+			return tui.NewNoteDocumentView(v)
+		})
+		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(guidecl.Native(document)))
 		// gui.Main ends the process when this callback returns, so this is the last
 		// code that runs: the recording's owner closes here, with the TUI's trace
 		// stopped, Launch having returned. gui.Main prints a returned error and

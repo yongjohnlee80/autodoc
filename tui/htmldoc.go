@@ -29,16 +29,29 @@ func (h *Host) pageView() (*widget.HTMLView, bool) {
 	if !ok {
 		return nil, false
 	}
-	v, ok := dc.DocumentComponent().(*widget.HTMLView)
-	return v, ok
+	switch v := dc.DocumentComponent().(type) {
+	case *NoteDocumentView:
+		return v.HTMLView, true
+	case *widget.HTMLView:
+		return v, true
+	}
+	return nil, false
 }
 
-// documentFor turns the page on for a raw HTML file under --gui and off for anything else, before
-// the editor is given the file's text, and points its images at the file's folder when that
-// changes.
+// documentFor turns the page on under --gui for a raw HTML file and for a note (notedoc.go), and off
+// for anything else, before the editor is given the file's text, and points its images at the
+// file's folder when that changes.
 func (h *Host) documentFor(ws, p string, raw bool) {
 	h.refusedNoted = false // another document: what its page refuses is said again
-	on := raw && h.native()
+	note := h.isNote(p, raw)
+	on := (raw || note) && h.native()
+	// set before the switch: the view shows its text as it is turned on, and a note's is rendered.
+	// A render still on its way is the last document's: dropped, so it never covers this one's page
+	h.noteDoc.gen++
+	h.noteDoc.on, h.noteDoc.file = on && note, ""
+	if h.noteDoc.on {
+		h.noteDoc.file = h.pathOnDisk(ws, p)
+	}
 	switch {
 	case h.docSwitch != nil:
 		h.docSwitch(on)
@@ -108,6 +121,11 @@ func refusalNotice(src, ws string) string {
 // linkPage gives the page its links, once the editor is built: they open as the preview pane's do,
 // against the open file's folder.
 func (h *Host) linkPage() {
+	if dc, ok := h.editor.(documentComponent); ok {
+		if d, ok := dc.DocumentComponent().(*NoteDocumentView); ok {
+			d.show = h.showNote
+		}
+	}
 	if v, ok := h.pageView(); ok {
 		v.SetOnLink(h.htmlLink)
 		v.SetOnRefused(h.resourceRefused)

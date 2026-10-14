@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 
@@ -84,8 +86,8 @@ func TestOpeningAnHTMLFileAsksSimplifiedOrRaw(t *testing.T) {
 }
 
 // TestARawHTMLFilesPageIsItsRenderedView: under a GUI, a file opened Raw turns the editor's page on
-// before its text arrives, and any other file, opened Simplified or not HTML, turns it off; in a
-// terminal it is never on.
+// before its text arrives, as a note does (notedoc.go), and the draft and a file opened Simplified
+// turn it off; in a terminal it is never on.
 func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r, kb := runHTML(t)
 	dir := t.TempDir()
@@ -108,8 +110,8 @@ func TestARawHTMLFilesPageIsItsRenderedView(t *testing.T) {
 	r.openHTMLAnswer(t, page, "simplified")
 	r.waitOpen(t, "", page)
 	got := onLoop(r, func() []bool { return append([]bool(nil), seen...) })
-	if len(got) < 4 || !got[0] || got[1] || got[2] || got[len(got)-1] {
-		t.Fatalf("the page was switched %v, want on for the raw file, then off for a.md, the draft and a simplified open", got)
+	if len(got) < 4 || !got[0] || !got[1] || got[2] || got[len(got)-1] {
+		t.Fatalf("the page was switched %v, want on for the raw file and a.md, then off for the draft and a simplified open", got)
 	}
 	if at := onLoop(r, func() string { return textAt[0] }); strings.Contains(at, "<p>page</p>") {
 		t.Errorf("the page was turned on after the file's text arrived: %q", at)
@@ -244,4 +246,56 @@ func TestTheOpenPreferenceAnswersForTheUser(t *testing.T) {
 	r.h.p.Post(func() { r.h.openAbsolute(raw) })
 	r.s.WaitForText(t, "open an HTML file")
 	r.h.p.Post(func() { r.h.openHTMLAs("cancel") })
+}
+
+// TestANotesRenderedViewIsItsPage: under a GUI a note's page is rendered from its Markdown, off the
+// loop: its embed beside it drawn (a Mermaid diagram), its blocks carrying their source bytes, and
+// its table fitted to the page, 16 rows. A raw HTML file's text is its own page, not rendered. A
+// note's render still on its way when another document opens is dropped, never shown over it.
+func TestANotesRenderedViewIsItsPage(t *testing.T) {
+	r, kb := runHTML(t)
+	rows := "n\n" + strings.Repeat("r\n", 20)
+	for name, text := range map[string]string{"flow.mmd": "graph TD\n  a --> b\n", "rows.csv": rows} {
+		if err := os.WriteFile(filepath.Join(kb, name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var mu sync.Mutex
+	var pages []string
+	r.h.p.Post(func() {
+		r.h.nativeViews = func() bool { return true }
+		r.h.docSwitch = func(bool) {}
+		r.h.notePage = func(page []byte) { mu.Lock(); pages = append(pages, string(page)); mu.Unlock() }
+	})
+	shown := func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), pages...) }
+	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(kb, "a.md")) })
+	r.waitOpen(t, "kb", "a.md")
+	note := "# A\n\n![flow](flow.mmd)\n\n![rows](rows.csv)\n"
+	if handled := onLoop(r, func() bool { return r.h.showNote([]byte(note)) }); !handled {
+		t.Fatal("a note's text was not rendered")
+	}
+	r.s.WaitFor(t, "the note's page", func(string) bool { return len(shown()) > 0 })
+	page := shown()[len(shown())-1]
+	for _, want := range []string{`<h1 data-src="`, `<div class="embed" data-src="`, `<pre class="mermaid">graph TD`, "… 4 more rows"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("the page lacks %q:\n%s", want, page)
+		}
+	}
+
+	// a render on its way when a raw HTML file opens is dropped
+	before := len(shown())
+	other := filepath.Join(t.TempDir(), "page.html")
+	r.h.p.Post(func() {
+		r.h.showNote([]byte("# stale\n"))
+		r.h.documentFor("", other, true)
+	})
+	if handled := onLoop(r, func() bool { return r.h.showNote([]byte("<p>page</p>")) }); handled {
+		t.Error("a raw HTML file's text was rendered as a note")
+	}
+	time.Sleep(500 * time.Millisecond) // the stale render, had it applied, has landed by now
+	for _, p := range shown()[before:] {
+		if strings.Contains(p, "stale") {
+			t.Error("a note's render landed over the next document's page")
+		}
+	}
 }
