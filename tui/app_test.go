@@ -540,8 +540,11 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	}
 	closeShown := func() {
 		t.Helper()
-		// keys and a post are not ordered: the typing is in before the close
-		r.s.WaitFor(t, "the buffer unsaved", func(string) bool { return r.file().dirty })
+		// keys and a post are not ordered: the typing, its Esc too, is in before the close, or the
+		// Esc lands on the question and answers Stay
+		r.s.WaitFor(t, "the buffer unsaved, typing done", func(string) bool {
+			return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
+		})
 		onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 		r.s.WaitForText(t, "unsaved file")
 	}
