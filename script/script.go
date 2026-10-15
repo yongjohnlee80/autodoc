@@ -145,6 +145,7 @@ type config struct {
 	timeout  time.Duration
 	clock    func() time.Time
 	location *time.Location
+	buffers  BufferSource // WithBuffers: the host's buffers, buffers() and buffer(n) (buffers.go)
 }
 
 // WithGlobal names the global table scripts register through ("editor" by default): AutoDoc's is
@@ -201,6 +202,9 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 	e.registerEditorType()
 	e.registerText()
 	e.registerGlobals()
+	if cfg.buffers != nil {
+		e.registerBuffers(cfg.buffers)
+	}
 	// a string's methods are the string library itself: no script reaches it through a string
 	if mt, ok := L.GetMetatable(lua.LString("")).(*lua.LTable); ok {
 		mt.RawSetString("__metatable", lua.LString("the string library"))

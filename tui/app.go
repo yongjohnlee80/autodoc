@@ -390,6 +390,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.outline = newOutline(core{h})
 	h.rel = newRelated(core{h})
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
+	h.bufferPick = h.newBufferPick()
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts

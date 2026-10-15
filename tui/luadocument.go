@@ -14,7 +14,7 @@ import (
 
 // THE PAGE AND THE COMMANDS, AS A SCRIPT SEES THEM:
 //
-//	autodoc.document()   the page in the editor: { workspace, path, kind, derived, frontmatter,
+//	autodoc.document()   the page in the editor (the active buffer): { buffer, workspace, path, kind, derived, frontmatter,
 //	                     frontmatter_error }. path is nil for the untitled draft, workspace for a
 //	                     file outside every workspace; kind is how AutoDoc reads it ("markdown",
 //	                     "text", "yaml", "derived", "registered"), derived the format of a derived
@@ -32,8 +32,9 @@ func (h *Host) bindDocument(eng *script.Engine) {
 }
 
 func (h *Host) luaDocument(L *lua.LState) int {
-	t := L.CreateTable(0, 6)
+	t := L.CreateTable(0, 7)
 	f := h.file
+	t.RawSetString("buffer", lua.LNumber(h.active.n))
 	k := kind.Markdown // the draft is Markdown
 	if f.open {
 		t.RawSetString("path", lua.LString(f.path))

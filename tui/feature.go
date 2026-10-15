@@ -341,7 +341,7 @@ func (l legacy) Listed() {
 
 // Picks are the host's own pickers.
 func (l legacy) Picks() map[string]picker {
-	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick}
+	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "buffers": l.h.bufferPick}
 }
 
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host
