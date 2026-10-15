@@ -184,7 +184,9 @@ func (h *Host) guardEach(left []*openBuffer, action string, then func()) {
 		return
 	}
 	b := left[0]
-	h.guard(b, action, func() { h.guardEach(left[1:], action, then) })
+	// the next question waits for the next turn of the loop: the answer that runs this closes the
+	// dialog, and the same dialog opened again in the same turn does not show
+	h.guard(b, action, func() { h.p.Post(func() { h.guardEach(left[1:], action, then) }) })
 }
 
 // bufferInfo is b as Lua and the editor socket see it.
