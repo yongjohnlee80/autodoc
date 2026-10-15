@@ -94,7 +94,7 @@ func TestAJumpWhoseListMovedLandsNowhere(t *testing.T) {
 		}
 	})
 	r := runTUI(t, sess, Options{})
-	r.waitListed(t, 1)
+	r.waitListed(t, len(linksKB["kb"])/2)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.putCursor(2, strings.Index("see [[b]] and [the c](c.md), then nothing", "b]]"))

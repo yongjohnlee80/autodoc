@@ -139,6 +139,11 @@ var luaDocChecks = map[string]func(t *testing.T, r *running){
 	},
 
 	// reference.md
+	"-- todos.lua: :todos counts TODO in every open buffer": func(t *testing.T, r *running) {
+		r.page("a TODO b TODO", 1, 1)
+		r.mustRun(t, "todos")
+		r.waitNotice(t, "1 untitled: 2")
+	},
 	"-- shape.lua: :shape shows every field autodoc.command takes": func(t *testing.T, r *running) {
 		r.mustRun(t, "sh  one  two ")
 		r.waitNotice(t, "shape: 2 args, line 'one  two' (as :sh)")

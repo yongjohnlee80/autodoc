@@ -221,9 +221,13 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 		}
 		if raw != nil && *raw != b.file.raw {
 			// an HTML file open one way, asked for the other: its one buffer is read again that way,
-			// which replaces its text, so unsaved changes are asked about first
-			h.activate(b)
-			h.guard(b, "reopen it", func() { h.loadInto(b, ref.ws, ref.path, nil, *raw, land) })
+			// which replaces its text, so unsaved changes are asked about first. The new way is set
+			// before it is shown, so its page is never switched on (or off) the old way first.
+			h.guard(b, "reopen it", func() {
+				b.file.raw = *raw
+				h.activate(b)
+				h.loadInto(b, ref.ws, ref.path, nil, *raw, land)
+			})
 			return
 		}
 		h.activate(b)
@@ -348,7 +352,12 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		if a.err != nil {
 			h.failed("open "+p, a.err)
 			h.missedLanding(land, a.err)
-			h.restoreOpenFailed(b, ws, p) // a kept copy's file gone: its text becomes a draft
+			if h.restoreOpenFailed(b, ws, p) { // a kept copy's file gone: its text becomes a draft
+				return
+			}
+			if !b.file.open && !b.file.dirty && b.buf != nil && b.buf.Value() == "" && len(h.buffers) > 1 {
+				h.dropBuffer(b) // the buffer made for this file, never loaded: the page goes back
+			}
 			return
 		}
 		if prev != nil && prev.Doc != docKey(fileRef{ws, p}) {

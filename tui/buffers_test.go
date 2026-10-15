@@ -102,7 +102,8 @@ func TestALoadLandsInItsBufferAfterASwitch(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	hold.Store(true)
-	r.openByPicker(t, "b.md") // its buffer is made and shown; the read is held
+	r.openByPicker(t, "b.md")          // its buffer is made and shown; the read is held
+	r.s.WaitForText(t, "opening b.md") // the picker's Enter is a key: the open is under way before the switch
 	onLoop(r, func() bool { r.h.activate(r.h.bufferOf(fileRef{"kb", "a.md"})); return true })
 	hold.Store(false)
 	close(release)

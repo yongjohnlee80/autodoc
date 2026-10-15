@@ -162,8 +162,14 @@ func (h *Host) enter(name string) {
 		h.remember(name)
 	}
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
-	if again {
+	switch {
+	case again:
 		h.recheckFile() // a new connection: every open buffer is checked against the disk
+	case !h.file.open:
+		// the draft shown on entering another workspace (the first, at start) is set up as the page,
+		// its text kept: the watchers (outline, HTML pane, plugin feed) hear its edits from here
+		h.readPage()
+		h.showPage()
 	}
 	h.prog = progress{}
 	if h.searchCancel != nil {

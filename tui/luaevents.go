@@ -71,9 +71,7 @@ func (h *Host) changeSoonFor(b *openBuffer) {
 		if gen != b.luaGen || eng != h.luaChangeGen || b.buf.Revision() == b.luaRev {
 			return // a later edit's timer emits; a reloaded engine; or only a handler's own edits since
 		}
-		info := h.bufferInfo(b)
-		info["revision"] = b.buf.Revision()
-		h.emitLua("change", info)
-		b.luaRev = b.buf.Revision() // after the handlers: their own edits are in it
+		h.emitLua("change", map[string]any{"buffer": b.n, "revision": b.buf.Revision()}) // as ADR 1792076688 §4.5: {buffer, revision}
+		b.luaRev = b.buf.Revision()                                                      // after the handlers: their own edits are in it
 	})
 }
