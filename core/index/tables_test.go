@@ -48,6 +48,7 @@ func accessors(x *Store, tx *store.Tx) map[string]dao.Named {
 		"doc_facet": x.facets(tx), "doc_diagnostic": x.diagnostics(tx),
 		"link": x.linksOut(tx), "link_key": x.linkKeys(tx), "model": x.sc.Models(tx), "embedding": x.embeddings(tx),
 		"index_job": x.jobs(tx), "change": x.changes(tx), "workspace_connection": x.sc.Connections(tx),
+		"workspace_graph_only": x.sc.GraphOnly(tx),
 	}
 }
 
@@ -153,6 +154,9 @@ func seed(t *testing.T, s *store.Store, x *Store) {
 		if _, err := x.sc.Connections(tx).Set(store.ConnRole, store.RoleSource).Set(store.ConnEngine, store.EngineSQLite).Set(store.ConnDSN, []byte{1}).
 			Set(store.ConnUpdatedAt, int64(0)).Insert(); err != nil {
 			return fmt.Errorf("connection: %w", err)
+		}
+		if err := x.sc.GraphOnlyBatch(tx).Add(map[store.GraphOnlyField]any{store.GraphOnlyOrd: int64(0), store.GraphOnlyValue: "**/.todo-list/**"}).Flush(); err != nil {
+			return fmt.Errorf("graph_only: %w", err)
 		}
 		return x.sc.PatternBatch(tx).Add(map[store.PatternField]any{store.PatternKind: "include", store.PatternOrd: int64(0), store.PatternValue: "*.md"}).Flush()
 	})

@@ -186,3 +186,80 @@ func TestGraphResolveFollowsALinkAsWritten(t *testing.T) {
 		t.Errorf("graph.resolve at protocol 17: %v, want an unknown method", err)
 	}
 }
+
+// TestAProtocol22SessionSeesNoTodoRelations (ADR 1792015212 §2.4): from protocol 23 a task's review
+// and blocked relations, and its links to a file outside the workspace (external), are in the graph;
+// a session below 23 sees the graph it knew, without them.
+func TestAProtocol22SessionSeesNoTodoRelations(t *testing.T) {
+	r := serve(t)
+	if err := r.fsys.MkdirAll(context.Background(), "tasks"); err != nil {
+		t.Fatal(err)
+	}
+	for p, c := range map[string]string{
+		"tasks/t.md": "---\nreview: [b.md]\nadr: [$X/q.md]\nblocked: [u]\n---\n# T\n",
+		"tasks/u.md": "# U\n",
+		"b.md":       "# B\n",
+	} {
+		if _, err := r.fsys.WriteFile(context.Background(), p, strings.NewReader(c)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cur, _, err := helloAs(r, Protocol, "a-new-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, _, err := helloAs(r, 22, "an-old-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"review": "b.md|", "adr": "|/elsewhere/q.md", "blocked": "tasks/u.md|"}
+	got := map[string]string{}
+	// the three files index in any order: t's links resolve as b and u arrive
+	eventually(t, "t's relations indexed and resolved", func() bool {
+		res, err := cur.Call(context.Background(), "graph.links", "kb", "tasks/t.md")
+		if err != nil {
+			return false
+		}
+		got = map[string]string{}
+		for _, l := range res.([]any) {
+			m := l.(map[string]any)
+			got[m["kind"].(string)] = m["path"].(string) + "|" + str(m["external"])
+		}
+		return reflect.DeepEqual(got, want)
+	})
+	if ls := call(t, old, "graph.links", "kb", "tasks/t.md").([]any); len(ls) != 0 {
+		t.Errorf("protocol 22's links of t: %v, want none (a review, a blocked and an external link)", ls)
+	}
+	if back := call(t, cur, "graph.backlinks", "kb", "b.md").([]any); len(back) != 1 {
+		t.Errorf("protocol 23's backlinks of b: %v, want t's review", back)
+	}
+	if back := call(t, old, "graph.backlinks", "kb", "b.md").([]any); len(back) != 0 {
+		t.Errorf("protocol 22's backlinks of b: %v, want none", back)
+	}
+	if un := call(t, cur, "graph.unresolved", "kb").([]any); len(un) != 0 {
+		t.Errorf("an external link is listed unresolved: %v", un)
+	}
+	// asked for by name, a kind protocol 23 added is refused below it, in every graph verb
+	for _, c := range []struct {
+		verb   string
+		params []any
+	}{
+		{"graph.links", []any{"kb", "tasks/t.md"}},
+		{"graph.backlinks", []any{"kb", "b.md"}},
+		{"graph.neighborhood", []any{"kb", "tasks/t.md", int64(1)}},
+		{"graph.unresolved", []any{"kb"}},
+	} {
+		for _, kind := range []string{"review", "blocked"} {
+			_, err := old.Call(context.Background(), c.verb, append(c.params, map[string]any{"kinds": []any{kind}})...)
+			var re *golibrpc.Error
+			if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.Contains(re.Message, "needs protocol 23") {
+				t.Errorf("protocol 22's %s with kinds [%s]: %v, want invalid params naming protocol 23", c.verb, kind, err)
+			}
+		}
+	}
+	if ls := call(t, cur, "graph.links", "kb", "tasks/t.md", map[string]any{"kinds": []any{"review"}}).([]any); len(ls) != 1 {
+		t.Errorf("protocol 23's review links of t: %v", ls)
+	}
+}
+
+func str(v any) string { s, _ := v.(string); return s }

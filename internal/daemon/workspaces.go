@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yongjohnlee80/golib/logger"
@@ -59,6 +60,13 @@ type Workspaces struct {
 	// provider's name, under mu; build makes one (the Embedding's, with its key and meter)
 	overrides map[string]embed.Provider
 	build     func(ctx context.Context, name string) (embed.Provider, error)
+
+	// todoStores lists the todo registry (under mu), stores is what every workspace's modes read of
+	// it, and modes are the workspaces' graph_only settings by id (under mu): ADR 1792015212
+	todoStores  TodoStores
+	stores      atomic.Pointer[[]TodoStore]
+	storesDirty chan struct{} // TodoStoresChanged's signal to the reader, one pending at most
+	modes       map[int64]*modes
 }
 
 // The warming-up reasons index.status reports, beside a follower's first scan (its "starting").
@@ -149,7 +157,7 @@ func New(ctx context.Context, db *store.Store, o Options) *Workspaces {
 	}
 	m := &Workspaces{db: db, ctx: ctx, opts: o, served: map[string]*served{}, restarting: map[string]bool{},
 		schemas: map[int64]*schemaHolder{}, texts: map[int64]*textExtensions{}, collided: map[int64]string{}, slots: slots,
-		overrides: map[string]embed.Provider{}}
+		overrides: map[string]embed.Provider{}, modes: map[int64]*modes{}, storesDirty: make(chan struct{}, 1)}
 	m.queue = newEmbeddingQueue(m)
 	return m
 }
@@ -191,6 +199,7 @@ func (m *Workspaces) OpenAll() error {
 		m.mu.Unlock()
 	}
 	m.queue.start()
+	m.noteTodoExcluded()
 	return nil
 }
 
@@ -247,6 +256,11 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 	if err != nil {
 		return nil, err
 	}
+	graphOnly, todoSearch, err := m.db.WorkspaceModes(m.ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	md := m.modesFor(id, c.Root, graphOnly, todoSearch)
 	text := m.textExtensionsFor(id)
 	text.store(stored)
 	m.noteCollisions(id, c.Name, stored)
@@ -260,7 +274,8 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 	sh.watch(m.ctx, schemaPoll)
 	override, provider, providerErr := m.providerOf(id)
 	ix := index.New(index.NewStore(m.db, id), ws.FS,
-		index.WithMatch(ws.Matcher.Match), index.WithProvider(provider), index.WithBatching(0, m.opts.BatchDelay),
+		index.WithMatch(ws.Matcher.Match), index.WithModes(md.mode), index.WithRoot(c.Root),
+		index.WithProvider(provider), index.WithBatching(0, m.opts.BatchDelay),
 		index.WithLogger(m.opts.Log), index.WithWorkspace(c.Name), index.WithSchema(sh.get),
 		index.WithTextExtensions(text.load), index.WithRegistrations(m.opts.Registrations), index.WithRank(m.opts.Rank),
 		index.WithClock(m.db.Clock()), index.WithExternalEmbedding(func() { m.queue.wakeWorkspace(c.Name) }))

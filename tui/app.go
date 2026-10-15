@@ -68,6 +68,9 @@ type Host struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
+	// todoNoted are the workspaces' todo_excluded already said this session, by name and patterns
+	todoNoted map[string]bool
+
 	about     string
 	aboutInfo AboutInfo // what Help › About lists (help.go)
 	// layoutSrc is the layout as last loaded, dev the -dev directory ("" for none), theme the one

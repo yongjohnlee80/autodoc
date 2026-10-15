@@ -38,6 +38,8 @@ func TestChangesOf_ReadsEverySetting(t *testing.T) {
 		"view_args":              map[string]any{"LabelGroupID": "7"},
 		"source":                 map[string]any{"engine": "postgres", "dsn": "postgres://db/src", "schema": "labels"},
 		"destination_connection": map[string]any{"remove": true},
+		"graph_only":             []any{"drafts/**"},
+		"todo_search":            true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +58,8 @@ func TestChangesOf_ReadsEverySetting(t *testing.T) {
 		ViewArgs:        ptr(map[string]any{"LabelGroupID": "7"}),
 		Source:          &store.ConnectionSpec{Engine: "postgres", DSN: "postgres://db/src", Schema: "labels"},
 		DestinationConn: &store.ConnectionSpec{Remove: true},
+		GraphOnly:       ptr([]string{"drafts/**"}),
+		TodoSearch:      ptr(true),
 	}
 	if !reflect.DeepEqual(c, want) {
 		t.Errorf("changes\n got %+v\nwant %+v", c, want)

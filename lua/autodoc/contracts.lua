@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 22,
+  protocol = 23,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -207,7 +207,7 @@ return {
         { name = "path", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "[{path, raw, anchor, kind, resolved}]",
+      result = "[{path, raw, anchor, kind, resolved, external?}]",
       doc = "The files that link to it.",
     },
     ["graph.links"] = {
@@ -217,7 +217,7 @@ return {
         { name = "path", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "[{path, raw, anchor, kind, resolved}]",
+      result = "[{path, raw, anchor, kind, resolved, external?}]",
       doc = "The links the file makes.",
     },
     ["graph.neighborhood"] = {
@@ -683,7 +683,7 @@ return {
     ["workspace.list"] = {
       since = 1, scope = "global", audience = "agent",
       params = {},
-      result = "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]",
+      result = "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
       doc = "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN.",
     },
     ["workspace.remove"] = {

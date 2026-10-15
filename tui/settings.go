@@ -142,6 +142,8 @@ type settingsForm struct {
 	index                                       int
 	src                                         int
 	srcDSN, srcSchema, viewArgs                 string
+	graphOnly                                   string // the graph_only patterns, semicolon-separated
+	todoSearch                                  int    // 0 yes, 1 no: the todo tasks in search
 }
 
 // settingsBase is what the dialog was opened on: the workspace as the daemon had it, the
@@ -201,14 +203,16 @@ func (b settingsBase) form() settingsForm {
 		name: w.name, root: w.root, schema: w.schema.path, texts: strings.Join(text, ", "),
 		include: strings.Join(w.include, "; "), exclude: strings.Join(w.exclude, "; "),
 		md: typeIndex(m, "md"), txt: typeIndex(m, "txt"), yaml: typeIndex(m, "yaml", "yml"),
-		code:     strings.Join(registeredOn(m, b.registered), ", "),
-		docs:     strings.Join(registeredOn(m, b.derived), ", "),
-		section:  strconv.FormatInt(w.sectionTokens, 10),
-		policy:   max(slices.Index(policyChoices, w.embeddingPolicy), 0),
-		provider: max(slices.Index(b.providers, w.provider), 0),
-		dest:     max(slices.Index(destinationChoices, w.db.destination), 0),
-		index:    max(slices.Index(indexChoices, w.db.vectorIndex), 0),
-		viewArgs: viewArgsText(w.db.viewArgs),
+		code:       strings.Join(registeredOn(m, b.registered), ", "),
+		docs:       strings.Join(registeredOn(m, b.derived), ", "),
+		section:    strconv.FormatInt(w.sectionTokens, 10),
+		policy:     max(slices.Index(policyChoices, w.embeddingPolicy), 0),
+		provider:   max(slices.Index(b.providers, w.provider), 0),
+		dest:       max(slices.Index(destinationChoices, w.db.destination), 0),
+		index:      max(slices.Index(indexChoices, w.db.vectorIndex), 0),
+		viewArgs:   viewArgsText(w.db.viewArgs),
+		graphOnly:  strings.Join(w.graphOnly, "; "),
+		todoSearch: yesNo(w.todoSearch),
 	}
 	if c := w.db.destConn; c != nil {
 		f.destSchema = c.schema
@@ -376,6 +380,17 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 		out["include"], out["exclude"] = anyStrings(include), anyStrings(exclude)
 	}
 
+	graphOnly, err := splitPatternRules(f.graphOnly)
+	if err != nil {
+		return nil, fmt.Errorf("graph only: %w", err)
+	}
+	if !slices.Equal(graphOnly, w.graphOnly) {
+		out["graph_only"] = anyStrings(graphOnly)
+	}
+	if search := f.todoSearch == 0; search != w.todoSearch && f.todoSearch >= 0 {
+		out["todo_search"] = search
+	}
+
 	if s := strings.TrimSpace(f.section); s != opened.section {
 		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil || n < 128 || n > 2048 {
@@ -393,6 +408,14 @@ func (b settingsBase) changes(f settingsForm) (map[string]any, error) {
 		return out, nil
 	}
 	return out, b.databaseChanges(f, out)
+}
+
+// yesNo is a yes/no chooser's index for b: 0 yes, 1 no.
+func yesNo(b bool) int {
+	if b {
+		return 0
+	}
+	return 1
 }
 
 // codeTypes reads the registered types typed, each one the daemon's.
@@ -644,6 +667,8 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	// short, so the files frame fits: the excludes code brings are written where the user sees
 	// them, in the exclude field
 	h.set("App.settingsCodeLabel", "code: "+strings.Join(base.registered, ", "))
+	h.set("App.settingsTodoNote", todoExcludedNote(w))
+	h.set("App.settingsTodoNoted", len(w.todoExcluded) > 0)
 	h.set("App.settingsDestState", "stored: "+w.db.destConn.where()+" · a blank DSN keeps it")
 	h.set("App.settingsSourceState", "stored: "+w.db.source.where()+" · a blank DSN keeps it")
 	h.fillSettings(f)
@@ -659,12 +684,13 @@ func (h *Host) fillSettings(f settingsForm) {
 	for k, v := range map[string]string{"App.settingsName": f.name, "App.settingsRoot": f.root, "App.settingsSchema": f.schema,
 		"App.settingsTexts": f.texts, "App.settingsCode": f.code, "App.settingsDocs": f.docs, "App.settingsInclude": f.include, "App.settingsExclude": f.exclude,
 		"App.settingsSection": f.section, "App.settingsDestDSN": f.destDSN, "App.settingsDestSchema": f.destSchema,
-		"App.settingsSrcDSN": f.srcDSN, "App.settingsSrcSchema": f.srcSchema, "App.settingsViewArgs": f.viewArgs} {
+		"App.settingsSrcDSN": f.srcDSN, "App.settingsSrcSchema": f.srcSchema, "App.settingsViewArgs": f.viewArgs,
+		"App.settingsGraphOnly": f.graphOnly} {
 		h.setField(k, v)
 	}
 	for k, v := range map[string]int{"App.settingsMdIndex": f.md, "App.settingsTxtIndex": f.txt, "App.settingsYamlIndex": f.yaml,
 		"App.settingsPolicyIndex": f.policy, "App.wsProviderIndex": f.provider, "App.settingsDestIndex": f.dest,
-		"App.settingsVectorIndex": f.index, "App.settingsSourceIndex": f.src} {
+		"App.settingsVectorIndex": f.index, "App.settingsSourceIndex": f.src, "App.settingsTodoSearchIndex": f.todoSearch} {
 		h.set(k, -1)
 		h.set(k, v)
 	}
@@ -802,12 +828,34 @@ func (h *Host) saved(name string, c map[string]any) {
 	}
 }
 
+// todoExcludedNote says which exclude patterns keep a todo store of w out of the index (ADR
+// 1792015212 §2.3): its tasks open in no workspace, without relations; "" for none.
+func todoExcludedNote(w wsInfo) string {
+	if len(w.todoExcluded) == 0 {
+		return ""
+	}
+	return "exclude " + strings.Join(w.todoExcluded, "; ") + " keeps this workspace's todo tasks out of the index: " +
+		"they open with no relations. Index them graph-only instead: out of search, in the graph."
+}
+
+// todoGraphOnly is the notice's button: the exclude patterns that keep a todo store out are taken
+// out of the exclude field, so Save indexes the tasks graph-only. Nothing is saved until then.
+func (h *Host) todoGraphOnly(exclude string) {
+	rules, err := splitPatternRules(exclude)
+	if err != nil {
+		return
+	}
+	rules = slices.DeleteFunc(rules, func(p string) bool { return slices.Contains(h.settings.w.todoExcluded, p) })
+	h.setField("App.settingsExclude", strings.Join(rules, "; "))
+	h.set("App.settingsHelp", "the todo store's exclude is out of the field: Save indexes its tasks graph-only")
+}
+
 // settingsArgs reads App.saveSettings' arguments, in the dialog's order: name, root, schema, text
 // types, include, exclude, the three file types, section, policy, provider, destination, its DSN
 // and schema, vector index, source, its DSN and schema, view args, the registered types on, the
-// document formats on.
+// document formats on, the graph_only patterns, todo tasks in search.
 func settingsArgs(fn func(settingsForm)) Command {
-	const want = 22
+	const want = 24
 	return Command{Args: make([]qml.SpecValueKind, want), What: fmt.Sprintf("the dialog's %d fields", want), Run: func(args []qml.SpecValue) error {
 		s := func(i int) string { return args[i].Raw }
 		n := func(i int) int {
@@ -820,7 +868,7 @@ func settingsArgs(fn func(settingsForm)) Command {
 		fn(settingsForm{name: s(0), root: s(1), schema: s(2), texts: s(3), include: s(4), exclude: s(5),
 			md: n(6), txt: n(7), yaml: n(8), section: s(9), policy: n(10), provider: n(11),
 			dest: n(12), destDSN: s(13), destSchema: s(14), index: n(15), src: n(16), srcDSN: s(17), srcSchema: s(18), viewArgs: s(19),
-			code: s(20), docs: s(21)})
+			code: s(20), docs: s(21), graphOnly: s(22), todoSearch: n(23)})
 		return nil
 	}}
 }
@@ -866,6 +914,8 @@ func managerDetail(w wsInfo, databases bool, registered []string) string {
 		fmt.Sprintf("  section      %d estimated tokens", w.sectionTokens),
 		"  embedding    " + w.embeddingPolicy,
 		"  provider     " + provider,
+		"  graph only   " + none(strings.Join(w.graphOnly, "; ")),
+		"  todo search  " + map[bool]string{true: "on: tasks are search hits", false: "off: tasks are in the graph only"}[w.todoSearch],
 	}
 	if databases {
 		dest := "the local store"

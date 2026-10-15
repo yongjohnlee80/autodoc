@@ -61,6 +61,7 @@ type options struct {
 	home         string
 	env          func(string) string
 	events       func(Event)
+	stores       func()
 	refreshCheck time.Duration
 }
 
@@ -82,6 +83,12 @@ func WithEnv(env func(string) string) Option { return func(o *options) { o.env =
 // WithEvents receives what the host records in sys.events beyond the verbs' own events.
 func WithEvents(fn func(Event)) Option { return func(o *options) { o.events = fn } }
 
+// WithStoresChanged is told, after the write, when the registry's stores (their ids and paths) or
+// the variables they resolve changed: a store registered, moved or removed, a global or machine var
+// set, a store's variable file written (ADR 1792015212 §2.2). The daemon's workspaces read the stores
+// again on it. It is called from the verbs, so it must not wait.
+func WithStoresChanged(fn func()) Option { return func(o *options) { o.stores = fn } }
+
 // WithRefreshCheck sets how often RefreshDaily looks for a claimed store due its daily refresh;
 // an hour by default. Whether a store is due is the clock's (WithClock), not this interval's.
 func WithRefreshCheck(d time.Duration) Option { return func(o *options) { o.refreshCheck = d } }
@@ -92,8 +99,10 @@ func New(roots Roots, disk Filesystems, journal Journal, opts ...Option) *Manage
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return &Manager{roots: roots, disk: disk, j: journal, o: o, stores: map[string]*store{}, blocked: map[string]string{},
+	m := &Manager{roots: roots, disk: disk, o: o, stores: map[string]*store{}, blocked: map[string]string{},
 		movesSettled: map[string]bool{}}
+	m.j = watched{Journal: journal, m: m} // says when the stores or their variables change
+	return m
 }
 
 func (m *Manager) now() time.Time { return m.o.now() }
@@ -101,6 +110,13 @@ func (m *Manager) now() time.Time { return m.o.now() }
 func (m *Manager) event(e Event) {
 	if m.o.events != nil {
 		m.o.events(e)
+	}
+}
+
+// storesChanged tells WithStoresChanged's receiver the stores or their variables changed.
+func (m *Manager) storesChanged() {
+	if m.o.stores != nil {
+		m.o.stores()
 	}
 }
 

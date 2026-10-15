@@ -506,11 +506,16 @@ func (m *Manager) editStoreVars(ctx context.Context, w where, fn func(*storeVars
 		if ver == "" {
 			return nil
 		}
-		return st.docs.Remove(ctx, varsFile, ver)
+		err := st.docs.Remove(ctx, varsFile, ver)
+		if err == nil {
+			m.storesChanged()
+		}
+		return err
 	}
 	_, err = st.docs.Write(ctx, varsFile, sv.render(), ver)
 	if err == nil {
 		m.event(Event{Kind: "todos.vars", Store: st.id, Path: st.path + "/" + varsFile})
+		m.storesChanged()
 	}
 	return err
 }

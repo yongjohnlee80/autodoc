@@ -22,8 +22,11 @@ type Link struct {
 	Path     string
 	Raw      string // the link as written
 	Anchor   string // the heading, or "^" and the block id; "" for none
-	Kind     string // LinkWikilink, LinkEmbed or LinkMarkdown
+	Kind     string // LinkWikilink, LinkEmbed or LinkMarkdown, or a relation's field
 	Resolved bool
+	// External is a link's file outside the workspace, absolute: a todo task's ref (ADR 1792015212
+	// §2.4). It reaches no document, and is not unresolved. "" for every other link.
+	External string
 }
 
 // Edge is a resolved link between two documents of a neighbourhood.
@@ -67,9 +70,10 @@ func (s *Store) Links(ctx context.Context, path string, kinds []string) ([]Link,
 			return err
 		}
 		rows, err := kindsIn(s.linksOut(tx), kinds).With(LinkSrc, id).OrderBy(dao.Asc(LinkByID)).
-			Select(LinkOtherPath, LinkRaw, LinkAnchor, LinkKind, LinkDst)
+			Select(LinkOtherPath, LinkRaw, LinkAnchor, LinkKind, LinkDst, LinkTarget)
 		for _, r := range rows {
-			out = append(out, Link{Path: r.OtherPath, Raw: r.Raw, Anchor: deref(r.Anchor), Kind: r.Kind, Resolved: r.DstDoc != nil})
+			out = append(out, Link{Path: r.OtherPath, Raw: r.Raw, Anchor: deref(r.Anchor), Kind: r.Kind, Resolved: r.DstDoc != nil,
+				External: deref(r.Target)})
 		}
 		return err
 	})
@@ -159,7 +163,9 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int, kinds 
 func (s *Store) Unresolved(ctx context.Context, kinds []string) ([]Unresolved, error) {
 	out := []Unresolved{}
 	err := s.read(ctx, func(tx *store.Tx) error {
-		rows, err := kindsIn(s.linksIn(tx), kinds).WithPredicate(dao.IsNull(`"link"."dst_doc"`)).OrderBy(dao.Asc(LinkByOtherPath)).
+		// an external link reaches a file outside the workspace: it is where it should be
+		rows, err := kindsIn(s.linksIn(tx), kinds).WithPredicate(dao.IsNull(`"link"."dst_doc"`)).
+			WithPredicate(dao.IsNull(`"link"."target"`)).OrderBy(dao.Asc(LinkByOtherPath)).
 			Select(LinkID, LinkOtherPath, LinkRaw, LinkKind, LinkName)
 		if err != nil {
 			return err

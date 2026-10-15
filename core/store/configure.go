@@ -27,10 +27,13 @@ type Changes struct {
 	VectorIndex     *string // IndexHNSW or IndexIVFFlat; "" the default
 	ViewArgs        *map[string]any
 	// Retrieval, off until measured
-	AbstractChunk    *bool           // each document's abstract as a chunk of its own
-	DemoteSuperseded *bool           // a superseded document's hits below its successor's
-	Source           *ConnectionSpec // the database the .view files run on
-	DestinationConn  *ConnectionSpec // the Postgres database the index lives in
+	AbstractChunk    *bool // each document's abstract as a chunk of its own
+	DemoteSuperseded *bool // a superseded document's hits below its successor's
+	// Todo stores (ADR 1792015212 §2.2)
+	GraphOnly       *[]string       // the graph_only patterns: indexed for the graph, never for search
+	TodoSearch      *bool           // the workspace's todo tasks indexed in full, for search
+	Source          *ConnectionSpec // the database the .view files run on
+	DestinationConn *ConnectionSpec // the Postgres database the index lives in
 }
 
 // ConnectionSpec is a connection as a client sets it. Remove drops the connection; otherwise an
@@ -122,6 +125,12 @@ func (s *Store) Configure(ctx context.Context, id int64, c Changes) error {
 		if c.DemoteSuperseded != nil {
 			row = row.Set(WorkspaceDemote, boolInt(*c.DemoteSuperseded))
 		}
+		if c.TodoSearch != nil {
+			row = row.Set(WorkspaceTodoSearch, boolInt(*c.TodoSearch))
+		}
+		if c.GraphOnly != nil {
+			row = row.Set(WorkspaceGraphOnlySet, int64(1))
+		}
 		if c.Provider != nil {
 			var v any
 			if *c.Provider != "" {
@@ -169,6 +178,20 @@ func (s *Store) Configure(ctx context.Context, id int64, c Changes) error {
 			}
 			if err := s.writePatterns(tx, id, *c.Include, *c.Exclude); err != nil {
 				return err
+			}
+		}
+		if c.GraphOnly != nil {
+			if err := s.Workspace(id).GraphOnly(tx).Delete(); err != nil {
+				return err
+			}
+			if len(*c.GraphOnly) > 0 {
+				b := s.Workspace(id).GraphOnlyBatch(tx)
+				for i, p := range *c.GraphOnly {
+					b.Add(map[GraphOnlyField]any{GraphOnlyOrd: int64(i), GraphOnlyValue: p})
+				}
+				if err := b.Flush(); err != nil {
+					return err
+				}
 			}
 		}
 		for role, spec := range map[string]*ConnectionSpec{RoleSource: c.Source, RoleDestination: c.DestinationConn} {

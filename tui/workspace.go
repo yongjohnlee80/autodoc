@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 )
 
 // THE WORKSPACES — the daemon's, the one in use, and the manager that lists them beside the
@@ -19,6 +21,10 @@ type wsInfo struct {
 	textExtensions                     []string // the workspace's own plain-text extensions
 	provider, providerErr              string   // its own embedding provider ("" the daemon's), and why it is not set up
 	db                                 databasesInfo
+	// graphOnly are its graph_only patterns, todoSearch whether its todo tasks are in search, and
+	// todoExcluded the exclude patterns that keep a todo store of it out of the index (ADR 1792015212)
+	graphOnly, todoExcluded []string
+	todoSearch              bool
 }
 
 func workspacePatterns(value any) []string {
@@ -61,6 +67,7 @@ func (h *Host) loadWorkspaces() {
 			}
 		}
 		h.showWorkspaceRows(a.v)
+		h.noteTodoExcluded(a.v)
 		if h.ws != "" && (pick < 0 || a.v[pick].name != h.ws) {
 			h.keepDraftOnLeave() // the workspace in use is not served now: its unsaved text stays, as a draft
 		}
@@ -227,7 +234,13 @@ func (h *Host) listWorkspaces(ctx context.Context) ([]wsInfo, error) {
 		out = append(out, wsInfo{name: str(m, "name"), root: str(m, "root"), state: str(m, "state"), sectionTokens: num(m, "section_tokens"),
 			embeddingPolicy: str(m, "embedding_policy"), include: workspacePatterns(m["include"]), exclude: workspacePatterns(m["exclude"]),
 			schema: readSchemaInfo(m["schema"]), textExtensions: workspacePatterns(m["text_extensions"]),
-			provider: str(m, "provider"), providerErr: str(m, "provider_error"), db: readDatabasesInfo(m["databases"])})
+			provider: str(m, "provider"), providerErr: str(m, "provider_error"), db: readDatabasesInfo(m["databases"]),
+			graphOnly: workspacePatterns(m["graph_only"]), todoExcluded: workspacePatterns(m["todo_excluded"])})
+		w := &out[len(out)-1]
+		w.todoSearch, _ = m["todo_search"].(bool)
+		if _, ok := m["graph_only"]; !ok {
+			w.graphOnly = workspace.DefaultGraphOnly() // a daemon before protocol 23 indexes no store graph-only
+		}
 	}
 	return out, nil
 }
@@ -343,4 +356,22 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 		return
 	}
 	remove()
+}
+
+// noteTodoExcluded says once a session, for each workspace whose excludes keep a todo store out of
+// the index, which patterns do (ADR 1792015212 §2.3): its tasks open with no relations, and its
+// settings offer to index them graph-only instead.
+func (h *Host) noteTodoExcluded(list []wsInfo) {
+	for _, w := range list {
+		key := w.name + "\x00" + strings.Join(w.todoExcluded, ";")
+		if len(w.todoExcluded) == 0 || h.todoNoted[key] {
+			continue
+		}
+		if h.todoNoted == nil {
+			h.todoNoted = map[string]bool{}
+		}
+		h.todoNoted[key] = true
+		h.notify(w.name + ": exclude " + strings.Join(w.todoExcluded, "; ") +
+			" keeps its todo tasks out of the index; its settings can index them graph-only")
+	}
 }

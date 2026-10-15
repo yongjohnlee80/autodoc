@@ -67,6 +67,12 @@ func settersOf(ws Workspaces) setters {
 	return s
 }
 
+// todoModer is a workspace that reports its graph_only patterns, its todo_search, and the exclude
+// patterns that keep a todo store of it out of the index (ADR 1792015212).
+type todoModer interface {
+	TodoModes() (graphOnly []string, todoSearch bool, excluded []string)
+}
+
 // workspaceJSON is a workspace as workspace.list and workspace.add answer it.
 type workspaceJSON struct {
 	Name             string         `json:"name"`
@@ -78,6 +84,9 @@ type workspaceJSON struct {
 	EmbeddingPolicy  string         `json:"embedding_policy"`
 	AbstractChunk    *bool          `json:"abstract_chunk,omitempty"`
 	DemoteSuperseded *bool          `json:"demote_superseded,omitempty"`
+	GraphOnly        []string       `json:"graph_only,omitempty"`
+	TodoSearch       *bool          `json:"todo_search,omitempty"`
+	TodoExcluded     []string       `json:"todo_excluded,omitempty"`
 	Schema           *schemaJSON    `json:"schema,omitempty"`
 	TextExtensions   []string       `json:"text_extensions"`
 	TextCollisions   []string       `json:"text_collisions"`
@@ -151,6 +160,10 @@ func listed(w Workspace) workspaceJSON {
 		sch := schemaOf(st)
 		out.Schema = &sch
 	}
+	if t, ok := w.(todoModer); ok {
+		list, search, excluded := t.TodoModes()
+		out.GraphOnly, out.TodoSearch, out.TodoExcluded = list, &search, excluded
+	}
 	out.TextExtensions = w.TextExtensions()
 	out.TextCollisions = w.TextCollisions()
 	if db, ok := w.Databases(); ok {
@@ -211,7 +224,7 @@ func (s *Server) workspaceVerbs() []module.Verb {
 	fixed := []int64{CodeNoSuchWorkspace, CodeUnsupported}
 	return []module.Verb{
 		module.Handle(module.Contract{Verb: "workspace.list", Effect: module.EffectRead, Since: 1, Audience: module.AudienceAgent,
-			Result: "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]",
+			Result: "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
 			Doc:    "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."},
 			func(context.Context, struct{}) ([]workspaceJSON, error) {
 				out := []workspaceJSON{}

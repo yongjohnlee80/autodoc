@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -269,4 +270,77 @@ func (r *running) waitKeptNotice(t *testing.T, text string) {
 			return false
 		})
 	})
+}
+
+// whyOutside (ADR 1792015212 §2.5): the innermost workspace root holding a file, and the exclude
+// pattern that keeps it out ("" when it is only not admitted); none for a file under no root.
+func TestWhyAFileIsInNoWorkspace(t *testing.T) {
+	list := []wsInfo{
+		{name: "outer", root: "/src", exclude: []string{".git/**"}},
+		{name: "kb", root: "/src/kb", exclude: []string{".git/**", ".todo-list/**"}},
+	}
+	for _, c := range []struct {
+		abs, ws, pattern string
+		ok               bool
+	}{
+		{"/src/kb/.todo-list/open/t.md", "kb", ".todo-list/**", true},
+		{"/src/kb/notes/x.go", "kb", "", true},
+		{"/src/other/a.md", "outer", "", true},
+		{"/elsewhere/a.md", "", "", false},
+		{"/src/kbx/a.md", "outer", "", true}, // a sibling sharing the prefix is not under kb
+	} {
+		w, p, ok := whyOutside(list, c.abs)
+		if ok != c.ok || w.name != c.ws || p != c.pattern {
+			t.Errorf("%s: %q %q %v; want %q %q %v", c.abs, w.name, p, ok, c.ws, c.pattern, c.ok)
+		}
+	}
+}
+
+// A file a workspace's exclude keeps out, opened by its path, says which workspace and which
+// pattern, and offers that workspace's settings (ADR 1792015212 §2.5).
+func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
+	root := fileDir(t, "a.md", "# A\n")
+	if err := os.MkdirAll(filepath.Join(root, "drafts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "drafts", "d.md"), []byte("# D\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d := startManaged(t, map[string]string{"kb": root})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.openSettings(t, "kb", 0)
+	r.saveForm(func(f *settingsForm) { f.exclude = ".git/**; drafts/**" })
+	r.waitNoticed(t, "kb: saved")
+	r.s.WaitFor(t, "the listing has the exclude", func(string) bool {
+		return onLoop(r, func() bool {
+			w, ok := r.h.workspaces.At(0)
+			return ok && slices.Contains(w.exclude, "drafts/**")
+		})
+	})
+	// over unsaved changes the question waits for the open: Stay opens nothing, so nothing is said
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.waitFile(t, "a.md")
+	r.typeInEditor(t, "x")
+	r.s.WaitFor(t, "a.md unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
+	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
+	r.s.WaitFor(t, "a question", func(sc string) bool {
+		return strings.Contains(sc, "unsaved file") || strings.Contains(sc, "in no workspace")
+	})
+	if strings.Contains(r.s.String(), "in no workspace") {
+		t.Fatal("the excluded-file question came before the unsaved decision")
+	}
+	r.keys(t, key('t')) // Stay
+	r.s.WaitFor(t, "the unsaved question closed", func(sc string) bool { return !strings.Contains(sc, "unsaved file") })
+	if onLoop(r, func() bool { return r.h.file.path != "a.md" }) || strings.Contains(r.s.String(), "in no workspace") {
+		t.Fatalf("Stay opened the excluded file, or asked about it: %q", onLoop(r, func() string { return r.h.file.path }))
+	}
+	// Discard goes ahead: the file opens, and the question follows
+	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
+	r.s.WaitForText(t, "unsaved file")
+	r.keys(t, key('d')) // Discard
+	r.s.WaitForText(t, "in no workspace: open kb's settings?")
+	r.s.WaitForText(t, "keeps it out")
+	r.keys(t, key('o'))
+	r.s.WaitForText(t, "workspace settings · kb")
 }

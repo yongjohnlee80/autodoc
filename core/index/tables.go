@@ -237,7 +237,8 @@ type LinkRow struct {
 	DstDoc                  *int64
 	Anchor                  *string
 	Kind                    string
-	OtherPath               string // joined: the path of the document at the other end
+	Target                  *string // an external link's file, absolute (ADR 1792015212 §2.4); nil otherwise
+	OtherPath               string  // joined: the path of the document at the other end
 }
 
 // LinkField names a link column.
@@ -254,6 +255,7 @@ const (
 	LinkDst       LinkField = "dst_doc"
 	LinkAnchor    LinkField = "anchor"
 	LinkKind      LinkField = "kind"
+	LinkTarget    LinkField = "target"
 	LinkOtherPath LinkField = "other_path" // joined
 )
 
@@ -538,6 +540,7 @@ func links(c dao.DataConn, end string, left bool) *dao.Schema[*LinkRow, LinkFiel
 			LinkDst:       store.Col("link", LinkDst, func(l *LinkRow) any { return &l.DstDoc }),
 			LinkAnchor:    store.Col("link", LinkAnchor, func(l *LinkRow) any { return &l.Anchor }),
 			LinkKind:      store.Col("link", LinkKind, func(l *LinkRow) any { return &l.Kind }),
+			LinkTarget:    store.Col("link", LinkTarget, func(l *LinkRow) any { return &l.Target }),
 			LinkOtherPath: {Expr: dao.Coalesce(dao.T("document", "path"), store.NoText), Join: JoinOther, ReadOnly: true,
 				Scan: func(l *LinkRow) any { return &l.OtherPath }},
 		}),
