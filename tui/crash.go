@@ -172,17 +172,17 @@ func (h *Host) reportFatal(pe *tuicore.PanicError) error {
 	return os.WriteFile(filepath.Join(h.crashDir, lastFatalFile), []byte(path), 0o600)
 }
 
-// sayLastCrash is the start after a fatal panic: where its report is, said once.
+// sayLastCrash is the start after a fatal panic: where its report is, said once. The note's removal
+// is the claim: of two starts that read it, only the one that removes it says it.
 func (h *Host) sayLastCrash() {
 	if h.crashDir == "" {
 		return
 	}
 	note := filepath.Join(h.crashDir, lastFatalFile)
 	b, err := os.ReadFile(note)
-	if err != nil {
+	if err != nil || os.Remove(note) != nil {
 		return
 	}
-	_ = os.Remove(note)
 	msg := "AutoDoc stopped after a crash last time; the report is in " + strings.TrimSpace(string(b))
 	h.p.Post(func() { h.notify(msg) })
 }
