@@ -322,6 +322,7 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "x")
+	r.s.WaitFor(t, "a.md unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
 	r.s.WaitForText(t, "unsaved file")
 	if strings.Contains(r.s.String(), "in no workspace") {
