@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yongjohnlee80/golib/parse/qml"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
@@ -744,4 +745,140 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.plugins.beginExport(filepath.Join(t.TempDir(), "again.csv")); return true })
 	r.waitNotice(t, "only the first 250 rows were kept; run the query again to export them all")
+}
+
+// resultsTUI is the TUI with the plugins in dir, over a daemon of workspaces and o: pluginTUI's,
+// for a cell that needs another daemon (a build that derives PDFs) or quits the TUI itself.
+func resultsTUI(t *testing.T, dir string, workspaces map[string][]string, o daemonOpts) (*running, string) {
+	t.Helper()
+	logs := t.TempDir()
+	o.prefs = testPrefs
+	d := startDaemonWith(t, "", workspaces, o)
+	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}})
+	r.s.WaitForText(t, "connected — autodoc v-test")
+	return r, logs
+}
+
+// app runs one of the App.* commands, as the panel's buttons and the Go menu do.
+func (r *running) app(t *testing.T, name string, args ...qml.SpecValue) {
+	t.Helper()
+	if err := onLoop(r, func() error { return r.h.reg.handlers[name](args) }); err != nil {
+		t.Fatalf("%s: %v", name, err)
+	}
+}
+
+// TestTheResultsCommandsRunFromTheCatalogAndThePanel: the results commands, run as the panel's
+// buttons, the Go menu and the catalog run them. Copy puts the cursor's cell on the clipboard;
+// Export CSV… opens the save dialog at the page's folder; Insert as Markdown puts the table under
+// the paragraph above the cursor, a blank line between, and on a read-only page it says why it
+// cannot; results.toggle closes the panel, telling the plugin its table is gone, and Go › Results
+// opens it again, empty.
+func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
+	r, logs := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
+	r.waitResults(t, "q1", tablePage+resultsPage)
+
+	r.app(t, "App.copyResults")
+	r.s.WaitFor(t, "the cursor's cell on the clipboard", func(string) bool { return string(r.s.Backend.Clipboard()) == "0" })
+
+	r.app(t, "App.startExportResults")
+	r.s.WaitForText(t, "export all rows as CSV")
+	if folder := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.browseFolder"); return v.Raw }); folder != onLoop(r, r.h.browseFolder) || folder == "" {
+		t.Errorf("the save dialog starts at %q, want the page's folder", folder)
+	}
+	onLoop(r, func() bool { r.h.closeDialog("exportResults"); return true })
+
+	// on a blank line under a paragraph: a blank line kept between them, and before the next
+	r.page("intro\n\nafter", 2, 1)
+	r.app(t, "App.insertResults")
+	r.waitNotice(t, "loaded rows inserted; more remain")
+	text := r.editorText()
+	if lines := strings.Split(text, "\n"); len(lines) < 5 || lines[0] != "intro" || lines[1] != "" || !strings.HasPrefix(lines[2], "| n ") ||
+		lines[len(lines)-2] != "" || lines[len(lines)-1] != "after" {
+		t.Fatalf("the table under the paragraph:\n%.120s\n…\n%s", text, text[max(len(text)-120, 0):])
+	}
+
+	r.s.WaitFor(t, "the daemon's derived formats", func(string) bool {
+		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
+	})
+	r.h.p.Post(func() { r.h.openPath("manual.pdf") })
+	r.waitFile(t, "manual.pdf")
+	if err := onLoop(r, func() error { return r.h.cat.run("results.markdown", nil) }); err != nil {
+		t.Fatal(err)
+	}
+	r.waitNotice(t, "insert the results: widget: the editor is read-only")
+	if r.editorText() != manualPDF {
+		t.Fatalf("the read-only page changed: %q", r.editorText())
+	}
+
+	if err := onLoop(r, func() error { return r.h.cat.run("results.toggle", nil) }); err != nil {
+		t.Fatal(err)
+	}
+	waitSaidN(t, logs, "rows", "closed q1", 1)
+	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] }) })
+	r.app(t, "App.toggleResults")
+	r.s.WaitFor(t, "the panel open, empty", func(string) bool {
+		return onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] && len(r.h.plugins.results.model.rows) == 0 })
+	})
+	r.app(t, "App.copyResults")
+	r.waitNotice(t, "no results to copy")
+}
+
+// TestQuittingStopsAnExport: AutoDoc quitting with an export not finished cancels it: the .part is
+// removed and the chosen path never written.
+func TestQuittingStopsAnExport(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
+	r, _ := resultsTUI(t, dir, map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{})
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
+	r.waitResults(t, "q1", tablePage+resultsPage)
+	path := filepath.Join(t.TempDir(), "rows.csv")
+	onLoop(r, func() bool { r.h.plugins.exportResults(path); return true })
+	r.s.WaitFor(t, "a page written to the .part", func(string) bool {
+		return onLoop(r, func() bool { x := r.h.plugins.export; return x != nil && x.written > 0 })
+	})
+	if _, err := os.Stat(path + ".part"); err != nil {
+		t.Fatalf("no .part before quitting: %v", err)
+	}
+	onLoop(r, func() bool { r.h.p.Quit(); return true }) // nothing runs on the loop after this
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		_, partErr := os.Stat(path + ".part")
+		_, pathErr := os.Stat(path)
+		if errors.Is(partErr, os.ErrNotExist) && errors.Is(pathErr, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after quitting: .part %v, the file %v; want neither", partErr, pathErr)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestTheHostsTableAndBlockServices: TableCore answers only a cell-cursor TableView (the results'),
+// never another view or an id that is none; before the program runs the host has neither a table
+// nor a page to insert into.
+func TestTheHostsTableAndBlockServices(t *testing.T) {
+	early := core{newHost(NewSession("unused", nil), Options{})}
+	if early.TableCore(resultsView) != nil {
+		t.Error("a table before the program runs")
+	}
+	if err := early.InsertBlock("| a |\n"); err == nil || err.Error() != "no page is open" {
+		t.Errorf("an insert before the program runs: %v", err)
+	}
+	r := runTUI(t, NewSession("unused", nil), Options{})
+	onLoop(r, func() bool {
+		c := core{r.h}
+		if c.TableCore(resultsView) == nil {
+			t.Error("no core behind the results' table")
+		}
+		for _, id := range []string{"editor", "no-such-view"} {
+			if c.TableCore(id) != nil {
+				t.Errorf("TableCore(%q) answered a core", id)
+			}
+		}
+		return true
+	})
 }
