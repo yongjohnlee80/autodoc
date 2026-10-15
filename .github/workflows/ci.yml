@@ -73,12 +73,14 @@ jobs:
       # flakes are someone else's problem later. The Postgres cells are required
       # here, where the service exists: they fail loudly rather than skip when
       # the URL is missing (AUTODOC_TEST_PG_REQUIRED, not CI: the macOS job runs
-      # core/... too and has no service container to give it one).
+      # core/... too and has no service container to give it one). -timeout is
+      # per package: tui takes ~16 minutes here (973s on main, 2026-10-15), and a
+      # runner a fifth slower takes it past 20, so it has 30.
       - name: test
         env:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
           AUTODOC_TEST_PG_REQUIRED: "1"
-        run: go test -race -count=2 -timeout 20m ./...
+        run: go test -race -count=2 -timeout 30m ./...
 
       # Linux ships without cgo (modernc SQLite). A macOS build without cgo still
       # builds and polls its roots instead of watching them; the release builds
