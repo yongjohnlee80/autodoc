@@ -323,19 +323,19 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "x")
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
-	r.s.WaitForText(t, "has unsaved changes")
+	r.s.WaitForText(t, "unsaved file")
 	if strings.Contains(r.s.String(), "in no workspace") {
 		t.Fatal("the excluded-file question came before the unsaved decision")
 	}
-	r.h.p.Post(func() { r.h.unsaved("stay") })
-	r.s.WaitFor(t, "the unsaved question closed", func(sc string) bool { return !strings.Contains(sc, "has unsaved changes") })
+	r.keys(t, key('t')) // Stay
+	r.s.WaitFor(t, "the unsaved question closed", func(sc string) bool { return !strings.Contains(sc, "unsaved file") })
 	if onLoop(r, func() bool { return r.h.file.path != "a.md" }) || strings.Contains(r.s.String(), "in no workspace") {
 		t.Fatalf("Stay opened the excluded file, or asked about it: %q", onLoop(r, func() string { return r.h.file.path }))
 	}
 	// Discard goes ahead: the file opens, and the question follows
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
-	r.s.WaitForText(t, "has unsaved changes")
-	r.h.p.Post(func() { r.h.unsaved("discard") })
+	r.s.WaitForText(t, "unsaved file")
+	r.keys(t, key('d')) // Discard
 	r.s.WaitForText(t, "in no workspace: open kb's settings?")
 	r.s.WaitForText(t, "keeps it out")
 	r.keys(t, key('o'))
