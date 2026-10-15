@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
@@ -354,6 +355,40 @@ func TestAFailedMachineValueRestoresTheFile(t *testing.T) {
 	e.j.Fail = nil
 	if v := varOf(t, e, kb, "LOGS"); err == nil || !v.Machine {
 		t.Errorf("an existing declaration was undone: %+v %v", v, err)
+	}
+}
+
+// A failed machine value's undo never lands between another set_var's two writes: the second call
+// waits for the first to finish (its undo included), then declares and keeps its own value.
+func TestMachineSetVarsDoNotInterleave(t *testing.T) {
+	e := claimed(t)
+	file := kbStore + "/.autodoc-vars.toml"
+	later := make(chan error, 1)
+	failed := false
+	e.j.Fail = func(op string) error {
+		if op != "UpdateSettings" || failed {
+			return nil
+		}
+		failed = true // the first call's settings write fails, while a second call starts
+		go func() {
+			later <- e.m.SetVar(ctx, "DUMPS", "/later", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine})
+		}()
+		select {
+		case err := <-later: // it finished in between: the undo that follows would land after it
+			later <- err
+		case <-time.After(300 * time.Millisecond): // it waits for this call, as it must
+		}
+		return errors.New("the settings write failed")
+	}
+	if err := e.m.SetVar(ctx, "DUMPS", "/first", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}); err == nil {
+		t.Fatal("the failed first call reported success")
+	}
+	if err := <-later; err != nil {
+		t.Fatalf("the second call: %v", err)
+	}
+	e.j.Fail = nil
+	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/later" || v.Source != "machine" || !v.Machine {
+		t.Errorf("the second call's value lost its declaration: %+v\n%s", v, e.read(file))
 	}
 }
 
