@@ -131,7 +131,8 @@ func TestATasksVariableRefs(t *testing.T) {
 	m := &modes{stores: map[string]*TodoStore{"kb/.todo-list/": {ID: "S",
 		Vars: map[string]string{"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/src/lm"}}}}
 	e := newEnv(t, options{Modes: m.mode, Root: "/ws"})
-	e.put("kb/adrs/a.md", "a", "kb/reviews/r.md", "r", "adrs/b.md", "b",
+	// z.md at the root: an unknown variable read as the root would reach it
+	e.put("kb/adrs/a.md", "a", "kb/reviews/r.md", "r", "adrs/b.md", "b", "z.md", "the root's z",
 		"kb/.todo-list/open/t.md", "---\nadr:\n  - $KB_ROOT/adrs/a.md\n  - $PROJECT_ROOT/lm/x.md\n  - $NOPE/z.md\n"+
 			"  - /ws/kb/adrs/a.md\n  - /elsewhere/q.md\nreview:\n  - $KB_ROOT/reviews/r.md\n---\nt\n",
 		"notes/n.md", "---\nrelated: [$KB_ROOT/adrs/b.md]\n---\nn\n")
