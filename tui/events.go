@@ -187,19 +187,32 @@ func (h *Host) applyEvents(events []peerEvent) {
 	}
 }
 
-// keepDraftOnLeave keeps the file's unsaved text when its workspace is about to go: the file
-// becomes the untitled draft (its path names a workspace that no longer exists), and the next
-// workspace entered keeps it instead of starting a blank page. The draft is another page: another
-// file's (file.gen), so an answer still coming for the file it was is dropped, and shown as one, so
-// the watchers read it as the draft (Markdown, no file).
+// keepDraftOnLeave settles the buffers of the workspace in use when it is about to go: a buffer
+// with unsaved text becomes an untitled draft (its path names a workspace that no longer exists),
+// and the others close. A buffer that becomes a draft is another page: another file's (file.gen),
+// so an answer still coming for the file it was is dropped. Outside files are in no workspace: they
+// stay as they are.
 func (h *Host) keepDraftOnLeave() {
-	if !h.file.dirty || h.file.outside() { // an outside file is in no workspace: it stays as it is
-		return
+	ws, kept := h.ws, false
+	for _, b := range slices.Clone(h.buffers) {
+		if !b.file.open || b.file.outside() || b.file.ws != ws {
+			continue
+		}
+		if !b.file.dirty {
+			h.dropBuffer(b)
+			continue
+		}
+		b.file.open, b.file.path, b.file.version = false, "", ""
+		b.file.gen++
+		b.buf.SetName("")
+		kept = true
+		if b == h.active {
+			h.showPage()
+			h.setDirty(true)
+		}
 	}
-	h.file.open, h.file.path, h.file.version = false, "", ""
-	h.file.gen++
-	h.keepDraft = true
-	h.showPage()
-	h.setDirty(true)
-	h.notify("the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace")
+	h.syncBuffers()
+	if kept {
+		h.notify("the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace")
+	}
 }

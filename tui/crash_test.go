@@ -109,7 +109,9 @@ func TestAnAppCommandsPanicIsNamed(t *testing.T) {
 func TestAFatalPanicKeepsTheDraftAndReports(t *testing.T) {
 	crash, recovery := t.TempDir(), t.TempDir()
 	h := &Host{crashDir: crash, recoveryDir: recovery}
-	h.file.dirty = true // and no editor: keeping the text panics
+	b := &openBuffer{n: 1}
+	b.file.dirty = true // and no editor buffer: keeping the text panics
+	h.buffers, h.active, h.file = []*openBuffer{b}, b, &b.file
 	err := h.ended(errors.Join(errors.New("ran"), &tuicore.PanicError{Value: namedPanic{name: "App.render", value: "bad frame"}, Stack: []byte("goroutine 1 [running]:\nRender()")}))
 	if err == nil || !strings.Contains(err.Error(), "keeping the unsaved text panicked") {
 		t.Errorf("ended = %v", err)

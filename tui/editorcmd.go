@@ -20,7 +20,7 @@ import (
 func (h *Host) writeFromEditor(quit bool) {
 	var then func()
 	if quit {
-		then = h.p.Quit
+		then = func() { h.guardAll("quit", h.p.Quit) } // the other modified buffers are asked about
 	}
 	switch {
 	case !h.file.open:
@@ -28,17 +28,19 @@ func (h *Host) writeFromEditor(quit bool) {
 	case h.file.derived != "":
 		h.save() // says why it is read-only
 	default:
-		h.write(h.core.Value(), h.file.version, then)
+		h.write(h.active, h.core.Value(), h.file.version, then)
 	}
 }
 
-// quitFromEditor is q, asking over unsaved changes as every quit does, and q!, which discards them.
+// quitFromEditor is q, asking over unsaved changes as every quit does, and q!, which discards the
+// shown buffer's. The other modified buffers are asked about even then: q! is said of the one shown.
 func (h *Host) quitFromEditor(force bool) {
 	if force {
 		// discarded on purpose: nothing to keep, and a copy kept earlier goes too
-		h.settleRecovery(h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
+		own, ok := h.active.ownRecovery()
+		h.settleRecovery(h.active, own, ok)
 		h.setDirty(false)
-		h.p.Quit()
+		h.guardAll("quit", h.p.Quit)
 		return
 	}
 	h.quit()

@@ -9,6 +9,7 @@ import (
 	"github.com/yongjohnlee80/golib/dao/sqlite"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	"github.com/yongjohnlee80/golib/server/rpc/msgpackrpc"
+	"io"
 	"io/fs"
 	"net"
 	"net/http"
@@ -1071,22 +1072,37 @@ func TestTheBlankPageIsADraft(t *testing.T) {
 	}
 }
 
-// TestADraftIsGuardedLikeAFile: opening a file over an unsaved draft asks; Save names the draft,
-// creates it, and then opens the file asked for.
+// TestADraftIsGuardedLikeAFile: opening a file over an unsaved draft asks nothing, and the draft
+// keeps its text in its buffer; closing the draft asks, and Save names it and creates the file.
 func TestADraftIsGuardedLikeAFile(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
 	r := attached(t, d)
 	r.typeInEditor(t, "draft text")
-	r.openByPicker(t, "a.md")
+	r.openByPicker(t, "a.md") // a buffer of its own: the draft keeps its text, unasked
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { // the draft shown again, and closed: that asks
+		for _, b := range r.h.buffers {
+			if !b.file.open {
+				r.h.activate(b)
+			}
+		}
+		r.h.closeShownBuffer()
+		return true
+	})
 	r.s.WaitForText(t, "untitled has unsaved changes")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "save the draft")
 	r.keys(t, decltest.Type("kept")...)
 	r.keys(t, enter())
-	r.waitFile(t, "a.md") // the open it guarded, after the save
-	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
-		t.Fatalf("kept.md holds %q, want the draft", got)
-	}
+	r.s.WaitFor(t, "kept.md written", func(string) bool {
+		f, err := d.fs["kb"].Open(context.Background(), "kept.md", 0)
+		if err != nil {
+			return false // not yet created
+		}
+		defer f.Close()
+		b, _ := io.ReadAll(f)
+		return string(b) == "draft text"
+	})
 }
 
 // TestTheExplorerStaysOpenWhenNothingChanged: a scan's end lists the workspace's files again, and

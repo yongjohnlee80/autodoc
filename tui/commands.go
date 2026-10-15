@@ -57,6 +57,8 @@ func (h *Host) commands() map[string]Command {
 		"App.zoomWindow":            oneString("in or out", h.zoomWindow),
 		"App.toggleSearchStage":     oneString("lexical, semantic or rerank", h.toggleSearchStage),
 		"App.openPicker":            none(h.openPicker),
+		"App.openBuffers":           none(h.openBuffers),
+		"App.closeBuffer":           none(h.closeShownBuffer),
 
 		// the plugins
 

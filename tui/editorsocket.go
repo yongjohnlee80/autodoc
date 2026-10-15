@@ -187,6 +187,7 @@ func (a editorArgs) pos(i int) (widget.TextPos, error) {
 // editorVerbs are the socket's handlers.
 func (h *Host) editorVerbs() map[string]golibrpc.Handler {
 	return map[string]golibrpc.Handler{
+		"editor.buffers":     h.editorVerb("editor.read", h.editorBuffers),
 		"editor.document":    h.editorVerb("editor.read", h.editorDocument),
 		"editor.read":        h.editorVerb("editor.read", h.editorRead),
 		"editor.find":        h.editorVerb("editor.read", h.editorFind),
@@ -233,17 +234,55 @@ func (h *Host) editorVerb(capability string, fn func(agent string, a editorArgs)
 	}
 }
 
-func (h *Host) editorDocument(_ string, _ editorArgs) (any, error) {
-	c := h.core
+// socketBuffer is the buffer a verb acts on: its optional trailing param i (a buffer number), or
+// the active buffer without it; and that buffer's editor (editorFor). An unknown number is refused.
+func (h *Host) socketBuffer(a editorArgs, i int) (*openBuffer, *widget.EditorCore, error) {
+	n, given, err := a.num(i, "the buffer", true)
+	if err != nil {
+		return nil, nil, err
+	}
+	b := h.active
+	if given {
+		if b = h.bufferNumbered(n); b == nil || b.buf == nil {
+			return nil, nil, &golibrpc.Error{Code: codeEditorRefused, Message: fmt.Sprintf("no buffer %d", n)}
+		}
+	}
+	return b, h.editorFor(b), nil
+}
+
+// editorBuffers is editor.buffers: every open buffer, in opening order.
+func (h *Host) editorBuffers(_ string, _ editorArgs) (any, error) {
+	out := []any{}
+	for _, b := range h.buffers {
+		row := map[string]any{"n": b.n, "modified": b.file.dirty, "active": b == h.active}
+		if b.buf != nil {
+			row["revision"] = b.buf.Revision()
+		}
+		if b.file.open {
+			row["path"] = b.file.path
+			if b.file.ws != "" {
+				row["workspace"] = b.file.ws
+			}
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
+func (h *Host) editorDocument(_ string, a editorArgs) (any, error) {
+	b, c, err := h.socketBuffer(a, 0)
+	if err != nil {
+		return nil, err
+	}
 	cur := c.Cursor()
 	doc := map[string]any{
-		"kind": kind.Markdown.String(), "modified": c.Modified(), "revision": c.Revision(),
+		"buffer": b.n, "kind": kind.Markdown.String(), "modified": c.Modified(), "revision": c.Revision(),
 		"cursor": []any{cur.Line + 1, cur.Col + 1}, "read_only": c.ReadOnly(),
 	}
-	if h.file.open {
-		doc["path"], doc["kind"] = h.file.path, h.resolver().Of(h.file.path).String()
-		if h.file.ws != "" {
-			doc["workspace"] = h.file.ws
+	if b.file.open {
+		doc["path"], doc["kind"] = b.file.path, h.resolver().Of(b.file.path).String()
+		if b.file.ws != "" {
+			doc["workspace"] = b.file.ws
 		}
 	}
 	if r, ok := c.Selection(); ok {
@@ -253,7 +292,11 @@ func (h *Host) editorDocument(_ string, _ editorArgs) (any, error) {
 }
 
 func (h *Host) editorRead(_ string, a editorArgs) (any, error) {
-	lines := h.core.Lines()
+	_, ed, err := h.socketBuffer(a, 2)
+	if err != nil {
+		return nil, err
+	}
+	lines := ed.Lines()
 	from, given, err := a.num(0, "the first line", true)
 	if err != nil {
 		return nil, err
@@ -273,11 +316,15 @@ func (h *Host) editorRead(_ string, a editorArgs) (any, error) {
 	if from <= to {
 		text = strings.Join(lines[from-1:to], "\n")
 	}
-	return map[string]any{"text": text, "revision": h.core.Revision()}, nil
+	return map[string]any{"text": text, "revision": ed.Revision()}, nil
 }
 
 func (h *Host) editorFind(_ string, a editorArgs) (any, error) {
 	term, err := a.str(0, "the term")
+	if err != nil {
+		return nil, err
+	}
+	_, ed, err := h.socketBuffer(a, 2)
 	if err != nil {
 		return nil, err
 	}
@@ -289,28 +336,32 @@ func (h *Host) editorFind(_ string, a editorArgs) (any, error) {
 		}
 	}
 	out := []any{}
-	for _, r := range h.core.FindAll(term, o) {
+	for _, r := range ed.FindAll(term, o) {
 		out = append(out, []any{r.From.Line + 1, r.From.Col + 1, r.To.Line + 1, r.To.Col + 1})
 	}
 	return out, nil
 }
 
-// edit runs fn as one undo step, refused on a read-only page or one whose text is not at the
-// revision param rev gives (absent: whatever it is).
-func (h *Host) edit(a editorArgs, rev int, fn func() (widget.TextPos, error)) (any, error) {
+// edit runs fn on buffer b's editor ed as one undo step, refused on a read-only buffer or one whose
+// text is not at the revision param rev gives (absent: whatever it is). A buffer not shown is told of
+// the edit as the shown one is by its textChanged (bufferEdited).
+func (h *Host) edit(a editorArgs, rev int, b *openBuffer, ed *widget.EditorCore, fn func(ed *widget.EditorCore) (widget.TextPos, error)) (any, error) {
 	if want, given, err := a.num(rev, "the revision read", true); err != nil {
 		return nil, err
-	} else if given && uint64(want) != h.core.Revision() {
+	} else if given && uint64(want) != ed.Revision() {
 		return nil, &golibrpc.Error{Code: codeEditorStale,
-			Message: fmt.Sprintf("the text is at revision %d, not %d: read it again", h.core.Revision(), want)}
+			Message: fmt.Sprintf("the text is at revision %d, not %d: read it again", ed.Revision(), want)}
 	}
-	if h.core.ReadOnly() {
+	if ed.ReadOnly() {
 		return nil, &golibrpc.Error{Code: codeEditorReadOnly, Message: "the page is read-only"}
 	}
+	if b != h.active {
+		defer h.bufferEdited(b)
+	}
 	var end widget.TextPos
-	err := h.core.Batch(func() error {
+	err := ed.Batch(func() error {
 		var err error
-		end, err = fn()
+		end, err = fn(ed)
 		return err
 	})
 	if errors.Is(err, widget.ErrReadOnly) {
@@ -319,7 +370,7 @@ func (h *Host) edit(a editorArgs, rev int, fn func() (widget.TextPos, error)) (a
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"line": end.Line + 1, "col": end.Col + 1, "revision": h.core.Revision()}, nil
+	return map[string]any{"line": end.Line + 1, "col": end.Col + 1, "revision": ed.Revision()}, nil
 }
 
 func (h *Host) editorInsert(_ string, a editorArgs) (any, error) {
@@ -331,7 +382,11 @@ func (h *Host) editorInsert(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.edit(a, 3, func() (widget.TextPos, error) { return h.core.Insert(p, text) })
+	b, ed, err := h.socketBuffer(a, 4)
+	if err != nil {
+		return nil, err
+	}
+	return h.edit(a, 3, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) { return ed.Insert(p, text) })
 }
 
 func (h *Host) editorReplace(_ string, a editorArgs) (any, error) {
@@ -347,8 +402,12 @@ func (h *Host) editorReplace(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return h.edit(a, 5, func() (widget.TextPos, error) {
-		return h.core.Replace(widget.TextRange{From: from, To: to}, text)
+	b, ed, err := h.socketBuffer(a, 6)
+	if err != nil {
+		return nil, err
+	}
+	return h.edit(a, 5, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) {
+		return ed.Replace(widget.TextRange{From: from, To: to}, text)
 	})
 }
 
@@ -361,8 +420,12 @@ func (h *Host) editorDelete(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := h.edit(a, 4, func() (widget.TextPos, error) {
-		return from, h.core.Delete(widget.TextRange{From: from, To: to})
+	b, ed, err := h.socketBuffer(a, 5)
+	if err != nil {
+		return nil, err
+	}
+	res, err := h.edit(a, 4, b, ed, func(ed *widget.EditorCore) (widget.TextPos, error) {
+		return from, ed.Delete(widget.TextRange{From: from, To: to})
 	})
 	if m, ok := res.(map[string]any); ok {
 		res = map[string]any{"revision": m["revision"]}
@@ -375,7 +438,18 @@ func (h *Host) editorRun(_ string, a editorArgs) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := h.core.RunCommand(line); err != nil {
+	b, ed, err := h.socketBuffer(a, 1)
+	if err != nil {
+		return nil, err
+	}
+	// a command run on a buffer not shown runs on its headless editor, by the user's code: the
+	// catalog's commands take the core they are run on (CommandContext.Core)
+	before := ed.Revision()
+	err = ed.RunCommand(line)
+	if b != h.active && ed.Revision() != before {
+		h.bufferEdited(b)
+	}
+	if err != nil {
 		return nil, &golibrpc.Error{Code: codeEditorRefused, Message: err.Error()}
 	}
 	return map[string]any{"ok": true}, nil
