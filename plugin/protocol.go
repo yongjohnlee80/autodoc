@@ -14,19 +14,32 @@
 //	                plugin.hide {}, plugin.show {}                  esc = "hide": hidden, shown again
 //	                plugin.focus {focused}                          2: a card took or gave back the keys
 //	                plugin.document {path, workspace, text,         2: the open note, as [feed] declares
-//	                  cursor, selection, version, too_large}
+//	                  cursor, selection, version, too_large,
+//	                  cursor_byte, selection_bytes}                 4: the byte offsets
 //	                plugin.command {id}                             2: one of the manifest's [[commands]]
+//	                plugin.command {id, document}                   4: with the note as it stood, under [feed]
 //	                plugin.result {call, ok, error}                 3: the answer to host.call
+//	                plugin.table.fetch {id, n}                      4: up to n more rows of the table
+//	                plugin.table.close {id}                         4: the table closed, or replaced
 //	                plugin.close {}                                 the last
 //	plugin → host   host.ready {protocol}                           the answer to plugin.open
 //	                host.frame {rows}                               the whole dialog, any time
 //	                host.title {title}
 //	                host.call {call, id, args}                      3: run a command of AutoDoc's catalog
+//	                host.table {id, title, fields, rows, more}      4: a table of rows, as [table] declares
+//	                host.rows {id, rows, more}                      4: the next rows, answering a fetch
+//	                host.table_end {id, error}                      4: the table's rows ended early
 //	                host.close {}
 //
-// The notifications marked 2 are protocol 2's, those marked 3 protocol 3's. A host sends them only
-// to a plugin whose manifest says that protocol (or a later one) and declares them, so a protocol-1
-// plugin never sees one.
+// The notifications marked 2 are protocol 2's, those marked 3 protocol 3's, those marked 4 protocol
+// 4's. A host sends them only to a plugin whose manifest says that protocol (or a later one) and
+// declares them, so a protocol-1 plugin never sees one.
+//
+// A table is the host's to show: the plugin sends its fields and its first rows (host.table), and
+// AutoDoc shows them in a results panel, asking for more as the user nears the end of those loaded
+// (plugin.table.fetch), one request at a time until host.rows answers it. more says rows remain;
+// host.table_end ends them early, with why. A newer host.table replaces the table, and the host
+// says plugin.table.close for the one it replaced, as it does when the panel closes.
 //
 // host.call and plugin.result are a request and its answer made of two notifications, matched by
 // call, a number the plugin chooses and does not reuse while it waits. The host runs only the
@@ -56,7 +69,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 3
+	Protocol    = 4
 )
 
 // The notifications the host sends.
@@ -78,6 +91,12 @@ const (
 	MethodCommand = "plugin.command"
 	// MethodResult is the host's answer to a host.call, by its call number.
 	MethodResult = "plugin.result"
+	// MethodFetch asks for up to n more rows of the table id (protocol 4). The host sends another
+	// only once host.rows (or host.table_end) has answered it.
+	MethodFetch = "plugin.table.fetch"
+	// MethodTableGone is the table id closed: its panel closed, or a newer table replaced it. The
+	// plugin frees what serves its rows (a database cursor, say).
+	MethodTableGone = "plugin.table.close"
 )
 
 // The notifications the plugin sends.
@@ -88,6 +107,14 @@ const (
 	MethodHostClose = "host.close"
 	// MethodCall asks the host to run a command of its catalog, one the manifest's calls declares.
 	MethodCall = "host.call"
+	// MethodTable shows a table (protocol 4): its id, title, fields and first rows, and whether
+	// more remain. It replaces the table shown, any plugin's.
+	MethodTable = "host.table"
+	// MethodRows is the table's next rows, answering plugin.table.fetch, and whether more remain.
+	MethodRows = "host.rows"
+	// MethodTableEnd is the table's rows ended before the last was sent: no more will come, and
+	// error, when set, says why.
+	MethodTableEnd = "host.table_end"
 )
 
 // The bounds of host.call (protocol 3).
@@ -145,6 +172,12 @@ type Document struct {
 	Selection       []Range
 	Version         int
 	TooLarge        bool
+	// CursorByte and SelectionBytes are Cursor and Selection as byte offsets into Text, each
+	// selection range [start, end): the host counts them from the same grapheme clusters as the
+	// columns, so a plugin slicing Text never counts clusters itself. Sent from protocol 4 on;
+	// before it they are 0 and nil.
+	CursorByte     int
+	SelectionBytes [][2]int
 }
 
 // Key is a key typed into the dialog. Key is its text for a printable key (" " for Space), or one of
@@ -201,20 +234,41 @@ func CommandParams(id string) []any { return one(map[string]any{"id": id}) }
 
 func (p Position) wire() map[string]any { return map[string]any{"line": p.Line, "col": p.Col} }
 
-// DocumentParams are plugin.document's. A TooLarge one carries its path, workspace and version
-// alone.
-func DocumentParams(d Document) []any {
+// DocumentParams are plugin.document's as protocols 2 and 3 have it, without the byte offsets. A
+// TooLarge one carries its path, workspace and version alone.
+func DocumentParams(d Document) []any { return DocumentParamsAt(3, d) }
+
+// DocumentParamsAt are plugin.document's as a plugin speaking protocol is sent it: from protocol 4
+// on with cursor_byte and selection_bytes, so a plugin written for an earlier one sees what it
+// always has.
+func DocumentParamsAt(protocol int, d Document) []any { return one(documentWire(protocol, d)) }
+
+func documentWire(protocol int, d Document) map[string]any {
 	m := map[string]any{"path": d.Path, "workspace": d.Workspace, "version": d.Version}
 	if d.TooLarge {
 		m["too_large"] = true
-		return one(m)
+		return m
 	}
 	sel := make([]any, len(d.Selection))
 	for i, r := range d.Selection {
 		sel[i] = map[string]any{"start": r.Start.wire(), "end": r.End.wire()}
 	}
 	m["text"], m["cursor"], m["selection"] = d.Text, d.Cursor.wire(), sel
-	return one(m)
+	if protocol >= 4 {
+		bytes := make([]any, len(d.SelectionBytes))
+		for i, r := range d.SelectionBytes {
+			bytes[i] = []any{r[0], r[1]}
+		}
+		m["cursor_byte"], m["selection_bytes"] = d.CursorByte, bytes
+	}
+	return m
+}
+
+// CommandDocParams are plugin.command's with the document it runs on (protocol 4): the note as it
+// stood when the command was chosen, carried inside the command so no queue can drop it as it
+// drops a waiting plugin.document (FitCommand sizes it).
+func CommandDocParams(id string, d Document) []any {
+	return one(map[string]any{"id": id, "document": documentWire(4, d)})
 }
 
 // KeyParams are plugin.key's.
@@ -393,8 +447,11 @@ func flag(m map[string]any, k string) bool {
 	return b
 }
 
-func num(m map[string]any, k string) (int, bool) {
-	switch n := m[k].(type) {
+func num(m map[string]any, k string) (int, bool) { return number(m[k]) }
+
+// number is a whole number as the decoder gives it: int64, or uint64 past it.
+func number(v any) (int, bool) {
+	switch n := v.(type) {
 	case int64:
 		return int(n), true
 	case uint64:
@@ -474,12 +531,17 @@ func readPosition(v any) Position {
 	return Position{Line: l, Col: c}
 }
 
-// ReadDocument reads plugin.document. A selection entry that is not a map is dropped.
+// ReadDocument reads plugin.document. A selection entry that is not a map is dropped, and so is a
+// byte range that is not two offsets.
 func ReadDocument(params []any) (Document, error) {
 	m, err := arg(params)
 	if err != nil {
 		return Document{}, err
 	}
+	return readDocument(m)
+}
+
+func readDocument(m map[string]any) (Document, error) {
 	v, ok := num(m, "version")
 	if !ok {
 		return Document{}, fmt.Errorf("%w: plugin.document wants version", ErrParams)
@@ -497,7 +559,36 @@ func ReadDocument(params []any) (Document, error) {
 		}
 		d.Selection = append(d.Selection, Range{Start: readPosition(rm["start"]), End: readPosition(rm["end"])})
 	}
+	d.CursorByte, _ = num(m, "cursor_byte")
+	spans, _ := m["selection_bytes"].([]any)
+	for _, r := range spans {
+		pair, _ := r.([]any)
+		if len(pair) != 2 {
+			continue
+		}
+		from, ok1 := number(pair[0])
+		to, ok2 := number(pair[1])
+		if ok1 && ok2 {
+			d.SelectionBytes = append(d.SelectionBytes, [2]int{from, to})
+		}
+	}
 	return d, nil
+}
+
+// ReadCommandDocument reads the document a protocol-4 plugin.command carries; false when it
+// carries none (an earlier protocol's, or a plugin without the feed) or the one it carries is
+// malformed.
+func ReadCommandDocument(params []any) (Document, bool) {
+	m, err := arg(params)
+	if err != nil {
+		return Document{}, false
+	}
+	dm, ok := m["document"].(map[string]any)
+	if !ok {
+		return Document{}, false
+	}
+	d, err := readDocument(dm)
+	return d, err == nil
 }
 
 // ReadKey reads plugin.key.
@@ -588,4 +679,180 @@ func ReadFrame(params []any) (rows []Row, dropped int, err error) {
 		rows[i] = row
 	}
 	return rows, dropped, nil
+}
+
+// ---------------------------------------------------------------- tables (protocol 4)
+
+// TableOpen is host.table: a table the host shows in its results panel, by the plugin's id for it.
+// Fields are the columns' titles; each row has a cell per field (a shorter row's last cells are
+// empty, a longer one's extra cells dropped). More says rows remain, for the host to fetch.
+type TableOpen struct {
+	ID, Title string
+	Fields    []string
+	Rows      [][]string
+	More      bool
+}
+
+// TableFetch is plugin.table.fetch: up to N more rows of the table ID.
+type TableFetch struct {
+	ID string
+	N  int
+}
+
+func rowsWire(rows [][]string) []any {
+	out := make([]any, len(rows))
+	for i, row := range rows {
+		cells := make([]any, len(row))
+		for j, c := range row {
+			cells[j] = c
+		}
+		out[i] = cells
+	}
+	return out
+}
+
+// TableParams are host.table's.
+func TableParams(t TableOpen) []any {
+	fields := make([]any, len(t.Fields))
+	for i, f := range t.Fields {
+		fields[i] = f
+	}
+	return one(map[string]any{"id": t.ID, "title": t.Title, "fields": fields, "rows": rowsWire(t.Rows), "more": t.More})
+}
+
+// RowsParams are host.rows'.
+func RowsParams(id string, rows [][]string, more bool) []any {
+	return one(map[string]any{"id": id, "rows": rowsWire(rows), "more": more})
+}
+
+// TableEndParams are host.table_end's; error only when there is one.
+func TableEndParams(id, why string) []any {
+	m := map[string]any{"id": id}
+	if why != "" {
+		m["error"] = why
+	}
+	return one(m)
+}
+
+// FetchParams are plugin.table.fetch's.
+func FetchParams(f TableFetch) []any { return one(map[string]any{"id": f.ID, "n": f.N}) }
+
+// TableGoneParams are plugin.table.close's.
+func TableGoneParams(id string) []any { return one(map[string]any{"id": id}) }
+
+// tableID is a table notification's id: a string that is not empty.
+func tableID(m map[string]any, method string) (string, error) {
+	id := str(m, "id")
+	if id == "" {
+		return "", fmt.Errorf("%w: %s wants id", ErrParams, method)
+	}
+	return id, nil
+}
+
+// readRows reads a table's rows. A row that is not a list is dropped, and a cell that is not a
+// string reads as empty; dropped counts both, so the host can say so.
+func readRows(v any, method string) (rows [][]string, dropped int, err error) {
+	raw, ok := v.([]any)
+	if !ok && v != nil {
+		return nil, 0, fmt.Errorf("%w: %s's rows is a list of lists of strings", ErrParams, method)
+	}
+	rows = make([][]string, 0, len(raw))
+	for _, r := range raw {
+		cells, ok := r.([]any)
+		if !ok {
+			dropped++
+			continue
+		}
+		row := make([]string, len(cells))
+		for j, c := range cells {
+			s, ok := c.(string)
+			if !ok {
+				dropped++
+			}
+			row[j] = s
+		}
+		rows = append(rows, row)
+	}
+	return rows, dropped, nil
+}
+
+// ReadTable reads host.table; dropped counts its malformed rows and cells (readRows).
+func ReadTable(params []any) (t TableOpen, dropped int, err error) {
+	m, err := arg(params)
+	if err != nil {
+		return TableOpen{}, 0, err
+	}
+	if t.ID, err = tableID(m, MethodTable); err != nil {
+		return TableOpen{}, 0, err
+	}
+	raw, ok := m["fields"].([]any)
+	if !ok || len(raw) == 0 {
+		return TableOpen{}, 0, fmt.Errorf("%w: host.table wants fields, a list of one or more titles", ErrParams)
+	}
+	for _, f := range raw {
+		s, ok := f.(string)
+		if !ok {
+			return TableOpen{}, 0, fmt.Errorf("%w: host.table's fields are strings", ErrParams)
+		}
+		t.Fields = append(t.Fields, s)
+	}
+	if t.Rows, dropped, err = readRows(m["rows"], MethodTable); err != nil {
+		return TableOpen{}, 0, err
+	}
+	t.Title, t.More = str(m, "title"), flag(m, "more")
+	return t, dropped, nil
+}
+
+// ReadRows reads host.rows: the table's id, its next rows and whether more remain; dropped counts
+// the malformed rows and cells (readRows).
+func ReadRows(params []any) (id string, rows [][]string, more bool, dropped int, err error) {
+	m, err := arg(params)
+	if err != nil {
+		return "", nil, false, 0, err
+	}
+	if id, err = tableID(m, MethodRows); err != nil {
+		return "", nil, false, 0, err
+	}
+	if rows, dropped, err = readRows(m["rows"], MethodRows); err != nil {
+		return "", nil, false, 0, err
+	}
+	return id, rows, flag(m, "more"), dropped, nil
+}
+
+// ReadTableEnd reads host.table_end: the table's id, and why its rows ended ("" when no error).
+func ReadTableEnd(params []any) (id, why string, err error) {
+	m, err := arg(params)
+	if err != nil {
+		return "", "", err
+	}
+	if id, err = tableID(m, MethodTableEnd); err != nil {
+		return "", "", err
+	}
+	return id, str(m, "error"), nil
+}
+
+// ReadFetch reads plugin.table.fetch.
+func ReadFetch(params []any) (TableFetch, error) {
+	m, err := arg(params)
+	if err != nil {
+		return TableFetch{}, err
+	}
+	id, err := tableID(m, MethodFetch)
+	if err != nil {
+		return TableFetch{}, err
+	}
+	n, ok := num(m, "n")
+	if !ok || n < 1 {
+		return TableFetch{}, fmt.Errorf("%w: plugin.table.fetch wants n, a count of rows", ErrParams)
+	}
+	return TableFetch{ID: id, N: n}, nil
+}
+
+// ReadTableGone reads plugin.table.close: the table's id.
+func ReadTableGone(params []any) (string, error) {
+	m, err := arg(params)
+	if err != nil {
+		return "", err
+	}
+	return tableID(m, MethodTableGone)
 }

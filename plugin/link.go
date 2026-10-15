@@ -33,16 +33,39 @@ func EncodedSize(method string, params []any) (int, error) {
 	return int(n), nil
 }
 
-// FitDocument is d as it can be sent: d itself when its plugin.document encodes to at most
-// MaxDocumentBytes, else its too-large form, which keeps its path, workspace and version alone.
-func FitDocument(d Document) Document {
+// FitDocument is d as it can be sent to a plugin speaking protocol 2 or 3 (FitDocumentAt).
+func FitDocument(d Document) Document { return FitDocumentAt(3, d) }
+
+// FitDocumentAt is d as it can be sent to a plugin speaking protocol: d itself when its
+// plugin.document, in that protocol's form, encodes to at most MaxDocumentBytes, else its too-large
+// form, which keeps its path, workspace and version alone.
+func FitDocumentAt(protocol int, d Document) Document {
 	if d.TooLarge {
 		return d
 	}
-	if n, err := EncodedSize(MethodDocument, DocumentParams(d)); err == nil && n <= MaxDocumentBytes {
+	if n, err := EncodedSize(MethodDocument, DocumentParamsAt(protocol, d)); err == nil && n <= MaxDocumentBytes {
 		return d
 	}
+	return tooLarge(d)
+}
+
+func tooLarge(d Document) Document {
 	return Document{Path: d.Path, Workspace: d.Workspace, Version: d.Version, TooLarge: true}
+}
+
+// FitCommand is plugin.command id carrying d (protocol 4), as it can be sent. The document is sized
+// INSIDE the command, the whole notification as the link writes it, since a document that fits a
+// plugin.document of its own can pass the link's limit once the command's envelope is added: one
+// that does not fit goes as its too-large form, so the link never refuses the command, and the
+// plugin learns the note was too large to send rather than running on a stale copy.
+func FitCommand(id string, d Document) []any {
+	if !d.TooLarge {
+		params := CommandDocParams(id, d)
+		if n, err := EncodedSize(MethodCommand, params); err == nil && n <= MaxMessageBytes {
+			return params
+		}
+	}
+	return CommandDocParams(id, tooLarge(d))
 }
 
 type counter int
