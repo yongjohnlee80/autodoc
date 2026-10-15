@@ -24,7 +24,7 @@ import (
 //
 // A copy goes only once its text is safe or deliberately thrown away: its document saved, or
 // discarded (the unsaved question's Discard, :q!). Restoring it puts the text back in the editor,
-// unsaved, and the copy stays until then (restoredCopy): a SIGKILL or a power loss before the save
+// unsaved, and the copy stays until then (openBuffer.restored): a SIGKILL or a power loss before the save
 // must not lose it.
 
 // recovered is one kept document.
@@ -95,10 +95,10 @@ func readRecovery(dir string) []recovered {
 // settleRecovery deletes the copies of the text in the editor, now that it is saved or discarded:
 // the document's own (ws, p) and the restored copy it came from, which may be another's (a copy
 // whose file was gone became the draft).
-func (h *Host) settleRecovery(ws, p string) {
+func (h *Host) settleRecovery(b *openBuffer, ws, p string) {
 	h.dropRecovery(ws, p)
-	if r := h.restoredCopy; r != nil {
-		h.restoredCopy = nil
+	if r := b.restored; r != nil {
+		b.restored = nil
 		if *r != (fileRef{ws, p}) {
 			h.dropRecovery(r.ws, r.path)
 		}
@@ -115,25 +115,33 @@ func (h *Host) dropRecovery(ws, p string) {
 	}
 }
 
-// keepRecovery keeps the open document when Run ends with it unsaved. The loop has ended, so the
-// file's state is this goroutine's alone.
+// keepRecovery keeps every buffer Run ends with unsaved. The loop has ended, so the buffers' state is
+// this goroutine's alone. Every modified buffer is kept, even when one fails; the failures come back
+// joined.
 func (h *Host) keepRecovery() error {
-	if h.recoveryDir == "" || !h.file.dirty {
+	if h.recoveryDir == "" {
 		return nil
 	}
-	path := h.file.path
-	if !h.file.open {
-		path = ""
+	var errs []error
+	for _, b := range h.buffers {
+		if !b.file.dirty || b.buf == nil {
+			continue
+		}
+		path := b.file.path
+		if !b.file.open {
+			path = ""
+		}
+		r := recovered{WS: b.file.ws, Path: path, Text: b.buf.Value(), Saved: time.Now()}
+		if err := writeRecovery(h.recoveryDir, r); err != nil {
+			errs = append(errs, fmt.Errorf("keeping the unsaved text of %s: %w", b.file.name(), err))
+			continue
+		}
+		// the copy just written holds the restored text now: the one it came from would be offered twice
+		if rc := b.restored; rc != nil && *rc != (fileRef{r.WS, r.Path}) {
+			h.dropRecovery(rc.ws, rc.path)
+		}
 	}
-	r := recovered{WS: h.file.ws, Path: path, Text: h.core.Value(), Saved: time.Now()}
-	if err := writeRecovery(h.recoveryDir, r); err != nil {
-		return fmt.Errorf("keeping the unsaved text of %s: %w", h.file.name(), err)
-	}
-	// the copy just written holds the restored text now: the one it came from would be offered twice
-	if rc := h.restoredCopy; rc != nil && *rc != (fileRef{r.WS, r.Path}) {
-		h.dropRecovery(rc.ws, rc.path)
-	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // offerRecovery asks about each kept document in turn, once a start has connected.
@@ -191,8 +199,10 @@ func (h *Host) recovery(answer string) {
 //     copy stays for the next start.
 func (h *Host) restoreRecovered(r recovered) {
 	switch {
-	case r.Path != "" && h.file.open && h.file.ws == r.WS && h.file.path == r.Path:
-		h.applyRecovered(r)
+	case r.Path != "" && h.bufferOf(fileRef{r.WS, r.Path}) != nil:
+		b := h.bufferOf(fileRef{r.WS, r.Path})
+		h.activate(b)
+		h.applyRecovered(b, r)
 		h.askRecovery()
 	case r.Path == "":
 		h.restoreAsDraft(r, "restore the kept draft")
@@ -202,34 +212,33 @@ func (h *Host) restoreRecovered(r recovered) {
 	}
 }
 
-// restoreAsDraft makes the kept text the untitled draft, asking first over unsaved changes.
-func (h *Host) restoreAsDraft(r recovered, action string) {
-	h.restoreWaiting = true
-	h.guard(action, func() {
-		h.restoreWaiting = false
-		if h.file.open {
-			h.closeFile()
-		}
-		h.applyRecovered(r)
-		h.askRecovery()
-	})
+// restoreAsDraft makes the kept text a new draft buffer, shown. Nothing is asked: every other buffer
+// keeps its own text.
+func (h *Host) restoreAsDraft(r recovered, _ string) {
+	b := h.active
+	if b.file.open || b.file.dirty || h.core.Value() != "" {
+		b = h.newBuffer()
+		h.activate(b)
+	}
+	h.applyRecovered(b, r)
+	h.askRecovery()
 }
 
-// applyPendingRestore puts a restored copy's text in the document show just opened, if it is the
-// one being restored.
-func (h *Host) applyPendingRestore(ws, p string) {
+// applyPendingRestore puts a restored copy's text in b, the buffer show just loaded (ws, p) into,
+// if that is the document being restored: the copy lands in the buffer of its file, shown or not.
+func (h *Host) applyPendingRestore(b *openBuffer, ws, p string) {
 	r := h.pendingRestore
 	if r == nil || r.WS != ws || r.Path != p {
 		return
 	}
 	h.pendingRestore, h.restoreWaiting = nil, false
-	h.applyRecovered(*r)
+	h.applyRecovered(b, *r)
 	h.p.Post(h.askRecovery)
 }
 
 // restoreOpenFailed is the open of a document being restored failing: its kept text becomes the
 // untitled draft, so it is not lost with the file. It reports whether p was being restored.
-func (h *Host) restoreOpenFailed(ws, p string) bool {
+func (h *Host) restoreOpenFailed(_ *openBuffer, ws, p string) bool {
 	r := h.pendingRestore
 	if r == nil || r.WS != ws || r.Path != p {
 		return false
@@ -250,16 +259,21 @@ func (h *Host) restoreSettled() {
 	h.p.Post(h.askRecovery)
 }
 
-// applyRecovered replaces the editor's text with the copy's, as one edit, unsaved. The copy stays
-// until the text is saved or discarded (settleRecovery).
-func (h *Host) applyRecovered(r recovered) {
-	end := widget.TextPos{Line: h.core.LineCount() - 1, Col: 1 << 30}
-	if _, err := h.core.Replace(widget.TextRange{To: end}, r.Text); err != nil {
+// applyRecovered replaces b's text with the copy's, as one edit, unsaved. The copy stays until the
+// text is saved or discarded (settleRecovery).
+func (h *Host) applyRecovered(b *openBuffer, r recovered) {
+	ed := h.editorFor(b)
+	end := widget.TextPos{Line: ed.LineCount() - 1, Col: 1 << 30}
+	if _, err := ed.Replace(widget.TextRange{To: end}, r.Text); err != nil {
 		h.failed("could not restore "+r.Path, err)
 		return
 	}
-	h.setDirty(true)
-	h.restoredCopy = &fileRef{r.WS, r.Path}
+	if b == h.active {
+		h.setDirty(true)
+	} else {
+		h.bufferEdited(b) // no textChanged reaches the host from a headless editor
+	}
+	b.restored = &fileRef{r.WS, r.Path}
 	name := r.Path
 	if name == "" {
 		name = untitled

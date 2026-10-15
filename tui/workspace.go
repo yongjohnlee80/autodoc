@@ -74,13 +74,6 @@ func (h *Host) loadWorkspaces() {
 		if pick < 0 {
 			h.ws = ""
 			h.resetFiles()
-			switch {
-			case h.keepDraft:
-				h.keepDraft = false
-			case h.file.outside(): // in no workspace: it stays open
-			default:
-				h.closeFile()
-			}
 			h.setWhere("autodoc · no workspace")
 			h.notify("no workspace: Go › Manage workspaces… adds one")
 			return
@@ -151,13 +144,14 @@ func (h *Host) useWorkspace(i int) {
 		return
 	}
 	h.closeDialog("workspacePicker")
-	h.guard("switch to "+w.name, func() { h.enter(w.name) })
+	h.enter(w.name) // nothing is asked: every buffer stays open, in its own workspace (buffers.go)
 }
 
-// enter makes name the workspace in use, and lists its files for the pickers. Entering another
-// workspace closes the file (every caller has asked about unsaved changes first). Entering the one in
-// use again, as a new connection does, keeps the page as it is, unsaved text, cursor and all: only
-// the connection changed, so the open file is checked against the disk (recheckFile).
+// enter makes name the workspace in use, and lists its files for the pickers. Every buffer stays
+// open, in its own workspace: search, links and the outline follow the workspace in use, and a
+// buffer's file is still read and written in its own (buffers.go). Entering the one in use again, as
+// a new connection does, keeps every buffer as it is, unsaved text, cursor and all: only the
+// connection changed, so each open buffer is checked against the disk (recheckFile).
 func (h *Host) enter(name string) {
 	again := name == h.ws
 	h.epoch++
@@ -168,14 +162,8 @@ func (h *Host) enter(name string) {
 		h.remember(name)
 	}
 	h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), name))
-	switch {
-	case h.keepDraft:
-		h.keepDraft = false // the draft a removed workspace left stays on the page (events.go)
-	case again && h.file.open, h.file.outside():
-		h.recheckFile() // an outside file stays open in any workspace
-	case again: // the untitled draft, or the empty page, stays
-	default:
-		h.closeFile()
+	if again {
+		h.recheckFile() // a new connection: every open buffer is checked against the disk
 	}
 	h.prog = progress{}
 	if h.searchCancel != nil {
@@ -342,17 +330,21 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 				return
 			}
 			if h.ws == name {
+				h.keepDraftOnLeave() // its buffers: each asked about first, so only Stay-free ones are left
 				h.ws, h.entered = "", false
-				if !h.file.outside() {
-					h.closeFile()
-				}
 			}
 			h.notify("deleted workspace " + name + " (its files stay)")
 			h.loadWorkspaces()
 		})
 	}
 	if h.ws == name {
-		h.guard("delete its workspace", remove)
+		var its []*openBuffer
+		for _, b := range h.buffers {
+			if b.file.open && b.file.ws == name {
+				its = append(its, b)
+			}
+		}
+		h.guardEach(its, "delete its workspace", remove)
 		return
 	}
 	remove()

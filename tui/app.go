@@ -165,8 +165,7 @@ type Host struct {
 	fmDiagnostics []fmDiagnostic
 	// the event log's cursor (events.go), and whether the next workspace entered keeps the draft
 	// a peer's removal of this one left
-	evCursor  int64
-	keepDraft bool
+	evCursor int64
 	// the image previews (preview.go): previewGen numbers them, the latest wins; htmlPreviewPath is
 	// the file the HTML preview's image was made from; graphicsOverride replaces the terminal's
 	// kitty graphics answer in tests, and rasterizeOverride the headless browser
@@ -218,7 +217,14 @@ type Host struct {
 	managerIndex int
 	databases    bool
 
-	file openedFile // the file in the editor (files.go)
+	file *openedFile // the active buffer's file (buffers.go): every h.file.x reads the page's
+	// the open buffers (buffers.go): in opening order, the one shown, the most recently shown first
+	// (where a close goes back to), and the last number given
+	buffers    []*openBuffer
+	active     *openBuffer
+	bufRecent  []*openBuffer
+	bufN       int
+	bufferPick *pick[string] // the Buffers picker (bufferpick.go)
 
 	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
 	// still to ask about, and the one being restored once its file opens
@@ -241,12 +247,10 @@ type Host struct {
 	luaRoots []*os.Root
 	// editorSock is the socket the agents reach the page through (editorsocket.go); nil without
 	editorSock     *editorSocket
-	luaChangeRev   uint64
 	luaMode        string
 	recoveryQueue  []recovered
 	pendingRestore *recovered
 	restoreWaiting bool       // a restore is under way: its open, or the unsaved question before it
-	restoredCopy   *fileRef   // the copy whose text is in the editor, unsaved: kept until saved or discarded
 	draft          *draftSave // the draft being named in the new-file picker, nil when none is (files.go)
 	prog           progress   // the daemon's work left (progress.go)
 	// the notifications (notify.go): the toasts over the page, what was posted before they were,
@@ -375,6 +379,10 @@ func newHost(session *Session, opt Options) *Host {
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 	}
 	h.themeCatalog = usertheme.Open(opt.ThemeDir)
+	// buffer 1 is the page from the start; attach gives it the editor's own buffer
+	first := h.newBuffer()
+	first.buf = nil
+	h.active, h.file, h.bufRecent = first, &first.file, []*openBuffer{first}
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
 	h.explorer = newExplorer(core{h})
@@ -398,6 +406,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 		return errors.New("main.qml declares no Editor with id: editor")
 	}
 	h.core = h.editor.Core()
+	h.active.buf = h.core.Buffer()     // buffer 1 is what the editor shows already
 	h.core.SetJumps(h.jumps, h.jumpTo) // Ctrl+O and Ctrl+I walk the one list (navigation.go)
 	h.core.SetFindHost(h.starFind)     // * and # are the page's find (find.go)
 	h.core.SetJumpView(h.jumpView)

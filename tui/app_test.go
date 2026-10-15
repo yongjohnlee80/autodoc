@@ -414,7 +414,7 @@ func onLoop[T any](r *running, read func() T) T {
 	return <-ch
 }
 
-func (r *running) file() openedFile   { return onLoop(r, func() openedFile { return r.h.file }) }
+func (r *running) file() openedFile   { return onLoop(r, func() openedFile { return *r.h.file }) }
 func (r *running) editorText() string { return onLoop(r, r.h.core.Value) }
 
 func (r *running) waitFile(t *testing.T, p string) {

@@ -37,11 +37,9 @@ func (h *Host) openFileDialog() {
 
 // newFile opens the save dialog for a new file's path, asking first over unsaved changes.
 func (h *Host) newFile() {
-	h.guard("start a new file", func() {
-		h.draft = nil
-		h.set("App.browseFolder", h.browseFolder())
-		h.open("newAnyFile")
-	})
+	h.draft = nil // nothing is asked: the new file opens in a buffer of its own (buffers.go)
+	h.set("App.browseFolder", h.browseFolder())
+	h.open("newAnyFile")
 }
 
 // browseFolder is where the file dialogs start: the open file's folder, else the workspace's
