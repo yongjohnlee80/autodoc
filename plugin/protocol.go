@@ -39,7 +39,9 @@
 // AutoDoc shows them in a results panel, asking for more as the user nears the end of those loaded
 // (plugin.table.fetch), one request at a time until host.rows answers it. more says rows remain;
 // host.table_end ends them early, with why. A newer host.table replaces the table, and the host
-// says plugin.table.close for the one it replaced, as it does when the panel closes.
+// says plugin.table.close for the one it replaced, as it does when the panel closes. Each table has
+// an id of its own: one that reuses the shown table's id is refused, and host.rows no fetch asked
+// for is dropped.
 //
 // host.call and plugin.result are a request and its answer made of two notifications, matched by
 // call, a number the plugin chooses and does not reuse while it waits. The host runs only the

@@ -266,13 +266,21 @@ results panel, docked at the bottom, a table with a cursor on cells, its columns
 loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the user reads down.
 
 - **A table.** `host.table {id, title, fields, rows, more}`: `id` is the plugin's own name for it
-  (a cursor's, say), `fields` the columns' titles, `rows` the first rows (each a list of strings, a
+  (a cursor's, say), new for each table: a query run again is a new table with a new id. A
+  `host.table` that reuses the id of the table shown is refused and written in the plugin's log
+  ("host.table reused the shown table's id …; a new table needs a new id"): a fetch for the shown
+  table may still be on its way, and its rows would join the new ones. `fields` the columns' titles, `rows` the first rows (each a list of strings, a
   cell per field), and `more` whether rows remain. `title` heads the panel; when it is empty the
   manifest's `[table] title` does. The panel opens if it is closed, leaving the keyboard where it is.
 - **Paging.** As the table's cursor nears the end of the loaded rows, AutoDoc sends
   `plugin.table.fetch {id, n}`, and sends no other fetch until the plugin answers it:
   `host.rows {id, rows, more}` with up to `n` rows (fewer is fine), or `host.table_end {id, error}`
   when the rows end early (a failed fetch, a cancelled query). `more: false` is the last page.
+  `host.rows` that no fetch asked for are dropped, and noted in the plugin's log.
+- **At most 100 000 rows are shown.** At that cap the table stops asking for more, and its heading
+  says the first rows are shown and more remain. Export all rows as CSV still takes them all: the
+  rows past the cap go to the file, never to the panel, so AutoDoc never holds a whole large
+  result. Afterwards the table shows the first rows, and another export asks to run the query again.
 - **One table at a time.** A newer `host.table`, from any plugin, replaces the one shown, and the
   plugin whose table it replaced is sent `plugin.table.close {id}`. Closing the panel sends it too.
   Free what serves the rows then. Rows for a table no longer shown are dropped.
@@ -282,10 +290,10 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
   - `results.copy`, Copy selection: the selected cells, or the cursor's, as tab-separated text
     (`y` in the table, `v` to select a range);
   - `results.csv`, Export all rows as CSV…: a save dialog; AutoDoc fetches every remaining row (they
-    land in the table too) and writes them, in the order the plugin sent them, to `<file>.part`
+    land in the table too, up to its cap) and writes them, in the order the plugin sent them, to `<file>.part`
     beside the file, renamed over it once the last is written. Closing the panel, the rows ending
     early or a write failing removes the `.part` and leaves the file as it was;
-  - `results.markdown`, Insert loaded rows as a Markdown table: the rows loaded now, as the table
+  - `results.markdown`, Insert loaded rows as a Markdown table: the rows loaded now (at most the cap), as the table
     shows them (sorted, if it is), at the page's cursor. While rows remain unloaded it says so.
 
 ### Services (`kind = "service"`)
