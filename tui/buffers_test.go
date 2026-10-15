@@ -45,7 +45,7 @@ func TestABufferIsShownAgainWithItsEdits(t *testing.T) {
 	if got := r.editorText(); !strings.Contains(got, "Xaaa") || !r.file().dirty {
 		t.Fatalf(":b a.md: %q, dirty %v", got, r.file().dirty)
 	}
-	n := onLoop(r, func() int { return bufferOn(r, "b.md").n })
+	n := onLoop(r, func() int { return r.h.bufferOf(fileRef{"kb", "b.md"}).n }) // not bufferOn: onLoop inside onLoop waits on itself
 	run("b " + strconv.Itoa(n))
 	r.waitFile(t, "b.md")
 	if r.file().dirty || r.editorText() != "bbb\n" {

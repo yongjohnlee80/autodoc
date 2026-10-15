@@ -540,6 +540,8 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	}
 	closeShown := func() {
 		t.Helper()
+		// keys and a post are not ordered: the typing is in before the close
+		r.s.WaitFor(t, "the buffer unsaved", func(string) bool { return r.file().dirty })
 		onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 		r.s.WaitForText(t, "unsaved file")
 	}
@@ -548,7 +550,7 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	r.s.WaitFor(t, "still a.md, unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") && !strings.Contains(sc, "unsaved file") })
 	closeShown()
 	r.keys(t, key('s'))
-	r.waitFile(t, "b.md") // a.md written and closed: b.md is shown
+	r.waitBuffer(t, "b.md") // a.md written and closed: b.md, open already, is shown
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
 		t.Errorf("save, then close: a.md %q", got)
 	}
@@ -844,6 +846,8 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
+	// keys and a post are not ordered: the typing is in before the close
+	r.s.WaitFor(t, "a.md unsaved", func(string) bool { return r.file().dirty })
 	holding.Store(true)
 	onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 	r.s.WaitForText(t, "unsaved file")
