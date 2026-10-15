@@ -324,7 +324,9 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	r.typeInEditor(t, "x")
 	r.s.WaitFor(t, "a.md unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
-	r.s.WaitForText(t, "unsaved file")
+	r.s.WaitFor(t, "a question", func(sc string) bool {
+		return strings.Contains(sc, "unsaved file") || strings.Contains(sc, "in no workspace")
+	})
 	if strings.Contains(r.s.String(), "in no workspace") {
 		t.Fatal("the excluded-file question came before the unsaved decision")
 	}
