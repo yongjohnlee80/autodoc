@@ -227,8 +227,20 @@ func (pl *plugins) runPluginCommand(key, id string) {
 		}
 	}
 	if !(e.m.card() && id == pluginToggle) {
-		r.send(plugin.MethodCommand, plugin.CommandParams(id))
+		r.send(plugin.MethodCommand, pl.commandParams(e, id))
 	}
+}
+
+// commandParams are plugin.command id as e is sent it. A protocol-4 plugin on the feed is sent the
+// note as it stands inside the command: the feed waits for a pause, and both queues drop a waiting
+// document when a newer one comes, so a document sent beside the command could arrive late or not
+// at all, and the command run on an older text, cursor or selection. One too large for the link
+// goes as its too-large form (plugin.FitCommand). Earlier protocols are sent the id alone.
+func (pl *plugins) commandParams(e pluginEntry, id string) []any {
+	if e.m.Feed.Document && e.m.Protocol >= 4 {
+		return plugin.FitCommand(id, pl.document())
+	}
+	return plugin.CommandParams(id)
 }
 
 // launchServices starts the services whose manifest says start = "launch": with the TUI, and again

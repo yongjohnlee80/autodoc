@@ -207,8 +207,8 @@ func TestAProtocolTwoPluginsCallIsDropped(t *testing.T) {
 }
 
 // TestProtocolThreesCalls (§4.5): calls needs protocol = 3, exact ids, never a plugin's, each once;
-// a protocol this AutoDoc does not speak is refused, as an older AutoDoc refuses protocol 3. The
-// install question lists the calls.
+// a protocol this AutoDoc does not speak is refused, as an older AutoDoc refuses protocol 3; a
+// later protocol keeps the calls. The install question lists the calls.
 func TestProtocolThreesCalls(t *testing.T) {
 	const head = "name = \"p\"\nkind = \"dialog\"\ncommand = [\"x\"]\n"
 	for _, c := range []struct{ toml, reason string }{
@@ -219,7 +219,8 @@ func TestProtocolThreesCalls(t *testing.T) {
 		{"protocol = 3\n" + head + "calls = [\"Todos\"]\n", `calls "Todos": not a command id`},
 		{"protocol = 3\n" + head + "calls = [\"plugin.x.y\"]\n", `calls "plugin.x.y": a plugin's command is never`},
 		{"protocol = 3\n" + head + "calls = [\"a.b\", \"a.b\"]\n", `calls "a.b": twice`},
-		{"protocol = 4\n" + head, "protocol 4; this AutoDoc speaks 1 to 3"},
+		{"protocol = 4\n" + head + "calls = [\"todos.open\", \"lua.mark\"]\n", ""},
+		{"protocol = 5\n" + head, "protocol 5; this AutoDoc speaks 1 to 4"},
 	} {
 		dir := filepath.Join(t.TempDir(), "p")
 		_ = os.MkdirAll(dir, 0o755)
