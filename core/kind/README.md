@@ -3,7 +3,9 @@
 How AutoDoc reads a file, decided by its extension and never by its content. The
 indexer, the document API and the editor all ask here, so they agree. In order: `.txt`, `.mmd`
 (Mermaid) and `.csv` are `Text`, `.yaml` and `.yml` are `YAML`, a derived format is `Derived`, a registered chunker's extension is
-`Registered`, a workspace's own text extension is `Text`, and anything else is `Markdown`.
+`Registered`, a workspace's own text extension is `Text`, a file a source language claims (`*.sql`,
+`*.go`, `*.py`, …: golib's `parse/languages`, the catalog the editor highlights with) is `Text`,
+and anything else is `Markdown`.
 
 | Name | What |
 | --- | --- |
@@ -19,6 +21,7 @@ indexer, the document API and the editor all ask here, so they agree. In order: 
 | `Label(p)` | a derived format's name for a reader: the extension upper-cased without its dot (`PDF`) |
 | `RawText(p)` | whether a derived format's own bytes are text a person edits (`.html`, `.htm`) |
 | `Textual(b)` | whether `b` is valid UTF-8 with no NUL byte |
+| `IsSource(p)` | whether a source language claims `p`'s file name, its case aside: such a file is read as `Text`, never as Markdown |
 | `IsBuiltIn(ext)` | whether `ext` is `.md`, `.txt`, `.yaml`, `.yml`, `.mmd` or `.csv` |
 | `ValidExtension(e)` | whether `e` is a dot and 1 to 16 of `a-z 0-9 _ + -` |
 | `TextExtensions(in)` | a workspace's own text extensions normalized, or an `*ErrExtension`; `.mmd` and `.csv`, which a workspace declared before they were built in, are dropped, not refused |

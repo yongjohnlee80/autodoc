@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -93,10 +94,13 @@ type daemonOpts struct {
 	reg registrations.Tables
 	// deriver, when set, is its build's deriver: it indexes and reads PDFs with it, and reports it
 	deriver registrations.Deriver
-	// goChunker, when set, is its build's chunker for .go, reported as deriver is
+	// goChunker, when set, is its build's chunker for .go (or chunked), reported as deriver is
 	goChunker search.Chunker
-	// goFiles admits .go files, whether or not it has a chunker for them
+	// goFiles admits .go files (or chunked), whether or not it has a chunker for them
 	goFiles bool
+	// chunked is the extension goChunker reads and goFiles admits in place of .go: one no source
+	// language claims, for a test of a file the community build reads as Markdown
+	chunked string
 	// roots, when one names a workspace, is that workspace's files as another daemon left them: the
 	// same daemon after a restart. Its notes are not written again.
 	roots map[string]*memfs.FS
@@ -134,10 +138,11 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	d.db = db
 	var derives *registrations.Table
 	var docOpts []docs.Option
+	chunked := cmp.Or(o.chunked, ".go")
 	if o.deriver != nil || o.goChunker != nil {
 		var chunkers map[string]search.Chunker
 		if o.goChunker != nil {
-			chunkers = map[string]search.Chunker{".go": o.goChunker}
+			chunkers = map[string]search.Chunker{chunked: o.goChunker}
 		}
 		if derives, err = registrations.New(chunkers, o.deriver); err != nil {
 			t.Fatal(err)
@@ -146,7 +151,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 		o.reg = derives.Tables()
 	}
 	match := func(p string) bool {
-		return md(p) || o.deriver != nil && strings.HasSuffix(p, ".pdf") || (o.goFiles || o.goChunker != nil) && strings.HasSuffix(p, ".go")
+		return md(p) || o.deriver != nil && strings.HasSuffix(p, ".pdf") || (o.goFiles || o.goChunker != nil) && strings.HasSuffix(p, chunked)
 	}
 	prefs := o.prefs
 	if prefs == nil {

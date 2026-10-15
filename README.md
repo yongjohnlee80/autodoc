@@ -108,7 +108,9 @@ it:
 ```
 
 - Mermaid (`.mmd`) and CSV (`.csv`) are read as plain text, and HTML as the text derived from the
-  page. Leave pictures and other binary files out: a file AutoDoc does not know is read as Markdown.
+  page. So is source code AutoDoc highlights (`.sql`, `.go`, `.py`, …): it opens as code, with no
+  rendered view. Leave pictures and other binary files out: a file AutoDoc does not know is read as
+  Markdown.
 - `![alt](path)` is an embed of the workspace path it names, as `![[./path]]` is: the resource's
   backlinks name the document that shows it. It is a link only to a note or to a file the
   workspace indexes, so a picture left out is not a missing link.

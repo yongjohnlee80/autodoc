@@ -163,17 +163,18 @@ func TestADerivedPageIsReadOnlyBeforeTheRegistrationsCome(t *testing.T) {
 	}
 }
 
-// TestARegisteredPageReadsByTheRegistrationsWhenTheyCome: a .go file read before the registrations
-// answer is writable, read as the community build reads it (Markdown, a "# " line its heading);
-// when they come the page reads it as the registered chunker's: plain text, no headings, writable.
+// TestARegisteredPageReadsByTheRegistrationsWhenTheyCome: a .zig file (a format no source language
+// claims, so the community build reads it as Markdown) read before the registrations answer is
+// writable, read as the community build reads it (Markdown, a "# " line its heading); when they
+// come the page reads it as the registered chunker's: plain text, no headings, writable.
 func TestARegisteredPageReadsByTheRegistrationsWhenTheyCome(t *testing.T) {
-	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.go", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}})
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.zig", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}, chunked: ".zig"})
 	sess, release := holdCapabilities(d.sock)
 	t.Cleanup(release)
 	r := runTUI(t, sess, Options{})
 	r.s.WaitFor(t, "the files listed, the registrations not", func(string) bool { return len(r.listed()) > 0 })
-	r.h.p.Post(func() { r.h.openPath("a.go") })
-	r.waitFile(t, "a.go")
+	r.h.p.Post(func() { r.h.openPath("a.zig") })
+	r.waitFile(t, "a.zig")
 	if onLoop(r, r.h.core.ReadOnly) || r.headings() != 1 {
 		t.Fatalf("before the registrations: read-only %v, %d headings", onLoop(r, r.h.core.ReadOnly), r.headings())
 	}
@@ -182,12 +183,12 @@ func TestARegisteredPageReadsByTheRegistrationsWhenTheyCome(t *testing.T) {
 	r.typeOnPage(t, "typed ")
 }
 
-// TestAReconnectReadsThePageByTheNewBuild: a .go file open over a reconnect to a build without the
-// .go chunker reads as the last daemon's (plain text) until that build's registrations answer; when
-// they come, the page reads it as the new build does: Markdown, its "# " line a heading.
+// TestAReconnectReadsThePageByTheNewBuild: a .zig file open over a reconnect to a build without the
+// .zig chunker reads as the last daemon's (plain text) until that build's registrations answer;
+// when they come, the page reads it as the new build does: Markdown, its "# " line a heading.
 func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 	sock := filepath.Join(shortDir(t), "s.sock")
-	pro := startDaemonWith(t, sock, map[string][]string{"kb": {"a.go", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}, version: "v-pro"})
+	pro := startDaemonWith(t, sock, map[string][]string{"kb": {"a.zig", goWithAHashLine}}, daemonOpts{goChunker: wholeGo{}, chunked: ".zig", version: "v-pro"})
 	held := make(chan struct{})
 	release := sync.OnceFunc(func() { close(held) })
 	t.Cleanup(release)
@@ -201,17 +202,17 @@ func TestAReconnectReadsThePageByTheNewBuild(t *testing.T) {
 	r := runTUI(t, sess, Options{})
 	r.s.WaitForText(t, "connected — autodoc v-pro")
 	r.s.WaitFor(t, "the files listed", func(string) bool { return len(r.listed()) > 0 }) // the workspace entered
-	r.h.p.Post(func() { r.h.openPath("a.go") })
-	r.waitFile(t, "a.go")
+	r.h.p.Post(func() { r.h.openPath("a.zig") })
+	r.waitFile(t, "a.zig")
 	r.s.WaitFor(t, "the page read as registered", func(string) bool { return r.headings() == 0 })
 	pro.stop()
-	startDaemonWith(t, sock, map[string][]string{"kb": {"a.go", goWithAHashLine}}, daemonOpts{goFiles: true, version: "v-community"})
+	startDaemonWith(t, sock, map[string][]string{"kb": {"a.zig", goWithAHashLine}}, daemonOpts{goFiles: true, chunked: ".zig", version: "v-community"})
 	r.s.WaitFor(t, "the community daemon's workspace", func(string) bool {
 		return onLoop(r, func() bool {
 			return r.h.connected && r.h.session.Version() == "v-community" && r.h.entered && len(r.h.files.Paths) > 0
 		})
 	})
-	if f := r.file(); !f.open || f.path != "a.go" {
+	if f := r.file(); !f.open || f.path != "a.zig" {
 		t.Fatalf("the reconnect closed the page: %+v", f)
 	}
 	if asked.Load() != 2 || r.headings() != 0 {
