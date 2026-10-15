@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -29,16 +30,41 @@ import (
 
 // recovered is one kept document.
 type recovered struct {
-	WS    string    `json:"ws"`   // its workspace; "" for a file outside every one, or the draft
-	Path  string    `json:"path"` // "" for the untitled draft
+	WS   string `json:"ws"`   // its workspace; "" for a file outside every one
+	Path string `json:"path"` // "" for an untitled draft
+	// Draft is an untitled draft's own id (openBuffer.draft), so two drafts keep two copies; "" for a
+	// file's copy, and for a draft's kept before drafts had one
+	Draft string    `json:"draft,omitempty"`
 	Text  string    `json:"text"`
 	Saved time.Time `json:"saved"` // when it was kept
 }
 
-// recoveryFile is the copy's file for a document: a hash of where it is, so a path's characters
-// never reach the file name.
-func recoveryFile(dir, ws, p string) string {
-	sum := sha256.Sum256([]byte(ws + "\x00" + p))
+// recoveryKey is which document a copy is of: a file's (ws, path), or a draft's (ws, "", its id).
+type recoveryKey struct{ ws, path, draft string }
+
+func (r recovered) key() recoveryKey { return recoveryKey{r.WS, r.Path, r.Draft} }
+
+// ownRecovery is the key b's text is kept under: its file's, or its draft id's. A draft never kept
+// has no id, so no copy of its own: ok is false.
+func (b *openBuffer) ownRecovery() (k recoveryKey, ok bool) {
+	if b.file.open {
+		return recoveryKey{b.file.ws, b.file.path, ""}, true
+	}
+	return recoveryKey{b.file.ws, "", b.draft}, b.draft != ""
+}
+
+// newDraftID is a draft's recovery id: random, so no two drafts, in this run or a later one, share
+// a copy.
+func newDraftID() string { return rand.Text() }
+
+// recoveryFile is the copy's file for a document: a hash of its key, so a path's characters never
+// reach the file name. A file's and an id-less draft's hash as they did before drafts had ids.
+func recoveryFile(dir string, k recoveryKey) string {
+	s := k.ws + "\x00" + k.path
+	if k.draft != "" {
+		s += "\x00" + k.draft
+	}
+	sum := sha256.Sum256([]byte(s))
 	return filepath.Join(dir, hex.EncodeToString(sum[:12])+".json")
 }
 
@@ -65,7 +91,7 @@ func writeRecovery(dir string, r recovered) error {
 		os.Remove(tmp.Name())
 		return err
 	}
-	return os.Rename(tmp.Name(), recoveryFile(dir, r.WS, r.Path))
+	return os.Rename(tmp.Name(), recoveryFile(dir, r.key()))
 }
 
 // readRecovery is every kept document, the newest first. A copy that cannot be read is left alone.
@@ -92,26 +118,32 @@ func readRecovery(dir string) []recovered {
 	return out
 }
 
-// settleRecovery deletes the copies of the text in the editor, now that it is saved or discarded:
-// the document's own (ws, p) and the restored copy it came from, which may be another's (a copy
-// whose file was gone became the draft).
-func (h *Host) settleRecovery(b *openBuffer, ws, p string) {
-	h.dropRecovery(ws, p)
+// settleRecovery deletes the copies of b's text, now that it is saved or discarded: its own, under
+// own (ownRecovery, read before a save renames it), and the restored copy it came from, which may
+// be another's (a copy whose file was gone became a draft).
+func (h *Host) settleRecovery(b *openBuffer, own recoveryKey, ok bool) {
+	if ok {
+		h.dropRecovery(own)
+	}
 	if r := b.restored; r != nil {
 		b.restored = nil
-		if *r != (fileRef{ws, p}) {
-			h.dropRecovery(r.ws, r.path)
+		if !ok || *r != own {
+			h.dropRecovery(*r)
 		}
 	}
 }
 
 // dropRecovery deletes a document's copy, if it has one.
-func (h *Host) dropRecovery(ws, p string) {
+func (h *Host) dropRecovery(k recoveryKey) {
 	if h.recoveryDir == "" {
 		return
 	}
-	if err := os.Remove(recoveryFile(h.recoveryDir, ws, p)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		h.failed("could not remove the recovery copy of "+p, err)
+	if err := os.Remove(recoveryFile(h.recoveryDir, k)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		name := k.path
+		if name == "" {
+			name = untitled
+		}
+		h.failed("could not remove the recovery copy of "+name, err)
 	}
 }
 
@@ -127,18 +159,18 @@ func (h *Host) keepRecovery() error {
 		if !b.file.dirty {
 			continue
 		}
-		path := b.file.path
-		if !b.file.open {
-			path = ""
+		if !b.file.open && b.draft == "" {
+			b.draft = newDraftID() // its own copy: another draft's is not overwritten
 		}
-		r := recovered{WS: b.file.ws, Path: path, Text: b.buf.Value(), Saved: time.Now()}
+		k, _ := b.ownRecovery()
+		r := recovered{WS: k.ws, Path: k.path, Draft: k.draft, Text: b.buf.Value(), Saved: time.Now()}
 		if err := writeRecovery(h.recoveryDir, r); err != nil {
 			errs = append(errs, fmt.Errorf("keeping the unsaved text of %s: %w", b.file.name(), err))
 			continue
 		}
 		// the copy just written holds the restored text now: the one it came from would be offered twice
-		if rc := b.restored; rc != nil && *rc != (fileRef{r.WS, r.Path}) {
-			h.dropRecovery(rc.ws, rc.path)
+		if rc := b.restored; rc != nil && *rc != k {
+			h.dropRecovery(*rc)
 		}
 	}
 	return errors.Join(errs...)
@@ -170,6 +202,10 @@ func (h *Host) askRecovery() {
 	h.open("recoveryDialog")
 }
 
+// askRecoveryNext asks about the next kept document on the loop's next turn: the question answered
+// was closed in this one, and a dialog closed and opened again in one turn stays closed.
+func (h *Host) askRecoveryNext() { h.p.Post(h.askRecovery) }
+
 // recovery answers the question: restore, discard or later.
 func (h *Host) recovery(answer string) {
 	h.closeDialog("recoveryDialog")
@@ -183,9 +219,9 @@ func (h *Host) recovery(answer string) {
 		h.restoreRecovered(r)
 		return // the next question waits for this document to open
 	case "discard":
-		h.dropRecovery(r.WS, r.Path)
+		h.dropRecovery(r.key())
 	}
-	h.askRecovery()
+	h.askRecoveryNext()
 }
 
 // restoreRecovered puts a kept copy's text back in the editor, and asks about the next copy once
@@ -203,7 +239,7 @@ func (h *Host) restoreRecovered(r recovered) {
 		b := h.bufferOf(fileRef{r.WS, r.Path})
 		h.activate(b)
 		h.applyRecovered(b, r)
-		h.askRecovery()
+		h.askRecoveryNext()
 	case r.Path == "":
 		h.restoreAsDraft(r, "restore the kept draft")
 	default:
@@ -221,7 +257,7 @@ func (h *Host) restoreAsDraft(r recovered, _ string) {
 		h.activate(b)
 	}
 	h.applyRecovered(b, r)
-	h.askRecovery()
+	h.askRecoveryNext()
 }
 
 // applyPendingRestore puts a restored copy's text in b, the buffer show just loaded (ws, p) into,
@@ -233,7 +269,7 @@ func (h *Host) applyPendingRestore(b *openBuffer, ws, p string) {
 	}
 	h.pendingRestore, h.restoreWaiting = nil, false
 	h.applyRecovered(b, *r)
-	h.p.Post(h.askRecovery)
+	h.askRecoveryNext()
 }
 
 // restoreOpenFailed is the open of a document being restored failing: its kept text becomes the
@@ -256,7 +292,7 @@ func (h *Host) restoreSettled() {
 		return
 	}
 	h.pendingRestore, h.restoreWaiting = nil, false
-	h.p.Post(h.askRecovery)
+	h.askRecoveryNext()
 }
 
 // applyRecovered replaces b's text with the copy's, as one edit, unsaved. The copy stays until the
@@ -273,7 +309,7 @@ func (h *Host) applyRecovered(b *openBuffer, r recovered) {
 	} else {
 		h.bufferEdited(b) // no textChanged reaches the host from a headless editor
 	}
-	b.restored = &fileRef{r.WS, r.Path}
+	b.restored = &recoveryKey{r.WS, r.Path, r.Draft}
 	name := r.Path
 	if name == "" {
 		name = untitled

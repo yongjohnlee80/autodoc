@@ -37,7 +37,8 @@ func (h *Host) writeFromEditor(quit bool) {
 func (h *Host) quitFromEditor(force bool) {
 	if force {
 		// discarded on purpose: nothing to keep, and a copy kept earlier goes too
-		h.settleRecovery(h.active, h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
+		own, ok := h.active.ownRecovery()
+		h.settleRecovery(h.active, own, ok)
 		h.setDirty(false)
 		h.guardAll("quit", h.p.Quit)
 		return

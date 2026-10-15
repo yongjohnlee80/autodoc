@@ -28,11 +28,11 @@ func TestAFailureSaysWhatFailedAndWhy(t *testing.T) {
 
 	// a copy that is a folder with something in it cannot be removed
 	dir := t.TempDir()
-	copyPath := recoveryFile(dir, "kb", "a.md")
+	copyPath := recoveryFile(dir, recoveryKey{"kb", "a.md", ""})
 	if err := os.MkdirAll(filepath.Join(copyPath, "inside"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	onLoop(r, func() bool { r.h.recoveryDir = dir; r.h.dropRecovery("kb", "a.md"); return true })
+	onLoop(r, func() bool { r.h.recoveryDir = dir; r.h.dropRecovery(recoveryKey{"kb", "a.md", ""}); return true })
 	r.waitKept(t, "could not remove the recovery copy of a.md: ")
 
 	// a theme switch reads the document from the dev folder, which has none

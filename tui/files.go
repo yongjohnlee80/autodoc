@@ -150,7 +150,8 @@ func (h *Host) unsaved(answer string) {
 		}
 		h.write(h.active, h.core.Value(), h.file.version, then)
 	case "discard":
-		h.settleRecovery(h.active, h.file.ws, map[bool]string{true: h.file.path, false: ""}[h.file.open])
+		own, ok := h.active.ownRecovery()
+		h.settleRecovery(h.active, own, ok)
 		h.setDirty(false)
 		if then != nil {
 			then()
@@ -378,18 +379,32 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 // show puts a file's text in buffer b, clean: p of workspace ws, or outside every one (""). b shown,
 // the page follows it; not shown, only the buffer changes, and the page is set up when it is.
 func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
-	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, false
+	h.adopt(b, ws, p, version, raw, &content)
+}
+
+// adopt makes b the buffer of p, at version: with content, its text, clean (show); with nil, b keeps
+// its own text, unsaved (a draft written under p while it was edited further). Whether p is a
+// derived document, and so read-only, is set here for any buffer: a headless editor's edits are
+// refused as the widget's are (editorFor).
+func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
+	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
 	b.file.raw = raw
+	b.file.derived = derivedOf(p, raw)
 	b.buf.SetName(docKey(fileRef{ws, p}))
 	if b != h.active {
-		h.editorFor(b).SetValue(content) // a headless editor's: no widget, no textChanged
+		ed := h.editorFor(b) // read-only now for a derived document
+		if content != nil {
+			ed.SetValue(*content) // a headless editor's: no widget, no textChanged
+		}
 		h.syncBuffers()
 		h.emitOpenFor(b)
 		h.applyPendingRestore(b, ws, p)
 		return
 	}
-	h.documentFor(ws, p, raw)  // before the text: a page shown for the last file must not get this one's
-	h.editor.SetValue(content) // reports no textChanged: only typing does
+	h.documentFor(ws, p, raw) // before the text: a page shown for the last file must not get this one's
+	if content != nil {
+		h.editor.SetValue(*content) // reports no textChanged: only typing does
+	}
 	h.syncPageWidth()
 	h.page = h.takePage() // readPage's consumers read it
 	h.readPage()
@@ -400,6 +415,15 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 	// of it: readPage again (registrations arriving) is no new page
 	h.emitOpenFor(b)
 	h.applyPendingRestore(b, ws, p)
+}
+
+// derivedOf is the kind of a derived document p is ("PDF"), read-only; "" for a file of text, and
+// for one opened raw, its own bytes.
+func derivedOf(p string, raw bool) string {
+	if p != "" && kind.Of(p, nil) == kind.Derived && !raw {
+		return kind.Label(p)
+	}
+	return ""
 }
 
 // readPage decides how the open page reads its file, the one place that does: on every open, and
@@ -416,10 +440,7 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 // Unsaved text stays as it is: only how it is read changes.
 func (h *Host) readPage() {
 	p := h.file.path
-	h.file.derived = ""
-	if kind.Of(p, nil) == kind.Derived && !h.file.raw {
-		h.file.derived = kind.Label(p)
-	}
+	h.file.derived = derivedOf(p, h.file.raw)
 	h.core.SetReadOnly(h.file.derived != "")
 	k := h.resolver().Of(p) // the daemon's registrations: it is the one indexing
 	// Tab walks a Markdown table's cells (the draft is Markdown too)
@@ -680,7 +701,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 			newer := b.buf.Value() != content
 			if !newer {
 				b.buf.MarkSaved() // the command line's x reads it
-				h.settleRecovery(b, ws, p)
+				h.settleRecovery(b, recoveryKey{ws, p, ""}, true)
 			}
 			if b == h.active {
 				h.setDirty(newer)
@@ -788,22 +809,34 @@ func (h *Host) createFile(name string) {
 		return
 	}
 	b := ds.b
-	content := []byte(h.editorFor(b).Value())
-	restored := b.restored // the kept copy the draft's text came from, if any (recovery.go)
+	content := h.editorFor(b).Value() // what is written: an edit after this is newer than the file
+	own, owned := b.ownRecovery()     // the draft's copy, read before the draft becomes the file
 	ws, tk := h.ws, h.bufferTicket(b, false)
-	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "doc.write", ws, name, content, "")
-		return err
-	}, func(err error) {
+	type answer struct {
+		version string
+		err     error
+	}
+	do(h, func(ctx context.Context) answer {
+		res, err := h.call(ctx, "doc.write", ws, name, []byte(content), "")
+		if err == nil {
+			return answer{version: str(asMap(res), "version")}
+		}
+		if code(err) != rpc.CodeCommitted {
+			return answer{err: err}
+		}
+		// landed: its version for the next save, read back ("" if that fails: the next save conflicts)
+		back, _ := h.readFile(ctx, ws, name, false)
+		return answer{version: str(asMap(back), "version")}
+	}, func(a answer) {
 		if !tk.Current() {
-			if err == nil || code(err) == rpc.CodeCommitted {
+			if a.err == nil {
 				h.notify("saved the draft as " + name) // its buffer was closed meanwhile; the file is on disk
 			}
 			return
 		}
-		if err != nil && code(err) != rpc.CodeCommitted {
-			reason := wireMessage(err)
-			if code(err) == rpc.CodeConflict {
+		if a.err != nil {
+			reason := wireMessage(a.err)
+			if code(a.err) == rpc.CodeConflict {
 				reason = name + " exists: pick another name, or open it"
 			}
 			h.set("App.fileNameError", reason)
@@ -813,18 +846,29 @@ func (h *Host) createFile(name string) {
 		if h.draft == ds {
 			h.draft = nil // a newer draft's picker, opened while this write was in flight, stays
 		}
-		// the draft's text is on disk now: the copy it was restored from goes (not another draft's,
-		// which Later kept for the next start)
-		if restored != nil {
-			h.dropRecovery(restored.ws, restored.path)
-			b.restored = nil
+		h.listFiles()
+		h.loadWorkspaces() // the explorer lists it
+		if b.buf.Value() != content {
+			// edited while it was written (typing, a script, an agent): the buffer is the file now,
+			// and keeps the newer text, unsaved, and the copies it came from; what the save guarded
+			// (a close, a quit) would drop that text: ask again, over b
+			h.adopt(b, ws, name, a.version, false, nil)
+			if ds.then == nil {
+				h.notify("saved the draft as " + name + "; it changed again while it was saved: the newer changes are unsaved")
+				return
+			}
+			h.activate(b)
+			b.file.then = ds.then
+			h.set("App.unsavedQuestion", fmt.Sprintf("%s changed again while it was saved. Save the newer changes first?", name))
+			h.open("unsavedFile")
+			return
 		}
-		h.settleRecovery(b, ws, "")
+		// the draft's text is on disk now: its copy, and the one it was restored from, go
+		h.settleRecovery(b, own, owned)
+		b.draft = ""
 		land := &landing{at: cursorBytesOf(h.editorFor(b))} // the cursor where it was in the draft
 		b.file.dirty = false                                // written: the load below finds it saved
 		h.loadInto(b, ws, name, nil, false, land)
-		h.listFiles()
-		h.loadWorkspaces() // the explorer lists it
 		if ds.then != nil {
 			ds.then()
 		}

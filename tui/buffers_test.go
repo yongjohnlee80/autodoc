@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -584,4 +585,209 @@ func TestAForcedExitThatCannotKeepSaysWhichBuffers(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "unsaved text of a.md") || !strings.Contains(err.Error(), "unsaved text of "+untitled) {
 		t.Fatalf("an unwritable recovery directory: %v", err)
 	}
+}
+
+// TestEveryDraftKeepsItsOwnCopy: two modified drafts keep two copies at a forced exit; the next start
+// restores both, each into a draft of its own; kept again, they replace their own copies, neither
+// overwriting the other nor adding a third.
+func TestEveryDraftKeepsItsOwnCopy(t *testing.T) {
+	dir := t.TempDir()
+	h := &Host{recoveryDir: dir}
+	mk := func(n int, text string) *openBuffer {
+		b := &openBuffer{n: n, buf: widget.NewBuffer(widget.BufferText(text))}
+		b.file = openedFile{ws: "kb", dirty: true}
+		return b
+	}
+	h.buffers = []*openBuffer{mk(1, "first draft\n"), mk(2, "second draft\n")}
+	h.active, h.file = h.buffers[0], &h.buffers[0].file
+	if err := h.keepRecovery(); err != nil {
+		t.Fatal(err)
+	}
+	keptTexts := func() string {
+		var out []string
+		for _, k := range readRecovery(dir) {
+			out = append(out, k.Text)
+		}
+		slices.Sort(out)
+		return strings.Join(out, "|")
+	}
+	if got := keptTexts(); got != "first draft\n|second draft\n" {
+		t.Fatalf("copies kept: %q; want one per draft", got)
+	}
+
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	r := attachedWith(t, d, dir)
+	drafts := func() string {
+		return onLoop(r, func() string {
+			var out []string
+			for _, b := range r.h.buffers {
+				if !b.file.open && b.file.dirty {
+					out = append(out, b.buf.Value())
+				}
+			}
+			slices.Sort(out)
+			return strings.Join(out, "|")
+		})
+	}
+	r.s.WaitForText(t, untitled+" had unsaved changes")
+	r.keys(t, key('r'))
+	// the first restored and its question closed, in one turn, and that turn drawn: the question on
+	// the screen after this is the second
+	r.s.WaitFor(t, "one draft restored", func(string) bool { return strings.Count(drafts(), "draft") == 1 })
+	r.s.WaitForText(t, untitled+" had unsaved changes")
+	r.keys(t, key('r'))
+	r.s.WaitFor(t, "both drafts restored", func(string) bool { return drafts() == "first draft\n|second draft\n" })
+	if err := onLoop(r, r.h.keepRecovery); err != nil {
+		t.Fatal(err)
+	}
+	if got := keptTexts(); got != "first draft\n|second draft\n" {
+		t.Fatalf("copies kept again: %q; want each draft's own, replaced", got)
+	}
+}
+
+// TestADraftEditedWhileItIsNamedKeepsTheEdit: an edit made while the draft's write is in flight is
+// not lost to the file read back: the buffer is the file, holding the newer text, unsaved; the disk
+// holds what was written.
+func TestADraftEditedWhileItIsNamedKeepsTheEdit(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	sess := NewSession(d.sock, nil)
+	held, release := make(chan struct{}, 1), make(chan struct{})
+	var hold atomic.Bool
+	sess.SetBeforeCall(func(method string, params []any) {
+		if method == "doc.write" && hold.Load() {
+			held <- struct{}{}
+			<-release
+		}
+	})
+	r := runTUI(t, sess, Options{})
+	r.waitListed(t, 1)
+	r.typeInEditor(t, "draft text")
+	r.keys(t, decltest.Ctrl('s'))
+	r.s.WaitForText(t, "save the draft")
+	hold.Store(true)
+	r.keys(t, decltest.Type("kept")...)
+	r.keys(t, enter())
+	<-held
+	r.typeInEditor(t, "more ")
+	// the draft is modified already: waitTyped would not wait for these keys; the text does
+	r.s.WaitFor(t, "the edit typed during the write", func(string) bool {
+		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "more") && r.h.core.Mode() == widget.ModeNormal })
+	})
+	newer := r.editorText()
+	hold.Store(false)
+	close(release)
+	r.waitNoticed(t, "it changed again while it was saved")
+	if f := r.file(); f.path != "kept.md" || !f.open || !f.dirty || r.editorText() != newer {
+		t.Fatalf("after the write: %+v %q; want kept.md, unsaved, with the newer text", f, r.editorText())
+	}
+	if got := d.read(t, "kb", "kept.md"); got != "draft text" {
+		t.Fatalf("kept.md: %q", got)
+	}
+}
+
+// TestAQuitThatSavesADraftEditedMeanwhileAsksAgain: Save in the quit question names the draft; an
+// edit made while its write is in flight is not quit over: the question asks again.
+func TestAQuitThatSavesADraftEditedMeanwhileAsksAgain(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n"}})
+	sess := NewSession(d.sock, nil)
+	held, release := make(chan struct{}, 1), make(chan struct{})
+	var hold atomic.Bool
+	sess.SetBeforeCall(func(method string, params []any) {
+		if method == "doc.write" && hold.Load() {
+			held <- struct{}{}
+			<-release
+		}
+	})
+	r := runTUI(t, sess, Options{})
+	r.waitListed(t, 1)
+	r.typeInEditor(t, "draft text")
+	r.waitTyped(t)
+	r.keys(t, decltest.Ctrl('q'))
+	r.s.WaitForText(t, "Save them before you quit?")
+	r.keys(t, key('s'))
+	r.s.WaitForText(t, "save the draft")
+	hold.Store(true)
+	r.keys(t, decltest.Type("kept")...)
+	r.keys(t, enter())
+	<-held
+	r.typeInEditor(t, "more ")
+	// the draft is modified already: waitTyped would not wait for these keys; the text does
+	r.s.WaitFor(t, "the edit typed during the write", func(string) bool {
+		return onLoop(r, func() bool { return strings.Contains(r.h.core.Value(), "more") && r.h.core.Mode() == widget.ModeNormal })
+	})
+	newer := r.editorText()
+	hold.Store(false)
+	close(release)
+	r.s.WaitForText(t, "kept.md changed again while it was saved")
+	select {
+	case <-r.s.Quit():
+		t.Fatal("quit over the edit made while the draft was written")
+	case <-time.After(300 * time.Millisecond):
+	}
+	if f := r.file(); f.path != "kept.md" || !f.dirty || r.editorText() != newer {
+		t.Fatalf("after the write: %+v %q", f, r.editorText())
+	}
+}
+
+// TestADerivedDocumentLoadedNotShownIsReadOnly: a PDF whose read lands after the user switched away
+// is read-only in its buffer at once: a script's edit of it is refused, before it is ever shown.
+func TestADerivedDocumentLoadedNotShownIsReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	src := `autodoc.command{ name = "stamp", run = function(ed, args)
+  autodoc.buffer(tonumber(args[1])):insert_at(1, 1, "Z")
+end }`
+	if err := os.WriteFile(filepath.Join(dir, "stamp.lua"), []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "# A\n", "manual.pdf", manualPDF}}, daemonOpts{deriver: pdfAsText{}})
+	sess := NewSession(d.sock, nil)
+	release := make(chan struct{})
+	var hold atomic.Bool
+	sess.SetBeforeCall(func(method string, params []any) {
+		if method == "doc.read" && hold.Load() && len(params) > 1 && params[1] == "manual.pdf" {
+			<-release
+		}
+	})
+	r := runTUI(t, sess, Options{LuaDir: dir})
+	r.waitListed(t, 2)
+	r.s.WaitFor(t, "the daemon's derived formats", func(string) bool {
+		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
+	})
+	r.h.p.Post(func() { r.h.openPath("a.md") })
+	r.waitFile(t, "a.md")
+	hold.Store(true)
+	r.h.p.Post(func() { r.h.openPath("manual.pdf") })
+	r.s.WaitForText(t, "opening manual.pdf")
+	onLoop(r, func() bool { r.h.activate(bufferOnLoop(r, "a.md")); return true })
+	hold.Store(false)
+	close(release)
+	r.s.WaitFor(t, "manual.pdf loaded into its buffer", func(string) bool {
+		return onLoop(r, func() bool { b := bufferOnLoop(r, "manual.pdf"); return b != nil && b.buf.Value() == manualPDF })
+	})
+	pdf := bufferOn(r, "manual.pdf")
+	if !onLoop(r, func() bool { return r.h.editorFor(pdf).ReadOnly() }) {
+		t.Fatal("the derived document's buffer, not shown, is writable")
+	}
+	n := onLoop(r, func() int { return pdf.n })
+	_ = onLoop(r, func() error { return r.h.core.RunCommand("stamp " + strconv.Itoa(n)) })
+	if got, dirty := onLoop(r, func() string { return pdf.buf.Value() }), onLoop(r, func() bool { return pdf.file.dirty }); got != manualPDF || dirty {
+		t.Fatalf("a script edited the derived document: %q, dirty %v", got, dirty)
+	}
+	if r.file().path != "a.md" {
+		t.Fatalf("the edit attempt showed %s", r.file().path)
+	}
+}
+
+// TestLaterAsksAboutTheNextCopy: Later on the first kept copy asks about the next: the question is
+// opened again on the turn after the one that closed it.
+func TestLaterAsksAboutTheNextCopy(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "b.md", Text: "b kept\n", Saved: now})
+	_ = writeRecovery(dir, recovered{WS: "kb", Path: "a.md", Text: "a kept\n", Saved: now.Add(-time.Hour)})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a disk\n", "b.md", "b disk\n"}})
+	r := attachedWith(t, d, dir)
+	r.s.WaitForText(t, "b.md had unsaved changes")
+	r.keys(t, key('l'))
+	r.s.WaitForText(t, "a.md had unsaved changes")
 }

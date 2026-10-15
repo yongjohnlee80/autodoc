@@ -40,7 +40,7 @@ func TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked(t *testing.T) {
 	if len(got) != 1 || got[0].WS != "kb" || got[0].Path != "a.md" || got[0].Text != "Xaaa\n" {
 		t.Fatalf("kept %+v", got)
 	}
-	if fi, err := os.Stat(recoveryFile(dir, "kb", "a.md")); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(recoveryFile(dir, recoveryKey{"kb", "a.md", ""})); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("the copy: %v, %v; want it the user's alone", fi, err)
 	}
 }
