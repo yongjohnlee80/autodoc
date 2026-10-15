@@ -124,7 +124,7 @@ func (h *Host) keepRecovery() error {
 	}
 	var errs []error
 	for _, b := range h.buffers {
-		if !b.file.dirty || b.buf == nil {
+		if !b.file.dirty {
 			continue
 		}
 		path := b.file.path
