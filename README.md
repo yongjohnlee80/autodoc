@@ -762,7 +762,7 @@ placement.
 **The results panel.** A plugin may show a table of rows (a query's result, say) in AutoDoc's own
 results panel, at the bottom (**Go › Results**): a cursor on cells (`h j k l`, `v` selects a range),
 `s` sorts the loaded rows by the cursor's column, and more rows load as the cursor nears the end of
-those loaded. Its rows leave through AutoDoc's commands, each saying which rows it takes:
+those loaded, up to 100 000 (the CSV export takes the rest). Its rows leave through AutoDoc's commands, each saying which rows it takes:
 `results.copy` (the selection, or the cursor's cell, as TSV), `results.markdown` (the rows loaded
 now, as a Markdown table at the page's cursor) and `results.csv` (every row, fetched to the last,
 into a file chosen in a save dialog; the file is written whole or not at all). Closing the panel

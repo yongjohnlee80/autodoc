@@ -206,8 +206,11 @@ func (p *Peer) Title(title string) error {
 func (p *Peer) Close() error { return p.link.Notify(p.ctx, MethodHostClose, EmptyParams()) }
 
 // Table shows t in AutoDoc's results panel (protocol 4; the manifest declares [table]), replacing
-// the table shown. Keep each message under the link's limit, MaxMessageBytes as EncodedSize
-// measures it: size the rows by their encoded bytes, not their count alone.
+// the table shown. Give each table a new ID (a query run again is a new table): a fetch for the
+// table shown may still be on its way, so the host refuses a table that reuses the shown table's
+// ID, keeping the one shown. Rows are taken only as the answer to a FetchRows. Keep each message
+// under the link's limit, MaxMessageBytes as EncodedSize measures it: size the rows by their
+// encoded bytes, not their count alone.
 func (p *Peer) Table(t TableOpen) error {
 	if p.protocol.Load() < 4 {
 		return ErrNoTables

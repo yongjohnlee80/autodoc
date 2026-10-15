@@ -35,7 +35,8 @@ func installPlugin4(t *testing.T, dir, name, kind, mode, extra string) {
 }
 
 // tableManifest is a service serving tables: run opens one, run2 another.
-const tableManifest = "[table]\ntitle = \"Rows\"\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n[[commands]]\nid = \"run2\"\ntitle = \"Run again\"\n"
+const tableManifest = "[table]\ntitle = \"Rows\"\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n[[commands]]\nid = \"run2\"\ntitle = \"Run again\"\n" +
+	"[[commands]]\nid = \"unsolicited\"\ntitle = \"Rows unasked\"\n"
 
 // snapManifest is a card on the feed whose command says the document it runs on.
 const snapManifest = "[dialog]\nmodal = false\nwidth = 60\nheight = 6\n[feed]\ndocument = true\n[[commands]]\nid = \"run\"\ntitle = \"Run\"\n"
@@ -57,7 +58,11 @@ func tableRow(i int) []string {
 }
 
 // tablePlugin is a protocol-4 service serving tables of tableRows rows, a page at a time. In mode
-// "tablestall" it answers only its first fetch, so a fetch stays waiting.
+// "tablestall" it answers only its first fetch, so a fetch stays waiting. In "tablereuse", before
+// answering each fetch, it sends a new table under the id of the one being fetched (one row,
+// "new"), as a plugin that runs a query again under a stable id would. In "table1000" its tables
+// hold 1000 rows, sent in pages of at most 100. Its command "unsolicited" sends rows no fetch asked
+// for.
 type tablePlugin struct {
 	plugin.Base
 	mode    string
@@ -78,7 +83,20 @@ func (p *tablePlugin) say(line string) { fmt.Fprintln(os.Stderr, "said: "+line) 
 
 func (p *tablePlugin) Open(peer *plugin.Peer, o plugin.Open) { p.peer = peer }
 
+// total is how many rows the plugin's tables hold, and page the most it sends at once.
+func (p *tablePlugin) total() (rows, page int) {
+	if p.mode == "table1000" {
+		return 1000, 100
+	}
+	return tableRows, tableRows
+}
+
 func (p *tablePlugin) Command(id string) {
+	if id == "unsolicited" {
+		_ = p.peer.Rows("q1", [][]string{{"unsolicited", "unsolicited"}}, true)
+		p.say("sent unsolicited")
+		return
+	}
 	t := map[string]string{"run": "q1", "run2": "q2"}[id]
 	rows := make([][]string, tablePage)
 	for i := range rows {
@@ -95,14 +113,18 @@ func (p *tablePlugin) FetchRows(f plugin.TableFetch) {
 	if p.mode == "tablestall" && p.fetches > 1 {
 		return // never answered: the host's fetch waits
 	}
+	if p.mode == "tablereuse" {
+		_ = p.peer.Table(plugin.TableOpen{ID: f.ID, Fields: []string{"n", "name"}, Rows: [][]string{{"new", "new"}}, More: true})
+	}
+	total, page := p.total()
 	from := p.sent[f.ID]
-	to := min(from+f.N, tableRows)
+	to := min(from+min(f.N, page), total)
 	rows := make([][]string, 0, to-from)
 	for i := from; i < to; i++ {
 		rows = append(rows, tableRow(i))
 	}
 	p.sent[f.ID] = to
-	_ = p.peer.Rows(f.ID, rows, to < tableRows)
+	_ = p.peer.Rows(f.ID, rows, to < total)
 }
 
 func (p *tablePlugin) TableClosed(id string) { p.say("closed " + id) }
@@ -270,6 +292,34 @@ func TestANewerTableClosesTheOld(t *testing.T) {
 	}
 }
 
+// readCSVFile is the CSV file at p, read whole.
+func readCSVFile(t *testing.T, p string) [][]string {
+	t.Helper()
+	f, err := os.Open(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	records, err := csv.NewReader(f).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return records
+}
+
+// wantAllRows checks an exported CSV: the header, then the plugin's n rows, each once, in order.
+func wantAllRows(t *testing.T, records [][]string, n int) {
+	t.Helper()
+	if len(records) != n+1 || !slices.Equal(records[0], []string{"n", "name"}) {
+		t.Fatalf("%d records, header %q; want %d rows under n, name", len(records), records[0], n)
+	}
+	for i, rec := range records[1:] {
+		if !slices.Equal(rec, tableRow(i)) {
+			t.Fatalf("row %d: %q, want %q", i, rec, tableRow(i))
+		}
+	}
+}
+
 // TestExportingAllRowsAsCSV: Export all rows as CSV drains the plugin's pages to the last and
 // writes every row, in order, quoted where a cell needs it; the rows land in the table too, and no
 // .part is left. A file there already is asked about, and replaced once the rows are written.
@@ -284,28 +334,8 @@ func TestExportingAllRowsAsCSV(t *testing.T) {
 	path := filepath.Join(out, "rows.csv")
 	onLoop(r, func() bool { r.h.plugins.exportResults(path); return true })
 	r.waitNotice(t, fmt.Sprintf("%d rows exported to %s", tableRows, path))
-	readCSV := func(p string) [][]string {
-		t.Helper()
-		f, err := os.Open(p)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer f.Close()
-		records, err := csv.NewReader(f).ReadAll()
-		if err != nil {
-			t.Fatal(err)
-		}
-		return records
-	}
-	records := readCSV(path)
-	if len(records) != tableRows+1 || !slices.Equal(records[0], []string{"n", "name"}) {
-		t.Fatalf("%d records, header %q; want %d rows under n, name", len(records), records[0], tableRows)
-	}
-	for i, rec := range records[1:] {
-		if !slices.Equal(rec, tableRow(i)) {
-			t.Fatalf("row %d: %q, want %q", i, rec, tableRow(i))
-		}
-	}
+	readCSV := func(p string) [][]string { t.Helper(); return readCSVFile(t, p) }
+	wantAllRows(t, readCSV(path), tableRows)
 	if _, err := os.Stat(path + ".part"); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the .part is left: %v", err)
 	}
@@ -573,4 +603,130 @@ func TestASQLFileOpensAsSource(t *testing.T) {
 	if k, tables := onLoop(r, r.h.pageKind), onLoop(r, r.h.core.TableEditing); k != kind.Markdown || !tables {
 		t.Fatalf("a.md: read as %s, table keys %v; want Markdown with them", k, tables)
 	}
+}
+
+// wantShownRows checks the panel's rows are the plugin's first n, in order: nothing of another
+// table, and nothing no fetch asked for.
+func (r *running) wantShownRows(t *testing.T, n int) {
+	t.Helper()
+	rows := onLoop(r, func() [][]string { return slices.Clone(r.h.plugins.results.model.rows) })
+	if len(rows) != n {
+		t.Fatalf("the panel holds %d rows, want %d", len(rows), n)
+	}
+	for i, row := range rows {
+		if !slices.Equal(row, tableRow(i)) {
+			t.Fatalf("row %d is %q, want %q: rows of another table joined", i, row, tableRow(i))
+		}
+	}
+}
+
+// pluginLogHas reports whether the plugin's log holds text: what the host noted of it.
+func pluginLogHas(logs, name, text string) bool {
+	b, _ := os.ReadFile(filepath.Join(logs, name+".log"))
+	return strings.Contains(string(b), text)
+}
+
+// TestATableReusingTheShownIDIsRefused: with a fetch on its way, the plugin sends a new table under
+// the shown table's id. It is refused and noted; the table shown, and its rows, are as they were, and
+// the fetch's answer is taken as the shown table's: nothing of the new one mixes in.
+func TestATableReusingTheShownIDIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "tablereuse", tableManifest)
+	r, logs := pluginTUI(t, dir)
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
+	// the first page's cursor is within a page of its end: one fetch, answered after the reuse
+	r.waitResults(t, "q1", tablePage+resultsPage)
+	r.wantShownRows(t, tablePage+resultsPage)
+	if !pluginLogHas(logs, "rows", `host.table reused the shown table's id "q1"; a new table needs a new id`) {
+		t.Fatalf("the refusal is not in the plugin's log: %q", said(t, logs, "rows"))
+	}
+	if got := saidLines(t, logs, "rows", "closed "); len(got) != 0 {
+		t.Fatalf("the shown table was closed by its reuse: %q", got)
+	}
+}
+
+// TestAReusedIDLeavesAnExportWhole: the same reuse at every fetch while the CSV export drains the
+// table: the file holds every row once, in order, none of the refused tables'.
+func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "tablereuse", tableManifest)
+	r, _ := pluginTUI(t, dir)
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
+	r.waitResults(t, "q1", tablePage)
+	path := filepath.Join(t.TempDir(), "rows.csv")
+	onLoop(r, func() bool { r.h.plugins.exportResults(path); return true })
+	r.waitNotice(t, fmt.Sprintf("%d rows exported to %s", tableRows, path))
+	wantAllRows(t, readCSVFile(t, path), tableRows)
+	r.wantShownRows(t, tableRows)
+}
+
+// TestRowsNoFetchAskedForAreDropped: host.rows with no fetch waiting are dropped and noted, the
+// table as it was.
+func TestRowsNoFetchAskedForAreDropped(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
+	r, logs := pluginTUI(t, dir)
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
+	r.waitResults(t, "q1", tablePage+resultsPage)
+	// the cursor is at the top, far from the end: no fetch waits
+	if onLoop(r, func() bool { return r.h.plugins.results.pending }) {
+		t.Fatal("a fetch waits: the cell needs none")
+	}
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "unsolicited"); return true })
+	waitSaid(t, logs, "rows", "sent unsolicited")
+	r.s.WaitFor(t, "the rows noted as dropped", func(string) bool {
+		return pluginLogHas(logs, "rows", `host.rows for "q1" dropped: no fetch is waiting for them`)
+	})
+	r.wantShownRows(t, tablePage+resultsPage)
+}
+
+// TestThePanelHoldsAtMostItsCap: with the cap lowered to 250 and a 1000-row table in pages of 100,
+// the panel stops asking at 250, and its heading says the first rows are shown and more remain;
+// the export writes all 1000 rows in order, and the panel never holds more than 250 (every change
+// the model announces is measured), showing the first 250 after.
+func TestThePanelHoldsAtMostItsCap(t *testing.T) {
+	cap := resultsResident
+	resultsResident = 250
+	t.Cleanup(func() { resultsResident = cap })
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "table1000", tableManifest)
+	r, logs := pluginTUI(t, dir)
+	high := 0
+	onLoop(r, func() bool {
+		m := r.h.plugins.results.model
+		m.Subscribe(func(tuidecl.Change) { high = max(high, len(m.rows)) })
+		r.h.plugins.runPluginCommand("rows", "run")
+		return true
+	})
+	r.waitResults(t, "q1", 250)
+	title := func() string {
+		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.resultsTitle"); return v.Raw })
+	}
+	r.s.WaitFor(t, "the heading at the cap", func(string) bool {
+		return strings.Contains(title(), "the first 250 rows shown; more remain (Export CSV takes them all)")
+	})
+	time.Sleep(300 * time.Millisecond) // a fetch past the cap would have been answered by now
+	if n := onLoop(r, func() int { return len(r.h.plugins.results.model.rows) }); n != 250 || onLoop(r, func() bool {
+		return r.h.plugins.results.model.CanFetchMore(tuidecl.Index{})
+	}) {
+		t.Fatalf("at the cap: %d rows, and the table still asks for more", n)
+	}
+	fetches := len(saidLines(t, logs, "rows", "fetch "))
+
+	path := filepath.Join(t.TempDir(), "rows.csv")
+	onLoop(r, func() bool { r.h.plugins.exportResults(path); return true })
+	r.waitNotice(t, "1000 rows exported to "+path)
+	wantAllRows(t, readCSVFile(t, path), 1000)
+	if got := onLoop(r, func() int { return high }); got > 250 {
+		t.Fatalf("the panel held %d rows at its most, past its cap of 250", got)
+	}
+	r.wantShownRows(t, 250)
+	if !strings.Contains(title(), "the first 250 rows shown; the rest were exported, not kept") {
+		t.Errorf("the heading after the export: %q", title())
+	}
+	if n := len(saidLines(t, logs, "rows", "fetch ")); n <= fetches {
+		t.Errorf("the export fetched nothing past the cap: %d fetches before it, %d after", fetches, n)
+	}
+	onLoop(r, func() bool { r.h.plugins.beginExport(filepath.Join(t.TempDir(), "again.csv")); return true })
+	r.waitNotice(t, "only the first 250 rows were kept; run the query again to export them all")
 }

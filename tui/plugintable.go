@@ -25,6 +25,14 @@ import (
 // table replaces the one shown, whoever's it was, and its plugin is told the old one is gone
 // (plugin.table.close), as it is when the panel closes; the plugin frees what serves its rows.
 //
+// A table's id is new for each table: one sent again under the id of the table shown is refused,
+// since a fetch for the old one may still be on its way and its rows would join the new. Rows are
+// taken only as the answer to the fetch that waits.
+//
+// The panel holds at most resultsResident rows: a query of millions is read a page at a time, never
+// whole. At the cap the table stops asking for more and its heading says more remain. The CSV
+// export takes them all: the rows past the cap go to its file, never to the panel.
+//
 // The rows leave through AutoDoc's own commands, each saying which rows it takes: results.copy the
 // selected cells (or the cursor's), results.markdown the rows loaded now, into the page, and
 // results.csv every row, fetched to the last, into a file.
@@ -42,6 +50,10 @@ const resultsPage = 500
 // toastExport is the CSV export's toast, updated as rows are written.
 const toastExport = "results-export"
 
+// resultsResident is the most rows the panel holds (a variable, so a test can lower it). Past it a
+// query's rows are not loaded into the table; an export writes them and lets them go.
+var resultsResident = 100_000
+
 // resultsTable is the table shown: whose it is, its id there, and the plugin's paging. Loop-owned.
 type resultsTable struct {
 	model *resultsModel
@@ -53,7 +65,14 @@ type resultsTable struct {
 	// remained when the table's rows ended early (host.table_end, or its plugin closed): what is
 	// loaded is not every row, so no export claims it is.
 	more, pending, cut bool
+	// over are rows that came past the panel's cap, not shown, waiting for an export to write them;
+	// spilled is rows past the cap that an export wrote and let go, so the table is not all of them.
+	over    [][]string
+	spilled bool
 }
+
+// full reports whether the panel holds all the rows it may.
+func (res *resultsTable) full() bool { return len(res.model.rows) >= resultsResident }
 
 // resultsModel is the table's rows as a TableView reads them: its fields as the columns, its cells
 // as text, and a Fetcher at the root, so the cell-cursor view asks for more as it nears the end.
@@ -155,8 +174,12 @@ func (m *resultsModel) Subscribe(fn func(tuidecl.Change)) (cancel func()) {
 	return func() { delete(m.subs, id) }
 }
 
-// CanFetchMore is the last message's more, at the root: it stays true while a fetch is answered.
-func (m *resultsModel) CanFetchMore(ix tuidecl.Index) bool { return ix.Parent == nil && m.t.more }
+// CanFetchMore is the last message's more, at the root, while the panel is under its cap: it stays
+// true while a fetch is answered, and is false once the panel holds resultsResident rows, so the
+// view stops asking (the export takes the rest).
+func (m *resultsModel) CanFetchMore(ix tuidecl.Index) bool {
+	return ix.Parent == nil && m.t.more && !m.t.full()
+}
 
 // FetchMore asks the plugin for the next rows; one waiting already is not asked again.
 func (m *resultsModel) FetchMore(ix tuidecl.Index) {
@@ -224,11 +247,17 @@ func (pl *plugins) tableOpened(r *pluginRun, t plugin.TableOpen) {
 		return // its plugin closed while the table was on its way
 	}
 	res := pl.results
-	if res.owner != r || res.id != t.ID { // the same table sent again is not a new one
-		pl.closeTable("a newer table replaced it")
+	if res.owner == r && res.id == t.ID {
+		// a fetch for the table shown may be on its way: under the same id its rows would join the
+		// new table's, and an export of it would write the two mixed
+		r.log.note(fmt.Sprintf("host.table reused the shown table's id %q; a new table needs a new id", t.ID))
+		return
 	}
+	pl.closeTable("a newer table replaced it")
 	res.owner, res.id, res.title, res.more, res.pending, res.cut = r, t.ID, cmp.Or(t.Title, r.e.m.Table.Title), t.More, false, false
-	res.model.reset(t.Fields, t.Rows)
+	res.over, res.spilled = nil, false
+	res.model.reset(t.Fields, t.Rows[:min(len(t.Rows), resultsResident)])
+	res.over = append(res.over, t.Rows[min(len(t.Rows), resultsResident):]...)
 	pl.showResultsTitle()
 	if !pl.c.PanelOpen(resultsPanel) {
 		pl.c.Keep(pl.c.View(resultsPanel, "open"))
@@ -236,14 +265,21 @@ func (pl *plugins) tableOpened(r *pluginRun, t plugin.TableOpen) {
 }
 
 // tableRows is host.rows: the next rows of the table shown, answering the fetch that waits. Rows
-// for a table no longer shown are dropped.
+// for a table no longer shown are dropped, and so are rows no fetch asked for. Rows past the
+// panel's cap are kept apart (over) for the export, never shown.
 func (pl *plugins) tableRows(r *pluginRun, id string, rows [][]string, more bool) {
 	res := pl.results
 	if res.owner != r || res.id != id {
 		return
 	}
+	if !res.pending {
+		r.log.note(fmt.Sprintf("host.rows for %q dropped: no fetch is waiting for them", id))
+		return
+	}
 	res.pending, res.more = false, more
-	res.model.add(rows)
+	keep := min(max(resultsResident-len(res.model.rows), 0), len(rows))
+	res.over = append(res.over, rows[keep:]...)
+	res.model.add(rows[:keep])
 	pl.showResultsTitle()
 	pl.exportPump()
 }
@@ -266,14 +302,21 @@ func (pl *plugins) tableEnded(r *pluginRun, id, why string) {
 }
 
 // fetchRows asks the table's plugin for its next rows, unless one request waits already, no rows
-// remain, or no plugin serves the table.
+// remain, or no plugin serves the table. With no export it asks only for what the panel has room
+// for, and nothing at its cap; an export asks for whole pages, which go past the cap to its file.
 func (pl *plugins) fetchRows() {
 	res := pl.results
 	if res.owner == nil || res.owner.closing || !res.more || res.pending {
 		return
 	}
+	n := resultsPage
+	if pl.export == nil {
+		if n = min(n, resultsResident-len(res.model.rows)); n <= 0 || len(res.over) > 0 {
+			return
+		}
+	}
 	res.pending = true
-	res.owner.send(plugin.MethodFetch, plugin.FetchParams(plugin.TableFetch{ID: res.id, N: resultsPage}))
+	res.owner.send(plugin.MethodFetch, plugin.FetchParams(plugin.TableFetch{ID: res.id, N: n}))
 }
 
 // closeTable lets go of the table shown: its plugin is told it is gone, and an export of it stops,
@@ -308,7 +351,7 @@ func (pl *plugins) tableOwnerGone(r *pluginRun) {
 // holds nothing until the next.
 func (pl *plugins) resultsClosed() {
 	pl.closeTable("the results panel closed")
-	pl.results.title, pl.results.cut = "", false
+	pl.results.title, pl.results.cut, pl.results.over, pl.results.spilled = "", false, nil, false
 	pl.results.model.reset(nil, nil)
 	pl.showResultsTitle()
 }
@@ -321,12 +364,17 @@ func (pl *plugins) showResultsTitle() {
 		title += ": " + res.title
 	}
 	if n := len(res.model.rows); n > 0 || res.id != "" {
-		title += fmt.Sprintf(" · %d rows", n)
 		switch {
+		case (res.more || len(res.over) > 0) && res.full():
+			title += fmt.Sprintf(" · the first %d rows shown; more remain (Export CSV takes them all)", n)
+		case res.spilled:
+			title += fmt.Sprintf(" · the first %d rows shown; the rest were exported, not kept", n)
 		case res.more:
-			title += ", more to load"
+			title += fmt.Sprintf(" · %d rows, more to load", n)
 		case res.cut:
-			title += ", ended early"
+			title += fmt.Sprintf(" · %d rows, ended early", n)
+		default:
+			title += fmt.Sprintf(" · %d rows", n)
 		}
 	}
 	if x := pl.export; x != nil {
@@ -485,6 +533,9 @@ func (pl *plugins) beginExport(path string) {
 	case pl.results.cut:
 		pl.c.Notify("the results ended early, so the rows loaded are not all of them: run the query again to export them all")
 		return
+	case pl.results.spilled:
+		pl.c.Notify(fmt.Sprintf("only the first %d rows were kept; run the query again to export them all", len(pl.results.model.rows)))
+		return
 	}
 	x := &resultsExport{path: path, part: path + ".part", steps: make(chan exportStep, 2), done: make(chan struct{})}
 	pl.export = x
@@ -501,10 +552,17 @@ func (pl *plugins) exportPump() {
 	if x == nil || x.writing || x.stopping {
 		return
 	}
-	if rows := pl.results.model.rows; x.sent < len(rows) {
+	res := pl.results
+	if rows := res.model.rows; x.sent < len(rows) {
 		x.writing = true
 		x.steps <- exportStep{rows: rows[x.sent:]}
 		x.sent = len(rows)
+		return
+	}
+	if len(res.over) > 0 { // past the panel's cap: written, and let go
+		x.writing = true
+		x.steps <- exportStep{rows: res.over}
+		res.over, res.spilled = nil, true
 		return
 	}
 	if pl.results.more {
