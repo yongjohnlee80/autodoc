@@ -534,7 +534,7 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 		t.Fatal("opening another file asked about a.md's unsaved changes")
 	}
 	r.openByPicker(t, "a.md") // its buffer, shown again: the edit is there
-	r.waitFile(t, "a.md")
+	r.waitBuffer(t, "a.md")
 	if !strings.Contains(r.editorText(), "Xaaa") || !r.file().dirty {
 		t.Fatalf("a.md shown again: %q, dirty %v", r.editorText(), r.file().dirty)
 	}

@@ -318,7 +318,7 @@ qa … q  record a macro;  @a @@  play
 COMMANDS (:, Tab completes)
 :12  go to line 12      :w :q :wq :x :q!  save, quit
 :find :replace :nohl    :table 3 4  :mermaid flowchart
-:terminal  the terminal
+:terminal  the terminal  :b 3 :b name  show a buffer  :bd  close it
 your own: ~/.config/autodoc/lua/*.lua (autodoc.command)`
 
 // author is AutoDoc's author, as NOTICE says.

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -54,9 +55,9 @@ func TestCtrlOWalksTheJumpListAcrossDocuments(t *testing.T) {
 	r.waitAt(t, "a.md", 2, col)
 }
 
-// TestCtrlOThatDoesntGoAheadKeepsTheList: back over unsaved changes asks first; Stay keeps the
-// page and the jump list as they were, so Ctrl+O again asks again, and Discard then goes back.
-func TestCtrlOThatDoesntGoAheadKeepsTheList(t *testing.T) {
+// TestCtrlOOverUnsavedChangesKeepsThem: back over unsaved changes asks nothing: the document left
+// keeps them in its buffer, and Ctrl+I comes back to them.
+func TestCtrlOOverUnsavedChangesKeepsThem(t *testing.T) {
 	r := attached(t, startDaemon(t, linksKB))
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
@@ -64,39 +65,49 @@ func TestCtrlOThatDoesntGoAheadKeepsTheList(t *testing.T) {
 	r.leader(t, 'j')
 	r.waitFile(t, "b.md")
 	r.typeInEditor(t, "edit ")
-	n, idx := r.jumpIndex()
 	r.keys(t, ctrlKey('o'))
-	r.s.WaitForText(t, "Save them before")
-	r.h.p.Post(func() { r.h.unsaved("stay") })
-	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "Save them before") })
-	if f := r.file(); f.path != "b.md" || !f.dirty {
-		t.Fatalf("Stay left %s (dirty %v), want b.md unsaved", f.path, f.dirty)
-	}
-	if n2, idx2 := r.jumpIndex(); n2 != n || idx2 != idx {
-		t.Fatalf("Stay moved the jump list: %d at %d, was %d at %d", n2, idx2, n, idx)
-	}
-	r.keys(t, ctrlKey('o'))
-	r.s.WaitForText(t, "Save them before")
-	r.h.p.Post(func() { r.h.unsaved("discard") })
 	r.waitFile(t, "a.md")
+	if strings.Contains(r.s.String(), "Save them before") {
+		t.Fatal("Ctrl+O asked about b.md's unsaved changes")
+	}
+	if b := bufferOn(r, "b.md"); b == nil || !onLoop(r, func() bool { return b.file.dirty && strings.Contains(b.buf.Value(), "edit ") }) {
+		t.Fatal("b.md's buffer lost its unsaved changes")
+	}
+	r.keys(t, ctrlKey('i'))
+	r.waitBuffer(t, "b.md")
+	if !strings.Contains(r.editorText(), "edit ") {
+		t.Fatalf("Ctrl+I back to b.md: %q", r.editorText())
+	}
 }
 
 // TestAJumpWhoseListMovedLandsNowhere: a step proposed, then the list moved before its document
-// was shown (here, while the unsaved question is asked): the document opens, but the step is not
-// committed, so the cursor stays at the document's start and the list where the move left it.
+// was shown (here, while its read is held): the document opens, but the step is not committed, so
+// the cursor stays at the document's start and the list where the move left it.
 func TestAJumpWhoseListMovedLandsNowhere(t *testing.T) {
-	r := attached(t, startDaemon(t, linksKB))
+	d := startDaemon(t, linksKB)
+	sess := NewSession(d.sock, nil)
+	release := make(chan struct{})
+	var hold atomic.Bool
+	sess.SetBeforeCall(func(method string, params []any) {
+		if method == "doc.read" && hold.Load() && len(params) > 1 && params[1] == "a.md" {
+			<-release
+		}
+	})
+	r := runTUI(t, sess, Options{})
+	r.waitListed(t, 1)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.putCursor(2, strings.Index("see [[b]] and [the c](c.md), then nothing", "b]]"))
 	r.leader(t, 'j')
 	r.waitFile(t, "b.md")
-	r.typeInEditor(t, "edit ")
+	onLoop(r, func() bool { r.h.dropBuffer(r.h.bufferOf(fileRef{"kb", "a.md"})); return true }) // a.md must be read again
+	hold.Store(true)
 	r.keys(t, ctrlKey('o'))
-	r.s.WaitForText(t, "Save them before")
+	r.s.WaitForText(t, "opening a.md")
 	onLoop(r, func() bool { r.h.jumps.Push(widget.JumpPos{Doc: "elsewhere", Line: 1}); return true })
 	n, idx := r.jumpIndex()
-	r.h.p.Post(func() { r.h.unsaved("discard") })
+	hold.Store(false)
+	close(release)
 	r.waitFile(t, "a.md")
 	if at := r.cursor(); at != [2]int{0, 0} {
 		t.Fatalf("a step whose list moved landed at %v, want the document's start", at)
@@ -116,6 +127,7 @@ func TestCtrlOToADocumentGoneDropsIt(t *testing.T) {
 	r.putCursor(2, strings.Index("see [[b]] and [the c](c.md), then nothing", "b]]"))
 	r.leader(t, 'j')
 	r.waitFile(t, "b.md")
+	onLoop(r, func() bool { r.h.dropBuffer(r.h.bufferOf(fileRef{"kb", "a.md"})); return true }) // not open: Ctrl+O reads it
 	if err := d.fs["kb"].Remove(context.Background(), "a.md"); err != nil {
 		t.Fatal(err)
 	}
@@ -149,9 +161,9 @@ var landingKB = map[string][]string{"kb": {
 	"b.md", "# B\n\none\n\ntwo\n",
 }}
 
-// A search hit's open that doesn't go ahead takes its section with it: the next open lands at the
-// document's own start, not at the hit's section. Stay at the unsaved question drops it.
-func TestASearchHitRefusedByStayDropsItsSection(t *testing.T) {
+// A search hit over unsaved changes asks nothing: it opens at its section, and the page left keeps
+// its edits in its buffer.
+func TestASearchHitOverUnsavedChangesOpensAtItsSection(t *testing.T) {
 	r := attached(t, startDaemon(t, landingKB))
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
@@ -163,13 +175,13 @@ func TestASearchHitRefusedByStayDropsItsSection(t *testing.T) {
 		})
 	})
 	onLoop(r, func() bool { r.h.openHit(hit{path: "b.md", byteStart: 10}); return true })
-	r.s.WaitForText(t, "Save them before")
-	r.h.p.Post(func() { r.h.unsaved("stay") })
-	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "Save them before") })
-	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
-	r.s.WaitForText(t, "Save them before")
-	r.h.p.Post(func() { r.h.unsaved("discard") })
-	r.waitAt(t, "b.md", 0, 0)
+	r.waitAt(t, "b.md", 4, 0) // byte 10 is "two", line 5
+	if strings.Contains(r.s.String(), "Save them before") {
+		t.Fatal("the hit's open asked about a.md's unsaved changes")
+	}
+	if a := bufferOn(r, "a.md"); a == nil || !onLoop(r, func() bool { return a.file.dirty && strings.Contains(a.buf.Value(), "edit ") }) {
+		t.Fatal("a.md's buffer lost its unsaved changes")
+	}
 }
 
 // An HTML file's Cancel drops the hit's section: the next open lands at its own start.

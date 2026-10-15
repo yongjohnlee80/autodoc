@@ -189,9 +189,9 @@ func TestAnOutsideFileHasNoRelations(t *testing.T) {
 	r.s.WaitForText(t, "relations · "+outsideBadge)
 }
 
-// TestBackKeepsItsDocumentWhenStayIsChosen: back over unsaved changes asks first; Stay keeps the
-// page and the jump list as they were, so back again asks again, and Discard then goes back.
-func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
+// TestBackOverUnsavedChangesKeepsThem: SPC b over unsaved changes asks nothing: the document goes
+// back, and the one left keeps its edits in its buffer.
+func TestBackOverUnsavedChangesKeepsThem(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
 	r.openByPicker(t, "doc.md")
@@ -201,16 +201,13 @@ func TestBackKeepsItsDocumentWhenStayIsChosen(t *testing.T) {
 	r.waitFile(t, "body.md")
 	r.typeInEditor(t, "edit ")
 	r.leader(t, 'b')
-	r.s.WaitForText(t, "Save them before")
-	r.h.p.Post(func() { r.h.unsaved("stay") }) // the dialog's Stay
-	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "Save them before") })
-	if f := r.file(); f.path != "body.md" || !f.dirty {
-		t.Fatalf("Stay left %s (dirty %v), want body.md unsaved", f.path, f.dirty)
-	}
-	r.leader(t, 'b')
-	r.s.WaitForText(t, "Save them before")
-	r.h.p.Post(func() { r.h.unsaved("discard") })
 	r.waitFile(t, "doc.md")
+	if strings.Contains(r.s.String(), "Save them before") {
+		t.Fatal("SPC b asked about body.md's unsaved changes")
+	}
+	if b := bufferOn(r, "body.md"); b == nil || !onLoop(r, func() bool { return b.file.dirty && strings.Contains(b.buf.Value(), "edit ") }) {
+		t.Fatal("body.md's buffer lost its unsaved changes")
+	}
 	if more := onLoop(r, func() bool { _, ok := r.h.backToDocument(); return ok }); more {
 		t.Error("after going back to the first document, back goes further")
 	}

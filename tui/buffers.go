@@ -119,15 +119,14 @@ func (h *Host) editorFor(b *openBuffer) *widget.EditorCore {
 	return b.ed
 }
 
-// bufferEdited is what an edit is to b, shown or not: dirty as its editor's Modified says, the
-// buffer list's [+], and the debounced Lua change with b's own baseline. A headless edit calls it
-// after its Batch: no textChanged reaches the host from a headless editor.
+// bufferEdited is what an edit is to b, shown or not: unsaved, the buffer list's [+], and the
+// debounced Lua change with b's own baseline. A headless edit calls it after its Batch: no
+// textChanged reaches the host from a headless editor.
 func (h *Host) bufferEdited(b *openBuffer) {
-	dirty := b.buf.Modified()
 	if b == h.active {
-		h.setDirty(dirty)
+		h.setDirty(true)
 	} else {
-		b.file.dirty = dirty
+		b.file.dirty = true
 	}
 	h.syncBuffers()
 	h.changeSoonFor(b)

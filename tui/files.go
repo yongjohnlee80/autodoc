@@ -219,7 +219,15 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 		if prev != nil && prev.Doc != docKey(ref) {
 			h.jumps.Push(*prev) // a jump: the place left
 		}
+		if raw != nil && *raw != b.file.raw {
+			// an HTML file open one way, asked for the other: its one buffer is read again that way,
+			// which replaces its text, so unsaved changes are asked about first
+			h.activate(b)
+			h.guard(b, "reopen it", func() { h.loadInto(b, ref.ws, ref.path, nil, *raw, land) })
+			return
+		}
 		h.activate(b)
+		h.say("opened " + ref.path)
 		h.land(land, ref, h.core.Value()) // the document is open already: the open lands at once
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
@@ -535,10 +543,9 @@ func (h *Host) closeFile() {
 	h.emitOpenFor(h.active) // the draft is the page now (luaevents.go)
 }
 
-// edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes as
-// long as it differs from what was saved (an undo back to the saved text is clean again).
+// edited is the editor's text changing: typed, so the file (or the draft) has unsaved changes.
 func (h *Host) edited() {
-	h.setDirty(h.core.Modified())
+	h.setDirty(true)
 	h.syncBuffers()
 	h.pageVersion++ // an edit: the next page taken carries it (Page.Version)
 	// a check or a feed the last pause scheduled is of text this keystroke changed: the next
