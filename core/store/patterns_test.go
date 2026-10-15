@@ -93,3 +93,61 @@ func TestEmptyIncludeSurvivesStoreReload(t *testing.T) {
 		t.Fatalf("explicit empty include lost: %+v", workspaces)
 	}
 }
+
+// TestAWorkspacesGraphOnlyListAndTodoSearch (ADR 1792015212 §2.2): a workspace that never set its
+// graph_only list has none stored (nil: the default); Configure stores the list and todo_search,
+// an empty list included; another workspace is untouched; one the store does not have is
+// ErrNoWorkspace.
+func TestAWorkspacesGraphOnlyListAndTodoSearch(t *testing.T) {
+	s := openStore(t)
+	ctx := context.Background()
+	a, _ := s.AddWorkspace(ctx, "a", "/roots/a", nil, nil)
+	b, _ := s.AddWorkspace(ctx, "b", "/roots/b", nil, nil)
+	modes := func(id int64) ([]string, bool) {
+		t.Helper()
+		list, search, err := s.WorkspaceModes(ctx, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return list, search
+	}
+	if list, search := modes(a.ID); list != nil || search {
+		t.Fatalf("a new workspace: %v %v, want nil (the default) and off", list, search)
+	}
+	list, on := []string{"drafts/**", "**/.todo-list/**"}, true
+	if err := s.Configure(ctx, a.ID, Changes{GraphOnly: &list, TodoSearch: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if got, search := modes(a.ID); !slices.Equal(got, list) || !search {
+		t.Errorf("a: %v %v", got, search)
+	}
+	ws, err := s.Workspaces(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range ws {
+		switch w.Name {
+		case "a":
+			if !slices.Equal(w.GraphOnly, list) || w.TodoSearch != 1 {
+				t.Errorf("listed a: %v %d", w.GraphOnly, w.TodoSearch)
+			}
+		case "b":
+			if w.GraphOnly != nil || w.TodoSearch != 0 {
+				t.Errorf("listed b, untouched: %v %d", w.GraphOnly, w.TodoSearch)
+			}
+		}
+	}
+	empty := []string{}
+	if err := s.Configure(ctx, a.ID, Changes{GraphOnly: &empty}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := modes(a.ID); got == nil || len(got) != 0 {
+		t.Errorf("an empty list stored: %#v, want an empty list, not the default", got)
+	}
+	if got, _ := modes(b.ID); got != nil {
+		t.Errorf("b: %v", got)
+	}
+	if _, _, err := s.WorkspaceModes(ctx, 999); !errors.Is(err, ErrNoWorkspace) {
+		t.Errorf("an unknown workspace: %v", err)
+	}
+}

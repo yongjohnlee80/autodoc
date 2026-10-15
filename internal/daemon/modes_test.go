@@ -225,3 +225,13 @@ func TestAnExcludedStoreIsSaid(t *testing.T) {
 		return len(excluded) == 0
 	})
 }
+
+// A view whose workspace has no modes yet (it never started) reports the defaults.
+func TestAViewWithoutModesReportsTheDefaults(t *testing.T) {
+	m, _ := open(t)
+	v := &view{m: m, s: &served{id: 999, root: "/nowhere"}, name: "gone"}
+	list, search, excluded := v.TodoModes()
+	if !slices.Equal(list, workspace.DefaultGraphOnly()) || search || excluded != nil {
+		t.Errorf("TodoModes %v %v %v", list, search, excluded)
+	}
+}
