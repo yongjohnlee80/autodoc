@@ -38,16 +38,26 @@ type Hider interface {
 	Show()
 }
 
-// The optional interfaces of protocol 2 (ADR 1791268009). Serve probes the Handler for each; a
-// notification no interface takes is dropped. A plugin implements the ones its manifest declares.
+// The optional interfaces of protocol 2 (ADR 1791268009) and 4. Serve probes the Handler for each;
+// a notification no interface takes is dropped. A plugin implements the ones its manifest declares.
 type (
 	// DocumentReader takes the feed ([feed] document = true): the open note, after each pause in
-	// editing. Only the latest waits for it: a newer document replaces one not yet handled.
+	// editing. Only the latest waits for it: a newer document replaces one not yet handled. From
+	// protocol 4 a command carries the note as it stood when it was chosen, and the reader is
+	// handed that one first, just before the command runs.
 	DocumentReader interface{ Document(d Document) }
 	// Commander takes the manifest's [[commands]], by id.
 	Commander interface{ Command(id string) }
 	// Focuser is a non-modal card told it took the keys (true) or gave them back (false).
 	Focuser interface{ Focus(focused bool) }
+	// TableFetcher serves the rows of the tables it sends (protocol 4, [table]): FetchRows is the
+	// host asking for up to f.N more of table f.ID, answered with Peer.Rows (or Peer.TableEnd);
+	// the host asks again only after the answer. TableClosed is the table gone: its panel closed,
+	// or a newer table replaced it.
+	TableFetcher interface {
+		FetchRows(f TableFetch)
+		TableClosed(id string)
+	}
 )
 
 // Base is a Handler that does nothing: a service plugin, which has no dialog, embeds it and adds
@@ -78,6 +88,9 @@ var (
 	// ErrNoCalls is a call to a host that opened the plugin at a protocol before 3, which has no
 	// host.call.
 	ErrNoCalls = errors.New("plugin: the host speaks a protocol before 3, without host.call")
+	// ErrNoTables is a table sent to a host that opened the plugin at a protocol before 4, which has
+	// no host.table.
+	ErrNoTables = errors.New("plugin: the host speaks a protocol before 4, without tables")
 )
 
 // callTimeout is CallTimeout, which a test shortens.
@@ -192,6 +205,37 @@ func (p *Peer) Title(title string) error {
 // Close asks the host to close the dialog: it answers with plugin.close, and Handler.Close follows.
 func (p *Peer) Close() error { return p.link.Notify(p.ctx, MethodHostClose, EmptyParams()) }
 
+// Table shows t in AutoDoc's results panel (protocol 4; the manifest declares [table]), replacing
+// the table shown. Keep each message under the link's limit, MaxMessageBytes as EncodedSize
+// measures it: size the rows by their encoded bytes, not their count alone.
+func (p *Peer) Table(t TableOpen) error {
+	if p.protocol.Load() < 4 {
+		return ErrNoTables
+	}
+	return p.link.Notify(p.ctx, MethodTable, TableParams(t))
+}
+
+// Rows sends the next rows of table id, answering a FetchRows; more says rows remain.
+func (p *Peer) Rows(id string, rows [][]string, more bool) error {
+	if p.protocol.Load() < 4 {
+		return ErrNoTables
+	}
+	return p.link.Notify(p.ctx, MethodRows, RowsParams(id, rows, more))
+}
+
+// TableEnd ends table id's rows early: no more will come, and err, when not nil, says why (a query
+// that failed on its third page, say). It answers a FetchRows as Rows does.
+func (p *Peer) TableEnd(id string, err error) error {
+	if p.protocol.Load() < 4 {
+		return ErrNoTables
+	}
+	why := ""
+	if err != nil {
+		why = err.Error()
+	}
+	return p.link.Notify(p.ctx, MethodTableEnd, TableEndParams(id, why))
+}
+
 // Serve speaks the protocol on the plugin's stdin and stdout until the dialog closes, the host goes
 // or ctx ends. It returns nil when the host closed the dialog. stdout is the protocol's: after Serve
 // starts, os.Stdout is os.Stderr, which the host keeps in the plugin's log.
@@ -296,9 +340,30 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 				}
 			}
 		case MethodCommand:
-			if c, ok := h.(Commander); ok && opened {
-				if id, err := ReadCommand(n.params); err == nil {
-					c.Command(id)
+			id, err := ReadCommand(n.params)
+			if err != nil || !opened {
+				break
+			}
+			// the note the command was chosen on, handed over in this same step: nothing the host
+			// sent later (a newer feed document) runs between the two
+			if r, ok := h.(DocumentReader); ok {
+				if d, ok := ReadCommandDocument(n.params); ok {
+					r.Document(d)
+				}
+			}
+			if c, ok := h.(Commander); ok {
+				c.Command(id)
+			}
+		case MethodFetch:
+			if tf, ok := h.(TableFetcher); ok && opened {
+				if f, err := ReadFetch(n.params); err == nil {
+					tf.FetchRows(f)
+				}
+			}
+		case MethodTableGone:
+			if tf, ok := h.(TableFetcher); ok && opened {
+				if id, err := ReadTableGone(n.params); err == nil {
+					tf.TableClosed(id)
 				}
 			}
 		case MethodClose:
