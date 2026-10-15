@@ -153,8 +153,12 @@ func (s *Server) graphVerbs() []module.Verb {
 const relationsSince = 14
 
 // todoGraphSince is the protocol the review and blocked relations and external links arrived in
-// (ADR 1792015212 §2.4). A session below it sees the kinds it knew, its graph unchanged.
+// (ADR 1792015212 §2.4). A session below it sees the kinds it knew, its graph unchanged, and asking
+// for one of todoKinds by name is refused, not answered.
 const todoGraphSince = 23
+
+// todoKinds are the relation kinds protocol 23 added.
+var todoKinds = map[string]bool{"review": true, "blocked": true}
 
 // graphKinds is the kinds of link a graph verb answers with: the body kinds below relationsSince,
 // otherwise every kind, or those its {kinds} option names. Asking for kinds below relationsSince is
@@ -180,6 +184,9 @@ func graphKinds(ctx context.Context, raw any) ([]string, error) {
 				if !ok {
 					return nil, invalid("kinds must be a list of strings")
 				}
+				if todoKinds[s] && protocolOf(ctx) < todoGraphSince {
+					return nil, invalid(fmt.Sprintf("kind %s needs protocol %d", s, todoGraphSince))
+				}
 				kinds = append(kinds, s)
 			}
 			return kinds, nil
@@ -191,7 +198,7 @@ func graphKinds(ctx context.Context, raw any) ([]string, error) {
 	if protocolOf(ctx) < todoGraphSince {
 		var kinds []string
 		for _, k := range append(append([]string{}, index.BodyKinds...), index.RelationFields...) {
-			if k != "review" {
+			if !todoKinds[k] {
 				kinds = append(kinds, k)
 			}
 		}

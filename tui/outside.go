@@ -124,8 +124,8 @@ func (h *Host) openAbsolute(abs string) {
 		case l.ws != "":
 			h.openIn(l.ws, l.path)
 		default:
-			h.openOutside(abs)
-			h.sayWhyOutside(abs)
+			// said once the open goes ahead: over unsaved changes, Stay opens nothing to explain
+			h.openRef(fileRef{"", abs}, true, func() { h.sayWhyOutside(abs) })
 		}
 	})
 }
