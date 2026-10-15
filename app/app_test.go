@@ -123,7 +123,7 @@ func TestMainReturnsItsExitCodes(t *testing.T) {
 		{[]string{"--contracts", "todos.*", "--call", "workspace.list"}, 2, "", "autodoc: --contracts and --call are separate modes: give one\n"},
 		// --dev is the UI's: without it, it is refused
 		{[]string{"--serve", "--dev", "/tmp"}, 2, "", "autodoc: --dev is for --ui and --gui\n"},
-		{[]string{"--gui", "kb", "extra"}, 2, "", "only --contracts, --server, --call, --editor, --export, --ui and --gui take one argument"},
+		{[]string{"--gui", "kb", "extra"}, 2, "", "only --check-theme, --new-theme, --contracts, --server, --call, --editor, --export, --ui and --gui take one argument"},
 		// --editor outside an agent AutoDoc started: no page to reach, and it says what is missing
 		{[]string{"--editor", "editor.read"}, 1, "", "$AUTODOC_EDITOR and $AUTODOC_EDITOR_TOKEN are not set"},
 		{[]string{"--editor", "editor.read", "[1]", "extra"}, 2, "", "take one argument"},

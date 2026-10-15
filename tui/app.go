@@ -444,7 +444,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 			}
 		}
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
-		if opt.ThemeDir != "" {
+		// Names added later require a restart; with no registered user modules there is
+		// nothing mutable to follow, so the normal built-in-only UI keeps no poller.
+		if opt.ThemeDir != "" && len(h.themeNames()) > len(themeNames) {
 			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.themesReloaded() })))
 		}
 	}
