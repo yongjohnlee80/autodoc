@@ -847,7 +847,7 @@ func (h *Host) todoGraphOnly(exclude string) {
 	}
 	rules = slices.DeleteFunc(rules, func(p string) bool { return slices.Contains(h.settings.w.todoExcluded, p) })
 	h.setField("App.settingsExclude", strings.Join(rules, "; "))
-	h.set("App.settingsHelp", "the todo store's exclude is taken out of the exclude field: Save indexes its tasks graph-only")
+	h.set("App.settingsHelp", "the todo store's exclude is out of the field: Save indexes its tasks graph-only")
 }
 
 // settingsArgs reads App.saveSettings' arguments, in the dialog's order: name, root, schema, text
