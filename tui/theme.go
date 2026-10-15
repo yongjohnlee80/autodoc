@@ -31,7 +31,7 @@ func themeOf(src []byte) string {
 
 // themeState is which theme the menu shows checked: the one the layout imports.
 func themeState(theme string) map[string]any {
-	return map[string]any{"App.activeTheme": theme, "App.themeDark": theme == "dark", "App.themeLight": theme == "light",
+	return map[string]any{"App.themeDark": theme == "dark", "App.themeLight": theme == "light",
 		"App.themeMono": theme == "mono", "App.themeRetro": theme == "retro", "App.themeSepia": theme == "sepia"}
 }
 
@@ -73,6 +73,7 @@ func (h *Host) switchTheme(name string) {
 			return
 		}
 		h.layoutSrc, h.theme = next, name
+		h.set("App.userThemes", h.userThemeRows())
 		h.reg.themeChanged()
 		for k, v := range themeState(name) {
 			h.set(k, v)
@@ -106,7 +107,7 @@ func (h *Host) themeValues(name string) (map[string]string, error) {
 	return h.themeCatalog.Values(name)
 }
 func (h *Host) userThemeRows() *tuidecl.ListModel {
-	m := tuidecl.NewListModel("key", "label", "enabled")
+	m := tuidecl.NewListModel("key", "label", "enabled", "checked")
 	var rows []rowOf
 	for _, n := range h.themeNames() {
 		if slices.Contains(themeNames, n) {
@@ -117,7 +118,7 @@ func (h *Host) userThemeRows() *tuidecl.ListModel {
 		if err != nil {
 			label += " — invalid"
 		}
-		rows = append(rows, rowOf{"key": n, "label": label, "enabled": err == nil})
+		rows = append(rows, rowOf{"key": n, "label": label, "enabled": err == nil, "checked": n == h.theme})
 	}
 	m.Reset(rows)
 	return m

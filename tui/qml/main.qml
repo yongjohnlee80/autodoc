@@ -180,7 +180,7 @@ Window {
                 MenuItem { text: "&Sepia"; group: "theme"; checked: App.themeSepia; onTriggered: App.useTheme("sepia") }
                 Instantiator {
                     model: App.userThemes
-                    MenuItem { text: model.label; enabled: model.enabled; group: "theme"; checked: model.key == App.activeTheme; onTriggered: App.useTheme(model.key) }
+                    MenuItem { text: model.label; enabled: model.enabled; group: "theme"; checked: model.checked; onTriggered: App.useTheme(model.key) }
                 }
             }
             MenuSeparator {}
