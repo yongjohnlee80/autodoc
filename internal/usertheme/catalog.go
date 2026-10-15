@@ -165,7 +165,7 @@ func (f checkedFS) Open(name string) (fs.File, error) {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
 	}
 	if name == "." {
-		return os.DirFS(f.c.dir).Open(name)
+		return &themeDir{entries: slices.Clone(f.c.entries)}, nil
 	}
 	n := strings.TrimSuffix(name, ".qml")
 	if name != n+".qml" || !slices.Contains(f.c.users, n) {
@@ -177,11 +177,18 @@ func (f checkedFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &themeFile{Reader: strings.NewReader(string(src)), name: name, size: int64(len(src))}, nil
+	info, err := os.Stat(filepath.Join(f.c.dir, name))
+	if err != nil {
+		return nil, err
+	}
+	return &themeFile{Reader: strings.NewReader(string(src)), info: info}, nil
 }
 func (f checkedFS) ReadFile(name string) ([]byte, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrInvalid}
+	}
 	n := strings.TrimSuffix(name, ".qml")
-	if !fs.ValidPath(name) || name != n+".qml" || !slices.Contains(f.c.users, n) {
+	if name != n+".qml" || !slices.Contains(f.c.users, n) {
 		return nil, &fs.PathError{Op: "read", Path: name, Err: fs.ErrNotExist}
 	}
 	file := filepath.Join(f.c.dir, name)
@@ -200,6 +207,9 @@ func (f checkedFS) ReadFile(name string) ([]byte, error) {
 	return src, nil
 }
 func (f checkedFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	if !fs.ValidPath(name) {
+		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrInvalid}
+	}
 	if name != "." {
 		return nil, &fs.PathError{Op: "readdir", Path: name, Err: fs.ErrNotExist}
 	}

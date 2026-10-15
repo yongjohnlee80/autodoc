@@ -30,6 +30,10 @@ properties are equivalent QML spellings. No imports, handlers, property declarat
 objects. Every key below is required exactly once; unknown keys and invalid colours are errors.
 No omitted key silently inherits a colour.
 
+These 45 keys are the shared vocabulary of golib's bundled themes, not every optional palette or
+syntax property its toolkit supports. AutoDoc binds this whole vocabulary; the numeric syntax
+roles (`decVal`, `float`, `baseN`) have separate colours as well as `constant`.
+
 Values use golib's colour vocabulary:
 
 - `"#rrggbb"`: six hexadecimal digits, recommended for consistent terminal and GUI appearance.

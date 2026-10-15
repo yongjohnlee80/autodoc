@@ -1,6 +1,7 @@
 package usertheme
 
 import (
+	"io"
 	"io/fs"
 	"strings"
 	"time"
@@ -8,21 +9,43 @@ import (
 
 type themeFile struct {
 	*strings.Reader
-	name string
-	size int64
+	info fs.FileInfo
 }
 
 func (*themeFile) Close() error                 { return nil }
-func (f *themeFile) Stat() (fs.FileInfo, error) { return themeInfo{f.name, f.size}, nil }
+func (f *themeFile) Stat() (fs.FileInfo, error) { return f.info, nil }
 
-type themeInfo struct {
-	name string
-	size int64
+// The virtual directory exposes only registered module files, just as ReadDir does.
+type themeDir struct {
+	entries []fs.DirEntry
+	at      int
 }
 
-func (f themeInfo) Name() string     { return f.name }
-func (f themeInfo) Size() int64      { return f.size }
-func (themeInfo) Mode() fs.FileMode  { return 0o444 }
-func (themeInfo) ModTime() time.Time { return time.Time{} }
-func (themeInfo) IsDir() bool        { return false }
-func (themeInfo) Sys() any           { return nil }
+func (*themeDir) Close() error               { return nil }
+func (*themeDir) Stat() (fs.FileInfo, error) { return themeDirInfo{}, nil }
+func (*themeDir) Read([]byte) (int, error) {
+	return 0, &fs.PathError{Op: "read", Path: ".", Err: fs.ErrInvalid}
+}
+func (d *themeDir) ReadDir(n int) ([]fs.DirEntry, error) {
+	if n <= 0 {
+		out := d.entries[d.at:]
+		d.at = len(d.entries)
+		return out, nil
+	}
+	if d.at == len(d.entries) {
+		return nil, io.EOF
+	}
+	end := min(d.at+n, len(d.entries))
+	out := d.entries[d.at:end]
+	d.at = end
+	return out, nil
+}
+
+type themeDirInfo struct{}
+
+func (themeDirInfo) Name() string       { return "." }
+func (themeDirInfo) Size() int64        { return 0 }
+func (themeDirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o555 }
+func (themeDirInfo) ModTime() time.Time { return time.Time{} }
+func (themeDirInfo) IsDir() bool        { return true }
+func (themeDirInfo) Sys() any           { return nil }

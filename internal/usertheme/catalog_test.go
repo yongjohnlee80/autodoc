@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
@@ -42,6 +43,13 @@ func TestCatalogAndExportMapping(t *testing.T) {
 	}
 	if _, err := fs.ReadFile(c.Files(), "dark.qml"); err == nil {
 		t.Fatal("shadowing file reached module loader")
+	}
+	var paths []string
+	for _, base := range themes.Names() {
+		paths = append(paths, "copy_"+base+".qml")
+	}
+	if err := fstest.TestFS(c.Files(), paths...); err != nil {
+		t.Fatalf("checked module filesystem: %v", err)
 	}
 	file := filepath.Join(dir, "copy_sepia.qml")
 	if err := os.WriteFile(file, []byte(`Theme { app.window: "invalid" }`), 0o644); err != nil {

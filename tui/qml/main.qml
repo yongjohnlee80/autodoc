@@ -43,6 +43,9 @@ Window {
     syntax.function: Theme.syntax.function
     syntax.string: Theme.syntax.string
     syntax.specialChar: Theme.syntax.specialChar
+    syntax.decVal: Theme.syntax.decVal
+    syntax.float: Theme.syntax.float
+    syntax.baseN: Theme.syntax.baseN
     syntax.constant: Theme.syntax.constant
     syntax.comment: Theme.syntax.comment
     syntax.alert: Theme.syntax.alert
