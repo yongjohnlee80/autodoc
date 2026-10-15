@@ -34,6 +34,9 @@ type DocLink struct {
 	// Keys are a relation link's names, tried in order, Name being the first; nil for a body link,
 	// which has the one name
 	Keys []string
+	// Target is an external link's file, absolute: a todo task's ref outside the workspace (ADR
+	// 1792015212 §2.4). It reaches no document. "" for every other link.
+	Target string
 }
 
 // attachments are the file types Obsidian opens that are not files
@@ -367,15 +370,18 @@ func (s *Store) writeLinks(tx *store.Tx, docID, gen int64, links []DocLink) erro
 		if err != nil {
 			return err
 		}
-		var d, anchor any
+		var d, anchor, target any
 		if dst != 0 {
 			d = dst
 		}
 		if l.Anchor != "" {
 			anchor = l.Anchor
 		}
+		if l.Target != "" {
+			target = l.Target
+		}
 		id, err := s.linksOut(tx).Set(LinkSrc, docID).Set(LinkGenFrom, gen).Set(LinkRaw, l.Raw).
-			Set(LinkName, l.Name).Set(LinkDst, d).Set(LinkAnchor, anchor).Set(LinkKind, l.Kind).Insert()
+			Set(LinkName, l.Name).Set(LinkDst, d).Set(LinkAnchor, anchor).Set(LinkKind, l.Kind).Set(LinkTarget, target).Insert()
 		if err != nil {
 			return err
 		}

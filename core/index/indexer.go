@@ -49,6 +49,12 @@ type options struct {
 	BatchDelay time.Duration // or every this long (default 200 ms)
 	// Match reports whether a path is eligible (the workspace's include and exclude). Nil: all.
 	Match func(path string) bool
+	// Modes says how an eligible path is indexed (ADR 1792015212): graph-only, and the todo store it
+	// lies in. Nil: every path in full, in no store.
+	Modes func(path string) Mode
+	// Root is the workspace's root, absolute: a todo task's ref to an absolute path under it is a
+	// workspace path. "": every such ref is an external link.
+	Root string
 	// RetryDelay is how long a job whose file could not be read first waits before it runs again
 	// (default 1 s); each failure after that doubles the wait, up to MaxRetryDelay (default 5 min).
 	RetryDelay    time.Duration
@@ -114,6 +120,14 @@ func WithBatching(size int, delay time.Duration) Option {
 
 // WithMatch is which paths are the workspace's (its include and exclude); default all.
 func WithMatch(match func(path string) bool) Option { return func(o *options) { o.Match = match } }
+
+// WithModes sets how each eligible path is indexed (ADR 1792015212): graph-only, and its todo store.
+// It is asked for each path as it is indexed, so a mode that changes applies from the next index
+// of the path; Revalidate finds the documents whose mode changed.
+func WithModes(modes func(path string) Mode) Option { return func(o *options) { o.Modes = modes } }
+
+// WithRoot is the workspace's root, absolute, for a todo task's absolute refs.
+func WithRoot(root string) Option { return func(o *options) { o.Root = root } }
 
 // WithClock is the clock the index's recorded times read (default time.Now).
 func WithClock(c clock.Clock) Option { return func(o *options) { o.Now = c } }
@@ -223,6 +237,7 @@ type prepared struct {
 	links       []DocLink
 	frontmatter schema.Result // a Markdown file's facets and diagnostics under the schema
 	adr         string        // the decision record number a document of type adr carries; "" otherwise
+	todoName    string        // the name a todo store's task answers to; "" otherwise
 }
 
 // New returns the indexer for store over the workspace root fsys.
@@ -641,8 +656,9 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		p.err, p.tooLarge = tooLarge(w.path, limit), true
 		return p
 	}
+	m := x.mode(w.path)
 	if derives {
-		return x.prepareDerived(ctx, p, fi, tokens)
+		return graphOnly(x.prepareDerived(ctx, p, fi, tokens), m)
 	}
 	r, err := x.fsys.Open(ctx, w.path, 0)
 	if err != nil {
@@ -673,13 +689,25 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 			return p
 		}
 	}
-	if err := cutters.Of(k)(x, p, source{text: src, tokens: tokens, abstract: ret.AbstractChunk, schema: sch}); err != nil {
+	if err := cutters.Of(k)(x, p, source{text: src, tokens: tokens, abstract: ret.AbstractChunk, schema: sch, mode: m}); err != nil {
 		p.err = err
 		return p
+	}
+	if m.Store != nil {
+		p.todoName = todoKey(m.Store.ID, taskID(w.path))
 	}
 	x.mu.Lock()
 	x.parses++
 	x.mu.Unlock()
+	return graphOnly(p, m)
+}
+
+// graphOnly drops a graph-only document's chunks (ADR 1792015212 §2.1): its row, frontmatter, links
+// and relations are written, and the chunks it had die in the same generation.
+func graphOnly(p *prepared, m Mode) *prepared {
+	if m.GraphOnly && p.err == nil {
+		p.chunks = nil
+	}
 	return p
 }
 
@@ -691,6 +719,7 @@ type source struct {
 	abstract bool
 	schema   *schema.Schema
 	title    string
+	mode     Mode // the path's (ADR 1792015212)
 }
 
 // cutter cuts a kind's text into p's chunks, links and frontmatter.
@@ -717,7 +746,11 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 			p.chunks = append(p.chunks, abstractChunk(c))
 		}
 	}
-	p.links = append(extractLinks(doc, p.path, x.opts.Match), extractRelations(doc, p.path)...)
+	if s.mode.Store != nil {
+		p.links = append(extractLinks(doc, p.path, x.opts.Match), taskRelations(doc, p.path, s.mode.Store, x.opts.Root)...)
+	} else {
+		p.links = append(extractLinks(doc, p.path, x.opts.Match), extractRelations(doc, p.path)...)
+	}
 	p.adr = adrNumber(p.meta.FrontmatterJSON)
 	if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {
 		p.frontmatter = s.schema.Validate(fm.Literal, true)
@@ -1093,6 +1126,9 @@ func (s *Store) upsertDoc(tx *store.Tx, p Doc, now time.Time) (int64, error) {
 	names := namesOf(p.Path, p.Meta.Aliases)
 	if p.ADR != "" {
 		names = append(names, docName{key: adrKey(p.ADR)})
+	}
+	if p.TodoName != "" {
+		names = append(names, docName{key: p.TodoName})
 	}
 	changed, err := s.writeNames(tx, docID, names)
 	if err != nil {

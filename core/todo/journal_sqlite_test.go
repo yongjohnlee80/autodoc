@@ -73,6 +73,7 @@ var sqliteSuites = []struct {
 	{"TheStoresVariableFile", TestTheStoresVariableFile},
 	{"MachineOnlyNamesAreNeverPersistedAsErrors", TestMachineOnlyNamesAreNeverPersistedAsErrors},
 	{"SetVarScopes", TestSetVarScopes},
+	{"TheRegistrySaysWhenItsStoresChange", TestTheRegistrySaysWhenItsStoresChange},
 	{"AClaimRecordsTheProjectItsStoreIsIn", TestAClaimRecordsTheProjectItsStoreIsIn},
 	{"CarryKBRoots", TestCarryKBRoots},
 	{"AFailedMachineDeclarationKeepsNoValue", TestAFailedMachineDeclarationKeepsNoValue},

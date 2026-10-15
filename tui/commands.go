@@ -87,6 +87,7 @@ func (h *Host) commands() map[string]Command {
 		"App.managerMoved":           oneNumber("a row", h.managerMoved),
 		"App.settingsTabMoved":       oneNumber("a tab", h.settingsTabMoved),
 		"App.saveSettings":           settingsArgs(h.saveSettings),
+		"App.todoGraphOnly":          oneString("the exclude field", h.todoGraphOnly),
 		"App.browseRoot":             oneString("a directory", h.browseRoot),
 		"App.rootChosen":             oneString("a directory", h.rootChosen),
 		"App.managerClosed":          none(h.managerClosed),

@@ -54,6 +54,33 @@ func kbInfo() wsInfo {
 		db: databasesInfo{destination: store.DestinationLocal}}
 }
 
+// todoInfo is kbInfo as a daemon at protocol 23 lists it: the default graph_only list, todo_search off.
+func todoInfo() wsInfo {
+	w := kbInfo()
+	w.graphOnly = []string{"**/.todo-list/**"}
+	return w
+}
+
+// The notice of a todo store an exclude keeps out (ADR 1792015212 §2.3): it names the pattern, and
+// its button takes the pattern out of the exclude field, nothing saved until Save.
+func TestATodoStoreExcludedIsSaidAndOffered(t *testing.T) {
+	w := todoInfo()
+	w.exclude, w.todoExcluded = []string{".git/**", ".todo-list/**"}, []string{".todo-list/**"}
+	if n := todoExcludedNote(w); !strings.Contains(n, "exclude .todo-list/**") || !strings.Contains(n, "graph-only") {
+		t.Errorf("the note %q", n)
+	}
+	if todoExcludedNote(todoInfo()) != "" {
+		t.Error("a note with nothing excluded")
+	}
+	b := baseFor(w)
+	f := b.form()
+	f.exclude = ".git/**" // what the button leaves in the field
+	got, err := b.changes(f)
+	if err != nil || !reflect.DeepEqual(got, map[string]any{"include": anyStrings(w.include), "exclude": []any{".git/**"}}) {
+		t.Errorf("Save after the button sends %v, %v", got, err)
+	}
+}
+
 // A save sends only what differs from the workspace as the dialog opened on it: nothing, for a
 // form left as it was; the file types and text types folded into one change of the rules.
 func TestSettingsChanges(t *testing.T) {
@@ -88,6 +115,13 @@ func TestSettingsChanges(t *testing.T) {
 			map[string]any{"destination_connection": map[string]any{"engine": "postgres", "dsn": "", "schema": "rag2"}}},
 		"no source": {pg, func(f *settingsForm) { f.src = 0 }, map[string]any{"source": map[string]any{"remove": true}}},
 		"view args": {pg, func(f *settingsForm) { f.viewArgs = "b = 2; a=1" }, map[string]any{"view_args": map[string]any{"a": "1", "b": "2"}}},
+		// ADR 1792015212: the graph_only patterns and the todo tasks in search
+		"nothing, todo stores": {todoInfo(), func(*settingsForm) {}, map[string]any{}},
+		"a graph_only pattern and todo tasks in search": {todoInfo(), func(f *settingsForm) {
+			f.graphOnly, f.todoSearch = "**/.todo-list/**; drafts/**", 0
+		}, map[string]any{"graph_only": []any{"**/.todo-list/**", "drafts/**"}, "todo_search": true}},
+		"the default entry removed": {todoInfo(), func(f *settingsForm) { f.graphOnly = "" },
+			map[string]any{"graph_only": []any{}}},
 	} {
 		b := baseFor(tc.w)
 		f := b.form()
@@ -172,7 +206,8 @@ func TestTheSettingsDialogSavesEveryField(t *testing.T) {
 		r.h.fillSettings(settingsForm{name: "docs", root: "/ignored", schema: schema, texts: ".log",
 			include: "**/*.md", exclude: ".git/**", md: 0, txt: 1, yaml: 1, section: "256", policy: 2, provider: 0,
 			dest: 1, destDSN: "postgres://me:pw@db:5432/rag", destSchema: "autodoc", index: 2,
-			src: 2, srcDSN: "/data/labels.db", srcSchema: "main", viewArgs: "LabelGroupID=7"})
+			src: 2, srcDSN: "/data/labels.db", srcSchema: "main", viewArgs: "LabelGroupID=7",
+			graphOnly: "drafts/**; **/.todo-list/**", todoSearch: 0})
 		return true
 	})
 	r.keys(t, tab(), enter()) // into the first field of the tab, and Enter saves
@@ -196,6 +231,10 @@ func TestTheSettingsDialogSavesEveryField(t *testing.T) {
 	}
 	if w.ViewArgs == nil || !strings.Contains(*w.ViewArgs, `"LabelGroupID":"7"`) {
 		t.Errorf("view args %v", w.ViewArgs)
+	}
+	if g, search, err := d.db.WorkspaceModes(context.Background(), w.ID); err != nil ||
+		!slices.Equal(g, []string{"drafts/**", "**/.todo-list/**"}) || !search {
+		t.Errorf("graph_only %v, todo_search %v, %v", g, search, err)
 	}
 	conns, err := d.db.Connections(context.Background(), w.ID)
 	if err != nil || len(conns) != 2 {

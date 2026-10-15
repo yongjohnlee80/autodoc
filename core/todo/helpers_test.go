@@ -39,6 +39,7 @@ type env struct {
 	now    time.Time
 	m      *todo.Manager
 	events []todo.Event
+	stores int // how many times WithStoresChanged was told
 }
 
 func newEnv(t *testing.T) *env {
@@ -67,7 +68,8 @@ func (e *env) restart() {
 	e.m = todo.New(e.roots, e.disk, e.j,
 		todo.WithClock(func() time.Time { e.mu.Lock(); defer e.mu.Unlock(); return e.now }),
 		todo.WithHome("/home/u"),
-		todo.WithEvents(func(ev todo.Event) { e.mu.Lock(); defer e.mu.Unlock(); e.events = append(e.events, ev) }))
+		todo.WithEvents(func(ev todo.Event) { e.mu.Lock(); defer e.mu.Unlock(); e.events = append(e.events, ev) }),
+		todo.WithStoresChanged(func() { e.mu.Lock(); defer e.mu.Unlock(); e.stores++ }))
 }
 
 func (e *env) advance(d time.Duration) { e.mu.Lock(); e.now = e.now.Add(d); e.mu.Unlock() }

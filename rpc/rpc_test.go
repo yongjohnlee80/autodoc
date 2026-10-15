@@ -52,6 +52,15 @@ type rig struct {
 
 // serve runs a daemon's worth of core over memfs, in one store: workspace kb (followed and
 // indexed), flaky (its writes land and then fail), and broken (its root could not be opened).
+// rigModes are the rig's workspaces' modes: tasks/ is a todo store, graph-only, whose $X is outside
+// every workspace (ADR 1792015212).
+func rigModes(p string) index.Mode {
+	if strings.HasPrefix(p, "tasks/") {
+		return index.Mode{GraphOnly: true, Store: &index.TodoStore{ID: "S", Vars: map[string]string{"X": "/elsewhere"}}}
+	}
+	return index.Mode{}
+}
+
 func serve(t *testing.T) *rig {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -66,7 +75,8 @@ func serve(t *testing.T) *rig {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond))
+		ix := index.New(index.NewStore(db, row.ID), fsys, index.WithMatch(md), index.WithBatching(0, 5*time.Millisecond),
+			index.WithModes(rigModes), index.WithRoot("/roots/"+name))
 		f := follow.New(fsys, ix, ix, follow.WithMatch(md), follow.WithPollInterval(20*time.Millisecond))
 		ix.SetRescanner(f)
 		r.cores.Go(func() { _ = ix.Run(ctx) })

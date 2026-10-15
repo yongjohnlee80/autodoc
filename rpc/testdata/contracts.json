@@ -1,5 +1,5 @@
 {
-  "protocol": 22,
+  "protocol": 23,
   "min_protocol": 12,
   "verbs": [
     {
@@ -601,7 +601,7 @@
           "doc": "{kinds} (protocol 14)"
         }
       ],
-      "result": "[{path, raw, anchor, kind, resolved}]",
+      "result": "[{path, raw, anchor, kind, resolved, external?}]",
       "errors": [
         -32060,
         -32061
@@ -630,7 +630,7 @@
           "doc": "{kinds} (protocol 14)"
         }
       ],
-      "result": "[{path, raw, anchor, kind, resolved}]",
+      "result": "[{path, raw, anchor, kind, resolved, external?}]",
       "errors": [
         -32060,
         -32061
@@ -1293,7 +1293,7 @@
         {
           "name": "settings",
           "type": "map",
-          "doc": "any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)"
+          "doc": "any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, graph_only, todo_search, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)"
         }
       ],
       "errors": [
@@ -1304,7 +1304,7 @@
         -32068
       ],
       "event": {
-        "kind": "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval",
+        "kind": "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval | workspace.graph_only",
         "workspace": "workspace"
       },
       "doc": "Saves the settings at once: all of them or none. An unknown key is invalid params. Logs the event each changed setting's own verb logs, a rename first."
@@ -1361,7 +1361,7 @@
       "audience": "agent",
       "effect": "read",
       "params": [],
-      "result": "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded}]",
+      "result": "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
       "doc": "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN."
     },
     {

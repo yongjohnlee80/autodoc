@@ -80,6 +80,8 @@ type process struct {
 	emb     *serving.Embedding
 	files   *docs.Docs
 	srv     *rpc.Server
+	deps    *moduleDeps     // the modules' dependencies, built with the workspaces
+	mods    []module.Module // the modules, built before any workspace starts
 }
 
 // serveSteps are --serve's subsystems in the order they start.
@@ -194,6 +196,11 @@ func (d *process) startWorkspaces() error {
 	d.ws = serving.New(wsCtx, db, serving.Options{Poll: cfg.Follow.PollInterval.Duration, Log: d.log,
 		MaxEmbedRequests: cfg.EmbeddingQueue.MaxInflight, Databases: edition.Databases, Registrations: b.reg,
 		Rank: index.Rank{Source: holder, Texts: b.rank.Texts, Required: b.rank.Required}})
+	// the modules, the todo system first among them, before any workspace starts: a workspace's
+	// index reads the todo stores, so its first pass indexes their tasks graph-only (ADR 1792015212)
+	d.deps = &moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log, onStores: d.ws.TodoStoresChanged}
+	d.mods = modules(d.deps)
+	d.ws.SetTodoStores(todoStores(d.deps.todos))
 	// the provider the preferences name, before any workspace starts, so each starts with it
 	d.emb = serving.NewEmbedding(db, d.ws, d.log)
 	d.emb.Start(wsCtx)
@@ -228,11 +235,10 @@ func (d *process) openFiles() error {
 // the lease-info beside the store: the lease and the socket are both this process's now.
 func (d *process) buildServer() error {
 	b, db := d.b, d.db
-	deps := &moduleDeps{store: db, workspaces: d.ws, journal: sqlitejournal.New(db), log: d.log}
 	d.srv = rpc.New(d.ws, b.version, rpc.WithListener(d.ln), rpc.WithLogger(d.log), rpc.WithPreferences(db), rpc.WithEmbeddings(d.emb), rpc.WithEvents(db),
 		rpc.WithRegistrations(b.reg.Tables()), rpc.WithRankers(d.ranking), rpc.WithStoreID(d.storeID), rpc.WithFiles(d.files),
-		rpc.WithModules(modules(deps)...))
-	d.refreshTodos(deps.todos)
+		rpc.WithModules(d.mods...))
+	d.refreshTodos(d.deps.todos)
 	li := store.LeaseInfo{StoreID: d.storeID, StorePath: d.p.Store, Addr: d.p.Socket, PID: int64(os.Getpid()), Instance: d.srv.Instance(),
 		Version: b.version, Protocol: rpc.Protocol, MinProtocol: rpc.MinProtocol, Since: time.Now().UTC()}
 	if err := store.WriteLeaseInfo(d.p.Store, li); err != nil {
@@ -264,6 +270,9 @@ type moduleDeps struct {
 	log        logger.Logger
 
 	todos *todo.Manager // the todo system modules built, for its daily refresh
+	// onStores is told a todo store was registered, moved or removed, or its variables changed: the
+	// workspaces read the stores again (ADR 1792015212 §2.2). nil: no one is.
+	onStores func()
 }
 
 // modules are the daemon's core Modules, the one list of them: runServe serves them, and
@@ -273,6 +282,9 @@ func modules(d *moduleDeps) []module.Module {
 		return []module.Module{todo.New(nil, nil, nil)}
 	}
 	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
+	if d.onStores != nil {
+		opts = append(opts, todo.WithStoresChanged(d.onStores)) // the workspaces read the stores again
+	}
 	if home, err := os.UserHomeDir(); err == nil {
 		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (ADR 1792015069 §2.2)
 	}
@@ -371,4 +383,35 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 		fmt.Fprintln(out, "  "+f)
 	}
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
+}
+
+// todoStores is the todo registry as the workspaces read it (ADR 1792015212 §2.2): each store's id,
+// directory and variables, through its first root (a store with none has no variables).
+func todoStores(m *todo.Manager) serving.TodoStores {
+	return func(ctx context.Context) ([]serving.TodoStore, error) {
+		list, err := m.Stores(ctx)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]serving.TodoStore, 0, len(list))
+		for _, s := range list {
+			ts := serving.TodoStore{ID: s.ID, Dir: s.Path}
+			if len(s.Roots) > 0 {
+				vars, err := m.Vars(ctx, todo.At{Root: s.Roots[0]})
+				if err != nil {
+					return nil, fmt.Errorf("todo store %s: its variables: %w", s.Path, err)
+				}
+				for _, v := range vars {
+					if v.Value != "" {
+						if ts.Vars == nil {
+							ts.Vars = map[string]string{}
+						}
+						ts.Vars[v.Name] = v.Value
+					}
+				}
+			}
+			out = append(out, ts)
+		}
+		return out, nil
+	}
 }

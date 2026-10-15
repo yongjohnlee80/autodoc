@@ -72,6 +72,15 @@ Dialog {
                         Text { text: "exclude globs (semicolon-separated)" }
                         TextField { id: sExclude; text: App.settingsExclude }
                         Text { text: App.settingsUnreadLine; visible: App.settingsUnreadShown; wrapMode: Tui.WordWrap }
+                        Text { text: App.settingsTodoNote; visible: App.settingsTodoNoted; wrapMode: Tui.WordWrap }
+                        Button { text: "Index tasks graph-only instead"; visible: App.settingsTodoNoted; onClicked: App.todoGraphOnly(sExclude.text) }
+                        Text { text: "graph-only globs (in links and relations, never in search)" }
+                        TextField { id: sGraphOnly; text: App.settingsGraphOnly }
+                        Flex {
+                            direction: Tui.Horizontal
+                            Text { text: "Todo tasks in search " }
+                            ComboBox { id: sTodoSearch; model: App.yesNo; textRole: "label"; currentIndex: App.settingsTodoSearchIndex }
+                        }
                     }
                 }
             }
@@ -138,5 +147,6 @@ Dialog {
     onAccepted: App.saveSettings(sName.text, sRoot.text, sSchema.text, sTexts.text, sInclude.text, sExclude.text,
         sMd.currentIndex, sTxt.currentIndex, sYaml.currentIndex, sSection.text, sPolicy.currentIndex, sProvider.currentIndex,
         sDest.currentIndex, sDestDSN.text, sDestSchema.text, sIndex.currentIndex,
-        sSource.currentIndex, sSrcDSN.text, sSrcSchema.text, sViewArgs.text, sCode.text, sDocs.text)
+        sSource.currentIndex, sSrcDSN.text, sSrcSchema.text, sViewArgs.text, sCode.text, sDocs.text,
+        sGraphOnly.text, sTodoSearch.currentIndex)
 }

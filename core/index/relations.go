@@ -13,13 +13,16 @@ import (
 
 // RelationFields are the frontmatter fields whose values name other documents. Each value that
 // names one becomes a link whose kind is its field: "supersedes", "amends", and so on.
-var RelationFields = []string{"supersedes", "superseded_by", "amends", "related", "sources", "adr"}
+var RelationFields = []string{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review"}
 
 // BodyKinds are the kinds of link a document's body makes, the only ones before relations.
 var BodyKinds = []string{LinkWikilink, LinkEmbed, LinkMarkdown}
 
-// isRelation reports whether a link of kind came from a frontmatter relation field.
-func isRelation(kind string) bool { return slices.Contains(RelationFields, kind) }
+// isRelation reports whether a link of kind came from a frontmatter relation field: one of
+// RelationFields, or a todo task's "blocked".
+func isRelation(kind string) bool {
+	return slices.Contains(RelationFields, kind) || slices.Contains(storeRelations, kind)
+}
 
 // ReasonCycle is why a superseded document is not moved below its successor: the supersession
 // relations among its documents go round in a loop, which has no order to follow.
@@ -83,24 +86,29 @@ func allDigits(s string) bool {
 func extractRelations(doc *markdown.Document, p string) []DocLink {
 	var out []DocLink
 	for _, r := range chunk.Relations(doc, RelationFields) {
-		ref := chunk.ParseRef(r.Raw)
-		var keys []string
-		switch ref.Form {
-		case chunk.RefPath:
-			keys = pathKeys(p, ref.Target)
-		case chunk.RefWikilink, chunk.RefSlug:
-			if k := wikiKey(p, ref.Target); k != "" {
-				keys = []string{k}
-			}
-		case chunk.RefNumber:
-			keys = []string{adrKey(ref.Target)}
-		}
-		if len(keys) == 0 {
-			continue
-		}
-		out = append(out, DocLink{Raw: r.Raw, Name: keys[0], Anchor: ref.Anchor, Kind: r.Field, Keys: keys})
+		out = append(out, relationsOf(p, r, chunk.ParseRef(r.Raw))...)
 	}
 	return out
+}
+
+// relationsOf is relation r of file p, read as ref, as a link: none when it names no document. A
+// $VAR root is read as the workspace root.
+func relationsOf(p string, r chunk.Relation, ref chunk.Ref) []DocLink {
+	var keys []string
+	switch ref.Form {
+	case chunk.RefPath:
+		keys = pathKeys(p, ref.Target)
+	case chunk.RefWikilink, chunk.RefSlug:
+		if k := wikiKey(p, ref.Target); k != "" {
+			keys = []string{k}
+		}
+	case chunk.RefNumber:
+		keys = []string{adrKey(ref.Target)}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	return []DocLink{{Raw: r.Raw, Name: keys[0], Anchor: ref.Anchor, Kind: r.Field, Keys: keys}}
 }
 
 // pathKeys are the names a relation path is looked up under: the path from the workspace root, then

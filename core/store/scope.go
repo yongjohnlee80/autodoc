@@ -73,6 +73,11 @@ func (sc *Scope) Patterns(tx *Tx) dao.DAO[*Pattern, PatternField, int64] {
 	return scoped(sc, tx.t.patterns, tx)
 }
 
+// GraphOnly are the workspace's graph_only patterns (ADR 1792015212 §2.2).
+func (sc *Scope) GraphOnly(tx *Tx) dao.DAO[*GraphOnly, GraphOnlyField, int64] {
+	return scoped(sc, tx.t.graphOnly, tx)
+}
+
 // Models are the embedding models the workspace used: the providers' (providers.go) as well as the
 // index's.
 func (sc *Scope) Models(tx *Tx) dao.DAO[*Model, ModelField, string] {
@@ -104,6 +109,11 @@ func (b Batch[R, C]) Flush() error { return b.b.Flush() }
 
 func batch[R any, C ~string, K ~string, ID any](sc *Scope, s *dao.Schema[R, C, K, ID], tx *Tx) Batch[R, C] {
 	return Batch[R, C]{b: s.On(tx.tx).Batch(), ws: sc.id}
+}
+
+// GraphOnlyBatch is a batch insert into the workspace's graph_only patterns.
+func (sc *Scope) GraphOnlyBatch(tx *Tx) Batch[*GraphOnly, GraphOnlyField] {
+	return batch(sc, tx.t.graphOnly, tx)
 }
 
 // PatternBatch is a batch insert into the workspace's patterns.

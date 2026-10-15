@@ -378,6 +378,9 @@ type Core interface {
 	// OpenRef opens a workspace's file in the editor, as the user's open: asking first over unsaved
 	// changes, and recording where they left for Back.
 	OpenRef(ws, path string)
+	// OpenAbsolute opens the file at an absolute path: as its workspace's file when one indexes it,
+	// else outside every workspace.
+	OpenAbsolute(abs string)
 	// Say puts a message about the page or the view on the status line, until the next.
 	Say(msg string)
 	// SetPref sets one of the feature's preferences (its PrefSpec row names it), through the row
@@ -467,6 +470,7 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
 func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }
 func (c core) OpenRef(ws, path string)                         { c.h.openIn(ws, path) }
+func (c core) OpenAbsolute(abs string)                         { c.h.openAbsolute(abs) }
 func (c core) Say(msg string)                                  { c.h.say(msg) }
 func (c core) Files() FileList                                 { return c.h.files }
 func (c core) Workspaces() []Workspace {

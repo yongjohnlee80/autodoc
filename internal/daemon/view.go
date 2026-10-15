@@ -7,6 +7,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/follow"
 	"github.com/yongjohnlee80/autodoc/core/index"
 	"github.com/yongjohnlee80/autodoc/core/schema"
+	"github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -91,6 +92,21 @@ func (v *view) FrontmatterSchema() (*schema.Schema, rpc.SchemaStatus, bool) {
 	}
 	s, _ := v.s.schema.get()
 	return s, v.s.schema.status(), true
+}
+
+// TodoModes are the workspace's graph_only patterns, the default until it sets its own, its
+// todo_search, and the exclude patterns that keep a todo store of it out of the index (ADR
+// 1792015212 §2.2, §2.3).
+func (v *view) TodoModes() (graphOnly []string, todoSearch bool, excluded []string) {
+	v.m.mu.Lock()
+	h := v.m.modes[v.s.id]
+	v.m.mu.Unlock()
+	excluded = v.m.todoExcluded(v.s.root, v.s.exclude)
+	if h == nil {
+		return workspace.DefaultGraphOnly(), false, excluded
+	}
+	c := h.cfg.Load()
+	return append([]string{}, c.list...), c.search, excluded
 }
 
 func (v *view) TextExtensions() []string {
