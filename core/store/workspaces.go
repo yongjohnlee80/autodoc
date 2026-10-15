@@ -269,15 +269,8 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 					info.Exclude = append(info.Exclude, p.Pattern)
 				}
 			}
-			if w.GraphOnlySet != 0 {
-				gs, err := s.Workspace(w.ID).GraphOnly(tx).OrderBy(dao.Asc(ByKey)).Select()
-				if err != nil {
-					return err
-				}
-				info.GraphOnly = []string{}
-				for _, g := range gs {
-					info.GraphOnly = append(info.GraphOnly, g.Pattern)
-				}
+			if info.GraphOnly, err = s.graphOnlyOf(tx, w); err != nil {
+				return err
 			}
 			out = append(out, info)
 		}
@@ -297,21 +290,25 @@ func (s *Store) WorkspaceModes(ctx context.Context, id int64) (graphOnly []strin
 		if err != nil {
 			return err
 		}
-		todoSearch = w.TodoSearch != 0
-		if w.GraphOnlySet == 0 {
-			return nil
-		}
-		gs, err := s.Workspace(id).GraphOnly(tx).OrderBy(dao.Asc(ByKey)).Select()
-		if err != nil {
-			return err
-		}
-		graphOnly = []string{}
-		for _, g := range gs {
-			graphOnly = append(graphOnly, g.Pattern)
-		}
-		return nil
+		w.ID, todoSearch = id, w.TodoSearch != 0
+		graphOnly, err = s.graphOnlyOf(tx, w)
+		return err
 	})
 	return graphOnly, todoSearch, err
+}
+
+// graphOnlyOf is workspace w's graph_only patterns, in order; nil when it never set them (the
+// default), an empty list when it set none.
+func (s *Store) graphOnlyOf(tx *Tx, w *Workspace) ([]string, error) {
+	if w.GraphOnlySet == 0 {
+		return nil, nil
+	}
+	gs, err := s.Workspace(w.ID).GraphOnly(tx).OrderBy(dao.Asc(ByKey)).Select()
+	out := []string{}
+	for _, g := range gs {
+		out = append(out, g.Pattern)
+	}
+	return out, err
 }
 
 // AddWorkspace creates a workspace with its patterns, in one transaction.
