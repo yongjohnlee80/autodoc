@@ -63,6 +63,8 @@ github.com/yongjohnlee80/golib/gui v0.1.41 h1:X57Aqt9r4OLYFNLIcjFsCAhHBfLUvFCAPA
 github.com/yongjohnlee80/golib/gui v0.1.41/go.mod h1:SqAfSZoid0dGMsWSrbFaAG5gWf/l7+XRkQKkD6Hutg4=
 github.com/yongjohnlee80/golib/gui v0.1.42-0.20261015155522-06893881326f h1:6vI/xmsTUehU8aSU6BzOgrwn6Gcqvo3pLBP8jF5k100=
 github.com/yongjohnlee80/golib/gui v0.1.42-0.20261015155522-06893881326f/go.mod h1:SqAfSZoid0dGMsWSrbFaAG5gWf/l7+XRkQKkD6Hutg4=
+github.com/yongjohnlee80/golib/gui v0.1.42-0.20261015163019-cf40a035b9e2 h1:UsAlY+naFVwI3n5YT1JrRclfdzUri2d9y8DIvKU4xBQ=
+github.com/yongjohnlee80/golib/gui v0.1.42-0.20261015163019-cf40a035b9e2/go.mod h1:SqAfSZoid0dGMsWSrbFaAG5gWf/l7+XRkQKkD6Hutg4=
 github.com/yuin/gopher-lua v1.1.2 h1:yF/FjE3hD65tBbt0VXLE13HWS9h34fdzJmrWRXwobGA=
 github.com/yuin/gopher-lua v1.1.2/go.mod h1:7aRmXIWl37SqRf0koeyylBEzJ+aPt8A+mmkQ4f1ntR8=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 h1:R84qjqJb5nVJMxqWYb3np9L5ZsaDtB+a39EqjV0JSUM=
