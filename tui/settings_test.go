@@ -151,6 +151,7 @@ func TestSettingsChangesRefused(t *testing.T) {
 		"a built-in text type":        {kbInfo(), func(f *settingsForm) { f.texts = ".md" }, ".md"},
 		"view args without =":         {pg, func(f *settingsForm) { f.viewArgs = "a=1; b" }, "key=value"},
 		"a new engine on the old DSN": {pg, func(f *settingsForm) { f.src = 2 }, "needs its connection"},
+		"an empty graph-only rule":    {todoInfo(), func(f *settingsForm) { f.graphOnly = "drafts/**;;x/**" }, "graph only"},
 	} {
 		b := baseFor(tc.w)
 		f := b.form()
@@ -670,5 +671,27 @@ func TestTheSettingsDocumentTypes(t *testing.T) {
 	f.docs = ".pdf"
 	if _, err := b.changes(f); err == nil || !strings.Contains(err.Error(), "documents: this backend reads no .pdf; it reads .docx, .htm, .html") {
 		t.Fatalf("an unread format: %v", err)
+	}
+}
+
+// The notice's button (ADR 1792015212 §2.3) takes the exclude patterns that keep the todo store out
+// out of the exclude field, keeps the others, and says so on the help line; nothing is saved.
+func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	r.openSettings(t, "kb", 0)
+	onLoop(r, func() bool {
+		r.h.settings.w.todoExcluded = []string{".todo-list/**"}
+		r.h.todoGraphOnly(".git/**; .todo-list/**; drafts/**")
+		return true
+	})
+	r.s.WaitForText(t, "Save indexes its tasks graph-only")
+	r.s.WaitFor(t, "the exclude field without the store's pattern", func(sc string) bool {
+		return strings.Contains(sc, ".git/**; drafts/**")
+	})
+	onLoop(r, func() bool { r.h.todoGraphOnly("[unclosed; .todo-list/**"); return true }) // refused: left as typed
+	if got := storedOnly(t, d); !slices.Equal(got.Exclude, []string{".git/**", "**/node_modules/**"}) {
+		t.Errorf("the button saved: %v", got.Exclude)
 	}
 }
