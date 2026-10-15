@@ -90,7 +90,12 @@ func (h *Host) rasterizer() func(context.Context, []byte, widget.Page) ([]byte, 
 }
 
 // exportTheme is the export palette of the active theme.
-func (h *Host) exportTheme() string { return export.ThemeOf(h.theme) }
+func (h *Host) exportTheme() string {
+	if h.themeCatalog != nil {
+		return h.themeCatalog.ExportStyle(h.theme)
+	}
+	return export.ThemeOf(h.theme)
+}
 
 // toggleImagePreviews is View › Image previews.
 func (h *Host) toggleImagePreviews() {

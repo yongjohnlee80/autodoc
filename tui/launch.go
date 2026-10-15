@@ -144,6 +144,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		// the user's Lua commands, beside the config as the plugins are
 		LuaDir:          filepath.Join(filepath.Dir(configPath), "lua"),
 		ConfigPath:      configPath,
+		ThemeDir:        filepath.Join(filepath.Dir(configPath), "themes"),
 		ProgramOptions:  o.ProgramOptions,
 		NoteFile:        o.NoteFile,
 		Fonts:           o.Fonts,

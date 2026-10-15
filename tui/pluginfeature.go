@@ -169,6 +169,8 @@ func (c core) Theme() string                           { return c.h.theme }
 func (c core) NotifyOngoing(id, msg string)            { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)               { c.h.notifyDone(id, msg) }
 
+func (c core) ThemeValues(name string) (map[string]string, error) { return c.h.themeValues(name) }
+
 func (c core) PluginEntries() []*Entry {
 	if c.h.cat == nil {
 		return nil

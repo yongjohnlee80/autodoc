@@ -416,3 +416,11 @@ autodoc --contracts 'todos.*'                                       # every todo
 | a tool with its own UI | a plugin (`docs/plugins.md`) |
 
 Never edit the daemon's store (`autodoc.db`), its lease, or a `.todo-list`'s `.autodoc-owner`.
+
+## User themes (agent authoring)
+
+Run `autodoc --theme-reference` for the installed format, every required colour role and a complete
+example. Start with `autodoc --new-theme mytheme --from sepia`, edit the printed `.qml` file, then
+run `autodoc --check-theme /path/themes/mytheme.qml` until it succeeds. These commands need no
+daemon or UI. `--config` places new themes beside that config file. Built-in names cannot be
+shadowed; every colour key is required. See [docs/themes.md](docs/themes.md).

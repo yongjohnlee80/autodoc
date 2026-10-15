@@ -152,7 +152,11 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 	if gui {
 		theme = defaultGUITheme
 	}
-	themeRow := choicePref(themePref(gui), theme, themeNames, func(p *prefs) *string { return &p.theme }).
+	names := themeNames
+	if h != nil {
+		names = h.themeNames()
+	}
+	themeRow := choicePref(themePref(gui), theme, names, func(p *prefs) *string { return &p.theme }).
 		chooser("App.themeIndex", "App.setThemeIndex")
 	themeRow.valid = func(v string) bool { return v != "" } // a theme this build lacks is kept, and the default drawn
 	seconds := make([]string, maxToastSeconds)
@@ -504,8 +508,8 @@ func (h *Host) setRuler(text string) {
 
 // useTheme is View › Theme and the Preferences dialog: the theme on screen, and kept.
 func (h *Host) useTheme(name string) {
-	if !isTheme(name) {
-		h.say("no theme " + strconv.Quote(name))
+	if _, err := h.themeValues(name); err != nil {
+		h.notify(err.Error())
 		return
 	}
 	h.setPref(themePref(h.gui), name, func(p *prefs) { p.theme = name })

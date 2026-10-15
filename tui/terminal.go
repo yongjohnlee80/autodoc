@@ -39,7 +39,7 @@ func (t *terminals) State() map[string]any {
 		"App.terminalEdges":   choices(termEdgeLabels...),
 		"App.terminalSizes":   choices(percentLabels(termSizes)...),
 		"App.terminalLengths": choices(percentLabels(termLengths)...),
-		"App.terminalThemes":  choices(termThemeLabels()...),
+		"App.terminalThemes":  choices(t.themeLabels()...),
 	}
 	maps.Copy(st, t.lookState())
 	return st
@@ -59,9 +59,13 @@ func (t *terminals) Catalog() []Entry {
 func terminalPrefRows(t *terminals) []PrefSpec {
 	row := choicePref(prefTermEdge, "bottom", termEdges, func(p *prefs) *string { return &p.termEdge }).
 		shows(terminalPreferenceState)
-	theme := choicePref(prefTermTheme, "page", termThemes(), func(p *prefs) *string { return &p.termTheme }).
+	names := termThemes()
+	if t != nil {
+		names = t.themeNames()
+	}
+	theme := choicePref(prefTermTheme, "page", names, func(p *prefs) *string { return &p.termTheme }).
 		shows(func(p prefs) map[string]any {
-			return map[string]any{"App.terminalThemeIndex": max(indexOf(termThemes(), cmp.Or(p.termTheme, "page")), 0)}
+			return map[string]any{"App.terminalThemeIndex": max(indexOf(names, cmp.Or(p.termTheme, "page")), 0)}
 		})
 	if t != nil {
 		row = row.then(func(prefs) { t.c.DockPanel("terminal") })
@@ -82,6 +86,19 @@ const prefTermTheme = "tui.terminal.theme"
 func termThemes() []string { return append([]string{"page"}, themeNames...) }
 
 func termThemeLabels() []string { return append([]string{"the page's"}, themeNames...) }
+
+func (t *terminals) themeNames() []string {
+	if c, ok := t.c.(interface{ ThemeNames() []string }); ok {
+		return append([]string{"page"}, c.ThemeNames()...)
+	}
+	return termThemes()
+}
+func (t *terminals) themeLabels() []string {
+	if c, ok := t.c.(interface{ ThemeLabels() []string }); ok {
+		return append([]string{"the page's"}, c.ThemeLabels()...)
+	}
+	return termThemeLabels()
+}
 
 // termLook is the theme the terminals are drawn in for p on a page drawn in page: its document's
 // text, background and cursor colours. One golib does not ship falls back to the page's, and a page
@@ -111,6 +128,21 @@ func (t *terminals) lookState() map[string]any {
 	var p prefs
 	if t.c != nil {
 		p = t.c.Prefs()
+	}
+	if c, ok := t.c.(interface {
+		ThemeValues(string) (map[string]string, error)
+	}); ok {
+		name := p.termTheme
+		if name == "" || name == "page" {
+			name = page
+		}
+		v, err := c.ThemeValues(name)
+		if err != nil {
+			v, err = c.ThemeValues(page)
+		}
+		if err == nil {
+			return map[string]any{"App.terminalBase": v["document.base"], "App.terminalText": v["document.text"], "App.terminalCursor": v["document.cursor"]}
+		}
 	}
 	return termLook(p, page)
 }
@@ -278,7 +310,7 @@ func (t *terminals) setTerminalSize(i int) {
 
 // setTerminalTheme is the Preferences row: the terminals' theme, kept.
 func (t *terminals) setTerminalTheme(i int) {
-	if all := termThemes(); i >= 0 && i < len(all) {
+	if all := t.themeNames(); i >= 0 && i < len(all) {
 		t.c.SetPref(prefTermTheme, all[i])
 	}
 }

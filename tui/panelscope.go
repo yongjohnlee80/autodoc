@@ -50,6 +50,12 @@ func (s *scopedPanelHost) KeepPanelGeometry(id, dimension string, percent int) {
 // PageTheme is the theme the page is drawn in: a terminal theme of "the page's" follows it.
 func (s *scopedPanelHost) PageTheme() string { return s.core.Theme() }
 
+func (s *scopedPanelHost) ThemeNames() []string  { return s.core.h.themeNames() }
+func (s *scopedPanelHost) ThemeLabels() []string { return s.core.h.themeLabels() }
+func (s *scopedPanelHost) ThemeValues(name string) (map[string]string, error) {
+	return s.core.h.themeValues(name)
+}
+
 // OpenTerminalLook is the panels' Theme and font… (terminallook.go); none before the views exist.
 func (s *scopedPanelHost) OpenTerminalLook() error {
 	if err := s.ready(); err != nil {

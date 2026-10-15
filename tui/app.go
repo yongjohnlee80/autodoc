@@ -40,6 +40,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yongjohnlee80/golib/decl"
 	"github.com/yongjohnlee80/golib/highlight"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -47,6 +48,7 @@ import (
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
+	"github.com/yongjohnlee80/autodoc/internal/usertheme"
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
@@ -70,9 +72,10 @@ type Host struct {
 	aboutInfo AboutInfo // what Help › About lists (help.go)
 	// layoutSrc is the layout as last loaded, dev the -dev directory ("" for none), theme the one
 	// the screen wears (theme.go).
-	layoutSrc []byte
-	dev       string
-	theme     string
+	layoutSrc    []byte
+	dev          string
+	theme        string
+	themeCatalog *usertheme.Catalog
 
 	// the models the document binds
 	workspaces, managed *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
@@ -317,6 +320,8 @@ type Options struct {
 	// ConfigPath is the config file the TUI runs on: the agent's autodoc runs on it too, so it
 	// reaches the TUI's store (agent.go). "" is the default config.
 	ConfigPath string
+	// ThemeDir holds the user's complete Theme files beside config.toml. Empty offers built-ins only.
+	ThemeDir string
 	// ProgramOptions come after the program's own options (options): a build's choice of how
 	// the document runs, such as tuidecl.WithStyle for the window's native widgets. nil: none.
 	ProgramOptions []tuidecl.ProgramOption
@@ -366,6 +371,7 @@ func newHost(session *Session, opt Options) *Host {
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 	}
+	h.themeCatalog = usertheme.Open(opt.ThemeDir)
 	h.noticeLog = newNotices(core{h})
 	h.recent = newRecent(core{h})
 	h.explorer = newExplorer(core{h})
@@ -410,6 +416,11 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)
 	p.Post(h.start)
+	p.Post(func() {
+		for _, err := range h.themeCatalog.Problems {
+			h.notify(err.Error())
+		}
+	})
 	p.Post(h.plugins.launchServices)
 	return nil
 }
@@ -423,7 +434,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
 		files := os.DirFS(opt.Dev)
 		opts = append(modulesFrom(files), tuidecl.Layout(files, "main.qml"),
-			tuidecl.HotReload(tuidecl.OnReloadError(func(err error) { h.notify(err.Error()) })))
+			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.themesReloaded() })))
 	} else {
 		src = opt.Layout
 		if src == nil {
@@ -433,6 +444,12 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 			}
 		}
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
+		if opt.ThemeDir != "" {
+			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.themesReloaded() })))
+		}
+	}
+	if opt.ThemeDir != "" {
+		opts = append(opts, tuidecl.Themes(h.themeCatalog.Files(), ".", "autodoc.theme", moduleVersion))
 	}
 	h.layoutSrc = src
 	h.theme = themeOf(src)

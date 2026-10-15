@@ -62,6 +62,11 @@ func (pl *plugins) openPlugin(key string) {
 // pluginTheme is the theme a plugin is sent: the one the screen wears.
 func (pl *plugins) pluginTheme() plugin.Theme {
 	colors, err := themes.Values(pl.c.Theme())
+	if c, ok := pl.c.(interface {
+		ThemeValues(string) (map[string]string, error)
+	}); ok {
+		colors, err = c.ThemeValues(pl.c.Theme())
+	}
 	if err != nil {
 		colors = map[string]string{}
 	}

@@ -140,6 +140,10 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	configPath := fs.String("config", "", "config file (default $XDG_CONFIG_HOME/autodoc/config.toml)")
 	fs.Bool("version", false, "print the version")
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
+	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
+	fs.Bool("check-theme", false, "validate the Theme file after the flags; report every problem, without a UI or daemon")
+	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
+	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
 	editor := fs.String("editor", "", `call a verb of the page in the AutoDoc that started this agent ($AUTODOC_EDITOR, as $AUTODOC_AGENT) and print its answer as JSON; its parameters, a JSON array, after the flags: --editor editor.read '[1, 20]'`)
@@ -163,6 +167,19 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		return code
 	}
 	modes := []mode{
+		{flag: "theme-reference", run: func(string) int { themeReference(stdout); return 0 }},
+		{flag: "check-theme", arg: true, run: func(file string) int {
+			if err := checkTheme(file, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "new-theme", arg: true, flagsAfter: true, run: func(name string) int {
+			if err := newTheme(*configPath, name, *fromTheme, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
 		{flag: "version", run: func(string) int { fmt.Fprintln(stdout, "autodoc", b.version); return 0 }},
 		{flag: "contracts", arg: true, flagsAfter: true, run: func(filter string) int {
 			if err := writeContracts(stdout, Contracts(filter), *format); err != nil {
@@ -228,7 +245,15 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return editorMain(ctx, *editor, params, stdout, stderr)
 		}},
 		{flag: "export", asked: func() bool { return *exportFormat != "" }, arg: true, run: func(src string) int {
-			if err := exportMain(src, *exportFormat, *exportOutput, *exportTheme, *exportBase); err != nil {
+			theme := *exportTheme
+			if *exportFormat == "html" {
+				var err error
+				theme, err = exportThemeFor(*configPath, theme)
+				if err != nil {
+					return failed(err, 1)
+				}
+			}
+			if err := exportMain(src, *exportFormat, *exportOutput, theme, *exportBase); err != nil {
 				return failed(err, 1)
 			}
 			return 0
@@ -237,6 +262,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flag: "gui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, true, b, stderr, debug) }},
 	}
 	companions := []companion{
+		{flags: []string{"from"}, modes: []string{"new-theme"}},
 		{flags: []string{"ensure", "restart"}, modes: []string{"print-endpoint"}, says: "--ensure and --restart go with --print-endpoint"},
 		{flags: []string{"base", "output", "theme"}, modes: []string{"export"}},
 		{flags: []string{"format"}, modes: []string{"contracts"}},

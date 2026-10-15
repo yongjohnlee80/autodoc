@@ -82,7 +82,8 @@ func (h *Host) state() map[string]any {
 
 		// the editor's preferences
 		"App.keymaps":         choices(keymapLabels...),
-		"App.themes":          choices(themeNames...),
+		"App.themes":          choices(h.themeLabels()...),
+		"App.userThemes":      h.userThemeRows(),
 		"App.edges":           choices(edges...),
 		"App.yesNo":           choices("yes", "no"),
 		"App.openAsChoices":   choices(openAsLabels...),
