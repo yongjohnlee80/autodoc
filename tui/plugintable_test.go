@@ -698,12 +698,27 @@ func TestThePanelHoldsAtMostItsCap(t *testing.T) {
 		r.h.plugins.runPluginCommand("rows", "run")
 		return true
 	})
-	r.waitResults(t, "q1", 250)
+	// the reader walks to the last row loaded, again as each page lands: the table asks for more
+	// each time, until the cap
+	r.s.WaitFor(t, "the panel filled to its cap", func(string) bool {
+		return onLoop(r, func() bool {
+			if tc := r.h.plugins.c.TableCore(resultsView); tc != nil && tc.Len() > 0 {
+				tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+			}
+			return r.h.plugins.results.id == "q1" && len(r.h.plugins.results.model.rows) >= 250
+		})
+	})
 	title := func() string {
 		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.resultsTitle"); return v.Raw })
 	}
 	r.s.WaitFor(t, "the heading at the cap", func(string) bool {
 		return strings.Contains(title(), "the first 250 rows shown; more remain (Export CSV takes them all)")
+	})
+	onLoop(r, func() bool { // at the last row again: at the cap, nothing is asked
+		tc := r.h.plugins.c.TableCore(resultsView)
+		tc.SetCursor(widget.TablePos{Row: tc.Len() - 1})
+		r.h.plugins.results.model.FetchMore(tuidecl.Index{})
+		return true
 	})
 	time.Sleep(300 * time.Millisecond) // a fetch past the cap would have been answered by now
 	if n := onLoop(r, func() int { return len(r.h.plugins.results.model.rows) }); n != 250 || onLoop(r, func() bool {
