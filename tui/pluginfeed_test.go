@@ -14,7 +14,7 @@ func TestAByteOffsetIsTheCursorsCluster(t *testing.T) {
 	}{
 		{0, 0, 0}, {0, 1, 3}, {0, 2, 3 + len(family)}, {0, 3, 4 + len(family)},
 		{0, 9, 4 + len(family)}, // past the line's end: its end, before the line break
-		{1, 0, 5 + len(family)}, {1, 2, 11 + len(family)}, {1, 4, 13 + len(family)},
+		{1, 0, 5 + len(family)}, {1, 2, 11 + len(family)}, {1, 4, 15 + len(family)},
 		{2, 0, len(text)}, {2, 5, len(text)}, // the empty last line
 		{7, 0, len(text)}, // a line the text does not have
 	} {
