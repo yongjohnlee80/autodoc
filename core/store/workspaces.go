@@ -240,6 +240,9 @@ func (s *Store) SetWorkspaceSchema(ctx context.Context, id int64, path string) e
 type WorkspaceInfo struct {
 	Workspace
 	Include, Exclude []string
+	// GraphOnly are its graph_only patterns (ADR 1792015212 §2.2); nil until they are set, which is
+	// the default (workspace.DefaultGraphOnly).
+	GraphOnly []string
 }
 
 // Workspaces lists every workspace, by name.
@@ -266,11 +269,49 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 					info.Exclude = append(info.Exclude, p.Pattern)
 				}
 			}
+			if w.GraphOnlySet != 0 {
+				gs, err := s.Workspace(w.ID).GraphOnly(tx).OrderBy(dao.Asc(ByKey)).Select()
+				if err != nil {
+					return err
+				}
+				info.GraphOnly = []string{}
+				for _, g := range gs {
+					info.GraphOnly = append(info.GraphOnly, g.Pattern)
+				}
+			}
 			out = append(out, info)
 		}
 		return nil
 	})
 	return out, err
+}
+
+// WorkspaceModes are workspace id's graph_only patterns (nil: never set, the default) and its
+// todo_search (ADR 1792015212 §2.2).
+func (s *Store) WorkspaceModes(ctx context.Context, id int64) (graphOnly []string, todoSearch bool, err error) {
+	err = s.Read(ctx, func(tx *Tx) error {
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceGraphOnlySet, WorkspaceTodoSearch)
+		if errors.Is(err, dao.ErrNoRows) {
+			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
+		}
+		if err != nil {
+			return err
+		}
+		todoSearch = w.TodoSearch != 0
+		if w.GraphOnlySet == 0 {
+			return nil
+		}
+		gs, err := s.Workspace(id).GraphOnly(tx).OrderBy(dao.Asc(ByKey)).Select()
+		if err != nil {
+			return err
+		}
+		graphOnly = []string{}
+		for _, g := range gs {
+			graphOnly = append(graphOnly, g.Pattern)
+		}
+		return nil
+	})
+	return graphOnly, todoSearch, err
 }
 
 // AddWorkspace creates a workspace with its patterns, in one transaction.

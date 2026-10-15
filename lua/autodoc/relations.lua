@@ -28,6 +28,10 @@ M.SECTIONS = {
   { label = "amended by", ["in"] = { "amends" } },
   { label = "related", out = { "related" }, ["in"] = { "related" } },
   { label = "adr", out = { "adr" } },
+  { label = "review", out = { "review" } },
+  { label = "reviews", ["in"] = { "review" } },
+  { label = "blocked by", out = { "blocked" } },
+  { label = "blocks", ["in"] = { "blocked" } },
   { label = "links", out = BODY },
   { label = "backlinks", ["in"] = { "wikilink", "embed", "markdown", "adr" } },
 }
@@ -44,9 +48,10 @@ local WARN = vim.log.levels.WARN
 ---@field raw string as written
 ---@field kind string
 ---@field resolved boolean
+---@field external string|nil a todo task's file outside the workspace, absolute (ADR 1792015212 §2.4)
 
 ---@class autodoc.RelRow
----@field kind "heading"|"doc"|"beyond"|"unresolved"
+---@field kind "heading"|"doc"|"beyond"|"unresolved"|"external"
 ---@field text string
 ---@field ws string|nil
 ---@field path string|nil a document to open
@@ -91,8 +96,18 @@ function M.rows(ws, rel, data)
         paths[#paths + 1] = e.path
       end
     end
-    if #paths > 0 then
-      rows[#rows + 1] = { kind = "heading", text = string.format("%s (%d)", s.label, #paths) }
+    local external, seen_x = {}, {}
+    for _, e in ipairs(out) do
+      if e.external and e.external ~= "" and vim.tbl_contains(s.out or {}, e.kind) and not seen_x[e.external] then
+        seen_x[e.external] = true
+        external[#external + 1] = e.external
+      end
+    end
+    if #paths + #external > 0 then
+      rows[#rows + 1] = { kind = "heading", text = string.format("%s (%d)", s.label, #paths + #external) }
+      for _, x in ipairs(external) do
+        rows[#rows + 1] = { kind = "external", text = x .. "  (outside the workspace)", path = x, section = s.label }
+      end
       for _, p in ipairs(paths) do
         rows[#rows + 1] = { kind = "doc", text = p, ws = ws, path = p, section = s.label }
         if not under[p] then
@@ -115,7 +130,9 @@ function M.rows(ws, rel, data)
   end
   local unresolved = {}
   for _, e in ipairs(out) do
-    if not e.resolved then unresolved[#unresolved + 1] = e.raw .. "  (" .. e.kind .. ", names no document)" end
+    if not e.resolved and (e.external or "") == "" then
+      unresolved[#unresolved + 1] = e.raw .. "  (" .. e.kind .. ", names no document)"
+    end
   end
   for _, c in ipairs(data.cycles or {}) do unresolved[#unresolved + 1] = c .. "  (supersession goes round a loop)" end
   if #unresolved > 0 then
@@ -128,7 +145,8 @@ end
 local function edges_of(res)
   local out = {}
   for _, l in ipairs(type(res) == "table" and res or {}) do
-    out[#out + 1] = { path = l.path or "", raw = l.raw or "", kind = l.kind or "", resolved = l.resolved == true }
+    out[#out + 1] = { path = l.path or "", raw = l.raw or "", kind = l.kind or "", resolved = l.resolved == true,
+      external = l.external }
   end
   return out
 end
@@ -231,6 +249,15 @@ end
 ---open opens a related document; the KB document left behind goes on the history.
 ---@param ws string
 ---@param rel string
+---open_external opens a todo task's file outside the workspace, by its absolute path: as any file
+---is, in the editor window.
+---@param abs string
+function M.open_external(abs)
+  local target = require("autodoc.views.panel").editor_target_winid()
+  if target then vim.api.nvim_set_current_win(target) end
+  vim.cmd.edit(vim.fn.fnameescape(abs))
+end
+
 function M.open(ws, rel)
   local target = require("autodoc.views.panel").editor_target_winid()
   local prev = target and M.current(vim.api.nvim_win_get_buf(target)) or nil
@@ -272,6 +299,10 @@ function M.pick(path)
           seen[r.path] = true
           items[#items + 1] = { idx = #items + 1, file = root .. "/" .. r.path, ws = ws, path = r.path,
             text = string.format("%-14s %s", r.section, r.path) }
+        elseif r.kind == "external" and not seen[r.path] then
+          seen[r.path] = true
+          items[#items + 1] = { idx = #items + 1, file = r.path, external = r.path,
+            text = string.format("%-14s %s", r.section, r.path) }
         end
       end
       if #items == 0 then return notify("autodoc: " .. rel .. " has no related documents") end
@@ -292,6 +323,7 @@ function M.present(title, items)
   local snacks = require("autodoc.picker").snacks()
   if not snacks then
     return vim.ui.select(items, { prompt = title, format_item = function(it) return it.text end }, function(choice)
+      if choice and choice.external then return M.open_external(choice.external) end
       if choice then M.open(choice.ws, choice.path) end
     end)
   end
@@ -303,6 +335,7 @@ function M.present(title, items)
     preview = "file",
     confirm = function(p, item)
       p:close()
+      if item and item.external then return vim.schedule(function() M.open_external(item.external) end) end
       if item then vim.schedule(function() M.open(item.ws, item.path) end) end
     end,
   })

@@ -25,7 +25,7 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `core/todo` | the todo system: format (versioned schema files), rules, every write; a `Module` |
 | `core/schema` | frontmatter schemas: the KB's `schema.yaml` and the todo formats |
 | `core/docs` | versioned, conditional reads and writes of a workspace's files over a `vfs.FS` |
-| `core/index` | the indexer, links, graph, search, and the writer port its documents are kept through |
+| `core/index` | the indexer, links, graph, search, and the writer port its documents are kept through; a path's mode (`Mode`): full, or graph-only (its links and relations, no chunks), and the todo store it lies in (ADR 1792015212) |
 | `core/store` | the SQLite store: lease, migrations, its tables (workspaces, preferences, and the metered services: embedding providers and rankers, keys sealed, calls metered), and the seam a module declares its own through |
 | `core/todo/sqlitejournal` | the todo system's Journal on the store, its tables declared through the seam |
 | `core/follow` | watching and polling a workspace |
@@ -37,7 +37,7 @@ The daemon never pushes: clients poll `sys.events` (and, for todos, `todos.chang
 | `core/paths`, `clock` | the path helpers and the one clock the core packages share |
 | `core/outline`, `export`, `edition` | as named |
 | `rpc` | the daemon's socket: registers every verb from its contract; `Catalog`. A `file.write` on a file a workspace indexes is that workspace's `doc.write` |
-| `internal/daemon` | the served workspaces; the todo system's disk and roots |
+| `internal/daemon` | the served workspaces, each path's mode from the todo registry and the workspace's `graph_only` and `todo_search`; the todo system's disk and roots |
 | `internal/client` | the daemon's client: the session (handshake, spawning `--serve`), restart handoffs |
 | `internal/endpoint` | which socket serves a config's store |
 | `app` | the modes (`--serve`, `--ui`, `--call`, `--contracts`, …) and the one module list |

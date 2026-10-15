@@ -80,6 +80,28 @@ local function texts(rows)
   return vim.tbl_map(function(r) return r.text end, rows or {})
 end
 
+t.section("rows: a todo task's (ADR 1792015212 §2.4)", function()
+  local rows = relations.rows("kb", ".todo-list/open/t.md", {
+    out = {
+      { path = "reviews/r.md", raw = "$KB_ROOT/reviews/r.md", kind = "review", resolved = true },
+      { path = "", raw = "$PROJECT_ROOT/d.md", kind = "adr", resolved = false, external = "/src/p/d.md" },
+      { path = ".todo-list/open/u.md", raw = "u", kind = "blocked", resolved = true },
+      { path = "", raw = "$NOPE/x.md", kind = "adr", resolved = false },
+    },
+    ["in"] = { { path = ".todo-list/open/w.md", raw = "t", kind = "blocked", resolved = true } },
+    cycles = {},
+  })
+  t.eq(texts(rows), {
+    "adr (1)", "/src/p/d.md  (outside the workspace)",
+    "review (1)", "reviews/r.md",
+    "blocked by (1)", ".todo-list/open/u.md",
+    "blocks (1)", ".todo-list/open/w.md",
+    "unresolved (1)", "$NOPE/x.md  (adr, names no document)",
+  }, "review and blocked both ways; an external file in its section, never unresolved")
+  t.eq(rows[2].kind, "external", "the external row's kind")
+  t.eq(rows[2].path, "/src/p/d.md", "the external row opens its absolute path")
+end)
+
 t.section("rows: the layout, without a daemon", function()
   local rows, n = relations.rows("kb", "a.md", {
     out = { { path = "b.md", raw = "b.md", kind = "superseded_by", resolved = true },

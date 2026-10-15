@@ -799,6 +799,8 @@ function M.new(profile)
                 row({ kind = "rel_heading", section = "relations" }, "    " .. r.text, HL.dir)
               elseif r.kind == "unresolved" then
                 row({ kind = "rel_unresolved", section = "relations" }, "      " .. r.text, HL.error)
+              elseif r.kind == "external" then
+                row({ kind = "rel_external", section = "relations", path = r.path }, "      " .. r.text, HL.dim)
               else
                 row({ kind = "rel_doc", section = "relations", ws = r.ws, path = r.path },
                   (r.kind == "beyond" and "        " or "      ") .. r.text, r.kind == "beyond" and HL.dim or HL.item)
@@ -1310,6 +1312,8 @@ function M.new(profile)
       return open_doc(r)
     elseif r.kind == "rel_doc" then
       return relations().open(r.ws, r.path)
+    elseif r.kind == "rel_external" then
+      return relations().open_external(r.path)
     elseif r.kind == "provider" or r.kind == "ranker" then
       return use_model(r)
     elseif r.kind == "no_ranker" then

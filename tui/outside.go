@@ -3,9 +3,11 @@ package tui
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -123,8 +125,48 @@ func (h *Host) openAbsolute(abs string) {
 			h.openIn(l.ws, l.path)
 		default:
 			h.openOutside(abs)
+			h.sayWhyOutside(abs)
 		}
 	})
+}
+
+// whyOutside is why abs, under a workspace's root, is in no workspace (ADR 1792015212 §2.5): the
+// workspace whose root holds it, and the exclude pattern that keeps it out, or "" when its include
+// patterns admit no such file. ok is false when no workspace's root holds it.
+func whyOutside(list []wsInfo, abs string) (w wsInfo, pattern string, ok bool) {
+	for _, x := range list {
+		rel, err := filepath.Rel(x.root, abs)
+		if x.root == "" || err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			continue
+		}
+		rel = filepath.ToSlash(rel)
+		if ok && len(x.root) <= len(w.root) {
+			continue // the innermost root holding it
+		}
+		w, pattern, ok = x, "", true
+		for _, p := range x.exclude {
+			if wsfilter.NewMatcher(nil, []string{p}).Excluded(rel) {
+				pattern = p
+				break
+			}
+		}
+	}
+	return w, pattern, ok
+}
+
+// sayWhyOutside says why a file opened outside every workspace is not its workspace's when a
+// workspace's root holds it and an exclude pattern keeps it out, and offers that workspace's
+// settings. A file its include patterns do not admit (a type the workspace does not index) is
+// opened without a word.
+func (h *Host) sayWhyOutside(abs string) {
+	w, pattern, ok := whyOutside(h.workspaces.All(), abs)
+	if !ok || pattern == "" {
+		return
+	}
+	h.ask(Question{Title: "in no workspace: open " + w.name + "'s settings?",
+		Text: abs + " is under workspace " + w.name + "'s root, but its exclude pattern " + pattern +
+			" keeps it out: it opens with no relations, links or backlinks.", Yes: "&Open the settings", No: "&Not now",
+		OnYes: func() { h.openSettings(w.name, 0) }})
 }
 
 // openOutside opens the absolute path abs, a file outside every workspace, asking first over

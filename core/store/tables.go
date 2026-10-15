@@ -26,6 +26,8 @@ type Workspace struct {
 	ViewArgs             *string // the default arguments of its .view files, by name, as a JSON object; nil: none (000011)
 	AbstractChunk        int64   // 1: each document's abstract is a chunk of its own (000014)
 	DemoteSuperseded     int64   // 1: a superseded document's hits sit below its successor's (000014)
+	GraphOnlySet         int64   // 1: its graph_only patterns were set; 0: it has the default (000021)
+	TodoSearch           int64   // 1: its todo tasks are indexed in full, for search (000021)
 	CreatedAt, UpdatedAt int64
 }
 
@@ -50,6 +52,8 @@ const (
 	WorkspaceViewArgs        WorkspaceField = "view_args"
 	WorkspaceAbstractChunk   WorkspaceField = "abstract_chunk"
 	WorkspaceDemote          WorkspaceField = "demote_superseded"
+	WorkspaceGraphOnlySet    WorkspaceField = "graph_only_set"
+	WorkspaceTodoSearch      WorkspaceField = "todo_search"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
 )
@@ -192,6 +196,22 @@ type Pattern struct {
 	Pattern     string
 }
 
+// GraphOnly is one of a workspace's graph_only patterns (ADR 1792015212 §2.2), in order.
+type GraphOnly struct {
+	WorkspaceID int64
+	Ord         int64
+	Pattern     string
+}
+
+// GraphOnlyField names a workspace_graph_only column.
+type GraphOnlyField string
+
+const (
+	GraphOnlyWorkspace GraphOnlyField = wsCol
+	GraphOnlyOrd       GraphOnlyField = "ord"
+	GraphOnlyValue     GraphOnlyField = "pattern"
+)
+
 // PatternField names a workspace_pattern column.
 type PatternField string
 
@@ -278,6 +298,7 @@ type tables struct {
 	rankUsage   *dao.Schema[*Usage, UsageField, noSort, int64]
 	rankCalls   *dao.Schema[*LogEntry, LogField, noSort, int64]
 	patterns    *dao.Schema[*Pattern, PatternField, noSort, int64]
+	graphOnly   *dao.Schema[*GraphOnly, GraphOnlyField, noSort, int64]
 	connections *dao.Schema[*Connection, ConnectionField, noSort, int64]
 	models      *dao.Schema[*Model, ModelField, noSort, string]
 	events      *dao.Schema[*Event, EventField, noSort, int64]
@@ -315,6 +336,8 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceVectorIndex:     col("workspace", WorkspaceVectorIndex, func(w *Workspace) any { return &w.VectorIndex }),
 				WorkspaceViewArgs:        col("workspace", WorkspaceViewArgs, func(w *Workspace) any { return &w.ViewArgs }),
 				WorkspaceAbstractChunk:   col("workspace", WorkspaceAbstractChunk, func(w *Workspace) any { return &w.AbstractChunk }),
+				WorkspaceGraphOnlySet:    col("workspace", WorkspaceGraphOnlySet, func(w *Workspace) any { return &w.GraphOnlySet }),
+				WorkspaceTodoSearch:      col("workspace", WorkspaceTodoSearch, func(w *Workspace) any { return &w.TodoSearch }),
 				WorkspaceDemote:          col("workspace", WorkspaceDemote, func(w *Workspace) any { return &w.DemoteSuperseded }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),
@@ -422,6 +445,14 @@ func newTables(c dao.DataConn) *tables {
 				PatternValue:     col("workspace_pattern", PatternValue, func(p *Pattern) any { return &p.Pattern }),
 			}),
 			dao.SortMap[*Pattern, PatternField, noSort, int64](map[noSort]string{ByKey: `"workspace_pattern"."kind", "workspace_pattern"."ord"`})),
+		graphOnly: dao.New[*GraphOnly, GraphOnlyField, noSort, int64](c,
+			dao.Table[*GraphOnly, GraphOnlyField, noSort, int64]("workspace_graph_only"),
+			dao.Fields[*GraphOnly, GraphOnlyField, noSort, int64](map[GraphOnlyField]dao.Field[*GraphOnly]{
+				GraphOnlyWorkspace: col("workspace_graph_only", GraphOnlyWorkspace, func(g *GraphOnly) any { return &g.WorkspaceID }),
+				GraphOnlyOrd:       col("workspace_graph_only", GraphOnlyOrd, func(g *GraphOnly) any { return &g.Ord }),
+				GraphOnlyValue:     col("workspace_graph_only", GraphOnlyValue, func(g *GraphOnly) any { return &g.Pattern }),
+			}),
+			dao.SortMap[*GraphOnly, GraphOnlyField, noSort, int64](map[noSort]string{ByKey: `"workspace_graph_only"."ord"`})),
 		connections: dao.New[*Connection, ConnectionField, noSort, int64](c,
 			dao.Table[*Connection, ConnectionField, noSort, int64]("workspace_connection"),
 			dao.Fields[*Connection, ConnectionField, noSort, int64](map[ConnectionField]dao.Field[*Connection]{

@@ -30,6 +30,9 @@ type Doc struct {
 	Links       []DocLink     // its links and relations, in order
 	Frontmatter schema.Result // its facets and diagnostics under the workspace's schema
 	ADR         string        // the decision-record number a document of type adr carries; "" for none
+	// TodoName is the name a todo store's task answers to, "#todo:<store>/<task id>" (ADR 1792015212
+	// §2.4); "" for a document in no store
+	TodoName string
 }
 
 // Writer is where documents are kept. A batch lives under Begin's ctx: once that is done, the
@@ -49,7 +52,7 @@ type Batch interface {
 // doc is what p hands on.
 func (p *prepared) doc() Doc {
 	return Doc{Path: p.path, Version: p.version, Indexer: p.indexer, Meta: p.meta, Chunks: p.chunks,
-		Links: p.links, Frontmatter: p.frontmatter, ADR: p.adr}
+		Links: p.links, Frontmatter: p.frontmatter, ADR: p.adr, TodoName: p.todoName}
 }
 
 // storeWriter is the store's own Writer inside one write transaction: its batches are that

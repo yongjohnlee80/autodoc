@@ -40,6 +40,8 @@ type linkJSON struct {
 	Anchor   string `json:"anchor"`
 	Kind     string `json:"kind"`
 	Resolved bool   `json:"resolved"`
+	// External is a todo task's link to a file outside the workspace, absolute (ADR 1792015212 §2.4)
+	External string `json:"external,omitempty"`
 }
 
 type neighborhoodJSON struct {
@@ -68,7 +70,7 @@ func (s *Server) graphVerbs() []module.Verb {
 	agent, ws := module.AudienceAgent, module.ScopeWorkspace
 	links := func(verb, doc string, backlinks bool) module.Verb {
 		return module.Handle(module.Contract{Verb: verb, Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
-			Result: "[{path, raw, anchor, kind, resolved}]", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound}, Doc: doc},
+			Result: "[{path, raw, anchor, kind, resolved, external?}]", Errors: []int64{CodeNoSuchWorkspace, CodeNotFound}, Doc: doc},
 			func(ctx context.Context, p graphPath) ([]linkJSON, error) {
 				kinds, err := graphKinds(ctx, p.Options.raw)
 				if err != nil {
@@ -82,9 +84,13 @@ func (s *Server) graphVerbs() []module.Verb {
 				if err != nil {
 					return nil, err
 				}
-				out := make([]linkJSON, len(ls))
-				for i, l := range ls {
-					out[i] = linkJSON{Path: l.Path, Raw: l.Raw, Anchor: l.Anchor, Kind: l.Kind, Resolved: l.Resolved}
+				out := make([]linkJSON, 0, len(ls))
+				for _, l := range ls {
+					if l.External != "" && protocolOf(ctx) < todoGraphSince {
+						continue // a session below it knows no external link: it would read as unresolved
+					}
+					out = append(out, linkJSON{Path: l.Path, Raw: l.Raw, Anchor: l.Anchor, Kind: l.Kind, Resolved: l.Resolved,
+						External: l.External})
 				}
 				return out, nil
 			})
@@ -146,6 +152,10 @@ func (s *Server) graphVerbs() []module.Verb {
 // body links alone: a new kind of link changes what a graph answer means.
 const relationsSince = 14
 
+// todoGraphSince is the protocol the review and blocked relations and external links arrived in
+// (ADR 1792015212 §2.4). A session below it sees the kinds it knew, its graph unchanged.
+const todoGraphSince = 23
+
 // graphKinds is the kinds of link a graph verb answers with: the body kinds below relationsSince,
 // otherwise every kind, or those its {kinds} option names. Asking for kinds below relationsSince is
 // refused, not ignored, so an old client never takes an answer it did not ask for.
@@ -177,6 +187,15 @@ func graphKinds(ctx context.Context, raw any) ([]string, error) {
 	}
 	if below {
 		return index.BodyKinds, nil
+	}
+	if protocolOf(ctx) < todoGraphSince {
+		var kinds []string
+		for _, k := range append(append([]string{}, index.BodyKinds...), index.RelationFields...) {
+			if k != "review" {
+				kinds = append(kinds, k)
+			}
+		}
+		return kinds, nil
 	}
 	return nil, nil
 }

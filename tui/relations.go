@@ -43,18 +43,23 @@ var relSections = []relSection{
 	{label: "amended by", in: []string{"amends"}},
 	{label: "related", out: []string{"related"}, in: []string{"related"}},
 	{label: "adr", out: []string{"adr"}},
+	{label: "review", out: []string{"review"}},
+	{label: "reviews", in: []string{"review"}},
+	{label: "blocked by", out: []string{"blocked"}},
+	{label: "blocks", in: []string{"blocked"}},
 	{label: "links", out: body},
 	{label: "backlinks", in: append(slices.Clone(body), "adr")},
 }
 
-// relRow is one row of the drawer: a heading or an unresolved link (path ""), or a document to
-// open, of workspace ws.
-type relRow struct{ label, ws, path, section string }
+// relRow is one row of the drawer: a heading or an unresolved link (path ""), a document to open,
+// of workspace ws, or a file outside the workspace to open by its absolute path (external).
+type relRow struct{ label, ws, path, section, external string }
 
-// relEdge is one link of graph.links or graph.backlinks: the other end, as written, and its kind.
+// relEdge is one link of graph.links or graph.backlinks: the other end, as written, and its kind;
+// external is a todo task's file outside the workspace, absolute (ADR 1792015212 §2.4).
 type relEdge struct {
-	path, raw, kind string
-	resolved        bool
+	path, raw, kind, external string
+	resolved                  bool
 }
 
 // relations is what load gathered for one document.
@@ -99,10 +104,19 @@ func relationRows(ws, p string, rl relations) ([]relRow, int) {
 				paths = append(paths, e.path)
 			}
 		}
-		if len(paths) == 0 {
+		var external []string
+		for _, e := range rl.out {
+			if e.external != "" && slices.Contains(s.out, e.kind) && !slices.Contains(external, e.external) {
+				external = append(external, e.external)
+			}
+		}
+		if len(paths)+len(external) == 0 {
 			continue
 		}
-		rows = append(rows, relRow{label: fmt.Sprintf("%s (%d)", s.label, len(paths))})
+		rows = append(rows, relRow{label: fmt.Sprintf("%s (%d)", s.label, len(paths)+len(external))})
+		for _, x := range external {
+			rows = append(rows, relRow{label: "  " + x + "  (outside the workspace)", external: x, section: s.label})
+		}
 		for _, q := range paths {
 			rows = append(rows, relRow{label: "  " + q, ws: ws, path: q, section: s.label})
 			if under[q] {
@@ -119,7 +133,7 @@ func relationRows(ws, p string, rl relations) ([]relRow, int) {
 	}
 	var unresolved []string
 	for _, e := range rl.out {
-		if !e.resolved {
+		if !e.resolved && e.external == "" {
 			unresolved = append(unresolved, e.raw+"  ("+e.kind+", names no document)")
 		}
 	}
@@ -244,7 +258,8 @@ func (r *related) load(ws, p string) {
 			for _, l := range asList(res) {
 				m := asMap(l)
 				resolved, _ := m["resolved"].(bool)
-				out = append(out, relEdge{path: str(m, "path"), raw: str(m, "raw"), kind: str(m, "kind"), resolved: resolved})
+				out = append(out, relEdge{path: str(m, "path"), raw: str(m, "raw"), kind: str(m, "kind"), resolved: resolved,
+					external: str(m, "external")})
 			}
 			return out, err
 		}
@@ -334,10 +349,13 @@ func (r *related) labels() []string {
 // open opens the drawer's row i in the editor; the drawer stays open.
 func (r *related) open(i int) {
 	row, ok := r.rows.At(i)
-	if !ok || row.path == "" {
-		return
+	switch {
+	case !ok:
+	case row.external != "":
+		r.c.OpenAbsolute(row.external) // its workspace's file when one indexes it, else outside them all
+	case row.path != "":
+		r.c.OpenRef(row.ws, row.path)
 	}
-	r.c.OpenRef(row.ws, row.path)
 }
 
 // depth is d: the drawer shows the second ring, or no longer does. Only the drawer answers it.

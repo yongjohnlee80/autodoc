@@ -27,6 +27,8 @@ import (
 //	view_args          map
 //	abstract_chunk     bool       each document's abstract as a chunk of its own; off by default
 //	demote_superseded  bool       a superseded document's hits below its successor's; off by default
+//	graph_only         [string]   paths indexed for the graph, never for search (ADR 1792015212)
+//	todo_search        bool       the workspace's todo tasks indexed in full, for search; off by default
 //	source, destination_connection   {engine, dsn, schema, remove}   an empty dsn keeps the stored one
 //
 // A key it does not know, or a value of the wrong shape, is InvalidParams: a client's typo is
@@ -35,7 +37,7 @@ import (
 var configureKeys = map[string]bool{"name": true, "include": true, "exclude": true, "schema": true,
 	"text_extensions": true, "section_tokens": true, "embedding_policy": true, "provider": true,
 	"destination": true, "vector_index": true, "view_args": true, "source": true, "destination_connection": true,
-	"abstract_chunk": true, "demote_superseded": true}
+	"abstract_chunk": true, "demote_superseded": true, "graph_only": true, "todo_search": true}
 
 // changesOf reads workspace.configure's settings map.
 func changesOf(m map[string]any) (store.Changes, error) {
@@ -97,7 +99,11 @@ func changesOf(m map[string]any) (store.Changes, error) {
 	if c.VectorIndex, err = str("vector_index"); err != nil {
 		return c, err
 	}
-	for key, dst := range map[string]**bool{"abstract_chunk": &c.AbstractChunk, "demote_superseded": &c.DemoteSuperseded} {
+	if c.GraphOnly, err = list("graph_only"); err != nil {
+		return c, err
+	}
+	for key, dst := range map[string]**bool{"abstract_chunk": &c.AbstractChunk, "demote_superseded": &c.DemoteSuperseded,
+		"todo_search": &c.TodoSearch} {
 		if v, ok := m[key]; ok {
 			b, ok := v.(bool)
 			if !ok {
@@ -195,6 +201,7 @@ func configureEvents(_ context.Context, p []any, _ any) []module.Event {
 		{"workspace.provider", []string{"provider"}, "provider"},
 		{"workspace.databases", []string{"destination", "vector_index", "view_args", "source", "destination_connection"}, ""},
 		{"workspace.retrieval", []string{"abstract_chunk", "demote_superseded"}, ""},
+		{"workspace.graph_only", []string{"graph_only", "todo_search"}, ""},
 	} {
 		if !slices.ContainsFunc(f.keys, func(k string) bool { _, ok := m[k]; return ok }) {
 			continue
@@ -210,12 +217,13 @@ func configureEvents(_ context.Context, p []any, _ any) []module.Event {
 
 type workspaceConfigure struct {
 	Workspace string    `param:"workspace"`
-	Settings  optionMap `param:"settings" doc:"any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)"`
+	Settings  optionMap `param:"settings" doc:"any of name, include+exclude, schema, text_extensions, section_tokens, embedding_policy, provider, abstract_chunk, demote_superseded, graph_only, todo_search, and (where sys.capabilities says databases) destination, vector_index, view_args, source and destination_connection ({engine, dsn, schema} or {remove: true}; a blank dsn keeps the stored one)"`
 }
 
 // The kinds of event workspace.configure may log, one for each setting it changed (configureEvents).
 const configureKinds = "workspace.renamed | workspace.patterns | workspace.schema | workspace.text_extensions | " +
-	"workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval"
+	"workspace.section_size | workspace.embedding_policy | workspace.provider | workspace.databases | workspace.retrieval | " +
+	"workspace.graph_only"
 
 func (s *Server) configureVerb() module.Verb {
 	v := module.Handle(module.Contract{Verb: "workspace.configure", Effect: module.EffectSettings, Since: 9, Audience: module.AudienceUser,

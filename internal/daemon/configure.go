@@ -52,6 +52,16 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 			}
 		}
 	}
+	if c.GraphOnly != nil {
+		if *c.GraphOnly == nil {
+			c.GraphOnly = &[]string{}
+		}
+		for _, p := range *c.GraphOnly {
+			if err := workspace.ValidPattern(p); err != nil {
+				return fmt.Errorf("%w: graph_only pattern %q: %v", workspace.ErrInvalidSpec, p, err)
+			}
+		}
+	}
 	var texts []string
 	if c.TextExtensions != nil {
 		norm, err := m.textExtensions(*c.TextExtensions)
@@ -149,6 +159,29 @@ func (m *Workspaces) Configure(ctx context.Context, name string, c store.Changes
 		// and only their abstract chunks embed
 		m.revalidate(s.id)
 	}
+	if (c.GraphOnly != nil || c.TodoSearch != nil) && c.Include == nil {
+		// a path's mode is in its document's identity (ADR 1792015212 §2.1): revalidating indexes
+		// exactly the paths whose mode changed, their chunks added or dead in one generation
+		if err := m.applyModes(ctx, s.id); err != nil {
+			logger.Warning(m.opts.Log, err, logger.Fields{"event": "workspace.modes.failed", "workspace": name})
+		}
+		m.revalidate(s.id)
+	}
+	return nil
+}
+
+// applyModes gives workspace id's served modes what the store holds now.
+func (m *Workspaces) applyModes(ctx context.Context, id int64) error {
+	list, search, err := m.db.WorkspaceModes(ctx, id)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	h := m.modes[id]
+	m.mu.Unlock()
+	if h != nil {
+		h.set(list, search)
+	}
 	return nil
 }
 
@@ -194,6 +227,18 @@ func (m *Workspaces) inverseOf(ctx context.Context, id int64, c store.Changes) (
 	if c.DemoteSuperseded != nil {
 		b := w.DemoteSuperseded != 0
 		inv.DemoteSuperseded = &b
+	}
+	if c.GraphOnly != nil {
+		list := w.GraphOnly
+		if list == nil {
+			list = workspace.DefaultGraphOnly()
+		}
+		list = append([]string{}, list...)
+		inv.GraphOnly = &list
+	}
+	if c.TodoSearch != nil {
+		b := w.TodoSearch != 0
+		inv.TodoSearch = &b
 	}
 	if c.SectionTokens != nil {
 		n := 0 // the default

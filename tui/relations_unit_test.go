@@ -167,3 +167,39 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 		t.Fatalf("refresh failure was not reported: %v", c.failed)
 	}
 }
+
+// A todo task's relations (ADR 1792015212 §2.4): its review and blocked relations have their
+// sections both ways, and a ref to a file outside the workspace is a row of its section that opens
+// the file by its absolute path, never an unresolved link.
+func TestATasksRelationsInTheDrawer(t *testing.T) {
+	c := newScripted("kb")
+	c.answers["graph.links"] = func([]any) (any, error) {
+		return []any{
+			map[string]any{"path": "reviews/r.md", "raw": "$KB_ROOT/reviews/r.md", "kind": "review", "resolved": true},
+			map[string]any{"path": "", "raw": "$PROJECT_ROOT/docs/d.md", "kind": "adr", "resolved": false, "external": "/src/p/docs/d.md"},
+			map[string]any{"path": ".todo-list/open/u.md", "raw": "u", "kind": "blocked", "resolved": true},
+			map[string]any{"path": "", "raw": "$NOPE/x.md", "kind": "adr", "resolved": false},
+		}, nil
+	}
+	c.answers["graph.backlinks"] = func([]any) (any, error) {
+		return []any{map[string]any{"path": ".todo-list/open/w.md", "raw": "t", "kind": "blocked", "resolved": true}}, nil
+	}
+	c.answers["graph.unresolved"] = func([]any) (any, error) { return []any{}, nil }
+	r := newRelated(c)
+	r.Shown(Page{Ref: fileRef{"kb", ".todo-list/open/t.md"}})
+	want := []string{
+		"adr (1)", "  /src/p/docs/d.md  (outside the workspace)",
+		"review (1)", "  reviews/r.md",
+		"blocked by (1)", "  .todo-list/open/u.md",
+		"blocks (1)", "  .todo-list/open/w.md",
+		"unresolved (1)", "  $NOPE/x.md  (adr, names no document)",
+	}
+	if got := r.labels(); !slices.Equal(got, want) {
+		t.Fatalf("rows\n got %q\nwant %q", got, want)
+	}
+	r.open(1) // the external file: by its absolute path
+	r.open(3) // the review: as the workspace's file
+	if !slices.Equal(c.files, []string{":/src/p/docs/d.md", "kb:reviews/r.md"}) {
+		t.Fatalf("opened %v", c.files)
+	}
+}

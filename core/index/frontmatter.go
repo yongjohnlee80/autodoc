@@ -30,7 +30,7 @@ func (x *Indexer) Kind(p string) kind.Kind { return x.kinds.Of(p) }
 // change never derives it again.
 func (x *Indexer) versionOf(p string, k kind.Kind, tokens int, schemaFP string, abstract bool) string {
 	builtIn := docVersion(indexerVersion(tokens), k.Traits().Frontmatter, schemaFP, abstract)
-	return identities.Of(k)(x, p, tokens, builtIn)
+	return identities.Of(k)(x, p, tokens, builtIn) + x.mode(p).version()
 }
 
 // identity is a kind's document.indexer for path: its own, or the built-in chunkers' when the build
