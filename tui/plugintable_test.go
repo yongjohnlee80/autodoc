@@ -790,16 +790,6 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	}
 	onLoop(r, func() bool { r.h.closeDialog("exportResults"); return true })
 
-	// on a blank line under a paragraph: a blank line kept between them, and before the next
-	r.page("intro\n\nafter", 2, 1)
-	r.app(t, "App.insertResults")
-	r.waitNotice(t, "loaded rows inserted; more remain")
-	text := r.editorText()
-	if lines := strings.Split(text, "\n"); len(lines) < 5 || lines[0] != "intro" || lines[1] != "" || !strings.HasPrefix(lines[2], "| n ") ||
-		lines[len(lines)-2] != "" || lines[len(lines)-1] != "after" {
-		t.Fatalf("the table under the paragraph:\n%.120s\n…\n%s", text, text[max(len(text)-120, 0):])
-	}
-
 	r.s.WaitFor(t, "the daemon's derived formats", func(string) bool {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
@@ -811,6 +801,19 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 	r.waitNotice(t, "insert the results: widget: the editor is read-only")
 	if r.editorText() != manualPDF {
 		t.Fatalf("the read-only page changed: %q", r.editorText())
+	}
+
+	onLoop(r, func() bool { r.h.closeFile(); return true })
+	r.s.WaitFor(t, "the page closed", func(string) bool { return !r.file().open })
+
+	// on a blank line under a paragraph: a blank line kept between them, and before the next
+	r.page("intro\n\nafter", 2, 1)
+	r.app(t, "App.insertResults")
+	r.waitNotice(t, "loaded rows inserted; more remain")
+	text := r.editorText()
+	if lines := strings.Split(text, "\n"); len(lines) < 5 || lines[0] != "intro" || lines[1] != "" || !strings.HasPrefix(lines[2], "| n ") ||
+		lines[len(lines)-2] != "" || lines[len(lines)-1] != "after" {
+		t.Fatalf("the table under the paragraph:\n%.120s\n…\n%s", text, text[max(len(text)-120, 0):])
 	}
 
 	if err := onLoop(r, func() error { return r.h.cat.run("results.toggle", nil) }); err != nil {
@@ -843,17 +846,16 @@ func TestQuittingStopsAnExport(t *testing.T) {
 		t.Fatalf("no .part before quitting: %v", err)
 	}
 	onLoop(r, func() bool { r.h.p.Quit(); return true }) // nothing runs on the loop after this
-	deadline := time.Now().Add(20 * time.Second)
-	for {
-		_, partErr := os.Stat(path + ".part")
-		_, pathErr := os.Stat(path)
-		if errors.Is(partErr, os.ErrNotExist) && errors.Is(pathErr, os.ErrNotExist) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("after quitting: .part %v, the file %v; want neither", partErr, pathErr)
-		}
-		time.Sleep(20 * time.Millisecond)
+	select {
+	case <-r.s.Quit():
+	case <-time.After(20 * time.Second):
+		t.Fatal("the program did not stop")
+	}
+	r.h.reg.stopped() // what Run does once the loop has ended: each feature stops what it started
+	_, partErr := os.Stat(path + ".part")
+	_, pathErr := os.Stat(path)
+	if !errors.Is(partErr, os.ErrNotExist) || !errors.Is(pathErr, os.ErrNotExist) {
+		t.Fatalf("after quitting: .part %v, the file %v; want neither", partErr, pathErr)
 	}
 }
 
