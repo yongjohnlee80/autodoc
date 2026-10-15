@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"time"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
@@ -79,7 +82,8 @@ func (pl *plugins) feedDocuments() {
 
 // document is the note in the editor: its path in the workspace ("" for a draft), its text and its
 // version (Page: snapshotted again when typed since the last), the cursor and the selection, from 1
-// in the editor's columns (grapheme clusters).
+// in the editor's columns (grapheme clusters), and the same as byte offsets into the text (a
+// protocol-4 plugin is sent those too).
 func (pl *plugins) document() plugin.Document {
 	p := pl.c.Page()
 	d := plugin.Document{Workspace: pl.c.Workspace(), Version: p.Version, Text: string(p.Text)}
@@ -88,9 +92,39 @@ func (pl *plugins) document() plugin.Document {
 	}
 	row, col := pl.c.Cursor()
 	d.Cursor = plugin.Position{Line: row + 1, Col: col + 1}
+	d.CursorByte = byteOffset(d.Text, row, col)
 	if r, c, er, ec, ok := pl.c.Selection(); ok {
 		d.Selection = []plugin.Range{{Start: plugin.Position{Line: r + 1, Col: c + 1},
 			End: plugin.Position{Line: er + 1, Col: ec + 1}}}
+		d.SelectionBytes = [][2]int{{byteOffset(d.Text, r, c), byteOffset(d.Text, er, ec)}}
 	}
 	return d
+}
+
+// byteOffset is the byte in text where the editor's position falls: line and col from 0, col
+// counting grapheme clusters as the editor's cursor does (the one segmentation, golib's), so the
+// offset is the cluster's first byte and never inside one. A column past its line's end is the
+// line's end, and a line past the text's end is the text's end.
+func byteOffset(text string, line, col int) int {
+	at := 0
+	for range line {
+		nl := strings.IndexByte(text[at:], '\n')
+		if nl < 0 {
+			return len(text)
+		}
+		at += nl + 1
+	}
+	end := len(text)
+	if nl := strings.IndexByte(text[at:], '\n'); nl >= 0 {
+		end = at + nl
+	}
+	n := 0
+	for c := range tuicore.Graphemes(text[at:end]) {
+		if n == col {
+			break
+		}
+		at += len(c)
+		n++
+	}
+	return at
 }

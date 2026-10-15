@@ -123,6 +123,7 @@ Window {
             // the panels that stay open, checked while they show
             MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
             MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
+            MenuItem { text: "Res&ults"; checkable: true; checked: App.resultsShown; onTriggered: App.toggleResults() }
             MenuSeparator {}
             MenuItem { text: "A&rrange panel…"; onTriggered: App.arrangePanel() }
             MenuItem { text: "Reset panel la&yout"; onTriggered: App.resetPanelLayout() }
@@ -478,6 +479,50 @@ Window {
         }
     }
 
+    // the results: a table a plugin sends (plugintable.go), golib's cell-cursor table over the rows
+    // loaded, which asks the plugin for more as the cursor nears their end; at the bottom unless
+    // moved. Closing it lets the table go. Its buttons are the results commands, each saying which
+    // rows it takes.
+    Panel {
+        id: results
+        heading: App.resultsTitle
+        closeOnQ: true
+        edge: Tui.Bottom
+        size: App.resultsSize
+        length: App.resultsLength
+        floating: App.resultsFloating
+        floatX: App.resultsX; floatY: App.resultsY; floatWidth: App.resultsW; floatHeight: App.resultsH
+        onPlaced: App.panelPlaced("results", x, y, width, height)
+        minimumSize: 10
+        onResized: App.panelResized("results", size, length)
+        onOpened: App.panelOpened("results")
+        onClosed: App.panelClosed("results")
+        Flex {
+            direction: Tui.Vertical
+            TableView {
+                id: resultsTable
+                Layout.fillHeight: true
+                palette.highlight: Theme.document.highlight
+                palette.highlightedText: Theme.document.highlightedText
+                model: App.resultsRows
+                cellCursor: true
+                sortable: true
+            }
+            Flex {
+                direction: Tui.Horizontal
+                Text { text: " "; Layout.fillWidth: true }
+                Button { text: "Copy"; toolTipText: "the selected cells, or the cursor's, as TSV (y in the table)"; onClicked: App.copyResults() }
+                Text { text: " " }
+                Button { text: "Export CSV…"; toolTipText: "every row, fetched to the last, into a CSV file"; onClicked: App.startExportResults() }
+                Text { text: " " }
+                Button { text: "Insert as Markdown"; toolTipText: "the rows loaded now, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
+                Text { text: " " }
+                Button { text: "Close (&q)"; toolTipText: "close the results"; onClicked: App.toggleResults() }
+                Text { text: " "; Layout.fillWidth: true }
+            }
+        }
+    }
+
     // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
     // tab per status, as autofinder's todos panel; at the left edge unless moved, and large: 65% of
     // the window across, 80% along, centred (todosDefault), until the user sizes or places it
@@ -760,6 +805,7 @@ Window {
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }
+    ExportResults { id: exportResults }
     UnsavedFile { id: unsavedFile }
     Recovery { id: recoveryDialog }
     OpenHTML { id: openHTML }
