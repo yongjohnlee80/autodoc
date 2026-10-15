@@ -680,6 +680,7 @@ func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
+	before := storedOnly(t, d).Exclude
 	r.openSettings(t, "kb", 0)
 	onLoop(r, func() bool {
 		r.h.settings.w.todoExcluded = []string{".todo-list/**"}
@@ -691,7 +692,7 @@ func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 		return strings.Contains(f, "Save indexes its tasks graph-only") && strings.Contains(f, ".git/**; drafts/**")
 	})
 	onLoop(r, func() bool { r.h.todoGraphOnly("[unclosed; .todo-list/**"); return true }) // refused: left as typed
-	if got := storedOnly(t, d); !slices.Equal(got.Exclude, []string{".git/**", "**/node_modules/**"}) {
-		t.Errorf("the button saved: %v", got.Exclude)
+	if got := storedOnly(t, d); !slices.Equal(got.Exclude, before) {
+		t.Errorf("the button saved: %v, was %v", got.Exclude, before)
 	}
 }
