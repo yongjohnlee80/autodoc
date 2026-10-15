@@ -322,6 +322,11 @@ func TestAFailedMachineValueRestoresTheFile(t *testing.T) {
 	e.disk.WriteFile(file, []byte("[vars]\nDUMPS = \"/old\"\n"))
 	e.j.Fail = func(op string) error {
 		if op == "UpdateSettings" {
+			// a hand edit lands between the declaration and the settings write: it stays
+			if got := e.read(file); !strings.Contains(got, `machine = ["DUMPS"]`) {
+				t.Errorf("not declared before the settings write:\n%s", got)
+			}
+			e.disk.WriteFile(file, []byte("machine = [\"DUMPS\"]\n\n[vars]\nEXTRA = \"/new\"\n"))
 			return errors.New("the settings write failed")
 		}
 		return nil
@@ -333,6 +338,22 @@ func TestAFailedMachineValueRestoresTheFile(t *testing.T) {
 	}
 	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/old" || v.Source != "store" || v.Machine {
 		t.Errorf("the portable value was lost: %+v\n%s", v, e.read(file))
+	}
+	if v := varOf(t, e, kb, "EXTRA"); v.Value != "/new" {
+		t.Errorf("undoing the declaration erased an edit made in between: %+v\n%s", v, e.read(file))
+	}
+	// a name declared machine-only already: a failed value changes nothing in the file
+	e.disk.WriteFile(file, []byte("machine = [\"LOGS\"]\n"))
+	e.j.Fail = func(op string) error {
+		if op == "UpdateSettings" {
+			return errors.New("the settings write failed")
+		}
+		return nil
+	}
+	err = e.m.SetVar(ctx, "LOGS", "/l", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine})
+	e.j.Fail = nil
+	if v := varOf(t, e, kb, "LOGS"); err == nil || !v.Machine {
+		t.Errorf("an existing declaration was undone: %+v %v", v, err)
 	}
 }
 

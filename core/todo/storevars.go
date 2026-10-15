@@ -90,6 +90,20 @@ func (sv storeVars) clone() storeVars {
 	return c
 }
 
+// undoDeclare undoes, in sv (the file now), what declaring name machine-only changed in prior (the
+// file then): the portable value it dropped comes back, unless the file has one again, and a
+// declaration it added goes. Everything else in sv stays as it is now.
+func (prior storeVars) undoDeclare(sv *storeVars, name string) {
+	v, had := prior.Vars[name]
+	if !had && slices.Contains(prior.Machine, name) {
+		return // declared already: the call changed nothing
+	}
+	sv.Machine = slices.DeleteFunc(sv.Machine, func(n string) bool { return n == name })
+	if _, again := sv.Vars[name]; had && !again {
+		sv.Vars[name] = v
+	}
+}
+
 // render writes sv as the file's TOML: the machine list, then [vars], each sorted, so the file a
 // verb writes is stable and diffs cleanly.
 func (sv storeVars) render() []byte {
@@ -411,8 +425,9 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 			return err
 		}
 		// the name is declared machine-only in the store's file first, so no machine without it errs,
-		// and a file edit that fails leaves no value behind; the file as it was is kept, and put back
-		// if the value then cannot be kept, so a portable value it held is never lost
+		// and a file edit that fails leaves no value behind; what the declaration changed is undone if
+		// the value then cannot be kept, so a portable value it held is never lost, and only that is
+		// undone: an edit the file took in between stays
 		var prior *storeVars
 		if value != "" {
 			err := m.editStoreVars(ctx, w, func(sv *storeVars) error {
@@ -449,8 +464,8 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 			return nil
 		})
 		if err != nil && prior != nil {
-			if rerr := m.editStoreVars(ctx, w, func(sv *storeVars) error { *sv = prior.clone(); return nil }); rerr != nil {
-				return errors.Join(err, fmt.Errorf("putting the store's variable file back: %w", rerr))
+			if rerr := m.editStoreVars(ctx, w, func(sv *storeVars) error { prior.undoDeclare(sv, name); return nil }); rerr != nil {
+				return errors.Join(err, fmt.Errorf("undoing the machine-only declaration of %s: %w", name, rerr))
 			}
 		}
 		return err
