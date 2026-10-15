@@ -26,6 +26,9 @@ import (
 // varsFile is a store's variable file, beside its buckets.
 const varsFile = ".autodoc-vars.toml"
 
+// maxVarsFile is the largest variable file read: a larger one is refused whole, never cut short.
+const maxVarsFile = 64 << 10
+
 // VarProjectRoot is the project a store serves: what auto-core's $WORKSPACE meant before the cutover.
 const VarProjectRoot = "PROJECT_ROOT"
 
@@ -138,9 +141,12 @@ func (m *Manager) readStoreVars(ctx context.Context, dir string) (storeVars, err
 		return storeVars{}, err
 	}
 	defer r.Close()
-	b, err := io.ReadAll(io.LimitReader(r, 64<<10))
+	b, err := io.ReadAll(io.LimitReader(r, maxVarsFile+1))
 	if err != nil {
 		return storeVars{}, err
+	}
+	if len(b) > maxVarsFile {
+		return storeVars{}, fmt.Errorf("%s/%s: larger than %d bytes", dir, varsFile, maxVarsFile)
 	}
 	sv, err := parseStoreVars(b)
 	if err != nil {
@@ -395,7 +401,21 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 		if err != nil {
 			return err
 		}
-		err = m.j.UpdateSettings(ctx, func(s *Settings) error {
+		if value != "" {
+			// the name is declared machine-only in the store's file first, so no machine without
+			// it errs; a file edit that fails leaves no value behind
+			err := m.editStoreVars(ctx, w, func(sv *storeVars) error {
+				if !slices.Contains(sv.Machine, name) {
+					sv.Machine = append(sv.Machine, name)
+				}
+				delete(sv.Vars, name)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return m.j.UpdateSettings(ctx, func(s *Settings) error {
 			if s.MachineVars == nil {
 				s.MachineVars = map[string]map[string]string{}
 			}
@@ -413,17 +433,6 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 			} else {
 				s.MachineVars[w.rec.ID] = vals
 			}
-			return nil
-		})
-		if err != nil || value == "" {
-			return err
-		}
-		// the name is declared machine-only in the store's file, so no machine without it errs
-		return m.editStoreVars(ctx, w, func(sv *storeVars) error {
-			if !slices.Contains(sv.Machine, name) {
-				sv.Machine = append(sv.Machine, name)
-			}
-			delete(sv.Vars, name)
 			return nil
 		})
 	}
@@ -557,7 +566,16 @@ func (m *Manager) CarryKBRoots(ctx context.Context) {
 		if err != nil {
 			continue
 		}
-		if l.fileErr == nil && l.file.Vars[VarKBRoot] == "" && kb != l.derived[VarKBRoot] {
+		switch {
+		case l.fileErr != nil:
+			// the file cannot take it: the routes keep their kb_root until the file is mended, and
+			// the next start carries it
+			m.event(Event{Kind: "todos.vars_carry_blocked", Store: id, Path: rec.Path,
+				Detail: "kb_root " + kb + " kept on the routes: " + l.fileErr.Error()})
+			continue
+		case l.file.Vars[VarKBRoot] != "" || kb == l.derived[VarKBRoot]:
+			// the store's file already names a KB_ROOT, or its place derives this one
+		default:
 			err := m.editStoreVars(ctx, w, func(sv *storeVars) error {
 				sv.Vars[VarKBRoot] = relTo(rec.Path, kb)
 				return nil

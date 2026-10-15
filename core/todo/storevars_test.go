@@ -275,12 +275,56 @@ func TestCarryKBRoots(t *testing.T) {
 		t.Errorf("a kb_root equal to the derived one wrote a file or stayed: %v", roots(e))
 	}
 
+	// a refused file cannot take the carried value: the routes keep theirs until it is mended, and
+	// the next start carries it
+	e = claimed(t)
+	e.disk.WriteFile(file, []byte("[vars\n"))
+	setRoots(e, map[string]string{"/kb": "/elsewhere"})
+	e.m.CarryKBRoots(ctx)
+	if r := roots(e); r["/kb"] != "/elsewhere" || !slices.Contains(e.eventKinds(), "todos.vars_carry_blocked") || e.read(file) != "[vars\n" {
+		t.Fatalf("a refused file: roots %v, events %v, file %q", r, e.eventKinds(), e.read(file))
+	}
+	e.disk.WriteFile(file, []byte("[vars]\nP = \"/p\"\n"))
+	e.m.CarryKBRoots(ctx)
+	if v := varOf(t, e, kb, "KB_ROOT"); v.Value != "/elsewhere" || len(roots(e)) != 0 {
+		t.Errorf("after mending the file: %+v, roots %v", v, roots(e))
+	}
+
 	e = claimed(t)
 	folderRoute(t, e)
 	setRoots(e, map[string]string{"/kb": "/a", "/src/proj": "/b"})
 	e.m.CarryKBRoots(ctx)
 	if e.exists(file) || len(roots(e)) != 2 || !slices.Contains(e.eventKinds(), "todos.vars_carry_conflict") {
 		t.Errorf("disagreeing routes: file %v, roots %v, events %v", e.exists(file), roots(e), e.eventKinds())
+	}
+}
+
+// A machine value whose declaration the store's file cannot take is not kept either: no machine may
+// hold a value its peers would read as an undefined name.
+func TestAFailedMachineDeclarationKeepsNoValue(t *testing.T) {
+	e := claimed(t)
+	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("[vars\n"))
+	if err := e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}); err == nil {
+		t.Fatal("a machine value set though its declaration could not be written")
+	}
+	st, err := e.j.Settings(ctx)
+	if err != nil || len(st.MachineVars) != 0 {
+		t.Errorf("a failed declaration kept the value: %+v %v", st.MachineVars, err)
+	}
+}
+
+// A variable file over the limit is refused whole, never read as its first part.
+func TestAnOversizedVariableFileIsRefused(t *testing.T) {
+	e := claimed(t)
+	file := kbStore + "/.autodoc-vars.toml"
+	pad := "# " + strings.Repeat("x", 64<<10) + "\n"
+	e.disk.WriteFile(file, []byte(pad+"[vars]\nP = \"/p\"\n"))
+	if v := varOf(t, e, kb, "P"); v.Value != "" || !slices.Contains(e.eventKinds(), "todos.vars_invalid") {
+		t.Errorf("an oversized file was read, not refused: %+v, events %v", v, e.eventKinds())
+	}
+	e.disk.WriteFile(file, []byte(pad[:60<<10]+"\n[vars]\nP = \"/p\"\n"))
+	if v := varOf(t, e, kb, "P"); v.Value != "/p" {
+		t.Errorf("a file under the limit: %+v", v)
 	}
 }
 

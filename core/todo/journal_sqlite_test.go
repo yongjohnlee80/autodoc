@@ -75,6 +75,8 @@ var sqliteSuites = []struct {
 	{"SetVarScopes", TestSetVarScopes},
 	{"AClaimRecordsTheProjectItsStoreIsIn", TestAClaimRecordsTheProjectItsStoreIsIn},
 	{"CarryKBRoots", TestCarryKBRoots},
+	{"AFailedMachineDeclarationKeepsNoValue", TestAFailedMachineDeclarationKeepsNoValue},
+	{"AnOversizedVariableFileIsRefused", TestAnOversizedVariableFileIsRefused},
 	{"MigrateRefsPlansThenAppliesTheReviewedList", TestMigrateRefsPlansThenAppliesTheReviewedList},
 	{"TransitionsAnyToAny", TestTransitionsAnyToAny},
 	{"AssignD1", TestAssignD1},
