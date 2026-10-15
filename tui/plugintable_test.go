@@ -114,9 +114,10 @@ func snapLine(id string, d plugin.Document) string {
 	if len(d.Text) < 200 {
 		text = strconv.Quote(d.Text)
 	}
-	rest := ""
+	rest := "" // two characters from the offset: one inside a character shows as U+FFFD
 	if d.CursorByte >= 0 && d.CursorByte <= len(d.Text) {
-		rest = d.Text[d.CursorByte:min(d.CursorByte+4, len(d.Text))]
+		r := []rune(d.Text[d.CursorByte:])
+		rest = string(r[:min(2, len(r))])
 	}
 	var sel []string
 	for _, r := range d.SelectionBytes {
@@ -422,10 +423,10 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 			r.h.core.SetCursor(widget.TextPos{Line: line, Col: col})
 		}
 	}
-	if got := run("an edit", edited("SELECT 1;\nSELECT 2;", 1, 3)); !strings.Contains(got, `"SELECT 1;\nSELECT 2;" at 2:4 byte 13 rest "ECT " sel [] large=false`) {
+	if got := run("an edit", edited("SELECT 1;\nSELECT 2;", 1, 3)); !strings.Contains(got, `"SELECT 1;\nSELECT 2;" at 2:4 byte 13 rest "EC" sel [] large=false`) {
 		t.Errorf("an edit, then the command: %q", got)
 	}
-	if got := run("a move", func() { r.h.core.SetCursor(widget.TextPos{}) }); !strings.Contains(got, `at 1:1 byte 0 rest "SELE"`) {
+	if got := run("a move", func() { r.h.core.SetCursor(widget.TextPos{}) }); !strings.Contains(got, `at 1:1 byte 0 rest "SE"`) {
 		t.Errorf("a move, then the command: %q", got)
 	}
 	selectLine := func() {
@@ -441,11 +442,11 @@ func TestACommandCarriesTheNoteItWasChosenOn(t *testing.T) {
 	const accent, family = "é", "\U0001F468‍\U0001F469‍\U0001F467"
 	text := accent + family + "x\n한국어;"
 	got := run("multibyte", edited(text, 0, 2))
-	if want := fmt.Sprintf(`at 1:3 byte %d rest "x\n한"`, len(accent+family)); !strings.Contains(got, want) {
+	if want := fmt.Sprintf(`at 1:3 byte %d rest "x\n"`, len(accent+family)); !strings.Contains(got, want) {
 		t.Errorf("the cursor on x after two clusters: %q, want %s", got, want)
 	}
 	got = run("multibyte, line two", func() { r.h.core.SetCursor(widget.TextPos{Line: 1, Col: 2}) })
-	if want := fmt.Sprintf(`at 2:3 byte %d rest "어"`, len(accent+family+"x\n한국")); !strings.Contains(got, want) {
+	if want := fmt.Sprintf(`at 2:3 byte %d rest "어;"`, len(accent+family+"x\n한국")); !strings.Contains(got, want) {
 		t.Errorf("the cursor on the third syllable: %q, want %s", got, want)
 	}
 	got = run("a multibyte selection", func() {

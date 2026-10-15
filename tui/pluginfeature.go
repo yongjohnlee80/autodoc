@@ -106,7 +106,8 @@ func (pl *plugins) Catalog() []Entry {
 		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", pl.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
 		builtin("plugins.commands", "plugin commands", "pluginKeys.open()", func() { pl.c.Open("pluginKeys") }),
-		// the results panel's rows (plugintable.go), each command saying which rows it takes
+		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
+		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
 		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", pl.copyResults),
 		builtin("results.csv", "results: export all rows as CSV…", "App.startExportResults()", pl.startExportResults),
 		builtin("results.markdown", "results: insert loaded rows as a Markdown table", "App.insertResults()", pl.insertResults),

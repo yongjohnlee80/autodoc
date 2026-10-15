@@ -533,7 +533,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
-	r.waitNotice(t, "future speaks protocol 4; its manifest says 1")
+	r.waitNotice(t, fmt.Sprintf("future speaks protocol %d; its manifest says 1", plugin.Protocol+1))
 
 	if r.openPlugin("gone") != nil {
 		t.Error("a plugin that did not start is open")
