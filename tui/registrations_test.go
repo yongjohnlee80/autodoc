@@ -42,7 +42,9 @@ func TestARegisteredTUIOffersARestartOnce(t *testing.T) {
 	r.s.WaitFor(t, "the offer", func(sc string) bool {
 		return strings.Contains(sc, regQuestion) && strings.Contains(flat(sc), "This backend, autodoc v-test, lacks .go, .rs") && strings.Contains(sc, "Restart Now")
 	})
-	if k := onLoop(r, func() kind.Kind { return r.h.kinds.Of("a.go", nil) }); k != kind.Markdown {
+	// the daemon has no chunker for .go: its file is plain text (a source language's), never the
+	// TUI's own build's Registered
+	if k := onLoop(r, func() kind.Kind { return r.h.kinds.Of("a.go", nil) }); k != kind.Text {
 		t.Fatalf("a.go reads as %v: the kinds are not the daemon's", k)
 	}
 	r.h.p.Post(func() { r.h.closeDialog("registrations") })
