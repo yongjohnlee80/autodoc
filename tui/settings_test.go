@@ -686,9 +686,9 @@ func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 		r.h.todoGraphOnly(".git/**; .todo-list/**; drafts/**")
 		return true
 	})
-	r.s.WaitForText(t, "Save indexes its tasks graph-only")
-	r.s.WaitFor(t, "the exclude field without the store's pattern", func(sc string) bool {
-		return strings.Contains(sc, ".git/**; drafts/**")
+	r.s.WaitFor(t, "the help line and the exclude field without the store's pattern", func(sc string) bool {
+		f := flat(sc)
+		return strings.Contains(f, "Save indexes its tasks graph-only") && strings.Contains(f, ".git/**; drafts/**")
 	})
 	onLoop(r, func() bool { r.h.todoGraphOnly("[unclosed; .todo-list/**"); return true }) // refused: left as typed
 	if got := storedOnly(t, d); !slices.Equal(got.Exclude, []string{".git/**", "**/node_modules/**"}) {
