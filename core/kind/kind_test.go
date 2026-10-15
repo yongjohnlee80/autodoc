@@ -64,14 +64,14 @@ func TestARegistrationReadsItsExtension(t *testing.T) {
 		{"a.yaml", nil, YAML},
 		{"a.pdf", nil, Derived},
 		{"a.log", []string{".log"}, Text},
-		{"a.py", nil, Markdown},
+		{"a.py", nil, Text}, // a source language's: code, not Markdown
 	} {
 		if got := r.Of(c.path, c.text); got != c.want {
 			t.Errorf("%s with text %v: %v, want %v", c.path, c.text, got, c.want)
 		}
 	}
-	if Of("main.go", nil) != Markdown {
-		t.Error("a build with no registrations reads .go as Markdown, as before")
+	if Of("main.go", nil) != Text {
+		t.Error("a build with no registrations reads .go as Markdown: a source language claims it")
 	}
 	if !Registered.IsText() || Registered.String() != "registered" {
 		t.Error("a registered file is UTF-8 text")
@@ -105,5 +105,30 @@ func TestTextual(t *testing.T) {
 		if got := Textual([]byte(in)); got != want {
 			t.Errorf("Textual(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+// TestASourceLanguagesFileIsCode: a file a source language claims (golib's catalog, the one the
+// editor highlights with) is plain text, never Markdown, whatever its case: a .sql page has no
+// rendered view and no Markdown table keys. The decisions before it still win, and a name no
+// language claims stays Markdown.
+func TestASourceLanguagesFileIsCode(t *testing.T) {
+	for p, want := range map[string]Kind{
+		"q.sql": Text, "db/Q.SQL": Text, "a.mysql.sql": Text, "a.sqlite.sql": Text, "a.pgsql": Text,
+		"main.go": Text, "lib.rs": Text, "x.py": Text, "x.ts": Text, "run.sh": Text, "init.lua": Text,
+		"c.yaml": YAML, "notes.md": Markdown, "x.adoc": Markdown, "README": Markdown, "page.html": Derived,
+	} {
+		if got := Of(p, nil); got != want {
+			t.Errorf("Of(%s) = %v, want %v", p, got, want)
+		}
+	}
+	if !IsSource("schema.sql") || IsSource("notes.md") || IsSource("x.adoc") {
+		t.Error("IsSource: .sql is code, .md and .adoc are not")
+	}
+	if (Registrations{Chunked: []string{".sql"}}).Of("q.sql", nil) != Registered {
+		t.Error("a registered chunker's extension is no longer Registered")
+	}
+	if Of("q.sql", []string{".sql"}) != Text {
+		t.Error("a workspace's text extension that a language claims is not text")
 	}
 }

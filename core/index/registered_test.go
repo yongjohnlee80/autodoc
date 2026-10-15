@@ -97,7 +97,7 @@ const goSrc = "package a\n\nfunc A() {\n\treturn\n}\n\nfunc B() {\n\treturn\n}\n
 
 // TestARegisteredChunkerCutsItsFiles: a file of a registered extension is cut by its chunker and
 // recorded under its extension and version, with the chunker's embed text; a build with no
-// registrations reads the same file as Markdown, as before.
+// registrations reads the same file as plain text, since a source language claims it.
 func TestARegisteredChunkerCutsItsFiles(t *testing.T) {
 	e := newEnv(t, options{Match: goAndMarkdown, Registrations: registered(t, &funcChunker{version: "fake-1"})})
 	e.put("a.go", goSrc)
@@ -109,8 +109,8 @@ func TestARegisteredChunkerCutsItsFiles(t *testing.T) {
 	}
 	community := newEnv(t, options{Match: goAndMarkdown})
 	community.put("a.go", goSrc)
-	// unregistered, a.go is read as Markdown: its relations are read too (".r1")
-	if got := community.indexerOf("a.go"); got != "c"+ChunkerVersion+".s3.t512.r1" {
+	// unregistered, a.go is code a source language claims: plain text, so no relations (no ".r1")
+	if got := community.indexerOf("a.go"); got != "c"+ChunkerVersion+".s3.t512" {
 		t.Errorf("the community build records a.go under %q", got)
 	}
 	if got := community.embedsOf("a.go"); len(got) == 0 || slices.ContainsFunc(got, func(s string) bool { return s != "" }) {
