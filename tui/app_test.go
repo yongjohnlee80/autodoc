@@ -397,6 +397,16 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 	r.keys(t, esc())
 }
 
+// waitTyped waits for typeInEditor to be done: the buffer shown modified, and the editor back in
+// Normal mode. Keys and a post are not ordered: a post right after the typing can run before its
+// Esc, which then lands on whatever the post opened (a question's Esc is Stay).
+func (r *running) waitTyped(t *testing.T) {
+	t.Helper()
+	r.s.WaitFor(t, "the typing done", func(string) bool {
+		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
+	})
+}
+
 // openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
@@ -414,7 +424,7 @@ func onLoop[T any](r *running, read func() T) T {
 	return <-ch
 }
 
-func (r *running) file() openedFile   { return onLoop(r, func() openedFile { return r.h.file }) }
+func (r *running) file() openedFile   { return onLoop(r, func() openedFile { return *r.h.file }) }
 func (r *running) editorText() string { return onLoop(r, r.h.core.Value) }
 
 func (r *running) waitFile(t *testing.T, p string) {
@@ -519,33 +529,44 @@ func TestAConflictAsks(t *testing.T) {
 	}
 }
 
-// TestUnsavedWorkIsNeverLostQuietly: opening another file over unsaved changes asks; stay keeps
-// them, discard drops them, save writes them first.
+// TestUnsavedWorkIsNeverLostQuietly: opening another file asks nothing, and the buffer left keeps
+// its unsaved changes; closing a modified buffer asks: stay keeps it, save writes it first, discard
+// drops it.
 func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	r := attached(t, d)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
-	ask := func() {
+	r.openByPicker(t, "b.md")
+	r.waitFile(t, "b.md")
+	if strings.Contains(r.s.String(), "unsaved file") {
+		t.Fatal("opening another file asked about a.md's unsaved changes")
+	}
+	r.openByPicker(t, "a.md") // its buffer, shown again: the edit is there
+	r.waitBuffer(t, "a.md")
+	if !strings.Contains(r.editorText(), "Xaaa") || !r.file().dirty {
+		t.Fatalf("a.md shown again: %q, dirty %v", r.editorText(), r.file().dirty)
+	}
+	closeShown := func() {
 		t.Helper()
-		r.openByPicker(t, "b.md")
+		r.waitTyped(t)
+		onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 		r.s.WaitForText(t, "unsaved file")
 	}
-	ask()
+	closeShown()
 	r.keys(t, key('t'))
 	r.s.WaitFor(t, "still a.md, unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") && !strings.Contains(sc, "unsaved file") })
-	ask()
+	closeShown()
 	r.keys(t, key('s'))
-	r.waitFile(t, "b.md")
+	r.waitBuffer(t, "b.md") // a.md written and closed: b.md, open already, is shown
 	if got := d.read(t, "kb", "a.md"); got != "Xaaa\n" {
-		t.Errorf("save, then open: a.md %q", got)
+		t.Errorf("save, then close: a.md %q", got)
 	}
 	r.typeInEditor(t, "Y")
-	r.openByPicker(t, "a.md")
-	r.s.WaitForText(t, "unsaved file")
+	closeShown()
 	r.keys(t, key('d'))
-	r.waitFile(t, "a.md")
+	r.s.WaitFor(t, "b.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "b.md"}) == nil }) })
 	if got := d.read(t, "kb", "b.md"); got != "bbb\n" {
 		t.Errorf("discard wrote b.md: %q", got)
 	}
@@ -818,7 +839,7 @@ func TestReconnects(t *testing.T) {
 }
 
 // TestASaveNeverDropsANewerEdit: an edit made while a guarded save is on its way is not dropped by
-// what the save guarded: the switch asks again.
+// what the save guarded: the close asks again.
 func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
 	sess := NewSession(d.sock, nil)
@@ -834,8 +855,9 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
+	r.waitTyped(t)
 	holding.Store(true)
-	r.openByPicker(t, "b.md")
+	onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 	r.s.WaitForText(t, "unsaved file")
 	r.keys(t, key('s'))
 	r.s.WaitForText(t, "saving a.md")
@@ -851,8 +873,8 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	if n := r.file(); n.path != "a.md" || !n.dirty || !strings.Contains(r.editorText(), "Y") {
 		t.Fatalf("after the save: %s, dirty %v, text %q", n.path, n.dirty, r.editorText())
 	}
-	r.keys(t, key('s')) // save the newer edit too; then the open goes ahead
-	r.waitFile(t, "b.md")
+	r.keys(t, key('s')) // save the newer edit too; then the close goes ahead
+	r.s.WaitFor(t, "a.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "a.md"}) == nil }) })
 	if got := d.read(t, "kb", "a.md"); !strings.Contains(got, "Y") || !strings.Contains(got, "X") {
 		t.Errorf("a.md %q", got)
 	}
@@ -877,8 +899,8 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 	if n := r.file(); !n.dirty || !strings.Contains(r.editorText(), "mine") {
 		t.Fatalf("after the failed reload: dirty %v, text %q", n.dirty, r.editorText())
 	}
-	r.openByPicker(t, "b.md")
-	r.s.WaitForText(t, "unsaved file") // still guarded
+	onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
+	r.s.WaitForText(t, "unsaved file") // still guarded: closing it asks
 }
 
 func TestProgressText(t *testing.T) {

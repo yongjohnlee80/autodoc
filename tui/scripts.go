@@ -43,7 +43,7 @@ func (h *Host) loadScripts() {
 // startScripts makes a new engine, binds the program's functions into it and loads AutoDoc's
 // scripts, then the user's: what failed to load.
 func (h *Host) startScripts() []error {
-	h.scripts = script.New(h.core, script.WithGlobal("autodoc"), script.WithNotify(h.notify))
+	h.scripts = script.New(h.core, script.WithGlobal("autodoc"), script.WithNotify(h.notify), script.WithBuffers(luaBuffers{h}))
 	if h.cat != nil {
 		h.scripts.SetRegistrar(h.registerLua)
 	}

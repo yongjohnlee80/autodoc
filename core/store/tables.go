@@ -27,7 +27,7 @@ type Workspace struct {
 	AbstractChunk        int64   // 1: each document's abstract is a chunk of its own (000014)
 	DemoteSuperseded     int64   // 1: a superseded document's hits sit below its successor's (000014)
 	GraphOnlySet         int64   // 1: its graph_only patterns were set; 0: it has the default (000021)
-	TodoSearch           int64   // 1: its todo tasks are indexed in full, for search (000021)
+	TodoGraphOnly        int64   // 1: its todo tasks are in the graph only, not in search; 0, the default: in search (000022)
 	CreatedAt, UpdatedAt int64
 }
 
@@ -53,7 +53,7 @@ const (
 	WorkspaceAbstractChunk   WorkspaceField = "abstract_chunk"
 	WorkspaceDemote          WorkspaceField = "demote_superseded"
 	WorkspaceGraphOnlySet    WorkspaceField = "graph_only_set"
-	WorkspaceTodoSearch      WorkspaceField = "todo_search"
+	WorkspaceTodoGraphOnly   WorkspaceField = "todo_graph_only"
 	WorkspaceCreatedAt       WorkspaceField = "created_at"
 	WorkspaceUpdatedAt       WorkspaceField = "updated_at"
 )
@@ -337,7 +337,7 @@ func newTables(c dao.DataConn) *tables {
 				WorkspaceViewArgs:        col("workspace", WorkspaceViewArgs, func(w *Workspace) any { return &w.ViewArgs }),
 				WorkspaceAbstractChunk:   col("workspace", WorkspaceAbstractChunk, func(w *Workspace) any { return &w.AbstractChunk }),
 				WorkspaceGraphOnlySet:    col("workspace", WorkspaceGraphOnlySet, func(w *Workspace) any { return &w.GraphOnlySet }),
-				WorkspaceTodoSearch:      col("workspace", WorkspaceTodoSearch, func(w *Workspace) any { return &w.TodoSearch }),
+				WorkspaceTodoGraphOnly:   col("workspace", WorkspaceTodoGraphOnly, func(w *Workspace) any { return &w.TodoGraphOnly }),
 				WorkspaceDemote:          col("workspace", WorkspaceDemote, func(w *Workspace) any { return &w.DemoteSuperseded }),
 				WorkspaceCreatedAt:       col("workspace", WorkspaceCreatedAt, func(w *Workspace) any { return &w.CreatedAt }),
 				WorkspaceUpdatedAt:       col("workspace", WorkspaceUpdatedAt, func(w *Workspace) any { return &w.UpdatedAt }),

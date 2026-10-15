@@ -341,7 +341,7 @@ func (l legacy) Listed() {
 
 // Picks are the host's own pickers.
 func (l legacy) Picks() map[string]picker {
-	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick}
+	return map[string]picker{"search": l.h.searchPick, "open": l.h.openPick, "new": l.h.newPick, "buffers": l.h.bufferPick}
 }
 
 // Core is what a feature may use of the host: all of it, so a feature never reaches for a Host
@@ -516,7 +516,9 @@ func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
 		*seq++
 		n = *seq
 	}
-	gen, epoch, file := h.session.Gen(), h.epoch, h.file.gen
+	// the page is a buffer and its generation: buffers count their generations alike, so the same
+	// number in another buffer is another page
+	gen, epoch, file, page := h.session.Gen(), h.epoch, h.file.gen, h.active
 	return Ticket{current: func() bool {
 		if scope == TicketLocal {
 			return seq == nil || *seq == n
@@ -530,6 +532,6 @@ func (h *Host) ticket(seq *uint64, scope TicketScope) Ticket {
 		case TicketWorkspace:
 			return h.epoch == epoch
 		}
-		return h.epoch == epoch && h.file.gen == file
+		return h.epoch == epoch && h.active == page && h.file.gen == file
 	}}
 }

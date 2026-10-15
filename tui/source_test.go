@@ -13,7 +13,7 @@ import (
 func TestActualSourceFileUsesItsLanguageBeforeAndAfterFind(t *testing.T) {
 	r := runTUI(t, NewSession("unused", nil), Options{})
 	onLoop(r, func() bool {
-		r.h.show("", "/tmp/example.go", "package main\nfunc f() {\n\t", "v1", false)
+		r.h.show(r.h.active, "", "/tmp/example.go", "package main\nfunc f() {\n\t", "v1", false)
 		r.h.core.SetKeyset(widget.KeysetStandard)
 		return true
 	})
@@ -56,7 +56,7 @@ func TestCustomProviderWorksForActualSourceAndMarkdownThroughAutoDoc(t *testing.
 		{"/tmp/example.md", "```custom\ntoken\n```", 1, 0},
 	} {
 		onLoop(r, func() bool {
-			r.h.show("", tc.path, tc.text, "v1", false)
+			r.h.show(r.h.active, "", tc.path, tc.text, "v1", false)
 			r.h.core.SetKeyset(widget.KeysetStandard)
 			return true
 		})
@@ -87,7 +87,7 @@ func TestLuaIsHighlightedInAFileAndAFence(t *testing.T) {
 	styleOf := func(path, text string, line int) highlight.Style {
 		t.Helper()
 		return onLoop(r, func() highlight.Style {
-			r.h.show("", path, text, "v1", false)
+			r.h.show(r.h.active, "", path, text, "v1", false)
 			f := r.h.core.BeginHighlight(0)
 			defer f.Close()
 			return f.Styles(line)[0]
@@ -111,7 +111,7 @@ func TestSQLIsHighlightedInAFence(t *testing.T) {
 	styleOf := func(path, text string, line int) highlight.Style {
 		t.Helper()
 		return onLoop(r, func() highlight.Style {
-			r.h.show("", path, text, "v1", false)
+			r.h.show(r.h.active, "", path, text, "v1", false)
 			f := r.h.core.BeginHighlight(0)
 			defer f.Close()
 			return f.Styles(line)[0]

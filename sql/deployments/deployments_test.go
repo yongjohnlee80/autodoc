@@ -58,6 +58,14 @@ var released = map[string]map[string]string{
 		"000016_update_chunk_text.sql":                 "20095490a20b1bf3bf24100fd9cc3c32b5be2f4f8a762ac3baa4d74ee639d457", // v0.1.22
 		"000017_revert_todo_journal.sql":               "4d6a59d6bbbc49c41e3cff44bda6ed6067e653812cdb692fd57553906acb430c", // v0.1.38
 		"000017_update_todo_journal.sql":               "722ea9820c78f62864d612d396f7378882141a67240bf993b6c1efa42f4c1159", // v0.1.38
+		"000018_revert_todo_consumer_resync.sql":       "aff6a4e6a53dbcf39671096990a68e12cca83e2dc82a7ee9ac3a1910f70d0929", // v0.1.41
+		"000018_update_todo_consumer_resync.sql":       "66efc8ab196b6753a0453533a165ca9a1f55df07cb1179c48ae605d8570c06af", // v0.1.41
+		"000019_revert_todo_store_refreshed.sql":       "511502af936c922beec17fb3b12851b132ce67217f4604fee3720578b6ff1ea5", // v0.1.41
+		"000019_update_todo_store_refreshed.sql":       "2939760ddf372d1fc76b8533adc644cfd9d27d57b7e85e62e56792d5177b26b5", // v0.1.41
+		"000020_revert_todo_store_vars.sql":            "ce90a4775cab2f33c98b874b2fd1d3978d82e716842a0aaac2c21ec91a615177", // v0.1.49
+		"000020_update_todo_store_vars.sql":            "ff8ace3ebac253787bb2454d8c08471a08f3643714dc834fb14eeca964558de7", // v0.1.49
+		"000021_revert_todo_graph_only.sql":            "e613711d6f5a39e3e6e9f262c1f49eb81bdabce725f435d009ec6b68fb4bffd4", // v0.1.50
+		"000021_update_todo_graph_only.sql":            "2da44e9b2e17040063269c44a7673594e51e6b08843cd1c5df367a0eb1b30607", // v0.1.50
 	},
 }
 
@@ -169,6 +177,55 @@ func TestTheScriptsApplyOnSQLite(t *testing.T) {
 	}
 	if left != 0 {
 		t.Fatalf("deleting the workspace left %d of its rows", left)
+	}
+}
+
+// 000022 stores todo_graph_only, the opt-out, in place of 000021's todo_search: every workspace has
+// its todo tasks in search, a new one by the column's default and an old one whatever 000021 held.
+// The revert puts back todo_search, the inverse of todo_graph_only.
+func TestTheTodoSearchDefault(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	ints := func(q string) []int64 {
+		t.Helper()
+		rows, err := db.QueryContext(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []int64
+		for rows.Next() {
+			var n int64
+			if err := rows.Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, n)
+		}
+		return out
+	}
+	exec(t, db, "INSERT INTO workspace(id, name, root, created_at, updated_at) VALUES (1, 'a', '/a', 0, 0), (2, 'b', '/b', 0, 0)")
+	if got := fmt.Sprint(ints("SELECT todo_graph_only FROM workspace ORDER BY id")); got != "[0 0]" {
+		t.Fatalf("a new workspace's todo_graph_only %s, want 0: its tasks in search", got)
+	}
+	exec(t, db, "UPDATE workspace SET todo_graph_only = 1 WHERE id = 2")
+	if name, err := deployments.Runner().Revert(ctx, db, 22); err != nil || !strings.Contains(name, "000022") {
+		t.Fatalf("revert 000022: %s, %v", name, err)
+	}
+	if got := fmt.Sprint(ints("SELECT todo_search FROM workspace ORDER BY id")); got != "[1 0]" {
+		t.Fatalf("reverted todo_search %s, want [1 0]: the inverse", got)
+	}
+	if _, err := db.QueryContext(ctx, "SELECT todo_graph_only FROM workspace"); err == nil {
+		t.Fatal("the revert left todo_graph_only")
+	}
+	exec(t, db, "UPDATE workspace SET todo_search = 0") // 000021's default, and an opt-in turned off
+	if _, err := deployments.Runner().Apply(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(ints("SELECT todo_graph_only FROM workspace ORDER BY id")); got != "[0 0]" {
+		t.Fatalf("todo_graph_only after 000022 %s, want [0 0]: every workspace's tasks in search", got)
+	}
+	if _, err := db.QueryContext(ctx, "SELECT todo_search FROM workspace"); err == nil {
+		t.Fatal("000022 left todo_search")
 	}
 }
 

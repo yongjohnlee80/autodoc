@@ -34,18 +34,13 @@ func (h *Host) emitLua(event string, info map[string]any) {
 	}
 }
 
-// emitOpen is open, for the page readPage set up. Setting it up is not an edit: its revision is
-// change's starting point.
-func (h *Host) emitOpen() {
-	h.luaChangeRev = h.core.Revision()
-	info := map[string]any{}
-	if h.file.open {
-		info["path"] = h.file.path
-		if h.file.ws != "" {
-			info["workspace"] = h.file.ws
-		}
+// emitOpenFor is open, for buffer b: a file loaded into it (shown or not), or the draft it became.
+// Loading is not an edit: b's revision is its change event's starting point.
+func (h *Host) emitOpenFor(b *openBuffer) {
+	if b.buf != nil {
+		b.luaRev = b.buf.Revision()
 	}
-	h.emitLua("open", info)
+	h.emitLua("open", h.bufferInfo(b))
 }
 
 // emitMode is mode, when the editor's mode is another than the one last emitted.
@@ -63,19 +58,20 @@ func (h *Host) emitMode() {
 	h.emitLua("mode", info)
 }
 
-// changeSoon emits change after the pause, for the last edit only, into the engine running when it
-// was set (a reload bumps the generation), and not for a handler's own edits.
-func (h *Host) changeSoon() {
-	if h.scripts == nil || !h.scripts.Handles("change") {
+// changeSoonFor emits change for buffer b after the pause, for its last edit only, into the engine
+// running when it was set (a reload bumps the generation), and not for a handler's own edits. Each
+// buffer debounces on its own: an edit to one never swallows another's change.
+func (h *Host) changeSoonFor(b *openBuffer) {
+	if h.scripts == nil || !h.scripts.Handles("change") || b.buf == nil {
 		return
 	}
-	h.luaChangeGen++
-	gen := h.luaChangeGen
+	b.luaGen++
+	gen, eng := b.luaGen, h.luaChangeGen
 	h.after(luaChangeWait, func() {
-		if gen != h.luaChangeGen || h.core.Revision() == h.luaChangeRev {
-			return // a later edit's timer emits; or nothing but a handler's own edits since
+		if gen != b.luaGen || eng != h.luaChangeGen || b.buf.Revision() == b.luaRev {
+			return // a later edit's timer emits; a reloaded engine; or only a handler's own edits since
 		}
-		h.emitLua("change", map[string]any{"revision": h.core.Revision()})
-		h.luaChangeRev = h.core.Revision() // after the handlers: their own edits are in it
+		h.emitLua("change", map[string]any{"buffer": b.n, "revision": b.buf.Revision()}) // as ADR 1792076688 §4.5: {buffer, revision}
+		b.luaRev = b.buf.Revision()                                                      // after the handlers: their own edits are in it
 	})
 }

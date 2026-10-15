@@ -58,7 +58,7 @@ A new workspace-owned table follows the same rule.
 | table | what a row is | key |
 | --- | --- | --- |
 | `schema_version` | an applied update script; golib `dao/deploy` creates and keeps it | `script` |
-| `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed; its retrieval settings `abstract_chunk` and `demote_superseded` (000014); `todo_search`, its todo tasks in search, and `graph_only_set`, its graph_only list set (000021, ADR 1792015212) | `id` |
+| `workspace` | a root AutoDoc indexes; `name` is what a person types and can be renamed; its retrieval settings `abstract_chunk` and `demote_superseded` (000014); `graph_only_set`, its graph_only list set (000021, ADR 1792015212), and `todo_graph_only`, its todo tasks kept out of search (000022; 0, the default, keeps them in search; it replaced 000021's `todo_search`) | `id` |
 | `embedding_provider` | an embedding provider: kind, base URL, model, and its API key sealed with the keyslot (000002); its context window in tokens (000003) | `id`, `name` |
 | `embedding_usage` | a provider's requests, texts, tokens and failures by day (000002) | `(provider_id, day)` |
 | `embedding_log` | a provider's recent calls, the last 200 kept (000002) | `id` |

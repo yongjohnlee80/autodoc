@@ -40,7 +40,7 @@ func TestUnsavedWorkIsKeptWhenTheProgramEndsUnasked(t *testing.T) {
 	if len(got) != 1 || got[0].WS != "kb" || got[0].Path != "a.md" || got[0].Text != "Xaaa\n" {
 		t.Fatalf("kept %+v", got)
 	}
-	if fi, err := os.Stat(recoveryFile(dir, "kb", "a.md")); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(recoveryFile(dir, recoveryKey{"kb", "a.md", ""})); err != nil || fi.Mode().Perm() != 0o600 {
 		t.Fatalf("the copy: %v, %v; want it the user's alone", fi, err)
 	}
 }
@@ -154,10 +154,22 @@ func TestARestoredCopyStaysUntilDiscarded(t *testing.T) {
 		t.Fatal("the copy went with the text still unsaved")
 	}
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })
-	r.openByPicker(t, "a.md")
-	r.s.WaitForText(t, "Save them before you open a.md?")
-	r.keys(t, key('d'))
+	r.openByPicker(t, "a.md") // a buffer of its own: the restored draft stays unsaved in its own
 	r.waitFile(t, "a.md")
+	if len(readRecovery(dir)) != 1 {
+		t.Fatal("opening another file took the copy of the draft still unsaved")
+	}
+	onLoop(r, func() bool { // show the draft again, and close it
+		for _, b := range r.h.buffers {
+			if !b.file.open {
+				r.h.activate(b)
+			}
+		}
+		r.h.closeShownBuffer()
+		return true
+	})
+	r.s.WaitForText(t, "untitled has unsaved changes")
+	r.keys(t, key('d'))
 	r.s.WaitFor(t, "the copy discarded", func(string) bool { return len(readRecovery(dir)) == 0 })
 }
 
@@ -179,9 +191,10 @@ func TestACopyOfTheOpenDocumentGoesInAtOnce(t *testing.T) {
 	}
 }
 
-// Stay in the unsaved question before a restore keeps that copy for the next start, and nothing
-// waits for an open that will not come.
-func TestStayBeforeARestoreKeepsTheCopy(t *testing.T) {
+// TestRestoringTwoCopiesGivesEachItsBuffer: restoring a.md's copy while b.md's restored text is
+// unsaved asks nothing: each is in a buffer of its own, both unsaved, and both copies are kept
+// until each is saved or discarded.
+func TestRestoringTwoCopiesGivesEachItsBuffer(t *testing.T) {
 	dir := t.TempDir()
 	now := time.Now()
 	_ = writeRecovery(dir, recovered{WS: "kb", Path: "b.md", Text: "b kept\n", Saved: now})
@@ -195,15 +208,19 @@ func TestStayBeforeARestoreKeepsTheCopy(t *testing.T) {
 		t.Fatalf("b.md holds %q", got)
 	}
 	r.keys(t, key('r'))
-	r.s.WaitForText(t, "Save them before you open a.md?") // b.md's restored text is unsaved
-	r.keys(t, key('t'))
-	r.s.WaitFor(t, "the question gone", func(sc string) bool { return !strings.Contains(sc, "before you open") })
-	if waiting := onLoop(r, func() bool { return r.h.restoreWaiting || r.h.pendingRestore != nil }); waiting {
-		t.Fatal("Stay left the restore waiting")
+	r.s.WaitFor(t, "a.md restored", func(string) bool { return r.editorText() == "a kept\n" })
+	if strings.Contains(r.s.String(), "before you open") {
+		t.Fatal("restoring a.md asked about b.md's unsaved text")
 	}
-	// a.md's copy kept for the next start; b.md's stays while its restored text is unsaved
+	b := bufferOn(r, "b.md")
+	if b == nil || !onLoop(r, func() bool { return b.file.dirty && b.buf.Value() == "b kept\n" }) {
+		t.Fatal("b.md's restored text left its buffer")
+	}
+	if waiting := onLoop(r, func() bool { return r.h.restoreWaiting || r.h.pendingRestore != nil }); waiting {
+		t.Fatal("a restore is left waiting")
+	}
 	if got := readRecovery(dir); len(got) != 2 {
-		t.Fatalf("copies left: %+v; want both", got)
+		t.Fatalf("copies left: %+v; want both, each text still unsaved", got)
 	}
 }
 

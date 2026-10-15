@@ -751,6 +751,7 @@ Window {
     SearchPicker { id: searchPicker }
     Find { id: findDialog }
     FileOpen { id: fileOpen }
+    BufferPick { id: bufferPick }
     OutlinePicker { id: outlinePicker }
     AgentAssign { id: agentAssignPicker }
     LuaPick { id: luaPicker }

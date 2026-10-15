@@ -19,6 +19,8 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("file.new", "new file", "App.newFile()", h.newFile),
 		builtin("panel.maximize", "maximize or restore the terminal or agents", "App.maximizePanel()", h.maximizePanel),
 		builtin("file.open", "open a document", "App.openPicker()", h.openPicker),
+		builtin("buffer.pick", "switch buffer", "App.openBuffers()", h.openBuffers),
+		builtin("buffer.close", "close the buffer", "App.closeBuffer()", h.closeShownBuffer),
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
 		builtin("file.save", "save", "App.save()", h.save),
 		builtin("file.reload", "reload from disk", "App.reload()", h.reload),
@@ -55,7 +57,7 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("help.keys", "help", "help.open()", func() { h.open("help") }),
 		builtin("help.tutorial", "the tutorial", "App.openTutorial()", h.openTutorial),
 		builtin("help.about", "about", "about.open()", func() { h.open("about") }),
-	}, h.editorEntries()...)
+	}, append(h.editorEntries(), h.bufferEntries()...)...)
 }
 
 // runEntry is App.run(id): a key running a catalog entry. What it cannot run is said, as a key's

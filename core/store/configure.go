@@ -31,7 +31,7 @@ type Changes struct {
 	DemoteSuperseded *bool // a superseded document's hits below its successor's
 	// Todo stores (ADR 1792015212 §2.2)
 	GraphOnly       *[]string       // the graph_only patterns: indexed for the graph, never for search
-	TodoSearch      *bool           // the workspace's todo tasks indexed in full, for search
+	TodoSearch      *bool           // the workspace's todo tasks in search (the default), or in the graph only
 	Source          *ConnectionSpec // the database the .view files run on
 	DestinationConn *ConnectionSpec // the Postgres database the index lives in
 }
@@ -126,7 +126,7 @@ func (s *Store) Configure(ctx context.Context, id int64, c Changes) error {
 			row = row.Set(WorkspaceDemote, boolInt(*c.DemoteSuperseded))
 		}
 		if c.TodoSearch != nil {
-			row = row.Set(WorkspaceTodoSearch, boolInt(*c.TodoSearch))
+			row = row.Set(WorkspaceTodoGraphOnly, boolInt(!*c.TodoSearch))
 		}
 		if c.GraphOnly != nil {
 			row = row.Set(WorkspaceGraphOnlySet, int64(1))

@@ -31,7 +31,7 @@ func TestAutoDocNativeConstructionUsesAnInjectedSourceProvider(t *testing.T) {
 		{"/tmp/demo.nativesource", "token", 0}, {"/tmp/demo.md", "```nativesource\ntoken\n```", 1},
 	} {
 		ok := onLoop(r, func() bool {
-			r.h.show("", tc.path, tc.text, "v1", false)
+			r.h.show(r.h.active, "", tc.path, tc.text, "v1", false)
 			_, native := r.h.editor.(*guiwidget.Editor)
 			f := r.h.core.BeginHighlight(0)
 			defer f.Close()

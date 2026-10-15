@@ -95,9 +95,9 @@ func TestEmptyIncludeSurvivesStoreReload(t *testing.T) {
 }
 
 // TestAWorkspacesGraphOnlyListAndTodoSearch (ADR 1792015212 §2.2): a workspace that never set its
-// graph_only list has none stored (nil: the default); Configure stores the list and todo_search,
-// an empty list included; another workspace is untouched; one the store does not have is
-// ErrNoWorkspace.
+// graph_only list has none stored (nil: the default), and its todo_search is on (amendment 1);
+// Configure stores the list and todo_search, an empty list included, and turns todo_search off and
+// on again; another workspace is untouched; one the store does not have is ErrNoWorkspace.
 func TestAWorkspacesGraphOnlyListAndTodoSearch(t *testing.T) {
 	s := openStore(t)
 	ctx := context.Background()
@@ -111,14 +111,14 @@ func TestAWorkspacesGraphOnlyListAndTodoSearch(t *testing.T) {
 		}
 		return list, search
 	}
-	if list, search := modes(a.ID); list != nil || search {
-		t.Fatalf("a new workspace: %v %v, want nil (the default) and off", list, search)
+	if list, search := modes(a.ID); list != nil || !search {
+		t.Fatalf("a new workspace: %v %v, want nil (the default) and on", list, search)
 	}
-	list, on := []string{"drafts/**", "**/.todo-list/**"}, true
-	if err := s.Configure(ctx, a.ID, Changes{GraphOnly: &list, TodoSearch: &on}); err != nil {
+	list, off := []string{"drafts/**", "**/.todo-list/**"}, false
+	if err := s.Configure(ctx, a.ID, Changes{GraphOnly: &list, TodoSearch: &off}); err != nil {
 		t.Fatal(err)
 	}
-	if got, search := modes(a.ID); !slices.Equal(got, list) || !search {
+	if got, search := modes(a.ID); !slices.Equal(got, list) || search {
 		t.Errorf("a: %v %v", got, search)
 	}
 	ws, err := s.Workspaces(ctx)
@@ -128,12 +128,12 @@ func TestAWorkspacesGraphOnlyListAndTodoSearch(t *testing.T) {
 	for _, w := range ws {
 		switch w.Name {
 		case "a":
-			if !slices.Equal(w.GraphOnly, list) || w.TodoSearch != 1 {
-				t.Errorf("listed a: %v %d", w.GraphOnly, w.TodoSearch)
+			if !slices.Equal(w.GraphOnly, list) || w.TodoGraphOnly != 1 {
+				t.Errorf("listed a: %v %d", w.GraphOnly, w.TodoGraphOnly)
 			}
 		case "b":
-			if w.GraphOnly != nil || w.TodoSearch != 0 {
-				t.Errorf("listed b, untouched: %v %d", w.GraphOnly, w.TodoSearch)
+			if w.GraphOnly != nil || w.TodoGraphOnly != 0 {
+				t.Errorf("listed b, untouched: %v %d", w.GraphOnly, w.TodoGraphOnly)
 			}
 		}
 	}
@@ -146,6 +146,13 @@ func TestAWorkspacesGraphOnlyListAndTodoSearch(t *testing.T) {
 	}
 	if got, _ := modes(b.ID); got != nil {
 		t.Errorf("b: %v", got)
+	}
+	on := true
+	if err := s.Configure(ctx, a.ID, Changes{TodoSearch: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if _, search := modes(a.ID); !search {
+		t.Error("todo_search turned on again: still off")
 	}
 	if _, _, err := s.WorkspaceModes(ctx, 999); !errors.Is(err, ErrNoWorkspace) {
 		t.Errorf("an unknown workspace: %v", err)

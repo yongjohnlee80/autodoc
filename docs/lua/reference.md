@@ -31,7 +31,9 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | `autodoc.notify(message)` | Shows a notification: a toast in the corner, kept in the history (SPC h). | nothing |
 | `autodoc.call(verb, params, cb)` | Calls any daemon verb by its name, with `params` a list of its params in order (`nil` or `{}` for none). `cb` is optional. | nothing; the answer goes to `cb` |
 | `autodoc.current_workspace()` | The workspace in use. | a string, or `nil` before one is entered |
-| `autodoc.document()` | The page in the editor ([below](#autodocdocument)). | a table |
+| `autodoc.document()` | The page in the editor, the buffer shown ([below](#autodocdocument)). | a table |
+| `autodoc.buffers()` | Every open buffer, in opening order: `{n, path, workspace, kind, modified, active}` ([buffers](#buffers)). | a list of tables |
+| `autodoc.buffer(n)` | An editor object for buffer `n`, shown or not: `ed`'s methods ([buffers](#buffers)). | the object, or `nil` and why |
 | `autodoc.map{mode, keys, command, title}` | Binds a key to a command line ([keys and menus](#keys-and-menus)). | nothing |
 | `autodoc.menu{where, title, command}` | Adds a menu row that runs a command line ([keys and menus](#keys-and-menus)). | nothing |
 | `autodoc.<domain>.<verb>(…, cb)` | Calls the daemon's `<domain>.<verb>`: its params in order, then `cb`. Made when AutoDoc connects ([the daemon's verbs](#the-daemons-verbs)). | nothing; the answer goes to `cb` |
@@ -63,10 +65,11 @@ autodoc.command{
 
 ### `autodoc.document()`
 
-The page in the editor, as a table. It can be called anywhere, a file's top level too.
+The page in the editor, the buffer shown, as a table. It can be called anywhere, a file's top level too.
 
 | Field | What it is |
 |---|---|
+| `buffer` | the buffer's number, as `:b` and `autodoc.buffers()` give it |
 | `path` | its path in its workspace; `nil` for the untitled draft |
 | `workspace` | the workspace it is in; `nil` for the draft, or a file outside every workspace |
 | `kind` | how AutoDoc reads it: `"markdown"`, `"text"`, `"yaml"`, `"derived"` or `"registered"` (source code) |
@@ -297,16 +300,48 @@ them, and its jump to the first match comes just after your command ends.
 a number; `args` are strings, so convert them with `tonumber`. A fraction is cut to a whole number.
 A text argument may be a string or a number.
 
+## Buffers
+
+Every open file, and the untitled draft, is a buffer; the editor shows one. `:b <n|name>` and the
+Buffers picker switch, `:bd` closes the one shown.
+
+- `autodoc.buffers()` lists them: `{n, path, workspace, kind, modified, active}`, in opening order.
+- `autodoc.buffer(n)` is an editor object for buffer `n`, with `ed`'s methods. A buffer not shown is
+  edited by a headless editor of its own, through the code the user's keys run, so a command gives
+  the same result on any buffer. Each call is one undo step in its buffer, and makes it modified.
+- In a gated script, a buffer's `run` needs the `commands` grant, as its `ed:run` does.
+
+```lua
+-- todos.lua: :todos counts TODO in every open buffer
+autodoc.command{
+  name = "todos",
+  help = "count TODO in every open buffer",
+  run = function()
+    for _, b in ipairs(autodoc.buffers()) do
+      local n = #autodoc.buffer(b.n):find_all("TODO", {})
+      autodoc.notify(b.n .. " " .. (b.path or "untitled") .. ": " .. n)
+    end
+  end,
+}
+```
+
 ## Events
 
 `autodoc.on(event, fn)` calls `fn(ed, info)` each time event happens:
 
 | Event | When | `info` |
 |---|---|---|
-| `open` | a page is set up in the editor: a file opened, or the draft after a close | `{path, workspace}`; `path` is `nil` for the draft |
-| `save` | a save wrote the editor's text | `{path, workspace}` |
+| `open` | a file was loaded into a buffer (shown or not), or a buffer became the draft | `{buffer, path, workspace}`; `path` is `nil` for the draft |
+| `enter` | a buffer is shown in the editor: switched to, or opened | `{buffer, path, workspace}` |
+| `leave` | the buffer shown is about to be replaced by another | `{buffer, path, workspace}` |
+| `close` | a buffer is closed (after the unsaved question, if any) | `{buffer, path, workspace}` |
+| `save` | a save wrote a buffer's text | `{buffer, path, workspace}` |
 | `mode` | the editor's mode changed | `{mode, previous}`, as `ed:mode()` names them |
-| `change` | the text changed, once typing pauses (300 ms): a burst of keys is one change | `{revision}`, as `ed:revision()` |
+| `change` | a buffer's text changed, once typing pauses (300 ms): a burst of keys is one change, per buffer | `{buffer, revision}`, as `ed:revision()` |
+
+- **`open` is a load; `enter` is a switch.** Opening a file shows its buffer (`enter`) and loads it
+  (`open`); switching back to it later is `enter` only. A script that sets something up for each
+  file keeps `open`; one that follows the page on screen adds `enter`.
 
 - **A handler runs as a callback does:** on AutoDoc's loop, with 2 seconds, `ed` reachable and its
   edits one undo step. Its error is a notification, `a Lua handler failed: …`; the other handlers

@@ -318,29 +318,21 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 			return ok && slices.Contains(w.exclude, "drafts/**")
 		})
 	})
-	// over unsaved changes the question waits for the open: Stay opens nothing, so nothing is said
+	// over unsaved changes nothing is asked about them: the file opens in a buffer of its own, a.md
+	// keeps its edit in its, and the excluded-file question follows the open
 	r.h.p.Post(func() { r.h.openPath("a.md") })
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "x")
 	r.s.WaitFor(t, "a.md unsaved", func(sc string) bool { return strings.Contains(sc, "a.md [+]") })
 	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
-	r.s.WaitFor(t, "a question", func(sc string) bool {
-		return strings.Contains(sc, "unsaved file") || strings.Contains(sc, "in no workspace")
-	})
-	if strings.Contains(r.s.String(), "in no workspace") {
-		t.Fatal("the excluded-file question came before the unsaved decision")
-	}
-	r.keys(t, key('t')) // Stay
-	r.s.WaitFor(t, "the unsaved question closed", func(sc string) bool { return !strings.Contains(sc, "unsaved file") })
-	if onLoop(r, func() bool { return r.h.file.path != "a.md" }) || strings.Contains(r.s.String(), "in no workspace") {
-		t.Fatalf("Stay opened the excluded file, or asked about it: %q", onLoop(r, func() string { return r.h.file.path }))
-	}
-	// Discard goes ahead: the file opens, and the question follows
-	r.h.p.Post(func() { r.h.openAbsolute(filepath.Join(root, "drafts", "d.md")) })
-	r.s.WaitForText(t, "unsaved file")
-	r.keys(t, key('d')) // Discard
 	r.s.WaitForText(t, "in no workspace: open kb's settings?")
 	r.s.WaitForText(t, "keeps it out")
 	r.keys(t, key('o'))
 	r.s.WaitForText(t, "workspace settings · kb")
+	if strings.Contains(r.s.String(), "unsaved file") {
+		t.Fatal("opening the excluded file asked about a.md's unsaved changes")
+	}
+	if a := onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"kb", "a.md"}) }); a == nil || !onLoop(r, func() bool { return a.file.dirty }) {
+		t.Fatal("a.md's buffer lost its unsaved edit")
+	}
 }

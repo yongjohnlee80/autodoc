@@ -260,13 +260,13 @@ func TestAPagesKindFollowsRawAndDerived(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	got := onLoop(r, func() [3]kind.Kind {
-		saved := r.h.file
-		defer func() { r.h.file = saved }()
-		r.h.file = openedFile{ws: "kb", path: "page.html", open: true, raw: true}
+		saved := *r.h.file
+		defer func() { *r.h.file = saved }()
+		*r.h.file = openedFile{ws: "kb", path: "page.html", open: true, raw: true}
 		raw := r.h.pageKind()
-		r.h.file = openedFile{ws: "kb", path: "manual.pdf", open: true, derived: "PDF"}
+		*r.h.file = openedFile{ws: "kb", path: "manual.pdf", open: true, derived: "PDF"}
 		derived := r.h.pageKind()
-		r.h.file = openedFile{}
+		*r.h.file = openedFile{}
 		return [3]kind.Kind{raw, derived, r.h.pageKind()}
 	})
 	if got != [3]kind.Kind{kind.Text, kind.Markdown, kind.Markdown} {
