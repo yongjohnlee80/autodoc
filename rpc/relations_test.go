@@ -239,6 +239,27 @@ func TestAProtocol22SessionSeesNoTodoRelations(t *testing.T) {
 	if un := call(t, cur, "graph.unresolved", "kb").([]any); len(un) != 0 {
 		t.Errorf("an external link is listed unresolved: %v", un)
 	}
+	// asked for by name, a kind protocol 23 added is refused below it, in every graph verb
+	for _, c := range []struct {
+		verb   string
+		params []any
+	}{
+		{"graph.links", []any{"kb", "tasks/t.md"}},
+		{"graph.backlinks", []any{"kb", "b.md"}},
+		{"graph.neighborhood", []any{"kb", "tasks/t.md", int64(1)}},
+		{"graph.unresolved", []any{"kb"}},
+	} {
+		for _, kind := range []string{"review", "blocked"} {
+			_, err := old.Call(context.Background(), c.verb, append(c.params, map[string]any{"kinds": []any{kind}})...)
+			var re *golibrpc.Error
+			if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams || !strings.Contains(re.Message, "needs protocol 23") {
+				t.Errorf("protocol 22's %s with kinds [%s]: %v, want invalid params naming protocol 23", c.verb, kind, err)
+			}
+		}
+	}
+	if ls := call(t, cur, "graph.links", "kb", "tasks/t.md", map[string]any{"kinds": []any{"review"}}).([]any); len(ls) != 1 {
+		t.Errorf("protocol 23's review links of t: %v", ls)
+	}
 }
 
 func str(v any) string { s, _ := v.(string); return s }
