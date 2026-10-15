@@ -442,7 +442,7 @@ func TestCreatingAFileOpensItInABufferOfItsOwn(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
-	r.s.WaitFor(t, "a.md modified", func(string) bool { return r.file().dirty })
+	r.waitTyped(t)
 	onLoop(r, func() bool { r.h.createFile("c"); return true })
 	r.waitFile(t, "c.md")
 	if r.editorText() != "" || d.read(t, "kb", "c.md") != "" {
@@ -501,7 +501,7 @@ func TestARestoreLandsInItsOwnBuffer(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
-	r.s.WaitFor(t, "a.md modified", func(string) bool { return r.file().dirty })
+	r.waitTyped(t)
 	onLoop(r, func() bool { r.h.restoreAsDraft(recovered{Text: "kept draft\n"}, ""); return true })
 	if f := r.file(); f.open || !f.dirty || r.editorText() != "kept draft\n" {
 		t.Fatalf("the draft restored: %+v %q", f, r.editorText())
@@ -541,9 +541,7 @@ func TestDeletingTheWorkspaceInUseAsksAboutItsBuffers(t *testing.T) {
 	r.h.p.Post(func() { r.h.openPath("b.md") })
 	r.waitFile(t, "b.md")
 	r.typeInEditor(t, "X")
-	r.s.WaitFor(t, "b.md modified, typing done", func(string) bool {
-		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
-	})
+	r.waitTyped(t)
 	r.h.p.Post(func() { r.h.removeWorkspaceConfirmed("alpha") })
 	r.s.WaitForText(t, "b.md has unsaved changes")
 	r.keys(t, key('t')) // Stay

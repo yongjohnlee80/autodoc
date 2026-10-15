@@ -27,7 +27,7 @@ func TestATooSmallWindowsQuitAsksOverUnsavedChanges(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
-	r.s.WaitFor(t, "the edit unsaved", func(string) bool { return r.file().dirty })
+	r.waitTyped(t)
 	r.shrink(t, true)
 	r.s.WaitForText(t, "Screen too small")
 	r.keys(t, key('q'))

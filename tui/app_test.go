@@ -397,6 +397,16 @@ func (r *running) typeInEditor(t *testing.T, text string) {
 	r.keys(t, esc())
 }
 
+// waitTyped waits for typeInEditor to be done: the buffer shown modified, and the editor back in
+// Normal mode. Keys and a post are not ordered: a post right after the typing can run before its
+// Esc, which then lands on whatever the post opened (a question's Esc is Stay).
+func (r *running) waitTyped(t *testing.T) {
+	t.Helper()
+	r.s.WaitFor(t, "the typing done", func(string) bool {
+		return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
+	})
+}
+
 // openByPicker opens a file through File › Open.
 func (r *running) openByPicker(t *testing.T, p string) {
 	t.Helper()
@@ -540,11 +550,7 @@ func TestUnsavedWorkIsNeverLostQuietly(t *testing.T) {
 	}
 	closeShown := func() {
 		t.Helper()
-		// keys and a post are not ordered: the typing, its Esc too, is in before the close, or the
-		// Esc lands on the question and answers Stay
-		r.s.WaitFor(t, "the buffer unsaved, typing done", func(string) bool {
-			return onLoop(r, func() bool { return r.h.file.dirty && r.h.core.Mode() == widget.ModeNormal })
-		})
+		r.waitTyped(t)
 		onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 		r.s.WaitForText(t, "unsaved file")
 	}
@@ -849,8 +855,7 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	r.typeInEditor(t, "X")
-	// keys and a post are not ordered: the typing is in before the close
-	r.s.WaitFor(t, "a.md unsaved", func(string) bool { return r.file().dirty })
+	r.waitTyped(t)
 	holding.Store(true)
 	onLoop(r, func() bool { r.h.closeShownBuffer(); return true })
 	r.s.WaitForText(t, "unsaved file")
