@@ -2,8 +2,6 @@ eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d h1:ARo7NCVvN2NdhLlJE9xAbKw
 eliasnaur.com/font v0.0.0-20230308162249-dd43949cb42d/go.mod h1:OYVuxibdk9OSLX8vAqydtRPP87PyTFcT9uH3MlEGBQA=
 filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
 filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=
-gioui.org v0.10.3 h1:ZiJ4CRvmPQEl2Ee0lK6JQ9WepiA628YmbjibiBVnBTw=
-gioui.org v0.10.3/go.mod h1:x8MAOooc/v4UUaB5o6BS/FpYdxnzh3LBvZlTBmYpnlQ=
 gioui.org/cpu v0.0.0-20210808092351-bfe733dd3334/go.mod h1:A8M0Cn5o+vY5LTMlnRoK3O5kG+rH0kWfJjeKd9QpBmQ=
 gioui.org/shader v1.0.9 h1:XxnqIfmClWpN49kizxH2W0JcCFrrEP4q3jZmNYaltbs=
 gioui.org/shader v1.0.9/go.mod h1:mWdiME581d/kV7/iEhLmUgUK5iZ09XR5XpduXzbePVM=
@@ -49,10 +47,12 @@ github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UV
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/yongjohnlee80/gio v0.0.0-20261015223359-d2512beba836 h1:QgbPLITKQ5Q5CuVv8rq9tswUIJ4a0+QIpqJAwl/bYiI=
+github.com/yongjohnlee80/gio v0.0.0-20261015223359-d2512beba836/go.mod h1:MsY9btTPg5olz9jztt6/GPX+IpvN+g6aai/nggObGlc=
 github.com/yongjohnlee80/golib v0.6.108 h1:FLE3qeZMAFrDJF17g7fLBXHDQ73Ukrc9819A65uEJqU=
 github.com/yongjohnlee80/golib v0.6.108/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
-github.com/yongjohnlee80/golib/gui v0.1.42 h1:flD1054jgifdriL146vMCHnjF1G44upzAN8nFW5QYCk=
-github.com/yongjohnlee80/golib/gui v0.1.42/go.mod h1:SqAfSZoid0dGMsWSrbFaAG5gWf/l7+XRkQKkD6Hutg4=
+github.com/yongjohnlee80/golib/gui v0.1.43-0.20261015223622-3794a2dab4f4 h1:ITj+I23YbvMxEg4npZFPxIt/BKzSZHCJ/femPDttlAE=
+github.com/yongjohnlee80/golib/gui v0.1.43-0.20261015223622-3794a2dab4f4/go.mod h1:hiwX7Uup9Kapi9KmwA0Xm3m969nGEF2/c4ZaOR87j8E=
 github.com/yuin/gopher-lua v1.1.2 h1:yF/FjE3hD65tBbt0VXLE13HWS9h34fdzJmrWRXwobGA=
 github.com/yuin/gopher-lua v1.1.2/go.mod h1:7aRmXIWl37SqRf0koeyylBEzJ+aPt8A+mmkQ4f1ntR8=
 golang.org/x/exp v0.0.0-20250408133849-7e4ce0ab07d0 h1:R84qjqJb5nVJMxqWYb3np9L5ZsaDtB+a39EqjV0JSUM=
