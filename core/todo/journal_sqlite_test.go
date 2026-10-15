@@ -78,6 +78,7 @@ var sqliteSuites = []struct {
 	{"AFailedMachineDeclarationKeepsNoValue", TestAFailedMachineDeclarationKeepsNoValue},
 	{"AnOversizedVariableFileIsRefused", TestAnOversizedVariableFileIsRefused},
 	{"AFailedMachineValueRestoresTheFile", TestAFailedMachineValueRestoresTheFile},
+	{"MachineSetVarsDoNotInterleave", TestMachineSetVarsDoNotInterleave},
 	{"MigrateRefsPlansThenAppliesTheReviewedList", TestMigrateRefsPlansThenAppliesTheReviewedList},
 	{"TransitionsAnyToAny", TestTransitionsAnyToAny},
 	{"AssignD1", TestAssignD1},

@@ -46,6 +46,10 @@ type Manager struct {
 	blocked      map[string]string // store ids an ambiguous store move made read-only, and why
 	movesSettled map[string]bool   // store ids whose interrupted store moves were settled
 	varsErr      map[string]string // store ids whose variable file was last refused, and why
+	// varsMu serializes a store's or this machine's set_var whole: a machine value is two writes
+	// (the file's declaration, then the value) and a failure's undo, which another set_var must
+	// never land between
+	varsMu sync.Mutex
 	// claimMu serializes Claim and Release from the record to the marker: one call's undo can never
 	// clear what another call claimed
 	claimMu sync.Mutex

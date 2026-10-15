@@ -403,6 +403,10 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 		})
 	case o.At == nil:
 		return fmt.Errorf("%w: scope %q needs an at", ErrInvalid, scope)
+	}
+	m.varsMu.Lock()
+	defer m.varsMu.Unlock()
+	switch {
 	case scope == ScopeStore:
 		w, err := m.writable(ctx, *o.At)
 		if err != nil {
