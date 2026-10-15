@@ -794,7 +794,10 @@ func TestTheResultsCommandsRunFromTheCatalogAndThePanel(t *testing.T) {
 		return onLoop(r, func() bool { return r.h.kinds.Readable("manual.pdf") })
 	})
 	r.h.p.Post(func() { r.h.openPath("manual.pdf") })
-	r.waitFile(t, "manual.pdf")
+	// the panel, docked at the bottom, covers the status line waitFile reads: the page's own state
+	r.s.WaitFor(t, "manual.pdf open, read-only", func(string) bool {
+		return onLoop(r, func() bool { return r.h.file.open && r.h.file.path == "manual.pdf" && r.h.core.ReadOnly() })
+	})
 	if err := onLoop(r, func() error { return r.h.cat.run("results.markdown", nil) }); err != nil {
 		t.Fatal(err)
 	}
