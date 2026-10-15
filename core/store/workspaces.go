@@ -280,17 +280,17 @@ func (s *Store) Workspaces(ctx context.Context) ([]WorkspaceInfo, error) {
 }
 
 // WorkspaceModes are workspace id's graph_only patterns (nil: never set, the default) and its
-// todo_search (ADR 1792015212 §2.2).
+// todo_search, on unless the workspace turned it off (ADR 1792015212 §2.2, amendment 1).
 func (s *Store) WorkspaceModes(ctx context.Context, id int64) (graphOnly []string, todoSearch bool, err error) {
 	err = s.Read(ctx, func(tx *Tx) error {
-		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceGraphOnlySet, WorkspaceTodoSearch)
+		w, err := tx.t.workspaces.On(tx.tx).With(WorkspaceID, id).Get(WorkspaceGraphOnlySet, WorkspaceTodoGraphOnly)
 		if errors.Is(err, dao.ErrNoRows) {
 			return fmt.Errorf("%w: %d", ErrNoWorkspace, id)
 		}
 		if err != nil {
 			return err
 		}
-		w.ID, todoSearch = id, w.TodoSearch != 0
+		w.ID, todoSearch = id, w.TodoGraphOnly == 0
 		graphOnly, err = s.graphOnlyOf(tx, w)
 		return err
 	})

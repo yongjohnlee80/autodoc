@@ -103,7 +103,7 @@ func (v *view) TodoModes() (graphOnly []string, todoSearch bool, excluded []stri
 	v.m.mu.Unlock()
 	excluded = v.m.todoExcluded(v.s.root, v.s.exclude)
 	if h == nil {
-		return workspace.DefaultGraphOnly(), false, excluded
+		return workspace.DefaultGraphOnly(), true, excluded
 	}
 	c := h.cfg.Load()
 	return append([]string{}, c.list...), c.search, excluded

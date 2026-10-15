@@ -27,7 +27,7 @@ type TodoStore struct {
 type TodoStores func(ctx context.Context) ([]TodoStore, error)
 
 // SetTodoStores gives the workspaces the todo registry and reads it at once, so a workspace started
-// after it indexes its stores' tasks graph-only from its first pass. Call it once, before OpenAll:
+// after it indexes its stores' tasks in their mode from its first pass. Call it once, before OpenAll:
 // it starts the reader TodoStoresChanged wakes, which runs until the workspaces' context ends.
 func (m *Workspaces) SetTodoStores(list TodoStores) {
 	m.mu.Lock()
@@ -153,8 +153,8 @@ func (h *modes) set(list []string, search bool) { h.cfg.Store(newModeConfig(list
 
 // mode is path p's mode, first match deciding (ADR 1792015212 §2.2): exclude is the indexer's own
 // Match, before this is asked; a user's graph_only pattern makes it graph-only; a todo store's path,
-// by the registry or the default entry, is graph-only unless todo_search is on; anything else is
-// full. A path in a store has the store, whatever its mode.
+// by the registry or the default entry, is graph-only when todo_search is off (it is on unless the
+// workspace turned it off); anything else is full. A path in a store has the store, whatever its mode.
 func (h *modes) mode(p string) index.Mode {
 	c := h.cfg.Load()
 	var md index.Mode
