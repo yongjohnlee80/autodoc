@@ -81,6 +81,15 @@ func parseStoreVars(b []byte) (storeVars, error) {
 	return sv, nil
 }
 
+// clone is a copy of sv to change without changing sv.
+func (sv storeVars) clone() storeVars {
+	c := storeVars{Vars: maps.Clone(sv.Vars), Machine: slices.Clone(sv.Machine)}
+	if c.Vars == nil {
+		c.Vars = map[string]string{}
+	}
+	return c
+}
+
 // render writes sv as the file's TOML: the machine list, then [vars], each sorted, so the file a
 // verb writes is stable and diffs cleanly.
 func (sv storeVars) render() []byte {
@@ -401,10 +410,14 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 		if err != nil {
 			return err
 		}
+		// the name is declared machine-only in the store's file first, so no machine without it errs,
+		// and a file edit that fails leaves no value behind; the file as it was is kept, and put back
+		// if the value then cannot be kept, so a portable value it held is never lost
+		var prior *storeVars
 		if value != "" {
-			// the name is declared machine-only in the store's file first, so no machine without
-			// it errs; a file edit that fails leaves no value behind
 			err := m.editStoreVars(ctx, w, func(sv *storeVars) error {
+				was := sv.clone()
+				prior = &was
 				if !slices.Contains(sv.Machine, name) {
 					sv.Machine = append(sv.Machine, name)
 				}
@@ -415,7 +428,7 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 				return err
 			}
 		}
-		return m.j.UpdateSettings(ctx, func(s *Settings) error {
+		err = m.j.UpdateSettings(ctx, func(s *Settings) error {
 			if s.MachineVars == nil {
 				s.MachineVars = map[string]map[string]string{}
 			}
@@ -435,6 +448,12 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 			}
 			return nil
 		})
+		if err != nil && prior != nil {
+			if rerr := m.editStoreVars(ctx, w, func(sv *storeVars) error { *sv = prior.clone(); return nil }); rerr != nil {
+				return errors.Join(err, fmt.Errorf("putting the store's variable file back: %w", rerr))
+			}
+		}
+		return err
 	}
 	return fmt.Errorf("%w: scope %q: global, store or machine", ErrInvalid, scope)
 }

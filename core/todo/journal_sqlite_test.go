@@ -77,6 +77,7 @@ var sqliteSuites = []struct {
 	{"CarryKBRoots", TestCarryKBRoots},
 	{"AFailedMachineDeclarationKeepsNoValue", TestAFailedMachineDeclarationKeepsNoValue},
 	{"AnOversizedVariableFileIsRefused", TestAnOversizedVariableFileIsRefused},
+	{"AFailedMachineValueRestoresTheFile", TestAFailedMachineValueRestoresTheFile},
 	{"MigrateRefsPlansThenAppliesTheReviewedList", TestMigrateRefsPlansThenAppliesTheReviewedList},
 	{"TransitionsAnyToAny", TestTransitionsAnyToAny},
 	{"AssignD1", TestAssignD1},

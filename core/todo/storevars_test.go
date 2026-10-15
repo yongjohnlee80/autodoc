@@ -1,6 +1,7 @@
 package todo_test
 
 import (
+	"errors"
 	"reflect"
 	"slices"
 	"strings"
@@ -310,6 +311,28 @@ func TestAFailedMachineDeclarationKeepsNoValue(t *testing.T) {
 	st, err := e.j.Settings(ctx)
 	if err != nil || len(st.MachineVars) != 0 {
 		t.Errorf("a failed declaration kept the value: %+v %v", st.MachineVars, err)
+	}
+}
+
+// Making a portable variable machine-only rewrites the store's file first; if this machine's value
+// then cannot be kept, the file is put back, so the portable value is never lost.
+func TestAFailedMachineValueRestoresTheFile(t *testing.T) {
+	e := claimed(t)
+	file := kbStore + "/.autodoc-vars.toml"
+	e.disk.WriteFile(file, []byte("[vars]\nDUMPS = \"/old\"\n"))
+	e.j.Fail = func(op string) error {
+		if op == "UpdateSettings" {
+			return errors.New("the settings write failed")
+		}
+		return nil
+	}
+	err := e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine})
+	e.j.Fail = nil
+	if err == nil {
+		t.Fatal("a failed settings write reported success")
+	}
+	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/old" || v.Source != "store" || v.Machine {
+		t.Errorf("the portable value was lost: %+v\n%s", v, e.read(file))
 	}
 }
 
