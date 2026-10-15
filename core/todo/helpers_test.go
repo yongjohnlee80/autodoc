@@ -20,7 +20,11 @@ import (
 
 var ctx = context.Background()
 
-// kb is the workspace every env has: /kb, with AGENTS.md, so $KB_ROOT is its root too.
+// kbAgents is a KB's AGENTS.md: its frontmatter's type: kb is what makes a directory a KB.
+const kbAgents = "---\ntype: kb\nkind: agents\n---\n\n# kb\n"
+
+// kb is the workspace every env has: /kb, a KB (its AGENTS.md says type: kb), so $KB_ROOT is its
+// root too.
 var kb = todo.At{Workspace: "kb"}
 
 const kbStore = "/kb/.todo-list"
@@ -41,7 +45,7 @@ func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{t: t, disk: todotest.NewDisk(), j: todotest.NewFaulty(newJournal(t)), roots: todotest.Roots{"kb": "/kb"},
 		now: time.Date(2026, 10, 11, 10, 0, 0, 0, time.FixedZone("PDT", -7*3600))}
-	e.disk.WriteFile("/kb/AGENTS.md", []byte("# kb\n"))
+	e.disk.WriteFile("/kb/AGENTS.md", []byte(kbAgents))
 	e.disk.MkdirAll("/home/u")
 	e.restart()
 	return e

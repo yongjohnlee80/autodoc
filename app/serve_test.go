@@ -906,7 +906,8 @@ func TestServeGivesUpOnAStoreStillHeld(t *testing.T) {
 }
 
 // TestACallsEventsAreTheCLIs: --call says hello as autodoc-cli, not as the TUI, so what it changes is
-// attributed to it in sys.events.
+// attributed to it in sys.events, with who ran it: its pid and cwd, and its agent when it has one
+// (ADR 1792015069 §2.6).
 func TestACallsEventsAreTheCLIs(t *testing.T) {
 	dir := short(t)
 	sock := filepath.Join(dir, "a.sock")
@@ -919,8 +920,9 @@ func TestACallsEventsAreTheCLIs(t *testing.T) {
 	events := call(t, dial(t, sock), "sys.events", int64(0), int64(50)).(map[string]any)["events"].([]any)
 	for _, e := range events {
 		if e := e.(map[string]any); e["kind"] == "preference.changed" {
-			if c, _ := e["client"].(string); !strings.HasPrefix(c, rpc.CLIName+"#") {
-				t.Fatalf("preference.changed attributed to %q, want %s#…", c, rpc.CLIName)
+			wd, _ := os.Getwd()
+			if c, _ := e["client"].(string); !strings.HasPrefix(c, rpc.CLIName+"(") || !strings.Contains(c, fmt.Sprintf("pid=%d cwd=%s)#", os.Getpid(), wd)) {
+				t.Fatalf("preference.changed attributed to %q, want %s(pid=%d cwd=%s)#…", c, rpc.CLIName, os.Getpid(), wd)
 			}
 			return
 		}

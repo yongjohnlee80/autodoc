@@ -165,8 +165,9 @@ func TestWhere(t *testing.T) {
 	}
 }
 
-// Writes stay inside the writable stores: an unregistered project's .todo-list is not one, and a
-// kb_root a client passes is only where refs resolve.
+// Writes stay inside the writable stores: an unregistered project's .todo-list is not one. A kb_root
+// a client passes is ignored (ADR 1792015069): a store outside any KB has no $KB_ROOT until its own
+// file names one, and it is never a write location.
 func TestConfinement(t *testing.T) {
 	e := claimed(t)
 	e.disk.MkdirAll("/src/other/.todo-list/open")
@@ -180,19 +181,23 @@ func TestConfinement(t *testing.T) {
 	if _, err := e.m.Open(ctx, other, todo.OpenOpts{KBRoot: "/kb"}); err != nil {
 		t.Fatalf("open: %v", err)
 	}
+	if v := varOf(t, e, other, "KB_ROOT"); v.Value != "" {
+		t.Errorf("a kb_root on open became the store's $KB_ROOT: %+v", v)
+	}
 	if l, err := e.m.List(ctx, other, todo.ListOpts{}); err != nil || len(l.Tasks) != 0 {
 		t.Errorf("reading it is fine: %v", err)
 	}
-	// kb_root: refs resolve there, nothing is written there
+	// the store's own KB_ROOT: refs resolve there, nothing is written there
 	e.must(func() error { _, err := e.m.Register(ctx, "/src/other"); return err }())
 	e.must(e.m.Claim(ctx, other))
+	e.must(e.m.SetVar(ctx, "KB_ROOT", "/kb", todo.SetVarOpts{At: &other}))
 	task, err := e.m.Add(ctx, other, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/x.md"}})
 	if err != nil || task.ADR[0] != "$KB_ROOT/adrs/x.md" || !e.exists("/src/other/.todo-list/open/"+task.ID+".md") ||
 		e.exists("/kb/.todo-list/open/"+task.ID+".md") {
-		t.Errorf("kb_root: %+v %v", task, err)
+		t.Errorf("the store's KB_ROOT: %+v %v", task, err)
 	}
-	if _, err := e.m.Open(ctx, other, todo.OpenOpts{KBRoot: "relative"}); !is(err, todo.ErrInvalid) {
-		t.Errorf("a relative kb_root: %v", err)
+	if _, err := e.m.Open(ctx, other, todo.OpenOpts{KBRoot: "relative"}); err != nil {
+		t.Errorf("a kb_root is ignored, whatever it is: %v", err)
 	}
 	if _, err := e.m.Open(ctx, todo.At{Root: "/home/u"}, todo.OpenOpts{}); !is(err, todo.ErrNotAStore) {
 		t.Errorf("open a directory with no store: %v", err)

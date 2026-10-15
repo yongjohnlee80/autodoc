@@ -3,6 +3,7 @@ package todotest
 import (
 	"context"
 	"errors"
+	"maps"
 	"math"
 	"reflect"
 	"testing"
@@ -196,7 +197,8 @@ func fullSettings() todo.Settings {
 			"/p": {Root: "/p", Registered: t0, KBRoot: "/kb", LastResolved: t0.Add(time.Second)},
 			"/q": {Root: "/q", Override: "/elsewhere/todos"},
 		},
-		Vars: map[string]string{"PROJ": "/home/u/proj", "X": "1"},
+		Vars:        map[string]string{"PROJ": "/home/u/proj", "X": "1"},
+		MachineVars: map[string]map[string]string{"s1": {"DUMPS": "/data", "LOGS": "/l"}, "s2": {"X": "y"}},
 	}
 }
 
@@ -215,11 +217,15 @@ func conformSettings(t *testing.T, h Harness) {
 		r := s.Roots["/p"]
 		r.Override = "/p/todos"
 		s.Roots["/p"] = r
+		delete(s.MachineVars, "s2")
+		s.MachineVars["s1"]["LOGS"] = "/l2"
+		s.MachineVars["s1"]["NEW"] = "/n"
 		return nil
 	}))
 	delete(want.Stores, "s2")
 	delete(want.Vars, "X")
 	want.Vars["Y"] = "2"
+	want.MachineVars = map[string]map[string]string{"s1": {"DUMPS": "/data", "LOGS": "/l2", "NEW": "/n"}}
 	want.Roots["/p"] = todo.RootRecord{Root: "/p", Override: "/p/todos", Registered: t0, KBRoot: "/kb", LastResolved: t0.Add(time.Second)}
 	same(t, "changed", settings(t, j), want)
 
@@ -419,7 +425,7 @@ func same(t *testing.T, what string, got, want any) {
 }
 
 // norm is v with each time an instant in UTC, and an empty list or map none (a Settings' maps
-// always there).
+// always there; its MachineVars only when it holds a value).
 func norm(v any) any {
 	switch v := v.(type) {
 	case []todo.Change:
@@ -460,6 +466,15 @@ func norm(v any) any {
 		}
 		for k, val := range v.Vars {
 			out.Vars[k] = val
+		}
+		for id, vals := range v.MachineVars {
+			if len(vals) == 0 {
+				continue
+			}
+			if out.MachineVars == nil {
+				out.MachineVars = map[string]map[string]string{}
+			}
+			out.MachineVars[id] = maps.Clone(vals)
 		}
 		return out
 	}

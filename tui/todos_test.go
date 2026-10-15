@@ -64,6 +64,12 @@ func openTodos(t *testing.T, r *running, label string, n rune) {
 // tabRead waits for tab's tasks (for Archived, its months) to have been read.
 func tabRead(t *testing.T, r *running, tab int) {
 	t.Helper()
+	if tab == varsTab {
+		r.s.WaitFor(t, "Variables read", func(string) bool {
+			return onLoop(r, func() bool { v := todosOf(r); return v.tab == tab && v.vars.Len() > 0 })
+		})
+		return
+	}
 	r.s.WaitFor(t, todoBuckets[tab].title+" read", func(string) bool {
 		return onLoop(r, func() bool { v := todosOf(r); return v.tab == tab && !v.stale[tab] })
 	})
@@ -494,7 +500,7 @@ func TestTodosKeysAreTheListsNotTheDetails(t *testing.T) {
 	r.s.WaitFor(t, "completed, from a task button", func(string) bool { return len(listedIn(t, d, "completed")) == 1 })
 }
 
-// TestTodosTabKeysInThePanel: ] and [ step through the tabs, round, 1–5 pick one, and a click on a
+// TestTodosTabKeysInThePanel: ] and [ step through the tabs, round (Variables last), 1–6 pick one, and a click on a
 // tab's title shows it: each read, the keyboard in its table.
 func TestTodosTabKeysInThePanel(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
@@ -504,7 +510,7 @@ func TestTodosTabKeysInThePanel(t *testing.T) {
 	for _, step := range []struct {
 		key  rune
 		want int
-	}{{']', 1}, {']', 2}, {'[', 1}, {'[', 0}, {'[', 4}, {']', 0}, {'3', 2}} {
+	}{{']', 1}, {']', 2}, {'[', 1}, {'[', 0}, {'[', 5}, {'[', 4}, {']', 5}, {']', 0}, {'6', 5}, {'3', 2}} {
 		r.keys(t, key(step.key))
 		tabRead(t, r, step.want)
 	}

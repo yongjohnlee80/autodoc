@@ -404,7 +404,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 		t.Error("? in the todos panel does not open its card")
 	}
 	text := cardText(c.Groups, k.on(todoKeysCard))
-	for _, want := range []string{"MOVE", "TABS", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a month", "1–5  a tab",
+	for _, want := range []string{"MOVE", "TABS", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a month", "1–6  a tab",
 		"[ ]  the tab before, after", "s  status…: move the task", "a  add a task", "A  assign it to an agent", "S  choose the store",
 		"N  a new store", "O  load a store", "L  rename it (its label)", "R  refresh", "M  move the store"} {
 		if !strings.Contains(text, want) {

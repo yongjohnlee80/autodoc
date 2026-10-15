@@ -22,6 +22,9 @@ const (
 // protocol is the protocol the todos verbs arrived in.
 const protocol = 20
 
+// protocolMigrateRefs is the protocol todos.migrate_refs arrived in (ADR 1792015069).
+const protocolMigrateRefs = 22
+
 // Name is the module's name: its verbs are todos.*.
 func (m *Manager) Name() string { return "todos" }
 
@@ -122,9 +125,14 @@ type (
 		At   At        `param:"at"`
 		Opts ClaimOpts `param:"opts,optional" doc:"{legacy_workspace}: the directory auto-core's $WORKSPACE meant"`
 	}
+	migrateParams struct {
+		At   At          `param:"at"`
+		Opts MigrateOpts `param:"opts" doc:"{plan: true} lists the store's $WORKSPACE refs and where each exists; {apply: [...]} rewrites exactly the listed ones to $PROJECT_ROOT"`
+	}
 	setVarParams struct {
-		Name  string `param:"name"`
-		Value string `param:"value" doc:"\"\" removes it"`
+		Name  string     `param:"name"`
+		Value string     `param:"value" doc:"\"\" removes it"`
+		Opts  SetVarOpts `param:"opts,optional" doc:"{at, scope}: scope global (the default without at), store (the store's .autodoc-vars.toml, the default with at) or machine (this machine's value for the store)"`
 	}
 )
 
@@ -161,7 +169,7 @@ func (m *Manager) Verbs() []module.Verb {
 			"Where an at's store is, and whether the daemon may write it."),
 			func(ctx context.Context, p atParams) (Resolved, error) { return m.Resolve(ctx, p.At) }),
 		module.Handle(read("todos.open", "{store_id, store, scaffolded: false}",
-			"Checks that an at's store exists, and records the client's kb_root for its refs.", CodeNotAStore),
+			"Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's own.", CodeNotAStore),
 			func(ctx context.Context, p openParams) (Opened, error) { return m.Open(ctx, p.At, p.Opts) }),
 		module.Handle(write("todos.scaffold", "{store_id, store, scaffolded}",
 			"Creates the at's .todo-list and its buckets.", agent, append(writes, CodeExists)...),
@@ -233,14 +241,28 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p claimParams) (none, error) { return nil, m.Claim(ctx, p.At, p.Opts) }),
 		module.Handle(settings(write("todos.release", "nil", "The cutover's rollback: the daemon only reads the store again.", user)),
 			func(ctx context.Context, p atParams) (none, error) { return nil, m.Release(ctx, p.At) }),
-		module.Handle(read("todos.vars", "[{name, value?, builtin}]", "The variables a ref may start with, for an at's store."),
+		module.Handle(write("todos.migrate_refs", "{candidates?: [{id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
+			"Migrates Lua-era $WORKSPACE refs: a plan lists them; an apply rewrites exactly the reviewed list to $PROJECT_ROOT, journaled.",
+			user, append(writes, CodeInvalid)...),
+			func(ctx context.Context, p migrateParams) (MigrateResult, error) {
+				return m.MigrateRefs(ctx, p.At, p.Opts)
+			}),
+		module.Handle(read("todos.vars", "[{name, value?, builtin, derived?, source?, machine?}]",
+			"The variables an at's store's refs may start with, the same from every route to the store: each effective value and its source."),
 			func(ctx context.Context, p atParams) ([]Var, error) { return m.Vars(ctx, p.At) }),
-		module.Handle(quiet("todos.set_var", module.EffectSettings, "nil", "Sets or removes a user variable; built-ins are read-only.", user, CodeInvalid),
-			func(ctx context.Context, p setVarParams) (none, error) { return nil, m.SetVar(ctx, p.Name, p.Value) }),
+		module.Handle(quiet("todos.set_var", module.EffectSettings, "nil",
+			"Sets or removes a variable: globally, in an at's store's file, or for this machine; a store or machine value may override a built-in.",
+			user, CodeInvalid, CodeNotWritable, CodeUnclaimed),
+			func(ctx context.Context, p setVarParams) (none, error) {
+				return nil, m.SetVar(ctx, p.Name, p.Value, p.Opts)
+			}),
 	}
 	for i := range verbs {
 		if verbs[i].Event != nil {
 			verbs[i].Events = changedEvent
+		}
+		if verbs[i].Verb == "todos.migrate_refs" {
+			verbs[i].Since = protocolMigrateRefs
 		}
 	}
 	return verbs

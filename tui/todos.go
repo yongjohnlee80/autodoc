@@ -165,6 +165,12 @@ type todos struct {
 	// malformed are the files a tab's read could not list, by the tab's name: the one thing the
 	// status line says (a store shown afresh empties it)
 	malformed map[string]int
+	// vars are the Variables tab's rows (todos_vars.go), varCursor its row under the cursor, varsSeq
+	// its latest read, varEditing the variable its prompt is for
+	vars       *rows[map[string]any]
+	varCursor  int
+	varsSeq    uint64
+	varEditing *todoVarEdit
 }
 
 func newTodos(c Core) *todos {
@@ -179,6 +185,7 @@ func newTodos(c Core) *todos {
 		t.tasks[i] = newRows(tuidecl.NewListModel("key", "n", "title"), taskRowOf)
 		t.cursors[i] = -1
 	}
+	t.vars, t.varCursor = newVarRows(), -1
 	t.assignPick = newAssignPick(t)
 	t.statusPick = newStatusPick(t)
 	return t
@@ -209,6 +216,9 @@ func (t *todos) State() map[string]any {
 		"App.agentAssignRows": t.assignPick.list.Model(), "App.agentAssignField": "", "App.agentAssignStatus": "agents",
 		"App.agentAssignPreviewTitle": "", "App.agentAssignPreviewText": "", "App.agentAssignPreviewAt": 0,
 		"App.todoAssignTitle": "assign", "App.todoAssignText": "",
+		"App.todoVarsRows": t.vars.Model(), "App.todoVarsIndex": -1, "App.todoOnVars": false,
+		"App.todoActVarSet": false, "App.todoActVarAdd": false, "App.todoActVarClear": false,
+		"App.todoVarTitle": "", "App.todoVarText": "",
 	}
 	for i, tab := range todoTabs {
 		st["App.todo"+tab.stem+"Rows"] = t.tasks[i].Model()
@@ -259,6 +269,10 @@ func (t *todos) Commands() map[string]Command {
 		"App.todoNew":          none(t.chooseNew),
 		"App.todoMove":         none(func() { t.chooseFolder("move") }),
 		"App.todoFolderChosen": oneString("a folder", t.folderChosen),
+		"App.todoVarMoved":     oneNumber("a variable", t.varMoved),
+		"App.todoVarEdit":      none(t.varEdit),
+		"App.todoVarMachine":   none(t.varMachine),
+		"App.todoVarSet":       oneString("a value", t.varSet),
 	}
 }
 
@@ -311,6 +325,7 @@ const (
 	todoGroupTask   = "TASK"
 	todoGroupStatus = "STATUS"
 	todoGroupStore  = "STORE"
+	todoGroupVars   = "VARIABLES (6)"
 )
 
 // Keys are the panel's, live while the keyboard is in the store's dropdown, the tabs or the action
@@ -335,9 +350,11 @@ func (*todos) Keys() []Key {
 		{Scope: "todos", Seq: "Shift+M", Show: "M", Run: "App.todoMove()"},
 		{Scope: "todos", Seq: "?", Show: "?", Opens: todoKeysCard},
 	}
-	for i := range todoBuckets {
-		keys = append(keys, Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–5", Run: fmt.Sprintf("App.todosTab(%d)", i)})
+	for i := range varsTab + 1 {
+		keys = append(keys, Key{Scope: "todos", Seq: fmt.Sprint(i + 1), Show: "1–6", Run: fmt.Sprintf("App.todosTab(%d)", i)})
 	}
+	keys = append(keys, Key{Scope: "todos", Seq: "e", Show: "e", Run: "App.todoVarEdit()"},
+		Key{Scope: "todos", Seq: "m", Show: "m", Run: "App.todoVarMachine()"})
 	card := slices.Concat(
 		inGroup(todoGroupMove, []Key{
 			{Seq: "Return", Show: "Enter", Does: "open the task's file, or a month", Run: "App.todoEnter()"},
@@ -347,9 +364,10 @@ func (*todos) Keys() []Key {
 		inGroup(todoGroupTabs, []Key{
 			{Seq: "[", Show: "[ ]", Does: "the tab before, after", Run: "App.todoTabBefore()"},
 			{Seq: "]", Run: "App.todoTabAfter()"},
-			{Seq: "1", Show: "1–5", Does: "a tab", Run: "App.todosTab(0)"},
+			{Seq: "1", Show: "1–6", Does: "a tab", Run: "App.todosTab(0)"},
 			{Seq: "2", Run: "App.todosTab(1)"}, {Seq: "3", Run: "App.todosTab(2)"},
 			{Seq: "4", Run: "App.todosTab(3)"}, {Seq: "5", Run: "App.todosTab(4)"},
+			{Seq: "6", Run: "App.todosTab(5)"},
 		}),
 		inGroup(todoGroupStatus, []Key{
 			{Seq: "s", Show: "s", Does: "status…: move the task", Run: "App.todoChooseStatus()"},
@@ -358,6 +376,10 @@ func (*todos) Keys() []Key {
 			{Seq: "a", Show: "a", Does: "add a task", Run: "App.todoAdd()"},
 			{Seq: "d", Show: "d", Does: "remove the task", Run: "App.todoRemove()"},
 			{Seq: "Shift+A", Show: "A", Does: "assign it to an agent", Run: "App.todoAssign()"},
+		}),
+		inGroup(todoGroupVars, []Key{
+			{Seq: "e", Show: "e", Does: "set (file), a adds, d clears", Run: "App.todoVarEdit()"},
+			{Seq: "m", Show: "m", Does: "set for this machine only", Run: "App.todoVarMachine()"},
 		}),
 		inGroup(todoGroupStore, []Key{
 			{Seq: "Shift+S", Show: "S", Does: "choose the store", Run: "App.todoFocusStore()"},
@@ -381,7 +403,7 @@ func (*todos) Cards() []Card {
 	return []Card{{ID: todoKeysCard, View: "TodoKeys", Title: "todos — keys", Toggle: "?",
 		Note:   "↑ ↓ or j k move · q closes the panel",
 		Help:   "THE TODOS PANEL'S KEYS (? in the todos panel)",
-		Groups: [][]string{{todoGroupMove, todoGroupTabs, todoGroupStatus}, {todoGroupTask, todoGroupStore}}}}
+		Groups: [][]string{{todoGroupMove, todoGroupTabs, todoGroupStatus}, {todoGroupTask, todoGroupVars, todoGroupStore}}}}
 }
 
 func (t *todos) chooseLoad() { t.chooseFolder("load") }
@@ -589,6 +611,8 @@ func (t *todos) showStore() {
 		t.cursors[i] = -1
 		t.stale[i] = true
 	}
+	t.vars.Reset(nil)
+	t.varCursor = -1
 	t.malformed = map[string]int{}
 	t.status()
 	t.read()
@@ -608,6 +632,10 @@ func (t *todos) reload() {
 func (t *todos) read() {
 	s, tab, gen := t.cur, t.tab, t.gen
 	if s == nil {
+		return
+	}
+	if tab == varsTab {
+		t.readVars()
 		return
 	}
 	if tab != archivedTab {
@@ -721,10 +749,10 @@ func (t *todos) status() {
 	t.c.Set("App.todosStatusShown", msg != "")
 }
 
-// showTab is a tab shown (a click on its title, 1–5, [ ]): read when its rows are outdated, the
-// keyboard in its table.
+// showTab is a tab shown (a click on its title, 1–6, [ ]): read when its rows are outdated (the
+// Variables tab: every time), the keyboard in its table.
 func (t *todos) showTab(i int) {
-	if i < 0 || i >= len(todoBuckets) {
+	if i < 0 || i > varsTab {
 		return
 	}
 	if i != t.tab {
@@ -732,7 +760,7 @@ func (t *todos) showTab(i int) {
 		t.c.Set("App.todoTab", i)
 		t.showDetail()
 	}
-	if t.stale[i] {
+	if i == varsTab || t.stale[i] {
 		t.read()
 	}
 	t.focusTab()
@@ -749,13 +777,17 @@ func (t *todos) tabShown(i int) {
 
 // stepTab is [ and ]: the tab before or after, round.
 func (t *todos) stepTab(step int) {
-	n := len(todoBuckets)
+	n := varsTab + 1
 	t.showTab(((t.tab+step)%n + n) % n)
 }
 
 // focusTab gives the tab shown's table the keyboard, once the tab is laid out: the Archived tab's
 // months while no month is open.
 func (t *todos) focusTab() {
+	if t.tab == varsTab {
+		t.c.Post(func() { t.focus("todoVarsTable") })
+		return
+	}
 	id := todoTabs[t.tab].table
 	if t.tab == archivedTab && t.month == "" {
 		id = "todoMonths"
@@ -776,8 +808,12 @@ func (t *todos) taskAt(tab, i int) map[string]any {
 	return x
 }
 
-// cursor is the store shown, and the task under the cursor in the tab shown, nil for none.
+// cursor is the store shown, and the task under the cursor in the tab shown, nil for none (and on
+// the Variables tab).
 func (t *todos) cursor() (*todoStore, map[string]any) {
+	if t.tab == varsTab {
+		return t.cur, nil
+	}
 	return t.cur, t.taskAt(t.tab, t.cursors[t.tab])
 }
 
@@ -804,7 +840,9 @@ func (t *todos) showDetail() {
 		heading += " · " + tildePath(s.path)
 	}
 	t.c.Set("App.todosTitle", heading)
-	if x != nil {
+	if v := t.varAt(t.varCursor); t.tab == varsTab && v != nil {
+		t.c.Set("App.todoDetail", varDetail(v))
+	} else if x != nil {
 		t.c.Set("App.todoDetail", todoDetail(x))
 	} else {
 		t.c.Set("App.todoDetail", "")
@@ -823,11 +861,20 @@ func (t *todos) syncActions() {
 	s, x := t.cursor()
 	writable := s != nil && s.claimed
 	task := writable && x != nil
+	onVars := t.tab == varsTab
 	t.c.Set("App.todoReadOnly", s != nil && !s.claimed)
-	t.c.Set("App.todoActAdd", writable)
+	t.c.Set("App.todoOnVars", onVars)
+	t.c.Set("App.todoActAdd", writable && !onVars)
 	t.c.Set("App.todoActStatus", task)
 	t.c.Set("App.todoActAssign", task)
 	t.c.Set("App.todoActRemove", task)
+	if onVars {
+		t.syncVarActions()
+	} else {
+		for _, src := range []string{"App.todoActVarSet", "App.todoActVarAdd", "App.todoActVarClear"} {
+			t.c.Set(src, false)
+		}
+	}
 }
 
 // todoDetail is a task's details, as autofinder's i shows them.
@@ -872,6 +919,10 @@ func (t *todos) activated(tab, i int) {
 // enter is Enter on the card of keys: the task under the cursor opens, as Enter in its table; on
 // the Archived tab with no month open, the month under the months' cursor opens.
 func (t *todos) enter() {
+	if t.tab == varsTab {
+		t.varEdit()
+		return
+	}
 	if t.tab == archivedTab && t.month == "" {
 		t.monthChosen(t.monthCursor)
 		return
@@ -924,6 +975,10 @@ func (t *todos) write(s *todoStore, verb string, params []any, done func(any)) {
 
 // add is a: the title of a new task in the store shown asked for (todoNew).
 func (t *todos) add() {
+	if t.tab == varsTab {
+		t.varAdd()
+		return
+	}
 	if !t.readOnly(t.cur) {
 		t.c.Open("todoNew")
 	}
@@ -944,6 +999,10 @@ func (t *todos) addTitle(title string) {
 }
 
 func (t *todos) remove() {
+	if t.tab == varsTab {
+		t.varClear()
+		return
+	}
 	s, x := t.cursor()
 	if x == nil || t.readOnly(s) {
 		return

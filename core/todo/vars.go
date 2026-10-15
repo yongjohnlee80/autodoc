@@ -9,7 +9,8 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
-// Builtin variable names. They resolve from the store's context and cannot be set.
+// Builtin variable names. They are derived from the store's location (storevars.go); a store's
+// variable file or this machine may override them, a global user var may not.
 const (
 	VarKBRoot    = "KB_ROOT"
 	VarWorkspace = "WORKSPACE"
@@ -24,15 +25,19 @@ var (
 	leadSlashes = regexp.MustCompile(`^/+`)
 )
 
-func isBuiltin(name string) bool { return name == VarKBRoot || name == VarWorkspace || name == VarHome }
+func isBuiltin(name string) bool {
+	return name == VarKBRoot || name == VarWorkspace || name == VarProjectRoot || name == VarHome
+}
 
-// scope is what a store's refs resolve against: its built-ins, the user's vars and the
-// environment, in vars.lua's order.
+// scope is what a store's refs resolve against, the same from every route to the store: its
+// built-ins and its other variables, each the first of this machine's value, the store's file, the
+// derived value and a global user var (Manager.scope), then the environment.
 type scope struct {
-	kbRoot, workspace, home string
-	user                    map[string]string
-	env                     func(string) string
-	exists                  func(string) bool
+	kbRoot, workspace, projectRoot, home string
+	user                                 map[string]string // the effective variables that are not built in
+	machine                              map[string]bool   // the names the store's file declares per machine
+	env                                  func(string) string
+	exists                               func(string) bool
 }
 
 func (s scope) get(name string) string {
@@ -41,6 +46,8 @@ func (s scope) get(name string) string {
 		return s.kbRoot
 	case VarWorkspace:
 		return s.workspace
+	case VarProjectRoot:
+		return s.projectRoot
 	case VarHome:
 		return s.home
 	}
@@ -101,8 +108,8 @@ func splitVar(input string) (name, rest string) {
 }
 
 // symbolize is vars.lua's symbolize_path: an absolute (or ~) path is written against the root
-// with the longest matching prefix, KB_ROOT, WORKSPACE, the user's vars and HOME, the earlier one
-// winning a tie. A bare relative path is the KB's, so it becomes $KB_ROOT/… when the KB holds it.
+// with the longest matching prefix, KB_ROOT, WORKSPACE, PROJECT_ROOT, the user's vars and HOME, the
+// earlier one winning a tie. A bare relative path is the KB's, so it becomes $KB_ROOT/… when the KB holds it.
 func (s scope) symbolize(p string) string {
 	if p == "" || strings.HasPrefix(p, "$") {
 		return p
@@ -116,6 +123,7 @@ func (s scope) symbolize(p string) string {
 	}
 	add(VarKBRoot, s.kbRoot)
 	add(VarWorkspace, s.workspace)
+	add(VarProjectRoot, s.projectRoot)
 	names := make([]string, 0, len(s.user))
 	for k := range s.user {
 		names = append(names, k)
@@ -196,6 +204,9 @@ func (s scope) refErrors(t Task, now string, hasTask func(id string) bool) []Err
 			}
 			field := fmt.Sprintf("%s[%d]", name, i)
 			r := s.resolve(p)
+			if r.unresolved && s.machine[r.varName] {
+				continue // set on some machines only: a fact about this machine, not about the task
+			}
 			if r.unresolved {
 				add(field, CodeUnresolved, "variable '$"+r.varName+"' is not defined on this machine — "+
 					"set it in the Vars section or as an environment variable")

@@ -374,7 +374,7 @@ func TestListFilters(t *testing.T) {
 func TestVars(t *testing.T) {
 	e := claimed(t)
 	e.must(e.m.SetVar(ctx, "PROJ", "/home/u/src/proj"))
-	for _, name := range []string{"KB_ROOT", "WORKSPACE", "HOME", "1BAD", "a-b"} {
+	for _, name := range []string{"KB_ROOT", "WORKSPACE", "PROJECT_ROOT", "HOME", "1BAD", "a-b"} {
 		if err := e.m.SetVar(ctx, name, "/x"); !is(err, todo.ErrInvalid) {
 			t.Errorf("SetVar(%s): %v", name, err)
 		}
@@ -383,8 +383,11 @@ func TestVars(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []todo.Var{{Name: "KB_ROOT", Value: "/kb", Builtin: true}, {Name: "WORKSPACE", Value: "/kb", Builtin: true},
-		{Name: "HOME", Value: "/home/u", Builtin: true}, {Name: "PROJ", Value: "/home/u/src/proj"}}
+	want := []todo.Var{{Name: "KB_ROOT", Value: "/kb", Builtin: true, Derived: "/kb", Source: "derived"},
+		{Name: "WORKSPACE", Value: "/kb", Builtin: true, Derived: "/kb", Source: "derived"},
+		{Name: "PROJECT_ROOT", Builtin: true},
+		{Name: "HOME", Value: "/home/u", Builtin: true, Derived: "/home/u", Source: "derived"},
+		{Name: "PROJ", Value: "/home/u/src/proj", Source: "global"}}
 	if !reflect.DeepEqual(vars, want) {
 		t.Errorf("%+v", vars)
 	}
@@ -392,7 +395,7 @@ func TestVars(t *testing.T) {
 		t.Errorf("a user var: %v", task.ADR)
 	}
 	e.must(e.m.SetVar(ctx, "PROJ", ""))
-	if vars, _ := e.m.Vars(ctx, kb); len(vars) != 3 {
+	if vars, _ := e.m.Vars(ctx, kb); len(vars) != 4 {
 		t.Error("clearing a var")
 	}
 }

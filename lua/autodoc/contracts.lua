@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 21,
+  protocol = 22,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -506,6 +506,15 @@ return {
       result = "{tasks: [task: {id, version, status, title, …, rev, path, description}], malformed: [{path, reason}], partitions?: [{month, count}], cursor}",
       doc = "The active buckets' tasks; archives only by month, on request.",
     },
+    ["todos.migrate_refs"] = {
+      since = 22, scope = "global", audience = "user",
+      params = {
+        { name = "at", type = "workspace | {root}" },
+        { name = "opts", type = "map" }
+      },
+      result = "{candidates?: [{id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
+      doc = "Migrates Lua-era $WORKSPACE refs: a plan lists them; an apply rewrites exactly the reviewed list to $PROJECT_ROOT, journaled.",
+    },
     ["todos.move_store"] = {
       since = 20, scope = "global", audience = "user",
       params = {
@@ -522,7 +531,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{store_id, store, scaffolded: false}",
-      doc = "Checks that an at's store exists, and records the client's kb_root for its refs.",
+      doc = "Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's own.",
     },
     ["todos.refresh"] = {
       since = 20, scope = "global", audience = "agent",
@@ -596,10 +605,11 @@ return {
       since = 20, scope = "global", audience = "user",
       params = {
         { name = "name", type = "string" },
-        { name = "value", type = "string" }
+        { name = "value", type = "string" },
+        { name = "opts", type = "map", optional = true }
       },
       result = "nil",
-      doc = "Sets or removes a user variable; built-ins are read-only.",
+      doc = "Sets or removes a variable: globally, in an at's store's file, or for this machine; a store or machine value may override a built-in.",
     },
     ["todos.status"] = {
       since = 20, scope = "global", audience = "agent",
@@ -634,8 +644,8 @@ return {
       params = {
         { name = "at", type = "workspace | {root}" }
       },
-      result = "[{name, value?, builtin}]",
-      doc = "The variables a ref may start with, for an at's store.",
+      result = "[{name, value?, builtin, derived?, source?, machine?}]",
+      doc = "The variables an at's store's refs may start with, the same from every route to the store: each effective value and its source.",
     },
     ["workspace.add"] = {
       since = 2, scope = "global", audience = "user",

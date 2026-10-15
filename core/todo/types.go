@@ -121,8 +121,11 @@ type StoreInfo struct {
 // Var is one variable a ref may start with: $KB_ROOT, $WORKSPACE, $HOME, or a user's.
 type Var struct {
 	Name    string `json:"name"`
-	Value   string `json:"value,omitempty"`
+	Value   string `json:"value,omitempty"` // the effective value; "" for none here
 	Builtin bool   `json:"builtin"`
+	Derived string `json:"derived,omitempty"` // a built-in's value from the store's location, before overrides
+	Source  string `json:"source,omitempty"`  // where Value came from: machine, store, derived, global or env
+	Machine bool   `json:"machine,omitempty"` // declared machine-only by the store's file
 }
 
 // ChangesPage is a consumer's next changes, or a resync: the consumer was unregistered while it

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"unicode/utf8"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -33,7 +34,7 @@ func runCall(ctx context.Context, configPath, method, params string, out io.Writ
 	if err != nil {
 		return err
 	}
-	session := client.NewSession(p.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, p.StateDir) }).As(rpc.CLIName).
+	session := client.NewSession(p.Socket, func() (string, error) { return client.SpawnServe(e.ConfigPath, p.StateDir) }).As(rpc.CLIName).WithInfo(cliWho()).
 		UseHandoffs(p.StateDir).ForStore(p.Socket, p.Store)
 	if err := session.Connect(ctx); err != nil {
 		return err
@@ -141,4 +142,17 @@ func jsonOf(v any) any {
 		return x
 	}
 	return v
+}
+
+// cliWho is who a --call is, for its hello: the agent running it ($AUTO_AGENTS_MAILBOX_ID), its pid and
+// its working directory. The daemon puts them in the client's token, so a todo event names its caller.
+func cliWho() map[string]any {
+	info := map[string]any{"pid": int64(os.Getpid())}
+	if a := os.Getenv("AUTO_AGENTS_MAILBOX_ID"); a != "" {
+		info["agent"] = a
+	}
+	if wd, err := os.Getwd(); err == nil {
+		info["cwd"] = wd
+	}
+	return info
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/vfs"
+
+	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
 // Roots is the daemon's workspaces: a workspace name's root, and every name.
@@ -42,6 +45,7 @@ type Manager struct {
 	stores       map[string]*store // open stores, by id
 	blocked      map[string]string // store ids an ambiguous store move made read-only, and why
 	movesSettled map[string]bool   // store ids whose interrupted store moves were settled
+	varsErr      map[string]string // store ids whose variable file was last refused, and why
 	// claimMu serializes Claim and Release from the record to the marker: one call's undo can never
 	// clear what another call claimed
 	claimMu sync.Mutex
@@ -120,6 +124,15 @@ func (a *At) DecodeParam(v any) error {
 	return nil
 }
 
+// UnmarshalJSON reads an At inside an options map (todos.set_var's {at}) as DecodeParam does.
+func (a *At) UnmarshalJSON(b []byte) error {
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		return fmt.Errorf("%w: at: %v", ErrInvalid, err)
+	}
+	return a.DecodeParam(v)
+}
+
 // ParamType is how a contract shows At.
 func (At) ParamType() string { return "workspace | {root}" }
 
@@ -130,7 +143,6 @@ type where struct {
 	rec       StoreRecord
 	override  string
 	writable  bool
-	kbRoot    string
 }
 
 const todoDir = ".todo-list"
@@ -185,12 +197,6 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 		w.rec = rec
 	} else if w.rec, err = m.newStore(ctx, storePath); err != nil {
 		return w, err
-	}
-	w.kbRoot = rr.KBRoot
-	if w.workspace {
-		if fi, err := fsys.Stat(ctx, "AGENTS.md"); err == nil && fi.IsRegular() {
-			w.kbRoot = canon
-		}
 	}
 	return w, nil
 }
@@ -294,30 +300,17 @@ func (m *Manager) SetDir(ctx context.Context, at At, dir string) (Resolved, erro
 	return m.Resolve(ctx, at)
 }
 
-// OpenOpts is what a client tells Open about a root that is not a workspace.
+// OpenOpts is what an older client tells Open about a root. Its kb_root is accepted and ignored: a
+// store's $KB_ROOT is the store's own (ADR 1792015069), never a route's.
 type OpenOpts struct {
-	KBRoot string `json:"kb_root,omitempty"` // $KB_ROOT for its refs; never a write location
+	KBRoot string `json:"kb_root,omitempty"`
 }
 
-// Open checks that an At's store exists and records the client's context for its root.
-func (m *Manager) Open(ctx context.Context, at At, opts OpenOpts) (Opened, error) {
+// Open checks that an At's store exists.
+func (m *Manager) Open(ctx context.Context, at At, _ OpenOpts) (Opened, error) {
 	w, err := m.resolve(ctx, at)
 	if err != nil {
 		return Opened{}, err
-	}
-	if opts.KBRoot != "" {
-		if !path.IsAbs(opts.KBRoot) {
-			return Opened{}, fmt.Errorf("%w: kb_root %q is not an absolute path", ErrInvalid, opts.KBRoot)
-		}
-		err := m.j.UpdateSettings(ctx, func(s *Settings) error {
-			rr := s.Roots[w.root]
-			rr.Root, rr.KBRoot = w.root, path.Clean(opts.KBRoot)
-			setRoot(s, rr)
-			return nil
-		})
-		if err != nil {
-			return Opened{}, err
-		}
 	}
 	st, err := m.open(ctx, w)
 	if err != nil {
@@ -435,13 +428,21 @@ func (m *Manager) finishClaim(ctx context.Context, w where, o ClaimOpts) error {
 		return err
 	}
 	st.mu.Lock()
-	defer st.mu.Unlock()
-	if err := st.mark(ctx, m.now()); err != nil {
+	err = st.mark(ctx, m.now())
+	st.mu.Unlock()
+	if err != nil || o.LegacyWorkspace == "" {
 		return err
 	}
-	if o.LegacyWorkspace == "" {
-		return nil
+	// the project auto-core's $WORKSPACE meant becomes the store's $PROJECT_ROOT first, so the
+	// cutover's rewritten refs read $PROJECT_ROOT/… (ADR 1792015069 §2.7) — only when the store is
+	// inside that project: a store several projects share (a global KB) belongs to none of them
+	if paths.Under(w.rec.Path, o.LegacyWorkspace) {
+		if err := m.recordProjectRoot(ctx, w, o.LegacyWorkspace); err != nil {
+			return err
+		}
 	}
+	st.mu.Lock()
+	defer st.mu.Unlock()
 	if err := m.ready(ctx, st); err != nil {
 		return err
 	}
@@ -557,54 +558,6 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 		return Opened{}, err
 	}
 	return Opened{StoreID: st.id, Store: st.path, Scaffolded: made}, nil
-}
-
-// Vars lists the variables an At's refs may use: its built-ins, then the user's.
-func (m *Manager) Vars(ctx context.Context, at At) ([]Var, error) {
-	w, err := m.resolve(ctx, at)
-	if err != nil {
-		return nil, err
-	}
-	sc, err := m.scope(ctx, w)
-	if err != nil {
-		return nil, err
-	}
-	out := []Var{{Name: VarKBRoot, Value: sc.kbRoot, Builtin: true}, {Name: VarWorkspace, Value: sc.workspace, Builtin: true},
-		{Name: VarHome, Value: sc.home, Builtin: true}}
-	for _, k := range slices.Sorted(maps.Keys(sc.user)) {
-		out = append(out, Var{Name: k, Value: sc.user[k]})
-	}
-	return out, nil
-}
-
-// SetVar sets a user variable, or clears it with "". Built-ins cannot be set.
-func (m *Manager) SetVar(ctx context.Context, name, value string) error {
-	if !varNameRe.MatchString(name) {
-		return fmt.Errorf("%w: %q is not a variable name (letters, digits and _, not starting with a digit)", ErrInvalid, name)
-	}
-	if isBuiltin(name) {
-		return fmt.Errorf("%w: %s is built in and resolves by itself", ErrInvalid, name)
-	}
-	return m.j.UpdateSettings(ctx, func(s *Settings) error {
-		if s.Vars == nil {
-			s.Vars = map[string]string{}
-		}
-		if value == "" {
-			delete(s.Vars, name)
-		} else {
-			s.Vars[name] = value
-		}
-		return nil
-	})
-}
-
-// scope is what a store's refs resolve against.
-func (m *Manager) scope(ctx context.Context, w where) (scope, error) {
-	st, err := m.j.Settings(ctx)
-	if err != nil {
-		return scope{}, err
-	}
-	return scope{kbRoot: w.kbRoot, workspace: w.root, home: m.o.home, user: st.Vars, env: m.o.env}, nil
 }
 
 // withExists gives sc a stat of absolute ref paths, through the disk; done releases it.

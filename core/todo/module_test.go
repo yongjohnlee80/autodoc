@@ -22,7 +22,7 @@ func verb(t *testing.T, m *todo.Manager, name string) module.Verb {
 	return module.Verb{}
 }
 
-// TestTheVerbsAreAModule: every todos verb checks, arrived in protocol 20, takes where its store is
+// TestTheVerbsAreAModule: every todos verb checks, arrived in protocol 20 (migrate_refs in 22), takes where its store is
 // first, and the module's codes sit in its range; a module built with no dependencies lists them.
 func TestTheVerbsAreAModule(t *testing.T) {
 	m := todo.New(nil, nil, nil)
@@ -30,14 +30,18 @@ func TestTheVerbsAreAModule(t *testing.T) {
 		t.Fatal(err)
 	}
 	vs := m.Verbs()
-	if len(vs) != 22 {
+	if len(vs) != 23 {
 		t.Errorf("%d verbs", len(vs))
 	}
 	for _, v := range vs {
 		if err := v.Check(); err != nil {
 			t.Error(err)
 		}
-		if !strings.HasPrefix(v.Verb, "todos.") || v.Since != 20 || v.Scope != module.ScopeGlobal {
+		since := int64(20)
+		if v.Verb == "todos.migrate_refs" {
+			since = 22
+		}
+		if !strings.HasPrefix(v.Verb, "todos.") || v.Since != since || v.Scope != module.ScopeGlobal {
 			t.Errorf("%s: since %d, scope %s", v.Verb, v.Since, v.Scope)
 		}
 		switch v.Verb {
@@ -145,6 +149,19 @@ func TestEveryVerbAnswers(t *testing.T) {
 		t.Error("no vars")
 	}
 	call("todos.set_var", "PROJECTS", "/home/u/projects")
+	// an at inside the options map decodes as a verb's first param does: a name or a {root}
+	call("todos.set_var", "PROJECT_ROOT", "/kb", map[string]any{"at": "kb"})
+	call("todos.set_var", "LOGS", "/l", map[string]any{"at": map[string]any{"root": "/kb"}, "scope": "machine"})
+	byName := map[string]todo.Var{}
+	for _, v := range call("todos.vars", "kb").([]todo.Var) {
+		byName[v.Name] = v
+	}
+	if byName["PROJECT_ROOT"].Source != "store" || byName["LOGS"].Source != "machine" {
+		t.Errorf("set_var's options: %+v %+v", byName["PROJECT_ROOT"], byName["LOGS"])
+	}
+	if p := call("todos.migrate_refs", "kb", map[string]any{"plan": true}).(todo.MigrateResult); p.Rewritten != 0 {
+		t.Errorf("a plan rewrote: %+v", p)
+	}
 	updated := call("todos.update", "kb", added.ID, added.Rev, map[string]any{"priority": "high"}).(todo.Task)
 	assigned := call("todos.assign", "kb", added.ID, updated.Rev, "agent:jarvis", "yours").(todo.Task)
 	statused := call("todos.status", "kb", added.ID, assigned.Rev, "completed").(todo.Task)

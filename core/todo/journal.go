@@ -72,7 +72,10 @@ type Repath struct {
 type Settings struct {
 	Stores map[string]StoreRecord // by store id
 	Roots  map[string]RootRecord  // by canonical root
-	Vars   map[string]string
+	Vars   map[string]string      // the global user vars
+	// MachineVars are this machine's per-store values (todos.set_var, scope "machine"), by store id
+	// then name: what differs on one machine and must not travel with the store's file.
+	MachineVars map[string]map[string]string
 }
 
 // StoreRecord is a store: a stable id given the first time a root resolves to it, and its
@@ -92,7 +95,7 @@ type RootRecord struct {
 	Root         string
 	Override     string    // the store directory SetDir chose; "" for <root>/.todo-list
 	Registered   time.Time // zero unless Register enrolled it
-	KBRoot       string    // $KB_ROOT for a root that is not a workspace, from Open
+	KBRoot       string    // the kb_root an older Open recorded: carried into the store's file once, then cleared (ADR 1792015069 §2.7)
 	LastResolved time.Time
 }
 

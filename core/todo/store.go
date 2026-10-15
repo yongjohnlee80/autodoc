@@ -48,9 +48,9 @@ type cached struct {
 }
 
 // eligible is every file the store's documents may name: a task file in a bucket or an archive
-// partition, a staged delete in the trash, and the owner marker.
+// partition, a staged delete in the trash, the owner marker and the variable file.
 func eligible(p string) bool {
-	if p == ownerMarker {
+	if p == ownerMarker || p == varsFile {
 		return true
 	}
 	if !strings.HasSuffix(p, ".md") {

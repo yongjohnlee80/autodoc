@@ -23,10 +23,13 @@ Dialog {
     Shortcut { sequence: "3"; onActivated: { todoKeys.close(); App.todosTab(2) } }
     Shortcut { sequence: "4"; onActivated: { todoKeys.close(); App.todosTab(3) } }
     Shortcut { sequence: "5"; onActivated: { todoKeys.close(); App.todosTab(4) } }
+    Shortcut { sequence: "6"; onActivated: { todoKeys.close(); App.todosTab(5) } }
     Shortcut { sequence: "s"; onActivated: { todoKeys.close(); App.todoChooseStatus() } }
     Shortcut { sequence: "a"; onActivated: { todoKeys.close(); App.todoAdd() } }
     Shortcut { sequence: "d"; onActivated: { todoKeys.close(); App.todoRemove() } }
     Shortcut { sequence: "Shift+A"; onActivated: { todoKeys.close(); App.todoAssign() } }
+    Shortcut { sequence: "e"; onActivated: { todoKeys.close(); App.todoVarEdit() } }
+    Shortcut { sequence: "m"; onActivated: { todoKeys.close(); App.todoVarMachine() } }
     Shortcut { sequence: "Shift+S"; onActivated: { todoKeys.close(); App.todoFocusStore() } }
     Shortcut { sequence: "Shift+N"; onActivated: { todoKeys.close(); App.todoNew() } }
     Shortcut { sequence: "Shift+O"; onActivated: { todoKeys.close(); App.todoLoad() } }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strconv"
+	"strings"
 
 	"github.com/yongjohnlee80/golib/logger"
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -37,6 +39,29 @@ const sessClient = "client"
 const maxEvents = 500
 
 // newClientToken is a session's token: the client's own name and a random suffix.
+// who is the identity a CLI's hello carries, for its token: (agent=… pid=… cwd=…), each present
+// key; "" for another client, or a CLI that sent none. A token is only compared whole and shown, so
+// it may say who the client is; '#' is dropped from the parts, so the token's own '#' stays the last.
+func who(name string, info map[string]any) string {
+	if name != CLIName {
+		return ""
+	}
+	var parts []string
+	if a, _ := info["agent"].(string); a != "" {
+		parts = append(parts, "agent="+a)
+	}
+	if p, ok := info["pid"].(int64); ok && p > 0 {
+		parts = append(parts, "pid="+strconv.FormatInt(p, 10))
+	}
+	if c, _ := info["cwd"].(string); c != "" {
+		parts = append(parts, "cwd="+c)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "(" + strings.ReplaceAll(strings.Join(parts, " "), "#", "") + ")"
+}
+
 func newClientToken(name string) string {
 	if name == "" {
 		name = "client"

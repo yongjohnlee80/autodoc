@@ -505,7 +505,7 @@ tables. The codes an `err` carries are listed at the end of `--contracts`.
 | `ranker` | `add`, `list`, `log`, `models`, `remove`, `update`, `usage`, `use`, `window` |
 | `search` | `query` |
 | `sys` | `capabilities`, `contracts`, `events` |
-| `todos` | `ack`, `add`, `assign`, `changes`, `claim`, `get`, `list`, `move_store`, `open`, `refresh`, `register`, `release`, `remove`, `remove_malformed`, `resolve`, `scaffold`, `set_dir`, `set_var`, `status`, `stores`, `update`, `vars` |
+| `todos` | `ack`, `add`, `assign`, `changes`, `claim`, `get`, `list`, `migrate_refs`, `move_store`, `open`, `refresh`, `register`, `release`, `remove`, `remove_malformed`, `resolve`, `scaffold`, `set_dir`, `set_var`, `status`, `stores`, `update`, `vars` |
 | `workspace` | `add`, `configure`, `embedding_policy`, `focus`, `list`, `remove`, `rename`, `section_size`, `set_patterns`, `set_provider`, `set_schema`, `set_text_extensions` |
 
 The ones a command reaches for most:

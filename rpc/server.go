@@ -71,8 +71,11 @@ import (
 // todos.* verbs. Protocol 21 makes file.write and file.write_raw on a file a workspace indexes that
 // workspace's doc.write and doc.write_raw, indexed at once, where they wrote round it through "/";
 // file.locate resolves symlinks. No verb is added, and every session gets the new behaviour: the
-// old one was the bypass.
-const Protocol int64 = 21
+// old one was the bypass. Protocol 22 is ADR 1792015069: todos.migrate_refs, which a session below
+// 22 sees as an unknown method; todos.set_var's optional {at, scope}; todos.vars' derived, source and
+// machine. Every session resolves a todo store's variables from the store, whichever route it names,
+// and todos.open ignores a kb_root: the per-route values were the bug.
+const Protocol int64 = 22
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

@@ -272,8 +272,11 @@ func modules(d *moduleDeps) []module.Module {
 	if d == nil {
 		return []module.Module{todo.New(nil, nil, nil)}
 	}
-	d.todos = todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal,
-		todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) }))
+	opts := []todo.Option{todo.WithLogger(d.log), todo.WithEvents(func(e todo.Event) { todoEvent(d, e) })}
+	if home, err := os.UserHomeDir(); err == nil {
+		opts = append(opts, todo.WithHome(home)) // $HOME and a ref's leading ~ (ADR 1792015069 §2.2)
+	}
+	d.todos = todo.New(serving.TodoRoots{Workspaces: d.workspaces}, serving.TodoDisk{Log: d.log}, d.journal, opts...)
 	return []module.Module{d.todos}
 }
 

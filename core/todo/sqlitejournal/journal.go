@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/yongjohnlee80/golib/dao"
@@ -16,7 +17,8 @@ import (
 )
 
 // THE TODO JOURNAL ON THE STORE — core/todo's Journal port (ADR 1791532020 §2.5) on the store's
-// todo tables (migration 000017; 000018 adds a consumer's resync, 000019 a store's daily refresh):
+// todo tables (migration 000017; 000018 adds a consumer's resync, 000019 a store's daily refresh,
+// 000020 a store's per-machine variables):
 // each todo store's change log, snapshot and consumers' cursors, and the store, root and var
 // records, all keyed by the store's stable id, never its path. The tables are declared through
 // core/store's seam (store.Declare), so neither core/store nor core/todo imports the other: this
@@ -96,8 +98,9 @@ type (
 		Root, Override, KBRoot   string
 		Registered, LastResolved *int64
 	}
-	todoVarRow    struct{ Name, Value string }
-	todoChangeRow struct {
+	todoVarRow      struct{ Name, Value string }
+	todoStoreVarRow struct{ Store, Name, Value string }
+	todoChangeRow   struct {
 		Seq                        int64
 		Store, ID, Kind, Op, State string
 		From, To, Reason           string
@@ -136,6 +139,7 @@ type todoTables struct {
 	stores    *todoSchema[*todoStoreRow]
 	roots     *todoSchema[*todoRootRow]
 	vars      *todoSchema[*todoVarRow]
+	storeVars *todoSchema[*todoStoreVarRow]
 	changes   *todoSchema[*todoChangeRow]
 	snapshot  *todoSchema[*todoSnapRow]
 	consumers *todoSchema[*todoConsumerRow]
@@ -184,6 +188,11 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcName:  func(r *todoVarRow) any { return &r.Name },
 			tcValue: func(r *todoVarRow) any { return &r.Value },
 		}, []todoCol{tcName}, map[todoSort]string{byKey: `"todo_var"."name"`}),
+		storeVars: todoTable(c, "todo_store_var", map[todoCol]func(*todoStoreVarRow) any{
+			tcStore: func(r *todoStoreVarRow) any { return &r.Store },
+			tcName:  func(r *todoStoreVarRow) any { return &r.Name },
+			tcValue: func(r *todoStoreVarRow) any { return &r.Value },
+		}, []todoCol{tcStore, tcName}, map[todoSort]string{byKey: `"todo_store_var"."name"`}),
 		changes: todoTable(c, "todo_change", map[todoCol]func(*todoChangeRow) any{
 			tcSeq:      func(r *todoChangeRow) any { return &r.Seq },
 			tcStore:    func(r *todoChangeRow) any { return &r.Store },
@@ -518,8 +527,21 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 			KBRoot: r.KBRoot, LastResolved: fromNanos(r.LastResolved)}
 	}
 	vars, err := t.vars.On(tx).Select()
+	if err != nil {
+		return s, err
+	}
 	for _, r := range vars {
 		s.Vars[r.Name] = r.Value
+	}
+	svars, err := t.storeVars.On(tx).Select()
+	for _, r := range svars {
+		if s.MachineVars == nil {
+			s.MachineVars = map[string]map[string]string{}
+		}
+		if s.MachineVars[r.Store] == nil {
+			s.MachineVars[r.Store] = map[string]string{}
+		}
+		s.MachineVars[r.Store][r.Name] = r.Value
 	}
 	return s, err
 }
@@ -541,9 +563,30 @@ func saveSettings(tx *dao.Transaction, t *todoTables, before, after todo.Setting
 	if err != nil {
 		return err
 	}
-	return syncRecords(after.Vars, before.Vars, func(name, value string) error {
+	err = syncRecords(after.Vars, before.Vars, func(name, value string) error {
 		return t.vars.On(tx).SetMap(map[todoCol]any{tcName: name, tcValue: value}).Upsert()
 	}, func(name string) error { return t.vars.On(tx).With(tcName, name).Delete() })
+	if err != nil {
+		return err
+	}
+	return syncRecords(flatStoreVars(after.MachineVars), flatStoreVars(before.MachineVars), func(k, value string) error {
+		store, name, _ := strings.Cut(k, "\x00")
+		return t.storeVars.On(tx).SetMap(map[todoCol]any{tcStore: store, tcName: name, tcValue: value}).Upsert()
+	}, func(k string) error {
+		store, name, _ := strings.Cut(k, "\x00")
+		return t.storeVars.On(tx).With(tcStore, store).With(tcName, name).Delete()
+	})
+}
+
+// flatStoreVars keys each per-store value by its store id and name, NUL between them.
+func flatStoreVars(mv map[string]map[string]string) map[string]string {
+	out := map[string]string{}
+	for store, vals := range mv {
+		for name, v := range vals {
+			out[store+"\x00"+name] = v
+		}
+	}
+	return out
 }
 
 // syncRecords puts every entry of after that before does not hold as it is, and deletes every key of
@@ -569,7 +612,14 @@ func syncRecords[V comparable](after, before map[string]V, put func(string, V) e
 }
 
 func cloneSettings(s todo.Settings) todo.Settings {
-	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars)}
+	var mv map[string]map[string]string
+	if s.MachineVars != nil {
+		mv = make(map[string]map[string]string, len(s.MachineVars))
+		for id, vals := range s.MachineVars {
+			mv[id] = maps.Clone(vals)
+		}
+	}
+	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars), MachineVars: mv}
 }
 
 // THE COLUMNS' ENCODINGS

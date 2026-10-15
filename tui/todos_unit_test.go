@@ -293,7 +293,7 @@ func TestTodosTabsAreNumberedTablesReadWhenShown(t *testing.T) {
 	if got := tabRows(v, 2); len(got) != 2 {
 		t.Errorf("Deferred %q", got)
 	}
-	for _, step := range []struct{ by, want int }{{1, 3}, {1, 4}, {1, 0}, {-1, 4}, {-1, 3}} {
+	for _, step := range []struct{ by, want int }{{1, 3}, {1, 4}, {1, varsTab}, {1, 0}, {-1, varsTab}, {-1, 4}, {-1, 3}} {
 		v.stepTab(step.by)
 		if v.tab != step.want || s.set["App.todoTab"] != step.want {
 			t.Fatalf("a step of %d: tab %d, want %d", step.by, v.tab, step.want)

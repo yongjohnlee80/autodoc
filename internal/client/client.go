@@ -47,6 +47,7 @@ type Session struct {
 	// name is what the hello says: rpc.TUIName (the default), held to this build's protocol, or
 	// another client's (As), admitted across the daemon's range
 	name   string
+	info   map[string]any // the hello's other keys (WithInfo)
 	addr   string
 	spawn  func() (logPath string, err error) // start `autodoc --serve`; nil: never
 	window time.Duration
@@ -114,6 +115,24 @@ func NewSession(addr string, spawn func() (string, error)) *Session {
 func (s *Session) As(name string) *Session {
 	s.name = name
 	return s
+}
+
+// WithInfo adds info to the session's hello beside its protocol and name: who the client is (the
+// CLI's agent, cwd and pid), which the daemon puts in the client's token, so its events say who
+// made them. A daemon that does not read a key ignores it.
+func (s *Session) WithInfo(info map[string]any) *Session {
+	s.info = info
+	return s
+}
+
+// helloInfo is the hello's map at proto: the session's info, then its protocol and name.
+func (s *Session) helloInfo(proto int64) map[string]any {
+	m := map[string]any{}
+	for k, v := range s.info {
+		m[k] = v
+	}
+	m["protocol"], m["name"] = proto, s.name
+	return m
 }
 
 // address is where the session dials now.
@@ -277,7 +296,7 @@ func (s *Session) Connect(ctx context.Context) error {
 // Stale). Another client, refused by an older daemon this build still serves, says hello again at
 // that daemon's protocol, on a new connection: a refused hello spends its session for good.
 func (s *Session) hello(ctx context.Context, cli *golibrpc.Client) (*golibrpc.Client, map[string]any, error) {
-	res, err := cli.Call(ctx, "sys.hello", map[string]any{"protocol": rpc.Protocol, "name": s.name})
+	res, err := cli.Call(ctx, "sys.hello", s.helloInfo(rpc.Protocol))
 	if err != nil {
 		_ = cli.Close()
 		var re *golibrpc.Error
@@ -297,7 +316,7 @@ func (s *Session) hello(ctx context.Context, cli *golibrpc.Client) (*golibrpc.Cl
 		if cli, err = golibrpc.Dial(ctx, s.address(), msgpackrpc.New(nil), golibrpc.ClientNetwork("unix")); err != nil {
 			return nil, nil, err
 		}
-		if res, err = cli.Call(ctx, "sys.hello", map[string]any{"protocol": info.Protocol, "name": s.name}); err != nil {
+		if res, err = cli.Call(ctx, "sys.hello", s.helloInfo(info.Protocol)); err != nil {
 			_ = cli.Close()
 			return nil, nil, fmt.Errorf("hello at protocol %d: %w", info.Protocol, err)
 		}

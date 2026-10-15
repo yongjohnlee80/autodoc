@@ -526,6 +526,9 @@ Window {
                 Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
                 Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
                 Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
+                Shortcut { sequence: "6"; onActivated: App.todosTab(5) }
+                Shortcut { sequence: "e"; onActivated: App.todoVarEdit() }
+                Shortcut { sequence: "m"; onActivated: App.todoVarMachine() }
                 // ---- end of the todos's keys ----
                 Flex {
                     direction: Tui.Vertical
@@ -653,6 +656,23 @@ Window {
                                 }
                             }
                         }
+                        // the store's variables, the same from every route to it: each value and
+                        // where it came from (todos_vars.go)
+                        Tab {
+                            title: "Variables"
+                            TableView {
+                                id: todoVarsTable
+                                palette.highlight: Theme.document.highlight
+                                palette.highlightedText: Theme.document.highlightedText
+                                model: App.todoVarsRows
+                                currentIndex: App.todoVarsIndex
+                                onCurrentIndexChanged: App.todoVarMoved(index)
+                                onActivated: App.todoVarEdit()
+                                TableViewColumn { role: "name"; title: "NAME"; width: 16 }
+                                TableViewColumn { role: "from"; title: "FROM"; width: 9 }
+                                TableViewColumn { role: "value"; title: "VALUE"; width: 0 }
+                            }
+                        }
                     }
                 }
             }
@@ -702,6 +722,9 @@ Window {
                 Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
                 Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
                 Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
+                Shortcut { sequence: "6"; onActivated: App.todosTab(5) }
+                Shortcut { sequence: "e"; onActivated: App.todoVarEdit() }
+                Shortcut { sequence: "m"; onActivated: App.todoVarMachine() }
                 // ---- end of the todos task buttons' keys ----
                 Flex {
                     direction: Tui.Horizontal
@@ -713,6 +736,13 @@ Window {
                     Button { text: "Remove (&d)"; toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
                     Text { text: " "; visible: App.todoActStatus }
                     Button { id: todoAddButton; text: "&Add"; toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
+                    Button { text: "S&et"; toolTipText: "set the value, in the store's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
+                    Text { text: " "; visible: App.todoActVarSet }
+                    Button { text: "This &machine"; toolTipText: "set the value for this machine only (m)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarMachine() }
+                    Text { text: " "; visible: App.todoActVarClear }
+                    Button { text: "Clear (&d)"; toolTipText: "clear the value set here (d)"; visible: App.todoActVarClear; enabled: App.todoActVarClear; onClicked: App.todoRemove() }
+                    Text { text: " "; visible: App.todoActVarAdd }
+                    Button { text: "&Add"; toolTipText: "add a variable, NAME=value (a)"; visible: App.todoActVarAdd; enabled: App.todoActVarAdd; onClicked: App.todoAdd() }
                 }
             }
         }
@@ -768,6 +798,7 @@ Window {
     About { id: about }
     TodoNew { id: todoNew }
     TodoLabel { id: todoLabel }
+    TodoVar { id: todoVar }
     TodoAssign { id: todoAssign }
     TodoFolder { id: todoFolder; title: "todos: load a store: its project's folder" }
     TodoFolder { id: todoFolderNew; title: "todos: a new store: the project's folder" }

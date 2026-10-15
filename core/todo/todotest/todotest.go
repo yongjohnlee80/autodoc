@@ -281,7 +281,14 @@ func (j *Journal) apply(e todo.Edit) {
 }
 
 func copySettings(s todo.Settings) todo.Settings {
-	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars)}
+	var mv map[string]map[string]string
+	if s.MachineVars != nil {
+		mv = make(map[string]map[string]string, len(s.MachineVars))
+		for id, vals := range s.MachineVars {
+			mv[id] = maps.Clone(vals)
+		}
+	}
+	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars), MachineVars: mv}
 }
 
 // Disk is a todo.Filesystems over one memfs: the whole disk, "/" its root. Paths are canonical as

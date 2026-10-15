@@ -30,8 +30,8 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
 `autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
 when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": 21, "name": "<your client>"}`: the protocol your client was written
-for. The daemon serves every protocol from `min_protocol` (12) to its own (21); another is
+`sys.hello` with `{"protocol": 22, "name": "<your client>"}`: the protocol your client was written
+for. The daemon serves every protocol from `min_protocol` (12) to its own (22); another is
 refused, and so is every verb until the hello succeeds. A verb may be written right behind the
 hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
@@ -200,7 +200,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 21; the daemon serves sessions from protocol 12.
+Verbs at protocol 22; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -310,8 +310,9 @@ Verbs at protocol 21; the daemon serves sessions from protocol 12.
 | `todos.claim` | `at` workspace \| {root}, `opts`? map ({legacy_workspace}: the directory auto-core's $WORKSPACE meant) | `nil` — The cutover: the daemon writes the store from now on. Only the release that removes auto-core's writer calls it. Logs `todos.changed`. Codes: -32060, -32076, -32073. | 20 | for people's tools | settings |
 | `todos.get` | `at` workspace \| {root}, `id` string | `task: {id, version, status, title, …, rev, path, description}` — One task, with its rev and body. Codes: -32060, -32072, -32074. | 20 | agent | read |
 | `todos.list` | `at` workspace \| {root}, `opts`? map ({buckets, tag, assignee, priority, has_errors}; buckets ["archived"] lists the months, ["archived/YYYY/MM"] one month) | `{tasks: [task: {id, version, status, title, …, rev, path, description}], malformed: [{path, reason}], partitions?: [{month, count}], cursor}` — The active buckets' tasks; archives only by month, on request. Codes: -32060, -32074, -32073. | 20 | agent | read |
+| `todos.migrate_refs` | `at` workspace \| {root}, `opts` map ({plan: true} lists the store's $WORKSPACE refs and where each exists; {apply: [...]} rewrites exactly the listed ones to $PROJECT_ROOT) | `{candidates?: [{id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}` — Migrates Lua-era $WORKSPACE refs: a plan lists them; an apply rewrites exactly the reviewed list to $PROJECT_ROOT, journaled. Logs `todos.changed`. Codes: -32060, -32076, -32077, -32073. | 22 | for people's tools | write |
 | `todos.move_store` | `at` workspace \| {root}, `to` string (the store's new directory; nothing may be there yet) | `{store_id, store, root, override?, writable, claimed}` — Moves an at's store to a new directory; its claim, change log and cursors move with it. Logs `todos.changed`. Codes: -32060, -32076, -32077, -32075. | 20 | for people's tools | settings |
-| `todos.open` | `at` workspace \| {root}, `opts`? map ({kb_root}) | `{store_id, store, scaffolded: false}` — Checks that an at's store exists, and records the client's kb_root for its refs. Codes: -32060, -32074. | 20 | agent | read |
+| `todos.open` | `at` workspace \| {root}, `opts`? map ({kb_root}) | `{store_id, store, scaffolded: false}` — Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's own. Codes: -32060, -32074. | 20 | agent | read |
 | `todos.refresh` | `at` workspace \| {root} (a workspace name, or {root = "/abs/project"}) | `{scanned, moved, archived, errors_set, rewritten, malformed}` — Reconciles the active buckets: misplaced files, errors[], the 28-day archive. Never reads archives. Logs `todos.changed`. Codes: -32060, -32076, -32077. | 20 | agent | write |
 | `todos.register` | `root` string (an existing directory: a project that is no AutoDoc workspace) | `{new}` — Enrolls a project root that is no AutoDoc workspace, so its .todo-list may be written; allowed before any claim. Codes: -32060, -32073. | 20 | agent | settings |
 | `todos.release` | `at` workspace \| {root} (a workspace name, or {root = "/abs/project"}) | `nil` — The cutover's rollback: the daemon only reads the store again. Logs `todos.changed`. Codes: -32060. | 20 | for people's tools | settings |
@@ -320,11 +321,11 @@ Verbs at protocol 21; the daemon serves sessions from protocol 12.
 | `todos.resolve` | `at` workspace \| {root} (a workspace name, or {root = "/abs/project"}) | `{store_id, store, root, override?, writable, claimed}` — Where an at's store is, and whether the daemon may write it. Codes: -32060. | 20 | agent | read |
 | `todos.scaffold` | `at` workspace \| {root} (a workspace name, or {root = "/abs/project"}) | `{store_id, store, scaffolded}` — Creates the at's .todo-list and its buckets. Logs `todos.changed`. Codes: -32060, -32076, -32077, -32075. | 20 | agent | write |
 | `todos.set_dir` | `at` workspace \| {root}, `dir` string (the store's directory; "" clears the override) | `{store_id, store, root, override?, writable, claimed}` — Points an at's root at another store directory, or back at <root>/.todo-list. Logs `todos.changed`. Codes: -32060, -32073. | 20 | for people's tools | settings |
-| `todos.set_var` | `name` string, `value` string ("" removes it) | `nil` — Sets or removes a user variable; built-ins are read-only. Codes: -32060, -32073. | 20 | for people's tools | settings |
+| `todos.set_var` | `name` string, `value` string ("" removes it), `opts`? map ({at, scope}: scope global (the default without at), store (the store's .autodoc-vars.toml, the default with at) or machine (this machine's value for the store)) | `nil` — Sets or removes a variable: globally, in an at's store's file, or for this machine; a store or machine value may override a built-in. Codes: -32060, -32073, -32076, -32077. | 20 | for people's tools | settings |
 | `todos.status` | `at` workspace \| {root}, `id` string, `rev` string, `status` string (open, in-progress, deferred, completed or archived) | `task: {id, version, status, title, …, rev, path, description}` — Moves a task read at rev to another status. Logs `todos.changed`. Codes: -32060, -32076, -32077, -32071, -32072, -32073. | 20 | agent | write |
 | `todos.stores` | — | `[{id, path, roots, claimed, last_use}]` — The stores the daemon knows. Codes: -32060. | 20 | agent | read |
 | `todos.update` | `at` workspace \| {root}, `id` string, `rev` string (the rev the client read), `patch` map (hand-editable fields only: title, description, priority, due, tags, adr, review, blocked) | `task: {id, version, status, title, …, rev, path, description}` — Changes hand-editable fields of a task read at rev; status and assignee have their own verbs. Logs `todos.changed`. Codes: -32060, -32076, -32077, -32071, -32072, -32073. | 20 | agent | write |
-| `todos.vars` | `at` workspace \| {root} (a workspace name, or {root = "/abs/project"}) | `[{name, value?, builtin}]` — The variables a ref may start with, for an at's store. Codes: -32060. | 20 | agent | read |
+| `todos.vars` | `at` workspace \| {root} (a workspace name, or {root = "/abs/project"}) | `[{name, value?, builtin, derived?, source?, machine?}]` — The variables an at's store's refs may start with, the same from every route to the store: each effective value and its source. Codes: -32060. | 20 | agent | read |
 
 ### `workspace`
 

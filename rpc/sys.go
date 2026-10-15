@@ -150,7 +150,7 @@ func (s *Server) hello(ctx context.Context, p sysHello) (*helloJSON, error) {
 	sess.SetValue(sessHello, true)
 	sess.SetValue(sessProtocol, proto)
 	reply.Protocol = proto
-	reply.Client = newClientToken(name)
+	reply.Client = newClientToken(name + who(name, info))
 	sess.SetValue(sessClient, reply.Client)
 	if s.events != nil {
 		// where this client's sys.events begins: what happened before it connected is in its snapshot
