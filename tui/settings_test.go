@@ -54,7 +54,8 @@ func kbInfo() wsInfo {
 		db: databasesInfo{destination: store.DestinationLocal}}
 }
 
-// todoInfo is kbInfo as a daemon at protocol 23 lists it: the default graph_only list, todo_search off.
+// todoInfo is kbInfo as a daemon at protocol 23 lists a workspace that turned todo_search off: the
+// default graph_only list, todo_search off.
 func todoInfo() wsInfo {
 	w := kbInfo()
 	w.graphOnly = []string{"**/.todo-list/**"}

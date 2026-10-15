@@ -32,10 +32,10 @@ func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 		search bool
 		want   []want
 	}{
-		{"the default", nil, false, []want{
+		{"todo_search off", nil, false, []want{
 			{".todo-list/open/a.md", true, ""}, {"p/.todo-list/open/a.md", true, ""}, {"tasks/open/a.md", true, "S"},
 			{"notes/a.md", false, ""}}},
-		{"todo_search on", nil, true, []want{
+		{"the default: todo_search on", nil, true, []want{
 			{".todo-list/open/a.md", false, ""}, {"tasks/open/a.md", false, "S"}, {"notes/a.md", false, ""}}},
 		{"a user's pattern beats todo_search", []string{"drafts/**", workspace.TodoPattern}, true, []want{
 			{"drafts/a.md", true, ""}, {".todo-list/open/a.md", false, ""}, {"tasks/open/a.md", false, "S"}}},
@@ -107,9 +107,10 @@ func writeAll(t *testing.T, root string, files map[string]string) {
 	}
 }
 
-// TestAStoreChangeReindexesWithoutAnEdit (ADR 1792015212 §5): a crawled workspace's directory
-// becomes a todo store (a set_dir to a store not named .todo-list): its tasks leave search, their
-// graph links stay, and no file changed. The store removed, they are back in search.
+// TestAStoreChangeReindexesWithoutAnEdit (ADR 1792015212 §5): in a workspace with todo_search off,
+// a crawled directory becomes a todo store (a set_dir to a store not named .todo-list): its tasks
+// leave search, their graph links stay, and no file changed. The store removed, they are back in
+// search.
 func TestAStoreChangeReindexesWithoutAnEdit(t *testing.T) {
 	m, _ := open(t)
 	reg := &stores{}
@@ -121,6 +122,9 @@ func TestAStoreChangeReindexesWithoutAnEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 2)
+	if err := m.Configure(context.Background(), "kb", store.Changes{TodoSearch: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
 	if got := hits(t, m, "kb", "zanzibar"); !slices.Equal(got, []string{"tasks/open/t.md"}) {
 		t.Fatalf("before it is a store: %v", got)
 	}
@@ -145,9 +149,9 @@ func TestAStoreChangeReindexesWithoutAnEdit(t *testing.T) {
 	})
 }
 
-// TestTodoSearchAndGraphOnlyApplyWithoutARestart: workspace.configure's todo_search and graph_only
-// re-index the paths whose mode changed, the workspace's indexer as it was, and workspace.list
-// reports them.
+// TestTodoSearchAndGraphOnlyApplyWithoutARestart: a workspace's todo tasks are in search by default
+// (amendment 1); workspace.configure's todo_search and graph_only re-index the paths whose mode
+// changed, the workspace's indexer as it was, and workspace.list reports them.
 func TestTodoSearchAndGraphOnlyApplyWithoutARestart(t *testing.T) {
 	m, db := open(t)
 	m.SetTodoStores((&stores{}).read)
@@ -157,12 +161,16 @@ func TestTodoSearchAndGraphOnlyApplyWithoutARestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	indexed(t, m, "kb", 2)
-	if got := hits(t, m, "kb", "zanzibar"); len(got) != 0 {
-		t.Fatalf("a .todo-list task is in search by default: %v", got)
+	if got := hits(t, m, "kb", "zanzibar"); !slices.Equal(got, []string{".todo-list/open/t.md"}) {
+		t.Fatalf("a .todo-list task is not in search by default: %v", got)
 	}
 	w, _ := m.Get("kb")
 	ix := w.Index()
 
+	if err := m.Configure(context.Background(), "kb", store.Changes{TodoSearch: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "todo_search off: the task leaves search", func() bool { return len(hits(t, m, "kb", "zanzibar")) == 0 })
 	if err := m.Configure(context.Background(), "kb", store.Changes{TodoSearch: ptr(true)}); err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +239,7 @@ func TestAViewWithoutModesReportsTheDefaults(t *testing.T) {
 	m, _ := open(t)
 	v := &view{m: m, s: &served{id: 999, root: "/nowhere"}, name: "gone"}
 	list, search, excluded := v.TodoModes()
-	if !slices.Equal(list, workspace.DefaultGraphOnly()) || search || excluded != nil {
+	if !slices.Equal(list, workspace.DefaultGraphOnly()) || !search || excluded != nil {
 		t.Errorf("TodoModes %v %v %v", list, search, excluded)
 	}
 }

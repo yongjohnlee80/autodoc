@@ -154,7 +154,7 @@ func (h *Host) state() map[string]any {
 		"App.settingsSourceState":     "",
 		"App.settingsViewArgs":        "",
 		"App.settingsGraphOnly":       "",
-		"App.settingsTodoSearchIndex": 1,
+		"App.settingsTodoSearchIndex": 0,
 		"App.settingsTodoNote":        "",
 		"App.settingsTodoNoted":       false,
 

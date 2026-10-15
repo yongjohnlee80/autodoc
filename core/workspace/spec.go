@@ -29,7 +29,8 @@ func DefaultExclude() []string { return []string{".git/**", "**/node_modules/**"
 
 // TodoPattern is the graph_only entry every workspace starts with (ADR 1792015212 §2.2): a todo
 // store's directory that no route has resolved yet. It is the todo rule's, so a workspace's
-// todo_search overrides it, where it overrides no pattern a user added.
+// todo_search overrides it, where it overrides no pattern a user added. todo_search is on unless
+// the workspace turns it off (amendment 1), so by default the rule keeps the tasks in search.
 const TodoPattern = "**/.todo-list/**"
 
 // DefaultGraphOnly is the graph_only list a workspace has until it sets its own: a fresh slice.

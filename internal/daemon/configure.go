@@ -237,7 +237,7 @@ func (m *Workspaces) inverseOf(ctx context.Context, id int64, c store.Changes) (
 		inv.GraphOnly = &list
 	}
 	if c.TodoSearch != nil {
-		b := w.TodoSearch != 0
+		b := w.TodoGraphOnly == 0
 		inv.TodoSearch = &b
 	}
 	if c.SectionTokens != nil {
