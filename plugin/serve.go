@@ -213,19 +213,34 @@ func (p *Peer) Close() error { return p.link.Notify(p.ctx, MethodHostClose, Empt
 // ID, keeping the one shown. Rows are taken only as the answer to a FetchRows. Keep each message
 // under the link's limit, MaxMessageBytes as EncodedSize measures it: size the rows by their
 // encoded bytes, not their count alone.
+//
+// t.Kinds go only to a host that opened the plugin at protocol 5 or later; below it the table is
+// sent without them, every cell text, as that host would read it.
 func (p *Peer) Table(t TableOpen) error {
 	if p.protocol.Load() < 4 {
 		return ErrNoTables
+	}
+	if p.protocol.Load() < 5 {
+		t.Kinds = nil
 	}
 	return p.link.Notify(p.ctx, MethodTable, TableParams(t))
 }
 
 // Rows sends the next rows of table id, answering a FetchRows; more says rows remain.
 func (p *Peer) Rows(id string, rows [][]string, more bool) error {
+	return p.RowsKinds(id, rows, nil, more)
+}
+
+// RowsKinds is Rows with each row's kinds (protocol 5; see TableOpen.Kinds): kinds[i] is rows[i]'s,
+// one byte per field. Below protocol 5 the rows go without them.
+func (p *Peer) RowsKinds(id string, rows [][]string, kinds []string, more bool) error {
 	if p.protocol.Load() < 4 {
 		return ErrNoTables
 	}
-	return p.link.Notify(p.ctx, MethodRows, RowsParams(id, rows, more))
+	if p.protocol.Load() < 5 {
+		kinds = nil
+	}
+	return p.link.Notify(p.ctx, MethodRows, RowsKindsParams(id, rows, kinds, more))
 }
 
 // TableEnd ends table id's rows early: no more will come, and err, when not nil, says why (a query

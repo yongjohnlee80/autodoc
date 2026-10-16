@@ -27,13 +27,16 @@
 //	                host.title {title}
 //	                host.call {call, id, args}                      3: run a command of AutoDoc's catalog
 //	                host.table {id, title, fields, rows, more}      4: a table of rows, as [table] declares
+//	                host.table {…, kinds}                           5: with each cell's kind
 //	                host.rows {id, rows, more}                      4: the next rows, answering a fetch
+//	                host.rows {…, kinds}                            5: with each cell's kind
 //	                host.table_end {id, error}                      4: the table's rows ended early
 //	                host.close {}
 //
 // The notifications marked 2 are protocol 2's, those marked 3 protocol 3's, those marked 4 protocol
 // 4's. A host sends them only to a plugin whose manifest says that protocol (or a later one) and
-// declares them, so a protocol-1 plugin never sees one.
+// declares them, so a protocol-1 plugin never sees one. The fields marked 5 are read only from a
+// plugin whose manifest says protocol 5.
 //
 // A table is the host's to show: the plugin sends its fields and its first rows (host.table), and
 // AutoDoc shows them in a results panel, asking for more as the user nears the end of those loaded
@@ -42,6 +45,11 @@
 // says plugin.table.close for the one it replaced, as it does when the panel closes. Each table has
 // an id of its own: one that reuses the shown table's id is refused, and host.rows no fetch asked
 // for is dropped.
+//
+// From protocol 5 a table's cells may carry their kinds: kinds is one string per row, a byte per
+// field, each one of KindText, KindNull, KindNumber, KindBool and KindJSON. A NULL is then told from
+// the text "NULL", and a number's text is its literal. The host sorts by them and writes them into
+// JSON. A kinds string of the wrong length, or with another byte, makes its message malformed.
 //
 // host.call and plugin.result are a request and its answer made of two notifications, matched by
 // call, a number the plugin chooses and does not reuse while it waits. The host runs only the
@@ -71,7 +79,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 4
+	Protocol    = 5
 )
 
 // The notifications the host sends.
@@ -688,11 +696,47 @@ func ReadFrame(params []any) (rows []Row, dropped int, err error) {
 // TableOpen is host.table: a table the host shows in its results panel, by the plugin's id for it.
 // Fields are the columns' titles; each row has a cell per field (a shorter row's last cells are
 // empty, a longer one's extra cells dropped). More says rows remain, for the host to fetch.
+//
+// Kinds (protocol 5) are each row's cells' kinds: Kinds[i] is row i's, one byte per field (see
+// KindText). nil sends none, and every cell is text. A table's kinds are decided by its host.table:
+// one sent with kinds (an empty list when it has no rows yet) reads them on every later page, and
+// one sent without them reads every cell as text.
 type TableOpen struct {
 	ID, Title string
 	Fields    []string
 	Rows      [][]string
+	Kinds     []string
 	More      bool
+}
+
+// The kinds of a table's cells (protocol 5), one byte each: golib's widget.TableCellKind bytes.
+const (
+	KindText   byte = 't'
+	KindNull   byte = 'z' // the cell is NULL; its text is what shows (the plugin's "NULL", say)
+	KindNumber byte = 'n' // the cell's text is the number's literal
+	KindBool   byte = 'b' // the cell's text is true or false
+	KindJSON   byte = 'j' // the cell's text is a JSON value
+)
+
+// CheckKinds is why kinds cannot be the kinds of rows of a table of fields fields ("" when they
+// can): one string per row, each exactly fields bytes, every byte a kind.
+func CheckKinds(kinds []string, rows, fields int) string {
+	if len(kinds) != rows {
+		return fmt.Sprintf("%d kinds strings for %d rows", len(kinds), rows)
+	}
+	for i, k := range kinds {
+		if len(k) != fields {
+			return fmt.Sprintf("row %d's kinds are %d bytes for %d fields", i, len(k), fields)
+		}
+		for j := range len(k) {
+			switch k[j] {
+			case KindText, KindNull, KindNumber, KindBool, KindJSON:
+			default:
+				return fmt.Sprintf("row %d's kinds hold %q, not a kind", i, k[j])
+			}
+		}
+	}
+	return ""
 }
 
 // TableFetch is plugin.table.fetch: up to N more rows of the table ID.
@@ -713,18 +757,35 @@ func rowsWire(rows [][]string) []any {
 	return out
 }
 
-// TableParams are host.table's.
-func TableParams(t TableOpen) []any {
-	fields := make([]any, len(t.Fields))
-	for i, f := range t.Fields {
-		fields[i] = f
+func stringsWire(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
 	}
-	return one(map[string]any{"id": t.ID, "title": t.Title, "fields": fields, "rows": rowsWire(t.Rows), "more": t.More})
+	return out
+}
+
+// TableParams are host.table's; kinds only when t has them.
+func TableParams(t TableOpen) []any {
+	m := map[string]any{"id": t.ID, "title": t.Title, "fields": stringsWire(t.Fields), "rows": rowsWire(t.Rows), "more": t.More}
+	if t.Kinds != nil {
+		m["kinds"] = stringsWire(t.Kinds)
+	}
+	return one(m)
 }
 
 // RowsParams are host.rows'.
 func RowsParams(id string, rows [][]string, more bool) []any {
-	return one(map[string]any{"id": id, "rows": rowsWire(rows), "more": more})
+	return RowsKindsParams(id, rows, nil, more)
+}
+
+// RowsKindsParams are host.rows' with each row's kinds (protocol 5); nil kinds sends none.
+func RowsKindsParams(id string, rows [][]string, kinds []string, more bool) []any {
+	m := map[string]any{"id": id, "rows": rowsWire(rows), "more": more}
+	if kinds != nil {
+		m["kinds"] = stringsWire(kinds)
+	}
+	return one(m)
 }
 
 // TableEndParams are host.table_end's; error only when there is one.
@@ -752,19 +813,21 @@ func tableID(m map[string]any, method string) (string, error) {
 }
 
 // readRows reads a table's rows. A row that is not a list is dropped, and a cell that is not a
-// string reads as empty; dropped counts both, so the host can say so.
-func readRows(v any, method string) (rows [][]string, dropped int, err error) {
+// string reads as empty; dropped counts both, so the host can say so. A row dropped is kept out of
+// kept, the indices of the rows read, so their kinds can follow them.
+func readRows(v any, method string) (rows [][]string, kept []int, dropped int, err error) {
 	raw, ok := v.([]any)
 	if !ok && v != nil {
-		return nil, 0, fmt.Errorf("%w: %s's rows is a list of lists of strings", ErrParams, method)
+		return nil, nil, 0, fmt.Errorf("%w: %s's rows is a list of lists of strings", ErrParams, method)
 	}
 	rows = make([][]string, 0, len(raw))
-	for _, r := range raw {
+	for i, r := range raw {
 		cells, ok := r.([]any)
 		if !ok {
 			dropped++
 			continue
 		}
+		kept = append(kept, i)
 		row := make([]string, len(cells))
 		for j, c := range cells {
 			s, ok := c.(string)
@@ -775,11 +838,47 @@ func readRows(v any, method string) (rows [][]string, dropped int, err error) {
 		}
 		rows = append(rows, row)
 	}
-	return rows, dropped, nil
+	return rows, kept, dropped, nil
 }
 
-// ReadTable reads host.table; dropped counts its malformed rows and cells (readRows).
-func ReadTable(params []any) (t TableOpen, dropped int, err error) {
+// readKinds reads a message's kinds (protocol 5): nil when it has none, else one string per row
+// sent, of which those of the rows read (kept) are returned, in their order. A message whose kinds
+// are not a list of strings, one per row sent, is malformed; their length and bytes are CheckKinds'.
+func readKinds(m map[string]any, sent int, kept []int, method string) ([]string, error) {
+	v, ok := m["kinds"]
+	if !ok || v == nil {
+		return nil, nil
+	}
+	raw, ok := v.([]any)
+	if !ok || len(raw) != sent {
+		return nil, fmt.Errorf("%w: %s's kinds is a list of strings, one per row", ErrParams, method)
+	}
+	all := make([]string, len(raw))
+	for i, k := range raw {
+		if all[i], ok = k.(string); !ok {
+			return nil, fmt.Errorf("%w: %s's kinds are strings", ErrParams, method)
+		}
+	}
+	out := make([]string, 0, len(kept))
+	for _, i := range kept {
+		out = append(out, all[i])
+	}
+	return out, nil
+}
+
+// sentRows is how many rows a message's rows list holds, the malformed ones included.
+func sentRows(m map[string]any) int {
+	raw, _ := m["rows"].([]any)
+	return len(raw)
+}
+
+// ReadTable reads host.table as protocol 4 has it, with no kinds; dropped counts its malformed rows
+// and cells (readRows).
+func ReadTable(params []any) (t TableOpen, dropped int, err error) { return ReadTableAt(params, 4) }
+
+// ReadTableAt reads host.table from a plugin speaking protocol: from 5, with its kinds, which must
+// fit its rows and fields (CheckKinds) or the table is malformed. Below 5 a kinds field is not read.
+func ReadTableAt(params []any, protocol int) (t TableOpen, dropped int, err error) {
 	m, err := arg(params)
 	if err != nil {
 		return TableOpen{}, 0, err
@@ -798,27 +897,60 @@ func ReadTable(params []any) (t TableOpen, dropped int, err error) {
 		}
 		t.Fields = append(t.Fields, s)
 	}
-	if t.Rows, dropped, err = readRows(m["rows"], MethodTable); err != nil {
+	var kept []int
+	if t.Rows, kept, dropped, err = readRows(m["rows"], MethodTable); err != nil {
 		return TableOpen{}, 0, err
+	}
+	if protocol >= 5 {
+		if t.Kinds, err = readKinds(m, sentRows(m), kept, MethodTable); err != nil {
+			return TableOpen{}, 0, err
+		}
+		if why := CheckKinds(t.Kinds, len(t.Rows), len(t.Fields)); t.Kinds != nil && why != "" {
+			return TableOpen{}, 0, fmt.Errorf("%w: host.table's kinds: %s", ErrParams, why)
+		}
 	}
 	t.Title, t.More = str(m, "title"), flag(m, "more")
 	return t, dropped, nil
 }
 
-// ReadRows reads host.rows: the table's id, its next rows and whether more remain; dropped counts
-// the malformed rows and cells (readRows).
+// TableRows is host.rows as protocol 5 reads it: table ID's next rows, their kinds (nil: none
+// sent), and whether more remain.
+type TableRows struct {
+	ID    string
+	Rows  [][]string
+	Kinds []string
+	More  bool
+}
+
+// ReadRows reads host.rows as protocol 4 has it: the table's id, its next rows and whether more
+// remain; dropped counts the malformed rows and cells (readRows).
 func ReadRows(params []any) (id string, rows [][]string, more bool, dropped int, err error) {
+	r, dropped, err := ReadTableRows(params, 4)
+	return r.ID, r.Rows, r.More, dropped, err
+}
+
+// ReadTableRows reads host.rows from a plugin speaking protocol: from 5, with its kinds, one string
+// per row. Their length is checked against the table's fields by whoever knows them, the host
+// (CheckKinds), since host.rows does not carry the fields. Below 5 a kinds field is not read.
+func ReadTableRows(params []any, protocol int) (r TableRows, dropped int, err error) {
 	m, err := arg(params)
 	if err != nil {
-		return "", nil, false, 0, err
+		return TableRows{}, 0, err
 	}
-	if id, err = tableID(m, MethodRows); err != nil {
-		return "", nil, false, 0, err
+	if r.ID, err = tableID(m, MethodRows); err != nil {
+		return TableRows{}, 0, err
 	}
-	if rows, dropped, err = readRows(m["rows"], MethodRows); err != nil {
-		return "", nil, false, 0, err
+	var kept []int
+	if r.Rows, kept, dropped, err = readRows(m["rows"], MethodRows); err != nil {
+		return TableRows{}, 0, err
 	}
-	return id, rows, flag(m, "more"), dropped, nil
+	if protocol >= 5 {
+		if r.Kinds, err = readKinds(m, sentRows(m), kept, MethodRows); err != nil {
+			return TableRows{}, 0, err
+		}
+	}
+	r.More = flag(m, "more")
+	return r, dropped, nil
 }
 
 // ReadTableEnd reads host.table_end: the table's id, and why its rows ended ("" when no error).
