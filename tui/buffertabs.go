@@ -14,13 +14,15 @@ import (
 // buffer, and a press on its × closes it (asking first over unsaved changes); + makes a new, empty
 // one. A tab's menu (≡, a right press) has New buffer, Open file in a
 // new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was opened
-// for, each asking about unsaved changes as the TUI's do. A tab is capped at bufferTabWidth cells;
-// tabs wider than the bar's share scroll between < and > (golib's TabStrip). The TUI has no title
+// for, each asking about unsaved changes as the TUI's do. The tabs take the bar's room up to Raw |
+// Rendered, each whole while they all fit; when they do not, the strip cuts each to the widest width
+// at which they do (bufferTabLabel, its middle cut), never under bufferTabWidth cells, and under that
+// scrolls them between ← and → (golib's TabStrip.SetLabelFit). The TUI has no title
 // bar: its editor has no strip (bufferStrip is nil there), and :b and the Buffers picker switch
 // instead.
 
-// bufferTabWidth is a buffer tab's widest, in cells, its padding included: a long name is cut to
-// an ellipsis there, and its menu's Go to › has it whole.
+// bufferTabWidth is the narrowest a buffer tab is cut to, in cells, its padding included, when the
+// tabs do not fit the bar whole; its menu's Go to › has the name whole.
 const bufferTabWidth = 24
 
 // syncBufferTabs feeds the editor's strip the buffers as they are now, wiring it the first time
@@ -39,12 +41,17 @@ func (h *Host) syncBufferTabs() {
 		})
 		strip.SetMenu(h.bufferTabRows)
 		strip.SetActions(h.newEmptyBuffer, nil)
-		strip.SetMaxTabWidth(bufferTabWidth)
+		strip.SetLabelFit(bufferTabWidth, func(id string, w int) string {
+			if b := h.bufferOfTab(id); b != nil {
+				return h.bufferTabLabel(b, w)
+			}
+			return ""
+		})
 		strip.SetOnClose(h.closeBufferTab)
 	}
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
-		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: h.bufferTabLabel(b)}
+		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: h.bufferTabLabel(b, 0)}
 	}
 	strip.SetTabs(tabs)
 	if h.active != nil {
@@ -52,16 +59,16 @@ func (h *Host) syncBufferTabs() {
 	}
 }
 
-// bufferTabLabel is b's tab, told apart from every other buffer's: its file's name; its path where
-// another buffer's file has that name; its workspace and path where another's has that path (in
-// another workspace); untitled, with its number while there is more than one draft. [+] while
-// modified. A name longer than the tab is cut in its middle, its start (the workspace, the folder)
-// and its end (the file's name and kind) kept, and [+] after it; two cut alike take their buffer's
-// number, so the tabs drawn still tell every buffer apart.
-func (h *Host) bufferTabLabel(b *openBuffer) string {
-	label := h.cutTabName(b, "")
-	if slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && h.cutTabName(o, "") == label }) {
-		label = h.cutTabName(b, " #"+strconv.Itoa(b.n))
+// bufferTabLabel is b's tab within w cells, its padding not counted (0: whole), told apart from
+// every other buffer's: its file's name; its path where another buffer's file has that name; its
+// workspace and path where another's has that path (in another workspace); untitled, with its number
+// while there is more than one draft. [+] while modified. A name longer than w is cut in its middle,
+// its start (the workspace, the folder) and its end (the file's name and kind) kept, and [+] after
+// it; two cut alike take their buffer's number, so the tabs drawn still tell every buffer apart.
+func (h *Host) bufferTabLabel(b *openBuffer, w int) string {
+	label := h.cutTabName(b, "", w)
+	if slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && h.cutTabName(o, "", w) == label }) {
+		label = h.cutTabName(b, " #"+strconv.Itoa(b.n), w)
 	}
 	return label + bufferMarks(b)
 }
@@ -82,10 +89,13 @@ func bufferMarks(b *openBuffer) string {
 	return " [" + marks + "]"
 }
 
-// cutTabName is b's name, then mark, cut in the middle to fit a tab with room for its marks (always,
-// so a buffer's label does not change length as it is edited).
-func (h *Host) cutTabName(b *openBuffer, mark string) string {
-	room := bufferTabWidth - 2 - len(" [+!]") - tuicore.StringWidth(mark) // 2: the tab's padding
+// cutTabName is b's name, then mark, cut in the middle to fit w cells with room for its marks
+// (always, so a cut label does not change length as the buffer is edited); 0 leaves it whole.
+func (h *Host) cutTabName(b *openBuffer, mark string, w int) string {
+	if w <= 0 {
+		return h.bufferTabName(b) + mark
+	}
+	room := w - len(" [+!]") - tuicore.StringWidth(mark)
 	return elideMiddle(h.bufferTabName(b), room) + mark
 }
 

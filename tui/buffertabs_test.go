@@ -59,7 +59,7 @@ func TestABufferTabIsNamedByItsFile(t *testing.T) {
 			var out []string
 			for _, b := range r.h.buffers {
 				if b.file.open {
-					out = append(out, r.h.bufferTabLabel(b))
+					out = append(out, r.h.bufferTabLabel(b, bufferTabWidth-2))
 				}
 			}
 			return strings.Join(out, "|")
@@ -149,7 +149,7 @@ func TestBufferTabsAreToldApart(t *testing.T) {
 	labels := onLoop(r, func() []string {
 		var out []string
 		for _, b := range r.h.buffers {
-			out = append(out, r.h.bufferTabLabel(b))
+			out = append(out, r.h.bufferTabLabel(b, bufferTabWidth-2))
 		}
 		return out
 	})
@@ -256,7 +256,7 @@ func TestALongTabKeepsItsMarkAndWhatTellsItApart(t *testing.T) {
 	labels := onLoop(r, func() []string {
 		var out []string
 		for _, b := range r.h.buffers {
-			out = append(out, r.h.bufferTabLabel(b))
+			out = append(out, r.h.bufferTabLabel(b, bufferTabWidth-2))
 		}
 		return out
 	})
