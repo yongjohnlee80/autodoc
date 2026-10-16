@@ -626,3 +626,32 @@ func TestCtrlTTogglesTheAgentsModeAndEscIsTheAgents(t *testing.T) {
 	r.keys(t, decltest.Type("exit 6\r")...)
 	r.s.WaitFor(t, "the agent exited 6", func(string) bool { return r.noticed("fake exited (6)") })
 }
+
+// Shift+Enter in the agents panel is a new line in the prompt, not a send. An agent CLI (Claude
+// Code, Codex) asks for the kitty keyboard protocol at startup (CSI > 5 u), and then reads
+// Shift+Enter as CSI 13;2u, apart from Enter's \r. The fake agent asks as they do, then reports
+// the bytes the key sends it.
+func TestShiftEnterReachesAnAgentApartFromEnter(t *testing.T) {
+	dir := t.TempDir()
+	agent := filepath.Join(t.TempDir(), "kitty-agent")
+	script := `#!/bin/sh
+printf '\033[>5u'
+echo ready
+stty raw -echo
+got=$(dd bs=1 count=7 2>/dev/null | od -An -tx1 | tr -d ' \n')
+stty sane
+echo "got-$got"
+read line
+`
+	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, r, _ := runAgentTUI(t, dir, []agentProfile{{Name: "kitty", Command: shellQuote(agent)}}, "kitty")
+	r.leader(t, 'g')
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.s.WaitForText(t, "ready")
+	r.keys(t, tuicore.KeyEvent{Code: tuicore.KeyEnter, Mods: tuicore.ModShift})
+	// ESC [ 1 3 ; 2 u: Shift+Enter in the protocol the agent asked for. A plain \r here (0d) is
+	// the bug: the agent would have sent the prompt.
+	r.s.WaitForText(t, "got-1b5b31333b3275")
+}
