@@ -167,6 +167,73 @@ func TestARefusedKBFile(t *testing.T) {
 	}
 }
 
+// The KB's file holds a top-level machine list and a [vars] table of variable names with values, and
+// nothing else: each other shape is refused whole, its names read as unset, and reported.
+func TestTheVariableFileFormat(t *testing.T) {
+	e := claimed(t)
+	reported := func() int { return strings.Count(strings.Join(e.eventKinds(), ","), "todos.vars_invalid") }
+	for i, bad := range []string{
+		"other = 1\n[vars]\nX = \"x\"\n",            // an unknown key
+		"machine = [\"1BAD\"]\n[vars]\nX = \"x\"\n", // a machine name that is no variable name
+		"[vars]\n\"a-b\" = \"y\"\nX = \"x\"\n",      // a variable name that is none
+		"machine = [\"X\"]\n[vars]\nX = \"x\"\n",    // machine-only and given a value here
+		"[vars]\nX = \"\"\n",                        // an empty value
+	} {
+		e.disk.WriteFile(kbFile, []byte(bad))
+		if v := varOf(t, e, kb, "X"); v.Value != "" || v.Source == "kb" {
+			t.Errorf("file %d was read: %+v", i, v)
+		}
+		if n := reported(); n != i+1 {
+			t.Errorf("file %d: %d reports, want %d", i, n, i+1)
+		}
+	}
+}
+
+// EffectiveVars are a workspace's values as the index reads them, each name with a value, the
+// environment's included; AllEffectiveVars hold every workspace's, and "" those of no workspace.
+func TestEffectiveVars(t *testing.T) {
+	e := claimed(t)
+	e.m = todo.New(e.roots, e.disk, e.j, todo.WithHome("/home/u"),
+		todo.WithEnv(func(n string) string { return map[string]string{"FROMENV": "/env"}[n] }))
+	e.disk.WriteFile(kbFile, []byte("machine = [\"FROMENV\", \"UNSET\"]\n\n[vars]\nPROJECT_ROOT = \"../src\"\n"))
+	e.must(e.m.SetVar(ctx, "G", "/g"))
+	want := map[string]string{"KB_ROOT": "/kb", "HOME": "/home/u", "PROJECT_ROOT": "/src", "G": "/g", "FROMENV": "/env"}
+	got, err := e.m.EffectiveVars(ctx, "/kb")
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Errorf("EffectiveVars %v %v\nwant %v", got, err, want)
+	}
+	if v := varOf(t, e, kb, "FROMENV"); v.Source != "env" || !v.Machine {
+		t.Errorf("a machine-only name this machine has in its environment %+v", v)
+	}
+	all, err := e.m.AllEffectiveVars(ctx)
+	if err != nil || !reflect.DeepEqual(all["/kb"], want) ||
+		!reflect.DeepEqual(all[""], map[string]string{"HOME": "/home/u", "G": "/g"}) || len(all) != 2 {
+		t.Errorf("AllEffectiveVars %v %v", all, err)
+	}
+}
+
+// SetVar refuses what names no place to keep a value: an unknown scope, machine_only off the machine
+// scope, and a KB or machine value with neither a workspace nor an at.
+func TestSetVarRefusals(t *testing.T) {
+	e := claimed(t)
+	for name, o := range map[string]todo.SetVarOpts{
+		"an unknown scope":          {Workspace: "kb", Scope: "bogus"},
+		"machine_only in the file":  {Workspace: "kb", Scope: todo.ScopeKB, MachineOnly: true},
+		"a kb value with no place":  {Scope: todo.ScopeKB},
+		"a machine value, no place": {Scope: todo.ScopeMachine},
+	} {
+		if err := e.m.SetVar(ctx, "X", "/x", o); !is(err, todo.ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if err := e.m.SetVar(ctx, "1BAD", "/x"); !is(err, todo.ErrInvalid) {
+		t.Errorf("a bad name: %v", err)
+	}
+	if e.exists(kbFile) {
+		t.Errorf("a refused set wrote the KB file:\n%s", e.read(kbFile))
+	}
+}
+
 // A machine-only name with no value here is never an errors[] entry: it is a fact about this machine.
 // Any other name no layer defines is, the same on every machine.
 func TestMachineOnlyNamesAreNeverPersistedAsErrors(t *testing.T) {
@@ -245,6 +312,20 @@ func TestAStoresWorkspace(t *testing.T) {
 		t.Errorf("a note's owner: %q", ws)
 	}
 	delete(e.roots, "inner")
+	// a store recorded before ADR 1792132105 has no workspace in its record: its first use records it
+	e.must(e.j.UpdateSettings(ctx, func(s *todo.Settings) error {
+		for id, r := range s.Stores {
+			r.KB = ""
+			s.Stores[id] = r
+		}
+		return nil
+	}))
+	if ws, _, _ := e.m.Owner(ctx, kbStore+"/open/x.md"); ws != "kb" {
+		t.Errorf("an old record's owner: %q", ws)
+	}
+	if st, err := e.j.Settings(ctx); err != nil || st.Stores[e.storeID()].KB != "/kb" {
+		t.Errorf("the old record's workspace was not recorded: %+v %v", st.Stores[e.storeID()], err)
+	}
 	if ws, root, _ := e.m.Owner(ctx, "/elsewhere/f.md"); ws != "" || root != "" {
 		t.Errorf("a file in no workspace: %q %q", ws, root)
 	}
