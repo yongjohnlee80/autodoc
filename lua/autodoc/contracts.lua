@@ -512,8 +512,8 @@ return {
         { name = "at", type = "workspace | {root}" },
         { name = "opts", type = "map" }
       },
-      result = "{candidates?: [{id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
-      doc = "Migrates Lua-era $WORKSPACE refs: a plan lists them; an apply rewrites exactly the reviewed list to $PROJECT_ROOT, journaled.",
+      result = "{candidates?: [{kind?, id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
+      doc = "Migrates refs a plan lists, Lua-era $WORKSPACE refs (to $PROJECT_ROOT) or refs into removed git worktrees (kind worktree, to the main worktree's copy): an apply rewrites exactly the reviewed list, journaled.",
     },
     ["todos.move_store"] = {
       since = 20, scope = "global", audience = "user",

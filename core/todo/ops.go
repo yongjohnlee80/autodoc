@@ -201,6 +201,9 @@ func (m *Manager) Add(ctx context.Context, at At, spec Spec) (Task, error) {
 	if !validStatus(status) {
 		return Task{}, fmt.Errorf("%w: status %q", ErrInvalid, status)
 	}
+	if err := checkBlocked(spec.Blocked); err != nil {
+		return Task{}, err
+	}
 	t := Task{Version: newest.version, ID: id, Status: status, Title: spec.Title, Description: spec.Description,
 		Due: spec.Due, Priority: spec.Priority, Assignee: spec.Assignee, Tags: spec.Tags, ADR: slices.Clone(spec.ADR),
 		Review: slices.Clone(spec.Review), Blocked: spec.Blocked, Created: ts, Updated: ts, StatusChanged: ts}
@@ -271,6 +274,11 @@ func (m *Manager) Update(ctx context.Context, at At, id, seen string, patch Patc
 		if k == "title" && v == "" {
 			return Task{}, fmt.Errorf("%w: title cannot be empty", ErrInvalid)
 		}
+		if l, ok := v.([]string); ok && k == "blocked" {
+			if err := checkBlocked(l); err != nil {
+				return Task{}, err
+			}
+		}
 		t.set(k, v)
 	}
 	sc, err := m.scope(ctx, w)
@@ -287,6 +295,18 @@ func (m *Manager) Update(ctx context.Context, at At, id, seen string, patch Patc
 	}
 	c := Change{ID: id, Kind: KindUpdate, FromRev: seen, Fields: changedFields(t, digests(before), digests(back))}
 	return m.rewrite(ctx, st, c, back, ver, content)
+}
+
+// checkBlocked refuses a blocked entry that is not a task id: blocked names the tasks this one waits
+// on, and a sentence there is a note for the description, which no relation or refresh can resolve.
+func checkBlocked(list []string) error {
+	for i, id := range list {
+		if !safeID(id) {
+			return fmt.Errorf("%w: blocked[%d] %q is not a task id (letters, digits, - and _); "+
+				"put a note in the description", ErrInvalid, i, id)
+		}
+	}
+	return nil
 }
 
 // patchValue is a patch value as its field's Go value: a string, or a list of strings.

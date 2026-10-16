@@ -38,6 +38,10 @@ type scope struct {
 	machine                              map[string]bool   // the names the store's file declares per machine
 	env                                  func(string) string
 	exists                               func(string) bool
+	// read and list are a small file's content and a directory's entry names, by absolute path;
+	// withExists gives them with exists. ok is false for what cannot be read.
+	read func(string) ([]byte, bool)
+	list func(string) []string
 }
 
 func (s scope) get(name string) string {

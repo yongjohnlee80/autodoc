@@ -127,7 +127,7 @@ type (
 	}
 	migrateParams struct {
 		At   At          `param:"at"`
-		Opts MigrateOpts `param:"opts" doc:"{plan: true} lists the store's $WORKSPACE refs and where each exists; {apply: [...]} rewrites exactly the listed ones to $PROJECT_ROOT"`
+		Opts MigrateOpts `param:"opts" doc:"{plan: true} lists the store's $WORKSPACE refs and where each exists; {plan: true, worktrees: true} lists its refs into removed git worktrees and their main-worktree copies; {apply: [...]} rewrites exactly the listed ones"`
 	}
 	setVarParams struct {
 		Name  string     `param:"name"`
@@ -241,8 +241,8 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p claimParams) (none, error) { return nil, m.Claim(ctx, p.At, p.Opts) }),
 		module.Handle(settings(write("todos.release", "nil", "The cutover's rollback: the daemon only reads the store again.", user)),
 			func(ctx context.Context, p atParams) (none, error) { return nil, m.Release(ctx, p.At) }),
-		module.Handle(write("todos.migrate_refs", "{candidates?: [{id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
-			"Migrates Lua-era $WORKSPACE refs: a plan lists them; an apply rewrites exactly the reviewed list to $PROJECT_ROOT, journaled.",
+		module.Handle(write("todos.migrate_refs", "{candidates?: [{kind?, id, path, field, index, ref, to, under_workspace, under_project, suggested}], rewritten, skipped?}",
+			"Migrates refs a plan lists, Lua-era $WORKSPACE refs (to $PROJECT_ROOT) or refs into removed git worktrees (kind worktree, to the main worktree's copy): an apply rewrites exactly the reviewed list, journaled.",
 			user, append(writes, CodeInvalid)...),
 			func(ctx context.Context, p migrateParams) (MigrateResult, error) {
 				return m.MigrateRefs(ctx, p.At, p.Opts)
