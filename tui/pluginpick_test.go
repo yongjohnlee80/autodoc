@@ -22,7 +22,7 @@ func (r *running) pluginCardOf(t *testing.T, name string) {
 	t.Helper()
 	r.leader(t, 'p')
 	r.s.WaitForText(t, "SPC p — plugins")
-	i, at, title := onLoop3(r, func() (int, int, string) {
+	i, at, title := loopTriple(r, func() (int, int, string) {
 		pl := r.h.plugins
 		i := slices.IndexFunc(pl.chooser, func(p pluginRow) bool { return p.key == name })
 		return i, pl.chooserAt, pl.pluginTitle(name)
@@ -40,7 +40,7 @@ func (r *running) pluginCardOf(t *testing.T, name string) {
 	r.s.WaitForText(t, "SPC p › "+title)
 }
 
-func onLoop3[A, B, C any](r *running, fn func() (A, B, C)) (A, B, C) {
+func loopTriple[A, B, C any](r *running, fn func() (A, B, C)) (A, B, C) {
 	type abc struct {
 		a A
 		b B
@@ -116,7 +116,7 @@ func TestStarGivesAPluginALetter(t *testing.T) {
 	r.s.WaitForText(t, "SPC p — plugins")
 	r.keys(t, key('k'), key('*'), key('j')) // alpha; j is the chooser's own
 	r.s.WaitForText(t, "j moves down: * again for another letter")
-	if at, l := onLoop2(r, func() (int, string) { return r.h.plugins.chooserAt, r.h.prefs.pluginLetter["alpha"] }); at != 0 || l != "" {
+	if at, l := loopPair(r, func() (int, string) { return r.h.plugins.chooserAt, r.h.prefs.pluginLetter["alpha"] }); at != 0 || l != "" {
 		t.Fatalf("after * j: the cursor on %d, alpha's letter %q; want 0 and none", at, l)
 	}
 	r.keys(t, key('*'), key('g')) // beta's g moves to alpha
@@ -146,8 +146,8 @@ func TestStarGivesAPluginALetter(t *testing.T) {
 	}
 }
 
-func onLoop2[A, B any](r *running, fn func() (A, B)) (A, B) {
-	a, b, _ := onLoop3(r, func() (A, B, struct{}) { a, b := fn(); return a, b, struct{}{} })
+func loopPair[A, B any](r *running, fn func() (A, B)) (A, B) {
+	a, b, _ := loopTriple(r, func() (A, B, struct{}) { a, b := fn(); return a, b, struct{}{} })
 	return a, b
 }
 
