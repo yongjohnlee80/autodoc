@@ -357,3 +357,30 @@ func TestAModalDialogIsAFloatAsItWas(t *testing.T) {
 		t.Fatal("Esc did not close the modal dialog")
 	}
 }
+
+// TestArrangingACardPanelNamesItAndMovesIt: Go › Arrange panel (SPC L) with a card's panel open
+// reaches that panel, names it by the plugin's title, moves it by its keys, and keeps where Enter
+// leaves it under the panel's id.
+func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
+	d, r, _ := cardTUI(t, dir, nil)
+	r.openPlugin("card")
+	top, left, _, _ := waitFrame(t, r, "Card")
+	onLoop(r, func() bool { r.h.arrangePanel(); return true }) // the card's panel, the one opened last
+	r.s.WaitForText(t, "arrange Card")
+	if strings.Contains(r.s.String(), "arrange the "+cardPanelID("card")) {
+		t.Fatalf("Arrange panel named the card by its panel's id:\n%s", r.s)
+	}
+	r.keys(t, key('h'), key('h'), key('j'))
+	r.s.WaitFor(t, "four columns left, a row down", func(sc string) bool {
+		t2, l2, _, _, ok := frameOf(sc, "Card")
+		return ok && l2 == left-4 && t2 == top+1
+	})
+	r.keys(t, enter())
+	r.s.WaitFor(t, "kept once", func(string) bool {
+		m, _ := d.db.Preferences(context.Background())
+		_, ok := parseFloat(m["tui."+cardPanelID("card")+".float"])
+		return ok
+	})
+}
