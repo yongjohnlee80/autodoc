@@ -159,6 +159,31 @@ func (h *Host) bufferOfTab(id string) *openBuffer {
 	return h.bufferNumbered(n)
 }
 
+// bufferChord is H and L in Normal mode (bufferline's <S-h> and <S-l>, as in autovim): the buffer
+// before or after the shown one, in the order the tabs show them, wrapping at the ends, in the GUI
+// and in the TUI alike. It overrides vim's H and L (the screen's top and bottom line) in Normal mode
+// only: Visual mode keeps them, and Insert mode, a text field or a terminal never sees them (the
+// chord hook runs for the editor's keys, in Normal or Visual mode, with nothing pending).
+func (h *Host) bufferChord(kc widget.KeyChord) bool {
+	if kc.Mode != widget.ModeNormal || kc.Ctrl {
+		return false
+	}
+	step := 0
+	switch kc.Code {
+	case 'H':
+		step = -1
+	case 'L':
+		step = 1
+	default:
+		return false
+	}
+	n := len(h.buffers)
+	if i := slices.Index(h.buffers, h.active); i >= 0 && n > 1 {
+		h.showBuffer(h.buffers[(i+step+n)%n])
+	}
+	return true
+}
+
 // closeBufferTab is a press on a tab's ×: its buffer closed, asked about first when it is modified.
 func (h *Host) closeBufferTab(id string) {
 	if b := h.bufferOfTab(id); b != nil {

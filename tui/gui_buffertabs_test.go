@@ -5,6 +5,7 @@ package tui
 import (
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -125,6 +126,30 @@ func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
 			}
 		}
 		return false
+	})
+}
+
+// TestLInTheGUIScrollsTheStripToTheTab: tabs overflowing a narrow bar, the last shown; L wraps to
+// the first, and the strip scrolls back to show it (bufferChord, then the strip's reveal).
+func TestLInTheGUIScrollsTheStripToTheTab(t *testing.T) {
+	long := []string{"a-long-file-name-for-the-first-tab.md", "another-long-file-name-for-a-tab.md", "a-third-long-file-name-to-overflow.md"}
+	d := startDaemon(t, map[string][]string{"kb": {long[0], "a\n", long[1], "b\n", long[2], "c\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.waitListed(t, 3)
+	r.s.Backend.InjectResize(220, 30)
+	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	for _, f := range long {
+		r.openByPicker(t, f)
+		r.waitFile(t, f)
+	}
+	r.s.Backend.InjectResize(60, 30)
+	first, last := onLoop(r, func() string { return strconv.Itoa(r.h.buffers[0].n) }), onLoop(r, func() string { return strconv.Itoa(r.h.buffers[2].n) })
+	r.s.WaitFor(t, "narrow: the last tab active and shown, the strip scrolled to it", func(string) bool {
+		return onLoop(r, func() bool { return strip.Active() == last && strip.ActiveTabIndex() >= 0 })
+	})
+	r.keys(t, esc(), key('L'))
+	r.s.WaitFor(t, "L: the first tab active, and shown", func(string) bool {
+		return onLoop(r, func() bool { return strip.Active() == first && strip.ActiveTabIndex() >= 0 })
 	})
 }
 
