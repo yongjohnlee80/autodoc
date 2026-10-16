@@ -55,6 +55,9 @@ type openedFile struct {
 	// raw is an HTML file opened Raw (ADR 1791474356): its own bytes, editable, read and written
 	// through the *_raw verbs; false for one opened Simplified, as its derived text
 	raw bool
+	// hint is the draft's suggested name (buffer.new's "public.users.sql"): what it is called, and
+	// read as, until a save names it. Not a path: nothing is written under it. "" for none
+	hint string
 	// then is what the unsaved question guards: run after save or discard, dropped by stay.
 	then func()
 	// disk is how the file stands on disk, as its last check found it (diskwatch.go): diskVersion
@@ -66,12 +69,24 @@ type openedFile struct {
 // untitled is the draft's name wherever a file's path would show.
 const untitled = "untitled"
 
-// name is the file's path, or untitled for the draft.
+// name is the file's path; for the draft, its hint, or untitled.
 func (n openedFile) name() string {
+	switch {
+	case n.open:
+		return n.path
+	case n.hint != "":
+		return n.hint
+	}
+	return untitled
+}
+
+// readAs is the name the page's kind and syntax are read from: the file's path, or the draft's
+// hint; "" for a draft with none, which is Markdown.
+func (n openedFile) readAs() string {
 	if n.open {
 		return n.path
 	}
-	return untitled
+	return n.hint
 }
 
 // outside reports whether the open file is outside every workspace.
@@ -406,6 +421,7 @@ func (h *Host) show(b *openBuffer, ws, p, content, version string, raw bool) {
 // refused as the widget's are (editorFor).
 func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *string) {
 	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
+	b.file.hint = "" // a draft named: its path is its name now
 	b.file.raw = raw
 	b.file.derived = derivedOf(p, raw)
 	b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // read or written just now
@@ -459,12 +475,12 @@ func derivedOf(p string, raw bool) string {
 //
 // Unsaved text stays as it is: only how it is read changes.
 func (h *Host) readPage() {
-	p := h.file.path
-	h.file.derived = derivedOf(p, h.file.raw)
+	h.file.derived = derivedOf(h.file.path, h.file.raw)
 	h.core.SetReadOnly(h.file.derived != "")
+	p := h.file.readAs()    // a draft's hint reads as a file's name would
 	k := h.resolver().Of(p) // the daemon's registrations: it is the one indexing
-	// Tab walks a Markdown table's cells (the draft is Markdown too)
-	h.core.SetTableEditing(k == kind.Markdown || !h.file.open)
+	// Tab walks a Markdown table's cells (a draft with no hint is Markdown too)
+	h.core.SetTableEditing(k == kind.Markdown || p == "")
 	// a raw HTML file's Rendered view is its page (documentFor), where there is one: the GUI's
 	h.setRendered(k == kind.Markdown || h.file.derived != "" || h.file.raw && h.native())
 	switch {
@@ -504,11 +520,16 @@ func (h *Host) resolver() kind.Resolver {
 }
 
 // setRendered gives the editor its Rendered view, or withholds it. The view draws Markdown, so
-// only a page read as Markdown has one: a note, a derived document (its text is Markdown), or the
-// untitled draft. Code, YAML and plain text stay Raw, and the key that switches views does nothing
-// there. Called at each change of document: load (through readPage) and closeFile, the two places
-// that set the editor's text. Only an editor with a Rendered view answers (the GUI's).
+// only a page read as Markdown has one: a note, a derived document (its text is Markdown), or a
+// draft whose hint is Markdown's or which has none. Code, YAML and plain text stay Raw, and the key
+// that switches views does nothing there. Called at each change of document: load (through
+// readPage) and closeFile, the two places that set the editor's text. Only an editor with a
+// Rendered view answers (the GUI's).
 func (h *Host) setRendered(on bool) {
+	if h.renderedSet != nil {
+		h.renderedSet(on)
+		return
+	}
 	if rs, ok := h.editor.(renderedSwitch); ok {
 		rs.SetRenderedEnabled(on)
 	}
@@ -644,7 +665,7 @@ func (h *Host) save() {
 func (h *Host) nameDraft(then func()) {
 	h.draft = &draftSave{then: then, b: h.active}
 	h.set("App.fileNameError", draftHelp)
-	h.setField("App.newFilePath", "")
+	h.setField("App.newFilePath", h.file.hint) // the name buffer.new suggested, to take or change
 	h.newPick.setAll(h.files.Paths)
 	h.newPick.filter("")
 	h.open("fileName")

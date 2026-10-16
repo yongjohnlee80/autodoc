@@ -120,6 +120,8 @@ func runTestPlugin(mode string) int {
 					}
 				case "once":
 					call(1, "lua.mark", "p")
+				case "newbuf": // buffer.new: a draft named q.sql (buffernew_test.go)
+					call(1, "buffer.new", "q.sql", "SELECT 1;\n")
 				case "ping":
 					fmt.Fprintln(os.Stderr, "said: pong")
 				}

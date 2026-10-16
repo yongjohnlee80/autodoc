@@ -89,7 +89,8 @@ func (h *Host) bufferNamed(arg string) (*openBuffer, error) {
 	return nil, fmt.Errorf("b: %d buffers match %q: give more of the name, or its number", len(found), arg)
 }
 
-// bufferEntries are :b and :bd, as catalog entries (catalog.go).
+// bufferEntries are :b and :bd, as catalog entries (catalog.go), and buffer.new, which has no ':'
+// name: a key, autodoc.run or a plugin's host.call runs it.
 func (h *Host) bufferEntries() []Entry {
 	return []Entry{
 		{ID: "buffer.go", Title: "show a buffer", Verb: "b", Args: "<number|name>",
@@ -121,6 +122,21 @@ func (h *Host) bufferEntries() []Entry {
 				}
 				h.closeShownBuffer()
 				return nil
+			}},
+		{ID: "buffer.new", Title: "new buffer with text",
+			Help: "a new buffer, an unsaved draft: its arguments are its suggested name, then its text",
+			Run: func(x Invocation) error {
+				if len(x.Args) > 2 {
+					return fmt.Errorf("buffer.new: takes a name and a text, not %d arguments", len(x.Args))
+				}
+				name, text := "", ""
+				if len(x.Args) > 0 {
+					name = x.Args[0]
+				}
+				if len(x.Args) > 1 {
+					text = x.Args[1]
+				}
+				return h.newBufferWith(name, text)
 			}},
 	}
 }

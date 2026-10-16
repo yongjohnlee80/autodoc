@@ -216,6 +216,9 @@ its name: strings, numbers or booleans.
   refusal. A plugin's command (`plugin.<name>.<id>`) is never Lua's to run.
 - **It runs now**, on AutoDoc's loop, as a key does. A Lua command it runs gets `ed`, the editor's,
   and its edits join the running command's one undo.
+- `autodoc.run("buffer.new", name, text)` opens a new buffer holding `text`, an unsaved draft
+  called `name` (`"q.sql"`, read as SQL; never a path), for Ctrl+S to name. Both are optional;
+  `text` is at most 256 KiB.
 
 ```lua
 -- again.lua: :again <id> [args] runs a command of the catalog by its id, and says how it went

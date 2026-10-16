@@ -236,3 +236,53 @@ func TestProtocolThreesCalls(t *testing.T) {
 		}
 	}
 }
+
+// TestAPluginOpensADraftWithBufferNew: a plugin whose manifest's calls has buffer.new opens a draft
+// with it, shown, holding its text and named by it, and is answered ok; one whose calls has it not is
+// refused, and no buffer is added.
+func TestAPluginOpensADraftWithBufferNew(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin3(t, dir, "drafter", "service", "rawcalls", "calls = [\"buffer.new\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
+	installPlugin3(t, dir, "nodraft", "service", "rawcalls", "calls = [\"lua.mark\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
+	r, logs := callTUI(t, dir)
+	for _, name := range []string{"drafter", "nodraft"} {
+		onLoop(r, func() bool { r.h.plugins.runPluginCommand(name, "ping"); return true })
+		waitSaid(t, logs, name, "pong")
+		r.s.WaitFor(t, name+" ready", func(string) bool { return onLoop(r, func() bool { return r.h.plugins.running[name].ready }) })
+	}
+	buffers := func() int { return onLoop(r, func() int { return len(r.h.buffers) }) }
+	send := func(name string) {
+		t.Helper()
+		onLoop(r, func() bool {
+			r.h.plugins.running[name].send(plugin.MethodCommand, plugin.CommandParams("newbuf"))
+			return true
+		})
+		waitSaid(t, logs, name, "result 1 ")
+	}
+
+	n := buffers()
+	send("nodraft")
+	if got := results(t, logs, "nodraft"); !slices.Equal(got, []string{"result 1 false refused buffer.new is not in the manifest's calls"}) {
+		t.Fatalf("an undeclared buffer.new: %q", got)
+	}
+	if buffers() != n {
+		t.Fatal("an undeclared buffer.new added a buffer")
+	}
+
+	send("drafter")
+	if got := results(t, logs, "drafter"); !slices.Equal(got, []string{"result 1 true "}) {
+		t.Fatalf("a declared buffer.new: %q", got)
+	}
+	type st struct {
+		n           int
+		open, dirty bool
+		name, text  string
+	}
+	s := onLoop(r, func() st {
+		b := r.h.active
+		return st{len(r.h.buffers), b.file.open, b.file.dirty, b.file.name(), r.h.core.Value()}
+	})
+	if s.n != n+1 || s.open || !s.dirty || s.name != "q.sql" || s.text != "SELECT 1;\n" {
+		t.Fatalf("after a declared buffer.new: %+v; want a new draft q.sql, shown and modified", s)
+	}
+}
