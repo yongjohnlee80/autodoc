@@ -28,7 +28,8 @@ func cardTUI(t *testing.T, dir string, prefs map[string]string) (*daemon, *runni
 }
 
 // frameOf is the panel titled title on the screen: its frame's top row, left and right columns,
-// and bottom row (-1 when another panel covers it); ok false when its top is not there.
+// and bottom row (the right and bottom -1 where another panel covers them); ok false when its
+// title is not there.
 func frameOf(screen, title string) (top, left, right, bottom int, ok bool) {
 	lines := strings.Split(screen, "\n")
 	for y, l := range lines {
@@ -51,7 +52,7 @@ func frameOf(screen, title string) (top, left, right, bottom int, ok bool) {
 				break
 			}
 		}
-		return y, c, right, bottom, right > c
+		return y, c, right, bottom, true
 	}
 	return 0, 0, 0, 0, false
 }
@@ -323,7 +324,9 @@ func TestACardOnTheRightAndTheResultsAtTheBottom(t *testing.T) {
 	if cRight != 99 || cLeft != left || cRight != right {
 		t.Fatalf("the card moved when the results opened: %d–%d, was %d–%d:\n%s", cLeft, cRight, left, right, r.s)
 	}
-	if rTop < 15 || rBottom < 25 || rRight-rLeft < 60 {
+	// the card is drawn over the corner of the results' top row: the results' right corner may be
+	// covered, never their left, their heading or their rows
+	if rTop < 15 || rBottom < 25 || rLeft != 0 {
 		t.Fatalf("the results are not along the bottom (rows %d–%d, columns %d–%d):\n%s", rTop, rBottom, rLeft, rRight, r.s)
 	}
 	if !r.panelShown("db") || cTop >= rTop {
