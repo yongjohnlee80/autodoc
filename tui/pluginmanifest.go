@@ -60,7 +60,8 @@ func (d *dialogSize) UnmarshalTOML(v any) error {
 
 // manifest is a plugin.toml. Protocol 2's keys (ADR 1791268009) are kind = "service", start,
 // [dialog] modal, [feed] and [[commands]]; a manifest that uses any of them says protocol = 2.
-// Protocol 3's (ADR 1791762474 §4.5) is calls; a manifest with it says protocol = 3.
+// Protocol 3's (ADR 1791762474 §4.5) is calls; a manifest with it says protocol = 3. Protocol 4's
+// is [table]; a manifest with it says protocol = 4.
 type manifest struct {
 	Name     string   `toml:"name"`
 	Title    string   `toml:"title"`
@@ -93,6 +94,11 @@ type manifest struct {
 	// Calls are the command catalog's ids the plugin may run through host.call: exact ids, never a
 	// plugin's (plugincall.go).
 	Calls []string `toml:"calls"`
+	// Table is the table it shows in AutoDoc's results panel (host.table): Title, the panel's
+	// heading when a table carries none (plugintable.go).
+	Table struct {
+		Title string `toml:"title"`
+	} `toml:"table"`
 	// Install is what adding it from a git URL runs in its directory before it is started: a build,
 	// as argv (plugininstall.go).
 	Install struct {
@@ -266,6 +272,9 @@ func checkProtocolTwo(m *manifest, md toml.MetaData) string {
 	if why := checkCalls(m, md); why != "" {
 		return why
 	}
+	if why := checkTable(m, md); why != "" {
+		return why
+	}
 	switch {
 	case m.service() && md.IsDefined("dialog"):
 		return "[dialog]: a service has no dialog"
@@ -323,6 +332,21 @@ func checkCalls(m *manifest, md toml.MetaData) string {
 			return fmt.Sprintf("calls %q: twice", id)
 		}
 		seen[id] = true
+	}
+	return ""
+}
+
+// checkTable is why m's [table] cannot run ("" when it can): it needs protocol = 4, so an AutoDoc
+// that speaks 3 refuses the manifest rather than run a plugin whose results it cannot show, and it
+// names the panel's title.
+func checkTable(m *manifest, md toml.MetaData) string {
+	switch {
+	case !md.IsDefined("table"):
+		return ""
+	case m.Protocol < 4:
+		return "declares [table]: needs protocol = 4"
+	case strings.TrimSpace(m.Table.Title) == "":
+		return "[table]: no title"
 	}
 	return ""
 }

@@ -82,7 +82,8 @@ func TestRegistrationsAreFrozenAtEntry(t *testing.T) {
 	if _, _, ok := none.Chunker("a.go"); ok || none.Extensions() != nil || len(none.Versions()) != 0 || none.Collisions([]string{".go"}) != nil {
 		t.Fatal("the nil Table answers as if it had registrations")
 	}
-	if none.Kinds().Of("a.go", nil) != kind.Markdown || tab.Kinds().Of("a.go", nil) != kind.Registered {
+	// with no chunker, a.go is the code a source language claims: plain text
+	if none.Kinds().Of("a.go", nil) != kind.Text || tab.Kinds().Of("a.go", nil) != kind.Registered {
 		t.Fatal("the kinds do not follow the registrations")
 	}
 }

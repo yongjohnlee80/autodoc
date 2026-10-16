@@ -6,7 +6,11 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"unicode/utf8"
+
+	"github.com/yongjohnlee80/golib/highlight"
+	"github.com/yongjohnlee80/golib/parse/languages"
 )
 
 // Kind is how a file is read.
@@ -58,7 +62,7 @@ func Of(p string, text []string) Kind { return Registrations{}.Of(p, text) }
 type Registrations struct{ Chunked, Derived []string }
 
 // Of is the kind of path: a built-in kind, then a registered chunker's, then the workspace's own
-// text extension (text), then Markdown.
+// text extension (text), then plain text for a source language's file (IsSource), then Markdown.
 func (r Registrations) Of(p string, text []string) Kind {
 	ext := Ext(p)
 	switch ext {
@@ -74,8 +78,26 @@ func (r Registrations) Of(p string, text []string) Kind {
 		return Registered
 	case slices.Contains(text, ext):
 		return Text
+	case IsSource(p):
+		return Text
 	}
 	return Markdown
+}
+
+// sourceLanguages are the languages AutoDoc reads as code, golib's source-language catalog: the
+// one the editor highlights with, so a file it shows as SQL or Go is the file read here as code.
+var sourceLanguages = sync.OnceValue(func() *highlight.Repository {
+	return highlight.NewRepository(languages.Definitions()...)
+})
+
+// IsSource reports whether a source language claims p's file name (*.sql, *.go, *.py), its case
+// aside. Such a file is code, never Markdown: read as Markdown, a SQL script's "-- note" or a
+// Python "# comment" would be cut and parsed as prose, and the editor would offer it a rendered
+// view and Markdown's table keys. A built-in kind, a registered chunker's or a workspace's own
+// text extension decides first.
+func IsSource(p string) bool {
+	d, ok := sourceLanguages().DefinitionForFileName(strings.ToLower(path.Base(p)))
+	return ok && !d.DocumentAdapter
 }
 
 // Readable reports whether path is a derived format the build derives: kind Derived, never written,

@@ -280,7 +280,7 @@ func TestServeAnswersEachProtocolInItsRange(t *testing.T) {
 	for _, c := range []struct {
 		protocol, answer int
 		opens            bool
-	}{{1, 1, true}, {2, 2, true}, {3, 3, true}, {0, Protocol, false}, {4, Protocol, false}} {
+	}{{1, 1, true}, {2, 2, true}, {3, 3, true}, {4, 4, true}, {0, Protocol, false}, {5, Protocol, false}} {
 		r := &recorder{}
 		hs := start(t, r)
 		hs.send(t, MethodOpen, OpenParams(Open{Protocol: c.protocol, Width: 40, Height: 20}))

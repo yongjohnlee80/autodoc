@@ -189,6 +189,9 @@ func pluginDeclares(m *manifest) string {
 	if len(m.Calls) > 0 {
 		parts = append(parts, "may run AutoDoc's commands: "+strings.Join(m.Calls, ", "))
 	}
+	if m.Table.Title != "" {
+		parts = append(parts, "shows a table of results ("+m.Table.Title+")")
+	}
 	return strings.Join(parts, " · ")
 }
 

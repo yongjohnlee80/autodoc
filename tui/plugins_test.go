@@ -133,6 +133,8 @@ func runTestPlugin(mode string) int {
 		close(linked)
 		<-done
 		return 0
+	case "table", "tablestall", "tablereuse", "table1000": // protocol 4: a table of rows, paged (plugintable_test.go)
+		return runTablePlugin(mode)
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
 		child := exec.Command("sleep", "60")
@@ -155,13 +157,16 @@ func testStdio() net.Conn {
 	return plugin.FileConn(os.NewFile(0, "stdin"), os.NewFile(1, "stdout"))
 }
 
-// echo draws what it has been sent: its size and theme, and the keys, one row each.
+// echo draws what it has been sent: its size and theme, and the keys, one row each. In mode "snap"
+// (protocol 4) a command says the document it runs on, and the key w holds it until the test lets
+// it go (plugintable_test.go).
 type echo struct {
 	mode  string
 	mu    sync.Mutex
 	peer  *plugin.Peer
 	w, h  int
 	lines []string
+	doc   plugin.Document
 }
 
 func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
@@ -173,6 +178,10 @@ func (e *echo) Open(p *plugin.Peer, o plugin.Open) {
 }
 
 func (e *echo) Key(k plugin.Key) {
+	if e.mode == "snap" && k.Key == "w" {
+		e.hold()
+		return
+	}
 	if e.mode == "caller" && k.Key == "k" { // a call from a Key handler, on Serve's own queue
 		ok, err := e.peer.Call("lua.mark", "key")
 		e.say(fmt.Sprintf("called key %v %v", ok, err))
@@ -206,6 +215,10 @@ func (e *echo) Theme(t plugin.Theme) { e.say("theme " + t.Name) }
 // protocol 2's: a card's focus, a command, the feed's document
 func (e *echo) Focus(focused bool) { e.say(fmt.Sprintf("focus %v", focused)) }
 func (e *echo) Command(id string) {
+	if e.mode == "snap" {
+		e.say(snapLine(id, e.doc))
+		return
+	}
 	if target, ok := callerTargets[id]; ok && e.mode == "caller" { // a call from a Command handler
 		ok, err := e.peer.Call(target, "1")
 		e.say(fmt.Sprintf("called %s %v %v", id, ok, err))
@@ -219,6 +232,11 @@ var callerTargets = map[string]string{"mark": "lua.mark", "boom": "lua.boom", "u
 	"unknown": "lua.nope", "plugin": "plugin.caller.mark"}
 
 func (e *echo) Document(d plugin.Document) {
+	e.doc = d
+	if e.mode == "snap" { // its notes can be near the link's limit: their size, not their text
+		e.say(fmt.Sprintf("doc v%d %d bytes large=%v", d.Version, len(d.Text), d.TooLarge))
+		return
+	}
 	sel := ""
 	for _, r := range d.Selection {
 		sel += fmt.Sprintf(" sel %d:%d-%d:%d", r.Start.Line, r.Start.Col, r.End.Line, r.End.Col)
@@ -387,7 +405,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 4\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 5\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -404,7 +422,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 4; this AutoDoc speaks 1 to 3",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 5; this AutoDoc speaks 1 to 4",
 		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
@@ -515,7 +533,7 @@ func TestAPluginThatFailsClosesItsDialogAndSaysWhy(t *testing.T) {
 	onLoop(r, func() bool { pluginHandshake = 30 * time.Second; return true })
 
 	r.openPlugin("future")
-	r.waitNotice(t, "future speaks protocol 4; its manifest says 1")
+	r.waitNotice(t, fmt.Sprintf("future speaks protocol %d; its manifest says 1", plugin.Protocol+1))
 
 	if r.openPlugin("gone") != nil {
 		t.Error("a plugin that did not start is open")
@@ -927,11 +945,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 4\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 5\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 4; this AutoDoc speaks 1 to 3")
+	r.waitNotice(t, "not added: protocol 5; this AutoDoc speaks 1 to 4")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)
@@ -1440,13 +1458,13 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 			}
 		}
 	}
-	if methods < 14 { // ten the host sends, four the plugin sends
+	if methods < 21 { // thirteen the host sends, eight the plugin sends
 		t.Fatalf("read %d Method constants from protocol.go: the reader is not seeing them", methods)
 	}
 
 	samples := regexp.MustCompile("(?s)```toml\n(.*?)```").FindAllSubmatch(doc, -1)
-	if len(samples) != 3 {
-		t.Fatalf("%d manifest samples, want 3 (a dialog, a card, a service)", len(samples))
+	if len(samples) != 4 {
+		t.Fatalf("%d manifest samples, want 4 (a dialog, a card, a service, a card with a table)", len(samples))
 	}
 	kinds := map[string]bool{}
 	for _, m := range samples {

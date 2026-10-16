@@ -6,7 +6,8 @@
 // An extension is compared lowercased with its dot (Ext). The order of the decision is fixed:
 // ".txt" is Text and ".yaml" and ".yml" are YAML; then a derived format (DerivedExtensions, or one
 // the build's deriver names) is Derived; then a registered chunker's extension is Registered; then
-// a workspace's own text extension is Text; anything else is Markdown.
+// a workspace's own text extension is Text; then a file a source language claims (IsSource:
+// *.sql, *.go, *.py, …, golib's source-language catalog) is Text; anything else is Markdown.
 //
 // Traits are the facts of a kind wherever it is read. A Table is a package's own behaviour per
 // kind, checked complete when it is built, so a kind added here cannot be forgotten by a package
@@ -14,7 +15,8 @@
 // and a derived document's text.
 //
 // Concurrency: the package does no I/O, and its functions and methods are functions of their
-// arguments and of package tables written only at init. Any number of goroutines may call them.
+// arguments and of package tables written only once (at init, or the source-language catalog at
+// its first use, under a sync.Once). Any number of goroutines may call them.
 // DerivedExtensions is an exported slice that nothing in AutoDoc writes; a caller must not modify
 // it. A Table is written only by NewTable, so its Of is safe for concurrent use; the entries are
 // the caller's values. Registrations and Resolver read their fields on each call, so a caller

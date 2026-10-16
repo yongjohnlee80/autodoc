@@ -108,7 +108,9 @@ it:
 ```
 
 - Mermaid (`.mmd`) and CSV (`.csv`) are read as plain text, and HTML as the text derived from the
-  page. Leave pictures and other binary files out: a file AutoDoc does not know is read as Markdown.
+  page. So is source code AutoDoc highlights (`.sql`, `.go`, `.py`, …): it opens as code, with no
+  rendered view. Leave pictures and other binary files out: a file AutoDoc does not know is read as
+  Markdown.
 - `![alt](path)` is an embed of the workspace path it names, as `![[./path]]` is: the resource's
   backlinks name the document that shows it. It is a link only to a note or to a file the
   workspace indexes, so a picture left out is not a missing link.
@@ -756,6 +758,15 @@ placement.
   in `<name>-install.log`.
 - A plugin that exits, stops answering, or speaks another protocol closes its dialog, and a toast
   says why.
+
+**The results panel.** A plugin may show a table of rows (a query's result, say) in AutoDoc's own
+results panel, at the bottom (**Go › Results**): a cursor on cells (`h j k l`, `v` selects a range),
+`s` sorts the loaded rows by the cursor's column, and more rows load as the cursor nears the end of
+those loaded, up to 100 000 (the CSV export takes the rest). Its rows leave through AutoDoc's commands, each saying which rows it takes:
+`results.copy` (the selection, or the cursor's cell, as TSV), `results.markdown` (the rows loaded
+now, as a Markdown table at the page's cursor) and `results.csv` (every row, fetched to the last,
+into a file chosen in a save dialog; the file is written whole or not at all). Closing the panel
+lets the table go.
 
 Writing one: `docs/plugins.md` covers the manifest, the protocol, and the SDK in package `plugin`.
 

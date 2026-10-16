@@ -218,9 +218,11 @@ func (r *pluginRun) send(method string, params []any) {
 	}
 }
 
-// sendDocument sends d, as it can be sent: whole, or too large for the link (plugin.FitDocument).
+// sendDocument sends d, as it can be sent: whole, or too large for the link (plugin.FitDocumentAt),
+// in the form the plugin's protocol has (byte offsets from 4 on).
 func (r *pluginRun) sendDocument(d plugin.Document) {
-	r.send(plugin.MethodDocument, plugin.DocumentParams(plugin.FitDocument(d)))
+	p := r.e.m.Protocol
+	r.send(plugin.MethodDocument, plugin.DocumentParamsAt(p, plugin.FitDocumentAt(p, d)))
 }
 
 // sender writes the queue to the plugin, off the loop; a write the plugin does not take within the
@@ -282,6 +284,8 @@ func (r *pluginRun) onNote(method string, params []any) {
 		r.pl.c.Post(func() { r.close("") })
 	case plugin.MethodCall:
 		r.hostCall(params)
+	case plugin.MethodTable, plugin.MethodRows, plugin.MethodTableEnd:
+		r.onTable(method, params)
 	}
 }
 
@@ -335,6 +339,7 @@ func (r *pluginRun) close(why string) {
 		delete(r.pl.running, r.e.key())
 		r.pl.refreshPlugins()
 	}
+	r.pl.tableOwnerGone(r)
 	go r.shutdown()
 	if why != "" {
 		msg := r.e.m.Name + " " + why

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"strings"
@@ -38,6 +39,9 @@ type plugins struct {
 	// installed ones
 	pendingPlugin  *pluginChange
 	managedPlugins *rows[managedPlugin]
+	// the results panel's table, a plugin's (plugintable.go), and its CSV export while one runs
+	results *resultsTable
+	export  *resultsExport
 }
 
 func newPlugins(c pluginHost, opt Plugins) *plugins {
@@ -46,6 +50,8 @@ func newPlugins(c pluginHost, opt Plugins) *plugins {
 		pluginKeyRows: tuidecl.NewListModel("key", "target"),
 		running:       map[string]*pluginRun{}}
 	pl.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
+	pl.results = &resultsTable{}
+	pl.results.model = newResultsModel(pl.results, pl.fetchRows)
 	pl.loadPlugins()
 	return pl
 }
@@ -53,6 +59,7 @@ func newPlugins(c pluginHost, opt Plugins) *plugins {
 func (*plugins) Name() string { return "plugins" }
 
 func (pl *plugins) State() map[string]any {
+	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	return map[string]any{
 		"App.plugins":            pl.pluginRows,
 		"App.pluginKeys":         pl.pluginKeyRows,
@@ -63,22 +70,32 @@ func (pl *plugins) State() map[string]any {
 		"App.pluginQuestion":     "",
 		"App.managedPlugins":     pl.managedPlugins.Model(),
 		"App.pluginsHelp":        pluginsHelp,
+		"App.resultsRows":        pl.results.model,
+		"App.resultsTitle":       "results",
+		"App.resultsShown":       false,
+		"App.resultsSize":        size,
+		"App.resultsLength":      length,
 	}
 }
 
 func (pl *plugins) Commands() map[string]Command {
 	return map[string]Command{
-		"App.openPlugin":        oneString("a plugin", pl.openPlugin),
-		"App.pluginEntry":       oneString("a plugin's menu row or letter", pl.pluginEntry),
-		"App.pluginKey":         oneString("a plugin command letter", pl.pluginKey),
-		"App.startAddPlugin":    none(pl.startAddPlugin),
-		"App.addPlugin":         oneString("a git URL", pl.addPlugin),
-		"App.pluginConfirmed":   none(pl.pluginConfirmed),
-		"App.pluginDeclined":    none(pl.pluginDeclined),
-		"App.managePlugins":     none(pl.managePlugins),
-		"App.startUpdatePlugin": oneNumber("a row", pl.startUpdatePlugin),
-		"App.startRemovePlugin": oneNumber("a row", pl.startRemovePlugin),
-		"App.placePlugin":       oneNumber("a row", pl.placePlugin),
+		"App.openPlugin":         oneString("a plugin", pl.openPlugin),
+		"App.pluginEntry":        oneString("a plugin's menu row or letter", pl.pluginEntry),
+		"App.pluginKey":          oneString("a plugin command letter", pl.pluginKey),
+		"App.startAddPlugin":     none(pl.startAddPlugin),
+		"App.addPlugin":          oneString("a git URL", pl.addPlugin),
+		"App.pluginConfirmed":    none(pl.pluginConfirmed),
+		"App.pluginDeclined":     none(pl.pluginDeclined),
+		"App.managePlugins":      none(pl.managePlugins),
+		"App.startUpdatePlugin":  oneNumber("a row", pl.startUpdatePlugin),
+		"App.startRemovePlugin":  oneNumber("a row", pl.startRemovePlugin),
+		"App.placePlugin":        oneNumber("a row", pl.placePlugin),
+		"App.toggleResults":      none(func() { pl.c.TogglePanel(resultsPanel) }),
+		"App.copyResults":        none(pl.copyResults),
+		"App.startExportResults": none(pl.startExportResults),
+		"App.exportResults":      oneString("a file's path", pl.exportResults),
+		"App.insertResults":      none(pl.insertResults),
 	}
 }
 
@@ -89,7 +106,33 @@ func (pl *plugins) Catalog() []Entry {
 		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", pl.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
 		builtin("plugins.commands", "plugin commands", "pluginKeys.open()", func() { pl.c.Open("pluginKeys") }),
+		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
+		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
+		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", pl.copyResults),
+		builtin("results.csv", "results: export all rows as CSV…", "App.startExportResults()", pl.startExportResults),
+		builtin("results.markdown", "results: insert loaded rows as a Markdown table", "App.insertResults()", pl.insertResults),
 	}
+}
+
+// Panels is the results panel: a plugin's table (plugintable.go), at the bottom unless moved. Its
+// closing lets the table go, and the keyboard goes back to the page.
+func (pl *plugins) Panels() []PanelSpec {
+	s := resultsPanelSpec()
+	s.Opened = func(c PanelHost) { c.Set("App.resultsShown", true) }
+	s.Closed = func(c PanelHost) {
+		c.Set("App.resultsShown", false)
+		pl.resultsClosed()
+		c.Keep(c.RestoreKeyboardPane("editor"))
+	}
+	return []PanelSpec{s}
+}
+
+// resultsPanelSpec is the results panel: at the bottom, 35% of the window tall and its full width
+// until the user sizes it, its size kept as every panel's is (panelsize.go).
+func resultsPanelSpec() PanelSpec {
+	return PanelSpec{ID: resultsPanel, View: resultsView, Priority: 70,
+		Edge: func(prefs) string { return "bottom" }, Places: []string{"bottom"},
+		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }
 
 // Keys is SPC p, the plugin commands' card. The card is the plugins' own (views/PluginKeys.qml), its
@@ -99,8 +142,14 @@ func (*plugins) Keys() []Key {
 }
 func (*plugins) Cards() []Card { return nil }
 
-// PreferencesChanged lays the SPC p letters out again: the user's choices are preferences.
-func (pl *plugins) PreferencesChanged() { pl.refreshPlugins() }
+// PreferencesChanged lays the SPC p letters out again: the user's choices are preferences; and the
+// results panel takes the size the user left it at.
+func (pl *plugins) PreferencesChanged() {
+	pl.refreshPlugins()
+	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
+	pl.c.Set("App.resultsSize", size)
+	pl.c.Set("App.resultsLength", length)
+}
 
 // ThemeChanged tells the running plugins the theme the screen now wears.
 func (pl *plugins) ThemeChanged() { pl.themePlugins() }
@@ -108,7 +157,11 @@ func (pl *plugins) ThemeChanged() { pl.themePlugins() }
 // Stopped stops every running plugin, all at once, each within pluginGrace of being asked to close
 // and pluginTermGrace of SIGTERM before SIGKILL (pluginRun.shutdown, whose waits carry their NOTE:):
 // quitting waits at most those two for a plugin that hangs, never on it.
-func (pl *plugins) Stopped() { pl.stopPlugins() }
+// An export not finished is cancelled first, its .part removed.
+func (pl *plugins) Stopped() {
+	pl.stopExport()
+	pl.stopPlugins()
+}
 
 // The page's lifecycle is the document feed's: a page shown, a pause in typing and a cursor move
 // each send the document once things rest (feedSoon). Its Version is the page's own (Page.Version),
@@ -148,6 +201,14 @@ type pluginHost interface {
 	NotifyOngoing(id, msg string)
 	NotifyDone(id, msg string)
 	Keep(err error)
+	// PanelOpen reports whether panel id is open (the results panel opens for a plugin's table)
+	PanelOpen(id string) bool
+	// TableCore is the table behind a cell-cursor TableView, by its id; nil when there is none
+	TableCore(id string) *widget.TableCore
+	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
+	InsertBlock(text string) error
+	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
+	BrowseFolder() string
 }
 
 // The scoped services' refusals.
@@ -168,6 +229,54 @@ func (c core) After(d time.Duration, fn func())        { c.h.after(d, fn) }
 func (c core) Theme() string                           { return c.h.theme }
 func (c core) NotifyOngoing(id, msg string)            { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)               { c.h.notifyDone(id, msg) }
+func (c core) BrowseFolder() string                    { return c.h.browseFolder() }
+
+func (c core) TableCore(id string) *widget.TableCore {
+	if c.h.p == nil {
+		return nil
+	}
+	comp, ok := c.h.p.Find(id)
+	if !ok {
+		return nil
+	}
+	if t := tuidecl.TableOf(comp); t != nil {
+		return t.Core()
+	}
+	return nil
+}
+
+// InsertBlock puts text into the page as a block of its own: on the cursor's line when that is
+// empty, else after it, with a blank line before and after wherever its neighbour has text, so a
+// Markdown block (a table) neither joins the paragraph above nor swallows the line below. One undo
+// step; a read-only page refuses it.
+func (c core) InsertBlock(text string) error {
+	ed := c.h.core
+	if ed == nil {
+		return errors.New("no page is open")
+	}
+	if ed.ReadOnly() {
+		return widget.ErrReadOnly
+	}
+	blank := func(ln int) bool { return strings.TrimSpace(ed.LineAt(ln)) == "" }
+	line, _ := ed.Line()
+	text = strings.TrimSuffix(text, "\n")
+	at := widget.TextPos{Line: line}
+	if blank(line) {
+		if line > 0 && !blank(line-1) {
+			text = "\n" + text
+		}
+	} else {
+		at.Col = len(ed.LineAt(line)) // past its last cluster: clamped to the line's end
+		text = "\n\n" + text
+	}
+	if line+1 < ed.LineCount() && !blank(line+1) {
+		text += "\n"
+	}
+	return ed.Batch(func() error {
+		_, err := ed.Insert(at, text)
+		return err
+	})
+}
 
 func (c core) ThemeValues(name string) (map[string]string, error) { return c.h.themeValues(name) }
 
