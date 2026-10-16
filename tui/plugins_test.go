@@ -1273,7 +1273,8 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	}
 
 	r.keys(t, esc())
-	waitSaid(t, logs, "alpha", "hide")
+	waitCount(t, logs, "alpha", "hide", 2)
+	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
 	r.openPlugin("alpha") // its menu entry: shown, the keys left with the editor
 	r.s.WaitFor(t, "the panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
 	r.pluginCardOf(t, "alpha")
