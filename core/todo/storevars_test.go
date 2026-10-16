@@ -428,6 +428,26 @@ func TestAClaimRecordsTheProjectItsStoreIsIn(t *testing.T) {
 	if err != nil || !slices.Equal(l.ADR, []string{"$PROJECT_ROOT/docs/d.md"}) {
 		t.Errorf("the cutover's ref %v %v", l.ADR, err)
 	}
+	// a claim from a session started in the KB names the KB, not the project it serves
+	k := claimedFrom(t, "/kb")
+	if v := varOf(t, k, kb, "PROJECT_ROOT"); v.Value != "" || k.exists(kbFile) {
+		t.Errorf("a claim from the KB recorded PROJECT_ROOT %+v\n%s", v, k.read(kbFile))
+	}
+	k = claimedFrom(t, "/kb/notes")
+	if v := varOf(t, k, kb, "PROJECT_ROOT"); v.Value != "" {
+		t.Errorf("a claim from inside the KB recorded PROJECT_ROOT %+v", v)
+	}
+}
+
+// claimedFrom is an env whose kb store, holding a task, was claimed by a session whose project root
+// was legacy: a store with no directory yet leaves its claim's work to Scaffold.
+func claimedFrom(t *testing.T, legacy string) *env {
+	t.Helper()
+	e := newEnv(t)
+	e.disk.MkdirAll(legacy)
+	e.disk.WriteFile(kbStore+"/open/k.md", []byte(taskFile("k", "open")))
+	e.must(e.m.Claim(ctx, kb, todo.ClaimOpts{LegacyWorkspace: legacy}))
+	return e
 }
 
 // A machine-only declaration whose KB file cannot take it keeps no row either: no machine may hold a
