@@ -406,7 +406,7 @@ func (l layers) names() []string {
 func (m *Manager) scopeOf(l layers) scope {
 	get := func(n string) string { v, _ := l.value(n, nil); return v }
 	sc := scope{kbRoot: get(VarKBRoot), workspace: get(VarWorkspace), projectRoot: get(VarProjectRoot), home: get(VarHome),
-		user: map[string]string{}, machine: map[string]bool{}, env: m.o.env}
+		user: map[string]string{}, machine: map[string]bool{}, conflict: l.conflict, env: m.o.env}
 	for _, n := range l.names() {
 		if !isBuiltin(n) {
 			if v := get(n); v != "" {

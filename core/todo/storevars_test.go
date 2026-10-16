@@ -462,6 +462,61 @@ func TestAMigrationConflictWaitsForAPerson(t *testing.T) {
 	}
 }
 
+// conflicted is an env whose kb workspace holds P in conflict, two stores having set it differently,
+// over a manager whose environment has P too.
+func conflicted(t *testing.T, envP string) *env {
+	t.Helper()
+	e := claimed(t)
+	folderStore := "/src/proj/todos"
+	e.disk.MkdirAll(folderStore)
+	at := todo.At{Root: "/src/proj"}
+	if _, err := e.m.SetDir(ctx, at, folderStore); err != nil {
+		t.Fatal(err)
+	}
+	e.must(e.m.Claim(ctx, at))
+	if _, err := e.m.Scaffold(ctx, at); err != nil {
+		t.Fatal(err)
+	}
+	e.must(e.m.SetKB(ctx, at, "kb"))
+	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("[vars]\nP = \"../../a\"\n"))
+	e.disk.WriteFile(folderStore+"/.autodoc-vars.toml", []byte("[vars]\nP = \"../../../b\"\n"))
+	e.m = todo.New(e.roots, e.disk, e.j, todo.WithHome("/home/u"),
+		todo.WithEnv(func(n string) string { return map[string]string{"P": envP}[n] }))
+	return e
+}
+
+// A name held in conflict is unresolved in a task's refs as in todos.vars and the index: the
+// environment never answers for it, and the error says what settles it. With no conflict, the
+// environment answers, so the refusal is the conflict's.
+func TestAConflictedNameNeverFallsToTheEnvironment(t *testing.T) {
+	e := conflicted(t, "/environment")
+	e.disk.WriteFile("/environment/a.md", []byte("x"))
+	if v := varOf(t, e, kb, "P"); !v.Conflict || v.Value != "" {
+		t.Fatalf("P is not in conflict: %+v", v)
+	}
+	e.disk.WriteFile(kbStore+"/open/c.md", []byte(taskFile("c", "open", "adr:\n  - $P/a.md")))
+	if _, err := e.m.Refresh(ctx, kb); err != nil {
+		t.Fatal(err)
+	}
+	c := e.get("c")
+	if len(c.Errors) != 1 || c.Errors[0].Code != todo.CodeUnresolved || !strings.Contains(c.Errors[0].Message, "conflict") {
+		t.Errorf("a conflicted $P resolved through the environment: %+v", c.Errors)
+	}
+
+	// the control: no conflict, the environment answers
+	o := claimed(t)
+	o.m = todo.New(o.roots, o.disk, o.j, todo.WithHome("/home/u"),
+		todo.WithEnv(func(n string) string { return map[string]string{"P": "/environment"}[n] }))
+	o.disk.WriteFile("/environment/a.md", []byte("x"))
+	o.disk.WriteFile(kbStore+"/open/c.md", []byte(taskFile("c", "open", "adr:\n  - $P/a.md")))
+	if _, err := o.m.Refresh(ctx, kb); err != nil {
+		t.Fatal(err)
+	}
+	if c := o.get("c"); len(c.Errors) != 0 {
+		t.Errorf("the environment's $P did not answer with no conflict: %+v", c.Errors)
+	}
+}
+
 // At start, every store's workspace is recorded: the containing one, or, for a store outside every
 // workspace, the workspace an older route's kb_root named; the routes' kb_roots are cleared.
 func TestMigrateVarsRecordsOwnersAndClearsRouteKBRoots(t *testing.T) {
