@@ -244,6 +244,9 @@ Each notification carries one map.
   open (below), or Manage plugins. It stops too when it exits, or when AutoDoc quits.
 - A card's panel is made when AutoDoc starts: a card plugin added while it runs has its panel from
   the next start.
+- **A card, or a dialog, draws no key help of its own.** It registers its commands (`[[commands]]`,
+  each with an optional `key`), and SPC p and Plugins › Commands… list them with their letters. Its
+  frames are its content: a line of keys there says again what AutoDoc already shows.
 
 ### The document feed (`[feed] document = true`)
 
@@ -329,8 +332,8 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
 
 - Each command is on the Plugins menu, under the plugin's own entry, beside Open (a dialog's or a
   card's) and Close (a card's Turn off).
-- **The SPC p card** lists every plugin command with its letter (SPC p, then the letter). AutoDoc's
-  own leader letters are never a plugin's: SPC p is a card of its own.
+- **The SPC p card** lists every plugin command with its letter (SPC p, or Plugins › Commands…,
+  then the letter). AutoDoc's own leader letters are never a plugin's: SPC p is a card of its own.
 - **Letters.** A command's `key` binds only if no plugin earlier by name holds that letter. The other
   is listed unbound, saying whose the letter is. The preference
   `tui.plugin.<name>.key.<id>` overrides a manifest's letter, and `""` unbinds the command. Set it
@@ -363,6 +366,31 @@ do in AutoDoc is there to read before it is installed.
   that number. A call from a plugin before protocol 3, or before it has answered `plugin.open`, is
   dropped the same way.
 - A Lua command run by a call edits the note in the editor, as it does from a key.
+
+#### `buffer.new`: a draft for the user to edit
+
+`buffer.new` opens a new buffer, in a tab of its own, and shows it: an unsaved draft holding the
+plugin's text, the cursor at its start. A database plugin opens a query for the user to run this
+way, a `SELECT … LIMIT 100;` on the table chosen. Its manifest lists it, `calls = ["buffer.new"]`,
+and the plugin calls:
+
+```go
+ok, err := p.peer.Call("buffer.new", "public.users.sql", "SELECT *\nFROM public.users\nLIMIT 100;\n")
+```
+
+- **Its args are `[name, text]`**, both optional.
+  - `name` is the draft's suggested name, `public.users.sql`. Its tab and the status line show it,
+    the page reads as a file of that name would (a `.sql` draft has SQL's syntax and no Rendered
+    view; with no name, the draft is Markdown), and the save picker starts with it.
+  - It is a name, not a path: one with `/`, `\` or `..` fails, and nothing opens.
+- **Nothing is written.** The draft is unsaved, like text typed into an empty page: closing it and
+  quitting ask about it, an exit nobody chose keeps it for recovery, and only Ctrl+S, through the
+  picker, writes a file. A name that is an open file's opens a draft of its own: that file's
+  buffer and the disk are untouched.
+- **The text is at most 256 KiB**; more fails (`failed buffer.new: the text is 300 KiB; at most
+  256 KiB`), and nothing opens.
+- **An AutoDoc without it answers `unknown buffer.new`**, so a plugin can tell its user to update
+  AutoDoc.
 
 ## The SDK, in Go
 

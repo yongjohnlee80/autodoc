@@ -211,6 +211,8 @@ Window {
                 }
             }
             Instantiator { model: App.luaMenus; MenuItem { text: model.label; onTriggered: App.luaMenu(model.target) } }
+            // every plugin's commands, by plugin: the SPC p card, which says so when there are none
+            MenuItem { text: "&Commands…  (SPC p)"; onTriggered: App.openPluginChooser() }
             MenuSeparator {}
             MenuItem { text: "&Add from a git URL…"; onTriggered: App.startAddPlugin() }
             MenuItem { text: "&Manage plugins…"; onTriggered: App.managePlugins() }

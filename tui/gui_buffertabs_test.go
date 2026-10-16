@@ -5,6 +5,7 @@ package tui
 import (
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -109,12 +110,16 @@ func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
 		if small != 4 || len(tabs) == 0 {
 			return false
 		}
+		// every tab cut, and the whole ones at the floor (with its ×); one cut at the window's edge,
+		// or the one before the first in the cells left over, is narrower, as the window draws it
+		atFloor := false
 		for _, w := range tabs {
-			if w >= whole(long[2]) || w < bufferTabWidth+2 { // cut, but never under the floor (and its ×)
+			if w >= whole(long[2]) || w > bufferTabWidth+2 {
 				return false
 			}
+			atFloor = atFloor || w == bufferTabWidth+2
 		}
-		return true
+		return atFloor
 	})
 	// cut in the middle, by AutoDoc's fit: the title row (the one with the arrows) keeps a name's
 	// end, its kind after the ellipsis, as a cut at its end would not
@@ -125,6 +130,30 @@ func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
 			}
 		}
 		return false
+	})
+}
+
+// TestLInTheGUIScrollsTheStripToTheTab: tabs overflowing a narrow bar, the last shown; L wraps to
+// the first, and the strip scrolls back to show it (bufferChord, then the strip's reveal).
+func TestLInTheGUIScrollsTheStripToTheTab(t *testing.T) {
+	long := []string{"a-long-file-name-for-the-first-tab.md", "another-long-file-name-for-a-tab.md", "a-third-long-file-name-to-overflow.md"}
+	d := startDaemon(t, map[string][]string{"kb": {long[0], "a\n", long[1], "b\n", long[2], "c\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.waitListed(t, 3)
+	r.s.Backend.InjectResize(220, 30)
+	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	for _, f := range long {
+		r.openByPicker(t, f)
+		r.waitFile(t, f)
+	}
+	r.s.Backend.InjectResize(60, 30)
+	first, last := onLoop(r, func() string { return strconv.Itoa(r.h.buffers[0].n) }), onLoop(r, func() string { return strconv.Itoa(r.h.buffers[2].n) })
+	r.s.WaitFor(t, "narrow: the last tab active and shown, the strip scrolled to it", func(string) bool {
+		return onLoop(r, func() bool { return strip.Active() == last && strip.ActiveTabIndex() >= 0 })
+	})
+	r.keys(t, esc(), key('L'))
+	r.s.WaitFor(t, "L: the first tab active, and shown", func(string) bool {
+		return onLoop(r, func() bool { return strip.Active() == first && strip.ActiveTabIndex() >= 0 })
 	})
 }
 
