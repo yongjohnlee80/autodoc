@@ -14,7 +14,9 @@ three things:
 A protocol-2 plugin can also read the open note (the document feed) and have commands on the Plugins
 menu and the SPC p card. A protocol-3 plugin can also run AutoDoc's own commands, the ones its
 manifest declares (`calls`). A protocol-4 plugin can also show a table of rows in AutoDoc's own
-results panel (`[table]`), and its commands carry the note they were chosen on. ADR 0209, ADR
+results panel (`[table]`), and its commands carry the note they were chosen on. A protocol-5 plugin
+can also say each cell's kind, so AutoDoc tells a NULL from the text `NULL`, sorts numbers as
+numbers and writes JSON with its nulls, numbers and booleans. ADR 0209, ADR
 1791268009, ADR 1791762474 and ADR 1792078052 are the decisions behind it.
 
 [autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris) is a complete protocol-1 example.
@@ -118,7 +120,7 @@ key   = "r"
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. Among the reasons:
 
-- an unknown kind, or a protocol outside 1 to 4;
+- an unknown kind, or a protocol outside 1 to 5;
 - an unknown key, at any level (`dialog.colour`): AutoDoc decodes the manifest strictly;
 - a name taken, no command;
 - a placement, `esc` or height it does not know;
@@ -140,7 +142,7 @@ AutoDoc's commands: file.save", and a table it shows: "shows a table of results 
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 4**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 5**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -154,10 +156,14 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   ("protocol 4; this AutoDoc speaks 1 to 3"), so a plugin never runs where its results cannot show.
   Protocol 4 also changes what a plugin on the feed is sent: its commands carry the note, and the
   note carries byte offsets (below). A protocol-2 or -3 plugin is sent neither.
+- **A plugin that sends its cells' kinds says `protocol = 5`.** Kinds are read only from a plugin
+  whose manifest says 5; an AutoDoc of 1 to 4 lists it disabled ("protocol 5; this AutoDoc speaks 1
+  to 4"), so a plugin that tells NULL from `NULL` never runs where the two would be confused.
+  Nothing else changes: no message is added, and the host fetches what it fetched at 4.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 4, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 5, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -203,8 +209,8 @@ Each notification carries one map.
 | plugin | `host.frame` | 1 | `{rows}`: the whole dialog, at any time. A service's is dropped |
 | plugin | `host.title` | 1 | `{title}` |
 | plugin | `host.call` | 3 | `{call, id, args}`: run AutoDoc's command `id`, one the manifest's `calls` declares, with `args` (strings) |
-| plugin | `host.table` | 4 | `{id, title, fields, rows, more}`: a table for the results panel, under `[table]` |
-| plugin | `host.rows` | 4 | `{id, rows, more}`: the table's next rows, answering `plugin.table.fetch` |
+| plugin | `host.table` | 4 | `{id, title, fields, rows, more}`: a table for the results panel, under `[table]`; from 5 also `{kinds}` |
+| plugin | `host.rows` | 4 | `{id, rows, more}`: the table's next rows, answering `plugin.table.fetch`; from 5 also `{kinds}` |
 | plugin | `host.table_end` | 4 | `{id, error}`: the table's rows ended before the last; `error`, when set, says why |
 | plugin | `host.close` | 1 | `{}`: asks to close; a card asks its panel to close, and runs on |
 
@@ -310,6 +316,21 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
 - **One table at a time.** A newer `host.table`, from any plugin, replaces the one shown, and the
   plugin whose table it replaced is sent `plugin.table.close {id}`. Closing the panel sends it too.
   Free what serves the rows then. Rows for a table no longer shown are dropped.
+- **Each cell's kind (protocol 5).** `host.table` and `host.rows` may carry `kinds`: one string per
+  row, in the rows' order, of exactly one byte per field, each one of
+  - `t` text, `z` NULL (the cell's text is what shows, the plugin's `NULL` say), `n` a number (the
+    text is its literal, every digit), `b` a boolean (`true` or `false`), `j` a JSON value.
+
+  A kinds string of another length, or with another byte, makes its message malformed: a
+  `host.table` is refused, and a `host.rows` page is dropped and the table's rows end there, noted in
+  the plugin's log and a notice, since the rows after it would not follow those before. A table's
+  kinds are decided by its `host.table`: one sent with `kinds` (an empty list when it has no rows
+  yet) keeps them on every page, a page without them read as text; one sent without them reads every
+  cell as text. With kinds the panel sorts NULLs last in both directions, numbers as exact decimals
+  and false before true, and the JSON export writes `null`, numbers, booleans and JSON values. Without
+  them every cell is text, sorted as numbers where both cells read as numbers. In Go,
+  `TableOpen.Kinds` and `Peer.RowsKinds`, with `plugin.KindText` and its siblings; a host opened at a
+  protocol before 5 is sent neither.
 - **Keep each message under the link's limit** (1 MiB, the whole notification as encoded): size a
   page by its encoded bytes, not only its rows. `plugin.EncodedSize` measures one.
 - **What leaves the table** is AutoDoc's, its commands each saying which rows it takes:
