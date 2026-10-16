@@ -89,6 +89,7 @@ func (h *Host) state() map[string]any {
 		"App.keymaps":           choices(keymapLabels...),
 		"App.themes":            choices(h.themeLabels()...),
 		"App.userThemes":        h.userThemeRows(),
+		"App.builtinThemes":     h.builtinThemeRows(),
 		"App.edges":             choices(edges...),
 		"App.yesNo":             choices("yes", "no"),
 		"App.openAsChoices":     choices(openAsLabels...),
@@ -187,9 +188,6 @@ func (h *Host) state() map[string]any {
 		st[k] = v
 	}
 	for k, v := range h.aboutState() {
-		st[k] = v
-	}
-	for k, v := range themeState(h.theme) {
 		st[k] = v
 	}
 	for k, v := range prefState(h.prefs) {
