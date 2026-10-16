@@ -32,6 +32,15 @@ func worktreeLayout(e *env) {
 	w("/repo/bare2/.git/worktrees/main/gitdir", "/repo/bare2/main/.git\n")
 	w("/repo/bare2/main/.git", "gitdir: /repo/bare2/.git/worktrees/main\n")
 	w("/repo/bare2/main/docs/c.md", "c")
+	w("/repo/nogit/readme.md", "r")                              // a directory that is no repository
+	w("/repo/canaryonly/.git/config", "[core]\n\tbare = true\n") // no main or master worktree
+	w("/repo/canaryonly/.git/worktrees/canary/HEAD", "ref: refs/heads/canary\n")
+	w("/repo/canaryonly/.git/worktrees/canary/gitdir", "/repo/canaryonly/canary/.git\n")
+	w("/repo/canaryonly/canary/docs/a.md", "a")
+	w("/repo/broken/.git/config", "[core]\n\tbare = true\n") // worktree records git can't have left
+	w("/repo/broken/.git/worktrees/nohead/gitdir", "/repo/broken/main/.git\n")
+	w("/repo/broken/.git/worktrees/nogitdir/HEAD", "ref: refs/heads/main\n")
+	w("/repo/broken/main/docs/a.md", "a")
 	w("/repo/plain/.git/config", "[core]\n\tbare = false\n")
 	w("/repo/plain/docs/b.md", "b")
 	w("/repo/plain/.claude/worktrees/live/x.md", "x")
@@ -55,6 +64,12 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 		"/repo/bare2/.claude/worktrees/gone/docs/c.md",         // .claude/worktrees itself removed
 		"/repo/lm/.claude/worktrees/live/x.md",                 // a live Claude worktree: resolves, left
 		"/repo/lm/.claude/worktrees/live/docs/a.md",            // a live worktree's missing file, though main has it: left
+		"/repo/nogit/.claude/worktrees/w/docs/a.md",            // a Claude path in no repository: left
+		"/repo/nogit/gone/docs/a.md",                           // a missing directory in no repository: left
+		"/repo/canaryonly/feat/docs/a.md",                      // a bare repository with no main worktree: left
+		"/repo/broken/feat/docs/a.md",                          // worktree records without HEAD or gitdir: left
+		"$NOPE/docs/a.md",                                      // an unresolved variable: left
+		"docs/relative.md",                                     // a relative ref: left
 	}
 	review := []string{"/repo/plain/.claude/worktrees/gone/docs/b.md"} // a Claude worktree in a checkout
 	e.disk.WriteFile(kbStore+"/archived/2026/09/w.md", []byte(taskFile("w", "archived",
