@@ -35,3 +35,58 @@ func wantCtrlVBlock(t *testing.T, r *running) {
 		t.Errorf("the page changed: %q", r.editorText())
 	}
 }
+
+// TestEscClosesTheResultsOnceNothingIsPending: in the results, Esc first ends what the table holds
+// (a selection, a count typed), the panel left open; with nothing pending it closes the panel.
+func TestEscClosesTheResultsOnceNothingIsPending(t *testing.T) {
+	r, _ := kindsTUI(t, "tablestall")
+	wantEscCloses(t, r, func() {
+		onLoop(r, func() bool { r.h.plugins.runPluginCommand("kinds", "run"); return true })
+		r.waitResults(t, "k1", len(kindsRows))
+	})
+}
+
+// wantEscCloses checks Esc in the results three times over, showing the table again with show
+// after each close: a selection ended by the first Esc (the panel open) and the panel closed by the
+// second; a count dropped by the first (a j after it moves one row, the panel open) and the panel
+// closed by the second; with nothing pending, the panel closed by the first.
+func wantEscCloses(t *testing.T, r *running, show func()) {
+	t.Helper()
+	open := func() bool { return onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] }) }
+	focus := func() {
+		t.Helper()
+		onLoop(r, func() bool { r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus")); return true })
+		r.s.WaitFor(t, "the results with the keys", func(string) bool { return r.focused(resultsView) })
+	}
+	row := func() int { return onLoop(r, func() int { return r.resultsCore().Cursor().Row }) }
+	closedBy := func(what string) {
+		t.Helper()
+		r.keys(t, esc())
+		r.s.WaitFor(t, "the panel closed by "+what, func(string) bool { return !open() })
+	}
+
+	focus()
+	r.keys(t, key('V'))
+	selected := func() bool { return onLoop(r, func() bool { _, _, ok := r.resultsCore().Selection(); return ok }) }
+	r.s.WaitFor(t, "a selection made", func(string) bool { return selected() })
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the selection ended by Esc", func(string) bool { return !selected() })
+	if !open() {
+		t.Fatal("the Esc that ended the selection closed the panel")
+	}
+	closedBy("a second Esc after the selection")
+	show()
+
+	focus()
+	from := row()
+	r.keys(t, key('3'), esc(), key('j'))
+	r.s.WaitFor(t, "j moved one row after Esc dropped the count", func(string) bool { return row() == from+1 })
+	if !open() {
+		t.Fatal("the Esc that dropped the count closed the panel")
+	}
+	closedBy("a second Esc after the count")
+	show()
+
+	focus()
+	closedBy("an Esc with nothing pending")
+}
