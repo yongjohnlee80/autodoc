@@ -443,9 +443,18 @@ under way, or the provider not answering). While the provider embeds, a spinner 
 of the sections covered. A model switch notifies when search is temporarily words-only and when
 semantic search returns; a search already open refreshes its hits without another keystroke.
 
+Open files follow the disk. The folder of every open file is watched (inotify, FSEvents; polled
+where neither is there), so a file another program or an agent changes is picked up at once: one
+with no unsaved changes is reloaded in place, one undo step, the cursor on its text; one with
+unsaved changes is marked "changed on disk" (`[!]` on its tab and in the Buffers picker) and asked
+about when you next open or save it, never while you type. A file deleted on disk keeps its text,
+marked "deleted on disk", and a save creates it again. Preferences' **files changed on disk**
+(`tui.disk_reload`) can ask first for clean files too. The TUI's own saves are never taken for a
+change.
+
 A save writes only over the version the file was opened at. If the file changed on disk since, the
-TUI asks: keep editing, reload the disk's version, or overwrite it with yours. Opening, switching or
-quitting over unsaved changes asks first, too. A lost connection loses nothing: the open file stays
+TUI asks: keep editing, reload the disk's version (`u` brings your text back), or overwrite it with
+yours. Opening, switching or quitting over unsaved changes asks first, too. A lost connection loses nothing: the open file stays
 on the page through the reconnect, unsaved changes and cursor as they were. It is read again if it
 changed on disk meanwhile and has no unsaved changes; if it is gone, closing it asks first; if its
 workspace is no longer served, its unsaved text stays as the untitled draft.

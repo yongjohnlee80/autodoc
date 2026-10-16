@@ -66,6 +66,12 @@ Dialog {
                         Text { text: "two-view documents"; Layout.preferredWidth: 21; toolTipText: "how a document with two views (HTML) opens: asked each time, raw (its source, to edit) or simplified (its text)" }
                         ComboBox { model: App.openAsChoices; textRole: "label"; currentIndex: App.openAsIndex; onActivated: App.setOpenAsIndex(index) }
                     }
+                    // an open file changed on disk with no unsaved edits: reloaded at once, or asked about
+                    Flex {
+                        direction: Tui.Horizontal
+                        Text { text: "files changed on disk"; Layout.preferredWidth: 21; toolTipText: "an open file another program changed, with no unsaved edits: reloaded at once (one undo step), or asked about as a modified one is" }
+                        ComboBox { model: App.diskReloadChoices; textRole: "label"; currentIndex: App.diskReloadIndex; onActivated: App.setDiskReloadIndex(index) }
+                    }
                     Text { text: "" }
                     Flex {
                         direction: Tui.Horizontal

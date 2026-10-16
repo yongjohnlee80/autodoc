@@ -38,6 +38,15 @@ type openBuffer struct {
 	// draft is an untitled draft's recovery id (ownRecovery), made when it is first kept; "" until
 	// then. Kept again, a restored draft's copy replaces the one it came from (keepRecovery)
 	draft string
+	// following the disk (diskwatch.go): its folder's watch and its file's name there; diskGen the
+	// debounce of its checks; saving and recheck hold a check while a save is out; saves counts
+	// the saves started, so a check that began before one is stale
+	watch     *diskWatch
+	watchName string
+	diskGen   uint64
+	saving    bool
+	recheck   bool
+	saves     uint64
 }
 
 // newBuffer is an empty buffer, added after the others. It is not shown until activate.
@@ -146,6 +155,7 @@ func (h *Host) closeBuffer(b *openBuffer) {
 // dropBuffer drops b, unasked: its edits are saved or discarded.
 func (h *Host) dropBuffer(b *openBuffer) {
 	h.emitLua("close", h.bufferInfo(b))
+	h.unwatchFile(b)
 	if b.ed != nil {
 		b.ed.Detach()
 		b.ed = nil
@@ -206,11 +216,7 @@ func (h *Host) bufferInfo(b *openBuffer) map[string]any {
 
 // bufferLabel is b's name in the buffer list: its path, or untitled, with [+] while modified.
 func bufferLabel(b *openBuffer) string {
-	label := fmt.Sprintf("%d %s", b.n, b.file.name())
-	if b.file.dirty {
-		label += " [+]"
-	}
-	return label
+	return fmt.Sprintf("%d %s", b.n, b.file.name()) + bufferMarks(b)
 }
 
 // syncBuffers tells the buffer list's surfaces (:b completion, the Buffers picker, the GUI's tabs)

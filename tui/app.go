@@ -45,6 +45,7 @@ import (
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/registrations"
@@ -226,6 +227,9 @@ type Host struct {
 	bufN       int
 	bufferPick *pick[string]    // the Buffers picker (bufferpick.go)
 	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
+	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
+	watches map[string]*diskWatch
+	diskFS  func(dir string) (vfs.FS, error)
 
 	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
 	// still to ask about, and the one being restored once its file opens
@@ -363,6 +367,8 @@ func newHost(session *Session, opt Options) *Host {
 		ws: opt.Workspace, remember: opt.Remember, installed: opt.Installed, ownTables: opt.Registrations, recoveryDir: opt.RecoveryDir, crashDir: opt.CrashDir, luaDir: opt.LuaDir, editorDir: opt.EditorDir,
 		awaitExit:       awaitExit,
 		browser:         openDefaultApp,
+		watches:         map[string]*diskWatch{},
+		diskFS:          localDisk,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
 		cellFontModel:   fontModel(),
 		termFontModel:   termFontModel(),

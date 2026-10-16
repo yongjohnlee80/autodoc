@@ -61,16 +61,29 @@ func (h *Host) bufferTabLabel(b *openBuffer) string {
 	if slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && h.cutTabName(o, "") == label }) {
 		label = h.cutTabName(b, " #"+strconv.Itoa(b.n))
 	}
-	if b.file.dirty {
-		label += " [+]"
-	}
-	return label
+	return label + bufferMarks(b)
 }
 
-// cutTabName is b's name, then mark, cut in the middle to fit a tab with room for [+] (always, so a
-// buffer's label does not change length as it is edited).
+// bufferMarks are b's marks after its name: [+] while modified, ! while its file changed or went
+// on disk (diskwatch.go); "" for neither.
+func bufferMarks(b *openBuffer) string {
+	marks := ""
+	if b.file.dirty {
+		marks += "+"
+	}
+	if b.file.disk != diskSame {
+		marks += "!"
+	}
+	if marks == "" {
+		return ""
+	}
+	return " [" + marks + "]"
+}
+
+// cutTabName is b's name, then mark, cut in the middle to fit a tab with room for its marks (always,
+// so a buffer's label does not change length as it is edited).
 func (h *Host) cutTabName(b *openBuffer, mark string) string {
-	room := bufferTabWidth - 2 - len(" [+]") - tuicore.StringWidth(mark) // 2: the tab's padding
+	room := bufferTabWidth - 2 - len(" [+!]") - tuicore.StringWidth(mark) // 2: the tab's padding
 	return elideMiddle(h.bufferTabName(b), room) + mark
 }
 
@@ -141,6 +154,7 @@ func (h *Host) showBuffer(b *openBuffer) {
 	}
 	h.activate(b)
 	h.keep(h.p.Call("editor", "forceActiveFocus"))
+	h.askDiskOnEnter(b)
 }
 
 // newEmptyBuffer is the tabs' +: a new, empty buffer, shown, for the user to type in, name, or
