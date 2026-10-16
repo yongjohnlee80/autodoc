@@ -79,16 +79,27 @@ func TestTheGUITabsKeepOneWidth(t *testing.T) {
 	r.waitListed(t, 3)
 	r.s.Backend.InjectResize(220, 30)
 	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
-	// the tabs' widths, and the arrows', +'s and ≡'s count: those are 3 cells, a tab more
-	look := func() (tabs []int, small int) {
-		for _, sp := range onLoop(r, func() []widget.TabSpan { return strip.TabSpans() }) {
+	// the tabs' widths, told from the strip's other cells by place, not width: the row is
+	// [←] tab… [→] + ≡, and a tab the window cuts can be as narrow as an arrow
+	look := func(arrows bool) []int {
+		spans := onLoop(r, func() []widget.TabSpan { return strip.TabSpans() })
+		lead, trail := 0, 2 // + ≡
+		if arrows {
+			lead, trail = 1, 3 // ←, and → + ≡
+		}
+		if len(spans) <= lead+trail {
+			return nil
+		}
+		for _, sp := range append(spans[:lead:lead], spans[len(spans)-trail:]...) {
 			if sp.W > 3 {
-				tabs = append(tabs, sp.W)
-			} else {
-				small++
+				return nil // not this layout: a tab where an arrow, + or ≡ should be
 			}
 		}
-		return tabs, small
+		var tabs []int
+		for _, sp := range spans[lead : len(spans)-trail] {
+			tabs = append(tabs, sp.W)
+		}
+		return tabs
 	}
 	for _, f := range long {
 		r.openByPicker(t, f)
@@ -96,14 +107,14 @@ func TestTheGUITabsKeepOneWidth(t *testing.T) {
 	}
 	var wide []int
 	r.s.WaitFor(t, "wide: three tabs, each cut to the cap, no arrows", func(string) bool {
-		tabs, small := look()
+		tabs := look(false)
 		wide = tabs
-		return len(tabs) == 3 && small == 2 && slices.Max(tabs) <= bufferTabWidth+2 && slices.Min(tabs) == slices.Max(tabs)
+		return len(tabs) == 3 && slices.Max(tabs) <= bufferTabWidth+2 && slices.Min(tabs) == slices.Max(tabs)
 	})
 	r.s.Backend.InjectResize(100, 30)
-	r.s.WaitFor(t, "narrow: the same widths, scrolling between the arrows", func(string) bool {
-		tabs, small := look()
-		if small != 4 || len(tabs) == 0 {
+	r.s.WaitFor(t, "narrow: the same widths, scrolling between the arrows", func(sc string) bool {
+		tabs := look(true)
+		if !strings.Contains(sc, "←") || !strings.Contains(sc, "→") || len(tabs) == 0 {
 			return false
 		}
 		// every tab the window shows whole is as wide as before; the one cut at the window's edge,
