@@ -86,16 +86,17 @@ func (h *Host) state() map[string]any {
 		// the leader card
 
 		// the editor's preferences
-		"App.keymaps":         choices(keymapLabels...),
-		"App.themes":          choices(h.themeLabels()...),
-		"App.userThemes":      h.userThemeRows(),
-		"App.edges":           choices(edges...),
-		"App.yesNo":           choices("yes", "no"),
-		"App.openAsChoices":   choices(openAsLabels...),
-		"App.indentMarkModes": choices(indentMarkLabels...),
-		"App.corners":         choices(cornerLabels...),
-		"App.toastSeconds":    choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
-		"App.prefsError":      "",
+		"App.keymaps":           choices(keymapLabels...),
+		"App.themes":            choices(h.themeLabels()...),
+		"App.userThemes":        h.userThemeRows(),
+		"App.edges":             choices(edges...),
+		"App.yesNo":             choices("yes", "no"),
+		"App.openAsChoices":     choices(openAsLabels...),
+		"App.diskReloadChoices": choices(diskReloadLabels...),
+		"App.indentMarkModes":   choices(indentMarkLabels...),
+		"App.corners":           choices(cornerLabels...),
+		"App.toastSeconds":      choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
+		"App.prefsError":        "",
 		// the notifications' history (notify.go), and the Vim keys' card
 		// find in a pane (find.go)
 		"App.findTitle": "find",

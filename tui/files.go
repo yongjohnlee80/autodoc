@@ -57,6 +57,10 @@ type openedFile struct {
 	raw bool
 	// then is what the unsaved question guards: run after save or discard, dropped by stay.
 	then func()
+	// disk is how the file stands on disk, as its last check found it (diskwatch.go): diskVersion
+	// the newer version a change found, diskAsked the one the user was last asked about
+	disk                   diskState
+	diskVersion, diskAsked string
 }
 
 // untitled is the draft's name wherever a file's path would show.
@@ -82,6 +86,12 @@ func (n openedFile) title() string {
 	}
 	if n.open && n.derived != "" {
 		badges = append(badges, n.derived+" · read-only")
+	}
+	switch {
+	case n.open && n.disk == diskChanged:
+		badges = append(badges, "changed on disk")
+	case n.open && n.disk == diskDeleted:
+		badges = append(badges, "deleted on disk")
 	}
 	if len(badges) == 0 {
 		return n.name()
@@ -234,6 +244,7 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 		h.activate(b)
 		h.say("opened " + ref.path)
 		h.land(land, ref, h.core.Value()) // the document is open already: the open lands at once
+		h.askDiskOnEnter(b)
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
@@ -390,6 +401,8 @@ func (h *Host) adopt(b *openBuffer, ws, p, version string, raw bool, content *st
 	b.file.ws, b.file.path, b.file.version, b.file.open, b.file.dirty = ws, p, version, true, content == nil
 	b.file.raw = raw
 	b.file.derived = derivedOf(p, raw)
+	b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // read or written just now
+	h.watchFile(b)
 	b.buf.SetName(docKey(fileRef{ws, p}))
 	if b != h.active {
 		ed := h.editorFor(b) // read-only now for a derived document
@@ -556,6 +569,7 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 
 // closeFile empties the active buffer: no file is open in it, and it is a new draft.
 func (h *Host) closeFile() {
+	h.unwatchFile(h.active)
 	h.file.gen++
 	h.documentFor("", "", false)
 	h.editor.SetValue("")
@@ -665,9 +679,23 @@ func cursorBytesOf(ed *widget.EditorCore) int {
 // write writes content over the version want, then runs after. A stale version opens the conflict
 // dialog. A write that landed before a follow-up failed (Committed) is read back: when the disk
 // holds what was written, its version is adopted; otherwise someone wrote after it, which is a
-// conflict. It is never sent again blindly.
+// conflict. It is never sent again blindly. A file deleted on disk is created again, only if it is
+// still gone (want ""). A disk check of b waits while the write is out, and runs once after
+// (diskwatch.go): the TUI's own save is never an outside change.
 func (h *Host) write(b *openBuffer, content, want string, after func()) {
 	tk, ws, p, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.raw
+	if b.file.disk == diskDeleted {
+		want = "" // create only: refused if someone made it again meanwhile
+	}
+	b.saving = true
+	b.saves++
+	settled := func() {
+		b.saving = false
+		if b.recheck {
+			b.recheck = false
+			h.diskSoon(b)
+		}
+	}
 	type answer struct {
 		version string
 		err     error
@@ -691,12 +719,14 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 		b, _ := m["content"].([]byte)
 		return answer{err: err, version: str(m, "version"), same: string(b) == content}
 	}, func(a answer) {
+		defer settled()
 		if !tk.Current() {
 			return
 		}
 		switch {
 		case a.err == nil, code(a.err) == rpc.CodeCommitted && a.readErr == nil && a.same:
 			b.file.version = a.version
+			b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", "" // what is on disk is what was written
 			// typing during the save leaves the file unsaved: what is on disk is what was written
 			newer := b.buf.Value() != content
 			if !newer {
@@ -731,10 +761,10 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 			h.notify("saved " + p + ", but it could not be read back: " + wireMessage(a.readErr) + " — reload before saving again")
 		case code(a.err) == rpc.CodeConflict, code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
-			h.set("App.conflictQuestion", fmt.Sprintf("%s changed on disk since you opened it. Keep editing, reload the disk's version (your changes are lost), or overwrite it with yours?", p))
+			h.set("App.conflictQuestion", fmt.Sprintf("%s changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?", p))
 			h.open("fileConflict")
 		case code(a.err) == rpc.CodeNotFound:
-			h.notify(p + " is gone from disk: File › New file to write it again")
+			h.markDisk(b, diskDeleted, "") // the next save creates it again
 		default:
 			h.failed("save "+p, a.err)
 		}
@@ -746,14 +776,34 @@ func (h *Host) conflict(answer string) {
 	h.closeDialog("fileConflict")
 	switch answer {
 	case "reload":
-		// the file stays unsaved until the disk's version is in the editor: a failed read keeps the
-		// edits guarded
-		h.load(h.file.ws, h.file.path, nil)
+		// the disk's version in place of the edits, as one undo step: u brings them back. The file
+		// stays unsaved until it is in: a failed read keeps the edits guarded
+		h.reloadShown()
 	case "overwrite":
 		h.overwrite()
 	default:
 		h.notify("kept your changes; the disk's version is newer")
 	}
+}
+
+// reloadShown reads the shown buffer's file and puts it in the buffer as reloadFromDisk does,
+// unsaved edits and all: the conflict dialog's Reload.
+func (h *Host) reloadShown() {
+	b := h.active
+	tk := h.bufferTicket(b, false)
+	snap := diskSnap{ws: b.file.ws, path: b.file.path, raw: b.file.raw}
+	do(h, func(ctx context.Context) diskRead { return readDisk(ctx, h, snap) }, func(r diskRead) {
+		switch {
+		case !tk.Current(), b.file.path != snap.path, b.file.ws != snap.ws:
+		case r.missing:
+			h.markDisk(b, diskDeleted, "")
+		case r.err != nil:
+			h.failed("reload "+snap.path, r.err)
+		default:
+			h.reloadFromDisk(b, r.content, r.version)
+			h.notify("reloaded " + snap.path + " from disk: u brings your text back")
+		}
+	})
 }
 
 // overwrite writes the editor's text over whatever version is on disk now: it reads the version

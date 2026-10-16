@@ -33,6 +33,7 @@ const (
 	prefImages        = "tui.preview.images"
 	prefMermaid       = "tui.preview.mermaid"
 	prefOpenAs        = "tui.documents.open"
+	prefDiskReload    = "tui.disk_reload"
 	prefLuaGrants     = "lua.grants" // a JSON map: gated script → capability → true (luagate.go)
 	prefCorner        = "tui.toast.corner"
 	prefAboutAt       = "tui.about.atstart"
@@ -95,6 +96,7 @@ type prefs struct {
 	images                      bool                       // previews as images where the terminal draws them (preview.go)
 	mermaid                     string                     // what draws a Mermaid diagram in a GUI window: "mermaidjs" or "native" (preview.go)
 	openAs                      string                     // how a document with two views opens: "prompt", "raw" or "simplified" (files.go)
+	diskReload                  string                     // a clean file changed on disk: reloaded ("clean") or asked about ("ask") (diskwatch.go)
 	luaGrants                   map[string]map[string]bool // what each gated Lua script may do (luagate.go)
 	aboutAtStart                bool                       // About opens when the program starts (startup.go)
 	updateCheck                 bool                       // a newer release is looked for when the program starts (startup.go)
@@ -215,6 +217,8 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 			}),
 		choicePref(prefOpenAs, "prompt", openAsChoices, func(p *prefs) *string { return &p.openAs }).
 			chooser("App.openAsIndex", "App.setOpenAsIndex"),
+		choicePref(prefDiskReload, diskReloadClean, diskReloadChoices, func(p *prefs) *string { return &p.diskReload }).
+			chooser("App.diskReloadIndex", "App.setDiskReloadIndex"),
 		boolPref(prefAboutAt, true, func(p *prefs) *bool { return &p.aboutAtStart }).
 			chooser("App.aboutAtStartIndex", "App.setAboutAtStartIndex"),
 		boolPref(prefUpdates, true, func(p *prefs) *bool { return &p.updateCheck }).

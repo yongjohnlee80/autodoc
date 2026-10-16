@@ -523,15 +523,17 @@ func TestAConflictAsks(t *testing.T) {
 	if got := d.read(t, "kb", "a.md"); got != "mine one\n" {
 		t.Fatalf("after overwrite: disk %q", got)
 	}
-	// reload: the editor gets the disk's, and mine is gone
+	// reload: the editor gets the disk's, clean, and mine is one u away
 	d.write(t, "kb", "a.md", "theirs again\n")
 	r.typeInEditor(t, "lost ")
 	conflict()
 	r.keys(t, key('r'))
-	r.waitFile(t, "a.md")
-	if got := r.editorText(); got != "theirs again\n" {
-		t.Errorf("after reload: editor %q", got)
+	r.s.WaitForText(t, "reloaded a.md from disk")
+	if got := r.editorText(); got != "theirs again\n" || r.file().dirty {
+		t.Errorf("after reload: editor %q, dirty %v", got, r.file().dirty)
 	}
+	r.undo()
+	r.s.WaitFor(t, "mine back", func(string) bool { return strings.Contains(r.editorText(), "lost ") })
 }
 
 // TestUnsavedWorkIsNeverLostQuietly: opening another file asks nothing, and the buffer left keeps
@@ -886,7 +888,8 @@ func TestASaveNeverDropsANewerEdit(t *testing.T) {
 }
 
 // TestAFailedReloadKeepsTheEditsUnsaved: Reload from the conflict dialog marks the file clean only
-// once the disk's version is in the editor; a read that fails leaves the edits guarded.
+// once the disk's version is in the editor; a file gone by then leaves the edits guarded, the file
+// marked deleted on disk.
 func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "one\n", "b.md", "b\n"}})
 	r := attached(t, d)
@@ -900,7 +903,7 @@ func TestAFailedReloadKeepsTheEditsUnsaved(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.keys(t, key('r'))
-	r.s.WaitForText(t, "open a.md:")
+	r.s.WaitForText(t, "a.md was deleted on disk") // gone by the time Reload read it
 	if n := r.file(); !n.dirty || !strings.Contains(r.editorText(), "mine") {
 		t.Fatalf("after the failed reload: dirty %v, text %q", n.dirty, r.editorText())
 	}

@@ -34,6 +34,7 @@ func (h *Host) newBufferPick() *pick[string] {
 			if b := h.bufferOfLabel(label); b != nil {
 				h.activate(b)
 				h.keep(h.p.Call("editor", "forceActiveFocus"))
+				h.askDiskOnEnter(b)
 			}
 		}}
 }
@@ -110,6 +111,7 @@ func (h *Host) bufferEntries() []Entry {
 					return err
 				}
 				h.activate(b)
+				h.askDiskOnEnter(b)
 				return nil
 			}},
 		{ID: "buffer.delete", Title: "close the buffer", Verb: "bd", Help: "close the shown buffer; unsaved changes are asked about",

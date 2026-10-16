@@ -69,7 +69,7 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 	r.typeInEditor(t, "X")
 	r.waitTyped(t)
 	// drawn: its middle cut, its end and [+] on the title bar
-	r.s.WaitForText(t, "-the-cut.md [+]")
+	r.s.WaitForText(t, "…the-cut.md [+]")
 	widest := onLoop(r, func() int {
 		w := 0
 		for _, s := range strip.TabSpans() {
@@ -77,7 +77,7 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 		}
 		return w
 	})
-	if widest != bufferTabWidth {
-		t.Fatalf("the long name's tab is %d cells, want capped at %d", widest, bufferTabWidth)
+	if widest > bufferTabWidth || widest < bufferTabWidth-1 { // the room for [+!] less the ! it lacks
+		t.Fatalf("the long name's tab is %d cells, want cut to fit %d", widest, bufferTabWidth)
 	}
 }

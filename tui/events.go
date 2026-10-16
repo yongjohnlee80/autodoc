@@ -202,7 +202,9 @@ func (h *Host) keepDraftOnLeave() {
 			h.dropBuffer(b)
 			continue
 		}
+		h.unwatchFile(b) // a draft now: no file to follow
 		b.file.open, b.file.path, b.file.version = false, "", ""
+		b.file.disk, b.file.diskVersion, b.file.diskAsked = diskSame, "", ""
 		b.file.gen++
 		b.buf.SetName("")
 		kept = true

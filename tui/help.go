@@ -249,7 +249,11 @@ WHAT A KEY NEEDS
   Everything here needs the daemon (autodoc --serve). --ui starts it when nothing answers; if it
   does not come up, Help › About names its log.
   Ctrl+S writes only over the version you opened. If the file changed on disk since, it asks:
-  keep editing, reload the disk's version, or overwrite it with yours.
+  keep editing, reload the disk's version (u brings your text back), or overwrite it with yours.
+  Open files follow the disk: a file changed elsewhere reloads in place when it has no unsaved
+  changes (one undo step), and is marked "changed on disk" ([!]) and asked about when you next
+  open or save it when it has; a file deleted on disk keeps its text, and a save creates it again.
+  Preferences › files changed on disk can ask first for clean files too.
   A path must be one the workspace indexes (new workspaces include Markdown, text and YAML); others
   are refused.
   Semantic search needs an embedding provider, chosen in System › Search models (SPC s): a local Ollama with
