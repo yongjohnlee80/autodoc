@@ -169,7 +169,12 @@ jobs:
       - name: make build-gui
         run: make build-gui && ./bin/autodoc --version
       - name: vet with the GUI
-        run: go vet -tags gui ./app/ ./cmd/...
+        run: go vet -tags gui ./app/ ./cmd/... ./tui/
+      # The TUI's GUI-only cells (the title bar's buffer tabs, the GUI editor's keys): no other job
+      # builds tui/ with the gui tag, so they ran nowhere and main stayed green while two failed.
+      # They need no display (decltest's backend), and run without -race to keep this job short.
+      - name: the TUI's GUI cells
+        run: go test -tags gui -count=1 -timeout 20m ./tui/
 
   coverage:
     name: coverage policy
