@@ -516,10 +516,12 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	if got != [3]string{"center", "80", "4"} {
 		t.Errorf("after choosing the centre the document reads %v, want center at its own 80%%", got)
 	}
+	// attached waits for the notes, not the preferences: they load on a call of their own, which a
+	// loaded runner can answer after the notes. Wait for them; one that never reads center still fails.
 	again := attached(t, d)
-	if e := onLoop(again, func() string { return again.h.prefs.agentEdge }); e != "center" {
-		t.Errorf("a new TUI opens the agent at %q, want the chosen center", e)
-	}
+	again.s.WaitFor(t, "a new TUI opens the agent at the chosen center", func(string) bool {
+		return onLoop(again, func() string { return again.h.prefs.agentEdge }) == "center"
+	})
 }
 
 // {root} and {workspace} are one shell word each, whatever they hold.
