@@ -734,6 +734,13 @@ func TestAReusedIDLeavesAnExportWhole(t *testing.T) {
 			return len(r.h.plugins.results.model.rows) >= loaded
 		})
 	})
+	// the reader back at the top: once the last fetch is answered, nothing more loads
+	r.s.WaitFor(t, "the pages settled", func(string) bool {
+		return onLoop(r, func() bool {
+			r.resultsCore().SetCursor(widget.TablePos{})
+			return !r.h.plugins.results.pending
+		})
+	})
 	path := filepath.Join(t.TempDir(), "rows.csv")
 	n := onLoop(r, func() int { r.h.plugins.exportResults(path); return len(r.h.plugins.results.model.rows) })
 	r.waitNotice(t, fmt.Sprintf("%d loaded rows exported to %s", n, path))
