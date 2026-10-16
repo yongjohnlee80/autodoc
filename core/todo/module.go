@@ -290,7 +290,7 @@ func (m *Manager) Verbs() []module.Verb {
 				return nil, m.SetVar(ctx, p.Name, p.Value, p.Opts)
 			}),
 		module.Handle(read("workspace.vars", "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
-			"A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source."),
+			"A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with."),
 			func(ctx context.Context, p wsVarsParams) ([]Var, error) { return m.WorkspaceVars(ctx, p.Workspace) }),
 		module.Handle(quiet("workspace.set_var", module.EffectSettings, "nil",
 			"Sets or removes a workspace's variable: this machine's value (scope machine, absolute) or the KB's (scope kb, relative to the KB root, carried by git); machine_only declares the name machine-only in the KB's file.",

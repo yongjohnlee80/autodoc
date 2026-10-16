@@ -212,6 +212,38 @@ func TestEffectiveVars(t *testing.T) {
 	}
 }
 
+// workspace.vars("") is no workspace's: $HOME and the global variables, with no $KB_ROOT, the same a
+// path in no workspace resolves with in the index (AllEffectiveVars' ""). A client resolving a file no
+// workspace owns reads them there (ADR 1792132105 §2.5); a name no workspace's is unknown.
+func TestTheVarsOfNoWorkspace(t *testing.T) {
+	e := claimed(t)
+	e.m = todo.New(e.roots, e.disk, e.j, todo.WithHome("/home/u"))
+	e.must(e.m.SetVar(ctx, "G", "/g"))
+	vars, err := e.m.WorkspaceVars(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, v := range vars {
+		if v.Value != "" {
+			got[v.Name] = v.Value
+		}
+	}
+	all, err := e.m.AllEffectiveVars(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, map[string]string{"HOME": "/home/u", "G": "/g"}) || !reflect.DeepEqual(got, all[""]) {
+		t.Errorf("workspace.vars(\"\") %v, the index's %v; want HOME and G alone, alike", got, all[""])
+	}
+	if v := find(vars, "G"); v.Source != "global" {
+		t.Errorf("G's source %q, want global", v.Source)
+	}
+	if _, err := e.m.WorkspaceVars(ctx, "nope"); !errors.Is(err, todo.ErrNoWorkspace) {
+		t.Errorf("an unknown workspace: %v, want ErrNoWorkspace", err)
+	}
+}
+
 // SetVar refuses what names no place to keep a value: an unknown scope, machine_only off the machine
 // scope, and a KB or machine value with neither a workspace nor an at.
 func TestSetVarRefusals(t *testing.T) {

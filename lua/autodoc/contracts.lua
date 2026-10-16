@@ -776,7 +776,7 @@ return {
         { name = "workspace", type = "string" }
       },
       result = "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
-      doc = "A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source.",
+      doc = "A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source. \"\" is no workspace's: $HOME and the global variables, which a file no workspace owns resolves with.",
     },
   },
   errors = {
