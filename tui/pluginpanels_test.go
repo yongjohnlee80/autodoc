@@ -32,7 +32,7 @@ func cardTUI(t *testing.T, dir string, prefs map[string]string) (*daemon, *runni
 func frameOf(screen, title string) (top, left, right, bottom int, ok bool) {
 	lines := strings.Split(screen, "\n")
 	for y, l := range lines {
-		c := col(l, "┌ "+title+" ")
+		c := col(l, "┌ "+title)
 		if c < 0 {
 			continue
 		}
@@ -318,7 +318,7 @@ func TestACardOnTheRightAndTheResultsAtTheBottom(t *testing.T) {
 	_, left, right, _ := waitFrame(t, r, "Db")
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("db", "run"); return true })
 	r.s.WaitFor(t, "the results open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen[resultsPanel] }) })
-	rTop, rLeft, rRight, rBottom := waitFrame(t, r, "Rows")
+	rTop, rLeft, rRight, rBottom := waitFrame(t, r, "results: Rows")
 	cTop, cLeft, cRight, _ := waitFrame(t, r, "Db")
 	if cRight != 99 || cLeft != left || cRight != right {
 		t.Fatalf("the card moved when the results opened: %d–%d, was %d–%d:\n%s", cLeft, cRight, left, right, r.s)
