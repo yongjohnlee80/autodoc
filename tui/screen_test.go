@@ -1962,12 +1962,14 @@ func TestFindInThePanes(t *testing.T) {
 // is blank: a page's words there would come between the toast's rows.
 func (r *running) waitNoticed(t *testing.T, text string) {
 	t.Helper()
-	r.s.WaitFor(t, "the notification "+text, func(sc string) bool {
-		// a toast's frame, and the page frame's corners a long toast's line may land on
-		flat := strings.Join(strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ",
-			"┌", " ", "┐", " ", "└", " ", "┘", " ").Replace(sc)), " ")
-		return strings.Contains(flat, text)
-	})
+	r.s.WaitFor(t, "the notification "+text, func(sc string) bool { return strings.Contains(noticeText(sc), text) })
+}
+
+// noticeText is the screen's text on one line, without a toast's frame or the page frame's corners
+// a long toast's line may land on: where a notification's words are found.
+func noticeText(sc string) string {
+	return strings.Join(strings.Fields(strings.NewReplacer("│", " ", "╭", " ", "╮", " ", "╰", " ", "╯", " ", "─", " ",
+		"┌", " ", "┐", " ", "└", " ", "┘", " ").Replace(sc)), " ")
 }
 
 // TestNotificationsAndTheStatusLine: what happened is a toast, over the status line at the bottom

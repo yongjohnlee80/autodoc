@@ -152,9 +152,11 @@ func TestARestartAnsweredByTheSameBuildIsNamed(t *testing.T) {
 	sock := filepath.Join(shortDir(t), "s.sock")
 	old := startDaemonWith(t, sock, kbNotes, daemonOpts{})
 	var spawns atomic.Int32
+	started := make(chan struct{}) // the supervisor's daemon serves the store
 	sess := NewSession(sock, func() (string, error) {
 		if spawns.Add(1) == 1 {
 			startDaemonWith(t, sock, kbNotes, daemonOpts{version: "v-supervised"})
+			close(started)
 		}
 		return "", nil
 	})
@@ -165,8 +167,29 @@ func TestARestartAnsweredByTheSameBuildIsNamed(t *testing.T) {
 		return true
 	})
 	r.h.p.Post(r.h.restartForRegistrations)
-	r.waitNoticed(t, "the backend that answered after the restart, autodoc v-supervised (pid")
-	r.waitNoticed(t, "still lacks .go, .rs: another build serves this store")
+	// NOTE: the restart is the old daemon stopping, this TUI waiting for its process to go, a new
+	// daemon opening the store and indexing it, then the reconnect's hello and capabilities:
+	// seconds on a loaded machine, past decltest's WaitTimeout (3 s), which bounds a frame's change,
+	// not a daemon's start. So the cell waits for the new daemon itself, then for the notice on a
+	// clock of its own. The notice is the connection's ongoing toast, shown until the connection's
+	// next, so a long wait cannot miss it; the clock only turns a restart that never comes into a
+	// failure rather than a hang.
+	const restartAnswered = time.Minute
+	select {
+	case <-started:
+	case <-time.After(restartAnswered):
+		t.Fatalf("no daemon started for the restart within %s (%d spawns)", restartAnswered, spawns.Load())
+	}
+	const named = "the backend that answered after the restart, autodoc v-supervised (pid"
+	const lacks = "still lacks .go, .rs: another build serves this store"
+	for deadline := time.Now().Add(restartAnswered); !strings.Contains(noticeText(r.s.String()), named); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the restart's answer was never named:\n%s", r.s.String())
+		}
+	}
+	if sc := noticeText(r.s.String()); !strings.Contains(sc, lacks) {
+		t.Fatalf("the notice does not say what the backend lacks:\n%s", sc)
+	}
 	if strings.Contains(r.s.String(), regQuestion) {
 		t.Fatal("offered again")
 	}
