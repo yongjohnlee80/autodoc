@@ -213,12 +213,13 @@ func bufferLabel(b *openBuffer) string {
 	return label
 }
 
-// syncBuffers tells the buffer list's surfaces (:b completion, the Buffers picker) the buffers as
-// they are now.
+// syncBuffers tells the buffer list's surfaces (:b completion, the Buffers picker, the GUI's tabs)
+// the buffers as they are now.
 func (h *Host) syncBuffers() {
 	if h.bufferPick != nil {
 		h.bufferPick.setAll(h.bufferLabels())
 	}
+	h.syncBufferTabs()
 }
 
 // bufferLabels are the buffers' labels in opening order.
