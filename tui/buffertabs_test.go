@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -248,5 +249,42 @@ func TestALongTabKeepsItsMarkAndWhatTellsItApart(t *testing.T) {
 		if !strings.Contains(l, "…") || !strings.Contains(l, " #") {
 			t.Fatalf("tabs %q: want the two long paths cut and numbered", labels)
 		}
+	}
+}
+
+// TestOpenFileInANewBufferAlwaysMakesOne: Open file in a new buffer… opens the file chosen in a
+// buffer of its own though the buffer shown is an empty, new one, which stays; a plain File › Open
+// after one that was closed unchosen fills the empty buffer, as before.
+func TestOpenFileInANewBufferAlwaysMakesOne(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	count := func() int { return onLoop(r, func() int { return len(r.h.buffers) }) }
+	onLoop(r, func() bool { r.h.newEmptyBuffer(); return true })
+	empty := onLoop(r, func() *openBuffer { return r.h.active })
+	before := count()
+	runTabRow(t, r, empty, "buffer.tabs.open")
+	r.s.WaitForText(t, "open a document")
+	r.keys(t, decltest.Type("b.md")...)
+	r.keys(t, enter())
+	r.waitFile(t, "b.md")
+	if n := count(); n != before+1 || onLoop(r, func() bool { return r.h.active == empty || !slices.Contains(r.h.buffers, empty) }) {
+		t.Fatalf("Open file in a new buffer…: %d buffers (want %d), the empty one kept and not used", n, before+1)
+	}
+
+	// asked for, then closed unchosen: the next plain File › Open fills an empty buffer again
+	onLoop(r, func() bool { r.h.activate(empty); r.h.openPickerNewBuffer(); return true })
+	r.s.WaitForText(t, "open a document")
+	r.keys(t, esc())
+	r.s.WaitFor(t, "the picker closed", func(sc string) bool { return !strings.Contains(sc, "open a document") })
+	before = count()
+	d.write(t, "kb", "c.md", "ccc\n")
+	r.waitListed(t, 3)
+	r.openByPicker(t, "c.md")
+	r.waitFile(t, "c.md")
+	if n := count(); n != before || onLoop(r, func() bool { return r.h.active != empty }) {
+		t.Fatalf("a plain File › Open: %d buffers (want %d), c.md in the empty buffer %v", n, before, onLoop(r, func() bool { return r.h.active == empty }))
 	}
 }

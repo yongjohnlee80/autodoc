@@ -230,6 +230,9 @@ type Host struct {
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
 	watches map[string]*diskWatch
 	diskFS  func(dir string) (vfs.FS, error)
+	// openNewBuffer: File › Open's next choice opens in a buffer of its own (openPickerNewBuffer);
+	// forceNewBuffer carries it to that choice's open (openRefAs)
+	openNewBuffer, forceNewBuffer bool
 
 	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
 	// still to ask about, and the one being restored once its file opens

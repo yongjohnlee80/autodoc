@@ -51,7 +51,7 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 			return strip.HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: 0})
 		})
 	}
-	press(spans[0].X + 1)
+	press(spans[0].X + spans[0].W - 2) // on a.md's name: its start is its ×
 	r.waitBuffer(t, "a.md")
 	if got := tabs(); got != "*a.md [+]|b.md" || !strings.Contains(r.editorText(), "Xaaa") {
 		t.Fatalf("after a press on a.md's tab: tabs %q, text %q", got, r.editorText())
@@ -77,7 +77,36 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 		}
 		return w
 	})
-	if widest > bufferTabWidth || widest < bufferTabWidth-1 { // the room for [+!] less the ! it lacks
-		t.Fatalf("the long name's tab is %d cells, want cut to fit %d", widest, bufferTabWidth)
+	if widest > bufferTabWidth+2 || widest < bufferTabWidth+1 { // the label cut to the room for [+!] less the ! it lacks; its × 2 more, outside the cap
+		t.Fatalf("the long name's tab is %d cells, want its label cut to fit %d, and its × 2 more", widest, bufferTabWidth)
+	}
+}
+
+// TestAGUITabsCloseButton: a press on a tab's × closes its buffer: at once when it is clean, after
+// the unsaved question when it is modified.
+func TestAGUITabsCloseButton(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.waitListed(t, 2)
+	strip := onLoop(r, func() *widget.TabStrip { return r.h.editor.(*guiwidget.Editor).Tabs() })
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.typeInEditor(t, "X")
+	r.waitTyped(t)
+	r.openByPicker(t, "b.md")
+	r.waitFile(t, "b.md")
+	pressX := func(i int) {
+		t.Helper()
+		onLoop(r, func() bool {
+			s := strip.TabSpans()[i]
+			return strip.HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: s.X + 1, Y: 0})
+		})
+	}
+	pressX(1) // b.md's ×: clean, closed at once
+	r.s.WaitFor(t, "b.md closed", func(string) bool { return onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "b.md"}) == nil }) })
+	pressX(0) // a.md's ×: modified, asked first
+	r.s.WaitForText(t, "unsaved file")
+	if onLoop(r, func() bool { return r.h.bufferOf(fileRef{"kb", "a.md"}) == nil }) {
+		t.Fatal("a.md, modified, closed without the question")
 	}
 }

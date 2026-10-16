@@ -21,13 +21,24 @@ func (h *Host) newOpenPick() *pick[string] {
 		match:   func(p string) string { return p },
 		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },
 		scope:   TicketWorkspace,
-		choose:  h.openPath}
+		choose: func(p string) {
+			h.forceNewBuffer, h.openNewBuffer = h.openNewBuffer, false
+			h.openPath(p)
+		}}
 }
 
 // openPicker opens File › Open over the workspace's files.
 func (h *Host) openPicker() {
+	h.openNewBuffer = false
 	h.openPick.setAll(h.files.Paths)
 	h.openPick.open()
+}
+
+// openPickerNewBuffer is File › Open with the file chosen opened in a buffer of its own, even when
+// the buffer shown is empty (a tab's Open file in a new buffer…): an open file is shown where it is.
+func (h *Host) openPickerNewBuffer() {
+	h.openPicker()
+	h.openNewBuffer = true
 }
 
 // pathRowOf is a file's row in a list of paths.
