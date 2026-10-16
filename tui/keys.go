@@ -191,9 +191,11 @@ var leaderKeys = onCard(leader, slices.Concat(
 		{Seq: "r", Show: "r", Does: "recent files", Run: "App.openRecent()"},
 		{Seq: "j", Show: "j", Does: "go to link", Run: "App.followLink()"},
 		{Seq: "b", Show: "b", Does: "back", Run: "App.goBack()"},
+		{Seq: "Shift+B", Show: "B", Does: "switch buffer", Run: "App.openBuffers()"},
 	}),
 	inGroup(groupFile, []Key{
 		{Seq: "n", Show: "n", Does: "new file", Run: "App.newFile()"},
+		{Seq: "Shift+C", Show: "C", Does: "close the buffer", Run: "App.closeBuffer()"},
 		{Seq: "Shift+O", Show: "O", Does: "the file's outline", Run: "App.openOutline()"},
 		{Seq: "d", Show: "d", Does: "view the diagram", Run: "App.previewDiagram()"},
 		{Seq: "Shift+H", Show: "H", Does: "preview HTML", Run: "App.previewHTML()"},

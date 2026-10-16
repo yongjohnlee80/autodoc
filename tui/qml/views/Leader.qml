@@ -18,7 +18,9 @@ Dialog {
     Shortcut { sequence: "r"; onActivated: { leader.close(); App.openRecent() } }
     Shortcut { sequence: "j"; onActivated: { leader.close(); App.followLink() } }
     Shortcut { sequence: "b"; onActivated: { leader.close(); App.goBack() } }
+    Shortcut { sequence: "Shift+B"; onActivated: { leader.close(); App.openBuffers() } }
     Shortcut { sequence: "n"; onActivated: { leader.close(); App.newFile() } }
+    Shortcut { sequence: "Shift+C"; onActivated: { leader.close(); App.closeBuffer() } }
     Shortcut { sequence: "Shift+O"; onActivated: { leader.close(); App.openOutline() } }
     Shortcut { sequence: "d"; onActivated: { leader.close(); App.previewDiagram() } }
     Shortcut { sequence: "Shift+H"; onActivated: { leader.close(); App.previewHTML() } }

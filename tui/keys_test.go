@@ -83,7 +83,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 	agents := &keyedFake{fake: fake{name: "agents"},
 		cards: []Card{{ID: "agentsCard", View: "AgentsCard", Title: "SPC a — agents", Back: leader, Help: "SPC a — AGENTS"}},
 		keys: []Key{
-			{Card: leader, Seq: "Shift+B", Show: "B", Does: "agents…", Opens: "agentsCard"},
+			{Card: leader, Seq: "Shift+Y", Show: "Y", Does: "agents…", Opens: "agentsCard"},
 			{Card: "agentsCard", Seq: "b", Show: "b", Does: "send the buffer", Run: `App.runCommand("agent.buffer")`},
 			{Card: "agentsCard", Seq: "f", Show: "f", Does: "send the selection", Run: `App.runCommand("agent.selection")`},
 		}}
@@ -105,7 +105,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, qml)
 		}
 	}
-	if lq, _ := k.card(leader); !strings.Contains(cardQML(lq, k.on(leader)), `Shortcut { sequence: "Shift+B"; onActivated: { leader.close(); agentsCard.open() } }`) {
+	if lq, _ := k.card(leader); !strings.Contains(cardQML(lq, k.on(leader)), `Shortcut { sequence: "Shift+Y"; onActivated: { leader.close(); agentsCard.open() } }`) {
 		t.Error("SPC B does not close SPC's card and open the agents'")
 	}
 	if got := k.cardState()["App.agentsCardText"]; got != "b  send the buffer  f  send the selection" {
