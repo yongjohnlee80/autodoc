@@ -22,8 +22,9 @@ func (h *Host) newOpenPick() *pick[string] {
 		preview: func(p string) func(context.Context) answerOf[pane] { return h.readPreview(p, 0, false) },
 		scope:   TicketWorkspace,
 		choose: func(p string) {
-			h.forceNewBuffer, h.openNewBuffer = h.openNewBuffer, false
-			h.openPath(p)
+			newBuffer := h.openNewBuffer
+			h.openNewBuffer = false
+			h.openRefWith(fileRef{h.ws, p}, true, nil, nil, newBuffer)
 		}}
 }
 

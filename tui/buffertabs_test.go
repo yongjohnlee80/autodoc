@@ -288,3 +288,31 @@ func TestOpenFileInANewBufferAlwaysMakesOne(t *testing.T) {
 		t.Fatalf("a plain File › Open: %d buffers (want %d), c.md in the empty buffer %v", n, before, onLoop(r, func() bool { return r.h.active == empty }))
 	}
 }
+
+// TestACancelledHTMLQuestionTakesTheNewBufferRequestWithIt: Open file in a new buffer… choosing an
+// HTML file asks how to open it; Cancel drops the open and its request for a new buffer with it,
+// so a later ordinary open (an explorer's, a link's) fills an empty buffer shown, as it always does.
+func TestACancelledHTMLQuestionTakesTheNewBufferRequestWithIt(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { r.h.newEmptyBuffer(); return true })
+	empty := onLoop(r, func() *openBuffer { return r.h.active })
+	onLoop(r, func() bool {
+		r.h.openPickerNewBuffer()
+		r.h.closeDialog(r.h.openPick.dialog)
+		r.h.openPick.choose("page.html") // as Enter on it does
+		return true
+	})
+	r.s.WaitForText(t, "open an HTML file")
+	onLoop(r, func() bool { r.h.openHTMLAs("cancel"); return true })
+	r.s.WaitFor(t, "the question closed", func(sc string) bool { return !strings.Contains(sc, "open an HTML file") })
+	count := onLoop(r, func() int { return len(r.h.buffers) })
+	onLoop(r, func() bool { r.h.openPath("b.md"); return true }) // an ordinary open, not File › Open's
+	r.waitFile(t, "b.md")
+	if n, in := onLoop(r, func() int { return len(r.h.buffers) }), onLoop(r, func() bool { return r.h.active == empty }); n != count || !in {
+		t.Fatalf("after the cancelled question, an ordinary open made %d buffers (want %d), filled the empty one %v", n, count, in)
+	}
+}
