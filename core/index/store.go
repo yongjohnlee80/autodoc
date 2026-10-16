@@ -102,7 +102,7 @@ func (s *Store) read(ctx context.Context, fn func(tx *store.Tx) error) error {
 // outdated lists the documents indexed under another version than the one they would get now
 // (want, for a path at the section size): a chunker or section-size change reaches every document
 // of that chunker, a schema change every Markdown file.
-func (s *Store) outdated(ctx context.Context, want func(path string, tokens int) string) ([]string, error) {
+func (s *Store) outdated(ctx context.Context, want func(path string, tokens int, recorded string) string) ([]string, error) {
 	var out []string
 	tokens, err := s.sectionTokens(ctx)
 	if err != nil {
@@ -111,7 +111,7 @@ func (s *Store) outdated(ctx context.Context, want func(path string, tokens int)
 	err = s.read(ctx, func(tx *store.Tx) error {
 		docs, err := s.documents(tx).OrderBy(dao.Asc(byPath)).Select(DocPath, DocIndexer)
 		for _, d := range docs {
-			if d.Indexer != want(d.Path, tokens) {
+			if d.Indexer != want(d.Path, tokens, d.Indexer) {
 				out = append(out, d.Path)
 			}
 		}
