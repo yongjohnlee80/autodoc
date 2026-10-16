@@ -372,12 +372,11 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 	if strings.Contains(r.s.String(), "arrange the "+cardPanelID("card")) {
 		t.Fatalf("Arrange panel named the card by its panel's id:\n%s", r.s)
 	}
-	r.keys(t, key('h'), key('h'), key('j'))
+	r.keys(t, key('h'), key('h'), key('j'), enter()) // the arrange card covers the panel's title until Enter
 	r.s.WaitFor(t, "four columns left, a row down", func(sc string) bool {
 		t2, l2, _, _, ok := frameOf(sc, "Card")
 		return ok && l2 == left-4 && t2 == top+1
 	})
-	r.keys(t, enter())
 	r.s.WaitFor(t, "kept once", func(string) bool {
 		m, _ := d.db.Preferences(context.Background())
 		_, ok := parseFloat(m["tui."+cardPanelID("card")+".float"])
