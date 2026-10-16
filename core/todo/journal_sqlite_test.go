@@ -81,6 +81,7 @@ var sqliteSuites = []struct {
 	{"AStoresWorkspace", TestAStoresWorkspace},
 	{"TheMigrationFoldsAStoresFile", TestTheMigrationFoldsAStoresFile},
 	{"AMigrationConflictWaitsForAPerson", TestAMigrationConflictWaitsForAPerson},
+	{"AConflictedNameNeverFallsToTheEnvironment", TestAConflictedNameNeverFallsToTheEnvironment},
 	{"MigrateVarsRecordsOwnersAndClearsRouteKBRoots", TestMigrateVarsRecordsOwnersAndClearsRouteKBRoots},
 	{"AFailedMachineDeclarationKeepsNoValue", TestAFailedMachineDeclarationKeepsNoValue},
 	{"AFailedMachineValueRestoresTheFile", TestAFailedMachineValueRestoresTheFile},

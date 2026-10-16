@@ -30,15 +30,17 @@ var (
 func isBuiltin(name string) bool { return name == VarKBRoot || name == VarHome }
 
 // scope is what a store's refs resolve against, the same from every route to the store: its
-// built-ins and its other variables, each the first of this machine's value, the store's file, the
-// derived value and a global user var (Manager.scope), then the environment.
+// workspace's built-ins and other variables, each the first of this machine's value, the KB's file,
+// the derived value and a global user var (Manager.scope), then the environment. A name a pending
+// migration holds in conflict has only this machine's value: never the environment's.
 type scope struct {
 	kbRoot, workspace, projectRoot, home string
 	// storeHome is the store's parent: what the daemon derived $WORKSPACE as before it was retired
 	// (ADR 1792132105 §2.6), read only to tell where a Lua-era $WORKSPACE ref exists
 	storeHome string
 	user      map[string]string // the effective variables that are not built in
-	machine   map[string]bool   // the names the store's file declares per machine
+	machine   map[string]bool   // the names the KB's file declares per machine
+	conflict  map[string]bool   // the names a pending migration holds in conflict
 	env       func(string) string
 	exists    func(string) bool
 	// read and list are a small file's content and a directory's entry names, by absolute path;
@@ -47,19 +49,20 @@ type scope struct {
 	list func(string) []string
 }
 
+// get is name's value, as layers.value answers it: $WORKSPACE and $PROJECT_ROOT are ordinary names,
+// in user when set.
 func (s scope) get(name string) string {
 	switch name {
 	case VarKBRoot:
 		return s.kbRoot
-	case VarWorkspace:
-		return s.workspace
-	case VarProjectRoot:
-		return s.projectRoot
 	case VarHome:
 		return s.home
 	}
 	if v := s.user[name]; v != "" {
 		return v
+	}
+	if s.conflict[name] {
+		return "" // unresolved below this machine's row until the conflict is settled
 	}
 	if s.env != nil {
 		return s.env(name)
@@ -213,6 +216,11 @@ func (s scope) refErrors(t Task, now string, hasTask func(id string) bool) []Err
 			r := s.resolve(p)
 			if r.unresolved && s.machine[r.varName] {
 				continue // set on some machines only: a fact about this machine, not about the task
+			}
+			if r.unresolved && s.conflict[r.varName] {
+				add(field, CodeUnresolved, "variable '$"+r.varName+"' is held in conflict: this workspace's stores set it "+
+					"differently; set it in the KB's file, or declare it machine-only (workspace.set_var)")
+				continue
 			}
 			if r.unresolved {
 				add(field, CodeUnresolved, "variable '$"+r.varName+"' is not defined on this machine — "+
