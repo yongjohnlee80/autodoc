@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -59,6 +60,37 @@ func cellColor(t *testing.T, v string) tuicore.CellColor {
 		t.Fatalf("%q is neither RGB nor default", v)
 	}
 	return tuicore.CellColor{Kind: tuicore.CellColorRGB, R: r, G: g, B: b}
+}
+
+// TestEveryThemeGolibShipsIsOnTheThemeMenu: Options › Theme lists every theme golib ships, from
+// its catalog (builtinThemeRows), not a list of its own: a theme golib adds shows with no change
+// here; and a row of one switches to it, checked.
+func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	r.keys(t, decltest.Alt('o'))
+	r.s.WaitForText(t, "Editor mode")
+	r.keys(t, key('t'))
+	for _, n := range themes.Names() {
+		label, ok := themeMenuLabels[n]
+		if !ok {
+			label = n
+		}
+		r.s.WaitForText(t, strings.ReplaceAll(label, "&", ""))
+	}
+	last := themes.Names()[len(themes.Names())-1]
+	onLoop(r, func() bool { r.h.useTheme(last); return true })
+	r.s.WaitFor(t, "the menu's check on "+last, func(string) bool {
+		return onLoop(r, func() bool {
+			m := r.h.builtinThemeRows()
+			for i := range m.Len() {
+				if row := m.At(i); row["checked"] == true {
+					return row["key"] == last
+				}
+			}
+			return false
+		})
+	})
 }
 
 // TestSepiaIsOnTheThemeMenu: Options › Theme › Sepia switches to it, as the other themes do — the

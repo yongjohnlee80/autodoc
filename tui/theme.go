@@ -29,10 +29,37 @@ func themeOf(src []byte) string {
 	return ""
 }
 
-// themeState is which theme the menu shows checked: the one the layout imports.
-func themeState(theme string) map[string]any {
-	return map[string]any{"App.themeDark": theme == "dark", "App.themeLight": theme == "light",
-		"App.themeMono": theme == "mono", "App.themeRetro": theme == "retro", "App.themeSepia": theme == "sepia"}
+// themeMenuLabels are Options › Theme's words for golib's themes, each with its access key; a theme
+// golib ships that is not here shows as its name, without one.
+var themeMenuLabels = map[string]string{
+	"dark": "&Dark", "light": "&Light", "mono": "&Mono", "retro": "&Retro", "sepia": "&Sepia",
+	"catppuccin_frappe": "&Catppuccin Frappé", "kanagawa": "&Kanagawa", "nord": "&Nord",
+	"shades_of_purple": "Shades of &Purple", "tokyo_night": "&Tokyo Night",
+}
+
+// themeMenuFirst are the themes Options › Theme lists first, in this order; golib's others follow
+// in its order.
+var themeMenuFirst = []string{"dark", "light", "mono", "retro", "sepia"}
+
+// builtinThemeRows are Options › Theme's rows for the themes golib ships, the one on screen checked.
+func (h *Host) builtinThemeRows() *tuidecl.ListModel {
+	m := tuidecl.NewListModel("key", "label", "checked")
+	order := slices.DeleteFunc(slices.Clone(themeMenuFirst), func(n string) bool { return !slices.Contains(themeNames, n) })
+	for _, n := range themeNames {
+		if !slices.Contains(order, n) {
+			order = append(order, n)
+		}
+	}
+	rows := make([]rowOf, 0, len(order))
+	for _, n := range order {
+		label, ok := themeMenuLabels[n]
+		if !ok {
+			label = n
+		}
+		rows = append(rows, rowOf{"key": n, "label": label, "checked": n == h.theme})
+	}
+	m.Reset(rows)
+	return m
 }
 
 // themeNames are the themes golib ships, as the menu and the Preferences dialog offer them.
@@ -74,10 +101,8 @@ func (h *Host) switchTheme(name string) {
 		}
 		h.layoutSrc, h.theme = next, name
 		h.set("App.userThemes", h.userThemeRows())
+		h.set("App.builtinThemes", h.builtinThemeRows())
 		h.reg.themeChanged()
-		for k, v := range themeState(name) {
-			h.set(k, v)
-		}
 		h.say("theme: " + name)
 	})
 }

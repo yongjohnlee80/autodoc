@@ -179,11 +179,11 @@ Window {
             }
             Menu {
                 title: "&Theme"
-                MenuItem { text: "&Dark";  group: "theme"; checked: App.themeDark;  onTriggered: App.useTheme("dark") }
-                MenuItem { text: "&Light"; group: "theme"; checked: App.themeLight; onTriggered: App.useTheme("light") }
-                MenuItem { text: "&Mono";  group: "theme"; checked: App.themeMono;  onTriggered: App.useTheme("mono") }
-                MenuItem { text: "&Retro"; group: "theme"; checked: App.themeRetro; onTriggered: App.useTheme("retro") }
-                MenuItem { text: "&Sepia"; group: "theme"; checked: App.themeSepia; onTriggered: App.useTheme("sepia") }
+                // golib's themes, every one it ships (theme.go: builtinThemeRows), then the user's
+                Instantiator {
+                    model: App.builtinThemes
+                    MenuItem { text: model.label; group: "theme"; checked: model.checked; onTriggered: App.useTheme(model.key) }
+                }
                 Instantiator {
                     model: App.userThemes
                     MenuItem { text: model.label; enabled: model.enabled; group: "theme"; checked: model.checked; onTriggered: App.useTheme(model.key) }
