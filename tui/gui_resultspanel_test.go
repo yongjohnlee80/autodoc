@@ -10,8 +10,9 @@ import (
 )
 
 // Under --gui's style the results' DataTable is laid out and drawn natively, and Ctrl+V still
-// reaches it: a block from the first cell, j and l growing it, the page untouched.
-func TestCtrlVReachesTheGUIResultsTable(t *testing.T) {
+// reaches it: a block from the first cell, j and l growing it, the page untouched. Esc ends a
+// selection or a count first, and then closes the panel, as in the terminal.
+func TestTheGUIResultsTablesKeys(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin5(t, dir, "kinds", "service", "kinds", tableManifest)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: testPrefs})
@@ -33,4 +34,9 @@ func TestCtrlVReachesTheGUIResultsTable(t *testing.T) {
 		t.Fatal("the results' table is not laid out natively under the GUI style")
 	}
 	wantCtrlVBlock(t, r)
+	onLoop(r, func() bool { r.resultsCore().SetAnchor(nil); return true })
+	wantEscCloses(t, r, func() {
+		onLoop(r, func() bool { r.h.plugins.runPluginCommand("kinds", "run"); return true })
+		r.waitResults(t, "k1", len(kindsRows))
+	})
 }
