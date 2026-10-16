@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/style"
 )
 
 // CARD PANELS — a card plugin is a docked panel of its own: it opens at its first placement's edge,
@@ -382,4 +383,57 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 		_, ok := parseFloat(m["tui."+cardPanelID("card")+".float"])
 		return ok
 	})
+}
+
+// cellsDrawn is a Surface that counts the cells drawn into it, beyond its fill.
+type cellsDrawn struct {
+	tuicore.Surface
+	w, h  int
+	cells []string
+}
+
+func (s *cellsDrawn) Size() tuicore.Size                        { return tuicore.Size{W: s.w, H: s.h} }
+func (s *cellsDrawn) Fill(tuicore.Rect, string, style.Style)    {}
+func (s *cellsDrawn) StringWidth(g string) int                  { return len([]rune(g)) }
+func (s *cellsDrawn) SetCell(x, y int, g string, _ style.Style) { s.cells = append(s.cells, g) }
+
+// TestACardViewBetweenRunsDrawsNothingAndTakesNothing: a card's view whose plugin is not running
+// draws no frame, takes no key or focus, and lays out without telling anyone; one whose plugin
+// runs draws its frame only within the view, leaves key releases and keys it cannot name alone, and
+// sends no resize for a size the plugin already has.
+func TestACardViewBetweenRunsDrawsNothingAndTakesNothing(t *testing.T) {
+	v := &pluginView{card: "card"}
+	s := &cellsDrawn{w: 4, h: 1}
+	v.Render(s)
+	if len(s.cells) != 0 {
+		t.Fatalf("a card with no plugin running drew %q", s.cells)
+	}
+	if v.HandleEvent(key('a')) || v.HandleEvent(tuicore.FocusEvent{Gained: true}) {
+		t.Fatal("a card with no plugin running took an event")
+	}
+	v.resized()    // nothing to open or resize
+	v.closePanel() // no feature to close it through: nothing happens
+
+	r := &pluginRun{opened: true, frame: [][]pluginCell{{{text: "ab"}}, {{text: "cd"}}}}
+	v.attach(r)
+	v.Render(s)
+	if strings.Join(s.cells, "") != "ab" {
+		t.Fatalf("a one-row view drew %q, want its first row only", s.cells)
+	}
+	if v.HandleEvent(tuicore.KeyEvent{Kind: tuicore.KeyRelease, Code: 'a'}) {
+		t.Fatal("a key release was taken")
+	}
+	if _, ok := pluginKey(tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyMenu}); ok {
+		t.Fatal("a key the protocol has no name for was named")
+	}
+	v.laidW, v.laidH, v.sentW, v.sentH = 4, 1, 4, 1
+	v.resized() // the size the plugin has: nothing sent, which would need a link
+	v.detach(&pluginRun{})
+	if v.run != r {
+		t.Fatal("detaching another run left the view")
+	}
+	v.detach(r)
+	if v.run != nil {
+		t.Fatal("the view still shows a run that went")
+	}
 }
