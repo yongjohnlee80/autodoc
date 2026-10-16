@@ -589,10 +589,7 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 			return fmt.Errorf("%w: %s is under this machine's home: set it with scope \"machine\"", ErrInvalid, value)
 		}
 		if value != "" {
-			abs := m.absValue(kb, value)
-			if rel = relTo(kb, abs); isAbsValue(rel) {
-				return fmt.Errorf("%w: %s is not a path relative to the KB root %s", ErrInvalid, value, kb)
-			}
+			rel = relTo(kb, m.absValue(kb, value)) // absolute both, so always relative: "../…" outside the KB
 		}
 		return m.editKBFile(ctx, kb, func(sv *storeVars) error {
 			if slices.Contains(sv.Machine, name) && value != "" {
