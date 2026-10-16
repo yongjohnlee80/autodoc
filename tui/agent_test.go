@@ -178,6 +178,23 @@ func TestTheAgentStartsTheDefaultInItsOwnFolderToldAboutTheWorkspace(t *testing.
 	r.keys(t, esc())
 }
 
+// Desktop drops are ordinary pastes from the GUI backend. The currently focused
+// agent terminal must receive the quoted paths unchanged, without a focus switch.
+func TestTheFocusedAgentReceivesDroppedPathsAsAnOrdinaryPaste(t *testing.T) {
+	agent, _ := fakeAgent(t)
+	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "fake", Command: shellQuote(agent)}}, "fake")
+	r.leader(t, 'g')
+	r.s.WaitFor(t, "the agent's keyboard", func(string) bool { return r.focused("agentView") })
+	r.s.WaitForText(t, "started")
+	paths := "'/tmp/screen shot.png' /tmp/second.png"
+	r.keys(t, tuicore.PasteEvent{Text: paths})
+	if !r.focused("agentView") {
+		t.Fatal("pasting dropped paths changed keyboard focus")
+	}
+	r.keys(t, decltest.Type("\r")...)
+	r.s.WaitForText(t, "heard-"+paths)
+}
+
 // waitStored waits for the daemon's store to hold the default and the profiles: the TUI writes its
 // preferences after it shows them.
 func (d *daemon) waitStored(t *testing.T, def, profiles string) {
