@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -102,8 +103,8 @@ func TestABufferTabsMenu(t *testing.T) {
 	if s, _ := tabRow(onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows(tabID(b)) }), "buffer.tabs.save"); !s.Enabled {
 		t.Fatal("Save not offered for b.md, which is modified")
 	}
-	if rows := onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }); len(rows) != 1 {
-		t.Fatalf("the menu off a tab: %d rows, want Go to alone", len(rows))
+	if rows := onLoop(r, func() []widget.MenuItemModel { return r.h.bufferTabRows("") }); len(rows) != 3 {
+		t.Fatalf("the menu off a tab: %d rows, want New buffer, Open file and Go to", len(rows))
 	}
 
 	runTabRow(t, r, a, "buffer.tabs.goto."+tabID(a))
@@ -172,5 +173,37 @@ func TestBufferTabsAreToldApart(t *testing.T) {
 	}
 	if drafts != 2 {
 		t.Fatalf("tabs %q: want two numbered, modified drafts", labels)
+	}
+}
+
+// TestABufferTabsMenuMakesANewBuffer: New buffer shows a new, empty draft, the other buffers as they
+// were; Open file in a new buffer… shows a new one and File › Open, and the file chosen loads into
+// it, the buffer shown before keeping its file.
+func TestABufferTabsMenuMakesANewBuffer(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	a := bufferOn(r, "a.md")
+	count := func() int { return onLoop(r, func() int { return len(r.h.buffers) }) }
+	before := count()
+	runTabRow(t, r, a, "buffer.tabs.new")
+	r.s.WaitFor(t, "a new, empty buffer shown", func(string) bool {
+		return onLoop(r, func() bool { return !r.h.file.open && r.h.core.Value() == "" && r.h.active != a })
+	})
+	if count() != before+1 || bufferOn(r, "a.md") != a {
+		t.Fatalf("New buffer: %d buffers (want %d), a.md's kept %v", count(), before+1, bufferOn(r, "a.md") == a)
+	}
+
+	r.openByPicker(t, "a.md") // shown again: the empty draft stays
+	r.waitBuffer(t, "a.md")
+	runTabRow(t, r, a, "buffer.tabs.open")
+	r.s.WaitForText(t, "open a document")
+	r.keys(t, decltest.Type("b.md")...)
+	r.keys(t, enter())
+	r.waitFile(t, "b.md")
+	if bufferOn(r, "a.md") != a || onLoop(r, func() bool { return a.file.path != "a.md" }) {
+		t.Fatal("Open file in a new buffer… loaded over a.md's buffer")
 	}
 }

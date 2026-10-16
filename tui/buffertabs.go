@@ -11,10 +11,16 @@ import (
 
 // THE BUFFER TABS — the open buffers on the GUI editor's title bar (golib's Editor.Tabs, ADR
 // 1792076688 §4.7): a tab for each buffer, in opening order, the shown one active. A press shows a
-// buffer; a tab's menu (≡, a right press) has Go to › every buffer, then Save, Close and Close
-// others for the tab it was opened for, each asking about unsaved changes as the TUI's do; + opens
-// File › Open. The TUI has no title bar: its editor has no strip (bufferStrip is nil there), and :b
-// and the Buffers picker switch instead.
+// buffer; + makes a new, empty one. A tab's menu (≡, a right press) has New buffer, Open file in a
+// new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was opened
+// for, each asking about unsaved changes as the TUI's do. A tab is capped at bufferTabWidth cells;
+// tabs wider than the bar's share scroll between < and > (golib's TabStrip). The TUI has no title
+// bar: its editor has no strip (bufferStrip is nil there), and :b and the Buffers picker switch
+// instead.
+
+// bufferTabWidth is a buffer tab's widest, in cells, its padding included: a long name is cut to
+// an ellipsis there, and its menu's Go to › has it whole.
+const bufferTabWidth = 24
 
 // syncBufferTabs feeds the editor's strip the buffers as they are now, wiring it the first time
 // it is seen (a new editor, after a reload, is a new strip).
@@ -31,7 +37,8 @@ func (h *Host) syncBufferTabs() {
 			}
 		})
 		strip.SetMenu(h.bufferTabRows)
-		strip.SetActions(h.openPicker, nil)
+		strip.SetActions(h.newEmptyBuffer, nil)
+		strip.SetMaxTabWidth(bufferTabWidth)
 	}
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
@@ -93,8 +100,15 @@ func (h *Host) showBuffer(b *openBuffer) {
 	h.keep(h.p.Call("editor", "forceActiveFocus"))
 }
 
-// bufferTabRows is the menu of the tab id ("" off a tab, with none active): Go to › every buffer;
-// then, for its buffer, Save (while it is modified), Close and Close others.
+// newEmptyBuffer is the tabs' +: a new, empty buffer, shown, for the user to type in, name, or
+// open a file into (File › Open fills an empty, clean buffer rather than making another).
+func (h *Host) newEmptyBuffer() {
+	h.showBuffer(h.newBuffer())
+}
+
+// bufferTabRows is the menu of the tab id ("" off a tab, with none active): New buffer, Open file
+// in a new buffer… and Go to › every buffer; then, for its buffer, Save (while it is modified),
+// Close and Close others.
 func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 	goTo := make([]widget.MenuItemModel, 0, len(h.buffers))
 	for _, o := range h.buffers {
@@ -103,7 +117,12 @@ func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 	}
 	sub := widget.NewSubmenu("buffer.tabs.goto", "Go to", goTo)
 	sub.Enabled = len(goTo) > 0
-	rows := []widget.MenuItemModel{sub}
+	rows := []widget.MenuItemModel{
+		bufferTabRow("buffer.tabs.new", "&New buffer", h.newEmptyBuffer),
+		// File › Open: a file opens in a buffer of its own (an empty, clean one shown is filled instead)
+		bufferTabRow("buffer.tabs.open", "&Open file in a new buffer…", h.openPicker),
+		sub,
+	}
 	b := h.bufferOfTab(id)
 	if b == nil {
 		return rows
