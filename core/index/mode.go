@@ -3,6 +3,7 @@ package index
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"maps"
 	"path"
 	"path/filepath"
 	"slices"
@@ -17,9 +18,12 @@ type Mode struct {
 	// GraphOnly indexes the document's row, frontmatter, links and relations, and no chunks: it is
 	// never a lexical or semantic hit, and never embedded.
 	GraphOnly bool
-	// Store is the todo store the path lies in, nil for none: its tasks answer to the store's names,
-	// and their $VAR refs resolve through the store's variables.
+	// Store is the todo store the path lies in, nil for none: its tasks answer to the store's names.
 	Store *TodoStore
+	// Vars are the variables of the workspace the path belongs to (ADR 1792132105 §2.5): a $NAME ref
+	// of the document resolves through them. nil when the index is given none: a task's $NAME ref is
+	// then unresolved, and any other document's reads its root as the workspace root, as before.
+	Vars *Vars
 }
 
 // TodoStore is a todo store as the index reads its documents (ADR 1792015212 §2.4).
@@ -27,36 +31,63 @@ type TodoStore struct {
 	// ID is the store's stable id in the todo registry: a task answers to "#todo:<ID>/<task id>",
 	// so two stores' identical ids never meet.
 	ID string
-	// Vars are the store's variables' values (ADR 1792015069), by name; a name with no value here
-	// is left out. A $VAR ref of a task resolves through these, never the workspace root.
-	Vars map[string]string
+}
+
+// Vars are a workspace's variables' values, by name; a name with no value is left out. Make them
+// with NewVars, once for every path they serve.
+type Vars struct {
+	values map[string]string
+	fp     string
+}
+
+// NewVars are values as a mode's variables.
+func NewVars(values map[string]string) *Vars {
+	names := make([]string, 0, len(values))
+	for n, v := range values {
+		if v != "" {
+			names = append(names, n)
+		}
+	}
+	slices.Sort(names)
+	h := sha256.New()
+	vs := make(map[string]string, len(names))
+	for _, n := range names {
+		vs[n] = values[n]
+		h.Write([]byte(n + "=" + values[n] + "\n"))
+	}
+	return &Vars{values: vs, fp: hex.EncodeToString(h.Sum(nil))[:12]}
+}
+
+// Get is name's value, "" for none.
+func (v *Vars) Get(name string) string {
+	if v == nil {
+		return ""
+	}
+	return v.values[name]
+}
+
+// Equal reports whether v and o hold the same values.
+func (v *Vars) Equal(o *Vars) bool {
+	if v == nil || o == nil {
+		return v == o
+	}
+	return v.fp == o.fp && maps.Equal(v.values, o.values)
 }
 
 // version is what m adds to a document's indexer version: a path whose mode changes is indexed
-// again, its bytes unchanged, and so is a task whose store's variables change.
+// again, its bytes unchanged, and so is a document whose workspace's variables change.
 func (m Mode) version() string {
 	var b strings.Builder
 	if m.GraphOnly {
 		b.WriteString(";graph")
 	}
 	if m.Store != nil {
-		b.WriteString(";todo=" + m.Store.ID + ":" + m.Store.fingerprint())
+		b.WriteString(";todo=" + m.Store.ID)
+	}
+	if m.Vars != nil {
+		b.WriteString(";vars=" + m.Vars.fp)
 	}
 	return b.String()
-}
-
-// fingerprint is a short hash of the store's variables, names in order.
-func (t *TodoStore) fingerprint() string {
-	names := make([]string, 0, len(t.Vars))
-	for n := range t.Vars {
-		names = append(names, n)
-	}
-	slices.Sort(names)
-	h := sha256.New()
-	for _, n := range names {
-		h.Write([]byte(n + "=" + t.Vars[n] + "\n"))
-	}
-	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
 // mode is path p's mode: the workspace's Modes, or full and in no store without them.
@@ -84,25 +115,22 @@ const externalPrefix = "#file:"
 // tasks of the store by id.
 var storeRelations = []string{"blocked"}
 
-// taskRelations reads the relations of file p, a task of store t, whose index root is root
-// (absolute; "" for none known). They are read as any document's are, except:
-//   - a $VAR path resolves through the store's variables: inside the workspace it is looked up by
-//     its workspace path, outside it is an external link, and an unknown or unset variable is
-//     unresolved rather than read from the workspace root;
-//   - an absolute path is a workspace path, or an external link;
-//   - "blocked" names a task of the same store, by id.
-func taskRelations(doc *markdown.Document, p string, t *TodoStore, root string) []DocLink {
+// varRelations reads the relations of file p, whose workspace's variables are vars and whose index
+// root is root (absolute; "" for none known). They are read as extractRelations reads them, except:
+//   - a $NAME path resolves through vars: inside the workspace it is looked up by its workspace
+//     path, outside it is an external link, and an unknown or unset name is unresolved rather than
+//     read from the workspace root;
+//   - an absolute path is a workspace path, or an external link.
+func varRelations(doc *markdown.Document, p string, vars *Vars, root string) []DocLink {
 	var out []DocLink
 	for _, r := range chunk.Relations(doc, RelationFields) {
 		ref := chunk.ParseRef(r.Raw)
 		var abs string
 		switch {
 		case ref.Var != "":
-			v := t.Vars[ref.Var]
+			v := vars.Get(ref.Var)
 			if v == "" {
-				// unresolved: the variable's name keeps it from naming any document
-				out = append(out, DocLink{Raw: r.Raw, Name: "$" + ref.Var + "/" + ref.Target, Anchor: ref.Anchor,
-					Kind: r.Field, Keys: []string{"$" + ref.Var + "/" + ref.Target}})
+				out = append(out, unresolvedVar(r.Raw, ref, r.Field, true))
 				continue
 			}
 			abs = filepath.Join(v, ref.Target)
@@ -119,6 +147,24 @@ func taskRelations(doc *markdown.Document, p string, t *TodoStore, root string) 
 		}
 		out = append(out, DocLink{Raw: r.Raw, Name: externalPrefix + abs, Anchor: ref.Anchor, Kind: r.Field, Target: abs})
 	}
+	return out
+}
+
+// unresolvedVar is a $NAME ref whose name has no value: the name keeps it from naming any document.
+// A relation's names are its Keys; a body link has the one.
+func unresolvedVar(raw string, ref chunk.Ref, kind string, relation bool) DocLink {
+	name := "$" + ref.Var + "/" + ref.Target
+	l := DocLink{Raw: raw, Name: name, Anchor: ref.Anchor, Kind: kind}
+	if relation {
+		l.Keys = []string{name}
+	}
+	return l
+}
+
+// taskRelations reads the relations of file p, a task of store t, as varRelations does, and its
+// store's own: "blocked" names a task of the same store, by id.
+func taskRelations(doc *markdown.Document, p string, t *TodoStore, vars *Vars, root string) []DocLink {
+	out := varRelations(doc, p, vars, root)
 	for _, r := range chunk.Relations(doc, storeRelations) {
 		id := strings.TrimSpace(r.Raw)
 		if id == "" || strings.ContainsAny(id, " \t/") {

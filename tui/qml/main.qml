@@ -707,7 +707,7 @@ Window {
                                 }
                             }
                         }
-                        // the store's variables, the same from every route to it: each value and
+                        // the store's workspace's variables, the same from every route to it: each value and
                         // where it came from (todos_vars.go)
                         Tab {
                             title: "Variables"
@@ -787,7 +787,7 @@ Window {
                     Button { text: "Remove (&d)"; toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
                     Text { text: " "; visible: App.todoActStatus }
                     Button { id: todoAddButton; text: "&Add"; toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
-                    Button { text: "S&et"; toolTipText: "set the value, in the store's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
+                    Button { text: "S&et"; toolTipText: "set the value, in the KB's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
                     Text { text: " "; visible: App.todoActVarSet }
                     Button { text: "This &machine"; toolTipText: "set the value for this machine only (m)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarMachine() }
                     Text { text: " "; visible: App.todoActVarClear }

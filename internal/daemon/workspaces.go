@@ -64,8 +64,9 @@ type Workspaces struct {
 	// todoStores lists the todo registry (under mu), stores is what every workspace's modes read of
 	// it, and modes are the workspaces' graph_only settings by id (under mu): ADR 1792015212
 	todoStores  TodoStores
-	stores      atomic.Pointer[[]TodoStore]
-	storesDirty chan struct{} // TodoStoresChanged's signal to the reader, one pending at most
+	stores      atomic.Pointer[registry]
+	storesDirty chan struct{}     // TodoStoresChanged's signal to the reader, one pending at most
+	varsStamps  map[string]string // each variable file's size and modification time, the reader's alone
 	modes       map[int64]*modes
 }
 

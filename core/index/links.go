@@ -4,11 +4,13 @@ import (
 	"errors"
 	"net/url"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/dao"
 	"github.com/yongjohnlee80/golib/parse/markdown"
+	"github.com/yongjohnlee80/golib/search/chunk"
 
 	"github.com/yongjohnlee80/autodoc/core/store"
 )
@@ -56,8 +58,9 @@ var attachments = map[string]bool{
 // a file that is not a file. A wikilink names a file unless it names an attachment (a page may hold
 // dots: "Meeting 2024.05.01"); a markdown link, which names files of every kind (a KB links to its
 // code), only with ".md" or no extension. Either counts when eligible (nil: nothing) indexes it,
-// judged on the workspace path for a path, and on the name as written for a wikilink by name.
-func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) []DocLink {
+// judged on the workspace path for a path, and on the name as written for a wikilink by name. With
+// vars, a markdown link to $NAME/… resolves through them, as a relation does (varLink).
+func extractLinks(doc *markdown.Document, p string, eligible func(string) bool, vars *Vars, root string) []DocLink {
 	var out []DocLink
 	indexed := func(target string) bool { return eligible != nil && eligible(target) }
 	wikiFile := func(page string) bool { return !attachments[strings.ToLower(path.Ext(page))] || indexed(page) }
@@ -101,7 +104,12 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 				out = append(out, DocLink{Raw: string(doc.Source[c.Span.Start:c.Span.End]), Name: name, Anchor: anchor, Kind: kind})
 				continue
 			case markdown.KindLink:
-				if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
+				raw := string(doc.Source[c.Span.Start:c.Span.End])
+				if l, ok := varLink(raw, string(c.Dest), vars, root, targetsFile); ok {
+					if l.Name != "" {
+						out = append(out, l)
+					}
+				} else if target, anchor, ok := localTarget(p, string(c.Dest)); ok && targetsFile(target) {
 					out = append(out, DocLink{Raw: string(doc.Source[c.Span.Start:c.Span.End]), Name: target, Anchor: anchor, Kind: LinkMarkdown})
 				}
 			case markdown.KindImage:
@@ -114,6 +122,43 @@ func extractLinks(doc *markdown.Document, p string, eligible func(string) bool) 
 	}
 	walk(doc.Root)
 	return out
+}
+
+// varLink reads the destination dest of markdown link raw as a $NAME ref, with vars the variables of
+// the file's workspace and root its index root (ADR 1792132105 §2.5): inside root, the workspace path,
+// when targetsFile takes it; outside, an external link; an unknown or unset name, unresolved. ok is
+// false with no vars or for a destination that is no $NAME ref; a link ok with no Name is left out.
+func varLink(raw, dest string, vars *Vars, root string, targetsFile func(string) bool) (l DocLink, ok bool) {
+	if vars == nil || !strings.HasPrefix(dest, "$") {
+		return DocLink{}, false
+	}
+	var anchor string
+	if i := strings.IndexByte(dest, '#'); i >= 0 {
+		dest, anchor = dest[:i], dest[i+1:]
+	}
+	if d, err := url.PathUnescape(dest); err == nil {
+		dest = d
+	}
+	if a, err := url.PathUnescape(anchor); err == nil {
+		anchor = a
+	}
+	ref := chunk.ParseRef(dest)
+	if ref.Var == "" {
+		return DocLink{}, false
+	}
+	ref.Anchor = anchor
+	v := vars.Get(ref.Var)
+	if v == "" {
+		return unresolvedVar(raw, ref, LinkMarkdown, false), true
+	}
+	abs := filepath.Join(v, ref.Target)
+	if rel, in := inside(root, abs); in {
+		if !targetsFile(rel) {
+			return DocLink{}, true
+		}
+		return DocLink{Raw: raw, Name: rel, Anchor: anchor, Kind: LinkMarkdown}, true
+	}
+	return DocLink{Raw: raw, Name: externalPrefix + abs, Anchor: anchor, Kind: LinkMarkdown, Target: abs}, true
 }
 
 // localTarget reads a markdown link's destination as a workspace path: relative to the file's

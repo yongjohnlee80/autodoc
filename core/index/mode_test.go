@@ -7,12 +7,14 @@ import (
 	"testing"
 )
 
-// modes is a test's Modes: graph-only by path prefix, and the todo stores by directory, each
-// changeable while the indexer runs.
+// modes is a test's Modes: graph-only by path prefix, the todo stores by directory, and the
+// workspaces' variables by the longest directory prefix ("" for every path), each changeable while
+// the indexer runs.
 type modes struct {
 	mu     sync.Mutex
-	graph  []string              // path prefixes indexed graph-only
-	stores map[string]*TodoStore // by directory prefix ("a/.todo-list/")
+	graph  []string                     // path prefixes indexed graph-only
+	stores map[string]*TodoStore        // by directory prefix ("a/.todo-list/")
+	vars   map[string]map[string]string // by directory prefix
 }
 
 func (m *modes) mode(p string) Mode {
@@ -27,6 +29,12 @@ func (m *modes) mode(p string) Mode {
 	for dir, st := range m.stores {
 		if strings.HasPrefix(p, dir) {
 			md.Store = st
+		}
+	}
+	best := -1
+	for dir, vs := range m.vars {
+		if strings.HasPrefix(p, dir) && len(dir) > best {
+			best, md.Vars = len(dir), NewVars(vs)
 		}
 	}
 	return md
@@ -123,19 +131,22 @@ func TestBlockedNamesATaskOfItsOwnStore(t *testing.T) {
 	eq(t, "a note's blocked", e.kinds("notes/n.md"), nil)
 }
 
-// TestATasksVariableRefs (ADR 1792015212 §2.4): a task's $VAR ref resolves through its store's
-// variables: a path in the workspace is that document, one outside it an external link, which is
-// not unresolved; an unknown variable is unresolved, never the workspace root. An absolute ref is
-// read the same way. A document in no store keeps today's reading of $VAR, root-relative.
-func TestATasksVariableRefs(t *testing.T) {
-	m := &modes{stores: map[string]*TodoStore{"kb/.todo-list/": {ID: "S",
-		Vars: map[string]string{"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/src/lm"}}}}
+// TestEveryDocumentsVariableRefs (ADR 1792132105 §2.5, generalizing ADR 1792015212 §2.4): a
+// document's $NAME ref, a relation or a markdown link, task or note, resolves through the variables
+// of the workspace it belongs to: a path in the indexed workspace is that document, one outside it an
+// external link, which is not unresolved; an unknown name is unresolved, never the workspace root.
+// An absolute ref is read the same way. A nested workspace's document reads its own workspace's
+// $KB_ROOT, not the indexing one's.
+func TestEveryDocumentsVariableRefs(t *testing.T) {
+	m := &modes{stores: map[string]*TodoStore{"kb/.todo-list/": {ID: "S"}},
+		vars: map[string]map[string]string{"": {"KB_ROOT": "/ws"}, "kb/": {"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/src/lm"}}}
 	e := newEnv(t, options{Modes: m.mode, Root: "/ws"})
 	// z.md at the root: an unknown variable read as the root would reach it
 	e.put("kb/adrs/a.md", "a", "kb/reviews/r.md", "r", "adrs/b.md", "b", "z.md", "the root's z",
 		"kb/.todo-list/open/t.md", "---\nadr:\n  - $KB_ROOT/adrs/a.md\n  - $PROJECT_ROOT/lm/x.md\n  - $NOPE/z.md\n"+
 			"  - /ws/kb/adrs/a.md\n  - /elsewhere/q.md\nreview:\n  - $KB_ROOT/reviews/r.md\n---\nt\n",
-		"notes/n.md", "---\nrelated: [$KB_ROOT/adrs/b.md]\n---\nn\n")
+		"notes/n.md", "---\nrelated: [$KB_ROOT/adrs/b.md, $NOPE/z.md]\n---\nn\n",
+		"kb/notes/m.md", "---\nrelated: [$KB_ROOT/adrs/a.md]\n---\nsee [x]($PROJECT_ROOT/lm/x.md) and [r]($KB_ROOT/reviews/r.md#top)\n")
 	eq(t, "the task's", e.kinds("kb/.todo-list/open/t.md"), []string{
 		"adr $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
 		"adr $PROJECT_ROOT/lm/x.md -> -",
@@ -144,24 +155,35 @@ func TestATasksVariableRefs(t *testing.T) {
 		"adr /elsewhere/q.md -> -",
 		"review $KB_ROOT/reviews/r.md -> kb/reviews/r.md",
 	})
-	ls, err := e.store.Links(context.Background(), "kb/.todo-list/open/t.md", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	eq(t, "a note of the indexed workspace", e.kinds("notes/n.md"), []string{
+		"related $KB_ROOT/adrs/b.md -> adrs/b.md",
+		"related $NOPE/z.md -> -",
+	})
+	eq(t, "a note of the nested workspace", e.kinds("kb/notes/m.md"), []string{
+		"markdown [x]($PROJECT_ROOT/lm/x.md) -> -",
+		"markdown [r]($KB_ROOT/reviews/r.md#top) -> kb/reviews/r.md",
+		"related $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
+	})
 	var external []string
-	for _, l := range ls {
-		if l.External != "" {
-			external = append(external, l.Raw+" => "+l.External)
+	for _, p := range []string{"kb/.todo-list/open/t.md", "kb/notes/m.md"} {
+		ls, err := e.store.Links(context.Background(), p, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range ls {
+			if l.External != "" {
+				external = append(external, l.Raw+" => "+l.External)
+			}
 		}
 	}
-	eq(t, "external", external, []string{"$PROJECT_ROOT/lm/x.md => /src/lm/lm/x.md", "/elsewhere/q.md => /elsewhere/q.md"})
-	eq(t, "unresolved: the unknown variable alone", e.unresolved(), []string{"kb/.todo-list/open/t.md $NOPE/z.md missing"})
-	eq(t, "a note in no store", e.kinds("notes/n.md"), []string{"related $KB_ROOT/adrs/b.md -> adrs/b.md"})
+	eq(t, "external", external, []string{"$PROJECT_ROOT/lm/x.md => /src/lm/lm/x.md", "/elsewhere/q.md => /elsewhere/q.md",
+		"[x]($PROJECT_ROOT/lm/x.md) => /src/lm/lm/x.md"})
+	eq(t, "unresolved: the unknown variable alone", e.unresolved(), []string{
+		"kb/.todo-list/open/t.md $NOPE/z.md missing", "notes/n.md $NOPE/z.md missing"})
 
-	// the store's variables changed: its tasks are indexed again, no file changed
+	// the workspace's variables changed: its documents are indexed again, no file changed
 	m.set(func(m *modes) {
-		m.stores["kb/.todo-list/"] = &TodoStore{ID: "S", Vars: map[string]string{"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/ws",
-			"NOPE": "/ws/kb"}}
+		m.vars["kb/"] = map[string]string{"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/ws", "NOPE": "/ws/kb"}
 	})
 	e.put("lm/x.md", "x", "kb/z.md", "z")
 	e.revalidate(func() bool {
@@ -172,6 +194,21 @@ func TestATasksVariableRefs(t *testing.T) {
 			"adr /ws/kb/adrs/a.md -> kb/adrs/a.md",
 			"adr /elsewhere/q.md -> -",
 			"review $KB_ROOT/reviews/r.md -> kb/reviews/r.md",
+		}, "|") && strings.Join(e.kinds("kb/notes/m.md"), "|") == strings.Join([]string{
+			"markdown [x]($PROJECT_ROOT/lm/x.md) -> lm/x.md",
+			"markdown [r]($KB_ROOT/reviews/r.md#top) -> kb/reviews/r.md",
+			"related $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
 		}, "|")
+	})
+	// the other workspace's documents kept theirs
+	eq(t, "the indexed workspace's note", e.kinds("notes/n.md"), []string{
+		"related $KB_ROOT/adrs/b.md -> adrs/b.md",
+		"related $NOPE/z.md -> -",
+	})
+
+	// with no variables given, a note's $NAME root is the workspace root, as before ADR 1792132105
+	m.set(func(m *modes) { m.vars = nil })
+	e.revalidate(func() bool {
+		return strings.Join(e.kinds("notes/n.md"), "|") == "related $KB_ROOT/adrs/b.md -> adrs/b.md|related $NOPE/z.md -> z.md"
 	})
 }

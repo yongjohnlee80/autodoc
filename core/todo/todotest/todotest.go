@@ -281,14 +281,20 @@ func (j *Journal) apply(e todo.Edit) {
 }
 
 func copySettings(s todo.Settings) todo.Settings {
-	var mv map[string]map[string]string
-	if s.MachineVars != nil {
-		mv = make(map[string]map[string]string, len(s.MachineVars))
-		for id, vals := range s.MachineVars {
-			mv[id] = maps.Clone(vals)
-		}
+	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars),
+		MachineVars: copyNested(s.MachineVars), WorkspaceVars: copyNested(s.WorkspaceVars)}
+}
+
+// copyNested is a deep copy of a two-level map; nil stays nil.
+func copyNested(m map[string]map[string]string) map[string]map[string]string {
+	if m == nil {
+		return nil
 	}
-	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars), MachineVars: mv}
+	out := make(map[string]map[string]string, len(m))
+	for k, vals := range m {
+		out[k] = maps.Clone(vals)
+	}
+	return out
 }
 
 // Disk is a todo.Filesystems over one memfs: the whole disk, "/" its root. Paths are canonical as

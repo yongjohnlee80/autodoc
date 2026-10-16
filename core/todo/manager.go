@@ -46,7 +46,8 @@ type Manager struct {
 	stores       map[string]*store // open stores, by id
 	blocked      map[string]string // store ids an ambiguous store move made read-only, and why
 	movesSettled map[string]bool   // store ids whose interrupted store moves were settled
-	varsErr      map[string]string // store ids whose variable file was last refused, and why
+	varsErr      map[string]string // variable files last refused, and why, by owner (a store id, "kb:<root>", ...)
+	folded       map[string]bool   // workspace roots whose stores' old variable files are all carried (fold)
 	// varsMu serializes a store's or this machine's set_var whole: a machine value is two writes
 	// (the file's declaration, then the value) and a failure's undo, which another set_var must
 	// never land between
@@ -222,7 +223,8 @@ func (m *Manager) resolve(ctx context.Context, at At) (where, error) {
 	return w, nil
 }
 
-// newStore records the store at path with a fresh id, unless another call just did.
+// newStore records the store at path with a fresh id, unless another call just did, and the workspace
+// it belongs to: the deepest one containing it (ADR 1792132105 §2.4).
 func (m *Manager) newStore(ctx context.Context, path string) (StoreRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -236,7 +238,7 @@ func (m *Manager) newStore(ctx context.Context, path string) (StoreRecord, error
 		if _, err := rand.Read(b[:]); err != nil {
 			return err
 		}
-		rec = StoreRecord{ID: hex.EncodeToString(b[:]), Path: path, LastUse: m.now()}
+		rec = StoreRecord{ID: hex.EncodeToString(b[:]), Path: path, KB: m.containing(path), LastUse: m.now()}
 		if s.Stores == nil {
 			s.Stores = map[string]StoreRecord{}
 		}
@@ -362,7 +364,10 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 	}
 	var out []StoreInfo
 	for _, rec := range st.Stores {
-		info := StoreInfo{ID: rec.ID, Path: rec.Path, Claimed: rec.Claimed, LastUse: rec.LastUse, Roots: []string{}}
+		info := StoreInfo{ID: rec.ID, Path: rec.Path, Claimed: rec.Claimed, LastUse: rec.LastUse, Roots: []string{}, KB: rec.KB}
+		if info.KB == "" {
+			info.KB = m.containing(rec.Path) // recorded at the next start (MigrateVars); a read writes nothing
+		}
 		for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
 			rr := st.Roots[root]
 			if rr.Override == rec.Path || (rr.Override == "" && root+"/"+todoDir == rec.Path) {

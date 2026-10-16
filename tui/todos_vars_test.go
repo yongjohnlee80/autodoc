@@ -7,15 +7,16 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// varsStore is scriptedStore with todos.vars answered: a derived built-in, a variable from the
-// store's file and a machine-only one with no value here.
+// varsStore is scriptedStore with todos.vars answered: a derived built-in, a variable from the KB's
+// file, a machine-only one with no value here, and one a migration holds in conflict.
 func varsStore(claimed bool) *scriptedCore {
 	s := scriptedStore(claimed)
 	s.answers["todos.vars"] = func([]any) (any, error) {
 		return []any{
 			map[string]any{"name": "KB_ROOT", "value": "/kb", "builtin": true, "derived": "/kb", "source": "derived"},
-			map[string]any{"name": "PROJ", "value": "/src/p", "source": "store"},
+			map[string]any{"name": "PROJ", "value": "/src/p", "source": "kb"},
 			map[string]any{"name": "DUMPS", "machine": true},
+			map[string]any{"name": "P", "source": "conflict", "conflict": true},
 		}, nil
 	}
 	return s
@@ -32,9 +33,10 @@ func varRows(v *todos) []string {
 	return out
 }
 
-// The Variables tab (6) lists the store's variables as todos.vars answers them, each value and
-// where it came from; the task actions hide there and the variable actions show. e sets the value
-// under the cursor in the store's file (a machine-only name: for this machine), m for this machine,
+// The Variables tab (6) lists the store's workspace's variables as todos.vars answers them, each value
+// and where it came from, or its conflict; the task actions hide there and the variable actions show.
+// e sets the value under the cursor in the KB's file (a machine-only name: for this machine), m for
+// this machine,
 // a adds NAME=value to the file, d clears a value set here (asked first). [ ] reach it round.
 func TestTheVariablesTab(t *testing.T) {
 	s := varsStore(true)
@@ -44,26 +46,31 @@ func TestTheVariablesTab(t *testing.T) {
 	if !s.called("todos.vars[") {
 		t.Fatalf("the tab did not read todos.vars: %v", s.calls)
 	}
-	if got := strings.Join(varRows(v), " | "); got != "$KB_ROOT derived /kb | $PROJ store /src/p | $DUMPS machine (set per machine: none here)" {
+	if got := strings.Join(varRows(v), " | "); got != "$KB_ROOT derived /kb | $PROJ kb /src/p | $DUMPS machine (set per machine: none here) | "+
+		"$P conflict (conflict: set it in the KB's file, or machine-only)" {
 		t.Errorf("rows %q", got)
 	}
 	if s.set["App.todoOnVars"] != true || s.set["App.todoActStatus"] != false || s.set["App.todoActAdd"] != false ||
 		s.set["App.todoActVarSet"] != true || s.set["App.todoActVarAdd"] != true {
 		t.Errorf("actions on the tab: %v", s.set)
 	}
-	if d, _ := s.set["App.todoDetail"].(string); !strings.Contains(d, "## $KB_ROOT") || !strings.Contains(d, "derived from the store's place: /kb") {
+	if d, _ := s.set["App.todoDetail"].(string); !strings.Contains(d, "## $KB_ROOT") || !strings.Contains(d, "derived from the workspace: /kb") {
 		t.Errorf("details %q", d)
 	}
 	if s.set["App.todoActVarClear"] != false {
 		t.Error("a derived value offers to be cleared")
 	}
 
-	v.varMoved(1) // $PROJ, from the store's file
+	v.varMoved(3) // $P, in conflict: nothing set here to clear, and the details say what settles it
+	if d, _ := s.set["App.todoDetail"].(string); s.set["App.todoActVarClear"] != false || !strings.Contains(d, "in conflict") {
+		t.Errorf("a conflict: clear %v, details %q", s.set["App.todoActVarClear"], d)
+	}
+	v.varMoved(1) // $PROJ, from the KB's file
 	if s.set["App.todoActVarClear"] != true {
-		t.Error("a value from the store's file offers no clear")
+		t.Error("a value from the KB's file offers no clear")
 	}
 	v.enter()
-	if s.opened[len(s.opened)-1] != "todoVar" || !strings.Contains(s.set["App.todoVarTitle"].(string), "the store's file") ||
+	if s.opened[len(s.opened)-1] != "todoVar" || !strings.Contains(s.set["App.todoVarTitle"].(string), "the KB's file") ||
 		s.set["App.todoVarText"] != "/src/p" {
 		t.Fatalf("Enter on a variable: opened %v, %v", s.opened, s.set)
 	}

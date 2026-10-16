@@ -116,6 +116,9 @@ type StoreInfo struct {
 	Roots   []string  `json:"roots"`
 	Claimed bool      `json:"claimed"`
 	LastUse time.Time `json:"last_use"`
+	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4): recorded, or else
+	// the deepest containing it; "" for none.
+	KB string `json:"kb,omitempty"`
 }
 
 // Var is one variable a ref may start with: $KB_ROOT, $WORKSPACE, $HOME, or a user's.
@@ -123,9 +126,12 @@ type Var struct {
 	Name    string `json:"name"`
 	Value   string `json:"value,omitempty"` // the effective value; "" for none here
 	Builtin bool   `json:"builtin"`
-	Derived string `json:"derived,omitempty"` // a built-in's value from the store's location, before overrides
-	Source  string `json:"source,omitempty"`  // where Value came from: machine, store, derived, global or env
-	Machine bool   `json:"machine,omitempty"` // declared machine-only by the store's file
+	Derived string `json:"derived,omitempty"` // a built-in's derived value, before overrides
+	Source  string `json:"source,omitempty"`  // where Value came from: machine, kb, derived, global or env; conflict for a held name
+	Machine bool   `json:"machine,omitempty"` // declared machine-only by the KB's file
+	// Conflict is a name a pending migration holds in conflict: unresolved unless this machine's row
+	// sets it, until a KB-file value or a machine-only declaration settles it (ADR 1792132105 §2.7).
+	Conflict bool `json:"conflict,omitempty"`
 }
 
 // ChangesPage is a consumer's next changes, or a resync: the consumer was unregistered while it

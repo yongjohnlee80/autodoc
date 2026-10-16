@@ -25,6 +25,11 @@ const protocol = 20
 // protocolMigrateRefs is the protocol todos.migrate_refs arrived in (ADR 1792015069).
 const protocolMigrateRefs = 22
 
+// protocolWorkspaceVars is the protocol variables moved to the workspace in (ADR 1792132105):
+// workspace.vars, workspace.set_var, workspace.of and todos.set_kb; a variable's source "kb" and its
+// conflict. A session below it reads "store" for "kb".
+const protocolWorkspaceVars = 24
+
 // Name is the module's name: its verbs are todos.*.
 func (m *Manager) Name() string { return "todos" }
 
@@ -132,9 +137,34 @@ type (
 	setVarParams struct {
 		Name  string     `param:"name"`
 		Value string     `param:"value" doc:"\"\" removes it"`
-		Opts  SetVarOpts `param:"opts,optional" doc:"{at, scope}: scope global (the default without at), store (the store's .autodoc-vars.toml, the default with at) or machine (this machine's value for the store)"`
+		Opts  SetVarOpts `param:"opts,optional" doc:"{at, scope}: scope global (the default without at), store (the at's store's workspace's KB file, a path relative to the KB root; the default with at) or machine (this machine's value for that workspace)"`
+	}
+	wsVarsParams struct {
+		Workspace string `param:"workspace"`
+	}
+	wsSetVarParams struct {
+		Workspace string `param:"workspace"`
+		Name      string `param:"name"`
+		Value     string `param:"value" doc:"\"\" removes it"`
+		Opts      struct {
+			Scope       string `json:"scope,omitempty"`
+			MachineOnly bool   `json:"machine_only,omitempty"`
+		} `param:"opts,optional" doc:"{scope, machine_only}: scope machine (this machine's absolute value; the default) or kb (the KB's .autodoc-vars.toml, stored relative to the KB root); machine_only with scope machine also declares the name machine-only in the KB's file, so other machines report it as a value to set and a migration conflict on it is settled"`
+	}
+	ofParams struct {
+		Path string `param:"path" doc:"an absolute file path"`
+	}
+	setKBParams struct {
+		At        At     `param:"at"`
+		Workspace string `param:"workspace" doc:"the workspace the store belongs to from now on"`
 	}
 )
+
+// Owned is the workspace a file belongs to (workspace.of): "" for none.
+type Owned struct {
+	Workspace string `json:"workspace,omitempty"`
+	Root      string `json:"root,omitempty"`
+}
 
 // none is the result of a verb that answers nothing.
 type none = any
@@ -169,7 +199,7 @@ func (m *Manager) Verbs() []module.Verb {
 			"Where an at's store is, and whether the daemon may write it."),
 			func(ctx context.Context, p atParams) (Resolved, error) { return m.Resolve(ctx, p.At) }),
 		module.Handle(read("todos.open", "{store_id, store, scaffolded: false}",
-			"Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's own.", CodeNotAStore),
+			"Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's workspace's.", CodeNotAStore),
 			func(ctx context.Context, p openParams) (Opened, error) { return m.Open(ctx, p.At, p.Opts) }),
 		module.Handle(write("todos.scaffold", "{store_id, store, scaffolded}",
 			"Creates the at's .todo-list and its buckets.", agent, append(writes, CodeExists)...),
@@ -247,22 +277,47 @@ func (m *Manager) Verbs() []module.Verb {
 			func(ctx context.Context, p migrateParams) (MigrateResult, error) {
 				return m.MigrateRefs(ctx, p.At, p.Opts)
 			}),
-		module.Handle(read("todos.vars", "[{name, value?, builtin, derived?, source?, machine?}]",
-			"The variables an at's store's refs may start with, the same from every route to the store: each effective value and its source."),
-			func(ctx context.Context, p atParams) ([]Var, error) { return m.Vars(ctx, p.At) }),
+		module.Handle(read("todos.vars", "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
+			"The variables an at's store's refs may start with: its workspace's, the same from every route to the store; each effective value and its source."),
+			func(ctx context.Context, p atParams) ([]Var, error) {
+				vars, err := m.Vars(ctx, p.At)
+				return compatVars(ctx, vars), err
+			}),
 		module.Handle(quiet("todos.set_var", module.EffectSettings, "nil",
-			"Sets or removes a variable: globally, in an at's store's file, or for this machine; a store or machine value may override a built-in.",
+			"Sets or removes a variable: globally, in an at's store's workspace's KB file, or for this machine; a KB or machine value may override a built-in.",
 			user, CodeInvalid, CodeNotWritable, CodeUnclaimed),
 			func(ctx context.Context, p setVarParams) (none, error) {
 				return nil, m.SetVar(ctx, p.Name, p.Value, p.Opts)
 			}),
+		module.Handle(read("workspace.vars", "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
+			"A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source."),
+			func(ctx context.Context, p wsVarsParams) ([]Var, error) { return m.WorkspaceVars(ctx, p.Workspace) }),
+		module.Handle(quiet("workspace.set_var", module.EffectSettings, "nil",
+			"Sets or removes a workspace's variable: this machine's value (scope machine, absolute) or the KB's (scope kb, relative to the KB root, carried by git); machine_only declares the name machine-only in the KB's file.",
+			user, CodeInvalid),
+			func(ctx context.Context, p wsSetVarParams) (none, error) {
+				return nil, m.SetVar(ctx, p.Name, p.Value, SetVarOpts{Workspace: p.Workspace, Scope: p.Opts.Scope, MachineOnly: p.Opts.MachineOnly})
+			}),
+		module.Handle(read("workspace.of", "{workspace?, root?}",
+			"The workspace a file belongs to, the owner its refs resolve with: a todo store's file, the store's workspace; any other file, the deepest workspace containing it; none otherwise."),
+			func(ctx context.Context, p ofParams) (Owned, error) {
+				ws, root, err := m.Owner(ctx, p.Path)
+				return Owned{Workspace: ws, Root: root}, err
+			}),
+		module.Handle(settings(write("todos.set_kb", "nil",
+			"Records the workspace an at's store belongs to: links a store outside every workspace, or moves one; its refs resolve with that workspace's variables.",
+			user, CodeInvalid)),
+			func(ctx context.Context, p setKBParams) (none, error) { return nil, m.SetKB(ctx, p.At, p.Workspace) }),
 	}
 	for i := range verbs {
 		if verbs[i].Event != nil {
 			verbs[i].Events = changedEvent
 		}
-		if verbs[i].Verb == "todos.migrate_refs" {
+		switch verbs[i].Verb {
+		case "todos.migrate_refs":
 			verbs[i].Since = protocolMigrateRefs
+		case "workspace.vars", "workspace.set_var", "workspace.of", "todos.set_kb":
+			verbs[i].Since = protocolWorkspaceVars
 		}
 	}
 	return verbs
@@ -290,4 +345,18 @@ func changedEvent(_ context.Context, params []any, result any) []module.Event {
 		}
 	}
 	return []module.Event{{Kind: "todos.changed", Workspace: at.Workspace, Detail: detail}}
+}
+
+// compatVars is vars as a session below protocolWorkspaceVars reads them: a KB-file value's source is
+// "store", as the store's own file's was.
+func compatVars(ctx context.Context, vars []Var) []Var {
+	if p := module.ProtocolFrom(ctx); p == 0 || p >= protocolWorkspaceVars {
+		return vars
+	}
+	for i := range vars {
+		if vars[i].Source == "kb" {
+			vars[i].Source = "store"
+		}
+	}
+	return vars
 }

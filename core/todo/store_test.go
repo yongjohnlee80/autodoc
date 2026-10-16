@@ -190,7 +190,7 @@ func TestConfinement(t *testing.T) {
 	// the store's own KB_ROOT: refs resolve there, nothing is written there
 	e.must(func() error { _, err := e.m.Register(ctx, "/src/other"); return err }())
 	e.must(e.m.Claim(ctx, other))
-	e.must(e.m.SetVar(ctx, "KB_ROOT", "/kb", todo.SetVarOpts{At: &other}))
+	e.must(e.m.SetKB(ctx, other, "kb"))
 	task, err := e.m.Add(ctx, other, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/x.md"}})
 	if err != nil || task.ADR[0] != "$KB_ROOT/adrs/x.md" || !e.exists("/src/other/.todo-list/open/"+task.ID+".md") ||
 		e.exists("/kb/.todo-list/open/"+task.ID+".md") {

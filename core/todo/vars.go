@@ -9,8 +9,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
-// Builtin variable names. They are derived from the store's location (storevars.go); a store's
-// variable file or this machine may override them, a global user var may not.
+// Builtin variable names: $KB_ROOT is the workspace's root and $HOME the daemon user's home
+// (storevars.go). A KB's file or this machine may override them, a global user var may not.
+// VarWorkspace is AutoVim's retired $WORKSPACE (ADR 1792132105 §2.6): an ordinary name now, unset
+// unless a person sets it, which todos.migrate_refs rewrites to $PROJECT_ROOT.
 const (
 	VarKBRoot    = "KB_ROOT"
 	VarWorkspace = "WORKSPACE"
@@ -25,19 +27,20 @@ var (
 	leadSlashes = regexp.MustCompile(`^/+`)
 )
 
-func isBuiltin(name string) bool {
-	return name == VarKBRoot || name == VarWorkspace || name == VarProjectRoot || name == VarHome
-}
+func isBuiltin(name string) bool { return name == VarKBRoot || name == VarHome }
 
 // scope is what a store's refs resolve against, the same from every route to the store: its
 // built-ins and its other variables, each the first of this machine's value, the store's file, the
 // derived value and a global user var (Manager.scope), then the environment.
 type scope struct {
 	kbRoot, workspace, projectRoot, home string
-	user                                 map[string]string // the effective variables that are not built in
-	machine                              map[string]bool   // the names the store's file declares per machine
-	env                                  func(string) string
-	exists                               func(string) bool
+	// storeHome is the store's parent: what the daemon derived $WORKSPACE as before it was retired
+	// (ADR 1792132105 §2.6), read only to tell where a Lua-era $WORKSPACE ref exists
+	storeHome string
+	user      map[string]string // the effective variables that are not built in
+	machine   map[string]bool   // the names the store's file declares per machine
+	env       func(string) string
+	exists    func(string) bool
 	// read and list are a small file's content and a directory's entry names, by absolute path;
 	// withExists gives them with exists. ok is false for what cannot be read.
 	read func(string) ([]byte, bool)

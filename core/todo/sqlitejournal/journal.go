@@ -85,12 +85,13 @@ const (
 	tcKBRoot       todoCol = "kb_root"
 	tcLastResolved todoCol = "last_resolved"
 	tcValue        todoCol = "value"
+	tcKB           todoCol = "kb"
 )
 
 // The rows, as the tables hold them.
 type (
 	todoStoreRow struct {
-		ID, Path                        string
+		ID, Path, KB                    string
 		Claimed                         int64
 		ClaimedAt, LastUse, RefreshedAt *int64
 	}
@@ -100,6 +101,7 @@ type (
 	}
 	todoVarRow      struct{ Name, Value string }
 	todoStoreVarRow struct{ Store, Name, Value string }
+	todoWSVarRow    struct{ KB, Name, Value string }
 	todoChangeRow   struct {
 		Seq                        int64
 		Store, ID, Kind, Op, State string
@@ -140,6 +142,7 @@ type todoTables struct {
 	roots     *todoSchema[*todoRootRow]
 	vars      *todoSchema[*todoVarRow]
 	storeVars *todoSchema[*todoStoreVarRow]
+	wsVars    *todoSchema[*todoWSVarRow]
 	changes   *todoSchema[*todoChangeRow]
 	snapshot  *todoSchema[*todoSnapRow]
 	consumers *todoSchema[*todoConsumerRow]
@@ -176,6 +179,7 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcClaimedAt:   func(r *todoStoreRow) any { return &r.ClaimedAt },
 			tcLastUse:     func(r *todoStoreRow) any { return &r.LastUse },
 			tcRefreshedAt: func(r *todoStoreRow) any { return &r.RefreshedAt },
+			tcKB:          func(r *todoStoreRow) any { return &r.KB },
 		}, []todoCol{tcID}, map[todoSort]string{byKey: `"todo_store"."id"`}),
 		roots: todoTable(c, "todo_root", map[todoCol]func(*todoRootRow) any{
 			tcRoot:         func(r *todoRootRow) any { return &r.Root },
@@ -193,6 +197,11 @@ func newTodoTables(c dao.DataConn) *todoTables {
 			tcName:  func(r *todoStoreVarRow) any { return &r.Name },
 			tcValue: func(r *todoStoreVarRow) any { return &r.Value },
 		}, []todoCol{tcStore, tcName}, map[todoSort]string{byKey: `"todo_store_var"."name"`}),
+		wsVars: todoTable(c, "todo_workspace_var", map[todoCol]func(*todoWSVarRow) any{
+			tcKB:    func(r *todoWSVarRow) any { return &r.KB },
+			tcName:  func(r *todoWSVarRow) any { return &r.Name },
+			tcValue: func(r *todoWSVarRow) any { return &r.Value },
+		}, []todoCol{tcKB, tcName}, map[todoSort]string{byKey: `"todo_workspace_var"."name"`}),
 		changes: todoTable(c, "todo_change", map[todoCol]func(*todoChangeRow) any{
 			tcSeq:      func(r *todoChangeRow) any { return &r.Seq },
 			tcStore:    func(r *todoChangeRow) any { return &r.Store },
@@ -516,7 +525,7 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 	}
 	for _, r := range stores {
 		s.Stores[r.ID] = todo.StoreRecord{ID: r.ID, Path: r.Path, Claimed: r.Claimed != 0,
-			ClaimedAt: fromNanos(r.ClaimedAt), LastUse: fromNanos(r.LastUse), RefreshedAt: fromNanos(r.RefreshedAt)}
+			ClaimedAt: fromNanos(r.ClaimedAt), LastUse: fromNanos(r.LastUse), RefreshedAt: fromNanos(r.RefreshedAt), KB: r.KB}
 	}
 	roots, err := t.roots.On(tx).Select()
 	if err != nil {
@@ -534,6 +543,9 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 		s.Vars[r.Name] = r.Value
 	}
 	svars, err := t.storeVars.On(tx).Select()
+	if err != nil {
+		return s, err
+	}
 	for _, r := range svars {
 		if s.MachineVars == nil {
 			s.MachineVars = map[string]map[string]string{}
@@ -543,6 +555,16 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 		}
 		s.MachineVars[r.Store][r.Name] = r.Value
 	}
+	wvars, err := t.wsVars.On(tx).Select()
+	for _, r := range wvars {
+		if s.WorkspaceVars == nil {
+			s.WorkspaceVars = map[string]map[string]string{}
+		}
+		if s.WorkspaceVars[r.KB] == nil {
+			s.WorkspaceVars[r.KB] = map[string]string{}
+		}
+		s.WorkspaceVars[r.KB][r.Name] = r.Value
+	}
 	return s, err
 }
 
@@ -551,7 +573,7 @@ func loadSettings(tx *dao.Transaction, t *todoTables) (todo.Settings, error) {
 func saveSettings(tx *dao.Transaction, t *todoTables, before, after todo.Settings) error {
 	err := syncRecords(after.Stores, before.Stores, func(id string, r todo.StoreRecord) error {
 		return t.stores.On(tx).SetMap(map[todoCol]any{tcID: id, tcPath: r.Path, tcClaimed: flag(r.Claimed),
-			tcClaimedAt: nanos(r.ClaimedAt), tcLastUse: nanos(r.LastUse), tcRefreshedAt: nanos(r.RefreshedAt)}).Upsert()
+			tcClaimedAt: nanos(r.ClaimedAt), tcLastUse: nanos(r.LastUse), tcRefreshedAt: nanos(r.RefreshedAt), tcKB: r.KB}).Upsert()
 	}, func(id string) error { return t.stores.On(tx).With(tcID, id).Delete() })
 	if err != nil {
 		return err
@@ -569,16 +591,27 @@ func saveSettings(tx *dao.Transaction, t *todoTables, before, after todo.Setting
 	if err != nil {
 		return err
 	}
-	return syncRecords(flatStoreVars(after.MachineVars), flatStoreVars(before.MachineVars), func(k, value string) error {
+	err = syncRecords(flatStoreVars(after.MachineVars), flatStoreVars(before.MachineVars), func(k, value string) error {
 		store, name, _ := strings.Cut(k, "\x00")
 		return t.storeVars.On(tx).SetMap(map[todoCol]any{tcStore: store, tcName: name, tcValue: value}).Upsert()
 	}, func(k string) error {
 		store, name, _ := strings.Cut(k, "\x00")
 		return t.storeVars.On(tx).With(tcStore, store).With(tcName, name).Delete()
 	})
+	if err != nil {
+		return err
+	}
+	return syncRecords(flatStoreVars(after.WorkspaceVars), flatStoreVars(before.WorkspaceVars), func(k, value string) error {
+		kb, name, _ := strings.Cut(k, "\x00")
+		return t.wsVars.On(tx).SetMap(map[todoCol]any{tcKB: kb, tcName: name, tcValue: value}).Upsert()
+	}, func(k string) error {
+		kb, name, _ := strings.Cut(k, "\x00")
+		return t.wsVars.On(tx).With(tcKB, kb).With(tcName, name).Delete()
+	})
 }
 
-// flatStoreVars keys each per-store value by its store id and name, NUL between them.
+// flatStoreVars keys each value of a two-level map (a store id or a workspace root, then a name) by
+// its key and name, NUL between them.
 func flatStoreVars(mv map[string]map[string]string) map[string]string {
 	out := map[string]string{}
 	for store, vals := range mv {
@@ -612,14 +645,20 @@ func syncRecords[V comparable](after, before map[string]V, put func(string, V) e
 }
 
 func cloneSettings(s todo.Settings) todo.Settings {
-	var mv map[string]map[string]string
-	if s.MachineVars != nil {
-		mv = make(map[string]map[string]string, len(s.MachineVars))
-		for id, vals := range s.MachineVars {
-			mv[id] = maps.Clone(vals)
-		}
+	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars),
+		MachineVars: cloneNested(s.MachineVars), WorkspaceVars: cloneNested(s.WorkspaceVars)}
+}
+
+// cloneNested is a deep copy of a two-level map; nil stays nil.
+func cloneNested(m map[string]map[string]string) map[string]map[string]string {
+	if m == nil {
+		return nil
 	}
-	return todo.Settings{Stores: maps.Clone(s.Stores), Roots: maps.Clone(s.Roots), Vars: maps.Clone(s.Vars), MachineVars: mv}
+	out := make(map[string]map[string]string, len(m))
+	for k, vals := range m {
+		out[k] = maps.Clone(vals)
+	}
+	return out
 }
 
 // THE COLUMNS' ENCODINGS

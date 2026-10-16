@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -385,33 +386,26 @@ func noteOldIndexes(stateDir, storePath string, out io.Writer) {
 	_ = os.WriteFile(marker, []byte("the files beside this were noted as unused\n"), 0o600)
 }
 
-// todoStores is the todo registry as the workspaces read it (ADR 1792015212 §2.2): each store's id,
-// directory and variables, through its first root (a store with none has no variables).
+// todoStores is the todo registry as the workspaces read it (ADR 1792015212 §2.2, ADR 1792132105
+// §2.5): each store's id, directory and workspace, and every workspace's variables.
 func todoStores(m *todo.Manager) serving.TodoStores {
-	return func(ctx context.Context) ([]serving.TodoStore, error) {
+	return func(ctx context.Context) (serving.TodoRegistry, error) {
 		list, err := m.Stores(ctx)
 		if err != nil {
-			return nil, err
+			return serving.TodoRegistry{}, err
 		}
-		out := make([]serving.TodoStore, 0, len(list))
+		reg := serving.TodoRegistry{Stores: make([]serving.TodoStore, 0, len(list))}
 		for _, s := range list {
-			ts := serving.TodoStore{ID: s.ID, Dir: s.Path}
-			if len(s.Roots) > 0 {
-				vars, err := m.Vars(ctx, todo.At{Root: s.Roots[0]})
-				if err != nil {
-					return nil, fmt.Errorf("todo store %s: its variables: %w", s.Path, err)
-				}
-				for _, v := range vars {
-					if v.Value != "" {
-						if ts.Vars == nil {
-							ts.Vars = map[string]string{}
-						}
-						ts.Vars[v.Name] = v.Value
-					}
-				}
-			}
-			out = append(out, ts)
+			reg.Stores = append(reg.Stores, serving.TodoStore{ID: s.ID, Dir: s.Path, KB: s.KB})
 		}
-		return out, nil
+		if reg.Vars, err = m.AllEffectiveVars(ctx); err != nil {
+			return serving.TodoRegistry{}, fmt.Errorf("the workspaces' variables: %w", err)
+		}
+		for _, root := range slices.Sorted(maps.Keys(reg.Vars)) {
+			if root != "" {
+				reg.Files = append(reg.Files, filepath.Join(root, todo.VarsFile))
+			}
+		}
+		return reg, nil
 	}
 }

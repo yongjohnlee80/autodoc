@@ -8,7 +8,7 @@ import (
 )
 
 // MIGRATING LUA-ERA $WORKSPACE REFS (ADR 1792015069 §2.7 step 2). Before the cutover, auto-core
-// wrote $WORKSPACE/… meaning Neovim's project root; the daemon's $WORKSPACE is the store's home. A
+// wrote $WORKSPACE/… meaning Neovim's project root; the daemon's $WORKSPACE was the store's home. A
 // ref's meaning cannot be told from which files exist today (a target may not exist yet, or exist in
 // both places), so nothing rewrites them by itself: MigrateRefs plans, a person reviews the plan, and
 // the reviewed list is applied, exactly, each rewrite journaled.
@@ -74,7 +74,7 @@ func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (Migrat
 	}
 	workspace := (o.Plan && !o.Worktrees) || slices.ContainsFunc(o.Apply, func(c RefCandidate) bool { return c.kind() == RefWorkspace })
 	if workspace && sc.projectRoot == "" {
-		return MigrateResult{}, fmt.Errorf("%w: the store has no $PROJECT_ROOT (todos.set_var with scope store sets it)", ErrInvalid)
+		return MigrateResult{}, fmt.Errorf("%w: the store has no $PROJECT_ROOT (todos.set_var with scope store, or workspace.set_var, sets it)", ErrInvalid)
 	}
 	sc, done := m.withExists(ctx, sc)
 	defer done()
@@ -181,7 +181,7 @@ func (s scope) workspaceRefs(t Task, file string) []RefCandidate {
 			}
 			rest = strings.TrimLeft(rest, "/")
 			c := RefCandidate{ID: t.ID, Path: file, Field: f.name, Index: i, Ref: p, To: "$" + VarProjectRoot + "/" + rest,
-				UnderWorkspace: s.exists(joinPath(s.workspace, rest)), UnderProject: s.exists(joinPath(s.projectRoot, rest))}
+				UnderWorkspace: s.exists(joinPath(s.storeHome, rest)), UnderProject: s.exists(joinPath(s.projectRoot, rest))}
 			c.Suggested = c.UnderProject && !c.UnderWorkspace
 			out = append(out, c)
 		}

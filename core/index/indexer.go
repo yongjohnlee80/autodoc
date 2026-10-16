@@ -746,10 +746,14 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 			p.chunks = append(p.chunks, abstractChunk(c))
 		}
 	}
-	if s.mode.Store != nil {
-		p.links = append(extractLinks(doc, p.path, x.opts.Match), taskRelations(doc, p.path, s.mode.Store, x.opts.Root)...)
-	} else {
-		p.links = append(extractLinks(doc, p.path, x.opts.Match), extractRelations(doc, p.path)...)
+	p.links = extractLinks(doc, p.path, x.opts.Match, s.mode.Vars, x.opts.Root)
+	switch {
+	case s.mode.Store != nil:
+		p.links = append(p.links, taskRelations(doc, p.path, s.mode.Store, s.mode.Vars, x.opts.Root)...)
+	case s.mode.Vars != nil:
+		p.links = append(p.links, varRelations(doc, p.path, s.mode.Vars, x.opts.Root)...)
+	default:
+		p.links = append(p.links, extractRelations(doc, p.path)...)
 	}
 	p.adr = adrNumber(p.meta.FrontmatterJSON)
 	if fm := doc.Root.FirstChild; fm != nil && fm.Kind == markdown.KindFrontmatter {

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,7 +20,8 @@ import (
 // in every mode.
 func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 	m, _ := open(t)
-	m.stores.Store(&[]TodoStore{{ID: "S", Dir: "/ws/tasks", Vars: map[string]string{"KB_ROOT": "/ws"}}})
+	m.stores.Store(newRegistry(TodoRegistry{Stores: []TodoStore{{ID: "S", Dir: "/ws/tasks", KB: "/ws"}},
+		Vars: map[string]map[string]string{"/ws": {"KB_ROOT": "/ws"}}}))
 	h := &modes{m: m, root: "/ws"}
 	type want struct {
 		path  string
@@ -60,14 +62,85 @@ func TestAPathsModeIsTheFirstRuleItMatches(t *testing.T) {
 
 // stores is a test's todo registry, changed while the daemon runs.
 type stores struct {
-	mu   sync.Mutex
-	list []TodoStore
+	mu    sync.Mutex
+	list  []TodoStore
+	vars  map[string]map[string]string
+	files []string
 }
 
-func (s *stores) read(context.Context) ([]TodoStore, error) {
+func (s *stores) read(context.Context) (TodoRegistry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return slices.Clone(s.list), nil
+	return TodoRegistry{Stores: slices.Clone(s.list), Vars: maps.Clone(s.vars), Files: slices.Clone(s.files)}, nil
+}
+
+func (s *stores) setVars(vars map[string]map[string]string) {
+	s.mu.Lock()
+	s.vars = vars
+	s.mu.Unlock()
+}
+
+// TestADocumentsVariablesAreItsWorkspaces (ADR 1792132105 §2.5): the owner rule workspace.of answers.
+// A store's path reads its recorded workspace's variables, wherever the store lies; any other path
+// the deepest workspace's holding it; a path in none, those of no workspace. With no variables in
+// the registry, none.
+func TestADocumentsVariablesAreItsWorkspaces(t *testing.T) {
+	g := newRegistry(TodoRegistry{
+		Stores: []TodoStore{{ID: "out", Dir: "/out/.todo-list", KB: "/ws"}, {ID: "in", Dir: "/ws/nested/.todo-list", KB: "/ws"}},
+		Vars:   map[string]map[string]string{"": {"HOME": "/h"}, "/ws": {"KB_ROOT": "/ws"}, "/ws/nested": {"KB_ROOT": "/ws/nested"}},
+	})
+	m := &Workspaces{}
+	m.stores.Store(g)
+	for _, c := range []struct{ abs, kb string }{
+		{"/out/.todo-list/open/t.md", "/ws"},       // linked with todos.set_kb
+		{"/ws/nested/.todo-list/open/t.md", "/ws"}, // its owner recorded before the nested workspace
+		{"/ws/nested/notes/n.md", "/ws/nested"},
+		{"/ws/notes/n.md", "/ws"},
+		{"/elsewhere/n.md", ""},
+	} {
+		_, vars := m.storeAt(c.abs)
+		if want := g.modes[c.kb]; vars != want {
+			t.Errorf("%s: the variables of %v, want %s's", c.abs, vars, c.kb)
+		}
+	}
+	m.stores.Store(newRegistry(TodoRegistry{Stores: g.stores}))
+	if _, vars := m.storeAt("/ws/notes/n.md"); vars != nil {
+		t.Errorf("no variables in the registry: %v", vars)
+	}
+}
+
+// TestAVariableChangeReindexesWithoutAnEdit (ADR 1792132105 §2.5): a note's $NAME relation resolves
+// through its workspace's variables, and a change to them re-resolves it, the note unchanged: one
+// the todo system says, and an edit to a variable file it names, which no call says.
+func TestAVariableChangeReindexesWithoutAnEdit(t *testing.T) {
+	m, _ := open(t)
+	root := t.TempDir()
+	reg := &stores{}
+	reg.setVars(map[string]map[string]string{root: {"PROJECT_ROOT": filepath.Join(root, "a")}})
+	reg.files = []string{filepath.Join(root, ".autodoc-vars.toml")}
+	m.SetTodoStores(reg.read)
+	writeAll(t, root, map[string]string{"notes/n.md": "---\nrelated: [$PROJECT_ROOT/x.md]\n---\nn\n",
+		"a/x.md": "# A\n", "b/x.md": "# B\n"})
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
+		t.Fatal(err)
+	}
+	indexed(t, m, "kb", 3)
+	w, _ := m.Get("kb")
+	target := func() string {
+		ls, err := w.Index().Store().Links(context.Background(), "notes/n.md", nil)
+		if err != nil || len(ls) != 1 || !ls[0].Resolved {
+			return ""
+		}
+		return ls[0].Path
+	}
+	eventually(t, "the relation reaches a/x.md", func() bool { return target() == "a/x.md" })
+	reg.setVars(map[string]map[string]string{root: {"PROJECT_ROOT": filepath.Join(root, "b")}})
+	m.TodoStoresChanged()
+	eventually(t, "the relation reaches b/x.md", func() bool { return target() == "b/x.md" })
+
+	reg.setVars(map[string]map[string]string{root: {"PROJECT_ROOT": filepath.Join(root, "a")}})
+	writeAll(t, root, map[string]string{".autodoc-vars.toml": "[vars]\nPROJECT_ROOT = \"a\"\n"})
+	eventually(t, "the polled edit: the relation reaches a/x.md again", func() bool { return target() == "a/x.md" })
 }
 
 func (s *stores) set(list ...TodoStore) {

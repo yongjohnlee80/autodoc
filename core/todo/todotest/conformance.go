@@ -190,7 +190,7 @@ func fullSettings() todo.Settings {
 	return todo.Settings{
 		Stores: map[string]todo.StoreRecord{
 			"s1": {ID: "s1", Path: "/p/.todo-list", Claimed: true, ClaimedAt: t0, LastUse: t0.Add(time.Minute).In(pdt),
-				RefreshedAt: t0.Add(time.Hour)},
+				RefreshedAt: t0.Add(time.Hour), KB: "/p"},
 			"s2": {ID: "s2", Path: "/elsewhere/todos"},
 		},
 		Roots: map[string]todo.RootRecord{
@@ -199,6 +199,8 @@ func fullSettings() todo.Settings {
 		},
 		Vars:        map[string]string{"PROJ": "/home/u/proj", "X": "1"},
 		MachineVars: map[string]map[string]string{"s1": {"DUMPS": "/data", "LOGS": "/l"}, "s2": {"X": "y"}},
+		WorkspaceVars: map[string]map[string]string{"/p": {"PROJECT_ROOT": "/home/u/proj", "DUMPS": "/data"},
+			"/kb": {"SPECS": "/s"}},
 	}
 }
 
@@ -220,12 +222,16 @@ func conformSettings(t *testing.T, h Harness) {
 		delete(s.MachineVars, "s2")
 		s.MachineVars["s1"]["LOGS"] = "/l2"
 		s.MachineVars["s1"]["NEW"] = "/n"
+		delete(s.WorkspaceVars, "/kb")
+		s.WorkspaceVars["/p"]["DUMPS"] = "/data2"
+		s.WorkspaceVars["/p"]["LOGS"] = "/logs"
 		return nil
 	}))
 	delete(want.Stores, "s2")
 	delete(want.Vars, "X")
 	want.Vars["Y"] = "2"
 	want.MachineVars = map[string]map[string]string{"s1": {"DUMPS": "/data", "LOGS": "/l2", "NEW": "/n"}}
+	want.WorkspaceVars = map[string]map[string]string{"/p": {"PROJECT_ROOT": "/home/u/proj", "DUMPS": "/data2", "LOGS": "/logs"}}
 	want.Roots["/p"] = todo.RootRecord{Root: "/p", Override: "/p/todos", Registered: t0, KBRoot: "/kb", LastResolved: t0.Add(time.Second)}
 	same(t, "changed", settings(t, j), want)
 
@@ -475,6 +481,15 @@ func norm(v any) any {
 				out.MachineVars = map[string]map[string]string{}
 			}
 			out.MachineVars[id] = maps.Clone(vals)
+		}
+		for kb, vals := range v.WorkspaceVars {
+			if len(vals) == 0 {
+				continue
+			}
+			if out.WorkspaceVars == nil {
+				out.WorkspaceVars = map[string]map[string]string{}
+			}
+			out.WorkspaceVars[kb] = maps.Clone(vals)
 		}
 		return out
 	}

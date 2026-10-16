@@ -7,12 +7,13 @@ import (
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 )
 
-// THE VARIABLES TAB (ADR 1792015069 §2.3): the store's variables as todos.vars answers them, the same
-// from every route to the store: each one's value, and where it came from (this machine, the store's
-// file, derived from the store's place, a global var, the environment). e sets the one under the
-// cursor in the store's file, which travels with the KB (a machine-only name: for this machine), m
-// for this machine only, a adds one (NAME=value) to the file, d clears the value set here. A built-in
-// overridden and then cleared is derived again.
+// THE VARIABLES TAB (ADR 1792132105 §2.3): the variables of the store's workspace as todos.vars
+// answers them, the same from every route to the store: each one's value, and where it came from
+// (this machine, the KB's file, derived from the workspace, a global var, the environment), or a
+// migration conflict waiting for a person. e sets the one under the cursor in the KB's file, which
+// travels with the KB (a machine-only name: for this machine), m for this machine only, a adds one
+// (NAME=value) to the file, d clears the value set here. A built-in overridden and then cleared is
+// derived again.
 
 // varsTab is the tab after the statuses' tabs.
 var varsTab = len(todoBuckets)
@@ -21,6 +22,8 @@ var varsTab = len(todoBuckets)
 func varRowOf(_ int, v map[string]any) rowOf {
 	value := str(v, "value")
 	switch {
+	case v["conflict"] == true && str(v, "source") == "conflict":
+		value = "(conflict: set it in the KB's file, or machine-only)"
 	case value == "" && v["machine"] == true:
 		value = "(set per machine: none here)"
 	case value == "":
@@ -99,18 +102,22 @@ func varDetail(v map[string]any) string {
 		b.WriteString("- value: none here\n")
 	}
 	if d := str(v, "derived"); d != "" {
-		fmt.Fprintf(&b, "- derived from the store's place: %s\n", d)
+		fmt.Fprintf(&b, "- derived from the workspace: %s\n", d)
 	}
 	if v["builtin"] == true {
-		b.WriteString("- built in: derived per store; a value set here overrides it\n")
+		b.WriteString("- built in: derived per workspace; a value set here overrides it\n")
 	}
 	if v["machine"] == true {
-		b.WriteString("- machine-only: its value is set on each machine, never in the store's file\n")
+		b.WriteString("- machine-only: its value is set on each machine, never in the KB's file\n")
+	}
+	if v["conflict"] == true {
+		b.WriteString("- in conflict: the workspace's stores set it differently; a value in the KB's file (e), " +
+			"or declaring it machine-only, settles it, and a value for this machine (m) only overrides it here\n")
 	}
 	return b.String()
 }
 
-// syncVarActions sets the action row on the Variables tab: set (store's file, or this machine for a
+// syncVarActions sets the action row on the Variables tab: set (the KB's file, or this machine for a
 // machine-only name), set for this machine, add, and clear a value set here.
 func (t *todos) syncVarActions() {
 	s := t.cur
@@ -119,11 +126,17 @@ func (t *todos) syncVarActions() {
 	src := str(v, "source")
 	t.c.Set("App.todoActVarSet", writable && v != nil)
 	t.c.Set("App.todoActVarAdd", writable)
-	t.c.Set("App.todoActVarClear", writable && v != nil && (src == "store" || src == "machine" || src == "global"))
+	t.c.Set("App.todoActVarClear", writable && v != nil && clearable(src))
+}
+
+// clearable reports a source the tab clears a value from: one set here, not derived or from the
+// environment. "store" is a KB-file value as a daemon before protocol 24 names it.
+func clearable(src string) bool {
+	return src == "kb" || src == "store" || src == "machine" || src == "global"
 }
 
 // varEdit is e (and Enter) on the tab: a value for the variable under the cursor asked for, its
-// value filled in; kept in the store's file, or for this machine when the name is machine-only.
+// value filled in; kept in the KB's file, or for this machine when the name is machine-only.
 func (t *todos) varEdit() { t.askVar("store") }
 
 // varMachine is m: a value for the variable under the cursor, for this machine only.
@@ -138,7 +151,7 @@ func (t *todos) askVar(scope string) {
 	if v["machine"] == true {
 		scope = "machine"
 	}
-	where := "the store's file"
+	where := "the KB's file"
 	if scope == "machine" {
 		where = "this machine"
 	}
@@ -148,14 +161,14 @@ func (t *todos) askVar(scope string) {
 	t.c.Open("todoVar")
 }
 
-// varAdd is a on the tab: NAME=value asked for, kept in the store's file.
+// varAdd is a on the tab: NAME=value asked for, kept in the KB's file.
 func (t *todos) varAdd() {
 	s := t.cur
 	if t.readOnly(s) || t.tab != varsTab {
 		return
 	}
 	t.varEditing = &todoVarEdit{store: s, scope: "store"}
-	t.c.Set("App.todoVarTitle", "a variable, kept in the store's file: NAME=value")
+	t.c.Set("App.todoVarTitle", "a variable, kept in the KB's file: NAME=value")
 	t.c.Set("App.todoVarText", "")
 	t.c.Open("todoVar")
 }
@@ -188,15 +201,18 @@ func (t *todos) varSet(text string) {
 }
 
 // varClear is d on the tab: the value set here for the variable under the cursor removed (asked
-// first), where it was set: the store's file, this machine, or the global vars.
+// first), where it was set: the KB's file, this machine, or the global vars.
 func (t *todos) varClear() {
 	s, v := t.cur, t.varAt(t.varCursor)
 	if t.readOnly(s) || v == nil {
 		return
 	}
 	scope, name := str(v, "source"), str(v, "name")
-	if scope != "store" && scope != "machine" && scope != "global" {
+	if !clearable(scope) {
 		return
+	}
+	if scope == "kb" {
+		scope = "store" // todos.set_var's name for the store's workspace's file, at every protocol
 	}
 	t.c.Ask(Question{Title: "clear the variable?", Text: fmt.Sprintf("Clear $%s's value set in %s?", name, scope),
 		OnYes: func() { t.setVar(s, name, "", scope) }})

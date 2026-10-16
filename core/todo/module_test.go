@@ -22,15 +22,16 @@ func verb(t *testing.T, m *todo.Manager, name string) module.Verb {
 	return module.Verb{}
 }
 
-// TestTheVerbsAreAModule: every todos verb checks, arrived in protocol 20 (migrate_refs in 22), takes where its store is
-// first, and the module's codes sit in its range; a module built with no dependencies lists them.
+// TestTheVerbsAreAModule: every todos verb checks, arrived in protocol 20 (migrate_refs in 22, set_kb and
+// the workspace verbs in 24), takes where its store is first (the workspace verbs a workspace or a path),
+// and the module's codes sit in its range; a module built with no dependencies lists them.
 func TestTheVerbsAreAModule(t *testing.T) {
 	m := todo.New(nil, nil, nil)
 	if err := module.CheckCodes(m); err != nil {
 		t.Fatal(err)
 	}
 	vs := m.Verbs()
-	if len(vs) != 23 {
+	if len(vs) != 27 {
 		t.Errorf("%d verbs", len(vs))
 	}
 	for _, v := range vs {
@@ -38,13 +39,24 @@ func TestTheVerbsAreAModule(t *testing.T) {
 			t.Error(err)
 		}
 		since := int64(20)
-		if v.Verb == "todos.migrate_refs" {
+		switch {
+		case v.Verb == "todos.migrate_refs":
 			since = 22
+		case v.Verb == "todos.set_kb" || strings.HasPrefix(v.Verb, "workspace."):
+			since = 24
 		}
-		if !strings.HasPrefix(v.Verb, "todos.") || v.Since != since || v.Scope != module.ScopeGlobal {
+		if !strings.HasPrefix(v.Verb, "todos.") && !strings.HasPrefix(v.Verb, "workspace.") || v.Since != since || v.Scope != module.ScopeGlobal {
 			t.Errorf("%s: since %d, scope %s", v.Verb, v.Since, v.Scope)
 		}
 		switch v.Verb {
+		case "workspace.vars", "workspace.set_var":
+			if v.Params[0].Name != "workspace" {
+				t.Errorf("%s does not take its workspace first: %+v", v.Verb, v.Params)
+			}
+		case "workspace.of":
+			if v.Params[0].Name != "path" {
+				t.Errorf("%s does not take a path: %+v", v.Verb, v.Params)
+			}
 		case "todos.register", "todos.stores", "todos.set_var":
 		default:
 			if len(v.Params) == 0 || v.Params[0].Name != "at" || v.Params[0].Type != "workspace | {root}" {
@@ -156,8 +168,30 @@ func TestEveryVerbAnswers(t *testing.T) {
 	for _, v := range call("todos.vars", "kb").([]todo.Var) {
 		byName[v.Name] = v
 	}
-	if byName["PROJECT_ROOT"].Source != "store" || byName["LOGS"].Source != "machine" {
+	if byName["PROJECT_ROOT"].Source != "kb" || byName["LOGS"].Source != "machine" {
 		t.Errorf("set_var's options: %+v %+v", byName["PROJECT_ROOT"], byName["LOGS"])
+	}
+	// a session from before protocol 24 reads a KB-file value's source as the store's file's was
+	old, err := verb(t, e.m, "todos.vars").Call(module.WithProtocol(context.Background(), 23), []any{"kb"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range old.([]todo.Var) {
+		if v.Name == "PROJECT_ROOT" && v.Source != "store" {
+			t.Errorf("protocol 23's PROJECT_ROOT %+v", v)
+		}
+	}
+	call("workspace.set_var", "kb", "DUMPS", "/data", map[string]any{"machine_only": true})
+	call("workspace.set_var", "kb", "SPECS", "specs", map[string]any{"scope": "kb"})
+	byName = map[string]todo.Var{}
+	for _, v := range call("workspace.vars", "kb").([]todo.Var) {
+		byName[v.Name] = v
+	}
+	if d, s := byName["DUMPS"], byName["SPECS"]; d.Value != "/data" || !d.Machine || s.Value != "/kb/specs" || s.Source != "kb" {
+		t.Errorf("workspace.set_var: %+v %+v", d, s)
+	}
+	if o := call("workspace.of", "/kb/.todo-list/open/x.md").(todo.Owned); o.Workspace != "kb" || o.Root != "/kb" {
+		t.Errorf("workspace.of %+v", o)
 	}
 	if p := call("todos.migrate_refs", "kb", map[string]any{"plan": true}).(todo.MigrateResult); p.Rewritten != 0 {
 		t.Errorf("a plan rewrote: %+v", p)
@@ -186,6 +220,10 @@ func TestEveryVerbAnswers(t *testing.T) {
 	}
 	call("todos.claim", map[string]any{"root": root}, map[string]any{})
 	call("todos.scaffold", map[string]any{"root": root})
+	call("todos.set_kb", map[string]any{"root": root}, "kb")
+	if o := call("workspace.of", root+"/.todo-list/open/x.md").(todo.Owned); o.Workspace != "kb" {
+		t.Errorf("set_kb did not link the store: %+v", o)
+	}
 	e.disk.MkdirAll("/elsewhere")
 	call("todos.set_dir", map[string]any{"root": root}, "")
 	call("todos.move_store", map[string]any{"root": root}, "/elsewhere/.todo-list")

@@ -20,10 +20,10 @@ const RefreshEvery = 24 * time.Hour
 
 // RefreshDaily refreshes every claimed store once a day until ctx ends: at once each store whose
 // daily refresh last ran RefreshEvery ago or more, or never, then each one as it falls due. The
-// daemon runs it for as long as it serves; it first carries older routes' kb_roots into their
-// stores (CarryKBRoots).
+// daemon runs it for as long as it serves; it first records each store's workspace and folds the
+// stores' old variable files into their workspaces' (MigrateVars).
 func (m *Manager) RefreshDaily(ctx context.Context) {
-	m.CarryKBRoots(ctx) // once per start; a no-op once every route's kb_root is carried and cleared
+	m.MigrateVars(ctx) // once per start; a no-op once every store's workspace is recorded and its files carried
 	m.RefreshDue(ctx)
 	// NOTE: timed. The daemon gets no event for "a day passed", so it looks for a store due every
 	// refreshCheck (an hour by default), by the wall clock against the last run the journal keeps:

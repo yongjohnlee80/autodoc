@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 23,
+  protocol = 24,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -531,7 +531,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "{store_id, store, scaffolded: false}",
-      doc = "Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's own.",
+      doc = "Checks that an at's store exists. A kb_root is accepted and ignored: $KB_ROOT is the store's workspace's.",
     },
     ["todos.refresh"] = {
       since = 20, scope = "global", audience = "agent",
@@ -601,6 +601,15 @@ return {
       result = "{store_id, store, root, override?, writable, claimed}",
       doc = "Points an at's root at another store directory, or back at <root>/.todo-list.",
     },
+    ["todos.set_kb"] = {
+      since = 24, scope = "global", audience = "user",
+      params = {
+        { name = "at", type = "workspace | {root}" },
+        { name = "workspace", type = "string" }
+      },
+      result = "nil",
+      doc = "Records the workspace an at's store belongs to: links a store outside every workspace, or moves one; its refs resolve with that workspace's variables.",
+    },
     ["todos.set_var"] = {
       since = 20, scope = "global", audience = "user",
       params = {
@@ -609,7 +618,7 @@ return {
         { name = "opts", type = "map", optional = true }
       },
       result = "nil",
-      doc = "Sets or removes a variable: globally, in an at's store's file, or for this machine; a store or machine value may override a built-in.",
+      doc = "Sets or removes a variable: globally, in an at's store's workspace's KB file, or for this machine; a KB or machine value may override a built-in.",
     },
     ["todos.status"] = {
       since = 20, scope = "global", audience = "agent",
@@ -644,8 +653,8 @@ return {
       params = {
         { name = "at", type = "workspace | {root}" }
       },
-      result = "[{name, value?, builtin, derived?, source?, machine?}]",
-      doc = "The variables an at's store's refs may start with, the same from every route to the store: each effective value and its source.",
+      result = "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
+      doc = "The variables an at's store's refs may start with: its workspace's, the same from every route to the store; each effective value and its source.",
     },
     ["workspace.add"] = {
       since = 2, scope = "global", audience = "user",
@@ -685,6 +694,14 @@ return {
       params = {},
       result = "[{name, root, state, include, exclude, section_tokens, embedding_policy, schema, text_extensions, text_collisions, provider, provider_error?, databases?, abstract_chunk, demote_superseded, graph_only, todo_search, todo_excluded?}]",
       doc = "Every workspace. Search only one whose state is ready. schema is {path, active, fields, error, line}; text_extensions are the extensions read as plain text besides .txt, text_collisions those of them the build reads with a registered chunker instead; provider is the workspace's own embedding provider (\"\": the daemon's); databases is {uid, destination, vector_index, view_args, source?, destination_connection?}, each connection {engine, host, database, user, schema, has_password}, never its DSN.",
+    },
+    ["workspace.of"] = {
+      since = 24, scope = "global", audience = "agent",
+      params = {
+        { name = "path", type = "string" }
+      },
+      result = "{workspace?, root?}",
+      doc = "The workspace a file belongs to, the owner its refs resolve with: a todo store's file, the store's workspace; any other file, the deepest workspace containing it; none otherwise.",
     },
     ["workspace.remove"] = {
       since = 2, scope = "global", audience = "user",
@@ -741,6 +758,25 @@ return {
       },
       result = "[string]",
       doc = "Declares the workspace's own plain-text extensions; answers them normalized. One the build reads with a registered chunker is refused.",
+    },
+    ["workspace.set_var"] = {
+      since = 24, scope = "global", audience = "user",
+      params = {
+        { name = "workspace", type = "string" },
+        { name = "name", type = "string" },
+        { name = "value", type = "string" },
+        { name = "opts", type = "map", optional = true }
+      },
+      result = "nil",
+      doc = "Sets or removes a workspace's variable: this machine's value (scope machine, absolute) or the KB's (scope kb, relative to the KB root, carried by git); machine_only declares the name machine-only in the KB's file.",
+    },
+    ["workspace.vars"] = {
+      since = 24, scope = "global", audience = "agent",
+      params = {
+        { name = "workspace", type = "string" }
+      },
+      result = "[{name, value?, builtin, derived?, source?, machine?, conflict?}]",
+      doc = "A workspace's variables (ADR 1792132105): the ones every document of it, its todo stores' tasks included, resolves $NAME refs with; each effective value and its source.",
     },
   },
   errors = {

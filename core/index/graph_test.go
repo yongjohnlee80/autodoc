@@ -86,7 +86,7 @@ func TestExtractLinks(t *testing.T) {
 		"[code](../scripts/run.sh) [img](pic.png) <https://auto.link>\n"
 	doc := markdown.Parse([]byte(src), markdown.GFM(), markdown.Obsidian())
 	var got []string
-	for _, l := range extractLinks(doc, "dir/n.md", nil) {
+	for _, l := range extractLinks(doc, "dir/n.md", nil, nil, "") {
 		got = append(got, fmt.Sprintf("%s %s #%s %s", l.Kind, l.Name, l.Anchor, l.Raw))
 	}
 	eq(t, "links", got, []string{
@@ -108,7 +108,7 @@ func TestExtractLinks(t *testing.T) {
 	for _, l := range extractLinks(markdown.Parse([]byte("![[doc.pdf]] [c](run.sh) ![[../assets/d.pdf]] [e](../assets/e.pdf) ![[../other/f.pdf]]"), markdown.Obsidian()), "notes/n.md",
 		func(p string) bool {
 			return p == "doc.pdf" || strings.HasSuffix(p, ".sh") || strings.HasPrefix(p, "assets/") && strings.HasSuffix(p, ".pdf")
-		}) {
+		}, nil, "") {
 		pdf = append(pdf, l.Name)
 	}
 	eq(t, "indexed attachment types", pdf, []string{"doc.pdf", "notes/run.sh", "/assets/d.pdf", "assets/e.pdf"})
@@ -118,7 +118,7 @@ func TestExtractLinks(t *testing.T) {
 	var imgs []string
 	src = "![flow](d/flow.mmd \"height=420\") ![p](pic.png) ![n](../top.md#Sec) ![w](https://x.io/a.png) ![o](../../out.mmd) ![b](plain)\n"
 	for _, l := range extractLinks(markdown.Parse([]byte(src), markdown.GFM(), markdown.Obsidian()), "notes/n.md",
-		func(p string) bool { return strings.HasSuffix(p, ".mmd") }) {
+		func(p string) bool { return strings.HasSuffix(p, ".mmd") }, nil, "") {
 		imgs = append(imgs, fmt.Sprintf("%s %s #%s %s", l.Kind, l.Name, l.Anchor, l.Raw))
 	}
 	eq(t, "images", imgs, []string{
