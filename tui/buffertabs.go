@@ -25,16 +25,15 @@ import (
 // its middle there, the same however many tabs are open; its menu's Go to › has the name whole.
 const bufferTabWidth = 32
 
-// syncBufferTabs feeds the editor's strip the buffers as they are now; the TUI's editor has none.
-func (h *Host) syncBufferTabs() {
-	if strip := h.bufferStrip(); strip != nil {
-		h.feedBufferTabs(strip)
-	}
-}
+// syncBufferTabs feeds the editor's strip the buffers as they are now.
+func (h *Host) syncBufferTabs() { h.feedBufferTabs(h.bufferStrip()) }
 
 // feedBufferTabs gives strip a tab per buffer and the shown one active, wiring it the first time
-// it is seen (a new editor, after a reload, is a new strip).
+// it is seen (a new editor, after a reload, is a new strip); nil, the TUI's editor's, is left.
 func (h *Host) feedBufferTabs(strip *widget.TabStrip) {
+	if strip == nil {
+		return
+	}
 	if strip != h.tabStrip {
 		h.tabStrip = strip
 		strip.SetOnSelect(func(id string) {
