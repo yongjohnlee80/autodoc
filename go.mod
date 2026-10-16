@@ -5,7 +5,7 @@ go 1.25.3
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/yongjohnlee80/golib v0.6.120
-	github.com/yongjohnlee80/golib/gui v0.1.48-0.20261016173335-5aef157093f4
+	github.com/yongjohnlee80/golib/gui v0.1.48
 	github.com/yuin/gopher-lua v1.1.2
 )
 
