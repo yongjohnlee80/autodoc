@@ -171,28 +171,10 @@ func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 		card.text = strings.Join(append(bound[key], unbound[key]...), "\n")
 	}
 	if pl.c.Attached() { // at New there is no program yet: attach's launchServices refreshes it
-		pl.showPluginCard()
+		pl.showChooser()
 		pl.c.CommandsChanged() // F1 names the keys
 	}
 	return out
-}
-
-// showPluginCard sets the SPC p card to the chosen plugin's: its title and its commands.
-func (pl *plugins) showPluginCard() {
-	text := "no commands: the plugin is gone, or cannot run"
-	if card := pl.pluginCards[pl.cardPlugin]; card != nil {
-		text = card.text
-	}
-	pl.c.Set("App.pluginKeysTitle", "SPC p › "+pl.pluginTitle(pl.cardPlugin))
-	pl.c.Set("App.pluginKeysText", text)
-}
-
-// pluginKey is a letter on the chosen plugin's card: its command runs, once the card is closed.
-func (pl *plugins) pluginKey(letter string) {
-	if card := pl.pluginCards[pl.cardPlugin]; card != nil && card.targets[letter] != "" {
-		pl.c.Close("pluginKeys")
-		pl.pluginEntry(card.targets[letter])
-	}
 }
 
 // pluginEntry is a Plugins menu row or a SPC p letter, chosen: its target.
