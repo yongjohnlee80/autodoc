@@ -5,7 +5,7 @@ go 1.25.3
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/yongjohnlee80/golib v0.6.115
-	github.com/yongjohnlee80/golib/gui v0.1.43
+	github.com/yongjohnlee80/golib/gui v0.1.44
 	github.com/yuin/gopher-lua v1.1.2
 )
 
@@ -22,7 +22,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/yongjohnlee80/gio v0.1.1 // indirect
+	github.com/yongjohnlee80/gio v0.1.3 // indirect
 	golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
