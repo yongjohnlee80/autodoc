@@ -793,10 +793,12 @@ func relTo(dir, target string) string {
 }
 
 // recordProjectRoot writes the project a claim names (AutoVim's legacy $WORKSPACE) into the store's
-// workspace's file as PROJECT_ROOT, relative to the KB root, unless the file already names one.
+// workspace's file as PROJECT_ROOT, relative to the KB root, unless the file already names one. A
+// "project" that is the KB root or inside it is a session started in the KB, not the project the
+// KB serves: nothing is recorded.
 func (m *Manager) recordProjectRoot(ctx context.Context, w where, project string) error {
 	kb, err := m.owner(ctx, w.rec.ID)
-	if err != nil || kb == "" {
+	if err != nil || kb == "" || paths.Under(path.Clean(project), kb) {
 		return err
 	}
 	m.varsMu.Lock()
