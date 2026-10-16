@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -136,7 +137,7 @@ func (h *Host) startWatch(w *diskWatch) {
 	gen, dir := w.gen, w.dir
 	ctx, cancel := context.WithCancel(h.ctx)
 	w.cancel = cancel
-	events, mode, err := openWatch(ctx, h.diskFS, w.at, w.rel)
+	events, mode, closeFS, err := openWatch(ctx, h.diskFS, w.at, w.rel)
 	if err != nil {
 		cancel()
 		if w.err == nil { // said once, not at every retry
@@ -151,27 +152,36 @@ func (h *Host) startWatch(w *diskWatch) {
 		for ev := range events {
 			h.p.Post(func() { h.diskEvent(dir, gen, ev) })
 		}
+		closeFS()                                   // the run is over: its driver's handle on the folder goes with it
 		h.p.Post(func() { h.watchEnded(dir, gen) }) // cancelled, or the folder went
 	}()
 }
 
 // openWatch is a run's events: the native watch of rel in the driver opened at at, or a poll of it
-// where the driver has none (or its watch would not start). Events name paths under at.
-func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string) (<-chan vfs.Event, string, error) {
+// where the driver has none (or its watch would not start). Events name paths under at. closeFS
+// releases the driver (its os.Root on the folder): the caller runs it once the events end; a run
+// that does not start has released it already.
+func openWatch(ctx context.Context, open func(string) (vfs.FS, error), at, rel string) (events <-chan vfs.Event, mode string, closeFS func(), err error) {
 	fsys, err := open(at)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
+	}
+	closeFS = func() {
+		if c, ok := fsys.(io.Closer); ok {
+			_ = c.Close()
+		}
 	}
 	if w, ok := fsys.(vfs.Watcher); ok {
 		if events, err := w.Watch(ctx, rel); err == nil {
-			return events, diskWatching, nil
+			return events, diskWatching, closeFS, nil
 		}
 	}
-	events, err := vfs.Poll(ctx, fsys, rel, diskPollEvery)
+	events, err = vfs.Poll(ctx, fsys, rel, diskPollEvery)
 	if err != nil {
-		return nil, "", err
+		closeFS()
+		return nil, "", nil, err
 	}
-	return events, diskPolling, nil
+	return events, diskPolling, closeFS, nil
 }
 
 // watchEnded: a run of dir's watch is over. A cancelled run (its last buffer closed, the TUI
@@ -230,6 +240,15 @@ func (h *Host) diskEvent(dir string, gen uint64, ev vfs.Event) {
 	}
 	if ev.Op == vfs.OpOverflow {
 		h.checkFolder(w)
+		if w.mode == diskPolling {
+			// a poll's overflow is a listing that failed (the folder gone): its next good listing is
+			// a new baseline, with no event for what came back. The run is started again instead,
+			// with backoff, and a start checks every buffer in the folder.
+			w.cancel()
+			w.gen++
+			w.mode = ""
+			h.restartWatch(w)
+		}
 		return
 	}
 	for _, b := range h.buffers {

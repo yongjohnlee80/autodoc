@@ -237,9 +237,29 @@ func TestBuffersInOneFolderShareAWatch(t *testing.T) {
 }
 
 // TestAFolderThatGoesAndComesBack: the open file's folder deleted ends its watch, and its buffer is
-// badged deleted; made again, the watch starts again, and a change in it is picked up.
+// badged deleted; made again, the watch starts again, and a change in it is picked up. The same
+// with no native watcher: a poll's overflow (its listing failed) starts its run again.
 func TestAFolderThatGoesAndComesBack(t *testing.T) {
+	for _, poll := range []bool{false, true} {
+		t.Run(map[bool]string{false: "watch", true: "poll"}[poll], func(t *testing.T) {
+			if poll {
+				old := diskPollEvery
+				diskPollEvery = 100 * time.Millisecond
+				t.Cleanup(func() { diskPollEvery = old })
+			}
+			folderGoesAndComesBack(t, poll)
+		})
+	}
+}
+
+func folderGoesAndComesBack(t *testing.T, poll bool) {
 	r, root := onDisk(t, Options{})
+	if poll {
+		onLoop(r, func() bool {
+			r.h.diskFS = func(dir string) (vfs.FS, error) { fs, err := local.New(dir); return noWatch{fs}, err }
+			return true
+		})
+	}
 	sub := filepath.Join(root, "sub")
 	if err := os.MkdirAll(sub, 0o700); err != nil {
 		t.Fatal(err)
@@ -365,4 +385,33 @@ func unwatched(r *running) {
 		r.h.diskFS = func(string) (vfs.FS, error) { return nil, errors.New("not watched in this cell") }
 		return true
 	})
+}
+
+// TestAWatchLeavesNoHandleBehind: a folder's watch started and ended over and over leaves no file
+// descriptor behind: each run closes its driver's handle on the folder.
+func TestAWatchLeavesNoHandleBehind(t *testing.T) {
+	if _, err := os.ReadDir("/proc/self/fd"); err != nil {
+		t.Skipf("no /proc/self/fd: %v", err)
+	}
+	r, _ := onDisk(t, Options{})
+	r.openOnDisk(t, "a.md")
+	fds := func() int { e, _ := os.ReadDir("/proc/self/fd"); return len(e) }
+	cycle := func() {
+		onLoop(r, func() bool { r.h.unwatchFile(r.h.active); r.h.watchFile(r.h.active); return true })
+	}
+	for range 5 { // warm: the runtime's own descriptors settle
+		cycle()
+	}
+	time.Sleep(200 * time.Millisecond)
+	before := fds()
+	for range 20 {
+		cycle()
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for fds()-before > 3 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if grown := fds() - before; grown > 3 {
+		t.Fatalf("%d more file descriptors after 20 watches started and ended", grown)
+	}
 }
