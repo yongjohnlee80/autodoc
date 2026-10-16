@@ -11,20 +11,23 @@ import (
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
-// PLUGIN COMMANDS (ADR 1791268009 §2.5) — a manifest's [[commands]] are on the Plugins menu, under
-// the plugin's own submenu, and on the SPC p card by their letters. Each is a command catalog entry
-// (catalog.go), plugin.<name>.<id>, with no verb: the SPC p card is made from the catalog's, and F1
-// lists them with their letters. A letter is the manifest's, or
-// the user's (tui.plugin.<name>.key.<id>; "" unbinds it); the first plugin by name keeps a letter
-// two want, and the other is listed unbound, saying why. Plugins never take AutoDoc's own leader
-// letters: SPC p is a card of its own.
+// PLUGIN COMMANDS (ADR 1791268009 §2.5, ADR 1792132889) — a manifest's [[commands]] are on the
+// Plugins menu, under the plugin's own submenu, and on the plugin's SPC p card by their letters: SPC p
+// chooses the plugin (pluginpick.go), then its card shows its commands. Each is a command catalog
+// entry (catalog.go), plugin.<name>.<id>, with no verb: the cards are made from the catalog's, and F1
+// lists them with their keys. A letter is the manifest's, or the user's (tui.plugin.<name>.key.<id>;
+// "" unbinds it), unique within its plugin only: two plugins may both use s. Two of one plugin's
+// commands wanting a letter, the first in the manifest keeps it, and the other is listed unbound,
+// saying why. Plugins never take AutoDoc's own leader letters: SPC p is a card of its own.
 //
 // A command starts its plugin when it is not running, and is sent once the plugin has opened. A
-// card's commands focus it, but its "toggle", which is the host's own: it opens the card, focused,
-// and closes it when it is open. A focused card takes every key, SPC included, so a toggle that only
-// closed a focused card could never be reached from the keyboard.
+// card's commands open its panel and focus it, but its "toggle", which is the host's own: it starts
+// the card, its panel open and focused; it shows a card whose panel was closed (the plugin ran on);
+// and it turns off a card whose panel is open, stopping its plugin. A focused card takes every key,
+// SPC included, so a toggle that only turned off a focused card could never be reached from the
+// keyboard.
 
-// The targets of the Plugins menu's rows and the SPC p card's letters: "<key>|open",
+// The targets of the Plugins menu's rows and the SPC p cards' letters: "<key>|open",
 // "<key>|close" and "<key>|cmd|<id>".
 const (
 	targetOpen    = "open"
@@ -37,14 +40,21 @@ func pluginTarget(key string, parts ...string) string {
 	return strings.Join(append([]string{key}, parts...), "|")
 }
 
-// pluginBinding is a command's place on the SPC p card: its letter, or why it has none.
+// pluginBinding is a command's place on its plugin's SPC p card: its letter, or why it has none.
 type pluginBinding struct {
 	letter, why string
 }
 
-// refreshPlugins rebuilds the Plugins menu and the SPC p card from the plugins found, the user's
-// letters and what is running.
+// pluginCard is one plugin's SPC p card: its letters' targets, and its text.
+type pluginCard struct {
+	targets map[string]string
+	text    string
+}
+
+// refreshPlugins rebuilds the Plugins menu, the SPC p chooser and the plugins' cards from the
+// plugins found, the user's letters and what is running.
 func (pl *plugins) refreshPlugins() {
+	pl.bindPluginLetters()
 	bindings := pl.bindPluginKeys()
 	rows := make([]tuidecl.Row, 0, len(pl.pluginList))
 	for _, e := range pl.pluginList {
@@ -65,12 +75,16 @@ func (pl *plugins) refreshPlugins() {
 		for _, c := range e.m.Commands {
 			label := c.Title
 			if b := bindings[e.m.Name+"."+c.ID]; b.letter != "" {
-				label += " · SPC p " + b.letter
+				label += " · " + pl.cardKeys(key) + " " + b.letter
 			}
 			items = append(items, tuidecl.Row{"key": "cmd:" + c.ID, "label": label, "enabled": true,
 				"target": pluginTarget(key, targetCommand, c.ID)})
 		}
-		items = append(items, tuidecl.Row{"key": "close", "label": "Close", "enabled": running,
+		closeLabel := "Close"
+		if e.m.card() { // its panel's Close hides it; this stops its plugin
+			closeLabel = "Turn off"
+		}
+		items = append(items, tuidecl.Row{"key": "close", "label": closeLabel, "enabled": running,
 			"target": pluginTarget(key, targetClose)})
 		sub.Reset(items)
 		rows = append(rows, tuidecl.Row{"key": key, "kind": "submenu", "label": e.label(), "rows": sub})
@@ -81,8 +95,8 @@ func (pl *plugins) refreshPlugins() {
 	pl.pluginRows.Reset(rows)
 }
 
-// pluginCommandRef is a plugin command's catalog entry, as SPC p binds it: its plugin and its
-// manifest's id and letter.
+// pluginCommandRef is a plugin command's catalog entry, as its SPC p card binds it: its plugin and
+// its manifest's id and letter.
 type pluginCommandRef struct {
 	plugin, key, id, letter string
 }
@@ -114,21 +128,25 @@ func (pl *plugins) syncPluginEntries() {
 	}
 }
 
-// bindPluginKeys gives the catalog's plugin commands their SPC p letters, in the order of the
-// plugins' names, and sets the card: its letters, and its text. It returns each command's binding,
-// by "<plugin>.<id>".
+// bindPluginKeys gives the catalog's plugin commands their letters on their plugins' SPC p cards,
+// unique within each plugin, and sets the cards: their letters, and their text. It returns each
+// command's binding, by "<plugin>.<id>".
 func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
-	var entries []*Entry
-	entries = pl.c.PluginEntries()
+	entries := pl.c.PluginEntries() // each plugin's in its manifest's order
 	slices.SortStableFunc(entries, func(a, b *Entry) int { return strings.Compare(a.Owner, b.Owner) })
 	out := map[string]pluginBinding{}
-	taken := map[string]string{"q": "close card"}
-	var rows []tuidecl.Row
-	targets := map[string]string{}
+	taken := map[string]map[string]string{} // by plugin: a letter's holder
+	bound, unbound := map[string][]string{}, map[string][]string{}
+	pl.pluginCards = map[string]*pluginCard{}
 	pl.pluginLetters = map[string][]string{}
-	var bound, unbound []string
 	for _, e := range entries {
 		ref := pl.pluginCmds[e.ID]
+		card := pl.pluginCards[ref.key]
+		if card == nil {
+			card = &pluginCard{targets: map[string]string{}}
+			pl.pluginCards[ref.key] = card
+			taken[ref.key] = map[string]string{"q": "closing the card"}
+		}
 		letter, chosen := pl.c.Prefs().pluginKeys[ref.plugin+"."+ref.id]
 		if !chosen {
 			letter = ref.letter
@@ -141,40 +159,28 @@ func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 			b.why = "no key"
 		case !pluginLetter(letter):
 			b.why = fmt.Sprintf("key %q: want one letter or digit", letter)
-		case taken[letter] != "":
-			b.why = fmt.Sprintf("%s is %s's", letter, taken[letter])
+		case taken[ref.key][letter] != "":
+			b.why = fmt.Sprintf("%s is taken by %s", letter, taken[ref.key][letter])
 		default:
 			b.letter = letter
-			taken[letter] = ref.plugin
-			target := pluginTarget(ref.key, targetCommand, ref.id)
-			rows = append(rows, tuidecl.Row{"key": letter, "target": target})
-			targets[letter] = target
-			bound = append(bound, letter+"  "+e.Title)
-			pl.pluginLetters[e.ID] = []string{"SPC p " + letter}
+			taken[ref.key][letter] = e.Help
+			card.targets[letter] = pluginTarget(ref.key, targetCommand, ref.id)
+			bound[ref.key] = append(bound[ref.key], letter+"  "+e.Help)
+			pl.pluginLetters[e.ID] = []string{pl.cardKeys(ref.key) + " " + letter}
 		}
 		if b.letter == "" {
-			unbound = append(unbound, "   "+e.Title+" — "+b.why)
+			unbound[ref.key] = append(unbound[ref.key], "   "+e.Help+" — "+b.why)
 		}
 		out[ref.plugin+"."+ref.id] = b
 	}
-	pl.pluginKeyTargets = targets
-	pl.pluginKeyRows.Reset(rows)
-	text := "no plugin commands yet"
-	if lines := append(bound, unbound...); len(lines) > 0 {
-		text = strings.Join(lines, "\n")
+	for key, card := range pl.pluginCards {
+		card.text = strings.Join(append(bound[key], unbound[key]...), "\n")
 	}
 	if pl.c.Attached() { // at New there is no program yet: attach's launchServices refreshes it
-		pl.c.Set("App.pluginKeysText", text)
-		pl.c.CommandsChanged() // F1 names the letters
+		pl.showChooser()
+		pl.c.CommandsChanged() // F1 names the keys
 	}
 	return out
-}
-
-func (pl *plugins) pluginKey(letter string) {
-	if target := pl.pluginKeyTargets[letter]; target != "" {
-		pl.c.Close("pluginKeys")
-		pl.pluginEntry(target)
-	}
 }
 
 // pluginEntry is a Plugins menu row or a SPC p letter, chosen: its target.
@@ -207,7 +213,7 @@ func (pl *plugins) runPluginCommand(key, id string) {
 		return
 	}
 	r := pl.running[key]
-	if e.m.card() && id == pluginToggle && r != nil {
+	if e.m.card() && id == pluginToggle && r != nil && !r.hidden {
 		r.close("")
 		return
 	}
@@ -220,11 +226,13 @@ func (pl *plugins) runPluginCommand(key, id string) {
 		pl.running[key] = r
 		pl.refreshPlugins()
 		r.focusOnOpen = e.m.card()
+		if e.m.card() {
+			pl.showCard(r, true)
+		}
+	} else if e.m.card() {
+		pl.showCard(r, true)
 	} else {
 		r.show()
-		if e.m.card() && r.view != nil {
-			r.view.RequestFocus()
-		}
 	}
 	if !(e.m.card() && id == pluginToggle) {
 		r.send(plugin.MethodCommand, pl.commandParams(e, id))

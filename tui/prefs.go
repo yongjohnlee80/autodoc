@@ -42,8 +42,10 @@ const (
 	// a plugin's placement: tui.plugin.<name>.placement
 	prefPluginPrefix = "tui.plugin."
 	prefPluginPlace  = ".placement"
-	// a plugin command's SPC p letter: tui.plugin.<name>.key.<id>
+	// a plugin command's letter on its SPC p card: tui.plugin.<name>.key.<id>
 	prefPluginKey = ".key."
+	// a plugin's letter on the SPC p chooser: tui.plugin.<name>.letter
+	prefPluginLetter = ".letter"
 )
 
 // corners are where the toasts can stack, in the order the Preferences dialog offers them.
@@ -110,9 +112,12 @@ type prefs struct {
 	// pluginPlace is each plugin's placement the user chose, by name (tui.plugin.<name>.placement);
 	// one its manifest does not offer is ignored where it is read (plugins.go placement)
 	pluginPlace map[string]string
-	// pluginKeys are the SPC p letters the user chose, by "<plugin>.<command id>"
-	// (tui.plugin.<name>.key.<id>); "" unbinds the command (plugincmds.go)
+	// pluginKeys are the letters the user chose on the plugins' SPC p cards, by
+	// "<plugin>.<command id>" (tui.plugin.<name>.key.<id>); "" unbinds the command (plugincmds.go)
 	pluginKeys map[string]string
+	// pluginLetter is each plugin's letter on the SPC p chooser, by name (tui.plugin.<name>.letter,
+	// set with the chooser's *); "" is none (pluginpick.go)
+	pluginLetter map[string]string
 	// searchStages are the search's boxes as the user left them (stages.go)
 	searchStages stageChoice
 	// panelGeo are every sized panel's kept size and length, by preference name (panelsize.go)
@@ -385,8 +390,8 @@ func (h *Host) setConnected(v bool) {
 // were made. Each write is its own call on its own worker, and the daemon may answer them in any
 // order: sent together, an earlier change could land after a later one and the store keep it, so
 // the next start shows what the user changed away from. They go one at a time instead.
-// readPluginPref reads one tui.plugin.* preference into p: a command's letter or a dialog's
-// placement. Anything else is not a plugin's, and is left alone.
+// readPluginPref reads one tui.plugin.* preference into p: a command's letter, a plugin's letter or
+// a dialog's placement. Anything else is not a plugin's, and is left alone.
 func readPluginPref(p *prefs, k string, v any) {
 	name, ok := strings.CutPrefix(k, prefPluginPrefix)
 	if !ok {
@@ -398,6 +403,15 @@ func readPluginPref(p *prefs, k string, v any) {
 				p.pluginKeys = map[string]string{}
 			}
 			p.pluginKeys[plug+"."+id] = s
+		}
+		return
+	}
+	if plug, ok := strings.CutSuffix(name, prefPluginLetter); ok {
+		if s, isStr := v.(string); isStr {
+			if p.pluginLetter == nil {
+				p.pluginLetter = map[string]string{}
+			}
+			p.pluginLetter[plug] = s
 		}
 		return
 	}

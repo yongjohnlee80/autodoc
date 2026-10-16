@@ -525,6 +525,10 @@ Window {
         }
     }
 
+    // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
+    // written in here as the program is built; Escape closes one, and its plugin runs on
+    // ---- the card plugins' panels ----
+
     // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
     // tab per status, as autofinder's todos panel; at the left edge unless moved, and large: 65% of
     // the window across, 80% along, centred (todosDefault), until the user sizes or places it
@@ -839,7 +843,7 @@ Window {
     AgentsCard { id: agentsCard }
     TodoKeys { id: todoKeys }
     // ---- end of the generated cards ----
-    PluginKeys { id: pluginKeys }
+    PluginChooser { id: pluginChooser }
     LuaKeys { id: luaKeys }
     Help { id: help }
     Arrange { id: arrange }

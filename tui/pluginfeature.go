@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -28,10 +29,16 @@ type plugins struct {
 	pluginList []pluginEntry
 	pluginRows *tuidecl.ListModel
 	feedGen    int // numbers the document feed's pending send (pluginfeed.go)
-	// the SPC p card's letters: each command's, as bound (plugincmds.go)
-	pluginKeyRows    *tuidecl.ListModel
-	pluginKeyTargets map[string]string
-	running          map[string]*pluginRun
+	// SPC p: the chooser's plugins, its cursor, the plugin * asks a letter for and what it last said
+	// (pluginpick.go); then each plugin's card, and the one shown in the list's place ("" for the
+	// list; plugincmds.go)
+	chooser     []pluginRow
+	chooserAt   int
+	chooserBind string
+	chooserNote string
+	pluginCards map[string]*pluginCard
+	cardPlugin  string
+	running     map[string]*pluginRun
 	// the catalog's plugin entries by id, and their letters as F1 names them (plugincmds.go)
 	pluginCmds    map[string]pluginCommandRef
 	pluginLetters map[string][]string
@@ -42,13 +49,16 @@ type plugins struct {
 	// the results panel's table, a plugin's (plugintable.go), and its CSV export while one runs
 	results *resultsTable
 	export  *resultsExport
+	// the card plugins' panels, by name and in order, fixed when the program is built
+	// (pluginpanels.go); nil until then
+	cards     map[string]*cardPanel
+	cardOrder []*cardPanel
 }
 
 func newPlugins(c pluginHost, opt Plugins) *plugins {
 	pl := &plugins{c: c, pluginOpt: opt,
-		pluginRows:    tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
-		pluginKeyRows: tuidecl.NewListModel("key", "target"),
-		running:       map[string]*pluginRun{}}
+		pluginRows: tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
+		running:    map[string]*pluginRun{}}
 	pl.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
 	pl.results = &resultsTable{}
 	pl.results.model = newResultsModel(pl.results, pl.fetchRows)
@@ -60,10 +70,11 @@ func (*plugins) Name() string { return "plugins" }
 
 func (pl *plugins) State() map[string]any {
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
-	return map[string]any{
+	st := map[string]any{
 		"App.plugins":            pl.pluginRows,
-		"App.pluginKeys":         pl.pluginKeyRows,
-		"App.pluginKeysText":     "no plugin commands yet",
+		"App.pluginChooserTitle": "SPC p — plugins",
+		"App.pluginChooserText":  "",
+		"App.pluginChooserHelp":  chooserHelp,
 		"App.pluginUrl":          "",
 		"App.pluginRisk":         pluginRisk,
 		"App.pluginConfirmTitle": "",
@@ -76,13 +87,16 @@ func (pl *plugins) State() map[string]any {
 		"App.resultsSize":        size,
 		"App.resultsLength":      length,
 	}
+	maps.Copy(st, pl.cardState())
+	return st
 }
 
 func (pl *plugins) Commands() map[string]Command {
 	return map[string]Command{
 		"App.openPlugin":         oneString("a plugin", pl.openPlugin),
 		"App.pluginEntry":        oneString("a plugin's menu row or letter", pl.pluginEntry),
-		"App.pluginKey":          oneString("a plugin command letter", pl.pluginKey),
+		"App.openPluginChooser":  none(pl.openPluginChooser),
+		"App.pluginChooserKey":   oneString("a key on the SPC p chooser", pl.pluginChooserKey),
 		"App.startAddPlugin":     none(pl.startAddPlugin),
 		"App.addPlugin":          oneString("a git URL", pl.addPlugin),
 		"App.pluginConfirmed":    none(pl.pluginConfirmed),
@@ -105,7 +119,7 @@ func (pl *plugins) Catalog() []Entry {
 	return []Entry{
 		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", pl.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
-		builtin("plugins.commands", "plugin commands", "pluginKeys.open()", func() { pl.c.Open("pluginKeys") }),
+		builtin("plugins.commands", "plugin commands: choose a plugin, then one of its commands", "App.openPluginChooser()", pl.openPluginChooser),
 		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
 		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
 		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", pl.copyResults),
@@ -115,7 +129,8 @@ func (pl *plugins) Catalog() []Entry {
 }
 
 // Panels is the results panel: a plugin's table (plugintable.go), at the bottom unless moved. Its
-// closing lets the table go, and the keyboard goes back to the page.
+// closing lets the table go, and the keyboard goes back to the page. Then a panel for each card
+// plugin (pluginpanels.go).
 func (pl *plugins) Panels() []PanelSpec {
 	s := resultsPanelSpec()
 	s.Opened = func(c PanelHost) { c.Set("App.resultsShown", true) }
@@ -124,7 +139,7 @@ func (pl *plugins) Panels() []PanelSpec {
 		pl.resultsClosed()
 		c.Keep(c.RestoreKeyboardPane("editor"))
 	}
-	return []PanelSpec{s}
+	return append([]PanelSpec{s}, pl.cardSpecs()...)
 }
 
 // resultsPanelSpec is the results panel: at the bottom, 35% of the window tall and its full width
@@ -135,20 +150,23 @@ func resultsPanelSpec() PanelSpec {
 		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }
 
-// Keys is SPC p, the plugin commands' card. The card is the plugins' own (views/PluginKeys.qml), its
-// letters theirs to bind (plugincmds.go), so it is not a key card of the catalog's: Cards is none.
+// Keys is SPC p, the plugins' chooser, then a plugin's card in its place. It is the plugins' own
+// (views/PluginChooser.qml), its letters the user's and the plugins' (pluginpick.go, plugincmds.go),
+// so it is not a key card of the catalog's: Cards is none.
 func (*plugins) Keys() []Key {
-	return []Key{{Card: leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "pluginKeys.open()", Group: groupWindow}}
+	return []Key{{Card: leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "App.openPluginChooser()", Group: groupWindow}}
 }
 func (*plugins) Cards() []Card { return nil }
 
-// PreferencesChanged lays the SPC p letters out again: the user's choices are preferences; and the
+// PreferencesChanged lays the SPC p letters out again, the plugins' and their commands': the user's
+// choices are preferences; and the
 // results panel takes the size the user left it at.
 func (pl *plugins) PreferencesChanged() {
 	pl.refreshPlugins()
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
 	pl.c.Set("App.resultsLength", length)
+	pl.syncCards()
 }
 
 // ThemeChanged tells the running plugins the theme the screen now wears.
@@ -203,6 +221,11 @@ type pluginHost interface {
 	Keep(err error)
 	// PanelOpen reports whether panel id is open (the results panel opens for a plugin's table)
 	PanelOpen(id string) bool
+	// DockPanel forgets a panel's floating rectangle: a card's, moved to another edge
+	DockPanel(id string)
+	// PageSize is the page's size in cells, as last laid out; 0 before its first layout. A card's
+	// panel is sized from it until the user sizes it
+	PageSize() (w, h int)
 	// TableCore is the table behind a cell-cursor TableView, by its id; nil when there is none
 	TableCore(id string) *widget.TableCore
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
@@ -230,6 +253,19 @@ func (c core) Theme() string                           { return c.h.theme }
 func (c core) NotifyOngoing(id, msg string)            { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)               { c.h.notifyDone(id, msg) }
 func (c core) BrowseFolder() string                    { return c.h.browseFolder() }
+
+func (c core) PageSize() (w, h int) {
+	ed, ok := c.h.editor.(interface{ Context() *tuicore.Context })
+	if !ok || ed.Context() == nil {
+		return 0, 0
+	}
+	ctx := ed.Context()
+	r, ok := ctx.ResolveAnchor(ctx.NodeAnchor())
+	if !ok {
+		return 0, 0
+	}
+	return r.W, r.H
+}
 
 func (c core) TableCore(id string) *widget.TableCore {
 	if c.h.p == nil {
@@ -312,7 +348,7 @@ func (c core) SetPluginPref(name, value string) error {
 	}
 	c.h.setPref(name, value, func(p *prefs) {
 		// the maps are shared with the prefs in effect: written anew, never in place
-		p.pluginKeys, p.pluginPlace = maps.Clone(p.pluginKeys), maps.Clone(p.pluginPlace)
+		p.pluginKeys, p.pluginPlace, p.pluginLetter = maps.Clone(p.pluginKeys), maps.Clone(p.pluginPlace), maps.Clone(p.pluginLetter)
 		readPluginPref(p, name, value)
 	})
 	return nil

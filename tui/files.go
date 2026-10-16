@@ -189,18 +189,25 @@ func (h *Host) openRef(ref fileRef, remember bool, proceed func()) {
 // openRefTo is openRef, the cursor landing as land says once the document is shown (navigation.go):
 // land goes with this open and no other, so an open that doesn't go ahead drops it.
 func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landing) {
+	h.openRefWith(ref, remember, proceed, land, false)
+}
+
+// openRefWith is openRefTo; newBuffer opens ref in a buffer of its own even over an empty one shown
+// (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
+// with nothing else: a question cancelled takes it away with the open.
+func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
 	// an HTML file asks how to open it before anything else: entering its workspace closes the
 	// file open now, which Cancel must leave as it is
 	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {
-		h.askHowToOpen(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw, land) })
+		h.askHowToOpen(ref.path, func(raw bool) { h.openRefAs(ref, remember, proceed, &raw, land, newBuffer) })
 		return
 	}
-	h.openRefAs(ref, remember, proceed, nil, land)
+	h.openRefAs(ref, remember, proceed, nil, land, newBuffer)
 }
 
 // openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
 // is no question (load asks for one that is).
-func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, land *landing) {
+func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, land *landing, newBuffer bool) {
 	open := func(prev *widget.JumpPos) {
 		if raw != nil {
 			h.loadAs(ref.ws, ref.path, prev, *raw, land)
@@ -248,8 +255,8 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
-	if h.file.open || h.file.dirty || h.core.Value() != "" {
-		h.activate(h.newBuffer()) // the page shown is a file or a draft with text: the file gets its own
+	if newBuffer || h.file.open || h.file.dirty || h.core.Value() != "" {
+		h.activate(h.newBuffer()) // the page shown is a file or a draft with text, or a new tab was asked for
 	}
 	open(prev)
 }

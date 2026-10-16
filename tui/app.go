@@ -230,6 +230,9 @@ type Host struct {
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
 	watches map[string]*diskWatch
 	diskFS  func(dir string) (vfs.FS, error)
+	// openNewBuffer: File › Open's next choice opens in a buffer of its own (openPickerNewBuffer),
+	// passed to that open alone (openRefWith)
+	openNewBuffer bool
 
 	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
 	// still to ask about, and the one being restored once its file opens
@@ -453,7 +456,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 	if opt.Dev != "" {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
 		files := os.DirFS(opt.Dev)
-		opts = append(modulesFrom(files), tuidecl.Layout(files, "main.qml"),
+		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
+		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins}, "main.qml"),
 			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.themesReloaded() })))
 	} else {
 		src = opt.Layout
@@ -463,6 +467,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 				src = themeImport.ReplaceAll(src, []byte("import autodoc.theme."+defaultGUITheme+" "+moduleVersion))
 			}
 		}
+		src = h.plugins.withCardPanels(src) // a panel for each card plugin found (pluginpanels.go)
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules there is
 		// nothing mutable to follow, so the normal built-in-only UI keeps no poller.
@@ -486,7 +491,8 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Sources(h.reg.state),
 		tuidecl.Handlers(h.reg.handlers),
 		tuidecl.ErrorSink(h.keep),
-		tuidecl.Types(noteRendererType), // the note editor's renderer (noterenderer.go)
+		tuidecl.Types(noteRendererType),     // the note editor's renderer (noterenderer.go)
+		tuidecl.Types(h.plugins.cardType()), // a card plugin's view in its panel (pluginpanels.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
 		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
 		// vfs/local, whose root refuses an absolute link and lists every link as a file.

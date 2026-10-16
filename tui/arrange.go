@@ -38,7 +38,7 @@ func (h *Host) arrangePanel() {
 		a.begin = &r
 	}
 	h.arrange = a
-	h.set("App.arrangeTitle", "arrange "+panelTitle(panel))
+	h.set("App.arrangeTitle", "arrange "+h.panelTitle(panel))
 	h.keep(h.p.Call("arrange", "open"))
 }
 
@@ -83,9 +83,14 @@ func (h *Host) arrangeCancel() {
 }
 
 // panelTitle is how a panel is named to the user.
-func panelTitle(panel string) string {
+func (h *Host) panelTitle(panel string) string {
 	if panel == "htmlPane" {
 		return "the preview"
+	}
+	for _, c := range h.plugins.cardOrder {
+		if cardPanelID(c.name) == panel {
+			return c.entry.label() // a card plugin's panel: its title
+		}
 	}
 	return "the " + panel
 }

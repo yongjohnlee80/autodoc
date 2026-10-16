@@ -11,7 +11,8 @@ import (
 
 // THE BUFFER TABS — the open buffers on the GUI editor's title bar (golib's Editor.Tabs, ADR
 // 1792076688 §4.7): a tab for each buffer, in opening order, the shown one active. A press shows a
-// buffer; + makes a new, empty one. A tab's menu (≡, a right press) has New buffer, Open file in a
+// buffer, and a press on its × closes it (asking first over unsaved changes); + makes a new, empty
+// one. A tab's menu (≡, a right press) has New buffer, Open file in a
 // new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was opened
 // for, each asking about unsaved changes as the TUI's do. A tab is capped at bufferTabWidth cells;
 // tabs wider than the bar's share scroll between < and > (golib's TabStrip). The TUI has no title
@@ -39,6 +40,7 @@ func (h *Host) syncBufferTabs() {
 		strip.SetMenu(h.bufferTabRows)
 		strip.SetActions(h.newEmptyBuffer, nil)
 		strip.SetMaxTabWidth(bufferTabWidth)
+		strip.SetOnClose(h.closeBufferTab)
 	}
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
@@ -147,6 +149,13 @@ func (h *Host) bufferOfTab(id string) *openBuffer {
 	return h.bufferNumbered(n)
 }
 
+// closeBufferTab is a press on a tab's ×: its buffer closed, asked about first when it is modified.
+func (h *Host) closeBufferTab(id string) {
+	if b := h.bufferOfTab(id); b != nil {
+		h.closeBuffer(b)
+	}
+}
+
 // showBuffer shows b, if it is still open, and gives the editor the keys.
 func (h *Host) showBuffer(b *openBuffer) {
 	if !slices.Contains(h.buffers, b) {
@@ -176,8 +185,8 @@ func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 	sub.Enabled = len(goTo) > 0
 	rows := []widget.MenuItemModel{
 		bufferTabRow("buffer.tabs.new", "&New buffer", h.newEmptyBuffer),
-		// File › Open: a file opens in a buffer of its own (an empty, clean one shown is filled instead)
-		bufferTabRow("buffer.tabs.open", "&Open file in a new buffer…", h.openPicker),
+		// File › Open, the file chosen in a buffer of its own, even over an empty one shown
+		bufferTabRow("buffer.tabs.open", "&Open file in a new buffer…", h.openPickerNewBuffer),
 		sub,
 	}
 	b := h.bufferOfTab(id)
