@@ -244,6 +244,9 @@ Each notification carries one map.
   open (below), or Manage plugins. It stops too when it exits, or when AutoDoc quits.
 - A card's panel is made when AutoDoc starts: a card plugin added while it runs has its panel from
   the next start.
+- **A card, or a dialog, draws no key help of its own.** It registers its commands (`[[commands]]`,
+  each with an optional `key`), and SPC p and Plugins › Commands… list them with their letters. Its
+  frames are its content: a line of keys there says again what AutoDoc already shows.
 
 ### The document feed (`[feed] document = true`)
 
@@ -329,8 +332,8 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
 
 - Each command is on the Plugins menu, under the plugin's own entry, beside Open (a dialog's or a
   card's) and Close (a card's Turn off).
-- **The SPC p card** lists every plugin command with its letter (SPC p, then the letter). AutoDoc's
-  own leader letters are never a plugin's: SPC p is a card of its own.
+- **The SPC p card** lists every plugin command with its letter (SPC p, or Plugins › Commands…,
+  then the letter). AutoDoc's own leader letters are never a plugin's: SPC p is a card of its own.
 - **Letters.** A command's `key` binds only if no plugin earlier by name holds that letter. The other
   is listed unbound, saying whose the letter is. The preference
   `tui.plugin.<name>.key.<id>` overrides a manifest's letter, and `""` unbinds the command. Set it
