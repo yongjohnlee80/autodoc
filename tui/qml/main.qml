@@ -504,18 +504,21 @@ Window {
         onClosed: App.panelClosed("results")
         Flex {
             direction: Tui.Vertical
-            // the sort of the loaded rows, as SQL writes one: Enter sorts; its line is the text's
-            // error, the fields a word typed may be, or what the sort covers
+            // the loaded rows tidied as SQL writes it: the clause (ORDER BY, WHERE), then its text,
+            // which Enter applies, each clause keeping its own; the line is the clause's error, the
+            // fields a word typed may be, or what the view holds of the result
             Flex {
                 direction: Tui.Horizontal
-                Text { text: "ORDER BY " }
+                ComboBox { id: resultsClause; model: App.resultsClauses; textRole: "label"; valueRole: "key"; maxWidth: 14
+                    currentIndex: App.resultsClauseIndex; onActivated: App.resultsClauseChosen(index, resultsText.text) }
+                Text { text: " " }
                 TextField {
-                    id: resultsOrder
+                    id: resultsText
                     Layout.fillWidth: true
-                    text: App.resultsOrder
-                    placeholderText: "column [ASC|DESC], … — sorts the loaded rows"
-                    onAccepted: App.orderResults(text)
-                    onTextEdited: App.resultsOrderTyped(text)
+                    text: App.resultsClauseText
+                    placeholderText: "the clause's text, over the loaded rows: column [ASC|DESC], …"
+                    onAccepted: App.applyResultsClause(text)
+                    onTextEdited: App.resultsClauseTyped(text)
                 }
                 Text { text: " " }
                 Text { text: App.resultsSortLine }
