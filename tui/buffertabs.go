@@ -14,16 +14,16 @@ import (
 // buffer, and a press on its × closes it (asking first over unsaved changes); + makes a new, empty
 // one. A tab's menu (≡, a right press) has New buffer, Open file in a
 // new buffer… and Go to › every buffer, then Save, Close and Close others for the tab it was opened
-// for, each asking about unsaved changes as the TUI's do. The tabs take the bar's room up to Raw |
-// Rendered, each whole while they all fit; when they do not, the strip cuts each to the widest width
-// at which they do (bufferTabLabel, its middle cut), never under bufferTabWidth cells, and under that
-// scrolls them between ← and → (golib's TabStrip.SetLabelFit). The TUI has no title
+// for, each asking about unsaved changes as the TUI's do. A tab is never wider than bufferTabWidth
+// cells: a longer name is cut in its middle (bufferTabLabel), and a tab never changes width as tabs
+// open and close or the window resizes (Johno: consistent, not re-fitted each time). The strip has
+// the bar's room up to Raw | Rendered; tabs that do not fit scroll between ← and →. The TUI has no title
 // bar: its editor has no strip (bufferStrip is nil there), and :b and the Buffers picker switch
 // instead.
 
-// bufferTabWidth is the narrowest a buffer tab is cut to, in cells, its padding included, when the
-// tabs do not fit the bar whole; its menu's Go to › has the name whole.
-const bufferTabWidth = 24
+// bufferTabWidth is a buffer tab's widest, in cells, its padding included: a longer name is cut in
+// its middle there, the same however many tabs are open; its menu's Go to › has the name whole.
+const bufferTabWidth = 32
 
 // syncBufferTabs feeds the editor's strip the buffers as they are now, wiring it the first time
 // it is seen (a new editor, after a reload, is a new strip).
@@ -41,17 +41,12 @@ func (h *Host) syncBufferTabs() {
 		})
 		strip.SetMenu(h.bufferTabRows)
 		strip.SetActions(h.newEmptyBuffer, nil)
-		strip.SetLabelFit(bufferTabWidth, func(id string, w int) string {
-			if b := h.bufferOfTab(id); b != nil {
-				return h.bufferTabLabel(b, w)
-			}
-			return ""
-		})
+		strip.SetMaxTabWidth(bufferTabWidth) // a backstop: each label comes cut to fit (bufferTabLabel)
 		strip.SetOnClose(h.closeBufferTab)
 	}
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
-		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: h.bufferTabLabel(b, 0)}
+		tabs[i] = widget.StripTab{ID: strconv.Itoa(b.n), Label: h.bufferTabLabel(b, bufferTabWidth-2)} // 2: the padding
 	}
 	strip.SetTabs(tabs)
 	if h.active != nil {
