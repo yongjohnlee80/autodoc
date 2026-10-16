@@ -64,7 +64,7 @@ func cellColor(t *testing.T, v string) tuicore.CellColor {
 
 // TestEveryThemeGolibShipsIsOnTheThemeMenu: Options › Theme lists every theme golib ships, from
 // its catalog (builtinThemeRows), not a list of its own: a theme golib adds shows with no change
-// here; and a row of one switches to it, checked.
+// here; and its row's access key switches to it, stored and checked.
 func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
@@ -78,8 +78,18 @@ func TestEveryThemeGolibShipsIsOnTheThemeMenu(t *testing.T) {
 		}
 		r.s.WaitForText(t, strings.ReplaceAll(label, "&", ""))
 	}
+	// the last golib names, a theme added after the first five once golib ships more
 	last := themes.Names()[len(themes.Names())-1]
-	onLoop(r, func() bool { r.h.useTheme(last); return true })
+	label := themeMenuLabels[last]
+	amp := strings.Index(label, "&")
+	if amp < 0 || amp+1 >= len(label) {
+		t.Fatalf("%s's menu label %q has no access key", last, label)
+	}
+	r.keys(t, key(rune(strings.ToLower(label[amp+1 : amp+2])[0])))
+	r.s.WaitFor(t, "tui.theme = "+last, func(string) bool {
+		m, err := d.db.Preferences(context.Background())
+		return err == nil && m["tui.theme"] == last
+	})
 	r.s.WaitFor(t, "the menu's check on "+last, func(string) bool {
 		return onLoop(r, func() bool {
 			m := r.h.builtinThemeRows()
