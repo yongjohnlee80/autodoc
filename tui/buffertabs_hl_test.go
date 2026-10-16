@@ -21,7 +21,7 @@ func (r *running) shownPath() string {
 // order the tabs show them, wrapping at both ends. Insert mode types them; Visual mode keeps Vim's
 // H and L (the screen's top and bottom line).
 func TestHAndLSwitchBuffers(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "ccc\n"}})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n", "c.md", "c1\nc2\nc3\n"}})
 	r := attached(t, d)
 	r.waitListed(t, 3)
 	for _, f := range []string{"a.md", "b.md", "c.md"} {
@@ -50,14 +50,20 @@ func TestHAndLSwitchBuffers(t *testing.T) {
 	// Insert mode: H is typed, the buffer stays
 	r.keys(t, key('i'), key('H'), esc())
 	r.waitTyped(t)
-	if got := r.shownPath(); got != "c.md" || r.editorText() != "Hccc\n" {
-		t.Fatalf("Insert mode's H: shown %q, text %q; want c.md, Hccc", got, r.editorText())
+	if got := r.shownPath(); got != "c.md" || r.editorText() != "Hc1\nc2\nc3\n" {
+		t.Fatalf("Insert mode's H: shown %q, text %q; want c.md, Hc1…", got, r.editorText())
 	}
-	// Visual mode: Vim's H, the buffer stays
-	r.keys(t, key('v'), key('H'), esc())
+	// Visual mode: Vim's H, the cursor to the screen's top line, the buffer stays. Waited for by the
+	// cursor's move, so the check below reads after H, not before it
+	line := func() int { return onLoop(r, func() int { l, _ := r.h.core.Line(); return l }) }
+	r.keys(t, key('G'))
+	r.s.WaitFor(t, "G: the cursor on the last line", func(string) bool { return line() > 0 })
+	r.keys(t, key('v'), key('H'))
+	r.s.WaitFor(t, "Visual H: the cursor on the top line", func(string) bool { return line() == 0 || r.shownPath() != "c.md" })
 	if got := r.shownPath(); got != "c.md" {
 		t.Fatalf("Visual mode's H showed %q, want c.md still", got)
 	}
+	r.keys(t, esc())
 }
 
 // TestHAndLStayOutOfTheTerminal: with the keyboard in the terminal, L is the shell's, and the

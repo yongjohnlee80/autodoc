@@ -68,11 +68,11 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 	}
 }
 
-// TestTheGUITabsTakeTheBarsRoom: the buffer tabs take the title bar's room up to Raw | Rendered.
-// Wide, a long name shows whole; narrowed, every tab is cut in its middle to fit, never under
-// bufferTabWidth cells, and under that they scroll between ← and →. (was: two thirds of the bar, and
-// every tab cut at bufferTabWidth however much room was left)
-func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
+// TestTheGUITabsKeepOneWidth: a buffer tab is never wider than bufferTabWidth, a longer name cut in
+// its middle, and keeps its width however many tabs are open and however wide the window is: tabs
+// that do not fit scroll between ← and →, none re-fitted (Johno: consistent, never re-flowed). The
+// window is never narrower than the TUI's 80 columns, under which nothing is laid out.
+func TestTheGUITabsKeepOneWidth(t *testing.T) {
 	long := []string{"a-long-file-name-for-the-first-tab.md", "another-long-file-name-for-a-tab.md", "a-third-long-file-name-to-overflow.md"}
 	d := startDaemon(t, map[string][]string{"kb": {long[0], "a\n", long[1], "b\n", long[2], "c\n"}})
 	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
@@ -90,39 +90,37 @@ func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
 		}
 		return tabs, small
 	}
-	whole := func(name string) int { return len(name) + 4 } // " × " before it, a cell after
-	for _, f := range long[:2] {
+	for _, f := range long {
 		r.openByPicker(t, f)
 		r.waitFile(t, f)
 	}
-	r.s.WaitFor(t, "wide: both long names whole", func(string) bool {
+	var wide []int
+	r.s.WaitFor(t, "wide: three tabs, each cut to the cap, no arrows", func(string) bool {
 		tabs, small := look()
-		return len(tabs) == 2 && small == 2 && slices.Contains(tabs, whole(long[0])) && slices.Contains(tabs, whole(long[1]))
+		wide = tabs
+		return len(tabs) == 3 && small == 2 && slices.Max(tabs) <= bufferTabWidth+2 && slices.Min(tabs) == slices.Max(tabs)
 	})
-
-	// the third opened while wide (the leader card needs the room), then the window narrowed: the
-	// strip fits its tabs again to the room it now has
-	r.openByPicker(t, long[2])
-	r.waitFile(t, long[2])
-	r.s.Backend.InjectResize(60, 30)
-	r.s.WaitFor(t, "narrow: cut, and scrolling between the arrows", func(string) bool {
+	r.s.Backend.InjectResize(100, 30)
+	r.s.WaitFor(t, "narrow: the same widths, scrolling between the arrows", func(string) bool {
 		tabs, small := look()
 		if small != 4 || len(tabs) == 0 {
 			return false
 		}
-		// every tab cut, and the whole ones at the floor (with its ×); one cut at the window's edge,
+		// every tab the window shows whole is as wide as before; the one cut at the window's edge,
 		// or the one before the first in the cells left over, is narrower, as the window draws it
-		atFloor := false
+		whole := 0
 		for _, w := range tabs {
-			if w >= whole(long[2]) || w > bufferTabWidth+2 {
+			if w > wide[0] {
 				return false
 			}
-			atFloor = atFloor || w == bufferTabWidth+2
+			if w == wide[0] {
+				whole++
+			}
 		}
-		return atFloor
+		return whole > 0
 	})
-	// cut in the middle, by AutoDoc's fit: the title row (the one with the arrows) keeps a name's
-	// end, its kind after the ellipsis, as a cut at its end would not
+	// cut in the middle, by AutoDoc: the title row (the one with the arrows) keeps a name's end, its
+	// kind after the ellipsis, as a cut at its end would not
 	r.s.WaitFor(t, "a tab cut in its middle", func(sc string) bool {
 		for _, line := range strings.Split(sc, "\n") {
 			if strings.Contains(line, "←") && middleCut.MatchString(line) {
@@ -146,7 +144,7 @@ func TestLInTheGUIScrollsTheStripToTheTab(t *testing.T) {
 		r.openByPicker(t, f)
 		r.waitFile(t, f)
 	}
-	r.s.Backend.InjectResize(60, 30)
+	r.s.Backend.InjectResize(100, 30) // the TUI lays nothing out under 80 columns
 	first, last := onLoop(r, func() string { return strconv.Itoa(r.h.buffers[0].n) }), onLoop(r, func() string { return strconv.Itoa(r.h.buffers[2].n) })
 	r.s.WaitFor(t, "narrow: the last tab active and shown, the strip scrolled to it", func(string) bool {
 		return onLoop(r, func() bool { return strip.Active() == last && strip.ActiveTabIndex() >= 0 })
