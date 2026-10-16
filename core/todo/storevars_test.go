@@ -2,6 +2,7 @@ package todo_test
 
 import (
 	"errors"
+	"path"
 	"reflect"
 	"slices"
 	"strings"
@@ -382,6 +383,75 @@ func TestAStoresWorkspace(t *testing.T) {
 	if err := e.m.SetKB(ctx, out, "nope"); !is(err, todo.ErrNoWorkspace) {
 		t.Errorf("set_kb to an unknown workspace: %v", err)
 	}
+}
+
+// A store recorded to a workspace that is then removed belongs to none, or to the deepest workspace
+// still containing it, alike for todos.vars, workspace.of, todos.stores and the index's variables;
+// the record stays, so adding the workspace back restores the link, a todos.set_kb one to an outside
+// store included.
+func TestAStoreOfARemovedWorkspace(t *testing.T) {
+	e := claimed(t)
+	out := outside(t, e)
+	e.must(e.m.SetKB(ctx, out, "kb"))
+	e.disk.MkdirAll("/w/in")
+	e.roots["outer"], e.roots["inner"] = "/w", "/w/in"
+	nested := todo.At{Workspace: "inner"}
+	e.must(e.m.Claim(ctx, nested))
+	if _, err := e.m.Scaffold(ctx, nested); err != nil {
+		t.Fatal(err)
+	}
+	owners := func() map[string]string { // a store's path: its workspace, as todos.stores answers it
+		t.Helper()
+		list, err := e.m.Stores(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, s := range list {
+			got[s.Path] = s.KB
+		}
+		return got
+	}
+	agree := func(what string, at todo.At, file, root string) {
+		t.Helper()
+		if v := varOf(t, e, at, "KB_ROOT"); v.Value != root {
+			t.Errorf("%s: todos.vars KB_ROOT %q, want %q", what, v.Value, root)
+		}
+		if _, r, err := e.m.Owner(ctx, file); err != nil || r != root {
+			t.Errorf("%s: workspace.of root %q (%v), want %q", what, r, err, root)
+		}
+		if kb := owners()[path.Dir(path.Dir(file))]; kb != root {
+			t.Errorf("%s: todos.stores kb %q, want %q", what, kb, root)
+		}
+		all, err := e.m.AllEffectiveVars(ctx)
+		if err != nil || all[root]["KB_ROOT"] != root && root != "" {
+			t.Errorf("%s: the index has no variables for %q: %v %v", what, root, all, err)
+		}
+	}
+	agree("linked", out, "/out/.todo-list/open/x.md", "/kb")
+	agree("nested", nested, "/w/in/.todo-list/open/x.md", "/w/in")
+
+	delete(e.roots, "kb")
+	delete(e.roots, "inner")
+	agree("its workspace removed", out, "/out/.todo-list/open/x.md", "")
+	agree("its nested workspace removed: the outer one holds it", todo.At{Root: "/w/in"}, "/w/in/.todo-list/open/x.md", "/w")
+	all, err := e.m.AllEffectiveVars(ctx)
+	if _, stale := all["/kb"]; err != nil || stale {
+		t.Errorf("the index keeps the removed workspace's variables: %v %v", all, err)
+	}
+	st, err := e.j.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range st.Stores {
+		if rec.Path == "/out/.todo-list" && rec.KB != "/kb" || rec.Path == "/w/in/.todo-list" && rec.KB != "/w/in" {
+			t.Errorf("a read rewrote the record: %+v", rec)
+		}
+	}
+
+	e.roots["kb"], e.roots["inner"] = "/kb", "/w/in"
+	agree("its workspace back", out, "/out/.todo-list/open/x.md", "/kb")
+	agree("its nested workspace back", nested, "/w/in/.todo-list/open/x.md", "/w/in")
 }
 
 // The migration (ADR 1792132105 §2.7): a store's old file's relative values are rebased into the KB's

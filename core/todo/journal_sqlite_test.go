@@ -80,6 +80,7 @@ var sqliteSuites = []struct {
 	{"TheRegistrySaysWhenItsStoresChange", TestTheRegistrySaysWhenItsStoresChange},
 	{"AClaimRecordsTheProjectItsStoreIsIn", TestAClaimRecordsTheProjectItsStoreIsIn},
 	{"AStoresWorkspace", TestAStoresWorkspace},
+	{"AStoreOfARemovedWorkspace", TestAStoreOfARemovedWorkspace},
 	{"TheMigrationFoldsAStoresFile", TestTheMigrationFoldsAStoresFile},
 	{"AMigrationConflictWaitsForAPerson", TestAMigrationConflictWaitsForAPerson},
 	{"AConflictedNameNeverFallsToTheEnvironment", TestAConflictedNameNeverFallsToTheEnvironment},

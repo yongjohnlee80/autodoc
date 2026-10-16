@@ -202,9 +202,21 @@ func (m *Manager) nameOf(root string) string {
 	return ""
 }
 
-// owner is the root of the workspace the store id belongs to: the one recorded; else (a store recorded
-// before ADR 1792132105, or outside every workspace then) the deepest workspace containing the store,
-// recorded now so a workspace added later never takes it; else "".
+// ownerOf is the workspace root a store record belongs to now: the recorded one while a workspace has
+// that root; else the deepest workspace containing the store; else "". A recorded root whose
+// workspace was removed is kept, so adding the workspace back restores the link (a todos.set_kb one
+// to an outside store included); until then the store reads as an unrecorded one, and nothing is
+// recorded for it.
+func (m *Manager) ownerOf(rec StoreRecord) string {
+	if rec.KB != "" && m.nameOf(rec.KB) != "" {
+		return rec.KB
+	}
+	return m.containing(rec.Path)
+}
+
+// owner is the root of the workspace the store id belongs to: ownerOf's. A store recorded before ADR
+// 1792132105, or outside every workspace then, has its containing workspace recorded now, so a
+// workspace added later never takes it.
 func (m *Manager) owner(ctx context.Context, id string) (string, error) {
 	st, err := m.j.Settings(ctx)
 	if err != nil {
@@ -215,7 +227,7 @@ func (m *Manager) owner(ctx context.Context, id string) (string, error) {
 		return "", nil
 	}
 	if rec.KB != "" {
-		return rec.KB, nil
+		return m.ownerOf(rec), nil
 	}
 	kb := m.containing(rec.Path)
 	if kb == "" {
@@ -509,7 +521,7 @@ func (m *Manager) AllEffectiveVars(ctx context.Context) (map[string]map[string]s
 		return nil, err
 	}
 	for _, rec := range st.Stores {
-		roots[rec.KB] = true
+		roots[m.ownerOf(rec)] = true
 	}
 	out := map[string]map[string]string{}
 	for _, root := range slices.Sorted(maps.Keys(roots)) {
@@ -855,8 +867,8 @@ func (m *Manager) fold(ctx context.Context, kb string) map[string]bool {
 	blocked := false
 	for _, id := range slices.Sorted(maps.Keys(st.Stores)) {
 		rec := st.Stores[id]
-		if rec.KB != kb {
-			continue
+		if rec.KB != kb || m.ownerOf(rec) != kb {
+			continue // another workspace's, or recorded to a removed one: folded when that one is back
 		}
 		sv, ok, err := m.readVarsFile(ctx, rec.Path)
 		if err != nil {
