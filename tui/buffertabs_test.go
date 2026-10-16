@@ -126,3 +126,51 @@ func TestABufferTabsMenu(t *testing.T) {
 		t.Errorf("Discard wrote b.md: %q", got)
 	}
 }
+
+// TestBufferTabsAreToldApart: no two tabs read alike: one path open in two workspaces shows each
+// tab's workspace, and two drafts each show their number.
+func TestBufferTabsAreToldApart(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"notes/a.md", "a\n"}, "kb2": {"notes/a.md", "other a\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 1)
+	r.openByPicker(t, "notes/a.md")
+	r.waitFile(t, "notes/a.md")
+	ws := r.file().ws
+	otherWS := map[string]string{"kb": "kb2", "kb2": "kb"}[ws]
+	onLoop(r, func() bool { r.h.openRef(fileRef{otherWS, "notes/a.md"}, false, nil); return true })
+	r.s.WaitFor(t, "notes/a.md of "+otherWS+" open", func(string) bool { f := r.file(); return f.open && f.ws == otherWS })
+	onLoop(r, func() bool {
+		r.h.restoreAsDraft(recovered{Text: "one\n"}, "")
+		r.h.restoreAsDraft(recovered{Text: "two\n"}, "")
+		return true
+	})
+	labels := onLoop(r, func() []string {
+		var out []string
+		for _, b := range r.h.buffers {
+			out = append(out, r.h.bufferTabLabel(b))
+		}
+		return out
+	})
+	seen := map[string]bool{}
+	for _, l := range labels {
+		if seen[l] {
+			t.Fatalf("tabs %q: %q twice", labels, l)
+		}
+		seen[l] = true
+	}
+	want := []string{ws + ": notes/a.md", otherWS + ": notes/a.md"}
+	for _, w := range want {
+		if !seen[w] {
+			t.Fatalf("tabs %q: want %q", labels, w)
+		}
+	}
+	drafts := 0
+	for _, l := range labels {
+		if strings.HasPrefix(l, untitled+" ") && strings.HasSuffix(l, " [+]") {
+			drafts++
+		}
+	}
+	if drafts != 2 {
+		t.Fatalf("tabs %q: want two numbered, modified drafts", labels)
+	}
+}
