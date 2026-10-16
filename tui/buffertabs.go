@@ -40,11 +40,7 @@ func (h *Host) syncBufferTabs() {
 		strip.SetMenu(h.bufferTabRows)
 		strip.SetActions(h.newEmptyBuffer, nil)
 		strip.SetMaxTabWidth(bufferTabWidth)
-		strip.SetOnClose(func(id string) { // a tab's ×: its buffer closed, asked about first if modified
-			if b := h.bufferOfTab(id); b != nil {
-				h.closeBuffer(b)
-			}
-		})
+		strip.SetOnClose(h.closeBufferTab)
 	}
 	tabs := make([]widget.StripTab, len(h.buffers))
 	for i, b := range h.buffers {
@@ -151,6 +147,13 @@ func (h *Host) bufferOfTab(id string) *openBuffer {
 		return nil
 	}
 	return h.bufferNumbered(n)
+}
+
+// closeBufferTab is a press on a tab's ×: its buffer closed, asked about first when it is modified.
+func (h *Host) closeBufferTab(id string) {
+	if b := h.bufferOfTab(id); b != nil {
+		h.closeBuffer(b)
+	}
 }
 
 // showBuffer shows b, if it is still open, and gives the editor the keys.

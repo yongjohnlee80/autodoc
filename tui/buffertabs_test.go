@@ -209,6 +209,35 @@ func TestABufferTabsMenuMakesANewBuffer(t *testing.T) {
 	}
 }
 
+// TestATabsCloseMarkClosesItsBuffer: a tab's × (closeBufferTab, the strip's SetOnClose) closes a
+// clean buffer at once, and asks first about a modified one, which stays until answered. A tab no
+// buffer has (closed meanwhile) closes nothing.
+func TestATabsCloseMarkClosesItsBuffer(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "aaa\n", "b.md", "bbb\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 2)
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	r.typeInEditor(t, "X")
+	r.waitTyped(t)
+	r.openByPicker(t, "b.md")
+	r.waitFile(t, "b.md")
+	a, b := bufferOn(r, "a.md"), bufferOn(r, "b.md")
+	count := func() int { return onLoop(r, func() int { return len(r.h.buffers) }) }
+	before := count()
+	onLoop(r, func() bool { r.h.closeBufferTab("999"); return true })
+	if count() != before {
+		t.Fatalf("a tab no buffer has closed one: %d buffers, want %d", count(), before)
+	}
+	onLoop(r, func() bool { r.h.closeBufferTab(tabID(b)); return true }) // clean: closed at once
+	r.s.WaitFor(t, "b.md closed", func(string) bool { return bufferOn(r, "b.md") == nil })
+	onLoop(r, func() bool { r.h.closeBufferTab(tabID(a)); return true }) // modified: asked first
+	r.s.WaitForText(t, "unsaved file")
+	if bufferOn(r, "a.md") != a {
+		t.Fatal("a.md, modified, closed without the question")
+	}
+}
+
 // TestALongTabKeepsItsMarkAndWhatTellsItApart: a long name is cut in its middle within the tab, its
 // end (the file's name and kind) and [+] kept; two long paths that cut alike take their numbers.
 func TestALongTabKeepsItsMarkAndWhatTellsItApart(t *testing.T) {
