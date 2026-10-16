@@ -157,7 +157,8 @@ func testStdio() net.Conn {
 	return plugin.FileConn(os.NewFile(0, "stdin"), os.NewFile(1, "stdout"))
 }
 
-// echo draws what it has been sent: its size and theme, and the keys, one row each. In mode "snap"
+// echo draws what it has been sent: its size and theme, and the keys, one row each; q asks the host
+// to close it (host.close), but in mode "typist", where q is a letter typed. In mode "snap"
 // (protocol 4) a command says the document it runs on, and the key w holds it until the test lets
 // it go (plugintable_test.go).
 type echo struct {
@@ -189,6 +190,9 @@ func (e *echo) Key(k plugin.Key) {
 	}
 	switch k.Key {
 	case "q":
+		if e.mode == "typist" { // a plugin typing into a field of its own: q is a letter
+			break
+		}
 		_ = e.peer.Close()
 	case "x":
 		fmt.Fprintln(os.Stderr, "boom: the test plugin crashed")
@@ -1073,7 +1077,8 @@ func TestProtocolTwosManifestKeys(t *testing.T) {
 		{"protocol = 2\n" + head + "start = \"launch\"\n", "start: only a service starts on its own"},
 		{svc + "start = \"boot\"\n", `start "boot": want use or launch`},
 		{svc, `start = "use": nothing would start it (no command, no feed)`},
-		{"protocol = 2\n" + head + "[dialog]\nmodal = false\nesc = \"hide\"\n", "[dialog] esc: a card's Esc gives the keys back"},
+		{"protocol = 2\n" + head + "[dialog]\nmodal = false\nesc = \"hide\"\n", "[dialog] esc: a card's Esc closes its panel, and its plugin runs on"},
+		{"protocol = 2\n" + head + "[dialog]\nmodal = false\nesc = \"close\"\n", "[dialog] esc: a card's Esc closes its panel, and its plugin runs on"},
 		{"protocol = 2\n" + head + "[[commands]]\nid = \"A\"\ntitle = \"A\"\n", `command id "A": want lower-case`},
 		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\ntitle = \"A\"\n[[commands]]\nid = \"a\"\ntitle = \"B\"\n", `command id "a": twice`},
 		{"protocol = 2\n" + head + "[[commands]]\nid = \"a\"\n", `command "a": no title`},
@@ -1100,18 +1105,18 @@ func (r *running) textAt(text string) (x, y int) {
 	return -1, -1
 }
 
-// TestACardTakesTheKeysOnlyWhenFocused (ADR 1791268009 §2.2): a non-modal card opens beside the
-// page without taking the keys; a click on it focuses it, the plugin told plugin.focus true, and
-// its keys go to the plugin; Esc gives them back to the editor, plugin.focus false, and the card
-// stays open.
+// TestACardTakesTheKeysOnlyWhenFocused (ADR 1791268009 §2.2): a non-modal card opens in its panel
+// beside the page without taking the keys; a click on it focuses it, the plugin told plugin.focus
+// true, and its keys go to the plugin; Esc gives them back to the editor, plugin.focus false, and
+// closes the panel, the plugin told plugin.hide and running on.
 func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements = [\"top-right\"]\n")
-	r, _ := pluginTUI(t, dir)
-	r.openPlugin("card")
-	r.waitShown(t, "open 36x8 dark")
+	r, logs := pluginTUI(t, dir)
+	run := r.openPlugin("card")
+	r.waitShown(t, "dark")
 	r.waitShown(t, "p2")
-	r.s.WaitForText(t, "Card · Esc returns the keys")
+	r.s.WaitForText(t, "┌ Card")
 
 	r.keys(t, key('i'), key('Q'))
 	r.s.WaitFor(t, "the editor took the keys", func(string) bool { return strings.Contains(r.editorText(), "Q") })
@@ -1120,7 +1125,7 @@ func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 	}
 	r.keys(t, esc())
 
-	x, y := r.textAt("open 36x8")
+	x, y := r.textAt("open ")
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y},
 		tuicore.MouseEvent{Kind: tuicore.MouseRelease, Button: tuicore.MouseLeft, X: x, Y: y})
 	r.waitShown(t, "focus true")
@@ -1129,14 +1134,22 @@ func TestACardTakesTheKeysOnlyWhenFocused(t *testing.T) {
 	before := r.editorText()
 
 	r.keys(t, esc())
-	r.waitShown(t, "focus false")
-	if !strings.Contains(r.s.String(), "Card · Esc returns the keys") {
-		t.Fatalf("Esc closed the card:\n%s", r.s)
+	waitSaid(t, logs, "card", "hide")
+	if got := said(t, logs, "card"); !slices.Contains(got, "focus false") {
+		t.Fatalf("Esc did not give the keys back: the plugin said %q", got)
+	}
+	if onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("card")] }) {
+		t.Fatalf("Esc left the card's panel open:\n%s", r.s)
+	}
+	select {
+	case <-run.exited:
+		t.Fatal("Esc stopped the card's plugin")
+	case <-time.After(300 * time.Millisecond):
 	}
 	r.keys(t, key('i'), key('W'))
 	r.s.WaitFor(t, "the editor has the keys again", func(string) bool { return strings.Contains(r.editorText(), "W") })
-	if strings.Contains(r.s.String(), "key W") || !strings.Contains(before, "Q") {
-		t.Fatalf("after Esc the card still took keys:\n%s", r.s)
+	if slices.Contains(said(t, logs, "card"), "key W ctrl=false") || !strings.Contains(before, "Q") {
+		t.Fatalf("after Esc the card still took keys: it said %q", said(t, logs, "card"))
 	}
 }
 
@@ -1204,8 +1217,8 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 // then its card lists its commands with their letters; a letter runs its command, starting the
 // plugin first and sending the command once it has opened, and a card's command focuses it. A letter
 // is unique within its plugin only: alpha and beta both have s, and gamma has h as alpha does. A
-// card's toggle is the host's: it closes the open card, and opens it again, focused; it is never sent
-// to the plugin.
+// card's toggle is the host's, and never sent to the plugin: it shows a hidden card, focused; it
+// turns off a shown one, stopping its plugin; and it starts one that is off.
 func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
@@ -1218,7 +1231,7 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	if err := os.Rename(filepath.Join(dir, "gamma"), filepath.Join(dir, "0-gamma")); err != nil {
 		t.Fatal(err)
 	}
-	r, _ := pluginTUI(t, dir)
+	r, logs := pluginTUI(t, dir)
 
 	r.leader(t, 'p')
 	r.s.WaitForText(t, "SPC p — plugins")
@@ -1245,19 +1258,44 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	r.keys(t, key('z'))
 	r.waitShown(t, "key z")
 
-	r.keys(t, esc()) // the keys back to the editor; the card stays
-	r.waitShown(t, "focus false")
+	r.keys(t, esc()) // the keys back to the editor; the card's panel closes, its plugin runs on
+	waitSaid(t, logs, "alpha", "focus false")
+	waitSaid(t, logs, "alpha", "hide")
+	run := onLoop(r, func() *pluginRun { return r.h.plugins.running["alpha"] })
 	r.pluginCardOf(t, "alpha")
-	r.keys(t, key('s')) // toggle, the card open: closed
-	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "Alpha · Esc returns the keys") })
-	r.pluginCardOf(t, "alpha")
-	r.keys(t, key('s')) // toggle, the card closed: opened, focused
-	r.waitShown(t, "focus true")
-	if strings.Contains(r.s.String(), "command toggle") {
-		t.Fatalf("the host's toggle was sent to the plugin:\n%s", r.s)
-	}
+	r.keys(t, key('s')) // toggle, the card hidden: shown again, focused
+	waitSaid(t, logs, "alpha", "show")
+	waitCount(t, logs, "alpha", "focus true", 2)
 	r.keys(t, key('y'))
 	r.waitShown(t, "key y")
+	if onLoop(r, func() *pluginRun { return r.h.plugins.running["alpha"] }) != run {
+		t.Fatal("the toggle on a hidden card started its plugin again")
+	}
+
+	r.keys(t, esc())
+	waitSaid(t, logs, "alpha", "hide")
+	r.openPlugin("alpha") // its menu entry: shown, the keys left with the editor
+	r.s.WaitFor(t, "the panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
+	r.pluginCardOf(t, "alpha")
+	r.keys(t, key('s')) // toggle, the card shown: turned off
+	select {
+	case <-run.exited:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the toggle on a shown card did not stop its plugin")
+	}
+	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
+	r.pluginCardOf(t, "alpha")
+	r.keys(t, key('s')) // toggle, the card off: started, focused
+	r.s.WaitFor(t, "started again", func(string) bool {
+		again := onLoop(r, func() *pluginRun { return r.h.plugins.running["alpha"] })
+		return again != nil && again != run
+	})
+	r.waitShown(t, "focus true")
+	if slices.Contains(said(t, logs, "alpha"), "command toggle") {
+		t.Fatalf("the host's toggle was sent to the plugin: %q", said(t, logs, "alpha"))
+	}
+	r.keys(t, key('w'))
+	r.waitShown(t, "key w")
 }
 
 // TestAPreferenceRebindsAPluginCommand: tui.plugin.<name>.key.<id> overrides the manifest's letter
@@ -1296,6 +1334,28 @@ func said(t *testing.T, logs, name string) []string {
 		}
 	}
 	return out
+}
+
+// waitCount waits until the plugin has said line n times.
+func waitCount(t *testing.T, logs, name, line string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		got := said(t, logs, name)
+		c := 0
+		for _, s := range got {
+			if s == line {
+				c++
+			}
+		}
+		if c >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s said %q %d times, not %d; it said %q", name, line, c, n, got)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // waitSaid waits until the plugin has said a line starting with prefix, and returns what it said.

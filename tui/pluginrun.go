@@ -36,12 +36,12 @@ type pluginRun struct {
 	stop  context.CancelFunc
 	out   *outQueue // to the sender goroutine
 	log   *pluginLog
-	float *widget.Float // nil for a service, which has no surface
+	float *widget.Float // a modal dialog's; nil for a card, which is a panel, and a service
 	box   *widget.Box
-	view  *pluginView
+	view  *pluginView // nil for a service, which has no surface
 
 	ready, closing bool
-	hidden         bool // Esc hid it (esc = "hide"): the plugin runs, told plugin.hide
+	hidden         bool // Esc hid it (esc = "hide"), or a card's panel closed: the plugin runs, told plugin.hide
 	opened         bool // plugin.open sent: at the dialog's first layout, or a service's start
 	focused        bool // a card that holds the keys (plugin.focus true was sent)
 	focusOnOpen    bool // a card started by its command: it takes the keys at its first layout
@@ -74,6 +74,16 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	host, ok := pl.c.Overlay()
 	if !ok && !e.m.service() {
 		return nil, errors.New("the screen is not ready")
+	}
+	var card *pluginView
+	if e.m.card() {
+		pl.fixCards()
+		if c := pl.cards[e.m.Name]; c != nil {
+			card = c.view
+		}
+		if card == nil {
+			return nil, errors.New("it is a card, and its panel comes with AutoDoc's next start")
+		}
 	}
 	toPlugin, hostOut, err := os.Pipe()
 	if err != nil {
@@ -127,7 +137,11 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		return r, nil
 	}
 
-	r.view = &pluginView{run: r, w: e.m.Dialog.Width, h: e.m.Dialog.Height.rows, fill: e.m.Dialog.Height.pct > 0}
+	if card != nil { // its panel is opened by what started it, once it is running (showCard)
+		card.attach(r)
+		return r, nil
+	}
+	r.view = &pluginView{run: r, pl: pl, w: e.m.Dialog.Width, h: e.m.Dialog.Height.rows, fill: e.m.Dialog.Height.pct > 0}
 	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
 		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
 	opts := []widget.FloatOption{widget.WithModal(e.m.modal()), widget.WithAnchor(pluginAnchors[pl.placement(e)])}
@@ -160,19 +174,21 @@ func (r *pluginRun) openAt(w, h int) {
 	})
 }
 
-// title is the dialog's title, saying what Esc does.
+// title is a modal dialog's title, saying what Esc does. A card's panel is headed by its title alone.
 func (r *pluginRun) title(t string) string {
-	if !r.e.m.modal() {
-		return t + " · Esc returns the keys"
-	}
 	if r.e.m.Dialog.Esc == "hide" {
 		return t + " · Esc hides"
 	}
 	return t + " · Esc closes"
 }
 
-// hide is Esc under esc = "hide": the dialog goes, the plugin runs on, told so.
+// hide is Esc under esc = "hide": the dialog goes, the plugin runs on, told so. A card's panel
+// closes, and its plugin is told so as the panel goes (cardClosed).
 func (r *pluginRun) hide() {
+	if r.e.m.card() {
+		r.pl.hideCard(r)
+		return
+	}
 	if r.hidden || r.closing {
 		return
 	}
@@ -181,8 +197,13 @@ func (r *pluginRun) hide() {
 	r.send(plugin.MethodHide, plugin.EmptyParams())
 }
 
-// show brings the dialog back: its Plugins menu entry, chosen again.
+// show brings the dialog back: its Plugins menu entry, chosen again. A card's panel opens, and its
+// plugin is told so as it does (cardOpened).
 func (r *pluginRun) show() {
+	if r.e.m.card() {
+		r.pl.showCard(r, false)
+		return
+	}
 	if r.float == nil {
 		return
 	}
@@ -278,15 +299,34 @@ func (r *pluginRun) onNote(method string, params []any) {
 		}
 	case plugin.MethodTitle:
 		if t, err := plugin.ReadTitle(params); err == nil && !r.e.m.service() {
-			r.pl.c.Post(func() { r.box.SetTitle(r.title(t)) })
+			r.pl.c.Post(func() { r.setTitle(t) })
 		}
 	case plugin.MethodHostClose:
-		r.pl.c.Post(func() { r.close("") })
+		// a card asks its panel to close, as Esc closes it: it hides, and runs on
+		r.pl.c.Post(func() {
+			if r.e.m.card() {
+				r.hide()
+			} else {
+				r.close("")
+			}
+		})
 	case plugin.MethodCall:
 		r.hostCall(params)
 	case plugin.MethodTable, plugin.MethodRows, plugin.MethodTableEnd:
 		r.onTable(method, params)
 	}
+}
+
+// setTitle is host.title: a modal dialog's title, with what Esc does, or a card panel's heading.
+func (r *pluginRun) setTitle(t string) {
+	if r.closing {
+		return
+	}
+	if r.e.m.card() {
+		r.pl.c.Set("App."+cardPanelID(r.e.m.Name)+"Title", t)
+		return
+	}
+	r.box.SetTitle(r.title(t))
 }
 
 // readied is host.ready: the plugin's protocol, which must be the one its manifest says, and
@@ -324,10 +364,15 @@ func (r *pluginRun) close(why string) {
 		return
 	}
 	r.closing = true
+	if r.focused {
+		r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
+	}
+	if r.e.m.card() && r.view != nil {
+		r.pl.hideCard(r)
+		r.view.detach(r)
+		r.pl.c.Set("App."+cardPanelID(r.e.m.Name)+"Title", r.e.label())
+	}
 	if r.float != nil {
-		if r.focused {
-			r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
-		}
 		if r.float.Shown() {
 			r.float.Hide()
 		}

@@ -72,14 +72,15 @@ type manifest struct {
 	// "launch", with the TUI.
 	Start  string `toml:"start"`
 	Dialog struct {
-		// Modal is a dialog that holds the keys while open (the default); false is a card beside
-		// the page, which takes them when clicked or its command's key is pressed, and gives them
-		// back on Esc.
+		// Modal is a dialog that holds the keys while open (the default); false is a card, a docked
+		// panel of its own (pluginpanels.go), which takes them when clicked or its command's key is
+		// pressed; Esc closes the panel, and its plugin runs on.
 		Modal  *bool      `toml:"modal"`
 		Width  int        `toml:"width"`
 		Height dialogSize `toml:"height"` // rows, or "80%" of the screen's
 		// Placements are where it is designed to sit (pluginAnchors' names), the first its
-		// default; the user picks among them in Manage plugins…. ["center"] when unset.
+		// default; the user picks among them in Manage plugins…. ["center"] when unset. A card's
+		// panel docks at the placement's edge, a corner at its side's (cardEdge).
 		Placements []string `toml:"placements"`
 		// Esc is what Esc does: "close" (the default), or "hide" for a plugin with its own quit —
 		// the dialog hides, the plugin is told (plugin.hide) and keeps running.
@@ -281,7 +282,7 @@ func checkProtocolTwo(m *manifest, md toml.MetaData) string {
 	case !m.service() && md.IsDefined("start"):
 		return "start: only a service starts on its own"
 	case !m.modal() && md.IsDefined("dialog", "esc"):
-		return "[dialog] esc: a card's Esc gives the keys back, and nothing else"
+		return "[dialog] esc: a card's Esc closes its panel, and its plugin runs on"
 	case m.Start != "" && m.Start != "use" && m.Start != "launch":
 		return fmt.Sprintf("start %q: want use or launch", m.Start)
 	}

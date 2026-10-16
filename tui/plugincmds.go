@@ -21,9 +21,11 @@ import (
 // saying why. Plugins never take AutoDoc's own leader letters: SPC p is a card of its own.
 //
 // A command starts its plugin when it is not running, and is sent once the plugin has opened. A
-// card's commands focus it, but its "toggle", which is the host's own: it opens the card, focused,
-// and closes it when it is open. A focused card takes every key, SPC included, so a toggle that only
-// closed a focused card could never be reached from the keyboard.
+// card's commands open its panel and focus it, but its "toggle", which is the host's own: it starts
+// the card, its panel open and focused; it shows a card whose panel was closed (the plugin ran on);
+// and it turns off a card whose panel is open, stopping its plugin. A focused card takes every key,
+// SPC included, so a toggle that only turned off a focused card could never be reached from the
+// keyboard.
 
 // The targets of the Plugins menu's rows and the SPC p cards' letters: "<key>|open",
 // "<key>|close" and "<key>|cmd|<id>".
@@ -78,7 +80,11 @@ func (pl *plugins) refreshPlugins() {
 			items = append(items, tuidecl.Row{"key": "cmd:" + c.ID, "label": label, "enabled": true,
 				"target": pluginTarget(key, targetCommand, c.ID)})
 		}
-		items = append(items, tuidecl.Row{"key": "close", "label": "Close", "enabled": running,
+		closeLabel := "Close"
+		if e.m.card() { // its panel's Close hides it; this stops its plugin
+			closeLabel = "Turn off"
+		}
+		items = append(items, tuidecl.Row{"key": "close", "label": closeLabel, "enabled": running,
 			"target": pluginTarget(key, targetClose)})
 		sub.Reset(items)
 		rows = append(rows, tuidecl.Row{"key": key, "kind": "submenu", "label": e.label(), "rows": sub})
@@ -207,7 +213,7 @@ func (pl *plugins) runPluginCommand(key, id string) {
 		return
 	}
 	r := pl.running[key]
-	if e.m.card() && id == pluginToggle && r != nil {
+	if e.m.card() && id == pluginToggle && r != nil && !r.hidden {
 		r.close("")
 		return
 	}
@@ -220,11 +226,13 @@ func (pl *plugins) runPluginCommand(key, id string) {
 		pl.running[key] = r
 		pl.refreshPlugins()
 		r.focusOnOpen = e.m.card()
+		if e.m.card() {
+			pl.showCard(r, true)
+		}
+	} else if e.m.card() {
+		pl.showCard(r, true)
 	} else {
 		r.show()
-		if e.m.card() && r.view != nil {
-			r.view.RequestFocus()
-		}
 	}
 	if !(e.m.card() && id == pluginToggle) {
 		r.send(plugin.MethodCommand, pl.commandParams(e, id))
