@@ -116,8 +116,8 @@ type StoreInfo struct {
 	Roots   []string  `json:"roots"`
 	Claimed bool      `json:"claimed"`
 	LastUse time.Time `json:"last_use"`
-	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4): recorded, or else
-	// the deepest containing it; "" for none.
+	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4): the recorded one
+	// while a workspace has it, or else the deepest containing the store; "" for none.
 	KB string `json:"kb,omitempty"`
 }
 

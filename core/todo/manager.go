@@ -364,10 +364,8 @@ func (m *Manager) Stores(ctx context.Context) ([]StoreInfo, error) {
 	}
 	var out []StoreInfo
 	for _, rec := range st.Stores {
-		info := StoreInfo{ID: rec.ID, Path: rec.Path, Claimed: rec.Claimed, LastUse: rec.LastUse, Roots: []string{}, KB: rec.KB}
-		if info.KB == "" {
-			info.KB = m.containing(rec.Path) // recorded at the next start (MigrateVars); a read writes nothing
-		}
+		// ownerOf: a store recorded to a removed workspace reads as unrecorded; a read writes nothing
+		info := StoreInfo{ID: rec.ID, Path: rec.Path, Claimed: rec.Claimed, LastUse: rec.LastUse, Roots: []string{}, KB: m.ownerOf(rec)}
 		for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
 			rr := st.Roots[root]
 			if rr.Override == rec.Path || (rr.Override == "" && root+"/"+todoDir == rec.Path) {
