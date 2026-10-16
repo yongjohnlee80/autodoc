@@ -13,8 +13,16 @@ import (
 // both places), so nothing rewrites them by itself: MigrateRefs plans, a person reviews the plan, and
 // the reviewed list is applied, exactly, each rewrite journaled.
 
-// RefCandidate is one adr or review ref $WORKSPACE/<rest> in a store, and where <rest> exists now.
+// Ref kinds a migration plans (MigrateOpts.Worktrees chooses).
+const (
+	RefWorkspace = "workspace" // a Lua-era $WORKSPACE/<rest>, to $PROJECT_ROOT/<rest>
+	RefWorktree  = "worktree"  // a ref into a removed git worktree, to its copy in the main worktree
+)
+
+// RefCandidate is one adr or review ref a migration would rewrite: a $WORKSPACE/<rest> and where <rest>
+// exists now, or a ref into a removed worktree and its copy (worktree.go).
 type RefCandidate struct {
+	Kind           string `json:"kind,omitempty"` // RefWorkspace when empty
 	ID             string `json:"id"`
 	Path           string `json:"path,omitempty"` // the task file, store-relative
 	Field          string `json:"field"`          // adr or review
@@ -29,10 +37,12 @@ type RefCandidate struct {
 }
 
 // MigrateOpts is todos.migrate_refs' options: Plan lists the candidates; Apply rewrites exactly the
-// listed ones, each still as the plan saw it.
+// listed ones, each still as the plan saw it. Worktrees plans refs into removed git worktrees instead
+// of $WORKSPACE refs; an apply takes each entry's Kind.
 type MigrateOpts struct {
-	Plan  bool           `json:"plan,omitempty"`
-	Apply []RefCandidate `json:"apply,omitempty"`
+	Plan      bool           `json:"plan,omitempty"`
+	Worktrees bool           `json:"worktrees,omitempty"`
+	Apply     []RefCandidate `json:"apply,omitempty"`
 }
 
 // MigrateResult is a plan's candidates, or what an apply rewrote and skipped.
@@ -42,8 +52,9 @@ type MigrateResult struct {
 	Skipped    []RefCandidate `json:"skipped,omitempty"` // listed, but no longer as planned: not rewritten
 }
 
-// MigrateRefs plans or applies the migration of an At's store's Lua-era $WORKSPACE refs. It needs the
-// store's $PROJECT_ROOT, and a writable, claimed store for an apply.
+// MigrateRefs plans or applies the migration of an At's store's Lua-era $WORKSPACE refs, or of its
+// refs into removed git worktrees. $WORKSPACE refs need the store's $PROJECT_ROOT; an apply needs a
+// writable, claimed store.
 func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (MigrateResult, error) {
 	if o.Plan == (len(o.Apply) > 0) {
 		return MigrateResult{}, fmt.Errorf("%w: give plan: true, or apply: the plan's list as reviewed", ErrInvalid)
@@ -61,7 +72,8 @@ func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (Migrat
 	if err != nil {
 		return MigrateResult{}, err
 	}
-	if sc.projectRoot == "" {
+	workspace := (o.Plan && !o.Worktrees) || slices.ContainsFunc(o.Apply, func(c RefCandidate) bool { return c.kind() == RefWorkspace })
+	if workspace && sc.projectRoot == "" {
 		return MigrateResult{}, fmt.Errorf("%w: the store has no $PROJECT_ROOT (todos.set_var with scope store sets it)", ErrInvalid)
 	}
 	sc, done := m.withExists(ctx, sc)
@@ -98,7 +110,13 @@ func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (Migrat
 			if f.bad != "" {
 				continue
 			}
-			found := sc.workspaceRefs(f.task, fi.Path)
+			var found []RefCandidate
+			if !o.Plan || !o.Worktrees {
+				found = append(found, sc.workspaceRefs(f.task, fi.Path)...)
+			}
+			if !o.Plan || o.Worktrees {
+				found = append(found, sc.worktreeRefs(f.task, fi.Path)...)
+			}
 			if o.Plan {
 				res.Candidates = append(res.Candidates, found...)
 				continue
@@ -111,7 +129,9 @@ func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (Migrat
 			t := clone(f.task)
 			changed := false
 			for _, c := range listed {
-				i := slices.IndexFunc(found, func(x RefCandidate) bool { return x.Field == c.Field && x.Index == c.Index && x.Ref == c.Ref })
+				i := slices.IndexFunc(found, func(x RefCandidate) bool {
+					return x.kind() == c.kind() && x.Field == c.Field && x.Index == c.Index && x.Ref == c.Ref && x.To == c.To
+				})
 				if i < 0 {
 					res.Skipped = append(res.Skipped, c)
 					continue
@@ -130,7 +150,11 @@ func (m *Manager) MigrateRefs(ctx context.Context, at At, o MigrateOpts) (Migrat
 			if err != nil {
 				return res, err
 			}
-			ch := Change{ID: t.ID, Kind: KindRefresh, Reason: "migrate_refs: Lua-era $WORKSPACE was " + sc.projectRoot,
+			reason := "migrate_refs: Lua-era $WORKSPACE was " + sc.projectRoot
+			if !slices.ContainsFunc(listed, func(c RefCandidate) bool { return c.kind() == RefWorkspace }) {
+				reason = "migrate_refs: refs into removed git worktrees, to their main worktree's copies"
+			}
+			ch := Change{ID: t.ID, Kind: KindRefresh, Reason: reason,
 				FromRev: f.task.Rev, From: t.Status, To: t.Status, Fields: changedFields(back, digests(f.task), digests(back))}
 			if _, err := m.rewrite(ctx, st, ch, back, ver, content); err != nil {
 				return res, err
@@ -163,4 +187,12 @@ func (s scope) workspaceRefs(t Task, file string) []RefCandidate {
 		}
 	}
 	return out
+}
+
+// kind is c's Kind, RefWorkspace for an entry written before kinds existed.
+func (c RefCandidate) kind() string {
+	if c.Kind == "" {
+		return RefWorkspace
+	}
+	return c.Kind
 }

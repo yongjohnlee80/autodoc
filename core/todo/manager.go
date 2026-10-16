@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"path"
 	"slices"
@@ -580,14 +581,15 @@ func (m *Manager) Scaffold(ctx context.Context, at At) (Opened, error) {
 	return Opened{StoreID: st.id, Store: st.path, Scaffolded: made}, nil
 }
 
-// withExists gives sc a stat of absolute ref paths, through the disk; done releases it.
+// withExists gives sc a stat, a small read and a listing of absolute paths, through the disk; done
+// releases them.
 func (m *Manager) withExists(ctx context.Context, sc scope) (scope, func()) {
 	var root vfs.FS
-	sc.exists = func(abs string) bool {
+	open := func(abs string) (vfs.FS, string, bool) {
 		if root == nil {
 			fsys, _, err := m.disk.Open(ctx, "/")
 			if err != nil {
-				return false
+				return nil, "", false
 			}
 			root = fsys
 		}
@@ -595,8 +597,47 @@ func (m *Manager) withExists(ctx context.Context, sc scope) (scope, func()) {
 		if name == "" {
 			name = "."
 		}
-		_, err := root.Stat(ctx, name)
+		return root, name, true
+	}
+	sc.exists = func(abs string) bool {
+		fsys, name, ok := open(abs)
+		if !ok {
+			return false
+		}
+		_, err := fsys.Stat(ctx, name)
 		return err == nil
+	}
+	sc.read = func(abs string) ([]byte, bool) {
+		fsys, name, ok := open(abs)
+		if !ok {
+			return nil, false
+		}
+		r, err := fsys.Open(ctx, name, 0)
+		if err != nil {
+			return nil, false
+		}
+		defer r.Close()
+		// a git metadata file is a line or a few: a larger one is not what the caller looks for
+		b, err := io.ReadAll(io.LimitReader(r, smallFileLimit+1))
+		if err != nil || len(b) > smallFileLimit {
+			return nil, false
+		}
+		return b, true
+	}
+	sc.list = func(abs string) []string {
+		fsys, name, ok := open(abs)
+		if !ok {
+			return nil
+		}
+		entries, err := fsys.ReadDir(ctx, name)
+		if err != nil {
+			return nil
+		}
+		out := make([]string, 0, len(entries))
+		for _, e := range entries {
+			out = append(out, e.Name)
+		}
+		return out
 	}
 	return sc, func() {
 		if root != nil {
