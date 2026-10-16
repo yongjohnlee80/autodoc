@@ -46,9 +46,14 @@ type plugins struct {
 	// installed ones
 	pendingPlugin  *pluginChange
 	managedPlugins *rows[managedPlugin]
-	// the results panel's table, a plugin's (plugintable.go), and its CSV export while one runs
-	results *resultsTable
-	export  *resultsExport
+	// the results panel's table, a plugin's (plugintable.go), and its export while one runs, in
+	// the format last chosen (plugintable_export.go)
+	results      *resultsTable
+	export       *resultsExport
+	exportFormat copyFormat
+	// the ORDER BY bar: its text, why it did not parse, the fields it offers for the word typed,
+	// and the sort's note (plugintable.go)
+	resultsOrder, resultsOrderErr, resultsHint, resultsNote string
 	// the card plugins' panels, by name and in order, fixed when the program is built
 	// (pluginpanels.go); nil until then
 	cards     map[string]*cardPanel
@@ -62,6 +67,8 @@ func newPlugins(c pluginHost, opt Plugins) *plugins {
 	pl.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
 	pl.results = &resultsTable{}
 	pl.results.model = newResultsModel(pl.results, pl.fetchRows)
+	pl.results.shown = pl.results.model
+	pl.exportFormat = formatCSV
 	pl.loadPlugins()
 	return pl
 }
@@ -83,6 +90,15 @@ func (pl *plugins) State() map[string]any {
 		"App.pluginsHelp":        pluginsHelp,
 		"App.resultsRows":        pl.results.model,
 		"App.resultsTitle":       "results",
+		"App.resultsOrder":       "",
+		"App.resultsSortNote":    "",
+		"App.resultsSortLine":    "",
+		"App.exportHeading":      "",
+		"App.exportMore":         "",
+		"App.exportMoreShown":    false,
+		"App.exportFormats":      exportFormatsModel(),
+		"App.exportFormatIndex":  0,
+		"App.exportFile":         "",
 		"App.resultsShown":       false,
 		"App.resultsSize":        size,
 		"App.resultsLength":      length,
@@ -93,23 +109,28 @@ func (pl *plugins) State() map[string]any {
 
 func (pl *plugins) Commands() map[string]Command {
 	return map[string]Command{
-		"App.openPlugin":         oneString("a plugin", pl.openPlugin),
-		"App.pluginEntry":        oneString("a plugin's menu row or letter", pl.pluginEntry),
-		"App.openPluginChooser":  none(pl.openPluginChooser),
-		"App.pluginChooserKey":   oneString("a key on the SPC p chooser", pl.pluginChooserKey),
-		"App.startAddPlugin":     none(pl.startAddPlugin),
-		"App.addPlugin":          oneString("a git URL", pl.addPlugin),
-		"App.pluginConfirmed":    none(pl.pluginConfirmed),
-		"App.pluginDeclined":     none(pl.pluginDeclined),
-		"App.managePlugins":      none(pl.managePlugins),
-		"App.startUpdatePlugin":  oneNumber("a row", pl.startUpdatePlugin),
-		"App.startRemovePlugin":  oneNumber("a row", pl.startRemovePlugin),
-		"App.placePlugin":        oneNumber("a row", pl.placePlugin),
-		"App.toggleResults":      none(func() { pl.c.TogglePanel(resultsPanel) }),
-		"App.copyResults":        none(pl.copyResults),
-		"App.startExportResults": none(pl.startExportResults),
-		"App.exportResults":      oneString("a file's path", pl.exportResults),
-		"App.insertResults":      none(pl.insertResults),
+		"App.openPlugin":          oneString("a plugin", pl.openPlugin),
+		"App.pluginEntry":         oneString("a plugin's menu row or letter", pl.pluginEntry),
+		"App.openPluginChooser":   none(pl.openPluginChooser),
+		"App.pluginChooserKey":    oneString("a key on the SPC p chooser", pl.pluginChooserKey),
+		"App.startAddPlugin":      none(pl.startAddPlugin),
+		"App.addPlugin":           oneString("a git URL", pl.addPlugin),
+		"App.pluginConfirmed":     none(pl.pluginConfirmed),
+		"App.pluginDeclined":      none(pl.pluginDeclined),
+		"App.managePlugins":       none(pl.managePlugins),
+		"App.startUpdatePlugin":   oneNumber("a row", pl.startUpdatePlugin),
+		"App.startRemovePlugin":   oneNumber("a row", pl.startRemovePlugin),
+		"App.placePlugin":         oneNumber("a row", pl.placePlugin),
+		"App.toggleResults":       none(func() { pl.c.TogglePanel(resultsPanel) }),
+		"App.copyResults":         none(func() { pl.copyResults(formatTSV) }),
+		"App.startExportResults":  none(func() { pl.startExportResults("") }),
+		"App.exportFormatChosen":  oneNumber("a format's row", pl.exportFormatChosen),
+		"App.chooseExportFile":    none(pl.chooseExportFile),
+		"App.exportResults":       oneString("a file's path", pl.exportResults),
+		"App.insertResults":       none(pl.insertResults),
+		"App.orderResults":        oneString("an ORDER BY", pl.orderResults),
+		"App.resultsOrderTyped":   oneString("an ORDER BY", pl.resultsOrderTyped),
+		"App.resultsOrderChanged": oneString("an ORDER BY", pl.resultsOrderChanged),
 	}
 }
 
@@ -122,8 +143,21 @@ func (pl *plugins) Catalog() []Entry {
 		builtin("plugins.commands", "plugin commands: choose a plugin, then one of its commands", "App.openPluginChooser()", pl.openPluginChooser),
 		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
 		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
-		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", pl.copyResults),
-		builtin("results.csv", "results: export all rows as CSV…", "App.startExportResults()", pl.startExportResults),
+		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", func() { pl.copyResults(formatTSV) }),
+		builtin("results.copy_csv", "results: copy selection as CSV (its fields as a header)", "", func() { pl.copyResults(formatCSV) }),
+		builtin("results.copy_json", "results: copy selection as JSON (an object per row)", "", func() { pl.copyResults(formatJSON) }),
+		builtin("results.copy_markdown", "results: copy selection as a Markdown table", "", func() { pl.copyResults(formatMarkdown) }),
+		builtin("results.select_all", "results: select every loaded row", "", pl.selectAllResults),
+		{ID: "results.sort_asc", Title: "results: sort the loaded rows by a field, ascending", Args: "[field]",
+			Help: "results: sort the loaded rows by a field (its 1-based position; the cursor's when none), ascending",
+			Run:  func(inv Invocation) error { return pl.sortResults("asc", inv.Args) }},
+		{ID: "results.sort_desc", Title: "results: sort the loaded rows by a field, descending", Args: "[field]",
+			Help: "results: sort the loaded rows by a field (its 1-based position; the cursor's when none), descending",
+			Run:  func(inv Invocation) error { return pl.sortResults("desc", inv.Args) }},
+		{ID: "results.unsort", Title: "results: unsort, the rows in the query's order", Help: "results: unsort, the rows in the query's order",
+			Run: func(inv Invocation) error { return pl.sortResults("off", inv.Args) }},
+		builtin("results.export", "results: export loaded rows…", "App.startExportResults()", func() { pl.startExportResults("") }),
+		builtin("results.csv", "results: export loaded rows as CSV…", "", func() { pl.startExportResults(formatCSV) }),
 		builtin("results.markdown", "results: insert loaded rows as a Markdown table", "App.insertResults()", pl.insertResults),
 	}
 }
@@ -133,7 +167,10 @@ func (pl *plugins) Catalog() []Entry {
 // plugin (pluginpanels.go).
 func (pl *plugins) Panels() []PanelSpec {
 	s := resultsPanelSpec()
-	s.Opened = func(c PanelHost) { c.Set("App.resultsShown", true) }
+	s.Opened = func(c PanelHost) {
+		c.Set("App.resultsShown", true)
+		pl.bindResultsMenu()
+	}
 	s.Closed = func(c PanelHost) {
 		c.Set("App.resultsShown", false)
 		pl.resultsClosed()
@@ -228,6 +265,10 @@ type pluginHost interface {
 	PageSize() (w, h int)
 	// TableCore is the table behind a cell-cursor TableView, by its id; nil when there is none
 	TableCore(id string) *widget.TableCore
+	// ResultsTable is the cell-cursor TableView's DataTable, by its id: its menu; nil when none
+	ResultsTable(id string) *widget.DataTable
+	// CopyText puts text on the clipboard, reporting whether there is one
+	CopyText(text string) bool
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
 	InsertBlock(text string) error
 	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
@@ -268,6 +309,13 @@ func (c core) PageSize() (w, h int) {
 }
 
 func (c core) TableCore(id string) *widget.TableCore {
+	if t := c.ResultsTable(id); t != nil {
+		return t.Core()
+	}
+	return nil
+}
+
+func (c core) ResultsTable(id string) *widget.DataTable {
 	if c.h.p == nil {
 		return nil
 	}
@@ -275,11 +323,10 @@ func (c core) TableCore(id string) *widget.TableCore {
 	if !ok {
 		return nil
 	}
-	if t := tuidecl.TableOf(comp); t != nil {
-		return t.Core()
-	}
-	return nil
+	return tuidecl.TableOf(comp)
 }
+
+func (c core) CopyText(text string) bool { return c.h.p != nil && c.h.p.App().CopyToClipboard(text) }
 
 // InsertBlock puts text into the page as a block of its own: on the cursor's line when that is
 // empty, else after it, with a blank line before and after wherever its neighbour has text, so a

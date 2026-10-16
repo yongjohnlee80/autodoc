@@ -310,9 +310,8 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
   when the rows end early (a failed fetch, a cancelled query). `more: false` is the last page.
   `host.rows` that no fetch asked for are dropped, and noted in the plugin's log.
 - **At most 100 000 rows are shown.** At that cap the table stops asking for more, and its heading
-  says the first rows are shown and more remain. Export all rows as CSV still takes them all: the
-  rows past the cap go to the file, never to the panel, so AutoDoc never holds a whole large
-  result. Afterwards the table shows the first rows, and another export asks to run the query again.
+  says the first rows are shown and the result has more, so AutoDoc never holds a whole large
+  result. A narrower result is the query's to return: a LIMIT, a WHERE.
 - **One table at a time.** A newer `host.table`, from any plugin, replaces the one shown, and the
   plugin whose table it replaced is sent `plugin.table.close {id}`. Closing the panel sends it too.
   Free what serves the rows then. Rows for a table no longer shown are dropped.
@@ -333,15 +332,42 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
   protocol before 5 is sent neither.
 - **Keep each message under the link's limit** (1 MiB, the whole notification as encoded): size a
   page by its encoded bytes, not only its rows. `plugin.EncodedSize` measures one.
+- **The panel acts on the table in the view.** Its sort, its copies, its Markdown and its exports
+  take the rows loaded, in the order shown, and none of them fetches a row: **an export writes the
+  rows loaded in the view; scroll to load more, or change the query.** More rows load as the user
+  scrolls, and the view then holds them.
+  - **The table.** Its rows are numbered. `h j k l` move (with counts: `5j`), `w` and `b` by field,
+    `gg` and `G` to the first and last row; `v` selects cells in reading order, `V` rows, Ctrl+V a
+    block; a drag selects cells, over the numbers rows, over the headers columns. `y` copies the
+    selection, `s` sorts by the cursor's field. Its cursor dims while the keys are elsewhere.
+  - **The ORDER BY bar** above it sorts the loaded rows as SQL writes a sort: `column [ASC|DESC], …`,
+    a column by its name, its `"quoted name"` or its 1-based position (a name two columns share is
+    written as its position). Enter sorts; text that does not parse leaves the rows as they were
+    and says why. While a name is typed its line offers the columns it may be. While the result has
+    more rows than are loaded, the line says the sort covers the loaded rows.
+  - **The right-click menu** runs the results commands: Copy (TSV), Copy as CSV, JSON or Markdown,
+    Select all, Sort ascending or descending by the column pressed on, Unsort, Export loaded rows…
+    and Insert as Markdown.
 - **What leaves the table** is AutoDoc's, its commands each saying which rows it takes:
-  - `results.copy`, Copy selection: the selected cells, or the cursor's, as tab-separated text
-    (`y` in the table, `v` to select a range);
-  - `results.csv`, Export all rows as CSV…: a save dialog; AutoDoc fetches every remaining row (they
-    land in the table too, up to its cap) and writes them, in the order the plugin sent them, to `<file>.part`
-    beside the file, renamed over it once the last is written. Closing the panel, the rows ending
-    early or a write failing removes the `.part` and leaves the file as it was;
-  - `results.markdown`, Insert loaded rows as a Markdown table: the rows loaded now (at most the cap), as the table
-    shows them (sorted, if it is), at the page's cursor. While rows remain unloaded it says so.
+  - `results.copy`, Copy selection: the selected cells, or the cursor's, as tab-separated text;
+    `results.copy_csv`, `results.copy_json` and `results.copy_markdown` the same as CSV (the
+    columns as a header), JSON (an object per row) or a Markdown table. A copy past 16 MiB of
+    text copies nothing and says to export instead;
+  - `results.export`, Export loaded rows…: a dialog that says what it takes ("Export N loaded rows,
+    as shown", and while the result has more, that changing the query changes what is returned)
+    and its format, CSV or JSON, then a save dialog. AutoDoc writes the rows to `<file>.part` beside
+    the file, renamed over it once the last is written; a write that fails removes the `.part` and
+    leaves the file as it was. Its notice says when the result has more. `results.csv` opens it on
+    CSV;
+  - JSON is an array of objects keyed by column, a name that appears twice taking a suffix (`id`,
+    `id_2`). From a protocol-5 plugin each value follows its kind: NULL is `null`, a number its
+    literal (never read through a float), a boolean `true` or `false`, a JSON value itself; a number
+    or JSON that does not read as one (NaN), and text, are strings. Without kinds every value is a
+    string;
+  - `results.markdown`, Insert loaded rows as a Markdown table: the rows loaded now, as the table
+    shows them, at the page's cursor. While the result has more it says so;
+  - `results.select_all`, `results.sort_asc`, `results.sort_desc` and `results.unsort` (each
+    taking a 1-based column, the cursor's when none) select and sort the loaded rows.
 
 ### Services (`kind = "service"`)
 

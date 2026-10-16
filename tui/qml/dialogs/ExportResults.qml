@@ -1,10 +1,24 @@
-// ExportResults.qml — the results' Export all rows as CSV… (results.csv): where every row of the
-// results panel's table goes, fetched to the last (plugintable.go). A file there already is asked
-// about first, and replaced only once every row is written.
-FileDialog {
-    title: "export all rows as CSV"
-    fileMode: Tui.SaveFile
-    currentFolder: App.browseFolder
+// ExportResults.qml — the results' Export loaded rows… (results.export; results.csv opens it on CSV):
+// what the export takes, the rows loaded in the view as it shows them, said before any file is
+// chosen, and its format. The file is chosen next (ExportResultsFile.qml); the export fetches
+// nothing (plugintable_export.go).
+Dialog {
+    closeOnQ: true
+    maxWidthPercent: 80
+    title: "export the results"
+    width: 72
     dim: false
-    onAccepted: App.exportResults(selectedFile)
+    Flex {
+        direction: Tui.Vertical
+        Text { text: App.exportHeading }
+        Text { text: App.exportMore; wrapMode: Tui.WordWrap; visible: App.exportMoreShown }
+        Text { text: " " }
+        Text { text: "format" }
+        ComboBox { model: App.exportFormats; textRole: "label"; currentIndex: App.exportFormatIndex; onActivated: App.exportFormatChosen(index) }
+    }
+    DialogButtonBox {
+        Button { text: "&Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: "Choose the &file…"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+    }
+    onAccepted: App.chooseExportFile()
 }

@@ -2,40 +2,41 @@ package tui
 
 import (
 	"cmp"
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
 // THE RESULTS PANEL — a table a plugin sends (protocol 4: host.table), shown by AutoDoc itself in a
-// panel docked at the bottom: golib's cell-cursor table, its loaded rows sortable. A plugin whose
-// manifest declares [table] sends its fields and first rows; the table asks for more as its cursor
-// nears the end of those loaded, and the plugin answers each request (plugin.table.fetch) with the
-// next rows (host.rows), or ends them early (host.table_end). One request waits at a time. A newer
-// table replaces the one shown, whoever's it was, and its plugin is told the old one is gone
-// (plugin.table.close), as it is when the panel closes; the plugin frees what serves its rows.
+// panel docked at the bottom: golib's cell-cursor table, its rows numbered, its loaded rows sortable
+// from an ORDER BY bar, with vim's selections and a right-click menu. A plugin whose manifest
+// declares [table] sends its fields and first rows; the table asks for more as its cursor nears the
+// end of those loaded, and the plugin answers each request (plugin.table.fetch) with the next rows
+// (host.rows), or ends them early (host.table_end). One request waits at a time. A newer table
+// replaces the one shown, whoever's it was, and its plugin is told the old one is gone
+// (plugin.table.close), as it is when the panel closes; the plugin frees what serves its rows. From
+// protocol 5 the plugin may send each cell's kind, so a NULL is told from the text "NULL" and a
+// number from its digits: the sort and the JSON export read them.
 //
 // A table's id is new for each table: one sent again under the id of the table shown is refused,
 // since a fetch for the old one may still be on its way and its rows would join the new. Rows are
 // taken only as the answer to the fetch that waits.
 //
 // The panel holds at most resultsResident rows: a query of millions is read a page at a time, never
-// whole. At the cap the table stops asking for more and its heading says more remain. The CSV
-// export takes them all: the rows past the cap go to its file, never to the panel.
+// whole. At the cap the table stops asking for more and its heading says more remain.
 //
-// The rows leave through AutoDoc's own commands, each saying which rows it takes: results.copy the
-// selected cells (or the cursor's), results.markdown the rows loaded now, into the page, and
-// results.csv every row, fetched to the last, into a file.
+// THE PANEL ACTS ON THE TABLE IN THE VIEW. Its sort, its copies, results.markdown and its exports
+// take the rows loaded, in the order shown, and none of them fetches a row: what the query returns
+// is changed by changing the query. More rows load as the reader scrolls, and the view then holds
+// them.
 
 // resultsPanel is the panel's id, and resultsView its table's, which takes the keyboard.
 const (
@@ -47,42 +48,48 @@ const (
 // a page by its encoded bytes, to stay under the link's limit.
 const resultsPage = 500
 
-// toastExport is the CSV export's toast, updated as rows are written.
-const toastExport = "results-export"
-
-// resultsResident is the most rows the panel holds (a variable, so a test can lower it). Past it a
-// query's rows are not loaded into the table; an export writes them and lets them go.
+// resultsResident is the most rows the panel holds (a variable, so a test can lower it). Rows past
+// it are not loaded, and the table says the result has more.
 var resultsResident = 100_000
+
+// resultsCopyCap is the most text a copy puts on the clipboard (a variable, so a test can lower it):
+// past it nothing is copied, and the notice says to export instead.
+var resultsCopyCap = 16 << 20
 
 // resultsTable is the table shown: whose it is, its id there, and the plugin's paging. Loop-owned.
 type resultsTable struct {
 	model *resultsModel
-	owner *pluginRun // nil when no plugin serves it: none shown, or its plugin closed
-	id    string     // the plugin's id for it; "" when none is shown
+	shown tuidecl.ItemModel // what App.resultsRows holds: the model, or kindedResults over it
+	owner *pluginRun        // nil when no plugin serves it: none shown, or its plugin closed
+	id    string            // the plugin's id for it; "" when none is shown
 	title string
 	// more is the last message's: rows remain to fetch. pending is a fetch sent and not yet
 	// answered: another is not sent until host.rows or host.table_end answers it. cut is rows that
-	// remained when the table's rows ended early (host.table_end, or its plugin closed): what is
-	// loaded is not every row, so no export claims it is.
-	more, pending, cut bool
-	// over are rows that came past the panel's cap, not shown, waiting for an export to write them;
-	// spilled is rows past the cap that an export wrote and let go, so the table is not all of them.
-	over    [][]string
-	spilled bool
+	// remained when the table's rows ended early (host.table_end, its plugin closed, or a page
+	// refused). capped is rows that came past the panel's cap and were let go.
+	more, pending, cut, capped bool
 }
 
 // full reports whether the panel holds all the rows it may.
 func (res *resultsTable) full() bool { return len(res.model.rows) >= resultsResident }
 
+// partial reports whether the result has rows the view does not: rows still to fetch, rows past the
+// cap, or rows that never came.
+func (res *resultsTable) partial() bool { return res.more || res.cut || res.capped }
+
 // resultsModel is the table's rows as a TableView reads them: its fields as the columns, its cells
 // as text, and a Fetcher at the root, so the cell-cursor view asks for more as it nears the end.
-// It keeps the cells as the plugin sent them, for the CSV export (which keeps a line break in a
-// cell); the view is given them on one line. Loop-owned, as every model.
+// It keeps the cells as the plugin sent them, for the CSV and JSON exports (which keep a line break
+// in a cell); the view is given them on one line. Loop-owned, as every model.
 type resultsModel struct {
 	t      *resultsTable
 	fetch  func()
 	fields []string
 	rows   [][]string
+	// kinds are each row's cells' kinds, parallel to rows, while the table has them (kinded: its
+	// host.table carried kinds); a row's "" is every cell text. nil for a table sent without them.
+	kinds  []string
+	kinded bool
 	subs   map[int]func(tuidecl.Change)
 	next   int
 }
@@ -91,22 +98,51 @@ func newResultsModel(t *resultsTable, fetch func()) *resultsModel {
 	return &resultsModel{t: t, fetch: fetch, subs: map[int]func(tuidecl.Change){}}
 }
 
-// reset replaces the fields and the rows.
-func (m *resultsModel) reset(fields []string, rows [][]string) {
-	m.fields, m.rows = fields, nil
+// reset replaces the fields, the rows and their kinds; kinded says the table has kinds.
+func (m *resultsModel) reset(fields []string, rows [][]string, kinds []string, kinded bool) {
+	m.fields, m.rows, m.kinds, m.kinded = fields, nil, nil, kinded
 	m.rows = append(m.rows, rows...)
+	m.addKinds(len(rows), kinds)
 	m.notify(tuidecl.Change{Kind: tuidecl.Reset})
 }
 
-// add appends rows.
-func (m *resultsModel) add(rows [][]string) {
+// add appends rows and their kinds.
+func (m *resultsModel) add(rows [][]string, kinds []string) {
 	if len(rows) == 0 {
 		m.notify(tuidecl.Change{Kind: tuidecl.Changed, First: 0, Last: max(len(m.rows)-1, 0)})
 		return
 	}
 	first := len(m.rows)
 	m.rows = append(m.rows, rows...)
+	m.addKinds(len(rows), kinds)
 	m.notify(tuidecl.Change{Kind: tuidecl.Inserted, First: first, Last: len(m.rows) - 1})
+}
+
+// addKinds keeps n new rows' kinds, while the table has them: a page sent without them is text.
+func (m *resultsModel) addKinds(n int, kinds []string) {
+	if !m.kinded {
+		return
+	}
+	if kinds == nil {
+		kinds = make([]string, n)
+	}
+	m.kinds = append(m.kinds, kinds[:n]...)
+}
+
+// kind is a cell's kind: text when the table, the row or the field has none.
+func (m *resultsModel) kind(row, col int) widget.TableCellKind {
+	if row < 0 || row >= len(m.kinds) || col < 0 || col >= len(m.kinds[row]) {
+		return widget.TableCellText
+	}
+	return widget.TableCellKind(m.kinds[row][col])
+}
+
+// rowKinds is a row's kinds as the table holds them: "" without.
+func (m *resultsModel) rowKinds(row int) string {
+	if row < 0 || row >= len(m.kinds) {
+		return ""
+	}
+	return m.kinds[row]
 }
 
 func (m *resultsModel) notify(c tuidecl.Change) {
@@ -176,7 +212,7 @@ func (m *resultsModel) Subscribe(fn func(tuidecl.Change)) (cancel func()) {
 
 // CanFetchMore is the last message's more, at the root, while the panel is under its cap: it stays
 // true while a fetch is answered, and is false once the panel holds resultsResident rows, so the
-// view stops asking (the export takes the rest).
+// view stops asking.
 func (m *resultsModel) CanFetchMore(ix tuidecl.Index) bool {
 	return ix.Parent == nil && m.t.more && !m.t.full()
 }
@@ -190,6 +226,16 @@ func (m *resultsModel) FetchMore(ix tuidecl.Index) {
 
 var _ tuidecl.Fetcher = (*resultsModel)(nil)
 
+// kindedResults is the model as the view reads it while the table has kinds: its Kind makes the
+// view sort by them (golib's TableKinds), NULLs last and numbers as exact decimals. A table without
+// kinds is shown through the model itself, which has no Kind, so its sort reads the text as a
+// table of strings always has been read: as numbers where both cells are numbers.
+type kindedResults struct{ *resultsModel }
+
+func (k kindedResults) Kind(row, col int) widget.TableCellKind { return k.kind(row, col) }
+
+var _ widget.TableKinds = kindedResults{}
+
 // oneLine is a cell's text as a table row shows it.
 var oneLine = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").Replace
 
@@ -197,7 +243,7 @@ var oneLine = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ", "\t", " ").
 
 // onTable is a protocol-4 plugin's table messages, read on the link's goroutine and handled on the
 // loop. One from a plugin whose manifest declares no [table], or before it is ready, is logged and
-// dropped.
+// dropped. Kinds are read from a plugin whose manifest says protocol 5 or later.
 func (r *pluginRun) onTable(method string, params []any) {
 	switch {
 	case r.e.m.Table.Title == "":
@@ -209,7 +255,7 @@ func (r *pluginRun) onTable(method string, params []any) {
 	}
 	switch method {
 	case plugin.MethodTable:
-		t, dropped, err := plugin.ReadTable(params)
+		t, dropped, err := plugin.ReadTableAt(params, r.e.m.Protocol)
 		if err != nil {
 			r.log.note("a table refused: " + err.Error())
 			return
@@ -217,13 +263,13 @@ func (r *pluginRun) onTable(method string, params []any) {
 		r.noteDropped(method, dropped)
 		r.pl.c.Post(func() { r.pl.tableOpened(r, t) })
 	case plugin.MethodRows:
-		id, rows, more, dropped, err := plugin.ReadRows(params)
+		page, dropped, err := plugin.ReadTableRows(params, r.e.m.Protocol)
 		if err != nil {
 			r.log.note("rows refused: " + err.Error())
 			return
 		}
 		r.noteDropped(method, dropped)
-		r.pl.c.Post(func() { r.pl.tableRows(r, id, rows, more) })
+		r.pl.c.Post(func() { r.pl.tableRows(r, page) })
 	case plugin.MethodTableEnd:
 		id, why, err := plugin.ReadTableEnd(params)
 		if err != nil {
@@ -249,43 +295,72 @@ func (pl *plugins) tableOpened(r *pluginRun, t plugin.TableOpen) {
 	res := pl.results
 	if res.owner == r && res.id == t.ID {
 		// a fetch for the table shown may be on its way: under the same id its rows would join the
-		// new table's, and an export of it would write the two mixed
+		// new table's
 		r.log.note(fmt.Sprintf("host.table reused the shown table's id %q; a new table needs a new id", t.ID))
 		return
 	}
-	pl.closeTable("a newer table replaced it")
+	pl.closeTable()
 	res.owner, res.id, res.title, res.more, res.pending, res.cut = r, t.ID, cmp.Or(t.Title, r.e.m.Table.Title), t.More, false, false
-	res.over, res.spilled = nil, false
-	res.model.reset(t.Fields, t.Rows[:min(len(t.Rows), resultsResident)])
-	res.over = append(res.over, t.Rows[min(len(t.Rows), resultsResident):]...)
+	keep := min(len(t.Rows), resultsResident)
+	res.capped = keep < len(t.Rows)
+	var kinds []string
+	if t.Kinds != nil {
+		kinds = t.Kinds[:keep]
+	}
+	res.model.reset(t.Fields, t.Rows[:keep], kinds, t.Kinds != nil)
+	pl.showResultsModel()
 	pl.showResultsTitle()
+	pl.orderResults(pl.resultsOrder) // the bar's text, read against the new fields
 	if !pl.c.PanelOpen(resultsPanel) {
 		pl.c.Keep(pl.c.View(resultsPanel, "open"))
+	}
+	pl.bindResultsMenu()
+}
+
+// showResultsModel gives the view the model as it should read it: with kinds, or without.
+func (pl *plugins) showResultsModel() {
+	var v tuidecl.ItemModel = pl.results.model
+	if pl.results.model.kinded {
+		v = kindedResults{pl.results.model}
+	}
+	if v != pl.results.shown {
+		pl.results.shown = v
+		pl.c.Set("App.resultsRows", v)
 	}
 }
 
 // tableRows is host.rows: the next rows of the table shown, answering the fetch that waits. Rows
 // for a table no longer shown are dropped, and so are rows no fetch asked for. Rows past the
-// panel's cap are kept apart (over) for the export, never shown.
-func (pl *plugins) tableRows(r *pluginRun, id string, rows [][]string, more bool) {
+// panel's cap are let go. A page whose kinds do not fit the table's fields is dropped, and the
+// table's rows end there: the rows after it would not follow the rows before.
+func (pl *plugins) tableRows(r *pluginRun, page plugin.TableRows) {
 	res := pl.results
-	if res.owner != r || res.id != id {
+	if res.owner != r || res.id != page.ID {
 		return
 	}
 	if !res.pending {
-		r.log.note(fmt.Sprintf("host.rows for %q dropped: no fetch is waiting for them", id))
+		r.log.note(fmt.Sprintf("host.rows for %q dropped: no fetch is waiting for them", page.ID))
 		return
 	}
-	res.pending, res.more = false, more
-	keep := min(max(resultsResident-len(res.model.rows), 0), len(rows))
-	res.over = append(res.over, rows[keep:]...)
-	res.model.add(rows[:keep])
+	if !res.model.kinded {
+		page.Kinds = nil
+	} else if why := plugin.CheckKinds(page.Kinds, len(page.Rows), len(res.model.fields)); page.Kinds != nil && why != "" {
+		r.log.note(fmt.Sprintf("host.rows for %q dropped: its kinds: %s", page.ID, why))
+		pl.tableEnded(r, page.ID, "a page of rows was malformed: its kinds: "+why)
+		return
+	}
+	res.pending, res.more = false, page.More
+	keep := min(max(resultsResident-len(res.model.rows), 0), len(page.Rows))
+	res.capped = res.capped || keep < len(page.Rows)
+	var kinds []string
+	if page.Kinds != nil {
+		kinds = page.Kinds[:keep]
+	}
+	res.model.add(page.Rows[:keep], kinds)
 	pl.showResultsTitle()
-	pl.exportPump()
 }
 
-// tableEnded is host.table_end: no more rows will come, and why when it failed. An export waiting
-// for them stops, leaving nothing.
+// tableEnded is host.table_end: no more rows will come, and why when it failed.
 func (pl *plugins) tableEnded(r *pluginRun, id, why string) {
 	res := pl.results
 	if res.owner != r || res.id != id {
@@ -293,35 +368,33 @@ func (pl *plugins) tableEnded(r *pluginRun, id, why string) {
 	}
 	res.cut = res.cut || res.more
 	res.pending, res.more = false, false
-	res.model.add(nil)
+	res.model.add(nil, nil)
 	pl.showResultsTitle()
 	if why != "" {
 		pl.c.Notify(r.e.m.Name + ": the results ended early: " + why)
 	}
-	pl.cancelExport("the results ended early" + cmp.Or(": "+why, ""))
 }
 
 // fetchRows asks the table's plugin for its next rows, unless one request waits already, no rows
-// remain, or no plugin serves the table. With no export it asks only for what the panel has room
-// for, and nothing at its cap; an export asks for whole pages, which go past the cap to its file.
+// remain, no plugin serves the table, or the panel is at its cap. It asks only for what the panel
+// has room for.
 func (pl *plugins) fetchRows() {
 	res := pl.results
 	if res.owner == nil || res.owner.closing || !res.more || res.pending {
 		return
 	}
-	n := resultsPage
-	if pl.export == nil {
-		if n = min(n, resultsResident-len(res.model.rows)); n <= 0 || len(res.over) > 0 {
-			return
-		}
+	n := min(resultsPage, resultsResident-len(res.model.rows))
+	if n <= 0 {
+		return
 	}
 	res.pending = true
 	res.owner.send(plugin.MethodFetch, plugin.FetchParams(plugin.TableFetch{ID: res.id, N: n}))
 }
 
-// closeTable lets go of the table shown: its plugin is told it is gone, and an export of it stops,
-// saying why. The rows stay in the model until something replaces them.
-func (pl *plugins) closeTable(why string) {
+// closeTable lets go of the table shown: its plugin is told it is gone. The rows stay in the model
+// until something replaces them. An export already begun writes the rows it took, whatever comes
+// after.
+func (pl *plugins) closeTable() {
 	res := pl.results
 	if res.id == "" {
 		return
@@ -329,46 +402,45 @@ func (pl *plugins) closeTable(why string) {
 	if res.owner != nil && !res.owner.closing {
 		res.owner.send(plugin.MethodTableGone, plugin.TableGoneParams(res.id))
 	}
-	pl.cancelExport(why)
 	res.owner, res.id, res.more, res.pending = nil, "", false, false
 }
 
-// tableOwnerGone is a plugin closing: the table it served has no more rows to give, and an export
-// of it stops. Its rows stay shown.
+// tableOwnerGone is a plugin closing: the table it served has no more rows to give. Its rows stay
+// shown.
 func (pl *plugins) tableOwnerGone(r *pluginRun) {
 	res := pl.results
 	if res.owner != r {
 		return
 	}
-	pl.cancelExport(r.e.m.Name + " closed")
 	res.cut = res.cut || res.more
 	res.owner, res.more, res.pending = nil, false, false
-	res.model.add(nil)
+	res.model.add(nil, nil)
 	pl.showResultsTitle()
 }
 
 // resultsClosed is the panel closed (Esc, q, or Go › Results): the table is let go, and the panel
 // holds nothing until the next.
 func (pl *plugins) resultsClosed() {
-	pl.closeTable("the results panel closed")
-	pl.results.title, pl.results.cut, pl.results.over, pl.results.spilled = "", false, nil, false
-	pl.results.model.reset(nil, nil)
+	pl.closeTable()
+	pl.results.title, pl.results.cut, pl.results.capped = "", false, false
+	pl.results.model.reset(nil, nil, nil, false)
+	pl.showResultsModel()
 	pl.showResultsTitle()
 }
 
-// showResultsTitle is the panel's heading: the table's title, its rows, and whether more remain.
+// showResultsTitle is the panel's heading: the table's title, its rows, and whether more remain;
+// and the sort bar's note.
 func (pl *plugins) showResultsTitle() {
 	res := pl.results
 	title := "results"
 	if res.title != "" {
 		title += ": " + res.title
 	}
-	if n := len(res.model.rows); n > 0 || res.id != "" {
+	n := len(res.model.rows)
+	if n > 0 || res.id != "" {
 		switch {
-		case (res.more || len(res.over) > 0) && res.full():
-			title += fmt.Sprintf(" · the first %d rows shown; more remain (Export CSV takes them all)", n)
-		case res.spilled:
-			title += fmt.Sprintf(" · the first %d rows shown; the rest were exported, not kept", n)
+		case res.capped || res.more && res.full():
+			title += fmt.Sprintf(" · the first %d rows shown; the result has more: change the query to change what is returned", n)
 		case res.more:
 			title += fmt.Sprintf(" · %d rows, more to load", n)
 		case res.cut:
@@ -381,27 +453,350 @@ func (pl *plugins) showResultsTitle() {
 		title += fmt.Sprintf(" · exporting: %d rows", x.written)
 	}
 	pl.c.Set("App.resultsTitle", title)
+	note := ""
+	if res.partial() && n > 0 {
+		note = fmt.Sprintf("sorts the loaded rows: %d of a result with more", n)
+	}
+	pl.resultsNote = note
+	pl.c.Set("App.resultsSortNote", note)
+	pl.showSortLine()
 }
 
-// ---------------------------------------------------------------- copy and Markdown
+// ---------------------------------------------------------------- the ORDER BY bar
 
-// copyResults is results.copy: the selected cells, or the cursor's, as TSV.
-func (pl *plugins) copyResults() {
+// The bar's text is App.resultsOrder, which the TableView's orderBy is bound to: the bar writes it
+// when Enter is pressed, the view's own sorts (s, a header) are written back to it, and the menu's
+// sorts write it. Its line under the bar is the text's error, else the field names the word being
+// typed may be, else the sort's note.
+
+// orderResults is the bar's Enter: the text is the table's orderBy. Text that does not parse
+// leaves the rows as they were and shows why: the view's own words (ParseTableOrder's, over the
+// same fields).
+func (pl *plugins) orderResults(text string) {
+	pl.resultsOrder, pl.resultsHint = text, ""
+	pl.resultsOrderErr = ""
+	if _, err := widget.ParseTableOrder(text, pl.resultsFields()); err != nil {
+		pl.resultsOrderErr = err.Error()
+	}
+	pl.c.Set("App.resultsOrder", text)
+	pl.showSortLine()
+}
+
+// resultsOrderChanged is the view's own sort (the s key, a header), written back to orderBy: the
+// bar shows it.
+func (pl *plugins) resultsOrderChanged(text string) {
+	pl.resultsOrder, pl.resultsOrderErr, pl.resultsHint = text, "", ""
+	pl.c.Set("App.resultsOrder", text)
+	pl.showSortLine()
+}
+
+// resultsOrderTyped is the bar's text as it is typed: while a field's name is being typed, the
+// line offers the fields it may be, each written as the bar reads it back: a name two fields
+// share as its position.
+func (pl *plugins) resultsOrderTyped(text string) {
+	pl.resultsHint = orderHint(text, pl.resultsFields())
+	pl.showSortLine()
+}
+
+// orderHint is what the bar offers for text: "fields: name, 3, …" for the field the last key is
+// naming, "" once its name is followed by a space (a direction comes next) or nothing matches.
+func orderHint(text string, fields []widget.TableField) string {
+	word := text[strings.LastIndexByte(text, ',')+1:]
+	word = strings.TrimLeft(word, " \t")
+	if strings.ContainsAny(word, " \t") || len(fields) == 0 {
+		return ""
+	}
+	word = strings.TrimPrefix(word, `"`)
+	var offer []string
+	for col, f := range fields {
+		if strings.HasPrefix(strings.ToLower(f.Title), strings.ToLower(word)) {
+			offer = append(offer, strings.TrimSuffix(widget.FormatTableOrder([]widget.TableSortKey{{Col: col}}, fields), " ASC"))
+		}
+	}
+	if len(offer) == 0 {
+		return ""
+	}
+	return "fields: " + strings.Join(offer, ", ")
+}
+
+func (pl *plugins) showSortLine() {
+	line := pl.resultsNote
+	switch {
+	case pl.resultsOrderErr != "":
+		line = pl.resultsOrderErr
+	case pl.resultsHint != "":
+		line = pl.resultsHint
+	}
+	pl.c.Set("App.resultsSortLine", line)
+}
+
+// resultsFields are the table's fields as the view has them.
+func (pl *plugins) resultsFields() []widget.TableField {
+	out := make([]widget.TableField, len(pl.results.model.fields))
+	for i, f := range pl.results.model.fields {
+		out[i].Title = f
+	}
+	return out
+}
+
+// sortResults is results.sort_asc, results.sort_desc and results.unsort: the field (a 1-based
+// position; the cursor's when none is given) written to the bar as its one key, or no sort.
+func (pl *plugins) sortResults(how string, args []string) error {
+	core := pl.c.TableCore(resultsView)
+	if core == nil || len(core.Fields()) == 0 {
+		pl.c.Notify("no results to sort")
+		return nil
+	}
+	if how == "off" {
+		pl.orderResults("")
+		return nil
+	}
+	col := core.Cursor().Col
+	if len(args) > 0 {
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 1 || n > len(core.Fields()) {
+			return fmt.Errorf("no field %q: the results have %d", args[0], len(core.Fields()))
+		}
+		col = n - 1
+	}
+	pl.orderResults(widget.FormatTableOrder([]widget.TableSortKey{{Col: col, Desc: how == "desc"}}, core.Fields()))
+	return nil
+}
+
+// selectAllResults is results.select_all: every loaded row.
+func (pl *plugins) selectAllResults() {
+	if core := pl.c.TableCore(resultsView); core != nil && core.Len() > 0 {
+		core.SelectAll()
+	}
+}
+
+// ---------------------------------------------------------------- the menu
+
+// bindResultsMenu gives the table's right-click menu its rows: built each time it opens, so the
+// sorts name the field under the pointer.
+func (pl *plugins) bindResultsMenu() {
+	if t := pl.c.ResultsTable(resultsView); t != nil && t.Menu() != nil {
+		t.Menu().SetRows(pl.resultsMenuRows)
+	}
+}
+
+// resultsMenuRows are the menu's rows, each a results command of the catalog. The sorts take the
+// field the right press was on (MenuAt), not the cursor's.
+func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
+	t := pl.c.ResultsTable(resultsView)
+	if t == nil {
+		return nil
+	}
+	core := t.Core()
+	have := core.Len() > 0
+	at, hit := t.MenuAt()
+	field := []string{}
+	onField := hit == widget.TableHitCell || hit == widget.TableHitHeader
+	if onField {
+		field = []string{strconv.Itoa(at.Col + 1)}
+	}
+	name := ""
+	if f := core.Fields(); onField && at.Col < len(f) {
+		name = " by " + f[at.Col].Title
+	}
+	row := func(id, label, entry string, args []string, enabled bool) widget.MenuItemModel {
+		m := widget.NewCommand(widget.ItemID("results.menu."+id), label, widget.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
+			Run: func(*widget.EditorCore) { pl.runResultsEntry(entry, args) }})
+		m.Enabled = enabled
+		return m
+	}
+	return []widget.MenuItemModel{
+		row("copy", "Copy", "results.copy", nil, have),
+		row("copy_csv", "Copy as CSV", "results.copy_csv", nil, have),
+		row("copy_json", "Copy as JSON", "results.copy_json", nil, have),
+		row("copy_markdown", "Copy as Markdown", "results.copy_markdown", nil, have),
+		widget.NewSeparator("results.menu.selecting"),
+		row("select_all", "Select all", "results.select_all", nil, have),
+		widget.NewSeparator("results.menu.sorting"),
+		row("sort_asc", "Sort ascending"+name, "results.sort_asc", field, onField),
+		row("sort_desc", "Sort descending"+name, "results.sort_desc", field, onField),
+		row("unsort", "Unsort", "results.unsort", nil, pl.resultsOrder != ""),
+		widget.NewSeparator("results.menu.leaving"),
+		row("export", "Export loaded rows…", "results.export", nil, have),
+		row("markdown", "Insert as Markdown", "results.markdown", nil, have),
+	}
+}
+
+// runResultsEntry runs a results command of the catalog, as the menu's rows do; its error is a
+// notice.
+func (pl *plugins) runResultsEntry(id string, args []string) {
+	if err := pl.c.RunEntry(id, args); err != nil {
+		pl.c.Failed(id, err)
+	}
+}
+
+// ---------------------------------------------------------------- copies and Markdown
+
+// copyFormat is a copy's or an export's text: TSV (a copy's), CSV, JSON or Markdown (a copy's).
+type copyFormat string
+
+const (
+	formatTSV      copyFormat = "tsv"
+	formatCSV      copyFormat = "csv"
+	formatJSON     copyFormat = "json"
+	formatMarkdown copyFormat = "markdown"
+)
+
+// errPastCopyCap is a copy's text grown past resultsCopyCap.
+var errPastCopyCap = errors.New("past the copy's cap")
+
+// copyResults is results.copy and its siblings: the selected cells (or the cursor's), from the
+// loaded rows as the table shows them, in format. Past resultsCopyCap of text nothing is copied.
+func (pl *plugins) copyResults(format copyFormat) {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || core.Len() == 0 {
 		pl.c.Notify("no results to copy")
 		return
 	}
-	if !core.Copy() {
+	text, err := pl.selectionText(core, format)
+	if errors.Is(err, errPastCopyCap) || err == nil && len(text) > resultsCopyCap {
+		pl.c.Notify(fmt.Sprintf("nothing copied: the selection is more than the %s a copy takes; use Export loaded rows… to write it to a file", sizeOf(resultsCopyCap)))
+		return
+	}
+	if err != nil {
+		pl.c.Failed("copy the results", err)
+		return
+	}
+	if !pl.c.CopyText(text) {
 		pl.c.Notify("the results were not copied: no clipboard")
 		return
 	}
-	pl.c.Say("results copied")
+	if format == formatTSV {
+		pl.c.Say("results copied")
+		return
+	}
+	pl.c.Say("results copied as " + strings.ToUpper(string(format)))
+}
+
+// sizeOf is n bytes as a reader says it: "16 MiB", "512 KiB", "300 bytes".
+func sizeOf(n int) string {
+	switch {
+	case n >= 1<<20 && n%(1<<20) == 0:
+		return fmt.Sprintf("%d MiB", n>>20)
+	case n >= 1<<10 && n%(1<<10) == 0:
+		return fmt.Sprintf("%d KiB", n>>10)
+	}
+	return fmt.Sprintf("%d bytes", n)
+}
+
+// selectionText is the cells a copy takes, in format. TSV is the table's own (CopyText): the cells
+// as shown, no header. CSV and Markdown are the selected fields, a header first, a row for each row
+// the selection is in; a cell of those fields outside the selection (vim's charwise v, ragged at
+// its ends) is empty. JSON is an object per row holding its selected cells.
+func (pl *plugins) selectionText(core *widget.TableCore, format copyFormat) (string, error) {
+	if format == formatTSV {
+		return core.CopyText(), nil
+	}
+	cols, rows, in := selectedCells(core)
+	m := pl.results.model
+	names := make([]string, len(cols))
+	for i, c := range cols {
+		names[i] = m.fields[c]
+	}
+	pick := func(src int) (cells []string, kinds string) {
+		row, k := m.rows[src], m.rowKinds(src)
+		kb := make([]byte, len(cols))
+		cells = make([]string, len(cols))
+		for i, c := range cols {
+			kb[i] = byte(widget.TableCellText)
+			if c < len(k) {
+				kb[i] = k[c]
+			}
+			if c < len(row) {
+				cells[i] = row[c]
+			}
+		}
+		return cells, string(kb)
+	}
+	switch format {
+	case formatMarkdown:
+		table := make([][]string, 0, len(rows))
+		for _, d := range rows {
+			cells, _ := pick(core.SourceRow(d))
+			for i, c := range cols {
+				if !in(d, c) {
+					cells[i] = ""
+				}
+			}
+			table = append(table, cells)
+		}
+		return markdownTable(names, table), nil
+	case formatCSV:
+		var b strings.Builder
+		w := newCSVRows(&cappedWriter{w: &b, cap: resultsCopyCap}, names)
+		for _, d := range rows {
+			cells, _ := pick(core.SourceRow(d))
+			for i, c := range cols {
+				if !in(d, c) {
+					cells[i] = ""
+				}
+			}
+			if err := w.write(cells, ""); err != nil {
+				return "", err
+			}
+		}
+		if err := w.end(); err != nil {
+			return "", err
+		}
+		return b.String(), nil
+	}
+	var b strings.Builder
+	w := newJSONRows(&cappedWriter{w: &b, cap: resultsCopyCap}, names)
+	for _, d := range rows {
+		cells, kinds := pick(core.SourceRow(d))
+		var keep []int
+		for i, c := range cols {
+			if in(d, c) {
+				keep = append(keep, i)
+			}
+		}
+		if err := w.writeSome(cells, kinds, keep); err != nil {
+			return "", err
+		}
+	}
+	if err := w.end(); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+// selectedCells is the selection over the loaded rows as shown: the fields any selected cell is in
+// (in field order), the display rows holding one (in the order shown), and whether a cell is
+// selected. With no selection it is the cursor's cell.
+func selectedCells(core *widget.TableCore) (cols, rows []int, in func(d, col int) bool) {
+	from, to, ok := core.Selection()
+	if !ok {
+		cur := core.Cursor()
+		return []int{cur.Col}, []int{cur.Row}, func(d, col int) bool { return d == cur.Row && col == cur.Col }
+	}
+	n := len(core.Fields())
+	used := make([]bool, n)
+	for d := from.Row; d <= to.Row && d < core.Len(); d++ {
+		any := false
+		for col := range n {
+			if core.InSelection(d, col) {
+				used[col], any = true, true
+			}
+		}
+		if any {
+			rows = append(rows, d)
+		}
+	}
+	for col, u := range used {
+		if u {
+			cols = append(cols, col)
+		}
+	}
+	return cols, rows, core.InSelection
 }
 
 // insertResults is results.markdown: the rows loaded now, as the table shows them (its sort
-// applied), a Markdown table at the editor's cursor. While rows remain unloaded the notice says so,
-// and that the CSV export takes them all.
+// applied), a Markdown table at the editor's cursor. While the result has more the notice says so.
 func (pl *plugins) insertResults() {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || len(core.Fields()) == 0 {
@@ -417,8 +812,8 @@ func (pl *plugins) insertResults() {
 		pl.c.Failed("insert the results", err)
 		return
 	}
-	if pl.results.more {
-		pl.c.Notify(fmt.Sprintf("%d loaded rows inserted; more remain (Export all rows as CSV takes them all)", len(rows)))
+	if pl.results.partial() {
+		pl.c.Notify(fmt.Sprintf("%d loaded rows inserted; the result has more: change the query to change what is returned", len(rows)))
 		return
 	}
 	pl.c.Notify(fmt.Sprintf("%d rows inserted", len(rows)))
@@ -458,249 +853,4 @@ func markdownTable(fields []string, rows [][]string) string {
 		write(line)
 	}
 	return b.String()
-}
-
-// ---------------------------------------------------------------- the CSV export
-
-// resultsExport is results.csv at work: every row of the table, fetched to the last, written to
-// <path>.part beside the chosen path as pages arrive and renamed over it once all are written, so
-// the chosen path never holds part of a table. A writer goroutine owns the file; the loop feeds it
-// one page at a time and fetches the next only once that page is written, so at most one page and
-// the closing step ever wait for it (steps holds both, and a send never blocks the loop).
-type resultsExport struct {
-	path, part string
-	steps      chan exportStep
-	done       chan struct{} // closed when the writer has finished: the file renamed, or removed
-	// loop-owned: the model's rows handed to the writer, whether a page is with it, the rows it has
-	// written, and whether the closing step was sent (finish or cancel)
-	sent     int
-	writing  bool
-	written  int
-	stopping bool
-}
-
-// exportStep is the writer's next step: a page of rows, or the end, finish or cancel (why).
-type exportStep struct {
-	rows   [][]string
-	finish bool
-	cancel string
-}
-
-// startExportResults is results.csv: the save dialog, at the workspace's folder.
-func (pl *plugins) startExportResults() {
-	switch {
-	case pl.results.id == "" && len(pl.results.model.rows) == 0:
-		pl.c.Notify("no results to export")
-		return
-	case pl.export != nil:
-		pl.c.Notify("the results are being exported already")
-		return
-	}
-	pl.c.Set("App.browseFolder", pl.c.BrowseFolder())
-	pl.c.Open("exportResults")
-}
-
-// exportResults is the save dialog accepted: a file there already asks Replace or Cancel first.
-func (pl *plugins) exportResults(path string) {
-	pl.c.Close("exportResults")
-	if path == "" {
-		return
-	}
-	path = filepath.Clean(path)
-	if filepath.Ext(path) == "" {
-		path += ".csv"
-	}
-	if _, err := os.Stat(path); err == nil {
-		pl.c.Ask(Question{Title: "replace " + filepath.Base(path) + "?",
-			Text: path + " exists. Export the results over it? It is replaced only once every row is written.",
-			Yes:  "&Replace", No: "&Cancel", OnYes: func() { pl.beginExport(path) }})
-		return
-	}
-	pl.beginExport(path)
-}
-
-// beginExport starts the writer and hands it the rows loaded; the pump fetches the rest.
-func (pl *plugins) beginExport(path string) {
-	if pl.export != nil {
-		pl.c.Notify("the results are being exported already")
-		return
-	}
-	fields := pl.results.model.fields
-	switch {
-	case len(fields) == 0:
-		pl.c.Notify("no results to export")
-		return
-	case pl.results.cut:
-		pl.c.Notify("the results ended early, so the rows loaded are not all of them: run the query again to export them all")
-		return
-	case pl.results.spilled:
-		pl.c.Notify(fmt.Sprintf("only the first %d rows were kept; run the query again to export them all", len(pl.results.model.rows)))
-		return
-	}
-	x := &resultsExport{path: path, part: path + ".part", steps: make(chan exportStep, 2), done: make(chan struct{})}
-	pl.export = x
-	go x.write(fields, pl.c.Post, pl.exportWritten, pl.exportEnded)
-	pl.c.NotifyOngoing(toastExport, "exporting the results to "+path+"…")
-	pl.exportPump()
-}
-
-// exportPump moves the export on, after it starts, after each page is written and as rows arrive:
-// the rows the writer has not had go to it; with none, the next page is fetched; with none left,
-// the export finishes. A page with the writer waits for it to be written.
-func (pl *plugins) exportPump() {
-	x := pl.export
-	if x == nil || x.writing || x.stopping {
-		return
-	}
-	res := pl.results
-	if rows := res.model.rows; x.sent < len(rows) {
-		x.writing = true
-		x.steps <- exportStep{rows: rows[x.sent:]}
-		x.sent = len(rows)
-		return
-	}
-	if len(res.over) > 0 { // past the panel's cap: written, and let go
-		x.writing = true
-		x.steps <- exportStep{rows: res.over}
-		res.over, res.spilled = nil, true
-		return
-	}
-	if pl.results.more {
-		if pl.results.owner == nil {
-			pl.cancelExport("no plugin serves the results")
-			return
-		}
-		pl.fetchRows()
-		return
-	}
-	x.stopping = true
-	x.steps <- exportStep{finish: true}
-}
-
-// exportWritten is a page written; a write that failed has removed the .part.
-func (pl *plugins) exportWritten(x *resultsExport, n int) {
-	if pl.export != x {
-		return
-	}
-	x.writing = false
-	x.written += n
-	pl.c.NotifyOngoing(toastExport, fmt.Sprintf("exporting: %d rows", x.written))
-	pl.showResultsTitle()
-	pl.exportPump()
-}
-
-// cancelExport stops an export before it finishes: the writer closes and removes the .part, and
-// the chosen path is left as it was. One already finishing is let finish.
-func (pl *plugins) cancelExport(why string) {
-	x := pl.export
-	if x == nil || x.stopping {
-		return
-	}
-	x.stopping = true
-	x.steps <- exportStep{cancel: why}
-}
-
-// exportEnded is the writer finished: the file renamed into place, or removed, and why.
-func (pl *plugins) exportEnded(x *resultsExport, rows int, err error) {
-	if pl.export == x {
-		pl.export = nil
-	}
-	pl.showResultsTitle()
-	if err != nil {
-		pl.c.NotifyDone(toastExport, "the results were not exported: "+err.Error()+"; "+x.path+" not written")
-		return
-	}
-	pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s", rows, x.path))
-}
-
-// errExportCancelled is an export stopped before it finished, with why.
-type errExportCancelled struct{ why string }
-
-func (e errExportCancelled) Error() string { return "cancelled: " + e.why }
-
-// write is the writer: it creates the .part (never over one there already: another export's, or
-// one a crash left), writes the header and each page as it comes, and at the end syncs it and
-// renames it over the chosen path; cancelled, or on any error, it closes and removes it. Each
-// page written, and the end, are told to the loop through post.
-func (x *resultsExport) write(fields []string, post func(func()), written func(*resultsExport, int), ended func(*resultsExport, int, error)) {
-	defer close(x.done)
-	rows := 0
-	fail := func(f *os.File, err error) {
-		if f != nil {
-			_ = f.Close()
-			_ = os.Remove(x.part)
-		}
-		post(func() { ended(x, rows, err) })
-	}
-	f, err := os.OpenFile(x.part, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			err = fmt.Errorf("%s exists: another export's, or one that did not finish; remove it first", x.part)
-		}
-		fail(nil, err)
-		return
-	}
-	w := csv.NewWriter(f)
-	_ = w.Write(fields)
-	for step := range x.steps {
-		switch {
-		case step.cancel != "":
-			fail(f, errExportCancelled{step.cancel})
-			return
-		case step.finish:
-			w.Flush()
-			err := w.Error()
-			if err == nil {
-				err = f.Sync()
-			}
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
-			if err == nil {
-				err = os.Rename(x.part, x.path)
-			}
-			if err != nil {
-				_ = os.Remove(x.part)
-			}
-			post(func() { ended(x, rows, err) })
-			return
-		}
-		for _, r := range step.rows {
-			_ = w.Write(fieldsOf(r, len(fields)))
-		}
-		w.Flush()
-		if err := w.Error(); err != nil {
-			fail(f, err)
-			return
-		}
-		rows += len(step.rows)
-		n := len(step.rows)
-		post(func() { written(x, n) })
-	}
-}
-
-// fieldsOf is a row with a cell per field: a short one's last cells empty, a long one's extra cells
-// dropped, as the table shows it.
-func fieldsOf(row []string, n int) []string {
-	if len(row) == n {
-		return row
-	}
-	out := make([]string, n)
-	copy(out, row)
-	return out
-}
-
-// stopExport is AutoDoc quitting: an export not finished is cancelled, and its writer waited for,
-// so no .part is left behind. The writer is only ever between two file writes.
-func (pl *plugins) stopExport() {
-	x := pl.export
-	if x == nil {
-		return
-	}
-	if !x.stopping {
-		x.stopping = true
-		x.steps <- exportStep{cancel: "AutoDoc closed"}
-	}
-	<-x.done
-	pl.export = nil
 }

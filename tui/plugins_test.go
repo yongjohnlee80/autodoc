@@ -135,7 +135,7 @@ func runTestPlugin(mode string) int {
 		close(linked)
 		<-done
 		return 0
-	case "table", "tablestall", "tablereuse", "table1000": // protocol 4: a table of rows, paged (plugintable_test.go)
+	case "table", "tablestall", "tablereuse", "table1000", "kinds", "kindsbad": // protocol 4 and 5: a table of rows, paged (plugintable_test.go, resultspanel_test.go)
 		return runTablePlugin(mode)
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
