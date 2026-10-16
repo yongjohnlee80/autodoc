@@ -840,7 +840,6 @@ Window {
     TodoKeys { id: todoKeys }
     // ---- end of the generated cards ----
     PluginChooser { id: pluginChooser }
-    PluginKeys { id: pluginKeys }
     LuaKeys { id: luaKeys }
     Help { id: help }
     Arrange { id: arrange }

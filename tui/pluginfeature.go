@@ -29,7 +29,8 @@ type plugins struct {
 	pluginRows *tuidecl.ListModel
 	feedGen    int // numbers the document feed's pending send (pluginfeed.go)
 	// SPC p: the chooser's plugins, its cursor, the plugin * asks a letter for and what it last said
-	// (pluginpick.go); then each plugin's card, and the one shown (plugincmds.go)
+	// (pluginpick.go); then each plugin's card, and the one shown in the list's place ("" for the
+	// list; plugincmds.go)
 	chooser     []pluginRow
 	chooserAt   int
 	chooserBind string
@@ -66,10 +67,9 @@ func (pl *plugins) State() map[string]any {
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	return map[string]any{
 		"App.plugins":            pl.pluginRows,
+		"App.pluginChooserTitle": "SPC p — plugins",
 		"App.pluginChooserText":  "",
 		"App.pluginChooserHelp":  chooserHelp,
-		"App.pluginKeysTitle":    "SPC p",
-		"App.pluginKeysText":     "",
 		"App.pluginUrl":          "",
 		"App.pluginRisk":         pluginRisk,
 		"App.pluginConfirmTitle": "",
@@ -88,10 +88,8 @@ func (pl *plugins) Commands() map[string]Command {
 	return map[string]Command{
 		"App.openPlugin":         oneString("a plugin", pl.openPlugin),
 		"App.pluginEntry":        oneString("a plugin's menu row or letter", pl.pluginEntry),
-		"App.pluginKey":          oneString("a plugin command letter", pl.pluginKey),
 		"App.openPluginChooser":  none(pl.openPluginChooser),
 		"App.pluginChooserKey":   oneString("a key on the SPC p chooser", pl.pluginChooserKey),
-		"App.pluginCardBack":     none(pl.pluginCardBack),
 		"App.startAddPlugin":     none(pl.startAddPlugin),
 		"App.addPlugin":          oneString("a git URL", pl.addPlugin),
 		"App.pluginConfirmed":    none(pl.pluginConfirmed),
@@ -144,9 +142,9 @@ func resultsPanelSpec() PanelSpec {
 		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }
 
-// Keys is SPC p, the plugins' chooser, then a plugin's card. Both are the plugins' own
-// (views/PluginChooser.qml, views/PluginKeys.qml), their letters the user's and the plugins'
-// (pluginpick.go, plugincmds.go), so neither is a key card of the catalog's: Cards is none.
+// Keys is SPC p, the plugins' chooser, then a plugin's card in its place. It is the plugins' own
+// (views/PluginChooser.qml), its letters the user's and the plugins' (pluginpick.go, plugincmds.go),
+// so it is not a key card of the catalog's: Cards is none.
 func (*plugins) Keys() []Key {
 	return []Key{{Card: leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "App.openPluginChooser()", Group: groupWindow}}
 }

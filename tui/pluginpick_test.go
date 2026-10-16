@@ -50,14 +50,13 @@ func onLoop3[A, B, C any](r *running, fn func() (A, B, C)) (A, B, C) {
 	return v.a, v.b, v.c
 }
 
-// twoPlugins installs alpha and beta, each with a command on s, alpha's another on h.
+// twoPlugins installs alpha and beta, each with a command on s, alpha's another on h. They are
+// services, so a command run leaves the keys where they were, and each says what it was sent.
 func twoPlugins(t *testing.T) string {
 	dir := t.TempDir()
-	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
-		"[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
+	installPlugin2(t, dir, "alpha", "service", "echo", "[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
 		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n")
-	installPlugin2(t, dir, "beta", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
-		"[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
+	installPlugin2(t, dir, "beta", "service", "echo", "[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
 	return dir
 }
 

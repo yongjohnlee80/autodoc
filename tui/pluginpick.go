@@ -9,8 +9,8 @@ import (
 )
 
 // THE SPC p CHOOSER (ADR 1792132889) — SPC p lists the plugins whose commands can run, each with the
-// letter the user gave it, if any; a plugin's letter, or j/k then Enter, shows its card: its commands
-// by their letters (plugincmds.go). * asks for a letter for the plugin under ›, and the next key is
+// letter the user gave it, if any; a plugin's letter, or j/k then Enter, shows its card in the same
+// dialog: its commands by their letters (plugincmds.go), Backspace back to the list. * asks for a letter for the plugin under ›, and the next key is
 // it (Backspace removes it), as AutoVim's Ctrl+g modal binds a destination. The letters are the
 // user's alone, so a plugin installed never takes or moves one; a command's letter is unique within
 // its plugin only.
@@ -18,6 +18,8 @@ import (
 // The chooser is a card, as the leader's is: text, with nothing focusable in it. A focused list takes
 // j, k, g, G and Enter before a dialog's Shortcuts see them, so a letter it moves by could be given
 // to a plugin and never reach it. On the card every key is a Shortcut, and the host keeps the cursor.
+// The list and a plugin's card are one dialog, its text the host's: closing one dialog and opening
+// another from one key leaves the keyboard outside the one opened, which then never hears Esc.
 
 // pluginRow is a plugin on the SPC p chooser: one with commands that can run.
 type pluginRow struct {
@@ -80,14 +82,25 @@ func (pl *plugins) pluginTitle(key string) string {
 	return key
 }
 
-// The chooser's help: as it waits for a plugin, and as * waits for a letter.
+// The chooser's help: as it waits for a plugin, as * waits for a letter, and on a plugin's card.
 const (
 	chooserHelp     = "a plugin's letter, or Enter, shows its commands · j/k move · * gives the plugin under › a letter · q or Esc closes"
 	chooserBindHelp = "a letter or digit for %s (not j, k or q) · Backspace removes its letter · Esc closes"
+	pluginCardHelp  = "a key runs its command · Backspace goes back · q or Esc closes"
 )
 
-// showChooser sets the chooser's text, a line per plugin, and its help.
+// showChooser sets the dialog: the chosen plugin's card, or the list.
 func (pl *plugins) showChooser() {
+	if pl.cardPlugin != "" {
+		text := "no commands: the plugin is gone, or cannot run"
+		if card := pl.pluginCards[pl.cardPlugin]; card != nil {
+			text = card.text
+		}
+		pl.c.Set("App.pluginChooserTitle", "SPC p › "+pl.pluginTitle(pl.cardPlugin))
+		pl.c.Set("App.pluginChooserText", text)
+		pl.c.Set("App.pluginChooserHelp", pluginCardHelp)
+		return
+	}
 	text := "no plugin has commands yet: Plugins › Add from a git URL… adds one"
 	if len(pl.chooser) > 0 {
 		width := 0
@@ -118,19 +131,21 @@ func (pl *plugins) showChooser() {
 	case pl.chooserNote != "":
 		help = pl.chooserNote + " · " + chooserHelp
 	}
+	pl.c.Set("App.pluginChooserTitle", "SPC p — plugins")
 	pl.c.Set("App.pluginChooserText", text)
 	pl.c.Set("App.pluginChooserHelp", help)
 }
 
-// openPluginChooser is SPC p: the chooser, waiting for a plugin.
+// openPluginChooser is SPC p: the list, waiting for a plugin.
 func (pl *plugins) openPluginChooser() {
-	pl.chooserBind, pl.chooserNote = "", ""
+	pl.chooserBind, pl.chooserNote, pl.cardPlugin = "", "", ""
 	pl.showChooser()
 	pl.c.Open("pluginChooser")
 }
 
-// pluginChooserKey is a key on the chooser, by its Shortcut's name: a letter or digit, Up, Down,
-// Enter, * or Backspace. After *, it is the letter asked for.
+// pluginChooserKey is a key on the dialog, by its Shortcut's name: a letter or digit, Up, Down,
+// Enter, * or Backspace. On a plugin's card, a letter runs its command and Backspace goes back to the
+// list; on the list, after *, it is the letter asked for.
 func (pl *plugins) pluginChooserKey(k string) {
 	pl.chooserNote = ""
 	defer func() {
@@ -138,6 +153,10 @@ func (pl *plugins) pluginChooserKey(k string) {
 			pl.showChooser()
 		}
 	}()
+	if pl.cardPlugin != "" {
+		pl.pluginCardKey(k)
+		return
+	}
 	if pl.chooserBind != "" {
 		key := pl.chooserBind
 		pl.chooserBind = ""
@@ -167,18 +186,23 @@ func (pl *plugins) pluginChooserKey(k string) {
 	}
 }
 
-// choosePlugin shows a plugin's card in the chooser's place: its commands, by their letters.
-func (pl *plugins) choosePlugin(key string) {
-	pl.cardPlugin = key
-	pl.showPluginCard()
-	pl.c.Close("pluginChooser")
-	pl.c.Open("pluginKeys")
-}
+// choosePlugin shows a plugin's card in the list's place: its commands, by their letters.
+func (pl *plugins) choosePlugin(key string) { pl.cardPlugin = key }
 
-// pluginCardBack is Backspace on a plugin's card: back to the chooser.
-func (pl *plugins) pluginCardBack() {
-	pl.c.Close("pluginKeys")
-	pl.openPluginChooser()
+// pluginCardKey is a key on a plugin's card: a letter runs its command once the dialog is closed;
+// Backspace goes back to the list, its cursor where it was.
+func (pl *plugins) pluginCardKey(k string) {
+	switch k {
+	case "Backspace":
+		pl.cardPlugin = ""
+	case "q":
+		pl.c.Close("pluginChooser")
+	default:
+		if card := pl.pluginCards[pl.cardPlugin]; card != nil && card.targets[k] != "" {
+			pl.c.Close("pluginChooser")
+			pl.pluginEntry(card.targets[k])
+		}
+	}
 }
 
 // bindPluginLetter is the chooser's *: k becomes the plugin's letter, and Backspace removes it. A

@@ -1222,9 +1222,11 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 
 	r.leader(t, 'p')
 	r.s.WaitForText(t, "SPC p — plugins")
-	for _, want := range []string{"›   Alpha  2 commands", "Beta   1 command", "Gamma  1 command"} {
+	for _, want := range []string{"›    Alpha  2 commands", "Beta   1 command", "Gamma  1 command"} {
 		r.s.WaitForText(t, want)
 	}
+	r.keys(t, esc())
+	r.s.WaitFor(t, "Esc closed the chooser", func(sc string) bool { return !strings.Contains(sc, "SPC p — plugins") })
 	r.pluginCardOf(t, "gamma")
 	r.s.WaitForText(t, "h  Do g") // gamma's h, alpha's too
 	r.keys(t, backspace())        // back to the chooser
@@ -1259,17 +1261,19 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 }
 
 // TestAPreferenceRebindsAPluginCommand: tui.plugin.<name>.key.<id> overrides the manifest's letter
-// on the plugin's card; "" unbinds a command. Two of one plugin's commands wanting a letter: the
-// first in the manifest keeps it, and the other is listed unbound with why.
+// on the plugin's card; "" unbinds a command. Two of one plugin's commands wanting a letter (an
+// override, as a manifest refuses it): the first in the manifest keeps it, and the other is listed
+// unbound with why.
 func TestAPreferenceRebindsAPluginCommand(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
 		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n"+
-		"[[commands]]\nid = \"twin\"\ntitle = \"Do twin\"\nkey = \"s\"\n")
+		"[[commands]]\nid = \"twin\"\ntitle = \"Do twin\"\nkey = \"t\"\n")
 	installPlugin2(t, dir, "beta", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
-	r, _ := pluginTUIWith(t, dir, map[string]string{"tui.plugin.beta.key.x": "b", "tui.plugin.alpha.key.hello": ""})
+	r, _ := pluginTUIWith(t, dir, map[string]string{"tui.plugin.beta.key.x": "b", "tui.plugin.alpha.key.hello": "",
+		"tui.plugin.alpha.key.twin": "s"})
 	r.pluginCardOf(t, "alpha")
 	for _, want := range []string{"s  Do a", "Say hello — unbound in the preferences", "Do twin — s is taken by Do a"} {
 		r.s.WaitForText(t, want)
@@ -1588,7 +1592,7 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 		t.Fatalf("a removed plugin's command stayed: %+v", e)
 	}
 	r.leader(t, 'p')
-	r.s.WaitForText(t, "no plugin commands yet")
+	r.s.WaitForText(t, "no plugin has commands yet")
 }
 
 // A Plugins menu entry that starts nothing says why: none ("no plugins yet") does nothing; a key no
