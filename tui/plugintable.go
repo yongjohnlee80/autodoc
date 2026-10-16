@@ -68,6 +68,10 @@ type resultsTable struct {
 	// remained when the table's rows ended early (host.table_end, its plugin closed, or a page
 	// refused). capped is rows that came past the panel's cap and were let go.
 	more, pending, cut, capped bool
+	// sorting is the bar's sort being applied. The view keeps the cursor on its row, and the row's
+	// new place may be near the end of those loaded, where the view asks for more; a sort is not
+	// the reader scrolling, so nothing is fetched meanwhile.
+	sorting bool
 }
 
 // full reports whether the panel holds all the rows it may.
@@ -376,11 +380,11 @@ func (pl *plugins) tableEnded(r *pluginRun, id, why string) {
 }
 
 // fetchRows asks the table's plugin for its next rows, unless one request waits already, no rows
-// remain, no plugin serves the table, or the panel is at its cap. It asks only for what the panel
-// has room for.
+// remain, no plugin serves the table, the panel is at its cap, or the bar's sort is being applied.
+// It asks only for what the panel has room for.
 func (pl *plugins) fetchRows() {
 	res := pl.results
-	if res.owner == nil || res.owner.closing || !res.more || res.pending {
+	if res.owner == nil || res.owner.closing || !res.more || res.pending || res.sorting {
 		return
 	}
 	n := min(resultsPage, resultsResident-len(res.model.rows))
@@ -478,7 +482,10 @@ func (pl *plugins) orderResults(text string) {
 	if _, err := widget.ParseTableOrder(text, pl.resultsFields()); err != nil {
 		pl.resultsOrderErr = err.Error()
 	}
+	// the view applies orderBy within the Set, its sort and any request for rows the sort makes
+	pl.results.sorting = true
 	pl.c.Set("App.resultsOrder", text)
+	pl.results.sorting = false
 	pl.showSortLine()
 }
 
@@ -486,7 +493,9 @@ func (pl *plugins) orderResults(text string) {
 // bar shows it.
 func (pl *plugins) resultsOrderChanged(text string) {
 	pl.resultsOrder, pl.resultsOrderErr, pl.resultsHint = text, "", ""
+	pl.results.sorting = true
 	pl.c.Set("App.resultsOrder", text)
+	pl.results.sorting = false
 	pl.showSortLine()
 }
 
