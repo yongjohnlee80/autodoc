@@ -110,12 +110,16 @@ func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
 		if small != 4 || len(tabs) == 0 {
 			return false
 		}
+		// every tab cut, and the whole ones at the floor (with its ×); one cut at the window's edge,
+		// or the one before the first in the cells left over, is narrower, as the window draws it
+		atFloor := false
 		for _, w := range tabs {
-			if w >= whole(long[2]) || w < bufferTabWidth+2 { // cut, but never under the floor (and its ×)
+			if w >= whole(long[2]) || w > bufferTabWidth+2 {
 				return false
 			}
+			atFloor = atFloor || w == bufferTabWidth+2
 		}
-		return true
+		return atFloor
 	})
 	// cut in the middle, by AutoDoc's fit: the title row (the one with the arrows) keeps a name's
 	// end, its kind after the ellipsis, as a cut at its end would not
