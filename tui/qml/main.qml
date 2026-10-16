@@ -97,6 +97,7 @@ Window {
             MenuSeparator {}
             MenuItem { text: "&Save"; onTriggered: App.save() }
             MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
+            MenuItem { text: "Close &buffer"; onTriggered: App.closeBuffer() }
             MenuSeparator {}
             MenuItem { text: "Preview &HTML"; onTriggered: App.previewHTML() }
             // what draws a window's Mermaid diagrams (preview.go); the terminal's are mermaid.js's
@@ -115,6 +116,7 @@ Window {
             title: "&Go"
             MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
             MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
+            MenuItem { text: "&Buffers…"; onTriggered: App.openBuffers() }
             MenuSeparator {}
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "Re&lations"; onTriggered: App.toggleRelations() }

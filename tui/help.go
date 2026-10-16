@@ -129,6 +129,9 @@ const helpKeys = `KEYS
   * #         in the page, in Vim's Normal mode, find the word under the cursor, whole, on or
               back (g* g# as part of a word too): it becomes the page's find, so n and N go on
   SPC o       open a document: a filter over the workspace's files, with a preview
+  SPC B       switch buffer (Go › Buffers…, :b): the open files and drafts, each previewed with
+              its unsaved text; SPC C closes the one shown (File › Close buffer, :bd), asking
+              first over unsaved changes
   Ctrl+O Ctrl+I  back and forward along the jumps (Vim's jump list, in Normal mode): a link
               followed, a document opened from a picker, the explorer, the relations or the
               recent files, and the page's own jumps (G, gg, %, { }, a mark's). Back to another

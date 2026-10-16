@@ -41,14 +41,14 @@ func (h *Host) newBufferPick() *pick[string] {
 // labelRowOf is a buffer's row in the Buffers picker.
 func labelRowOf(_ int, label string) rowOf { return rowOf{"key": label, "label": label} }
 
-// openBuffers is Go › Buffers… : the picker over the open buffers.
+// openBuffers is Go › Buffers…, SPC B and :b alone: the picker over the open buffers.
 func (h *Host) openBuffers() {
 	h.syncBuffers()
 	h.bufferPick.open()
 }
 
-// closeShownBuffer is File › Close buffer and :bd: the shown buffer closed, asked about first when
-// it has unsaved changes.
+// closeShownBuffer is File › Close buffer, SPC C and :bd: the shown buffer closed, asked about first
+// when it has unsaved changes.
 func (h *Host) closeShownBuffer() { h.closeBuffer(h.active) }
 
 // bufferOfLabel is the buffer a label names (its leading number), or nil.
