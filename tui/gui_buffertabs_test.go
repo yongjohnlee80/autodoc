@@ -99,9 +99,11 @@ func TestTheGUITabsTakeTheBarsRoom(t *testing.T) {
 		return len(tabs) == 2 && small == 2 && slices.Contains(tabs, whole(long[0])) && slices.Contains(tabs, whole(long[1]))
 	})
 
-	r.s.Backend.InjectResize(60, 30)
+	// the third opened while wide (the leader card needs the room), then the window narrowed: the
+	// strip fits its tabs again to the room it now has
 	r.openByPicker(t, long[2])
 	r.waitFile(t, long[2])
+	r.s.Backend.InjectResize(60, 30)
 	r.s.WaitFor(t, "narrow: cut, and scrolling between the arrows", func(string) bool {
 		tabs, small := look()
 		if small != 4 || len(tabs) == 0 {
