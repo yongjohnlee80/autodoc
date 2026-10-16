@@ -207,3 +207,46 @@ func TestABufferTabsMenuMakesANewBuffer(t *testing.T) {
 		t.Fatal("Open file in a new buffer… loaded over a.md's buffer")
 	}
 }
+
+// TestALongTabKeepsItsMarkAndWhatTellsItApart: a long name is cut in its middle within the tab, its
+// end (the file's name and kind) and [+] kept; two long paths that cut alike take their numbers.
+func TestALongTabKeepsItsMarkAndWhatTellsItApart(t *testing.T) {
+	long, one, two := "loooong-file-title-to-test-the-cut.md", "projects-one/notes/very-long-name.md", "projects-two/notes/very-long-name.md"
+	d := startDaemon(t, map[string][]string{"kb": {long, "l\n", one, "1\n", two, "2\n"}})
+	r := attached(t, d)
+	r.waitListed(t, 3)
+	r.openByPicker(t, long)
+	r.waitFile(t, long)
+	r.typeInEditor(t, "X")
+	r.waitTyped(t)
+	for _, p := range []string{one, two} {
+		r.openByPicker(t, p)
+		r.waitFile(t, p)
+	}
+	labels := onLoop(r, func() []string {
+		var out []string
+		for _, b := range r.h.buffers {
+			out = append(out, r.h.bufferTabLabel(b))
+		}
+		return out
+	})
+	room := bufferTabWidth - 2 // the tab's padding
+	seen := map[string]bool{}
+	for _, l := range labels {
+		if w := len([]rune(l)); w > room {
+			t.Fatalf("tab %q is %d cells, more than the %d a tab has", l, w, room)
+		}
+		if seen[l] {
+			t.Fatalf("tabs %q: %q twice", labels, l)
+		}
+		seen[l] = true
+	}
+	if l := labels[0]; !strings.HasSuffix(l, "-cut.md [+]") || !strings.Contains(l, "…") {
+		t.Fatalf("the long, modified tab is %q: want its middle cut, its end and [+] kept", l)
+	}
+	for _, l := range labels[1:] {
+		if !strings.Contains(l, "…") || !strings.Contains(l, " #") {
+			t.Fatalf("tabs %q: want the two long paths cut and numbered", labels)
+		}
+	}
+}

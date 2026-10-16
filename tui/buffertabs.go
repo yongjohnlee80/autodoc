@@ -53,13 +53,56 @@ func (h *Host) syncBufferTabs() {
 // bufferTabLabel is b's tab, told apart from every other buffer's: its file's name; its path where
 // another buffer's file has that name; its workspace and path where another's has that path (in
 // another workspace); untitled, with its number while there is more than one draft. [+] while
-// modified.
+// modified. A name longer than the tab is cut in its middle, its start (the workspace, the folder)
+// and its end (the file's name and kind) kept, and [+] after it; two cut alike take their buffer's
+// number, so the tabs drawn still tell every buffer apart.
 func (h *Host) bufferTabLabel(b *openBuffer) string {
-	label := h.bufferTabName(b)
+	label := h.cutTabName(b, "")
+	if slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && h.cutTabName(o, "") == label }) {
+		label = h.cutTabName(b, " #"+strconv.Itoa(b.n))
+	}
 	if b.file.dirty {
 		label += " [+]"
 	}
 	return label
+}
+
+// cutTabName is b's name, then mark, cut in the middle to fit a tab with room for [+] (always, so a
+// buffer's label does not change length as it is edited).
+func (h *Host) cutTabName(b *openBuffer, mark string) string {
+	room := bufferTabWidth - 2 - len(" [+]") - tuicore.StringWidth(mark) // 2: the tab's padding
+	return elideMiddle(h.bufferTabName(b), room) + mark
+}
+
+// elideMiddle is s within w cells: whole if it fits, else its start and its longer end around an
+// ellipsis.
+func elideMiddle(s string, w int) string {
+	if tuicore.StringWidth(s) <= w {
+		return s
+	}
+	var cs []string
+	for c := range tuicore.Graphemes(s) {
+		cs = append(cs, c)
+	}
+	tailW := (w - 1) * 2 / 3
+	headW := w - 1 - tailW
+	head, used := "", 0
+	for _, c := range cs {
+		if cw := tuicore.StringWidth(c); used+cw <= headW {
+			head, used = head+c, used+cw
+			continue
+		}
+		break
+	}
+	tail, used := "", 0
+	for i := len(cs) - 1; i >= 0; i-- {
+		if cw := tuicore.StringWidth(cs[i]); used+cw <= tailW {
+			tail, used = cs[i]+tail, used+cw
+			continue
+		}
+		break
+	}
+	return head + "…" + tail
 }
 
 func (h *Host) bufferTabName(b *openBuffer) string {

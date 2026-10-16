@@ -66,6 +66,10 @@ func TestTheGUIEditorsTabsAreTheBuffers(t *testing.T) {
 
 	r.openByPicker(t, "loooong-file-title-to-test-the-cut.md")
 	r.waitFile(t, "loooong-file-title-to-test-the-cut.md")
+	r.typeInEditor(t, "X")
+	r.waitTyped(t)
+	// drawn: its middle cut, its end and [+] on the title bar
+	r.s.WaitForText(t, "-the-cut.md [+]")
 	widest := onLoop(r, func() int {
 		w := 0
 		for _, s := range strip.TabSpans() {
