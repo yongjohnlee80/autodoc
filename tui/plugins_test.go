@@ -418,7 +418,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 5\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 6\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -435,7 +435,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 5; this AutoDoc speaks 1 to 4",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 6; this AutoDoc speaks 1 to 5",
 		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
@@ -958,11 +958,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 5\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 6\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 5; this AutoDoc speaks 1 to 4")
+	r.waitNotice(t, "not added: protocol 6; this AutoDoc speaks 1 to 5")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)
