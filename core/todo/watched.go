@@ -47,7 +47,7 @@ func (w watched) Commit(ctx context.Context, seq int64, e Edit) error {
 func registryKey(s *Settings) string {
 	var b strings.Builder
 	for _, id := range slices.Sorted(maps.Keys(s.Stores)) {
-		b.WriteString("s\x00" + id + "\x00" + s.Stores[id].Path + "\n")
+		b.WriteString("s\x00" + id + "\x00" + s.Stores[id].Path + "\x00" + s.Stores[id].KB + "\n")
 	}
 	for _, n := range slices.Sorted(maps.Keys(s.Vars)) {
 		b.WriteString("v\x00" + n + "\x00" + s.Vars[n] + "\n")
@@ -56,6 +56,12 @@ func registryKey(s *Settings) string {
 		vals := s.MachineVars[id]
 		for _, n := range slices.Sorted(maps.Keys(vals)) {
 			b.WriteString("m\x00" + id + "\x00" + n + "\x00" + vals[n] + "\n")
+		}
+	}
+	for _, kb := range slices.Sorted(maps.Keys(s.WorkspaceVars)) {
+		vals := s.WorkspaceVars[kb]
+		for _, n := range slices.Sorted(maps.Keys(vals)) {
+			b.WriteString("w\x00" + kb + "\x00" + n + "\x00" + vals[n] + "\n")
 		}
 	}
 	return b.String()

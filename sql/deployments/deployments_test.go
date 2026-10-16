@@ -208,6 +208,9 @@ func TestTheTodoSearchDefault(t *testing.T) {
 		t.Fatalf("a new workspace's todo_graph_only %s, want 0: its tasks in search", got)
 	}
 	exec(t, db, "UPDATE workspace SET todo_graph_only = 1 WHERE id = 2")
+	if name, err := deployments.Runner().Revert(ctx, db, 23); err != nil || !strings.Contains(name, "000023") {
+		t.Fatalf("revert 000023, the script after: %s, %v", name, err)
+	}
 	if name, err := deployments.Runner().Revert(ctx, db, 22); err != nil || !strings.Contains(name, "000022") {
 		t.Fatalf("revert 000022: %s, %v", name, err)
 	}
@@ -226,6 +229,40 @@ func TestTheTodoSearchDefault(t *testing.T) {
 	}
 	if _, err := db.QueryContext(ctx, "SELECT todo_search FROM workspace"); err == nil {
 		t.Fatal("000022 left todo_search")
+	}
+}
+
+// 000023 records each todo store's workspace (ADR 1792132105 §2.4), empty until the daemon records it,
+// and keeps this machine's workspace variables, one row per workspace and name. The revert drops both.
+func TestTheWorkspaceVarsScript(t *testing.T) {
+	ctx := context.Background()
+	db := open(t)
+	exec(t, db, "INSERT INTO todo_store(id, path) VALUES ('s', '/kb/.todo-list')")
+	rows, err := db.QueryContext(ctx, "SELECT kb FROM todo_store WHERE id = 's'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kb := "unread"
+	for rows.Next() {
+		if err := rows.Scan(&kb); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := rows.Close(); err != nil || kb != "" {
+		t.Fatalf("a store's kb %q, %v; want '' until recorded", kb, err)
+	}
+	exec(t, db, "INSERT INTO todo_workspace_var(kb, name, value) VALUES ('/kb', 'DUMPS', '/data'), ('/other', 'DUMPS', '/d')")
+	if _, err := db.ExecContext(ctx, "INSERT INTO todo_workspace_var(kb, name, value) VALUES ('/kb', 'DUMPS', '/x')"); err == nil {
+		t.Fatal("two values of one name in one workspace")
+	}
+	if name, err := deployments.Runner().Revert(ctx, db, 23); err != nil || !strings.Contains(name, "000023") {
+		t.Fatalf("revert 000023: %s, %v", name, err)
+	}
+	if _, err := db.QueryContext(ctx, "SELECT kb FROM todo_store"); err == nil {
+		t.Fatal("the revert left todo_store.kb")
+	}
+	if _, err := db.QueryContext(ctx, "SELECT 1 FROM todo_workspace_var"); err == nil {
+		t.Fatal("the revert left todo_workspace_var")
 	}
 }
 

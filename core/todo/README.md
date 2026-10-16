@@ -49,7 +49,7 @@ the timestamp shape, a file-safe id).
 | completed for more than 28 days (calendar days) becomes archived, into `archived/YYYY/MM` of `archived_at` | `Refresh` |
 | assigning an open task moves it to in-progress (D1); creating one with an assignee is an assignment too, logged as an `assign` | `Assign`, `Add` |
 | `errors[]` for refs that do not resolve or exist and unknown `blocked` ids, `detected` kept | `Refresh` |
-| relative refs are the KB's (D2); absolute refs written as `$KB_ROOT`, `$WORKSPACE`, a user var or `$HOME`, longest prefix | `Add`, `Update`, `Refresh` |
+| relative refs are the KB's (D2); absolute refs written as `$KB_ROOT`, a variable of the store's workspace or `$HOME`, longest prefix | `Add`, `Update`, `Refresh` |
 | ids `<date>-<slug>`; a caller's id is file-safe | `Add` |
 | managed fields, status and assignee refused by `Update` | `Update` |
 
@@ -63,11 +63,37 @@ neither repeats nor skips a day. A run that changed the store logs `todos.change
 does; one that failed is logged and recorded in `sys.events` as `todos.refresh_failed`, and is
 tried again a day later.
 
+## Variables
+
+A ref's `$NAME/…` resolves with the variables of the workspace (the KB) the store belongs to (ADR
+1792132105), the same from every route to the store, and the index resolves every other document of
+the workspace with the same ones (`EffectiveVars`, `AllEffectiveVars`).
+
+- **A store's workspace** is recorded when the store is: the deepest workspace containing it, kept
+  when a workspace is later added inside it. A store outside every workspace has none until
+  `SetKB` (`todos.set_kb`) links it; `SetKB` also moves a store. `Owner(path)` (`workspace.of`) is
+  the one owner rule: a store's file, its store's workspace; any other file, the deepest workspace
+  containing it.
+- **A name's value**, first match winning: this machine's row for the workspace (absolute, never
+  travels); the KB's `<root>/.autodoc-vars.toml` (paths relative to the KB root, carried by git; an
+  absolute value there is refused and reported); the derived `$KB_ROOT` (the workspace root) and
+  `$HOME`; a global variable; the environment. `$PROJECT_ROOT` is a user variable; `$WORKSPACE` is
+  no longer derived (`todos.migrate_refs` moves its refs).
+- **`SetVar`**: scope `kb` (`store` for an `At`) writes the KB's file, relative; scope `machine` a
+  row, and `MachineOnly` declares the name in the file's `machine` list first, so other machines
+  report it as a value to set, never a ref error.
+- **The migration** (`MigrateVars` at start, and `fold` on a workspace's first read): each store's
+  old `.autodoc-vars.toml` and per-store machine values move into the KB's file and this machine's
+  rows, and the store's file is renamed `.autodoc-vars.toml.migrated` only after. Stores of one
+  workspace that set a name differently are a conflict, reported (`todos.vars_conflict`) and left in
+  place; the name is unresolved below this machine's row until a KB-file value or a machine-only
+  declaration settles it.
+
 ## Cutover
 
 `Claim(ctx, at, ClaimOpts{LegacyWorkspace: dir})` claims the store and then, once, rewrites the
 refs auto-core wrote against its own `$WORKSPACE` (Neovim's project root, `dir`): each `adr` or
-`review` ref `$WORKSPACE/<rest>` that the store's `$WORKSPACE` lacks and `dir` holds becomes that
+`review` ref `$WORKSPACE/<rest>` that the store's home (its parent) lacks and `dir` holds becomes that
 path, symbolized again (`$HOME/…` for a root under home). A ref that resolves nowhere stays. Each
 task is one journaled `refresh` change with the reason `cutover: $WORKSPACE was <dir>`. This pass
 reads archives too, because a claim asks for it explicitly; a second one rewrites nothing.

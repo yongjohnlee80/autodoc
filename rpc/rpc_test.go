@@ -56,7 +56,7 @@ type rig struct {
 // every workspace (ADR 1792015212).
 func rigModes(p string) index.Mode {
 	if strings.HasPrefix(p, "tasks/") {
-		return index.Mode{GraphOnly: true, Store: &index.TodoStore{ID: "S", Vars: map[string]string{"X": "/elsewhere"}}}
+		return index.Mode{GraphOnly: true, Store: &index.TodoStore{ID: "S"}, Vars: index.NewVars(map[string]string{"X": "/elsewhere"})}
 	}
 	return index.Mode{}
 }

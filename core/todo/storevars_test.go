@@ -11,6 +11,9 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/todo"
 )
 
+// kbFile is the kb workspace's variable file, at its root (ADR 1792132105 §2.3).
+const kbFile = "/kb/.autodoc-vars.toml"
+
 // varOf is name's entry in at's todos.vars.
 func varOf(t *testing.T, e *env, at todo.At, name string) todo.Var {
 	t.Helper()
@@ -18,6 +21,20 @@ func varOf(t *testing.T, e *env, at todo.At, name string) todo.Var {
 	if err != nil {
 		t.Fatalf("vars %v: %v", at, err)
 	}
+	return find(vars, name)
+}
+
+// wsVarOf is name's entry in workspace's workspace.vars.
+func wsVarOf(t *testing.T, m *todo.Manager, workspace, name string) todo.Var {
+	t.Helper()
+	vars, err := m.WorkspaceVars(ctx, workspace)
+	if err != nil {
+		t.Fatalf("workspace vars %s: %v", workspace, err)
+	}
+	return find(vars, name)
+}
+
+func find(vars []todo.Var, name string) todo.Var {
 	for _, v := range vars {
 		if v.Name == name {
 			return v
@@ -26,8 +43,15 @@ func varOf(t *testing.T, e *env, at todo.At, name string) todo.Var {
 	return todo.Var{Name: name}
 }
 
+// otherMachine is a second daemon over the same disk (the KB and its files travel by git) with its own
+// journal (a machine's rows never travel).
+func otherMachine(t *testing.T, e *env) *todo.Manager {
+	t.Helper()
+	return todo.New(e.roots, e.disk, newJournal(t), todo.WithHome("/Users/u"))
+}
+
 // folderRoute is a project folder whose todos are the kb store's (todos.set_dir), with the
-// project's own AGENTS.md, which is no KB marker: LabelManager's layout, where the bug was.
+// project's own AGENTS.md: LabelManager's layout, where the route bug was.
 func folderRoute(t *testing.T, e *env) todo.At {
 	t.Helper()
 	e.disk.WriteFile("/src/proj/AGENTS.md", []byte("# proj: an agent file, not a KB\n"))
@@ -38,10 +62,26 @@ func folderRoute(t *testing.T, e *env) todo.At {
 	return at
 }
 
-// Every route to a store resolves the same variables and writes the same refs: the workspace name
-// and a folder whose todos are the store's (ADR 1792015069 §2.1). A refresh on the folder route
-// writes no error for $KB_ROOT, which the route alone could not resolve.
-func TestEveryRouteResolvesTheStoresVars(t *testing.T) {
+// outside is a claimed store outside every workspace: /out/.todo-list, a registered project's.
+func outside(t *testing.T, e *env) todo.At {
+	t.Helper()
+	e.disk.MkdirAll("/out")
+	if _, err := e.m.Register(ctx, "/out"); err != nil {
+		t.Fatal(err)
+	}
+	out := todo.At{Root: "/out"}
+	e.must(e.m.Claim(ctx, out))
+	if _, err := e.m.Scaffold(ctx, out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+// Every route to a store resolves its workspace's variables: the workspace name and a folder whose
+// todos are the store's (ADR 1792015069 §2.1, ADR 1792132105 §2.1). $KB_ROOT is the workspace root and
+// $HOME the daemon user's; $WORKSPACE and $PROJECT_ROOT are no longer derived. A refresh on the folder
+// route writes no error for $KB_ROOT.
+func TestEveryRouteResolvesTheWorkspacesVars(t *testing.T) {
 	e := claimed(t)
 	folder := folderRoute(t, e)
 	e.disk.WriteFile("/kb/adrs/a.md", []byte("x"))
@@ -53,8 +93,17 @@ func TestEveryRouteResolvesTheStoresVars(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(viaKB, viaFolder) {
 		t.Fatalf("the routes disagree:\nkb     %+v\nfolder %+v (%v)", viaKB, viaFolder, err)
 	}
-	if v := varOf(t, e, folder, "KB_ROOT"); v.Value != "/kb" {
-		t.Errorf("the folder route's KB_ROOT: %+v", v)
+	ws := wsVarOf(t, e.m, "kb", "KB_ROOT")
+	if v := varOf(t, e, folder, "KB_ROOT"); v.Value != "/kb" || v.Source != "derived" || ws != v {
+		t.Errorf("KB_ROOT: folder %+v, workspace.vars %+v", v, ws)
+	}
+	if v := varOf(t, e, kb, "HOME"); v.Value != "/home/u" || !v.Builtin {
+		t.Errorf("HOME %+v", v)
+	}
+	for _, n := range []string{"WORKSPACE", "PROJECT_ROOT"} {
+		if v := varOf(t, e, kb, n); v.Value != "" || v.Builtin {
+			t.Errorf("%s is derived: %+v", n, v)
+		}
 	}
 	task, err := e.m.Add(ctx, folder, todo.Spec{Title: "t", ADR: []string{"/kb/adrs/a.md"}})
 	if err != nil || !slices.Equal(task.ADR, []string{"$KB_ROOT/adrs/a.md"}) {
@@ -69,68 +118,52 @@ func TestEveryRouteResolvesTheStoresVars(t *testing.T) {
 	}
 }
 
-// $KB_ROOT is the nearest directory at or above the store's home whose AGENTS.md declares type: kb
-// in its frontmatter. A project's own AGENTS.md makes nothing a KB.
-func TestKBRootComesOnlyFromAKBMarker(t *testing.T) {
+// One precedence (ADR 1792132105 §2.3): this machine's row, then the KB's file (relative to the KB
+// root), then the derived built-in, then a global var, then the environment. An absolute value in the
+// KB's file is refused, reported once, and the name falls through.
+func TestThePrecedence(t *testing.T) {
 	e := claimed(t)
-	for _, root := range []string{"/src/proj", "/kb/sub", "/notes/q"} {
-		e.disk.MkdirAll(root + "/.todo-list/open")
-		if _, err := e.m.Register(ctx, root); err != nil {
-			t.Fatal(err)
+	e.disk.WriteFile(kbFile, []byte("[vars]\nPROJECT_ROOT = \"../src/p\"\nKB_ROOT = \".\"\nABS = \"/abs\"\nBOTH = \"rel\"\n"))
+	e.must(e.m.SetVar(ctx, "BOTH", "/machine", todo.SetVarOpts{Workspace: "kb"}))
+	e.must(e.m.SetVar(ctx, "GLOBAL", "/g"))
+	e.must(e.m.SetVar(ctx, "ABS", "/global-abs"))
+	for _, c := range []struct{ name, value, source string }{
+		{"PROJECT_ROOT", "/src/p", "kb"},
+		{"KB_ROOT", "/kb", "kb"}, // a KB-file override of a built-in, "." being the root itself
+		{"BOTH", "/machine", "machine"},
+		{"GLOBAL", "/g", "global"},
+		{"ABS", "/global-abs", "global"}, // the file's absolute value refused: the global one answers
+		{"HOME", "/home/u", "derived"},
+	} {
+		if v := varOf(t, e, kb, c.name); v.Value != c.value || v.Source != c.source {
+			t.Errorf("%s = %q from %q, want %q from %q", c.name, v.Value, v.Source, c.value, c.source)
 		}
 	}
-	e.disk.WriteFile("/src/proj/AGENTS.md", []byte("# proj\n\ntype: kb\n"))           // not frontmatter
-	e.disk.WriteFile("/notes/AGENTS.md", []byte("---\ntype: \"kb\"\n---\n# notes\n")) // quoted
-	for root, want := range map[string]string{"/src/proj": "", "/kb/sub": "/kb", "/notes/q": "/notes"} {
-		if v := varOf(t, e, todo.At{Root: root}, "KB_ROOT"); v.Value != want || v.Derived != want {
-			t.Errorf("%s: KB_ROOT %+v, want %q", root, v, want)
-		}
-		if v := varOf(t, e, todo.At{Root: root}, "WORKSPACE"); v.Value != root {
-			t.Errorf("%s: WORKSPACE %+v: the store's home is its parent", root, v)
-		}
+	varOf(t, e, kb, "ABS")
+	if n := strings.Count(strings.Join(e.eventKinds(), ","), "todos.vars_refused"); n != 1 {
+		t.Errorf("the refused absolute value reported %d times, want once: %v", n, e.eventKinds())
 	}
 }
 
-// A store's variable file: relative values are the store directory's; a file override wins over the
-// derived built-in, which todos.vars still shows. A file the format refuses is ignored whole and
-// reported once; mending it is reported too.
-func TestTheStoresVariableFile(t *testing.T) {
+// A KB file the format refuses is ignored whole, reported once, and its mending reported too; a file
+// over the limit is refused, never read as its first part.
+func TestARefusedKBFile(t *testing.T) {
 	e := claimed(t)
-	file := kbStore + "/.autodoc-vars.toml"
-	e.disk.WriteFile(file, []byte("machine = [\"DUMPS\"]\n\n[vars]\nPROJECT_ROOT = \"../../src/p\"\nWORKSPACE = \"/w\"\n"))
-	if v := varOf(t, e, kb, "PROJECT_ROOT"); v.Value != "/src/p" || v.Source != "store" {
-		t.Errorf("a relative value: %+v", v)
+	e.disk.WriteFile(kbFile, []byte("[vars\n"))
+	varOf(t, e, kb, "X")
+	varOf(t, e, kb, "X")
+	kinds := e.eventKinds()
+	if c := strings.Count(strings.Join(kinds, ","), "todos.vars_invalid"); c != 1 {
+		t.Errorf("a refused file reported %d times: %v", c, kinds)
 	}
-	if v := varOf(t, e, kb, "WORKSPACE"); v.Value != "/w" || v.Source != "store" || v.Derived != "/kb" {
-		t.Errorf("an overridden built-in: %+v", v)
+	e.disk.WriteFile(kbFile, []byte("[vars]\nX = \"x\"\n"))
+	if v := varOf(t, e, kb, "X"); v.Value != "/kb/x" || !slices.Contains(e.eventKinds(), "todos.vars_valid") {
+		t.Errorf("the mended file: %+v %v", v, e.eventKinds())
 	}
-	if v := varOf(t, e, kb, "DUMPS"); !v.Machine || v.Value != "" {
-		t.Errorf("a machine-only name: %+v", v)
-	}
-	for _, bad := range []string{
-		"[vars]\nmachine = [\"DUMPS\"]\n",         // machine under [vars]: a variable named machine
-		"extra = 1\n[vars]\nP = \"/p\"\n",         // a key the format has not
-		"machine = [\"P\"]\n[vars]\nP = \"/p\"\n", // machine-only, yet given a value here
-		"[vars]\n1BAD = \"/p\"\n",
-		"[vars]\nP = \"\"\n",
-		"[vars\n",
-	} {
-		e.disk.WriteFile(file, []byte(bad))
-		if v := varOf(t, e, kb, "WORKSPACE"); v.Value != "/kb" || v.Source != "derived" {
-			t.Errorf("%q was not ignored whole: %+v", bad, v)
-		}
-	}
-	e.disk.WriteFile(file, []byte("[vars\n"))
-	varOf(t, e, kb, "WORKSPACE")
-	varOf(t, e, kb, "WORKSPACE")
-	e.disk.WriteFile(file, []byte("[vars]\nP = \"/p\"\n"))
-	varOf(t, e, kb, "P")
-	kinds := strings.Join(e.eventKinds(), " ")
-	if n := strings.Count(kinds, "todos.vars_invalid"); n != 6 {
-		t.Errorf("%d vars_invalid events, want one per distinct error (6): %s", n, kinds)
-	}
-	if !strings.HasSuffix(kinds, "todos.vars_valid") {
-		t.Errorf("mending the file was not reported: %s", kinds)
+	pad := "# " + strings.Repeat("x", 64<<10) + "\n"
+	e.disk.WriteFile(kbFile, []byte(pad+"[vars]\nP = \"p\"\n"))
+	if v := varOf(t, e, kb, "P"); v.Value != "" {
+		t.Errorf("an oversized file was read, not refused: %+v", v)
 	}
 }
 
@@ -138,76 +171,247 @@ func TestTheStoresVariableFile(t *testing.T) {
 // Any other name no layer defines is, the same on every machine.
 func TestMachineOnlyNamesAreNeverPersistedAsErrors(t *testing.T) {
 	e := claimed(t)
-	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("machine = [\"DUMPS\"]\n"))
-	e.disk.WriteFile(kbStore+"/open/m.md", []byte(taskFile("m", "open", "adr:\n  - $DUMPS/x.md\n  - $NOPE/y.md")))
+	e.disk.WriteFile(kbFile, []byte("machine = [\"DUMPS\"]\n"))
+	e.disk.WriteFile(kbStore+"/open/m.md", []byte(taskFile("m", "open", "adr:\n  - $DUMPS/a.md\n  - $NOPE/b.md")))
 	if _, err := e.m.Refresh(ctx, kb); err != nil {
 		t.Fatal(err)
 	}
 	m := e.get("m")
 	if len(m.Errors) != 1 || m.Errors[0].Field != "adr[1]" || m.Errors[0].Code != todo.CodeUnresolved {
-		t.Errorf("errors %+v: want only adr[1] unresolved", m.Errors)
+		t.Errorf("errors %+v, want only $NOPE's", m.Errors)
 	}
-	e.disk.WriteFile("/data/x.md", []byte("x"))
-	e.must(e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}))
-	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/data" || v.Source != "machine" || !v.Machine {
-		t.Errorf("a machine value: %+v", v)
-	}
-	// this machine's value comes first, even over a value the file gained by hand since
-	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("[vars]\nDUMPS = \"/from/the/file\"\n"))
-	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/data" || v.Source != "machine" {
-		t.Errorf("the file's value won over this machine's: %+v", v)
+	if v := varOf(t, e, kb, "DUMPS"); !v.Machine || v.Value != "" {
+		t.Errorf("DUMPS %+v", v)
 	}
 }
 
-// todos.set_var's scopes: the store's file (written, rendered stable, removed when empty), this
-// machine (the daemon's, and the name declared machine-only in the file), and global (never a
-// built-in). A store or machine write needs a writable store.
+// set_var's scopes: the KB's file (a value stored relative to the KB root, the file rendered stable
+// and removed when empty), this machine's row (absolute; machine_only also declares the name in the
+// file), global (never a built-in). todos.set_var with an at writes its store's workspace; one whose
+// store belongs to no workspace is refused.
 func TestSetVarScopes(t *testing.T) {
 	e := claimed(t)
-	file := kbStore + "/.autodoc-vars.toml"
-	e.must(e.m.SetVar(ctx, "PROJ", "/p", todo.SetVarOpts{At: &kb}))
-	e.must(e.m.SetVar(ctx, "WORKSPACE", "/w", todo.SetVarOpts{At: &kb, Scope: todo.ScopeStore}))
-	if got := e.read(file); !strings.Contains(got, "[vars]\nPROJ = \"/p\"\nWORKSPACE = \"/w\"\n") {
-		t.Errorf("the file:\n%s", got)
+	e.must(e.m.SetVar(ctx, "DDEX", "/kb/docs/ddex", todo.SetVarOpts{At: &kb})) // scope store: the KB's file
+	e.must(e.m.SetVar(ctx, "PROJECT_ROOT", "../src/p", todo.SetVarOpts{Workspace: "kb", Scope: todo.ScopeKB}))
+	if got := e.read(kbFile); !strings.Contains(got, "DDEX = \"docs/ddex\"") || !strings.Contains(got, "PROJECT_ROOT = \"../src/p\"") {
+		t.Errorf("the KB file:\n%s", got)
 	}
-	if v := varOf(t, e, kb, "WORKSPACE"); v.Value != "/w" || v.Derived != "/kb" {
-		t.Errorf("a store override of a built-in: %+v", v)
+	if err := e.m.SetVar(ctx, "HOMEY", "~/x", todo.SetVarOpts{Workspace: "kb", Scope: todo.ScopeKB}); !is(err, todo.ErrInvalid) {
+		t.Errorf("a ~ value in the KB's file, which another machine's home would not match: %v", err)
 	}
-	e.must(e.m.SetVar(ctx, "LOGS", "/var/l", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}))
-	if got := e.read(file); !strings.Contains(got, "machine = [\"LOGS\"]") || strings.Contains(got, "/var/l") {
-		t.Errorf("a machine value travels in the file, or its name is not declared:\n%s", got)
+	e.must(e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{Workspace: "kb", MachineOnly: true}))
+	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/data" || v.Source != "machine" || !v.Machine {
+		t.Errorf("DUMPS %+v", v)
 	}
-	if err := e.m.SetVar(ctx, "LOGS", "/x", todo.SetVarOpts{At: &kb, Scope: todo.ScopeStore}); !is(err, todo.ErrInvalid) {
-		t.Errorf("a store value for a machine-only name: %v", err)
+	if err := e.m.SetVar(ctx, "DUMPS", "rel", todo.SetVarOpts{Workspace: "kb", Scope: todo.ScopeKB}); !is(err, todo.ErrInvalid) {
+		t.Errorf("a KB value for a machine-only name: %v", err)
 	}
-	other := todo.At{Root: "/src/other"}
-	e.disk.MkdirAll("/src/other/.todo-list/open")
-	if err := e.m.SetVar(ctx, "X", "/x", todo.SetVarOpts{At: &other}); !is(err, todo.ErrNotWritable) {
-		t.Errorf("an unregistered root's store: %v", err)
+	if err := e.m.SetVar(ctx, "KB_ROOT", "/x"); !is(err, todo.ErrInvalid) {
+		t.Errorf("a global built-in: %v", err)
 	}
-	if err := e.m.SetVar(ctx, "X", "/x", todo.SetVarOpts{Scope: todo.ScopeStore}); !is(err, todo.ErrInvalid) {
-		t.Errorf("a store scope without an at: %v", err)
+	if err := e.m.SetVar(ctx, "X", "y", todo.SetVarOpts{Workspace: "nope"}); !is(err, todo.ErrNoWorkspace) {
+		t.Errorf("an unknown workspace: %v", err)
 	}
-	for _, n := range []string{"PROJ", "WORKSPACE"} {
-		e.must(e.m.SetVar(ctx, n, "", todo.SetVarOpts{At: &kb}))
+	if err := e.m.SetVar(ctx, "X", "y", todo.SetVarOpts{Workspace: "kb", At: &kb}); !is(err, todo.ErrInvalid) {
+		t.Errorf("a workspace and an at: %v", err)
 	}
-	e.must(e.m.SetVar(ctx, "LOGS", "", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}))
-	if got := e.read(file); got == "" || strings.Contains(got, "[vars]") {
-		t.Errorf("after clearing the values the file holds only the machine list:\n%s", got)
+	for _, n := range []string{"DDEX", "PROJECT_ROOT"} {
+		e.must(e.m.SetVar(ctx, n, "", todo.SetVarOpts{Workspace: "kb", Scope: todo.ScopeKB}))
 	}
-	e.disk.WriteFile(file, []byte("machine = [\"LOGS\"]\n"))
-	e.must(func() error {
-		return e.m.SetVar(ctx, "PROJ", "/p", todo.SetVarOpts{At: &kb})
-	}())
-	e.must(e.m.SetVar(ctx, "PROJ", "", todo.SetVarOpts{At: &kb}))
-	if !strings.Contains(e.read(file), "LOGS") {
-		t.Error("clearing a value dropped the machine list")
+	if got := e.read(kbFile); strings.Contains(got, "[vars]") || !strings.Contains(got, `machine = ["DUMPS"]`) {
+		t.Errorf("the file after removing its values:\n%s", got)
+	}
+	// a store outside every workspace is refused until linked
+	out := outside(t, e)
+	if err := e.m.SetVar(ctx, "X", "y", todo.SetVarOpts{At: &out}); !is(err, todo.ErrInvalid) {
+		t.Errorf("a store in no workspace: %v", err)
 	}
 }
 
-// A claim from auto-core records the project it names as the store's PROJECT_ROOT when the store is
-// inside that project (LabelManager's KB), so the cutover writes $PROJECT_ROOT/…; a store outside it
-// (a global KB several projects share) records none (TestEachRootsClaimRewritesItsOwnLegacyRefs).
+// A store belongs to the deepest workspace containing it, recorded once: a workspace nested inside it
+// later never takes it. A store outside every workspace has no $KB_ROOT until todos.set_kb links it,
+// and set_kb moves a store. workspace.of answers the owner todos.vars uses.
+func TestAStoresWorkspace(t *testing.T) {
+	e := claimed(t)
+	e.disk.WriteFile("/kb/notes/n.md", []byte("x"))
+	if ws, root, err := e.m.Owner(ctx, kbStore+"/open/x.md"); err != nil || ws != "kb" || root != "/kb" {
+		t.Errorf("a task's owner: %q %q %v", ws, root, err)
+	}
+	e.roots["inner"] = "/kb" + "/.todo-list" // a workspace nested inside, added after the store's owner was recorded
+	if _, root, _ := e.m.Owner(ctx, kbStore+"/open/x.md"); root != "/kb" {
+		t.Errorf("a nested workspace took the store: %q", root)
+	}
+	if ws, _, _ := e.m.Owner(ctx, "/kb/notes/n.md"); ws != "kb" {
+		t.Errorf("a note's owner: %q", ws)
+	}
+	delete(e.roots, "inner")
+	if ws, root, _ := e.m.Owner(ctx, "/elsewhere/f.md"); ws != "" || root != "" {
+		t.Errorf("a file in no workspace: %q %q", ws, root)
+	}
+	// an external store: no KB_ROOT, then linked, then moved
+	out := outside(t, e)
+	if v := varOf(t, e, out, "KB_ROOT"); v.Value != "" {
+		t.Errorf("an unlinked store's KB_ROOT %+v", v)
+	}
+	e.must(e.m.SetKB(ctx, out, "kb"))
+	if v := varOf(t, e, out, "KB_ROOT"); v.Value != "/kb" {
+		t.Errorf("a linked store's KB_ROOT %+v", v)
+	}
+	if ws, _, _ := e.m.Owner(ctx, "/out/.todo-list/open/x.md"); ws != "kb" {
+		t.Errorf("workspace.of disagrees with todos.vars: %q", ws)
+	}
+	e.roots["other"] = "/other"
+	e.disk.MkdirAll("/other")
+	e.must(e.m.SetKB(ctx, out, "other"))
+	if v := varOf(t, e, out, "KB_ROOT"); v.Value != "/other" {
+		t.Errorf("a moved store's KB_ROOT %+v", v)
+	}
+	if err := e.m.SetKB(ctx, out, "nope"); !is(err, todo.ErrNoWorkspace) {
+		t.Errorf("set_kb to an unknown workspace: %v", err)
+	}
+}
+
+// The migration (ADR 1792132105 §2.7): a store's old file's relative values are rebased into the KB's
+// file, its absolute values become this machine's rows and machine-only names, its old machine values
+// become rows, and the store's file is renamed only after; a second machine then resolves the
+// portable names and reports the machine-only one.
+func TestTheMigrationFoldsAStoresFile(t *testing.T) {
+	e := claimed(t)
+	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("machine = [\"LOGS\"]\n\n[vars]\nPROJECT_ROOT = \"../../src/p\"\nDUMPS = \"/data\"\n"))
+	e.must(e.j.UpdateSettings(ctx, func(s *todo.Settings) error {
+		for id := range s.Stores {
+			s.MachineVars = map[string]map[string]string{id: {"LOGS": "/logs"}}
+		}
+		return nil
+	}))
+	e.restart() // what an upgraded daemon finds
+	if v := varOf(t, e, kb, "PROJECT_ROOT"); v.Value != "/src/p" || v.Source != "kb" {
+		t.Errorf("PROJECT_ROOT %+v", v)
+	}
+	got := e.read(kbFile)
+	if !strings.Contains(got, `PROJECT_ROOT = "../src/p"`) || !strings.Contains(got, `"DUMPS"`) || !strings.Contains(got, `"LOGS"`) {
+		t.Errorf("the KB file:\n%s", got)
+	}
+	if e.exists(kbStore+"/.autodoc-vars.toml") || !e.exists(kbStore+"/.autodoc-vars.toml.migrated") {
+		t.Error("the store's file was not renamed")
+	}
+	for n, want := range map[string]string{"DUMPS": "/data", "LOGS": "/logs"} {
+		if v := varOf(t, e, kb, n); v.Value != want || v.Source != "machine" || !v.Machine {
+			t.Errorf("%s %+v", n, v)
+		}
+	}
+	st, err := e.j.Settings(ctx)
+	if err != nil || len(st.MachineVars) != 0 {
+		t.Errorf("the store's old machine values stayed: %+v %v", st.MachineVars, err)
+	}
+	other := otherMachine(t, e)
+	if v := wsVarOf(t, other, "kb", "PROJECT_ROOT"); v.Value != "/src/p" {
+		t.Errorf("another machine's PROJECT_ROOT %+v", v)
+	}
+	if v := wsVarOf(t, other, "kb", "DUMPS"); v.Value != "" || !v.Machine {
+		t.Errorf("another machine's DUMPS %+v: a machine-only name to set there", v)
+	}
+}
+
+// Two stores of one workspace setting a name differently is a conflict: nothing is carried, both
+// files stay, and the name is unresolved below this machine's row. A machine row overrides it here but
+// never settles it; a KB-file value settles it, and so does declaring it machine-only; then the files
+// are renamed and a second machine resolves the name, or reports it machine-only.
+func TestAMigrationConflictWaitsForAPerson(t *testing.T) {
+	for _, settle := range []string{"kb", "machine-only"} {
+		t.Run(settle, func(t *testing.T) {
+			e := claimed(t)
+			folderStore := "/src/proj/todos"
+			e.disk.MkdirAll(folderStore)
+			at := todo.At{Root: "/src/proj"}
+			if _, err := e.m.SetDir(ctx, at, folderStore); err != nil {
+				t.Fatal(err)
+			}
+			e.must(e.m.Claim(ctx, at))
+			if _, err := e.m.Scaffold(ctx, at); err != nil {
+				t.Fatal(err)
+			}
+			e.must(e.m.SetKB(ctx, at, "kb"))
+			e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("[vars]\nP = \"../../a\"\nQ = \"../q\"\n"))
+			e.disk.WriteFile(folderStore+"/.autodoc-vars.toml", []byte("[vars]\nP = \"../../../b\"\n"))
+			e.restart()
+			if v := varOf(t, e, kb, "P"); v.Value != "" || !v.Conflict || v.Source != "conflict" {
+				t.Errorf("a conflicted name answered %+v", v)
+			}
+			if !slices.Contains(e.eventKinds(), "todos.vars_conflict") || e.exists(kbFile) {
+				t.Errorf("events %v; the KB file written though in conflict: %v", e.eventKinds(), e.exists(kbFile))
+			}
+			e.must(e.m.SetVar(ctx, "P", "/here", todo.SetVarOpts{Workspace: "kb"}))
+			if v := varOf(t, e, kb, "P"); v.Value != "/here" || v.Source != "machine" {
+				t.Errorf("a machine row over a conflict %+v", v)
+			}
+			if !e.exists(kbStore+"/.autodoc-vars.toml") || !e.exists(folderStore+"/.autodoc-vars.toml") {
+				t.Fatal("a machine row settled the conflict: the stores' files were renamed")
+			}
+			if v := wsVarOf(t, otherMachine(t, e), "kb", "P"); v.Value != "" {
+				t.Errorf("another machine resolves the unsettled name %+v", v)
+			}
+			switch settle {
+			case "kb":
+				e.must(e.m.SetVar(ctx, "P", "/src/a", todo.SetVarOpts{Workspace: "kb", Scope: todo.ScopeKB}))
+			default:
+				e.must(e.m.SetVar(ctx, "P", "/here", todo.SetVarOpts{Workspace: "kb", MachineOnly: true}))
+			}
+			if v := varOf(t, e, kb, "P"); v.Conflict {
+				t.Errorf("still in conflict %+v", v)
+			}
+			if e.exists(kbStore+"/.autodoc-vars.toml") || e.exists(folderStore+"/.autodoc-vars.toml") {
+				t.Error("settled, the stores' files were not renamed")
+			}
+			if v := varOf(t, e, kb, "Q"); v.Value != "/kb/q" {
+				t.Errorf("the unconflicted name was not carried: %+v", v)
+			}
+			o := wsVarOf(t, otherMachine(t, e), "kb", "P")
+			switch settle {
+			case "kb":
+				if o.Value != "/src/a" {
+					t.Errorf("another machine's settled P %+v", o)
+				}
+			default:
+				if o.Value != "" || !o.Machine || o.Conflict {
+					t.Errorf("another machine's machine-only P %+v", o)
+				}
+			}
+		})
+	}
+}
+
+// At start, every store's workspace is recorded: the containing one, or, for a store outside every
+// workspace, the workspace an older route's kb_root named; the routes' kb_roots are cleared.
+func TestMigrateVarsRecordsOwnersAndClearsRouteKBRoots(t *testing.T) {
+	e := claimed(t)
+	out := outside(t, e)
+	e.must(e.j.UpdateSettings(ctx, func(s *todo.Settings) error {
+		if s.Roots == nil {
+			s.Roots = map[string]todo.RootRecord{}
+		}
+		r := s.Roots["/out"]
+		r.Root, r.KBRoot = "/out", "/kb"
+		s.Roots["/out"] = r
+		return nil
+	}))
+	e.m.MigrateVars(ctx)
+	if v := varOf(t, e, out, "KB_ROOT"); v.Value != "/kb" {
+		t.Errorf("the route's kb_root did not link the store: %+v", v)
+	}
+	st, err := e.j.Settings(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for root, r := range st.Roots {
+		if r.KBRoot != "" {
+			t.Errorf("%s kept its kb_root %q", root, r.KBRoot)
+		}
+	}
+}
+
+// A claim from auto-core records the project it names as the KB's PROJECT_ROOT, relative to the KB
+// root, when the store is inside that project, so the cutover writes $PROJECT_ROOT/….
 func TestAClaimRecordsTheProjectItsStoreIsIn(t *testing.T) {
 	e := newEnv(t)
 	e.roots["lm"] = "/lm/.auto-agents/kb"
@@ -216,8 +420,8 @@ func TestAClaimRecordsTheProjectItsStoreIsIn(t *testing.T) {
 	e.disk.WriteFile("/lm/docs/d.md", []byte("x"))
 	e.disk.WriteFile("/lm/.auto-agents/kb/.todo-list/open/l.md", []byte(taskFile("l", "open", "adr:\n  - $WORKSPACE/docs/d.md")))
 	e.must(e.m.Claim(ctx, lm, todo.ClaimOpts{LegacyWorkspace: "/lm"}))
-	if v := varOf(t, e, lm, "PROJECT_ROOT"); v.Value != "/lm" || v.Source != "store" ||
-		!strings.Contains(e.read("/lm/.auto-agents/kb/.todo-list/.autodoc-vars.toml"), `PROJECT_ROOT = "../../.."`) {
+	if v := varOf(t, e, lm, "PROJECT_ROOT"); v.Value != "/lm" || v.Source != "kb" ||
+		!strings.Contains(e.read("/lm/.auto-agents/kb/.autodoc-vars.toml"), `PROJECT_ROOT = "../.."`) {
 		t.Errorf("PROJECT_ROOT %+v", v)
 	}
 	l, err := e.m.Get(ctx, lm, "l")
@@ -226,135 +430,46 @@ func TestAClaimRecordsTheProjectItsStoreIsIn(t *testing.T) {
 	}
 }
 
-// The kb_roots older clients left on a store's routes move into the store's file once, when they
-// agree and differ from what the location derives, and are then cleared; routes that disagree are
-// reported and left as they are.
-func TestCarryKBRoots(t *testing.T) {
-	setRoots := func(e *env, kbRoots map[string]string) {
-		t.Helper()
-		e.must(e.j.UpdateSettings(ctx, func(s *todo.Settings) error {
-			if s.Roots == nil {
-				s.Roots = map[string]todo.RootRecord{}
-			}
-			for root, v := range kbRoots {
-				rr := s.Roots[root]
-				rr.Root, rr.KBRoot = root, v
-				if root != "/kb" {
-					rr.Override = kbStore
-				}
-				s.Roots[root] = rr
-			}
-			return nil
-		}))
-	}
-	roots := func(e *env) map[string]string {
-		st, _ := e.j.Settings(ctx)
-		out := map[string]string{}
-		for r, rr := range st.Roots {
-			if rr.KBRoot != "" {
-				out[r] = rr.KBRoot
-			}
-		}
-		return out
-	}
-	file := kbStore + "/.autodoc-vars.toml"
-
-	e := claimed(t)
-	folderRoute(t, e)
-	setRoots(e, map[string]string{"/kb": "/elsewhere", "/src/proj": "/elsewhere"})
-	e.m.CarryKBRoots(ctx)
-	if v := varOf(t, e, kb, "KB_ROOT"); v.Value != "/elsewhere" || v.Source != "store" || !strings.Contains(e.read(file), `KB_ROOT = "../../elsewhere"`) {
-		t.Errorf("an agreeing kb_root was not carried: %+v\n%s", v, e.read(file))
-	}
-	if r := roots(e); len(r) != 0 {
-		t.Errorf("routes keep their kb_roots: %v", r)
-	}
-
-	e = claimed(t)
-	setRoots(e, map[string]string{"/kb": "/kb"})
-	e.m.CarryKBRoots(ctx)
-	if e.exists(file) || len(roots(e)) != 0 {
-		t.Errorf("a kb_root equal to the derived one wrote a file or stayed: %v", roots(e))
-	}
-
-	// a refused file cannot take the carried value: the routes keep theirs until it is mended, and
-	// the next start carries it
-	e = claimed(t)
-	e.disk.WriteFile(file, []byte("[vars\n"))
-	setRoots(e, map[string]string{"/kb": "/elsewhere"})
-	e.m.CarryKBRoots(ctx)
-	if r := roots(e); r["/kb"] != "/elsewhere" || !slices.Contains(e.eventKinds(), "todos.vars_carry_blocked") || e.read(file) != "[vars\n" {
-		t.Fatalf("a refused file: roots %v, events %v, file %q", r, e.eventKinds(), e.read(file))
-	}
-	e.disk.WriteFile(file, []byte("[vars]\nP = \"/p\"\n"))
-	e.m.CarryKBRoots(ctx)
-	if v := varOf(t, e, kb, "KB_ROOT"); v.Value != "/elsewhere" || len(roots(e)) != 0 {
-		t.Errorf("after mending the file: %+v, roots %v", v, roots(e))
-	}
-
-	e = claimed(t)
-	folderRoute(t, e)
-	setRoots(e, map[string]string{"/kb": "/a", "/src/proj": "/b"})
-	e.m.CarryKBRoots(ctx)
-	if e.exists(file) || len(roots(e)) != 2 || !slices.Contains(e.eventKinds(), "todos.vars_carry_conflict") {
-		t.Errorf("disagreeing routes: file %v, roots %v, events %v", e.exists(file), roots(e), e.eventKinds())
-	}
-}
-
-// A machine value whose declaration the store's file cannot take is not kept either: no machine may
-// hold a value its peers would read as an undefined name.
+// A machine-only declaration whose KB file cannot take it keeps no row either: no machine may hold a
+// value its peers would read as an undefined name.
 func TestAFailedMachineDeclarationKeepsNoValue(t *testing.T) {
 	e := claimed(t)
-	e.disk.WriteFile(kbStore+"/.autodoc-vars.toml", []byte("[vars\n"))
-	if err := e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}); err == nil {
+	e.disk.WriteFile(kbFile, []byte("[vars\n"))
+	if err := e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{Workspace: "kb", MachineOnly: true}); err == nil {
 		t.Fatal("a machine value set though its declaration could not be written")
 	}
 	st, err := e.j.Settings(ctx)
-	if err != nil || len(st.MachineVars) != 0 {
-		t.Errorf("a failed declaration kept the value: %+v %v", st.MachineVars, err)
+	if err != nil || len(st.WorkspaceVars) != 0 {
+		t.Errorf("a failed declaration kept the value: %+v %v", st.WorkspaceVars, err)
 	}
 }
 
-// Making a portable variable machine-only rewrites the store's file first; if this machine's value
-// then cannot be kept, the file is put back, so the portable value is never lost.
+// Making a portable variable machine-only rewrites the KB's file first; if this machine's row then
+// cannot be kept, the file is put back, so the portable value is never lost.
 func TestAFailedMachineValueRestoresTheFile(t *testing.T) {
 	e := claimed(t)
-	file := kbStore + "/.autodoc-vars.toml"
-	e.disk.WriteFile(file, []byte("[vars]\nDUMPS = \"/old\"\n"))
+	e.disk.WriteFile(kbFile, []byte("[vars]\nDUMPS = \"old\"\n"))
 	e.j.Fail = func(op string) error {
 		if op == "UpdateSettings" {
 			// a hand edit lands between the declaration and the settings write: it stays
-			if got := e.read(file); !strings.Contains(got, `machine = ["DUMPS"]`) {
+			if got := e.read(kbFile); !strings.Contains(got, `machine = ["DUMPS"]`) {
 				t.Errorf("not declared before the settings write:\n%s", got)
 			}
-			e.disk.WriteFile(file, []byte("machine = [\"DUMPS\"]\n\n[vars]\nEXTRA = \"/new\"\n"))
+			e.disk.WriteFile(kbFile, []byte("machine = [\"DUMPS\"]\n\n[vars]\nEXTRA = \"new\"\n"))
 			return errors.New("the settings write failed")
 		}
 		return nil
 	}
-	err := e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine})
+	err := e.m.SetVar(ctx, "DUMPS", "/data", todo.SetVarOpts{Workspace: "kb", MachineOnly: true})
 	e.j.Fail = nil
 	if err == nil {
 		t.Fatal("a failed settings write reported success")
 	}
-	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/old" || v.Source != "store" || v.Machine {
-		t.Errorf("the portable value was lost: %+v\n%s", v, e.read(file))
+	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/kb/old" || v.Source != "kb" || v.Machine {
+		t.Errorf("the portable value was lost: %+v\n%s", v, e.read(kbFile))
 	}
-	if v := varOf(t, e, kb, "EXTRA"); v.Value != "/new" {
-		t.Errorf("undoing the declaration erased an edit made in between: %+v\n%s", v, e.read(file))
-	}
-	// a name declared machine-only already: a failed value changes nothing in the file
-	e.disk.WriteFile(file, []byte("machine = [\"LOGS\"]\n"))
-	e.j.Fail = func(op string) error {
-		if op == "UpdateSettings" {
-			return errors.New("the settings write failed")
-		}
-		return nil
-	}
-	err = e.m.SetVar(ctx, "LOGS", "/l", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine})
-	e.j.Fail = nil
-	if v := varOf(t, e, kb, "LOGS"); err == nil || !v.Machine {
-		t.Errorf("an existing declaration was undone: %+v %v", v, err)
+	if v := varOf(t, e, kb, "EXTRA"); v.Value != "/kb/new" {
+		t.Errorf("undoing the declaration erased an edit made in between: %+v\n%s", v, e.read(kbFile))
 	}
 }
 
@@ -362,7 +477,6 @@ func TestAFailedMachineValueRestoresTheFile(t *testing.T) {
 // waits for the first to finish (its undo included), then declares and keeps its own value.
 func TestMachineSetVarsDoNotInterleave(t *testing.T) {
 	e := claimed(t)
-	file := kbStore + "/.autodoc-vars.toml"
 	later := make(chan error, 1)
 	failed := false
 	e.j.Fail = func(op string) error {
@@ -371,7 +485,7 @@ func TestMachineSetVarsDoNotInterleave(t *testing.T) {
 		}
 		failed = true // the first call's settings write fails, while a second call starts
 		go func() {
-			later <- e.m.SetVar(ctx, "DUMPS", "/later", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine})
+			later <- e.m.SetVar(ctx, "DUMPS", "/later", todo.SetVarOpts{Workspace: "kb", MachineOnly: true})
 		}()
 		select {
 		case err := <-later: // it finished in between: the undo that follows would land after it
@@ -380,7 +494,7 @@ func TestMachineSetVarsDoNotInterleave(t *testing.T) {
 		}
 		return errors.New("the settings write failed")
 	}
-	if err := e.m.SetVar(ctx, "DUMPS", "/first", todo.SetVarOpts{At: &kb, Scope: todo.ScopeMachine}); err == nil {
+	if err := e.m.SetVar(ctx, "DUMPS", "/first", todo.SetVarOpts{Workspace: "kb", MachineOnly: true}); err == nil {
 		t.Fatal("the failed first call reported success")
 	}
 	if err := <-later; err != nil {
@@ -388,22 +502,7 @@ func TestMachineSetVarsDoNotInterleave(t *testing.T) {
 	}
 	e.j.Fail = nil
 	if v := varOf(t, e, kb, "DUMPS"); v.Value != "/later" || v.Source != "machine" || !v.Machine {
-		t.Errorf("the second call's value lost its declaration: %+v\n%s", v, e.read(file))
-	}
-}
-
-// A variable file over the limit is refused whole, never read as its first part.
-func TestAnOversizedVariableFileIsRefused(t *testing.T) {
-	e := claimed(t)
-	file := kbStore + "/.autodoc-vars.toml"
-	pad := "# " + strings.Repeat("x", 64<<10) + "\n"
-	e.disk.WriteFile(file, []byte(pad+"[vars]\nP = \"/p\"\n"))
-	if v := varOf(t, e, kb, "P"); v.Value != "" || !slices.Contains(e.eventKinds(), "todos.vars_invalid") {
-		t.Errorf("an oversized file was read, not refused: %+v, events %v", v, e.eventKinds())
-	}
-	e.disk.WriteFile(file, []byte(pad[:60<<10]+"\n[vars]\nP = \"/p\"\n"))
-	if v := varOf(t, e, kb, "P"); v.Value != "/p" {
-		t.Errorf("a file under the limit: %+v", v)
+		t.Errorf("the second call's value lost its declaration: %+v\n%s", v, e.read(kbFile))
 	}
 }
 

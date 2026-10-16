@@ -13,7 +13,7 @@ import (
 // ReasonAmbiguous, or "" when raw is no link the index keeps (a URL, a heading of from itself, an
 // attachment the workspace does not index).
 func (x *Indexer) ResolveLink(ctx context.Context, from, raw string) (path, reason string, err error) {
-	links := extractLinks(kind.ParseMarkdown([]byte(raw)), from, x.opts.Match)
+	links := extractLinks(kind.ParseMarkdown([]byte(raw)), from, x.opts.Match, x.mode(from).Vars, x.opts.Root)
 	if len(links) != 1 {
 		return "", "", nil
 	}

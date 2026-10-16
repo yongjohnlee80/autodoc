@@ -16,28 +16,38 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/vfs"
+
+	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/core/paths"
 )
 
-// A STORE'S VARIABLES (ADR 1792015069). A store's refs resolve against one scope, the store's,
-// whichever route (a workspace name, a folder root) reached it, so every client reads and writes
-// the same refs. The scope is the store's derived built-ins, overridden by its variable file
-// (<store>/.autodoc-vars.toml, which travels with the KB) and by this machine's per-store values.
+// A WORKSPACE'S VARIABLES (ADR 1792132105). Variables belong to the workspace, the KB, not to a todo
+// store: a store belongs to exactly one workspace and reads that workspace's variables, and so does
+// every other document of the workspace. A name's value is, first match winning: this machine's row
+// for the workspace (absolute, never travels); the KB's file, <root>/.autodoc-vars.toml (relative
+// paths only, carried by git, resolved from each machine's KB root); the derived built-in ($KB_ROOT,
+// the workspace root, and $HOME); a global user variable; the environment. A name a pending
+// migration holds in conflict answers only to this machine's row.
 
-// varsFile is a store's variable file, beside its buckets.
+// varsFile is the variable file: a KB's, at its root. A store's own (ADR 1792015069) is read only by
+// the migration that folds it into its workspace's (fold).
 const varsFile = ".autodoc-vars.toml"
+
+// VarsFile is the name of a KB's variable file, at its root: what a reader of the variables watches.
+const VarsFile = varsFile
+
+// migratedSuffix is added to a store's variable file once the migration has carried every value of it.
+const migratedSuffix = ".migrated"
 
 // maxVarsFile is the largest variable file read: a larger one is refused whole, never cut short.
 const maxVarsFile = 64 << 10
 
-// VarProjectRoot is the project a store serves: what auto-core's $WORKSPACE meant before the cutover.
+// VarProjectRoot is the project a workspace serves: what AutoVim's $WORKSPACE meant. It is a user
+// variable, set per KB (relative, in the KB's file) or per machine.
 const VarProjectRoot = "PROJECT_ROOT"
 
-// kbMarker is the file whose frontmatter makes a directory a KB: its AGENTS.md with "type: kb". A
-// project's own AGENTS.md has no such frontmatter, so it never makes the project a KB.
-const kbMarker = "AGENTS.md"
-
-// storeVars is a store's variable file as read: its variables, by name, as written (a relative path
-// is the store directory's), and the names whose value is set per machine.
+// storeVars is a variable file as read: its variables, by name, as written, and the names whose
+// value is set per machine.
 type storeVars struct {
 	Vars    map[string]string
 	Machine []string
@@ -50,8 +60,8 @@ type varsDoc struct {
 }
 
 // parseStoreVars reads a variable file. A key or table the format does not have, a name that is not
-// a variable name, or a name both machine-only and given a value here is refused whole: the store
-// then resolves as if the file were absent.
+// a variable name, or a name both machine-only and given a value here is refused whole: the file is
+// then read as absent.
 func parseStoreVars(b []byte) (storeVars, error) {
 	var d varsDoc
 	md, err := toml.NewDecoder(bytes.NewReader(b)).Decode(&d)
@@ -104,12 +114,13 @@ func (prior storeVars) undoDeclare(sv *storeVars, name string) {
 	}
 }
 
-// render writes sv as the file's TOML: the machine list, then [vars], each sorted, so the file a
-// verb writes is stable and diffs cleanly.
+// render writes sv as a KB's file: the machine list, then [vars], each sorted, so the file a verb
+// writes is stable and diffs cleanly.
 func (sv storeVars) render() []byte {
 	var b strings.Builder
-	b.WriteString("# AutoDoc todo variables for this store (ADR 1792015069). A relative path is this\n")
-	b.WriteString("# directory's. machine: the names whose value is set per machine, never here.\n")
+	b.WriteString("# AutoDoc variables of this KB (ADR 1792132105). Values are paths relative to this\n")
+	b.WriteString("# directory, resolved on each machine; a machine's own values are set per machine.\n")
+	b.WriteString("# machine: the names whose value is set per machine, never here.\n")
 	if len(sv.Machine) > 0 {
 		names := slices.Clone(sv.Machine)
 		sort.Strings(names)
@@ -124,147 +135,223 @@ func (sv storeVars) render() []byte {
 	}
 	if len(sv.Vars) > 0 {
 		b.WriteString("\n[vars]\n")
-		names := make([]string, 0, len(sv.Vars))
-		for k := range sv.Vars {
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		for _, k := range names {
+		for _, k := range slices.Sorted(maps.Keys(sv.Vars)) {
 			fmt.Fprintf(&b, "%s = %q\n", k, sv.Vars[k])
 		}
 	}
 	return []byte(b.String())
 }
 
-// abs is a file value as a path: a relative one is the store directory's; an absolute one, a ~ one
-// or one starting with a variable stays as written.
-func (sv storeVars) abs(dir, v string) string {
-	if v == "" || strings.HasPrefix(v, "/") || strings.HasPrefix(v, "~") || strings.HasPrefix(v, "$") {
-		return v
-	}
-	return path.Join(dir, v)
-}
+// isAbsValue reports a value that names a machine's path, not one relative to the KB: absolute, or
+// under ~.
+func isAbsValue(v string) bool { return strings.HasPrefix(v, "/") || strings.HasPrefix(v, "~") }
 
-// readStoreVars reads the variable file of the store at dir. An absent file, or an absent store, is
-// no variables; a file that cannot be read or parsed is its error, and the store resolves without it.
-func (m *Manager) readStoreVars(ctx context.Context, dir string) (storeVars, error) {
+// readVarsFile reads the variable file in dir. ok is false for an absent file or directory; a file
+// that cannot be read or parsed is its error.
+func (m *Manager) readVarsFile(ctx context.Context, dir string) (sv storeVars, ok bool, err error) {
 	fsys, _, err := m.disk.Open(ctx, dir)
 	if err != nil {
 		if errors.Is(err, vfs.ErrNotExist) {
-			return storeVars{}, nil
+			return storeVars{}, false, nil
 		}
-		return storeVars{}, err
+		return storeVars{}, false, err
 	}
 	defer fsys.Close()
 	r, err := fsys.Open(ctx, varsFile, 0)
 	if err != nil {
 		if errors.Is(err, vfs.ErrNotExist) {
-			return storeVars{}, nil
+			return storeVars{}, false, nil
 		}
-		return storeVars{}, err
+		return storeVars{}, false, err
 	}
 	defer r.Close()
 	b, err := io.ReadAll(io.LimitReader(r, maxVarsFile+1))
 	if err != nil {
-		return storeVars{}, err
+		return storeVars{}, false, err
 	}
 	if len(b) > maxVarsFile {
-		return storeVars{}, fmt.Errorf("%s/%s: larger than %d bytes", dir, varsFile, maxVarsFile)
+		return storeVars{}, false, fmt.Errorf("%s/%s: larger than %d bytes", dir, varsFile, maxVarsFile)
 	}
-	sv, err := parseStoreVars(b)
+	sv, err = parseStoreVars(b)
 	if err != nil {
-		return storeVars{}, fmt.Errorf("%s/%s: %w", dir, varsFile, err)
+		return storeVars{}, false, fmt.Errorf("%s/%s: %w", dir, varsFile, err)
 	}
-	return sv, nil
+	return sv, true, nil
 }
 
-// kbOf is the KB a store sits in: the nearest directory at or above dir whose AGENTS.md declares
-// "type: kb" in its frontmatter; "" for none.
-func (m *Manager) kbOf(ctx context.Context, dir string) string {
-	for d := path.Clean(dir); ; d = path.Dir(d) {
-		if m.isKB(ctx, d) {
-			return d
-		}
-		if d == "/" || d == "." {
-			return ""
-		}
-	}
-}
+// WHICH WORKSPACE (ADR 1792132105 §2.4, §2.5)
 
-// isKB reports whether dir's AGENTS.md opens with frontmatter that holds "type: kb".
-func (m *Manager) isKB(ctx context.Context, dir string) bool {
-	fsys, _, err := m.disk.Open(ctx, dir)
-	if err != nil {
-		return false
-	}
-	defer fsys.Close()
-	r, err := fsys.Open(ctx, kbMarker, 0)
-	if err != nil {
-		return false
-	}
-	defer r.Close()
-	b, _ := io.ReadAll(io.LimitReader(r, 4<<10))
-	return kbFrontmatter(b)
-}
-
-// kbFrontmatter reports frontmatter (a first line "---", up to the next "---") with a line
-// "type: kb", quoted or not.
-func kbFrontmatter(b []byte) bool {
-	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) != "---" {
-		return false
-	}
-	for _, l := range lines[1:] {
-		l = strings.TrimSpace(l)
-		if l == "---" {
-			return false
-		}
-		if k, v, ok := strings.Cut(l, ":"); ok && strings.TrimSpace(k) == "type" &&
-			strings.Trim(strings.TrimSpace(v), `"'`) == "kb" {
-			return true
+// containing is the root of the deepest workspace dir lies in, "" for none.
+func (m *Manager) containing(dir string) string {
+	best := ""
+	for _, name := range m.roots.Names() {
+		if r, ok := m.roots.Root(name); ok && paths.Under(dir, path.Clean(r)) && len(r) > len(best) {
+			best = path.Clean(r)
 		}
 	}
-	return false
+	return best
 }
 
-// layers are a store's variables before precedence: this machine's values, the store's file, the
-// derived built-ins and the global user vars.
-type layers struct {
-	dir     string            // the store's directory
-	machine map[string]string // this machine's values for the store
-	file    storeVars         // the store's file; empty when absent or refused
-	fileErr error             // why the file was refused; nil when read or absent
-	derived map[string]string // the built-ins from the store's location
-	global  map[string]string
+// nameOf is the name of the workspace whose root is root, "" for none.
+func (m *Manager) nameOf(root string) string {
+	for _, name := range m.roots.Names() {
+		if r, ok := m.roots.Root(name); ok && path.Clean(r) == root {
+			return name
+		}
+	}
+	return ""
 }
 
-// layers reads w's store's variables. A refused file is reported once per distinct error, and the
-// store resolves without it.
-func (m *Manager) layers(ctx context.Context, w where) (layers, error) {
+// owner is the root of the workspace the store id belongs to: the one recorded; else (a store recorded
+// before ADR 1792132105, or outside every workspace then) the deepest workspace containing the store,
+// recorded now so a workspace added later never takes it; else "".
+func (m *Manager) owner(ctx context.Context, id string) (string, error) {
 	st, err := m.j.Settings(ctx)
 	if err != nil {
-		return layers{}, err
+		return "", err
 	}
-	dir := w.rec.Path
-	if rec, ok := st.Stores[w.rec.ID]; ok {
-		dir = rec.Path
+	rec, ok := st.Stores[id]
+	if !ok {
+		return "", nil
 	}
-	home := path.Dir(dir) // the store's home: its parent, by location alone (ADR 1792015069 §2.1)
-	l := layers{dir: dir, machine: st.MachineVars[w.rec.ID], global: st.Vars,
-		derived: map[string]string{VarKBRoot: m.kbOf(ctx, home), VarWorkspace: home, VarProjectRoot: "", VarHome: m.o.home}}
-	l.file, l.fileErr = m.readStoreVars(ctx, dir)
-	m.reportVarsFile(w.rec.ID, dir, l.fileErr)
+	if rec.KB != "" {
+		return rec.KB, nil
+	}
+	kb := m.containing(rec.Path)
+	if kb == "" {
+		return "", nil
+	}
+	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
+		r, ok := s.Stores[id]
+		if !ok || r.KB != "" {
+			return nil
+		}
+		r.KB = kb
+		s.Stores[id] = r
+		return nil
+	})
+	return kb, err
+}
+
+// SetKB records which workspace an At's store belongs to (todos.set_kb): a store outside every
+// workspace is linked to one, and a store may be moved to another. Its refs resolve with the new
+// workspace's variables from now on.
+func (m *Manager) SetKB(ctx context.Context, at At, workspace string) error {
+	root, ok := m.roots.Root(workspace)
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNoWorkspace, workspace)
+	}
+	w, err := m.resolve(ctx, at)
+	if err != nil {
+		return err
+	}
+	root = path.Clean(root)
+	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
+		r, ok := s.Stores[w.rec.ID]
+		if !ok {
+			return fmt.Errorf("%w: store %s", ErrNotFound, w.rec.ID)
+		}
+		r.KB = root
+		s.Stores[w.rec.ID] = r
+		return nil
+	})
+	if err == nil {
+		m.unfold(root)
+		m.event(Event{Kind: "todos.set_kb", Store: w.rec.ID, Path: w.rec.Path, Detail: "workspace " + workspace + " (" + root + ")"})
+		m.storesChanged()
+	}
+	return err
+}
+
+// Owner is who a file at abs belongs to (workspace.of): the one owner rule the index and todos.vars
+// use. A file in a known todo store belongs to the store's workspace (recorded, or containing);
+// any other file to the deepest workspace containing it; otherwise to none ("", "").
+func (m *Manager) Owner(ctx context.Context, abs string) (workspace, root string, err error) {
+	abs = path.Clean(abs)
+	st, err := m.j.Settings(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	var best StoreRecord
+	for _, rec := range st.Stores {
+		if paths.Under(abs, rec.Path) && len(rec.Path) > len(best.Path) {
+			best = rec
+		}
+	}
+	if best.ID != "" {
+		if root, err = m.owner(ctx, best.ID); err != nil {
+			return "", "", err
+		}
+	} else {
+		root = m.containing(abs)
+	}
+	if root == "" {
+		return "", "", nil
+	}
+	return m.nameOf(root), root, nil
+}
+
+// THE LAYERS
+
+// layers are a workspace's variables before precedence.
+type layers struct {
+	kb       string            // the workspace's root; "" for a store that belongs to none
+	machine  map[string]string // this machine's rows for the workspace
+	file     storeVars         // the KB's file, its refused values left out; empty when absent or refused
+	fileErr  error             // why the file was refused; nil when read or absent
+	refused  []string          // names the file gave an absolute value: absolute paths belong to a machine
+	derived  map[string]string // the built-ins
+	global   map[string]string
+	conflict map[string]bool // names a pending migration holds in conflict
+}
+
+// layersOf reads the variables of the workspace whose root is kb ("" for none), folding its stores'
+// old files in first (fold). A refused file is reported once per distinct error.
+func (m *Manager) layersOf(ctx context.Context, kb string) (layers, error) {
+	l := layers{kb: kb, derived: map[string]string{VarHome: m.o.home}}
+	if kb != "" {
+		l.derived[VarKBRoot] = kb
+		l.conflict = m.fold(ctx, kb)
+		var ok bool
+		l.file, ok, l.fileErr = m.readVarsFile(ctx, kb)
+		m.reportVarsFile("kb:"+kb, kb, l.fileErr)
+		if ok {
+			for _, n := range slices.Sorted(maps.Keys(l.file.Vars)) {
+				if isAbsValue(l.file.Vars[n]) {
+					l.refused = append(l.refused, n)
+					delete(l.file.Vars, n)
+				}
+			}
+			m.reportRefused(kb, l.refused)
+		}
+	}
+	st, err := m.j.Settings(ctx)
+	if err != nil {
+		return l, err
+	}
+	l.machine, l.global = st.WorkspaceVars[kb], st.Vars
 	return l, nil
 }
 
-// value is name's effective value and where it came from: this machine, the store's file, the
-// derived built-in, a global user var (never for a built-in), then the environment.
+// layersAt reads the variables of w's store: its workspace's.
+func (m *Manager) layersAt(ctx context.Context, w where) (layers, error) {
+	kb, err := m.owner(ctx, w.rec.ID)
+	if err != nil {
+		return layers{}, err
+	}
+	return m.layersOf(ctx, kb)
+}
+
+// value is name's effective value and where it came from (ADR 1792132105 §2.3).
 func (l layers) value(name string, env func(string) string) (string, string) {
 	if v := l.machine[name]; v != "" {
 		return v, "machine"
 	}
+	if l.conflict[name] {
+		return "", "conflict"
+	}
 	if v := l.file.Vars[name]; v != "" {
-		return l.file.abs(l.dir, v), "store"
+		return path.Join(l.kb, v), "kb"
 	}
 	if isBuiltin(name) {
 		if v := l.derived[name]; v != "" {
@@ -283,7 +370,7 @@ func (l layers) value(name string, env func(string) string) (string, string) {
 	return "", ""
 }
 
-// names are every variable the layers name, built-ins first, then the rest sorted.
+// names are every variable the layers name, the built-ins first, then the rest sorted.
 func (l layers) names() []string {
 	seen := map[string]bool{}
 	var rest []string
@@ -302,19 +389,21 @@ func (l layers) names() []string {
 	for _, n := range l.file.Machine {
 		add(n)
 	}
+	for _, n := range l.refused {
+		add(n)
+	}
+	for n := range l.conflict {
+		add(n)
+	}
 	for n := range l.global {
 		add(n)
 	}
 	sort.Strings(rest)
-	return append([]string{VarKBRoot, VarWorkspace, VarProjectRoot, VarHome}, rest...)
+	return append([]string{VarKBRoot, VarHome}, rest...)
 }
 
-// scope is the store's scope: what every route to the store resolves refs against.
-func (m *Manager) scope(ctx context.Context, w where) (scope, error) {
-	l, err := m.layers(ctx, w)
-	if err != nil {
-		return scope{}, err
-	}
+// scopeOf is what refs of the workspace kb resolve against.
+func (m *Manager) scopeOf(l layers) scope {
 	get := func(n string) string { v, _ := l.value(n, nil); return v }
 	sc := scope{kbRoot: get(VarKBRoot), workspace: get(VarWorkspace), projectRoot: get(VarProjectRoot), home: get(VarHome),
 		user: map[string]string{}, machine: map[string]bool{}, env: m.o.env}
@@ -328,20 +417,22 @@ func (m *Manager) scope(ctx context.Context, w where) (scope, error) {
 	for _, n := range l.file.Machine {
 		sc.machine[n] = true
 	}
+	return sc
+}
+
+// scope is w's store's scope: its workspace's, the same from every route.
+func (m *Manager) scope(ctx context.Context, w where) (scope, error) {
+	l, err := m.layersAt(ctx, w)
+	if err != nil {
+		return scope{}, err
+	}
+	sc := m.scopeOf(l)
+	sc.storeHome = path.Dir(w.rec.Path)
 	return sc, nil
 }
 
-// Vars lists the variables an At's store's refs may use, the same from every route: the built-ins
-// with their derived values, then the rest, each with its effective value and its source.
-func (m *Manager) Vars(ctx context.Context, at At) ([]Var, error) {
-	w, err := m.resolve(ctx, at)
-	if err != nil {
-		return nil, err
-	}
-	l, err := m.layers(ctx, w)
-	if err != nil {
-		return nil, err
-	}
+// list is the layers as todos.vars and workspace.vars answer them.
+func (m *Manager) list(l layers) []Var {
 	machine := map[string]bool{}
 	for _, n := range l.file.Machine {
 		machine[n] = true
@@ -349,27 +440,104 @@ func (m *Manager) Vars(ctx context.Context, at At) ([]Var, error) {
 	var out []Var
 	for _, n := range l.names() {
 		v, src := l.value(n, m.o.env)
-		out = append(out, Var{Name: n, Value: v, Source: src, Builtin: isBuiltin(n), Derived: l.derived[n], Machine: machine[n]})
+		out = append(out, Var{Name: n, Value: v, Source: src, Builtin: isBuiltin(n), Derived: l.derived[n],
+			Machine: machine[n], Conflict: l.conflict[n]})
+	}
+	return out
+}
+
+// Vars lists the variables an At's store's refs may use: its workspace's, the same from every route.
+func (m *Manager) Vars(ctx context.Context, at At) ([]Var, error) {
+	w, err := m.resolve(ctx, at)
+	if err != nil {
+		return nil, err
+	}
+	l, err := m.layersAt(ctx, w)
+	if err != nil {
+		return nil, err
+	}
+	return m.list(l), nil
+}
+
+// WorkspaceVars lists a workspace's variables (workspace.vars).
+func (m *Manager) WorkspaceVars(ctx context.Context, workspace string) ([]Var, error) {
+	root, ok := m.roots.Root(workspace)
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNoWorkspace, workspace)
+	}
+	l, err := m.layersOf(ctx, path.Clean(root))
+	if err != nil {
+		return nil, err
+	}
+	return m.list(l), nil
+}
+
+// EffectiveVars are the values a document of the workspace rooted at kb resolves $NAME refs with: each
+// name that has one, built-ins included. The index reads them for every document.
+func (m *Manager) EffectiveVars(ctx context.Context, kb string) (map[string]string, error) {
+	l, err := m.layersOf(ctx, kb)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	for _, n := range l.names() {
+		if v, _ := l.value(n, m.o.env); v != "" {
+			out[n] = v
+		}
 	}
 	return out, nil
 }
 
-// Var scopes: where todos.set_var keeps a value.
-const (
-	ScopeGlobal  = "global"  // the daemon's user vars, for every store; never a built-in
-	ScopeStore   = "store"   // the store's file: travels with the KB
-	ScopeMachine = "machine" // this machine's value for the store; the name is declared machine-only in the file
-)
-
-// SetVarOpts says where SetVar keeps a value: an At's store, in its file or for this machine, or
-// (no At) the global user vars.
-type SetVarOpts struct {
-	At    *At    `json:"at,omitempty"`
-	Scope string `json:"scope,omitempty"` // "global" (the default without an At), "store" (with one), or "machine"
+// AllEffectiveVars are EffectiveVars for every workspace and every store's, by root, "" holding
+// those of a path in no workspace: what the index resolves each document's refs with.
+func (m *Manager) AllEffectiveVars(ctx context.Context) (map[string]map[string]string, error) {
+	roots := map[string]bool{"": true}
+	for _, name := range m.roots.Names() {
+		if r, ok := m.roots.Root(name); ok {
+			roots[path.Clean(r)] = true
+		}
+	}
+	st, err := m.j.Settings(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, rec := range st.Stores {
+		roots[rec.KB] = true
+	}
+	out := map[string]map[string]string{}
+	for _, root := range slices.Sorted(maps.Keys(roots)) {
+		vs, err := m.EffectiveVars(ctx, root)
+		if err != nil {
+			return nil, err
+		}
+		out[root] = vs
+	}
+	return out, nil
 }
 
-// SetVar sets a variable, or clears it with "". A global var is any name but a built-in's; a store
-// or machine value may override a built-in.
+// SETTING A VARIABLE
+
+// Var scopes: where a value is kept.
+const (
+	ScopeGlobal  = "global"  // the daemon's user vars, for every workspace; never a built-in
+	ScopeKB      = "kb"      // the KB's file: a path relative to the KB root, carried by git
+	ScopeStore   = "store"   // todos.set_var's name for ScopeKB: the store's workspace's file
+	ScopeMachine = "machine" // this machine's row for the workspace
+)
+
+// SetVarOpts says where SetVar keeps a value: a workspace, named or an At's store's, in its KB file or
+// for this machine; or, with neither, the global user vars.
+type SetVarOpts struct {
+	At        *At    `json:"at,omitempty"`
+	Workspace string `json:"workspace,omitempty"`
+	Scope     string `json:"scope,omitempty"` // "global" (the default with neither), "kb" or "store", or "machine" (the default with a workspace)
+	// MachineOnly declares the name machine-only in the KB's file with a machine value: other machines
+	// then report it as a value to set, never a ref error, and a migration conflict on it is settled.
+	MachineOnly bool `json:"machine_only,omitempty"`
+}
+
+// SetVar sets a variable, or clears it with "". A global var is any name but a built-in's; a KB or
+// machine value may override a built-in.
 func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVarOpts) error {
 	if !varNameRe.MatchString(name) {
 		return fmt.Errorf("%w: %q is not a variable name (letters, digits and _, not starting with a digit)", ErrInvalid, name)
@@ -379,16 +547,18 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 		o = opts[0]
 	}
 	scope := o.Scope
-	if scope == "" {
-		scope = ScopeGlobal
-		if o.At != nil {
-			scope = ScopeStore
-		}
-	}
 	switch {
-	case scope == ScopeGlobal:
+	case scope != "":
+	case o.Workspace != "":
+		scope = ScopeMachine
+	case o.At != nil:
+		scope = ScopeStore
+	default:
+		scope = ScopeGlobal
+	}
+	if scope == ScopeGlobal {
 		if isBuiltin(name) {
-			return fmt.Errorf("%w: %s is derived per store; override it for a store, not globally", ErrInvalid, name)
+			return fmt.Errorf("%w: %s is derived per workspace; override it for a workspace, not globally", ErrInvalid, name)
 		}
 		return m.j.UpdateSettings(ctx, func(s *Settings) error {
 			if s.Vars == nil {
@@ -401,40 +571,47 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 			}
 			return nil
 		})
-	case o.At == nil:
-		return fmt.Errorf("%w: scope %q needs an at", ErrInvalid, scope)
+	}
+	kb, err := m.kbFor(ctx, o)
+	if err != nil {
+		return err
 	}
 	m.varsMu.Lock()
 	defer m.varsMu.Unlock()
-	switch {
-	case scope == ScopeStore:
-		w, err := m.writable(ctx, *o.At)
-		if err != nil {
-			return err
+	defer m.unfold(kb)
+	switch scope {
+	case ScopeKB, ScopeStore:
+		if o.MachineOnly {
+			return fmt.Errorf("%w: machine_only goes with scope \"machine\"", ErrInvalid)
 		}
-		return m.editStoreVars(ctx, w, func(sv *storeVars) error {
+		rel := ""
+		if strings.HasPrefix(value, "~") {
+			return fmt.Errorf("%w: %s is under this machine's home: set it with scope \"machine\"", ErrInvalid, value)
+		}
+		if value != "" {
+			abs := m.absValue(kb, value)
+			if rel = relTo(kb, abs); isAbsValue(rel) {
+				return fmt.Errorf("%w: %s is not a path relative to the KB root %s", ErrInvalid, value, kb)
+			}
+		}
+		return m.editKBFile(ctx, kb, func(sv *storeVars) error {
 			if slices.Contains(sv.Machine, name) && value != "" {
-				return fmt.Errorf("%w: %s is machine-only in this store; set it with scope \"machine\"", ErrInvalid, name)
+				return fmt.Errorf("%w: %s is machine-only in this KB; set it with scope \"machine\"", ErrInvalid, name)
 			}
 			if value == "" {
 				delete(sv.Vars, name)
 			} else {
-				sv.Vars[name] = value
+				sv.Vars[name] = rel
 			}
 			return nil
 		})
-	case scope == ScopeMachine:
-		w, err := m.writable(ctx, *o.At)
-		if err != nil {
-			return err
-		}
-		// the name is declared machine-only in the store's file first, so no machine without it errs,
-		// and a file edit that fails leaves no value behind; what the declaration changed is undone if
-		// the value then cannot be kept, so a portable value it held is never lost, and only that is
-		// undone: an edit the file took in between stays
+	case ScopeMachine:
+		// a machine-only declaration goes in the KB's file first, so no machine without the value
+		// errs, and a file edit that fails leaves no row behind; what the declaration changed is
+		// undone if the row then cannot be kept, and only that: an edit the file took in between stays
 		var prior *storeVars
-		if value != "" {
-			err := m.editStoreVars(ctx, w, func(sv *storeVars) error {
+		if o.MachineOnly {
+			err := m.editKBFile(ctx, kb, func(sv *storeVars) error {
 				was := sv.clone()
 				prior = &was
 				if !slices.Contains(sv.Machine, name) {
@@ -447,48 +624,91 @@ func (m *Manager) SetVar(ctx context.Context, name, value string, opts ...SetVar
 				return err
 			}
 		}
-		err = m.j.UpdateSettings(ctx, func(s *Settings) error {
-			if s.MachineVars == nil {
-				s.MachineVars = map[string]map[string]string{}
+		abs := ""
+		if value != "" {
+			abs = m.absValue(kb, value)
+		}
+		err := m.j.UpdateSettings(ctx, func(s *Settings) error {
+			if s.WorkspaceVars == nil {
+				s.WorkspaceVars = map[string]map[string]string{}
 			}
-			vals := maps.Clone(s.MachineVars[w.rec.ID])
+			vals := maps.Clone(s.WorkspaceVars[kb])
 			if vals == nil {
 				vals = map[string]string{}
 			}
-			if value == "" {
+			if abs == "" {
 				delete(vals, name)
 			} else {
-				vals[name] = value
+				vals[name] = abs
 			}
 			if len(vals) == 0 {
-				delete(s.MachineVars, w.rec.ID)
+				delete(s.WorkspaceVars, kb)
 			} else {
-				s.MachineVars[w.rec.ID] = vals
+				s.WorkspaceVars[kb] = vals
 			}
 			return nil
 		})
 		if err != nil && prior != nil {
-			if rerr := m.editStoreVars(ctx, w, func(sv *storeVars) error { prior.undoDeclare(sv, name); return nil }); rerr != nil {
+			if rerr := m.editKBFile(ctx, kb, func(sv *storeVars) error { prior.undoDeclare(sv, name); return nil }); rerr != nil {
 				return errors.Join(err, fmt.Errorf("undoing the machine-only declaration of %s: %w", name, rerr))
 			}
 		}
+		if err == nil {
+			m.storesChanged()
+		}
 		return err
 	}
-	return fmt.Errorf("%w: scope %q: global, store or machine", ErrInvalid, scope)
+	return fmt.Errorf("%w: scope %q: global, kb (or store) or machine", ErrInvalid, scope)
 }
 
-// editStoreVars changes w's store's variable file through fn, written atomically at the version it
-// was read at; a file left with nothing is removed. A refused file is never rewritten.
-func (m *Manager) editStoreVars(ctx context.Context, w where, fn func(*storeVars) error) error {
-	st, err := m.open(ctx, w)
+// kbFor is the workspace root a SetVar names: its workspace, or its At's store's workspace.
+func (m *Manager) kbFor(ctx context.Context, o SetVarOpts) (string, error) {
+	switch {
+	case o.Workspace != "" && o.At != nil:
+		return "", fmt.Errorf("%w: name a workspace or an at, not both", ErrInvalid)
+	case o.Workspace != "":
+		root, ok := m.roots.Root(o.Workspace)
+		if !ok {
+			return "", fmt.Errorf("%w: %s", ErrNoWorkspace, o.Workspace)
+		}
+		return path.Clean(root), nil
+	case o.At != nil:
+		w, err := m.writable(ctx, *o.At)
+		if err != nil {
+			return "", err
+		}
+		kb, err := m.owner(ctx, w.rec.ID)
+		if err == nil && kb == "" {
+			err = fmt.Errorf("%w: the store %s belongs to no workspace: link it with todos.set_kb", ErrInvalid, w.rec.Path)
+		}
+		return kb, err
+	}
+	return "", fmt.Errorf("%w: a kb or machine value names a workspace or an at", ErrInvalid)
+}
+
+// absValue is a value as an absolute path: ~ expanded, a relative one the KB root's.
+func (m *Manager) absValue(kb, v string) string {
+	switch {
+	case v == "~" || strings.HasPrefix(v, "~/"):
+		return path.Join(m.o.home, strings.TrimPrefix(v, "~"))
+	case strings.HasPrefix(v, "/"):
+		return path.Clean(v)
+	}
+	return path.Join(kb, v)
+}
+
+// editKBFile changes the KB's file at kb through fn, written atomically at the version it was read
+// at; a file left with nothing is removed. A refused file is never rewritten.
+func (m *Manager) editKBFile(ctx context.Context, kb string, fn func(*storeVars) error) error {
+	fsys, _, err := m.disk.Open(ctx, kb)
 	if err != nil {
 		return err
 	}
-	st.mu.Lock()
-	defer st.mu.Unlock()
+	defer fsys.Close()
+	d := docs.New(fsys, func(p string) bool { return p == varsFile })
 	var ver vfs.Version
 	sv := storeVars{Vars: map[string]string{}}
-	doc, err := st.docs.Read(ctx, varsFile)
+	doc, err := d.Read(ctx, varsFile)
 	switch {
 	case errors.Is(err, vfs.ErrNotExist):
 	case err != nil:
@@ -496,7 +716,7 @@ func (m *Manager) editStoreVars(ctx context.Context, w where, fn func(*storeVars
 	default:
 		ver = doc.Version
 		if sv, err = parseStoreVars(doc.Content); err != nil {
-			return fmt.Errorf("%w: %s/%s is not a variable file the daemon rewrites (fix it by hand): %v", ErrInvalid, st.path, varsFile, err)
+			return fmt.Errorf("%w: %s/%s is not a variable file the daemon rewrites (fix it by hand): %v", ErrInvalid, kb, varsFile, err)
 		}
 	}
 	if err := fn(&sv); err != nil {
@@ -506,22 +726,23 @@ func (m *Manager) editStoreVars(ctx context.Context, w where, fn func(*storeVars
 		if ver == "" {
 			return nil
 		}
-		err := st.docs.Remove(ctx, varsFile, ver)
+		err := d.Remove(ctx, varsFile, ver)
 		if err == nil {
 			m.storesChanged()
 		}
 		return err
 	}
-	_, err = st.docs.Write(ctx, varsFile, sv.render(), ver)
+	_, err = d.Write(ctx, varsFile, sv.render(), ver)
 	if err == nil {
-		m.event(Event{Kind: "todos.vars", Store: st.id, Path: st.path + "/" + varsFile})
+		m.event(Event{Kind: "todos.vars", Path: kb + "/" + varsFile})
 		m.storesChanged()
 	}
 	return err
 }
 
-// reportVarsFile reports a store's refused variable file once per distinct error, and its recovery.
-func (m *Manager) reportVarsFile(id, dir string, err error) {
+// reportVarsFile reports a refused variable file once per distinct error, and its recovery. key names
+// the file's owner: "kb:<root>" for a KB's, a store id for a store's.
+func (m *Manager) reportVarsFile(key, dir string, err error) {
 	msg := ""
 	if err != nil {
 		msg = err.Error()
@@ -530,19 +751,40 @@ func (m *Manager) reportVarsFile(id, dir string, err error) {
 	if m.varsErr == nil {
 		m.varsErr = map[string]string{}
 	}
-	prev, seen := m.varsErr[id]
-	m.varsErr[id] = msg
+	prev, seen := m.varsErr[key]
+	m.varsErr[key] = msg
 	m.mu.Unlock()
+	store := ""
+	if !strings.HasPrefix(key, "kb:") {
+		store = key
+	}
 	if msg != "" && msg != prev {
-		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_invalid", "store": id, "path": dir + "/" + varsFile})
-		m.event(Event{Kind: "todos.vars_invalid", Store: id, Path: dir + "/" + varsFile, Detail: msg})
+		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_invalid", "path": dir + "/" + varsFile})
+		m.event(Event{Kind: "todos.vars_invalid", Store: store, Path: dir + "/" + varsFile, Detail: msg})
 	} else if msg == "" && seen && prev != "" {
-		m.event(Event{Kind: "todos.vars_valid", Store: id, Path: dir + "/" + varsFile})
+		m.event(Event{Kind: "todos.vars_valid", Store: store, Path: dir + "/" + varsFile})
 	}
 }
 
-// relTo is target written relative to dir when it is under dir's parent chain on the same tree (a
-// path the file can carry to another machine); otherwise target as it is.
+// reportRefused reports, once per distinct list, the names a KB's file gave absolute values.
+func (m *Manager) reportRefused(kb string, names []string) {
+	key := "abs:" + kb
+	msg := strings.Join(names, ", ")
+	m.mu.Lock()
+	if m.varsErr == nil {
+		m.varsErr = map[string]string{}
+	}
+	prev := m.varsErr[key]
+	m.varsErr[key] = msg
+	m.mu.Unlock()
+	if msg != "" && msg != prev {
+		m.event(Event{Kind: "todos.vars_refused", Path: kb + "/" + varsFile,
+			Detail: "absolute values are a machine's, not the KB's (set them with scope \"machine\"): " + msg})
+	}
+}
+
+// relTo is target relative to dir, the form a KB's file carries to another machine; target as it is
+// when no relative form exists.
 func relTo(dir, target string) string {
 	if rel, err := filepath.Rel(dir, target); err == nil && !filepath.IsAbs(rel) {
 		return filepath.ToSlash(rel)
@@ -550,29 +792,229 @@ func relTo(dir, target string) string {
 	return target
 }
 
-// recordProjectRoot writes the project a claim names (auto-core's legacy $WORKSPACE) into the
-// store's file as PROJECT_ROOT, relative to the store, unless the file already names one.
+// recordProjectRoot writes the project a claim names (AutoVim's legacy $WORKSPACE) into the store's
+// workspace's file as PROJECT_ROOT, relative to the KB root, unless the file already names one.
 func (m *Manager) recordProjectRoot(ctx context.Context, w where, project string) error {
-	return m.editStoreVars(ctx, w, func(sv *storeVars) error {
+	kb, err := m.owner(ctx, w.rec.ID)
+	if err != nil || kb == "" {
+		return err
+	}
+	m.varsMu.Lock()
+	defer m.varsMu.Unlock()
+	defer m.unfold(kb)
+	return m.editKBFile(ctx, kb, func(sv *storeVars) error {
 		if sv.Vars[VarProjectRoot] == "" && !slices.Contains(sv.Machine, VarProjectRoot) {
-			sv.Vars[VarProjectRoot] = relTo(w.rec.Path, project)
+			sv.Vars[VarProjectRoot] = relTo(kb, project)
 		}
 		return nil
 	})
 }
 
-// CarryKBRoots is ADR 1792015069 §2.7 step 1, run once as the daemon starts serving: the kb_root
-// older clients recorded on a claimed store's routes moves into the store's file when the routes
-// agree on it and the store's location derives something else (or nothing); then the routes' values
-// are cleared, so a route never carries one again. Routes that disagree are reported, and nothing of
-// that store is written or cleared: the user decides.
-func (m *Manager) CarryKBRoots(ctx context.Context) {
+// THE MIGRATION (ADR 1792132105 §2.7)
+
+// unfold makes the next read of kb's variables fold its stores' files again.
+func (m *Manager) unfold(kb string) {
+	m.mu.Lock()
+	delete(m.folded, kb)
+	m.mu.Unlock()
+}
+
+// fold carries the variables of kb's stores (each store's old file, and this machine's old per-store
+// values) into kb's: a relative value, rebased to the KB root, into the KB's file; an absolute value
+// into this machine's row, its name declared machine-only in the KB's file. Only when every value has
+// a destination is a store's file renamed. A name two sources set differently is a conflict: nothing
+// is carried, every file stays, and the conflicting names are returned, unresolved below this
+// machine's row until a KB-file value or a machine-only declaration settles them.
+func (m *Manager) fold(ctx context.Context, kb string) map[string]bool {
+	m.mu.Lock()
+	done := m.folded[kb]
+	m.mu.Unlock()
+	if done {
+		return nil
+	}
+	// one fold or set_var at a time: a fold's KB-file write and rows never interleave with a verb's
+	m.varsMu.Lock()
+	defer m.varsMu.Unlock()
 	st, err := m.j.Settings(ctx)
 	if err != nil {
-		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_carry.failed"})
+		return nil
+	}
+	type source struct {
+		id, dir string
+		file    storeVars
+		hasFile bool
+		machine map[string]string
+	}
+	var srcs []source
+	blocked := false
+	for _, id := range slices.Sorted(maps.Keys(st.Stores)) {
+		rec := st.Stores[id]
+		if rec.KB != kb {
+			continue
+		}
+		sv, ok, err := m.readVarsFile(ctx, rec.Path)
+		if err != nil {
+			m.reportVarsFile(id, rec.Path, err)
+			blocked = true // a refused store file is mended by hand first: nothing of it is lost
+			continue
+		}
+		if ok || len(st.MachineVars[id]) > 0 {
+			srcs = append(srcs, source{id: id, dir: rec.Path, file: sv, hasFile: ok, machine: st.MachineVars[id]})
+		}
+	}
+	if len(srcs) == 0 {
+		if !blocked {
+			m.mu.Lock()
+			if m.folded == nil {
+				m.folded = map[string]bool{}
+			}
+			m.folded[kb] = true
+			m.mu.Unlock()
+		}
+		return nil
+	}
+	kbFile, _, err := m.readVarsFile(ctx, kb)
+	if err != nil {
+		m.reportVarsFile("kb:"+kb, kb, err)
+		return nil // the KB's file is mended first; the stores' files wait
+	}
+	settled := func(n string) bool { _, ok := kbFile.Vars[n]; return ok || slices.Contains(kbFile.Machine, n) }
+	portable := map[string]map[string]bool{} // a name's values for the KB's file, relative to kb
+	rows := map[string]map[string]bool{}     // a name's values for this machine's row
+	machineOnly := map[string]bool{}
+	add := func(to map[string]map[string]bool, n, v string) {
+		if to[n] == nil {
+			to[n] = map[string]bool{}
+		}
+		to[n][v] = true
+	}
+	for _, s := range srcs {
+		for n, v := range s.file.Vars {
+			switch {
+			case strings.HasPrefix(v, "$"):
+				add(portable, n, v) // a value under another variable stays as written
+			case isAbsValue(v):
+				add(rows, n, m.absValue(kb, v))
+				machineOnly[n] = true
+			default:
+				add(portable, n, relTo(kb, path.Join(s.dir, v)))
+			}
+		}
+		for _, n := range s.file.Machine {
+			machineOnly[n] = true
+		}
+		for n, v := range s.machine {
+			add(rows, n, v)
+		}
+	}
+	conflict := map[string]bool{}
+	for n, vals := range portable {
+		if !settled(n) && (len(vals) > 1 || machineOnly[n]) {
+			conflict[n] = true
+		}
+	}
+	for n, vals := range rows {
+		if st.WorkspaceVars[kb][n] == "" && len(vals) > 1 {
+			conflict[n] = true
+		}
+	}
+	if len(conflict) > 0 {
+		key := "conflict:" + kb
+		msg := strings.Join(slices.Sorted(maps.Keys(conflict)), ", ")
+		m.mu.Lock()
+		if m.varsErr == nil {
+			m.varsErr = map[string]string{}
+		}
+		prev := m.varsErr[key]
+		m.varsErr[key] = msg
+		m.mu.Unlock()
+		if msg != prev {
+			m.event(Event{Kind: "todos.vars_conflict", Path: kb + "/" + varsFile, Detail: "stores of this workspace set " + msg +
+				" differently: set each in the KB's file (scope kb) or declare it machine-only (scope machine, machine_only)"})
+		}
+		return conflict
+	}
+	err = m.editKBFile(ctx, kb, func(sv *storeVars) error {
+		for n, vals := range portable {
+			if !settled(n) {
+				for v := range vals {
+					sv.Vars[n] = v
+				}
+			}
+		}
+		for n := range machineOnly {
+			if !settled(n) && sv.Vars[n] == "" && !slices.Contains(sv.Machine, n) {
+				sv.Machine = append(sv.Machine, n)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed", "kb": kb})
+		return nil
+	}
+	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
+		if s.WorkspaceVars == nil {
+			s.WorkspaceVars = map[string]map[string]string{}
+		}
+		vals := maps.Clone(s.WorkspaceVars[kb])
+		if vals == nil {
+			vals = map[string]string{}
+		}
+		for n, vs := range rows {
+			if vals[n] == "" {
+				for v := range vs {
+					vals[n] = v
+				}
+			}
+		}
+		if len(vals) > 0 {
+			s.WorkspaceVars[kb] = vals
+		}
+		for _, src := range srcs {
+			delete(s.MachineVars, src.id)
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed", "kb": kb})
+		return nil
+	}
+	for _, s := range srcs {
+		if !s.hasFile {
+			continue
+		}
+		if err := m.retire(ctx, s.dir); err != nil {
+			logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed", "store": s.id})
+			return nil // the next read folds again: the carried values are settled now, so only the rename is left
+		}
+		m.event(Event{Kind: "todos.vars_migrated", Store: s.id, Path: s.dir + "/" + varsFile,
+			Detail: "carried into " + kb + "/" + varsFile + " and this machine's rows; renamed " + varsFile + migratedSuffix})
+	}
+	m.storesChanged()
+	return nil
+}
+
+// retire renames a store's carried variable file, so it is never read again.
+func (m *Manager) retire(ctx context.Context, dir string) error {
+	fsys, _, err := m.disk.Open(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer fsys.Close()
+	return fsys.Rename(ctx, varsFile, varsFile+migratedSuffix)
+}
+
+// MigrateVars is ADR 1792132105 §2.7, run once as the daemon starts serving: every store's workspace
+// is recorded (the containing one; for a store outside every workspace, the workspace an older route's
+// kb_root named), the routes' kb_roots are cleared, and each workspace's stores are folded in.
+func (m *Manager) MigrateVars(ctx context.Context) {
+	st, err := m.j.Settings(ctx)
+	if err != nil {
+		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed"})
 		return
 	}
-	byStore := map[string][]string{} // a store's path: the roots that resolve to it with a kb_root
+	hint := map[string]string{} // a store's path: the workspace root an older route's kb_root named
 	for _, root := range slices.Sorted(maps.Keys(st.Roots)) {
 		rr := st.Roots[root]
 		if rr.KBRoot == "" {
@@ -582,63 +1024,51 @@ func (m *Manager) CarryKBRoots(ctx context.Context) {
 		if sp == "" {
 			sp = root + "/" + todoDir
 		}
-		byStore[sp] = append(byStore[sp], root)
+		if m.nameOf(path.Clean(rr.KBRoot)) != "" {
+			hint[sp] = path.Clean(rr.KBRoot)
+		}
 	}
+	kbs := map[string]bool{}
 	for _, id := range slices.Sorted(maps.Keys(st.Stores)) {
+		if ctx.Err() != nil {
+			return
+		}
 		rec := st.Stores[id]
-		roots := byStore[rec.Path]
-		if len(roots) == 0 || !rec.Claimed || ctx.Err() != nil {
-			continue
-		}
-		vals := map[string]bool{}
-		for _, r := range roots {
-			vals[st.Roots[r].KBRoot] = true
-		}
-		if len(vals) > 1 {
-			m.event(Event{Kind: "todos.vars_carry_conflict", Store: id, Path: rec.Path,
-				Detail: "routes " + strings.Join(roots, ", ") + " name different kb_roots: " + strings.Join(slices.Sorted(maps.Keys(vals)), ", ")})
-			continue
-		}
-		kb := st.Roots[roots[0]].KBRoot
-		w, err := m.whereOf(ctx, st, rec)
+		kb, err := m.owner(ctx, id)
 		if err != nil {
-			logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_carry.failed", "store": id})
+			logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed", "store": id})
 			continue
 		}
-		l, err := m.layers(ctx, w)
-		if err != nil {
-			continue
-		}
-		switch {
-		case l.fileErr != nil:
-			// the file cannot take it: the routes keep their kb_root until the file is mended, and
-			// the next start carries it
-			m.event(Event{Kind: "todos.vars_carry_blocked", Store: id, Path: rec.Path,
-				Detail: "kb_root " + kb + " kept on the routes: " + l.fileErr.Error()})
-			continue
-		case l.file.Vars[VarKBRoot] != "" || kb == l.derived[VarKBRoot]:
-			// the store's file already names a KB_ROOT, or its place derives this one
-		default:
-			err := m.editStoreVars(ctx, w, func(sv *storeVars) error {
-				sv.Vars[VarKBRoot] = relTo(rec.Path, kb)
+		if kb == "" && hint[rec.Path] != "" {
+			kb = hint[rec.Path]
+			err := m.j.UpdateSettings(ctx, func(s *Settings) error {
+				if r, ok := s.Stores[id]; ok && r.KB == "" {
+					r.KB = kb
+					s.Stores[id] = r
+				}
 				return nil
 			})
 			if err != nil {
-				logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_carry.failed", "store": id})
 				continue
 			}
-			m.event(Event{Kind: "todos.vars_carried", Store: id, Path: rec.Path, Detail: "KB_ROOT = " + kb})
 		}
-		err = m.j.UpdateSettings(ctx, func(s *Settings) error {
-			for _, r := range roots {
-				rr := s.Roots[r]
+		if kb != "" {
+			kbs[kb] = true
+		}
+	}
+	err = m.j.UpdateSettings(ctx, func(s *Settings) error {
+		for root, rr := range s.Roots {
+			if rr.KBRoot != "" {
 				rr.KBRoot = ""
-				setRoot(s, rr)
+				s.Roots[root] = rr
 			}
-			return nil
-		})
-		if err != nil {
-			logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_carry.failed", "store": id})
 		}
+		return nil
+	})
+	if err != nil {
+		logger.Warning(m.o.log, err, logger.Fields{"event": "todos.vars_migrate.failed"})
+	}
+	for _, kb := range slices.Sorted(maps.Keys(kbs)) {
+		m.fold(ctx, kb)
 	}
 }

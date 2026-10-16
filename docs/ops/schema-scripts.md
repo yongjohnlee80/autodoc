@@ -84,10 +84,11 @@ A new workspace-owned table follows the same rule.
 | `index_job` | a file waiting to be indexed | `(workspace_id, path)` |
 | `change` | a change-log entry a client follows by cursor | `(workspace_id, seq)` |
 | `event` | a configuration or lifecycle change, daemon-wide, with the client that made it; the last 1000 kept (000009) | `seq` |
-| `todo_store` | a todo store, by its stable id: its path now, and its claim (000017); its daily refresh's last run (000019) | `id` |
+| `todo_store` | a todo store, by its stable id: its path now, and its claim (000017); its daily refresh's last run (000019); `kb`, the root of the workspace it belongs to, recorded once (000023, ADR 1792132105) | `id` |
 | `todo_root` | a project root the todo system knows: its store override and registration (000017); its `kb_root`, an older client's, carried into its store's variable file once and cleared (ADR 1792015069) | `root` |
 | `todo_var` | a user's global todo ref variable (000017) | `name` |
-| `todo_store_var` | a todo store's variable on this machine: a machine-only name's value, or an override (000020, ADR 1792015069) | `(store, name)` |
+| `todo_store_var` | a todo store's variable on this machine: a machine-only name's value, or an override (000020, ADR 1792015069); read once more by the migration into `todo_workspace_var` | `(store, name)` |
+| `todo_workspace_var` | a workspace's variable on this machine, keyed by the workspace's root: an absolute path that never travels (000023, ADR 1792132105) | `(kb, name)` |
 | `todo_change` | a todo store's change-log row: pending, staged or committed; `seq` rises across every store (000017) | `seq` |
 | `todo_snapshot` | a task file as the daemon last saw it, with its per-field digests (000017) | `(store, path)` |
 | `todo_consumer` | a reader of a todo store's change log and the seq it acknowledged (000017); the cursor of the resync it was last answered (000018) | `(store, name)` |

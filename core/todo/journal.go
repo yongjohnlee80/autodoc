@@ -73,9 +73,12 @@ type Settings struct {
 	Stores map[string]StoreRecord // by store id
 	Roots  map[string]RootRecord  // by canonical root
 	Vars   map[string]string      // the global user vars
-	// MachineVars are this machine's per-store values (todos.set_var, scope "machine"), by store id
-	// then name: what differs on one machine and must not travel with the store's file.
+	// MachineVars are this machine's per-store values (ADR 1792015069), by store id then name. Since
+	// ADR 1792132105 they are only read, once, by the migration that folds them into WorkspaceVars.
 	MachineVars map[string]map[string]string
+	// WorkspaceVars are this machine's values for a workspace's variables (ADR 1792132105 §2.3), by
+	// the workspace's root then name: absolute paths that never travel.
+	WorkspaceVars map[string]map[string]string
 }
 
 // StoreRecord is a store: a stable id given the first time a root resolves to it, and its
@@ -87,6 +90,9 @@ type StoreRecord struct {
 	ClaimedAt   time.Time
 	LastUse     time.Time
 	RefreshedAt time.Time // the daily refresh's last run (RefreshDue); zero for never
+	// KB is the root of the workspace the store belongs to (ADR 1792132105 §2.4), recorded once: the
+	// workspace containing it, or the one todos.set_kb named. "" until recorded.
+	KB string
 }
 
 // RootRecord is a project root the daemon knows: one registered with Register, one whose store

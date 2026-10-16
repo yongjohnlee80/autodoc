@@ -73,7 +73,7 @@ func (s scope) legacyRef(p, legacy string) (string, bool) {
 		return "", false
 	}
 	rest = strings.TrimLeft(rest, "/")
-	if s.workspace != "" && s.exists(joinPath(s.workspace, rest)) {
+	if s.storeHome != "" && s.exists(joinPath(s.storeHome, rest)) {
 		return "", false
 	}
 	abs := joinPath(legacy, rest)

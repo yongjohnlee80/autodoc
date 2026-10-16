@@ -79,7 +79,10 @@ import (
 // relations, and a todo task's external links (graph.links' external), which a session below 23
 // does not see, its graph unchanged. Every session gets a todo store's tasks indexed graph-only: out
 // of search, in the graph.
-const Protocol int64 = 23
+// Protocol 24 is ADR 1792132105: variables belong to the workspace. It adds workspace.vars,
+// workspace.set_var, workspace.of and todos.set_kb, and a variable's conflict; a session below 24
+// reads a KB-file value's source as "store", as before.
+const Protocol int64 = 24
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
