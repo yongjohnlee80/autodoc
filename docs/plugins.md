@@ -364,6 +364,31 @@ do in AutoDoc is there to read before it is installed.
   dropped the same way.
 - A Lua command run by a call edits the note in the editor, as it does from a key.
 
+#### `buffer.new`: a draft for the user to edit
+
+`buffer.new` opens a new buffer, in a tab of its own, and shows it: an unsaved draft holding the
+plugin's text, the cursor at its start. A database plugin opens a query for the user to run this
+way, a `SELECT … LIMIT 100;` on the table chosen. Its manifest lists it, `calls = ["buffer.new"]`,
+and the plugin calls:
+
+```go
+ok, err := p.peer.Call("buffer.new", "public.users.sql", "SELECT *\nFROM public.users\nLIMIT 100;\n")
+```
+
+- **Its args are `[name, text]`**, both optional.
+  - `name` is the draft's suggested name, `public.users.sql`. Its tab and the status line show it,
+    the page reads as a file of that name would (a `.sql` draft has SQL's syntax and no Rendered
+    view; with no name, the draft is Markdown), and the save picker starts with it.
+  - It is a name, not a path: one with `/`, `\` or `..` fails, and nothing opens.
+- **Nothing is written.** The draft is unsaved, like text typed into an empty page: closing it and
+  quitting ask about it, an exit nobody chose keeps it for recovery, and only Ctrl+S, through the
+  picker, writes a file. A name that is an open file's opens a draft of its own: that file's
+  buffer and the disk are untouched.
+- **The text is at most 256 KiB**; more fails (`failed buffer.new: the text is 300 KiB; at most
+  256 KiB`), and nothing opens.
+- **An AutoDoc without it answers `unknown buffer.new`**, so a plugin can tell its user to update
+  AutoDoc.
+
 ## The SDK, in Go
 
 ```go

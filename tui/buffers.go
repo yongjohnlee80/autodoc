@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -56,6 +57,40 @@ func (h *Host) newBuffer() *openBuffer {
 	b.file.gen = 1
 	h.buffers = append(h.buffers, b)
 	return b
+}
+
+// newBufferMax is the most text buffer.new takes, in bytes: a scaffold to start from, not a document
+// to carry.
+const newBufferMax = 256 << 10
+
+// newBufferWith is buffer.new: a new buffer, shown, whatever the page shown is: an untitled draft
+// holding text, modified when it holds any, the cursor at its start. name, when given, is the
+// draft's hint: what it is called and read as ("public.users.sql" is SQL), and what Ctrl+S's
+// picker starts with. Nothing is written: only that save names a path, and every other buffer
+// keeps its text. A name with a path in it, or text past newBufferMax, is refused, and no buffer
+// is added.
+func (h *Host) newBufferWith(name, text string) error {
+	name = strings.TrimSpace(name)
+	if strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+		return fmt.Errorf("buffer.new: %q is a name, not a path: no /, \\ or ..", name)
+	}
+	if len(text) > newBufferMax {
+		return fmt.Errorf("buffer.new: the text is %d KiB; at most %d KiB", (len(text)+1023)>>10, newBufferMax>>10)
+	}
+	b := h.newBuffer()
+	b.file.hint = name
+	h.activate(b) // readPage reads the hint
+	if text != "" {
+		// an edit, as typing is: the editor's textChanged marks the draft modified (edited), and
+		// the editor's own :x sees it so
+		if _, err := h.core.Replace(widget.TextRange{}, text); err != nil {
+			h.dropBuffer(b)
+			return fmt.Errorf("buffer.new: %w", err)
+		}
+		h.core.SetLine(0, 0)
+	}
+	h.keep(h.p.Call("editor", "forceActiveFocus"))
+	return nil
 }
 
 // bufferOf is the open buffer of ref's file, or nil.

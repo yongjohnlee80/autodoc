@@ -541,7 +541,12 @@ error. A plugin's command (`plugin.…`) is never Lua's to run.
 ```lua
 local ok, err = autodoc.run("todos.open")
 local ok, err = autodoc.run("lua.upper", "3")
+local ok, err = autodoc.run("buffer.new", "q.sql", "SELECT 1;\n") -- a new buffer: an unsaved draft named q.sql
 ```
+
+`buffer.new [name] [text]` has no `:` name: it opens a new buffer holding the text, an unsaved
+draft that the save picker names. `name` is the draft's suggested name and how it reads (`q.sql` is
+SQL), never a path; nothing is written until Ctrl+S ([docs/plugins.md](docs/plugins.md#buffernew-a-draft-for-the-user-to-edit)).
 
 Help › Tutorial… walks through it all, ending with a worked `:todo` command. Its pages are
 in [`tui/tutorial/`](tui/tutorial/): 07 to 09 are the scripting ones.

@@ -61,8 +61,8 @@ func (h *Host) syncBufferTabs() {
 
 // bufferTabLabel is b's tab within w cells, its padding not counted (0: whole), told apart from
 // every other buffer's: its file's name; its path where another buffer's file has that name; its
-// workspace and path where another's has that path (in another workspace); untitled, with its number
-// while there is more than one draft. [+] while modified. A name longer than w is cut in its middle,
+// workspace and path where another's has that path (in another workspace); a draft's hint
+// (buffer.new's), or untitled, with its number while another draft has that name. [+] while modified. A name longer than w is cut in its middle,
 // its start (the workspace, the folder) and its end (the file's name and kind) kept, and [+] after
 // it; two cut alike take their buffer's number, so the tabs drawn still tell every buffer apart.
 func (h *Host) bufferTabLabel(b *openBuffer, w int) string {
@@ -135,10 +135,11 @@ func (h *Host) bufferTabName(b *openBuffer) string {
 		return slices.ContainsFunc(h.buffers, func(o *openBuffer) bool { return o != b && match(o) })
 	}
 	if !b.file.open {
-		if other(func(o *openBuffer) bool { return !o.file.open }) {
-			return untitled + " " + strconv.Itoa(b.n)
+		name := b.file.name() // its hint, or untitled
+		if other(func(o *openBuffer) bool { return !o.file.open && o.file.name() == name }) {
+			return name + " " + strconv.Itoa(b.n)
 		}
-		return untitled
+		return name
 	}
 	base := path.Base(b.file.path)
 	if !other(func(o *openBuffer) bool { return o.file.open && path.Base(o.file.path) == base }) {

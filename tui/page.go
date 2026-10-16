@@ -171,11 +171,14 @@ func (h *Host) takePage() Page {
 	return p
 }
 
-// pageKind is how the page's text is read: the draft and a derived document's text as Markdown, a
-// file opened raw (an HTML file's own bytes) as plain text, the rest by the daemon's registrations.
+// pageKind is how the page's text is read: a derived document's text as Markdown, a file opened
+// raw (an HTML file's own bytes) as plain text, the rest by the daemon's registrations, a draft by
+// its hint (Markdown with none).
 func (h *Host) pageKind() kind.Kind {
 	switch {
-	case !h.file.open, h.file.derived != "":
+	case !h.file.open:
+		return h.resolver().Of(h.file.hint) // "" is Markdown
+	case h.file.derived != "":
 		return kind.Markdown
 	case h.file.raw:
 		return kind.Text

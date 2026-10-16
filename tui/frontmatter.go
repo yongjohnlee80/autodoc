@@ -74,7 +74,12 @@ func (h *Host) validateSoon(wait time.Duration) {
 func (h *Host) validateNow(tk Ticket) {
 	p := h.file.path
 	if !h.file.open {
-		p = untitled + ".md"
+		// a draft's hint says its kind: a .sql draft has no frontmatter; a Markdown one is checked as
+		// the draft always was
+		p = h.file.hint
+		if h.resolver().Of(p).Traits().Frontmatter {
+			p = untitled + ".md"
+		}
 	}
 	if h.ws == "" || h.file.outside() || !h.resolver().Of(p).Traits().Frontmatter {
 		h.showDiagnostics(nil)
