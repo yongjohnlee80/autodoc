@@ -636,6 +636,8 @@ func (m *Workspaces) Add(ctx context.Context, c workspace.Spec) (rpc.Workspace, 
 	m.mu.Unlock()
 	m.queue.start()
 	m.queue.wakeWorkspace(c.Name)
+	// a new workspace can own todo stores and has variables: the registry the modes read is read again
+	m.TodoStoresChanged()
 	return s.view, nil
 }
 
@@ -683,7 +685,9 @@ func (m *Workspaces) renameServed(name, to string, s *served) {
 
 // Remove stops serving a workspace, then deletes it and, by the schema's cascade, its index, in
 // one transaction. Its files are not touched. A delete that fails (the request cancelled, the
-// store's write refused) leaves the workspace as it was: stored, and served again.
+// store's write refused) leaves the workspace as it was: stored, and served again. Once it is gone,
+// the todo registry is read again: a store recorded to it now belongs to the workspace containing
+// it, or to none (ADR 1792132105 §2.4), and the other workspaces' documents re-resolve with that.
 func (m *Workspaces) Remove(ctx context.Context, name string) error {
 	m.chg.Lock()
 	defer m.chg.Unlock()
@@ -715,6 +719,7 @@ func (m *Workspaces) Remove(ctx context.Context, name string) error {
 			delete(m.schemas, s.id)
 		}
 		delete(m.texts, s.id)
+		m.TodoStoresChanged()
 	}
 	return err
 }

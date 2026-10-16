@@ -109,6 +109,42 @@ func TestADocumentsVariablesAreItsWorkspaces(t *testing.T) {
 	}
 }
 
+// TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry (ADR 1792132105 §2.4): a store recorded to a
+// workspace belongs to it while it is served and to none once Workspaces.Remove takes it, and the
+// modes' cached registry follows both changes with no other wake: Remove and Add read it again.
+func TestAddingOrRemovingAWorkspaceRereadsTheTodoRegistry(t *testing.T) {
+	m, _ := open(t)
+	root, out := t.TempDir(), t.TempDir()
+	task := filepath.Join(out, "tasks", "open", "t.md")
+	// the todo system's answer: the store outside every workspace is linked to root's, which owns it
+	// and has variables only while it is served
+	reg := func(context.Context) (TodoRegistry, error) {
+		r := TodoRegistry{Vars: map[string]map[string]string{"": {"HOME": "/h"}}}
+		kb := ""
+		for _, w := range m.List() {
+			r.Vars[w.Root()] = map[string]string{"KB_ROOT": w.Root()}
+			if w.Root() == root {
+				kb = root
+			}
+		}
+		r.Stores = []TodoStore{{ID: "S", Dir: filepath.Join(out, "tasks"), KB: kb}}
+		return r, nil
+	}
+	m.SetTodoStores(reg)
+	kbRoot := func() string { _, vars := m.storeAt(task); return vars.Get("KB_ROOT") }
+	if got := kbRoot(); got != "" {
+		t.Fatalf("before the workspace exists: KB_ROOT %q", got)
+	}
+	if _, err := m.Add(context.Background(), workspace.Spec{Name: "kb", Root: root}); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "Add reads the registry again: the store's workspace is served", func() bool { return kbRoot() == root })
+	if err := m.Remove(context.Background(), "kb"); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "Remove reads the registry again: the store belongs to none", func() bool { return kbRoot() == "" })
+}
+
 // TestAVariableChangeReindexesWithoutAnEdit (ADR 1792132105 §2.5): a note's $NAME relation resolves
 // through its workspace's variables, and a change to them re-resolves it, the note unchanged: one
 // the todo system says, and an edit to a variable file it names, which no call says.
