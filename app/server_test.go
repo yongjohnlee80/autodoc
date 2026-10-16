@@ -239,6 +239,32 @@ func (f *serverFixture) locks() string {
 	return f.scalar(`SELECT count(*)::text ` + ownLocks)
 }
 
+// locksReleased fails unless the fixture's database holds no advisory lock within the bound, and
+// then says who holds them. The server has closed its own sessions by the time run returns, but
+// Postgres lets a session's advisory locks go as its backend finishes exiting, after the client has
+// gone: a read straight after could see the lock still granted to a dying backend.
+func (f *serverFixture) locksReleased(when string) {
+	f.t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for f.locks() != "0" {
+		if time.Now().After(deadline) {
+			f.t.Errorf("%s advisory locks held 15 s %s: %s", f.locks(), when, f.lockHolders())
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// lockHolders are the backends holding the fixture database's advisory locks, each with its state,
+// type, start and last query: a live session (a lock never released) reads apart from a dying one.
+func (f *serverFixture) lockHolders() string {
+	return f.scalar(`SELECT coalesce(string_agg(l.pid::text || ' ' || coalesce(a.backend_type, '?') || ' ' ||
+		coalesce(a.state, '?') || ' since ' || coalesce(a.backend_start::text, '?') || ' query ' ||
+		left(regexp_replace(coalesce(a.query, ''), '\s+', ' ', 'g'), 80), '; '), 'none')
+		FROM pg_locks l LEFT JOIN pg_stat_activity a ON a.pid = l.pid
+		WHERE l.locktype = 'advisory' AND l.granted AND l.database = (SELECT oid FROM pg_database WHERE datname = current_database())`)
+}
+
 func (f *serverFixture) waitFor(what string, cond func() bool) {
 	f.t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -418,9 +444,7 @@ func TestTheServerIndexesItsSourcesAndStopsInReverse(t *testing.T) {
 	if code := exitOf(t, done, stderr); code != 0 {
 		t.Fatalf("--server exited %d: %s", code, stderr)
 	}
-	if got := f.locks(); got != "0" {
-		t.Errorf("%s advisory locks held after the server stopped", got)
-	}
+	f.locksReleased("after the server stopped")
 	if !strings.Contains(stderr.String(), "serving enterprise search: 1 sources in schema "+f.schema) {
 		t.Errorf("the server said %s", stderr)
 	}
@@ -495,9 +519,7 @@ func TestSIGTERMStopsTheServer(t *testing.T) {
 		_ = cmd.Process.Kill()
 		t.Fatalf("--server did not stop on SIGTERM: %s", out.String())
 	}
-	if got := f.locks(); got != "0" {
-		t.Errorf("%s advisory locks held after SIGTERM", got)
-	}
+	f.locksReleased("after SIGTERM")
 }
 
 // The server embeds its tenant centrally: every distinct text gets a vector under the configured
