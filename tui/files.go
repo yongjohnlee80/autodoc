@@ -201,6 +201,8 @@ func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landi
 // openRefAs is openRef once an HTML file's way of opening is known: raw, or nil for a file that
 // is no question (load asks for one that is).
 func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, land *landing) {
+	force := h.forceNewBuffer // File › Open's choice asked for a buffer of its own (openPickerNewBuffer)
+	h.forceNewBuffer = false
 	open := func(prev *widget.JumpPos) {
 		if raw != nil {
 			h.loadAs(ref.ws, ref.path, prev, *raw, land)
@@ -248,8 +250,8 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 		h.keep(h.p.Call("editor", "forceActiveFocus"))
 		return
 	}
-	if h.file.open || h.file.dirty || h.core.Value() != "" {
-		h.activate(h.newBuffer()) // the page shown is a file or a draft with text: the file gets its own
+	if force || h.file.open || h.file.dirty || h.core.Value() != "" {
+		h.activate(h.newBuffer()) // the page shown is a file or a draft with text, or a new tab was asked for
 	}
 	open(prev)
 }
