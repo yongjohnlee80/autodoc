@@ -181,7 +181,7 @@ func pluginDeclares(m *manifest) string {
 		for i, c := range m.Commands {
 			cmds[i] = c.Title
 			if c.Key != "" {
-				cmds[i] += " (SPC p " + c.Key + ")"
+				cmds[i] += " (" + c.Key + " on its SPC p card)"
 			}
 		}
 		parts = append(parts, "commands: "+strings.Join(cmds, ", "))

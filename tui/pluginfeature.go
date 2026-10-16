@@ -28,10 +28,15 @@ type plugins struct {
 	pluginList []pluginEntry
 	pluginRows *tuidecl.ListModel
 	feedGen    int // numbers the document feed's pending send (pluginfeed.go)
-	// the SPC p card's letters: each command's, as bound (plugincmds.go)
-	pluginKeyRows    *tuidecl.ListModel
-	pluginKeyTargets map[string]string
-	running          map[string]*pluginRun
+	// SPC p: the chooser's plugins, its cursor, the plugin * asks a letter for and what it last said
+	// (pluginpick.go); then each plugin's card, and the one shown (plugincmds.go)
+	chooser     []pluginRow
+	chooserAt   int
+	chooserBind string
+	chooserNote string
+	pluginCards map[string]*pluginCard
+	cardPlugin  string
+	running     map[string]*pluginRun
 	// the catalog's plugin entries by id, and their letters as F1 names them (plugincmds.go)
 	pluginCmds    map[string]pluginCommandRef
 	pluginLetters map[string][]string
@@ -46,9 +51,8 @@ type plugins struct {
 
 func newPlugins(c pluginHost, opt Plugins) *plugins {
 	pl := &plugins{c: c, pluginOpt: opt,
-		pluginRows:    tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
-		pluginKeyRows: tuidecl.NewListModel("key", "target"),
-		running:       map[string]*pluginRun{}}
+		pluginRows: tuidecl.NewListModel("key", "kind", "label", "enabled", "target", "rows"),
+		running:    map[string]*pluginRun{}}
 	pl.managedPlugins = newRows(tuidecl.NewListModel("key", "name", "place", "commit", "source"), pl.managedPluginRowOf)
 	pl.results = &resultsTable{}
 	pl.results.model = newResultsModel(pl.results, pl.fetchRows)
@@ -62,8 +66,10 @@ func (pl *plugins) State() map[string]any {
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	return map[string]any{
 		"App.plugins":            pl.pluginRows,
-		"App.pluginKeys":         pl.pluginKeyRows,
-		"App.pluginKeysText":     "no plugin commands yet",
+		"App.pluginChooserText":  "",
+		"App.pluginChooserHelp":  chooserHelp,
+		"App.pluginKeysTitle":    "SPC p",
+		"App.pluginKeysText":     "",
 		"App.pluginUrl":          "",
 		"App.pluginRisk":         pluginRisk,
 		"App.pluginConfirmTitle": "",
@@ -83,6 +89,9 @@ func (pl *plugins) Commands() map[string]Command {
 		"App.openPlugin":         oneString("a plugin", pl.openPlugin),
 		"App.pluginEntry":        oneString("a plugin's menu row or letter", pl.pluginEntry),
 		"App.pluginKey":          oneString("a plugin command letter", pl.pluginKey),
+		"App.openPluginChooser":  none(pl.openPluginChooser),
+		"App.pluginChooserKey":   oneString("a key on the SPC p chooser", pl.pluginChooserKey),
+		"App.pluginCardBack":     none(pl.pluginCardBack),
 		"App.startAddPlugin":     none(pl.startAddPlugin),
 		"App.addPlugin":          oneString("a git URL", pl.addPlugin),
 		"App.pluginConfirmed":    none(pl.pluginConfirmed),
@@ -105,7 +114,7 @@ func (pl *plugins) Catalog() []Entry {
 	return []Entry{
 		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", pl.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
-		builtin("plugins.commands", "plugin commands", "pluginKeys.open()", func() { pl.c.Open("pluginKeys") }),
+		builtin("plugins.commands", "plugin commands: choose a plugin, then one of its commands", "App.openPluginChooser()", pl.openPluginChooser),
 		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
 		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),
 		builtin("results.copy", "results: copy selection (the selected cells, or the cursor's, as TSV)", "App.copyResults()", pl.copyResults),
@@ -135,14 +144,16 @@ func resultsPanelSpec() PanelSpec {
 		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }
 
-// Keys is SPC p, the plugin commands' card. The card is the plugins' own (views/PluginKeys.qml), its
-// letters theirs to bind (plugincmds.go), so it is not a key card of the catalog's: Cards is none.
+// Keys is SPC p, the plugins' chooser, then a plugin's card. Both are the plugins' own
+// (views/PluginChooser.qml, views/PluginKeys.qml), their letters the user's and the plugins'
+// (pluginpick.go, plugincmds.go), so neither is a key card of the catalog's: Cards is none.
 func (*plugins) Keys() []Key {
-	return []Key{{Card: leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "pluginKeys.open()", Group: groupWindow}}
+	return []Key{{Card: leader, Seq: "p", Show: "p", Does: "plugin commands", Run: "App.openPluginChooser()", Group: groupWindow}}
 }
 func (*plugins) Cards() []Card { return nil }
 
-// PreferencesChanged lays the SPC p letters out again: the user's choices are preferences; and the
+// PreferencesChanged lays the SPC p letters out again, the plugins' and their commands': the user's
+// choices are preferences; and the
 // results panel takes the size the user left it at.
 func (pl *plugins) PreferencesChanged() {
 	pl.refreshPlugins()
@@ -312,7 +323,7 @@ func (c core) SetPluginPref(name, value string) error {
 	}
 	c.h.setPref(name, value, func(p *prefs) {
 		// the maps are shared with the prefs in effect: written anew, never in place
-		p.pluginKeys, p.pluginPlace = maps.Clone(p.pluginKeys), maps.Clone(p.pluginPlace)
+		p.pluginKeys, p.pluginPlace, p.pluginLetter = maps.Clone(p.pluginKeys), maps.Clone(p.pluginPlace), maps.Clone(p.pluginLetter)
 		readPluginPref(p, name, value)
 	})
 	return nil
