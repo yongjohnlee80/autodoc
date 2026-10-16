@@ -446,7 +446,9 @@ func (pl *plugins) placePlugin(i int) {
 	next := places[(slices.Index(places, pl.placement(m.e))+1)%len(places)]
 	name := m.e.m.Name
 	pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+name+prefPluginPlace, next))
-	if r := pl.running[name]; r != nil {
+	if m.e.m.card() { // its panel goes to the edge, docked: the preference's change sets the edge
+		pl.c.DockPanel(cardPanelID(name))
+	} else if r := pl.running[name]; r != nil && r.float != nil {
 		r.float.SetAnchor(pluginAnchors[next])
 	}
 	pl.c.Set("App.pluginsHelp", fmt.Sprintf("%s: %s", m.e.label(), next))

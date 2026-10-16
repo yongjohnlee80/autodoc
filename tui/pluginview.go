@@ -59,29 +59,53 @@ func runStyle(s plugin.Style) (style.Style, int) {
 	return st.Bold(s.Bold).Italic(s.Italic).Underline(s.Underline), bad
 }
 
-// pluginView is the dialog's inside: the plugin's latest frame, and its keys.
+// pluginView is the dialog's inside: the plugin's latest frame, and its keys. A modal dialog's is
+// made with its run; a card's is its panel's PluginCard (pluginpanels.go), which shows each run of
+// its plugin in turn, and nothing while none runs.
 type pluginView struct {
 	widget.Base
-	run          *pluginRun
-	w, h         int  // the size the manifest asks for
-	fill         bool // the height is the float's share of the screen ("80%"): take all of it
-	sentW, sentH int  // the size last told to the plugin: plugin.open's, then each resize's
+	run          *pluginRun // nil: a card whose plugin is not running
+	pl           *plugins
+	card         string // the card plugin whose panel this is; "" for a modal dialog's
+	w, h         int    // the size the manifest asks for
+	fill         bool   // the height is the float's share of the screen ("80%"): take all of it
+	sentW, sentH int    // the size last told to the plugin: plugin.open's, then each resize's
 	laidW, laidH int
+	menu         *widget.EditorMenu // a card's right-click menu
 }
 
 var _ tuicore.Focusable = (*pluginView)(nil)
 
 func (v *pluginView) AcceptsFocus() bool { return true }
 
+// attach makes the view r's: a card's panel showing a run of its plugin.
+func (v *pluginView) attach(r *pluginRun) {
+	v.run, r.view = r, v
+	v.sentW, v.sentH = 0, 0
+	v.MarkDirty()
+}
+
+// detach leaves the view showing nothing, when it is r's.
+func (v *pluginView) detach(r *pluginRun) {
+	if v.run == r {
+		v.run = nil
+		v.MarkDirty()
+	}
+}
+
 // Layout is the manifest's size, within the screen's; the plugin is told a size it did not ask for.
+// A card fills its panel.
 func (v *pluginView) Layout(c tuicore.Constraints) tuicore.Size {
 	w := min(max(v.w, c.MinW), c.MaxW)
 	h := min(max(v.h, c.MinH), c.MaxH)
-	if v.fill {
+	if v.fill || v.card != "" && c.MaxH != tuicore.Unbounded {
 		h = c.MaxH
 	}
+	if v.card != "" && c.MaxW != tuicore.Unbounded {
+		w = c.MaxW
+	}
 	v.laidW, v.laidH = w, h
-	if ctx := v.Context(); ctx != nil && (!v.run.opened || w != v.sentW || h != v.sentH) {
+	if ctx := v.Context(); ctx != nil && v.run != nil && (!v.run.opened || w != v.sentW || h != v.sentH) {
 		ctx.AfterLayout("plugin-resize", v.resized) // Layout itself sends nothing
 	}
 	return tuicore.Size{W: w, H: h}
@@ -90,11 +114,15 @@ func (v *pluginView) Layout(c tuicore.Constraints) tuicore.Size {
 // resized follows a layout: the first opens the plugin at the laid size, a later one that changed
 // it is plugin.resize.
 func (v *pluginView) resized() {
-	if !v.run.opened {
+	r := v.run
+	if r == nil {
+		return
+	}
+	if !r.opened {
 		v.sentW, v.sentH = v.laidW, v.laidH
-		v.run.openAt(v.laidW, v.laidH)
-		if v.run.focusOnOpen {
-			v.run.focusOnOpen = false
+		r.openAt(v.laidW, v.laidH)
+		if r.focusOnOpen {
+			r.focusOnOpen = false
 			v.RequestFocus()
 		}
 		return
@@ -103,13 +131,16 @@ func (v *pluginView) resized() {
 		return
 	}
 	v.sentW, v.sentH = v.laidW, v.laidH
-	v.run.send(plugin.MethodResize, plugin.ResizeParams(v.laidW, v.laidH))
+	r.send(plugin.MethodResize, plugin.ResizeParams(v.laidW, v.laidH))
 }
 
 func (v *pluginView) Render(s tuicore.Surface) {
 	sz := s.Size()
 	base := style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)
 	s.Fill(tuicore.Rect{W: sz.W, H: sz.H}, " ", base)
+	if v.run == nil {
+		return
+	}
 	v.run.mu.Lock()
 	frame := v.run.frame
 	v.run.mu.Unlock()
@@ -138,13 +169,25 @@ func (v *pluginView) RequestFocus() {
 	}
 }
 
-// HandleEvent: Esc closes a dialog, or gives a card's keys back to the editor; every other key is
-// the plugin's. A card is told when it takes the keys (a click, or its command) and gives them back.
+// HandleEvent: Esc closes a dialog, or leaves a card's panel to close it (its Drawer's Esc); every
+// other key is the plugin's, q included: a card's q is the plugin's to give, through host.close. A
+// card is told when it takes the keys (a click, or its command) and gives them back, and a right
+// press on it opens its menu.
 func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
+	r := v.run
+	if m, ok := ev.(tuicore.MouseEvent); ok {
+		if v.card != "" && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
+			return v.openMenu(tuicore.Point{X: m.X, Y: m.Y})
+		}
+		return false
+	}
+	if r == nil {
+		return false
+	}
 	if f, ok := ev.(tuicore.FocusEvent); ok {
-		if !f.Terminal && !v.run.e.m.modal() && f.Gained != v.run.focused && !v.run.closing {
-			v.run.focused = f.Gained
-			v.run.send(plugin.MethodFocus, plugin.FocusParams(f.Gained))
+		if !f.Terminal && !r.e.m.modal() && f.Gained != r.focused && !r.closing {
+			r.focused = f.Gained
+			r.send(plugin.MethodFocus, plugin.FocusParams(f.Gained))
 		}
 		return false
 	}
@@ -153,22 +196,45 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		return false
 	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
-		if !v.run.e.m.modal() {
-			// the card stays open; the editor has the keys again (ADR 1791268009 §2.2)
-			v.run.pl.c.Keep(v.run.pl.c.View("editor", "forceActiveFocus"))
-			return true
+		if !r.e.m.modal() {
+			return false // the panel's Drawer closes on it: the card hides, its plugin runs on
 		}
-		if v.run.e.m.Dialog.Esc == "hide" {
-			v.run.hide()
+		if r.e.m.Dialog.Esc == "hide" {
+			r.hide()
 		} else {
-			v.run.close("")
+			r.close("")
 		}
 		return true
 	}
 	if k, ok := pluginKey(e); ok {
-		v.run.send(plugin.MethodKey, plugin.KeyParams(k))
+		r.send(plugin.MethodKey, plugin.KeyParams(k))
 	}
 	return true
+}
+
+// openMenu is a card's right-click menu, at a point in the card: Close (Esc), which closes its
+// panel as Esc does.
+func (v *pluginView) openMenu(at tuicore.Point) bool {
+	if v.menu == nil {
+		v.menu = widget.NewEditorMenu(v, nil)
+		v.menu.SetEnabled(true)
+		v.menu.SetRows(func() []widget.MenuItemModel {
+			return []widget.MenuItemModel{menuCommand("plugin.card.close", "&Close (Esc)",
+				widget.CoreMenuAction{ID: "plugin.card.close", Run: func(*widget.EditorCore) { v.closePanel() }})}
+		})
+	}
+	return v.menu.OpenAt(at)
+}
+
+// closePanel closes the card's panel: the card hides, its plugin runs on.
+func (v *pluginView) closePanel() {
+	if v.pl == nil || v.card == "" {
+		return
+	}
+	id := cardPanelID(v.card)
+	if v.pl.c.PanelOpen(id) {
+		v.pl.c.Keep(v.pl.c.View(id, "close"))
+	}
 }
 
 var pluginKeyNames = map[rune]string{

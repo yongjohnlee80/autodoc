@@ -56,7 +56,10 @@ func (pl *plugins) openPlugin(key string) {
 		return
 	}
 	pl.running[key] = r
-	pl.refreshPlugins() // a card shown takes no keys: a click or its command focuses it (§2.2)
+	pl.refreshPlugins()
+	if e.m.card() {
+		pl.showCard(r, false) // a card shown takes no keys: a click or its command focuses it (§2.2)
+	}
 }
 
 // pluginTheme is the theme a plugin is sent: the one the screen wears.

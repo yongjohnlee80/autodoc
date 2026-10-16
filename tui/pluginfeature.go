@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/golib/errs"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -48,6 +49,10 @@ type plugins struct {
 	// the results panel's table, a plugin's (plugintable.go), and its CSV export while one runs
 	results *resultsTable
 	export  *resultsExport
+	// the card plugins' panels, by name and in order, fixed when the program is built
+	// (pluginpanels.go); nil until then
+	cards     map[string]*cardPanel
+	cardOrder []*cardPanel
 }
 
 func newPlugins(c pluginHost, opt Plugins) *plugins {
@@ -65,7 +70,7 @@ func (*plugins) Name() string { return "plugins" }
 
 func (pl *plugins) State() map[string]any {
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
-	return map[string]any{
+	st := map[string]any{
 		"App.plugins":            pl.pluginRows,
 		"App.pluginChooserTitle": "SPC p — plugins",
 		"App.pluginChooserText":  "",
@@ -82,6 +87,8 @@ func (pl *plugins) State() map[string]any {
 		"App.resultsSize":        size,
 		"App.resultsLength":      length,
 	}
+	maps.Copy(st, pl.cardState())
+	return st
 }
 
 func (pl *plugins) Commands() map[string]Command {
@@ -122,7 +129,8 @@ func (pl *plugins) Catalog() []Entry {
 }
 
 // Panels is the results panel: a plugin's table (plugintable.go), at the bottom unless moved. Its
-// closing lets the table go, and the keyboard goes back to the page.
+// closing lets the table go, and the keyboard goes back to the page. Then a panel for each card
+// plugin (pluginpanels.go).
 func (pl *plugins) Panels() []PanelSpec {
 	s := resultsPanelSpec()
 	s.Opened = func(c PanelHost) { c.Set("App.resultsShown", true) }
@@ -131,7 +139,7 @@ func (pl *plugins) Panels() []PanelSpec {
 		pl.resultsClosed()
 		c.Keep(c.RestoreKeyboardPane("editor"))
 	}
-	return []PanelSpec{s}
+	return append([]PanelSpec{s}, pl.cardSpecs()...)
 }
 
 // resultsPanelSpec is the results panel: at the bottom, 35% of the window tall and its full width
@@ -158,6 +166,7 @@ func (pl *plugins) PreferencesChanged() {
 	size, length := pl.c.Prefs().panelGeometry(resultsPanel, "bottom")
 	pl.c.Set("App.resultsSize", size)
 	pl.c.Set("App.resultsLength", length)
+	pl.syncCards()
 }
 
 // ThemeChanged tells the running plugins the theme the screen now wears.
@@ -212,6 +221,11 @@ type pluginHost interface {
 	Keep(err error)
 	// PanelOpen reports whether panel id is open (the results panel opens for a plugin's table)
 	PanelOpen(id string) bool
+	// DockPanel forgets a panel's floating rectangle: a card's, moved to another edge
+	DockPanel(id string)
+	// PageSize is the page's size in cells, as last laid out; 0 before its first layout. A card's
+	// panel is sized from it until the user sizes it
+	PageSize() (w, h int)
 	// TableCore is the table behind a cell-cursor TableView, by its id; nil when there is none
 	TableCore(id string) *widget.TableCore
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
@@ -239,6 +253,19 @@ func (c core) Theme() string                           { return c.h.theme }
 func (c core) NotifyOngoing(id, msg string)            { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)               { c.h.notifyDone(id, msg) }
 func (c core) BrowseFolder() string                    { return c.h.browseFolder() }
+
+func (c core) PageSize() (w, h int) {
+	ed, ok := c.h.editor.(interface{ Context() *tuicore.Context })
+	if !ok || ed.Context() == nil {
+		return 0, 0
+	}
+	ctx := ed.Context()
+	r, ok := ctx.ResolveAnchor(ctx.NodeAnchor())
+	if !ok {
+		return 0, 0
+	}
+	return r.W, r.H
+}
 
 func (c core) TableCore(id string) *widget.TableCore {
 	if c.h.p == nil {
