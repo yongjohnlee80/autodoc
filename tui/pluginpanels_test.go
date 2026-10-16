@@ -324,8 +324,10 @@ func TestACardOnTheRightAndTheResultsAtTheBottom(t *testing.T) {
 	if cRight != 99 || cLeft != left || cRight != right {
 		t.Fatalf("the card moved when the results opened: %d–%d, was %d–%d:\n%s", cLeft, cRight, left, right, r.s)
 	}
-	// the card is drawn over the corner of the results' top row: the results' right corner may be
-	// covered, never their left, their heading or their rows
+	// each panel anchors at its own edge alone, whatever else is open, so the card may be drawn over
+	// the right end of the results' top row, as the explorer at the right and the terminal at the
+	// bottom overlap: the results' right corner may be covered, never their left, their heading or
+	// their rows
 	if rTop < 15 || rBottom < 25 || rLeft != 0 {
 		t.Fatalf("the results are not along the bottom (rows %d–%d, columns %d–%d):\n%s", rTop, rBottom, rLeft, rRight, r.s)
 	}
