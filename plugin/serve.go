@@ -32,7 +32,8 @@ type Handler interface {
 }
 
 // Hider is a Handler that wants to know its dialog was hidden (Esc, when its manifest says
-// esc = "hide") and shown again: a game pauses. A Handler that is not one keeps running, unseen.
+// esc = "hide"; a card's panel closed) and shown again: a game pauses. A Handler that is not one
+// keeps running, unseen.
 type Hider interface {
 	Hide()
 	Show()
@@ -203,6 +204,7 @@ func (p *Peer) Title(title string) error {
 }
 
 // Close asks the host to close the dialog: it answers with plugin.close, and Handler.Close follows.
+// A card's panel closes instead, and the plugin runs on: the host answers with plugin.hide.
 func (p *Peer) Close() error { return p.link.Notify(p.ctx, MethodHostClose, EmptyParams()) }
 
 // Table shows t in AutoDoc's results panel (protocol 4; the manifest declares [table]), replacing

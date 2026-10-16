@@ -7,7 +7,8 @@ three things:
 
 - **a dialog** (protocol 1): AutoDoc draws a dialog over the page, the plugin fills it with frames,
   and it is sent every key but Esc, which closes it;
-- **a card** (protocol 2): a dialog beside the page that takes the keys only when focused;
+- **a card** (protocol 2): a docked panel of its own beside the page, that takes the keys only when
+  focused;
 - **a service** (protocol 2): no surface at all. It works on the note, or serves something of its own.
 
 A protocol-2 plugin can also read the open note (the document feed) and have commands on the Plugins
@@ -39,7 +40,8 @@ placements = ["right", "left"]        # where it is designed to sit, the first i
                                       # center, top, bottom, left, right, or a corner
                                       # (top-left …); the user picks among them (Manage › Place)
 esc        = "hide"                   # "close" (the default), or "hide" for a plugin with its
-                                      # own quit: Esc hides the dialog, the plugin runs on
+                                      # own quit: Esc hides the dialog, the plugin runs on.
+                                      # Not on a card, whose Esc closes its panel
 
 [install]
 build = ["go", "build", "-o", "bin/autodoc-tetris", "."]   # run here when it is added or updated
@@ -55,7 +57,9 @@ protocol = 2                 # it declares points of protocol 2
 command  = ["autodoc-doc-stats"]
 
 [dialog]
-modal = false                # a card; default true (a dialog that holds the keys)
+modal = false                # a card, a panel of its own; default true (a dialog that holds the keys)
+width = 40                   # the panel's width at the right or left edge, height its height
+placements = ["right", "left"]  # the panel docks at the right edge, or the left
 
 [feed]
 document = true              # the open note, as it is edited
@@ -121,7 +125,8 @@ A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. 
 - a protocol-2 key under `protocol = 1` ("declares [feed]: needs protocol = 2"), `calls` under a
   protocol before 3, or `[table]` under a protocol before 4 ("declares [table]: needs protocol = 4");
 - a `[table]` with no title;
-- `start` on a dialog, `[dialog]` on a service, `esc` on a card;
+- `start` on a dialog, `[dialog]` on a service, `esc` on a card ("a card's Esc closes its panel, and
+  its plugin runs on");
 - a service that starts on use with nothing to start it (no command, no feed);
 - a command id that is not lower-case letters, digits and -, or appears twice; a command with no
   title; a key that is not one lower-case letter or digit, or is the plugin's twice;
@@ -166,8 +171,9 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   - A dialog or a card starts from its Plugins menu entry, or from one of its commands.
   - A service with `start = "use"` starts on its first command, or on its feed's first document.
     One with `start = "launch"` starts with the TUI.
-- The close is bounded. It starts on Esc (a dialog's), on the plugin's `host.close`, on its menu's
-  Close, or when the TUI quits:
+- The close is bounded. It starts on Esc (a dialog's), on the plugin's `host.close` (a dialog's or a
+  service's), on its menu's Close (a card's Turn off), on a card's `toggle` while its panel is open,
+  or when the TUI quits:
   1. AutoDoc sends `plugin.close`;
   2. after 2 s it sends the group SIGTERM;
   3. after 1 s more, SIGKILL.
@@ -185,7 +191,7 @@ Each notification carries one map.
 | AutoDoc | `plugin.key` | 1 | `{key, text, ctrl, alt, shift}` |
 | AutoDoc | `plugin.resize` | 1 | `{width, height}`: the dialog laid out at another size |
 | AutoDoc | `plugin.theme` | 1 | `{theme}`: the theme switched |
-| AutoDoc | `plugin.hide`, `plugin.show` | 1 | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again |
+| AutoDoc | `plugin.hide`, `plugin.show` | 1 | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again; a card's panel closed, and opened again |
 | AutoDoc | `plugin.focus` | 2 | `{focused}`: a card took the keys, or gave them back |
 | AutoDoc | `plugin.document` | 2 | `{path, workspace, text, cursor, selection, version, too_large}`: the open note, under `[feed] document = true`; from 4 also `{cursor_byte, selection_bytes}` |
 | AutoDoc | `plugin.command` | 2 | `{id}`: one of the manifest's `[[commands]]`, chosen; from 4, under the feed, `{id, document}` |
@@ -200,7 +206,7 @@ Each notification carries one map.
 | plugin | `host.table` | 4 | `{id, title, fields, rows, more}`: a table for the results panel, under `[table]` |
 | plugin | `host.rows` | 4 | `{id, rows, more}`: the table's next rows, answering `plugin.table.fetch` |
 | plugin | `host.table_end` | 4 | `{id, error}`: the table's rows ended before the last; `error`, when set, says why |
-| plugin | `host.close` | 1 | `{}`: asks to close |
+| plugin | `host.close` | 1 | `{}`: asks to close; a card asks its panel to close, and runs on |
 
 - **Keys.** `key` is a printable key's text (`" "` for Space), or one of `Up`, `Down`, `Left`,
   `Right`, `Enter`, `Tab`, `Backspace`, `Delete`, `Insert`, `Home`, `End`, `PageUp`, `PageDown`, `F1`
@@ -216,11 +222,28 @@ Each notification carries one map.
 
 ### Cards (`[dialog] modal = false`)
 
-- A card opens beside the page and takes the keys only when it is focused. A click on it focuses it,
-  and so do its commands. While focused it is sent every key but Esc, as a dialog is.
-- **Esc gives the keys back to the editor and leaves the card open.** The plugin is told
-  `plugin.focus {focused: false}`; it was told `{focused: true}` when it took them.
-- It closes through its menu's Close, or its `toggle` command (below).
+- **A card is a docked panel of its own**, as AutoDoc's results panel is. It opens at the edge of
+  its first placement (`right`, `left`, `top`, `bottom` or `center`; a corner at its side's edge,
+  `top-right` at the right), or the one the user chose (Manage › Place), as wide (at a side) or as
+  tall (at the top or bottom) as `[dialog] width` and `height` ask, until the user sizes it. It
+  moves and resizes as every panel does (Alt/Option-left drag, Alt/Option-right drag,
+  Go › Arrange panel), and AutoDoc keeps where it is left and its size. The plugin is told each new
+  size (`plugin.resize`).
+- It takes the keys only when it is focused. A click on it focuses it, and so do its commands. While
+  focused it is sent every key but Esc. The plugin is told `plugin.focus {focused: true}` when it
+  takes them, and `{focused: false}` when it gives them back.
+- **Esc closes the panel, and the plugin runs on.** So does Close (Esc) on its right-click menu. The
+  keys go back to the editor, and the plugin is told `plugin.hide`: its tables, its connection and
+  whatever else it holds stay as they are. A command, its Plugins menu entry or its `toggle` opens
+  the panel again, and the plugin is told `plugin.show`.
+- **q is the plugin's.** AutoDoc never takes a key from a focused card: a card with text fields
+  types q into them. A card that wants q to close it sends `host.close` when it is not typing,
+  which closes its panel as Esc does: the plugin is told `plugin.hide` and runs on. A card's
+  `host.close` never stops it.
+- It stops when the user turns it off: its Plugins menu's Turn off, its `toggle` while its panel is
+  open (below), or Manage plugins. It stops too when it exits, or when AutoDoc quits.
+- A card's panel is made when AutoDoc starts: a card plugin added while it runs has its panel from
+  the next start.
 
 ### The document feed (`[feed] document = true`)
 
@@ -305,7 +328,7 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
 ### Commands (`[[commands]]`)
 
 - Each command is on the Plugins menu, under the plugin's own entry, beside Open (a dialog's or a
-  card's) and Close.
+  card's) and Close (a card's Turn off).
 - **The SPC p card** lists every plugin command with its letter (SPC p, then the letter). AutoDoc's
   own leader letters are never a plugin's: SPC p is a card of its own.
 - **Letters.** A command's `key` binds only if no plugin earlier by name holds that letter. The other
@@ -314,9 +337,10 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
   with the daemon's `preference.set`, then restart the TUI.
 - **What a command does.**
   - It starts its plugin first when it is not running, and is sent once the plugin has opened.
-  - A card's commands focus the card.
-  - A card's command `toggle` is AutoDoc's own and is never sent: it opens the card, focused, and
-    closes it when it is open.
+  - A card's commands open its panel and focus it.
+  - A card's command `toggle` is AutoDoc's own and is never sent: it starts the card, its panel open
+    and focused; it opens the panel of a card that runs hidden, focused; and it turns off a card
+    whose panel is open, stopping its plugin.
 
 ### Calls (`calls = [...]`, protocol 3)
 
@@ -381,7 +405,8 @@ func main() {
 - A plugin with a clock of its own (a game's gravity) sends from another goroutine. The `Peer` is safe
   for concurrent use.
 - `Close` is called once, after `Open`, when the dialog closes or AutoDoc goes.
-- A Handler that is also a `plugin.Hider` (`Hide()`, `Show()`) is told of hiding. A game pauses.
+- A Handler that is also a `plugin.Hider` (`Hide()`, `Show()`) is told of hiding: a dialog's under
+  `esc = "hide"`, a card's panel closing. A game pauses.
   A Handler that is not one keeps running while it is hidden.
 - `plugin.open` comes after the dialog's first layout, with the size it was given; `plugin.resize`
   follows when the screen changes it.
