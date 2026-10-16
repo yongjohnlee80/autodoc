@@ -784,12 +784,13 @@ placement.
   says why.
 
 **The results panel.** A plugin may show a table of rows (a query's result, say) in AutoDoc's own
-results panel, at the bottom (**Go › Results**): a cursor on cells (`h j k l`, `v` selects a range),
-`s` sorts the loaded rows by the cursor's column, and more rows load as the cursor nears the end of
-those loaded, up to 100 000 (the CSV export takes the rest). Its rows leave through AutoDoc's commands, each saying which rows it takes:
-`results.copy` (the selection, or the cursor's cell, as TSV), `results.markdown` (the rows loaded
-now, as a Markdown table at the page's cursor) and `results.csv` (every row, fetched to the last,
-into a file chosen in a save dialog; the file is written whole or not at all). Closing the panel
+results panel, at the bottom (**Go › Results**): numbered rows, a cursor on cells with vim's keys
+(`h j k l` with counts, `gg`, `G`; `v`, `V` and Ctrl+V select cells, rows and a block; `y` copies),
+an ORDER BY bar and `s` to sort the loaded rows, and a right-click menu. More rows load as the
+cursor nears the end of those loaded, up to 100 000. The panel acts on the table in the view: its
+sort, copies (TSV, CSV, JSON, Markdown), `results.markdown` and exports (CSV or JSON, written whole
+or not at all) take the loaded rows in the order shown, and none of them fetches a row. An export
+writes the rows loaded in the view; scroll to load more, or change the query. Closing the panel
 lets the table go.
 
 Writing one: `docs/plugins.md` covers the manifest, the protocol, and the SDK in package `plugin`.

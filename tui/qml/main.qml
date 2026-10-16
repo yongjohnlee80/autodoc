@@ -485,8 +485,9 @@ Window {
 
     // the results: a table a plugin sends (plugintable.go), golib's cell-cursor table over the rows
     // loaded, which asks the plugin for more as the cursor nears their end; at the bottom unless
-    // moved. Closing it lets the table go. Its buttons are the results commands, each saying which
-    // rows it takes.
+    // moved. Closing it lets the table go. It acts on the table in the view: the ORDER BY bar sorts
+    // the loaded rows, and the buttons and the right-click menu are the results commands, none of
+    // which fetches a row.
     Panel {
         id: results
         heading: App.resultsTitle
@@ -503,23 +504,46 @@ Window {
         onClosed: App.panelClosed("results")
         Flex {
             direction: Tui.Vertical
+            // the sort of the loaded rows, as SQL writes one: Enter sorts; its line is the text's
+            // error, the fields a word typed may be, or what the sort covers
+            Flex {
+                direction: Tui.Horizontal
+                Text { text: "ORDER BY " }
+                TextField {
+                    id: resultsOrder
+                    Layout.fillWidth: true
+                    text: App.resultsOrder
+                    placeholderText: "column [ASC|DESC], … — sorts the loaded rows"
+                    onAccepted: App.orderResults(text)
+                    onTextEdited: App.resultsOrderTyped(text)
+                }
+                Text { text: " " }
+                Text { text: App.resultsSortLine }
+            }
             TableView {
                 id: resultsTable
                 Layout.fillHeight: true
                 palette.highlight: Theme.document.highlight
                 palette.highlightedText: Theme.document.highlightedText
+                // the cursor while the keys are elsewhere (the editor, the bar)
+                palette.inactive.highlight: Theme.app.inactive.highlight
+                palette.inactive.highlightedText: Theme.app.inactive.highlightedText
                 model: App.resultsRows
                 cellCursor: true
                 sortable: true
+                rowNumbers: true
+                contextMenu: true
+                orderBy: App.resultsOrder
+                onOrderByChanged: App.resultsOrderChanged(orderBy)
             }
             Flex {
                 direction: Tui.Horizontal
                 Text { text: " "; Layout.fillWidth: true }
-                Button { text: "Copy"; toolTipText: "the selected cells, or the cursor's, as TSV (y in the table)"; onClicked: App.copyResults() }
+                Button { text: "Copy"; toolTipText: "the selected cells, or the cursor's, as TSV (y in the table; the right-click menu has CSV, JSON and Markdown)"; onClicked: App.copyResults() }
                 Text { text: " " }
-                Button { text: "Export CSV…"; toolTipText: "every row, fetched to the last, into a CSV file"; onClicked: App.startExportResults() }
+                Button { text: "Export loaded rows…"; toolTipText: "the rows loaded, as shown, into a CSV or JSON file"; onClicked: App.startExportResults() }
                 Text { text: " " }
-                Button { text: "Insert as Markdown"; toolTipText: "the rows loaded now, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
+                Button { text: "Insert as Markdown"; toolTipText: "the rows loaded now, as shown, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
                 Text { text: " " }
                 Button { text: "Close (&q)"; toolTipText: "close the results"; onClicked: App.toggleResults() }
                 Text { text: " "; Layout.fillWidth: true }
@@ -814,6 +838,7 @@ Window {
     OpenAnyFile { id: openAnyFile }
     NewAnyFile { id: newAnyFile }
     ExportResults { id: exportResults }
+    ExportResultsFile { id: exportResultsFile }
     UnsavedFile { id: unsavedFile }
     Recovery { id: recoveryDialog }
     OpenHTML { id: openHTML }
