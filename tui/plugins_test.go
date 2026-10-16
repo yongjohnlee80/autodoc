@@ -1383,7 +1383,16 @@ func version(t *testing.T, doc string) int {
 // TestServicesStartOnUseOrAtLaunch (ADR 1791268009 §2.4): a service has no surface. One that starts
 // on use is not running until its command, which it is then sent, or the first event of its feed;
 // one that starts at launch runs with the TUI. Each is opened with no size.
+//
+// The page shown at start is the feed's first event (§2.3: sent when a note opens), so onfeed
+// starts pluginFeedDelay after it. The cell holds that send (the delay an hour) while it looks for
+// onfeed not running, then puts the delay back and types: the edit's send replaces the held one, and
+// onfeed starts with it. Asserting "not running" against the real 300 ms raced the debounce, and a
+// slow (-race, GUI) runner lost.
 func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
+	delay := pluginFeedDelay
+	pluginFeedDelay = time.Hour                   // before the TUI starts: its loop reads it from then on
+	t.Cleanup(func() { pluginFeedDelay = delay }) // after the TUI's own cleanup has stopped it
 	dir := t.TempDir()
 	installPlugin2(t, dir, "oncmd", "service", "echo", "[[commands]]\nid = \"run\"\ntitle = \"Run\"\nkey = \"r\"\n")
 	installPlugin2(t, dir, "onfeed", "service", "echo", "[feed]\ndocument = true\n")
@@ -1407,6 +1416,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 	if onLoop(r, func() bool { return r.h.plugins.running["onfeed"] != nil }) {
 		t.Fatal("onfeed runs before its feed's first event")
 	}
+	onLoop(r, func() bool { pluginFeedDelay = delay; return true }) // on the loop, which reads it
 	r.keys(t, key('i'), key('k'), esc())
 	waitSaid(t, logs, "onfeed", `doc "" v`)
 }
