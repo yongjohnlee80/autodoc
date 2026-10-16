@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
 // THE SPC p CHOOSER (ADR 1792132889 §5) — SPC p lists the plugins with commands; a plugin's letter,
@@ -186,4 +187,25 @@ func TestNoPluginHasCommands(t *testing.T) {
 		t.Fatalf("a letter bound with no plugin: %v", l)
 	}
 	r.s.WaitForText(t, "SPC p — plugins")
+}
+
+// TestPluginsCommandsOpensTheChooser: Plugins › Commands… is SPC p's card, from the menu: it lists
+// the plugins with commands, and a plugin's letter there runs its command. With no plugin, the card
+// says there are none.
+func TestPluginsCommandsOpensTheChooser(t *testing.T) {
+	r, logs := pluginTUI(t, twoPlugins(t))
+	r.keys(t, decltest.Alt('p'))
+	r.s.WaitForText(t, "Commands…  (SPC p)")
+	r.keys(t, key('c'))
+	r.s.WaitForText(t, "SPC p — plugins")
+	r.keys(t, key('j'), enter()) // beta
+	r.s.WaitForText(t, "SPC p › Beta")
+	r.keys(t, key('s'))
+	waitSaid(t, logs, "beta", "command x")
+
+	none, _ := pluginTUI(t, t.TempDir())
+	none.keys(t, decltest.Alt('p'))
+	none.s.WaitForText(t, "Commands…  (SPC p)")
+	none.keys(t, key('c'))
+	none.s.WaitForText(t, "no plugin has commands yet")
 }
