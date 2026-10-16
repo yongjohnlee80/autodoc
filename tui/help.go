@@ -132,6 +132,10 @@ const helpKeys = `KEYS
   SPC B       switch buffer (Go › Buffers…, :b): the open files and drafts, each previewed with
               its unsaved text; SPC C closes the one shown (File › Close buffer, :bd), asking
               first over unsaved changes
+  H L         in the page, in Vim's Normal mode, the buffer before or after the shown one, in the
+              order of the GUI's tabs, wrapping (bufferline's Shift+h / Shift+l): this replaces
+              Vim's H and L (the screen's top and bottom line) in Normal mode only; Visual mode
+              keeps them, and Insert mode types them. A script's own H or L (autodoc.map) wins
   Ctrl+O Ctrl+I  back and forward along the jumps (Vim's jump list, in Normal mode): a link
               followed, a document opened from a picker, the explorer, the relations or the
               recent files, and the page's own jumps (G, gg, %, { }, a mark's). Back to another
