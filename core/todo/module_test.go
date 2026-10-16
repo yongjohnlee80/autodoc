@@ -193,6 +193,14 @@ func TestEveryVerbAnswers(t *testing.T) {
 	if o := call("workspace.of", "/kb/.todo-list/open/x.md").(todo.Owned); o.Workspace != "kb" || o.Root != "/kb" {
 		t.Errorf("workspace.of %+v", o)
 	}
+	// "" is no workspace's: a file no workspace owns resolves with the global variables, not a KB's
+	none := map[string]todo.Var{}
+	for _, v := range call("workspace.vars", "").([]todo.Var) {
+		none[v.Name] = v
+	}
+	if g, kbr := none["PROJECTS"], none["KB_ROOT"]; g.Value != "/home/u/projects" || g.Source != "global" || kbr.Value != "" {
+		t.Errorf("workspace.vars(\"\"): PROJECTS %+v, KB_ROOT %+v; want the global, and no KB_ROOT", g, kbr)
+	}
 	if p := call("todos.migrate_refs", "kb", map[string]any{"plan": true}).(todo.MigrateResult); p.Rewritten != 0 {
 		t.Errorf("a plan rewrote: %+v", p)
 	}

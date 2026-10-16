@@ -459,13 +459,20 @@ func (m *Manager) Vars(ctx context.Context, at At) ([]Var, error) {
 	return m.list(l), nil
 }
 
-// WorkspaceVars lists a workspace's variables (workspace.vars).
+// WorkspaceVars lists a workspace's variables (workspace.vars). "" is no workspace's: the ones a
+// path in none resolves its refs with (ADR 1792132105 §2.5, the owner rule's third case), $HOME and
+// the global variables, before the environment, as the index resolves such a path (AllEffectiveVars'
+// "").
 func (m *Manager) WorkspaceVars(ctx context.Context, workspace string) ([]Var, error) {
-	root, ok := m.roots.Root(workspace)
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrNoWorkspace, workspace)
+	kb := ""
+	if workspace != "" {
+		root, ok := m.roots.Root(workspace)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrNoWorkspace, workspace)
+		}
+		kb = path.Clean(root)
 	}
-	l, err := m.layersOf(ctx, path.Clean(root))
+	l, err := m.layersOf(ctx, kb)
 	if err != nil {
 		return nil, err
 	}
