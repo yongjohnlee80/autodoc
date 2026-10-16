@@ -744,6 +744,14 @@ A plugin is a program AutoDoc runs in a dialog over the page, from the **Plugins
 into the dialog, and it gets every key but Esc, which closes it. The first one is AutoTetris,
 [autodoc-tetris](https://github.com/yongjohnlee80/autodoc-tetris).
 
+**Cards.** A card plugin (AutoDB's, say) is a docked panel of its own beside the page, at the edge
+its manifest names first (AutoDB's: the right), and moves, resizes and keeps its place as every
+panel does (Alt/Option-drag, **Go › Arrange panel**). It takes the keys when clicked or when one of
+its commands runs, and then every key is the plugin's, q included. Esc, or **Close (Esc)** on its
+right-click menu, closes the panel and hands the keys back to the page; the plugin runs on, its
+results and session kept, and a command or its Plugins menu entry opens the panel again. **Turn
+off** on its Plugins menu, or its toggle while the panel is open, stops it.
+
 **Adding one.** **Plugins › Add from a git URL…** takes the plugin's repository, which holds a
 `plugin.toml` at its top. There is no hub: the URL is the source.
 - AutoDoc clones it and runs nothing yet. It asks first, showing:
@@ -757,7 +765,7 @@ into the dialog, and it gets every key but Esc, which closes it. The first one i
 **Managing them.** **Plugins › Manage plugins…** lists each plugin with its source, commit and
 placement.
 - **Place** moves the plugin's dialog to the next placement it is designed for (AutoTetris: right or
-  left), and keeps the choice.
+  left), and keeps the choice. A card's panel docks at that edge.
 - **Update…** fetches the source and asks the same question about the new commit's build.
 - **Remove…** deletes the plugin's directory.
 - A plugin put in the folder by hand is listed as local.
