@@ -224,7 +224,8 @@ type Host struct {
 	active     *openBuffer
 	bufRecent  []*openBuffer
 	bufN       int
-	bufferPick *pick[string] // the Buffers picker (bufferpick.go)
+	bufferPick *pick[string]    // the Buffers picker (bufferpick.go)
+	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 
 	// recovery (recovery.go): the folder, whether this start has offered its copies, the copies
 	// still to ask about, and the one being restored once its file opens
