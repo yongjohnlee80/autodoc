@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -223,4 +224,32 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 	e.revalidate(func() bool {
 		return strings.Join(e.kinds("notes/n.md"), "|") == "related $KB_ROOT/adrs/b.md -> adrs/b.md|related $NOPE/z.md -> z.md"
 	})
+}
+
+// varLink reads a markdown link's $NAME destination through the variables: inside the root, the
+// workspace path when the workspace takes that kind of file, else nothing; outside, an external
+// link; an unknown name, unresolved. A destination that is no $NAME ref, or no variables, is the
+// ordinary reading's (ok false).
+func TestVarLink(t *testing.T) {
+	vars := NewVars(map[string]string{"KB_ROOT": "/ws", "OUT": "/elsewhere"})
+	md := func(p string) bool { return strings.HasSuffix(p, ".md") }
+	for _, c := range []struct {
+		dest string
+		vars *Vars
+		ok   bool
+		want DocLink
+	}{
+		{"$KB_ROOT/a/b.md#Sec%20One", vars, true, DocLink{Raw: "r", Name: "a/b.md", Anchor: "Sec One", Kind: LinkMarkdown}},
+		{"$OUT/x.md", vars, true, DocLink{Raw: "r", Name: externalPrefix + "/elsewhere/x.md", Kind: LinkMarkdown, Target: "/elsewhere/x.md"}},
+		{"$NOPE/q.md", vars, true, DocLink{Raw: "r", Name: "$NOPE/q.md", Kind: LinkMarkdown}},
+		{"$KB_ROOT/pic.png", vars, true, DocLink{}}, // a file the workspace does not take: left out
+		{"$5.md", vars, false, DocLink{}},           // no variable name
+		{"plain/a.md", vars, false, DocLink{}},
+		{"$KB_ROOT/a.md", nil, false, DocLink{}}, // no variables: the ordinary reading
+	} {
+		got, ok := varLink("r", c.dest, c.vars, "/ws", md)
+		if ok != c.ok || !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: %+v %v, want %+v %v", c.dest, got, ok, c.want, c.ok)
+		}
+	}
 }
