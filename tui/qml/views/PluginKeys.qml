@@ -1,16 +1,17 @@
-// PluginKeys.qml — SPC p's card: every plugin command with its letter (ADR 1791268009 §2.5). The
-// letters are the plugins', bound by the host (plugincmds.go), so its Shortcuts come from a model:
-// a Repeater expands them in the Dialog's place before anything is built. As the leader's card,
-// it holds nothing focusable, so every letter reaches a Shortcut; each closes the card before its
-// command runs. Esc closes it.
+// PluginKeys.qml — a plugin's SPC p card (ADR 1792132889): its commands with their letters, the plugin
+// chosen on the chooser (PluginChooser.qml). The letters are the plugin's, unique within it, bound by
+// the host (plugincmds.go); a Shortcut per letter asks the host for the chosen plugin's. As the
+// leader's card, it holds nothing focusable, so every letter reaches a Shortcut; each closes the card
+// before its command runs. Backspace goes back to the chooser; Esc closes it.
 Dialog {
     id: pluginKeys
     closeOnQ: true
-    title: "SPC p — plugin commands"
+    title: App.pluginKeysTitle
     dim: false
-    helpText: "a key runs its command · q or Esc closes"
+    helpText: "a key runs its command · Backspace goes back · q or Esc closes"
     Text { text: App.pluginKeysText; wrapMode: Tui.WordWrap }
     Shortcut { sequence: "q"; onActivated: pluginKeys.close() }
+    Shortcut { sequence: "Backspace"; onActivated: App.pluginCardBack() }
     Shortcut { sequence: "a"; onActivated: App.pluginKey("a") }
     Shortcut { sequence: "b"; onActivated: App.pluginKey("b") }
     Shortcut { sequence: "c"; onActivated: App.pluginKey("c") }

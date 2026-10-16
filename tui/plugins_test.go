@@ -338,10 +338,17 @@ func pluginTUIWith(t *testing.T, dir string, prefs map[string]string) (*running,
 // pluginLuaTUI is pluginTUIWith, with the user's Lua commands in luaDir.
 func pluginLuaTUI(t *testing.T, dir string, prefs map[string]string, luaDir string) (*running, string) {
 	t.Helper()
-	logs := t.TempDir()
 	all := maps.Clone(testPrefs)
 	maps.Copy(all, prefs)
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: all})
+	return pluginTUIOn(t, d, dir, luaDir)
+}
+
+// pluginTUIOn is a TUI on d with the plugins in dir: another attached to the same store, as after a
+// restart.
+func pluginTUIOn(t *testing.T, d *daemon, dir, luaDir string) (*running, string) {
+	t.Helper()
+	logs := t.TempDir()
 	r := runTUI(t, NewSession(d.sock, nil), Options{Plugins: Plugins{Dir: dir, LogDir: logs, Socket: d.sock}, LuaDir: luaDir})
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	t.Cleanup(func() {
@@ -1193,12 +1200,12 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 	}
 }
 
-// TestPluginCommandsOnTheSpcPCard (ADR 1791268009 §2.5): SPC p lists every plugin command with its
-// letter, built from the host's model (a Repeater of Shortcuts in the card); a letter runs its
-// command, starting the plugin first and sending the command once it has opened, and a card's
-// command focuses it. Two plugins wanting one letter: the first by name keeps it, the other is
-// listed unbound with why. A card's toggle is the host's: it closes the open card, and opens it
-// again, focused; it is never sent to the plugin.
+// TestPluginCommandsOnTheSpcPCard (ADR 1791268009 §2.5, ADR 1792132889): SPC p chooses a plugin,
+// then its card lists its commands with their letters; a letter runs its command, starting the
+// plugin first and sending the command once it has opened, and a card's command focuses it. A letter
+// is unique within its plugin only: alpha and beta both have s, and gamma has h as alpha does. A
+// card's toggle is the host's: it closes the open card, and opens it again, focused; it is never sent
+// to the plugin.
 func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
@@ -1206,7 +1213,7 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n")
 	installPlugin2(t, dir, "beta", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
-	// gamma's folder is listed first, but alpha comes first by name: alpha keeps h
+	// gamma's folder is listed first, but the chooser lists by name: alpha, beta, gamma
 	installPlugin2(t, dir, "gamma", "dialog", "echo", "[[commands]]\nid = \"g\"\ntitle = \"Do g\"\nkey = \"h\"\n")
 	if err := os.Rename(filepath.Join(dir, "gamma"), filepath.Join(dir, "0-gamma")); err != nil {
 		t.Fatal(err)
@@ -1214,9 +1221,20 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	r, _ := pluginTUI(t, dir)
 
 	r.leader(t, 'p')
-	r.s.WaitForText(t, "SPC p — plugin commands")
-	for _, want := range []string{"s  Alpha: Show the card", "h  Alpha: Say hello", "Beta: Do x — s is alpha's",
-		"Gamma: Do g — h is alpha's"} {
+	r.s.WaitForText(t, "SPC p — plugins")
+	for _, want := range []string{"›   Alpha  2 commands", "Beta   1 command", "Gamma  1 command"} {
+		r.s.WaitForText(t, want)
+	}
+	r.pluginCardOf(t, "gamma")
+	r.s.WaitForText(t, "h  Do g") // gamma's h, alpha's too
+	r.keys(t, backspace())        // back to the chooser
+	r.s.WaitForText(t, "SPC p — plugins")
+	r.keys(t, esc())
+	r.pluginCardOf(t, "beta")
+	r.s.WaitForText(t, "s  Do x") // beta's s, alpha's too
+	r.keys(t, esc())
+	r.pluginCardOf(t, "alpha")
+	for _, want := range []string{"s  Show the card", "h  Say hello"} {
 		r.s.WaitForText(t, want)
 	}
 	r.keys(t, key('h')) // alpha is not running: started, then told
@@ -1227,12 +1245,10 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 
 	r.keys(t, esc()) // the keys back to the editor; the card stays
 	r.waitShown(t, "focus false")
-	r.leader(t, 'p')
-	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.pluginCardOf(t, "alpha")
 	r.keys(t, key('s')) // toggle, the card open: closed
 	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "Alpha · Esc returns the keys") })
-	r.leader(t, 'p')
-	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.pluginCardOf(t, "alpha")
 	r.keys(t, key('s')) // toggle, the card closed: opened, focused
 	r.waitShown(t, "focus true")
 	if strings.Contains(r.s.String(), "command toggle") {
@@ -1242,21 +1258,25 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	r.waitShown(t, "key y")
 }
 
-// TestAPreferenceRebindsAPluginCommand: tui.plugin.<name>.key.<id> overrides the manifest's letter,
-// so the loser of a letter can be given another; "" unbinds a command.
+// TestAPreferenceRebindsAPluginCommand: tui.plugin.<name>.key.<id> overrides the manifest's letter
+// on the plugin's card; "" unbinds a command. Two of one plugin's commands wanting a letter: the
+// first in the manifest keeps it, and the other is listed unbound with why.
 func TestAPreferenceRebindsAPluginCommand(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"a\"\ntitle = \"Do a\"\nkey = \"s\"\n"+
-		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n")
+		"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n"+
+		"[[commands]]\nid = \"twin\"\ntitle = \"Do twin\"\nkey = \"s\"\n")
 	installPlugin2(t, dir, "beta", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n"+
 		"[[commands]]\nid = \"x\"\ntitle = \"Do x\"\nkey = \"s\"\n")
 	r, _ := pluginTUIWith(t, dir, map[string]string{"tui.plugin.beta.key.x": "b", "tui.plugin.alpha.key.hello": ""})
-	r.leader(t, 'p')
-	r.s.WaitForText(t, "SPC p — plugin commands")
-	for _, want := range []string{"s  Alpha: Do a", "b  Beta: Do x", "Alpha: Say hello — unbound in the preferences"} {
+	r.pluginCardOf(t, "alpha")
+	for _, want := range []string{"s  Do a", "Say hello — unbound in the preferences", "Do twin — s is taken by Do a"} {
 		r.s.WaitForText(t, want)
 	}
+	r.keys(t, esc())
+	r.pluginCardOf(t, "beta")
+	r.s.WaitForText(t, "b  Do x")
 	r.keys(t, key('b'))
 	r.waitShown(t, "command x")
 }
@@ -1370,8 +1390,7 @@ func TestServicesStartOnUseOrAtLaunch(t *testing.T) {
 		t.Fatalf("running at start: %v, want atstart alone", running)
 	}
 
-	r.leader(t, 'p')
-	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.pluginCardOf(t, "oncmd")
 	r.keys(t, key('r'))
 	got := waitSaid(t, logs, "oncmd", "command run")
 	if !reflect.DeepEqual(got[len(got)-1:], []string{"command run"}) || !strings.HasPrefix(got[0], "open 0x0 dark") {
@@ -1405,7 +1424,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 	card := read("name = \"stats\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n[dialog]\nmodal = false\n[feed]\ndocument = true\n" +
 		"[[commands]]\nid = \"toggle\"\ntitle = \"Show / hide the stats\"\nkey = \"s\"\n[[commands]]\nid = \"copy\"\ntitle = \"Copy\"\n")
 	q := pluginQuestion(pluginChange{m: card, url: "file:///x", commit: "abc"}, "Doc stats")
-	want := "Declares:  a card beside the page · reads the open note's text (feed) · commands: Show / hide the stats (SPC p s), Copy"
+	want := "Declares:  a card beside the page · reads the open note's text (feed) · commands: Show / hide the stats (s on its SPC p card), Copy"
 	if !strings.HasSuffix(q, want) || strings.Index(q, pluginRisk) > strings.Index(q, "Declares:") {
 		t.Errorf("a card's question:\n%s\nwant it to end, after the risk, with\n%s", q, want)
 	}
@@ -1519,8 +1538,7 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 	r.openPlugin("py-echo")
 	r.waitShown(t, "dark p2")
 	waitSaid(t, logs, "py-echo", "doc draft v")
-	r.leader(t, 'p') // opened from its menu, the card took no keys: the page has them
-	r.s.WaitForText(t, "SPC p — plugin commands")
+	r.pluginCardOf(t, "py-echo") // opened from its menu, the card took no keys: the page has them
 	r.keys(t, key('c'))
 	waitSaid(t, logs, "py-echo", "command clear")
 	r.keys(t, esc())
@@ -1532,8 +1550,8 @@ func TestThePythonExampleSpeaksTheProtocol(t *testing.T) {
 }
 
 // TestPluginCommandsAreCatalogEntries (ADR 1791762474 §3.2, §3.5): a runnable plugin's [[commands]]
-// are catalog entries, plugin.<name>.<id>, with no ':' name; F1 lists them with their SPC p
-// letters; run by id they run the plugin's command; the folder read anew without the plugin takes
+// are catalog entries, plugin.<name>.<id>, with no ':' name; F1 lists them with their keys (SPC p,
+// the plugin, the letter); run by id they run the plugin's command; the folder read anew without the plugin takes
 // them out, and SPC p with them. A plugin that cannot run has none.
 func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 	dir := t.TempDir()
@@ -1555,7 +1573,7 @@ func TestPluginCommandsAreCatalogEntries(t *testing.T) {
 	}
 	r.s.WaitFor(t, "F1 names the letters", func(string) bool {
 		help := strings.Join(strings.Fields(onLoop(r, func() string { return r.h.helpNow })), " ")
-		return strings.Contains(help, "the plugins' (SPC p) plugin.alpha.hello — · SPC p h · Alpha: Say hello")
+		return strings.Contains(help, "the plugins' (SPC p) plugin.alpha.hello — · SPC p › Alpha h · Alpha: Say hello")
 	})
 	if err := onLoop(r, func() error { return r.h.cat.run("plugin.alpha.hello", nil) }); err != nil {
 		t.Fatal(err)
