@@ -643,7 +643,8 @@ func (x *Indexer) prepare(ctx context.Context, w workItem) *prepared {
 		if v, ok, err := x.store.Version(ctx, w.path); err != nil {
 			p.err = err
 			return p
-		} else if ok && v == fi.Version && x.store.indexer(ctx, w.path) == p.indexer {
+		} else if rec := x.store.indexer(ctx, w.path); ok && v == fi.Version &&
+			rec == p.indexer+varsVersion(varsNamed(rec), x.mode(w.path).Vars) {
 			p.skip = true
 			return p
 		}
@@ -746,6 +747,7 @@ func cutMarkdown(x *Indexer, p *prepared, s source) error {
 			p.chunks = append(p.chunks, abstractChunk(c))
 		}
 	}
+	p.indexer += varsVersion(varNames(doc), s.mode.Vars)
 	p.links = extractLinks(doc, p.path, x.opts.Match, s.mode.Vars, x.opts.Root)
 	switch {
 	case s.mode.Store != nil:

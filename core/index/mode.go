@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"maps"
+	"net/url"
 	"path"
 	"path/filepath"
 	"slices"
@@ -35,27 +36,17 @@ type TodoStore struct {
 
 // Vars are a workspace's variables' values, by name; a name with no value is left out. Make them
 // with NewVars, once for every path they serve.
-type Vars struct {
-	values map[string]string
-	fp     string
-}
+type Vars struct{ values map[string]string }
 
 // NewVars are values as a mode's variables.
 func NewVars(values map[string]string) *Vars {
-	names := make([]string, 0, len(values))
+	vs := make(map[string]string, len(values))
 	for n, v := range values {
 		if v != "" {
-			names = append(names, n)
+			vs[n] = v
 		}
 	}
-	slices.Sort(names)
-	h := sha256.New()
-	vs := make(map[string]string, len(names))
-	for _, n := range names {
-		vs[n] = values[n]
-		h.Write([]byte(n + "=" + values[n] + "\n"))
-	}
-	return &Vars{values: vs, fp: hex.EncodeToString(h.Sum(nil))[:12]}
+	return &Vars{values: vs}
 }
 
 // Get is name's value, "" for none.
@@ -66,16 +57,8 @@ func (v *Vars) Get(name string) string {
 	return v.values[name]
 }
 
-// Equal reports whether v and o hold the same values.
-func (v *Vars) Equal(o *Vars) bool {
-	if v == nil || o == nil {
-		return v == o
-	}
-	return v.fp == o.fp && maps.Equal(v.values, o.values)
-}
-
 // version is what m adds to a document's indexer version: a path whose mode changes is indexed
-// again, its bytes unchanged, and so is a document whose workspace's variables change.
+// again, its bytes unchanged. The variables are not in it: a document's own are (varsVersion).
 func (m Mode) version() string {
 	var b strings.Builder
 	if m.GraphOnly {
@@ -84,10 +67,64 @@ func (m Mode) version() string {
 	if m.Store != nil {
 		b.WriteString(";todo=" + m.Store.ID)
 	}
-	if m.Vars != nil {
-		b.WriteString(";vars=" + m.Vars.fp)
-	}
 	return b.String()
+}
+
+// varsVersion is what a document whose $NAME refs name names adds to its indexer version (ADR
+// 1792132105 §2.5): the names, and a fingerprint of their values in vars ("nil" for none given), so a
+// change of the workspace's variables re-indexes exactly the documents that name a changed one. ""
+// for a document that names none. A variable name holds no ',', ':' or ';'.
+func varsVersion(names []string, vars *Vars) string {
+	if len(names) == 0 {
+		return ""
+	}
+	h := sha256.New()
+	if vars == nil {
+		h.Write([]byte("nil"))
+	} else {
+		for _, n := range names {
+			h.Write([]byte(n + "=" + vars.Get(n) + "\n"))
+		}
+	}
+	return ";vars=" + strings.Join(names, ",") + ":" + hex.EncodeToString(h.Sum(nil))[:12]
+}
+
+// varsNamed are the names a recorded indexer version's variables part names; nil for none.
+func varsNamed(recorded string) []string {
+	_, rest, ok := strings.Cut(recorded, ";vars=")
+	if !ok {
+		return nil
+	}
+	list, _, _ := strings.Cut(rest, ":")
+	return strings.Split(list, ",")
+}
+
+// varNames are the variables a document's $NAME refs name, sorted: its relations' and its markdown
+// links', the refs varRelations and varLink resolve.
+func varNames(doc *markdown.Document) []string {
+	seen := map[string]bool{}
+	for _, r := range chunk.Relations(doc, RelationFields) {
+		if v := chunk.ParseRef(r.Raw).Var; v != "" {
+			seen[v] = true
+		}
+	}
+	var walk func(*markdown.Node)
+	walk = func(n *markdown.Node) {
+		for c := n.FirstChild; c != nil; c = c.Next {
+			if c.Kind == markdown.KindLink && strings.HasPrefix(string(c.Dest), "$") {
+				dest, _, _ := strings.Cut(string(c.Dest), "#")
+				if d, err := url.PathUnescape(dest); err == nil {
+					dest = d
+				}
+				if v := chunk.ParseRef(dest).Var; v != "" {
+					seen[v] = true
+				}
+			}
+			walk(c)
+		}
+	}
+	walk(doc.Root)
+	return slices.Sorted(maps.Keys(seen))
 }
 
 // mode is path p's mode: the workspace's Modes, or full and in no store without them.

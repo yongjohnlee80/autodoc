@@ -181,11 +181,18 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 	eq(t, "unresolved: the unknown variable alone", e.unresolved(), []string{
 		"kb/.todo-list/open/t.md $NOPE/z.md missing", "notes/n.md $NOPE/z.md missing"})
 
-	// the workspace's variables changed: its documents are indexed again, no file changed
+	// the workspace's variables changed: the documents naming a changed one are indexed again, no
+	// file changed, and only they: kb/adrs/a.md names none, kb/notes/m.md names KB_ROOT and
+	// PROJECT_ROOT, the task NOPE too, and the other workspace's note is in another workspace
+	e.put("lm/x.md", "x", "kb/z.md", "z")
 	m.set(func(m *modes) {
 		m.vars["kb/"] = map[string]string{"KB_ROOT": "/ws/kb", "PROJECT_ROOT": "/ws", "NOPE": "/ws/kb"}
 	})
-	e.put("lm/x.md", "x", "kb/z.md", "z")
+	outdated, err := e.ix.outdated(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "outdated by the change", outdated, []string{"kb/.todo-list/open/t.md", "kb/notes/m.md"})
 	e.revalidate(func() bool {
 		return strings.Join(e.kinds("kb/.todo-list/open/t.md"), "|") == strings.Join([]string{
 			"adr $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
@@ -200,6 +207,11 @@ func TestEveryDocumentsVariableRefs(t *testing.T) {
 			"related $KB_ROOT/adrs/a.md -> kb/adrs/a.md",
 		}, "|")
 	})
+	// a variable no document names outdates none
+	m.set(func(m *modes) { m.vars["kb/"]["SPECS"] = "/ws/specs" })
+	if outdated, err := e.ix.outdated(context.Background()); err != nil || len(outdated) != 0 {
+		t.Errorf("a variable no document names outdated %v %v", outdated, err)
+	}
 	// the other workspace's documents kept theirs
 	eq(t, "the indexed workspace's note", e.kinds("notes/n.md"), []string{
 		"related $KB_ROOT/adrs/b.md -> adrs/b.md",

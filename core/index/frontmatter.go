@@ -61,22 +61,15 @@ func builtInIdentity(_ *Indexer, _ string, _ int, builtIn string) string { retur
 // Revalidate queues every document indexed under another version than it would get now: after a
 // chunker or section-size change all of them, after a schema change the Markdown files. Each is
 // rebuilt from its file; an unchanged chunk keeps its row and its vector, so a schema change costs
-// no embedding.
+// no embedding. A change of the workspace's variables queues the documents naming a changed one.
 func (x *Indexer) Revalidate(ctx context.Context) error {
 	h, err := x.holding(ctx)
 	if err != nil {
 		return err
 	}
-	_, fp := x.schema()
-	ret, err := x.store.retrieval(ctx)
+	outdated, err := x.outdated(ctx)
 	if err != nil {
-		return fmt.Errorf("index: listing outdated documents: reading the retrieval settings: %w", err)
-	}
-	outdated, err := x.store.outdated(ctx, func(p string, tokens int) string {
-		return x.versionOf(p, x.kinds.Of(p), tokens, fp, ret.AbstractChunk)
-	})
-	if err != nil {
-		return fmt.Errorf("index: listing outdated documents: %w", err)
+		return err
 	}
 	for _, p := range outdated {
 		if _, held := h.of(p); held {
@@ -85,6 +78,22 @@ func (x *Indexer) Revalidate(ctx context.Context) error {
 		x.touch(p, false) // the version check rebuilds each: no file changed, the indexer did
 	}
 	return nil
+}
+
+// outdated are the documents indexed under another version than they would get now, in path order.
+func (x *Indexer) outdated(ctx context.Context) ([]string, error) {
+	_, fp := x.schema()
+	ret, err := x.store.retrieval(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("index: listing outdated documents: reading the retrieval settings: %w", err)
+	}
+	out, err := x.store.outdated(ctx, func(p string, tokens int, recorded string) string {
+		return x.versionOf(p, x.kinds.Of(p), tokens, fp, ret.AbstractChunk) + varsVersion(varsNamed(recorded), x.mode(p).Vars)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("index: listing outdated documents: %w", err)
+	}
+	return out, nil
 }
 
 // replaceFrontmatter replaces a document's facets and diagnostics with r's.
