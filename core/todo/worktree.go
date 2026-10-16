@@ -13,7 +13,8 @@ import (
 //   - a bare repository's container: <repo>/.git is bare and each worktree is a directory beside it
 //     (<repo>/main, <repo>/<feature>); a missing <repo>/<feature> is a removed worktree;
 //   - a Claude Code worktree: <repo>/.claude/worktrees/<name>, inside an ordinary checkout or a bare
-//     repository's container; its main worktree is the checkout, or the container's main.
+//     repository's container; its main worktree is the checkout, or the container's main. It is
+//     known by its path, since removing the last worktree can remove .claude/worktrees too.
 //
 // Anything else is left alone: a directory deleted from an ordinary checkout is not a worktree, and
 // the same path under the repository's root is no evidence of where its file went.
@@ -35,6 +36,13 @@ func (s scope) movedFromWorktree(abs string) (string, bool) {
 	if s.exists(abs) {
 		return "", false
 	}
+	if repo, rest, ok := strings.Cut(abs, "/.claude/worktrees/"); ok {
+		name, rel, ok := strings.Cut(rest, "/")
+		if !ok || name == "" || rel == "" || !s.exists(repo) || s.exists(repo+"/.claude/worktrees/"+name) {
+			return "", false // not a path in a removed Claude worktree
+		}
+		return s.inMain(s.mainWorktreeOf(repo), rel)
+	}
 	// gone is the topmost missing directory on abs's path: the worktree, when abs was in one
 	gone := abs
 	for {
@@ -50,21 +58,28 @@ func (s scope) movedFromWorktree(abs string) (string, bool) {
 	if gone == abs {
 		return "", false // only the file is missing: no directory was removed
 	}
-	rel := strings.TrimPrefix(abs, gone+"/")
 	parent := path.Dir(gone)
-	var main string
-	switch {
-	case s.isBareContainer(parent):
-		main = s.mainWorktreeOfBare(parent + "/.git")
-	case path.Base(parent) == "worktrees" && path.Base(path.Dir(parent)) == ".claude":
-		repo := path.Dir(path.Dir(parent))
-		if s.isBareContainer(repo) {
-			main = s.mainWorktreeOfBare(repo + "/.git")
-		} else if s.exists(repo + "/.git") {
-			main = repo
-		}
+	if !s.isBareContainer(parent) {
+		return "", false
 	}
-	if main == "" || main == gone {
+	return s.inMain(s.mainWorktreeOfBare(parent+"/.git"), strings.TrimPrefix(abs, gone+"/"))
+}
+
+// mainWorktreeOf is repo's main worktree: its container's main for a bare repository's container, the
+// checkout itself for an ordinary one, "" for neither.
+func (s scope) mainWorktreeOf(repo string) string {
+	switch {
+	case s.isBareContainer(repo):
+		return s.mainWorktreeOfBare(repo + "/.git")
+	case s.exists(repo + "/.git"):
+		return repo
+	}
+	return ""
+}
+
+// inMain is rel in the main worktree main, when main is known and has a file there.
+func (s scope) inMain(main, rel string) (string, bool) {
+	if main == "" {
 		return "", false
 	}
 	to := main + "/" + rel

@@ -27,6 +27,11 @@ func worktreeLayout(e *env) {
 	w("/repo/lm/canary/docs/a.md", "a")
 	w("/repo/lm/canary/docs/only-canary.md", "c")
 	w("/repo/lm/.claude/worktrees/live/x.md", "x")
+	w("/repo/bare2/.git/config", "[core]\n\tbare = true\n") // no .claude/worktrees left at all
+	w("/repo/bare2/.git/worktrees/main/HEAD", "ref: refs/heads/main\n")
+	w("/repo/bare2/.git/worktrees/main/gitdir", "/repo/bare2/main/.git\n")
+	w("/repo/bare2/main/.git", "gitdir: /repo/bare2/.git/worktrees/main\n")
+	w("/repo/bare2/main/docs/c.md", "c")
 	w("/repo/plain/.git/config", "[core]\n\tbare = false\n")
 	w("/repo/plain/docs/b.md", "b")
 	w("/repo/plain/.claude/worktrees/live/x.md", "x")
@@ -47,6 +52,9 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 		"$PROJECT_ROOT/lm/main/docs/a.md",                      // resolves: left
 		"$PROJECT_ROOT/plain/gone-dir/docs/b.md",               // a directory deleted from a checkout: not a worktree
 		"$PROJECT_ROOT/lm/detached/../gone-detached/docs/x.md", // no main copy: left
+		"/repo/bare2/.claude/worktrees/gone/docs/c.md",         // .claude/worktrees itself removed
+		"/repo/lm/.claude/worktrees/live/x.md",                 // a live Claude worktree: resolves, left
+		"/repo/lm/.claude/worktrees/live/docs/a.md",            // a live worktree's missing file, though main has it: left
 	}
 	review := []string{"/repo/plain/.claude/worktrees/gone/docs/b.md"} // a Claude worktree in a checkout
 	e.disk.WriteFile(kbStore+"/archived/2026/09/w.md", []byte(taskFile("w", "archived",
@@ -67,6 +75,7 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 	want := []move{
 		{"adr", adr[0], "$PROJECT_ROOT/lm/main/docs/a.md"},
 		{"adr", adr[1], "$PROJECT_ROOT/lm/main/docs/a.md"},
+		{"adr", adr[7], "$PROJECT_ROOT/bare2/main/docs/c.md"},
 		{"review", review[0], "$PROJECT_ROOT/plain/docs/b.md"},
 	}
 	if !slices.Equal(got, want) {
@@ -78,14 +87,15 @@ func TestMigrateRefsMovesRefsOutOfRemovedWorktrees(t *testing.T) {
 
 	stale := plan.Candidates[1]
 	stale.To = "$PROJECT_ROOT/lm/canary/docs/a.md" // not what the plan proposed
-	apply := []todo.RefCandidate{plan.Candidates[0], stale, plan.Candidates[2]}
+	apply := []todo.RefCandidate{plan.Candidates[0], stale, plan.Candidates[2], plan.Candidates[3]}
 	res, err := e.m.MigrateRefs(ctx, kb, todo.MigrateOpts{Apply: apply})
-	if err != nil || res.Rewritten != 2 || len(res.Skipped) != 1 || res.Skipped[0].To != stale.To {
+	if err != nil || res.Rewritten != 3 || len(res.Skipped) != 1 || res.Skipped[0].To != stale.To {
 		t.Fatalf("apply %+v %v", res, err)
 	}
 	w := e.get("w")
 	wantADR := slices.Clone(adr)
 	wantADR[0] = "$PROJECT_ROOT/lm/main/docs/a.md"
+	wantADR[7] = "$PROJECT_ROOT/bare2/main/docs/c.md"
 	if !slices.Equal(w.ADR, wantADR) || !slices.Equal(w.Review, []string{"$PROJECT_ROOT/plain/docs/b.md"}) {
 		t.Errorf("adr %v\nreview %v", w.ADR, w.Review)
 	}
