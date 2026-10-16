@@ -216,9 +216,18 @@ func (pl *plugins) cardOpened(name string) {
 	}
 }
 
-// cardClosed follows the panel closed, however it was: the plugin is told it is hidden, and runs on.
+// cardClosed follows the panel closed, however it was: the plugin is told the keys left it, when it
+// had them, and that it is hidden; it runs on.
 func (pl *plugins) cardClosed(name string) {
-	if r := pl.running[name]; r != nil && !r.hidden && !r.closing {
+	r := pl.running[name]
+	if r == nil || r.closing {
+		return
+	}
+	if r.focused { // a hidden panel is sent no focus change of its own
+		r.focused = false
+		r.send(plugin.MethodFocus, plugin.FocusParams(false))
+	}
+	if !r.hidden {
 		r.hidden = true
 		r.send(plugin.MethodHide, plugin.EmptyParams())
 	}
