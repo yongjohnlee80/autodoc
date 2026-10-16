@@ -73,6 +73,7 @@ var sqliteSuites = []struct {
 	{"ARefusedKBFile", TestARefusedKBFile},
 	{"TheVariableFileFormat", TestTheVariableFileFormat},
 	{"EffectiveVars", TestEffectiveVars},
+	{"TheVarsOfNoWorkspace", TestTheVarsOfNoWorkspace},
 	{"SetVarRefusals", TestSetVarRefusals},
 	{"MachineOnlyNamesAreNeverPersistedAsErrors", TestMachineOnlyNamesAreNeverPersistedAsErrors},
 	{"SetVarScopes", TestSetVarScopes},
