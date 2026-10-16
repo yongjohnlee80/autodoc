@@ -340,7 +340,8 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
     `gg` and `G` to the first and last row; `v` selects cells in reading order, `V` rows, Ctrl+V a
     block; a drag selects cells, over the numbers rows, over the headers columns. `y` copies the
     selection, `s` sorts by the cursor's field. Its cursor dims while the keys are elsewhere.
-  - **The ORDER BY bar** above it sorts the loaded rows as SQL writes a sort: `column [ASC|DESC], …`,
+  - **The bar** above it is a clause, chosen in its dropdown, and its text; each clause keeps its
+    own text, and Enter applies it. Its ORDER BY sorts the loaded rows as SQL writes a sort: `column [ASC|DESC], …`,
     a column by its name, its `"quoted name"` or its 1-based position (a name two columns share is
     written as its position). Enter sorts; text that does not parse leaves the rows as they were
     and says why. While a name is typed its line offers the columns it may be. While the result has

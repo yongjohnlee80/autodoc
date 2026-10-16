@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
@@ -249,7 +250,7 @@ func TestTheSortBarReadsTheFields(t *testing.T) {
 
 	for typed, want := range map[string]string{"na": "fields: name", "i": "fields: 1, 6", "1, AM": "fields: amount",
 		`1, "do`: "fields: doc", "name ": "", "zz": ""} {
-		onLoop(r, func() bool { r.h.plugins.resultsOrderTyped(typed); return true })
+		onLoop(r, func() bool { r.h.plugins.resultsClauseTyped(typed); return true })
 		if line := r.source("App.resultsSortLine"); line != want {
 			t.Errorf("typing %q: the line %q, want %q", typed, line, want)
 		}
@@ -261,7 +262,9 @@ func TestTheSortBarReadsTheFields(t *testing.T) {
 		return true
 	})
 	r.keys(t, key('s'))
-	r.s.WaitFor(t, "s written to the bar", func(string) bool { return r.source("App.resultsOrder") == "name ASC" })
+	r.s.WaitFor(t, "s written to the bar", func(string) bool {
+		return r.source("App.resultsOrder") == "name ASC" && r.source("App.resultsClauseText") == "name ASC"
+	})
 	onLoop(r, func() bool { r.resultsCore().SetCursor(widget.TablePos{Col: 0}); return true })
 	r.keys(t, key('s'))
 	r.s.WaitFor(t, "a shared name's s written as its position", func(string) bool { return r.source("App.resultsOrder") == "1 ASC" })
@@ -575,4 +578,61 @@ func TestTheBlurredCursor(t *testing.T) {
 			t.Errorf("with the keys in %s: the cursor %s, want %s", c.id, got, c.want)
 		}
 	}
+}
+
+// TestTheBarIsAClauseAndItsText: the bar's dropdown shows ORDER BY chosen, of ORDER BY and WHERE;
+// text typed into its input and entered sorts the rows. Each clause keeps its own text as the
+// dropdown moves between them. WHERE, until AutoDoc's golib reads a filter, says so and leaves the
+// rows as they were.
+func TestTheBarIsAClauseAndItsText(t *testing.T) {
+	r, _ := kindsTUI(t, "tablestall")
+	r.s.WaitForText(t, "ORDER BY")
+	read := func(id, prop string) string {
+		return onLoop(r, func() string {
+			node, ok := r.h.p.Tree().NodeByID(id)
+			if !ok {
+				return "no " + id
+			}
+			v, err := r.h.p.Adapter().ReadProperty(node, prop)
+			if err != nil {
+				return err.Error()
+			}
+			return v.Raw
+		})
+	}
+	if got := read("resultsClause", "currentIndex") + " " + read("resultsClause", "currentValue"); got != "0 orderBy" {
+		t.Fatalf("the dropdown: %s, want ORDER BY chosen", got)
+	}
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("resultsText", "forceActiveFocus")); return true })
+	r.s.WaitFor(t, "the bar's input with the keys", func(string) bool { return r.focused("resultsText") })
+	r.keys(t, decltest.Type("name DESC")...)
+	r.keys(t, enter())
+	names := func(order ...int) []string {
+		out := make([]string, len(order))
+		for i, o := range order {
+			out[i] = kindsRows[o][1]
+		}
+		return out
+	}
+	r.waitColumn(t, 1, names(4, 0, 3, 2, 1))
+	if got := r.source("App.resultsOrder"); got != "name DESC" {
+		t.Errorf("orderBy after Enter: %q", got)
+	}
+
+	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseWhere, "name DESC"); return true })
+	r.s.WaitFor(t, "WHERE chosen, its own text empty", func(string) bool {
+		return read("resultsClause", "currentIndex") == "1" && read("resultsText", "text") == ""
+	})
+	onLoop(r, func() bool { r.h.plugins.applyResultsClause("id > 1"); return true })
+	if line := r.source("App.resultsSortLine"); line != errWhereUnread {
+		t.Errorf("WHERE's Enter: the line %q", line)
+	}
+	r.waitColumn(t, 1, names(4, 0, 3, 2, 1))
+	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseOrderBy, "id > 1"); return true })
+	r.s.WaitFor(t, "ORDER BY's own text back", func(string) bool { return read("resultsText", "text") == "name DESC" })
+	if line := r.source("App.resultsSortLine"); line != "" {
+		t.Errorf("ORDER BY's line: %q", line)
+	}
+	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseWhere, "name DESC"); return true })
+	r.s.WaitFor(t, "WHERE's own text kept", func(string) bool { return read("resultsText", "text") == "id > 1" })
 }

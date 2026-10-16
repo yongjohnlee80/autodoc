@@ -466,14 +466,70 @@ func (pl *plugins) showResultsTitle() {
 	pl.showSortLine()
 }
 
-// ---------------------------------------------------------------- the ORDER BY bar
+// ---------------------------------------------------------------- the bar: ORDER BY, WHERE
 
-// The bar's text is App.resultsOrder, which the TableView's orderBy is bound to: the bar writes it
-// when Enter is pressed, the view's own sorts (s, a header) are written back to it, and the menu's
-// sorts write it. Its line under the bar is the text's error, else the field names the word being
-// typed may be, else the sort's note.
+// The bar is a clause, chosen in its dropdown, and that clause's text, which Enter applies; each
+// clause keeps its own text. ORDER BY's applied text is App.resultsOrder, which the TableView's
+// orderBy is bound to: the view's own sorts (s, a header) are written back to it, and the menu's
+// sorts write it. WHERE filters the loaded rows once AutoDoc takes the golib that reads it; until
+// then its Enter says so. The line beside the bar is the chosen clause's error, else the field
+// names the word being typed may be, else the view's note.
 
-// orderResults is the bar's Enter: the text is the table's orderBy. Text that does not parse
+// The bar's clauses, in its dropdown's order.
+const (
+	clauseOrderBy = iota
+	clauseWhere
+)
+
+// errWhereUnread is WHERE's Enter until AutoDoc's golib reads a filter.
+const errWhereUnread = "WHERE needs a newer golib: it filters the loaded rows once AutoDoc takes one that reads it"
+
+// resultsClausesModel is the bar's clauses, its dropdown's rows.
+func resultsClausesModel() *tuidecl.ListModel {
+	m := tuidecl.NewListModel("key", "label")
+	m.Reset([]tuidecl.Row{{"key": "orderBy", "label": "ORDER BY"}, {"key": "where", "label": "WHERE"}})
+	return m
+}
+
+// resultsClauseChosen is the dropdown's choice: the clause left keeps the text typed into it, and
+// the bar shows the chosen one's.
+func (pl *plugins) resultsClauseChosen(i int, typed string) {
+	if i < clauseOrderBy || i > clauseWhere || i == pl.resultsClause {
+		return
+	}
+	pl.clauseText[pl.resultsClause] = typed
+	pl.resultsClause, pl.resultsHint = i, ""
+	pl.c.Set("App.resultsClauseIndex", i)
+	pl.c.Set("App.resultsClauseText", pl.clauseText[i])
+	pl.showSortLine()
+}
+
+// applyResultsClause is the bar's Enter: its text applied as the chosen clause.
+func (pl *plugins) applyResultsClause(text string) {
+	if pl.resultsClause == clauseOrderBy {
+		pl.orderResults(text)
+		return
+	}
+	pl.clauseText[clauseWhere], pl.resultsHint = text, ""
+	pl.resultsWhereErr = ""
+	if strings.TrimSpace(text) != "" {
+		pl.resultsWhereErr = errWhereUnread
+	}
+	pl.showSortLine()
+}
+
+// resultsClauseTyped is the bar's text as it is typed: while an ORDER BY's field name is typed,
+// the line offers the fields it may be, each written as the bar reads it back (a name two fields
+// share as its position).
+func (pl *plugins) resultsClauseTyped(text string) {
+	pl.resultsHint = ""
+	if pl.resultsClause == clauseOrderBy {
+		pl.resultsHint = orderHint(text, pl.resultsFields())
+	}
+	pl.showSortLine()
+}
+
+// orderResults is ORDER BY applied: the text is the table's orderBy. Text that does not parse
 // leaves the rows as they were and shows why: the view's own words (ParseTableOrder's, over the
 // same fields).
 func (pl *plugins) orderResults(text string) {
@@ -482,6 +538,7 @@ func (pl *plugins) orderResults(text string) {
 	if _, err := widget.ParseTableOrder(text, pl.resultsFields()); err != nil {
 		pl.resultsOrderErr = err.Error()
 	}
+	pl.showOrderText(text)
 	// the view applies orderBy within the Set, its sort and any request for rows the sort makes
 	pl.results.sorting = true
 	pl.c.Set("App.resultsOrder", text)
@@ -490,21 +547,22 @@ func (pl *plugins) orderResults(text string) {
 }
 
 // resultsOrderChanged is the view's own sort (the s key, a header), written back to orderBy: the
-// bar shows it.
+// bar's ORDER BY shows it.
 func (pl *plugins) resultsOrderChanged(text string) {
 	pl.resultsOrder, pl.resultsOrderErr, pl.resultsHint = text, "", ""
+	pl.showOrderText(text)
 	pl.results.sorting = true
 	pl.c.Set("App.resultsOrder", text)
 	pl.results.sorting = false
 	pl.showSortLine()
 }
 
-// resultsOrderTyped is the bar's text as it is typed: while a field's name is being typed, the
-// line offers the fields it may be, each written as the bar reads it back: a name two fields
-// share as its position.
-func (pl *plugins) resultsOrderTyped(text string) {
-	pl.resultsHint = orderHint(text, pl.resultsFields())
-	pl.showSortLine()
+// showOrderText is ORDER BY's text, kept, and in the bar while ORDER BY is chosen.
+func (pl *plugins) showOrderText(text string) {
+	pl.clauseText[clauseOrderBy] = text
+	if pl.resultsClause == clauseOrderBy {
+		pl.c.Set("App.resultsClauseText", text)
+	}
 }
 
 // orderHint is what the bar offers for text: "fields: name, 3, …" for the field the last key is
@@ -529,10 +587,13 @@ func orderHint(text string, fields []widget.TableField) string {
 }
 
 func (pl *plugins) showSortLine() {
-	line := pl.resultsNote
+	line, err := pl.resultsNote, pl.resultsOrderErr
+	if pl.resultsClause == clauseWhere {
+		err = pl.resultsWhereErr
+	}
 	switch {
-	case pl.resultsOrderErr != "":
-		line = pl.resultsOrderErr
+	case err != "":
+		line = err
 	case pl.resultsHint != "":
 		line = pl.resultsHint
 	}

@@ -51,9 +51,11 @@ type plugins struct {
 	results      *resultsTable
 	export       *resultsExport
 	exportFormat copyFormat
-	// the ORDER BY bar: its text, why it did not parse, the fields it offers for the word typed,
-	// and the sort's note (plugintable.go)
-	resultsOrder, resultsOrderErr, resultsHint, resultsNote string
+	// the bar (plugintable.go): its clause and each clause's text; ORDER BY's applied text and why
+	// it did not parse, WHERE's why, the fields it offers for the word typed, and the view's note
+	resultsClause                                                            int
+	clauseText                                                               [2]string
+	resultsOrder, resultsOrderErr, resultsWhereErr, resultsHint, resultsNote string
 	// the card plugins' panels, by name and in order, fixed when the program is built
 	// (pluginpanels.go); nil until then
 	cards     map[string]*cardPanel
@@ -90,6 +92,9 @@ func (pl *plugins) State() map[string]any {
 		"App.pluginsHelp":        pluginsHelp,
 		"App.resultsRows":        pl.results.model,
 		"App.resultsTitle":       "results",
+		"App.resultsClauses":     resultsClausesModel(),
+		"App.resultsClauseIndex": 0,
+		"App.resultsClauseText":  "",
 		"App.resultsOrder":       "",
 		"App.resultsSortNote":    "",
 		"App.resultsSortLine":    "",
@@ -128,8 +133,9 @@ func (pl *plugins) Commands() map[string]Command {
 		"App.chooseExportFile":    none(pl.chooseExportFile),
 		"App.exportResults":       oneString("a file's path", pl.exportResults),
 		"App.insertResults":       none(pl.insertResults),
-		"App.orderResults":        oneString("an ORDER BY", pl.orderResults),
-		"App.resultsOrderTyped":   oneString("an ORDER BY", pl.resultsOrderTyped),
+		"App.resultsClauseChosen": numberAndString("a clause and the text typed", pl.resultsClauseChosen),
+		"App.applyResultsClause":  oneString("a clause's text", pl.applyResultsClause),
+		"App.resultsClauseTyped":  oneString("a clause's text", pl.resultsClauseTyped),
 		"App.resultsOrderChanged": oneString("an ORDER BY", pl.resultsOrderChanged),
 	}
 }
