@@ -198,8 +198,10 @@ func TestAClosedShellRunsNothingQueued(t *testing.T) {
 func TestWaitIsRunsEnd(t *testing.T) {
 	r := newShellRig(t, "")
 	entered, release := make(chan struct{}), make(chan struct{})
+	releaseOnce := sync.OnceFunc(func() { close(release) })
 	r.s.held = func() { close(entered); <-release }
 	r.start()
+	t.Cleanup(releaseOnce) // runs before start's Close and Wait: a failed cell never hangs there
 	r.write("1\r")
 	r.runPost()
 	<-entered // run is inside settle, held
@@ -208,17 +210,14 @@ func TestWaitIsRunsEnd(t *testing.T) {
 	for range 4 {
 		go func() { n, _ := r.s.Wait(); waited <- n }()
 	}
+	// held, run cannot return: a Wait that answers in this window answered the stop request, not
+	// run's end. A Wait reading done answers at once; this one never answers before release.
 	select {
 	case <-waited:
 		t.Fatal("Wait returned while run was still held")
-	case <-r.s.done: // the stop was asked: run has not returned
+	case <-time.After(200 * time.Millisecond):
 	}
-	select {
-	case <-waited:
-		t.Fatal("Wait returned while run was still held")
-	default:
-	}
-	close(release)
+	releaseOnce()
 	for range 4 {
 		if n := <-waited; n != 0 {
 			t.Fatalf("Wait answered %d", n)
@@ -256,10 +255,12 @@ func TestTheShellClosesItself(t *testing.T) {
 func TestWriteIsRefusedAfterClose(t *testing.T) {
 	r := newShellRig(t, "")
 	entered, release := make(chan struct{}), make(chan struct{})
+	releaseOnce := sync.OnceFunc(func() { close(release) })
 	r.s.held = func() { close(entered); <-release }
 	var admitted atomic.Int32
 	r.s.admit = func() { admitted.Add(1) }
 	r.start()
+	t.Cleanup(releaseOnce) // runs before start's Close and Wait: a failed cell never hangs there
 	r.write("1\r")
 	r.runPost()
 	<-entered // run is held: nothing takes keys
@@ -277,7 +278,7 @@ func TestWriteIsRefusedAfterClose(t *testing.T) {
 	if admitted.Load() != before {
 		t.Fatal("a Write after Close was admitted")
 	}
-	close(release)
+	releaseOnce()
 	r.s.Wait()
 	if strings.Contains(r.output(), "Q") || strings.Contains(r.output(), "W") {
 		t.Fatalf("keys after Close were drawn: %q", r.output())
