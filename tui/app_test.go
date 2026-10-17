@@ -130,7 +130,7 @@ func startDaemonWith(t *testing.T, sock string, workspaces map[string][]string, 
 	var served []rpc.Workspace
 	var cores sync.WaitGroup // the indexers and followers, stopped before the store closes
 	// one store for the daemon's workspaces; closed after the indexers stop (cleanups run last first)
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	db, err := openDaemonStore(t)
 	if err != nil {
 		t.Fatal(err)
 	}

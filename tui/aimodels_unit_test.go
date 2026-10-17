@@ -30,6 +30,28 @@ func scriptedList(c *scriptedCore, e *endpoints) {
 	}
 }
 
+func TestEndpointDetailsReportUsageAndLogFailures(t *testing.T) {
+	for _, endpoint := range endpointCases {
+		for _, stage := range []string{"usage", "log"} {
+			t.Run(endpoint.name+"/"+stage, func(t *testing.T) {
+				c := newScripted("kb")
+				e := endpoint.make(c)
+				e.rows.Reset([]endpointRow{{name: "a", kind: e.spec.kinds[0].kind}})
+				c.answers[e.spec.verb+"."+stage] = func([]any) (any, error) {
+					return nil, errors.New(stage + " unavailable")
+				}
+				e.detail(0)
+				if got := c.set[e.src("Detail")]; got != "a: "+stage+" unavailable" {
+					t.Fatalf("detail after %s failed: %v", stage, got)
+				}
+				if stage == "usage" && c.called(e.spec.verb+".log") {
+					t.Fatal("log was read after usage failed")
+				}
+			})
+		}
+	}
+}
+
 func (s *scriptedCore) saw(view string) bool { return slices.Contains(s.views, view) }
 
 // Every step the providers and the rankers share runs once, in the endpoints core, the same for
