@@ -160,6 +160,8 @@ const helpKeys = `KEYS
               first to switch). Insert's Ctrl+U deletes back to the indent, and Ctrl+O runs one
               Normal-mode command
   Ctrl+h/j/k/l  in Normal mode, to the open panel on that side, and back to the page
+  F6 and Shift+F6  the next or the previous open widget: the editor and the panels, never the
+              menu bar. SPC Tab, or :go <name>, goes to one by name (Go › Widget…)
   F10, Alt+letter  the menu bar, which hides until then (Options › Editor preferences can keep it).
   SPC m       show and focus the menu bar; again hides it
               On a Mac, Option+letter is Alt+letter (US layout; Option+E, I, N, U are dead
