@@ -232,6 +232,11 @@ func (pl *plugins) cardClosed(name string) {
 		r.hidden = true
 		r.send(plugin.MethodHide, plugin.EmptyParams())
 		pl.refreshPlugins()
+		route := "Plugins › " + pl.pluginTitle(name) + " › Reopen card"
+		if keys := pl.pluginLetters["plugin."+name+"."+pluginToggle]; len(keys) > 0 {
+			route = keys[0] + " or " + route
+		}
+		pl.c.Notify(pl.pluginTitle(name) + " card hidden: " + route)
 	}
 }
 

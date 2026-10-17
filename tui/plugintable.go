@@ -757,6 +757,14 @@ func (pl *plugins) selectAllResults() {
 // bindResultsMenu gives the table's right-click menu its rows: built each time it opens, so the
 // sorts name the field under the pointer.
 func (pl *plugins) bindResultsMenu() {
+	order := widget.TableFieldCompleter(widget.TableOrderBar, pl.resultsFields)
+	where := widget.TableFieldCompleter(widget.TableWhereBar, pl.resultsFields)
+	pl.c.BindResultsCompleter(func(text string, cursor int) (int, []string) {
+		if pl.resultsClause == clauseWhere {
+			return where(text, cursor)
+		}
+		return order(text, cursor)
+	})
 	if t := pl.c.ResultsTable(resultsView); t != nil {
 		if t.Menu() != nil {
 			t.Menu().SetRows(pl.resultsMenuRows)

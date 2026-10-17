@@ -280,6 +280,8 @@ type pluginHost interface {
 	CopyText(text string) bool
 	// SetEditorRegister makes a table yank available to the editor's p/P commands.
 	SetEditorRegister(text string)
+	// BindResultsCompleter installs the loaded table's field-name completion in the results bar.
+	BindResultsCompleter(widget.TextCompleter)
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
 	InsertBlock(text string) error
 	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
@@ -342,6 +344,15 @@ func (c core) CopyText(text string) bool { return c.h.p != nil && c.h.p.App().Co
 func (c core) SetEditorRegister(text string) {
 	if c.h.core != nil {
 		c.h.core.SetRegister(text, false)
+	}
+}
+
+func (c core) BindResultsCompleter(complete widget.TextCompleter) {
+	if c.h.p == nil {
+		return
+	}
+	if input, ok := tuidecl.FindAs[*widget.TextInput](c.h.p, "resultsText"); ok {
+		input.SetCompleter(complete)
 	}
 }
 
