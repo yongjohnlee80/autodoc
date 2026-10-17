@@ -51,6 +51,8 @@ github.com/yongjohnlee80/gio v0.1.3 h1:SS1eK/mvEagINNIzAe09tjDIN3d2FdU9LjvR2pRNk
 github.com/yongjohnlee80/gio v0.1.3/go.mod h1:xdK1KMXzzmXQ6tTVMgCe0o5BVm003fo/u9yJ7OK6iko=
 github.com/yongjohnlee80/golib v0.6.118 h1:ImHbOo6a3Zo6jRKgSMVSagOl573yj0U+nR9ZqASTlFc=
 github.com/yongjohnlee80/golib v0.6.118/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
+github.com/yongjohnlee80/golib v0.6.120 h1:pfIeDDzApJE6bunx/fkyLQJvZ3MNdcDnw4FWm0jPMuc=
+github.com/yongjohnlee80/golib v0.6.120/go.mod h1:RAvsFuXFRS4qjOGL7Af9SRHVixI6cy0o4jsvPxRlTlc=
 github.com/yongjohnlee80/golib/gui v0.1.47 h1:opPJ9Zarg9qSlErvIMNtMnyA9D2M6z5/P5+wMI4avww=
 github.com/yongjohnlee80/golib/gui v0.1.47/go.mod h1:LFulv26MtTuJk1PIvkKbINs7Wja0CV+iUEhtSuzdFWw=
 github.com/yuin/gopher-lua v1.1.2 h1:yF/FjE3hD65tBbt0VXLE13HWS9h34fdzJmrWRXwobGA=
