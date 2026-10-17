@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 24,
+  protocol = 25,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -437,6 +437,12 @@ return {
       since = 1, scope = "local-peer", audience = "internal",
       params = {},
       doc = "Stops the daemon. Frozen across protocols.",
+    },
+    ["sys.stats"] = {
+      since = 25, scope = "global", audience = "agent",
+      params = {},
+      result = "{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}",
+      doc = "The daemon's own process: its sizes in bytes (rss 0 where the platform cannot say), cpu_seconds its CPU so far, cumulative (a reader takes a rate between two calls), started_at in Unix seconds and uptime in seconds.",
     },
     ["todos.ack"] = {
       since = 20, scope = "global", audience = "user",
