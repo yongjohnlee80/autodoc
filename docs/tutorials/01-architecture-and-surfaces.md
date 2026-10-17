@@ -26,7 +26,7 @@ Because files on disk are canonical, AutoDoc never requires an import or export 
 
 1. **Git-Native Versioning**: You branch, diff, blame, cherry-pick, and merge your knowledge base using standard `git` workflows. AutoDoc never hides metadata in sidecar binary blobs that cause merge conflicts.
 2. **External Editor Harmony**: You can edit a file with `nvim`, `sed`, `awk`, or an AI coding assistant while `autodoc --ui` or `autodoc --gui` is open. The daemon's filesystem follower (`core/follow`) detects the atomic rename or write within milliseconds, re-parses only the changed sections, and broadcasts incremental buffer and outline updates to all connected UI clients.
-3. **Disposable, Reconstructible Index**: The SQLite database (`index.db`) is strictly a derived cache containing parsed frontmatter fields, section chunks, FTS5 lexical postings, wikilink edges, and vector embeddings. If you delete the index directory entirely, AutoDoc deterministically rebuilds the exact same index state from your Markdown files and `.todo-list/` YAML records on the next startup.
+3. **Disposable, Reconstructible Index**: The SQLite store (`autodoc.db`) is strictly a derived cache containing parsed frontmatter fields, section chunks, FTS5 lexical postings, wikilink edges, and vector embeddings. If you delete the store, AutoDoc deterministically rebuilds the exact same index state from your Markdown files and `.todo-list/` YAML records on the next startup.
 
 ![AutoDoc Daemon and Surface Topology](daemon-topology.mmd)
 
@@ -45,7 +45,7 @@ A common failure mode in local knowledge tools occurs when multiple processes—
 
 AutoDoc eliminates multi-process write contention in `core/store` through two mechanisms:
 
-- **Single-Writer Lease (`flock`)**: Only the active daemon process (`autodoc --serve`) acquires the exclusive advisory file lock (`index.db.lock`) permitting write transactions against the workspace store.
+- **Single-Writer Lease (`flock`)**: Only the active daemon process (`autodoc --serve`) holds the exclusive `flock(2)` on a sidecar lease file beside the store, named for the store's device and inode (`.autodoc-lease-<device>-<inode>`, `core/store/lease.go`). Because the lease names the database rather than the path spelling, a symlink or hardlink to the same `autodoc.db` resolves to the same lease.
 - **Write-Ahead Logging (`PRAGMA journal_mode=WAL`)**: The SQLite store is configured in WAL mode with `synchronous=NORMAL`, `busy_timeout=5000`, `foreign_keys=ON`, and bounded WAL autocheckpointing (`wal_autocheckpoint=1000`). Inside the daemon, a dedicated writer coordinator serializes index batch commits (document upserts, chunk replacements, link graph rebuilds, and vector writes) while multiple read workers execute concurrent snapshot queries (`search.query`, `doc.get`, `graph.backlinks`) without blocking either the writer or one another.
 
 ### Content-Hash Deduplication
@@ -61,10 +61,11 @@ When any document changes on disk, `core/store` compares the incoming file's SHA
 
 At the center of AutoDoc's runtime architecture is `autodoc --serve`, a lightweight background daemon that manages workspace watchers, the SQLite WAL store, the hybrid ranking pipeline, and the Lua plugin host.
 
-All surfaces communicate with the daemon over a user-private Unix domain socket created with strict `0600` filesystem permissions:
+All surfaces communicate with the daemon over a user-private Unix domain socket named `autodoc.sock`, created with strict `0600` filesystem permissions. Unless `server.socket` is set in `config.toml`, the daemon resolves its directory in this order (`core/config/config.go`, `runtimeDir`):
 
-- **Linux**: `$XDG_RUNTIME_DIR/autodoc/autodoc.sock` (fallback: `~/.local/state/autodoc/autodoc.sock`)
-- **macOS**: `~/Library/Application Support/autodoc/autodoc.sock`
+1. **`$XDG_RUNTIME_DIR`** → `$XDG_RUNTIME_DIR/autodoc.sock` (typical on Linux, e.g. `/run/user/1000/autodoc.sock`).
+2. **macOS only:** the per-user `$TMPDIR` → `$TMPDIR/autodoc.sock`.
+3. **Otherwise:** the state directory → `$XDG_STATE_HOME/autodoc/autodoc.sock` (default `~/.local/state/autodoc/autodoc.sock`).
 
 The wire protocol uses **MessagePack-RPC** (`msgpack-RPC`), providing compact binary framing, sub-millisecond serialization overhead, and native compatibility with Neovim's built-in `vim.fn.sockconnect("pipe", ...)` and `vim.rpcrequest` APIs.
 
@@ -156,11 +157,12 @@ While `autodoc --serve` manages its own lifecycle automatically during normal us
 AutoDoc follows the XDG Base Directory Specification across Linux and macOS:
 
 - **Daemon Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Holds daemon-level `[server]` (`socket`, `state_dir`, `data_dir`), `[follow]` (`poll_interval`), and `[embedding_queue]` (`max_inflight`) settings (`core/config/config.go`). Workspace registrations and sealed embedding/reranker provider credentials live inside the SQLite store (`autodoc.db`) rather than in `config.toml`.
-- **State & Socket (`$XDG_RUNTIME_DIR/autodoc.sock` / `$XDG_STATE_HOME/autodoc/`)**:
-  - `autodoc.sock`: The `0600` msgpack-RPC Unix domain socket.
-- **Store Directory (`$XDG_DATA_HOME/autodoc/`)**:
+- **Socket (`autodoc.sock`)**: The `0600` msgpack-RPC Unix domain socket, at `server.socket` if set, else `$XDG_RUNTIME_DIR/autodoc.sock`, else (macOS) `$TMPDIR/autodoc.sock`, else the state directory (see §1.3).
+- **State Directory (`server.state_dir`, else `$XDG_STATE_HOME/autodoc/`, else `~/.local/state/autodoc/`)**: The daemon's log, and the socket's last-resort location.
+- **Store Directory (`server.data_dir`, else `$XDG_DATA_HOME/autodoc/`, else `~/.local/share/autodoc/`)**:
   - `autodoc.db`, `autodoc.db-wal`, `autodoc.db-shm`: The SQLite WAL database files storing workspaces, chunks, links, vectors, and sealed provider configurations.
-  - `autodoc.lock` & `lease-info`: The exclusive `flock(2)` single-writer lease and active endpoint record held by the running daemon.
+  - `.autodoc-lease-<device>-<inode>`: The sidecar file the running daemon holds an exclusive `flock(2)` on — the single-writer lease, named for the store's device and inode (`core/store/lease.go`).
+  - `.autodoc-lease-<device>-<inode>.json`: The lease-info record (`store_id`, `store_path`, `addr`, `pid`, `instance`, `version`, `protocol`, `min_protocol`, `since`) a client reads to find the daemon serving this store, even when it was started with a different config and socket.
 
 ### Inspecting Daemon Capabilities and Contracts (`sys.capabilities` and `sys.contracts`)
 
@@ -209,11 +211,11 @@ Example `sys.capabilities` response:
 
 When `autodoc --serve` receives `SIGTERM`, `SIGINT`, or a `sys.shutdown` RPC call:
 
-1. It stops accepting new RPC requests and cancels background embedding workers cleanly.
-2. It flushes all pending `core/follow` watcher events and runs `PRAGMA wal_checkpoint(TRUNCATE)` on every open workspace SQLite store so `index.db-wal` is folded completely into `index.db`.
-3. It unlinks `autodoc.sock` and releases the `index.db.lock` advisory file lease before exiting with code `0`.
+1. It stops accepting new RPC requests and cancels background embedding workers.
+2. It closes the SQLite store; SQLite folds the WAL back into `autodoc.db` on a clean close.
+3. It unlinks `autodoc.sock` **only if the path is still the socket this process bound** (`removeIfStillOurs` in `app/socket.go`), so a shutting-down daemon never deletes a successor's socket. Closing the process releases the `flock` on `.autodoc-lease-<device>-<inode>`.
 
-If a previous daemon process was ever terminated abruptly via `SIGKILL` (`kill -9`), the next client invocation detects that `autodoc.sock` refuses connection, verifies that `index.db.lock` is unheld, unlinks the stale socket file, and boots a fresh daemon automatically—recovering the WAL journal cleanly via SQLite's built-in crash recovery.
+If a previous daemon was terminated abruptly via `SIGKILL` (`kill -9`), the kernel releases its `flock` with the process, so the next daemon can take the lease. When that daemon binds the socket and finds a leftover `autodoc.sock` that **refuses connections** (`ECONNREFUSED`: no listener), it treats the file as a crashed daemon's, removes it, and binds a fresh one (`listen` in `app/socket.go`). Any other dial outcome — an answer, a timeout, or permission denied — leaves the path alone, since a live listener can produce those too. SQLite's built-in crash recovery replays the WAL when the store reopens.
 
 ---
 
