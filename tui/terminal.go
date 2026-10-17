@@ -383,26 +383,12 @@ func (t *terminals) newLuaShell() {
 		t.c.Notify(errNoShell.Error())
 		return
 	}
-	panel, err := t.panel()
-	if err != nil {
-		t.c.Keep(err)
-		return
-	}
-	var id widget.TerminalTabID
-	id, err = panel.Add(luaShellLabel(panel), TerminalConfig{Command: "lua", Start: t.startLua,
-		Exited: func(code int) { t.shellExited(id, code) }})
-	if err != nil {
-		t.c.Notify("the terminal could not add a Lua shell: " + err.Error())
-		return
-	}
 	if !t.c.PanelOpen("terminal") {
 		t.before = t.c.KeyboardPane()
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
-	if err := panel.Start(id); err != nil {
-		t.c.Notify("the Lua shell could not start: " + err.Error())
-	}
-	t.c.Keep(panel.Select(id)) // golib's Select gives the tab's terminal the keyboard
+	t.startTab(luaShellLabel, TerminalConfig{Command: "lua", Start: t.startLua}, "the terminal could not add a Lua shell: ",
+		func(err error) string { return "the Lua shell could not start (" + err.Error() + ")" })
 }
 
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
@@ -427,24 +413,35 @@ func liveShell(panel TerminalPanel, prefer widget.TerminalTabID) widget.Terminal
 // it the keyboard: opening the panel with none, its +, and New on a tab's menu. A shell that fails
 // to start says so, in its tab and in a notice.
 func (t *terminals) newShell() {
+	root := ""
+	if ws, ok := t.c.ActiveWorkspace(); ok {
+		root = ws.root
+	}
+	t.startTab(shellLabel, TerminalConfig{Dir: termDir(root)}, "the terminal could not add a shell: ",
+		func(err error) string {
+			return "the terminal could not start (" + err.Error() + "): SPC ` or Enter in it tries again"
+		})
+}
+
+// startTab adds a tab named by label running config, starts it and gives it the keyboard (golib's
+// Select gives the tab's terminal the keyboard): a shell's and a Lua shell's. A tab that cannot be
+// added is the notice addFail and the error; one that fails to start says so, in its tab and in the
+// notice startFail makes.
+func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalConfig, addFail string, startFail func(error) string) {
 	panel, err := t.panel()
 	if err != nil {
 		t.c.Keep(err)
 		return
 	}
-	root := ""
-	if ws, ok := t.c.ActiveWorkspace(); ok {
-		root = ws.root
-	}
 	var id widget.TerminalTabID
-	id, err = panel.Add(shellLabel(panel), TerminalConfig{Dir: termDir(root),
-		Exited: func(code int) { t.shellExited(id, code) }})
+	config.Exited = func(code int) { t.shellExited(id, code) }
+	id, err = panel.Add(label(panel), config)
 	if err != nil {
-		t.c.Notify("the terminal could not add a shell: " + err.Error())
+		t.c.Notify(addFail + err.Error())
 		return
 	}
 	if err := panel.Start(id); err != nil {
-		t.c.Notify("the terminal could not start (" + err.Error() + "): SPC ` or Enter in it tries again")
+		t.c.Notify(startFail(err))
 	}
 	t.c.Keep(panel.Select(id))
 }
