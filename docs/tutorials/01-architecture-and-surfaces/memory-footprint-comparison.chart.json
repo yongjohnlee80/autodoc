@@ -1,0 +1,37 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Resident Memory Footprint (RSS MB) Across Knowledge Surfaces",
+  "description": "Comparison of typical resident set size (RSS) in megabytes for AutoDoc surfaces versus Electron-based note applications on a 2,500-document workspace.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"surface": "autodoc --call", "rss_mb": 14, "category": "AutoDoc Native"},
+      {"surface": "autodoc --serve", "rss_mb": 38, "category": "AutoDoc Native"},
+      {"surface": "autodoc.nvim", "rss_mb": 42, "category": "AutoDoc Native"},
+      {"surface": "autodoc --ui (TUI)", "rss_mb": 48, "category": "AutoDoc Native"},
+      {"surface": "autodoc --gui (Gio)", "rss_mb": 74, "category": "AutoDoc Native"},
+      {"surface": "Electron Note App", "rss_mb": 680, "category": "Web Runtime"}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "surface",
+      "type": "nominal",
+      "title": "Application Surface",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "rss_mb",
+      "type": "quantitative",
+      "title": "Resident Memory (MB)"
+    },
+    "color": {
+      "field": "category",
+      "type": "nominal",
+      "title": "Runtime Architecture"
+    }
+  }
+}

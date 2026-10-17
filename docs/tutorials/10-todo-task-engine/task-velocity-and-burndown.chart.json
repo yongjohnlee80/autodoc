@@ -1,0 +1,49 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Workspace Task Velocity and Burndown Across Six Weekly Sprints",
+  "description": "Stacked bar chart tracking Open, In Progress, and Completed task counts across six weekly sprints (W1 to W6) before 28-day auto-archival.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"sprint": "W1", "status": "Completed", "tasks": 14},
+      {"sprint": "W1", "status": "In Progress", "tasks": 6},
+      {"sprint": "W1", "status": "Open", "tasks": 42},
+      {"sprint": "W2", "status": "Completed", "tasks": 23},
+      {"sprint": "W2", "status": "In Progress", "tasks": 8},
+      {"sprint": "W2", "status": "Open", "tasks": 36},
+      {"sprint": "W3", "status": "Completed", "tasks": 31},
+      {"sprint": "W3", "status": "In Progress", "tasks": 7},
+      {"sprint": "W3", "status": "Open", "tasks": 29},
+      {"sprint": "W4", "status": "Completed", "tasks": 39},
+      {"sprint": "W4", "status": "In Progress", "tasks": 5},
+      {"sprint": "W4", "status": "Open", "tasks": 24},
+      {"sprint": "W5", "status": "Completed", "tasks": 48},
+      {"sprint": "W5", "status": "In Progress", "tasks": 4},
+      {"sprint": "W5", "status": "Open", "tasks": 18},
+      {"sprint": "W6", "status": "Completed", "tasks": 57},
+      {"sprint": "W6", "status": "In Progress", "tasks": 3},
+      {"sprint": "W6", "status": "Open", "tasks": 12}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "sprint",
+      "type": "ordinal",
+      "title": "Weekly Sprint",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "tasks",
+      "type": "quantitative",
+      "title": "Task Count",
+      "stack": "zero"
+    },
+    "color": {
+      "field": "status",
+      "type": "nominal",
+      "title": "Task Bucket"
+    }
+  }
+}

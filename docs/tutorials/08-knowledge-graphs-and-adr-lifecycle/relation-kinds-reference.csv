@@ -1,0 +1,11 @@
+Kind,Source_Location,Syntax_Example,Forward_Label,Inverse_Label,Search_Ranking_Effect
+wikilink,Markdown Body,"[[0203-storage#4-lease|Storage Lease]]",Links,Backlinks,"Inbound backlinks apply +0.1 linkBoost authority weight after RRF fusion"
+markdown,Markdown Body,"[Storage Lease](../adrs/0203-storage.md#lease)",Links,Backlinks,"Inbound backlinks apply +0.1 linkBoost authority weight after RRF fusion"
+embed,Markdown Body,"![Architecture](0203-storage/flow.mmd) or ![[./flow.mmd]]",Embeds,Backlinks,"Ties companion diagrams and CSV tables to parent document backlinks"
+supersedes,YAML Frontmatter,"supersedes: [0001-legacy-store]",Supersedes,Superseded by,"Marks target ADR as superseded; demotes target below this document when demote_superseded: true"
+superseded_by,YAML Frontmatter,"superseded_by: [0009-sqlite-wal]",Superseded by,Supersedes,"Demotes this document's hits below successor 0009-sqlite-wal and sets Hit.SupersededBy"
+amends,YAML Frontmatter,"amends: [0009-sqlite-wal]",Amends,Amended by,"Links incremental ADR amendments to their base decision in Relations drawer"
+sources,YAML Frontmatter,"sources: [adrs/0009-sqlite-wal.md]",Sources,Cited by,"Connects synthesis and benchmark records to primary evidence documents"
+related,YAML Frontmatter,"related: [conventions/code-review.md]",Related,Related,"Symmetric cross-reference edge surfaced in Relations panel (SPC l)"
+adr,YAML Frontmatter,"adr: 0009-sqlite-wal (or list in todo task)",ADR,Referenced by,"Binds code reviews, rationale docs, and .todo-list tasks to governing ADRs"
+review,YAML Frontmatter,"review: [$KB_ROOT/reviews/lector/pr249-r1.md]",Review,Reviewed in,"Binds .todo-list tasks and PR records to durable review verdicts"

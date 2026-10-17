@@ -1,0 +1,10 @@
+flowchart LR
+    Q["Query & Facet Parser (search/query)"] --> F["Schema Facet Pre-Filter (field:value, -field:value, paths, tags)"]
+    F --> S1["Stage 1: Lexical FTS5 BM25 (Top 50 Candidates)"]
+    F --> B1["Stage 2a: 1-Bit Hamming Prefilter (Binary Code Scan)"]
+    B1 --> S2["Stage 2b: Float32 Cosine Rescore (Top 50 Candidates)"]
+    S1 --> RRF["Reciprocal Rank Fusion (k = 60) + Tag & In-Link Boosts"]
+    S2 --> RRF
+    RRF --> CAP["Per-Document Cap (Max 3 Chunks / Doc) + Demote Superseded"]
+    CAP --> S3["Stage 3: Cross-Encoder Reranker (Top Window 10..100)"]
+    S3 --> OUT["Ranked Hit Spans (line_start..line_end, via, stages)"]

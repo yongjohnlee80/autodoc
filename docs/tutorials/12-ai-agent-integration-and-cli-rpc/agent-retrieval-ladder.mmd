@@ -1,0 +1,26 @@
+flowchart TD
+    Start["Agent Needs Workspace / KB Context"] --> KnownTarget{"Known Path, ID, or Exact Error String?"}
+    KnownTarget -->|"Yes"| DirectRead["Direct Read or Scoped rg Over Target File"]
+    KnownTarget -->|"No (Topic Lookup)"| Probe["Run search.query with paths Scope and limit 3"]
+    Probe --> InspectStages{"Inspect stages.performed and stages.skipped"}
+
+    InspectStages -->|"semantic + rerank performed"| Top3["Read Top 3 Hits via line_start..line_end Span"]
+    InspectStages -->|"semantic performed, rerank skipped"| Top10["Re-run search.query with limit 10 and Read Matching Spans"]
+    InspectStages -->|"lexical only (semantic skipped)"| LexicalLadder["Words-Only Ladder: 2-3 Distinctive Keywords + Prefix* + doc.find + graph.neighbors"]
+    InspectStages -->|"Daemon Offline"| ScopedGrep["Fallback: Scoped rg Skipping archive/** and raw/**"]
+
+    Top3 --> RelCheck{"Need Supersession or Cross-Doc Lineage?"}
+    Top10 --> RelCheck
+    LexicalLadder --> RelCheck
+    ScopedGrep --> RelCheck
+    DirectRead --> RelCheck
+
+    RelCheck -->|"Yes"| GraphWalk["Call graph.links, graph.backlinks, or graph.neighborhood"]
+    RelCheck -->|"No"| DraftEdit["Draft New or Updated Document with YAML Frontmatter"]
+    GraphWalk --> DraftEdit
+
+    DraftEdit --> Validate["Run autodoc --call doc.validate Before or After Saving"]
+    Validate --> DiagCheck{"Any Diagnostics Returned?"}
+    DiagCheck -->|"Yes"| FixDiag["Fix Frontmatter Rule / Field Violation"]
+    FixDiag --> Validate
+    DiagCheck -->|"No"| Complete["Commit Clean Document and Update Task via todos.*"]

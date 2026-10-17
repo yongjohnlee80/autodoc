@@ -1,0 +1,41 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Resident Client Memory Across Result Set Sizes (MB)",
+  "description": "Comparison of client memory between paged session cursors and unbounded full-result buffers",
+  "width": 640,
+  "height": 280,
+  "data": {
+    "values": [
+      {"result_rows": "1k rows", "memory_mb": 4.2, "strategy": "Paged Session Cursor (AutoDoc + AutoDB)"},
+      {"result_rows": "10k rows", "memory_mb": 6.8, "strategy": "Paged Session Cursor (AutoDoc + AutoDB)"},
+      {"result_rows": "50k rows", "memory_mb": 14.5, "strategy": "Paged Session Cursor (AutoDoc + AutoDB)"},
+      {"result_rows": "100k rows", "memory_mb": 24.0, "strategy": "Paged Session Cursor (AutoDoc + AutoDB)"},
+      {"result_rows": "500k rows", "memory_mb": 24.0, "strategy": "Paged Session Cursor (AutoDoc + AutoDB)"},
+      {"result_rows": "1k rows", "memory_mb": 8.5, "strategy": "Unbounded Full-Result Buffer"},
+      {"result_rows": "10k rows", "memory_mb": 64.0, "strategy": "Unbounded Full-Result Buffer"},
+      {"result_rows": "50k rows", "memory_mb": 310.0, "strategy": "Unbounded Full-Result Buffer"},
+      {"result_rows": "100k rows", "memory_mb": 620.0, "strategy": "Unbounded Full-Result Buffer"},
+      {"result_rows": "500k rows", "memory_mb": 3100.0, "strategy": "Unbounded Full-Result Buffer"}
+    ]
+  },
+  "mark": {"type": "line", "point": true},
+  "encoding": {
+    "x": {
+      "field": "result_rows",
+      "type": "ordinal",
+      "title": "Query Result Set Size",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "memory_mb",
+      "type": "quantitative",
+      "title": "Resident Client Memory (MB)"
+    },
+    "color": {
+      "field": "strategy",
+      "type": "nominal",
+      "title": "Buffering Architecture"
+    }
+  }
+}

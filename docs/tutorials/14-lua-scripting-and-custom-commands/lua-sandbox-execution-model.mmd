@@ -1,0 +1,9 @@
+flowchart TB
+  UserTrigger["User Trigger (:command or Keymap)"] --> SandboxVM["2s Sandboxed Lua 5.1 VM (No os/io/network)"]
+  SandboxVM --> EditorBuf["Editor & Buffer Mutations (ed / autodoc.buf)"]
+  EditorBuf --> UndoGroup["Batched into Single-Step Atomic Undo Group"]
+  SandboxVM --> UIPick["Interactive UI Pickers (autodoc.ui.pick / notify)"]
+  SandboxVM --> CapGate["Capability Gate (autodoc.requires / package.toml)"]
+  CapGate --> DaemonRPC["Async Daemon RPC (autodoc.call / autodoc.cli)"]
+  DaemonRPC --> CallbackResume["Callback Resume on UI Loop (2s Budget + Revision Check)"]
+  CallbackResume --> UndoGroup

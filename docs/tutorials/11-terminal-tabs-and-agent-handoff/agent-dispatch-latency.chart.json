@@ -1,0 +1,40 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Task Dispatch Latency: Manual Context Copy-Paste vs AutoDoc One-Key Handoff",
+  "description": "Comparison of seconds spent across task handoff workflow steps between manual copy-pasting (~45s total) and AutoDoc SPC x -> A handoff (<1s total).",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"step": "1. Locate Task", "workflow": "Manual Copy-Paste", "seconds": 9.5},
+      {"step": "2. Update Status & Assignee", "workflow": "Manual Copy-Paste", "seconds": 12.0},
+      {"step": "3. Gather ADR Paths", "workflow": "Manual Copy-Paste", "seconds": 14.5},
+      {"step": "4. Paste Prompt to Agent", "workflow": "Manual Copy-Paste", "seconds": 9.0},
+      {"step": "1. Locate Task", "workflow": "AutoDoc One-Key (SPC x -> A)", "seconds": 0.2},
+      {"step": "2. Update Status & Assignee", "workflow": "AutoDoc One-Key (SPC x -> A)", "seconds": 0.15},
+      {"step": "3. Gather ADR Paths", "workflow": "AutoDoc One-Key (SPC x -> A)", "seconds": 0.1},
+      {"step": "4. Paste Prompt to Agent", "workflow": "AutoDoc One-Key (SPC x -> A)", "seconds": 0.25}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "step",
+      "type": "ordinal",
+      "title": "Handoff Workflow Step",
+      "sort": "ascending",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "seconds",
+      "type": "quantitative",
+      "title": "Elapsed Time (Seconds)",
+      "stack": "zero"
+    },
+    "color": {
+      "field": "workflow",
+      "type": "nominal",
+      "title": "Dispatch Method"
+    }
+  }
+}

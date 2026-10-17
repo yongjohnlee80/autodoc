@@ -1,0 +1,33 @@
+stateDiagram-v2
+    [*] --> Open: todos.add (no assignee)
+    [*] --> InProgress: todos.add (with assignee)
+
+    Open --> InProgress: todos.assign or todos.status
+    Open --> Deferred: todos.status
+    Open --> Completed: todos.status
+    Open --> Archived: todos.status
+
+    InProgress --> Open: todos.status
+    InProgress --> Deferred: todos.status
+    InProgress --> Completed: todos.status
+    InProgress --> Archived: todos.status
+
+    Deferred --> Open: todos.status
+    Deferred --> InProgress: todos.assign or todos.status
+    Deferred --> Completed: todos.status
+    Deferred --> Archived: todos.status
+
+    Completed --> Open: todos.status
+    Completed --> InProgress: todos.status
+    Completed --> Deferred: todos.status
+    Completed --> Archived: todos.status or 28-day refresh
+
+    Archived --> Open: todos.status
+    Archived --> InProgress: todos.status
+
+    state "SQLite Crash-Recovery Journal (sqlitejournal)" as Journal {
+        [*] --> Pending: 1. Record source/target rev & paths
+        Pending --> Committed: 2a. Create / Update / Move fsynced
+        Pending --> Staged: 2b. Delete renamed to .trash/seq-file
+        Staged --> Committed: 3. Unlink trash file & commit snapshot
+    }

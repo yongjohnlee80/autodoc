@@ -1,0 +1,33 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Embedding & Reranker Top-3 Recall (%) vs GPU VRAM Footprint (GB)",
+  "description": "Comparison of GPU memory footprint in GB (at 8,192 context tokens) versus Top-3 retrieval recall percentage.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"model": "nomic-embed-text", "vram_gb": 0.6, "recall_pct": 84},
+      {"model": "qwen3-embedding-0.6b", "vram_gb": 1.2, "recall_pct": 90},
+      {"model": "qwen3-embedding-4b", "vram_gb": 4.6, "recall_pct": 94},
+      {"model": "qwen3-0.6b + bge-reranker-v2-m3", "vram_gb": 2.4, "recall_pct": 98}
+    ]
+  },
+  "mark": "circle",
+  "encoding": {
+    "x": {
+      "field": "vram_gb",
+      "type": "quantitative",
+      "title": "GPU VRAM Usage at 8k Context (GB)"
+    },
+    "y": {
+      "field": "recall_pct",
+      "type": "quantitative",
+      "title": "Top-3 Recall (%)"
+    },
+    "color": {
+      "field": "model",
+      "type": "nominal",
+      "title": "Model Stack"
+    }
+  }
+}

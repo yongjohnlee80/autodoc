@@ -1,0 +1,19 @@
+Language,Extensions,Extractor_Engine,Extracted_Symbol_Kinds,Receiver_or_Scope_Support
+Go,.go,go/ast exact parser,"func, method, struct, interface, type, const, var",Method receiver type (e.g. *Indexer or Store)
+Rust,.rs,Polyglot line extractor,"func, method, struct, enum, trait, type, const, mod, impl",Impl target type / trait scope
+Python,.py,Polyglot indentation extractor,"func, method, class, var",Enclosing class scope for methods
+TypeScript / JavaScript,".ts, .tsx, .js, .jsx, .mjs",Polyglot line extractor,"func, method, class, interface, type, enum, const",Enclosing class or interface scope
+C / C++,".c, .h, .cc, .cpp, .hpp",Polyglot line extractor,"func, method, struct, class, enum, type, macro",Class/namespace qualifier (Class::Method)
+Java,.java,Polyglot line extractor,"method, class, interface, enum, field",Enclosing class or interface scope
+Kotlin,".kt, .kts",Polyglot line extractor,"func, method, class, interface, object, enum, val",Enclosing class/object or extension receiver
+Swift,.swift,Polyglot line extractor,"func, method, struct, class, protocol, enum, extension",Enclosing type or extension target
+C#,.cs,Polyglot line extractor,"method, class, struct, interface, enum, record, property",Enclosing class/struct scope
+Ruby,.rb,Polyglot line extractor,"func, method, class, module, const",Enclosing class or module scope
+PHP,.php,Polyglot line extractor,"func, method, class, interface, trait, enum, const",Enclosing class or trait scope
+Lua,.lua,Polyglot line extractor,"func, method, var",Module table prefix (M.fn or M:method)
+Scala,".scala, .sc",Polyglot line extractor,"func, method, class, trait, object, type, val",Enclosing class/trait/object scope
+Elixir,".ex, .exs",Polyglot line extractor,"func, macro, module, protocol, struct",Enclosing defmodule scope
+SQL,.sql,Polyglot DDL extractor,"table, view, func, index, trigger, type",Schema-qualified object name
+Protobuf,.proto,Polyglot IDL extractor,"message, service, rpc, enum",Enclosing service or message scope
+Zig,.zig,Polyglot / custom chunker,"func, struct, enum, union, const, test",Container struct/enum namespace
+Odin,.odin,Polyglot line extractor,"proc, struct, enum, union, bit_field, const",Package and proc group scope

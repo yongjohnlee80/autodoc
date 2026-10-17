@@ -1,0 +1,48 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Workspace Document Growth by Artifact Type (Stacked Tableau-10 Palette)",
+  "description": "Demonstrates AutoDoc's native Vega-Lite stacked bar encoding and Tableau-10 categorical color assignment across quarterly knowledge base snapshots.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"quarter": "2025-Q4", "count": 45, "artifact_type": "ADRs"},
+      {"quarter": "2025-Q4", "count": 60, "artifact_type": "Runbooks"},
+      {"quarter": "2025-Q4", "count": 80, "artifact_type": "Synthesis Notes"},
+      {"quarter": "2025-Q4", "count": 35, "artifact_type": "Code Reviews"},
+      {"quarter": "2026-Q1", "count": 68, "artifact_type": "ADRs"},
+      {"quarter": "2026-Q1", "count": 92, "artifact_type": "Runbooks"},
+      {"quarter": "2026-Q1", "count": 130, "artifact_type": "Synthesis Notes"},
+      {"quarter": "2026-Q1", "count": 74, "artifact_type": "Code Reviews"},
+      {"quarter": "2026-Q2", "count": 95, "artifact_type": "ADRs"},
+      {"quarter": "2026-Q2", "count": 124, "artifact_type": "Runbooks"},
+      {"quarter": "2026-Q2", "count": 190, "artifact_type": "Synthesis Notes"},
+      {"quarter": "2026-Q2", "count": 140, "artifact_type": "Code Reviews"},
+      {"quarter": "2026-Q3", "count": 128, "artifact_type": "ADRs"},
+      {"quarter": "2026-Q3", "count": 155, "artifact_type": "Runbooks"},
+      {"quarter": "2026-Q3", "count": 265, "artifact_type": "Synthesis Notes"},
+      {"quarter": "2026-Q3", "count": 210, "artifact_type": "Code Reviews"}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "quarter",
+      "type": "ordinal",
+      "title": "Quarter",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "count",
+      "type": "quantitative",
+      "title": "Total Indexed Documents",
+      "stack": "zero"
+    },
+    "color": {
+      "field": "artifact_type",
+      "type": "nominal",
+      "title": "Document Category"
+    }
+  }
+}

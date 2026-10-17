@@ -1,0 +1,48 @@
+flowchart TB
+    subgraph FrontEnds["Interactive & Programmatic Surfaces"]
+        UI["autodoc --ui (Terminal TUI)"]
+        GUI["autodoc --gui (Native Gio GUI)"]
+        NVIM["autodoc.nvim (Neovim Client)"]
+        CALL["autodoc --call (CLI / AI Agents)"]
+        PLUG["External Plugins (Lua / RPC)"]
+    end
+
+    subgraph Daemon["Local Daemon (autodoc --serve)"]
+        RPC["msgpack-RPC Dispatcher (0600 Unix Socket)"]
+        DOC["doc Module (CRUD & Frontmatter)"]
+        IDX["index Module (Chunker & Lexical FTS5)"]
+        SRCH["search & rank Modules (BM25 + RRF)"]
+        GRPH["graph Module (Wikilinks & Relations)"]
+        TODO["todo Module (.todo-list YAML Engine)"]
+        EMB["embedding Module (Vector Workers)"]
+    end
+
+    subgraph Storage["Canonical Files & Derived Storage"]
+        MD["Canonical Markdown + YAML Files (.md)"]
+        FOLLOW["Watch-Before-Scan Follower (core/follow)"]
+        WAL["SQLite WAL Store (Single-Writer Lease)"]
+        PG["autodoc --server (Enterprise Postgres + pgvector)"]
+    end
+
+    UI --> RPC
+    GUI --> RPC
+    NVIM --> RPC
+    CALL --> RPC
+    PLUG --> RPC
+
+    RPC --> DOC
+    RPC --> IDX
+    RPC --> SRCH
+    RPC --> GRPH
+    RPC --> TODO
+    RPC --> EMB
+
+    DOC --> MD
+    MD --> FOLLOW
+    FOLLOW --> IDX
+    IDX --> WAL
+    SRCH --> WAL
+    GRPH --> WAL
+    TODO --> MD
+    EMB --> WAL
+    SRCH --> PG

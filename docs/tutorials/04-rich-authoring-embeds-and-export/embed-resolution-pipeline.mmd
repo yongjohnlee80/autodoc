@@ -1,0 +1,24 @@
+flowchart TD
+    PARSE["Standalone Paragraph Image Syntax: ![Caption](target)"] --> GUARD["Security Validation (embedPath & os.Root)"]
+    GUARD --> REJECT["Reject Absolute Paths, URLs, or '..' Traversal"]
+    GUARD --> STEP1["1. Check Sibling Path: {note-dir}/{target}"]
+    STEP1 --> FOUND1["Sibling File Exists?"]
+    FOUND1 -->|"Yes"| CAP["Verify Size & Row/Col Caps (core/export/embed.go)"]
+    FOUND1 -->|"No"| STEP2["2. Check Companion Folder: {note-dir}/{note-stem}/{target}"]
+    STEP2 --> CAP
+
+    CAP --> KIND["Dispatch by File Extension"]
+    KIND -->|".mmd / .mermaid"| MMD["Mermaid AST Parser (golib/parse/mermaid)"]
+    KIND -->|".chart.json / .vl.json"| VL["Vega-Lite Spec Parser (golib/gui/vegalite)"]
+    KIND -->|".csv"| CSV["Bounded CSV Parser (Max 1000 Rows x 64 Cols)"]
+    KIND -->|".png / .svg / .webp / .jpg"| IMG["Image Decoder & MIME Sniffer (Max 6 MiB)"]
+
+    MMD --> GUI_OUT["--gui Rendered View: Native Gio Vector Canvas (Click to Edit)"]
+    VL --> GUI_OUT
+    CSV --> GUI_OUT
+    IMG --> GUI_OUT
+
+    MMD --> EXP_OUT["--export HTML: Self-Contained Offline SVG / Canvas + Base64 Data URI"]
+    VL --> EXP_OUT
+    CSV --> EXP_OUT
+    IMG --> EXP_OUT

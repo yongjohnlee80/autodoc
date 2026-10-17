@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant AgentA as Agent A (Claude Code)
+    participant AgentB as Agent B (Gemini CLI)
+    participant Daemon as AutoDoc Daemon (core/docs & core/todo)
+    participant VFS as golib/vfs/local (os.Root)
+
+    AgentA->>Daemon: doc.read("kb", "adrs/0203.md")
+    Daemon->>VFS: steady(): Stat(before) -> Read -> Stat(after)
+    VFS-->>Daemon: Content + Version "sha256-1"
+    Daemon-->>AgentA: {content: "...", version: "sha256-1"}
+
+    AgentB->>Daemon: doc.read("kb", "adrs/0203.md")
+    Daemon->>VFS: steady(): Stat(before) -> Read -> Stat(after)
+    VFS-->>Daemon: Content + Version "sha256-1"
+    Daemon-->>AgentB: {content: "...", version: "sha256-1"}
+
+    AgentA->>Daemon: doc.patch / doc.write("kb", "adrs/0203.md", editA, rev: "sha256-1")
+    Daemon->>VFS: WriteFileIf(want: "sha256-1")
+    Note over VFS: Verify current version == "sha256-1", write sibling .part temp file, fsync file, os.Rename over target, fsync parent dir
+    VFS-->>Daemon: Committed FileInfo (new Version: "sha256-2")
+    Daemon-->>AgentA: {version: "sha256-2"}
+
+    AgentB->>Daemon: doc.patch / doc.write("kb", "adrs/0203.md", editB, rev: "sha256-1")
+    Daemon->>VFS: WriteFileIf(want: "sha256-1")
+    Note over VFS: Current version is "sha256-2" != want "sha256-1" — abort before rename and leave file untouched
+    VFS-->>Daemon: *vfs.ConflictError
+    Daemon-->>AgentB: Error -32062 rpc.conflict ("the document is not at that version")
+    Note over AgentB: Re-read at "sha256-2", merge editB cleanly, and retry

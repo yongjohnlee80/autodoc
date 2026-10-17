@@ -1,0 +1,21 @@
+sequenceDiagram
+    participant Client as Surface (--ui / autodoc.nvim / --call)
+    participant Socket as Unix Socket (0600)
+    participant Daemon as autodoc --serve
+    participant Store as SQLite WAL Store (core/store)
+
+    Client->>Socket: Dial ~/.local/state/autodoc/autodoc.sock
+    alt Socket unreachable or missing
+        Client->>Daemon: Spawn background autodoc --serve
+        Daemon->>Store: Acquire Single-Writer Lease (flock)
+        Daemon->>Socket: Bind 0600 Unix domain socket
+        Socket-->>Client: Connection established
+    else Daemon already running
+        Socket-->>Client: Connection established
+    end
+    Client->>Daemon: Request sys.hello (client_version, protocol_rev)
+    Daemon-->>Client: Response {ok: true, protocol_rev, pid, workspaces}
+    Client->>Daemon: Request search.query / doc.get / todos.list
+    Daemon->>Store: Read snapshot (concurrent WAL reader)
+    Store-->>Daemon: Rows & ranked chunks
+    Daemon-->>Client: msgpack-RPC response payload
