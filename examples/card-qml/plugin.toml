@@ -1,0 +1,13 @@
+name     = "card-qml"
+title    = "People (QML card)"
+kind     = "dialog"
+protocol = 6
+command  = ["./bin/autodoc-card-qml"]
+
+[dialog]
+modal      = false
+width      = 44
+placements = ["right", "left"]
+
+[install]
+build = ["go", "build", "-o", "bin/autodoc-card-qml", "."]
