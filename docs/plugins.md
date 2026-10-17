@@ -604,7 +604,7 @@ plugin say to each other; both send `host.frame` like any other plugin.
 | You write | a `Page` of blocks and controls, in Go | a golib QML layout, plus Go handlers |
 | Controls | `Input` (and masked), `Buttons`, `List`, `Tree`, `Text`, `Line` | golib's widgets: `TextField`, `Button`, `ListView`, `TreeView`, `TableView`, `Flex`… |
 | Starts | drawing at once | by parsing its layout |
-| A plugin's binary | about 3 MB | about 7.5 MB |
+| A minimal plugin, stripped | about 3 MB | about 7.5 MB |
 | Example | `examples/card-go` | `examples/card-qml` |
 
 Pick `plugin/card` for a form, a list or a tree beside the page; pick `plugin/decl` for a richer

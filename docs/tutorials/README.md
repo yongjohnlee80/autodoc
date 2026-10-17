@@ -1,6 +1,6 @@
 # The AutoDoc User Reference Book & Interactive Tutorials
 
-Welcome to the **AutoDoc User Reference Book**—an 18-chapter, hands-on guide and architectural reference covering every surface of AutoDoc: the terminal editor (`autodoc --ui`), the native GPU desktop window (`autodoc --gui`), the Neovim integration (`autodoc.nvim`), the AI agent CLI (`autodoc --call`), the Lua & out-of-process plugin ecosystem (Protocols 1–5 and `autodoc-autodb`), and the headless multi-tenant PostgreSQL RAG server (`autodoc --server`).
+Welcome to the **AutoDoc User Reference Book**—an 18-chapter, hands-on guide and architectural reference covering every surface of AutoDoc: the terminal editor (`autodoc --ui`), the native GPU desktop window (`autodoc --gui`), the Neovim integration (`autodoc.nvim`), the AI agent CLI (`autodoc --call`), the Lua & out-of-process plugin ecosystem (Protocols 1–6, the plugin UI kits, and `autodoc-autodb`), and the headless multi-tenant PostgreSQL RAG server (`autodoc --server`).
 
 ---
 
@@ -63,8 +63,8 @@ Open this folder (`docs/tutorials/`) as a workspace in `autodoc --gui` and press
 ### Part IV — Programmability, Plugins & Neovim
 14. **[Chapter 14: Sandboxed Lua Scripting (`~/.config/autodoc/lua/`)](./14-lua-scripting-and-custom-commands.md)**
     Writing custom `:commands`, modal keymaps, single-step undo buffer transformations, interactive `autodoc.ui.pick` workflows, and capability-gated async RPC scripts inside the 2-second Lua sandbox.
-15. **[Chapter 15: The Out-of-Process Plugin System (Protocols 1–5) & Vetted Registry](./15-plugin-architecture-and-registry.md)**
-    Building isolated child-process plugins in Go or Python across Protocols 1 to 5: modal dialogs, docked non-modal cards, document feeds with byte offsets, hosted paged tables (`[table]`), and typed cell kinds.
+15. **[Chapter 15: The Out-of-Process Plugin System (Protocols 1–6) & Vetted Registry](./15-plugin-architecture-and-registry.md)**
+    Building isolated child-process plugins in Go or Python across Protocols 1 to 6: modal dialogs, docked non-modal cards, document feeds with byte offsets, hosted paged tables (`[table]`), typed cell kinds, the pointer, and the `plugin/card` and `plugin/decl` UI kits.
 16. **[Chapter 16: Live Database Workbenches in Markdown — The AutoDB Plugin](./16-autodb-live-sql-workbench.md)**
     Running PostgreSQL, MySQL, and SQLite queries directly from `.sql` files and Markdown notes via `autodoc-autodb`, streaming session-pinned paged cursors into AutoDoc's 100k-row sortable Results table, and exporting CSV or Markdown tables.
 17. **[Chapter 17: Neovim Integration (`autodoc.nvim`) & Reversible KB Migration](./17-neovim-integration-and-kb-migration.md)**

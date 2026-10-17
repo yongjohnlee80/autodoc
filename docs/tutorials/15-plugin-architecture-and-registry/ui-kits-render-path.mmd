@@ -1,0 +1,10 @@
+flowchart LR
+  subgraph Plugin["Plugin process"]
+    Page["card.Page: blocks & controls"] --> Card["card.Card: fit, theme roles, keys, pointer"]
+    QML["QML layout + Theme.* palette"] --> Prog["tuidecl.Program on a frame backend"]
+    Card --> Frame["plugin.Frame (grapheme cells)"]
+    Prog -->|"FlushSized: diff + size drawn at"| Frame
+  end
+  Frame -->|"host.frame (unchanged wire)"| Host["AutoDoc host: draws runs a cluster at a time"]
+  Host -->|"plugin.key / resize / theme / focus / pointer"| Card
+  Host -->|"same notifications, as terminal events"| Prog

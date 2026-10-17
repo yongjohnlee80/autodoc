@@ -1,8 +1,8 @@
 # Chapter 15: Plugin Architecture & Registry
 
-While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (ADR 0209, ADR 1791268009, ADR 1791762474, ADR 1792078052; see `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
+While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (ADR 0209, ADR 1791268009, ADR 1791762474, ADR 1792078052, ADR 1792254331; see `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
 
-This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 5**, and shows how to build and install plugins from the Registry or a Git URL.
+This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 6**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from the Registry or a Git URL.
 
 ---
 
@@ -26,11 +26,11 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 5
+## 15.3 Progression of Protocols 1 Through 6
 
-AutoDoc's plugin contract evolves through five cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
+AutoDoc's plugin contract evolves through six cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
-![Evolution of AutoDoc Plugin Protocols 1 to 5](five-plugin-protocols.mmd)
+![Evolution of AutoDoc Plugin Protocols 1 to 6](plugin-protocols.mmd)
 
 ### Protocol 1: Modal Dialogs and Styled Cell Frames
 
@@ -70,6 +70,10 @@ In Protocol 4, every cell is a string, making SQL `NULL` indistinguishable from 
 - `n`: exact numeric literal (sorted numerically by exact decimal value and exported as a raw JSON number without float64 precision loss)
 - `b`: boolean (`false` sorted before `true`, exported as JSON `true`/`false`)
 - `j`: structured JSON value (embedded directly into JSON exports)
+
+### Protocol 6: The Pointer in a Card
+
+Protocol 6 adds `plugin.pointer {kind, button, x, y, count}`: a left press (`"press"`, `"left"`) or a vertical wheel step (`"wheel"`, `"up"`/`"down"`) inside the plugin's frame, in frame coordinates from zero. `count` is bounded to 1–16. AutoDoc sends it only to a protocol-6 plugin, only for unmodified input inside the frame, and keeps the right press for the card's own context menu. A Go plugin takes it by implementing `plugin.PointerHandler`; a plugin can ignore it and keep its keyboard controls. AutoDB's card (Chapter 16) selects a connection or a tree row with it, and both UI kits below handle it for you.
 
 ---
 
@@ -122,9 +126,9 @@ key   = "s"
 
 ---
 
-## 15.5 Writing a Protocol-5 Plugin with the Go SDK
+## 15.5 Writing a Plugin with the Go SDK
 
-The `github.com/yongjohnlee80/autodoc/plugin` Go package implements Protocols 1–5 with concurrency-safe `Peer` methods and optional handler interfaces (`DocumentReader`, `Commander`, `CommandDocer`, `Focuser`, `TableFetcher`, `Hider`):
+The `github.com/yongjohnlee80/autodoc/plugin` Go package implements Protocols 1–6 with concurrency-safe `Peer` methods and optional handler interfaces (`DocumentReader`, `Commander`, `CommandDocer`, `Focuser`, `TableFetcher`, `Hider`, `PointerHandler`):
 
 ```go
 package main
@@ -171,7 +175,22 @@ Because the wire protocol is standard msgpack-RPC over `stdin` and `stdout`, a p
 
 ---
 
-## 15.6 Installing from the Registry, Security Boundaries, and Debugging
+## 15.6 Building the Card's UI: `plugin/card` and `plugin/decl`
+
+A card or dialog can draw every cell itself into a `plugin.Frame`, as the example above could. AutoDB's first card did, in about 860 lines of layout, wrapping, focus, list and theme code before any database logic. The SDK's two **UI kits** (ADR 1792254331) do that work, so a card is its controls and its behaviour. Neither changes the wire: both end in the same `host.frame`.
+
+![The two UI kits' render path](ui-kits-render-path.mmd)
+
+- **`plugin/card`, the native kit.** The plugin keeps its controls (`card.Input`, including a masked passphrase field; `card.Buttons`; `card.List`; `card.Tree`) and returns a `card.Page` (header, scrolling body, button bar, keys line, status, problem) each time the card is drawn. The `card.Card` shares the height in a fixed order, so the header, the focused row, the first problem row, the buttons and the keys survive a short card. It draws the selection in the theme's highlight (the inactive one while the card lacks the keys), and handles Tab and Shift+Tab, j/k/g/G, PageUp/PageDown, l/h on trees, Enter, and the Protocol 6 pointer. Your Handler forwards its methods to the Card; `Card.Key` returns false for keys it did not use, so your own letters and `q` stay yours. In a field, every printable key is text, `q` included. `examples/card-go` is the reference: about a hundred lines of Go, with no drawing code.
+- **`plugin/decl`, the QML adapter.** `decl.New(decl.Options{Program: …})` is a whole `plugin.Handler` that runs a golib QML layout (`tui/decl`, the language AutoDoc's own panels are written in) inside the plugin, on a backend whose every frame becomes a `host.frame`. Keys, resizes, focus and pointer presses arrive as terminal events. The layout binds its palette to `Theme.*` (module `autodoc.plugin 1.0`), so AutoDoc's theme switches apply without rebuilding the program, and typed text and scroll positions stay. State changes on the program's loop: in `Options.Setup` before the first frame, in a handler, or through `Card.Post`. `examples/card-qml` is the reference: a 19-line layout and about 60 lines of Go.
+
+**Which to pick:** the native kit starts drawing at once and adds little to the binary (about 3 MB for a minimal stripped plugin); the QML adapter parses its layout first and brings golib's widgets with it (about 7.5 MB), in exchange for declarative layouts and widgets such as `TreeView` and `TableView`. Both measure text exactly as AutoDoc does: a CJK character takes two cells, and an accent written as a combining mark, a ZWJ emoji or a flag stays one character. `plugin.Frame` itself places characters this way, and AutoDoc's renderer draws them a grapheme cluster at a time.
+
+Each example's test drives its plugin over the protocol, as AutoDoc does: open, type, press a button, switch the theme. See `docs/plugins.md` § "Drawing a card" for the full API.
+
+---
+
+## 15.7 Installing from the Registry, Security Boundaries, and Debugging
 
 Open **Plugins › Manage plugins…** to browse the vetted **Plugin Registry** or install from any Git repository URL. Before AutoDoc clones or builds a plugin (`[install] build = [...]`), it presents an explicit capability summary derived from `plugin.toml`—showing the build command, executable argv, surface type (`dialog`, `card`, or `service`), whether it reads the open note (`[feed]`), every `[[commands]]` shortcut on `SPC p`, every host command in `calls`, and whether it publishes to the `[table]` Results panel. You can also override any plugin command's `SPC p` key letter via the preference `tui.plugin.<name>.key.<id>`.
 
