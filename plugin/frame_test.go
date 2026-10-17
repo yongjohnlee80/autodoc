@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -92,5 +93,39 @@ func TestAZeroWidthClusterJoinsTheCellBefore(t *testing.T) {
 	g := NewFrame(2, 1)
 	if x := g.Text(0, 0, "\u0301", Style{}); x != 1 {
 		t.Errorf("a mark with nothing before it took %d cells, want 1", x)
+	}
+}
+
+// TestCellsWrittenApartAreSentApart: two cells whose texts would join into one cluster side by side
+// (regional indicators written one at a time, a heart then a variation selector) go in runs of
+// their own, so the host, which segments each run again, keeps them apart. Cells that cannot join
+// still share a run.
+func TestCellsWrittenApartAreSentApart(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		writes []string
+		runs   []string
+	}{
+		{"regional indicators", []string{"\U0001f1f0", "\U0001f1f7", "a"}, []string{"\U0001f1f0", "\U0001f1f7a"}},
+		{"heart then VS16", []string{"\u2764", "\ufe0f", "a"}, []string{"\u2764", "\ufe0fa"}},
+		{"ascii shares a run", []string{"a", "b", "c"}, []string{"abc"}},
+		{"cjk shares a run", []string{"表", "字"}, []string{"表字"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := NewFrame(8, 1)
+			x := 0
+			for _, w := range c.writes {
+				x = f.Text(x, 0, w, Style{})
+			}
+			var got []string
+			for _, r := range f.Rows()[0] {
+				got = append(got, r.Text)
+			}
+			// every run but the last exactly; the last up to the padding after the writes
+			n := len(c.runs)
+			if len(got) != n || !reflect.DeepEqual(got[:n-1], c.runs[:n-1]) || !strings.HasPrefix(got[n-1], c.runs[n-1]) {
+				t.Fatalf("runs = %q, want %q (the last as a prefix)", got, c.runs)
+			}
+		})
 	}
 }

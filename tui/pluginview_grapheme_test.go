@@ -59,20 +59,20 @@ func TestTheHostDrawsAFramesClustersInTheirColumns(t *testing.T) {
 	}{
 		{"ascii", func(f *plugin.Frame) { f.Text(0, 0, "abc", red) }, 8,
 			map[int]string{0: "a", 1: "b", 2: "c"}},
-		{"decomposed accent", func(f *plugin.Frame) { f.Text(0, 0, "éa", red) }, 8,
-			map[int]string{0: "é", 1: "a"}},
-		{"zwj emoji", func(f *plugin.Frame) { f.Text(0, 0, "\U0001f468‍\U0001f469‍\U0001f467b", red) }, 8,
-			map[int]string{0: "\U0001f468‍\U0001f469‍\U0001f467", 2: "b"}},
+		{"decomposed accent", func(f *plugin.Frame) { f.Text(0, 0, "e\u0301a", red) }, 8,
+			map[int]string{0: "e\u0301", 1: "a"}},
+		{"zwj emoji", func(f *plugin.Frame) { f.Text(0, 0, "\U0001f468\u200d\U0001f469\u200d\U0001f467b", red) }, 8,
+			map[int]string{0: "\U0001f468\u200d\U0001f469\u200d\U0001f467", 2: "b"}},
 		{"flag", func(f *plugin.Frame) { f.Text(0, 0, "\U0001f1f0\U0001f1f7c", red) }, 8,
 			map[int]string{0: "\U0001f1f0\U0001f1f7", 2: "c"}},
 		{"cjk, then a style", func(f *plugin.Frame) { f.Text(0, 0, "表", red); f.Text(2, 0, "a", blue) }, 8,
 			map[int]string{0: "表", 2: "a"}},
 		{"styles meeting at a cluster", func(f *plugin.Frame) {
-			f.Text(0, 0, "é", red)
+			f.Text(0, 0, "e\u0301", red)
 			f.Text(1, 0, "\U0001f1f0\U0001f1f7", blue)
 			f.Text(3, 0, "z", red)
 		}, 8,
-			map[int]string{0: "é", 1: "\U0001f1f0\U0001f1f7", 3: "z"}},
+			map[int]string{0: "e\u0301", 1: "\U0001f1f0\U0001f1f7", 3: "z"}},
 		{"clipped at the view's edge", func(f *plugin.Frame) { f.Text(0, 0, "表表表", red) }, 3,
 			map[int]string{0: "表", 2: "表"}},
 	} {
@@ -81,6 +81,39 @@ func TestTheHostDrawsAFramesClustersInTheirColumns(t *testing.T) {
 			c.draw(f)
 			if got := placed(t, f, c.w); !reflect.DeepEqual(got, c.want) {
 				t.Fatalf("columns = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestTheHostKeepsCellsWrittenApartInTheirColumns: clusters a plugin wrote one at a time, which
+// would join if their text ran together, keep the columns plugin.Frame gave them on the host:
+// what follows lands where Text said it would (Lector #230 c2 r0).
+func TestTheHostKeepsCellsWrittenApartInTheirColumns(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		writes []string
+	}{
+		{"regional indicators", []string{"\U0001f1f0", "\U0001f1f7"}},
+		{"heart then VS16", []string{"\u2764", "\ufe0f"}},
+		{"a flag, then indicators apart", []string{"\U0001f1f0\U0001f1f7", "\U0001f1fa", "\U0001f1f8"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := plugin.NewFrame(12, 1)
+			x := 0
+			for _, w := range c.writes {
+				x = f.Text(x, 0, w, plugin.Style{})
+			}
+			f.Text(x, 0, "a", plugin.Style{})
+			got := placed(t, f, 12)
+			at := -1
+			for col, g := range got {
+				if g == "a" {
+					at = col
+				}
+			}
+			if at != x {
+				t.Fatalf("a drawn at column %d, Text placed it at %d: %v", at, x, got)
 			}
 		})
 	}
