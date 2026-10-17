@@ -10,7 +10,8 @@ import (
 // leaves it to the plugin: its own letters, q to close (never while an Input has the keys, where q
 // is text).
 //
-//	any control      Tab / Shift+Tab     the next / previous control, wrapping
+//	any control      Tab / Shift+Tab     the next / previous control, wrapping; every button of a
+//	                                     Buttons bar is a stop of its own
 //	Input            text                inserted at the cursor (an IME commit or a paste, whole)
 //	                 Backspace Delete Left Right Home End    edit, move the cursor
 //	                 Ctrl+U              Clear
@@ -36,6 +37,10 @@ func (c *Card) Key(k plugin.Key) bool {
 		dir := 1
 		if k.Shift {
 			dir = -1
+		}
+		if b, ok := c.focus.(*Buttons); ok && b.step(dir) { // each button is a Tab stop
+			c.Draw()
+			return true
 		}
 		c.cycle(ctls, dir)
 		c.Draw()
@@ -72,4 +77,10 @@ func (c *Card) cycle(ctls []Control, dir int) {
 	i := slices.Index(ctls, c.focus)
 	n := len(ctls)
 	c.focus = ctls[((i+dir)%n+n)%n]
+	if b, ok := c.focus.(*Buttons); ok { // entered from before: the first button; from after: the last
+		b.at = 0
+		if dir < 0 {
+			b.at = max(len(b.Labels)-1, 0)
+		}
+	}
 }
