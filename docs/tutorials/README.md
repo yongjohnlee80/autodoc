@@ -47,8 +47,8 @@ Open this folder (`docs/tutorials/`) as a workspace in `autodoc --gui` and press
    Declaring `_schema/frontmatter.yaml` with `version: 2` (`discriminator: type`, `base` fields, and per-type rules), reading non-blocking live editor diagnostics, and turning YAML fields into queryable search facets.
 8. **[Chapter 08: Knowledge Graphs — Wikilinks, Backlinks & ADR Lifecycle Relations](./08-knowledge-graphs-and-adr-lifecycle.md)**
    Navigating `[[wikilinks]]` and typed architectural edges (`supersedes`, `superseded_by`, `amends`, `sources`, `adr`, `review`), using the Relations Panel (`SPC l`), demoting superseded ADRs, and auditing broken links (`graph.unresolved`).
-9. **[Chapter 09: Polyglot Code Symbol Indexing (`symbols.doc` & `symbols.find`)](./09-code-symbol-indexing.md)**
-   Indexing declarations across 18 programming languages (Go AST plus Rust, Python, TypeScript, C/C++, Java, SQL, Lua, Protobuf, Zig, Odin, and more) alongside your documentation.
+9. **[Chapter 09: Code Symbol & Declaration Indexing (`golib/search/chunk/code`)](./09-code-symbol-indexing.md)**
+   Indexing declarations across Go (`.go`), TypeScript/JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`), Python (`.py`), and Rust (`.rs`) alongside custom chunkers (`app.Options.Chunkers`) and plain-text extensions (`text_extensions`).
 
 ### Part III — Tasks, Workflows & AI Agent Orchestration
 10. **[Chapter 10: The `.todo-list/` Task Engine & Crash-Recoverable Journal](./10-todo-task-engine.md)**

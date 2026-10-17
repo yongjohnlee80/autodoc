@@ -7,7 +7,7 @@ Chapter,Title,Part,Primary Surfaces,Mermaid Diagrams (.mmd),Vega-Lite Charts (.c
 06,Configuring Local & Cloud Embeddings and Rerankers,Part II: Search & Graphs,--serve / config.toml,provider-routing-architecture.mmd,model-accuracy-vs-vram.chart.json,provider-config-matrix.csv
 07,Frontmatter Schemas (v1 & v2) & Live Validation,Part II: Search & Graphs,--ui / --gui / --call,schema-v2-inheritance.mmd,kb-document-type-distribution.chart.json,schema-field-types-reference.csv
 08,Knowledge Graphs & ADR Lifecycle Relations,Part II: Search & Graphs,--ui / --gui / --call,adr-supersession-lifecycle.mmd,graph-connectivity-histogram.chart.json,relation-kinds-reference.csv
-09,Polyglot Code Symbol Indexing (18 Languages),Part II: Search & Graphs,--ui / --gui / --call,symbol-extractor-dispatch.mmd,symbol-extraction-throughput.chart.json,supported-languages-and-kinds.csv
+09,Code Symbol & Declaration Indexing (Go / TS / Python / Rust),Part II: Search & Graphs,--ui / --gui / --call,symbol-extractor-dispatch.mmd,symbol-extraction-throughput.chart.json,supported-languages-and-kinds.csv
 10,The .todo-list/ Task Engine & Crash-Recoverable Journal,Part III: Tasks & Agents,--ui / --gui / --call,todo-lifecycle-and-journal.mmd,task-velocity-and-burndown.chart.json,todo-verbs-and-fields.csv
 11,Terminal Tabs & One-Key Agent Task Handoff,Part III: Tasks & Agents,--ui / --gui,agent-handoff-sequence.mmd,agent-dispatch-latency.chart.json,terminal-tabs-config-reference.csv
 12,Wiring External AI Coding Agents (--call & KB_OPERATIONS.md),Part III: Tasks & Agents,--call / AI Agents,agent-retrieval-ladder.mmd,agent-token-and-time-savings.chart.json,agent-rpc-verbs-reference.csv

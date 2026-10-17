@@ -1,19 +1,8 @@
-Language,Extensions,Extractor_Engine,Extracted_Symbol_Kinds,Receiver_or_Scope_Support
-Go,.go,go/ast exact parser,"func, method, struct, interface, type, const, var",Method receiver type (e.g. *Indexer or Store)
-Rust,.rs,Polyglot line extractor,"func, method, struct, enum, trait, type, const, mod, impl",Impl target type / trait scope
-Python,.py,Polyglot indentation extractor,"func, method, class, var",Enclosing class scope for methods
-TypeScript / JavaScript,".ts, .tsx, .js, .jsx, .mjs",Polyglot line extractor,"func, method, class, interface, type, enum, const",Enclosing class or interface scope
-C / C++,".c, .h, .cc, .cpp, .hpp",Polyglot line extractor,"func, method, struct, class, enum, type, macro",Class/namespace qualifier (Class::Method)
-Java,.java,Polyglot line extractor,"method, class, interface, enum, field",Enclosing class or interface scope
-Kotlin,".kt, .kts",Polyglot line extractor,"func, method, class, interface, object, enum, val",Enclosing class/object or extension receiver
-Swift,.swift,Polyglot line extractor,"func, method, struct, class, protocol, enum, extension",Enclosing type or extension target
-C#,.cs,Polyglot line extractor,"method, class, struct, interface, enum, record, property",Enclosing class/struct scope
-Ruby,.rb,Polyglot line extractor,"func, method, class, module, const",Enclosing class or module scope
-PHP,.php,Polyglot line extractor,"func, method, class, interface, trait, enum, const",Enclosing class or trait scope
-Lua,.lua,Polyglot line extractor,"func, method, var",Module table prefix (M.fn or M:method)
-Scala,".scala, .sc",Polyglot line extractor,"func, method, class, trait, object, type, val",Enclosing class/trait/object scope
-Elixir,".ex, .exs",Polyglot line extractor,"func, macro, module, protocol, struct",Enclosing defmodule scope
-SQL,.sql,Polyglot DDL extractor,"table, view, func, index, trigger, type",Schema-qualified object name
-Protobuf,.proto,Polyglot IDL extractor,"message, service, rpc, enum",Enclosing service or message scope
-Zig,.zig,Polyglot / custom chunker,"func, struct, enum, union, const, test",Container struct/enum namespace
-Odin,.odin,Polyglot line extractor,"proc, struct, enum, union, bit_field, const",Package and proc group scope
+Category,Extensions,Chunker_or_Extractor_ID,Extracted_Units_and_Declarations,Embedding_and_Fallback_Behavior
+Go (Built-in),.go,code-go-2+text-5 (go/parser),"File header (build tags, package doc, imports), functions, receiver methods, type specs, const/var groups","Embeds breadcrumb + doc + signature; falls back to chunk.Text if file has syntax errors"
+TypeScript / JavaScript (Built-in),".ts, .tsx, .js, .jsx, .mjs",code-ts-2 (string-aware scanner),"Functions, classes and methods, interfaces, type aliases, exported const arrow functions","Preserves JSDoc comments and @decorators; splits oversized declarations at statement boundaries"
+Python (Built-in),.py,code-py-2 (indentation scanner),"def, async def, class and methods by indentation scope","Preserves @decorators and triple-quoted docstrings; embeds breadcrumb + docstring + signature"
+Rust (Built-in),.rs,code-rs-2 (string-aware scanner),"fn, struct, enum, union, trait, and impl blocks with their associated functions","Preserves /// doc comments and #[...] attributes; embeds breadcrumb + doc + signature"
+Derived Documents (Built-in),".docx, .htm, .html",golib/extract/docx & golib/extract/html,"Heading-structured text extracted in memory (bounded by MaxContainer and MaxText)","Chunked by heading hierarchy; served as derived Markdown via doc.read and raw bytes via doc.read_raw"
+Plain-Text Extensions (Configurable),"text_extensions (e.g. .sql, .proto, .lua, .toml)",chunk.Text (text-5),"Paragraph and token-budget windows across declared UTF-8 text extensions","Configured via workspace.set_text_extensions; refused if extension collides with a registered code chunker"
+Custom Compile-Time Chunkers,app.Options.Chunkers (e.g. .dsl),Custom search.Chunker ID,"Domain-specific declaration units defined by custom binary build (ADR 0216)","Preserved as held (current, stale, unchecked) when opened by a community binary without that chunker"

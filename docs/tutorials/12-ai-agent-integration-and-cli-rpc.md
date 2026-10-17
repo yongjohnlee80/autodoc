@@ -101,7 +101,7 @@ Every `search.query` response includes a `stages` diagnostic block:
 3. **`semantic` skipped (`lexical` only)**: Switch to the **Words-Only Ladder**:
    - Never pass a full conversational sentence to FTS5 lexical search (which requires every word to appear in the same section and fails on 17 of 18 conversational queries).
    - Instead, pass **2 to 3 distinctive keywords** or a starred prefix (`"--delete-branch stacked*"`).
-   - Combine lexical search with `index.documents` / `doc.find` (filtering by `facets`, `tags`, or `sort: "updated"`), `symbols.find` (for code declarations), and `graph.neighborhood` / `graph.links` / `graph.backlinks` (to follow `supersedes`, `superseded_by`, `amends`, and `adr` relations).
+   - Combine lexical search with `index.documents` (filtering by `facets`, `tags`, `paths`, or `sort: "updated"`), `doc.outline` (for heading hierarchy), and `graph.neighborhood` / `graph.links` / `graph.backlinks` (to follow `supersedes`, `superseded_by`, `amends`, and `adr` relations).
    - If one retry with a dropped word or prefix still misses, fall back to scoped `rg -il --glob '!archive/**' --glob '!raw/**'`.
 
 ### Step 3: Read `[line_start, line_end]` Spans, Not Whole Files

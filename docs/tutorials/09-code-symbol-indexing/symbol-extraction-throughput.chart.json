@@ -1,18 +1,16 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Illustrative Symbol Extraction Throughput Profile by Language",
-  "description": "Illustrative relative extraction throughput profile across Go AST and polyglot line-scanner extractors.",
+  "title": "Illustrative Declaration Chunking Throughput Profile by Chunker",
+  "description": "Illustrative relative chunking throughput profile across built-in code chunkers (code-go-2, code-rs-2, code-ts-2, code-py-2) and plain-text chunking.",
   "width": 640,
   "height": 320,
   "data": {
     "values": [
-      {"language": "Go (AST)", "symbols_per_ms": 145},
-      {"language": "Rust", "symbols_per_ms": 310},
-      {"language": "TypeScript", "symbols_per_ms": 295},
-      {"language": "Python", "symbols_per_ms": 340},
-      {"language": "SQL", "symbols_per_ms": 380},
-      {"language": "Lua", "symbols_per_ms": 360},
-      {"language": "Protobuf", "symbols_per_ms": 410}
+      {"language": "Go (code-go-2)", "symbols_per_ms": 145},
+      {"language": "Rust (code-rs-2)", "symbols_per_ms": 310},
+      {"language": "TypeScript (code-ts-2)", "symbols_per_ms": 295},
+      {"language": "Python (code-py-2)", "symbols_per_ms": 340},
+      {"language": "Text (chunk.Text)", "symbols_per_ms": 420}
     ]
   },
   "mark": "bar",
@@ -20,19 +18,19 @@
     "x": {
       "field": "language",
       "type": "ordinal",
-      "title": "Language Extractor",
+      "title": "Built-in Chunker",
       "sort": null,
       "axis": {"labelAngle": 0}
     },
     "y": {
       "field": "symbols_per_ms",
       "type": "quantitative",
-      "title": "Throughput (Symbols Extracted / ms)"
+      "title": "Illustrative Throughput (Chunks / ms)"
     },
     "color": {
       "field": "language",
       "type": "nominal",
-      "title": "Language"
+      "title": "Chunker"
     }
   }
 }

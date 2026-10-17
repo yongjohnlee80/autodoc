@@ -1,52 +1,52 @@
-# Chapter 9: Code Symbol Indexing
+# Chapter 9: Code Symbol and Declaration Indexing
 
-Technical documentation rarely lives apart from the source code it describes. Architecture Decision Records cite Go interfaces (`search.Chunker`), SQL migration playbooks reference DDL tables (`CREATE TABLE document`), and API guides document Protobuf services and TypeScript types.
+Technical documentation rarely lives apart from the source code it describes. Architecture Decision Records cite Go interfaces (`search.Chunker`), frontend guides reference TypeScript types and React components, data engineering notes point to Python pipelines, and systems runbooks reference Rust structs and traits.
 
-Rather than treating source files as flat plain text or requiring heavyweight language servers (LSP) to be running for every language, AutoDoc includes a fast, zero-dependency **polyglot code declaration indexer** (`core/symbols` and `golib/search/chunk/code`). It extracts top-level and member declarations across **18 programming and schema languages**, cuts declaration-aligned chunks (`signature + doc comment`), and exposes both structured symbol lookups (`symbols.find`, `symbols.doc`) and hybrid semantic code search.
+Rather than treating source files as flat plain text or requiring heavyweight language servers (LSP) to be running in the background, AutoDoc ships a built-in **declaration-level code chunker** (`core/registrations/builtin.go` and `golib/search/chunk/code`). It partitions **Go** (`.go`), **TypeScript / JavaScript** (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`), **Python** (`.py`), and **Rust** (`.rs`) files at declaration boundaries, pairs verbatim code bodies with declaration-focused embedding surfaces (`breadcrumb + doc + signature`), and exposes custom compile-time chunker hooks (`app.Options.Chunkers`) and plain-text extensions (`workspace.set_text_extensions`).
 
-![Architecture of AutoDoc's polyglot symbol extractor dispatch and SQLite symbol index](symbol-extractor-dispatch.mmd)
-
----
-
-## 1. Dual-Engine Extraction Architecture (`core/symbols`)
-
-When the workspace indexer encounters a source code file, it routes the file by extension through a two-tier extraction architecture:
-
-### 1. Exact Go AST Parser (`go/token` + `go/ast`)
-
-Because Go's standard library ships a production compiler frontend (`go/parser`, `go/ast`, `go/token`), AutoDoc parses `.go` files into a complete Abstract Syntax Tree:
-
-- **Functions and Methods (`func`, `method`):** Extracts the exact function name, normalized parameter and return signature, 1-based start/end line numbers, attached doc comment (`// Search answers a query...`), and—for methods—the exact receiver type (`*Indexer`, `Store`, `fieldSet`).
-- **Types and Interfaces (`struct`, `interface`, `type`):** Captures `type Name struct`, `type Name interface`, and type definitions/aliases, including grouped `type ( ... )` blocks.
-- **Constants and Variables (`const`, `var`):** Extracts exported and package-level declarations from both standalone and parenthesized `const ( ... )` / `var ( ... )` blocks.
-- **Syntax Error Resilience:** Even if a `.go` file is mid-edit and contains a partial syntax error, `go/parser` recovers partial declarations up to the broken node so the file's existing symbols remain searchable.
-
-### 2. Zero-Dependency Polyglot Line Extractors (17 Languages)
-
-For the remaining 17 languages, AutoDoc runs state-aware, zero-regex-backtracking line scanners that strip block comments and string literals, track brace/indentation nesting scopes, attach preceding doc-comment blocks (`///`, `/** ... */`, `"""`, `--`), and extract declarations in microseconds per file:
-
-- **Systems Languages:** **Rust** (`.rs`), **C / C++** (`.c`, `.h`, `.cc`, `.cpp`, `.hpp`), **Zig** (`.zig`), **Odin** (`.odin`)
-- **Application & JVM Languages:** **TypeScript / JavaScript** (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`), **Python** (`.py`), **Java** (`.java`), **Kotlin** (`.kt`, `.kts`), **Swift** (`.swift`), **C#** (`.cs`), **Scala** (`.scala`, `.sc`)
-- **Dynamic & Functional Languages:** **Ruby** (`.rb`), **PHP** (`.php`), **Lua** (`.lua`), **Elixir** (`.ex`, `.exs`)
-- **Data & Interface Schemas:** **SQL** (`.sql` — `CREATE TABLE`, `CREATE VIEW`, `CREATE FUNCTION`, `CREATE INDEX`, `CREATE TRIGGER`, `CREATE TYPE`) and **Protobuf** (`.proto` — `message`, `service`, `rpc`, `enum`)
-
-![Symbol extraction throughput in symbols per millisecond across Go AST and polyglot extractors](symbol-extraction-throughput.chart.json)
+![Architecture of AutoDoc's declaration-level code chunker dispatch and SQLite chunk index](symbol-extractor-dispatch.mmd)
 
 ---
 
-## 2. Supported Languages, Extensions, and Symbol Kinds
+## 1. Declaration-Level Code Chunking (`golib/search/chunk/code`)
 
-Every extracted symbol is normalized into a uniform schema row in SQLite (`name`, `kind`, `line`, `line_end`, `signature`, `receiver`, `doc`) and paired with a declaration-scoped search chunk.
+When the workspace indexer (`core/index`) encounters a registered code extension, it routes the file to its language-specific `search.Chunker`:
 
-![Complete reference of all 18 supported languages, file extensions, and extracted symbol kinds](supported-languages-and-kinds.csv)
+### 1. Exact Go AST Chunker (`.go`, `code-go-2+text-5`)
 
-### How Declaration Chunking Differs from Markdown Chunking
+Because Go's standard library includes `go/parser`, `go/ast`, and `go/token`, AutoDoc parses `.go` files into a complete Abstract Syntax Tree:
 
-Unlike Markdown files (which split at `# Heading` boundaries targeting `section_tokens`), code files are chunked **one chunk per declaration**:
+- **File Header Unit:** Captures build tags, package doc comments, and the `import` block as the file's opening structural unit.
+- **Functions and Methods:** Extracts each top-level `func` and receiver method with its exact 1-based `line_start` / `line_end`, byte offsets (`byte_start` / `byte_end`), attached doc comment (`// Search answers a query...`), and normalized signature.
+- **Types and Interfaces:** Extracts each `type` specification (`struct`, `interface`, type definitions, and aliases), splitting grouped `type ( ... )` blocks into per-type units when needed.
+- **Constants and Variables:** Extracts `const` and `var` declarations and groups. For embeddings, a `const` or `var` embeds its names, type, and values (truncating large composite literals after the first three elements, e.g. `[][3]int{{0x0, 0xf, 0}, …}`, and representing function literals by their signature).
+- **Graceful Parse Fallback:** If a `.go` file is mid-edit and does not parse, the Go chunker automatically falls back to `chunk.Text` (`+text-5`), ensuring the file remains indexed and searchable at all times.
 
-- **Breadcrumb:** Set to `<path> › <receiver>.<name>` (or `<path> › <name>`), so every search hit immediately identifies the enclosing struct, class, trait, or Protobuf service.
-- **Embedding Text:** Constructed from the declaration's **doc comment + full signature** rather than raw implementation loop bodies. When you run a semantic query like *"how do we reclaim unused model vectors in batches"*, the embedding for `func (s *Store) reclaim(ctx context.Context, fp string, write writeFn)` and its doc comment scores a direct semantic hit.
-- **Editor View:** Opening a code hit in the TUI or GUI jumps directly to the declaration's `line_start` with syntax highlighting and read/write editing (with no Markdown rendered view).
+### 2. String-Aware Scanner Chunkers for TypeScript/JS, Python, and Rust
+
+For TypeScript/JavaScript, Python, and Rust, `golib/search/chunk/code` uses fast, string-and-comment-aware scanners where braces or keywords inside strings, template literals, raw strings, char literals, and comments never start or end a unit:
+
+- **TypeScript & JavaScript (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs` — `code-ts-2`):** Extracts functions, classes and their methods, interfaces, type aliases, and exported `const` arrow functions, keeping JSDoc blocks (`/** ... */`) and decorators (`@Component`) attached to their declarations.
+- **Python (`.py` — `code-py-2`):** Tracks indentation scopes to extract `def`, `async def`, and `class` declarations along with their methods, preserving leading `@decorator` lines and triple-quoted docstrings (`"""..."""`).
+- **Rust (`.rs` — `code-rs-2`):** Extracts `fn`, `struct`, `enum`, `union`, `trait`, and `impl` blocks together with their associated functions and methods, preserving `///` doc comments and `#[...]` attributes.
+
+![Illustrative declaration chunking throughput across built-in code chunkers and plain-text fallback](symbol-extraction-throughput.chart.json)
+
+*Note: The chart above shows an illustrative relative throughput profile comparing AST-based Go chunking, scanner-based TypeScript/Python/Rust declaration chunkers, and plain-text fallback chunking.*
+
+---
+
+## 2. The Partition Invariant and Two-Surface Embedding Design
+
+Every built-in code chunker in `golib/search/chunk/code` obeys a strict lossless partition invariant across the file:
+
+1. **Contiguous, Non-Overlapping Spans:** Chunk byte spans ascend and never overlap, only whitespace lies outside them, and `Body == string(Doc.Text[ByteStart:ByteEnd])`. Detached comments, preprocessor directives, and top-level glue statements become header or glue chunks so no line of code is ever dropped from lexical search.
+2. **Two Surfaces (`Body` vs. `Embed`):**
+   - **`Body` (Lexical FTS5 & Display):** Holds the verbatim source code of the declaration (`Doc.Text[ByteStart:ByteEnd]`), enabling exact identifier and literal searches in FTS5.
+   - **`Embed` (Semantic Vector Surface):** Constructed strictly from the **breadcrumb, doc comment, and declaration signature**—never the raw function body implementation. When you run a semantic query like *"how do we reclaim unused model vectors in batches"*, the vector embedding for `func (s *Store) reclaim(ctx context.Context, fp string, write writeFn)` and its doc comment scores a clean semantic hit without noise from loop variables.
+3. **Bounded Embeddings & Oversized Declarations:** No `Embed` text ever exceeds the chunk's token budget (long doc comments are trimmed while keeping the signature whole). When an oversized function or class exceeds the token budget, the chunker splits it at statement boundaries: every fragment's `breadcrumb` retains the enclosing signature, and continuation fragments embed the signature alongside their local comments and the identifiers they declare and call.
+
+![Built-in code chunkers, derived document extractors, and custom extension mechanisms in AutoDoc](supported-languages-and-kinds.csv)
 
 ---
 
@@ -61,10 +61,11 @@ By default, a newly created AutoDoc workspace includes `**/*.md`, `**/*.txt`, `*
 
 ### Configuring `include`, `exclude`, and `text_extensions` via RPC
 
-For polyglot repositories where documentation (`docs/`, `adrs/`) lives beside source code (`core/`, `rpc/`, `sql/`, `lua/`), configure `include`, `exclude`, and `text_extensions` atomically with `workspace.configure`:
+For repositories where documentation (`docs/`, `adrs/`) lives beside source code (`core/`, `rpc/`, `sql/`, `lua/`), configure `include`, `exclude`, and `text_extensions` atomically with `workspace.configure`:
 
 ```sh
-# Configure workspace "autodoc-repo" to index Markdown, YAML, Mermaid, CSV, and polyglot code
+# Configure workspace "autodoc-repo" to index Markdown, YAML, built-in code (.go, .rs, .py, .ts, .js),
+# and custom UTF-8 text extensions (.sql, .proto, .lua)
 autodoc --call workspace.configure '[
   "autodoc-repo",
   {
@@ -72,9 +73,7 @@ autodoc --call workspace.configure '[
       "**/*.md",
       "**/*.yaml",
       "**/*.yml",
-      "**/*.mmd",
-      "**/*.csv",
-      "**/*.{go,rs,py,ts,tsx,js,lua,sql,proto,zig,odin}"
+      "**/*.{go,rs,py,ts,tsx,js,jsx,mjs,sql,proto,lua}"
     ],
     "exclude": [
       ".git/**",
@@ -85,105 +84,62 @@ autodoc --call workspace.configure '[
       "build/**",
       "**/*_test.go"
     ],
-    "text_extensions": [".conf", ".env.example", ". service"]
+    "text_extensions": [".sql", ".proto", ".lua", ".conf"]
   }
 ]'
 ```
 
 ### Understanding `text_extensions` vs. Registered Code Chunkers (`text_collisions`)
 
-- **`text_extensions` (`workspace.set_text_extensions`):** Declares custom UTF-8 plain-text file extensions (such as `.log`, `.rst`, `.ini`, `.toml`) that AutoDoc should read and chunk as plain text.
-- **No Sniffing:** AutoDoc never guesses whether an unknown binary file is text; only built-in types, registered code chunkers, derived document formats, and declared `text_extensions` are read.
-- **Collision Protection (`text_collisions`):** Built-in code extensions (and custom chunkers registered via `app.Options.Chunkers`, ADR 0216) take precedence over plain-text extensions. Attempting to pass a registered code extension to `workspace.set_text_extensions` is refused with `-32602 rpc.invalid_params`, and `workspace.list` reports any historical overlap in `text_collisions`.
+- **`text_extensions` (`workspace.set_text_extensions`):** Declares additional UTF-8 plain-text file extensions (such as `.sql`, `.proto`, `.lua`, `.toml`, `.rst`, `.ini`) that AutoDoc should read and chunk via `chunk.Text`.
+- **No Sniffing:** AutoDoc never guesses whether an unknown binary file is text; only built-in types, registered code chunkers, derived document formats (`.docx`, `.htm`, `.html`), and declared `text_extensions` are read.
+- **Collision Protection (`text_collisions`):** Built-in code extensions (`.go`, `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.py`, `.rs`) and custom chunkers registered via `app.Options.Chunkers` (`ADR 0216`) take precedence over plain-text extensions. Attempting to pass a registered code extension to `workspace.set_text_extensions` is refused with `-32602 rpc.invalid_params`, and `workspace.list` reports any historical overlap in `text_collisions`.
 
 ---
 
-## 4. Querying Code Declarations with `symbols.find` and `symbols.doc`
+## 4. Querying Code Declarations and Inspecting Registered Chunkers
 
-In addition to finding code chunks through `search.query`, AutoDoc provides dedicated symbol inspection verbs (`symbols.find` and `symbols.doc`) for fast structural navigation by humans and AI coding agents.
+Once code files are indexed, `search.query` searches across both Markdown documentation and code declarations simultaneously, or you can scope `paths` to specific source packages.
 
-### 1. Listing All Declarations in a File (`symbols.doc`)
+### 1. Searching Code Declarations with `search.query`
 
-`symbols.doc` returns every extracted declaration in a single source file in top-to-bottom line order, similar to `doc.outline` for Markdown files:
+Every code hit returned by `search.query` includes the declaration's `breadcrumb` (carrying the package/type and signature), 1-based `line_start` and `line_end`, and byte offsets:
 
 ```sh
-# Inspect all Go declarations in core/index/reclaim.go
-autodoc --call symbols.doc '["autodoc-repo", "core/index/reclaim.go"]'
+# Search Go declarations under core/index for unused model vector reclamation
+autodoc --call search.query '[
+  "autodoc-repo",
+  "reclaim unused model vectors in batches",
+  {
+    "paths": ["core/index"],
+    "limit": 5
+  }
+]'
 ```
 
-Example response:
+Example hit in the response:
 
 ```json
 {
   "path": "core/index/reclaim.go",
-  "language": "go",
-  "symbols": [
-    {
-      "name": "reclaimBatch",
-      "kind": "var",
-      "line": 27,
-      "line_end": 27,
-      "signature": "var reclaimBatch uint64 = 2000"
-    },
-    {
-      "name": "writeFn",
-      "kind": "type",
-      "line": 30,
-      "line_end": 30,
-      "signature": "type writeFn func(ctx context.Context, fn func(context.Context, *store.Tx) error) error"
-    },
-    {
-      "name": "Reclaimed",
-      "kind": "struct",
-      "line": 34,
-      "line_end": 38,
-      "signature": "type Reclaimed struct"
-    },
-    {
-      "name": "reclaim",
-      "kind": "method",
-      "receiver": "*Store",
-      "line": 56,
-      "line_end": 103,
-      "signature": "func (s *Store) reclaim(ctx context.Context, fp string, write writeFn) (Reclaimed, error)"
-    },
-    {
-      "name": "Sweep",
-      "kind": "method",
-      "receiver": "*Indexer",
-      "line": 144,
-      "line_end": 151,
-      "signature": "func (x *Indexer) Sweep(ctx context.Context) ([]Reclaimed, error)"
-    }
-  ]
+  "breadcrumb": "core/index/reclaim.go › func (x *Indexer) Sweep(ctx context.Context) ([]Reclaimed, error)",
+  "snippet": "// Sweep reclaims vectors of models no workspace uses...",
+  "line_start": 144,
+  "line_end": 151,
+  "byte_start": 4120,
+  "byte_end": 4388,
+  "relevance": "high",
+  "via": ["lexical", "semantic", "rerank"]
 }
 ```
 
-### 2. Searching Declarations Across the Workspace (`symbols.find`)
+### 2. Inspecting Registered Chunkers and Derived Formats (`sys.capabilities`)
 
-`symbols.find` searches symbol names, receivers, and signatures across the entire workspace, with optional filters for `kind`, `language`, `receiver`, and `paths`:
+You can inspect the active daemon's registered code chunker versions and derived format extractors at any time via `sys.capabilities`:
 
 ```sh
-# Find all methods on *Indexer or *Store matching "Sweep" or "reclaim"
-autodoc --call symbols.find '[
-  "autodoc-repo",
-  "Sweep",
-  {
-    "kind": ["func", "method"],
-    "paths": ["core/index"],
-    "limit": 20
-  }
-]'
-
-# Find all SQL table and view definitions under sql/deployments
-autodoc --call symbols.find '[
-  "autodoc-repo",
-  "",
-  {
-    "kind": ["table", "view"],
-    "paths": ["sql/deployments"]
-  }
-]'
+# Inspect registered chunkers (.go, .ts, .py, .rs, plus any custom chunkers) and formats (.docx, .html)
+autodoc --call sys.capabilities '[]'
 ```
 
 ---
@@ -199,9 +155,8 @@ os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
 }))
 ```
 
-Because multiple AutoDoc builds share a single SQLite store (`autodoc.db`), a community binary that attaches to a store containing `.dsl` chunks produced by a custom build **never overwrites or drops those chunks**. Instead, it marks those files as **held** (`Hit.Hold` set to `"current"`, `"stale"`, or `"unchecked"`, and counted under `held` in `index.status`), keeping every declaration searchable across builds.
+Because multiple AutoDoc builds can share a single SQLite store (`autodoc.db`), a community binary that attaches to a store containing `.dsl` chunks produced by a custom build **never overwrites or drops those chunks**. Instead, it marks those files as **held** (`Hit.Hold` set to `"current"`, `"stale"`, or `"unchecked"`, and counted under `held` in `index.status`), keeping every declaration searchable across builds.
 
 ---
 
 [← Previous: Chapter 08: Knowledge Graphs & ADR Lifecycle](./08-knowledge-graphs-and-adr-lifecycle.md) | [Index](./README.md) | [Next: Chapter 10: Todo Task Engine →](./10-todo-task-engine.md)
-
