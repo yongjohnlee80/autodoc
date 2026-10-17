@@ -46,12 +46,14 @@ func TestWhereFiltersTheViewThenTheSort(t *testing.T) {
 		t.Helper()
 		onLoop(r, func() bool { r.h.plugins.whereResults(text); return true })
 	}
-	where("id > 1")
+	// #1 is the first id: the kinds table names two fields id, and a shared name is the
+	// position form, as the parser says.
+	where("#1 > 1")
 	r.waitColumn(t, 1, kindsNames(0, 2, 3))
 	if note, line := r.source("App.resultsViewNote"), r.source("App.resultsSortLine"); note != "3 of 5 loaded rows" || line != note {
 		t.Errorf("the note %q, the line %q; want 3 of 5 loaded rows", note, line)
 	}
-	onLoop(r, func() bool { r.h.plugins.orderResults("id DESC"); return true })
+	onLoop(r, func() bool { r.h.plugins.orderResults("1 DESC"); return true })
 	r.waitColumn(t, 1, kindsNames(3, 0, 2))
 
 	onLoop(r, func() bool { r.resultsCore().SelectAll(); r.h.plugins.copyResults(formatTSV); return true })
@@ -119,7 +121,7 @@ func TestWhereFiltersTheViewThenTheSort(t *testing.T) {
 func TestAWhereThatKeepsNothing(t *testing.T) {
 	r, _ := kindsTUI(t, "tablestall")
 	before := string(r.s.Backend.Clipboard())
-	onLoop(r, func() bool { r.h.plugins.whereResults("id > 100"); return true })
+	onLoop(r, func() bool { r.h.plugins.whereResults("#1 > 100"); return true })
 	r.s.WaitFor(t, "the empty view", func(string) bool { return onLoop(r, func() int { return r.resultsCore().Len() }) == 0 })
 	if note := r.source("App.resultsViewNote"); note != "0 of 5 loaded rows" {
 		t.Errorf("the note: %q", note)
@@ -140,7 +142,7 @@ func TestAWhereThatKeepsNothing(t *testing.T) {
 	onLoop(r, func() bool { r.h.plugins.chooseExportFile(); return true })
 	r.waitNotice(t, "nothing to export: the WHERE keeps no row of the 5 loaded")
 
-	onLoop(r, func() bool { r.h.plugins.whereResults("id > 2"); return true })
+	onLoop(r, func() bool { r.h.plugins.whereResults("#1 > 2"); return true })
 	r.waitColumn(t, 1, kindsNames(0, 3))
 	if got := onLoop(r, func() string {
 		tc := r.resultsCore()
