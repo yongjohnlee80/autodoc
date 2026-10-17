@@ -517,3 +517,18 @@ func TestKeysAndThePointerAsTheTerminalSendsThem(t *testing.T) {
 		t.Error("a right press was sent: AutoDoc keeps it for the card's menu")
 	}
 }
+
+// TestAQueuedFnChecksTheCardWhenItRuns: the guard Post wraps a fn in runs it while the Card is live
+// and skips it once Close has cancelled, whenever it was queued. (The integration cell above shows
+// the same through a running program, where the loop may end before reaching the fn at all.)
+func TestAQueuedFnChecksTheCardWhenItRuns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	ran := 0
+	before, after := whileLive(ctx, func() { ran++ }), whileLive(ctx, func() { ran += 10 })
+	before()
+	cancel()
+	after()
+	if ran != 1 {
+		t.Fatalf("ran = %d: want the fn run while live, and the one run after cancel skipped", ran)
+	}
+}
