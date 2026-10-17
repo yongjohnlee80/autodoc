@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/gui"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
@@ -51,15 +52,23 @@ func TestTheGUIResultsTablesKeys(t *testing.T) {
 	})
 }
 
-// guiPoint is pointAt for the native table: its layout painted once, 1200 by 400 pixels, a row is
-// found down the row numbers and a field along the titles, each by the layout's own HitAt, and a
-// cell where the two cross; the point is given in the cells, and the fractions of a cell, a
-// pointer event carries.
-func guiPoint(t *testing.T, r *running) pointAt {
+// nativePointer is the pointer over the native table: its layout painted once, 1200 by 400 pixels,
+// a row found down the row numbers and a field along the titles by the layout's own HitAt, and a
+// cell where the two cross. The left button's press, drag and release go to the table's core as
+// DataTable.HandleEvent hands them on (the pointer's capture is the App's, which a test backend
+// with no pixels cannot route by); the right press goes through HandleEvent, in the cells and
+// fractions of a cell the backend's pixels make of it.
+type nativePointer struct {
+	t *testing.T
+	r *running
+}
+
+const nativeW, nativeH = 1200, 400
+
+func newNativePointer(t *testing.T, r *running) *nativePointer {
 	t.Helper()
-	const w, h = 1200, 400
 	onLoop(r, func() bool {
-		c := gui.NewRecordingCanvas(gui.Size{W: w, H: h}, gui.Size{W: 8, H: 16})
+		c := gui.NewRecordingCanvas(gui.Size{W: nativeW, H: nativeH}, gui.Size{W: 8, H: 16})
 		c.TextPx = 14
 		c.Colors = func(int, int) (color.NRGBA, color.NRGBA) {
 			return color.NRGBA{R: 0xee, G: 0xee, B: 0xee, A: 0xff}, color.NRGBA{R: 0x11, G: 0x11, B: 0x11, A: 0xff}
@@ -67,64 +76,86 @@ func guiPoint(t *testing.T, r *running) pointAt {
 		r.h.plugins.c.ResultsTable(resultsView).BoundLayout().(gui.View).Paint(c)
 		return true
 	})
-	type found struct {
-		x, y float32
-		ok   bool
-	}
-	return func(row, col int, hit widget.TableHit) (int, int, float32, float32) {
-		t.Helper()
-		var f found
-		var cw, ch float32
-		onLoop(r, func() bool {
-			dt := r.h.plugins.c.ResultsTable(resultsView)
-			hitter := dt.BoundLayout().(widget.TableLayoutHitter)
-			cw, ch = 1, 1
-			if cp := dt.Context().CellPixels(); cp.W > 0 && cp.H > 0 {
-				cw, ch = cp.W, cp.H
-			}
-			// the row's middle, down the row numbers; the field's, along the titles
-			rowY := func() (float32, bool) {
-				for y := float32(1); y < h; y++ {
-					if at, got := hitter.HitAt(2, y); got == widget.TableHitGutter && at.Row == row {
-						return y + 4, true
-					}
+	return &nativePointer{t: t, r: r}
+}
+
+// point is the pixel over (row, col, hit), and what the layout says is there.
+func (p *nativePointer) point(row, col int, hit widget.TableHit) (x, y float32, at widget.TablePos) {
+	p.t.Helper()
+	var ok bool
+	onLoop(p.r, func() bool {
+		hitter := p.r.h.plugins.c.ResultsTable(resultsView).BoundLayout().(widget.TableLayoutHitter)
+		rowY := func() (float32, bool) {
+			for y := float32(1); y < nativeH; y++ {
+				if at, got := hitter.HitAt(2, y); got == widget.TableHitGutter && at.Row == row {
+					return y + 4, true
 				}
-				return 0, false
 			}
-			colX := func() (float32, bool) {
-				for x := float32(1); x < w; x++ {
-					if at, got := hitter.HitAt(x, 2); got == widget.TableHitHeader && at.Col == col {
-						return x + 4, true
-					}
-				}
-				return 0, false
-			}
-			switch hit {
-			case widget.TableHitGutter:
-				y, ok := rowY()
-				f = found{2, y, ok}
-			case widget.TableHitHeader:
-				x, ok := colX()
-				f = found{x, 2, ok}
-			default:
-				y, oky := rowY()
-				x, okx := colX()
-				at, got := hitter.HitAt(x, y)
-				f = found{x, y, oky && okx && got == hit && at == widget.TablePos{Row: row, Col: col}}
-			}
-			return true
-		})
-		if !f.ok {
-			t.Fatalf("the native table has no point for row %d, field %d, %v", row, col, hit)
+			return 0, false
 		}
-		fx, fy := f.x/cw, f.y/ch
-		return int(fx), int(fy), fx - float32(int(fx)), fy - float32(int(fy))
+		colX := func() (float32, bool) {
+			for x := float32(1); x < nativeW; x++ {
+				if at, got := hitter.HitAt(x, 2); got == widget.TableHitHeader && at.Col == col {
+					return x + 4, true
+				}
+			}
+			return 0, false
+		}
+		var okx, oky bool
+		switch hit {
+		case widget.TableHitGutter:
+			x, okx = 2, true
+			y, oky = rowY()
+		case widget.TableHitHeader:
+			y, oky = 2, true
+			x, okx = colX()
+		default:
+			y, oky = rowY()
+			x, okx = colX()
+		}
+		var got widget.TableHit
+		at, got = hitter.HitAt(x, y)
+		ok = okx && oky && got == hit
+		return true
+	})
+	if !ok {
+		p.t.Fatalf("the native table has no point for row %d, field %d, %v", row, col, hit)
 	}
+	return x, y, at
+}
+
+func (p *nativePointer) press(row, col int, hit widget.TableHit) {
+	_, _, at := p.point(row, col, hit)
+	onLoop(p.r, func() bool { return p.r.resultsCore().PressAt(at, hit) })
+}
+
+func (p *nativePointer) dragTo(row, col int, hit widget.TableHit) {
+	_, _, at := p.point(row, col, hit)
+	onLoop(p.r, func() bool { p.r.resultsCore().DragTo(at); return true })
+}
+
+func (p *nativePointer) release() {
+	onLoop(p.r, func() bool { p.r.resultsCore().EndDrag(); return true })
+}
+
+func (p *nativePointer) rightPress(row, col int, hit widget.TableHit) {
+	x, y, _ := p.point(row, col, hit)
+	onLoop(p.r, func() bool {
+		dt := p.r.h.plugins.c.ResultsTable(resultsView)
+		if cp := dt.Context().CellPixels(); cp.W > 0 && cp.H > 0 {
+			x, y = x/cp.W, y/cp.H
+		}
+		return dt.HandleEvent(tuicore.MouseEvent{Kind: tuicore.MousePress,
+			Button: tuicore.MouseRight, X: int(x), Y: int(y), SubX: x - float32(int(x)), SubY: y - float32(int(y))})
+	})
+	waitHandled(p.t, p.r, "the right press", func(*widget.TableCore) bool {
+		return p.r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen()
+	})
 }
 
 // TestTheGUIPointerSelectsWhatIsCopied: the terminal's pointer cell, over the native table's
 // pixels: the drags, the title clicked and the right press select and copy as they do there.
 func TestTheGUIPointerSelectsWhatIsCopied(t *testing.T) {
 	r := guiResultsTUI(t)
-	wantPointerSelections(t, r, guiPoint(t, r))
+	wantPointerSelections(t, r, newNativePointer(t, r))
 }

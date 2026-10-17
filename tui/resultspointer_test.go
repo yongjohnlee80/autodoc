@@ -15,30 +15,121 @@ import (
 // copy is the cells selected, never a row's number or a field's title. The terminal's cells here;
 // the GUI's pixels in gui_resultspanel_test.go.
 
-// pointAt is where a pointer event over the results' table goes, in its own frame, for the field
-// col's title (hit TableHitHeader), row's number (TableHitGutter), or the cell (TableHitCell).
-type pointAt func(row, col int, hit widget.TableHit) (x, y int, subX, subY float32)
+// pointer drives the pointer over the results' table for a cell, a row's number or a field's
+// title (hit): a left press, a drag to another of the same, the release, and a right press. Each
+// returns once the table has had the event.
+type pointer interface {
+	press(row, col int, hit widget.TableHit)
+	dragTo(row, col int, hit widget.TableHit)
+	release()
+	rightPress(row, col int, hit widget.TableHit)
+}
 
-// tuiPoint is pointAt for the terminal's DataTable: the header is its first line, the row numbers
-// its first cells, then each field in its width and the gap after it.
-func tuiPoint(r *running) pointAt {
-	return func(row, col int, hit widget.TableHit) (int, int, float32, float32) {
-		xy := onLoop(r, func() [2]int {
-			tc := r.resultsCore()
-			x := tc.RowNumberDigits() + 2
-			for c := range col {
-				x += tc.Width(c) + 2
+// screenPointer is the terminal's pointer: mouse events at the screen's cells, through the App's
+// own routing (the table takes the pointer while a drag lasts). A field's title is the header's
+// line, a row's number the table's first cells, then each field in its width and the gap after it.
+type screenPointer struct {
+	t      *testing.T
+	r      *running
+	x0, y0 int // the table's top left, on the screen
+	last   [2]int
+}
+
+func newScreenPointer(t *testing.T, r *running) *screenPointer {
+	t.Helper()
+	// the panel tall enough for the header and every row of the kinds table
+	onLoop(r, func() bool { r.h.plugins.c.Set("App.resultsSize", 70); return true })
+	p := &screenPointer{t: t, r: r}
+	r.s.WaitFor(t, "the results' table placed, its rows in sight", func(string) bool {
+		rect, ok := onLoop(r, func() [5]int {
+			root, _ := r.h.p.Root().(interface{ Context() *tuicore.Context })
+			dt := r.h.plugins.c.ResultsTable(resultsView)
+			if root == nil || root.Context() == nil || dt.Context() == nil {
+				return [5]int{}
 			}
-			switch hit {
-			case widget.TableHitHeader:
-				return [2]int{x, 0}
-			case widget.TableHitGutter:
-				return [2]int{0, row + 1}
+			at, ok := root.Context().ResolveAnchor(dt.Context().NodeAnchor())
+			if !ok {
+				return [5]int{}
 			}
-			return [2]int{x, row + 1}
-		})
-		return xy[0], xy[1], 0, 0
+			return [5]int{at.X, at.Y, at.W, at.H, 1}
+		}), true
+		p.x0, p.y0 = rect[0], rect[1]
+		return ok && rect[4] == 1 && rect[3] >= len(kindsRows)+1
+	})
+	return p
+}
+
+func (p *screenPointer) local(row, col int, hit widget.TableHit) (int, int) {
+	xy := onLoop(p.r, func() [2]int {
+		tc := p.r.resultsCore()
+		x := tc.RowNumberDigits() + 2
+		for c := range col {
+			x += tc.Width(c) + 2
+		}
+		switch hit {
+		case widget.TableHitHeader:
+			return [2]int{x, 0}
+		case widget.TableHitGutter:
+			return [2]int{0, row + 1}
+		}
+		return [2]int{x, row + 1}
+	})
+	return xy[0], xy[1]
+}
+
+func (p *screenPointer) send(kind tuicore.MouseKind, button tuicore.MouseButton, x, y int) {
+	p.t.Helper()
+	p.r.keys(p.t, tuicore.MouseEvent{Kind: kind, Button: button, X: p.x0 + x, Y: p.y0 + y})
+	p.last = [2]int{x, y}
+}
+
+func (p *screenPointer) press(row, col int, hit widget.TableHit) {
+	p.t.Helper()
+	x, y := p.local(row, col, hit)
+	p.send(tuicore.MousePress, tuicore.MouseLeft, x, y)
+	waitHandled(p.t, p.r, "the press", func(tc *widget.TableCore) bool { return tc.Dragging() && pointerAt(tc, row, col, hit) })
+}
+
+func (p *screenPointer) dragTo(row, col int, hit widget.TableHit) {
+	p.t.Helper()
+	x, y := p.local(row, col, hit)
+	p.send(tuicore.MouseMotion, tuicore.MouseLeft, x, y)
+	waitHandled(p.t, p.r, "the drag", func(tc *widget.TableCore) bool { return pointerAt(tc, row, col, hit) })
+}
+
+func (p *screenPointer) release() {
+	p.t.Helper()
+	p.send(tuicore.MouseRelease, tuicore.MouseLeft, p.last[0], p.last[1])
+	waitHandled(p.t, p.r, "the release", func(tc *widget.TableCore) bool { return !tc.Dragging() })
+}
+
+func (p *screenPointer) rightPress(row, col int, hit widget.TableHit) {
+	p.t.Helper()
+	x, y := p.local(row, col, hit)
+	p.send(tuicore.MousePress, tuicore.MouseRight, x, y)
+	waitHandled(p.t, p.r, "the right press", func(*widget.TableCore) bool {
+		return p.r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen()
+	})
+}
+
+// waitHandled waits until the table shows an event's effect: an injected event and a posted
+// function are drained in either order, so what the event does is what says it arrived.
+func waitHandled(t *testing.T, r *running, what string, done func(*widget.TableCore) bool) {
+	t.Helper()
+	r.s.WaitFor(t, what+" handled", func(string) bool { return onLoop(r, func() bool { return done(r.resultsCore()) }) })
+}
+
+// pointerAt reports whether the cursor is where a press or a drag over (row, col, hit) puts it: the
+// cell; the row, for a row's number; the field, for a title.
+func pointerAt(tc *widget.TableCore, row, col int, hit widget.TableHit) bool {
+	cur := tc.Cursor()
+	switch hit {
+	case widget.TableHitGutter:
+		return cur.Row == row
+	case widget.TableHitHeader:
+		return cur.Col == col
 	}
+	return cur == widget.TablePos{Row: row, Col: col}
 }
 
 // kindsTSV is the kinds table's rows from..to, fields lo..hi (each inclusive), as Copy writes
@@ -51,25 +142,18 @@ func kindsTSV(from, to, lo, hi int) string {
 	return strings.Join(lines, "\n")
 }
 
-// wantPointerSelections drives the pointer over the kinds table at, and checks each selection's
+// wantPointerSelections drives the pointer p over the kinds table, and checks each selection's
 // Copy (TSV) exactly; then the CSV and Markdown copies' names line, and a right press keeping the
 // selection while the menu opens.
-func wantPointerSelections(t *testing.T, r *running, at pointAt) {
+func wantPointerSelections(t *testing.T, r *running, p pointer) {
 	t.Helper()
-	send := func(kind tuicore.MouseKind, button tuicore.MouseButton, row, col int, hit widget.TableHit) {
-		t.Helper()
-		x, y, sx, sy := at(row, col, hit)
-		onLoop(r, func() bool {
-			return r.h.plugins.c.ResultsTable(resultsView).HandleEvent(tuicore.MouseEvent{Kind: kind, Button: button, X: x, Y: y, SubX: sx, SubY: sy})
-		})
-	}
 	drag := func(from, to [2]int, hit widget.TableHit) {
 		t.Helper()
-		send(tuicore.MousePress, tuicore.MouseLeft, from[0], from[1], hit)
+		p.press(from[0], from[1], hit)
 		if from != to {
-			send(tuicore.MouseMotion, tuicore.MouseLeft, to[0], to[1], hit)
+			p.dragTo(to[0], to[1], hit)
 		}
-		send(tuicore.MouseRelease, tuicore.MouseLeft, to[0], to[1], hit)
+		p.release()
 	}
 	copied := func(format copyFormat) string {
 		t.Helper()
@@ -123,10 +207,7 @@ func wantPointerSelections(t *testing.T, r *running, at pointAt) {
 	// a right press on a cell outside it: the menu opens over the selection, which stays, and Copy
 	// still writes it
 	before := selection()
-	send(tuicore.MousePress, tuicore.MouseRight, 3, 4, widget.TableHitCell)
-	r.s.WaitFor(t, "the menu open", func(string) bool {
-		return onLoop(r, func() bool { return r.h.plugins.c.ResultsTable(resultsView).Menu().IsOpen() })
-	})
+	p.rightPress(3, 4, widget.TableHitCell)
 	if got := selection(); got != before {
 		t.Errorf("the right press changed the selection: %s, was %s", got, before)
 	}
@@ -142,5 +223,5 @@ func wantPointerSelections(t *testing.T, r *running, at pointAt) {
 // the selected fields' names. A right press keeps the selection and opens the menu.
 func TestThePointerSelectsWhatIsCopied(t *testing.T) {
 	r, _ := kindsTUI(t, "tablestall")
-	wantPointerSelections(t, r, tuiPoint(r))
+	wantPointerSelections(t, r, newScreenPointer(t, r))
 }
