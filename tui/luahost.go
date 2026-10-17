@@ -62,6 +62,7 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	ui := L.NewTable()
 	L.SetFuncs(ui, map[string]lua.LGFunction{"pick": s.luaPick})
 	L.SetField(eng.Global(), "ui", ui)
+	s.bindCard(L, ui) // ui.card, ui.charts, app.stats (luacard.go)
 	ag := L.NewTable()
 	L.SetFuncs(ag, map[string]lua.LGFunction{"list": s.luaAgentsList, "send": s.luaAgentsSend})
 	L.SetField(eng.Global(), "agents", ag)

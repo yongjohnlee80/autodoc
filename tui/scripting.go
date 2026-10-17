@@ -63,6 +63,11 @@ type scripting struct {
 	host   luaHost
 	pick   *pick[luaItem]
 	pickCB *lua.LFunction
+	// card is the card autodoc.ui.card shows (luacard.go), nil for none; cardGen the latest card's
+	// number, cardEpoch the panel's opening, which a tick chain belongs to
+	card      *luaCard
+	cardGen   uint64
+	cardEpoch uint64
 }
 
 // Catalog is :lua-reload (catalog.go).
@@ -110,10 +115,12 @@ func (h *Host) luaFeature() *scripting {
 
 func (*scripting) Name() string { return "scripting" }
 func (s *scripting) State() map[string]any {
-	return map[string]any{"App.luaPickRows": s.luaPicker().list.Model(), "App.luaPickField": "",
+	st := map[string]any{"App.luaPickRows": s.luaPicker().list.Model(), "App.luaPickField": "",
 		"App.luaKeysText": s.luaKeysText(), "App.luaMenus": s.luaMenuRows(),
 		"App.luaPickStatus": "items", "App.luaPickTitle": "choose",
 		"App.luaPickPreviewTitle": "", "App.luaPickPreviewText": "", "App.luaPickPreviewAt": 0}
+	maps.Copy(st, s.cardState())
+	return st
 }
 func (s *scripting) Commands() map[string]Command {
 	return map[string]Command{
@@ -144,7 +151,9 @@ func (s *scripting) bind(eng *script.Engine, run func(id string, args []string) 
 	// grant given after the script loaded works at once (luakeys.go)
 	eng.SetGate("map", func(string, *lua.LState) string { return "" })
 	eng.SetGate("menu", func(string, *lua.LState) string { return "" })
-	// a new engine (a reload): the namespaces are made again in it, from the contracts known
+	// a new engine (a reload): the namespaces are made again in it, from the contracts known, and
+	// the old engine's card ends with its panel closed (luacard.go)
+	s.resetCard()
 	s.domains = map[string]*lua.LTable{}
 	if s.verbs != nil {
 		defer s.define(s.verbs)

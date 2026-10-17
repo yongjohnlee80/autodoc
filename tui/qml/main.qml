@@ -562,6 +562,32 @@ Window {
     // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
     // tab per status, as autofinder's todos panel; at the left edge unless moved, and large: 65% of
     // the window across, 80% along, centred (todosDefault), until the user sizes or places it
+    // a script's card (autodoc.ui.card, luacard.go): its Markdown drawn Rendered in the GUI, where a
+    // vega-lite fence is a chart; a terminal shows the source. One card at a time; :usage is one
+    Panel {
+        id: luaCard
+        heading: App.luaCardTitle
+        closeOnQ: true
+        edge: Tui.Right
+        size: App.luaCardSize
+        length: App.luaCardLength
+        floating: App.luaCardFloating
+        floatX: App.luaCardX; floatY: App.luaCardY; floatWidth: App.luaCardW; floatHeight: App.luaCardH
+        onPlaced: App.panelPlaced("luaCard", x, y, width, height)
+        minimumSize: 15
+        onResized: App.panelResized("luaCard", size, length)
+        onOpened: App.panelOpened("luaCard")
+        onClosed: App.panelClosed("luaCard")
+        Editor {
+            id: luaCardView
+            readOnly: true
+            wrap: true
+            view: Editor.Rendered
+            text: App.luaCardText
+            SyntaxHighlighter { definition: "Markdown" }
+            MarkdownRenderer { mermaid: true }
+        }
+    }
     Panel {
         id: todos
         heading: App.todosTitle

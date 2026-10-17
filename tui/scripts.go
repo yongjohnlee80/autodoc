@@ -10,10 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
 
+	"github.com/yongjohnlee80/autodoc/core/procstat"
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
@@ -172,3 +174,12 @@ func (l luaHostOf) sendText(to AgentRef, text string, done func(error)) error {
 	return l.h.agents.SendText(to, text, done)
 }
 func (l luaHostOf) post(fn func()) { l.h.p.Post(fn) }
+
+// the card's (luacard.go): its panel opened without taking the keyboard, which stays where it is
+func (l luaHostOf) openPanel(id string)              { l.h.keep(l.h.p.Call(id, "open")) }
+func (l luaHostOf) closePanel(id string)             { l.h.closeDrawer(id) }
+func (l luaHostOf) panelOpen(id string) bool         { return l.h.panelOpen[id] }
+func (l luaHostOf) after(d time.Duration, fn func()) { l.h.after(d, fn) }
+func (l luaHostOf) appStats() procstat.Stats         { return procstat.Read() }
+func (l luaHostOf) appVersion() string               { return l.h.aboutInfo.Version }
+func (l luaHostOf) native() bool                     { return l.h.native() }
