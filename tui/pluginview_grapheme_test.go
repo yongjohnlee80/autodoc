@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"math/rand/v2"
 	"reflect"
 	"testing"
 
@@ -116,5 +118,56 @@ func TestTheHostKeepsCellsWrittenApartInTheirColumns(t *testing.T) {
 				t.Fatalf("a drawn at column %d, Text placed it at %d: %v", at, x, got)
 			}
 		})
+	}
+}
+
+// TestTheHostKeepsEveryCellsCharacterAndColumn: through the real renderer, each cluster a plugin
+// wrote one Text at a time is drawn whole, at the column Text gave it, and so is the ASCII after:
+// single and paired regional indicators in both orders and parities (Lector #230 r1), and a seeded
+// run of random sequences from a pool of clusters that join, re-pair or extend.
+func TestTheHostKeepsEveryCellsCharacterAndColumn(t *testing.T) {
+	const (
+		k, r, u, s = "\U0001f1f0", "\U0001f1f7", "\U0001f1fa", "\U0001f1f8"
+	)
+	check := func(t *testing.T, writes []string) {
+		t.Helper()
+		f := plugin.NewFrame(40, 1)
+		want := map[int]string{}
+		x, prev := 0, -1
+		for _, w := range append(writes, "a") {
+			next := f.Text(x, 0, w, plugin.Style{})
+			if next == x && prev >= 0 { // a zero-width write joins the character before it
+				want[prev] += w
+			} else {
+				want[x], prev = w, x
+			}
+			x = next
+		}
+		if got := placed(t, f, 40); !reflect.DeepEqual(got, want) {
+			t.Fatalf("writes %q drawn %v, placed %v", writes, got, want)
+		}
+	}
+	for _, c := range []struct {
+		name   string
+		writes []string
+	}{
+		{"single, pair, single", []string{k, u + s, r}},
+		{"single, pair", []string{k, u + s}},
+		{"pair, single", []string{u + s, k}},
+		{"pair, single, single", []string{u + s, k, r}},
+		{"single, single, pair", []string{k, r, u + s}},
+		{"three singles", []string{k, r, u}},
+	} {
+		t.Run(c.name, func(t *testing.T) { check(t, c.writes) })
+	}
+	pool := []string{k, r, u, s, u + s, k + r, "\u2764", "\ufe0f", "\u200d", "\U0001f468", "\U0001f469",
+		"\U0001f468\u200d\U0001f469", "e\u0301", "表", "x", "-", "\u0915\u094d", "\u0937"}
+	rng := rand.New(rand.NewPCG(1792254331, 230))
+	for i := range 500 {
+		writes := make([]string, 1+rng.IntN(6))
+		for j := range writes {
+			writes[j] = pool[rng.IntN(len(pool))]
+		}
+		t.Run(fmt.Sprint("random ", i), func(t *testing.T) { check(t, writes) })
 	}
 }
