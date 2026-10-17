@@ -4,7 +4,7 @@ sequenceDiagram
     participant Daemon as autodoc --serve
     participant Store as SQLite WAL Store (core/store)
 
-    Client->>Socket: Dial autodoc.sock (server.socket, else $XDG_RUNTIME_DIR, else macOS $TMPDIR, else state dir)
+    Client->>Socket: Dial autodoc.sock (server.socket, else $XDG_RUNTIME_DIR, else macOS $TMPDIR, else $XDG_STATE_HOME/autodoc)
     alt Socket unreachable or missing
         Client->>Daemon: Spawn background autodoc --serve
         Daemon->>Store: Acquire single-writer lease (flock on .autodoc-lease-device-inode)
