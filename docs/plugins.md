@@ -593,6 +593,129 @@ protocol-6 handshake and only for unmodified input inside the frame. A right pre
 the card's context menu. `Pointer.X` and `Pointer.Y` are zero-based frame coordinates; `Count` is
 bounded to 1–16. A plugin can ignore pointer events and keep its keyboard controls.
 
+## Drawing a card: the UI kits
+
+A card or dialog can draw every cell itself with `plugin.Frame`. Most don't need to: the SDK has two
+kits that draw it for you, in AutoDoc's look, keys and theme. Neither changes what AutoDoc and the
+plugin say to each other; both send `host.frame` like any other plugin.
+
+| | `plugin/card` (native) | `plugin/decl` (QML) |
+|---|---|---|
+| You write | a `Page` of blocks and controls, in Go | a golib QML layout, plus Go handlers |
+| Controls | `Input` (and masked), `Buttons`, `List`, `Tree`, `Text`, `Line` | golib's widgets: `TextField`, `Button`, `ListView`, `TreeView`, `TableView`, `Flex`… |
+| Starts | drawing at once | by parsing its layout |
+| A plugin's binary | about 3 MB | about 7.5 MB |
+| Example | `examples/card-go` | `examples/card-qml` |
+
+Pick `plugin/card` for a form, a list or a tree beside the page; pick `plugin/decl` for a richer
+screen, or one you'd rather write the way AutoDoc's own panels are written.
+
+Both measure text as AutoDoc does: a CJK character takes two cells, and an accent written as a
+combining mark, an emoji sequence or a flag stays one character. `plugin.Frame` does the same for a
+plugin that draws its own.
+
+### `plugin/card`
+
+The plugin keeps its controls and builds a `card.Page` each time the card is drawn; the `Card` lays
+it out, draws it and handles the keys:
+
+```go
+type people struct {
+	plugin.Base
+	peer *plugin.Peer
+	card *card.Card
+	name card.Input
+	list card.List
+}
+
+func (p *people) page() card.Page {
+	return card.Page{
+		Title:  "People",
+		Header: []card.Block{card.Line(card.Title, "People")},
+		Body:   []card.Block{&p.name, &p.list},
+		Keys:   "Tab: move · Enter: add · q: close",
+	}
+}
+
+// the Handler's methods forward to the Card
+func (p *people) Open(peer *plugin.Peer, o plugin.Open) { p.peer = peer; p.card.Open(peer, o) }
+func (p *people) Resize(w, h int)                      { p.card.Resize(w, h) }
+func (p *people) Theme(t plugin.Theme)                 { p.card.Theme(t) }
+func (p *people) Focus(focused bool)                   { p.card.Focus(focused) }
+func (p *people) Pointer(at plugin.Pointer)            { p.card.Pointer(at) }
+func (p *people) Key(k plugin.Key) {
+	if !p.card.Key(k) && k.Key == "q" {
+		_ = p.peer.Close()
+	}
+}
+```
+
+- **The page** has a header (always shown), a body (scrolling to keep the focused row in view), a
+  button bar, a keys line, a status and a problem. When the card is short, rows go first to the
+  header, the focused row, the first problem row, the buttons and the keys.
+- **Keys:** Tab and Shift+Tab move between controls. Lists and trees take j k, PageUp PageDown (Ctrl+U
+  Ctrl+D), g G and Enter; trees open with l or Right and close with h or Left. `Card.Key` returns false
+  for a key it did not use, so your own letters (and q) stay yours. In an `Input`, every printable
+  key is text, q included.
+- **The pointer** (protocol 6): a press focuses and selects what it lands on and presses a button;
+  the wheel moves the focused list or tree.
+- **Theme:** the selection wears the theme's highlight, and the inactive one while the card lacks the
+  keys. Text roles are `Plain`, `Dim`, `Title`, `Good` and `Problem`.
+- A `List` asks for only the rows in view, so it can hold thousands. A `Tree` keeps its selection by
+  node: when the node closes away or is removed, the selection goes to its nearest ancestor still
+  showing.
+- A masked `Input` never makes its value a string to draw it; read it with `Runes()` and `Clear()` it
+  when done, which zeroes it.
+- `card.Options{Modal: true}` for a modal dialog, which AutoDoc sends no `plugin.focus`.
+
+### `plugin/decl`
+
+`decl.New` is a whole `plugin.Handler`: pass it to `plugin.Serve`, or embed `*decl.Card` in a type
+that adds `Command`, `Document` or tables.
+
+```go
+c := decl.New(decl.Options{
+	Program: []tuidecl.ProgramOption{
+		tuidecl.LayoutSource("card.qml", layout),
+		tuidecl.Singleton("people", "1.0", "App"),
+		tuidecl.Sources(map[string]any{"App.status": ""}),
+		tuidecl.Handlers(map[string]gdecl.HandlerFunc{"App.add": add}),
+	},
+	Setup: func(p *tuidecl.Program, _ *plugin.Peer) error { return p.Set("App.status", "ready") },
+})
+_ = plugin.Serve(ctx, c)
+```
+
+```qml
+import tui 1.0
+import autodoc.plugin 1.0   // Theme, kept to AutoDoc's theme
+import people 1.0
+
+Window {
+    palette.window: Theme.app.window; palette.windowText: Theme.app.windowText
+    Text { text: App.status }
+}
+```
+
+- **The theme:** bind the layout's palette to `Theme.*` and name no colour; when AutoDoc's theme
+  changes, the palette follows without a rebuild, and what was typed or scrolled stays.
+- **State** changes on the program's loop only: in `Setup`, before the first frame; in a handler; or
+  through `Card.Post` from your own goroutines. A `Post` after the card closed does not run.
+- **Keys** reach the program as a terminal's would, except Esc, which AutoDoc keeps to close or hide
+  the card. A left press arrives as a press and its release.
+- A layout that fails to build, or a `Setup` that fails, is shown in the card in red, and the card
+  closes. A program that quits closes its card.
+
+### Testing a card
+
+Both kits run without AutoDoc. `card.Card.Attach` draws to any `Frame`/`Title` host, so a test can
+send keys and read frames. The examples go further, driving the plugin over the protocol as AutoDoc
+does (`examples/internal/hosttest`).
+
+To try an example from a checkout, run `go build -o bin/autodoc-card-go .` in its directory.
+Installing from a git URL is for a repository whose top holds `plugin.toml`, as
+`autodoc-doc-stats` does; to install one of these, copy its directory into a repository of its own.
+
 ## What a plugin may not do
 
 - **Change the note** but through a command it declares in `calls` (a Lua command of yours, say). A

@@ -61,6 +61,10 @@
 // host logs it, runs nothing, and sends no result for it, so the waiting call's is the only one
 // with that number. Peer.Call does all of this for a plugin in Go.
 //
+// A card or dialog need not draw its cells by hand: plugin/card is a native kit of pages and
+// controls (inputs, buttons, lists, trees), and plugin/decl runs a golib QML layout. Both draw in
+// AutoDoc's look and theme (docs/plugins.md, "Drawing a card").
+//
 // A plugin in Go writes a [Handler] and calls [Serve]; one in another language speaks the table
 // above. The frame's colours are the themes' vocabulary: "default", an ANSI name ("brightwhite"), or
 // "#rrggbb" — golib's style.ParseColor reads them, as it reads the theme the plugin is sent.
