@@ -117,6 +117,7 @@ Window {
             MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
             MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
             MenuItem { text: "&Buffers…"; onTriggered: App.openBuffers() }
+            MenuItem { text: "W&idget…"; onTriggered: App.openWidgets() }
             MenuSeparator {}
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
             MenuItem { text: "Re&lations"; onTriggered: App.toggleRelations() }
@@ -859,6 +860,7 @@ Window {
     Find { id: findDialog }
     FileOpen { id: fileOpen }
     BufferPick { id: bufferPick }
+    GoPick { id: widgetPick }
     OutlinePicker { id: outlinePicker }
     AgentAssign { id: agentAssignPicker }
     LuaPick { id: luaPicker }

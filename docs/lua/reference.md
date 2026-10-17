@@ -34,6 +34,7 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 | `autodoc.document()` | The page in the editor, the buffer shown ([below](#autodocdocument)). | a table |
 | `autodoc.buffers()` | Every open buffer, in opening order: `{n, path, workspace, kind, modified, active}` ([buffers](#buffers)). | a list of tables |
 | `autodoc.buffer(n)` | An editor object for buffer `n`, shown or not: `ed`'s methods ([buffers](#buffers)). | the object, or `nil` and why |
+| `autodoc.widgets()` | The places the keyboard can go, in the order `:go` and F6 know them: the editor, every panel, each tab of the terminal and the agent panels; never the menu bar. `autodoc.run("widget.go", name)` goes to one, opening a closed panel (a card plugin's too). | a list of `{name, title, open, focused}` |
 | `autodoc.map{mode, keys, command, title}` | Binds a key to a command line ([keys and menus](#keys-and-menus)). | nothing |
 | `autodoc.menu{where, title, command}` | Adds a menu row that runs a command line ([keys and menus](#keys-and-menus)). | nothing |
 | `autodoc.<domain>.<verb>(…, cb)` | Calls the daemon's `<domain>.<verb>`: its params in order, then `cb`. Made when AutoDoc connects ([the daemon's verbs](#the-daemons-verbs)). | nothing; the answer goes to `cb` |

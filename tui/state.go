@@ -71,6 +71,8 @@ func (h *Host) state() map[string]any {
 		"App.buffersPreviewTitle": "",
 		"App.buffersPreviewText":  "",
 		"App.buffersPreviewAt":    0,
+		"App.widgetRows":          h.widgetRows.Model(),
+		"App.widgetIndex":         0,
 		"App.pickerStatus":        "files",
 		"App.openPreviewTitle":    "",
 		"App.openPreviewText":     "",

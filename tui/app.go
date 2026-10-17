@@ -226,7 +226,10 @@ type Host struct {
 	active     *openBuffer
 	bufRecent  []*openBuffer
 	bufN       int
-	bufferPick *pick[string]    // the Buffers picker (bufferpick.go)
+	bufferPick *pick[string] // the Buffers picker (bufferpick.go)
+	// the Go-to picker's rows and its cursor (widgets.go)
+	widgetRows *rows[widgetTarget]
+	widgetAt   int
 	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
 	watches map[string]*diskWatch
@@ -402,6 +405,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.rel = newRelated(core{h})
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.bufferPick = h.newBufferPick()
+	h.widgetRows = newWidgetRows()
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
