@@ -102,10 +102,14 @@ func TestGoNamesAndTheList(t *testing.T) {
 func TestF6CyclesTheOpenWidgets(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
-	onLoop(r, func() bool { r.h.togglePanel("explorer"); r.h.togglePanel("links"); r.h.focusEditor(); return true })
-	r.s.WaitFor(t, "both panels open, the editor focused", func(string) bool {
-		return r.panelIsOpen("explorer") && r.panelIsOpen("links") && r.focusedOn("editor")
+	onLoop(r, func() bool {
+		r.h.keep(r.h.p.Call("explorer", "open"))
+		r.h.keep(r.h.p.Call("links", "open"))
+		return true
 	})
+	r.s.WaitFor(t, "both panels open", func(string) bool { return r.panelIsOpen("explorer") && r.panelIsOpen("links") })
+	onLoop(r, func() bool { r.h.focusEditor(); return true })
+	r.s.WaitFor(t, "the editor focused", func(string) bool { return r.focusedOn("editor") })
 	for _, want := range []string{"explorerTree", "relationsList", "editor", "explorerTree"} {
 		r.keys(t, f6(false))
 		r.s.WaitFor(t, "F6 to "+want, func(string) bool { return r.focusedOn(want) })
