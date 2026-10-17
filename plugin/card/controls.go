@@ -95,6 +95,23 @@ func (in *Input) insert(rs []rune) {
 	copy(in.value[in.at+len(rs):], in.value[in.at:n])
 	copy(in.value[in.at:], rs)
 	in.at += len(rs)
+	in.settle()
+}
+
+// settle keeps the cursor at a character's start. An edit can join the characters around it (a
+// ZWJ typed between two emoji makes them one): the cursor then goes to the end of the character
+// it fell inside, behind what was typed, as it is after any insertion. A Masked value is edited
+// rune by rune, so every offset is a start.
+func (in *Input) settle() {
+	if in.Masked {
+		return
+	}
+	for _, s := range in.starts() {
+		if s >= in.at {
+			in.at = s
+			return
+		}
+	}
 }
 
 // cut removes the runes [from, to), zeroing the ones it frees.
@@ -109,6 +126,7 @@ func (in *Input) cut(from, to int) {
 	if in.at > from {
 		in.at = max(from, in.at-(to-from))
 	}
+	in.settle() // what was left either side may now be one character
 }
 
 func (in *Input) key(k plugin.Key) keyResult {
@@ -250,6 +268,7 @@ type Tree struct {
 	OnEnter  func(n *Node) bool // false: Enter opens or closes the node, as on one with no handler
 	sel      *Node              // the selected node; nil with selEmpty set, or before the first draw
 	selEmpty *Node              // the node whose Empty row is selected
+	selPath  []*Node            // the selection's ancestors, root first, when it last showed: a removed node's way back
 }
 
 // Node is one row of a Tree.
@@ -304,7 +323,7 @@ func (t *Tree) Selected() *Node {
 }
 
 // Select makes n the selection.
-func (t *Tree) Select(n *Node) { t.sel, t.selEmpty = n, nil }
+func (t *Tree) Select(n *Node) { t.sel, t.selEmpty, t.selPath = n, nil, pathTo(t.Roots, n) }
 
 // index is the selection's row among rows. A selection no longer showing (an ancestor closed, the
 // node removed) moves to its nearest showing ancestor, else to the first row.
@@ -315,6 +334,7 @@ func (t *Tree) index(rows []trow) int {
 	}
 	for i, r := range rows {
 		if r.n == want && r.empty == empty {
+			t.selPath = ancestors(rows, i)
 			return i
 		}
 	}
@@ -326,7 +346,10 @@ func (t *Tree) index(rows []trow) int {
 			}
 		}
 	}
-	path := pathTo(t.Roots, want)
+	path := pathTo(t.Roots, want) // hidden under a closed ancestor: still in the tree
+	if path == nil {
+		path = t.selPath // removed: the ancestors it had when it last showed
+	}
 	for j := len(path) - 1; j >= 0; j-- {
 		for i, r := range rows {
 			if r.n == path[j] && !r.empty {
@@ -341,6 +364,23 @@ func (t *Tree) index(rows []trow) int {
 	}
 	t.sel, t.selEmpty = rows[0].n, nil
 	return 0
+}
+
+// ancestors are the nodes holding rows[i], root first: the row above it one level up, and so on.
+// An Empty row's own node is held apart (selEmpty), so its ancestors start one level up.
+func ancestors(rows []trow, i int) []*Node {
+	var out []*Node
+	depth := rows[i].depth
+	if rows[i].empty {
+		depth--
+	}
+	for j := i - 1; j >= 0 && depth > 0; j-- {
+		if rows[j].depth == depth-1 && !rows[j].empty {
+			out = append([]*Node{rows[j].n}, out...)
+			depth--
+		}
+	}
+	return out
 }
 
 // pathTo is the nodes from a root down to n's parent; nil when n is not in the tree.

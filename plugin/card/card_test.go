@@ -376,3 +376,119 @@ func TestWrapAndElideMeasureWidths(t *testing.T) {
 		t.Errorf("wrap of wide text = %q", got)
 	}
 }
+
+// TestAnEditThatJoinsCharactersKeepsTheCursorOnOne: typing or deleting can join the characters
+// around the cursor into one (a ZWJ between two emoji, two regional indicators meeting, a combining
+// mark): the cursor then sits after the joined character, and every key still moves and deletes
+// (Lector #230 r2 R2). What is typed next shows where the cursor is.
+func TestAnEditThatJoinsCharactersKeepsTheCursorOnOne(t *testing.T) {
+	const man, woman, k, r = "\U0001f468", "\U0001f469", "\U0001f1f0", "\U0001f1f7"
+	for _, c := range []struct {
+		name  string
+		start string
+		keys  []plugin.Key
+		want  string
+	}{
+		{"a ZWJ joins two emoji", man + woman,
+			[]plugin.Key{key("Home"), key("Right"), text("\u200d"), text("x")}, man + "\u200d" + woman + "x"},
+		{"then Backspace takes the joined emoji whole", man + woman,
+			[]plugin.Key{key("Home"), key("Right"), text("\u200d"), key("Backspace")}, ""},
+		{"then Left and Delete do too", man + woman,
+			[]plugin.Key{key("Home"), key("Right"), text("\u200d"), key("Left"), key("Delete")}, ""},
+		{"deleting between indicators pairs them", k + "x" + r,
+			[]plugin.Key{key("Home"), key("Right"), key("Delete"), text("y")}, k + r + "y"},
+		{"a combining mark joins the letter before", "ab",
+			[]plugin.Key{key("Home"), key("Right"), text("\u0301"), text("z")}, "a\u0301zb"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			in := &Input{}
+			in.Set(c.start)
+			card, _ := open(t, func() Page { return Page{Body: []Block{in}} }, 30, 4)
+			for _, k := range c.keys {
+				if !card.Key(k) {
+					t.Fatalf("%+v not used", k)
+				}
+			}
+			if in.Value() != c.want {
+				t.Fatalf("value = %q, want %q", in.Value(), c.want)
+			}
+		})
+	}
+}
+
+// TestARemovedSelectionGoesToItsNearestShowingAncestor: the plugin refreshing its data can take
+// the selected node out of the tree; the selection goes to the nearest ancestor it had that still
+// shows, and to the first row only when none does (Lector #230 r2 R3).
+func TestARemovedSelectionGoesToItsNearestShowingAncestor(t *testing.T) {
+	build := func() (other, gp, p, g *Node, tree *Tree) {
+		g = &Node{Text: "grandchild", Leaf: true}
+		p = &Node{Text: "parent", Open: true, Children: []*Node{g}}
+		gp = &Node{Text: "grandparent", Open: true, Children: []*Node{p}}
+		other = &Node{Text: "other", Leaf: true}
+		return other, gp, p, g, &Tree{Roots: []*Node{other, gp}}
+	}
+	selectG := func(t *testing.T, c *Card, tree *Tree, g *Node) {
+		t.Helper()
+		for range 3 {
+			c.Key(key("Down"))
+		}
+		if tree.Selected() != g {
+			t.Fatalf("set-up: selected %v, want the grandchild", tree.Selected())
+		}
+	}
+	t.Run("the node removed, its parent showing", func(t *testing.T) {
+		_, _, p, g, tree := build()
+		c, _ := open(t, func() Page { return Page{Body: []Block{tree}} }, 30, 8)
+		selectG(t, c, tree, g)
+		p.Children = nil
+		c.Draw()
+		if tree.Selected() != p {
+			t.Fatalf("selected %v, want the parent", tree.Selected())
+		}
+	})
+	t.Run("the node and its parent removed", func(t *testing.T) {
+		_, gp, _, g, tree := build()
+		c, _ := open(t, func() Page { return Page{Body: []Block{tree}} }, 30, 8)
+		selectG(t, c, tree, g)
+		gp.Children = nil
+		c.Draw()
+		if tree.Selected() != gp {
+			t.Fatalf("selected %v, want the grandparent", tree.Selected())
+		}
+	})
+	t.Run("the whole branch removed", func(t *testing.T) {
+		other, _, _, g, tree := build()
+		c, _ := open(t, func() Page { return Page{Body: []Block{tree}} }, 30, 8)
+		selectG(t, c, tree, g)
+		tree.Roots = []*Node{other}
+		c.Draw()
+		if tree.Selected() != other {
+			t.Fatalf("selected %v, want the first row", tree.Selected())
+		}
+	})
+	t.Run("hidden, not removed", func(t *testing.T) {
+		_, gp, _, g, tree := build()
+		c, _ := open(t, func() Page { return Page{Body: []Block{tree}} }, 30, 8)
+		selectG(t, c, tree, g)
+		gp.Open = false
+		c.Draw()
+		if tree.Selected() != gp {
+			t.Fatalf("selected %v, want the grandparent", tree.Selected())
+		}
+	})
+	t.Run("an Empty row replaced by children", func(t *testing.T) {
+		n := &Node{Text: "schema", Open: true, Empty: "(no tables)"}
+		tree := &Tree{Roots: []*Node{{Text: "other", Leaf: true}, n}}
+		c, _ := open(t, func() Page { return Page{Body: []Block{tree}} }, 30, 8)
+		c.Key(key("Down"))
+		c.Key(key("Down"))
+		if tree.Selected() != nil {
+			t.Fatal("set-up: the Empty row is not selected")
+		}
+		n.Children = []*Node{{Text: "orders", Leaf: true}}
+		c.Draw()
+		if tree.Selected() != n {
+			t.Fatalf("selected %v, want the node whose Empty row went", tree.Selected())
+		}
+	})
+}
