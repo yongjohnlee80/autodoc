@@ -53,9 +53,10 @@ type plugins struct {
 	exportFormat copyFormat
 	// the bar (plugintable.go): its clause and each clause's text; ORDER BY's applied text and why
 	// it did not parse, WHERE's why, the fields it offers for the word typed, and the view's note
-	resultsClause                                                            int
-	clauseText                                                               [2]string
-	resultsOrder, resultsOrderErr, resultsWhereErr, resultsHint, resultsNote string
+	resultsClause                                                                           int
+	clauseText                                                                              [2]string
+	resultsOrder, resultsOrderErr, resultsFilter, resultsWhereErr, resultsHint, resultsNote string
+	whereOn                                                                                 bool // a WHERE filters the view
 	// the card plugins' panels, by name and in order, fixed when the program is built
 	// (pluginpanels.go); nil until then
 	cards     map[string]*cardPanel
@@ -96,7 +97,9 @@ func (pl *plugins) State() map[string]any {
 		"App.resultsClauseIndex": 0,
 		"App.resultsClauseText":  "",
 		"App.resultsOrder":       "",
-		"App.resultsSortNote":    "",
+		"App.resultsViewNote":    "",
+		"App.resultsFilter":      "",
+		"App.exportCanSave":      true,
 		"App.resultsSortLine":    "",
 		"App.exportHeading":      "",
 		"App.exportMore":         "",

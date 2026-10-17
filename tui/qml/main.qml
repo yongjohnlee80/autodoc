@@ -516,7 +516,7 @@ Window {
                     id: resultsText
                     Layout.fillWidth: true
                     text: App.resultsClauseText
-                    placeholderText: "the clause's text, over the loaded rows: column [ASC|DESC], …"
+                    placeholderText: "over the loaded rows: ORDER BY column [ASC|DESC], …; WHERE column > 1 AND …"
                     onAccepted: App.applyResultsClause(text)
                     onTextEdited: App.resultsClauseTyped(text)
                 }
@@ -537,6 +537,7 @@ Window {
                 rowNumbers: true
                 contextMenu: true
                 orderBy: App.resultsOrder
+                filter: App.resultsFilter
                 onOrderByChanged: App.resultsOrderChanged(orderBy)
             }
             Flex {

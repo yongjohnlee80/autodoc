@@ -184,14 +184,14 @@ func TestAKindsPageThatDoesNotFitIsDropped(t *testing.T) {
 // gutter as wide as the last number.
 func TestTheSortIsInBuffer(t *testing.T) {
 	r, logs := kindsTUI(t, "tablestall")
-	if note := r.source("App.resultsSortNote"); note != "" {
+	if note := r.source("App.resultsViewNote"); note != "" {
 		t.Errorf("the note on a whole result: %q", note)
 	}
 	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
 	loaded := tablePage + resultsPage
 	r.waitResults(t, "q1", loaded)
-	note := fmt.Sprintf("sorts the loaded rows: %d of a result with more", loaded)
-	r.s.WaitFor(t, "the note", func(string) bool { return r.source("App.resultsSortNote") == note })
+	note := "the result has more: change the query to change what is returned"
+	r.s.WaitFor(t, "the note", func(string) bool { return r.source("App.resultsViewNote") == note })
 	if line := r.source("App.resultsSortLine"); line != note {
 		t.Errorf("the bar's line %q, want the note", line)
 	}
@@ -582,8 +582,7 @@ func TestTheBlurredCursor(t *testing.T) {
 
 // TestTheBarIsAClauseAndItsText: the bar's dropdown shows ORDER BY chosen, of ORDER BY and WHERE;
 // text typed into its input and entered sorts the rows. Each clause keeps its own text as the
-// dropdown moves between them. WHERE, until AutoDoc's golib reads a filter, says so and leaves the
-// rows as they were.
+// dropdown moves between them, and WHERE's Enter filters the rows the sort orders.
 func TestTheBarIsAClauseAndItsText(t *testing.T) {
 	r, _ := kindsTUI(t, "tablestall")
 	r.s.WaitForText(t, "ORDER BY")
@@ -624,13 +623,13 @@ func TestTheBarIsAClauseAndItsText(t *testing.T) {
 		return read("resultsClause", "currentIndex") == "1" && read("resultsText", "text") == ""
 	})
 	onLoop(r, func() bool { r.h.plugins.applyResultsClause("id > 1"); return true })
-	if line := r.source("App.resultsSortLine"); line != errWhereUnread {
+	r.waitColumn(t, 1, names(0, 3, 2)) // id > 1 kept, then name DESC
+	if line := r.source("App.resultsSortLine"); line != "3 of 5 loaded rows" {
 		t.Errorf("WHERE's Enter: the line %q", line)
 	}
-	r.waitColumn(t, 1, names(4, 0, 3, 2, 1))
 	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseOrderBy, "id > 1"); return true })
 	r.s.WaitFor(t, "ORDER BY's own text back", func(string) bool { return read("resultsText", "text") == "name DESC" })
-	if line := r.source("App.resultsSortLine"); line != "" {
+	if line := r.source("App.resultsSortLine"); line != "3 of 5 loaded rows" {
 		t.Errorf("ORDER BY's line: %q", line)
 	}
 	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseWhere, "name DESC"); return true })

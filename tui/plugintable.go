@@ -68,10 +68,10 @@ type resultsTable struct {
 	// remained when the table's rows ended early (host.table_end, its plugin closed, or a page
 	// refused). capped is rows that came past the panel's cap and were let go.
 	more, pending, cut, capped bool
-	// sorting is the bar's sort being applied. The view keeps the cursor on its row, and the row's
-	// new place may be near the end of those loaded, where the view asks for more; a sort is not
-	// the reader scrolling, so nothing is fetched meanwhile.
-	sorting bool
+	// tidying is the bar's sort or filter being applied. The view keeps the cursor on its row, and
+	// the row's new place may be near the end of those loaded, where the view asks for more; a sort
+	// or a filter is not the reader scrolling, so nothing is fetched meanwhile.
+	tidying bool
 }
 
 // full reports whether the panel holds all the rows it may.
@@ -314,7 +314,8 @@ func (pl *plugins) tableOpened(r *pluginRun, t plugin.TableOpen) {
 	res.model.reset(t.Fields, t.Rows[:keep], kinds, t.Kinds != nil)
 	pl.showResultsModel()
 	pl.showResultsTitle()
-	pl.orderResults(pl.resultsOrder) // the bar's text, read against the new fields
+	pl.orderResults(pl.resultsOrder) // the bar's texts, read against the new fields
+	pl.applyWhere(pl.resultsFilter, true)
 	if !pl.c.PanelOpen(resultsPanel) {
 		pl.c.Keep(pl.c.View(resultsPanel, "open"))
 	}
@@ -380,11 +381,12 @@ func (pl *plugins) tableEnded(r *pluginRun, id, why string) {
 }
 
 // fetchRows asks the table's plugin for its next rows, unless one request waits already, no rows
-// remain, no plugin serves the table, the panel is at its cap, or the bar's sort is being applied.
+// remain, no plugin serves the table, the panel is at its cap, or the bar's sort or filter is being
+// applied.
 // It asks only for what the panel has room for.
 func (pl *plugins) fetchRows() {
 	res := pl.results
-	if res.owner == nil || res.owner.closing || !res.more || res.pending || res.sorting {
+	if res.owner == nil || res.owner.closing || !res.more || res.pending || res.tidying {
 		return
 	}
 	n := min(resultsPage, resultsResident-len(res.model.rows))
@@ -429,6 +431,7 @@ func (pl *plugins) resultsClosed() {
 	pl.results.title, pl.results.cut, pl.results.capped = "", false, false
 	pl.results.model.reset(nil, nil, nil, false)
 	pl.showResultsModel()
+	pl.applyWhere(pl.resultsFilter, true) // no fields: no filter on an empty panel
 	pl.showResultsTitle()
 }
 
@@ -457,13 +460,34 @@ func (pl *plugins) showResultsTitle() {
 		title += fmt.Sprintf(" · exporting: %d rows", x.written)
 	}
 	pl.c.Set("App.resultsTitle", title)
-	note := ""
-	if res.partial() && n > 0 {
-		note = fmt.Sprintf("sorts the loaded rows: %d of a result with more", n)
-	}
-	pl.resultsNote = note
-	pl.c.Set("App.resultsSortNote", note)
+	pl.resultsNote = pl.viewNote()
+	pl.c.Set("App.resultsViewNote", pl.resultsNote)
 	pl.showSortLine()
+}
+
+// viewNote names what the view holds of the result: "N of M loaded rows" while a filter is on, and
+// that the result has more while rows remain unloaded; "" for a whole result, unfiltered.
+func (pl *plugins) viewNote() string {
+	res := pl.results
+	var parts []string
+	if shown, loaded, on := pl.filtered(); on {
+		parts = append(parts, fmt.Sprintf("%d of %d loaded rows", shown, loaded))
+	}
+	if res.partial() && len(res.model.rows) > 0 {
+		parts = append(parts, "the result has more: change the query to change what is returned")
+	}
+	return strings.Join(parts, "; ")
+}
+
+// filtered is the rows the view shows and those loaded, and whether a filter is on (the last WHERE
+// that parsed).
+func (pl *plugins) filtered() (shown, loaded int, on bool) {
+	core := pl.c.TableCore(resultsView)
+	if core == nil || !pl.whereOn {
+		return len(pl.results.model.rows), len(pl.results.model.rows), false
+	}
+	shown, loaded = core.Filtered()
+	return shown, loaded, true
 }
 
 // ---------------------------------------------------------------- the bar: ORDER BY, WHERE
@@ -480,9 +504,6 @@ const (
 	clauseOrderBy = iota
 	clauseWhere
 )
-
-// errWhereUnread is WHERE's Enter until AutoDoc's golib reads a filter.
-const errWhereUnread = "WHERE needs a newer golib: it filters the loaded rows once AutoDoc takes one that reads it"
 
 // resultsClausesModel is the bar's clauses, its dropdown's rows.
 func resultsClausesModel() *tuidecl.ListModel {
@@ -510,23 +531,114 @@ func (pl *plugins) applyResultsClause(text string) {
 		pl.orderResults(text)
 		return
 	}
-	pl.clauseText[clauseWhere], pl.resultsHint = text, ""
+	pl.whereResults(text)
+}
+
+// whereResults is WHERE applied: the text is the table's filter, which keeps the loaded rows it is
+// true of, before the sort. Text that does not parse leaves the rows as they were and shows why:
+// the view's own words (ParseTableWhere's, over the same fields).
+func (pl *plugins) whereResults(text string) { pl.applyWhere(text, false) }
+
+// applyWhere is WHERE's text applied, on Enter or (newTable) read again against a new table's
+// fields. Text that does not parse leaves the view's filter as it was on Enter, and none on a new
+// table, whose source ends the filter.
+func (pl *plugins) applyWhere(text string, newTable bool) {
+	pl.resultsFilter, pl.resultsHint = text, ""
 	pl.resultsWhereErr = ""
-	if strings.TrimSpace(text) != "" {
-		pl.resultsWhereErr = errWhereUnread
+	if _, err := widget.ParseTableWhere(text, pl.resultsFields()); err != nil {
+		pl.resultsWhereErr = err.Error()
+		if newTable {
+			pl.whereOn = false
+		}
+	} else {
+		pl.whereOn = strings.TrimSpace(text) != ""
+	}
+	pl.clauseText[clauseWhere] = text
+	if pl.resultsClause == clauseWhere {
+		pl.c.Set("App.resultsClauseText", text)
+	}
+	// the view applies filter within the Set, and any request for rows its new view makes
+	pl.results.tidying = true
+	pl.c.Set("App.resultsFilter", text)
+	pl.results.tidying = false
+	pl.showResultsTitle()
+}
+
+// resultsClauseTyped is the bar's text as it is typed: while a field's name is typed, the line
+// offers the fields it may be, each written as the clause reads it back (a name two fields share
+// as its position: ORDER BY's 3, WHERE's #3).
+func (pl *plugins) resultsClauseTyped(text string) {
+	if pl.resultsClause == clauseOrderBy {
+		pl.resultsHint = orderHint(text, pl.resultsFields())
+	} else {
+		pl.resultsHint = whereHint(text, pl.resultsFields())
 	}
 	pl.showSortLine()
 }
 
-// resultsClauseTyped is the bar's text as it is typed: while an ORDER BY's field name is typed,
-// the line offers the fields it may be, each written as the bar reads it back (a name two fields
-// share as its position).
-func (pl *plugins) resultsClauseTyped(text string) {
-	pl.resultsHint = ""
-	if pl.resultsClause == clauseOrderBy {
-		pl.resultsHint = orderHint(text, pl.resultsFields())
+// whereKeywords are WHERE's words, which a bare field name cannot be.
+var whereKeywords = map[string]bool{"AND": true, "OR": true, "NOT": true, "IS": true, "NULL": true, "LIKE": true, "TRUE": true, "FALSE": true}
+
+// whereHint is what the bar offers for WHERE text: the fields the word being typed may name, while
+// it is where a field goes (at the start, or after "(", AND, OR or NOT); after an operator, a
+// literal or a field, nothing.
+func whereHint(text string, fields []widget.TableField) string {
+	start := len(text)
+	for start > 0 && !strings.ContainsRune(whereStops, rune(text[start-1])) {
+		start--
 	}
-	pl.showSortLine()
+	word := text[start:]
+	if strings.HasPrefix(word, "#") || len(fields) == 0 {
+		return ""
+	}
+	before := strings.TrimRight(text[:start], " \t\n\r")
+	if strings.HasSuffix(before, `"`) && strings.Count(before, `"`)%2 == 1 {
+		before = strings.TrimRight(strings.TrimSuffix(before, `"`), " \t\n\r") // a quoted name being typed
+	}
+	switch {
+	case before == "", strings.HasSuffix(before, "("):
+	default:
+		i := len(before)
+		for i > 0 && !strings.ContainsRune(whereStops, rune(before[i-1])) {
+			i--
+		}
+		if p := strings.ToUpper(before[i:]); p != "AND" && p != "OR" && p != "NOT" {
+			return ""
+		}
+	}
+	var offer []string
+	for col, f := range fields {
+		if strings.HasPrefix(strings.ToLower(f.Title), strings.ToLower(word)) {
+			offer = append(offer, whereFieldName(fields, col))
+		}
+	}
+	if len(offer) == 0 {
+		return ""
+	}
+	return "fields: " + strings.Join(offer, ", ")
+}
+
+// whereStops are the characters a bare word of WHERE stops at.
+const whereStops = " \t\n\r()=!<>',;\""
+
+// whereFieldName is field col as WHERE reads it back: its bare name, its "quoted name" when a bare
+// one would not read as it (a space, an operator's character, a keyword's spelling), or #position
+// when two fields share the name.
+func whereFieldName(fields []widget.TableField, col int) string {
+	name := fields[col].Title
+	shared := 0
+	for _, f := range fields {
+		if f.Title == name {
+			shared++
+		}
+	}
+	switch {
+	case shared > 1:
+		return "#" + strconv.Itoa(col+1)
+	case name == "" || whereKeywords[strings.ToUpper(name)] || strings.ContainsAny(name, whereStops+"#") || name[0] >= '0' && name[0] <= '9':
+		return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+	}
+	return name
 }
 
 // orderResults is ORDER BY applied: the text is the table's orderBy. Text that does not parse
@@ -540,9 +652,9 @@ func (pl *plugins) orderResults(text string) {
 	}
 	pl.showOrderText(text)
 	// the view applies orderBy within the Set, its sort and any request for rows the sort makes
-	pl.results.sorting = true
+	pl.results.tidying = true
 	pl.c.Set("App.resultsOrder", text)
-	pl.results.sorting = false
+	pl.results.tidying = false
 	pl.showSortLine()
 }
 
@@ -551,9 +663,9 @@ func (pl *plugins) orderResults(text string) {
 func (pl *plugins) resultsOrderChanged(text string) {
 	pl.resultsOrder, pl.resultsOrderErr, pl.resultsHint = text, "", ""
 	pl.showOrderText(text)
-	pl.results.sorting = true
+	pl.results.tidying = true
 	pl.c.Set("App.resultsOrder", text)
-	pl.results.sorting = false
+	pl.results.tidying = false
 	pl.showSortLine()
 }
 
@@ -720,7 +832,7 @@ var errPastCopyCap = errors.New("past the copy's cap")
 func (pl *plugins) copyResults(format copyFormat) {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || core.Len() == 0 {
-		pl.c.Notify("no results to copy")
+		pl.c.Notify(pl.nothingIn("copy"))
 		return
 	}
 	text, err := pl.selectionText(core, format)
@@ -741,6 +853,15 @@ func (pl *plugins) copyResults(format copyFormat) {
 		return
 	}
 	pl.c.Say("results copied as " + strings.ToUpper(string(format)))
+}
+
+// nothingIn is why there is nothing to take for what (copy, insert, export): no results, or a
+// filter that keeps no row of those loaded.
+func (pl *plugins) nothingIn(what string) string {
+	if _, loaded, on := pl.filtered(); on && loaded > 0 {
+		return "nothing to " + what + ": the WHERE keeps no row of the " + strconv.Itoa(loaded) + " loaded"
+	}
+	return "no results to " + what
 }
 
 // sizeOf is n bytes as a reader says it: "16 MiB", "512 KiB", "300 bytes".
@@ -876,6 +997,10 @@ func (pl *plugins) insertResults() {
 	fields := make([]string, len(core.Fields()))
 	for i, f := range core.Fields() {
 		fields[i] = f.Title
+	}
+	if core.Len() == 0 {
+		pl.c.Notify(pl.nothingIn("insert"))
+		return
 	}
 	rows := core.Rows(0, core.Len())
 	if err := pl.c.InsertBlock(markdownTable(fields, rows)); err != nil {

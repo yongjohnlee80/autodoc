@@ -344,8 +344,22 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
     own text, and Enter applies it. Its ORDER BY sorts the loaded rows as SQL writes a sort: `column [ASC|DESC], …`,
     a column by its name, its `"quoted name"` or its 1-based position (a name two columns share is
     written as its position). Enter sorts; text that does not parse leaves the rows as they were
-    and says why. While a name is typed its line offers the columns it may be. While the result has
-    more rows than are loaded, the line says the sort covers the loaded rows.
+    and says why. While a name is typed its line offers the columns it may be.
+  - **WHERE** filters the loaded rows, and never sends SQL or fetches a row: `column op literal`
+    (`= != <> < <= > >=`), `column IS [NOT] NULL`, `column [NOT] LIKE 'pattern'` (`%`, `_`, `\`
+    escapes), joined by AND, OR, NOT and parentheses; a column by its name, its `"quoted name"`, or
+    `#position`. Literals are numbers, `'strings'` (`''` inside), TRUE and FALSE. It is SQL's
+    three-valued logic: a row is kept only when the WHERE is true of it.
+    - From a protocol-5 plugin each cell compares by its kind: a NULL only matches IS NULL, a number
+      compares as an exact decimal, a boolean against TRUE or FALSE; anything against a 'string'
+      compares its text. Without kinds no cell is NULL, so IS NULL matches nothing, and a cell
+      whose text is a number compares as one.
+    - The view is filtered, then sorted. The row numbers, the selection, the copies, the Markdown
+      and the exports take that view. A WHERE that keeps no row shows the empty table: nothing to
+      copy, insert or export.
+  - **The line** beside the bar is the chosen clause's error, else the columns a word typed may be,
+    else what the view holds: "N of M loaded rows" while a WHERE is on, and that the result has
+    more while rows remain unloaded.
   - **The right-click menu** runs the results commands: Copy (TSV), Copy as CSV, JSON or Markdown,
     Select all, Sort ascending or descending by the column pressed on, Unsort, Export loaded rows…
     and Insert as Markdown.
@@ -355,7 +369,8 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
     columns as a header), JSON (an object per row) or a Markdown table. A copy past 16 MiB of
     text copies nothing and says to export instead;
   - `results.export`, Export loaded rows…: a dialog that says what it takes ("Export N loaded rows,
-    as shown", and while the result has more, that changing the query changes what is returned)
+    as shown", or under a WHERE "Export N rows, as shown (filtered from M loaded)", and while the
+    result has more, that changing the query changes what is returned)
     and its format, CSV or JSON, then a save dialog. AutoDoc writes the rows to `<file>.part` beside
     the file, renamed over it once the last is written; a write that fails removes the `.part` and
     leaves the file as it was. Its notice says when the result has more. `results.csv` opens it on
