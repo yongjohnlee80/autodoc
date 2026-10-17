@@ -93,9 +93,12 @@ func (r *shellRig) output() string {
 func (r *shellRig) until(what string, cond func() bool) {
 	r.t.Helper()
 	deadline := time.After(10 * time.Second)
+	tick := time.NewTicker(2 * time.Millisecond) // a state no post or output marks (admit's count)
+	defer tick.Stop()
 	for !cond() {
 		select {
 		case <-r.ping:
+		case <-tick.C:
 		case <-deadline:
 			r.t.Fatalf("%s never came; the shell wrote %q", what, r.output())
 		}

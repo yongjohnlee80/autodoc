@@ -402,8 +402,7 @@ func (t *terminals) newLuaShell() {
 	if err := panel.Start(id); err != nil {
 		t.c.Notify("the Lua shell could not start: " + err.Error())
 	}
-	t.c.Keep(panel.Select(id))
-	t.c.Keep(t.c.Focus("terminalView"))
+	t.c.Keep(panel.Select(id)) // golib's Select gives the tab's terminal the keyboard
 }
 
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
