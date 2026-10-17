@@ -622,16 +622,16 @@ func TestTheBarIsAClauseAndItsText(t *testing.T) {
 	r.s.WaitFor(t, "WHERE chosen, its own text empty", func(string) bool {
 		return read("resultsClause", "currentIndex") == "1" && read("resultsText", "text") == ""
 	})
-	onLoop(r, func() bool { r.h.plugins.applyResultsClause("id > 1"); return true })
-	r.waitColumn(t, 1, names(0, 3, 2)) // id > 1 kept, then name DESC
+	onLoop(r, func() bool { r.h.plugins.applyResultsClause("#1 > 1"); return true })
+	r.waitColumn(t, 1, names(0, 3, 2)) // #1 > 1 kept (the kinds table names two fields id), then name DESC
 	if line := r.source("App.resultsSortLine"); line != "3 of 5 loaded rows" {
 		t.Errorf("WHERE's Enter: the line %q", line)
 	}
-	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseOrderBy, "id > 1"); return true })
+	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseOrderBy, "#1 > 1"); return true })
 	r.s.WaitFor(t, "ORDER BY's own text back", func(string) bool { return read("resultsText", "text") == "name DESC" })
 	if line := r.source("App.resultsSortLine"); line != "3 of 5 loaded rows" {
 		t.Errorf("ORDER BY's line: %q", line)
 	}
 	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseWhere, "name DESC"); return true })
-	r.s.WaitFor(t, "WHERE's own text kept", func(string) bool { return read("resultsText", "text") == "id > 1" })
+	r.s.WaitFor(t, "WHERE's own text kept", func(string) bool { return read("resultsText", "text") == "#1 > 1" })
 }
