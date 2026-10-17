@@ -55,6 +55,7 @@ func (h *Host) startScripts() []error {
 	h.bindDocument(h.scripts)                        // autodoc.document, autodoc.commands (luadocument.go)
 	h.luaFeature().reload = h.reloadScripts
 	h.luaFeature().install = h.installPackage
+	h.luaFeature().shell = h.terminals.newLuaShell
 	h.luaFeature().line = h.core.RunCommand
 	// a script's chords, through golib (luakeys.go), then H and L between the buffers (buffertabs.go):
 	// a script's own H or L wins

@@ -68,6 +68,11 @@ type scripting struct {
 	card      *luaCard
 	cardGen   uint64
 	cardEpoch uint64
+	// shell opens a Lua shell in the terminal (terminals.newLuaShell); oneShot is :lua <chunk>'s
+	// environment on the engine oneShotOf, made at the first such chunk after a new engine
+	shell     func()
+	oneShot   *script.Shell
+	oneShotOf *script.Engine
 }
 
 // Catalog is :lua-reload (catalog.go).
@@ -80,6 +85,18 @@ func (s *scripting) Catalog() []Entry {
 			}
 			return s.reload()
 		}},
+		{ID: "scripts.shell", Title: "a Lua shell, or run Lua", Verb: "lua", Args: "[chunk]",
+			Help: "alone, a Lua shell in the terminal; with a chunk, run it and show its values",
+			Run: func(inv Invocation) error {
+				if inv.Line == "" {
+					if s.shell == nil {
+						return errNoShell
+					}
+					s.shell()
+					return nil
+				}
+				return s.evalOnce(inv.Line)
+			}},
 		{ID: "scripts.install", Title: "install a Lua package", Verb: "lua-install", Args: "<git-url>",
 			Help: "clone a Lua package into the config folder's lua/, once you agree",
 			Run: func(inv Invocation) error {
@@ -476,4 +493,28 @@ func luaErr(err error) string {
 		return fmt.Sprintf("%d %s", c, wireMessage(err))
 	}
 	return err.Error()
+}
+
+// evalOnce is :lua <chunk>: run in the engine's one-shot shell, its values one notice. The shell
+// lives as long as the engine, so a callback the chunk left prints later, as a notice too, and the
+// globals it sets stay for the next :lua <chunk>. An unfinished chunk is a problem here: there is
+// no next line.
+func (s *scripting) evalOnce(chunk string) error {
+	if s.eng == nil {
+		return errors.New("lua: the scripts have not started")
+	}
+	if s.oneShot == nil || s.oneShotOf != s.eng {
+		s.oneShot, s.oneShotOf = s.eng.NewShell(func(text string) { s.c.Notify(text) }), s.eng
+	}
+	vals, err := s.eng.Eval(s.oneShot, chunk)
+	switch {
+	case errors.Is(err, script.ErrIncomplete):
+		return errors.New("lua: the chunk is not finished: :lua alone opens a shell for more lines")
+	case err != nil:
+		return err
+	}
+	if len(vals) > 0 {
+		s.c.Notify(strings.Join(vals, "\t"))
+	}
+	return nil
 }

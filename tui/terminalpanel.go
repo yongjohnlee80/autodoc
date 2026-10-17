@@ -7,6 +7,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/errs"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -16,6 +17,9 @@ type TerminalConfig struct {
 	Command, Dir string
 	Args, Env    []string
 	Exited       func(int)
+	// Start, when set, runs the tab's program instead of a child on a PTY: golib's WithStarter (a
+	// Lua shell, luashell.go). Command and Args are then only its name.
+	Start func(pty.Cmd) (widget.TerminalProcess, error)
 }
 
 // TerminalRemoval observes confirmed cleanup of all generations of one child.
@@ -62,9 +66,13 @@ func (p terminalPanel) SameOwner(other TerminalPanel) bool {
 func (p terminalPanel) Shutdown() TerminalCompletion { return p.tabs.ShutdownWithResult() }
 
 func (p terminalPanel) Add(label string, config TerminalConfig) (widget.TerminalTabID, error) {
-	return p.tabs.Add(label, widget.WithCommand(config.Command, append([]string(nil), config.Args...)...),
+	opts := []widget.TerminalOption{widget.WithCommand(config.Command, append([]string(nil), config.Args...)...),
 		widget.WithDir(config.Dir), widget.WithEnv(append([]string(nil), config.Env...)...),
-		widget.WithOnExit(config.Exited))
+		widget.WithOnExit(config.Exited)}
+	if config.Start != nil {
+		opts = append(opts, widget.WithStarter(config.Start))
+	}
+	return p.tabs.Add(label, opts...)
 }
 func (p terminalPanel) Select(id widget.TerminalTabID) error { return p.tabs.Select(id) }
 func (p terminalPanel) Start(id widget.TerminalTabID) error  { return p.tabs.Start(id) }

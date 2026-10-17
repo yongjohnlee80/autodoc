@@ -407,6 +407,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.bufferPick = h.newBufferPick()
 	h.widgetRows = newWidgetRows()
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
+	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.plugins = newPlugins(core{h}, opt.Plugins)
