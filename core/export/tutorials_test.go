@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
+	"github.com/yongjohnlee80/autodoc/core/todo"
 	mermaidparse "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
@@ -71,9 +72,12 @@ func TestTutorialsBookEmbedsAndDiagrams(t *testing.T) {
 	if err := json.Unmarshal(contractsBytes, &catalog); err != nil {
 		t.Fatal(err)
 	}
-	registeredVerbs := make(map[string]bool, len(catalog.Verbs))
+	registeredVerbs := make(map[string]bool, len(catalog.Verbs)+32)
 	for _, v := range catalog.Verbs {
 		registeredVerbs[v.Verb] = true
+	}
+	for _, v := range (*todo.Manager)(nil).Verbs() {
+		registeredVerbs[v.Name] = true
 	}
 
 	for idx, mdPath := range ordered {
