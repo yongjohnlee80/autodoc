@@ -18,7 +18,7 @@ Dialog {
     }
     DialogButtonBox {
         Button { text: "&Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
-        Button { text: "Choose the &file…"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: "Choose the &file…"; enabled: App.exportCanSave; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
     }
     onAccepted: App.chooseExportFile()
 }

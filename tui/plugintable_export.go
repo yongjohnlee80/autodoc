@@ -51,6 +51,7 @@ type resultsExport struct {
 	rows    [][]string
 	kinds   []string
 	partial bool
+	from    int // the loaded rows a WHERE kept these of; 0 without one
 	steps   chan exportStep
 	done    chan struct{} // closed when the writer has finished: the file renamed, or removed
 	// loop-owned: the rows handed to the writer, whether a chunk is with it, the rows it has
@@ -84,11 +85,7 @@ func (pl *plugins) startExportResults(format copyFormat) {
 	if format != "" {
 		pl.exportFormat = format
 	}
-	n := len(pl.results.model.rows)
-	heading := fmt.Sprintf("Export %d loaded rows, as shown", n)
-	if n == 1 {
-		heading = "Export 1 loaded row, as shown"
-	}
+	heading := pl.exportHeading()
 	more := ""
 	if pl.results.partial() {
 		more = "the result has more rows than are loaded: change the query to change what is returned"
@@ -97,7 +94,31 @@ func (pl *plugins) startExportResults(format copyFormat) {
 	pl.c.Set("App.exportMore", more)
 	pl.c.Set("App.exportMoreShown", more != "")
 	pl.c.Set("App.exportFormatIndex", pl.exportFormatIndex())
+	pl.c.Set("App.exportCanSave", pl.viewLen() > 0)
 	pl.c.Open("exportResults")
+}
+
+// exportHeading is the export dialog's heading: the rows it writes, the view's, and what of the
+// loaded rows a WHERE kept.
+func (pl *plugins) exportHeading() string {
+	rows := func(n int, what string) string {
+		if n == 1 {
+			return "1 " + what + "row"
+		}
+		return fmt.Sprintf("%d %srows", n, what)
+	}
+	if shown, loaded, on := pl.filtered(); on {
+		return fmt.Sprintf("Export %s, as shown (filtered from %d loaded)", rows(shown, ""), loaded)
+	}
+	return fmt.Sprintf("Export %s, as shown", rows(len(pl.results.model.rows), "loaded "))
+}
+
+// viewLen is the rows the view shows: the loaded rows a WHERE keeps, all of them without one.
+func (pl *plugins) viewLen() int {
+	if core := pl.c.TableCore(resultsView); core != nil {
+		return core.Len()
+	}
+	return len(pl.results.model.rows)
 }
 
 func (pl *plugins) exportFormatIndex() int {
@@ -117,9 +138,13 @@ func (pl *plugins) exportFormatChosen(i int) {
 }
 
 // chooseExportFile is the dialog accepted: the save dialog, at the page's folder, its name ending
-// in the format's extension.
+// in the format's extension. A view with no row has nothing to save.
 func (pl *plugins) chooseExportFile() {
 	pl.c.Close("exportResults")
+	if pl.viewLen() == 0 {
+		pl.c.Notify(pl.nothingIn("export"))
+		return
+	}
 	folder := pl.c.BrowseFolder()
 	pl.c.Set("App.browseFolder", folder)
 	pl.c.Set("App.exportFile", filepath.Join(folder, "results."+string(pl.exportFormat)))
@@ -146,18 +171,22 @@ func (pl *plugins) exportResults(path string) {
 	pl.beginExport(path)
 }
 
-// viewRows are the loaded rows as the view shows them, in its order, and their kinds (nil when the
-// table has none): what an export takes.
+// viewRows are the rows the view shows, in its order, and their kinds (nil when the table has
+// none): what an export takes. A WHERE's view is the loaded rows it keeps, then sorted.
 func (pl *plugins) viewRows() (rows [][]string, kinds []string) {
 	m := pl.results.model
 	core := pl.c.TableCore(resultsView)
-	rows = make([][]string, len(m.rows))
-	if m.kinded {
-		kinds = make([]string, len(m.rows))
+	n := len(m.rows)
+	if core != nil {
+		n = core.Len()
 	}
-	for d := range m.rows {
+	rows = make([][]string, n)
+	if m.kinded {
+		kinds = make([]string, n)
+	}
+	for d := range n {
 		src := d
-		if core != nil && core.Len() == len(m.rows) {
+		if core != nil {
 			src = core.SourceRow(d)
 		}
 		rows[d] = m.rows[src]
@@ -180,8 +209,15 @@ func (pl *plugins) beginExport(path string) {
 		return
 	}
 	rows, kinds := pl.viewRows()
+	if len(rows) == 0 && len(pl.results.model.rows) > 0 {
+		pl.c.Notify(pl.nothingIn("export"))
+		return
+	}
 	x := &resultsExport{path: path, part: path + ".part", format: pl.exportFormat, fields: fields, rows: rows, kinds: kinds,
 		partial: pl.results.partial(), steps: make(chan exportStep, 2), done: make(chan struct{})}
+	if _, loaded, on := pl.filtered(); on {
+		x.from = loaded
+	}
 	pl.export = x
 	go x.write(pl.c.Post, pl.exportWrote, pl.exportEnded)
 	what := fmt.Sprintf("exporting %d rows to %s…", len(rows), path)
@@ -232,11 +268,16 @@ func (pl *plugins) exportEnded(x *resultsExport, rows int, err error) {
 		pl.export = nil
 	}
 	pl.showResultsTitle()
+	more := "; the result has more: change the query (a LIMIT, a WHERE) to change what is returned"
 	switch {
 	case err != nil:
 		pl.c.NotifyDone(toastExport, "the results were not exported: "+err.Error()+"; "+x.path+" not written")
+	case x.from > 0 && x.partial:
+		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s, as shown (filtered from %d loaded)%s", rows, x.path, x.from, more))
+	case x.from > 0:
+		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s, as shown (filtered from %d loaded)", rows, x.path, x.from))
 	case x.partial:
-		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d loaded rows exported to %s, as shown; the result has more: change the query (a LIMIT, a WHERE) to change what is returned", rows, x.path))
+		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d loaded rows exported to %s, as shown%s", rows, x.path, more))
 	default:
 		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s", rows, x.path))
 	}
