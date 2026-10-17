@@ -154,20 +154,24 @@ func (f *Frame) Rows() []Row {
 	return rows
 }
 
-// joins reports whether cells a and b, side by side, would be segmented as fewer clusters than they
-// hold apart. Printable ASCII next to printable ASCII never joins, and is answered at once.
+// joins reports whether cells a and b, side by side, would not stay two characters: segmenting a+b
+// puts no cluster boundary where b begins (two regional indicators pairing, a variation selector
+// taking the character before it, a single indicator re-pairing with a flag after it). Comparing
+// counts is not enough: a single indicator before a flag re-pairs as two clusters, the same count.
+// Printable ASCII next to printable ASCII never joins, and is answered at once.
 func joins(a, b string) bool {
 	if len(a) == 1 && len(b) == 1 && a[0] >= ' ' && a[0] < 0x7f && b[0] >= ' ' && b[0] < 0x7f {
 		return false
 	}
-	return count(a+b) < count(a)+count(b)
-}
-
-// count is how many grapheme clusters s holds.
-func count(s string) int {
-	n := 0
-	for range tui.Graphemes(s) {
-		n++
+	at := 0
+	for g := range tui.Graphemes(a + b) {
+		if at == len(a) {
+			return false
+		}
+		if at > len(a) {
+			break
+		}
+		at += len(g)
 	}
-	return n
+	return true
 }
