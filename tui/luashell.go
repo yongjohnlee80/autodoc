@@ -58,8 +58,13 @@ type luaShell struct {
 
 	// run's own: nothing else reads or writes it
 	ed lineEditor
-	// held, when set (tests), runs inside settle before the result is applied: a cell holds run there
-	held func()
+	// post hands fn to the UI loop (the program's Post; a test's own loop in the cells)
+	post func(func())
+	// held and admit, when set (tests): held runs inside settle before the result is applied, so a
+	// cell holds run there; admit runs in Write just past its closed check, so a cell sees a Write
+	// admitted, whichever case its select then takes
+	held  func()
+	admit func()
 }
 
 // shellPhase is run's: editing, or evaluating while a request is in flight.
@@ -113,15 +118,15 @@ type loopItem struct {
 	result *evalResult
 }
 
-func newLuaShell(h *Host) *luaShell {
-	return &luaShell{h: h, keys: make(chan []byte), out: newShellOutput(), inbox: newShellInbox(),
+func newLuaShell(h *Host, post func(func())) *luaShell {
+	return &luaShell{h: h, post: post, keys: make(chan []byte), out: newShellOutput(), inbox: newShellInbox(),
 		done: make(chan struct{}), runDone: make(chan struct{})}
 }
 
 // startLuaShell is a Lua shell tab's TerminalConfig.Start: a new shell each start (a tab started
 // again after its end is a new incarnation).
 func (h *Host) startLuaShell(pty.Cmd) (widget.TerminalProcess, error) {
-	s := newLuaShell(h)
+	s := newLuaShell(h, h.p.Post)
 	go s.run()
 	return s, nil
 }
@@ -136,6 +141,9 @@ func (s *luaShell) Read(p []byte) (int, error) { return s.out.Read(p) }
 func (s *luaShell) Write(p []byte) (int, error) {
 	if s.closed.Load() {
 		return 0, io.ErrClosedPipe
+	}
+	if s.admit != nil {
+		s.admit()
 	}
 	b := bytes.Clone(p)
 	select {
@@ -155,7 +163,7 @@ func (s *luaShell) Close() error {
 		s.closed.Store(true)
 		close(s.done)
 		s.out.close()
-		s.h.p.Post(func() { s.h.dropShell(s) })
+		s.post(func() { s.h.dropShell(s) })
 	})
 	return nil
 }
@@ -340,7 +348,7 @@ func (s *luaShell) send() {
 	e.seq++
 	e.sent, e.phase = chunk, evaluating
 	req := evalRequest{seq: e.seq, chunk: chunk}
-	s.h.p.Post(func() { s.h.evalShell(s, req) })
+	s.post(func() { s.h.evalShell(s, req) })
 }
 
 // remember adds a sent line to the history: not an empty one, nor the last one again.
