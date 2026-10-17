@@ -120,7 +120,7 @@ key   = "r"
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. Among the reasons:
 
-- an unknown kind, or a protocol outside 1 to 5;
+- an unknown kind, or a protocol outside 1 to 6;
 - an unknown key, at any level (`dialog.colour`): AutoDoc decodes the manifest strictly;
 - a name taken, no command;
 - a placement, `esc` or height it does not know;
@@ -142,7 +142,7 @@ AutoDoc's commands: file.save", and a table it shows: "shows a table of results 
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 5**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 6**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -160,10 +160,13 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   whose manifest says 5; an AutoDoc of 1 to 4 lists it disabled ("protocol 5; this AutoDoc speaks 1
   to 4"), so a plugin that tells NULL from `NULL` never runs where the two would be confused.
   Nothing else changes: no message is added, and the host fetches what it fetched at 4.
+- **A card or dialog that handles pointer input says `protocol = 6`.** AutoDoc sends left presses
+  and wheel steps only to a protocol-6 plugin, with coordinates inside its displayed frame. An
+  older AutoDoc refuses the manifest rather than showing a card that cannot receive its pointer.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 5, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 6, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -204,6 +207,7 @@ Each notification carries one map.
 | AutoDoc | `plugin.result` | 3 | `{call, ok, error}`: the answer to the `host.call` numbered `call` |
 | AutoDoc | `plugin.table.fetch` | 4 | `{id, n}`: up to `n` more rows of the table `id` |
 | AutoDoc | `plugin.table.close` | 4 | `{id}`: the table is gone: its panel closed, or a newer table replaced it |
+| AutoDoc | `plugin.pointer` | 6 | `{kind, button, x, y, count}`: an unmodified left press (`press`, `left`) or wheel step (`wheel`, `up`/`down`) inside the card or dialog; frame-local nonnegative coordinates and count 1–16 |
 | AutoDoc | `plugin.close` | 1 | `{}`: the last |
 | plugin | `host.ready` | 1 | `{protocol}`: the answer to `plugin.open`, with the protocol it was opened at |
 | plugin | `host.frame` | 1 | `{rows}`: the whole dialog, at any time. A service's is dropped |
@@ -511,6 +515,7 @@ no interface takes is dropped.
 | `plugin.Commander` | `Command(id string)` | a command |
 | `plugin.Focuser` | `Focus(focused bool)` | a card's focus |
 | `plugin.TableFetcher` | `FetchRows(f plugin.TableFetch)`, `TableClosed(id string)` | protocol 4: a fetch of a table's rows, and the table gone |
+| `plugin.PointerHandler` | `Pointer(p plugin.Pointer)` | protocol 6: a left press or wheel step in the displayed frame |
 
 `plugin.Base` is a Handler that does nothing. A service embeds it and adds what it needs:
 
@@ -582,6 +587,11 @@ func (s *sql) FetchRows(f plugin.TableFetch) {
 }
 func (s *sql) TableClosed(id string) { s.rows.close() }
 ```
+
+**Protocol 6** adds `plugin.PointerHandler`. AutoDoc delivers `plugin.pointer` only after the
+protocol-6 handshake and only for unmodified input inside the frame. A right press still opens
+the card's context menu. `Pointer.X` and `Pointer.Y` are zero-based frame coordinates; `Count` is
+bounded to 1–16. A plugin can ignore pointer events and keep its keyboard controls.
 
 ## What a plugin may not do
 
