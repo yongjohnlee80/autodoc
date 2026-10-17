@@ -500,27 +500,34 @@ autodoc.command{
 
 ## The program's own functions
 
-Beside the daemon's verbs, AutoDoc gives scripts its clipboard, a picker and its agents. They are
+Beside the daemon's verbs, AutoDoc gives scripts its clipboard, a picker, a card, its agents and what the app itself uses. They are
 there from the start, connected or not. As the daemon's do, each `cb` runs later on the loop as
 `cb(result, err)`, never inside the call: a refusal known at once is a callback on the next turn.
 
 | Domain | Functions |
 |---|---|
 | `agents` | `list`, `send` |
+| `app` | `stats` |
 | `clipboard` | `read`, `write` |
-| `ui` | `pick` |
+| `ui` | `card`, `charts`, `pick` |
 
 | Call | Answers |
 |---|---|
 | `autodoc.clipboard.write(text)` | `ok, err` at once: the system clipboard set (a terminal's, by OSC 52) |
 | `autodoc.clipboard.read(cb)` | `cb(text, err)`: `""` for an empty clipboard or one holding no text; `err` `"unsupported"` where AutoDoc cannot read it (in a terminal, its own paste is the way in), `"timeout"`, `"closed"` |
 | `autodoc.ui.pick({title, items}, cb)` | a picker over `items`, each a string or `{label, detail, value}` (`detail` is previewed, `value` given to `cb`, the item itself without one): `cb(value)`; `err` `"cancelled"` (Esc), or `"busy"` while another script's picker is open |
+| `autodoc.ui.card{title, text, every, tick}` | at once, the card's handle: the card panel (at the right) shows `text`, Markdown, drawn as it reads in the window's Rendered view, where a ```` ```vega-lite ```` fence is a chart; a terminal shows the Markdown. `tick(card)` runs every `every` ms (250 at least; none without `every`) while the panel is open, its first on the next turn. One card at a time: a new one replaces the one shown. `:lua-reload` ends it and closes the panel |
+| `card:set(text)` | the panel shows `text` now; a replaced or ended card's does nothing |
+| `card:close()` | the panel closes and the card ends: its tick stops, and `set` and `close` do nothing after |
+| `card:open()` | `true` while this card is the panel's and the panel is open |
+| `autodoc.ui.charts()` | at once: `true` where the window draws a `vega-lite` fence as a chart (`--gui`), `false` in a terminal |
+| `autodoc.app.stats()` | at once: the app's own process, in the keys `sys.stats` answers for the daemon's: `{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}`. Sizes are bytes (`rss` 0 where the system cannot say: macOS), `cpu_seconds` the CPU used so far: a rate is two readings apart |
 | `autodoc.agents.list()` | at once: `{{codename, name, running, closing, instance, orphan}, …}`, the saved profiles first; a `closing` one refuses a send |
 | `autodoc.agents.send(agent, text, cb)` | `text` pasted into the agent's prompt, no Enter added after it: `agent` a codename, or `{codename, instance}` for that exact run. A stopped agent is started once the user agrees. `cb(true)` once it is typed; `err` `"cancelled"`, `"stale"` (that run is gone), `"unavailable"`, or why |
 
 A paste is as the terminal's own: an agent CLI that asked for bracketed paste gets the text whole,
 held at its prompt for Enter; elsewhere its newlines are Enter, so its earlier lines are submitted
-as they arrive and only its last waits. AutoDoc's own `agents.lua` uses these: `:agent-buffer` sends the
+as they arrive and only its last waits. AutoDoc's own `usage.lua` is `:usage`: a card of the daemon's and the app's memory and CPU and the workspace's index, ticking each second, with charts in the window. Its `agents.lua` uses the others: `:agent-buffer` sends the
 page, and `:agent-forward` the selection, else the clipboard, to the agent running (with several,
 or none, a picker asks which; one not running is started once you agree).
 
@@ -542,7 +549,7 @@ tables. The codes an `err` carries are listed at the end of `--contracts`.
 | `preference` | `list`, `set` |
 | `ranker` | `add`, `list`, `log`, `models`, `remove`, `update`, `usage`, `use`, `window` |
 | `search` | `query` |
-| `sys` | `capabilities`, `contracts`, `events` |
+| `sys` | `capabilities`, `contracts`, `events`, `stats` |
 | `todos` | `ack`, `add`, `assign`, `changes`, `claim`, `get`, `list`, `migrate_refs`, `move_store`, `open`, `refresh`, `register`, `release`, `remove`, `remove_malformed`, `resolve`, `scaffold`, `set_dir`, `set_kb`, `set_var`, `status`, `stores`, `update`, `vars` |
 | `workspace` | `add`, `configure`, `embedding_policy`, `focus`, `list`, `of`, `remove`, `rename`, `section_size`, `set_patterns`, `set_provider`, `set_schema`, `set_text_extensions`, `set_var`, `vars` |
 
