@@ -149,7 +149,7 @@ func (h *Host) widgetNamed(arg string) (widgetTarget, error) {
 
 // widgetEntries are :go, as a catalog entry: builtinEntries adds it beside bufferEntries.
 func (h *Host) widgetEntries() []Entry {
-	return []Entry{{ID: "widget.go", Title: "go to a widget", Verb: "go", Args: "<name>",
+	return []Entry{{ID: "widget.go", Title: "go to a widget", Verb: "go", Args: "<name>", Twin: "App.openWidgets()",
 		Help: "put the keyboard on a widget: a panel opens if closed; Tab lists the names; alone, the Go-to picker",
 		Complete: func(widget.CompleteContext) []string {
 			var out []string

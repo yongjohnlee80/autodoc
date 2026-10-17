@@ -90,7 +90,7 @@ func (s *scripting) Catalog() []Entry {
 			Run: func(inv Invocation) error {
 				if inv.Line == "" {
 					if s.shell == nil {
-						return errNoShell
+						return errors.New("lua: the scripts have not started")
 					}
 					s.shell()
 					return nil
