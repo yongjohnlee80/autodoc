@@ -49,6 +49,8 @@ func Start(t *testing.T, h plugin.Handler, w, hh int, theme plugin.Theme) *Host 
 		_ = hs.link.Notify(context.Background(), plugin.MethodClose, plugin.EmptyParams())
 		select {
 		case <-served:
+		// NOTE: a test's bound: a plugin that never stops after plugin.close fails the test
+		// instead of hanging it; ServeConn's return itself is waited on.
 		case <-time.After(5 * time.Second):
 			t.Error("the plugin did not stop after plugin.close")
 		}
@@ -96,6 +98,8 @@ func (hs *Host) Screen(want string) string {
 	if strings.Contains(hs.last, want) {
 		return hs.last
 	}
+	// NOTE: a test's bound: a frame that never comes fails the test instead of hanging it; each
+	// frame itself is waited on as it arrives, never polled.
 	deadline := time.After(5 * time.Second)
 	for {
 		select {

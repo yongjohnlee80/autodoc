@@ -165,6 +165,9 @@ func (c *Card) Close() {
 		return
 	}
 	c.cancel()
+	// NOTE: a deadline the code can name: closeWait bounds the wait for Run to return after its
+	// context is cancelled, so a user's teardown that hangs cannot hold the plugin past the two
+	// seconds AutoDoc gives it. Run's return itself is waited on (done), not polled.
 	t := time.NewTimer(closeWait)
 	defer t.Stop()
 	select {
