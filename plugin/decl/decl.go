@@ -184,13 +184,17 @@ func (c *Card) Post(fn func()) bool {
 	if st != running {
 		return false
 	}
-	ctx := c.ctx
-	prog.Post(func() {
-		if ctx.Err() == nil { // checked when it runs, not when it was queued
+	prog.Post(whileLive(c.ctx, fn))
+	return true
+}
+
+// whileLive is fn, run only if ctx is not done when it runs: checked then, not when it was queued.
+func whileLive(ctx context.Context, fn func()) func() {
+	return func() {
+		if ctx.Err() == nil {
 			fn()
 		}
-	})
-	return true
+	}
 }
 
 // live is whether the Card has a backend that takes events: opened, and not failed.
