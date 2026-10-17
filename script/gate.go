@@ -167,8 +167,11 @@ func (e *Engine) Caller() (script string, grants Grants, ok bool) {
 	return e.calling.script, e.calling.grants, true
 }
 
-// owns reports whether fn is this engine's: made in its globals or in one of its gated scripts'.
-func (e *Engine) owns(fn *lua.LFunction) bool { return fn.Env == e.L.G.Global || e.envs[fn.Env] != nil }
+// owns reports whether fn is this engine's: made in its globals, in one of its gated scripts' or in
+// one of its open shells'.
+func (e *Engine) owns(fn *lua.LFunction) bool {
+	return fn.Env == e.L.G.Global || e.envs[fn.Env] != nil || e.shells[fn.Env] != nil
+}
 
 // gatedScript is a gated environment's script and grants: what its editor object asks.
 type gatedScript struct {
