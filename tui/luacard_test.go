@@ -207,14 +207,22 @@ func TestACardsTicksHaveAFloor(t *testing.T) {
 			t.Errorf("every %s: %v, want %v", every, d, cardEveryMin)
 		}
 	}
-	r.luaLoad(t, `autodoc.command{ name = "still", run = function() autodoc.ui.card{ text = "no tick" } end }`)
-	before := held.count()
-	if err := r.luaRun("still"); err != nil {
+	// a tick and no every: no tick at all, and no timer (Lector PR r0 R2); then no tick and no every
+	r.luaLoad(t, `autodoc.command{ name = "noevery", run = function()
+  autodoc.ui.card{ text = "no every", tick = function(card) ticks = ticks + 100; card:set("ticked") end }
+end }
+autodoc.command{ name = "still", run = function() autodoc.ui.card{ text = "no tick" } end }`)
+	before, ticksBefore := held.count(), r.ticks()
+	if err := r.luaRun("noevery"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitForText(t, "no every")
+	if err := r.luaRun("still"); err != nil { // its card shown means the loop turned past any first tick
 		t.Fatal(err)
 	}
 	r.s.WaitForText(t, "no tick")
-	if held.count() != before {
-		t.Error("a card with no tick scheduled one")
+	if held.count() != before || r.ticks() != ticksBefore {
+		t.Errorf("a card without every: %d timers (were %d), ticks %d (were %d)", held.count(), before, r.ticks(), ticksBefore)
 	}
 }
 

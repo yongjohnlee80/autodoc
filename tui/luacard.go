@@ -77,8 +77,8 @@ func (s *scripting) luaCard(L *lua.LState) int {
 	spec := L.CheckTable(1)
 	tick, _ := spec.RawGetString("tick").(*lua.LFunction)
 	every := cardEvery(spec.RawGetString("every"))
-	if tick == nil {
-		every = 0
+	if tick == nil || every == 0 {
+		tick, every = nil, 0 // no every, no tick: a chain needs an interval (Lector PR r0 R2)
 	}
 	h := s.cardHost()
 	if h == nil {

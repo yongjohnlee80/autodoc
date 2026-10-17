@@ -206,3 +206,27 @@ func TestTailState(t *testing.T) {
 		}
 	}
 }
+
+// Lector PR r0 R1: a value's __tostring is the chunk's Lua, written inside its protected call and
+// deadline: a normal one is the value's text, a raising one an error and never a panic, an endless
+// one stopped; the stack is as it was and the next chunk runs.
+func TestEvalWritesValuesUnderTheDeadline(t *testing.T) {
+	e, _, _ := engine(t, "")
+	sh := e.NewShell(nil)
+	top := e.L.GetTop()
+	if got := shellEval(t, e, sh, `setmetatable({}, {__tostring = function() return "kestrel" end})`); !slices.Equal(got, []string{"kestrel"}) {
+		t.Errorf("a __tostring: %q", got)
+	}
+	if _, err := e.Eval(sh, `setmetatable({}, {__tostring = function() error("tostring-raised") end})`); err == nil || !strings.Contains(err.Error(), "tostring-raised") {
+		t.Errorf("a raising __tostring: %v", err)
+	}
+	if _, err := e.Eval(sh, `setmetatable({}, {__tostring = function() while true do end end})`); err == nil || !strings.Contains(err.Error(), "ran past") {
+		t.Errorf("an endless __tostring: %v", err)
+	}
+	if e.L.GetTop() != top {
+		t.Errorf("the stack is %d, was %d", e.L.GetTop(), top)
+	}
+	if got := shellEval(t, e, sh, "1, 2"); !slices.Equal(got, []string{"1", "2"}) {
+		t.Errorf("after them: %q", got)
+	}
+}
