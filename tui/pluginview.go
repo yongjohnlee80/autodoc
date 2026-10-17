@@ -150,13 +150,14 @@ func (v *pluginView) Render(s tuicore.Surface) {
 		}
 		x := 0
 		for _, c := range row {
-			for _, ch := range c.text {
+			// a grapheme cluster at a time, as plugin.Frame placed it: an accent written as a
+			// combining mark, a ZWJ emoji or a flag is one character, not several
+			for g := range tuicore.Graphemes(c.text) {
 				if x >= sz.W {
 					break
 				}
-				g := string(ch)
 				s.SetCell(x, y, g, c.st)
-				x += max(s.StringWidth(g), 1)
+				x += max(s.StringWidth(g), 1) // a lone zero-width cluster still takes a column
 			}
 		}
 	}
