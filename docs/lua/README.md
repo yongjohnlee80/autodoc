@@ -48,7 +48,7 @@ Save that as `~/.config/autodoc/lua/lines.lua`, run `:lua-reload` (or restart Au
 
 ## Load order, and replacing a built-in
 
-At start AutoDoc loads its own scripts first (`table`, `mermaid`), then yours, every `*.lua` in the
+At start AutoDoc loads its own scripts first (`agents`, `mermaid`, `table`, `usage`), then yours, every `*.lua` in the
 folder in file-name order.
 
 - **A command named like one already loaded replaces it.** Yours can replace AutoDoc's `:table`, or
