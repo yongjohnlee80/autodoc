@@ -406,12 +406,13 @@ func TestALuaShellFromATabsMenu(t *testing.T) {
 	}
 	r.s.WaitFor(t, "a shell", func(string) bool { return len(r.shellTabs()) == 1 })
 	newLua := func() {
-		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(r.shellTabs()[0].ID) })
+		tab := r.shellTabs()[0].ID // read before the loop is entered: shellTabs is on the loop itself
+		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(tab) })
 		row, ok := menuRow(rows, "terminal.lua")
 		if !ok {
 			t.Fatalf("no New Lua shell in %v", rowIDs(rows))
 		}
-		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(r.shellTabs()[0].ID); return true })
+		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(tab); return true })
 	}
 	labels := func() []string {
 		var out []string
