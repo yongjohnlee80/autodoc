@@ -73,14 +73,15 @@ jobs:
       # flakes are someone else's problem later. The Postgres cells are required
       # here, where the service exists: they fail loudly rather than skip when
       # the URL is missing (AUTODOC_TEST_PG_REQUIRED, not CI: the macOS job runs
-      # core/... too and has no service container to give it one). -timeout is
-      # per package: tui takes ~16 minutes here (973s on main, 2026-10-15), and a
-      # runner a fifth slower takes it past 20, so it has 30.
+      # core/... too and has no service container to give it one).
       - name: test
         env:
           AUTODOC_TEST_PGURL: ${{ env.PGURL }}
           AUTODOC_TEST_PG_REQUIRED: "1"
-        run: go test -race -count=2 -timeout 30m ./...
+        run: |
+          go list ./... | awk '$0 != "github.com/yongjohnlee80/autodoc/tui"' > "$RUNNER_TEMP/test-packages"
+          mapfile -t packages < "$RUNNER_TEMP/test-packages"
+          go test -race -count=2 -timeout 30m "${packages[@]}"
 
       # Linux ships without cgo (modernc SQLite). A macOS build without cgo still
       # builds and polls its roots instead of watching them; the release builds
@@ -89,6 +90,30 @@ jobs:
         run: |
           CGO_ENABLED=0 GOOS=linux  GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/autodoc
+
+  tui:
+    name: TUI race (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: test
+        run: bash tests/run-tui-shard.sh "${{ matrix.shard }}" 4 > "$RUNNER_TEMP/tui-tests.jsonl"
+      - name: test timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tui-race-${{ matrix.shard }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/tui-tests.jsonl
+          if-no-files-found: error
+          retention-days: 7
 
   # The Lua side (lua/autodoc/): the suites under tests/, against a daemon built from this checkout,
   # in a pinned Neovim with a pinned auto-core.nvim (its hard dependency).

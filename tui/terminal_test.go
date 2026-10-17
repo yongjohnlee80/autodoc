@@ -235,7 +235,8 @@ func TestCtrlTTogglesTheTerminalsModeAndEscIsTheProgramsInEitherKeymap(t *testin
 	_, r := runShellTUI(t, nil) // the Vim keymap, the default
 	onLoop(r, func() bool { r.h.terminals.toggleTerminal(); return true })
 	r.s.WaitFor(t, "the terminal's keyboard", func(string) bool { return r.focused("terminalView") })
-	r.keys(t, decltest.Type("cat -v\r")...)
+	r.keys(t, decltest.Type("printf 'cat-%s\\n' ready; cat -v\r")...)
+	r.s.WaitForText(t, "cat-ready")
 	// escTo types Esc, then text and Enter, and waits for cat's ^[text: the Esc reached it.
 	escTo := func(text string) {
 		t.Helper()

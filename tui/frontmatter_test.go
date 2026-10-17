@@ -5,9 +5,31 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const tuiSchema = "version: 1\nfrontmatter:\n  type: {type: string, enum: [note, adr], required: true}\n"
+
+func TestAnOldFrontmatterAnswerKeepsTheNewerDiagnostics(t *testing.T) {
+	r := attached(t, startDaemon(t, map[string][]string{"kb": {"memo.md", "# Memo\n"}}))
+	r.openByPicker(t, "memo.md")
+	r.waitFile(t, "memo.md")
+	checked := make(chan struct{})
+	onLoop(r, func() bool {
+		r.h.fmGen++
+		r.h.showDiagnostics([]fmDiagnostic{{field: "type", line: 2, message: "newer text"}})
+		r.h.validateNow(Ticket{current: func() bool { close(checked); return false }})
+		return true
+	})
+	select {
+	case <-checked:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the old validation answer did not reach its ticket check")
+	}
+	if diagnostics := onLoop(r, func() []fmDiagnostic { return r.h.fmDiagnostics }); len(diagnostics) != 1 || diagnostics[0].message != "newer text" {
+		t.Fatalf("an old answer replaced newer diagnostics: %v", diagnostics)
+	}
+}
 
 // writeSchema puts the schema at root's suggested path, after the daemon's first index, as a user
 // adds one to a workspace they have.

@@ -41,7 +41,7 @@ func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) 
 func startManagedRanking(t *testing.T, roots map[string]string, o serving.Options, supplied serving.Supplied) *managedDaemon {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	db, err := store.Open(ctx, filepath.Join(t.TempDir(), "autodoc.db"))
+	db, err := openDaemonStore(t)
 	if err != nil {
 		t.Fatal(err)
 	}
