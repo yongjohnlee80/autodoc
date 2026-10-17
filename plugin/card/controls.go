@@ -334,15 +334,13 @@ func (t *Tree) index(rows []trow) int {
 	}
 	for i, r := range rows {
 		if r.n == want && r.empty == empty {
-			t.selPath = ancestors(rows, i)
-			return i
+			return t.selectAt(rows, i) // refreshes the ancestry while it shows
 		}
 	}
 	if empty { // the Empty row went: its node is the nearest
 		for i, r := range rows {
 			if r.n == want && !r.empty {
-				t.sel, t.selEmpty = want, nil
-				return i
+				return t.selectAt(rows, i)
 			}
 		}
 	}
@@ -353,17 +351,15 @@ func (t *Tree) index(rows []trow) int {
 	for j := len(path) - 1; j >= 0; j-- {
 		for i, r := range rows {
 			if r.n == path[j] && !r.empty {
-				t.sel, t.selEmpty = path[j], nil
-				return i
+				return t.selectAt(rows, i)
 			}
 		}
 	}
 	if len(rows) == 0 {
-		t.sel, t.selEmpty = nil, nil
+		t.sel, t.selEmpty, t.selPath = nil, nil, nil // no selection, so no way back to an old one
 		return 0
 	}
-	t.sel, t.selEmpty = rows[0].n, nil
-	return 0
+	return t.selectAt(rows, 0)
 }
 
 // ancestors are the nodes holding rows[i], root first: the row above it one level up, and so on.
@@ -396,12 +392,17 @@ func pathTo(ns []*Node, n *Node) []*Node {
 	return nil
 }
 
-func (t *Tree) selectRow(r trow) {
+// selectAt makes rows[i] the selection, with the ancestry it has there: every change of the
+// selection leaves the ancestry of the new one, never of the one it replaced.
+func (t *Tree) selectAt(rows []trow, i int) int {
+	r := rows[i]
 	if r.empty {
 		t.sel, t.selEmpty = nil, r.n
 	} else {
 		t.sel, t.selEmpty = r.n, nil
 	}
+	t.selPath = ancestors(rows, i)
+	return i
 }
 
 // open opens n, asking OnOpen first; false when OnOpen refused.
@@ -429,7 +430,7 @@ func (t *Tree) key(k plugin.Key, page int) keyResult {
 	}
 	i := t.index(rows)
 	if j, ok := move(k, i, len(rows), page); ok {
-		t.selectRow(rows[j])
+		t.selectAt(rows, j)
 		return used
 	}
 	r := rows[i]
@@ -440,7 +441,7 @@ func (t *Tree) key(k plugin.Key, page int) keyResult {
 		case !r.n.Open:
 			t.open(r.n)
 		case i+1 < len(rows) && rows[i+1].depth > r.depth: // open: to its first row
-			t.selectRow(rows[i+1])
+			t.selectAt(rows, i+1)
 		}
 	case k.Key == "Left" || plain(k) && k.Key == "h":
 		if !r.empty && !r.n.Leaf && r.n.Open {
@@ -449,7 +450,7 @@ func (t *Tree) key(k plugin.Key, page int) keyResult {
 		}
 		for j := i - 1; j >= 0; j-- { // to the row holding it
 			if rows[j].depth == r.depth-1 && !rows[j].empty {
-				t.selectRow(rows[j])
+				t.selectAt(rows, j)
 				break
 			}
 		}

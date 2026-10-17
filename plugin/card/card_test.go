@@ -492,3 +492,80 @@ func TestARemovedSelectionGoesToItsNearestShowingAncestor(t *testing.T) {
 		}
 	})
 }
+
+// TestATreesAncestryBelongsToItsCurrentSelection: every change of the selection, a fall back to the
+// first row, an empty tree, a recovered ancestor, leaves the ancestry of the new selection, so a
+// later refresh never brings back a node the selection has moved away from (Lector #230 r3).
+func TestATreesAncestryBelongsToItsCurrentSelection(t *testing.T) {
+	type tree struct {
+		other, parent, child *Node
+		t                    *Tree
+	}
+	build := func() tree {
+		child := &Node{Text: "child", Leaf: true}
+		parent := &Node{Text: "parent", Open: true, Children: []*Node{child}}
+		other := &Node{Text: "other", Leaf: true}
+		return tree{other, parent, child, &Tree{Roots: []*Node{other, parent}}}
+	}
+	selectChild := func(t *testing.T, c *Card, tr tree) {
+		t.Helper()
+		c.Key(key("Down"))
+		c.Key(key("Down"))
+		if tr.t.Selected() != tr.child {
+			t.Fatalf("set-up: selected %v, want the child", tr.t.Selected())
+		}
+	}
+	t.Run("an empty tree, then a new one", func(t *testing.T) {
+		tr := build()
+		c, _ := open(t, func() Page { return Page{Body: []Block{tr.t}} }, 30, 8)
+		selectChild(t, c, tr)
+		tr.t.Roots = nil
+		c.Draw()
+		if tr.t.Selected() != nil {
+			t.Fatalf("an empty tree has selection %v", tr.t.Selected())
+		}
+		fresh := &Node{Text: "fresh", Leaf: true}
+		tr.t.Roots = []*Node{fresh, tr.parent}
+		c.Draw()
+		if tr.t.Selected() != fresh {
+			t.Fatalf("selected %v, want the first row: the empty tree ended the old selection", tr.t.Selected())
+		}
+	})
+	t.Run("a fall back to the first row, then another refresh", func(t *testing.T) {
+		tr := build()
+		c, _ := open(t, func() Page { return Page{Body: []Block{tr.t}} }, 30, 8)
+		selectChild(t, c, tr)
+		tr.t.Roots = []*Node{tr.other}
+		c.Draw()
+		if tr.t.Selected() != tr.other {
+			t.Fatalf("selected %v, want other", tr.t.Selected())
+		}
+		fresh := &Node{Text: "fresh", Leaf: true}
+		tr.t.Roots = []*Node{fresh, tr.parent}
+		c.Draw()
+		if tr.t.Selected() != fresh {
+			t.Fatalf("selected %v, want the first row: other had no ancestor left", tr.t.Selected())
+		}
+	})
+	t.Run("a recovered ancestor, then it is removed", func(t *testing.T) {
+		g := &Node{Text: "g", Leaf: true}
+		p := &Node{Text: "p", Open: true, Children: []*Node{g}}
+		gp := &Node{Text: "gp", Open: true, Children: []*Node{p}}
+		other := &Node{Text: "other", Leaf: true}
+		tr := &Tree{Roots: []*Node{other, gp}}
+		c, _ := open(t, func() Page { return Page{Body: []Block{tr}} }, 30, 8)
+		for range 3 {
+			c.Key(key("Down"))
+		}
+		gp.Open = false // g hides: the selection goes to gp, a root, with no ancestors
+		c.Draw()
+		if tr.Selected() != gp {
+			t.Fatalf("selected %v, want gp", tr.Selected())
+		}
+		tr.Roots = []*Node{other, p} // gp gone; p, once g's parent, now a root of its own
+		c.Draw()
+		if tr.Selected() != other {
+			t.Fatalf("selected %v, want the first row: gp had no ancestor, and p was g's, not gp's", tr.Selected())
+		}
+	})
+}

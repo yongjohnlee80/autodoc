@@ -50,7 +50,7 @@ func (c *Card) press(ln line, x int) bool {
 			return false
 		}
 		c.focus = ctl
-		ctl.selectRow(rows[ln.item])
+		ctl.selectAt(rows, ln.item)
 	default:
 		return false
 	}
@@ -68,7 +68,7 @@ func (c *Card) wheel(step int) bool {
 		if len(rows) == 0 {
 			return false
 		}
-		ctl.selectRow(rows[min(max(ctl.index(rows)+step, 0), len(rows)-1)])
+		ctl.selectAt(rows, min(max(ctl.index(rows)+step, 0), len(rows)-1))
 	default:
 		c.from = max(c.from+step, 0) // fit keeps it in range
 	}
