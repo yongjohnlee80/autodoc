@@ -234,7 +234,8 @@ func TestATreeOpensClosesAndKeepsItsSelection(t *testing.T) {
 	public := &Node{Text: "public", Empty: "(no tables)"}
 	empty := &Node{Text: "empty", Empty: "(no tables)"}
 	failing := &Node{Text: "broken"}
-	tree := &Tree{Roots: []*Node{public, empty, failing}}
+	first := &Node{Text: "first", Leaf: true} // so the nearest showing ancestor is not also the first row
+	tree := &Tree{Roots: []*Node{first, public, empty, failing}}
 	tree.OnOpen = func(n *Node) bool {
 		switch n {
 		case public:
@@ -255,6 +256,7 @@ func TestATreeOpensClosesAndKeepsItsSelection(t *testing.T) {
 	}
 	c, host := open(t, func() Page { return Page{Body: []Block{tree}} }, 30, 10)
 	rows := func() string { return strings.Join(screen(host.last()), "\n") }
+	c.Key(key("Down"))  // public
 	c.Key(key("Right")) // public opens
 	if !strings.Contains(rows(), "> ▾ public") || !strings.Contains(rows(), "  ▸ orders") {
 		t.Fatalf("Right did not open public:\n%s", rows())
