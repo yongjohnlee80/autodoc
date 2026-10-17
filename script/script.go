@@ -119,7 +119,9 @@ type Engine struct {
 	gates       map[string]Gate
 	domainGates map[string]Gate
 	envs        map[*lua.LTable]*gatedScript
-	base        *lua.LTable
+	// shells are the Lua shells' environments (eval.go): the engine's, as its globals are
+	shells map[*lua.LTable]*Shell
+	base   *lua.LTable
 	// handlers are on's, by event (events.go)
 	handlers map[string][]*lua.LFunction
 	// calling is the gated script whose proxy called the host function running now (Caller)
@@ -189,7 +191,7 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 	}
 	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location,
 		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]*gatedScript{},
-		handlers: map[string][]*lua.LFunction{}}
+		shells: map[*lua.LTable]*Shell{}, handlers: map[string][]*lua.LFunction{}}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
 	L.SetField(e.global, "notify", L.NewFunction(func(L *lua.LState) int {
