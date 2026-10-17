@@ -149,7 +149,6 @@ end
 
 autodoc.command{
   name = "usage",
-  id = "usage.show",
   title = "what AutoDoc uses",
   help = "a card of the daemon's and the app's memory and CPU, and the workspace's index",
   run = function()
