@@ -122,7 +122,10 @@ func (f *Frame) join(x, y int, g string) bool {
 }
 
 // Rows are the frame as host.frame sends it: each row's cells, run together where the style is the
-// same, continuations left out.
+// same, continuations left out. The host segments each run's text into grapheme clusters again, so
+// two cells whose text would join into one cluster (two regional indicators written apart, a
+// character and a variation selector written after it) are sent in runs of their own: the host
+// never joins clusters across runs, and each keeps the column it was given.
 func (f *Frame) Rows() []Row {
 	rows := make([]Row, f.h)
 	buf := make([]byte, 0, f.w)
@@ -132,12 +135,39 @@ func (f *Frame) Rows() []Row {
 		for i := 0; i < len(line); {
 			st := line[i].st
 			buf = buf[:0]
+			last := "" // the run's last cell, to check the next one does not join it
 			for ; i < len(line) && line[i].st == st; i++ {
-				buf = append(buf, line[i].s...)
+				s := line[i].s
+				if s == "" {
+					continue // a continuation: its head is already in the run
+				}
+				if last != "" && joins(last, s) {
+					break
+				}
+				buf = append(buf, s...)
+				last = s
 			}
 			row = append(row, Run{Text: string(buf), Style: st})
 		}
 		rows[y] = row
 	}
 	return rows
+}
+
+// joins reports whether cells a and b, side by side, would be segmented as fewer clusters than they
+// hold apart. Printable ASCII next to printable ASCII never joins, and is answered at once.
+func joins(a, b string) bool {
+	if len(a) == 1 && len(b) == 1 && a[0] >= ' ' && a[0] < 0x7f && b[0] >= ' ' && b[0] < 0x7f {
+		return false
+	}
+	return count(a+b) < count(a)+count(b)
+}
+
+// count is how many grapheme clusters s holds.
+func count(s string) int {
+	n := 0
+	for range tui.Graphemes(s) {
+		n++
+	}
+	return n
 }
