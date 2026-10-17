@@ -63,6 +63,7 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	L.SetFuncs(ui, map[string]lua.LGFunction{"pick": s.luaPick})
 	L.SetField(eng.Global(), "ui", ui)
 	s.bindCard(L, ui) // ui.card, ui.charts, app.stats (luacard.go)
+	eng.SetFunction("widgets", s.luaWidgets)
 	ag := L.NewTable()
 	L.SetFuncs(ag, map[string]lua.LGFunction{"list": s.luaAgentsList, "send": s.luaAgentsSend})
 	L.SetField(eng.Global(), "agents", ag)
@@ -268,4 +269,25 @@ func agentErr(err error) string {
 		return "closed"
 	}
 	return err.Error()
+}
+
+// widgetLister is the program's widgets, for autodoc.widgets (widgets.go).
+type widgetLister interface{ widgets() []widgetTarget }
+
+// luaWidgets is autodoc.widgets(): the places the keyboard can go, {name, title, open, focused}, in
+// the order :go and F6 know them. autodoc.run("widget.go", name) goes to one.
+func (s *scripting) luaWidgets(L *lua.LState) int {
+	out := L.NewTable()
+	if wl, ok := s.host.(widgetLister); ok {
+		for _, w := range wl.widgets() {
+			t := L.NewTable()
+			L.SetField(t, "name", lua.LString(w.name))
+			L.SetField(t, "title", lua.LString(w.title))
+			L.SetField(t, "open", lua.LBool(w.open))
+			L.SetField(t, "focused", lua.LBool(w.focused))
+			out.Append(t)
+		}
+	}
+	L.Push(out)
+	return 1
 }

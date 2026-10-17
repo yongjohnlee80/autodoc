@@ -183,3 +183,4 @@ func (l luaHostOf) after(d time.Duration, fn func()) { l.h.after(d, fn) }
 func (l luaHostOf) appStats() procstat.Stats         { return procstat.Read() }
 func (l luaHostOf) appVersion() string               { return l.h.aboutInfo.Version }
 func (l luaHostOf) native() bool                     { return l.h.native() }
+func (l luaHostOf) widgets() []widgetTarget          { return l.h.widgets() }

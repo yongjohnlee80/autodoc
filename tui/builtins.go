@@ -57,7 +57,7 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("help.keys", "help", "help.open()", func() { h.open("help") }),
 		builtin("help.tutorial", "the tutorial", "App.openTutorial()", h.openTutorial),
 		builtin("help.about", "about", "about.open()", func() { h.open("about") }),
-	}, append(h.editorEntries(), h.bufferEntries()...)...)
+	}, append(append(h.editorEntries(), h.bufferEntries()...), h.widgetEntries()...)...)
 }
 
 // runEntry is App.run(id): a key running a catalog entry. What it cannot run is said, as a key's
