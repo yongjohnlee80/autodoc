@@ -254,22 +254,12 @@ func (v *pluginView) closePanel() {
 	}
 }
 
-var pluginKeyNames = map[rune]string{
-	tuicore.KeyUp: "Up", tuicore.KeyDown: "Down", tuicore.KeyLeft: "Left", tuicore.KeyRight: "Right",
-	tuicore.KeyEnter: "Enter", tuicore.KeyTab: "Tab", tuicore.KeyBackspace: "Backspace",
-	tuicore.KeyDelete: "Delete", tuicore.KeyInsert: "Insert", tuicore.KeyHome: "Home", tuicore.KeyEnd: "End",
-	tuicore.KeyPageUp: "PageUp", tuicore.KeyPageDown: "PageDown",
-	tuicore.KeyF1: "F1", tuicore.KeyF2: "F2", tuicore.KeyF3: "F3", tuicore.KeyF4: "F4", tuicore.KeyF5: "F5",
-	tuicore.KeyF6: "F6", tuicore.KeyF7: "F7", tuicore.KeyF8: "F8", tuicore.KeyF9: "F9", tuicore.KeyF10: "F10",
-	tuicore.KeyF11: "F11", tuicore.KeyF12: "F12",
-}
-
 // pluginKey is a key as the protocol names it.
 func pluginKey(e tuicore.KeyEvent) (plugin.Key, bool) {
 	k := plugin.Key{Ctrl: e.Mods&tuicore.ModCtrl != 0, Alt: e.Mods&tuicore.ModAlt != 0, Shift: e.Mods&tuicore.ModShift != 0}
 	switch {
-	case pluginKeyNames[e.Code] != "":
-		k.Key = pluginKeyNames[e.Code]
+	case plugin.KeyName(e.Code) != "":
+		k.Key = plugin.KeyName(e.Code)
 	case e.Text != "":
 		k.Key, k.Text = e.Text, e.Text
 	case e.Code >= ' ' && e.Code < tuicore.KeyInsert && utf8.ValidRune(e.Code):
