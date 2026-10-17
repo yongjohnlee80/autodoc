@@ -65,7 +65,7 @@ All surfaces communicate with the daemon over a user-private Unix domain socket 
 
 1. **`$XDG_RUNTIME_DIR`** → `$XDG_RUNTIME_DIR/autodoc.sock` (typical on Linux, e.g. `/run/user/1000/autodoc.sock`).
 2. **macOS only:** the per-user `$TMPDIR` → `$TMPDIR/autodoc.sock`.
-3. **Otherwise:** the state directory → `$XDG_STATE_HOME/autodoc/autodoc.sock` (default `~/.local/state/autodoc/autodoc.sock`).
+3. **Otherwise:** the default XDG state directory (`Server{}.StateDirPath()`) → `$XDG_STATE_HOME/autodoc/autodoc.sock` (else `~/.local/state/autodoc/autodoc.sock`; `server.state_dir` does not move the default socket).
 
 The wire protocol uses **MessagePack-RPC** (`msgpack-RPC`), providing compact binary framing, sub-millisecond serialization overhead, and native compatibility with Neovim's built-in `vim.fn.sockconnect("pipe", ...)` and `vim.rpcrequest` APIs.
 
@@ -157,8 +157,8 @@ While `autodoc --serve` manages its own lifecycle automatically during normal us
 AutoDoc follows the XDG Base Directory Specification across Linux and macOS:
 
 - **Daemon Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Holds daemon-level `[server]` (`socket`, `state_dir`, `data_dir`), `[follow]` (`poll_interval`), and `[embedding_queue]` (`max_inflight`) settings (`core/config/config.go`). Workspace registrations and sealed embedding/reranker provider credentials live inside the SQLite store (`autodoc.db`) rather than in `config.toml`.
-- **Socket (`autodoc.sock`)**: The `0600` msgpack-RPC Unix domain socket, at `server.socket` if set, else `$XDG_RUNTIME_DIR/autodoc.sock`, else (macOS) `$TMPDIR/autodoc.sock`, else the state directory (see §1.3).
-- **State Directory (`server.state_dir`, else `$XDG_STATE_HOME/autodoc/`, else `~/.local/state/autodoc/`)**: The daemon's log, and the socket's last-resort location.
+- **Socket (`autodoc.sock`)**: The `0600` msgpack-RPC Unix domain socket, at `server.socket` if set, else `$XDG_RUNTIME_DIR/autodoc.sock`, else (macOS) `$TMPDIR/autodoc.sock`, else `$XDG_STATE_HOME/autodoc/autodoc.sock` (`~/.local/state/autodoc/autodoc.sock`; resolved via `Server{}.StateDirPath()`).
+- **State Directory (`server.state_dir`, else `$XDG_STATE_HOME/autodoc/`, else `~/.local/state/autodoc/`)**: Where the daemon's log lives.
 - **Store Directory (`server.data_dir`, else `$XDG_DATA_HOME/autodoc/`, else `~/.local/share/autodoc/`)**:
   - `autodoc.db`, `autodoc.db-wal`, `autodoc.db-shm`: The SQLite WAL database files storing workspaces, chunks, links, vectors, and sealed provider configurations.
   - `.autodoc-lease-<device>-<inode>`: The sidecar file the running daemon holds an exclusive `flock(2)` on — the single-writer lease, named for the store's device and inode (`core/store/lease.go`).
