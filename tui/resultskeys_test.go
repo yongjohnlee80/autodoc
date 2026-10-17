@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -14,6 +15,27 @@ import (
 func TestCtrlVReachesTheResultsTable(t *testing.T) {
 	r, _ := kindsTUI(t, "tablestall")
 	wantCtrlVBlock(t, r)
+}
+
+// A table yank and an editor put share the unnamed register. Sending both keys through the
+// program catches a missing table-to-editor bridge or a focus path that swallows y.
+func TestAResultsYankPastesIntoTheEditor(t *testing.T) {
+	r, _ := kindsTUI(t, "tablestall")
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus")); return true })
+	r.s.WaitFor(t, "the results with the keys", func(string) bool { return r.focused(resultsView) })
+	want := onLoop(r, func() string { return r.resultsCore().Cell(0, 0) })
+	r.keys(t, key('y'))
+	r.s.WaitFor(t, "the editor register holds the table cell", func(string) bool {
+		return onLoop(r, func() bool { got, _ := r.h.core.Register(); return got == want })
+	})
+	before := r.editorText()
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call("editor", "forceActiveFocus")); return true })
+	r.s.WaitFor(t, "the editor with the keys", func(string) bool { return r.focused("editor") })
+	r.keys(t, key('p'))
+	r.s.WaitFor(t, "the yanked cell pasted", func(string) bool { return r.editorText() != before })
+	if got := r.editorText(); !strings.Contains(got, want) {
+		t.Errorf("editor text %q does not contain yanked cell %q", got, want)
+	}
 }
 
 // wantCtrlVBlock focuses the results table, sends Ctrl+V, j and l through the screen, and checks a

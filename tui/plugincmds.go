@@ -69,7 +69,14 @@ func (pl *plugins) refreshPlugins() {
 		var items []tuidecl.Row
 		running := pl.running[key] != nil
 		if !e.m.service() {
-			items = append(items, tuidecl.Row{"key": "open", "label": "Open", "enabled": true,
+			openLabel := "Open"
+			if e.m.card() {
+				openLabel = "Show card"
+				if running && pl.running[key].hidden {
+					openLabel = "Reopen card"
+				}
+			}
+			items = append(items, tuidecl.Row{"key": "open", "label": openLabel, "enabled": true,
 				"target": pluginTarget(key, targetOpen)})
 		}
 		for _, c := range e.m.Commands {

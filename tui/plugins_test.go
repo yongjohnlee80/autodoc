@@ -220,6 +220,9 @@ func (e *echo) Theme(t plugin.Theme) { e.say("theme " + t.Name) }
 
 // protocol 2's: a card's focus, a command, the feed's document
 func (e *echo) Focus(focused bool) { e.say(fmt.Sprintf("focus %v", focused)) }
+func (e *echo) Pointer(p plugin.Pointer) {
+	e.say(fmt.Sprintf("pointer %s %s %d,%d x%d", p.Kind, p.Button, p.X, p.Y, p.Count))
+}
 func (e *echo) Command(id string) {
 	if e.mode == "snap" {
 		e.say(snapLine(id, e.doc))
@@ -418,7 +421,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 6\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 7\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -435,7 +438,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 6; this AutoDoc speaks 1 to 5",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 7; this AutoDoc speaks 1 to 6",
 		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
@@ -958,11 +961,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 6\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 7\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 6; this AutoDoc speaks 1 to 5")
+	r.waitNotice(t, "not added: protocol 7; this AutoDoc speaks 1 to 6")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)

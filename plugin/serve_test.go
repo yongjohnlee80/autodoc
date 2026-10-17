@@ -273,14 +273,14 @@ func TestThePeerSendsFramesTitlesAndClose(t *testing.T) {
 	}
 }
 
-// TestServeAnswersEachProtocolInItsRange: a host speaking 1 (a 0209-era manifest) to 5 is answered
+// TestServeAnswersEachProtocolInItsRange: a host speaking 1 (a 0209-era manifest) to 6 is answered
 // with that same protocol, and the Handler opens; one below or above the range is told the newest,
 // and nothing opens.
 func TestServeAnswersEachProtocolInItsRange(t *testing.T) {
 	for _, c := range []struct {
 		protocol, answer int
 		opens            bool
-	}{{1, 1, true}, {2, 2, true}, {3, 3, true}, {4, 4, true}, {5, 5, true}, {0, Protocol, false}, {6, Protocol, false}} {
+	}{{1, 1, true}, {2, 2, true}, {3, 3, true}, {4, 4, true}, {5, 5, true}, {6, 6, true}, {0, Protocol, false}, {7, Protocol, false}} {
 		r := &recorder{}
 		hs := start(t, r)
 		hs.send(t, MethodOpen, OpenParams(Open{Protocol: c.protocol, Width: 40, Height: 20}))

@@ -9,6 +9,7 @@
 //
 //	host → plugin   plugin.open {protocol, width, height, theme}   the first, once; a service's has no size
 //	                plugin.key {key, text, ctrl, alt, shift}
+//	                plugin.pointer {kind, button, x, y, count}      6: a frame's left press or wheel
 //	                plugin.resize {width, height}
 //	                plugin.theme {theme}
 //	                plugin.hide {}, plugin.show {}                  esc = "hide": hidden, shown again
@@ -36,7 +37,7 @@
 // The notifications marked 2 are protocol 2's, those marked 3 protocol 3's, those marked 4 protocol
 // 4's. A host sends them only to a plugin whose manifest says that protocol (or a later one) and
 // declares them, so a protocol-1 plugin never sees one. The fields marked 5 are read only from a
-// plugin whose manifest says protocol 5.
+// plugin whose manifest says protocol 5. Pointer notifications go only to protocol-6 plugins.
 //
 // A table is the host's to show: the plugin sends its fields and its first rows (host.table), and
 // AutoDoc shows them in a results panel, asking for more as the user nears the end of those loaded
@@ -79,16 +80,17 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 5
+	Protocol    = 6
 )
 
 // The notifications the host sends.
 const (
-	MethodOpen   = "plugin.open"
-	MethodKey    = "plugin.key"
-	MethodResize = "plugin.resize"
-	MethodTheme  = "plugin.theme"
-	MethodClose  = "plugin.close"
+	MethodOpen    = "plugin.open"
+	MethodKey     = "plugin.key"
+	MethodPointer = "plugin.pointer" // protocol 6: a plugin view's left press or vertical wheel
+	MethodResize  = "plugin.resize"
+	MethodTheme   = "plugin.theme"
+	MethodClose   = "plugin.close"
 	// MethodHide and MethodShow are a dialog whose manifest says esc = "hide": Esc hid it, and
 	// its Plugins menu entry showed it again. A plugin may ignore them; it keeps running either way.
 	MethodHide = "plugin.hide"
@@ -198,6 +200,13 @@ type Key struct {
 	Ctrl, Alt, Shift bool
 }
 
+// Pointer is a view-local, zero-based left press or vertical wheel step. Count is capped by the
+// host, and the plugin checks the coordinates against its most recently opened/resized frame.
+type Pointer struct {
+	Kind, Button string // "press"/"left", or "wheel"/"up"/"down"
+	X, Y, Count  int
+}
+
 // Style is how a run of a frame looks: its colours, in the themes' vocabulary ("" is "default"),
 // and its attributes.
 type Style struct {
@@ -284,6 +293,11 @@ func CommandDocParams(id string, d Document) []any {
 // KeyParams are plugin.key's.
 func KeyParams(k Key) []any {
 	return one(map[string]any{"key": k.Key, "text": k.Text, "ctrl": k.Ctrl, "alt": k.Alt, "shift": k.Shift})
+}
+
+// PointerParams are plugin.pointer's coordinates in the plugin view's frame.
+func PointerParams(p Pointer) []any {
+	return one(map[string]any{"kind": p.Kind, "button": p.Button, "x": p.X, "y": p.Y, "count": p.Count})
 }
 
 // ResizeParams are plugin.resize's.
@@ -608,6 +622,23 @@ func ReadKey(params []any) (Key, error) {
 		return Key{}, err
 	}
 	return Key{Key: str(m, "key"), Text: str(m, "text"), Ctrl: flag(m, "ctrl"), Alt: flag(m, "alt"), Shift: flag(m, "shift")}, nil
+}
+
+// ReadPointer refuses malformed or unsupported pointer actions before they reach a plugin.
+func ReadPointer(params []any) (Pointer, error) {
+	m, err := arg(params)
+	if err != nil {
+		return Pointer{}, err
+	}
+	x, xOK := num(m, "x")
+	y, yOK := num(m, "y")
+	count, countOK := num(m, "count")
+	p := Pointer{Kind: str(m, "kind"), Button: str(m, "button"), X: x, Y: y, Count: count}
+	if !xOK || !yOK || !countOK || x < 0 || y < 0 || count < 1 || count > 16 ||
+		!(p.Kind == "press" && p.Button == "left" || p.Kind == "wheel" && (p.Button == "up" || p.Button == "down")) {
+		return Pointer{}, fmt.Errorf("%w: plugin.pointer wants a left press or vertical wheel, nonnegative coordinates and 1–16 steps", ErrParams)
+	}
+	return p, nil
 }
 
 // ReadResize reads plugin.resize.

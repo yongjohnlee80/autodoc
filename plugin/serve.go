@@ -51,6 +51,8 @@ type (
 	Commander interface{ Command(id string) }
 	// Focuser is a non-modal card told it took the keys (true) or gave them back (false).
 	Focuser interface{ Focus(focused bool) }
+	// PointerHandler takes view-local left presses and vertical wheel movement (protocol 6).
+	PointerHandler interface{ Pointer(Pointer) }
 	// TableFetcher serves the rows of the tables it sends (protocol 4, [table]): FetchRows is the
 	// host asking for up to f.N more of table f.ID, answered with Peer.Rows (or Peer.TableEnd);
 	// the host asks again only after the answer. TableClosed is the table gone: its panel closed,
@@ -330,6 +332,12 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 		case MethodKey:
 			if k, err := ReadKey(n.params); err == nil && opened {
 				h.Key(k)
+			}
+		case MethodPointer:
+			if ph, ok := h.(PointerHandler); ok && opened && peer.protocol.Load() >= 6 {
+				if p, err := ReadPointer(n.params); err == nil {
+					ph.Pointer(p)
+				}
 			}
 		case MethodResize:
 			if w, hh, err := ReadResize(n.params); err == nil && opened {
