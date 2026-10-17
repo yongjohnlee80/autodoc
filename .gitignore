@@ -1,6 +1,7 @@
 # build output
 /bin/
 /autodoc
+/examples/*/bin/
 
 # coverage profiles (make cover, CI)
 /coverage.out

@@ -1,0 +1,13 @@
+name     = "card-go"
+title    = "People (Go card kit)"
+kind     = "dialog"
+protocol = 6                       # the pointer (protocol 6) reaches the card's controls
+command  = ["./bin/autodoc-card-go"]
+
+[dialog]
+modal      = false                 # a card beside the page
+width      = 40
+placements = ["right", "left"]
+
+[install]
+build = ["go", "build", "-o", "bin/autodoc-card-go", "."]
