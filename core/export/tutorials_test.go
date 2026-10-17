@@ -77,7 +77,7 @@ func TestTutorialsBookEmbedsAndDiagrams(t *testing.T) {
 		registeredVerbs[v.Verb] = true
 	}
 	for _, v := range (*todo.Manager)(nil).Verbs() {
-		registeredVerbs[v.Name] = true
+		registeredVerbs[v.Verb] = true
 	}
 
 	for idx, mdPath := range ordered {
