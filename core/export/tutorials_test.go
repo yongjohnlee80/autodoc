@@ -32,6 +32,18 @@ func TestTutorialsBookEmbedsAndDiagrams(t *testing.T) {
 	if len(mdFiles) < 19 {
 		t.Fatalf("found %d markdown files in %s; want README.md + 18 chapters (19 total)", len(mdFiles), tutorialsDir)
 	}
+	// Place README.md first in reading order, followed by 01..18.
+	ordered := make([]string, 0, len(mdFiles))
+	for _, p := range mdFiles {
+		if filepath.Base(p) == "README.md" {
+			ordered = append(ordered, p)
+		}
+	}
+	for _, p := range mdFiles {
+		if filepath.Base(p) != "README.md" {
+			ordered = append(ordered, p)
+		}
+	}
 
 	asciiBoxChars := []rune{'┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', '╔', '╗', '╚', '╝'}
 	allowedTopKeys := map[string]bool{
@@ -47,7 +59,24 @@ func TestTutorialsBookEmbedsAndDiagrams(t *testing.T) {
 		"bar": true, "line": true, "point": true, "circle": true, "area": true,
 	}
 
-	for _, mdPath := range mdFiles {
+	contractsBytes, err := os.ReadFile(filepath.Join(tutorialsDir, "../../rpc/testdata/contracts.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var catalog struct {
+		Verbs []struct {
+			Verb string `json:"verb"`
+		} `json:"verbs"`
+	}
+	if err := json.Unmarshal(contractsBytes, &catalog); err != nil {
+		t.Fatal(err)
+	}
+	registeredVerbs := make(map[string]bool, len(catalog.Verbs))
+	for _, v := range catalog.Verbs {
+		registeredVerbs[v.Verb] = true
+	}
+
+	for idx, mdPath := range ordered {
 		base := filepath.Base(mdPath)
 		stem := strings.TrimSuffix(base, ".md")
 		t.Run(base, func(t *testing.T) {
@@ -60,6 +89,38 @@ func TestTutorialsBookEmbedsAndDiagrams(t *testing.T) {
 			for _, r := range asciiBoxChars {
 				if strings.ContainsRune(text, r) {
 					t.Errorf("%s contains ASCII box-drawing character %q; use .mmd diagrams instead", base, r)
+				}
+			}
+
+			// Verify every concrete `autodoc --call <verb>` invocation names a registered verb.
+			for lineNo, line := range strings.Split(text, "\n") {
+				s := strings.TrimSpace(line)
+				if after, ok := strings.CutPrefix(s, "autodoc --call "); ok {
+					fields := strings.Fields(after)
+					if len(fields) > 0 && !strings.HasPrefix(fields[0], "<") && !registeredVerbs[fields[0]] {
+						t.Errorf("%s:%d: autodoc --call %q is not a registered verb in rpc/testdata/contracts.json", base, lineNo+1, fields[0])
+					}
+				}
+			}
+
+			// Verify bottom Previous / Next navigation links.
+			trimmed := strings.TrimSpace(text)
+			lastLines := trimmed
+			if nl := strings.LastIndex(trimmed, "\n"); nl >= 0 {
+				lastLines = trimmed[nl+1:]
+			}
+			if idx > 0 {
+				prevBase := filepath.Base(ordered[idx-1])
+				wantPrev := "(./" + prevBase + ")"
+				if !strings.Contains(lastLines, "Previous:") || !strings.Contains(lastLines, wantPrev) {
+					t.Errorf("%s: bottom line %q missing Previous link %s", base, lastLines, wantPrev)
+				}
+			}
+			if idx < len(ordered)-1 {
+				nextBase := filepath.Base(ordered[idx+1])
+				wantNext := "(./" + nextBase + ")"
+				if !strings.Contains(lastLines, "Next") || !strings.Contains(lastLines, wantNext) {
+					t.Errorf("%s: bottom line %q missing Next link %s", base, lastLines, wantNext)
 				}
 			}
 

@@ -42,7 +42,7 @@ Open this folder (`docs/tutorials/`) as a workspace in `autodoc --gui` and press
 5. **[Chapter 05: The 3-Stage Hybrid Search Pipeline (`Lexical` + `Semantic` + `Rerank`)](./05-hybrid-search-pipeline.md)**
    Inside AutoDoc's retrieval funnel: FTS5 BM25 with structural signals, 1-bit quantized + float32 vector recall, Reciprocal Rank Fusion (RRF), cross-encoder reranking, facet filter syntax, and honest stage reporting.
 6. **[Chapter 06: Configuring Local & Cloud Embedding and Reranker Models](./06-configuring-embeddings-and-rerankers.md)**
-   Wiring local Ollama (`qwen3-embedding`) and TEI (`BAAI/bge-reranker-v2-m3`) or cloud providers (`OpenAI`, `Vertex AI`) in `config.toml`, switching models live in the background, and automatic orphan vector reclamation.
+   Wiring local Ollama (`qwen3-embedding`) and TEI (`BAAI/bge-reranker-v2-m3`) or cloud providers (`OpenAI`, `Vertex AI`) in the store (`embedding.add`, `ranker.add`), switching models live in the background, and automatic orphan vector reclamation.
 7. **[Chapter 07: Frontmatter Schemas (`v1` & `v2`), Live Validation & Search Facets](./07-frontmatter-schemas-and-validation.md)**
    Declaring `_schema/frontmatter.yaml` with `version: 2` (`discriminator: type`, `base` fields, and per-type rules), reading non-blocking live editor diagnostics, and turning YAML fields into queryable search facets.
 8. **[Chapter 08: Knowledge Graphs — Wikilinks, Backlinks & ADR Lifecycle Relations](./08-knowledge-graphs-and-adr-lifecycle.md)**
@@ -52,7 +52,7 @@ Open this folder (`docs/tutorials/`) as a workspace in `autodoc --gui` and press
 
 ### Part III — Tasks, Workflows & AI Agent Orchestration
 10. **[Chapter 10: The `.todo-list/` Task Engine & Crash-Recoverable Journal](./10-todo-task-engine.md)**
-    Managing tasks as canonical Markdown+YAML files backed by AutoDoc's 3-phase SQLite journal (`pending` → `staged` → `committed`), using the interactive Todos Panel (`SPC x`), and portable `$KB_ROOT` / `$WORKSPACE` symbolic paths.
+    Managing tasks as canonical Markdown+YAML files backed by AutoDoc's 3-phase SQLite journal (`pending` → `staged` → `committed`), using the interactive Todos Panel (`SPC x`), and portable `$KB_ROOT` / `$PROJECT_ROOT` symbolic paths.
 11. **[Chapter 11: Terminal Tabs & One-Key Agent Task Handoff (`SPC x` → `A`)](./11-terminal-tabs-and-agent-handoff.md)**
     Configuring embedded CLI coding agent tabs (`[[terminal.tabs]]`) and pressing `A` on any todo task to atomically mark it `in-progress`, assign it to `autodoc:<codename>`, and paste the structured task brief into the agent's live terminal.
 12. **[Chapter 12: Wiring External AI Coding Agents (`--call`, `KB_OPERATIONS.md`, & Token Efficiency)](./12-ai-agent-integration-and-cli-rpc.md)**
@@ -72,4 +72,9 @@ Open this folder (`docs/tutorials/`) as a workspace in `autodoc --gui` and press
 
 ### Part V — Enterprise RAG Server (`autodoc --server`)
 18. **[Chapter 18: Multi-Tenant PostgreSQL RAG Server (`autodoc --server` & `.view` Contracts)](./18-enterprise-postgres-rag-server.md)**
-    Ingesting live PostgreSQL tables via declarative `.view` templates with keyset cursors and tenant advisory locks, serving snapshot-enforced `POST /v1/search` over `pgvector`, and cutting monthly RAG TCO by nearly 50%.
+    Ingesting live PostgreSQL tables via declarative `.view` templates with keyset cursors and tenant advisory locks, serving snapshot-enforced `POST /v1/search` over `pgvector`, and evaluating self-hosted versus managed cloud RAG deployment scenarios.
+
+---
+
+**Next**: [Chapter 01: Architecture & Surfaces →](./01-architecture-and-surfaces.md)
+

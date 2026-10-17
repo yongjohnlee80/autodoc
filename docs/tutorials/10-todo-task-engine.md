@@ -82,19 +82,19 @@ AutoDoc partitions frontmatter fields into three strict categories:
 
 ---
 
-## 3. Portable Symbolic Path Rewriting (`$KB_ROOT` and `$WORKSPACE`)
+## 3. Portable Symbolic Path Rewriting (`$KB_ROOT` and `$PROJECT_ROOT`)
 
 A task's `adr`, `review`, and `blocked` fields link operational work to durable architectural artifacts. Because absolute paths break when a repository or Knowledge Base is synced across machines (for example, `/Users/alice/...` on macOS versus `/home/alice/...` on Linux), AutoDoc automatically rewrites absolute paths into portable symbolic variables on `todos.add`, `todos.update`, and `todos.refresh`.
 
-When you pass an absolute path in `adr` or `review`, the symbolizer checks the store's variable table (`todos.vars` / `workspace.vars`) and rewrites the path using the **longest matching prefix** among:
+When you pass an absolute path in `adr` or `review`, the symbolizer checks the owning workspace's variable table (`todos.vars` / `workspace.vars`, ADR 1792132105) and rewrites the path using the **longest matching prefix** among:
 
 - `$KB_ROOT` — The Knowledge Base workspace root governing the store.
-- `$WORKSPACE` / `$PROJECT_ROOT` — The active workspace or enrolled project root.
-- User-defined variables configured via `workspace.set_var` or `todos.set_var` (stored portably in `.autodoc-vars.toml` for KB-scoped variables or locally for machine-scoped overrides).
+- `$PROJECT_ROOT` — The enrolled project root owning a project-scoped store (note: legacy `$WORKSPACE` is retired in ADR 1792132105 and remains unresolved unless explicitly defined).
+- User-defined variables configured via `workspace.set_var` or `todos.set_var` (stored portably in `.autodoc-vars.toml` for workspace-scoped variables or locally for machine-scoped overrides).
 - `$HOME` — Fallback home directory variable.
 
 > [!IMPORTANT]
-> **Durable documents belong under `$KB_ROOT`:** While AutoDoc can symbolize paths under `$WORKSPACE`, ADRs and code reviews should always reside in the Knowledge Base so they resolve across every project worktree. Furthermore, every entry in `blocked:` must be a resolvable task `id` (such as `2026-10-11-autodoc-module-convention-foundation`) or a `$KB_ROOT/...` document reference—never free-text prose. During `todos.refresh`, the validator checks every reference and populates `errors[]` with structured diagnostics (`not-found` or `unresolved-variable`) while preserving the original `detected` timestamp for unchanged errors.
+> **Durable documents belong under `$KB_ROOT`:** While AutoDoc can symbolize project files under `$PROJECT_ROOT`, ADRs and code reviews should always reside in the Knowledge Base (`$KB_ROOT/...`) so they resolve across every project worktree. Never write retired `$WORKSPACE/...` references. Furthermore, every entry in `blocked:` must be a resolvable task `id` (such as `2026-10-11-autodoc-module-convention-foundation`) or a `$KB_ROOT/...` document reference—never free-text prose. During `todos.refresh`, the validator checks every reference and populates `errors[]` with structured diagnostics (`not-found` or `unresolved-variable`) while preserving the original `detected` timestamp for unchanged errors.
 
 ---
 
@@ -137,7 +137,7 @@ In the AutoDoc TUI and GUI, pressing `SPC x` (or selecting **Todos › Open todo
 - **Six Bucket & Variable Tabs (`1`–`6`, `[` / `]`)**:
   - Tabs `1` through `4` display numbered tables for **Open**, **In progress**, **Deferred**, and **Completed** tasks.
   - Tab `5` (**Archived**) displays a two-level browser: the left list shows `YYYY/MM` archive partitions with task counts; pressing `Enter` on a month loads its tasks into the table, and `Backspace` returns focus to the month list.
-  - Tab `6` (**Variables**) inspects the store's effective symbolic path variables (`$KB_ROOT`, `$WORKSPACE`, `$PROJECT_ROOT`, `$HOME`, and custom variables), showing each variable's resolved path and scope (`e` sets a KB-scoped variable in `.autodoc-vars.toml`; `m` sets a machine-local override).
+  - Tab `6` (**Variables**) inspects the store's effective symbolic path variables (`$KB_ROOT`, `$PROJECT_ROOT`, `$HOME`, and custom variables), showing each variable's resolved path and scope (`e` sets a workspace-scoped variable in `.autodoc-vars.toml`; `m` sets a machine-local override).
 - **Details Pane & Contextual Action Row (`i` / `o`)**: Below the table, a toggleable Markdown preview renders the selected task's metadata, any validation `errors[]`, and its description body. The bottom action row dynamically surfaces only valid operations (`Add`, `Status…`, `Assign`, `Remove`), hiding all write actions when viewing an unclaimed pre-cutover store. Pressing `?` opens a grouped keybinding overlay card.
 
 ---
@@ -189,3 +189,8 @@ Journal rows are retained for at least 30 days and are pruned only after every a
 ## Summary
 
 By consolidating task storage into `core/todo` and `core/todo/sqlitejournal`, AutoDoc gives human developers and AI agents a human-readable Markdown task store backed by database-grade concurrency, symbolic path portability, and crash recovery. In Chapter 11, we will see how the Todos Panel connects directly to AutoDoc's embedded terminal tabs to hand off tasks to live CLI coding agents with a single keystroke.
+
+---
+
+[← Previous: Chapter 09: Code Symbol Indexing](./09-code-symbol-indexing.md) | [Index](./README.md) | [Next: Chapter 11: Terminal Tabs & Agent Handoff →](./11-terminal-tabs-and-agent-handoff.md)
+

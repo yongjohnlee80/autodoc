@@ -200,3 +200,8 @@ os.Exit(app.Main(context.Background(), os.Args[1:], app.Options{
 ```
 
 Because multiple AutoDoc builds share a single SQLite store (`autodoc.db`), a community binary that attaches to a store containing `.dsl` chunks produced by a custom build **never overwrites or drops those chunks**. Instead, it marks those files as **held** (`Hit.Hold` set to `"current"`, `"stale"`, or `"unchecked"`, and counted under `held` in `index.status`), keeping every declaration searchable across builds.
+
+---
+
+[← Previous: Chapter 08: Knowledge Graphs & ADR Lifecycle](./08-knowledge-graphs-and-adr-lifecycle.md) | [Index](./README.md) | [Next: Chapter 10: Todo Task Engine →](./10-todo-task-engine.md)
+

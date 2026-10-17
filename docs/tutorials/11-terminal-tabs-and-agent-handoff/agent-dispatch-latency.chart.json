@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Task Dispatch Latency: Manual Context Copy-Paste vs AutoDoc One-Key Handoff",
-  "description": "Comparison of seconds spent across task handoff workflow steps between manual copy-pasting (~45s total) and AutoDoc SPC x -> A handoff (<1s total).",
+  "title": "Illustrative Workflow Time: Manual Copy-Paste vs One-Key Handoff",
+  "description": "Illustrative comparison of workflow steps between manual task context gathering and AutoDoc SPC x -> A handoff.",
   "width": 640,
   "height": 320,
   "data": {

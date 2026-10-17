@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Watch-Before-Scan Index Convergence Latency Under Burst File Writes",
-  "description": "End-to-end convergence latency in milliseconds from external git checkout or multi-agent burst writes (1 to 500 modified files) to SQLite index visibility.",
+  "title": "Illustrative Watch-Before-Scan Convergence Profile Under Burst Writes",
+  "description": "Illustrative convergence latency profile (ms) across burst file write batch sizes (1 to 500 modified files).",
   "width": 640,
   "height": 320,
   "data": {

@@ -201,3 +201,8 @@ Distributed systems and AI agents need to know whether a search result reflects 
 In the TUI search picker (`Ctrl+G` or `SPC /`), three checkboxes sit directly beneath the query input: **`[x] Lexical`**, **`[x] Semantic`**, and **`[x] Rerank (<model>)`**. In Neovim (`:AutodocSearch`), `<M-l>`, `<M-s>`, and `<M-r>` toggle these three stages live. Flipping any stage immediately re-runs the query so you can inspect how semantic recall and cross-encoder reranking reorder the candidate list in real time.
 
 If a caller explicitly requests semantic-only retrieval (`"stages": ["semantic"]` or `"mode": "semantic"`) while no embedding model is available or a model switch is in progress, AutoDoc refuses to silently substitute lexical hits—it returns an explicit RPC error (`-32065 rpc.unsupported`, `-32067 rpc.embed_failed`, or `-32069 rpc.switching`). When `"lexical"` is included alongside `"semantic"` (the default), AutoDoc gracefully answers via `lexical` and records the exact skip reason in `stages.skipped.semantic`.
+
+---
+
+[← Previous: Chapter 04: Rich Authoring, Embeds & Export](./04-rich-authoring-embeds-and-export.md) | [Index](./README.md) | [Next: Chapter 06: Configuring Embeddings & Rerankers →](./06-configuring-embeddings-and-rerankers.md)
+

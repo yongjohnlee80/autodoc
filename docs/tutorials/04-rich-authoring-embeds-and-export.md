@@ -153,35 +153,43 @@ Rendered View in `--gui` is not an embedded webview: every heading, code block, 
 
 ---
 
-## 4.8 Self-Contained Offline HTML Export (`autodoc --export`)
+## 4.8 Self-Contained Offline HTML and Text Export (`autodoc --export`)
 
-When you need to share an ADR, technical specification, or review report with colleagues who do not have AutoDoc installed, you can compile any Markdown document—or an entire workspace book—into a **100% self-contained, single-file HTML document** that works completely offline:
+When you need to share an ADR, technical specification, or review report with colleagues who do not have AutoDoc installed, you can compile any Markdown document into a **100% self-contained, single-file HTML document** (or derived plain text) that works completely offline (`app/export.go`):
 
 ```bash
-# Export a single note (including all companion .mmd, .chart.json, .csv, and images)
-autodoc --export docs/tutorials/04-rich-authoring-embeds-and-export.md -o /tmp/chapter-04.html
+# Export a single Markdown note (with all companion .mmd, .chart.json, .csv, and images) to HTML
+autodoc --export html --output /tmp/chapter-04.html docs/tutorials/04-rich-authoring-embeds-and-export.md
 
-# Or press 'w' while viewing any document in Rendered View (Ctrl+p)
+# Export with a specific built-in theme (light, dark, sepia, retro, or mono)
+autodoc --export html --theme dark --output /tmp/chapter-04-dark.html docs/tutorials/04-rich-authoring-embeds-and-export.md
+
+# Export a Markdown note as plain text
+autodoc --export text --output /tmp/chapter-04.txt docs/tutorials/04-rich-authoring-embeds-and-export.md
 ```
 
-During export (`core/export`), AutoDoc resolves every companion `.mmd` diagram, `.chart.json` chart, `.csv` table, and image, renders diagrams and charts into crisp inline vector output, encodes raster images as `data:<mime>;base64,...` URIs, and bundles print-ready responsive CSS with light/dark theme support. The resulting `.html` file has **zero external network requests**, making it safe to archive in compliance artifacts, attach to pull requests, or view inside air-gapped environments.
+During HTML export (`core/export`), AutoDoc resolves every companion `.mmd` diagram, `.chart.json` chart, `.csv` table, and image, renders diagrams and charts into inline blocks, encodes raster images as `data:<mime>;base64,...` URIs, and bundles print-ready responsive CSS with theme support. The resulting `.html` file has **zero external network requests**, making it safe to archive in compliance artifacts, attach to pull requests, or view inside air-gapped environments.
 
 ---
 
-## 4.9 Authoring Checklist and Diagnostic Validation
+## 4.9 Authoring Checklist and Export Verification
 
-When preparing a technical specification, architecture blueprint, or chapter with rich companion assets, you can verify that every embedded `.mmd`, `.chart.json`, `.csv`, and image resolves cleanly and passes grammar validation before committing to Git.
+When preparing a technical specification, architecture blueprint, or chapter with rich companion assets, you can verify that a document and all of its companion embeds render cleanly from the command line or a shell loop before committing to Git.
 
-### Headless Embed and Export Verification
+### Exporting Single Pages or a Directory Loop
 
-Running `autodoc --export` in `--check` (or dry-run) mode parses the Markdown AST, resolves every companion file through `core/export/embed.go`, validates all Mermaid ASTs (`golib/parse/mermaid`) and Vega-Lite specifications (`golib/gui/vegalite`), checks CSV dimension bounds, and reports any broken references or syntax errors with exact line numbers:
+Because `autodoc --export html --output <dest> <source.md>` exits with a non-zero status if the source file cannot be read or written, you can export a single chapter or loop over a directory of chapters in a standard shell script:
 
 ```bash
-# Verify a single document and all of its companion embeds
-autodoc --export --check docs/tutorials/04-rich-authoring-embeds-and-export.md
+# Export one chapter to verify its HTML output
+autodoc --export html --output /tmp/chapter-04.html docs/tutorials/04-rich-authoring-embeds-and-export.md
 
-# Batch-export an entire directory of chapters into a standalone HTML bundle
-autodoc --export docs/tutorials/ --out-dir dist/book-html/
+# Shell loop to export every chapter in docs/tutorials/ into /tmp/book-html/
+mkdir -p /tmp/book-html
+for md in docs/tutorials/*.md; do
+  stem="$(basename "$md" .md)"
+  autodoc --export html --theme dark --output "/tmp/book-html/${stem}.html" "$md"
+done
 ```
 
 ### Best Practices for Companion Asset Organization
@@ -191,3 +199,8 @@ autodoc --export docs/tutorials/ --out-dir dist/book-html/
 3. **Prefer `.csv` Companion Files for Wide Tables**: Any reference matrix with more than 4 columns or 10 rows is easier to diff, sort, and edit as a companion `.csv` file than as an inline Markdown pipe table.
 4. **Keep Vega-Lite Field Names Simple**: Use clean snake_case or camelCase field names (such as `latency_ms`, `rss_mb`, `artifact_type`) without embedded periods so field lookups in `golib/gui/vegalite` remain unambiguous.
 5. **Commit Companion Folders Alongside Notes**: When staging changes in Git, always stage both `<note-stem>.md` and `<note-stem>/` together (`git add docs/tutorials/04-rich-authoring-embeds-and-export.md docs/tutorials/04-rich-authoring-embeds-and-export/`) so every commit remains self-contained and reproducible.
+
+---
+
+[← Previous: Chapter 03: Modal Editor & Panels](./03-modal-editor-and-panels.md) | [Index](./README.md) | [Next: Chapter 05: Hybrid Search Pipeline →](./05-hybrid-search-pipeline.md)
+

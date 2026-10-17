@@ -189,3 +189,8 @@ autodoc --call graph.unresolved '[
 ```
 
 Each entry reports `{src, raw, reason}` where `reason` is either `"missing"` (no indexed file matches the target) or `"ambiguous"` (multiple files at equal depth match the short name, requiring a folder prefix to disambiguate).
+
+---
+
+[← Previous: Chapter 07: Frontmatter Schemas & Validation](./07-frontmatter-schemas-and-validation.md) | [Index](./README.md) | [Next: Chapter 09: Code Symbol Indexing →](./09-code-symbol-indexing.md)
+

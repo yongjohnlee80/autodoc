@@ -137,3 +137,8 @@ When the background goroutine posts its result back to the UI loop, the callback
 ## Summary
 
 From `os.Root`-confined `stat-read-stat` loops and SHA-256 conditional renames in `golib/vfs`, to the 3-stage `sqlitejournal`, the `watch-before-scan` follower invariant, the single-writer SQLite lease, and scoped UI `Ticket` guards, AutoDoc is architected from the ground up for high-concurrency multi-agent collaboration. Humans and AI coding agents can read, search, edit, and hand off tasks across the same workspace at full speed—confident that every conflict is caught deterministically and no work is ever silently lost.
+
+---
+
+[← Previous: Chapter 12: AI Agent Integration & CLI RPC](./12-ai-agent-integration-and-cli-rpc.md) | [Index](./README.md) | [Next: Chapter 14: Lua Scripting & Custom Commands →](./14-lua-scripting-and-custom-commands.md)
+

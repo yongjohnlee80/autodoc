@@ -14,15 +14,15 @@ Key structural features of the page editor include:
 - **Heading Breadcrumb Bar**: As you scroll through long specifications or ADRs, a pinned top breadcrumb bar displays your exact structural location (e.g., `GlobalKB > adrs/0042-sqlite-wal-lease.md > §1.2 Single-Writer Lease`).
 - **Live Wikilink & Tag Completion**: Typing `[[` in Insert mode triggers an inline completion menu backed by the daemon's `graph` index, allowing fuzzy matching by document title, slug, or heading anchor (`[[0042-sqlite-wal-lease#1.2 Single-Writer Lease]]`).
 
-![Editor Frame Latency Across Interactive Operations](editor-frame-latency.chart.json)
+![Illustrative Editor Frame Render Profile vs 16.6ms (60 FPS) Budget](editor-frame-latency.chart.json)
 
-Because the buffer engine maintains an incremental piece-table and row-level syntax cache in pure Go, keystroke echo latency averages **0.8 ms** and full-workspace fuzzy filtering over 5,000 documents completes in **4.6 ms**—well inside the **16.6 ms** frame budget required for locked 60 FPS rendering.
+Because the buffer engine maintains an incremental piece-table and row-level syntax cache in pure Go rather than a browser DOM, interactive editing operations stay well inside the **16.6 ms** frame budget required for 60 FPS rendering (as illustrated in the latency profile above).
 
 ---
 
 ## 3.2 Vim Modal Editing vs. Modeless Mode
 
-AutoDoc defaults to **Vim modal editing**, giving experienced terminal and Neovim users immediate muscle-memory compatibility. However, teams with mixed editor preferences can toggle **Modeless Mode** at any time via `F2`, `:modeless`, or `editor.mode = "modeless"` in `~/.config/autodoc/config.toml`.
+AutoDoc defaults to **Vim modal editing**, giving experienced terminal and Neovim users immediate muscle-memory compatibility. However, teams with mixed editor preferences can toggle **Modeless Mode** at any time via `:modeless` or inside the Preferences dialog (`SPC ,`, stored in the SQLite preferences table via `preference.set`).
 
 ![Editor Mode State Machine and Transitions](editor-mode-state-machine.mmd)
 
@@ -198,12 +198,18 @@ For workspace-wide link refactoring, renaming a file inside the `Files` panel (`
 
 ### Integrated `TerminalTabs` (`SPC \``) Workflows
 
-The bottom `TerminalTabs` panel spawns a real pseudoterminal (PTY) shell with `$AUTODOC_WORKSPACE`, `$AUTODOC_SOCKET`, and `$AUTODOC_CURRENT_DOC` exported into the shell environment. Because `$AUTODOC_CURRENT_DOC` always points to the active editor buffer, you can run one-liner validation or Git inspection commands directly against the file you are editing:
+The bottom `TerminalTabs` panel spawns a real pseudoterminal (PTY) shell with `$AUTODOC_WORKSPACE` and `$AUTODOC_CURRENT_DOC` exported into the shell environment. Because `$AUTODOC_CURRENT_DOC` always points to the active editor buffer, you can run one-liner outline, validation, or Git inspection commands directly against the file you are editing:
 
 ```bash
-# Inside TerminalTabs: validate the currently focused editor document
-autodoc --call doc.validate '["'"$AUTODOC_WORKSPACE"'", "'"$AUTODOC_CURRENT_DOC"'"]'
+# Inside TerminalTabs: inspect the heading outline of the focused editor document
+autodoc --call doc.outline '["'"$AUTODOC_WORKSPACE"'", "'"$AUTODOC_CURRENT_DOC"'"]'
 
 # Inspect recent git commits touching the active document and its companion folder
 git log -n 5 --oneline -- "$AUTODOC_CURRENT_DOC" "${AUTODOC_CURRENT_DOC%.md}/"
 ```
+
+
+---
+
+[← Previous: Chapter 02: Quickstart & Workspaces](./02-quickstart-and-workspaces.md) | [Index](./README.md) | [Next: Chapter 04: Rich Authoring, Embeds & Export →](./04-rich-authoring-embeds-and-export.md)
+

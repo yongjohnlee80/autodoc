@@ -150,3 +150,8 @@ A critical architectural boundary in ADR 1791532020 (§2.7a) is that **AutoDoc m
 ## Summary
 
 By pairing persistent agent profiles (`tui/agentinstances.go`) with atomic `todos.assign` transitions (`tui/todos_assign.go`), AutoDoc turns task delegation from a 45-second context-gathering chore into a sub-second, crash-safe handoff. Once the task brief lands in the agent's terminal, the agent itself needs a fast, token-efficient way to search the Knowledge Base, inspect linked ADRs, and validate its writes—the exact subject of Chapter 12.
+
+---
+
+[← Previous: Chapter 10: Todo Task Engine](./10-todo-task-engine.md) | [Index](./README.md) | [Next: Chapter 12: AI Agent Integration & CLI RPC →](./12-ai-agent-integration-and-cli-rpc.md)
+

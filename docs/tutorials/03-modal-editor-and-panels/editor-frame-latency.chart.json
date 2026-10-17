@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Editor Frame Render Latency vs 16.6ms (60 FPS) Budget",
-  "description": "P99 frame render latency in milliseconds across interactive editor operations in autodoc --ui and --gui.",
+  "title": "Illustrative Editor Frame Render Profile vs 16.6ms (60 FPS) Budget",
+  "description": "Illustrative frame render latency profile (ms) across interactive editor operations relative to a 16.6ms 60 FPS frame budget.",
   "width": 640,
   "height": 320,
   "data": {

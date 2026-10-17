@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Monthly RAG Infrastructure + API Cost Comparison (USD)",
-  "description": "Monthly TCO across query volumes comparing AutoDoc Server + Self-Hosted TEI vs Managed Cloud DB + Per-Query Rerank API",
+  "title": "Illustrative Monthly Cost Model: Fixed Self-Hosted TEI vs Per-Query Rerank API (USD)",
+  "description": "Illustrative cost comparison modeling a fixed-cost VM + self-hosted TEI container against a managed DB + per-1k-query reranking API across query volumes.",
   "width": 640,
   "height": 280,
   "data": {

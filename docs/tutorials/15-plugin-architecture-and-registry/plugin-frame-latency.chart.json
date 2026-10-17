@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Hosted Table Page Transfer and Render Latency Within 1 MiB Envelope",
-  "description": "Transfer and render latency in milliseconds across page row sizes",
+  "title": "Illustrative Hosted Table Page Transfer Profile Within 1 MiB Envelope",
+  "description": "Illustrative transfer and render latency profile (ms) across demand-paged row batch sizes",
   "width": 640,
   "height": 280,
   "data": {

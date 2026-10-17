@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Code Symbol Extraction Throughput by Language (Symbols / ms)",
-  "description": "Declaration extraction throughput measured in extracted symbols per millisecond across Go AST and polyglot line extractors.",
+  "title": "Illustrative Symbol Extraction Throughput Profile by Language",
+  "description": "Illustrative relative extraction throughput profile across Go AST and polyglot line-scanner extractors.",
   "width": 640,
   "height": 320,
   "data": {

@@ -132,3 +132,8 @@ The rules in `KB_OPERATIONS.md` are grounded in controlled measurements recorded
 ## Summary
 
 By combining self-describing contracts (`autodoc --contracts`), zero-config CLI invocation (`autodoc --call`), and the empirical retrieval ladder in `KB_OPERATIONS.md`, AI coding agents retrieve exact architectural context in seconds at a fraction of the token budget. In Chapter 13, we examine how AutoDoc guarantees that when multiple agents, Neovim buffers, and GUI editors write back to the workspace simultaneously, no edit is ever silently lost or corrupted.
+
+---
+
+[← Previous: Chapter 11: Terminal Tabs & Agent Handoff](./11-terminal-tabs-and-agent-handoff.md) | [Index](./README.md) | [Next: Chapter 13: Concurrency & Safe Multi-Agent Writes →](./13-concurrency-and-safe-multi-agent-writes.md)
+

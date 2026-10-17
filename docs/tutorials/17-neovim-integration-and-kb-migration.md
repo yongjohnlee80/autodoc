@@ -133,3 +133,8 @@ When upgrading an older knowledge base (with `shared/` and `agents/<name>/` tree
 If any file in the KB or linked `.todo-list/` store is modified after `:AutodocKbMigrate` generates the dry-run manifest and before you run `:AutodocKbMigrate --apply`, Stage 6 detects the SHA-256 mismatch before writing a single file and aborts cleanly—requiring a fresh dry-run so no concurrent edit is ever overwritten. Likewise, `:AutodocKbMigrate --undo` verifies the post-apply SHA-256 of every migrated file before restoring the pre-image backup, guaranteeing zero data loss if you edited a document after migrating.
 
 ![Neovim Commands, Keymappings, and Lua Entry Points Reference](neovim-commands-and-mappings.csv)
+
+---
+
+[← Previous: Chapter 16: AutoDB Live SQL Workbench](./16-autodb-live-sql-workbench.md) | [Index](./README.md) | [Next: Chapter 18: Enterprise PostgreSQL RAG Server →](./18-enterprise-postgres-rag-server.md)
+

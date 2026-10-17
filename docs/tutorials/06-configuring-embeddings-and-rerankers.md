@@ -190,3 +190,8 @@ autodoc --call index.models '["kb"]'
 autodoc --call index.purge_model '["kb", "ollama:nomic-embed-text:768"]'
 autodoc --compact
 ```
+
+---
+
+[← Previous: Chapter 05: Hybrid Search Pipeline](./05-hybrid-search-pipeline.md) | [Index](./README.md) | [Next: Chapter 07: Frontmatter Schemas & Validation →](./07-frontmatter-schemas-and-validation.md)
+
