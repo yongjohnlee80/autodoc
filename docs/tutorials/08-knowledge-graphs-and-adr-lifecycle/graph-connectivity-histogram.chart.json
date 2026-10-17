@@ -1,0 +1,36 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Knowledge Graph Link Connectivity Distribution (2,000-Document Engineering KB)",
+  "description": "Histogram of document counts by total resolved inbound and outbound graph degree.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"degree_bucket": "0 (Orphan)", "doc_count": 64},
+      {"degree_bucket": "1-2 Links", "doc_count": 512},
+      {"degree_bucket": "3-5 Links", "doc_count": 830},
+      {"degree_bucket": "6-10 Links", "doc_count": 442},
+      {"degree_bucket": "11+ Hub Docs", "doc_count": 152}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "degree_bucket",
+      "type": "ordinal",
+      "title": "Total Resolved Graph Degree (Inbound + Outbound Edges)",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "doc_count",
+      "type": "quantitative",
+      "title": "Document Count"
+    },
+    "color": {
+      "field": "degree_bucket",
+      "type": "nominal",
+      "title": "Connectivity Tier"
+    }
+  }
+}

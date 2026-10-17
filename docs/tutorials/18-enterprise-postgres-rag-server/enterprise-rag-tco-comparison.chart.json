@@ -1,0 +1,38 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Monthly RAG Infrastructure + API Cost Comparison (USD)",
+  "description": "Monthly TCO across query volumes comparing AutoDoc Server + Self-Hosted TEI vs Managed Cloud DB + Per-Query Rerank API",
+  "width": 640,
+  "height": 280,
+  "data": {
+    "values": [
+      {"volume": "200k queries/mo", "cost_usd": 371, "deployment": "AutoDoc Server + Self-Hosted TEI"},
+      {"volume": "200k queries/mo", "cost_usd": 715, "deployment": "Managed Cloud DB + Per-Query Rerank API"},
+      {"volume": "500k queries/mo", "cost_usd": 371, "deployment": "AutoDoc Server + Self-Hosted TEI"},
+      {"volume": "500k queries/mo", "cost_usd": 1015, "deployment": "Managed Cloud DB + Per-Query Rerank API"},
+      {"volume": "1M queries/mo", "cost_usd": 371, "deployment": "AutoDoc Server + Self-Hosted TEI"},
+      {"volume": "1M queries/mo", "cost_usd": 1515, "deployment": "Managed Cloud DB + Per-Query Rerank API"}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "volume",
+      "type": "ordinal",
+      "title": "Monthly Search Query Volume",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "cost_usd",
+      "type": "quantitative",
+      "title": "Monthly Cost (USD)",
+      "stack": "zero"
+    },
+    "color": {
+      "field": "deployment",
+      "type": "nominal",
+      "title": "Deployment Architecture"
+    }
+  }
+}

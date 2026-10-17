@@ -1,0 +1,36 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Typical Lua Command Execution Time vs 2000ms Sandbox Cap",
+  "description": "Execution duration in milliseconds for common AutoDoc Lua scripts",
+  "width": 640,
+  "height": 280,
+  "data": {
+    "values": [
+      {"script": "Toggle Checkbox", "duration_ms": 0.8, "category": "Buffer Mutation"},
+      {"script": "Insert ADR Frontmatter", "duration_ms": 1.4, "category": "Buffer Mutation"},
+      {"script": "Format Markdown Table", "duration_ms": 4.2, "category": "Buffer Mutation"},
+      {"script": "Async Search Picker", "duration_ms": 8.6, "category": "Daemon RPC + UI"},
+      {"script": "Todo Filter & Sort", "duration_ms": 12.5, "category": "Daemon RPC + UI"}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "script",
+      "type": "nominal",
+      "title": "Lua Script Workload",
+      "sort": "ascending",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "duration_ms",
+      "type": "quantitative",
+      "title": "Execution Time (ms, vs 2000ms Cap)"
+    },
+    "color": {
+      "field": "category",
+      "type": "nominal",
+      "title": "Workload Category"
+    }
+  }
+}

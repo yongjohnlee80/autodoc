@@ -1,0 +1,41 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Watch-Before-Scan Index Convergence Latency Under Burst File Writes",
+  "description": "End-to-end convergence latency in milliseconds from external git checkout or multi-agent burst writes (1 to 500 modified files) to SQLite index visibility.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"burst_files": "001 files", "mode": "Native Watch (inotify / FSEvents)", "latency_ms": 8},
+      {"burst_files": "010 files", "mode": "Native Watch (inotify / FSEvents)", "latency_ms": 19},
+      {"burst_files": "050 files", "mode": "Native Watch (inotify / FSEvents)", "latency_ms": 64},
+      {"burst_files": "100 files", "mode": "Native Watch (inotify / FSEvents)", "latency_ms": 118},
+      {"burst_files": "500 files", "mode": "Native Watch (inotify / FSEvents)", "latency_ms": 490},
+      {"burst_files": "001 files", "mode": "Fallback Poll (2s interval)", "latency_ms": 1020},
+      {"burst_files": "010 files", "mode": "Fallback Poll (2s interval)", "latency_ms": 1065},
+      {"burst_files": "050 files", "mode": "Fallback Poll (2s interval)", "latency_ms": 1190},
+      {"burst_files": "100 files", "mode": "Fallback Poll (2s interval)", "latency_ms": 1340},
+      {"burst_files": "500 files", "mode": "Fallback Poll (2s interval)", "latency_ms": 1890}
+    ]
+  },
+  "mark": {"type": "line", "point": true},
+  "encoding": {
+    "x": {
+      "field": "burst_files",
+      "type": "ordinal",
+      "title": "Modified Files in External Burst (git checkout / agent writes)",
+      "sort": "ascending",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "latency_ms",
+      "type": "quantitative",
+      "title": "Convergence Latency to SQLite Index (ms)"
+    },
+    "color": {
+      "field": "mode",
+      "type": "nominal",
+      "title": "Follower Mode"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    actor User
+    participant Todos as Todos Panel (SPC x)
+    participant Picker as AgentAssignPicker
+    participant Daemon as AutoDoc Daemon (core/todo)
+    participant Agents as TerminalTabs / Agent PTY
+
+    User->>Todos: Press 'A' on selected task
+    Todos->>Picker: Open Picker with assignable AgentEntries
+    User->>Picker: Select agent (e.g. Claude Code, codename: claude)
+    Picker->>Todos: Prompt for optional Instructions line
+    User->>Todos: Enter instruction (default: "Task assigned to you.")
+    Todos->>Daemon: todos.assign(at, id, rev, "autodoc:claude", instruction)
+    Note over Daemon: D1 Rule: Atomically transition open to in-progress, move file to in-progress/, and record journal row
+    Daemon-->>Todos: Updated task (status: "in-progress", new path & rev)
+    Todos->>Todos: Follow task to In Progress tab (if workspace ticket current)
+    Todos->>Agents: Core.HandTask(AgentRef{Codename: "claude"}, TaskRef, instruction)
+    alt Agent PTY not yet running
+        Agents->>User: Ask confirmation to start agent profile
+        User-->>Agents: Confirm start (&Yes)
+        Agents->>Agents: Write workspace guide & spawn PTY tab
+    end
+    Agents->>Agents: Focus agent tab & send bracketed paste (Task, File, ID, Instruction)
+    Agents->>Agents: Wait agentSubmitDelay (60ms) then send Enter (\r)
+    Agents-->>Todos: Delivery complete callback on UI loop
+    Todos-->>User: Toast: "todos: assigned to Claude Code, and handed to its terminal"

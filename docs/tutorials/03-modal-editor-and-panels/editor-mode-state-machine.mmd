@@ -1,0 +1,23 @@
+stateDiagram-v2
+    [*] --> Normal: Launch Editor (Vim Mode Default)
+
+    state "Normal Mode (Navigation & Operators)" as Normal
+    state "Insert Mode (Prose & Auto-Pairs)" as Insert
+    state "Visual Mode (Char / Line / Block)" as Visual
+    state "Command Mode (:w :q :vsplit)" as Command
+    state "Fuzzy Picker (SPC f / SPC s / SPC b)" as Picker
+    state "Rendered View (Ctrl+P Native Preview)" as RenderedView
+    state "Inline Embed Source Editor" as EmbedEdit
+
+    Normal --> Insert: i / a / o / O / cw
+    Insert --> Normal: Esc / Ctrl+[
+    Normal --> Visual: v / V / Ctrl+v
+    Visual --> Normal: Esc / y / d / c / > / <
+    Normal --> Command: : (Colon)
+    Command --> Normal: Enter / Esc
+    Normal --> Picker: SPC f / SPC s / SPC g / SPC t
+    Picker --> Normal: Enter (Open Target) / Esc
+    Normal --> RenderedView: Ctrl+p (--gui / --ui Preview)
+    RenderedView --> Normal: Ctrl+p / q / Esc
+    RenderedView --> EmbedEdit: Click Embedded Diagram or Chart
+    EmbedEdit --> RenderedView: Ctrl+s / Esc (Auto-Render Updated Asset)

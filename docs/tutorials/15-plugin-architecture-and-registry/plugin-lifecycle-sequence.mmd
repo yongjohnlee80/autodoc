@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant Host as AutoDoc TUI Host
+  participant Plugin as Plugin Process Group
+  Host->>Plugin: plugin.open {protocol, width, height, theme}
+  Plugin->>Host: host.ready {protocol}
+  Host->>Plugin: plugin.document {path, workspace, text, cursor_byte, selection_bytes, version}
+  Host->>Plugin: plugin.command {id, document}
+  Plugin->>Host: host.table {id, title, fields, rows, kinds, more}
+  Host->>Plugin: plugin.table.fetch {id, n}
+  Plugin->>Host: host.rows {id, rows, kinds, more}
+  Host->>Plugin: plugin.close {}
+  Note over Host,Plugin: Bounded 3s shutdown: 2s wait -> SIGTERM -> 1s wait -> SIGKILL

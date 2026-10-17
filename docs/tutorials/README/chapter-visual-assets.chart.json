@@ -1,0 +1,46 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "AutoDoc Reference Book: Embedded Visual Assets by Part and Type",
+  "width": 560,
+  "height": 260,
+  "data": {
+    "values": [
+      {"part": "Part I: Foundations", "asset_type": "Mermaid (.mmd)", "count": 6},
+      {"part": "Part I: Foundations", "asset_type": "Vega-Lite (.chart.json)", "count": 4},
+      {"part": "Part I: Foundations", "asset_type": "CSV Table (.csv)", "count": 4},
+      {"part": "Part II: Search & Graphs", "asset_type": "Mermaid (.mmd)", "count": 5},
+      {"part": "Part II: Search & Graphs", "asset_type": "Vega-Lite (.chart.json)", "count": 6},
+      {"part": "Part II: Search & Graphs", "asset_type": "CSV Table (.csv)", "count": 5},
+      {"part": "Part III: Tasks & Agents", "asset_type": "Mermaid (.mmd)", "count": 4},
+      {"part": "Part III: Tasks & Agents", "asset_type": "Vega-Lite (.chart.json)", "count": 4},
+      {"part": "Part III: Tasks & Agents", "asset_type": "CSV Table (.csv)", "count": 4},
+      {"part": "Part IV: Plugins & Neovim", "asset_type": "Mermaid (.mmd)", "count": 5},
+      {"part": "Part IV: Plugins & Neovim", "asset_type": "Vega-Lite (.chart.json)", "count": 4},
+      {"part": "Part IV: Plugins & Neovim", "asset_type": "CSV Table (.csv)", "count": 4},
+      {"part": "Part V: Enterprise RAG", "asset_type": "Mermaid (.mmd)", "count": 1},
+      {"part": "Part V: Enterprise RAG", "asset_type": "Vega-Lite (.chart.json)", "count": 1},
+      {"part": "Part V: Enterprise RAG", "asset_type": "CSV Table (.csv)", "count": 1}
+    ]
+  },
+  "mark": {"type": "bar", "tooltip": true},
+  "encoding": {
+    "x": {
+      "field": "part",
+      "type": "nominal",
+      "sort": null,
+      "title": "Reference Book Part",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "count",
+      "type": "quantitative",
+      "stack": "zero",
+      "title": "Embedded Visual Assets"
+    },
+    "color": {
+      "field": "asset_type",
+      "type": "nominal",
+      "title": "Asset Format"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "End-to-End Query Latency Breakdown Across Retrieval Configurations (ms)",
+  "description": "Stacked latency breakdown across Lexical FTS5, Vector Cosine, and Cross-Encoder Rerank stages.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"config": "Lexical Only", "stage": "Lexical FTS5", "latency_ms": 6},
+      {"config": "Lexical Only", "stage": "Vector Cosine", "latency_ms": 0},
+      {"config": "Lexical Only", "stage": "Cross-Encoder Rerank", "latency_ms": 0},
+      {"config": "Hybrid (BM25 + Vector)", "stage": "Lexical FTS5", "latency_ms": 6},
+      {"config": "Hybrid (BM25 + Vector)", "stage": "Vector Cosine", "latency_ms": 18},
+      {"config": "Hybrid (BM25 + Vector)", "stage": "Cross-Encoder Rerank", "latency_ms": 0},
+      {"config": "3-Stage (TEI GPU Window 20)", "stage": "Lexical FTS5", "latency_ms": 6},
+      {"config": "3-Stage (TEI GPU Window 20)", "stage": "Vector Cosine", "latency_ms": 18},
+      {"config": "3-Stage (TEI GPU Window 20)", "stage": "Cross-Encoder Rerank", "latency_ms": 42},
+      {"config": "3-Stage (TEI GPU Window 40)", "stage": "Lexical FTS5", "latency_ms": 6},
+      {"config": "3-Stage (TEI GPU Window 40)", "stage": "Vector Cosine", "latency_ms": 18},
+      {"config": "3-Stage (TEI GPU Window 40)", "stage": "Cross-Encoder Rerank", "latency_ms": 78}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "config",
+      "type": "ordinal",
+      "title": "Search Configuration",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "latency_ms",
+      "type": "quantitative",
+      "title": "Latency (ms)",
+      "stack": "zero"
+    },
+    "color": {
+      "field": "stage",
+      "type": "nominal",
+      "title": "Execution Stage"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+Surface,Invocation,Modal Editing,Rendered Preview & Embeds,Hybrid Search (BM25 + Vector),Todo Management,Lua Scripting & Plugins,Primary Use Case
+Terminal TUI,autodoc --ui,Full 120-col Vim + Modeless,Markdown + Table + ASCII/Inline Preview,Interactive Picker + Results Table,Dockable Todo Panel + Keychords,Full Go-Lua Host + UI Hooks,Keyboard-driven terminal authoring and SSH sessions
+Native GUI,autodoc --gui,Full 120-col Vim + Modeless,Native Gio Vector Mermaid + Vega-Lite + Images,Interactive Picker + Results Table,Dockable Todo Panel + Keychords,Full Go-Lua Host + UI Hooks,Rich visual authoring with inline diagram and chart rendering
+Neovim Plugin,autodoc.nvim,Native Neovim Buffers & Motions,Neovim Floating Previews + Harpoon,Telescope / Native Picker RPC,Mailbox & .todo-list Integration,Neovim Lua API + AutoDoc RPC,Seamless IDE integration alongside code repositories
+CLI & Agent RPC,autodoc --call,Headless RPC Verbs (doc.*),Headless HTML Export (--export),JSON Structured Query Output,Full 12-Verb todos.* Surface,Headless Batch Automation,AI coding agents and shell pipeline automation
+Enterprise Server,autodoc --server,Headless REST / RPC Ingestion,Server-side Export Pipeline,Postgres FTS + pgvector HNSW,Multi-tenant Shared Workspaces,Webhook & Policy Extensions,Team-wide multi-repository RAG and shared knowledge bases

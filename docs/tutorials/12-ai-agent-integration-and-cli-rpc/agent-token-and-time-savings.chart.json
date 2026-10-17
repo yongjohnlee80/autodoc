@@ -1,0 +1,38 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "AI Agent KB Retrieval Cost: Grep vs AutoDoc Lexical vs AutoDoc 3-Stage Hybrid",
+  "description": "Empirical comparison from the 96-session benchmark study (docs/benchmarks/kb-retrieval.md) across Median Tokens Read and End-to-End Seconds x100.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"metric": "Median Tokens Read", "method": "1. Grep + Full-File Read", "value": 1924},
+      {"metric": "Median Tokens Read", "method": "2. AutoDoc Lexical", "value": 1120},
+      {"metric": "Median Tokens Read", "method": "3. AutoDoc 3-Stage Hybrid", "value": 744},
+      {"metric": "End-to-End Seconds x100", "method": "1. Grep + Full-File Read", "value": 1540},
+      {"metric": "End-to-End Seconds x100", "method": "2. AutoDoc Lexical", "value": 1150},
+      {"metric": "End-to-End Seconds x100", "method": "3. AutoDoc 3-Stage Hybrid", "value": 880}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "method",
+      "type": "ordinal",
+      "title": "Retrieval Method",
+      "sort": "ascending",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "value",
+      "type": "quantitative",
+      "title": "Measured Cost (Tokens / Seconds x100)",
+      "stack": "zero"
+    },
+    "color": {
+      "field": "metric",
+      "type": "nominal",
+      "title": "Benchmark Metric"
+    }
+  }
+}

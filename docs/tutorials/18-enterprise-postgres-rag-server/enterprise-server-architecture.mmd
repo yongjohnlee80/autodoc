@@ -1,0 +1,8 @@
+flowchart TB
+  SourceDB["Source PostgreSQL Business Tables (track, artist, tickets)"] --> ViewIngest[".view Keyset Cursor Ingesters ((updated_at, id) + Tenant Advisory Locks)"]
+  ViewIngest --> PGStore["PostgreSQL + pgvector Schema (documents, chunks_fts, content_vectors)"]
+  PGStore --> EmbedWorker["Central Paged Embedder (Distinct SHA-256 Content Hash Batches)"]
+  EmbedWorker --> PGStore
+  SearchAPI["POST /v1/search & enterprise/search Go Package"] --> Snapshot["REPEATABLE READ Snapshot + Mandatory Access Scope Filter"]
+  Snapshot --> PGStore
+  PGStore --> Reranker["Hybrid RRF Fusion + Self-Hosted TEI Cross-Encoder Reranker"]

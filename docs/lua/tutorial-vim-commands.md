@@ -12,7 +12,7 @@ version of a built-in.
 
 - Make the folder: `mkdir -p ~/.config/autodoc/lua`.
 - Open the command line with **:** in Vim's Normal mode, or **Ctrl+;** in any mode.
-- AutoDoc reads the folder when it starts. **After each edit, quit (`:q`) and start it again.**
+- AutoDoc reads the folder when it starts and on **`:lua-reload`** (saving a script of the folder in AutoDoc reloads at once).
 - If nothing seems to happen, **SPC h** shows the notifications, load errors among them.
 
 ## 1. A first command: `:hello`

@@ -1,0 +1,22 @@
+sequenceDiagram
+    participant CLI as User / CLI (workspace.add)
+    participant Daemon as autodoc --serve
+    participant Watcher as fsnotify Watcher (core/follow)
+    participant Scanner as Tree Walker & Parser
+    participant Store as SQLite WAL Store (core/store)
+    participant Embed as Embedding Worker Pool
+
+    CLI->>Daemon: workspace.add {name, root, include, exclude}
+    Daemon->>Watcher: 1. Attach recursive fsnotify watches BEFORE scan
+    Watcher-->>Daemon: Watch descriptors active (buffering events)
+    Daemon->>Scanner: 2. Walk directory tree (honoring exclude globs)
+    loop Every matching .md file
+        Scanner->>Scanner: Compute SHA-256, parse YAML frontmatter & headings
+        Scanner->>Scanner: Split into section chunks (target section_tokens)
+    end
+    Scanner->>Store: 3. Commit lexical chunks, FTS5 tokens & wikilinks (batch tx)
+    Daemon->>Watcher: 4. Drain buffered watch events (coalesce by path + mtime/hash)
+    Watcher->>Store: Apply any concurrent edits that occurred during scan
+    Daemon-->>CLI: Workspace ready for lexical & graph queries
+    Daemon->>Embed: 5. Enqueue changed chunk hashes (if embedding_policy != off)
+    Embed->>Store: Stream vector embeddings asynchronously in background

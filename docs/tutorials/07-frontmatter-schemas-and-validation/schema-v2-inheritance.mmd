@@ -1,0 +1,39 @@
+classDiagram
+    class BaseFrontmatter {
+        +string type
+        +string status
+        +date created
+        +list tags
+        +string abstract
+        +date updated
+        +string author
+    }
+    class ADR {
+        +string number
+        +integer revision
+        +list supersedes
+        +list amends
+        +string decided_by
+    }
+    class Review {
+        +string verdict
+        +integer pr
+        +string reviewer
+        +string subject
+        +string head
+    }
+    class Synthesis {
+        +string kind
+        +list sources
+        +list related
+    }
+    class Convention {
+        +string scope
+        +string area
+        +integer revision
+        +list applies_to
+    }
+    BaseFrontmatter <|-- ADR
+    BaseFrontmatter <|-- Review
+    BaseFrontmatter <|-- Synthesis
+    BaseFrontmatter <|-- Convention

@@ -1,0 +1,15 @@
+sequenceDiagram
+  participant User as User in AutoDoc Editor
+  participant Plugin as autodoc-autodb (Protocol 5 Card)
+  participant Daemon as AutoDB Daemon (Session Pool)
+  participant Table as AutoDoc Results Panel (TableView)
+  User->>Plugin: SPC p a r (plugin.command {id: "run", document})
+  Note over Plugin: golib/parse/sql splits statement at cursor_byte
+  Plugin->>Daemon: exec.session_query (statement, page_size)
+  Daemon-->>Plugin: cursor_id, columns, first_page_rows, kinds, more
+  Plugin->>Table: host.table {id, title, fields, rows, kinds, more}
+  User->>Table: Scrolls near bottom of loaded rows
+  Table->>Plugin: plugin.table.fetch {id, n}
+  Plugin->>Daemon: exec.session_fetch (cursor_id, n)
+  Daemon-->>Plugin: next_page_rows, kinds, more
+  Plugin->>Table: host.rows {id, rows, kinds, more}

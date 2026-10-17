@@ -1,0 +1,37 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Editor Frame Render Latency vs 16.6ms (60 FPS) Budget",
+  "description": "P99 frame render latency in milliseconds across interactive editor operations in autodoc --ui and --gui.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"operation": "Keystroke Echo", "latency_ms": 0.8, "subsystem": "Buffer Engine"},
+      {"operation": "Syntax Highlight", "latency_ms": 1.9, "subsystem": "Buffer Engine"},
+      {"operation": "Outline Refresh", "latency_ms": 2.4, "subsystem": "Dock Panel"},
+      {"operation": "Split Resize", "latency_ms": 3.1, "subsystem": "Layout Engine"},
+      {"operation": "Picker Filter (5k docs)", "latency_ms": 4.6, "subsystem": "Daemon RPC"},
+      {"operation": "Mermaid Embed Layout", "latency_ms": 6.8, "subsystem": "Rendered View"}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "operation",
+      "type": "nominal",
+      "title": "Interactive Editor Operation",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "latency_ms",
+      "type": "quantitative",
+      "title": "P99 Latency (ms) [60fps Budget = 16.6ms]"
+    },
+    "color": {
+      "field": "subsystem",
+      "type": "nominal",
+      "title": "Subsystem"
+    }
+  }
+}

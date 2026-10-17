@@ -1,0 +1,9 @@
+flowchart TD
+    A01["ADR-0001: Legacy Store (status: superseded)"] -->|"superseded_by"| A09["ADR-0009: SQLite WAL Store (status: accepted)"]
+    A09 -->|"supersedes"| A01
+    A14["ADR-0014: Todo Journal (status: accepted)"] -->|"amends"| A09
+    SYN["Synthesis: Benchmark WAL vs Legacy (kind: benchmark)"] -->|"sources"| A01
+    SYN -->|"sources"| A09
+    REV["Review: Lector Round 1 (verdict: approved)"] -->|"adr"| A09
+    REV -->|"wikilink [[benchmark-wal]]"| SYN
+    TASK["Todo Task: 2026-10-11-ship-todos"] -->|"adr / review"| REV

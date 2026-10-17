@@ -1,0 +1,12 @@
+Setting,Type,Default,Description
+name,string,(Required),"Unique identifier for the workspace used in RPC calls and UI workspace switchers (e.g. GlobalKB or EngineeringDocs)"
+root,string,(Required),"Canonical absolute filesystem path to the workspace root directory"
+include,[]string,"[""**/*.md""]","Glob patterns of Markdown files to index and watch relative to the workspace root"
+exclude,[]string,"["".git/**"",""node_modules/**"",""vendor/**"","".todo-list/**""]","Glob patterns excluded from document indexing and directory watching"
+graph_only,bool,false,"When true builds only the wikilink and frontmatter relation graph without chunking prose for full-text or vector search"
+section_tokens,int,384,"Target maximum token budget per heading-bounded section chunk before splitting at paragraph boundaries"
+abstract_chunk,bool,true,"Synthesizes a dedicated high-weight summary chunk combining document title and frontmatter abstract for precision retrieval"
+demote_superseded,bool,true,"Applies a ranking decay multiplier to documents whose frontmatter status is superseded, deprecated, or archived"
+embedding_policy,string,"""auto""","Controls vector generation: off (lexical only), auto (background embed on idle), or eager (embed immediately on commit)"
+todo_search,bool,true,"Indexes .todo-list YAML items alongside documents so tasks can be queried and cross-referenced in unified search"
+schema,string,"""_schema/frontmatter.yaml""","Relative path to the workspace YAML frontmatter validation schema enforced by doc.validate"

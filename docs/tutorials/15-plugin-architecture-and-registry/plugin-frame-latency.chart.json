@@ -1,0 +1,39 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Hosted Table Page Transfer and Render Latency Within 1 MiB Envelope",
+  "description": "Transfer and render latency in milliseconds across page row sizes",
+  "width": 640,
+  "height": 280,
+  "data": {
+    "values": [
+      {"page_size": "100 rows", "latency_ms": 1.1, "phase": "Msgpack Transfer"},
+      {"page_size": "250 rows", "latency_ms": 2.4, "phase": "Msgpack Transfer"},
+      {"page_size": "500 rows", "latency_ms": 4.7, "phase": "Msgpack Transfer"},
+      {"page_size": "1000 rows", "latency_ms": 9.2, "phase": "Msgpack Transfer"},
+      {"page_size": "100 rows", "latency_ms": 1.8, "phase": "Total Host Table Render"},
+      {"page_size": "250 rows", "latency_ms": 3.9, "phase": "Total Host Table Render"},
+      {"page_size": "500 rows", "latency_ms": 7.4, "phase": "Total Host Table Render"},
+      {"page_size": "1000 rows", "latency_ms": 14.1, "phase": "Total Host Table Render"}
+    ]
+  },
+  "mark": {"type": "line", "point": true},
+  "encoding": {
+    "x": {
+      "field": "page_size",
+      "type": "ordinal",
+      "title": "Page Batch Size (Rows per host.table / host.rows)",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "latency_ms",
+      "type": "quantitative",
+      "title": "Latency (ms)"
+    },
+    "color": {
+      "field": "phase",
+      "type": "nominal",
+      "title": "Pipeline Stage"
+    }
+  }
+}

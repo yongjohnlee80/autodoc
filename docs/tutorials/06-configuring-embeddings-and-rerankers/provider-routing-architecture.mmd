@@ -1,0 +1,13 @@
+flowchart TD
+    CFG["config.toml ([embedding_queue] max_inflight) + Sealed SQLite Store (autodoc.db.key)"] --> DISP["Daemon Provider & Ranker Router (core/embedding, core/rank)"]
+    RPC["Runtime RPC & TUI (embedding.use, rank.use / ranker.use, rank.off)"] --> DISP
+    DISP --> PROBE["Startup & Switch Probe (Vector Dimension + Score Validation)"]
+    PROBE --> LOCAL["Local Inference Providers"]
+    PROBE --> CLOUD["Cloud Inference Providers"]
+    LOCAL --> OLLAMA["Ollama Server (127.0.0.1:11434, qwen3-embedding:0.6b / 4b)"]
+    LOCAL --> TEI["HuggingFace TEI (127.0.0.1:8080, BAAI/bge-reranker-v2-m3)"]
+    LOCAL --> VLLM["vLLM OpenAI Endpoint (127.0.0.1:8000/v1)"]
+    CLOUD --> OPENAI["OpenAI API (api.openai.com/v1)"]
+    CLOUD --> VERTEX["Google Vertex AI (OpenAI-Compatible Endpoint)"]
+    CLOUD --> VOYAGE["Voyage AI / Cohere Rerank API"]
+    PROBE --> FALLBACK["Offline / Switch Fallback: Non-Blocking Stage 1 Lexical FTS5 BM25"]

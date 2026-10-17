@@ -1,0 +1,42 @@
+flowchart TD
+  subgraph P1["Part I: Foundations and Surface Mastery"]
+    C01["Ch 01: Architecture and File-Canonical Guarantee"]
+    C02["Ch 02: 5-Minute Quickstart and Workspaces"]
+    C03["Ch 03: Modal Editor, Panels and Navigation"]
+    C04["Ch 04: Rich Authoring (.mmd, .chart.json, .csv)"]
+    C01 --> C02 --> C03 --> C04
+  end
+
+  subgraph P2["Part II: Search, Schemas and Knowledge Graphs"]
+    C05["Ch 05: 3-Stage Hybrid Search Pipeline"]
+    C06["Ch 06: Configuring Embeddings and Rerankers"]
+    C07["Ch 07: Frontmatter Schemas (v1 and v2)"]
+    C08["Ch 08: Knowledge Graphs and ADR Lifecycle"]
+    C09["Ch 09: Polyglot Code Symbol Indexing"]
+    C05 --> C06 --> C07 --> C08 --> C09
+  end
+
+  subgraph P3["Part III: Tasks, Workflows and AI Agents"]
+    C10["Ch 10: The .todo-list Task Engine and Journal"]
+    C11["Ch 11: Terminal Tabs and Agent Handoff"]
+    C12["Ch 12: Wiring External AI Coding Agents"]
+    C13["Ch 13: Concurrency and Safe Multi-Agent Writes"]
+    C10 --> C11 --> C12 --> C13
+  end
+
+  subgraph P4["Part IV: Programmability, Plugins and Neovim"]
+    C14["Ch 14: Sandboxed Lua Scripting"]
+    C15["Ch 15: Out-of-Process Plugins (Protocols 1-5)"]
+    C16["Ch 16: Live SQL Workbench (AutoDB Plugin)"]
+    C17["Ch 17: Neovim Integration and KB Migration"]
+    C14 --> C15 --> C16 --> C17
+  end
+
+  subgraph P5["Part V: Enterprise Server"]
+    C18["Ch 18: Multi-Tenant PostgreSQL RAG Server"]
+  end
+
+  C04 --> C05
+  C08 --> C10
+  C04 --> C14
+  C06 --> C18

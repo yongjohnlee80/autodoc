@@ -1,0 +1,10 @@
+flowchart LR
+    SRC["Source File (.go, .rs, .ts, .py, .sql, .proto, ...)"] --> ROUTER["Extension & Language Router (core/symbols)"]
+    ROUTER --> GOAST["Go AST Exact Parser (go/token + go/ast)"]
+    ROUTER --> POLY["Polyglot Line Extractors (17 Languages)"]
+    GOAST --> CHUNK["Declaration Chunker (Signature + Doc Comment)"]
+    POLY --> CHUNK
+    CHUNK --> SYMTAB["SQLite symbols & chunks Tables (name, kind, line, signature, receiver)"]
+    SYMTAB --> FIND["symbols.find (Workspace-Wide Symbol Search)"]
+    SYMTAB --> DOC["symbols.doc (Per-File Declaration Outline)"]
+    SYMTAB --> HYBRID["search.query (Lexical + Semantic Code Search)"]

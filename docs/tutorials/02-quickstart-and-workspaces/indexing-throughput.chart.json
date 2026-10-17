@@ -1,0 +1,41 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Workspace Indexing Latency Across Corpus Sizes (ms)",
+  "description": "Wall-clock indexing time in milliseconds comparing cold initial lexical scan against incremental watch-before-scan file updates across workspace sizes.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"files": "100", "latency_ms": 28, "mode": "Initial Scan (Lexical)"},
+      {"files": "500", "latency_ms": 115, "mode": "Initial Scan (Lexical)"},
+      {"files": "1000", "latency_ms": 220, "mode": "Initial Scan (Lexical)"},
+      {"files": "2500", "latency_ms": 510, "mode": "Initial Scan (Lexical)"},
+      {"files": "5000", "latency_ms": 980, "mode": "Initial Scan (Lexical)"},
+      {"files": "100", "latency_ms": 4, "mode": "Incremental Watch Update"},
+      {"files": "500", "latency_ms": 5, "mode": "Incremental Watch Update"},
+      {"files": "1000", "latency_ms": 6, "mode": "Incremental Watch Update"},
+      {"files": "2500", "latency_ms": 7, "mode": "Incremental Watch Update"},
+      {"files": "5000", "latency_ms": 9, "mode": "Incremental Watch Update"}
+    ]
+  },
+  "mark": {"type": "line", "point": true},
+  "encoding": {
+    "x": {
+      "field": "files",
+      "type": "ordinal",
+      "title": "Workspace Corpus Size (Markdown Files)",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "latency_ms",
+      "type": "quantitative",
+      "title": "Wall-Clock Time (ms)"
+    },
+    "color": {
+      "field": "mode",
+      "type": "nominal",
+      "title": "Indexing Operation"
+    }
+  }
+}

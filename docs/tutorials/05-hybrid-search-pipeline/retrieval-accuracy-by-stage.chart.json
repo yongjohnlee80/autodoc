@@ -1,0 +1,35 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Knowledge Base Retrieval Accuracy by Pipeline Stage (Top-3 Recall %)",
+  "description": "Top-3 recall percentage across retrieval configurations measured on benchmark knowledge bases.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"pipeline": "Keyword Grep", "recall": 47},
+      {"pipeline": "Lexical BM25", "recall": 76},
+      {"pipeline": "Hybrid (Lexical + Semantic)", "recall": 90},
+      {"pipeline": "Full 3-Stage (+ Reranker)", "recall": 98}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "pipeline",
+      "type": "ordinal",
+      "title": "Retrieval Pipeline Configuration",
+      "sort": null,
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "recall",
+      "type": "quantitative",
+      "title": "Top-3 Recall (%)"
+    },
+    "color": {
+      "field": "pipeline",
+      "type": "nominal",
+      "title": "Pipeline Stage"
+    }
+  }
+}

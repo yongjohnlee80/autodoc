@@ -1,0 +1,38 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Engineering Knowledge Base Document Distribution by Schema v2 Type",
+  "description": "Document counts across discriminated frontmatter types in a 2,200-document engineering KB.",
+  "width": 640,
+  "height": 320,
+  "data": {
+    "values": [
+      {"doc_type": "adr", "documents": 420},
+      {"doc_type": "synthesis", "documents": 610},
+      {"doc_type": "review", "documents": 540},
+      {"doc_type": "convention", "documents": 145},
+      {"doc_type": "reference", "documents": 210},
+      {"doc_type": "playbook", "documents": 95},
+      {"doc_type": "note", "documents": 180}
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "doc_type",
+      "type": "ordinal",
+      "title": "Schema v2 Document Type (discriminator: type)",
+      "sort": "-y",
+      "axis": {"labelAngle": 0}
+    },
+    "y": {
+      "field": "documents",
+      "type": "quantitative",
+      "title": "Indexed Document Count"
+    },
+    "color": {
+      "field": "doc_type",
+      "type": "nominal",
+      "title": "Document Type"
+    }
+  }
+}

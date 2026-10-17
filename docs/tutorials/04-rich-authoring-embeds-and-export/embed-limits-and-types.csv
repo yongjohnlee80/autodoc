@@ -1,0 +1,10 @@
+Extension,Asset Category,Max File Size,Structural Limits,--gui Rendered View Behavior,--export HTML Behavior
+.mmd / .mermaid,Mermaid Diagram,1 MiB,Flowchart / Sequence / State AST,Native Gio vector diagram via golib/gui/mermaid (click to edit source),Embedded deterministic SVG diagram with theme-adaptive styling
+.chart.json / .vl.json,Vega-Lite Chart,1 MiB,Bar / Line / Area / Point / Circle,Native Gio vector chart via golib/gui/vegalite (click to edit source),Self-contained vector SVG chart rendered without external JS CDNs
+.csv,Tabular Dataset,1 MiB,Max 1000 rows x 64 columns,Interactive striped table card with header pinning (click to edit CSV),Semantic HTML <table> with figure caption and truncation badge if capped
+.png,Raster Image,6 MiB (32 MiB page cap),Standard image dimensions,GPU texture decoded inline with aspect-ratio scaling,Inline data:image/png;base64 URI inside <figure>
+.jpg / .jpeg,Raster Image,6 MiB (32 MiB page cap),Standard image dimensions,GPU texture decoded inline with aspect-ratio scaling,Inline data:image/jpeg;base64 URI inside <figure>
+.webp,Raster Image,6 MiB (32 MiB page cap),Standard image dimensions,GPU texture decoded inline with aspect-ratio scaling,Inline data:image/webp;base64 URI inside <figure>
+.gif,Raster Image,6 MiB (32 MiB page cap),Static or animated frames,GPU texture decoded inline,Inline data:image/gif;base64 URI inside <figure>
+.avif,Raster Image,6 MiB (32 MiB page cap),Standard image dimensions,Decoded or previewed via image pipeline,Inline data:image/avif;base64 URI inside <figure>
+.svg,Vector Graphic,6 MiB (32 MiB page cap),Valid XML SVG root,Vector rasterized to Gio paint ops,Inline data:image/svg+xml;base64 URI inside <figure>
