@@ -10,6 +10,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/errs"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
+	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -19,6 +20,8 @@ type terminals struct {
 	c       PanelHost
 	restore bool
 	before  string
+	// startLua is a Lua shell's program (Host.startLuaShell, luashell.go); nil: no Lua shells
+	startLua func(pty.Cmd) (widget.TerminalProcess, error)
 }
 
 // terminalRuntimeHost is the PanelHost with the terminal panel's tabs (terminalpanel.go).
@@ -373,6 +376,36 @@ func (t *terminals) panel() (TerminalPanel, error) {
 	return panel, nil
 }
 
+// newLuaShell adds a Lua shell tab ("lua", then "lua 2", …), starts it and gives it the keyboard:
+// :lua alone, and Lua shell on the strip's + menu. The panel opens when it is closed.
+func (t *terminals) newLuaShell() {
+	if t.startLua == nil {
+		t.c.Notify(errNoShell.Error())
+		return
+	}
+	panel, err := t.panel()
+	if err != nil {
+		t.c.Keep(err)
+		return
+	}
+	var id widget.TerminalTabID
+	id, err = panel.Add(luaShellLabel(panel), TerminalConfig{Command: "lua", Start: t.startLua,
+		Exited: func(code int) { t.shellExited(id, code) }})
+	if err != nil {
+		t.c.Notify("the terminal could not add a Lua shell: " + err.Error())
+		return
+	}
+	if !t.c.PanelOpen("terminal") {
+		t.before = t.c.KeyboardPane()
+		t.c.Keep(t.c.CallView("terminal", "open"))
+	}
+	if err := panel.Start(id); err != nil {
+		t.c.Notify("the Lua shell could not start: " + err.Error())
+	}
+	t.c.Keep(panel.Select(id))
+	t.c.Keep(t.c.Focus("terminalView"))
+}
+
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
 // first; "" for none.
 func liveShell(panel TerminalPanel, prefer widget.TerminalTabID) widget.TerminalTabID {
@@ -447,8 +480,11 @@ func (t *terminals) tabRows(id widget.TerminalTabID) []widget.MenuItemModel {
 			t.c.Keep(panel.Select(target))
 		}),
 		tabMenuRow("terminal.new", "New", func(widget.TerminalTabID) { t.newShell() }),
-		closing,
 	}
+	if t.startLua != nil {
+		rows = append(rows, tabMenuRow("terminal.lua", "New &Lua shell", func(widget.TerminalTabID) { t.newLuaShell() }))
+	}
+	rows = append(rows, closing)
 	// Hide is SPC `'s own toggle (terminal.toggle): the panel closed, every shell running on
 	return append(rows, panelRows(t.c, "terminal", t.toggleTerminal)...)
 }
