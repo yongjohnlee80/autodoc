@@ -117,21 +117,29 @@ autodoc --call search.query '[
 ]'
 ```
 
-Example hit in the response:
+Example of one element of the response's `hits` array (the full `hitJSON` shape from `rpc/search.go`; the response also carries `mode_used`, `semantic`, `rank`, and `stages`, covered in Chapter 05). Values are illustrative:
 
 ```json
 {
   "path": "core/index/reclaim.go",
   "breadcrumb": "core/index/reclaim.go › func (x *Indexer) Sweep(ctx context.Context) ([]Reclaimed, error)",
   "snippet": "// Sweep reclaims vectors of models no workspace uses...",
-  "line_start": 144,
-  "line_end": 151,
+  "generation": 42,
   "byte_start": 4120,
   "byte_end": 4388,
-  "relevance": "high",
-  "via": ["lexical", "semantic", "rerank"]
+  "line_start": 144,
+  "line_end": 151,
+  "score": 0.0325,
+  "relevance": 0.91,
+  "via": ["lexical", "semantic"],
+  "hold": "",
+  "rank_score": 0.87
 }
 ```
+
+- `score` and `relevance` are numbers (`float64`), never labels.
+- `line_start` / `line_end` are omitted when the hit has no line span; `rank_score` is present only when the reranker scored the hit (and `0` is a real score); `superseded_by` appears only on hits from superseded documents.
+- `hold` is `""` for a normally indexed file, or `"current"`, `"stale"`, or `"unchecked"` for a file held from another build's chunker (§5).
 
 ### 2. Inspecting Registered Chunkers and Derived Formats (`sys.capabilities`)
 
