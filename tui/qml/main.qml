@@ -70,6 +70,8 @@ Window {
     Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
     Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
     Shortcut { sequence: "F11"; onActivated: App.maximizePanel() }
+    Shortcut { sequence: "F6"; onActivated: App.cycleWidget(1) }
+    Shortcut { sequence: "Shift+F6"; onActivated: App.cycleWidget(-1) }
     Shortcut { sequence: "F1"; onActivated: help.open() }
     Shortcut { sequence: "Ctrl+="; onActivated: App.zoomWindow("in") }
     Shortcut { sequence: "Ctrl+-"; onActivated: App.zoomWindow("out") }

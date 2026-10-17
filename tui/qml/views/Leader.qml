@@ -41,6 +41,7 @@ Dialog {
     Shortcut { sequence: ","; onActivated: { leader.close(); App.openPrefs() } }
     Shortcut { sequence: "k"; onActivated: { leader.close(); App.toggleKeymap() } }
     Shortcut { sequence: "m"; onActivated: { leader.close(); App.leaderMenuBar() } }
+    Shortcut { sequence: "Tab"; onActivated: { leader.close(); App.openWidgets() } }
     Shortcut { sequence: "."; onActivated: { leader.close(); App.openContextMenu() } }
     Shortcut { sequence: "t"; onActivated: { leader.close(); App.toggleStatusLine() } }
     Shortcut { sequence: "Shift+L"; onActivated: { leader.close(); App.arrangePanel() } }
