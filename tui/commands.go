@@ -80,11 +80,13 @@ func (h *Host) commands() map[string]Command {
 		"App.followLink":        none(h.followLink),
 
 		// the widgets (widgets.go)
-		"App.openWidgets": none(h.openWidgets),
-		"App.cycleWidget": oneNumber("a step", h.cycleWidget),
-		"App.widgetStep":  oneNumber("a step", h.widgetStep),
-		"App.widgetMoved": oneNumber("a row", h.widgetMoved),
-		"App.goWidget":    oneNumber("a row", h.goWidget),
+		"App.openWidgets":     none(h.openWidgets),
+		"App.cycleWidget":     none(func() { h.cycleWidget(1) }),
+		"App.cycleWidgetBack": none(func() { h.cycleWidget(-1) }),
+		"App.widgetNext":      none(func() { h.widgetStep(1) }),
+		"App.widgetPrevious":  none(func() { h.widgetStep(-1) }),
+		"App.widgetMoved":     oneNumber("a row", h.widgetMoved),
+		"App.goWidget":        oneNumber("a row", h.goWidget),
 
 		// the workspaces
 		"App.pickWorkspace":          none(h.pickWorkspace),

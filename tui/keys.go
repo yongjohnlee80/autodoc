@@ -161,8 +161,8 @@ var windowKeys = []Key{
 	// the terminal's or the agents' panel maximized or restored, from inside it too (SPC M off it)
 	{Seq: "F11", Show: "F11", Run: "App.maximizePanel()"},
 	// the widgets, one after another, the menu bar never among them (widgets.go)
-	{Seq: "F6", Show: "F6 and Shift+F6", Run: "App.cycleWidget(1)"},
-	{Seq: "Shift+F6", Show: "F6 and Shift+F6", Run: "App.cycleWidget(-1)"},
+	{Seq: "F6", Show: "F6 and Shift+F6", Run: "App.cycleWidget()"},
+	{Seq: "Shift+F6", Show: "F6 and Shift+F6", Run: "App.cycleWidgetBack()"},
 	{Seq: "F1", Show: "F1", Run: "help.open()"},
 	// the window's zoom (fonts.go); nothing in a terminal
 	{Seq: "Ctrl+=", Show: "Ctrl+= Ctrl+- Ctrl+0", Run: `App.zoomWindow("in")`},
