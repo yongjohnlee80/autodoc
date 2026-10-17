@@ -1353,7 +1353,8 @@ func TestEveryPreferenceIsKept(t *testing.T) {
 	stored("tui.explorer.edge", "top")
 	post(func() { r.h.choosePrefNamed(prefRelationsEdge, 3) })
 	stored("tui.links.edge", "bottom")
-	post(func() { r.h.choosePrefNamed(themePref(r.h.gui), 1) })
+	// light by name: its place is golib's order, which moves as golib ships more themes
+	post(func() { r.h.choosePrefNamed(themePref(r.h.gui), slices.Index(r.h.themeNames(), "light")) })
 	stored("tui.theme", "light")
 	post(func() { r.h.choosePrefNamed(prefKeymap, 1) })
 	stored("tui.editor.keymap", "text")

@@ -26,7 +26,8 @@ func TestCatalogAndExportMapping(t *testing.T) {
 	if len(c.Problems) != 1 || !strings.Contains(c.Problems[0].Error(), "shadowed") {
 		t.Fatalf("problems: %v", c.Problems)
 	}
-	if len(c.Names()) != 10 || !slices.Contains(c.Labels(), "copy_sepia (user)") {
+	// golib's themes, and a copy of each
+	if len(c.Names()) != 2*len(themes.Names()) || !slices.Contains(c.Labels(), "copy_sepia (user)") {
 		t.Fatalf("names: %v labels: %v", c.Names(), c.Labels())
 	}
 	for _, base := range themes.Names() {
