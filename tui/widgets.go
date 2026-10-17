@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -114,9 +115,13 @@ func (h *Host) goTo(t widgetTarget) {
 			h.openDrawer(t.panel) // opens and focuses
 		}
 	}
-	if t.tab != "" {
-		if tabs, ok := h.tabsOf(s.View); ok {
-			h.keep(tabs.Select(t.tab))
+	// a TerminalTabs view gives the keyboard to its tab's terminal by selecting it (golib's Select
+	// focuses the terminal); forceActiveFocus on the view would focus its strip
+	if tabs, ok := h.tabsOf(s.View); ok {
+		tab := cmp.Or(t.tab, tabs.Active())
+		if tab != "" {
+			h.keep(tabs.Select(tab))
+			return
 		}
 	}
 	h.keep(h.p.Call(s.View, "forceActiveFocus"))
