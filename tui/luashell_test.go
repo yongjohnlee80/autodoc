@@ -395,3 +395,40 @@ func TestTheLuaShellInTheTerminal(t *testing.T) {
 	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: 'd', Mods: tuicore.ModCtrl})
 	r.s.WaitFor(t, "the tab closed", func(string) bool { return !slices.Contains(r.widgetNames(), "terminal/lua") })
 }
+
+// New Lua shell on a tab's menu adds a Lua shell tab, lua then lua 2, beside the shell; a program
+// with no Lua shell's starter says so instead.
+func TestALuaShellFromATabsMenu(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d)
+	if err := r.luaRun("terminal"); err != nil {
+		t.Fatal(err)
+	}
+	r.s.WaitFor(t, "a shell", func(string) bool { return len(r.shellTabs()) == 1 })
+	newLua := func() {
+		rows := onLoop(r, func() []widget.MenuItemModel { return r.h.terminals.tabRows(r.shellTabs()[0].ID) })
+		row, ok := menuRow(rows, "terminal.lua")
+		if !ok {
+			t.Fatalf("no New Lua shell in %v", rowIDs(rows))
+		}
+		onLoop(r, func() bool { row.Action.(widget.TerminalTabsMenuAction).Run(r.shellTabs()[0].ID); return true })
+	}
+	labels := func() []string {
+		var out []string
+		for _, tab := range r.shellTabs() {
+			out = append(out, tab.Label)
+		}
+		return out
+	}
+	newLua()
+	r.s.WaitFor(t, "a Lua shell", func(string) bool { return slices.Equal(labels(), []string{"shell", "lua"}) })
+	r.s.WaitForText(t, "AutoDoc's engine")
+	newLua()
+	r.s.WaitFor(t, "a second", func(string) bool { return slices.Equal(labels(), []string{"shell", "lua", "lua 2"}) })
+
+	onLoop(r, func() bool { r.h.terminals.startLua = nil; r.h.terminals.newLuaShell(); return true })
+	r.s.WaitFor(t, "no starter said", func(string) bool { return r.noticed(errNoShell.Error()) })
+	if len(labels()) != 3 {
+		t.Fatalf("a tab was added without a starter: %v", labels())
+	}
+}
