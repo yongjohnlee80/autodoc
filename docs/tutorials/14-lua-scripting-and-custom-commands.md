@@ -215,5 +215,12 @@ When a user installs a package via `:lua-install <git-url>` or drops it into `lu
 
 ---
 
-[← Previous: Chapter 13: Concurrency & Safe Multi-Agent Writes](./13-concurrency-and-safe-multi-agent-writes.md) | [Index](./README.md) | [Next: Chapter 15: Plugin Architecture & Registry →](./15-plugin-architecture-and-registry.md)
+## 14.7 The Lua Shell, Cards, and `:usage`
 
+`:lua` opens a **Lua shell** in a tab of the terminal panel. An expression typed there shows its value, a statement runs, and a line that stops mid-statement asks for more with `..`. The shell's globals are its own, `ed` is the page, and `print` writes into the shell. `:lua <chunk>` runs one chunk and shows its values as a notification.
+
+A script can show a **card** beside the page with `autodoc.ui.card{title, text, every, tick}`: Markdown, refreshed by `tick` while the card is open, with a `vega-lite` fence drawn as a chart in the window (`--gui`). AutoDoc's own `:usage` is a card of the daemon's and the app's memory and CPU, read through `sys.stats` and `autodoc.app.stats()`, and of the workspace's index.
+
+---
+
+[← Previous: Chapter 13: Concurrency & Safe Multi-Agent Writes](./13-concurrency-and-safe-multi-agent-writes.md) | [Index](./README.md) | [Next: Chapter 15: Plugin Architecture & Registry →](./15-plugin-architecture-and-registry.md)

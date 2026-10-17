@@ -113,6 +113,31 @@ package is:
 - **An agent can offer you a Lua command:** a card shows its source, and only **Add it** writes it
   into `lua/` and loads it. A file already there is never replaced.
 
+## A Lua shell, and cards
+
+**`:lua` opens a Lua shell**, a tab of the terminal panel (also **New Lua shell** on a tab's menu).
+Type a line and Enter: an expression shows its value (`6*7` shows `42`), a statement runs. A line
+that stops mid-statement (`for i = 1, 3 do`) asks for more with `..`; a pasted chunk runs whole.
+Up and Down recall the lines typed, Ctrl+C drops the line, Ctrl+L clears, Ctrl+D on an empty line
+closes the shell.
+
+- **Its globals are its own:** `x = 1` in a shell is that shell's, never a script's; every global
+  the scripts have is there to read. A shared table (`autodoc`, `string`) is the same table for all.
+- **`ed` is the page,** and `print` writes into the shell, from a callback a chunk left as well.
+- **It runs with your trust,** as your own `lua/*.lua` files do, under the same 2-second deadline.
+- **`:lua-reload` gives it a fresh environment** on the new engine; it says so at its next line.
+- **`:lua <chunk>`** runs one chunk without a shell and shows its values as a notification.
+
+**A script can show a card** beside the page: `autodoc.ui.card{title, text, every, tick}` puts
+Markdown in the card panel, and `tick(card)` refreshes it every `every` ms while it is open. In
+the window (`--gui`) a ```` ```vega-lite ```` fence in the card is drawn as a chart
+(`autodoc.ui.charts()` says whether it is); a terminal shows the Markdown. AutoDoc's own **`:usage`**
+is one: the daemon's and the app's memory and CPU, and the workspace's index.
+
+**`:go <name>` puts the keyboard on a widget** (`:go explorer`, `:go card`, `:go terminal/lua`),
+opening a panel that is closed; `autodoc.widgets()` lists them, and `autodoc.run("widget.go", name)`
+goes there from a script.
+
 ## The sandbox
 
 Scripts get Lua 5.1's **base**, **table**, **string** and **math** libraries, and the `autodoc`

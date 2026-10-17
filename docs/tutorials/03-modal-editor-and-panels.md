@@ -87,6 +87,7 @@ In Normal mode, pressing the **Spacebar (`SPC`)** activates AutoDoc's mnemonic L
 - **`SPC g` (Graph Navigation)**: Opens sub-chords for `SPC g b` (incoming backlinks to the current note), `SPC g o` (outgoing wikilinks), `SPC g d` (broken link diagnostics), and `SPC g n` (2-hop neighborhood graph).
 - **`SPC t` (Todo Actions)**: Opens sub-chords for `SPC t l` (toggle Todo board panel), `SPC t n` (create new `.todo-list/` task), `SPC t s` (cycle task status), and `SPC t a` (assign task owner).
 - **`SPC w` (Workspace Switcher)**: Switches the active workspace or attaches a secondary workspace to the current session.
+- **`SPC Tab` (Go to a widget)**: Opens the Go-to picker over the places the keyboard can go: the editor, every panel, and each terminal and agent tab, never the menu bar. Tab and Shift+Tab move its cursor; Enter goes there, opening a closed panel. `:go <name>` does the same from the command line (`:go explorer`, `:go terminal/lua`), and **F6 / Shift+F6** step the keyboard through the open widgets.
 
 ![Complete Modal Editor, Leader Chord, and Panel Keybinding Reference](complete-keybinding-reference.csv)
 
