@@ -31,7 +31,7 @@ type pointer interface {
 type screenPointer struct {
 	t      *testing.T
 	r      *running
-	x0, y0 int // the table's top left, on the screen
+	x0, y0 int // the table's top left, on the screen: where its header line and row numbers are
 	last   [2]int
 }
 
@@ -40,21 +40,27 @@ func newScreenPointer(t *testing.T, r *running) *screenPointer {
 	// the panel tall enough for the header and every row of the kinds table
 	onLoop(r, func() bool { r.h.plugins.c.Set("App.resultsSize", 70); return true })
 	p := &screenPointer{t: t, r: r}
-	r.s.WaitFor(t, "the results' table placed, its rows in sight", func(string) bool {
-		rect, ok := onLoop(r, func() [5]int {
-			root, _ := r.h.p.Root().(interface{ Context() *tuicore.Context })
-			dt := r.h.plugins.c.ResultsTable(resultsView)
-			if root == nil || root.Context() == nil || dt.Context() == nil {
-				return [5]int{}
+	gutter := onLoop(r, func() int { return r.resultsCore().RowNumberDigits() + 2 })
+	last := fmt.Sprint(len(kindsRows))
+	// the table where the screen shows it: its header line, the first two titles at the gutter's
+	// width, and under it the last row's number in sight
+	r.s.WaitFor(t, "the results' table on the screen, its rows in sight", func(sc string) bool {
+		lines := strings.Split(sc, "\n")
+		for y, line := range lines {
+			runes := []rune(line)
+			x := strings.Index(line, "id  name  ")
+			if x < 0 || y+len(kindsRows) >= len(lines) {
+				continue
 			}
-			at, ok := root.Context().ResolveAnchor(dt.Context().NodeAnchor())
-			if !ok {
-				return [5]int{}
+			x = len([]rune(line[:x])) - gutter
+			below := []rune(lines[y+len(kindsRows)])
+			if x < 0 || x >= len(runes) || x+len(last) > len(below) || string(below[x:x+len(last)]) != last {
+				continue
 			}
-			return [5]int{at.X, at.Y, at.W, at.H, 1}
-		}), true
-		p.x0, p.y0 = rect[0], rect[1]
-		return ok && rect[4] == 1 && rect[3] >= len(kindsRows)+1
+			p.x0, p.y0 = x, y
+			return true
+		}
+		return false
 	})
 	return p
 }
