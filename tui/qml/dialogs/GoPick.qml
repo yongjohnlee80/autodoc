@@ -9,8 +9,8 @@ Dialog {
     title: "go to"
     dim: false
     helpText: "Enter goes · Tab and Shift+Tab move · :go <name> from the command line"
-    Shortcut { sequence: "Tab"; onActivated: App.widgetStep(1) }
-    Shortcut { sequence: "Shift+Tab"; onActivated: App.widgetStep(-1) }
+    Shortcut { sequence: "Tab"; onActivated: App.widgetNext() }
+    Shortcut { sequence: "Shift+Tab"; onActivated: App.widgetPrevious() }
     TableView {
         palette.highlight: Theme.document.highlight
         palette.highlightedText: Theme.document.highlightedText
