@@ -96,7 +96,7 @@ var themeA = plugin.Theme{Name: "a", Colors: map[string]string{
 	"app.window": "#112233", "app.windowText": "#ddeeff", "app.base": "#000000", "app.text": "#ffffff",
 }}
 
-const palette = "import tui 1.0\nimport autodoc.plugin 1.0\nimport hello 1.0\n" +
+const layoutHead = "import tui 1.0\nimport autodoc.plugin 1.0\nimport hello 1.0\n" +
 	"Window { palette.window: Theme.app.window; palette.windowText: Theme.app.windowText\n"
 
 // start opens a Card over opts on a fake host, w×h, and closes it when the test ends.
@@ -115,7 +115,7 @@ func TestSetupRunsBeforeTheFirstFrame(t *testing.T) {
 	o := Options{
 		Modal: true,
 		Program: []tuidecl.ProgramOption{
-			tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: App.status } }")),
+			tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: App.status } }")),
 			tuidecl.Singleton("hello", "1.0", "App"),
 			tuidecl.Sources(map[string]any{"App.status": "starting"}),
 		},
@@ -139,7 +139,7 @@ func TestSetupRunsBeforeTheFirstFrame(t *testing.T) {
 
 func TestWithoutSetupTheProgramStillDraws(t *testing.T) {
 	_, host := start(t, Options{Program: []tuidecl.ProgramOption{
-		tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: \"plain\" } }")),
+		tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: \"plain\" } }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 	}}, 20, 3)
 	lastHas(t, host, "plain")
@@ -149,7 +149,7 @@ func TestKeysReachTheProgramAndATypedFieldSurvivesATheme(t *testing.T) {
 	var mu sync.Mutex
 	var got []string
 	c, host := start(t, Options{Modal: true, Program: []tuidecl.ProgramOption{
-		tuidecl.LayoutSource("card.qml", []byte(palette+
+		tuidecl.LayoutSource("card.qml", []byte(layoutHead+
 			" Flex { direction: Tui.Vertical\n Text { text: \"name:\" }\n TextField { id: user; onAccepted: App.login(user.text) } } }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 		tuidecl.Types(controls.Types()...),
@@ -190,7 +190,7 @@ func TestKeysReachTheProgramAndATypedFieldSurvivesATheme(t *testing.T) {
 
 func TestPostReachesTheLoopAndResizeReachesTheFrame(t *testing.T) {
 	c, host := start(t, Options{Program: []tuidecl.ProgramOption{
-		tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: App.status } }")),
+		tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: App.status } }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 		tuidecl.Sources(map[string]any{"App.status": "one"}),
 	}}, 20, 3)
@@ -231,7 +231,7 @@ func TestAProgramThatCannotBeBuiltSaysSoAndCloses(t *testing.T) {
 func TestAFailingSetupDestroysTheTreeAndCloses(t *testing.T) {
 	c, host := start(t, Options{
 		Program: []tuidecl.ProgramOption{
-			tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: \"x\" } }")),
+			tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: \"x\" } }")),
 			tuidecl.Singleton("hello", "1.0", "App"),
 		},
 		Setup: func(*tuidecl.Program, *plugin.Peer) error { return context.DeadlineExceeded },
@@ -247,7 +247,7 @@ func TestAFailingSetupDestroysTheTreeAndCloses(t *testing.T) {
 
 func TestCloseBeforeRunHasStarted(t *testing.T) {
 	c := New(Options{Program: []tuidecl.ProgramOption{
-		tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: \"x\" } }")),
+		tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: \"x\" } }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 	}})
 	c.open(&fakeHost{}, nil, plugin.Open{Width: 10, Height: 2, Theme: themeA})
@@ -264,7 +264,7 @@ func TestCloseBeforeRunHasStarted(t *testing.T) {
 func TestAProgramThatQuitsClosesTheCard(t *testing.T) {
 	var c *Card
 	c, host := start(t, Options{Modal: true, Program: []tuidecl.ProgramOption{
-		tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: \"bye\" }\n Shortcut { sequence: \"x\"; onActivated: App.quit() } }")),
+		tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: \"bye\" }\n Shortcut { sequence: \"x\"; onActivated: App.quit() } }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 		tuidecl.Commands(map[string]func() error{"App.quit": func() error { c.Program().Quit(); return nil }}),
 	}}, 20, 3)
@@ -282,7 +282,7 @@ func TestAProgramThatQuitsClosesTheCard(t *testing.T) {
 
 func TestAPostQueuedBeforeCloseNeverRunsAfterIt(t *testing.T) {
 	c, host := start(t, Options{Program: []tuidecl.ProgramOption{
-		tuidecl.LayoutSource("card.qml", []byte(palette+" Text { text: \"x\" } }")),
+		tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: \"x\" } }")),
 		tuidecl.Singleton("hello", "1.0", "App"),
 	}}, 10, 2)
 	lastHas(t, host, "x")
@@ -530,5 +530,70 @@ func TestAQueuedFnChecksTheCardWhenItRuns(t *testing.T) {
 	after()
 	if ran != 1 {
 		t.Fatalf("ran = %d: want the fn run while live, and the one run after cancel skipped", ran)
+	}
+}
+
+// TestAMissingRoleStillMarksReverseAndTheCursor: a theme that leaves out app.base and app.text (an
+// empty one, or one naming only app.window) still gives a reversed cell and the cursor the colours
+// the Theme.* sources hold, the dark theme's, at Open and after a Theme; a theme that names them
+// wins (Lector #230 r5 R4). The frames are the ones the backend emits, flushed on the program's loop.
+func TestAMissingRoleStillMarksReverseAndTheCursor(t *testing.T) {
+	const darkBase, darkText = "#1c1c1c", "#d0d0d0"
+	for _, open := range []plugin.Theme{{Name: "empty"}, {Name: "window only", Colors: map[string]string{"app.window": "#112233"}}} {
+		t.Run(open.Name, func(t *testing.T) {
+			c := New(Options{Modal: true, Program: []tuidecl.ProgramOption{
+				tuidecl.LayoutSource("card.qml", []byte(layoutHead+" Text { text: \"x\" } }")),
+				tuidecl.Singleton("hello", "1.0", "App"),
+			}})
+			host := &fakeHost{}
+			c.open(host, nil, plugin.Open{Width: 4, Height: 1, Theme: open})
+			defer c.Close()
+			lastHas(t, host, "x")
+			check := func(t *testing.T, fg, bg string) {
+				t.Helper()
+				_, before, _ := host.snapshot()
+				c.Post(func() { // on the loop, as the App's own flushes are
+					c.be.ShowCursor()
+					c.be.SetCursor(1, 0)
+					_ = c.be.FlushSized(tui.Size{W: 4, H: 1}, []tui.CellUpdate{
+						{X: 0, Y: 0, Cell: tui.Cell{Content: "r", Width: 1, Attrs: tui.CellAttrs{Mask: tui.AttrReverse}}},
+						{X: 1, Y: 0, Cell: tui.Cell{Content: "c", Width: 1}},
+					})
+				})
+				var f *plugin.Frame
+				waitFor(t, "the injected frame", func() bool {
+					_, frames, _ := host.snapshot()
+					if len(frames) <= len(before) {
+						return false
+					}
+					for _, g := range frames[len(before):] {
+						if strings.HasPrefix(text(g), "rc") {
+							f = g
+							return true
+						}
+					}
+					return false
+				})
+				for _, want := range []string{"r", "c"} {
+					var got plugin.Style
+					for _, run := range f.Rows()[0] { // r and c share a style, and may share a run
+						if strings.Contains(run.Text, want) {
+							got = run.Style
+						}
+					}
+					if got.FG != fg || got.BG != bg {
+						t.Errorf("%q drawn %+v, want fg %s on bg %s", want, got, fg, bg)
+					}
+				}
+			}
+			check(t, darkBase, darkText)
+			c.Theme(plugin.Theme{Name: "still none"})
+			check(t, darkBase, darkText)
+			c.Theme(plugin.Theme{Name: "named", Colors: map[string]string{"app.base": "#ffffff", "app.text": "#000000"}})
+			check(t, "#ffffff", "#000000")
+		})
+	}
+	if raw := map[string]string{"app.window": "#112233"}; len(palette(plugin.Theme{Colors: raw})) <= 1 || len(raw) != 1 {
+		t.Fatal("palette changed the host's map, or added no fallback roles")
 	}
 }
