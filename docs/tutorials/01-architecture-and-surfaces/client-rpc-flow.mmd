@@ -13,9 +13,9 @@ sequenceDiagram
     else Daemon already running
         Socket-->>Client: Connection established
     end
-    Client->>Daemon: Request sys.hello (client_version, protocol_rev)
-    Daemon-->>Client: Response {ok: true, protocol_rev, pid, workspaces}
-    Client->>Daemon: Request search.query / doc.get / todos.list
+    Client->>Daemon: Internal handshake sys.hello ({protocol, name})
+    Daemon-->>Client: Response {protocol, server_protocol, min_protocol, version, pid, store_id, client, events}
+    Client->>Daemon: Request search.query / doc.read / todos.list
     Daemon->>Store: Read snapshot (concurrent WAL reader)
     Store-->>Daemon: Rows & ranked chunks
     Daemon-->>Client: msgpack-RPC response payload

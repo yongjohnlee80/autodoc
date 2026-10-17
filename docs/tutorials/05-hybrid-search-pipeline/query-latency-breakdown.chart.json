@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "End-to-End Query Latency Breakdown Across Retrieval Configurations (ms)",
-  "description": "Stacked latency breakdown across Lexical FTS5, Vector Cosine, and Cross-Encoder Rerank stages.",
+  "title": "Illustrative Query Latency Breakdown Across Retrieval Stages (ms)",
+  "description": "Illustrative stacked latency profile across Lexical FTS5, Vector Cosine, and Cross-Encoder Rerank stages.",
   "width": 640,
   "height": 320,
   "data": {

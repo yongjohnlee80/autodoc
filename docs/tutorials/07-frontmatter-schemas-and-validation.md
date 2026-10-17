@@ -198,3 +198,8 @@ In `core/schema/schema.go:68-71`, `Schema.Fields` constructs the ordered union o
 1. **Zero Extra Configuration:** The moment you add `verdict: {type: string, enum: [approved, rejected]}` under `types.review` in `_schema/frontmatter.yaml`, both `verdict:approved` inline query tokens and `{"facets": {"verdict": ["approved"]}}` RPC filters become active across the workspace.
 2. **Type-Aware Normalization:** Integer fields (`pr: 249` or `pr: 0xf9`), boolean flags, and ISO/RFC-3339 dates (`created: 2026-10-17`) are normalized to their canonical typed representation at index time and query parse time.
 3. **Scoped Type Matching:** Filtering by a type-specific field such as `verdict:approved` naturally narrows results to documents whose discriminator type declares and populates `verdict`.
+
+---
+
+[← Previous: Chapter 06: Configuring Embeddings & Rerankers](./06-configuring-embeddings-and-rerankers.md) | [Index](./README.md) | [Next: Chapter 08: Knowledge Graphs & ADR Lifecycle →](./08-knowledge-graphs-and-adr-lifecycle.md)
+

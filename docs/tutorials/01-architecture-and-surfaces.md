@@ -75,37 +75,20 @@ The wire protocol uses **MessagePack-RPC** (`msgpack-RPC`), providing compact bi
 You rarely need to launch `autodoc --serve` manually. Whenever you invoke an interactive or CLI surface (`autodoc --ui`, `autodoc --gui`, `autodoc --call`, or `autodoc.nvim`), the client library executes a deterministic bootstrap sequence:
 
 1. **Dial Socket**: The client attempts to connect to the local Unix domain socket.
-2. **Spawn on Miss**: If the socket does not exist or refuses connection, the client spawns `autodoc --serve` as a detached background process and polls with exponential backoff (starting at 5 ms) until the socket becomes ready.
-3. **Version Handshake (`sys.hello`)**: Upon connecting, the client sends a `sys.hello` RPC containing its build version and protocol revision:
-
-```bash
-autodoc --call sys.hello '[{"client": "cli", "protocol_rev": 4}]'
-```
-
-```json
-{
-  "ok": true,
-  "version": "0.9.4",
-  "protocol_rev": 4,
-  "pid": 48219,
-  "uptime_sec": 14820,
-  "workspaces": ["GlobalKB", "MonorepoDocs"]
-}
-```
-
-If a binary upgrade occurred while an older daemon was still running, the client detects the `protocol_rev` mismatch, issues `sys.shutdown` to the stale daemon, and seamlessly starts a fresh daemon matching the new binary.
+2. **Spawn on Miss**: If the socket does not exist or refuses connection, the client spawns `autodoc --serve` as a detached background process and polls with exponential backoff until the socket becomes ready.
+3. **Internal Protocol Handshake (`sys.hello`)**: Upon connecting, the client library automatically sends an internal `sys.hello` frame (`[{"protocol": 25, "name": "cli"}]`). The daemon replies with `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`. If a binary upgrade occurred while an older daemon was still running, the client detects the version/protocol mismatch, issues `sys.shutdown` to the stale daemon, and seamlessly starts a fresh daemon matching the new binary.
 
 ### Core Daemon Modules
 
-The daemon exposes a structured namespace of RPC methods organized by domain module:
+The daemon exposes a structured namespace of RPC methods organized by domain module (`autodoc --contracts`):
 
-- **`sys.*`**: Daemon health (`sys.ping`, `sys.hello`, `sys.status`), method introspection (`sys.methods`), and graceful lifecycle control (`sys.shutdown`).
-- **`workspace.*`**: Multi-workspace registration (`workspace.add`, `workspace.list`, `workspace.update`, `workspace.remove`) and per-workspace policy inspection.
-- **`doc.*`**: Canonical document reading (`doc.get`, `doc.list`, `doc.sections`), atomic writing (`doc.put`, `doc.patch`), frontmatter validation (`doc.validate`), and template instantiation (`doc.create`).
-- **`index.*`**: Real-time watcher health (`index.status`), manual re-indexing (`index.rebuild`), and queue inspection for pending vector embeddings.
-- **`search.*` & `rank.*`**: Lexical BM25 search, dense vector similarity, Reciprocal Rank Fusion (`RRF`), frontmatter predicate filtering (`type:adr status:accepted`), and section-level snippet extraction.
-- **`graph.*`**: Outgoing wikilinks, incoming backlinks, 2-hop neighborhood traversal, broken-link diagnostics, and orphan document detection.
-- **`todos.*`**: The 12-verb structured task engine (`list`, `show`, `list_dirs`, `get_dir`, `add`, `update`, `status`, `assign`, `archive`, `remove`, `refresh`, `set_dir`) backed by `.todo-list/` YAML files.
+- **`sys.*`**: Session negotiation and shutdown (`sys.hello`, `sys.shutdown` — internal to client libraries), edition and verb capability discovery (`sys.capabilities`), live configuration/lifecycle event streaming (`sys.events`), and self-describing protocol catalog inspection (`sys.contracts`).
+- **`workspace.*`**: Multi-workspace lifecycle (`workspace.list`, `workspace.add`, `workspace.rename`, `workspace.remove`) and store-backed policy configuration (`workspace.configure`, `workspace.set_patterns`, `workspace.set_schema`, `workspace.section_size`, `workspace.embedding_policy`, `workspace.set_provider`, `workspace.set_text_extensions`, `workspace.focus`, `workspace.of`, `workspace.vars`, `workspace.set_var`).
+- **`doc.*`**: Versioned document reading (`doc.read`, `doc.read_raw`), optimistic-concurrency writing (`doc.write`, `doc.write_raw`), heading outline extraction (`doc.outline`), frontmatter schema validation (`doc.validate`), and atomic file operations (`doc.rename`, `doc.remove`).
+- **`index.*`**: Real-time watcher and embedding queue status (`index.status`), frontmatter-projected document listing (`index.documents`, `index.list`), incremental cursor change feeds (`index.changes`), single-file re-indexing (`index.reindex`), and vector model inspection/cleanup (`index.models`, `index.purge_model`).
+- **`search.*`, `symbols.*`, `embedding.*`, & `ranker.*`**: Hybrid lexical/semantic/reranked retrieval (`search.query`), polyglot code symbol lookup (`symbols.find`, `symbols.doc`), and store-backed embedding/reranker provider management (`embedding.*`, `ranker.*`).
+- **`graph.*`**: Outgoing links (`graph.links`), incoming backlinks (`graph.backlinks`), $N$-hop neighborhood subgraphs (`graph.neighborhood`), broken-link diagnostics (`graph.unresolved`), and live unsaved target resolution (`graph.resolve`).
+- **`todos.*`**: The structured task engine (`todos.list`, `todos.get`, `todos.create`, `todos.update`, `todos.status`, `todos.assign`, `todos.archive`, `todos.delete`, `todos.refresh`, `todos.vars`, `todos.set_var`, `todos.changes`, `todos.ack`) backed by `.todo-list/` Markdown+YAML files and `core/todo/sqlitejournal`.
 
 ---
 
@@ -113,15 +96,17 @@ The daemon exposes a structured namespace of RPC methods organized by domain mod
 
 AutoDoc provides five specialized surfaces tailored to distinct environments and workflows. Because state lives in the daemon and on disk, you can run multiple surfaces simultaneously against the same workspace—for example, keeping `autodoc --gui` open on a secondary monitor for live diagram previews while editing code and querying notes from `autodoc.nvim` or `autodoc --call` in your terminal.
 
-![Resident Memory Footprint Comparison Across Surfaces](memory-footprint-comparison.chart.json)
+![Illustrative Resident Memory Profile Across Surface Architectures](memory-footprint-comparison.chart.json)
 
-### 1. Terminal TUI (`autodoc --ui` or `autodoc`)
+*Note: The chart above illustrates the architectural memory difference between native compiled Go/Gio surfaces (which share a single background `autodoc --serve` daemon) and desktop applications that bundle a dedicated Chromium + Node.js runtime.*
 
-Running `autodoc` (or explicitly `autodoc --ui`) opens the full-screen terminal interface inside any modern terminal emulator (Kitty, Alacritty, WezTerm, Ghostty, tmux, or over SSH). Built on a custom zero-allocation cell buffer renderer, `--ui` delivers a distraction-free **120-column centered page editor** with full Vim modal editing (`Normal`, `Insert`, `Visual`, `Command`) alongside an optional Modeless mode for users who prefer standard CUA shortcuts. Surrounding the editor are dockable panels for `Files`, `Outline`, `Relations`, `Todos`, `Results`, and embedded `TerminalTabs`.
+### 1. Terminal TUI (`autodoc --ui`)
+
+Running `autodoc --ui` (or `autodoc --ui <workspace-name>`) opens the full-screen terminal interface inside any modern terminal emulator (Kitty, Alacritty, WezTerm, Ghostty, tmux, or over SSH). Built on a custom zero-allocation cell buffer renderer, `--ui` delivers a distraction-free **120-column centered page editor** with full Vim modal editing (`Normal`, `Insert`, `Visual`, `Command`) alongside an optional Modeless mode for users who prefer standard CUA shortcuts. Surrounding the editor are dockable panels for `Files`, `Outline`, `Relations`, `Todos`, `Results`, and embedded `TerminalTabs`.
 
 ### 2. Native Desktop GUI (`autodoc --gui`)
 
-Invoking `autodoc --gui` launches the native, GPU-accelerated desktop application powered by Gio (`gioui.org`). It shares 100% of the editor buffer engine, keybindings, leader chords, and panel layout with `--ui`, while adding crisp vector typography and **Rendered View** (`Ctrl+P`). In `--gui`, standalone block embeds—including `.mmd` Mermaid diagrams, `.chart.json` Vega-Lite charts, `.csv` data tables, and raster/vector images—render natively inline without spawning a headless browser. Clicking any rendered diagram or chart jumps directly into an inline source editor for that companion file.
+Invoking `autodoc --gui` (or `autodoc --gui <workspace-name>`) launches the native, GPU-accelerated desktop application powered by Gio (`gioui.org`). It shares 100% of the editor buffer engine, keybindings, leader chords, and panel layout with `--ui`, while adding crisp vector typography and **Rendered View** (`Ctrl+P`). In `--gui`, standalone block embeds—including `.mmd` Mermaid diagrams, `.chart.json` Vega-Lite charts, `.csv` data tables, and raster/vector images—render natively inline without spawning a headless browser. Clicking any rendered diagram or chart jumps directly into an inline source editor for that companion file.
 
 ### 3. Neovim Integration (`autodoc.nvim`)
 
@@ -129,24 +114,24 @@ For developers who live inside Neovim, `autodoc.nvim` connects directly to `auto
 
 ### 4. CLI and AI Agent RPC (`autodoc --call`)
 
-Scripts, shell pipelines, and autonomous AI coding agents interact with AutoDoc headlessly via `autodoc --call <method> '<json-args>'`:
+Scripts, shell pipelines, and autonomous AI coding agents interact with AutoDoc headlessly via `autodoc --call <verb> '<json-args>'`:
 
 ```bash
 # Query top 5 accepted ADRs matching "sqlite wal" in the GlobalKB workspace
 autodoc --call search.query '["GlobalKB", "sqlite wal type:adr status:accepted", {"limit": 5}]'
 
-# Validate a draft document against the workspace's frontmatter schema
-autodoc --call doc.validate '["GlobalKB", "adrs/0042-sqlite-wal-lease.md"]'
+# Inspect the Markdown heading outline of an ADR
+autodoc --call doc.outline '["GlobalKB", "adrs/0042-sqlite-wal-lease.md"]'
 
 # List open high-priority tasks in JSON for an automated agent workflow
-autodoc --call todos.list '[{"status": "open", "priority": "high"}]'
+autodoc --call todos.list '["GlobalKB", {"status": "open", "priority": "high"}]'
 ```
 
-Because `autodoc --call` reuses the warm daemon socket, invocations complete in **2–5 milliseconds** with a 14 MB memory footprint, making it ideal for agent tool calls, Git pre-commit hooks, and CI validation gates.
+Because `autodoc --call` reuses the warm daemon socket, invocations complete in a few milliseconds without reloading the index, making it ideal for agent tool calls, Git pre-commit hooks, and CI validation gates.
 
 ### 5. Enterprise Server (`autodoc --server`)
 
-When a knowledge base grows to span dozens of repositories and hundreds of engineers, `autodoc --server` provides a stateless HTTP/RPC aggregation tier backed by PostgreSQL (`TSVECTOR` lexical search + `pgvector` HNSW semantic indexing). Individual workspaces remain Git-canonical, while CI webhooks or branch followers stream updates into the shared Postgres cluster for cross-organization retrieval-augmented generation (RAG) and federated search.
+When an organization wants to index live PostgreSQL tables alongside documentation for multi-tenant retrieval-augmented generation (RAG), `autodoc --server` provides a dedicated HTTP/RPC service backed by PostgreSQL (`TSVECTOR` lexical search + `pgvector` semantic indexing) driven by declarative `.view` contracts.
 
 ![Feature Matrix Across AutoDoc Surfaces](surface-feature-matrix.csv)
 
@@ -154,56 +139,69 @@ When a knowledge base grows to span dozens of repositories and hundreds of engin
 
 ## 1.5 Summary of Architectural Guarantees
 
-- **Zero Lock-In**: Plain `.md` files with YAML frontmatter and `.todo-list/*.yaml` records remain readable with `cat`, `grep`, `git`, or any text editor forever.
+- **Zero Lock-In**: Plain `.md` files with YAML frontmatter and `.todo-list/*.md` records remain readable with `cat`, `grep`, `git`, or any text editor forever.
 - **Zero Write Contention**: Single-writer `flock` lease plus SQLite WAL in `core/store` guarantees that simultaneous `--ui`, `--gui`, `nvim`, and `--call` clients never clash.
-- **Gapless External Sync**: The watch-before-scan state machine in `core/follow` ensures `git checkout`, `git rebase`, or external agent edits appear in `< 20 ms` without race windows.
-- **Sub-16ms Interactivity**: Native Go + Gio GPU rendering and binary msgpack-RPC deliver 60–120 FPS typing and scrolling at a fraction of Electron's memory footprint.
-- **Offline Determinism**: Native `.mmd` and `.chart.json` parsers plus self-contained HTML export ensure diagrams, charts, and exported pages work 100% air-gapped with zero CDN calls.
+- **Gapless External Sync**: The watch-before-scan state machine in `core/follow` ensures `git checkout`, `git rebase`, or external agent edits are reconciled without scan-to-watch race windows.
+- **Native Interactivity**: Native Go + Gio GPU rendering and binary msgpack-RPC deliver high-frame-rate typing and scrolling without a bundled browser runtime.
+- **Offline Determinism**: Native `.mmd` and `.chart.json` parsers plus self-contained HTML export (`autodoc --export html`) ensure diagrams, charts, and exported pages work 100% air-gapped with zero CDN calls.
 
 ---
 
-## 1.6 Deep Dive: Daemon Lifecycle, Logging, and Diagnostics
+## 1.6 Deep Dive: Daemon Lifecycle, Configuration, and Introspection
 
-While `autodoc --serve` manages its own lifecycle automatically during normal usage, understanding how the daemon initializes its runtime state directory, handles signals, and exposes diagnostic telemetry is helpful when debugging custom integrations or running headless agent fleets.
+While `autodoc --serve` manages its own lifecycle automatically during normal usage, understanding how the daemon initializes its runtime directories, handles signals, and exposes capability contracts is helpful when debugging custom integrations or running headless agent fleets.
 
 ### Runtime Directory Layout
 
 AutoDoc follows the XDG Base Directory Specification across Linux and macOS:
 
-- **Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Declarative workspace definitions, editor preferences (`mode = "vim"` or `"modeless"`), theme overrides, and embedding provider settings.
-- **State & Socket (`$XDG_STATE_HOME/autodoc/`)**:
+- **Daemon Configuration (`$XDG_CONFIG_HOME/autodoc/config.toml`)**: Holds daemon-level `[server]` (`socket`, `state_dir`, `data_dir`), `[follow]` (`poll_interval`), and `[embedding_queue]` (`max_inflight`) settings (`core/config/config.go`). Workspace registrations and sealed embedding/reranker provider credentials live inside the SQLite store (`autodoc.db`) rather than in `config.toml`.
+- **State & Socket (`$XDG_RUNTIME_DIR/autodoc.sock` / `$XDG_STATE_HOME/autodoc/`)**:
   - `autodoc.sock`: The `0600` msgpack-RPC Unix domain socket.
-  - `daemon.pid`: Advisory PID record of the active `autodoc --serve` instance.
-  - `daemon.log`: Structured JSON-lines operational log rotated automatically at 10 MiB.
-- **Derived Index Cache (`$XDG_CACHE_HOME/autodoc/workspaces/<workspace-hash>/`)**:
-  - `index.db`, `index.db-wal`, `index.db-shm`: The SQLite WAL database files.
-  - `index.db.lock`: The exclusive `flock(2)` single-writer lease held by the active daemon.
+- **Store Directory (`$XDG_DATA_HOME/autodoc/`)**:
+  - `autodoc.db`, `autodoc.db-wal`, `autodoc.db-shm`: The SQLite WAL database files storing workspaces, chunks, links, vectors, and sealed provider configurations.
+  - `autodoc.lock` & `lease-info`: The exclusive `flock(2)` single-writer lease and active endpoint record held by the running daemon.
 
-### Inspecting Live Daemon Telemetry (`sys.status` and `sys.methods`)
+### Inspecting Daemon Capabilities and Contracts (`sys.capabilities` and `sys.contracts`)
 
-You can query the daemon's active client connections, memory allocation, open SQLite WAL frames, and registered RPC methods at any time:
+You can query the daemon's active edition features, custom chunker/deriver registrations, ranker state, and callable msgpack-RPC verb catalog at any time:
 
 ```bash
-# Inspect live daemon resource usage and active connections
-autodoc --call sys.status '[]'
+# Inspect the daemon's active capabilities, ranker status, and allowed verbs
+autodoc --call sys.capabilities '[]'
 
-# Enumerate all registered msgpack-RPC verbs across modules
-autodoc --call sys.methods '[]'
+# Query the self-describing contract table for a specific domain (or run `autodoc --contracts` offline)
+autodoc --call sys.contracts '["sys.*"]'
 ```
 
-Example `sys.status` response:
+Example `sys.capabilities` response:
 
 ```json
 {
-  "pid": 48219,
-  "version": "0.9.4",
-  "protocol_rev": 4,
-  "goroutines": 18,
-  "heap_alloc_mb": 22.4,
-  "sys_rss_mb": 38.1,
-  "connected_clients": 3,
-  "wal_checkpoint_pages": 128,
-  "active_workspaces": ["GlobalKB", "MonorepoDocs"]
+  "databases": false,
+  "registrations": {
+    "chunkers": {},
+    "formats": {},
+    "fingerprint": ""
+  },
+  "ranker": {
+    "supplied": false,
+    "model": "tei-bge-m3"
+  },
+  "verbs": [
+    "doc.outline",
+    "doc.read",
+    "doc.validate",
+    "doc.write",
+    "graph.backlinks",
+    "graph.links",
+    "index.status",
+    "search.query",
+    "sys.capabilities",
+    "sys.contracts",
+    "todos.list",
+    "workspace.list"
+  ]
 }
 ```
 
@@ -216,3 +214,8 @@ When `autodoc --serve` receives `SIGTERM`, `SIGINT`, or a `sys.shutdown` RPC cal
 3. It unlinks `autodoc.sock` and releases the `index.db.lock` advisory file lease before exiting with code `0`.
 
 If a previous daemon process was ever terminated abruptly via `SIGKILL` (`kill -9`), the next client invocation detects that `autodoc.sock` refuses connection, verifies that `index.db.lock` is unheld, unlinks the stale socket file, and boots a fresh daemon automatically—recovering the WAL journal cleanly via SQLite's built-in crash recovery.
+
+---
+
+[← Previous: Book Index](./README.md) | [Index](./README.md) | [Next: Chapter 02: Quickstart & Workspaces →](./02-quickstart-and-workspaces.md)
+

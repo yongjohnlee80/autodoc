@@ -212,3 +212,8 @@ A package can also declare requirements in code via `autodoc.requires{"workspace
 When a user installs a package via `:lua-install <git-url>` or drops it into `lua/<name>/`, AutoDoc prompts once to grant the declared capabilities. Any ungranted call returns `nil, "needs <capability>: not granted"` without executing.
 
 ![Lua API Namespace Reference](lua-api-namespace-reference.csv)
+
+---
+
+[← Previous: Chapter 13: Concurrency & Safe Multi-Agent Writes](./13-concurrency-and-safe-multi-agent-writes.md) | [Index](./README.md) | [Next: Chapter 15: Plugin Architecture & Registry →](./15-plugin-architecture-and-registry.md)
+

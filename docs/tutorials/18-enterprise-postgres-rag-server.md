@@ -165,12 +165,17 @@ Operators authenticated via `[[http.operator]]` can query `GET /v1/status` (or `
 
 ---
 
-## 18.6 Self-Hosted TEI Reranking and Verified TCO Savings
+## 18.6 Self-Hosted TEI Reranking and Illustrative Cost Model
 
-Because `autodoc --server` speaks the standard OpenAI `/v1/embeddings` and HuggingFace Text Embeddings Inference (**TEI**) contracts over HTTP, enterprises can run `autodoc --server` alongside self-hosted TEI embedding and cross-encoder reranking containers on dedicated GPU/CPU instances rather than paying per-query managed cloud ranking API fees.
+Because `autodoc --server` speaks the standard OpenAI `/v1/embeddings` and HuggingFace Text Embeddings Inference (**TEI**) contracts over HTTP, organizations can run `autodoc --server` alongside self-hosted TEI embedding and cross-encoder reranking containers on fixed-cost instances rather than paying per-query managed cloud ranking API fees.
 
-![Monthly RAG Infrastructure + API Cost Comparison](enterprise-rag-tco-comparison.chart.json)
+![Illustrative Monthly Cost Model: Fixed Self-Hosted TEI vs Per-Query Rerank API](enterprise-rag-tco-comparison.chart.json)
 
-At **200,000 queries/month**, deploying `autodoc --server` + PostgreSQL/`pgvector` + self-hosted TEI costs **$371/month flat** compared to **$715/month** for managed cloud AlloyDB AI + per-query reranking APIs—a **~48% baseline TCO reduction** that widens to **63% at 500k queries/month** ($371 vs. $1,015) and **75% at 1M queries/month** ($371 vs. $1,515) because self-hosted TEI inference incurs zero per-query surcharge.
+In the **illustrative deployment scenario** modeled above—assuming a fixed self-hosted stack (one dedicated PostgreSQL/`pgvector` instance at ~$220/mo plus one GPU/CPU TEI inference node at ~$151/mo = **$371/month flat**) versus a managed cloud vector database base tier (~$515/mo) plus a metered cross-encoder reranking API billed at **$1.00 per 1,000 queries**—total monthly cost stays flat as query volume grows from 200k to 1M queries/month because self-hosted TEI inference incurs no per-request API surcharge.
 
 ![Enterprise .view Directive, server.toml, and HTTP API Reference](view-file-directive-reference.csv)
+
+---
+
+[← Previous: Chapter 17: Neovim Integration & KB Migration](./17-neovim-integration-and-kb-migration.md) | [Index](./README.md)
+

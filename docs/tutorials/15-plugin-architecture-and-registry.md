@@ -183,3 +183,8 @@ By architectural contract (`docs/plugins.md`), a plugin cannot:
 3. **Block the editor's 60fps render loop**: Syntax highlighting and frame layout run synchronously in Go; a slow or wedged plugin process only delays its own card or table page and is terminated cleanly within 3 seconds on close.
 
 ![Plugin Notifications and Manifest Capabilities Reference](plugin-notifications-and-capabilities.csv)
+
+---
+
+[← Previous: Chapter 14: Lua Scripting & Custom Commands](./14-lua-scripting-and-custom-commands.md) | [Index](./README.md) | [Next: Chapter 16: AutoDB Live SQL Workbench →](./16-autodb-live-sql-workbench.md)
+

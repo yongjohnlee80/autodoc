@@ -133,3 +133,8 @@ When querying production or staging databases from inside documentation notes, `
 - **Automatic Cursor Cleanup on Buffer or Query Switch**: Whenever you run a new statement, close the Results panel, or quit AutoDoc, `plugin.table.close {id}` closes the server-side cursor immediately so no idle portal holds locks or server memory.
 
 ![AutoDB Commands, Results Actions, and SQL Dialects Reference](autodb-commands-and-dialects.csv)
+
+---
+
+[← Previous: Chapter 15: Plugin Architecture & Registry](./15-plugin-architecture-and-registry.md) | [Index](./README.md) | [Next: Chapter 17: Neovim Integration & KB Migration →](./17-neovim-integration-and-kb-migration.md)
+

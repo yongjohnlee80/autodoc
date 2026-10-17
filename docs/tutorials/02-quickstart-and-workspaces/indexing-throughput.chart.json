@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Workspace Indexing Latency Across Corpus Sizes (ms)",
-  "description": "Wall-clock indexing time in milliseconds comparing cold initial lexical scan against incremental watch-before-scan file updates across workspace sizes.",
+  "title": "Illustrative Scaling Profile: Full Tree Scan vs Single-File Watch Update",
+  "description": "Illustrative latency scaling curve comparing O(N) initial workspace tree scans against O(1) incremental watch-before-scan file updates across corpus sizes.",
   "width": 640,
   "height": 320,
   "data": {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "title": "Resident Memory Footprint (RSS MB) Across Knowledge Surfaces",
-  "description": "Comparison of typical resident set size (RSS) in megabytes for AutoDoc surfaces versus Electron-based note applications on a 2,500-document workspace.",
+  "title": "Illustrative Resident Memory Profile Across Surface Architectures",
+  "description": "Illustrative order-of-magnitude memory footprint comparison (MB) between native Go/Gio surfaces and bundled Chromium/Node desktop runtimes.",
   "width": 640,
   "height": 320,
   "data": {
