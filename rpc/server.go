@@ -82,7 +82,9 @@ import (
 // Protocol 24 is ADR 1792132105: variables belong to the workspace. It adds workspace.vars,
 // workspace.set_var, workspace.of and todos.set_kb, and a variable's conflict; a session below 24
 // reads a KB-file value's source as "store", as before.
-const Protocol int64 = 24
+// Protocol 25 is ADR 1792256101: sys.stats, the daemon's own process (its memory, its CPU so far,
+// its goroutines and its start), which a session below 25 does not have.
+const Protocol int64 = 25
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

@@ -30,8 +30,8 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
 `autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
 when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": 22, "name": "<your client>"}`: the protocol your client was written
-for. The daemon serves every protocol from `min_protocol` (12) to its own (22); another is
+`sys.hello` with `{"protocol": 25, "name": "<your client>"}`: the protocol your client was written
+for. The daemon serves every protocol from `min_protocol` (12) to its own (25); another is
 refused, and so is every verb until the hello succeeds. A verb may be written right behind the
 hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
 verb added after it answers as an unknown method (-32601), and the results it knew keep their shape
@@ -200,7 +200,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 24; the daemon serves sessions from protocol 12.
+Verbs at protocol 25; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -298,6 +298,7 @@ Verbs at protocol 24; the daemon serves sessions from protocol 12.
 | `sys.events` | `since` int (a cursor; -1 answers the head alone), `limit` int (1 to 500) | `{cursor, events: [{seq, kind, workspace, client, detail, at}], more}` — Configuration and lifecycle changes after cursor since, each with the token of the client that made it ("" for the daemon itself). Codes: -32065, -32063. | 8 | agent | read |
 | `sys.hello` | `info`? map ({protocol, name}; none, or no protocol, is a probe that admits nothing) | `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}` — Opens the session at the protocol it declares. protocol is the session's, server_protocol and min_protocol the range the daemon serves, store_id the store's identity, client this connection's token, events the event log's head. Codes: -32020. | 1 | internal | read |
 | `sys.shutdown` | — | Stops the daemon. Frozen across protocols. Codes: -32001. | 1 | internal; unix socket only | settings |
+| `sys.stats` | — | `{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}` — The daemon's own process: its sizes in bytes (rss 0 where the platform cannot say), cpu_seconds its CPU so far, cumulative (a reader takes a rate between two calls), started_at in Unix seconds and uptime in seconds. | 25 | agent | read |
 
 ### `todos`
 

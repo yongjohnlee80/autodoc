@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/core/procstat"
 )
 
 // THE PROTOCOL'S OWN — sys.hello opens a session, sys.shutdown stops the daemon, and the rest say
@@ -109,6 +111,12 @@ func (s *Server) sysVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
+		module.Handle(module.Contract{Verb: "sys.stats", Effect: module.EffectRead, Since: 25, Audience: agent,
+			Result: "{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}",
+			Doc:    "The daemon's own process: its sizes in bytes (rss 0 where the platform cannot say), cpu_seconds its CPU so far, cumulative (a reader takes a rate between two calls), started_at in Unix seconds and uptime in seconds."},
+			func(context.Context, struct{}) (StatsJSON, error) {
+				return StatsOf(procstat.Read(), s.version, time.Now()), nil
+			}),
 		module.Handle(module.Contract{Verb: "sys.contracts", Effect: module.EffectRead, Since: 20, Audience: agent,
 			Result: "{protocol, min_protocol, verbs: [{verb, since, scope, audience, params, result, errors, event, doc}], errors: [{code, name, next, messages}]}",
 			Doc:    "These tables: the verbs this session may call, and the codes they may answer."},
@@ -159,4 +167,27 @@ func (s *Server) hello(ctx context.Context, p sysHello) (*helloJSON, error) {
 		}
 	}
 	return reply, nil
+}
+
+// StatsJSON is sys.stats's answer, and autodoc.app.stats's (the TUI's own process, in the same keys).
+type StatsJSON struct {
+	PID        int64   `json:"pid"`
+	Version    string  `json:"version"`
+	StartedAt  int64   `json:"started_at"` // Unix seconds
+	Uptime     float64 `json:"uptime"`     // seconds
+	RSS        int64   `json:"rss"`
+	PeakRSS    int64   `json:"peak_rss"`
+	CPUSeconds float64 `json:"cpu_seconds"`
+	GoMemory   int64   `json:"go_memory"`
+	GoHeap     int64   `json:"go_heap"`
+	Goroutines int64   `json:"goroutines"`
+	CPUs       int64   `json:"cpus"`
+}
+
+// StatsOf is st as sys.stats answers it, version the process's, now the time of the reading.
+func StatsOf(st procstat.Stats, version string, now time.Time) StatsJSON {
+	return StatsJSON{PID: int64(st.PID), Version: version, StartedAt: st.Started.Unix(),
+		Uptime: now.Sub(st.Started).Seconds(), RSS: int64(st.RSS), PeakRSS: int64(st.PeakRSS),
+		CPUSeconds: st.CPUSeconds, GoMemory: int64(st.GoMemory), GoHeap: int64(st.GoHeap),
+		Goroutines: int64(st.Goroutines), CPUs: int64(st.CPUs)}
 }
