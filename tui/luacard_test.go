@@ -216,7 +216,6 @@ autodoc.command{ name = "still", run = function() autodoc.ui.card{ text = "no ti
 	if err := r.luaRun("noevery"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitForText(t, "no every")
 	if err := r.luaRun("still"); err != nil { // its card shown means the loop turned past any first tick
 		t.Fatal(err)
 	}

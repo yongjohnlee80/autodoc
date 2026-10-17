@@ -102,27 +102,27 @@ func (e *Engine) callAll(name string, fn *lua.LFunction) ([]string, error) {
 	}()
 	top := L.GetTop()
 	L.Push(fn)
-	// fn and the writing of its values in one protected call: run returns the values as strings
-	run := L.NewFunction(func(L *lua.LState) int {
-		base := L.GetTop()
-		L.Push(fn)
-		L.Call(0, lua.MultRet)
-		n := L.GetTop() - base
-		for i := 1; i <= n; i++ {
-			L.Push(lua.LString(shown(L, L.Get(base+i))))
-		}
-		return n // only the strings, the last n on the stack
-	})
-	L.Push(run)
 	if err := L.PCall(0, lua.MultRet, nil); err != nil {
 		L.SetTop(top)
 		return nil, e.failure(name, ctx, err)
 	}
-	out := make([]string, L.GetTop()-top)
-	for i := range out {
-		out[i] = L.Get(top + 1 + i).String()
+	vals := make([]lua.LValue, L.GetTop()-top)
+	for i := range vals {
+		vals[i] = L.Get(top + 1 + i)
 	}
 	L.SetTop(top)
+	// the values written in a protected call of their own, still under the chunk's deadline
+	out := make([]string, len(vals))
+	L.Push(L.NewFunction(func(L *lua.LState) int {
+		for i, v := range vals {
+			out[i] = shown(L, v)
+		}
+		return 0
+	}))
+	if err := L.PCall(0, 0, nil); err != nil {
+		L.SetTop(top)
+		return nil, e.failure(name, ctx, err)
+	}
 	return out, nil
 }
 
