@@ -68,24 +68,26 @@ func (e *Engine) Eval(sh *Shell, chunk string) ([]string, error) {
 		}
 	}
 	fn.Env = sh.env
-	var vals []lua.LValue
+	var lines []string
 	err = e.core.Batch(func() error { // the chunk's edits one undo step, ed reaching the page
 		prev := e.cur
 		e.cur = e.core
 		defer func() { e.cur = prev }()
 		var cerr error
-		vals, cerr = e.callAll("lua", fn)
+		lines, cerr = e.callAll("lua", fn)
 		return cerr
 	})
 	if err != nil {
 		return nil, err
 	}
-	return e.shown(vals), nil
+	return lines, nil
 }
 
-// callAll is call with every result fn gives: the stack is left as it was, whatever fn returned or
-// raised.
-func (e *Engine) callAll(name string, fn *lua.LFunction) ([]lua.LValue, error) {
+// callAll is call with every result fn gives, each written as the shell shows it: the chunk and
+// the writing of its values (a table's __tostring is Lua too) run protected, under one deadline, so
+// a raising or endless __tostring is the chunk's error, never a panic or a hang. The stack is left
+// as it was, whatever fn returned or raised.
+func (e *Engine) callAll(name string, fn *lua.LFunction) ([]string, error) {
 	L := e.L
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
@@ -100,36 +102,44 @@ func (e *Engine) callAll(name string, fn *lua.LFunction) ([]lua.LValue, error) {
 	}()
 	top := L.GetTop()
 	L.Push(fn)
+	// fn and the writing of its values in one protected call: run returns the values as strings
+	run := L.NewFunction(func(L *lua.LState) int {
+		base := L.GetTop()
+		L.Push(fn)
+		L.Call(0, lua.MultRet)
+		n := L.GetTop() - base
+		for i := 1; i <= n; i++ {
+			L.Push(lua.LString(shown(L, L.Get(base+i))))
+		}
+		return n // only the strings, the last n on the stack
+	})
+	L.Push(run)
 	if err := L.PCall(0, lua.MultRet, nil); err != nil {
 		L.SetTop(top)
 		return nil, e.failure(name, ctx, err)
 	}
-	out := make([]lua.LValue, L.GetTop()-top)
+	out := make([]string, L.GetTop()-top)
 	for i := range out {
-		out[i] = L.Get(top + 1 + i)
+		out[i] = L.Get(top + 1 + i).String()
 	}
 	L.SetTop(top)
 	return out, nil
 }
 
-// shown is each value as the shell writes it: a string quoted, a table as literal writes one.
-func (e *Engine) shown(vals []lua.LValue) []string {
-	out := make([]string, len(vals))
-	for i, v := range vals {
-		switch x := v.(type) {
-		case lua.LString:
-			out[i] = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(string(x)) + `"`
-		case *lua.LTable:
-			if e.L.GetMetaField(x, "__tostring") != lua.LNil {
-				out[i] = e.L.ToStringMeta(x).String()
-			} else {
-				out[i] = literal(x)
-			}
-		default:
-			out[i] = e.L.ToStringMeta(v).String()
+// shown is one value as the shell writes it: a string quoted, a table by its __tostring or as
+// literal writes one. It runs inside callAll's protected call, so a __tostring that raises is an
+// error of the chunk, and one that runs on is stopped by the deadline.
+func shown(L *lua.LState, v lua.LValue) string {
+	switch x := v.(type) {
+	case lua.LString:
+		return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`).Replace(string(x)) + `"`
+	case *lua.LTable:
+		if L.GetMetaField(x, "__tostring") != lua.LNil {
+			return L.ToStringMeta(x).String()
 		}
+		return literal(x)
 	}
-	return out
+	return L.ToStringMeta(v).String()
 }
 
 // incomplete is a chunk more lines can finish: a syntax error at EOF, the chunk ending outside a

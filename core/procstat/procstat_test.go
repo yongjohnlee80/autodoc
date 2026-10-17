@@ -38,7 +38,13 @@ func TestResidentSizeOnLinux(t *testing.T) {
 		t.Skip("RSS is Linux's")
 	}
 	s := Read()
-	if s.RSS == 0 || s.PeakRSS < s.RSS {
-		t.Fatalf("rss %d peak %d", s.RSS, s.PeakRSS)
+	// bytes, not KiB or pages: a Go test binary is more than a MiB resident and far less than 64 GiB
+	if s.RSS < 1<<20 || s.RSS > 64<<30 || s.PeakRSS < 1<<20 || s.PeakRSS > 64<<30 {
+		t.Fatalf("rss %d peak %d: not sizes in bytes", s.RSS, s.PeakRSS)
+	}
+	// readOS holds the peak to at least the resident size it read (two readings, the kernel's peak
+	// trailing): the contract, not an ordering of separate observations
+	if s.PeakRSS < s.RSS {
+		t.Fatalf("peak %d below the resident %d", s.PeakRSS, s.RSS)
 	}
 }
