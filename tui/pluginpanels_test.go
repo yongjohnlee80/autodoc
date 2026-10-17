@@ -143,14 +143,21 @@ func TestACardReceivesItsPointerAtProtocolSix(t *testing.T) {
 	_, r, logs := cardTUI(t, dir, nil)
 	r.openPlugin("card")
 	r.waitShown(t, "open ")
+	before := r.editorText()
 	x, y := r.textAt("open ")
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y})
 	waitSaid(t, logs, "card", "pointer press left")
+	waitSaid(t, logs, "card", "focus true")
+	r.keys(t, key('j'))
+	waitSaid(t, logs, "card", "key j")
+	if r.editorText() != before {
+		t.Fatal("a click on the card left the following j with the editor")
+	}
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: x, Y: y, Count: 2})
 	waitSaid(t, logs, "card", "pointer wheel down")
 }
 
-// AutoDB is a modal dialog. Its frame has the same protocol-6 pointer path as a docked card.
+// An actual modal dialog has the same protocol-6 pointer path as a docked card.
 func TestAModalPluginReceivesItsPointerAtProtocolSix(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n")
@@ -170,6 +177,32 @@ func TestAModalPluginReceivesItsPointerAtProtocolSix(t *testing.T) {
 	waitSaid(t, logs, "card", "pointer press left")
 	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: x, Y: y, Count: 2})
 	waitSaid(t, logs, "card", "pointer wheel down")
+}
+
+// A protocol-5 card still takes focus from a click but never receives plugin.pointer. The key is
+// an ordered witness: a pointer delivered before it would already be in the plugin's log.
+func TestAProtocolFiveCardReceivesNoPointer(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
+	path := filepath.Join(dir, "card", "plugin.toml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "protocol = 2", "protocol = 5", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, r, logs := cardTUI(t, dir, nil)
+	r.openPlugin("card")
+	r.waitShown(t, "open ")
+	x, y := r.textAt("open ")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y}, key('j'))
+	waitSaid(t, logs, "card", "key j")
+	for _, line := range said(t, logs, "card") {
+		if strings.Contains(line, "pointer ") {
+			t.Fatalf("protocol-5 plugin received a pointer: %q", line)
+		}
+	}
 }
 
 // TestACardOpensAsADockedPanelAtItsFirstPlacement: a card whose placements are right, then left,
@@ -205,12 +238,11 @@ func TestACardOpensAsADockedPanelAtItsFirstPlacement(t *testing.T) {
 	r.s.WaitFor(t, "docked at the left", func(sc string) bool { _, l, _, _, ok := frameOf(sc, "Card"); return ok && l == 0 })
 }
 
-// TestEscHidesACardAndACommandShowsIt: Esc in a focused card closes its panel, the keys back with
-// the editor, the plugin told plugin.focus false and plugin.hide and running on; a command opens
-// the panel again, focused, the plugin told plugin.show, and is sent.
-func TestEscHidesACardAndACommandShowsIt(t *testing.T) {
+// Esc hides a focused card and tells the user how to reopen it. Its SPC p toggle shows the same
+// running plugin again and gives the card the keys.
+func TestEscHidesACardAndTheLeaderReopensIt(t *testing.T) {
 	dir := t.TempDir()
-	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+"[[commands]]\nid = \"hello\"\ntitle = \"Say hello\"\nkey = \"h\"\n")
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard+"[[commands]]\nid = \"toggle\"\ntitle = \"Show or hide the card\"\nkey = \"o\"\n")
 	_, r, logs := cardTUI(t, dir, nil)
 	run := r.openPlugin("card")
 	r.waitShown(t, "open ")
@@ -221,6 +253,7 @@ func TestEscHidesACardAndACommandShowsIt(t *testing.T) {
 
 	r.keys(t, esc())
 	waitSaid(t, logs, "card", "hide")
+	r.waitNotice(t, "Card card hidden: SPC p › Card o or Plugins › Card › Reopen card")
 	if got := said(t, logs, "card"); !slices.Contains(got, "focus false") {
 		t.Fatalf("Esc did not give the keys back: it said %q", got)
 	}
@@ -236,8 +269,8 @@ func TestEscHidesACardAndACommandShowsIt(t *testing.T) {
 	r.keys(t, esc())
 
 	r.pluginCardOf(t, "card")
-	r.keys(t, key('h'))
-	waitSaid(t, logs, "card", "command hello")
+	r.s.WaitForText(t, "o  Show or hide the card")
+	r.keys(t, key('o'))
 	waitSaid(t, logs, "card", "show")
 	waitCount(t, logs, "card", "focus true", 2)
 	if !r.panelShown("card") {

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -36,6 +38,56 @@ func TestAResultsYankPastesIntoTheEditor(t *testing.T) {
 	if got := r.editorText(); !strings.Contains(got, want) {
 		t.Errorf("editor text %q does not contain yanked cell %q", got, want)
 	}
+}
+
+// The results bar uses each clause's own parser forms: two id fields complete to a position,
+// ORDER BY's bare number and WHERE's #number. Tab inserts it into the actual TextField.
+func TestTheResultsBarTabInsertsAFieldTheClauseParses(t *testing.T) {
+	r, _ := kindsTUI(t, "kinds")
+	readText := func() string {
+		return onLoop(r, func() string {
+			node, ok := r.h.p.Tree().NodeByID("resultsText")
+			if !ok {
+				return "no resultsText"
+			}
+			value, err := r.h.p.Adapter().ReadProperty(node, "text")
+			if err != nil {
+				return err.Error()
+			}
+			return value.Raw
+		})
+	}
+	focus := func() {
+		onLoop(r, func() bool { r.h.keep(r.h.p.Call("resultsText", "forceActiveFocus")); return true })
+		r.s.WaitFor(t, "the results bar has focus", func(string) bool { return r.focused("resultsText") })
+	}
+	focus()
+	r.keys(t, decltest.Type("id")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab})
+	r.s.WaitFor(t, "ORDER BY Tab inserts the first id's position 1", func(string) bool { return readText() == "1" })
+	r.keys(t, enter())
+	r.s.WaitFor(t, "the completed ORDER BY is applied", func(string) bool { return r.source("App.resultsClauseText") == "1" })
+	onLoop(r, func() bool { r.h.plugins.resultsClauseChosen(clauseWhere, "1"); return true })
+	r.s.WaitFor(t, "WHERE starts empty", func(string) bool { return readText() == "" })
+	focus()
+	r.keys(t, decltest.Type("id")...)
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyTab})
+	r.s.WaitFor(t, "WHERE Tab inserts the first id's position #1", func(string) bool { return readText() == "#1" })
+}
+
+// The s key cycles a sort over the loaded rows. A sort landing the cursor at the far end must not
+// send plugin.table.fetch; only reading the table should do that.
+func TestTheResultsSKeySortsWithoutFetching(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin4(t, dir, "rows", "service", "tablestall", tableManifest)
+	r, logs := pluginTUI(t, dir)
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("rows", "run"); return true })
+	r.waitResults(t, "q1", tablePage+resultsPage)
+	fetches := len(saidLines(t, logs, "rows", "fetch "))
+	onLoop(r, func() bool { r.h.keep(r.h.p.Call(resultsView, "forceActiveFocus")); return true })
+	r.s.WaitFor(t, "results focused", func(string) bool { return r.focused(resultsView) })
+	r.keys(t, key('s'), key('s')) // ascending then descending: row zero moves near the end
+	r.wantNoFetchSince(t, logs, fetches)
 }
 
 // wantCtrlVBlock focuses the results table, sends Ctrl+V, j and l through the screen, and checks a
