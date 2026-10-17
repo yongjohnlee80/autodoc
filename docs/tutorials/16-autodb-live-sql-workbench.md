@@ -2,7 +2,7 @@
 
 Technical notes, incident post-mortems, and architecture decision records rarely live in isolation from production and staging databases. Engineers constantly switch between writing prose in an editor and running diagnostic queries in a separate SQL client—copying queries out, losing track of which connection ran them, and manually reformatting tabular output back into Markdown.
 
-By pairing AutoDoc's Protocol 5 plugin host (Chapter 15) with the **AutoDB plugin** (`autodoc-autodb`, ADR 1792078052), AutoDoc becomes a full-featured **live SQL workbench**. You write SQL either in dedicated `.sql` buffers or inside fenced code blocks within your Markdown notes, execute the statement under your cursor with a single chord, browse 100,000-row virtualized cursors in the docked Results panel, and insert formatted Markdown tables or export atomic CSV/JSON snapshots without leaving your workspace.
+By pairing AutoDoc's plugin host (Chapter 15) with the **AutoDB plugin** (`autodoc-autodb`, ADR 1792078052), AutoDoc becomes a full-featured **live SQL workbench**. You write SQL either in dedicated `.sql` buffers or inside fenced code blocks within your Markdown notes, execute the statement under your cursor with a single chord, browse 100,000-row virtualized cursors in the docked Results panel, and insert formatted Markdown tables or export atomic CSV/JSON snapshots without leaving your workspace.
 
 ---
 
@@ -25,7 +25,7 @@ If a visual selection is active (`selection_bytes` non-empty), `autodoc-autodb` 
 
 ## 16.2 Connecting, Unlocking Sessions, and Browsing Schemas (`SPC p a c`)
 
-`autodoc-autodb` runs as a **Protocol 5 non-modal docked card** (`[dialog] modal = false`, `[feed] document = true`, `[table] title = "Results"`, `calls = ["buffer.new"]`).
+`autodoc-autodb` runs as a **Protocol 6 non-modal docked card** (`[dialog] modal = false`, `[feed] document = true`, `[table] title = "Results"`, `calls = ["buffer.new"]`).
 
 1. **Opening and Unlocking (`SPC p a c`)**: Pressing `SPC p a c` (or selecting **Plugins › AutoDB › Connect**) opens and focuses the AutoDB card at the right edge of your screen. If the AutoDB daemon's keystore is sealed, the card prompts for your passphrase and unlocks your saved connection profiles.
 2. **Schema Inspection and Draft Generation**: Once connected to a PostgreSQL, MySQL/MariaDB, or SQLite target, the card displays your active connection, transaction/session status, and schema browser. Pressing `Enter` on any table or view invokes `host.call` with `buffer.new` (`calls = ["buffer.new"]`), opening a fresh unsaved tab named `<schema>.<table>.sql` pre-populated with:
