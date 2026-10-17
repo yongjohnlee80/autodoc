@@ -157,6 +157,7 @@ func TestTabCyclesAndInputsKeepTheirKeys(t *testing.T) {
 	if c.Key(text("q")) {
 		t.Fatal("q on the buttons was used: it is the plugin's, to close")
 	}
+	c.Key(key("Tab")) // Sign in to Cancel: every button is a Tab stop
 	c.Key(key("Tab"))
 	if c.Focused() != name {
 		t.Fatal("Tab did not wrap")
@@ -568,4 +569,39 @@ func TestATreesAncestryBelongsToItsCurrentSelection(t *testing.T) {
 			t.Fatalf("selected %v, want the first row: gp had no ancestor, and p was g's, not gp's", tr.Selected())
 		}
 	})
+}
+
+// TestEveryButtonIsATabStop: Tab walks a Buttons bar a button at a time before it goes on, and
+// Shift+Tab (or Up from the control after) enters it at its last button, as a sign-in's Sign in
+// and Cancel are each reached by Tab (found by the autodb port, ADR 1792254331 §4.12).
+func TestEveryButtonIsATabStop(t *testing.T) {
+	name, pass := &Input{}, &Input{}
+	btns := &Buttons{Labels: []string{"Sign in", "Cancel"}}
+	c, _ := open(t, func() Page { return Page{Body: []Block{name, pass}, Buttons: btns} }, 30, 10)
+	at := func() string {
+		switch c.Focused() {
+		case name:
+			return "name"
+		case pass:
+			return "pass"
+		}
+		return btns.Labels[btns.Focused()]
+	}
+	var got []string
+	for range 4 {
+		c.Key(key("Tab"))
+		got = append(got, at())
+	}
+	for range 4 {
+		c.Key(plugin.Key{Key: "Tab", Shift: true})
+		got = append(got, at())
+	}
+	want := []string{"pass", "Sign in", "Cancel", "name", "Cancel", "Sign in", "pass", "name"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("Tab ×4 then Shift+Tab ×4 = %v, want %v", got, want)
+	}
+	c.Key(key("Up")) // from the name, back around: the bar's last button
+	if at() != "Cancel" {
+		t.Fatalf("Up from the name reached %q, want Cancel", at())
+	}
 }

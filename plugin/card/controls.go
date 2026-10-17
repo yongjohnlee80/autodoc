@@ -179,6 +179,18 @@ func (b *Buttons) Focused() int { return b.at }
 
 func (b *Buttons) clamp() { b.at = min(max(b.at, 0), max(len(b.Labels)-1, 0)) }
 
+// step moves the focus to the next (+1) or previous (-1) button; false at the bar's end, where Tab
+// goes on to the next control.
+func (b *Buttons) step(dir int) bool {
+	b.clamp()
+	next := b.at + dir
+	if next < 0 || next >= len(b.Labels) {
+		return false
+	}
+	b.at = next
+	return true
+}
+
 func (b *Buttons) press(i int) {
 	if i >= 0 && i < len(b.Labels) && b.OnPress != nil {
 		b.OnPress(i)
