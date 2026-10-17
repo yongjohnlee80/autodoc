@@ -205,6 +205,24 @@ func TestAProtocolFiveCardReceivesNoPointer(t *testing.T) {
 	}
 }
 
+// Inspect the host's outbound queue before the SDK can discard an unsupported notification.
+// A protocol-5 plugin must not be sent plugin.pointer at all, even if its SDK ignores it.
+func TestAProtocolFiveViewQueuesNoPointer(t *testing.T) {
+	run := &pluginRun{e: pluginEntry{m: manifest{Protocol: 5}}}
+	view := &pluginView{run: run, laidW: 20, laidH: 8}
+	for _, ev := range []tuicore.MouseEvent{
+		{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: 2, Y: 3},
+		{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: 2, Y: 3, Count: 2},
+	} {
+		if view.HandleEvent(ev) {
+			t.Fatalf("protocol-5 view consumed unsupported pointer event: %+v", ev)
+		}
+	}
+	if len(run.early) != 0 {
+		t.Fatalf("protocol-5 view queued unsupported notifications: %+v", run.early)
+	}
+}
+
 // TestACardOpensAsADockedPanelAtItsFirstPlacement: a card whose placements are right, then left,
 // opens docked at the right edge, in a panel and not a float, about as wide as its manifest's width,
 // and leaves the keys with the editor; Manage › Place moves it to the left, docked there.
