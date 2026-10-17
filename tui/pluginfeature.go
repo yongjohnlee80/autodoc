@@ -278,6 +278,8 @@ type pluginHost interface {
 	ResultsTable(id string) *widget.DataTable
 	// CopyText puts text on the clipboard, reporting whether there is one
 	CopyText(text string) bool
+	// SetEditorRegister makes a table yank available to the editor's p/P commands.
+	SetEditorRegister(text string)
 	// InsertBlock puts text into the page at the cursor, on lines of its own: one undo step
 	InsertBlock(text string) error
 	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
@@ -336,6 +338,12 @@ func (c core) ResultsTable(id string) *widget.DataTable {
 }
 
 func (c core) CopyText(text string) bool { return c.h.p != nil && c.h.p.App().CopyToClipboard(text) }
+
+func (c core) SetEditorRegister(text string) {
+	if c.h.core != nil {
+		c.h.core.SetRegister(text, false)
+	}
+}
 
 // InsertBlock puts text into the page as a block of its own: on the cursor's line when that is
 // empty, else after it, with a blank line before and after wherever its neighbour has text, so a

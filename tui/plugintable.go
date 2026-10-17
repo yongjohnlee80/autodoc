@@ -757,8 +757,11 @@ func (pl *plugins) selectAllResults() {
 // bindResultsMenu gives the table's right-click menu its rows: built each time it opens, so the
 // sorts name the field under the pointer.
 func (pl *plugins) bindResultsMenu() {
-	if t := pl.c.ResultsTable(resultsView); t != nil && t.Menu() != nil {
-		t.Menu().SetRows(pl.resultsMenuRows)
+	if t := pl.c.ResultsTable(resultsView); t != nil {
+		if t.Menu() != nil {
+			t.Menu().SetRows(pl.resultsMenuRows)
+		}
+		t.Core().SetOnCopy(pl.c.SetEditorRegister)
 	}
 }
 
@@ -844,8 +847,9 @@ func (pl *plugins) copyResults(format copyFormat) {
 		pl.c.Failed("copy the results", err)
 		return
 	}
+	pl.c.SetEditorRegister(text)
 	if !pl.c.CopyText(text) {
-		pl.c.Notify("the results were not copied: no clipboard")
+		pl.c.Say("results copied to the editor register; no system clipboard")
 		return
 	}
 	if format == formatTSV {

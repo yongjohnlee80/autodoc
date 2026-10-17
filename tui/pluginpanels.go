@@ -213,6 +213,7 @@ func (pl *plugins) cardOpened(name string) {
 	if r.hidden && !r.closing {
 		r.hidden = false
 		r.send(plugin.MethodShow, plugin.EmptyParams())
+		pl.refreshPlugins()
 	}
 }
 
@@ -230,6 +231,7 @@ func (pl *plugins) cardClosed(name string) {
 	if !r.hidden {
 		r.hidden = true
 		r.send(plugin.MethodHide, plugin.EmptyParams())
+		pl.refreshPlugins()
 	}
 }
 

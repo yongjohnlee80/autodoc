@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"maps"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
 )
 
@@ -74,6 +77,28 @@ func (r *running) panelShown(name string) bool {
 	return onLoop(r, func() bool { return r.h.panelOpen[cardPanelID(name)] })
 }
 
+func (r *running) cardOpenLabel(name string) string {
+	return onLoop(r, func() string {
+		rows := r.h.plugins.pluginRows
+		for i := 0; i < rows.Len(); i++ {
+			row := rows.At(i)
+			if row["key"] != name {
+				continue
+			}
+			sub, _ := row["rows"].(*tuidecl.ListModel)
+			if sub != nil {
+				for j := 0; j < sub.Len(); j++ {
+					if item := sub.At(j); item["key"] == "open" {
+						label, _ := item["label"].(string)
+						return label
+					}
+				}
+			}
+		}
+		return ""
+	})
+}
+
 // stillRunning fails the test when run exits within a moment: the card hid, its plugin runs on.
 func stillRunning(t *testing.T, run *pluginRun, what string) {
 	t.Helper()
@@ -101,6 +126,51 @@ func openSize(t *testing.T, logs, name string) (w, h int) {
 }
 
 const rightCard = "[dialog]\nmodal = false\nwidth = 36\nheight = 8\nplacements = [\"right\", \"left\"]\n"
+
+// Protocol 6 delivers left presses and wheel movement to a card, while the right press remains
+// the host's context menu. Earlier card protocols keep their old mouse behavior.
+func TestACardReceivesItsPointerAtProtocolSix(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", rightCard)
+	path := filepath.Join(dir, "card", "plugin.toml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "protocol = 2", "protocol = 6", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, r, logs := cardTUI(t, dir, nil)
+	r.openPlugin("card")
+	r.waitShown(t, "open ")
+	x, y := r.textAt("open ")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y})
+	waitSaid(t, logs, "card", "pointer press left")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: x, Y: y, Count: 2})
+	waitSaid(t, logs, "card", "pointer wheel down")
+}
+
+// AutoDB is a modal dialog. Its frame has the same protocol-6 pointer path as a docked card.
+func TestAModalPluginReceivesItsPointerAtProtocolSix(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin2(t, dir, "card", "dialog", "echo", "[dialog]\nwidth = 36\nheight = 8\n")
+	path := filepath.Join(dir, "card", "plugin.toml")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "protocol = 2", "protocol = 6", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, r, logs := cardTUI(t, dir, nil)
+	r.openPlugin("card")
+	r.waitShown(t, "open ")
+	x, y := r.textAt("open ")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MousePress, Button: tuicore.MouseLeft, X: x, Y: y})
+	waitSaid(t, logs, "card", "pointer press left")
+	r.keys(t, tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: x, Y: y, Count: 2})
+	waitSaid(t, logs, "card", "pointer wheel down")
+}
 
 // TestACardOpensAsADockedPanelAtItsFirstPlacement: a card whose placements are right, then left,
 // opens docked at the right edge, in a panel and not a float, about as wide as its manifest's width,
@@ -215,9 +285,15 @@ func TestHostCloseFromACardHidesItsPanel(t *testing.T) {
 	r.keys(t, key('q')) // the plugin's own quit: host.close
 	waitSaid(t, logs, "card", "hide")
 	r.s.WaitFor(t, "the panel closed", func(string) bool { return !r.panelShown("card") })
+	if got := r.cardOpenLabel("card"); got != "Reopen card" {
+		t.Errorf("hidden card's menu action says %q, want Reopen card", got)
+	}
 	stillRunning(t, run, "host.close")
 	r.openPlugin("card")
 	waitSaid(t, logs, "card", "show")
+	if got := r.cardOpenLabel("card"); got != "Show card" {
+		t.Errorf("shown card's menu action says %q, want Show card", got)
+	}
 	if !r.panelShown("card") {
 		t.Fatal("the menu entry did not show the hidden card")
 	}

@@ -179,6 +179,22 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		if v.card != "" && m.Kind == tuicore.MousePress && m.Button == tuicore.MouseRight && m.Mods.Chord() == 0 {
 			return v.openMenu(tuicore.Point{X: m.X, Y: m.Y})
 		}
+		if r != nil && r.e.m.Protocol >= 6 && m.Mods.Chord() == 0 &&
+			m.X >= 0 && m.X < v.laidW && m.Y >= 0 && m.Y < v.laidH {
+			p := plugin.Pointer{X: m.X, Y: m.Y, Count: min(max(m.Count, 1), 16)}
+			switch {
+			case m.Kind == tuicore.MousePress && m.Button == tuicore.MouseLeft:
+				p.Kind, p.Button = "press", "left"
+			case m.Kind == tuicore.MouseWheel && m.Button == tuicore.WheelUp:
+				p.Kind, p.Button = "wheel", "up"
+			case m.Kind == tuicore.MouseWheel && m.Button == tuicore.WheelDown:
+				p.Kind, p.Button = "wheel", "down"
+			}
+			if p.Kind != "" {
+				r.send(plugin.MethodPointer, plugin.PointerParams(p))
+				return true
+			}
+		}
 		return false
 	}
 	if r == nil {
