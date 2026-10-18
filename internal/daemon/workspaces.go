@@ -15,6 +15,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/logger"
 	"github.com/yongjohnlee80/golib/search/embed"
+	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/follow"
@@ -108,6 +109,7 @@ type served struct {
 	// the rest is nil or zero for one that could not be opened
 	ix            *index.Indexer
 	docs          *docs.Docs
+	fsys          vfs.FS // the root, golib vfs/local (os.Root): workspace.scaffold writes through it, borrowed, never closed there
 	follower      *follow.Follower
 	schema        *schemaHolder
 	text          *textExtensions
@@ -306,7 +308,7 @@ func (m *Workspaces) start(id int64, c workspace.Spec) (*served, error) {
 		_ = ws.Close()
 	}
 	s := &served{id: id, override: override, root: c.Root, include: c.Include, exclude: c.Exclude,
-		ix: ix, docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds()),
+		ix: ix, fsys: ws.FS, docs: docs.New(ws.FS, ws.Matcher.Match, docs.WithTextExtensions(text.load), docs.WithRegistrations(m.opts.Registrations.Kinds()),
 			docs.WithDeriver(m.opts.Registrations)),
 		follower: f, schema: sh, text: text, sectionTokens: sectionTokens, policy: policy,
 		provider: rpc.ProviderChoice{Override: override, Err: errText(providerErr)},

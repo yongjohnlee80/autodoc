@@ -732,6 +732,15 @@ return {
         { name = "to", type = "string" }
       },
     },
+    ["workspace.scaffold"] = {
+      since = 26, scope = "global", audience = "user",
+      params = {
+        { name = "workspace", type = "string" },
+        { name = "files", type = "list" }
+      },
+      result = "[{path, outcome, error?}]",
+      doc = "Creates a KB type's files under the workspace's root, create-only: a file that exists is kept. The root KB_OPERATIONS.md, marked managed, replaces a copy that declares an older autodoc_version. An immutable folder's descriptor is skipped when that folder holds anything. It writes whether or not the workspace indexes a file; one it indexes reaches the index as any new file does. outcome is created, kept, updated, skipped or refused (with error).",
+    },
     ["workspace.section_size"] = {
       since = 5, scope = "global", audience = "user",
       params = {

@@ -21,6 +21,10 @@
 //
 //	autodoc --contracts [verb | domain.*] [--format json|md]
 //
+// --check-kbtype validates a KB type's repository, as its CI does, and lists the files it creates:
+//
+//	autodoc --check-kbtype [dir]
+//
 // --server is the enterprise search server: headless, it indexes an enterprise's database rows
 // through .view files into a schema of the same Postgres (docs/enterprise). --check validates its
 // configuration and every view, then exits:
@@ -146,6 +150,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("contracts", false, `print the daemon's verb contracts and error codes, with no daemon; a verb or "domain.*" after the flags narrows them (AGENTS.md's tables)`)
 	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
 	fs.Bool("check-theme", false, "validate the Theme file after the flags; report every problem, without a UI or daemon")
+	fs.Bool("check-kbtype", false, "validate the KB type repository in the directory after the flags (kbtype.toml and tree/, ADR 1792349867) and list what it creates, without a UI or daemon")
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
 	fs.Bool("keymap-reference", false, "print the reference for keymap.xml, every key's command id with its keys, with no UI or daemon")
 	fs.Bool("check-keymap", false, "check a keymap.xml (the file after the flags, or the one beside config.toml) as AutoDoc reads it; report every problem, without a UI or daemon")
@@ -190,6 +195,12 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return 0
 		}},
 		{flag: "keymap-reference", run: func(string) int { keymapReference(stdout); return 0 }},
+		{flag: "check-kbtype", arg: true, run: func(dir string) int {
+			if err := checkKBType(dir, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
 		{flag: "check-keymap", arg: true, run: func(file string) int {
 			if err := checkKeymap(*configPath, file, stdout); err != nil {
 				return failed(err, 1)

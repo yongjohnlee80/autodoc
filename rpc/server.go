@@ -86,7 +86,9 @@ import (
 // its goroutines and its start), which a session below 25 does not have.
 // Protocol 26 is ADR 1792347044: graph.map, a workspace's documents (each one's title, type and
 // whether another supersedes it) and the resolved links among them, or a root's neighbourhood.
-const Protocol int64 = 26
+// Protocol 27 is ADR 1792349867: workspace.scaffold, a KB type's files created under a workspace's
+// root, which a session below 27 does not have.
+const Protocol int64 = 27
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every
@@ -320,6 +322,7 @@ func New(workspaces Workspaces, version string, opts ...Option) *Server {
 func (s *Server) register() {
 	s.own(s.sysVerbs()...)
 	s.own(s.workspaceVerbs()...)
+	s.own(s.scaffoldVerb())
 	s.own(s.configureVerb())
 	s.own(s.preferenceVerbs()...)
 	s.own(s.searchVerbs()...)

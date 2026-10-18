@@ -51,6 +51,7 @@ type setters struct {
 	policy       policySetter
 	configure    workspaceConfigurer
 	capabilities capabilityReporter
+	scaffold     scaffolder
 }
 
 func settersOf(ws Workspaces) setters {
@@ -64,6 +65,7 @@ func settersOf(ws Workspaces) setters {
 	s.policy, _ = ws.(policySetter)
 	s.configure, _ = ws.(workspaceConfigurer)
 	s.capabilities, _ = ws.(capabilityReporter)
+	s.scaffold, _ = ws.(scaffolder)
 	return s
 }
 

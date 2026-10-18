@@ -9,3 +9,10 @@ import _ "embed"
 //
 //go:embed AGENTS.md
 var AgentsGuide string
+
+// KBOperations is the KB's operations manual, AutoDoc's own (ADR 1792349867 §4.5): a KB type's
+// scaffold writes it at the KB's root, and the Neovim side reads the same file through
+// schema.templates_dir, so both write one text.
+//
+//go:embed lua/autodoc/kb/templates/KB_OPERATIONS.md
+var KBOperations []byte

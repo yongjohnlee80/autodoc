@@ -4,7 +4,7 @@ kind: operations
 status: active
 created: {{date}}
 autodoc_version: {{autodoc_version}}
-revision: 3
+revision: 4
 tags: [kb, autodoc, operations]
 abstract: "How agents search, read and write this KB through AutoDoc. Shipped and versioned by AutoDoc; re-read it when its revision changes."
 ---
@@ -14,11 +14,11 @@ abstract: "How agents search, read and write this KB through AutoDoc. Shipped an
 This file is AutoDoc's, and is replaced when a newer AutoDoc ships a newer copy. Put this KB's own
 rules in `AGENTS.md`. `RULES.md` comes before both.
 
-`$AUTODOC_WORKSPACE` is this KB's AutoDoc workspace and `$AUTO_AGENTS_KB_ROOT` its root. Paths on
-the wire are relative to the root, with `/` separators.
+`$AUTODOC_WORKSPACE` is this KB's AutoDoc workspace and `$AUTODOC_ROOT` its root: AutoDoc sets
+both for every agent it starts. Paths on the wire are relative to the root, with `/` separators.
 
-- If `$AUTODOC_WORKSPACE` is unset, run `autodoc --call workspace.list '[]'` and use the `name` whose
-  `root` is `$AUTO_AGENTS_KB_ROOT`.
+- If they are unset (an agent another tool started), run `autodoc --call workspace.list '[]'` and use
+  the `name` and `root` of the workspace whose root holds this file.
 
 ## 0. Pick the method
 
@@ -124,7 +124,7 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 ## 4. History
 
 - **When the KB is a git repo, its git log is the durable audit trail:**
-  `git -C "$AUTO_AGENTS_KB_ROOT" log --stat -- <path>`.
+  `git -C "$AUTODOC_ROOT" log --stat -- <path>`.
 - A KB need not be a git repo. Then the durable history is whatever the user keeps.
 - `index.changes` is recent index activity only. It is bounded (at least 7 days and 100,000 rows)
   and its cursor may expire.
@@ -167,11 +167,11 @@ autodoc --call index.documents '["'"$AUTODOC_WORKSPACE"'", {"missing": ["abstrac
 
 ## 7. Grep: without a model, or when AutoDoc can't answer
 
-Use `rg` over `$AUTO_AGENTS_KB_ROOT` when §0 says so, and say in your work that you did.
+Use `rg` over `$AUTODOC_ROOT` when §0 says so, and say in your work that you did.
 
 ```sh
-rg -il -e '<term>' -e '<other term>' "$AUTO_AGENTS_KB_ROOT" --glob '*.md' --glob '!archive/**' --glob '!raw/**'
-rg -n -i -C1 '<term>' "$AUTO_AGENTS_KB_ROOT/<folder>"
+rg -il -e '<term>' -e '<other term>' "$AUTODOC_ROOT" --glob '*.md' --glob '!archive/**' --glob '!raw/**'
+rg -n -i -C1 '<term>' "$AUTODOC_ROOT/<folder>"
 ```
 
 - **Never grep the KB root unscoped. Skip `archive/` and `raw/`.** Retired material lives there,
