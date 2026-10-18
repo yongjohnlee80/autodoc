@@ -28,10 +28,10 @@ type kbTypeChoice struct{ name, title, url string }
 // builtinKBTypes are the first-party types, shown until the registry lists them (ADR 1792351195),
 // and kept for offline use after.
 var builtinKBTypes = []kbTypeChoice{
-	{"kb-autovim", "AutoVim coding KB", "https://github.com/yongjohnlee80/kb-autovim"},
-	{"kb-zettelkasten", "Zettelkasten", "https://github.com/yongjohnlee80/kb-zettelkasten"},
-	{"kb-para", "PARA", "https://github.com/yongjohnlee80/kb-para"},
-	{"kb-slipbox", "Slip-box", "https://github.com/yongjohnlee80/kb-slipbox"},
+	{"autovim.kb", "AutoVim coding KB", "https://github.com/yongjohnlee80/autovim.kb"},
+	{"zettelkasten.kb", "Zettelkasten", "https://github.com/yongjohnlee80/zettelkasten.kb"},
+	{"para.kb", "PARA", "https://github.com/yongjohnlee80/para.kb"},
+	{"slipbox.kb", "Slip-box", "https://github.com/yongjohnlee80/slipbox.kb"},
 }
 
 // The KB type field's rows around the types: None first, Custom URL… last.

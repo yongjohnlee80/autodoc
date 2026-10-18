@@ -78,7 +78,7 @@ func Descriptor(d string) string {
 	return path.Join(d, "ABOUT.md")
 }
 
-var nameRule = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
+var nameRule = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,63}$`) // the repo's name: autovim.kb
 
 // policies are the embedding policies a type may propose (core/store/workspaces.go's).
 var policies = []string{"always", "when opened", "never"}
@@ -189,7 +189,7 @@ func (t *Type) validate() error {
 		return invalid("%s: format %d; this AutoDoc reads format %d", Manifest, t.Format, Format)
 	}
 	if !nameRule.MatchString(t.Name) {
-		return invalid("%s: name %q: lowercase letters, digits and -", Manifest, t.Name)
+		return invalid("%s: name %q: lowercase letters, digits, . and -", Manifest, t.Name)
 	}
 	if strings.TrimSpace(t.Title) == "" {
 		return invalid("%s: no title", Manifest)

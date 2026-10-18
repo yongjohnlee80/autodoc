@@ -9,7 +9,7 @@ import (
 )
 
 const manifest = `format = 1
-name = "kb-zettelkasten"
+name = "zettelkasten.kb"
 title = "Zettelkasten"
 description = "linked notes"
 autodoc = ">=0.2.0"
@@ -73,7 +73,7 @@ func TestReadAValidType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ty.Name != "kb-zettelkasten" || len(ty.Folders) != 3 || len(ty.Files) != len(files()) {
+	if ty.Name != "zettelkasten.kb" || len(ty.Folders) != 3 || len(ty.Files) != len(files()) {
 		t.Fatalf("read %q with %d folders and %d files", ty.Name, len(ty.Folders), len(ty.Files))
 	}
 	if ty.Workspace.Schema != "_schema/frontmatter.yaml" || ty.Workspace.EmbeddingPolicy != "always" {
@@ -107,7 +107,7 @@ func TestReadRefusesEachRule(t *testing.T) {
 		{"folder twice", manifest + "\n[[folder]]\npath = \"raw\"\npurpose = \"again\"\n", "listed twice", files()},
 		{"unknown key", strings.Replace(manifest, "format = 1", "format = 1\nbuild = [\"make\"]", 1), "unknown key build", files()},
 		{"another format", strings.Replace(manifest, "format = 1", "format = 2", 1), "format 2", files()},
-		{"bad name", strings.Replace(manifest, `name = "kb-zettelkasten"`, `name = "KB Zettel"`, 1), "lowercase letters", files()},
+		{"bad name", strings.Replace(manifest, `name = "zettelkasten.kb"`, `name = "KB Zettel"`, 1), "lowercase letters", files()},
 		{"bad policy", strings.Replace(manifest, `embedding_policy = "always"`, `embedding_policy = "sometimes"`, 1), "embedding_policy", files()},
 		{"manifest over its limit", manifest + "#" + strings.Repeat("a", MaxManifestSize) + "\n", "is over", files()},
 	}
@@ -192,12 +192,12 @@ func TestPlan(t *testing.T) {
 		t.Fatalf("KB_OPERATIONS.md rendered as %q", ops2)
 	}
 	about := string(byRel["ABOUT.md"].Text)
-	for _, want := range []string{`kb_type: "kb-zettelkasten"`, `kb_type_url: "https://example.com/kb"`, `kb_type_commit: "0123456789abcdef0123456789abcdef01234567"`} {
+	for _, want := range []string{`kb_type: "zettelkasten.kb"`, `kb_type_url: "https://example.com/kb"`, `kb_type_commit: "0123456789abcdef0123456789abcdef01234567"`} {
 		if !strings.Contains(about, want) {
 			t.Errorf("the root ABOUT.md lacks %s: %q", want, about)
 		}
 	}
-	if got := string(byRel["AGENTS.md"].Text); !strings.Contains(got, "created: 2026-10-19") || !strings.Contains(got, "Agents of kb-zettelkasten") {
+	if got := string(byRel["AGENTS.md"].Text); !strings.Contains(got, "created: 2026-10-19") || !strings.Contains(got, "Agents of zettelkasten.kb") {
 		t.Errorf("AGENTS.md rendered as %q", got)
 	}
 	// a template's Obsidian variables pass through

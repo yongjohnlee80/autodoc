@@ -14,7 +14,7 @@ import (
 )
 
 const testKBManifest = `format = 1
-name = "kb-zettelkasten"
+name = "zettelkasten.kb"
 title = "Zettelkasten"
 description = "linked notes"
 
