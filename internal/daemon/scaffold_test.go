@@ -209,14 +209,13 @@ func TestScaffoldManaged(t *testing.T) {
 func TestScaffoldBounds(t *testing.T) {
 	m, root := scaffolded(t)
 	ctx := context.Background()
-	// notes/ exists, so the filesystem itself would resolve notes/../sneaky.md: only the daemon's
-	// own path check refuses it
+	// notes/ exists: a name that isn't clean is still refused, by the filesystem's own name check
 	if err := os.MkdirAll(filepath.Join(root, "notes"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	rs, err := m.Scaffold(ctx, "kb", []rpc.ScaffoldFile{
 		{Path: "../escape.md", Content: []byte("x")},
-		{Path: "notes/../sneaky.md", Content: []byte("x")}, // not clean: the daemon refuses what the filesystem would resolve
+		{Path: "notes/../sneaky.md", Content: []byte("x")}, // not clean
 		{Path: "/abs.md", Content: []byte("x")},
 		{Path: "", Content: []byte("x")},
 		{Path: "bin.md", Content: []byte("a\x00b")},

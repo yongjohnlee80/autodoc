@@ -64,9 +64,9 @@ func scaffoldOne(ctx context.Context, fsys vfs.FS, f rpc.ScaffoldFile) rpc.Scaff
 		r.Outcome, r.Err = rpc.ScaffoldRefused, why
 		return r
 	}
+	// a name that isn't clean, relative and inside the root is refused by the filesystem itself,
+	// before any I/O (vfs.CheckName, io/fs.ValidPath): one owner of that rule
 	switch {
-	case !kbtype.ValidPath(f.Path):
-		return refuse("not a clean relative path")
 	case len(f.Content) > kbtype.MaxFileSize:
 		return refuse(fmt.Sprintf("over %d bytes", kbtype.MaxFileSize))
 	case !kind.Textual(f.Content):
