@@ -215,7 +215,7 @@ func TestScaffoldBounds(t *testing.T) {
 	}
 	rs, err := m.Scaffold(ctx, "kb", []rpc.ScaffoldFile{
 		{Path: "../escape.md", Content: []byte("x")},
-		{Path: "notes/../sneaky.md", Content: []byte("x")}, // not clean
+		{Path: "notes/../sneaky.md", Content: []byte("x")},                 // not clean
 		{Path: "notes/../made-by-a-refusal/leaf.md", Content: []byte("x")}, // not clean, and its cleaned parent is new
 		{Path: "/abs.md", Content: []byte("x")},
 		{Path: "", Content: []byte("x")},
