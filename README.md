@@ -364,6 +364,8 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
     file modified. Only the edited record's lines change on save.
   - A file that is not valid CSV (a stray quote) opens read-only in the table; its text still
     edits.
+  - A workspace opens its CSV and TSV files once its include names them (`**/*.csv`,
+    `**/*.tsv`): the default include is Markdown, text and YAML.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
 - **The pickers** (search, open a document, add a workspace) share one layout: the fields over the
