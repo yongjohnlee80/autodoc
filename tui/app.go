@@ -120,11 +120,13 @@ type Host struct {
 	registrationOffered, registrationNoted bool
 	registrationRestart, restartAccepted   bool
 	panelOpen                              map[string]bool
-	panelMax                               map[string]bool // a panel maximized (its Drawer's changed signal; panelChanged)
-	maximizableOpened                      []string        // the terminal and the agents, the most recently opened first (maximizePanel)
-	lastPanel                              string          // the panel opened last (Arrange panel)
-	tutorialAt                             int             // the tutorial's page shown (tutorial.go)
-	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)
+	panelGen                               map[string]uint64 // each panel's openings, counted (panelOpened): a focus landing's (focusLanded)
+	navSeq                                 uint64            // the navigations begun (openRefWith): a focus landing's
+	panelMax                               map[string]bool   // a panel maximized (its Drawer's changed signal; panelChanged)
+	maximizableOpened                      []string          // the terminal and the agents, the most recently opened first (maximizePanel)
+	lastPanel                              string            // the panel opened last (Arrange panel)
+	tutorialAt                             int               // the tutorial's page shown (tutorial.go)
+	fonts                                  FontControl       // the window's fonts; nil in a terminal (fonts.go)
 	families                               func(mono bool) []string
 	defaultCellFont                        string
 	fontsApplied                           appliedFonts
@@ -400,6 +402,7 @@ func newHost(session *Session, opt Options) *Host {
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
 		panelOpen:       map[string]bool{},
+		panelGen:        map[string]uint64{},
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 	}

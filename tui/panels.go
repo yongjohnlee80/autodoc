@@ -119,6 +119,7 @@ func (h *Host) panelOpened(name string) {
 		return
 	}
 	h.panelOpen[name] = true
+	h.panelGen[name]++
 	h.lastPanel = name
 	if slices.Contains(maximizable, name) {
 		// the newest first: F11 and SPC M off the panels reach the newest still open

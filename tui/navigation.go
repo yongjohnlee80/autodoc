@@ -34,9 +34,15 @@ func refOf(doc string) fileRef {
 // travels with its own open (openRefTo, loadTo) and no other: an open that doesn't go ahead (Stay
 // at the unsaved question, an HTML file's Cancel, a failed read, a newer open's ticket) drops it,
 // so it never lands on another document, or on a later open of the same one.
+//
+// A landing may also name the panel the keyboard goes to once the document is shown (focus); it
+// does only while its open is still the foreground navigation (focusLanded).
 type landing struct {
-	at   int              // a byte offset, when step is nil
-	step *widget.JumpStep // a jump's
+	at       int              // a byte offset, when step is nil; -1 leaves the cursor where the open puts it
+	step     *widget.JumpStep // a jump's
+	focus    string           // the panel the keyboard goes to once the document is shown; "" the editor
+	nav      uint64           // the navigation it belongs to: h.navSeq when its open began
+	panelGen uint64           // the opening of focus it came from: h.panelGen[focus] then
 }
 
 // jumpView is the page's view, as the jump list records it: "rendered" in the GUI's Rendered view.
@@ -52,7 +58,7 @@ func (h *Host) jumpTo(step widget.JumpStep) {
 // committed first, and lands only if the list takes it (it moved since: nothing changes).
 func (h *Host) land(land *landing, ref fileRef, content string) {
 	switch {
-	case land == nil:
+	case land == nil, land.step == nil && land.at < 0:
 	case land.step != nil:
 		if !h.jumps.Commit(*land.step) {
 			return
@@ -62,6 +68,22 @@ func (h *Host) land(land *landing, ref fileRef, content string) {
 	default:
 		h.core.SetCursorPosition(cursorAt(content, min(max(land.at, 0), len(content))))
 	}
+}
+
+// focusLanded is a successful open's last step: b is the buffer the document was shown into. A
+// landing without a focus target gives the editor the keyboard, as every open does. One with a
+// target gives it that panel only while its open is still the foreground navigation: b is the
+// active buffer, no navigation began after it, and the panel is open in the same opening it was
+// asked from. Otherwise the keyboard stays where it is; b is filled all the same.
+func (h *Host) focusLanded(b *openBuffer, land *landing) {
+	if land == nil || land.focus == "" {
+		h.focusEditor()
+		return
+	}
+	if b != h.active || land.nav != h.navSeq || !h.panelOpen[land.focus] || h.panelGen[land.focus] != land.panelGen {
+		return
+	}
+	h.keep(h.p.Call(h.panelView(land.focus), "forceActiveFocus"))
 }
 
 // missedLanding is an open whose read failed: a jump's document gone for good leaves the list, and
