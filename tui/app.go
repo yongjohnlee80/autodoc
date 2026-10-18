@@ -166,6 +166,7 @@ type Host struct {
 	kbTypeSeq uint64
 	kbStaged  *stagedKBType
 	kbStage   func(context.Context, string) stagedKBType // a test's stager; nil is stageKBType's clone
+	kbResume  *kbResume                                  // a partial add's type, kept for its Save to finish (kbtype.go)
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
 	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins

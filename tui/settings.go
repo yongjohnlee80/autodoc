@@ -752,18 +752,33 @@ func (h *Host) saveSettings(f settingsForm) {
 		refuse(err)
 		return
 	}
-	if len(c) == 0 {
+	name := base.w.name
+	resume := h.kbResume
+	if resume != nil && resume.ws != name {
+		resume = nil // a resume belongs to the workspace it added, and to no other
+	}
+	if len(c) == 0 && resume == nil {
 		h.notify(base.w.name + ": nothing changed")
 		return
 	}
-	name := base.w.name
 	do(h, func(ctx context.Context) error {
+		if resume != nil {
+			if _, err := h.applyKBType(ctx, name, h.kbPlan(resume.s)); err != nil {
+				return fmt.Errorf("the KB type's files: %w", err)
+			}
+		}
+		if len(c) == 0 {
+			return nil
+		}
 		_, err := h.call(ctx, "workspace.configure", name, c)
 		return err
 	}, func(err error) {
 		if err != nil {
-			refuse(err)
+			refuse(err) // the resume is kept: Save again retries, create-only
 			return
+		}
+		if resume != nil && h.kbResume == resume {
+			h.dropKBType()
 		}
 		h.saved(name, c)
 	})
@@ -827,8 +842,11 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 		}
 		return a
 	}, func(a answer) {
-		if a.added {
-			h.dropKBType() // the stage's work is done, whatever the outcome; a resume stages again
+		switch {
+		case a.added && a.partial:
+			h.keepForResume(name, kb) // the reopened dialog's Save finishes it on this workspace
+		case a.added:
+			h.dropKBType() // the stage's work is done
 		}
 		made := base
 		made.w, made.adding = a.w, false
@@ -842,7 +860,7 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 			h.failed("added workspace "+name+", but its KB type stopped part way ("+a.applied.String()+")", a.err)
 			h.loadWorkspaces()
 			h.showSettings(made, h.settingsTabNow(), "added; the KB type stopped part way: "+a.applied.String()+
-				". Its settings are not saved yet: Save saves them, and kbtype.apply "+kb.url+" finishes the files.", f)
+				". Save finishes its files on "+name+", then saves the settings.", f)
 		case a.err != nil:
 			what := "added with the defaults"
 			if kb != nil {

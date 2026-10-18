@@ -231,15 +231,24 @@ func (t *Type) validate() error {
 			return invalid("%s/%s is missing: folder %q's descriptor", Tree, Descriptor(f.Path), f.Path)
 		}
 	}
-	// every folder under tree/ is listed, and an immutable folder holds only its descriptor
+	// an immutable folder has no subfolders (checked first, so the refusal names the folder)
+	for _, f := range t.Folders {
+		for d := path.Dir(f.Path); d != "."; d = path.Dir(d) {
+			if listed[d].Immutable {
+				return invalid("%s: folder %q is inside the immutable %q: an immutable folder has no subfolders", Manifest, f.Path, d)
+			}
+		}
+	}
+	// every folder under tree/ is listed, and an immutable folder's whole subtree holds only its
+	// own descriptor: nothing a type seeds may land inside the user's untouched material, however deep
 	for rel := range t.Files {
 		for d := path.Dir(rel); d != "."; d = path.Dir(d) {
 			if _, ok := listed[d]; !ok {
 				return invalid("%s/%s: folder %q is not listed in %s", Tree, rel, d, Manifest)
 			}
-		}
-		if d := path.Dir(rel); d != "." && listed[d].Immutable && rel != Descriptor(d) {
-			return invalid("%s/%s: folder %q is immutable: it holds only its descriptor", Tree, rel, d)
+			if listed[d].Immutable && rel != Descriptor(d) {
+				return invalid("%s/%s: folder %q is immutable: it holds only its descriptor", Tree, rel, d)
+			}
 		}
 	}
 	return nil

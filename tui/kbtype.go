@@ -186,13 +186,36 @@ func (h *Host) pickKBType(url string) {
 	})
 }
 
-// dropKBType forgets the staged type and removes its stage; a pick still staging is stale from now.
+// dropKBType forgets the staged type and a partial add's kept one, removing their stages; a pick
+// still staging is stale from now.
 func (h *Host) dropKBType() {
 	h.kbTypeSeq++
 	if h.kbStaged != nil {
 		_ = os.RemoveAll(h.kbStaged.stage)
 		h.kbStaged = nil
 	}
+	if r := h.kbResume; r != nil {
+		h.kbResume = nil
+		if r.s != h.kbStaged {
+			_ = os.RemoveAll(r.s.stage)
+		}
+	}
+}
+
+// kbResume is a partial add's unfinished type: the workspace it added and the type as staged. The
+// dialog reopened on that workspace finishes the files, create-only, before its Save configures,
+// so a retry never adds again and never writes into another workspace (Zen #240 r0 R2).
+type kbResume struct {
+	ws string
+	s  *stagedKBType
+}
+
+// keepForResume holds s for workspace ws after a partial add: the stage is no longer the add
+// dialog's pick (that dialog is gone), and is kept until the resume ends or the dialog is cancelled.
+func (h *Host) keepForResume(ws string, s *stagedKBType) {
+	h.kbTypeSeq++ // no pick still staging may land on the reopened dialog
+	h.kbStaged = nil
+	h.kbResume = &kbResume{ws: ws, s: s}
 }
 
 // kbTypeSummary is what the field shows of a staged type: its folders and purposes, and the

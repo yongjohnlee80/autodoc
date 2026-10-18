@@ -203,9 +203,10 @@ func TestAStaleKBTypePickNeverLands(t *testing.T) {
 }
 
 // A type whose files stop part way reopens the dialog on the workspace it added, saying what
-// landed, with no second add: the workspace exists, and a refused file is named.
+// landed, with no second add; that dialog's Save finishes the type there, and nowhere else.
 func TestAPartialKBTypeReopensOnTheAddedWorkspace(t *testing.T) {
-	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	kbRoot := fileDir(t, "a.md", "# A\n")
+	d := startManaged(t, map[string]string{"kb": kbRoot})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "the workspaces", func(string) bool { return len(r.listed()) > 0 })
 	r.h.kbStage = stagedAs(t, testKBType(t, 0))
@@ -226,6 +227,27 @@ func TestAPartialKBTypeReopensOnTheAddedWorkspace(t *testing.T) {
 	}
 	if ws, _ := d.db.Workspaces(context.Background()); len(ws) != 2 {
 		t.Fatalf("%d workspaces stored; want kb and zk", len(ws))
+	}
+	// the obstacle gone, the reopened dialog's Save finishes the type on zk: no second add, and
+	// nothing written into kb, the workspace in use (Zen #240 r0 R2)
+	if err := os.Remove(filepath.Join(root, "permanent")); err != nil {
+		t.Fatal(err)
+	}
+	r.saveForm(func(*settingsForm) {})
+	r.s.WaitFor(t, "the type finished on zk", func(string) bool {
+		_, err := os.Stat(filepath.Join(root, "permanent", "ABOUT.md"))
+		return err == nil
+	})
+	for _, rel := range []string{"AGENTS.md", "permanent", "KB_OPERATIONS.md"} {
+		if _, err := os.Stat(filepath.Join(kbRoot, rel)); err == nil {
+			t.Errorf("%s was written into kb, not zk", rel)
+		}
+	}
+	if ws, _ := d.db.Workspaces(context.Background()); len(ws) != 2 {
+		t.Fatalf("the resume added a workspace: %d stored", len(ws))
+	}
+	if onLoop(r, func() bool { return r.h.kbResume != nil }) {
+		t.Error("the resume was kept after it finished")
 	}
 }
 

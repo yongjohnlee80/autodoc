@@ -98,6 +98,8 @@ func TestReadRefusesEachRule(t *testing.T) {
 		{"operations in tree", manifest, "that file is AutoDoc's own", with(func(fs map[string]string) { fs[Operations] = "x" })},
 		{"no AGENTS.md", manifest, "AGENTS.md is missing", with(func(fs map[string]string) { delete(fs, "AGENTS.md") })},
 		{"immutable with content", manifest, `folder "raw" is immutable`, with(func(fs map[string]string) { fs["raw/source.txt"] = "x" })},
+		{"a folder inside an immutable one", manifest + "\n[[folder]]\npath = \"raw/nested\"\npurpose = \"seeds\"\n", `is inside the immutable "raw"`,
+			with(func(fs map[string]string) { fs["raw/nested/ABOUT.md"] = "x"; fs["raw/nested/seed.md"] = "x" })},
 		{"not text", manifest, "is not UTF-8 text", with(func(fs map[string]string) { fs["permanent/b.md"] = "a\x00b" })},
 		{"over a file's size", manifest, "is over", with(func(fs map[string]string) { fs["permanent/big.md"] = strings.Repeat("a", MaxFileSize+1) })},
 		{"schema not a file", strings.Replace(manifest, `schema = "_schema/frontmatter.yaml"`, `schema = "_schema/none.yaml"`, 1), "is not a file of tree/", files()},
