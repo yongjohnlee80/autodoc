@@ -548,7 +548,7 @@ tables. The codes an `err` carries are listed at the end of `--contracts`.
 | `doc` | `outline`, `read`, `read_raw`, `remove`, `rename`, `validate`, `write`, `write_raw` |
 | `embedding` | `add`, `cancel_switch`, `log`, `model_context`, `models`, `providers`, `remove`, `update`, `usage`, `use` |
 | `file` | `locate`, `read`, `read_raw`, `write`, `write_raw` |
-| `graph` | `backlinks`, `links`, `neighborhood`, `resolve`, `unresolved` |
+| `graph` | `backlinks`, `links`, `map`, `neighborhood`, `resolve`, `unresolved` |
 | `index` | `changes`, `documents`, `list`, `models`, `purge_model`, `reindex`, `status` |
 | `preference` | `list`, `set` |
 | `ranker` | `add`, `list`, `log`, `models`, `remove`, `update`, `usage`, `use`, `window` |

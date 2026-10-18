@@ -84,7 +84,9 @@ import (
 // reads a KB-file value's source as "store", as before.
 // Protocol 25 is ADR 1792256101: sys.stats, the daemon's own process (its memory, its CPU so far,
 // its goroutines and its start), which a session below 25 does not have.
-const Protocol int64 = 25
+// Protocol 26 is ADR 1792347044: graph.map, a workspace's documents (each one's title, type and
+// whether another supersedes it) and the resolved links among them, or a root's neighbourhood.
+const Protocol int64 = 26
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it
 // declared: a verb added after it answers as an unknown method, as an older daemon would, and every

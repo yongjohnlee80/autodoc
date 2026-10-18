@@ -41,8 +41,8 @@ func TestContractsAreGolden(t *testing.T) {
 	if string(got) != string(want) {
 		t.Errorf("the contracts differ from %s: review the change, bump Protocol if a client sees it, and rewrite it with -update", golden)
 	}
-	if Protocol != 25 || MinProtocol != 12 {
-		t.Errorf("protocol %d to %d: the golden file is protocol 25's, served from 12", MinProtocol, Protocol)
+	if Protocol != 26 || MinProtocol != 12 {
+		t.Errorf("protocol %d to %d: the golden file is protocol 26's, served from 12", MinProtocol, Protocol)
 	}
 }
 
@@ -98,7 +98,7 @@ func TestCatalogFilters(t *testing.T) {
 	if got := names(s.Catalog(13, "")); slices.Contains(got, "graph.resolve") || !slices.Contains(got, "index.documents") {
 		t.Errorf("at 13: %v", got)
 	}
-	if got := names(s.Catalog(Protocol, "graph.*")); !reflect.DeepEqual(got, []string{"graph.backlinks", "graph.links", "graph.neighborhood", "graph.resolve", "graph.unresolved"}) {
+	if got := names(s.Catalog(Protocol, "graph.*")); !reflect.DeepEqual(got, []string{"graph.backlinks", "graph.links", "graph.map", "graph.neighborhood", "graph.resolve", "graph.unresolved"}) {
 		t.Errorf("graph.*: %v", got)
 	}
 	one := s.Catalog(Protocol, "doc.read")
@@ -213,7 +213,7 @@ func sameJSON(t *testing.T, a, b any) bool {
 func TestCatalogMarkdown(t *testing.T) {
 	md := New(Fixed(), "v").Catalog(Protocol, "").Markdown()
 	for _, want := range []string{
-		"Verbs at protocol 25; the daemon serves sessions from protocol 12.",
+		"Verbs at protocol 26; the daemon serves sessions from protocol 12.",
 		"\n### `graph`\n\n| verb | params | result | since | audience | effect |\n",
 		"| `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools |",
 		"| `file.locate` | `path` string (absolute and clean) |",

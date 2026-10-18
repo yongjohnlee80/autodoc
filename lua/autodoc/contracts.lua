@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 25,
+  protocol = 26,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -219,6 +219,15 @@ return {
       },
       result = "[{path, raw, anchor, kind, resolved, external?}]",
       doc = "The links the file makes.",
+    },
+    ["graph.map"] = {
+      since = 26, scope = "workspace", audience = "agent",
+      params = {
+        { name = "workspace", type = "string" },
+        { name = "options", type = "map", optional = true }
+      },
+      result = "{nodes: [{path, title, type, superseded}], edges: [{src, dst, kind}]}",
+      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it.",
     },
     ["graph.neighborhood"] = {
       since = 1, scope = "workspace", audience = "agent",

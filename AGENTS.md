@@ -30,7 +30,7 @@ autodoc --call doc.read '["kb", "adrs/0203-architecture.md"]'
 A program that speaks msgpack-rpc itself can dial the socket directly. Find the socket with
 `autodoc --print-endpoint` (one line, `unix<TAB><socket>`; add `--ensure` to start the daemon first
 when nothing answers), never by rules of your own. The first call on a connection must be
-`sys.hello` with `{"protocol": 25, "name": "<your client>"}`: the protocol your client was written
+`sys.hello` with `{"protocol": 26, "name": "<your client>"}`: the protocol your client was written
 for. The daemon serves every protocol from `min_protocol` (12) to its own (25); another is
 refused, and so is every verb until the hello succeeds. A verb may be written right behind the
 hello, before its answer: it waits for the hello (3 s at most). A session keeps the protocol it declared: a
@@ -200,7 +200,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 25; the daemon serves sessions from protocol 12.
+Verbs at protocol 26; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -246,6 +246,7 @@ Verbs at protocol 25; the daemon serves sessions from protocol 12.
 | --- | --- | --- | --- | --- | --- |
 | `graph.backlinks` | `workspace` string, `path` string, `options`? map ({kinds} (protocol 14)) | `[{path, raw, anchor, kind, resolved, external?}]` — The files that link to it. Codes: -32060, -32061. | 1 | agent | read |
 | `graph.links` | `workspace` string, `path` string, `options`? map ({kinds} (protocol 14)) | `[{path, raw, anchor, kind, resolved, external?}]` — The links the file makes. Codes: -32060, -32061. | 1 | agent | read |
+| `graph.map` | `workspace` string, `options`? map ({root, depth, kinds}) | `{nodes: [{path, title, type, superseded}], edges: [{src, dst, kind}]}` — The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. Codes: -32060, -32061. | 26 | agent | read |
 | `graph.neighborhood` | `workspace` string, `path` string, `depth` int, `options`? map ({kinds} (protocol 14)) | `{nodes, edges: [{src, dst, kind}]}` — The files within depth links. Codes: -32060, -32061. | 1 | agent | read |
 | `graph.resolve` | `workspace` string, `from` string (the file the link is written in), `raw` string (the link as written) | `{path, reason}` — Where one link reaches now, saved or not, as the index resolves links: path "" with reason missing or ambiguous, or "" when raw is no link the index keeps (a URL, a heading of from). Codes: -32060. | 18 | agent | read |
 | `graph.unresolved` | `workspace` string, `options`? map ({kinds} (protocol 14)) | `[{src, raw, reason}]` — Links that name no file. Codes: -32060. | 1 | agent | read |

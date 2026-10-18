@@ -1,5 +1,5 @@
 {
-  "protocol": 25,
+  "protocol": 26,
   "min_protocol": 12,
   "verbs": [
     {
@@ -636,6 +636,31 @@
         -32061
       ],
       "doc": "The links the file makes."
+    },
+    {
+      "verb": "graph.map",
+      "since": 26,
+      "scope": "workspace",
+      "audience": "agent",
+      "effect": "read",
+      "params": [
+        {
+          "name": "workspace",
+          "type": "string"
+        },
+        {
+          "name": "options",
+          "type": "map",
+          "optional": true,
+          "doc": "{root, depth, kinds}"
+        }
+      ],
+      "result": "{nodes: [{path, title, type, superseded}], edges: [{src, dst, kind}]}",
+      "errors": [
+        -32060,
+        -32061
+      ],
+      "doc": "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it."
     },
     {
       "verb": "graph.neighborhood",

@@ -303,6 +303,125 @@ func TestNeighborhood(t *testing.T) {
 	}
 }
 
+// TestMap: without a root, every document of the workspace, a lone one included, each with its
+// title and frontmatter type, and every resolved link among them. A document is superseded by an
+// incoming supersedes or an outgoing superseded_by, and stays so under a kinds filter that drops
+// both; one naming itself is not.
+func TestMap(t *testing.T) {
+	e := newEnv(t, options{})
+	// a --supersedes--> b --wikilink--> c --superseded_by--> d; f alone; s supersedes itself
+	e.put("a.md", "---\ntitle: A doc\ntype: adr\nsupersedes: [b.md]\n---\nA\n",
+		"b.md", "---\ntitle: B doc\ntype: review\n---\n[[c]]\n",
+		"c.md", "---\ntitle: C doc\ntype: [not, a, string]\nsuperseded_by: [d.md]\n---\nC\n",
+		"d.md", "---\ntitle: D doc\n---\nD\n",
+		"f.md", "---\ntitle: F doc\n---\n[[nothing]]\n",
+		"s.md", "---\ntitle: S doc\nsupersedes: [s.md]\n---\nS\n")
+	ctx := context.Background()
+	nodes := []MapNode{
+		{Path: "a.md", Title: "A doc", Type: "adr"},
+		{Path: "b.md", Title: "B doc", Type: "review", Superseded: true},
+		{Path: "c.md", Title: "C doc", Superseded: true},
+		{Path: "d.md", Title: "D doc"},
+		{Path: "f.md", Title: "F doc"},
+		{Path: "s.md", Title: "S doc"},
+	}
+	all, err := e.store.Map(ctx, MapOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(all.Nodes, nodes) {
+		t.Errorf("every document:\n got %+v\nwant %+v", all.Nodes, nodes)
+	}
+	for _, want := range []Edge{{"a.md", "b.md", "supersedes"}, {"b.md", "c.md", LinkWikilink}, {"c.md", "d.md", "superseded_by"}} {
+		found := false
+		for _, e := range all.Edges {
+			found = found || e == want
+		}
+		if !found {
+			t.Errorf("edges %+v lack %+v", all.Edges, want)
+		}
+	}
+	if !sort.SliceIsSorted(all.Edges, func(i, j int) bool {
+		a, b := all.Edges[i], all.Edges[j]
+		return a.Src < b.Src || a.Src == b.Src && (a.Dst < b.Dst || a.Dst == b.Dst && a.Kind < b.Kind)
+	}) {
+		t.Errorf("edges unsorted: %+v", all.Edges)
+	}
+
+	body, err := e.store.Map(ctx, MapOpts{Kinds: BodyKinds})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(body.Nodes, nodes) {
+		t.Errorf("body kinds unmarked or dropped a document:\n got %+v\nwant %+v", body.Nodes, nodes)
+	}
+	if want := []Edge{{"b.md", "c.md", LinkWikilink}}; !reflect.DeepEqual(body.Edges, want) {
+		t.Errorf("body kinds' edges %+v, want %+v", body.Edges, want)
+	}
+
+	if _, err := e.store.Map(ctx, MapOpts{Root: "nope.md"}); !errors.Is(err, ErrNoDocument) {
+		t.Errorf("an unknown root: %v", err)
+	}
+}
+
+// TestNeighborhoodKeepsItsRoot: Neighborhood always walks from a document. An empty path, or one
+// naming none, is ErrNoDocument as before graph.map, never the whole workspace; a lone document is
+// its own neighbourhood. Map without a root is the whole workspace, and with an unknown one refuses.
+func TestNeighborhoodKeepsItsRoot(t *testing.T) {
+	e := newEnv(t, options{})
+	e.put("a.md", "[[b]]", "b.md", "b", "lone.md", "lone")
+	ctx := context.Background()
+	for _, p := range []string{"", "nope.md"} {
+		if nb, err := e.store.Neighborhood(ctx, p, 2, nil); !errors.Is(err, ErrNoDocument) {
+			t.Errorf("Neighborhood(%q): %+v, %v; want ErrNoDocument", p, nb, err)
+		}
+		if p != "" {
+			if m, err := e.store.Map(ctx, MapOpts{Root: p}); !errors.Is(err, ErrNoDocument) {
+				t.Errorf("Map rooted at %q: %+v, %v; want ErrNoDocument", p, m, err)
+			}
+		}
+	}
+	if nb, err := e.store.Neighborhood(ctx, "lone.md", 2, nil); err != nil || !reflect.DeepEqual(nb, Neighborhood{Nodes: []string{"lone.md"}}) {
+		t.Errorf("a lone root: %+v, %v", nb, err)
+	}
+	m, err := e.store.Map(ctx, MapOpts{})
+	if err != nil || len(m.Nodes) != 3 || len(m.Edges) != 1 {
+		t.Errorf("Map without a root: %+v, %v; want the 3 documents and their link", m, err)
+	}
+}
+
+// TestMapRootedIsTheNeighborhood: a rooted map holds Neighborhood's documents and links, at each
+// depth and kinds filter, with the documents' own fields.
+func TestMapRootedIsTheNeighborhood(t *testing.T) {
+	e := newEnv(t, options{})
+	e.put("a.md", "---\nsupersedes: [b.md]\n---\n[[e]]\n", "b.md", "[[c]]", "c.md", "[[d]]", "d.md", "end", "e.md", "![[a]]", "f.md", "lone")
+	ctx := context.Background()
+	for _, root := range []string{"a.md", "c.md", "f.md"} {
+		for _, depth := range []int{0, 1, 2, 9} {
+			for _, kinds := range [][]string{nil, BodyKinds} {
+				nb, err := e.store.Neighborhood(ctx, root, depth, kinds)
+				if err != nil {
+					t.Fatal(err)
+				}
+				m, err := e.store.Map(ctx, MapOpts{Root: root, Depth: depth, Kinds: kinds})
+				if err != nil {
+					t.Fatal(err)
+				}
+				var paths []string
+				for _, n := range m.Nodes {
+					paths = append(paths, n.Path)
+					if n.Path == "b.md" && !n.Superseded {
+						t.Errorf("%s depth %d %v: b.md not superseded", root, depth, kinds)
+					}
+				}
+				if !reflect.DeepEqual(paths, nb.Nodes) || !reflect.DeepEqual(m.Edges, nb.Edges) {
+					t.Errorf("%s depth %d %v: map %v %+v, neighborhood %+v", root, depth, kinds, paths, m.Edges, nb)
+				}
+			}
+		}
+	}
+}
+
 // TestTieBrokenByDelete: of two files tied for a name, deleting one gives the link to the other,
 // though the link never reached the one deleted.
 func TestTieBrokenByDelete(t *testing.T) {

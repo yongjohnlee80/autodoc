@@ -23,6 +23,10 @@ type (
 		Depth     int       `param:"depth"`
 		Options   optionMap `param:"options,optional" doc:"{kinds} (protocol 14)"`
 	}
+	graphMap struct {
+		Workspace string    `param:"workspace"`
+		Options   optionMap `param:"options,optional" doc:"{root, depth, kinds}"`
+	}
 	graphUnresolved struct {
 		Workspace string    `param:"workspace"`
 		Options   optionMap `param:"options,optional" doc:"{kinds} (protocol 14)"`
@@ -53,6 +57,18 @@ type edgeJSON struct {
 	Src  string `json:"src"`
 	Dst  string `json:"dst"`
 	Kind string `json:"kind"`
+}
+
+type mapJSON struct {
+	Nodes []mapNodeJSON `json:"nodes"`
+	Edges []edgeJSON    `json:"edges"`
+}
+
+type mapNodeJSON struct {
+	Path       string `json:"path"`
+	Title      string `json:"title"`
+	Type       string `json:"type"`
+	Superseded bool   `json:"superseded"`
 }
 
 type unresolvedJSON struct {
@@ -116,6 +132,28 @@ func (s *Server) graphVerbs() []module.Verb {
 				}
 				return out, nil
 			}),
+		module.Handle(module.Contract{Verb: "graph.map", Effect: module.EffectRead, Since: mapSince, Scope: ws, Audience: agent,
+			Result: "{nodes: [{path, title, type, superseded}], edges: [{src, dst, kind}]}",
+			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
+			Doc:    "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it."},
+			func(ctx context.Context, p graphMap) (*mapJSON, error) {
+				o, err := mapOpts(ctx, p.Options.raw)
+				if err != nil {
+					return nil, err
+				}
+				m, err := workspaceOf(ctx).Index().Store().Map(ctx, o)
+				if err != nil {
+					return nil, err
+				}
+				out := &mapJSON{Nodes: make([]mapNodeJSON, len(m.Nodes)), Edges: make([]edgeJSON, len(m.Edges))}
+				for i, n := range m.Nodes {
+					out.Nodes[i] = mapNodeJSON{Path: n.Path, Title: n.Title, Type: n.Type, Superseded: n.Superseded}
+				}
+				for i, e := range m.Edges {
+					out.Edges[i] = edgeJSON{Src: e.Src, Dst: e.Dst, Kind: e.Kind}
+				}
+				return out, nil
+			}),
 		module.Handle(module.Contract{Verb: "graph.unresolved", Effect: module.EffectRead, Since: 1, Scope: ws, Audience: agent,
 			Result: "[{src, raw, reason}]", Errors: []int64{CodeNoSuchWorkspace}, Doc: "Links that name no file."},
 			func(ctx context.Context, p graphUnresolved) ([]unresolvedJSON, error) {
@@ -156,6 +194,36 @@ const relationsSince = 14
 // (ADR 1792015212 §2.4). A session below it sees the kinds it knew, its graph unchanged, and asking
 // for one of todoKinds by name is refused, not answered.
 const todoGraphSince = 23
+
+// mapSince is the protocol graph.map came in (ADR 1792347044).
+const mapSince = 26
+
+// mapOpts reads graph.map's options: {root, depth, kinds}. Without a root, the whole workspace and
+// depth is unused; with one, depth defaults to 1. kinds is graphKinds'.
+func mapOpts(ctx context.Context, raw any) (index.MapOpts, error) {
+	o := index.MapOpts{Depth: 1}
+	kinds, err := graphKinds(ctx, raw)
+	if err != nil {
+		return o, err
+	}
+	o.Kinds = kinds
+	opts, _ := raw.(map[string]any) // graphKinds refused any other shape
+	if v, ok := opts["root"]; ok {
+		s, ok := v.(string)
+		if !ok || s == "" {
+			return o, invalid("graph.map: opts.root must be a path")
+		}
+		o.Root = s
+	}
+	if v, ok := opts["depth"]; ok {
+		n, ok := v.(int64)
+		if !ok || n < 1 || n > 2 {
+			return o, invalid("graph.map: opts.depth must be 1 or 2")
+		}
+		o.Depth = int(n)
+	}
+	return o, nil
+}
 
 // todoKinds are the relation kinds protocol 23 added.
 var todoKinds = map[string]bool{"review": true, "blocked": true}

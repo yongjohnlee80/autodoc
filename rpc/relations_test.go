@@ -263,3 +263,53 @@ func TestAProtocol22SessionSeesNoTodoRelations(t *testing.T) {
 }
 
 func str(v any) string { s, _ := v.(string); return s }
+
+// TestGraphMap: graph.map answers the workspace's documents with their fields, or a root's
+// neighbourhood, refuses a bad option, and is an unknown method below its protocol.
+func TestGraphMap(t *testing.T) {
+	r := relationRig(t)
+	cur, _, err := helloAs(r, Protocol, "a-new-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := call(t, cur, "graph.map", "kb").(map[string]any)
+	nodes := []any{
+		map[string]any{"path": "a.md", "title": "A", "type": "", "superseded": false},
+		map[string]any{"path": "b.md", "title": "B", "type": "", "superseded": true},
+		map[string]any{"path": "c.md", "title": "C", "type": "", "superseded": false},
+	}
+	edges := []any{
+		map[string]any{"src": "a.md", "dst": "b.md", "kind": "supersedes"},
+		map[string]any{"src": "b.md", "dst": "c.md", "kind": "wikilink"},
+	}
+	if !reflect.DeepEqual(m["nodes"], nodes) || !reflect.DeepEqual(m["edges"], edges) {
+		t.Errorf("the whole map: %v", m)
+	}
+	m = call(t, cur, "graph.map", "kb", map[string]any{"root": "c.md", "depth": int64(1), "kinds": []any{"wikilink"}}).(map[string]any)
+	if !reflect.DeepEqual(m["nodes"], nodes[1:]) || !reflect.DeepEqual(m["edges"], edges[1:]) {
+		t.Errorf("c.md's wikilink neighbourhood: %v; want b.md still superseded", m)
+	}
+	for _, opts := range []map[string]any{{"root": int64(1)}, {"root": ""}, {"depth": int64(3)}, {"depth": "1"}, {"kinds": "body"}} {
+		_, err := cur.Call(context.Background(), "graph.map", "kb", opts)
+		var re *golibrpc.Error
+		if !errors.As(err, &re) || re.Code != golibrpc.CodeInvalidParams {
+			t.Errorf("options %v: %v; want invalid params", opts, err)
+		}
+	}
+	if _, err := cur.Call(context.Background(), "graph.map", "kb", map[string]any{"root": "none.md"}); code(err) != CodeNotFound {
+		t.Errorf("an unknown root: %v; want not found", err)
+	}
+	// graph.neighborhood still always has a root: an empty or unknown path is not found, as it was
+	for _, p := range []string{"", "none.md"} {
+		if res, err := cur.Call(context.Background(), "graph.neighborhood", "kb", p, int64(2)); code(err) != CodeNotFound {
+			t.Errorf("graph.neighborhood of %q: %v, %v; want not found", p, res, err)
+		}
+	}
+	old, _, err := helloAs(r, mapSince-1, "an-old-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Call(context.Background(), "graph.map", "kb"); code(err) != golibrpc.CodeMethodNotFound {
+		t.Errorf("below protocol %d: %v; want method not found", mapSince, err)
+	}
+}

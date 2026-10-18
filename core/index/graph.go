@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"sort"
@@ -99,53 +100,96 @@ func (s *Store) Backlinks(ctx context.Context, path string, kinds []string) ([]L
 	return out, err
 }
 
-// Neighborhood gathers the documents within depth (1 or 2; others are clamped) resolved links of
-// the one at path, following links of the given kinds (nil: every kind) both ways, and those links
-// among them. The workspace's resolved links of those kinds are walked as a graph.Graph, so a
-// document reached only through a link of another kind is not in it.
-func (s *Store) Neighborhood(ctx context.Context, path string, depth int, kinds []string) (Neighborhood, error) {
-	depth = min(max(depth, 1), 2)
-	var nb Neighborhood
+// MapNode is a document of graph.map: its path, its title, its frontmatter "type" ("" when none),
+// and whether another document supersedes it.
+type MapNode struct {
+	Path, Title, Type string
+	Superseded        bool
+}
+
+// Map is graph.map: documents and the resolved links among them, both sorted.
+type Map struct {
+	Nodes []MapNode
+	Edges []Edge
+}
+
+// MapOpts selects graph.map's documents: every document of the workspace, or with Root those within
+// Depth (1 or 2; others are clamped) resolved links of it. Kinds are the links followed and returned
+// (nil: every kind), as Neighborhood takes them.
+type MapOpts struct {
+	Root  string
+	Depth int
+	Kinds []string
+}
+
+// Map gathers graph.map. The workspace's resolved links of the given kinds are read as a
+// graph.Graph. With a root, the subgraph within depth of it, both ways, as Neighborhood walks it;
+// without, every document, linked or not, and every one of those links. Each node's Superseded
+// comes from every resolved supersedes and superseded_by link, whatever kinds were asked for, so a
+// filter never unmarks a document; a document naming itself is not superseded by it.
+func (s *Store) Map(ctx context.Context, o MapOpts) (Map, error) {
+	return s.graphMap(ctx, o, o.Root != "")
+}
+
+// graphMap is Map, rooted at o.Root when rooted: an empty or unknown root is then ErrNoDocument,
+// as Neighborhood has always answered; unrooted, o.Root is unused.
+func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, error) {
+	var m Map
 	err := s.read(ctx, func(tx *store.Tx) error {
-		start, err := s.docID(tx, path)
-		if err != nil {
-			return err
+		var start int64
+		if rooted {
+			var err error
+			if start, err = s.docID(tx, o.Root); err != nil {
+				return err
+			}
 		}
-		rows, err := kindsIn(s.linksOut(tx), kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
+		rows, err := kindsIn(s.linksOut(tx), o.Kinds).WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).
 			Select(LinkSrc, LinkDst, LinkKind)
 		if err != nil {
 			return err
 		}
 		g := graph.New[int64]()
-		g.AddNode(start)
 		for _, l := range rows {
 			g.Add(graph.Edge[int64]{Src: l.SrcDoc, Dst: *l.DstDoc, Kind: l.Kind})
 		}
-		sub := g.Neighborhood(start, depth, graph.Both, graph.Filter{})
-		var ids []any
-		for id := range sub.Nodes() {
-			ids = append(ids, id)
+		docs := s.documents(tx)
+		if rooted {
+			g.AddNode(start)
+			g = g.Neighborhood(start, min(max(o.Depth, 1), 2), graph.Both, graph.Filter{})
+			var ids []any
+			for id := range g.Nodes() {
+				ids = append(ids, id)
+			}
+			docs = docs.With(DocID, ids...)
 		}
-		docs, err := s.documents(tx).With(DocID, ids...).Select(DocID, DocPath)
+		found, err := docs.Select(DocID, DocPath, DocTitle, DocFrontmatterJSON)
+		if err != nil {
+			return err
+		}
+		superseded, err := s.superseded(tx)
 		if err != nil {
 			return err
 		}
 		paths := map[int64]string{}
-		for _, d := range docs {
+		for _, d := range found {
 			paths[d.ID] = d.Path
-			nb.Nodes = append(nb.Nodes, d.Path)
+			n := MapNode{Path: d.Path, Type: frontmatterType(d.FrontmatterJSON), Superseded: superseded[d.ID]}
+			if d.Title != nil {
+				n.Title = *d.Title
+			}
+			m.Nodes = append(m.Nodes, n)
 		}
-		sort.Strings(nb.Nodes)
-		for e := range sub.Edges(graph.Filter{}) {
-			nb.Edges = append(nb.Edges, Edge{paths[e.Src], paths[e.Dst], e.Kind})
+		for e := range g.Edges(graph.Filter{}) {
+			m.Edges = append(m.Edges, Edge{paths[e.Src], paths[e.Dst], e.Kind})
 		}
 		return nil
 	})
 	if err != nil {
-		return Neighborhood{}, err
+		return Map{}, err
 	}
-	sort.Slice(nb.Edges, func(i, j int) bool {
-		a, b := nb.Edges[i], nb.Edges[j]
+	sort.Slice(m.Nodes, func(i, j int) bool { return m.Nodes[i].Path < m.Nodes[j].Path })
+	sort.Slice(m.Edges, func(i, j int) bool {
+		a, b := m.Edges[i], m.Edges[j]
 		if a.Src != b.Src {
 			return a.Src < b.Src
 		}
@@ -154,6 +198,57 @@ func (s *Store) Neighborhood(ctx context.Context, path string, depth int, kinds 
 		}
 		return a.Kind < b.Kind
 	})
+	return m, nil
+}
+
+// superseded is every document another one supersedes, by the resolved supersession links: a
+// supersedes link's target, and a superseded_by link's source.
+func (s *Store) superseded(tx *store.Tx) (map[int64]bool, error) {
+	rows, err := kindsIn(s.linksOut(tx), []string{"supersedes", "superseded_by"}).
+		WithPredicate(dao.IsNotNull(`"link"."dst_doc"`)).Select(LinkSrc, LinkDst, LinkKind)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]bool{}
+	for _, l := range rows {
+		if l.SrcDoc == *l.DstDoc {
+			continue // a document naming itself supersedes nothing
+		}
+		if l.Kind == "supersedes" {
+			out[*l.DstDoc] = true
+		} else {
+			out[l.SrcDoc] = true
+		}
+	}
+	return out, nil
+}
+
+// frontmatterType is a document's frontmatter "type", "" when it has none or it is not a string.
+func frontmatterType(raw *string) string {
+	if raw == nil || *raw == "" {
+		return ""
+	}
+	var front map[string]any
+	if json.Unmarshal([]byte(*raw), &front) != nil {
+		return ""
+	}
+	t, _ := front["type"].(string)
+	return t
+}
+
+// Neighborhood gathers the documents within depth (1 or 2; others are clamped) resolved links of
+// the one at path, following links of the given kinds (nil: every kind) both ways, and those links
+// among them: graph.map's rooted walk, as paths. A path that names no document, the empty one
+// included, is ErrNoDocument: unlike Map, Neighborhood always has a root.
+func (s *Store) Neighborhood(ctx context.Context, path string, depth int, kinds []string) (Neighborhood, error) {
+	m, err := s.graphMap(ctx, MapOpts{Root: path, Depth: depth, Kinds: kinds}, true)
+	if err != nil {
+		return Neighborhood{}, err
+	}
+	nb := Neighborhood{Edges: m.Edges}
+	for _, n := range m.Nodes {
+		nb.Nodes = append(nb.Nodes, n.Path)
+	}
 	return nb, nil
 }
 
