@@ -93,7 +93,7 @@ func (h *Host) openFind() {
 	h.askFind(target)
 }
 
-// findPaneList names the panes as the hint does: "the page, the explorer or the relations".
+// findPaneList names the panes as the hint does: "the page, the explorer or the links".
 func findPaneList(panes []FindPane) string {
 	var names []string
 	for _, p := range panes {

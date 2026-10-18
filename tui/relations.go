@@ -152,7 +152,7 @@ func relationRows(ws, p string, rl relations) ([]relRow, int) {
 // relationRowOf is a row of the drawer: a document, a heading, or what could not be resolved.
 func relationRowOf(i int, r relRow) rowOf { return rowOf{"key": fmt.Sprint(i), "label": r.label} }
 
-// related is the Relations drawer: the shown page's relations, as rows.
+// related is the Links drawer (Relations › Links): the shown page's relations, as rows.
 type related struct {
 	c    Core
 	rows *rows[relRow]
@@ -181,7 +181,7 @@ func (r *related) Panels() []PanelSpec {
 func (r *related) State() map[string]any {
 	return map[string]any{
 		"App.relations":      r.rows.Model(),
-		"App.relationsTitle": "relations",
+		"App.relationsTitle": "links",
 		"App.relationsIndex": 0,
 	}
 }
@@ -198,7 +198,7 @@ func (r *related) Commands() map[string]Command {
 // Catalog is the drawer's user command (catalog.go).
 func (r *related) Catalog() []Entry {
 	return []Entry{
-		builtin("links.toggle", "the relations", "App.toggleRelations()", r.toggle),
+		builtin("links.toggle", "the links", "App.toggleRelations()", r.toggle),
 	}
 }
 
@@ -223,14 +223,14 @@ func (r *related) moved(i int) { r.at = i }
 func (r *related) ofPage() {
 	switch ref := r.page.Ref; {
 	case ref.path == "":
-		r.clear("relations")
+		r.clear("links")
 	case r.page.Outside:
-		r.clear("relations · " + outsideBadge) // it is in no workspace's graph
+		r.clear("links · " + outsideBadge) // it is in no workspace's graph
 	default:
 		// another document's rows go at once: until this one's are read, the drawer has none
 		// rather than the last document's
 		if r.of != ref {
-			r.clear("relations · reading…")
+			r.clear("links · reading…")
 		}
 		r.load(ref.ws, ref.path)
 	}
@@ -298,7 +298,7 @@ func (r *related) load(ws, p string) {
 			return
 		}
 		if rl.err != nil {
-			r.c.Failed("relations", rl.err)
+			r.c.Failed("links", rl.err)
 			return
 		}
 		r.show(ws, p, rl)
@@ -316,7 +316,7 @@ func (r *related) show(ws, p string, rl relations) {
 	if first := slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" }); first >= 0 {
 		r.moveTo(first)
 	}
-	title := fmt.Sprintf("relations (%d)", neighbours)
+	title := fmt.Sprintf("links (%d)", neighbours)
 	if r.deep {
 		title += " · depth 2"
 	}
@@ -332,7 +332,7 @@ func (r *related) moveTo(i int) {
 
 // FindPane is the drawer's rows for find, as it shows them.
 func (r *related) FindPane() FindPane {
-	return FindPane{Name: "relations", View: relationsPanelSpec().View, Scope: relationsPanelSpec().ID, Rows: func() ([]string, int, func(int, int) error) {
+	return FindPane{Name: "links", View: relationsPanelSpec().View, Scope: relationsPanelSpec().ID, Rows: func() ([]string, int, func(int, int) error) {
 		return r.labels(), r.at, func(row, _ int) error { r.moveTo(row); return nil }
 	}}
 }
@@ -346,11 +346,17 @@ func (r *related) labels() []string {
 	return out
 }
 
-// open opens the drawer's row i in the editor; the drawer stays open.
+// open opens the drawer's row i in the editor, closing the drawer first, as the explorer's Enter
+// does.
 func (r *related) open(i int) {
 	row, ok := r.rows.At(i)
+	if !ok || row.external == "" && row.path == "" {
+		return // a heading, or a relation that names nothing: the drawer stays
+	}
+	if err := r.c.View(relationsPanelSpec().ID, "close"); err != nil {
+		r.c.Failed("links: open", err)
+	}
 	switch {
-	case !ok:
 	case row.external != "":
 		r.c.OpenAbsolute(row.external) // its workspace's file when one indexes it, else outside them all
 	case row.path != "":

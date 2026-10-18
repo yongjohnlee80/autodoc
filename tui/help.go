@@ -123,7 +123,7 @@ const helpKeys = `KEYS
               the file on the right at the hit; beneath, a checkbox per stage it can run
               (Lexical; Semantic with a model in use; Rerank, naming the ranker, with one in
               use): a change searches again, and one of Lexical and Semantic stays checked
-  /           find a word in the pane with the keyboard (the page, the explorer, the relations);
+  /           find a word in the pane with the keyboard (the page, the explorer, the links);
               n and N find it again, forward and back. In the page its words are marked, and
               "finding …" shows at the top right: its ✕ clears it, as Search › Clear find does.
               In the Text mode / types a slash: Search › Find in page, Find next, Find previous
@@ -138,7 +138,7 @@ const helpKeys = `KEYS
               Vim's H and L (the screen's top and bottom line) in Normal mode only; Visual mode
               keeps them, and Insert mode types them. A script's own H or L (autodoc.map) wins
   Ctrl+O Ctrl+I  back and forward along the jumps (Vim's jump list, in Normal mode): a link
-              followed, a document opened from a picker, the explorer, the relations or the
+              followed, a document opened from a picker, the explorer, the links or the
               recent files, and the page's own jumps (G, gg, %, { }, a mark's). Back to another
               document opens it where you left it, in the view you left it in
   SPC f       open a file anywhere on the disk (File › Open file…), with a preview: one in a
@@ -207,12 +207,12 @@ NOTIFICATIONS
   progress stays until it ends. Preferences sets the corner and the seconds; SPC h lists them.
 
 THE PANELS
-  The explorer (SPC e) is every workspace's folders and files; the relations (SPC l) are what
+  The explorer (SPC e) is every workspace's folders and files; the links (SPC l) are what
   this file is connected to, by kind: superseded by, supersedes, sources, cited by, amends,
   amended by, related, adr, its links and its backlinks, then what names nothing and the
-  supersession loops. d in the relations shows the files two links away, under the one that
+  supersession loops. d in the links shows the files two links away, under the one that
   reaches them. Each opens over the page from its side (Preferences sets which), and Escape or
-  its key again closes it. Enter on a file opens it; the relations stay open.
+  its key again closes it. Enter on a file opens it and closes the panel.
   SPC j goes to the link under the cursor: the document it names, else its web address or file.
   SPC b goes back to the previous document, where you left it (Ctrl+O steps back one jump at a
   time, within a document too). The page's right-click menu has both, Go to link (on a link)

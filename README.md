@@ -26,7 +26,7 @@ How it is put together, and the convention a new feature follows, is
 | `core/schema` | frontmatter schemas: a workspace's `schema.yaml`, and the todo formats |
 | `core/todo` | the todo system: the format, the rules and every write of a `.todo-list`; the `todos.*` verbs |
 | `rpc` | the msgpack-RPC API: every verb registered from its contract, rpc's own and the modules' |
-| `tui` | the terminal UI and the GUI: search, the files, a Vim-keyed editor, the relations drawer, the todos; its screen written in QML |
+| `tui` | the terminal UI and the GUI: search, the files, a Vim-keyed editor, the links drawer and the GUI's GlobeMap and Mindmap, the todos; its screen written in QML |
 | `script` | the Lua engine for the editor's commands, exportable to other programs |
 | `plugin` | the plugin protocol and the SDK a plugin is written with (`docs/plugins.md`) |
 | `internal/daemon` | the daemon's workspaces: each served by an indexer and a follower, added, renamed and removed while it runs |
@@ -262,15 +262,21 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
 - **The menu bar** hides until `F10` or an `Alt+letter` brings it up. On a Mac, `Option+letter`
   is `Alt+letter` whatever the terminal's Option setting (on a US layout; `Option+E`, `I`, `N`
   and `U` are dead keys there, so their menus need `F10`), and `F10` may need `Fn`.
-- **The explorer** (`SPC e`): every workspace's folders and files, as a tree. **The relations**
-  (`SPC l`): what this file is connected to, by kind and direction (superseded by, supersedes,
-  sources, cited by, amends, amended by, related, adr, links, backlinks), then the relations that
-  name nothing and the supersession loops; `d` there adds the files two links away, under the one
-  that reaches them. `Enter` opens a row and the drawer stays. Each opens over the page, which
+- **The explorer** (`SPC e`): every workspace's folders and files, as a tree. **The links**
+  (`SPC l`, `Relations › Links`): what this file is connected to, by kind and direction (superseded
+  by, supersedes, sources, cited by, amends, amended by, related, adr, links, backlinks), then the
+  relations that name nothing and the supersession loops; `d` there adds the files two links away,
+  under the one that reaches them. `Enter` opens a row and closes the drawer. Each opens over the page, which
   does not move, from the side the editor's preferences name; `Escape` or its key again closes
   it. `SPC j` goes to the link under the cursor (the document it names, else its web address or
   file); `SPC b` goes back to the previous document, where you left it (`Ctrl+O` steps back
   one jump at a time, within a document too); the page's right-click menu has both.
+- **The GUI's relation views** (`Relations ›`, `--gui` only). **GlobeMap**: every document of the
+  workspace and the links among them, placed by force, each document's dot coloured by its type
+  and a superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again, `f` cycles
+  every link, body links and relations, and a click opens the document. **Mindmap**: the page's
+  document and those within two links of it, as a mind map shaped by type; a click opens that
+  document and the map follows it, the keyboard staying on the map. A terminal has the links alone.
 - **The terminal's and the agents' tabs**: each shell or agent has a tab; `+` adds one, and the
   strip's menu (`≡`, a right click anywhere on the strip or an empty panel, or Enter on the strip)
   has **Go to ›**, the panel's own rows (the terminal: **New**, **Close**; the agents: **Restart**,
@@ -280,8 +286,8 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   leaves every shell and agent running. Every key goes to the shell or agent, `Esc` included;
   `Ctrl+T` toggles Normal mode, which moves over its history (`h j k l`, `/`, `v`, `y` …), and
   `Esc` in Normal mode hides the panel. `Ctrl+T` on the page stays the Rendered view's.
-- **Every panel moves and resizes**: the explorer, the relations, the terminal, the agent and the
-  HTML preview. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
+- **Every panel moves and resizes**: the explorer, the links, the terminal, the agent, the HTML
+  preview, and in the GUI the GlobeMap and the Mindmap. `Alt` (`Option` on a Mac) with the left button drags one anywhere over the page;
   with the right button it resizes. `SPC L` (`Go › Arrange panel…`) does both from the keyboard:
   `h` `j` `k` `l` or the arrows move it, `H` `J` `K` `L` or `Shift` with them resize it, `Enter`
   keeps it and `Esc` puts it back. A panel opens where it was left, kept in the store as
@@ -381,10 +387,10 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
 | --- | --- |
 | `Space`, `Ctrl+Space` | the leader card (Space in Vim's Normal mode; Ctrl+Space in any editor mode): a key runs its command (`e`, `l`, `/`, `o`, `O`, `d`, `H`, `k`, `,`, `s` …), listed by purpose: find and open, this file, the panels, the agents, help, managing, the window |
 | `Ctrl+G`, `SPC /`, `SPC SPC` | search the workspace, by words and meaning |
-| `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the relations), then again forward and back (Normal mode) |
+| `/`, `n`, `N` | find a word in the pane with the keyboard (the page, the explorer, the links), then again forward and back (Normal mode) |
 | `SPC o`, `Ctrl+N`, `Ctrl+S` | open a document of the workspace, new file (any folder), save |
 | `Ctrl+O`, `Ctrl+I` | back and forward along the jumps, Vim's jump list (Normal mode): links followed, documents opened, and the page's own jumps (`G`, `gg`, `%`, `{ }`, a mark's); back to another document opens it where you left it, in the view you left it in. `Ctrl+O` no longer opens a document: `SPC o` does |
-| `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the relations, the link under the cursor, back |
+| `SPC f`, `SPC l`, `SPC j`, `SPC b` | open a file anywhere, the links, the link under the cursor, back |
 | `SPC B`, `SPC C`, `:b`, `:bd` | switch buffer (`Go › Buffers…`: every open file and draft, previewed with its unsaved text; `:b 3`, `:b name`), close the one shown (`File › Close buffer`), asking first over unsaved changes |
 | `H`, `L` (`Shift+h`, `Shift+l`) | in the page, in Normal mode, the buffer before or after the shown one, in the order of the GUI's tabs, wrapping at the ends (bufferline's keys, as in autovim). This replaces Vim's `H` and `L` (the screen's top and bottom line) in Normal mode only: Visual mode keeps them, Insert mode types them, and a script's own `autodoc.map` of `H` or `L` wins |
 | `SPC O`, `SPC d`, `SPC H` | the file's outline (`Go › Outline…`); the Mermaid diagram at the cursor (`File › Preview Mermaid diagram…`, or right-click `View diagram`); the HTML preview (`File › Preview HTML`) |

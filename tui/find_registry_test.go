@@ -82,15 +82,15 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 		}
 		return out
 	})
-	if want := []string{"page", "explorer", "relations", "birds"}; !slices.Equal(names, want) {
+	if want := []string{"page", "explorer", "links", "birds"}; !slices.Equal(names, want) {
 		t.Fatalf("find searches %q, want %q: the page, then the features' order", names, want)
 	}
 	// the built-ins' hint is today's, word for word
-	if got := findPaneList(onLoop(r, func() []FindPane { return r.h.findPanes()[:3] })); got != "the page, the explorer or the relations" {
+	if got := findPaneList(onLoop(r, func() []FindPane { return r.h.findPanes()[:3] })); got != "the page, the explorer or the links" {
 		t.Errorf("the built-in panes are named %q", got)
 	}
 	// the explorer and the relations declare the views their bound panels have
-	for id, name := range map[string]string{"explorer": "explorer", relationsPanelSpec().ID: "relations"} {
+	for id, name := range map[string]string{"explorer": "explorer", relationsPanelSpec().ID: "links"} {
 		view, bound := onLoop(r, func() string { p, _ := r.h.findPane(name); return p.View }), onLoop(r, func() string { return r.h.panelView(id) })
 		if view == "" || view != bound {
 			t.Errorf("the %s's find view is %q, its bound panel's %q", name, view, bound)
@@ -102,7 +102,7 @@ func TestAFeaturesPaneIsSearchedWithoutFindNamingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.keys(t, key('/'))
-	r.s.WaitForText(t, "find: put the keyboard in the page, the explorer, the relations or the birds first")
+	r.s.WaitForText(t, "find: put the keyboard in the page, the explorer, the links or the birds first")
 
 	if err := onLoop(r, func() error { return r.h.p.Call("zzList", "forceActiveFocus") }); err != nil {
 		t.Fatal(err)

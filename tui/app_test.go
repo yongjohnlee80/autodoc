@@ -349,7 +349,7 @@ func TestQClosesNavigationPanelsAndCards(t *testing.T) {
 	for _, panel := range []struct {
 		key   rune
 		title string
-	}{{'e', "┌ explorer"}, {'l', "relations"}} {
+	}{{'e', "┌ explorer"}, {'l', "links"}} {
 		r.leader(t, panel.key)
 		r.s.WaitForText(t, panel.title)
 		r.keys(t, key('q'))
@@ -642,8 +642,8 @@ func TestCommittedIsReadBack(t *testing.T) {
 	}
 }
 
-// TestBacklinks: SPC l opens the Relations drawer over the files linking to the open one, the cursor
-// on the first, and Enter opens it; the drawer stays open.
+// TestBacklinks: SPC l opens the Links drawer over the files linking to the open one, the cursor on
+// the first, and Enter opens it, closing the drawer; opened again, it holds src.md's own links.
 func TestBacklinks(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"target.md", "# Target\n", "src.md", "see [[target]]\n"}})
 	r := attached(t, d)
@@ -653,7 +653,9 @@ func TestBacklinks(t *testing.T) {
 	r.s.WaitFor(t, "the backlink", func(sc string) bool { return strings.Contains(sc, "backlinks (1)") && strings.Contains(sc, "src.md") })
 	r.keys(t, enter())
 	r.waitFile(t, "src.md")
-	r.s.WaitForText(t, "links (1)") // src.md's own: its link to target.md, the drawer still open
+	r.s.WaitFor(t, "the drawer closed, the editor's keyboard", func(string) bool { return !r.panelIsOpen("links") && r.focusedOn("editor") })
+	r.leader(t, 'l')
+	r.s.WaitForText(t, "links (1) · d depth") // src.md's own: its link to target.md
 	r.s.WaitForText(t, "  target.md")
 }
 

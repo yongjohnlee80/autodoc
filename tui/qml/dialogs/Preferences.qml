@@ -127,7 +127,7 @@ Dialog {
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "relations open from"; Layout.preferredWidth: 21 }
+                        Text { text: "links open from"; Layout.preferredWidth: 21 }
                         ComboBox { model: App.edges; textRole: "label"; currentIndex: App.relationsEdgeIndex; onActivated: App.setRelationsEdge(index) }
                     }
                     Flex {

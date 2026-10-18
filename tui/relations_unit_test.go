@@ -42,14 +42,14 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 	c.deferred = true
 	a := Page{Ref: fileRef{"kb", "a.md"}}
 	r.Shown(a)
-	if title := c.set["App.relationsTitle"]; title != "relations · reading…" {
+	if title := c.set["App.relationsTitle"]; title != "links · reading…" {
 		t.Fatalf("while a.md's relations are read the drawer says %q", title)
 	}
 	c.deliver(0)
 	if got := r.labels(); !slices.Equal(got, []string{"links (1)", "  b.md", "backlinks (1)", "  c.md"}) {
 		t.Fatalf("a.md's rows %q", got)
 	}
-	if c.set["App.relationsTitle"] != "relations (2) · d depth" || r.at != 1 {
+	if c.set["App.relationsTitle"] != "links (2) · d depth" || r.at != 1 {
 		t.Fatalf("title %q, cursor on row %d: want 2 neighbours and the cursor on b.md", c.set["App.relationsTitle"], r.at)
 	}
 	r.Shown(a) // read again (a reload): its rows stay until the new ones come
@@ -64,11 +64,11 @@ func TestTheRelationsFollowThePageShown(t *testing.T) {
 	c.deliver(0)
 
 	r.Shown(Page{})
-	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "relations" {
+	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "links" {
 		t.Fatalf("the draft: rows %q, title %q", r.labels(), c.set["App.relationsTitle"])
 	}
 	r.Shown(Page{Ref: fileRef{"", "/tmp/x.md"}, Outside: true})
-	if c.set["App.relationsTitle"] != "relations · "+outsideBadge {
+	if c.set["App.relationsTitle"] != "links · "+outsideBadge {
 		t.Fatalf("a file in no workspace: title %q", c.set["App.relationsTitle"])
 	}
 }
@@ -88,10 +88,14 @@ func TestTheRelationsDepthAndOpen(t *testing.T) {
 	if got := r.labels(); !r.deep || !slices.Contains(got, "    › d.md  (wikilink →)") || !strings.Contains(c.set["App.relationsTitle"].(string), "depth 2") {
 		t.Fatalf("depth 2: deep %v, rows %q, title %q", r.deep, got, c.set["App.relationsTitle"])
 	}
-	r.open(0) // a heading: nothing opens
-	r.open(1) // b.md
-	if !slices.Equal(c.files, []string{"kb:b.md"}) {
-		t.Fatalf("opened files %v, want b.md", c.files)
+	c.views = nil
+	r.open(0) // a heading: nothing opens, and the drawer stays
+	if len(c.views) != 0 || len(c.files) != 0 {
+		t.Fatalf("a heading: views %v, files %v; want neither", c.views, c.files)
+	}
+	r.open(1) // b.md, the drawer closed
+	if !slices.Equal(c.files, []string{"kb:b.md"}) || !slices.Equal(c.views, []string{"links.close"}) {
+		t.Fatalf("opened files %v, views %v; want b.md, the drawer closed", c.files, c.views)
 	}
 }
 
@@ -105,7 +109,7 @@ func TestTheRelationsDropAStaleAnswer(t *testing.T) {
 	r.Shown(Page{Ref: fileRef{"kb", "a.md"}}) // read 0, held
 	r.Shown(Page{})                           // the file kept as the draft
 	c.deliver(0)
-	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "relations" {
+	if r.rows.Len() != 0 || c.set["App.relationsTitle"] != "links" {
 		t.Fatalf("the draft took the gone file's relations: rows %q, title %q", r.labels(), c.set["App.relationsTitle"])
 	}
 }
@@ -161,8 +165,8 @@ func TestRelationsCallbackKeepsRowsForStaleOrFailedAnswers(t *testing.T) {
 		}
 	}
 	if !slices.Equal(c.failed, []string{
-		"relations: graph.links refused", "relations: graph.backlinks refused",
-		"relations: graph.unresolved refused", "relations: graph.neighborhood refused",
+		"links: graph.links refused", "links: graph.backlinks refused",
+		"links: graph.unresolved refused", "links: graph.neighborhood refused",
 	}) {
 		t.Fatalf("refresh failure was not reported: %v", c.failed)
 	}

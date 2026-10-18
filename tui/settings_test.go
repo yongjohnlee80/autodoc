@@ -576,7 +576,7 @@ func TestRelationsOfAWorkspaceGoneSaySo(t *testing.T) {
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitForText(t, "· kb")
 	r.h.p.Post(func() { r.h.rel.load("gone", "a.md") })
-	r.waitNoticed(t, "relations: no such workspace")
+	r.waitNoticed(t, "links: no such workspace")
 }
 
 // Find › Find previous (its command, as the menu runs it) with nothing found yet says so.

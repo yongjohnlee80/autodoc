@@ -121,7 +121,6 @@ Window {
             MenuItem { text: "W&idget…"; onTriggered: App.openWidgets() }
             MenuSeparator {}
             MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
-            MenuItem { text: "Re&lations"; onTriggered: App.toggleRelations() }
             MenuItem { text: "&Notifications…"; onTriggered: App.openNotices() }
             MenuSeparator {}
             // the panels that stay open, checked while they show
@@ -134,6 +133,11 @@ Window {
             MenuSeparator {}
             MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
             MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
+        }
+        // the views of the shown document's relations (relations.go)
+        Menu {
+            title: "Re&lations"
+            MenuItem { text: "&Links  (SPC l)"; onTriggered: App.toggleRelations() }
         }
         // Search: the page's find for the Text mode too, where / types a slash, and the workspace's
         Menu {

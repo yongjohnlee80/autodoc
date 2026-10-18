@@ -259,9 +259,9 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "explorer") })
 
 	r.leader(t, 'l')
-	r.s.WaitForText(t, "relations (1)")
+	r.s.WaitForText(t, "links (1) · d depth")
 	for i, row := range strings.Split(r.s.String(), "\n") {
-		if !strings.Contains(row, "relations (1)") { // the drawer's top border, its title
+		if !strings.Contains(row, "links (1) · d depth") { // the drawer's top border, its title
 			continue
 		}
 		if i < 15 {
@@ -1235,7 +1235,7 @@ func screenRow(r *running, text string) int {
 var prefLabels = [][]string{
 	{"editor mode", "page width (40–400)", "theme", "wrap long lines", "line numbers", "indentation marks",
 		"image previews", "two-view documents", "terminal opens from", "terminal size", "terminal length", "terminal theme"},
-	{"hide the menu bar", "show the status line", "explorer opens from", "relations open from", "todos open from",
+	{"hide the menu bar", "show the status line", "explorer opens from", "links open from", "todos open from",
 		"agent opens from", "agent size", "agent length", "notifications in the", "a notification stays",
 		"About at startup", "look for updates"},
 }
@@ -1939,11 +1939,11 @@ func TestFindInThePanes(t *testing.T) {
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "backlinks (2)")
 	r.keys(t, key('/'))
-	r.s.WaitForText(t, "find in the relations")
+	r.s.WaitForText(t, "find in the links")
 	r.keys(t, decltest.Ctrl('u'))
 	r.keys(t, decltest.Type("x.md")...)
 	r.keys(t, enter())
-	r.s.WaitForText(t, `find "x.md": 1 of 1 in the relations`)
+	r.s.WaitForText(t, `find "x.md": 1 of 1 in the links`)
 	if at := onLoop(r, func() int { return r.h.rel.at }); at != 2 {
 		t.Fatalf("the links' cursor is on row %d, want 2 (x.md, under the heading and b.md)", at)
 	}

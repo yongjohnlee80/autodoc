@@ -64,7 +64,7 @@ var docRelations = []string{
 // TestTheRelationsDrawerGroupsByKindAndDirection: SPC l lists each relation in its section — a
 // relation into the document under its own side's name — the body's links, then what names
 // nothing and the supersession loop; d adds the second ring under its first-ring document; Enter
-// opens a row and the drawer stays open (§5.8).
+// opens a row and closes the drawer, whose rows follow the document opened (§5.8).
 func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
@@ -77,7 +77,7 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
 	r.leader(t, 'l')
 	r.waitRelations(t, docRelations)
-	r.s.WaitForText(t, "relations (10)")
+	r.s.WaitForText(t, "links (10)")
 	if onLoop(r, func() bool { return r.h.rel.deep }) {
 		t.Fatal("d in the explorer turned the drawer's depth 2 on")
 	}
@@ -93,8 +93,8 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.keys(t, enter()) // the cursor starts on the first document: new.md
 	r.waitFile(t, "new.md")
 	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own
-	if !onLoop(r, func() bool { return r.h.panelOpen["links"] }) {
-		t.Error("opening a relation closed the drawer")
+	if onLoop(r, func() bool { return r.h.panelOpen["links"] }) || !r.focusedOn("editor") {
+		t.Error("opening a relation left the drawer open, or the keyboard off the editor")
 	}
 }
 
@@ -186,7 +186,7 @@ func TestAnOutsideFileHasNoRelations(t *testing.T) {
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
 	r.leader(t, 'l')
-	r.s.WaitForText(t, "relations · "+outsideBadge)
+	r.s.WaitForText(t, "links · "+outsideBadge)
 }
 
 // TestBackOverUnsavedChangesKeepsThem: SPC b over unsaved changes asks nothing: the document goes

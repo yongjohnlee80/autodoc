@@ -148,7 +148,7 @@ func findKeys(fs []Feature) []Key {
 
 // scopedKeys are the other keys a pane answers itself: d in the Relations drawer shows the second
 // ring, or hides it (relations.go); b and q in the HTML preview pane are its buttons.
-var scopedKeys = []Key{{Scope: "links", Seq: "d", Show: "d in the relations", Run: "App.relationsDepth()"},
+var scopedKeys = []Key{{Scope: "links", Seq: "d", Show: "d in the links", Run: "App.relationsDepth()"},
 	// the HTML preview pane's buttons (htmlpane.go): b opens its page in the browser, q closes it
 	{Scope: "htmlPane", Seq: "b", Show: "b in the HTML preview", Run: "App.openPaneInBrowser()"},
 	{Scope: "htmlPane", Seq: "q", Show: "q in the HTML preview", Run: "App.closeHTMLPane()"}}
@@ -262,7 +262,7 @@ var leaderKeys = onCard(leader, slices.Concat(
 	}),
 	inGroup(groupPanels, []Key{
 		{Seq: "e", Show: "e", Does: "the explorer", Run: "App.toggleExplorer()"},
-		{Seq: "l", Show: "l", Does: "the relations", Run: "App.toggleRelations()"},
+		{Seq: "l", Show: "l", Does: "the links", Run: "App.toggleRelations()"},
 		{Seq: "`", Show: "`", Does: "the terminal", Run: "App.toggleTerminal()"},
 		{Seq: "x", Show: "x", Does: "todos", Run: "App.openTodos()"},
 		{Seq: "Shift+M", Show: "M", Does: "maximize panel", Run: "App.maximizePanel()"},
