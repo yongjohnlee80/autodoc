@@ -7,13 +7,14 @@
 Dialog {
     id: agentsCard
     closeOnQ: true
+    keyScope: "autodoc.agentsCard"
     title: "SPC a — agents"
     dim: false
     helpText: "a key runs its command · Backspace goes back · q or Esc closes"
     Text { text: App.agentsCardText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: "Backspace"; onActivated: { agentsCard.close(); leader.open() } }
-    Shortcut { sequence: "b"; onActivated: { agentsCard.close(); App.run("lua.agent-buffer") } }
-    Shortcut { sequence: "f"; onActivated: { agentsCard.close(); App.run("lua.agent-forward") } }
-    Shortcut { sequence: "g"; onActivated: { agentsCard.close(); App.toggleAgent() } }
-    Shortcut { sequence: "Shift+G"; onActivated: { agentsCard.close(); App.openAgentProfiles() } }
+    Shortcut { sequence: keyId("autodoc.agentsCard.run.lua.agent-buffer"); onActivated: { agentsCard.close(); App.run("lua.agent-buffer") } }
+    Shortcut { sequence: keyId("autodoc.agentsCard.run.lua.agent-forward"); onActivated: { agentsCard.close(); App.run("lua.agent-forward") } }
+    Shortcut { sequence: keyId("autodoc.agentsCard.toggleAgent"); onActivated: { agentsCard.close(); App.toggleAgent() } }
+    Shortcut { sequence: keyId("autodoc.agentsCard.openAgentProfiles"); onActivated: { agentsCard.close(); App.openAgentProfiles() } }
 }

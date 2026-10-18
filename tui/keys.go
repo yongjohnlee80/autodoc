@@ -9,6 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	tuikey "github.com/yongjohnlee80/golib/tui/key"
+	"github.com/yongjohnlee80/golib/tui/keymap"
 )
 
 // KEYS — every key the Window answers, and every card of keys (SPC's, and a card a key on it
@@ -24,6 +28,12 @@ import (
 // fixed when the registry is built, which checks every key, while Lua's and the plugins' come and
 // go (a Lua command is keyed by autodoc.map, a plugin's on SPC p). The host's own keys below keep
 // Run: every registry checks them, a test's of features alone too, where no built-in entry is.
+//
+// Every key is a golib key command (golib tui/keymap), so a user's keymap.xml can move it: its id is
+// autodoc.<place>.<action> (commandID), its scope the Window's (keymap.Global), a card's or a pane's
+// (autodoc.<card or pane>). The keys of one action in one place are one command: Space and
+// Ctrl+Space both open SPC's card, autodoc.window.open.leader. The generated Shortcuts name their
+// command by keyId, and a card or help names a key by its Show until a scheme moves it.
 
 // Key is one key.
 type Key struct {
@@ -47,6 +57,53 @@ type Key struct {
 	// Window's own key of that sequence. "" is everywhere.
 	Scope string
 }
+
+// place is where key is answered, as its command's id names it: "window", a card's id, or a pane's.
+func (k Key) place() string {
+	switch {
+	case k.Card != "":
+		return k.Card
+	case k.Scope != "":
+		return k.Scope
+	}
+	return "window"
+}
+
+// commandScope is key's command's scope: the Window's keys are keymap.Global's, a card's and a pane's
+// their own, autodoc.<card or pane>, which the card's Dialog and the pane's holder name by keyScope.
+func (k Key) commandScope() keymap.Scope {
+	if k.Card == "" && k.Scope == "" {
+		return keymap.Global
+	}
+	return keymap.Scope("autodoc." + k.place())
+}
+
+// runCall is a Run that names an action: App.openSearch(), App.movePane("h"), App.todosTab(0),
+// help.open().
+var runCall = regexp.MustCompile(`^(?:App\.)?([A-Za-z][A-Za-z0-9_.]*)\((?:"([^"]*)"|([0-9]+))?\)$`)
+
+// action is what key runs, as its command id's last part: openSearch for App.openSearch(),
+// movePane.h for App.movePane("h"), todosTab.0, help.open; open.<card> for the card it Opens, and
+// run.<id> for the catalog entry Cmd runs. "" for a Run it cannot name, which check refuses.
+func (k Key) action() string {
+	switch {
+	case k.Opens != "":
+		return "open." + k.Opens
+	case k.Cmd != "":
+		return "run." + k.Cmd
+	}
+	m := runCall.FindStringSubmatch(k.Run)
+	if m == nil {
+		return ""
+	}
+	if arg := m[2] + m[3]; arg != "" {
+		return m[1] + "." + arg
+	}
+	return m[1]
+}
+
+// commandID is key's command: autodoc.<place>.<action>, autodoc.window.save for the Window's Ctrl+S.
+func (k Key) commandID() string { return "autodoc." + k.place() + "." + k.action() }
 
 // keyScope is a pane whose keys are its own: a FocusScope in main.qml holding a generated block of
 // them, at indent.
@@ -258,6 +315,55 @@ func onCard(card string, keys []Key) []Key {
 type keyset struct {
 	cards []Card
 	keys  []Key
+	// live is the App's key map, which a card and help name keys by (shown): nil, before the
+	// program runs, names every key by its Show.
+	live *keymap.Map
+}
+
+// shown is how a card or help names key: its Show (its Seq when it has none) while its command holds
+// the keys it is declared with, else the keys the user's scheme gave it, "unbound" for none.
+func (k keyset) shown(key Key) string {
+	show := key.Show
+	if show == "" {
+		show = key.Seq
+	}
+	id := key.commandID()
+	cmd, ok := k.live.Command(id)
+	if !ok || k.live.SourceOf(id).Kind == keymap.FromDefault {
+		return show
+	}
+	return seqNames(k.live.KeysOf(cmd))
+}
+
+// seqNames names keys as a card lists them, "unbound" for none.
+func seqNames(keys []tuikey.Seq) string {
+	if len(keys) == 0 {
+		return "unbound"
+	}
+	names := make([]string, len(keys))
+	for i, s := range keys {
+		names[i] = s.String()
+	}
+	return strings.Join(names, " ")
+}
+
+// helpMoved is help's list of the keys the user's scheme moved, each command's id, its keys now and
+// where the scheme says so: "" while it moves none.
+func (k keyset) helpMoved() string {
+	var lines []string
+	for _, scope := range k.live.Scopes() {
+		for _, b := range k.live.Bindings(scope) {
+			if b.Source.Kind != keymap.FromScheme {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("  %-34s %s  (%s, line %d)", b.Command.ID, seqNames(b.Keys), b.Source.File, b.Source.Line))
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	slices.Sort(lines)
+	return "YOUR KEYS (keymap.xml beside config.toml)\n" + strings.Join(lines, "\n")
 }
 
 // keyCatalog is the catalog with every feature's keys and cards after the host's. A key running a
@@ -281,6 +387,90 @@ func keyCatalog(fs []Feature) keyset {
 		}
 	}
 	return k
+}
+
+// dialogCommands are the keys of AutoDoc's hand-written dialogs, which name them by keyId in their
+// QML: Arrange's steps (views/Arrange.qml), a picker's parts (dialogs/Picker.qml), and the Go-to
+// picker's next and previous (dialogs/GoPick.qml). Each dialog's keyScope is its ids' scope.
+var dialogCommands = []keymap.Command{
+	dialogCommand("autodoc.arrange.left", "H", "Left"),
+	dialogCommand("autodoc.arrange.right", "L", "Right"),
+	dialogCommand("autodoc.arrange.up", "K", "Up"),
+	dialogCommand("autodoc.arrange.down", "J", "Down"),
+	dialogCommand("autodoc.arrange.narrower", "Shift+H", "Shift+Left"),
+	dialogCommand("autodoc.arrange.wider", "Shift+L", "Shift+Right"),
+	dialogCommand("autodoc.arrange.shorter", "Shift+K", "Shift+Up"),
+	dialogCommand("autodoc.arrange.taller", "Shift+J", "Shift+Down"),
+	dialogCommand("autodoc.arrange.keep", "Return"),
+	dialogCommand("autodoc.picker.field", "Ctrl+K"),
+	dialogCommand("autodoc.picker.list", "Ctrl+J", "Ctrl+H"), // from the field, and back from the preview
+	dialogCommand("autodoc.picker.preview", "Ctrl+L"),
+	dialogCommand("autodoc.goPick.next", "Tab"),
+	dialogCommand("autodoc.goPick.previous", "Shift+Tab"),
+	// a terminal's and an agent's input and Normal mode, toggled (their modeKey, App.terminalModeKey):
+	// it has no Shortcut, the terminal reads it before its program does
+	dialogCommand(terminalModeID, "Ctrl+T"),
+}
+
+// terminalModeID is the terminals' mode key's command; maximizeID the Window's maximize, whose keys a
+// terminal keeps from its program (hostKeys, App.terminalHostKeys) so they reach the Window.
+const (
+	terminalModeID = "autodoc.terminal.mode"
+	maximizeID     = "autodoc.window.maximizePanel"
+)
+
+// keysValue is the keys the App's map gives command id, as a terminal's hostKeys and modeKey take
+// them: each one key, never split, so the comma key is one too (tuidecl.Keys). The declared keys
+// before the program runs; none when a scheme unbinds them.
+func (k keyset) keysValue(id string) tuidecl.Keys {
+	cmds, _ := k.commands()
+	i := slices.IndexFunc(cmds, func(c keymap.Command) bool { return c.ID == id })
+	if i < 0 {
+		return nil
+	}
+	if k.live != nil {
+		return tuidecl.Keys(k.live.KeysOf(cmds[i]))
+	}
+	return tuidecl.Keys(slices.Clone(cmds[i].Keys))
+}
+
+// terminalKeys are the terminals' key sources, as the map binds them now.
+func (k keyset) terminalKeys() map[string]any {
+	return map[string]any{"App.terminalHostKeys": k.keysValue(maximizeID), "App.terminalModeKey": k.keysValue(terminalModeID)}
+}
+
+// dialogCommand declares one: its scope is its id less the last part.
+func dialogCommand(id string, keys ...string) keymap.Command {
+	return keymap.Command{ID: id, Scope: keymap.Scope(id[:strings.LastIndex(id, ".")]), Keys: tuikey.MustParse(keys...)}
+}
+
+// commands are the catalog's key commands, in its order: one per action and place, its keys every
+// sequence the catalog gives it (Seq, then Also), each once; then the hand-written dialogs'. A sequence
+// key.Parse refuses is an error, as check reports.
+func (k keyset) commands() ([]keymap.Command, error) {
+	var out []keymap.Command
+	var errs []error
+	at := map[string]int{}
+	for _, kk := range k.keys {
+		id := kk.commandID()
+		i, ok := at[id]
+		if !ok {
+			i = len(out)
+			at[id] = i
+			out = append(out, keymap.Command{ID: id, Scope: kk.commandScope(), Text: kk.Does})
+		}
+		for _, s := range append([]string{kk.Seq}, kk.Also...) {
+			seq, err := tuikey.Parse(s)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("tui: %s %s: %w", placeName(kk.Card), s, err))
+				continue
+			}
+			if !slices.Contains(out[i].Keys, seq) {
+				out[i].Keys = append(out[i].Keys, seq)
+			}
+		}
+	}
+	return append(out, dialogCommands...), errors.Join(errs...)
 }
 
 // on are the keys on card ("" the Window's own, everywhere).
@@ -343,6 +533,9 @@ func (k keyset) check(taken map[string]bool, cat *catalog) error {
 		}
 	}
 	for _, key := range k.keys {
+		if key.Run != "" && key.action() == "" {
+			errs = append(errs, fmt.Errorf("tui: %s %s runs %q, which names no action for its key command: a call of App or of an id, with no argument or one literal", placeName(key.Card), key.Seq, key.Run))
+		}
 		if n := len(slices.DeleteFunc([]string{key.Run, key.Opens, key.Cmd}, func(s string) bool { return s == "" })); n != 1 {
 			errs = append(errs, fmt.Errorf("tui: %s %s runs %d of Run, Opens and Cmd: a key runs exactly one", placeName(key.Card), key.Seq, n))
 		}
@@ -378,6 +571,9 @@ func (k keyset) check(taken map[string]bool, cat *catalog) error {
 		if !opened[c.ID] {
 			errs = append(errs, fmt.Errorf("tui: no key opens the card %s", c.ID))
 		}
+	}
+	if _, err := k.commands(); err != nil {
+		errs = append(errs, err)
 	}
 	for _, place := range append([]string{""}, cardIDs(k.cards)...) {
 		seen := map[string]bool{}
@@ -465,21 +661,21 @@ func placeName(card string) string {
 	return "the card " + card + "'s"
 }
 
-// cardText is a card's body, its keys in the catalog's order. With groups, each key is under its
+// cardText is a card's body, its keys in the catalog's order, each named as shown says. With groups, each key is under its
 // heading, the headings in columns side by side, a blank line between two of a column: SPC's
 // card holds too many keys for two a row to fit the screen once headed. With none, two commands a
 // row, the second column aligned.
-func cardText(groups [][]string, keys []Key) string {
+func (k keyset) cardText(groups [][]string, keys []Key) string {
 	var listed []Key
-	for _, k := range keys {
-		if k.Does != "" {
-			listed = append(listed, k)
+	for _, key := range keys {
+		if key.Does != "" {
+			listed = append(listed, key)
 		}
 	}
 	if groups == nil {
 		cols := make([][]string, 2)
-		for i, k := range listed {
-			cols[i%2] = append(cols[i%2], k.Show+"  "+k.Does)
+		for i, key := range listed {
+			cols[i%2] = append(cols[i%2], k.shown(key)+"  "+key.Does)
 		}
 		return sideBySide(cols)
 	}
@@ -488,12 +684,12 @@ func cardText(groups [][]string, keys []Key) string {
 		headed[g] = true
 	}
 	under := map[string][]string{}
-	for _, k := range listed {
-		g := k.Group
+	for _, key := range listed {
+		g := key.Group
 		if !headed[g] {
 			g = groupMore
 		}
-		under[g] = append(under[g], k.Show+"  "+k.Does)
+		under[g] = append(under[g], k.shown(key)+"  "+key.Does)
 	}
 	cols := make([][]string, len(groups))
 	for i, col := range groups {
@@ -548,9 +744,9 @@ func textSource(card string) string { return "App." + card + "Text" }
 
 // cardState is every card's body, as the document reads it.
 func (k keyset) cardState() map[string]any {
-	m := map[string]any{}
+	m := k.terminalKeys()
 	for _, c := range k.cards {
-		m[textSource(c.ID)] = cardText(c.Groups, k.on(c.ID))
+		m[textSource(c.ID)] = k.cardText(c.Groups, k.on(c.ID))
 	}
 	return m
 }
@@ -559,16 +755,22 @@ func (k keyset) cardState() map[string]any {
 func (k keyset) helpCards() string {
 	var parts []string
 	for _, c := range k.cards {
-		parts = append(parts, c.Help+"\n  "+strings.ReplaceAll(cardText(c.Groups, k.on(c.ID)), "\n", "\n  "))
+		parts = append(parts, c.Help+"\n  "+strings.ReplaceAll(k.cardText(c.Groups, k.on(c.ID)), "\n", "\n  "))
 	}
 	return strings.Join(parts, "\n\n")
 }
 
-// shortcuts are the QML Shortcuts for keys, indented: each closes the card it is on first, when
-// close names it; a key that opens a card opens it.
+// shortcuts are the QML Shortcuts for keys, indented, one per command, which names its keys by keyId:
+// each closes the card it is on first, when close names it; a key that opens a card opens it.
 func shortcuts(keys []Key, indent, close string) string {
 	var b strings.Builder
+	seen := map[string]bool{}
 	for _, k := range keys {
+		id := k.commandID()
+		if seen[id] {
+			continue // another key of this command: the command binds them all
+		}
+		seen[id] = true
 		run := k.Run
 		switch {
 		case k.Opens != "":
@@ -579,9 +781,7 @@ func shortcuts(keys []Key, indent, close string) string {
 		if close != "" {
 			run = "{ " + close + ".close(); " + run + " }"
 		}
-		for _, s := range append([]string{k.Seq}, k.Also...) {
-			fmt.Fprintf(&b, "%sShortcut { sequence: %q; onActivated: %s }\n", indent, s, run)
-		}
+		fmt.Fprintf(&b, "%sShortcut { sequence: keyId(%q); onActivated: %s }\n", indent, id, run)
 	}
 	return b.String()
 }
@@ -631,6 +831,7 @@ func cardQML(c Card, keys []Key) string {
 Dialog {
     id: ` + c.ID + `
     closeOnQ: true
+    keyScope: ` + strconv.Quote("autodoc."+c.ID) + `
     title: ` + strconv.Quote(c.Title) + `
     dim: false
     helpText: ` + strconv.Quote(help) + `

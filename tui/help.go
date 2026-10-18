@@ -18,7 +18,11 @@ func helpText(k keyset, cat *catalog, more map[string][]string) string {
 	if cmds != "" {
 		cmds += "\n\n"
 	}
-	return helpKeys + "\n\n" + k.helpCards() + "\n\n" + cmds + helpRest
+	moved := k.helpMoved()
+	if moved != "" {
+		moved += "\n\n"
+	}
+	return helpKeys + "\n\n" + moved + k.helpCards() + "\n\n" + cmds + helpRest
 }
 
 // commandsChanged is the catalog changed: F1 is made anew once the loop is free, however many
@@ -98,10 +102,7 @@ func (k keyset) keysOf(e *Entry) []string {
 // keyName is key as typed from the page: a Window key's own name, a leader key after SPC, a key
 // on a card after the keys that open the card.
 func (k keyset) keyName(key Key, depth int) string {
-	show := key.Show
-	if show == "" {
-		show = key.Seq
-	}
+	show := k.shown(key)
 	if key.Card == leader {
 		return "SPC " + show
 	}

@@ -4,13 +4,14 @@
 // wrapping, as Down and Up do. q closes it.
 Dialog {
     closeOnQ: true
+    keyScope: "autodoc.goPick" // its keys' commands (tui/keys.go: dialogCommands)
     maxWidthPercent: 60
     maxHeightPercent: 80
     title: "go to"
     dim: false
     helpText: "Enter goes · Tab and Shift+Tab move · :go <name> from the command line"
-    Shortcut { sequence: "Tab"; onActivated: App.widgetNext() }
-    Shortcut { sequence: "Shift+Tab"; onActivated: App.widgetPrevious() }
+    Shortcut { sequence: keyId("autodoc.goPick.next"); onActivated: App.widgetNext() }
+    Shortcut { sequence: keyId("autodoc.goPick.previous"); onActivated: App.widgetPrevious() }
     TableView {
         palette.highlight: Theme.document.highlight
         palette.highlightedText: Theme.document.highlightedText

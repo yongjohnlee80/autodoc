@@ -10,12 +10,14 @@ Drawer {
     // as a band beside its border, which the GUI draws as a thin line through the cell)
     property var surface: Theme.document.base
     default property alias content: scope.data
+    // the key-map scope of the use's keys, which its FocusScope holds: "autodoc.explorer"
+    property string paneKeys: ""
     modal: false
     movable: true
     windowResize: true
     Frame {
         title: heading
         palette.window: surface
-        FocusScope { id: scope }
+        FocusScope { id: scope; keyScope: paneKeys }
     }
 }

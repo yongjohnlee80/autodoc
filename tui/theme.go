@@ -159,6 +159,23 @@ func (h *Host) themeReloadError(err error) {
 	}
 }
 
+// reloaded is a hot reload applied: the themes it may have changed, and the keys a key file moved,
+// as the cards and help name them.
+func (h *Host) reloaded() {
+	h.keysChanged()
+	h.themesReloaded()
+}
+
+// keysChanged is the App's key map installed or replaced: each card and help name the keys as it binds
+// them.
+func (h *Host) keysChanged() {
+	h.keys.live = h.p.App().Keymap()
+	for name, text := range h.keys.cardState() {
+		h.set(name, text)
+	}
+	h.commandsChanged()
+}
+
 func (h *Host) themesReloaded() {
 	h.set("App.userThemes", h.userThemeRows())
 	h.set("App.themes", choices(h.themeLabels()...))

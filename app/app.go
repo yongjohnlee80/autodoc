@@ -147,6 +147,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	fs.Bool("theme-reference", false, "print the installed agent-ready user-theme reference, with no UI or daemon")
 	fs.Bool("check-theme", false, "validate the Theme file after the flags; report every problem, without a UI or daemon")
 	fs.Bool("new-theme", false, "copy a built-in theme under a new name beside config.toml; never overwrite")
+	fs.Bool("keymap-reference", false, "print the reference for keymap.xml, every key's command id with its keys, with no UI or daemon")
+	fs.Bool("check-keymap", false, "check a keymap.xml (the file after the flags, or the one beside config.toml) as AutoDoc reads it; report every problem, without a UI or daemon")
 	fromTheme := fs.String("from", "sepia", "--new-theme: built-in starting theme (default sepia)")
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
@@ -180,6 +182,13 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		}},
 		{flag: "new-theme", arg: true, flagsAfter: true, run: func(name string) int {
 			if err := newTheme(*configPath, name, *fromTheme, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
+		{flag: "keymap-reference", run: func(string) int { keymapReference(stdout); return 0 }},
+		{flag: "check-keymap", arg: true, run: func(file string) int {
+			if err := checkKeymap(*configPath, file, stdout); err != nil {
 				return failed(err, 1)
 			}
 			return 0
