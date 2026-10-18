@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -165,8 +164,11 @@ func TestTheTerminalsKeysFollowTheMapWhole(t *testing.T) {
 		writeKeymap(t, file, `<mapping><shortcut id="autodoc.terminal.mode"><key value=""/></shortcut></mapping>`)
 		r := runShellWithKeymap(t, file)
 		r.openShell(t)
-		r.keys(t, ctrlKey('t'), esc())
-		time.Sleep(300 * time.Millisecond) // an absence: what Ctrl+T and Esc would have done by now
+		// The barrier: a line the shell runs after Ctrl+T and Esc, and prints only if they reached
+		// it. Had Ctrl+T left input mode, Esc would hide the pane and the line would never run. The
+		// first Enter runs the line Ctrl+T and Esc typed.
+		r.keys(t, append([]tuicore.Event{ctrlKey('t'), esc()}, decltest.Type("\recho $((40+2))unbound\r")...)...)
+		r.s.WaitForText(t, "42unbound")
 		if !r.termShown() {
 			t.Fatal("the unbound mode key still left input mode")
 		}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	tuikey "github.com/yongjohnlee80/golib/tui/key"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -162,6 +163,9 @@ func TestACardOpensFromAKey(t *testing.T) {
 	}
 	if _, err := keyCatalog(nil).withGenerated("no markers"); err == nil {
 		t.Error("a main.qml without the markers was rewritten")
+	}
+	if _, err := keyCatalog(nil).withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd); err == nil {
+		t.Error("a main.qml without its panes' markers was rewritten")
 	}
 	// a title is a QML string, quoted whatever it holds
 	if q := cardQML(Card{ID: "x", View: "X", Title: `say "hi" \ bye`}, nil); !strings.Contains(q, `title: "say \"hi\" \\ bye"`) {
@@ -412,12 +416,33 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		"a card's keys are the card's":      {Card: leader, Scope: "page", Seq: "x", Run: "App.x()"},
 		"which main.qml does not scope":     {Scope: "nowhere", Seq: "x", Run: "App.x()"},
 		"the pane links's d is taken twice": {Scope: "links", Seq: "d", Run: "App.x()"},
+		// key.Parse refuses the sequence, through commands
+		"tui: the Window's Ctrl+: ": {Seq: "Ctrl+", Run: "App.x()"},
+		// two arguments: no action names it, so no key command could
+		`the Window's F9 runs "App.x(1, 2)", which names no action`: {Seq: "F9", Run: "App.x(1, 2)"},
 	} {
 		bad := keyCatalog(nil)
 		bad.keys = append(bad.keys, key)
 		if err := bad.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%+v: err = %v, want %q", key, err, want)
 		}
+	}
+	nameless := keyCatalog(nil)
+	nameless.cards = append(nameless.cards, Card{View: "Nameless"})
+	if err := nameless.check(mainIDs, nil); err == nil || !strings.Contains(err.Error(), `the card "" (view "Nameless") needs a lower-camel ID`) {
+		t.Errorf("a card with no ID: err = %v", err)
+	}
+}
+
+// TestAKeysValueIsTheCatalogsKeys: the terminals' key sources before the program runs are the
+// catalog's keys of the command, and none for an id it does not declare.
+func TestAKeysValueIsTheCatalogsKeys(t *testing.T) {
+	k := keyCatalog(nil)
+	if got := k.keysValue(terminalModeID); !slices.Equal(got, tuidecl.Keys(tuikey.MustParse("Ctrl+T"))) {
+		t.Errorf("the mode key's value: %v, want Ctrl+T", got)
+	}
+	if got := k.keysValue("autodoc.window.nothing"); got != nil {
+		t.Errorf("an undeclared command's value: %v, want none", got)
 	}
 }
 
