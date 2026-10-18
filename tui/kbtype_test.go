@@ -278,3 +278,35 @@ func TestAKBTypeIsClonedOverHTTPSOnly(t *testing.T) {
 		}
 	}
 }
+
+// New Folder creates the folder the root field names (a leading ~ is home), and says why when it
+// can't: a relative path, a folder or file there already, a parent it can't create in.
+func TestNewFolderMakesTheRoot(t *testing.T) {
+	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitFor(t, "the workspaces", func(string) bool { return len(r.listed()) > 0 })
+	r.openAdd(t)
+	base := t.TempDir()
+	fresh := filepath.Join(base, "zk", "notes")
+	r.h.p.Post(func() { r.h.newRootFolder(fresh) })
+	r.s.WaitForText(t, "created "+fresh)
+	if info, err := os.Stat(fresh); err != nil || !info.IsDir() {
+		t.Fatalf("the folder was not created: %v", err)
+	}
+	r.h.p.Post(func() { r.h.newRootFolder(fresh) })
+	r.s.WaitForText(t, "exists already")
+	file := filepath.Join(base, "a-file")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.newRootFolder(file) })
+	r.s.WaitForText(t, "is a file")
+	r.h.p.Post(func() { r.h.newRootFolder(filepath.Join(file, "under")) })
+	r.s.WaitForText(t, "New Folder: mkdir")
+	r.h.p.Post(func() { r.h.newRootFolder("relative/path") })
+	r.s.WaitForText(t, "type the folder's full path")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	r.h.p.Post(func() { r.h.newRootFolder("~/from-home") })
+	r.s.WaitFor(t, "~ made under home", func(string) bool { _, err := os.Stat(filepath.Join(homeDir(), "from-home")); return err == nil })
+}
