@@ -245,3 +245,14 @@ func TestAKBTypeIsSentInBatches(t *testing.T) {
 		t.Fatalf("permanent/ holds %d files, want 71: %v", len(entries), err)
 	}
 }
+
+// A KB type is staged over https:// only: git's other transports (ext::, file://, a local path)
+// are refused before git runs, so nothing in a type's URL can run a command.
+func TestAKBTypeIsClonedOverHTTPSOnly(t *testing.T) {
+	for _, url := range []string{"ext::sh -c touch% /tmp/pwned", "file:///tmp/a-type", "/tmp/a-type", "git@github.com:x/y.git", "http://example.com/x"} {
+		s := stageKBType(context.Background(), url)
+		if s.err == nil || !strings.Contains(s.err.Error(), "https://") || s.stage != "" {
+			t.Errorf("%q: %v, stage %q; want refused before any clone", url, s.err, s.stage)
+		}
+	}
+}
