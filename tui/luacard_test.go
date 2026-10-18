@@ -255,8 +255,13 @@ func TestUsageShowsTablesAndChartsWhereDrawn(t *testing.T) {
 	}
 	r.s.WaitFor(t, "the usage tables", func(string) bool {
 		tx := text()
-		return strings.Contains(tx, "### Daemon") && strings.Contains(tx, "### App") && strings.Contains(tx, "| documents | 2 |")
+		// the cells as a reader reads them, whatever the padding
+		return strings.Contains(tx, "### Daemon") && strings.Contains(tx, "### App") &&
+			strings.Contains(strings.Join(strings.Fields(tx), " "), "| documents | 2 |")
 	})
+	if bad := misaligned(text()); bad != "" {
+		t.Fatalf("a table's rows do not line up in a terminal:\n%s", bad)
+	}
 	if strings.Contains(text(), "```vega-lite") {
 		t.Fatalf("a terminal's card has a chart: %s", text())
 	}

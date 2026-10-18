@@ -45,8 +45,8 @@ end
 
 local function percent(v) return v and ("%.1f %%"):format(v) or "—" end
 
--- width is how many characters s shows: UTF-8 continuation bytes are not characters
-local function width(s) return select(2, tostring(s):gsub("[^\128-\191]", "")) end
+-- width is the terminal columns s takes, as AutoDoc measures its own tables
+local function width(s) return autodoc.ui.width(tostring(s)) end
 
 local function pad(s, w)
   s = tostring(s)

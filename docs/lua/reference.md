@@ -523,6 +523,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `card:close()` | the panel closes and the card ends: its tick stops, and `set` and `close` do nothing after |
 | `card:open()` | `true` while this card is the panel's and the panel is open |
 | `autodoc.ui.charts()` | at once: `true` where the window draws a `vega-lite` fence as a chart (`--gui`), `false` in a terminal |
+| `autodoc.ui.width(s)` | at once: the terminal columns `s` takes, as AutoDoc measures its own tables (a wide character two, a combining mark none), to pad text so it lines up |
 | `autodoc.app.stats()` | at once: the app's own process, in the keys `sys.stats` answers for the daemon's: `{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}`. Sizes are bytes (`rss` 0 where the system cannot say: macOS), `cpu_seconds` the CPU used so far: a rate is two readings apart |
 | `autodoc.agents.list()` | at once: `{{codename, name, running, closing, instance, orphan}, …}`, the saved profiles first; a `closing` one refuses a send |
 | `autodoc.plugin.run(id, args…)` | at once, `ok, err`: from a plugin's own Lua package only (its `lua/`, loaded as `plugin:<name>`, [docs/plugins.md](../plugins.md#a-plugins-lua-package-lua)), one of its plugin's `[[commands]]` run with `args` (strings), the plugin started when it is not running. `err` `"autodoc.plugin.run: not a plugin's package"` for any other script, `"unknown: <id>"` for an id its manifest does not declare; arguments need the plugin's `protocol = 7` |

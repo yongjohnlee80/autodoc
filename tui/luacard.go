@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"time"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
+
 	"github.com/yongjohnlee80/autodoc/core/procstat"
 	"github.com/yongjohnlee80/autodoc/rpc"
 	lua "github.com/yuin/gopher-lua"
@@ -19,6 +21,7 @@ import (
 //	card:close()       the panel closes and the card ends: set and close then do nothing
 //	card:open()        true while this is the panel's card and the panel is open
 //	autodoc.ui.charts()   whether this window draws a vega-lite fence as a chart
+//	autodoc.ui.width(s)   the terminal columns s takes, for padding text to line up
 //	autodoc.app.stats()   the app's own process, keyed as sys.stats answers the daemon's
 //
 // One panel shows one card: a new card replaces the one shown, whose handle is then dead. tick(card)
@@ -59,6 +62,7 @@ type cardHost interface {
 func (s *scripting) bindCard(L *lua.LState, ui *lua.LTable) {
 	L.SetField(ui, "card", L.NewFunction(s.luaCard))
 	L.SetField(ui, "charts", L.NewFunction(s.luaCharts))
+	L.SetField(ui, "width", L.NewFunction(luaWidth))
 	app := L.NewTable()
 	L.SetField(app, "stats", L.NewFunction(s.luaAppStats))
 	L.SetField(s.eng.Global(), "app", app)
@@ -191,6 +195,13 @@ func (s *scripting) resetCard() {
 	if h := s.cardHost(); h != nil && h.panelOpen(luaCardPanel) {
 		h.closePanel(luaCardPanel)
 	}
+}
+
+// luaWidth is autodoc.ui.width(s): how many terminal columns s takes, as AutoDoc measures its own
+// tables (a wide character two, a combining mark none), so a script pads text to line up.
+func luaWidth(L *lua.LState) int {
+	L.Push(lua.LNumber(tuicore.StringWidth(L.CheckString(1))))
+	return 1
 }
 
 func (s *scripting) luaCharts(L *lua.LState) int {
