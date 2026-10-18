@@ -25,13 +25,21 @@ type documentSwitch interface{ SetRenderedDocument(on bool) }
 // HTMLView, named without a gui type.
 type documentComponent interface{ DocumentComponent() tuicore.Component }
 
-// pageView is the editor's document view, an HTMLView; false for an editor without one (a terminal's).
+// pageView is the editor's own document view, an HTMLView; false for an editor without one (a
+// terminal's). It is kept as first read, at the editor's start: a CSV buffer's table takes the
+// document view's place while it is shown (tabledoc.go), and the page comes back for an HTML file.
 func (h *Host) pageView() (*widget.HTMLView, bool) {
+	if h.pageDoc != nil {
+		return h.pageDoc, true
+	}
 	dc, ok := h.editor.(documentComponent)
 	if !ok {
 		return nil, false
 	}
 	v, ok := dc.DocumentComponent().(*widget.HTMLView)
+	if ok {
+		h.pageDoc = v
+	}
 	return v, ok
 }
 
@@ -48,7 +56,19 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 		}
 		h.noteFile(note)
 	}
-	on := raw && h.native()
+	page := raw && h.native()
+	var table *widget.TableDocument
+	if comma := tableComma(p); comma != 0 && !raw && h.active != nil && p != "" {
+		table = h.tableOf(h.active, comma)
+	}
+	v, hasPage := h.pageView()
+	switch {
+	case table != nil:
+		setDocumentView(h.editor, table)
+	case page && hasPage:
+		setDocumentView(h.editor, v)
+	}
+	on := table != nil || page
 	switch {
 	case h.docSwitch != nil:
 		h.docSwitch(on)
@@ -57,11 +77,7 @@ func (h *Host) documentFor(ws, p string, raw bool) {
 			ds.SetRenderedDocument(on)
 		}
 	}
-	if !on {
-		return
-	}
-	v, ok := h.pageView()
-	if !ok {
+	if !page || !hasPage {
 		return
 	}
 	if root, base := h.resourcesFor(ws, p); root+"\x00"+base != h.pageDir {

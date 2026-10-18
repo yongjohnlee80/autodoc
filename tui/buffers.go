@@ -30,6 +30,8 @@ type openBuffer struct {
 	buf  *widget.Buffer // its text, history, marks and revision (golib)
 	// ed is the buffer's own headless editor, made on first use (editorFor); nil until then
 	ed *widget.EditorCore
+	// table is a CSV or TSV buffer's Rendered view, made when it is first shown (tabledoc.go)
+	table *widget.TableDocument
 	// luaRev and luaGen are the Lua change event's baseline and debounce generation, per buffer
 	luaRev, luaGen uint64
 	// restored is the kept copy this buffer's text came from (recovery.go); pendingRestore, a copy

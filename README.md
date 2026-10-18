@@ -354,6 +354,16 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   - **Simplified** (`Enter`) is the derived text above, read-only.
   - **Raw** is the HTML itself, edited and saved like any file; reading it again keeps it raw.
   - In the GUI, a raw file's Rendered view (`Ctrl+T`) is its page, drawn natively.
+- **A CSV or TSV file's Rendered view is an editable table**, in the GUI and in the terminal.
+  `Ctrl+T` flips between it and the text, which is always there to edit. In the table:
+  - `Enter` (or `i`, or typing) opens a cell, and its exact value is kept: line breaks, tabs and
+    quotes. `Enter` keeps the cell, `Alt+Enter` adds a line, and `Esc` drops the edit.
+  - `o` adds a row under the cursor; `dd` deletes a row; `x` empties a cell.
+  - The extra row and field after the last, each marked `+`, append to the file.
+  - An edit is one undo step, undone by the editor's own key (`u`, or `Ctrl+Z`), and marks the
+    file modified. Only the edited record's lines change on save.
+  - A file that is not valid CSV (a stray quote) opens read-only in the table; its text still
+    edits.
 - **Frontmatter problems** show on a line over the page as the file is typed, once the workspace
   has a schema (`Manage… › Edit…`); they never block a save.
 - **The pickers** (search, open a document, add a workspace) share one layout: the fields over the

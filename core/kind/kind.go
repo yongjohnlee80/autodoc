@@ -66,7 +66,7 @@ type Registrations struct{ Chunked, Derived []string }
 func (r Registrations) Of(p string, text []string) Kind {
 	ext := Ext(p)
 	switch ext {
-	case ".txt", ".mmd", ".csv":
+	case ".txt", ".mmd", ".csv", ".tsv":
 		return Text
 	case ".yaml", ".yml":
 		return YAML
@@ -120,13 +120,13 @@ type ErrExtension struct{ Ext, Why string }
 
 func (e *ErrExtension) Error() string { return fmt.Sprintf("kind: %q: %s", e.Ext, e.Why) }
 
-// builtIn are the extensions whose kind is fixed. Mermaid diagrams (.mmd) and CSV tables are plain
-// text everywhere: read as Markdown they would be cut and parsed as prose.
-var builtIn = []string{".md", ".txt", ".yaml", ".yml", ".mmd", ".csv"}
+// builtIn are the extensions whose kind is fixed. Mermaid diagrams (.mmd) and CSV and TSV tables are
+// plain text everywhere: read as Markdown they would be cut and parsed as prose.
+var builtIn = []string{".md", ".txt", ".yaml", ".yml", ".mmd", ".csv", ".tsv"}
 
 // nowBuiltIn are built-in text extensions a workspace could declare before they were built in. One
 // is still accepted, and dropped as already read as text, so a workspace's saved list saves again.
-var nowBuiltIn = []string{".mmd", ".csv"}
+var nowBuiltIn = []string{".mmd", ".csv", ".tsv"}
 
 // IsBuiltIn reports whether ext (lowercased, with its dot) is a built-in kind's.
 func IsBuiltIn(ext string) bool { return slices.Contains(builtIn, ext) }

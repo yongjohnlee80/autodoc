@@ -40,6 +40,19 @@ func startManagedWith(t *testing.T, roots map[string]string, o serving.Options) 
 // startManagedRanking is startManagedWith as a build supplying its ranker (none: the stored ones).
 func startManagedRanking(t *testing.T, roots map[string]string, o serving.Options, supplied serving.Supplied) *managedDaemon {
 	t.Helper()
+	return startManagedIncludes(t, roots, nil, o, supplied)
+}
+
+// startManagedIncluding is startManaged with each workspace's include patterns: the files it
+// admits beyond the default's (a .csv, say).
+func startManagedIncluding(t *testing.T, roots map[string]string, include []string) *managedDaemon {
+	t.Helper()
+	return startManagedIncludes(t, roots, include, serving.Options{}, serving.Supplied{})
+}
+
+// startManagedIncludes is startManagedRanking with include, nil for the default.
+func startManagedIncludes(t *testing.T, roots map[string]string, include []string, o serving.Options, supplied serving.Supplied) *managedDaemon {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	db, err := openDaemonStore(t)
 	if err != nil {
@@ -51,7 +64,7 @@ func startManagedRanking(t *testing.T, roots map[string]string, o serving.Option
 		}
 	}
 	for _, name := range sortedNames(roots) {
-		if _, err := db.AddWorkspace(ctx, name, roots[name], nil, nil); err != nil {
+		if _, err := db.AddWorkspace(ctx, name, roots[name], include, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

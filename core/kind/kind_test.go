@@ -23,8 +23,8 @@ func TestOf(t *testing.T) {
 		t.Error("an undeclared extension is Markdown, the default")
 	}
 	// a build's chunker cannot claim them either: the built-in kind would win
-	if !IsBuiltIn(".mmd") || !IsBuiltIn(".csv") {
-		t.Error(".mmd and .csv are not built-in kinds' extensions")
+	if !IsBuiltIn(".mmd") || !IsBuiltIn(".csv") || !IsBuiltIn(".tsv") {
+		t.Error(".mmd, .csv and .tsv are not built-in kinds' extensions")
 	}
 }
 
