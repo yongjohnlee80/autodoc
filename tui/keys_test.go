@@ -3,6 +3,7 @@ package tui
 import (
 	"flag"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -11,13 +12,39 @@ import (
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
+	tuikey "github.com/yongjohnlee80/golib/tui/key"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
+// binds reports whether a generated block's Shortcuts take seq: a keyId's command holding it (the
+// catalog's commands), or a fixed sequence that is it.
+func binds(t *testing.T, k keyset, block, seq string) bool {
+	t.Helper()
+	cmds, err := k.commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := tuikey.MustParse(seq)[0]
+	for _, m := range regexp.MustCompile(`keyId\("([^"]+)"\)`).FindAllStringSubmatch(block, -1) {
+		for _, c := range cmds {
+			if c.ID == m[1] && slices.Contains(c.Keys, want) {
+				return true
+			}
+		}
+	}
+	for _, m := range regexp.MustCompile(`sequence: "([^"]+)"`).FindAllStringSubmatch(block, -1) {
+		if got, err := tuikey.Parse(m[1]); err == nil && got == want {
+			return true
+		}
+	}
+	return false
+}
+
 var updateKeys = flag.Bool("update", false, "rewrite the files generated from the key catalog (keys.go)")
 
-// TestKeysAreGenerated: main.qml's Window keys and its cards' declarations, and each card's
-// views/<View>.qml, are the catalog's, the features' keys and cards included; -update rewrites them.
+// TestKeysAreGenerated: main.qml's Window keys and its cards' declarations, each card's
+// views/<View>.qml, and docs/keymap.md's table of commands are the catalog's, the features' keys and
+// cards included; -update rewrites them.
 func TestKeysAreGenerated(t *testing.T) {
 	h := newHost(NewSession("unused", nil), Options{})
 	fs := h.features()
@@ -36,6 +63,17 @@ func TestKeysAreGenerated(t *testing.T) {
 	files := map[string]string{"qml/main.qml": wantMain}
 	for _, c := range k.cards {
 		files["qml/views/"+c.View+".qml"] = cardQML(c, k.on(c.ID))
+	}
+	cmds, err := k.commands()
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := os.ReadFile("../docs/keymap.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if files["../docs/keymap.md"], err = replaceBlock(string(doc), keymapDocBegin, keymapDocEnd, keymapTable(cmds)); err != nil {
+		t.Fatal(err)
 	}
 	for path, want := range files {
 		if *updateKeys {
@@ -65,7 +103,7 @@ func TestEveryKeyIsInTheHelp(t *testing.T) {
 		}
 	}
 	for _, c := range k.cards {
-		text := cardText(c.Groups, k.on(c.ID))
+		text := k.cardText(c.Groups, k.on(c.ID))
 		for _, key := range k.on(c.ID) {
 			if !strings.Contains(text, key.Show+"  "+key.Does) {
 				t.Errorf("%s is not on the card %s", key.Show, c.ID)
@@ -98,15 +136,19 @@ func TestACardOpensFromAKey(t *testing.T) {
 		`title: "SPC a — agents"`,
 		"text: App.agentsCardText",
 		`Shortcut { sequence: "Backspace"; onActivated: { agentsCard.close(); leader.open() } }`,
-		`Shortcut { sequence: "b"; onActivated: { agentsCard.close(); App.runCommand("agent.buffer") } }`,
+		`Shortcut { sequence: keyId("autodoc.agentsCard.runCommand.agent.buffer"); onActivated: { agentsCard.close(); App.runCommand("agent.buffer") } }`,
 		"Backspace goes back",
 	} {
 		if !strings.Contains(qml, want) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, qml)
 		}
 	}
-	if lq, _ := k.card(leader); !strings.Contains(cardQML(lq, k.on(leader)), `Shortcut { sequence: "Shift+Y"; onActivated: { leader.close(); agentsCard.open() } }`) {
+	lq, _ := k.card(leader)
+	if q := cardQML(lq, k.on(leader)); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.leader.open.agentsCard"); onActivated: { leader.close(); agentsCard.open() } }`) || !binds(t, k, q, "Shift+Y") {
 		t.Error("SPC B does not close SPC's card and open the agents'")
+	}
+	if !binds(t, k, qml, "b") || !binds(t, k, qml, "f") {
+		t.Error("the agents' card's commands do not hold b and f")
 	}
 	if got := k.cardState()["App.agentsCardText"]; got != "b  send the buffer  f  send the selection" {
 		t.Errorf("the card's text: %q", got)
@@ -251,10 +293,10 @@ func TestAKeyRunsACatalogEntryByItsID(t *testing.T) {
 		t.Errorf("the card's text: %q", got)
 	}
 	c, _ := k.card("zzCard")
-	if q := cardQML(c, k.on("zzCard")); !strings.Contains(q, `Shortcut { sequence: "b"; onActivated: { zzCard.close(); App.run("zz.send_buffer") } }`) {
+	if q := cardQML(c, k.on("zzCard")); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.zzCard.run.zz.send_buffer"); onActivated: { zzCard.close(); App.run("zz.send_buffer") } }`) || !binds(t, k, q, "b") {
 		t.Errorf("the card's QML does not run the entry:\n%s", q)
 	}
-	if got := shortcuts([]Key{{Seq: "F9", Cmd: `a.b"c`}}, "", ""); got != `Shortcut { sequence: "F9"; onActivated: App.run("a.b\"c") }`+"\n" {
+	if got := shortcuts([]Key{{Seq: "F9", Cmd: `a.b"c`}}, "", ""); got != `Shortcut { sequence: keyId("autodoc.window.run.a.b\"c"); onActivated: App.run("a.b\"c") }`+"\n" {
 		t.Errorf("an id is a QML string, quoted: %q", got)
 	}
 }
@@ -328,20 +370,21 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 	}
 	window := block(keysBegin, keysEnd)
 	for _, seq := range []string{"/", "n", "Shift+N"} {
-		if !strings.Contains(window, `sequence: "`+seq+`"`) {
+		if !binds(t, k, window, seq) {
 			t.Errorf("the Window lost %s, its fallback where find does not reach", seq)
 		}
 	}
-	if strings.Contains(window, `sequence: "d"`) {
+	if binds(t, k, window, "d") {
 		t.Error("d is still the Window's")
 	}
 	for _, s := range keyScopes {
 		begin, end := scopeMarkers(s)
 		got := block(begin, end)
-		if has := strings.Contains(got, s.Indent+`Shortcut { sequence: "/"; onActivated: App.openFind() }`); has != finds[s.ID] {
+		find := s.Indent + `Shortcut { sequence: keyId("autodoc.` + s.ID + `.openFind"); onActivated: App.openFind() }`
+		if has := strings.Contains(got, find) && binds(t, k, got, "/"); has != finds[s.ID] {
 			t.Errorf("the %s's keys hold /: %v, but a find pane scoped there: %v\n%s", s.ID, has, finds[s.ID], got)
 		}
-		if hasD := strings.Contains(got, `sequence: "d"`); hasD != (s.ID == "links" || s.ID == "todos") {
+		if hasD := binds(t, k, got, "d"); hasD != (s.ID == "links" || s.ID == "todos") {
 			t.Errorf("the %s's keys hold d: %v", s.ID, hasD)
 		}
 	}
@@ -357,7 +400,7 @@ func TestAPanesKeysAreItsOwn(t *testing.T) {
 		todosKeys := block(todosBegin, todosEnd)
 		for _, seq := range []string{"a", "d", "s", "i", "o", "Shift+R", "Shift+M", "Shift+L", "Shift+A", "Shift+S", "Shift+N", "Shift+O",
 			"[", "]", "Backspace", "?", "1", "2", "3", "4", "5"} {
-			if !strings.Contains(todosKeys, `sequence: "`+seq+`"`) {
+			if !binds(t, k, todosKeys, seq) {
 				t.Errorf("the todos panel's %q block lacks %s:\n%s", s.Label, seq, todosKeys)
 			}
 		}
@@ -403,7 +446,7 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	if !opens {
 		t.Error("? in the todos panel does not open its card")
 	}
-	text := cardText(c.Groups, k.on(todoKeysCard))
+	text := k.cardText(c.Groups, k.on(todoKeysCard))
 	for _, want := range []string{"MOVE", "TABS", "TASK", "STATUS", "STORE", "Enter  open the task's file, or a month", "1–6  a tab",
 		"[ ]  the tab before, after", "s  status…: move the task", "a  add a task", "A  assign it to an agent", "S  choose the store",
 		"N  a new store", "O  load a store", "L  rename it (its label)", "R  refresh", "M  move the store"} {
@@ -419,13 +462,18 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 	q := cardQML(c, k.on(todoKeysCard))
 	for _, want := range []string{
 		`Shortcut { sequence: "?"; onActivated: todoKeys.close() }`,
-		`Shortcut { sequence: "s"; onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
-		`Shortcut { sequence: "]"; onActivated: { todoKeys.close(); App.todoTabAfter() } }`,
-		`Shortcut { sequence: "o"; onActivated: { todoKeys.close(); App.todoToggleDetail() } }`,
+		`Shortcut { sequence: keyId("autodoc.todoKeys.todoChooseStatus"); onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
+		`Shortcut { sequence: keyId("autodoc.todoKeys.todoTabAfter"); onActivated: { todoKeys.close(); App.todoTabAfter() } }`,
+		`Shortcut { sequence: keyId("autodoc.todoKeys.todoToggleDetail"); onActivated: { todoKeys.close(); App.todoToggleDetail() } }`,
 		`helpText: "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"`,
 	} {
 		if !strings.Contains(q, want) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, q)
+		}
+	}
+	for _, seq := range []string{"s", "]", "i", "o"} {
+		if !binds(t, k, q, seq) {
+			t.Errorf("the card's commands do not hold %s", seq)
 		}
 	}
 	if lq, _ := k.card(leader); strings.Contains(cardQML(lq, k.on(leader)), "onActivated: leader.close() }") {

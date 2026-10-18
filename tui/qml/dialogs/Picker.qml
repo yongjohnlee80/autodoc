@@ -29,6 +29,7 @@ Dialog {
     default property alias columns: list.data
     property alias footer: footerRow.data
     closeOnQ: true
+    keyScope: "autodoc.picker" // its keys' commands (tui/keys.go: dialogCommands)
     maxWidthPercent: widthPercent
     maxHeightPercent: heightPercent
     dim: false
@@ -80,10 +81,9 @@ Dialog {
         // a row under both halves, empty unless a use fills it
         Flex { id: footerRow; direction: Tui.Horizontal }
     }
-    Shortcut { sequence: "Ctrl+K"; onActivated: field.forceActiveFocus() }
-    Shortcut { sequence: "Ctrl+J"; onActivated: list.forceActiveFocus() }
-    Shortcut { sequence: "Ctrl+L"; onActivated: preview.forceActiveFocus() }
-    Shortcut { sequence: "Ctrl+H"; onActivated: list.forceActiveFocus() }
+    Shortcut { sequence: keyId("autodoc.picker.field"); onActivated: field.forceActiveFocus() }
+    Shortcut { sequence: keyId("autodoc.picker.list"); onActivated: list.forceActiveFocus() }
+    Shortcut { sequence: keyId("autodoc.picker.preview"); onActivated: preview.forceActiveFocus() }
     DialogButtonBox {
         Button { text: acceptText; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }

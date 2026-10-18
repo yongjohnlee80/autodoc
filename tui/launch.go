@@ -145,6 +145,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		LuaDir:          filepath.Join(filepath.Dir(configPath), "lua"),
 		ConfigPath:      configPath,
 		ThemeDir:        filepath.Join(filepath.Dir(configPath), "themes"),
+		KeymapFile:      filepath.Join(filepath.Dir(configPath), "keymap.xml"),
 		ProgramOptions:  o.ProgramOptions,
 		NoteFile:        o.NoteFile,
 		Fonts:           o.Fonts,

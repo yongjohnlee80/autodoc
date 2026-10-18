@@ -341,6 +341,10 @@ type Options struct {
 	ConfigPath string
 	// ThemeDir holds the user's complete Theme files beside config.toml. Empty offers built-ins only.
 	ThemeDir string
+	// KeymapFile is the user's key-mapping scheme (golib's tui/keymap), keymap.xml beside config.toml:
+	// it moves any key by its command's id, and is followed while the program runs. A missing file
+	// is no scheme. "" for none.
+	KeymapFile string
 	// ProgramOptions come after the program's own options (options): a build's choice of how
 	// the document runs, such as tuidecl.WithStyle for the window's native widgets. nil: none.
 	ProgramOptions []tuidecl.ProgramOption
@@ -444,6 +448,7 @@ func (h *Host) attach(p *tuidecl.Program) error {
 	p.Post(h.attachToasts)
 	p.Post(h.attachVimKeys)
 	p.Post(h.attachFindChip)
+	p.Post(h.keysChanged) // the user's keymap.xml, read as the program was built: the cards name its keys
 	p.Post(h.start)
 	p.Post(func() {
 		for _, err := range h.themeCatalog.Problems {
@@ -464,7 +469,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		files := os.DirFS(opt.Dev)
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
 		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins}, "main.qml"),
-			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.themesReloaded() })))
+			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
 	} else {
 		src = opt.Layout
 		if src == nil {
@@ -475,10 +480,11 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		}
 		src = h.plugins.withCardPanels(src) // a panel for each card plugin found (pluginpanels.go)
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
-		// Names added later require a restart; with no registered user modules there is
-		// nothing mutable to follow, so the normal built-in-only UI keeps no poller.
-		if opt.ThemeDir != "" && len(h.themeNames()) > len(themeNames) {
-			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.themesReloaded() })))
+		// Names added later require a restart; with no registered user modules and no key file
+		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key
+		// file is followed from its first save, so its directory being named is enough.
+		if opt.KeymapFile != "" || opt.ThemeDir != "" && len(h.themeNames()) > len(themeNames) {
+			opts = append(opts, tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
 		}
 	}
 	if opt.ThemeDir != "" {
@@ -490,6 +496,14 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
 	h.cat = h.reg.catalog
+	cmds, err := h.keys.commands()
+	if err != nil {
+		panic(err) // the registry's check refuses it first: a build that cannot start
+	}
+	opts = append(opts, tuidecl.KeyCommands(cmds...))
+	if opt.KeymapFile != "" {
+		opts = append(opts, tuidecl.Keymap(os.DirFS(filepath.Dir(opt.KeymapFile)), filepath.Base(opt.KeymapFile)))
+	}
 	h.plugins.syncPluginEntries() // the plugins found at newHost, now that there is a catalog
 	h.plugins.refreshPlugins()
 	opts = append(opts,

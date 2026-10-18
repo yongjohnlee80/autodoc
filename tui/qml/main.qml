@@ -54,29 +54,28 @@ Window {
 
     // the Window's keys fire whichever widget has focus, when it leaves them (tui/keys.go)
     // ---- the Window's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-    Shortcut { sequence: "Space"; onActivated: leader.open() }
-    Shortcut { sequence: "Ctrl+Space"; onActivated: leader.open() }
-    Shortcut { sequence: "Ctrl+H"; onActivated: App.movePane("h") }
-    Shortcut { sequence: "Ctrl+J"; onActivated: App.movePane("j") }
-    Shortcut { sequence: "Ctrl+K"; onActivated: App.movePane("k") }
-    Shortcut { sequence: "Ctrl+L"; onActivated: App.movePane("l") }
-    Shortcut { sequence: "Ctrl+S"; onActivated: App.save() }
-    Shortcut { sequence: "Ctrl+N"; onActivated: App.newFile() }
-    Shortcut { sequence: "Ctrl+G"; onActivated: App.openSearch() }
-    Shortcut { sequence: "Ctrl+;"; onActivated: App.openCommandLine() }
-    Shortcut { sequence: "/"; onActivated: App.openFind() }
-    Shortcut { sequence: "n"; onActivated: App.findNext() }
-    Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
-    Shortcut { sequence: "Ctrl+W"; onActivated: App.pickWorkspace() }
-    Shortcut { sequence: "Ctrl+Q"; onActivated: App.quit() }
-    Shortcut { sequence: "F11"; onActivated: App.maximizePanel() }
-    Shortcut { sequence: "F6"; onActivated: App.cycleWidget() }
-    Shortcut { sequence: "Shift+F6"; onActivated: App.cycleWidgetBack() }
-    Shortcut { sequence: "F1"; onActivated: help.open() }
-    Shortcut { sequence: "Ctrl+="; onActivated: App.zoomWindow("in") }
-    Shortcut { sequence: "Ctrl+-"; onActivated: App.zoomWindow("out") }
-    Shortcut { sequence: "Ctrl+0"; onActivated: App.setZoom(100) }
-    Shortcut { sequence: "?"; onActivated: App.toggleVimKeys() }
+    Shortcut { sequence: keyId("autodoc.window.open.leader"); onActivated: leader.open() }
+    Shortcut { sequence: keyId("autodoc.window.movePane.h"); onActivated: App.movePane("h") }
+    Shortcut { sequence: keyId("autodoc.window.movePane.j"); onActivated: App.movePane("j") }
+    Shortcut { sequence: keyId("autodoc.window.movePane.k"); onActivated: App.movePane("k") }
+    Shortcut { sequence: keyId("autodoc.window.movePane.l"); onActivated: App.movePane("l") }
+    Shortcut { sequence: keyId("autodoc.window.save"); onActivated: App.save() }
+    Shortcut { sequence: keyId("autodoc.window.newFile"); onActivated: App.newFile() }
+    Shortcut { sequence: keyId("autodoc.window.openSearch"); onActivated: App.openSearch() }
+    Shortcut { sequence: keyId("autodoc.window.openCommandLine"); onActivated: App.openCommandLine() }
+    Shortcut { sequence: keyId("autodoc.window.openFind"); onActivated: App.openFind() }
+    Shortcut { sequence: keyId("autodoc.window.findNext"); onActivated: App.findNext() }
+    Shortcut { sequence: keyId("autodoc.window.findPrevious"); onActivated: App.findPrevious() }
+    Shortcut { sequence: keyId("autodoc.window.pickWorkspace"); onActivated: App.pickWorkspace() }
+    Shortcut { sequence: keyId("autodoc.window.quit"); onActivated: App.quit() }
+    Shortcut { sequence: keyId("autodoc.window.maximizePanel"); onActivated: App.maximizePanel() }
+    Shortcut { sequence: keyId("autodoc.window.cycleWidget"); onActivated: App.cycleWidget() }
+    Shortcut { sequence: keyId("autodoc.window.cycleWidgetBack"); onActivated: App.cycleWidgetBack() }
+    Shortcut { sequence: keyId("autodoc.window.help.open"); onActivated: help.open() }
+    Shortcut { sequence: keyId("autodoc.window.zoomWindow.in"); onActivated: App.zoomWindow("in") }
+    Shortcut { sequence: keyId("autodoc.window.zoomWindow.out"); onActivated: App.zoomWindow("out") }
+    Shortcut { sequence: keyId("autodoc.window.setZoom.100"); onActivated: App.setZoom(100) }
+    Shortcut { sequence: keyId("autodoc.window.toggleVimKeys"); onActivated: App.toggleVimKeys() }
     // ---- end of the generated keys ----
 
     MenuBar {
@@ -254,10 +253,11 @@ Window {
         // the page's keys, live while the keyboard is in the Editor (tui/keys.go's page scope)
         FocusScope {
             Layout.fillHeight: true
+            keyScope: "autodoc.page" // its keys' commands (tui/keys.go)
             // ---- the page's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-            Shortcut { sequence: "/"; onActivated: App.openFind() }
-            Shortcut { sequence: "n"; onActivated: App.findNext() }
-            Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
+            Shortcut { sequence: keyId("autodoc.page.openFind"); onActivated: App.openFind() }
+            Shortcut { sequence: keyId("autodoc.page.findNext"); onActivated: App.findNext() }
+            Shortcut { sequence: keyId("autodoc.page.findPrevious"); onActivated: App.findPrevious() }
             // ---- end of the page's keys ----
             Editor {
                 id: editor
@@ -324,10 +324,11 @@ Window {
         onResized: App.panelResized("explorer", size, length)
         onOpened: App.panelOpened("explorer")
         onClosed: App.panelClosed("explorer")
+        paneKeys: "autodoc.explorer" // its keys' commands (tui/keys.go): the scope of its FocusScope
         // ---- the explorer's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-        Shortcut { sequence: "/"; onActivated: App.openFind() }
-        Shortcut { sequence: "n"; onActivated: App.findNext() }
-        Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
+        Shortcut { sequence: keyId("autodoc.explorer.openFind"); onActivated: App.openFind() }
+        Shortcut { sequence: keyId("autodoc.explorer.findNext"); onActivated: App.findNext() }
+        Shortcut { sequence: keyId("autodoc.explorer.findPrevious"); onActivated: App.findPrevious() }
         // ---- end of the explorer's keys ----
         TreeView {
             id: explorerTree
@@ -353,9 +354,10 @@ Window {
         minimumSize: 20
         onOpened: App.panelOpened("htmlPane")
         onClosed: App.panelClosed("htmlPane")
+        paneKeys: "autodoc.htmlPane" // its keys' commands (tui/keys.go): the scope of its FocusScope
         // ---- the HTML preview's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-        Shortcut { sequence: "b"; onActivated: App.openPaneInBrowser() }
-        Shortcut { sequence: "q"; onActivated: App.closeHTMLPane() }
+        Shortcut { sequence: keyId("autodoc.htmlPane.openPaneInBrowser"); onActivated: App.openPaneInBrowser() }
+        Shortcut { sequence: keyId("autodoc.htmlPane.closeHTMLPane"); onActivated: App.closeHTMLPane() }
         // ---- end of the HTML preview's keys ----
         Flex {
             direction: Tui.Vertical
@@ -392,11 +394,12 @@ Window {
         onResized: App.panelResized("links", size, length)
         onOpened: App.panelOpened("links")
         onClosed: App.panelClosed("links")
+        paneKeys: "autodoc.links" // its keys' commands (tui/keys.go): the scope of its FocusScope
         // ---- the links's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-        Shortcut { sequence: "/"; onActivated: App.openFind() }
-        Shortcut { sequence: "n"; onActivated: App.findNext() }
-        Shortcut { sequence: "Shift+N"; onActivated: App.findPrevious() }
-        Shortcut { sequence: "d"; onActivated: App.relationsDepth() }
+        Shortcut { sequence: keyId("autodoc.links.openFind"); onActivated: App.openFind() }
+        Shortcut { sequence: keyId("autodoc.links.findNext"); onActivated: App.findNext() }
+        Shortcut { sequence: keyId("autodoc.links.findPrevious"); onActivated: App.findPrevious() }
+        Shortcut { sequence: keyId("autodoc.links.relationsDepth"); onActivated: App.relationsDepth() }
         // ---- end of the links's keys ----
         ListView {
             id: relationsList
@@ -430,11 +433,11 @@ Window {
         // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
         TerminalTabs {
             id: terminalView
-            // F11 (maximize) reaches the Window with the keyboard in a shell: its program never gets it
-            hostKeys: "F11"
+            // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
+            hostKeys: App.terminalHostKeys
             emptyText: "No shell running. Press + to start one."
-            // Ctrl+T toggles its input and Normal mode, in either editor mode; Esc goes to the program
-            modeKey: "Ctrl+T"
+            // autodoc.terminal.mode (Ctrl+T) toggles its input and Normal mode, in either editor mode; Esc goes to the program
+            modeKey: App.terminalModeKey
             vimKeys: false
             // the terminals' theme (terminal.go): its text and background, the strip's the page's
             palette.base: App.terminalBase
@@ -470,11 +473,11 @@ Window {
         // tab's menu goes to another, restarts or closes it, or opens the profiles
         TerminalTabs {
             id: agentView
-            // F11 (maximize) reaches the Window with the keyboard in a shell: its program never gets it
-            hostKeys: "F11"
+            // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
+            hostKeys: App.terminalHostKeys
             emptyText: "No agent running. Press + to start one of the profiles."
-            // Ctrl+T toggles its input and Normal mode, in either editor mode; Esc goes to the program
-            modeKey: "Ctrl+T"
+            // autodoc.terminal.mode (Ctrl+T) toggles its input and Normal mode, in either editor mode; Esc goes to the program
+            modeKey: App.terminalModeKey
             vimKeys: false
             // as the terminal's: the terminals' theme and face, the contrast raised against it
             palette.base: App.terminalBase
@@ -614,31 +617,31 @@ Window {
             // bubble, and a key read there must never change or remove the task being read
             FocusScope {
                 Layout.fillHeight: true
+                keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
                 // ---- the todos's keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-                Shortcut { sequence: "a"; onActivated: App.todoAdd() }
-                Shortcut { sequence: "d"; onActivated: App.todoRemove() }
-                Shortcut { sequence: "s"; onActivated: App.todoChooseStatus() }
-                Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
-                Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
-                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
-                Shortcut { sequence: "["; onActivated: App.todoTabBefore() }
-                Shortcut { sequence: "]"; onActivated: App.todoTabAfter() }
-                Shortcut { sequence: "Backspace"; onActivated: App.todoMonthsBack() }
-                Shortcut { sequence: "Shift+S"; onActivated: App.todoFocusStore() }
-                Shortcut { sequence: "Shift+N"; onActivated: App.todoNew() }
-                Shortcut { sequence: "Shift+O"; onActivated: App.todoLoad() }
-                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
-                Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
-                Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
-                Shortcut { sequence: "?"; onActivated: todoKeys.open() }
-                Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
-                Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
-                Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
-                Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
-                Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
-                Shortcut { sequence: "6"; onActivated: App.todosTab(5) }
-                Shortcut { sequence: "e"; onActivated: App.todoVarEdit() }
-                Shortcut { sequence: "m"; onActivated: App.todoVarMachine() }
+                Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
+                Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
+                Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
+                Shortcut { sequence: keyId("autodoc.todos.todoToggleDetail"); onActivated: App.todoToggleDetail() }
+                Shortcut { sequence: keyId("autodoc.todos.todoAssign"); onActivated: App.todoAssign() }
+                Shortcut { sequence: keyId("autodoc.todos.todoTabBefore"); onActivated: App.todoTabBefore() }
+                Shortcut { sequence: keyId("autodoc.todos.todoTabAfter"); onActivated: App.todoTabAfter() }
+                Shortcut { sequence: keyId("autodoc.todos.todoMonthsBack"); onActivated: App.todoMonthsBack() }
+                Shortcut { sequence: keyId("autodoc.todos.todoFocusStore"); onActivated: App.todoFocusStore() }
+                Shortcut { sequence: keyId("autodoc.todos.todoNew"); onActivated: App.todoNew() }
+                Shortcut { sequence: keyId("autodoc.todos.todoLoad"); onActivated: App.todoLoad() }
+                Shortcut { sequence: keyId("autodoc.todos.todoLabel"); onActivated: App.todoLabel() }
+                Shortcut { sequence: keyId("autodoc.todos.todoRefresh"); onActivated: App.todoRefresh() }
+                Shortcut { sequence: keyId("autodoc.todos.todoMove"); onActivated: App.todoMove() }
+                Shortcut { sequence: keyId("autodoc.todos.open.todoKeys"); onActivated: todoKeys.open() }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.0"); onActivated: App.todosTab(0) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.1"); onActivated: App.todosTab(1) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.2"); onActivated: App.todosTab(2) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.3"); onActivated: App.todosTab(3) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.4"); onActivated: App.todosTab(4) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.5"); onActivated: App.todosTab(5) }
+                Shortcut { sequence: keyId("autodoc.todos.todoVarEdit"); onActivated: App.todoVarEdit() }
+                Shortcut { sequence: keyId("autodoc.todos.todoVarMachine"); onActivated: App.todoVarMachine() }
                 // ---- end of the todos's keys ----
                 Flex {
                     direction: Tui.Vertical
@@ -810,31 +813,31 @@ Window {
             // note. Which apply follows the cursor (todos.go: syncActions), never a button's own click.
             // the panel's keys again, live on these buttons too (the details pane above has none)
             FocusScope {
+                keyScope: "autodoc.todos" // its keys' commands (tui/keys.go)
                 // ---- the todos task buttons' keys: generated from tui/keys.go (go test ./tui -run TestKeysAreGenerated -update) ----
-                Shortcut { sequence: "a"; onActivated: App.todoAdd() }
-                Shortcut { sequence: "d"; onActivated: App.todoRemove() }
-                Shortcut { sequence: "s"; onActivated: App.todoChooseStatus() }
-                Shortcut { sequence: "i"; onActivated: App.todoToggleDetail() }
-                Shortcut { sequence: "o"; onActivated: App.todoToggleDetail() }
-                Shortcut { sequence: "Shift+A"; onActivated: App.todoAssign() }
-                Shortcut { sequence: "["; onActivated: App.todoTabBefore() }
-                Shortcut { sequence: "]"; onActivated: App.todoTabAfter() }
-                Shortcut { sequence: "Backspace"; onActivated: App.todoMonthsBack() }
-                Shortcut { sequence: "Shift+S"; onActivated: App.todoFocusStore() }
-                Shortcut { sequence: "Shift+N"; onActivated: App.todoNew() }
-                Shortcut { sequence: "Shift+O"; onActivated: App.todoLoad() }
-                Shortcut { sequence: "Shift+L"; onActivated: App.todoLabel() }
-                Shortcut { sequence: "Shift+R"; onActivated: App.todoRefresh() }
-                Shortcut { sequence: "Shift+M"; onActivated: App.todoMove() }
-                Shortcut { sequence: "?"; onActivated: todoKeys.open() }
-                Shortcut { sequence: "1"; onActivated: App.todosTab(0) }
-                Shortcut { sequence: "2"; onActivated: App.todosTab(1) }
-                Shortcut { sequence: "3"; onActivated: App.todosTab(2) }
-                Shortcut { sequence: "4"; onActivated: App.todosTab(3) }
-                Shortcut { sequence: "5"; onActivated: App.todosTab(4) }
-                Shortcut { sequence: "6"; onActivated: App.todosTab(5) }
-                Shortcut { sequence: "e"; onActivated: App.todoVarEdit() }
-                Shortcut { sequence: "m"; onActivated: App.todoVarMachine() }
+                Shortcut { sequence: keyId("autodoc.todos.todoAdd"); onActivated: App.todoAdd() }
+                Shortcut { sequence: keyId("autodoc.todos.todoRemove"); onActivated: App.todoRemove() }
+                Shortcut { sequence: keyId("autodoc.todos.todoChooseStatus"); onActivated: App.todoChooseStatus() }
+                Shortcut { sequence: keyId("autodoc.todos.todoToggleDetail"); onActivated: App.todoToggleDetail() }
+                Shortcut { sequence: keyId("autodoc.todos.todoAssign"); onActivated: App.todoAssign() }
+                Shortcut { sequence: keyId("autodoc.todos.todoTabBefore"); onActivated: App.todoTabBefore() }
+                Shortcut { sequence: keyId("autodoc.todos.todoTabAfter"); onActivated: App.todoTabAfter() }
+                Shortcut { sequence: keyId("autodoc.todos.todoMonthsBack"); onActivated: App.todoMonthsBack() }
+                Shortcut { sequence: keyId("autodoc.todos.todoFocusStore"); onActivated: App.todoFocusStore() }
+                Shortcut { sequence: keyId("autodoc.todos.todoNew"); onActivated: App.todoNew() }
+                Shortcut { sequence: keyId("autodoc.todos.todoLoad"); onActivated: App.todoLoad() }
+                Shortcut { sequence: keyId("autodoc.todos.todoLabel"); onActivated: App.todoLabel() }
+                Shortcut { sequence: keyId("autodoc.todos.todoRefresh"); onActivated: App.todoRefresh() }
+                Shortcut { sequence: keyId("autodoc.todos.todoMove"); onActivated: App.todoMove() }
+                Shortcut { sequence: keyId("autodoc.todos.open.todoKeys"); onActivated: todoKeys.open() }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.0"); onActivated: App.todosTab(0) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.1"); onActivated: App.todosTab(1) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.2"); onActivated: App.todosTab(2) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.3"); onActivated: App.todosTab(3) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.4"); onActivated: App.todosTab(4) }
+                Shortcut { sequence: keyId("autodoc.todos.todosTab.5"); onActivated: App.todosTab(5) }
+                Shortcut { sequence: keyId("autodoc.todos.todoVarEdit"); onActivated: App.todoVarEdit() }
+                Shortcut { sequence: keyId("autodoc.todos.todoVarMachine"); onActivated: App.todoVarMachine() }
                 // ---- end of the todos task buttons' keys ----
                 Flex {
                     direction: Tui.Horizontal
