@@ -17,7 +17,7 @@ import (
 // view of Markdown beside the Raw one. The terminal keeps tui's Editor for the same main.qml.
 // Gio needs the process's main thread for windows (macOS requires it), so gui.Main takes it and
 // ends the process when the UI quits: it never returns.
-func runGUI(ctx context.Context, o tui.LaunchOptions, dbg *debugRecording) error {
+func runGUI(ctx context.Context, o tui.LaunchOptions, owned []owner) error {
 	configureGUIPreferences()
 	gui.Main(func() error {
 		opts := []gui.Option{gui.WithTitle("AutoDoc")}
@@ -37,10 +37,10 @@ func runGUI(ctx context.Context, o tui.LaunchOptions, dbg *debugRecording) error
 		o.NoteFile = notes.SetNote
 		o.ProgramOptions = append(o.ProgramOptions, tuidecl.WithStyle(tui.GUIStyle(notes)))
 		// gui.Main ends the process when this callback returns, so this is the last
-		// code that runs: the recording's owner closes here, with the TUI's trace
-		// stopped, Launch having returned. gui.Main prints a returned error and
-		// exits 1.
-		if err := finishUI(tui.Launch(ctx, o), dbg); err != nil && !errors.Is(err, context.Canceled) {
+		// code that runs: the run's owners close here (the recording, with the TUI's
+		// trace stopped, and the profile monitor), Launch having returned. gui.Main
+		// prints a returned error and exits 1.
+		if err := finishRun(tui.Launch(ctx, o), owned...); err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
 		return nil

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -91,17 +90,7 @@ func (d *debugRecording) close() error {
 // finishUI folds the UI's exit and the recording's close into the command's one
 // error. A recording that couldn't be written whole outranks a cancelled UI
 // (the ordinary way a --debug run ends); a real UI failure keeps both errors.
-func finishUI(uiErr error, dbg *debugRecording) error {
-	cerr := dbg.close()
-	switch {
-	case cerr == nil:
-		return uiErr
-	case uiErr == nil || errors.Is(uiErr, context.Canceled):
-		return cerr
-	default:
-		return errors.Join(uiErr, cerr)
-	}
-}
+func finishUI(uiErr error, dbg *debugRecording) error { return finishRun(uiErr, dbg) }
 
 // nonClosingRecorder hands the window's backend the recording without the close
 // that comes with it: the backend closes what it is given when the window ends,

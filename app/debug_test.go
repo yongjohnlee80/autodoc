@@ -135,6 +135,10 @@ func TestOpenDebugRecordingRefusesWhatExists(t *testing.T) {
 	if data, err := os.ReadFile(existing); err != nil || string(data) != "kept\n" {
 		t.Fatalf("the symlink's target was touched: %q, %v", string(data), err)
 	}
+	// a folder that is not there: no recording, and the error says which file and why
+	if _, _, err := openDebugRecording(filepath.Join(dir, "missing", "rec.jsonl")); err == nil || !strings.Contains(err.Error(), "cannot open the debug recording") {
+		t.Fatalf("a path in a missing folder: err = %v; want the open's refusal", err)
+	}
 }
 
 // The window's backend must not close the shared recording: the TUI's trace is

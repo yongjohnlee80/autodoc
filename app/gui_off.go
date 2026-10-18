@@ -14,4 +14,6 @@ import (
 var errNoGUI = errors.New("this autodoc was built without the GUI: `make build-gui` builds it (on macOS `make build` does), " +
 	"with cgo and, on Linux, the window system's development libraries (README, \"The GUI\")")
 
-func runGUI(context.Context, tui.LaunchOptions, *debugRecording) error { return errNoGUI }
+func runGUI(_ context.Context, _ tui.LaunchOptions, owned []owner) error {
+	return finishRun(errNoGUI, owned...)
+}

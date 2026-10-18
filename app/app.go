@@ -166,6 +166,9 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	health := fs.Bool("health", false, "--server: ask the running server for its health (GET /v1/health); exit 0 when ok or degraded, 1 otherwise")
 	debug := &debugFlag{}
 	fs.Var(debug, "debug", "--ui and --gui: record the input and event stream to one JSONL file for an input or IME bug report; =PATH names the file (default autodoc-debug-<date>.jsonl in the working directory). The file contains everything typed, passwords included")
+	profile := &profileFlag{}
+	fs.Var(profile, "profile", "--ui, --gui and --serve: monitor memory into a directory, =DIR names it (default autodoc-profile-<date>-<mode> in the working directory; AUTODOC_PROFILE=DIR does the same): samples of the Go runtime's memory, a heap profile and the allocation sites holding the most each time the live heap grows, and the profiles on DIR/pprof.sock for --profile-fetch")
+	profileFetch := fs.String("profile-fetch", "", "write one profile from a running --profile monitor to DIR/fetched-<profile>-<time>.pb.gz, for go tool pprof: heap, allocs, goroutine or cpu (30 seconds); its DIR after the flags, or AUTODOC_PROFILE's")
 
 	// failed is a mode's error as its exit code: code, after saying why.
 	failed := func(err error, code int) int {
@@ -219,14 +222,11 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flag: "serve", run: func(string) int {
 			ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
-			if err := runServe(ctx, *configPath, stderr, b); err != nil && !errors.Is(err, context.Canceled) {
-				fmt.Fprintln(stderr, "autodoc:", err)
-				if errors.Is(err, errAlreadyServing) {
-					return 0 // this store's daemon is serving: nothing is wrong
-				}
-				return 1
+			prof, err := startProfile(ctx, profile, "serve", stderr)
+			if err != nil {
+				return failed(err, 1)
 			}
-			return 0
+			return serveExit(stderr, runServe(ctx, *configPath, stderr, b), prof)
 		}},
 		{flag: "server", arg: true, flagsAfter: true, oneOf: []string{"check", "health"}, run: func(cfg string) int {
 			if cfg == "" {
@@ -271,8 +271,14 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			}
 			return 0
 		}},
-		{flag: "ui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, false, b, stderr, debug) }},
-		{flag: "gui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, true, b, stderr, debug) }},
+		{flag: "ui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, false, b, stderr, debug, profile) }},
+		{flag: "gui", arg: true, run: func(ws string) int { return uiMode(ctx, *configPath, *dev, ws, true, b, stderr, debug, profile) }},
+		{flag: "profile-fetch", asked: func() bool { return *profileFetch != "" }, arg: true, run: func(dir string) int {
+			if err := fetchProfile(ctx, *profileFetch, dir, stdout); err != nil {
+				return failed(err, 1)
+			}
+			return 0
+		}},
 	}
 	companions := []companion{
 		{flags: []string{"from"}, modes: []string{"new-theme"}},
@@ -282,6 +288,7 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 		{flags: []string{"dev"}, modes: []string{"ui", "gui"}},
 		{flags: []string{"check", "health"}, modes: []string{"server"}},
 		{flags: []string{"debug"}, modes: []string{"ui", "gui"}},
+		{flags: []string{"profile"}, modes: []string{"ui", "gui", "serve"}},
 	}
 	m, arg, code, ok := choose(fs, args, modes, companions)
 	if !ok {
@@ -293,10 +300,10 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 // uiMode is --ui and --gui. SIGTERM and SIGHUP (the terminal gone): the program ends and keeps
 // unsaved work for the next start. Not SIGINT: the terminal's own keys (ctrl-c among them) are the
 // TUI's.
-func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, stderr io.Writer, debug *debugFlag) int {
+func uiMode(ctx context.Context, configPath, dev, ws string, gui bool, b build, stderr io.Writer, debug *debugFlag, profile *profileFlag) int {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
-	if err := runUI(ctx, configPath, dev, ws, gui, b, debug); err != nil && !errors.Is(err, context.Canceled) {
+	if err := runUI(ctx, configPath, dev, ws, gui, b, debug, profile); err != nil && !errors.Is(err, context.Canceled) {
 		fmt.Fprintln(stderr, "autodoc:", err)
 		return 1
 	}

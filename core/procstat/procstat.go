@@ -7,8 +7,9 @@ package procstat
 import (
 	"os"
 	"runtime"
-	"runtime/metrics"
 	"time"
+
+	"github.com/yongjohnlee80/golib/diag"
 )
 
 // Stats is one process's use, read now.
@@ -26,33 +27,21 @@ type Stats struct {
 
 var started = time.Now()
 
-// the runtime/metrics samples Read takes, in this order
-const (
-	metricTotal      = "/memory/classes/total:bytes"
-	metricHeap       = "/memory/classes/heap/objects:bytes"
-	metricGoroutines = "/sched/goroutines:goroutines"
-)
-
 // Read is this process's Stats now.
 func Read() Stats {
 	s := Stats{PID: os.Getpid(), Started: started, CPUs: runtime.NumCPU()}
 	readRuntime(&s)
 	readOS(&s)
+	s.PeakRSS = max(s.PeakRSS, s.RSS) // two readings: a peak is never below now
 	return s
 }
 
-// readRuntime fills Go's own sizes. A metric this toolchain does not have reads as zero.
+// readRuntime fills Go's own sizes and the resident size from golib/diag's reader: one reading of
+// the runtime's memory, and of /proc/self/statm on Linux, for :usage and for a --profile monitor.
 func readRuntime(s *Stats) {
-	samples := []metrics.Sample{{Name: metricTotal}, {Name: metricHeap}, {Name: metricGoroutines}}
-	metrics.Read(samples)
-	s.GoMemory = uint64Of(samples[0].Value)
-	s.GoHeap = uint64Of(samples[1].Value)
-	s.Goroutines = int(uint64Of(samples[2].Value))
-}
-
-func uint64Of(v metrics.Value) uint64 {
-	if v.Kind() == metrics.KindUint64 {
-		return v.Uint64()
-	}
-	return 0
+	d := diag.Read()
+	s.GoMemory = d.GoTotal
+	s.GoHeap = d.HeapObjs
+	s.Goroutines = int(d.Goroutines)
+	s.RSS = d.RSS
 }
