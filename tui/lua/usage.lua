@@ -87,10 +87,19 @@ end
 -- model is an embedding model's id as a person reads it: provider|name|digest|dims becomes
 -- "provider name, dims dims", the digest left out; any other shape as it is
 local function model(id)
-  local parts = {}
-  for p in (tostring(id) .. "|"):gmatch("([^|]*)|") do parts[#parts + 1] = p end
+  id = tostring(id)
+  local parts, from = {}, 1
+  while true do -- split on "|" by find, not gmatch: gopher-lua's gmatch fails on this string
+    local at = id:find("|", from, true)
+    if not at then
+      parts[#parts + 1] = id:sub(from)
+      break
+    end
+    parts[#parts + 1] = id:sub(from, at - 1)
+    from = at + 1
+  end
   if #parts == 4 then return parts[1] .. " " .. parts[2] .. ", " .. parts[4] .. " dims" end
-  return tostring(id)
+  return id
 end
 
 local function workspace_table(ws, status, models)
