@@ -4,14 +4,14 @@ package tui
 
 import "github.com/yongjohnlee80/golib/tui/widget"
 
-// startRendered does nothing in a terminal build: its editor has no Rendered view.
-func startRendered(editorWidget) {}
+// startRendered chooses the terminal editor's Rendered view, a table file's table (rendered_term.go).
+func startRendered(e editorWidget) { startTermRendered(e) }
 
-// editorView is "" in a terminal build: its editor has one view.
-func editorView(editorWidget) string { return "" }
+// editorView is the terminal editor's chosen view as the jump list records it.
+func editorView(e editorWidget) string { v, _ := termView(e); return v }
 
-// setEditorView does nothing in a terminal build.
-func setEditorView(editorWidget, string) {}
+// setEditorView puts the terminal editor in the view a jump list recorded.
+func setEditorView(e editorWidget, view string) { setTermView(e, view) }
 
 // paneDiagrams does nothing in a terminal build: it opens no pane.
 func (h *Host) paneDiagrams(*widget.HTMLView) {}

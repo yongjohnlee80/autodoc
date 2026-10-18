@@ -10,11 +10,16 @@ import guiwidget "github.com/yongjohnlee80/golib/gui/widget"
 func startRendered(e editorWidget) {
 	if g, ok := e.(*guiwidget.Editor); ok {
 		g.SetMode(guiwidget.Rendered)
+		return
 	}
+	startTermRendered(e) // run with --ui: the terminal's editor (rendered_term.go)
 }
 
 // editorView is the GUI editor's view as the jump list records it: "rendered", or "" for its source.
 func editorView(e editorWidget) string {
+	if v, ok := termView(e); ok {
+		return v
+	}
 	if g, ok := e.(*guiwidget.Editor); ok && g.Mode() == guiwidget.Rendered {
 		return "rendered"
 	}
@@ -23,6 +28,9 @@ func editorView(e editorWidget) string {
 
 // setEditorView puts the GUI editor in the view a jump list recorded.
 func setEditorView(e editorWidget, view string) {
+	if setTermView(e, view) {
+		return
+	}
 	g, ok := e.(*guiwidget.Editor)
 	if !ok {
 		return
