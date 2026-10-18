@@ -206,20 +206,27 @@ func pointOf(cur *mind, p string) (gui.Point, bool) {
 func equalStrings(a, b []string) bool { return strings.Join(a, "\x00") == strings.Join(b, "\x00") }
 
 // In the host, Relations › GlobeMap opens over the workspace's map, and Relations › Mindmap over
-// the page's document; each closes back to the editor.
+// the page's document, one link out; d in the Mindmap shows two links out, and d again one. Each
+// closes back to the editor.
 func TestTheRelationViewsOpenInTheHost(t *testing.T) {
-	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "[[c]]\n", "c.md", "ccc\n"}})
 	r := windowed(t, d)
-	r.waitListed(t, 2)
+	r.waitListed(t, 3)
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	for _, v := range []struct{ panel, view, title string }{
-		{globeMapPanelID, globeMapViewID, "kb · 2 documents, 1 links"},
-		{mindmapPanelID, mindmapViewID, "a.md · 2 documents within two links"},
+		{globeMapPanelID, globeMapViewID, "kb · 3 documents, 2 links"},
+		{mindmapPanelID, mindmapViewID, "a.md · 2 documents · depth 1 · d depth"},
 	} {
 		onLoop(r, func() bool { core{r.h}.TogglePanel(v.panel); return true })
 		r.s.WaitForText(t, v.title)
 		r.s.WaitFor(t, v.panel+" open with the keyboard", func(string) bool { return r.panelIsOpen(v.panel) && r.focusedOn(v.view) })
+		if v.panel == mindmapPanelID {
+			r.keys(t, key('d'))
+			r.s.WaitForText(t, "a.md · 3 documents · depth 2 · d depth")
+			r.keys(t, key('d'))
+			r.s.WaitForText(t, "a.md · 2 documents · depth 1 · d depth")
+		}
 		onLoop(r, func() bool { core{r.h}.TogglePanel(v.panel); return true })
 		r.s.WaitFor(t, v.panel+" closed, the editor's keyboard", func(string) bool { return !r.panelIsOpen(v.panel) && r.focusedOn("editor") })
 	}

@@ -14,10 +14,10 @@ import (
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
-// THE MINDMAP — Relations › Mindmap: the page's document and the documents within two links of it,
-// as a mind map drawn natively (golib gui/mermaid.LayDiagram), each document once, under the one
-// that reached it first. A click on a document opens it and keeps the keyboard here; the map is
-// rooted again at the page shown, only when one is (Shown). The wheel scrolls a tall map.
+// THE MINDMAP — Relations › Mindmap: the page's document and the documents one link from it (d: two
+// links, and back), as a mind map drawn natively (golib gui/mermaid.LayDiagram), each document once,
+// under the one that reached it first. A click on a document opens it and keeps the keyboard here;
+// the map is rooted again at the page shown, only when one is (Shown). The wheel scrolls a tall map.
 
 // mind is one Mindmap build: everything derived from one graph.map answer, made off the loop and
 // never changed once installed.
@@ -39,9 +39,16 @@ type mindmap struct {
 	view   *mindView
 	scroll float32 // how far down the map the view is, in logical pixels
 	asked  float32 // the width a relayout was last asked for
+	depth  int     // the links out from the root it shows: 1, or 2 (d toggles)
 }
 
-func newMindmap(c Core) *mindmap { return &mindmap{c: c} }
+func newMindmap(c Core) *mindmap { return &mindmap{c: c, depth: 1} }
+
+// toggleDepth is d in the Mindmap: two links out, or one again, read afresh at the page shown.
+func (m *mindmap) toggleDepth() {
+	m.depth = 3 - m.depth
+	m.load()
+}
 
 func (*mindmap) Name() string { return "mindmap" }
 
@@ -104,12 +111,12 @@ func (m *mindmap) load() {
 		m.title()
 		return
 	}
-	width, th := m.width(), mindTheme(m.palette())
+	width, th, depth := m.width(), mindTheme(m.palette()), m.depth
 	m.asked = width
 	m.status = "reading " + ref.path + "…"
 	m.title()
 	m.c.Go(func(ctx context.Context) any {
-		res, err := m.c.Call(ctx, "graph.map", ref.ws, map[string]any{"root": ref.path, "depth": int64(2)})
+		res, err := m.c.Call(ctx, "graph.map", ref.ws, map[string]any{"root": ref.path, "depth": int64(depth)})
 		if err != nil {
 			return err
 		}
@@ -182,7 +189,7 @@ func (m *mindmap) title() {
 	case m.status != "":
 		t += " · " + m.status
 	case m.cur != nil:
-		t += fmt.Sprintf(" · %s · %d documents within two links", m.cur.root.path, len(m.cur.m.Nodes))
+		t += fmt.Sprintf(" · %s · %d documents · depth %d · d depth", m.cur.root.path, len(m.cur.m.Nodes), m.depth)
 	}
 	m.c.Set("App.mindmapTitle", t)
 	m.dirty()
@@ -258,6 +265,13 @@ func (v *mindView) pixels() gui.Size {
 
 func (v *mindView) HandleEvent(ev tuicore.Event) bool {
 	m := v.m
+	if k, ok := ev.(tuicore.KeyEvent); ok {
+		if k.Kind != tuicore.KeyPress || k.Text != "d" {
+			return false
+		}
+		m.toggleDepth()
+		return true
+	}
 	e, ok := ev.(tuicore.MouseEvent)
 	if !ok {
 		return false
