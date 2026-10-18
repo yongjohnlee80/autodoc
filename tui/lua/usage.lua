@@ -45,46 +45,72 @@ end
 
 local function percent(v) return v and ("%.1f %%"):format(v) or "—" end
 
+-- width is how many characters s shows: UTF-8 continuation bytes are not characters
+local function width(s) return select(2, tostring(s):gsub("[^\128-\191]", "")) end
+
+local function pad(s, w)
+  s = tostring(s)
+  return s .. string.rep(" ", w - width(s))
+end
+
+-- kv_table is rows of {label, value} as a Markdown table padded to its columns: the GUI renders
+-- it, and the terminal, which shows the Markdown as it is, reads it as aligned columns
+local function kv_table(rows)
+  local kw, vw = 3, 3
+  for _, r in ipairs(rows) do
+    kw, vw = math.max(kw, width(r[1])), math.max(vw, width(r[2]))
+  end
+  local out = {
+    "| " .. pad("", kw) .. " | " .. pad("", vw) .. " |",
+    "| " .. string.rep("-", kw) .. " | " .. string.rep("-", vw) .. " |",
+  }
+  for _, r in ipairs(rows) do
+    out[#out + 1] = "| " .. pad(r[1], kw) .. " | " .. pad(r[2], vw) .. " |"
+  end
+  return table.concat(out, "\n")
+end
+
 local function process_table(name, r)
   local st = r.st
   local rss = st.rss > 0 and size(st.rss) or ("— (peak " .. size(st.peak_rss) .. ")")
-  return table.concat({
-    "### " .. name,
-    "",
-    "| | |",
-    "| --- | --- |",
-    "| CPU | " .. percent(r.cpu) .. " of one core, " .. st.cpus .. " cores |",
-    "| resident memory | " .. rss .. " |",
-    "| peak resident | " .. size(st.peak_rss) .. " |",
-    "| Go memory | " .. size(st.go_memory) .. " (heap " .. size(st.go_heap) .. ") |",
-    "| goroutines | " .. st.goroutines .. " |",
-    "| up | " .. duration(st.uptime) .. " |",
-    "| pid, version | " .. st.pid .. ", " .. tostring(st.version) .. " |",
-  }, "\n")
+  return "### " .. name .. "\n\n" .. kv_table({
+    { "CPU", percent(r.cpu) .. " of one core, " .. st.cpus .. " cores" },
+    { "resident memory", rss },
+    { "peak resident", size(st.peak_rss) },
+    { "Go memory", size(st.go_memory) .. " (heap " .. size(st.go_heap) .. ")" },
+    { "goroutines", st.goroutines },
+    { "up", duration(st.uptime) },
+    { "pid, version", st.pid .. ", " .. tostring(st.version) },
+  })
+end
+
+-- model is an embedding model's id as a person reads it: provider|name|digest|dims becomes
+-- "provider name, dims dims", the digest left out; any other shape as it is
+local function model(id)
+  local parts = {}
+  for p in (tostring(id) .. "|"):gmatch("([^|]*)|") do parts[#parts + 1] = p end
+  if #parts == 4 then return parts[1] .. " " .. parts[2] .. ", " .. parts[4] .. " dims" end
+  return tostring(id)
 end
 
 local function workspace_table(ws, status, models)
   if not ws then return "### Workspace\n\nNo workspace is open." end
   if status.error then return "### Workspace `" .. ws .. "`\n\nThe index did not answer: " .. status.error end
   local rows = {
-    "### Workspace `" .. ws .. "`",
-    "",
-    "| | |",
-    "| --- | --- |",
-    "| documents | " .. status.docs .. " |",
-    "| sections | " .. status.chunks .. " |",
-    "| waiting to index | " .. status.pending_jobs .. " |",
-    "| failing | " .. #(status.failing or {}) .. " |",
-    "| held | " .. status.held .. " |",
+    { "documents", status.docs },
+    { "sections", status.chunks },
+    { "waiting to index", status.pending_jobs },
+    { "failing", #(status.failing or {}) },
+    { "held", status.held },
   }
   local e = status.embeddings
   if e then
-    rows[#rows + 1] = "| meaning search | " .. tostring(e.semantic) .. " (" .. tostring(e.model) .. ") |"
+    rows[#rows + 1] = { "meaning search", tostring(e.semantic) .. " (" .. model(e.model) .. ")" }
   end
   for _, m in ipairs(models or {}) do
-    rows[#rows + 1] = "| vectors, " .. m.name .. " | " .. m.vectors .. " (" .. tostring(m.state) .. ", " .. size(m.f32_bytes + m.bits_bytes + m.key_bytes) .. ") |"
+    rows[#rows + 1] = { "vectors, " .. m.name, m.vectors .. " (" .. tostring(m.state) .. ", " .. size(m.f32_bytes + m.bits_bytes + m.key_bytes) .. ")" }
   end
-  return table.concat(rows, "\n")
+  return "### Workspace `" .. ws .. "`\n\n" .. kv_table(rows)
 end
 
 -- json writes the values a chart needs: numbers, strings, lists and maps of them
