@@ -1,5 +1,10 @@
 package tui
 
+import (
+	"errors"
+	"path/filepath"
+)
+
 // THE BUILT-IN COMMANDS — AutoDoc's own entries in the command catalog (catalog.go): what a menu
 // row or a SPC key runs, each by its id. Until a feature leaves legacy, legacy contributes them
 // here; a feature of its own declares its own (todos.go). Each Run calls the same function as the
@@ -22,6 +27,15 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("buffer.pick", "switch buffer", "App.openBuffers()", h.openBuffers),
 		builtin("buffer.close", "close the buffer", "App.closeBuffer()", h.closeShownBuffer),
 		builtin("file.open_any", "open a file anywhere", "App.openFileDialog()", h.openFileDialog),
+		{ID: "file.open_path", Title: "open a file by its path", Args: "<absolute path>",
+			Help: "open a file by its absolute path, as File › Open any file does once it is chosen: its workspace's when one indexes it",
+			Run: func(x Invocation) error {
+				if len(x.Args) != 1 || !filepath.IsAbs(x.Args[0]) {
+					return errors.New("file.open_path: takes one absolute path")
+				}
+				h.openAbsolute(x.Args[0])
+				return nil
+			}},
 		builtin("file.save", "save", "App.save()", h.save),
 		builtin("file.reload", "reload from disk", "App.reload()", h.reload),
 		builtin("file.preview_html", "preview HTML", "App.previewHTML()", h.previewHTML),

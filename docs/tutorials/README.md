@@ -64,7 +64,7 @@ Open this folder (`docs/tutorials/`) as a workspace in `autodoc --gui` and press
 14. **[Chapter 14: Sandboxed Lua Scripting (`~/.config/autodoc/lua/`)](./14-lua-scripting-and-custom-commands.md)**
     Writing custom `:commands`, modal keymaps, single-step undo buffer transformations, interactive `autodoc.ui.pick` workflows, and capability-gated async RPC scripts inside the 2-second Lua sandbox.
 15. **[Chapter 15: The Out-of-Process Plugin System (Protocols 1–6) & Vetted Registry](./15-plugin-architecture-and-registry.md)**
-    Building isolated child-process plugins in Go or Python across Protocols 1 to 6: modal dialogs, docked non-modal cards, document feeds with byte offsets, hosted paged tables (`[table]`), typed cell kinds, the pointer, and the `plugin/card` and `plugin/decl` UI kits.
+    Building isolated child-process plugins in Go or Python across Protocols 1 to 7: modal dialogs, docked non-modal cards, document feeds with byte offsets, hosted paged tables (`[table]`), typed cell kinds, the pointer, the session slot and a plugin's Lua package, and the `plugin/card` and `plugin/decl` UI kits.
 16. **[Chapter 16: Live Database Workbenches in Markdown — The AutoDB Plugin](./16-autodb-live-sql-workbench.md)**
     Running PostgreSQL, MySQL, and SQLite queries directly from `.sql` files and Markdown notes via `autodoc-autodb`, streaming session-pinned paged cursors into AutoDoc's 100k-row sortable Results table, and exporting CSV or Markdown tables.
 17. **[Chapter 17: Neovim Integration (`autodoc.nvim`) & Reversible KB Migration](./17-neovim-integration-and-kb-migration.md)**

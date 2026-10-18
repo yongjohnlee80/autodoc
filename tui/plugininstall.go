@@ -14,6 +14,8 @@ import (
 	"slices"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
 // ADDING AND MANAGING PLUGINS — Plugins › Add from a git URL… clones a repository whose top holds a
@@ -204,7 +206,7 @@ func (pl *plugins) pluginConfirmed() {
 	}
 	if c.update {
 		if r := pl.running[c.m.Name]; r != nil {
-			r.close("") // it is replaced under itself otherwise
+			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
 		}
 	}
 	pl.c.NotifyOngoing(toastPlugin, "building "+c.m.Name+"…")
@@ -216,6 +218,9 @@ func (pl *plugins) pluginConfirmed() {
 		}
 		pl.loadPlugins()
 		pl.loadManaged()
+		if pl.scriptsChanged != nil {
+			pl.scriptsChanged()
+		}
 		verb := "added"
 		if c.update {
 			verb = "updated"
@@ -381,6 +386,23 @@ func (pl *plugins) startUpdatePlugin(i int) {
 		pl.c.Notify(m.e.label() + " was put in the folder by hand: update it there")
 		return
 	}
+	pl.fetchAndAsk(m)
+}
+
+// updatePlugin is plugins.update: the installed plugin named, as the manager's Update… updates it.
+// Its source is read with the fetch, since the manager's listing may not have run.
+func (pl *plugins) updatePlugin(name string) error {
+	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.m.Name == name })
+	if i < 0 {
+		return fmt.Errorf("plugins.update: no plugin %s", name)
+	}
+	pl.fetchAndAsk(managedPlugin{e: pl.pluginList[i]})
+	return nil
+}
+
+// fetchAndAsk fetches m's origin and asks about the commit it would move to; m's source, when not
+// known yet, is its clone's origin.
+func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	pl.c.NotifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
 	type fetched struct {
 		c    pluginChange
@@ -388,6 +410,16 @@ func (pl *plugins) startUpdatePlugin(i int) {
 		err  error
 	}
 	coreDo(pl.c, func(ctx context.Context) fetched {
+		if m.source == "" {
+			if _, err := os.Stat(filepath.Join(m.e.dir, ".git")); err != nil {
+				return fetched{err: errors.New("it was put in the folder by hand: update it there")}
+			}
+			src, err := git(ctx, pluginCloneTimeout, m.e.dir, "remote", "get-url", "origin")
+			if err != nil {
+				return fetched{err: err}
+			}
+			m.source = src
+		}
 		c, err := fetchUpdate(ctx, m)
 		if err != nil {
 			return fetched{err: err}
@@ -474,8 +506,15 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 	}
 	for key, r := range pl.running {
 		if r.e.dir == dir {
-			r.close("")
+			r.stopFor(plugin.CloseRemove, "")
 			delete(pl.running, key)
+		}
+	}
+	// its slot goes, whether it ran or not; after its run's stop began, so a write that run sends
+	// now is past its fence and nothing brings the slot back
+	for _, e := range pl.pluginList {
+		if e.dir == dir {
+			delete(pl.sessions, e.m.Name)
 		}
 	}
 	name := filepath.Base(dir)
@@ -487,5 +526,8 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 		pl.c.Notify("removed " + name)
 		pl.loadPlugins()
 		pl.loadManaged()
+		if pl.scriptsChanged != nil {
+			pl.scriptsChanged()
+		}
 	})
 }

@@ -510,6 +510,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `agents` | `list`, `send` |
 | `app` | `stats` |
 | `clipboard` | `read`, `write` |
+| `plugin` | `run` |
 | `ui` | `card`, `charts`, `pick` |
 
 | Call | Answers |
@@ -524,6 +525,7 @@ there from the start, connected or not. As the daemon's do, each `cb` runs later
 | `autodoc.ui.charts()` | at once: `true` where the window draws a `vega-lite` fence as a chart (`--gui`), `false` in a terminal |
 | `autodoc.app.stats()` | at once: the app's own process, in the keys `sys.stats` answers for the daemon's: `{pid, version, started_at, uptime, rss, peak_rss, cpu_seconds, go_memory, go_heap, goroutines, cpus}`. Sizes are bytes (`rss` 0 where the system cannot say: macOS), `cpu_seconds` the CPU used so far: a rate is two readings apart |
 | `autodoc.agents.list()` | at once: `{{codename, name, running, closing, instance, orphan}, …}`, the saved profiles first; a `closing` one refuses a send |
+| `autodoc.plugin.run(id, args…)` | at once, `ok, err`: from a plugin's own Lua package only (its `lua/`, loaded as `plugin:<name>`, [docs/plugins.md](../plugins.md#a-plugins-lua-package-lua)), one of its plugin's `[[commands]]` run with `args` (strings), the plugin started when it is not running. `err` `"autodoc.plugin.run: not a plugin's package"` for any other script, `"unknown: <id>"` for an id its manifest does not declare; arguments need the plugin's `protocol = 7` |
 | `autodoc.agents.send(agent, text, cb)` | `text` pasted into the agent's prompt, no Enter added after it: `agent` a codename, or `{codename, instance}` for that exact run. A stopped agent is started once the user agrees. `cb(true)` once it is typed; `err` `"cancelled"`, `"stale"` (that run is gone), `"unavailable"`, or why |
 
 A paste is as the terminal's own: an agent CLI that asked for bracketed paste gets the text whole,
@@ -588,6 +590,8 @@ call answers `nil` and `needs <capability>: not granted`, and does nothing.
 - **Its own calls are its own:** a function a package defines runs with the package's grants
   wherever it runs from (a callback, an event, a key).
 - **`require(name)`** loads the package's `name.lua` or `name/init.lua` once; `a.b` is `a/b.lua`.
+- **A plugin's package** (its `lua/`) is gated the same way, under `plugin:<name>`; the prompt
+  names the plugin. A package of yours with the plugin's name replaces it, and it never runs.
 
 ## The sandbox
 

@@ -78,6 +78,7 @@ func validPackageName(n string) bool {
 // fails, is one error and the others still load. A folder starting with "." (an install staged) is
 // skipped.
 func (h *Host) loadPackages() []error {
+	h.userPackages = map[string]bool{}
 	if h.luaDir == "" {
 		return nil
 	}
@@ -93,6 +94,9 @@ func (h *Host) loadPackages() []error {
 		if !en.IsDir() || strings.HasPrefix(en.Name(), ".") {
 			continue
 		}
+		// the name is the user's from here, whether the package loads or fails: a plugin's package of
+		// the same name never runs (ADR 1792300990 §4.4)
+		h.userPackages[en.Name()] = true
 		dir := filepath.Join(h.luaDir, en.Name())
 		// the package reads its own folder only, links included: os.Root refuses a path, or a
 		// link, that leads outside it. It stays open while the engine may require from it.
@@ -199,4 +203,74 @@ func (h *Host) askPackage(url, stage, commit string, m packageManifest) {
 		},
 		OnCancel: func() { _ = os.RemoveAll(stage) },
 	})
+}
+
+// loadPluginPackages loads each installed plugin's Lua package, <plugin folder>/lua/ (package.toml
+// naming the plugin, init.lua), gated under "plugin:<name>" (ADR 1792300990 §4.4). A name the user's
+// own package holds (loaded or not) is a notice, and nothing of the plugin's package runs: no grant
+// is asked, no init. The package's identity is recorded before its init runs, so autodoc.plugin.run
+// works from the init too, and dropped again if the load fails.
+func (h *Host) loadPluginPackages() []error {
+	h.pluginPackages = map[string]string{}
+	if h.plugins == nil {
+		return nil
+	}
+	var errs []error
+	for _, e := range h.plugins.pluginList {
+		if e.reason != "" {
+			continue
+		}
+		dir := filepath.Join(e.dir, "lua")
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			continue // no lua/: the plugin has no package
+		}
+		if _, err := fs.Stat(root.FS(), "package.toml"); err != nil {
+			root.Close()
+			continue
+		}
+		h.luaRoots = append(h.luaRoots, root)
+		m, err := readPluginPackage(root.FS(), e.m.Name)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("the plugin %s's Lua package: %w", e.m.Name, err))
+			continue
+		}
+		if h.userPackages[m.Name] {
+			h.notify("the plugin " + m.Name + "'s Lua package is replaced by yours, lua/" + m.Name)
+			continue
+		}
+		script := pluginScript(m.Name)
+		h.pluginPackages[script] = e.key()
+		grants := luaGrants{h}
+		if len(m.Requires) > 0 {
+			grants.Request(script, m.Requires)
+		}
+		if err := h.scripts.LoadPackage(script, root.FS(), grants); err != nil {
+			delete(h.pluginPackages, script)
+			errs = append(errs, err)
+		}
+	}
+	return errs
+}
+
+// pluginScript is a plugin's package's script name: its grants' key, and its caller identity.
+func pluginScript(name string) string { return "plugin:" + name }
+
+// readPluginPackage reads a plugin's lua/package.toml: its name must be the plugin's.
+func readPluginPackage(fsys fs.FS, plugin string) (packageManifest, error) {
+	var m packageManifest
+	src, err := fs.ReadFile(fsys, "package.toml")
+	if err == nil {
+		_, err = toml.Decode(string(src), &m)
+	}
+	if err != nil {
+		return m, fmt.Errorf("package.toml: %s", firstLine(err.Error()))
+	}
+	if m.Name != plugin {
+		return m, fmt.Errorf("package.toml names %q, but the plugin is %s", m.Name, plugin)
+	}
+	if _, err := fs.Stat(fsys, "init.lua"); err != nil {
+		return m, errors.New("no init.lua in its lua folder")
+	}
+	return m, nil
 }

@@ -120,7 +120,7 @@ key   = "r"
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. Among the reasons:
 
-- an unknown kind, or a protocol outside 1 to 6;
+- an unknown kind, or a protocol outside 1 to 7;
 - an unknown key, at any level (`dialog.colour`): AutoDoc decodes the manifest strictly;
 - a name taken, no command;
 - a placement, `esc` or height it does not know;
@@ -142,7 +142,7 @@ AutoDoc's commands: file.save", and a table it shows: "shows a table of results 
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 6**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 7**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -163,10 +163,14 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
 - **A card or dialog that handles pointer input says `protocol = 6`.** AutoDoc sends left presses
   and wheel steps only to a protocol-6 plugin, with coordinates inside its displayed frame. An
   older AutoDoc refuses the manifest rather than showing a card that cannot receive its pointer.
+- **A plugin that keeps a session, reads why it closes, or takes a command's arguments says
+  `protocol = 7`.** AutoDoc hands it its session slot in `plugin.open`, tells it the reason in
+  `plugin.close`, and sends `plugin.command` with `args` (below). An older AutoDoc refuses the
+  manifest, so a plugin never runs where its sign-in would be asked again at every start.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 6, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 7, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -181,8 +185,7 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   - A service with `start = "use"` starts on its first command, or on its feed's first document.
     One with `start = "launch"` starts with the TUI.
 - The close is bounded. It starts on Esc (a dialog's), on the plugin's `host.close` (a dialog's or a
-  service's), on its menu's Close (a card's Turn off), on a card's `toggle` while its panel is open,
-  or when the TUI quits:
+  service's), on its menu's Turn off, on an update or a removal, on a fault, or when the TUI quits:
   1. AutoDoc sends `plugin.close`;
   2. after 2 s it sends the group SIGTERM;
   3. after 1 s more, SIGKILL.
@@ -196,19 +199,19 @@ Each notification carries one map.
 
 | From | Notification | Since | Its map |
 |---|---|---|---|
-| AutoDoc | `plugin.open` | 1 | `{protocol, width, height, theme}`: the first, once. A service's has no `width` or `height` |
+| AutoDoc | `plugin.open` | 1 | `{protocol, width, height, theme}`: the first, once. A service's has no `width` or `height`; from 7, `{session}` when its slot holds one |
 | AutoDoc | `plugin.key` | 1 | `{key, text, ctrl, alt, shift}` |
 | AutoDoc | `plugin.resize` | 1 | `{width, height}`: the dialog laid out at another size |
 | AutoDoc | `plugin.theme` | 1 | `{theme}`: the theme switched |
 | AutoDoc | `plugin.hide`, `plugin.show` | 1 | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again; a card's panel closed, and opened again |
 | AutoDoc | `plugin.focus` | 2 | `{focused}`: a card took the keys, or gave them back |
 | AutoDoc | `plugin.document` | 2 | `{path, workspace, text, cursor, selection, version, too_large}`: the open note, under `[feed] document = true`; from 4 also `{cursor_byte, selection_bytes}` |
-| AutoDoc | `plugin.command` | 2 | `{id}`: one of the manifest's `[[commands]]`, chosen; from 4, under the feed, `{id, document}` |
+| AutoDoc | `plugin.command` | 2 | `{id}`: one of the manifest's `[[commands]]`, chosen; from 4, under the feed, `{id, document}`; from 7, `{args}` too when it has arguments |
 | AutoDoc | `plugin.result` | 3 | `{call, ok, error}`: the answer to the `host.call` numbered `call` |
 | AutoDoc | `plugin.table.fetch` | 4 | `{id, n}`: up to `n` more rows of the table `id` |
 | AutoDoc | `plugin.table.close` | 4 | `{id}`: the table is gone: its panel closed, or a newer table replaced it |
 | AutoDoc | `plugin.pointer` | 6 | `{kind, button, x, y, count}`: an unmodified left press (`press`, `left`) or wheel step (`wheel`, `up`/`down`) inside the card or dialog; frame-local nonnegative coordinates and count 1–16 |
-| AutoDoc | `plugin.close` | 1 | `{}`: the last |
+| AutoDoc | `plugin.close` | 1 | `{}`: the last; from 7, `{reason}` (below) |
 | plugin | `host.ready` | 1 | `{protocol}`: the answer to `plugin.open`, with the protocol it was opened at |
 | plugin | `host.frame` | 1 | `{rows}`: the whole dialog, at any time. A service's is dropped |
 | plugin | `host.title` | 1 | `{title}` |
@@ -216,6 +219,7 @@ Each notification carries one map.
 | plugin | `host.table` | 4 | `{id, title, fields, rows, more}`: a table for the results panel, under `[table]`; from 5 also `{kinds}` |
 | plugin | `host.rows` | 4 | `{id, rows, more}`: the table's next rows, answering `plugin.table.fetch`; from 5 also `{kinds}` |
 | plugin | `host.table_end` | 4 | `{id, error}`: the table's rows ended before the last; `error`, when set, says why |
+| plugin | `host.session` | 7 | `{values}`: the plugin's session slot replaced, a map of strings (below) |
 | plugin | `host.close` | 1 | `{}`: asks to close; a card asks its panel to close, and runs on |
 
 - **Keys.** `key` is a printable key's text (`" "` for Space), or one of `Up`, `Down`, `Left`,
@@ -250,8 +254,8 @@ Each notification carries one map.
   types q into them. A card that wants q to close it sends `host.close` when it is not typing,
   which closes its panel as Esc does: the plugin is told `plugin.hide` and runs on. A card's
   `host.close` never stops it.
-- It stops when the user turns it off: its Plugins menu's Turn off, its `toggle` while its panel is
-  open (below), or Manage plugins. It stops too when it exits, or when AutoDoc quits.
+- It stops when the user turns it off: its Plugins menu's Turn off, or Manage plugins. Its `toggle`
+  while its panel is open (below) only hides it. It stops too when it exits, or when AutoDoc quits.
 - A card's panel is made when AutoDoc starts: a card plugin added while it runs has its panel from
   the next start.
 - **A card, or a dialog, draws no key help of its own.** It registers its commands (`[[commands]]`,
@@ -389,6 +393,48 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
   - `results.select_all`, `results.sort_asc`, `results.sort_desc` and `results.unsort` (each
     taking a 1-based column, the cursor's when none) select and sort the loaded rows.
 
+### Sessions, close reasons and arguments (protocol 7)
+
+- **The session slot.** A plugin keeps what must outlive its process, a sign-in's token say, in
+  AutoDoc's keeping: `host.session {values}` replaces its slot, and every later `plugin.open` in this
+  run of AutoDoc carries it back as `session`. So a plugin turned off and on, updated, or restarted
+  after a crash reads its token back and checks it, instead of asking again.
+  - It lives in AutoDoc's memory, never on disk, and goes when AutoDoc quits or the plugin is
+    removed. Nothing logs its values; a refused slot's reason is logged, never a value.
+  - At most 32 keys, 8 KiB a value and 64 KiB in all; a slot over a bound is refused and the old
+    one kept. A slot sent once the plugin began to stop is dropped: set it when you sign in, not in
+    your close.
+- **Why it closes.** `plugin.close {reason}`: `quit` (AutoDoc is quitting: the slot goes with it,
+  log out now), `off` (turned off: the slot stays), `update` (its new build starts next), `remove`
+  (the slot is dropped), `failed` (stopped for a fault) or `closed` (Esc on a modal dialog, or its
+  own `host.close`). It is best effort: a plugin that never answered, blocks, or has died is stopped
+  by the signals without one.
+- **Arguments.** `plugin.command {id, args}` carries a command's arguments, from the plugin's own
+  Lua package (`autodoc.plugin.run`, below).
+
+### A plugin's Lua package (`lua/`)
+
+A plugin may ship a Lua package in its folder, `lua/package.toml` and `lua/init.lua`, as a package
+in your own `lua/` folder is made (docs/lua/reference.md). AutoDoc loads it after yours, under the
+name `plugin:<name>`:
+
+- `package.toml`'s `name` is the plugin's. Its `requires` are asked once, the prompt naming the
+  plugin ("let the plugin autodb's Lua package use …"), and its `require` reads only its own folder.
+- Your own package of the same name replaces it: the plugin's never runs, and a notice says so.
+- `autodoc.plugin.run(id, args…)` runs one of its own plugin's `[[commands]]`, starting the plugin
+  when it is not running; it answers `ok, err`. It reaches only the plugin whose package calls it:
+  any other script is refused, and an id the manifest does not declare is `unknown`. Arguments need
+  `protocol = 7`.
+- It comes and goes with the plugin: an install, an update or a removal reloads the scripts.
+
+```lua
+-- lua/init.lua: :autodb query select 1
+autodoc.command{ name = "autodb", run = function(ed, args)
+  local ok, err = autodoc.plugin.run(args[1] or "run", select(2, unpack(args)))
+  if not ok then error(err, 0) end
+end }
+```
+
 ### Services (`kind = "service"`)
 
 A service has no surface: `plugin.open` has no size, and its frames and titles are dropped. It runs
@@ -409,8 +455,8 @@ localhost, say) and use AutoDoc's API through `AUTODOC_SOCKET`.
   - It starts its plugin first when it is not running, and is sent once the plugin has opened.
   - A card's commands open its panel and focus it.
   - A card's command `toggle` is AutoDoc's own and is never sent: it starts the card, its panel open
-    and focused; it opens the panel of a card that runs hidden, focused; and it turns off a card
-    whose panel is open, stopping its plugin.
+    and focused; it opens the panel of a card that runs hidden, focused; and it closes the panel of
+    a card that is shown, the plugin running on (Turn off stops it).
 
 ### Calls (`calls = [...]`, protocol 3)
 
@@ -433,6 +479,15 @@ do in AutoDoc is there to read before it is installed.
   that number. A call from a plugin before protocol 3, or before it has answered `plugin.open`, is
   dropped the same way.
 - A Lua command run by a call edits the note in the editor, as it does from a key.
+
+#### `file.open_path` and `plugins.update`
+
+- `file.open_path` opens a file by its absolute path, as File › Open any file does once it is
+  chosen: its workspace's when one indexes it, else outside every workspace. A relative path fails.
+- `plugins.update` updates a plugin by its name, as Manage plugins › Update does: its new commit is
+  asked about first. A plugin's call may name only the plugin itself (`refused` otherwise), so one
+  plugin never updates another. A plugin that finds itself older than the server it serves asks
+  this way.
 
 #### `buffer.new`: a draft for the user to edit
 
@@ -586,6 +641,32 @@ func (s *sql) FetchRows(f plugin.TableFetch) {
 	_ = s.peer.Rows(f.ID, page, more)
 }
 func (s *sql) TableClosed(id string) { s.rows.close() }
+```
+
+**Protocol 7** adds the session slot, the close's reason and a command's arguments.
+
+- `Peer.SetSession(values)` sends `host.session`. It returns `plugin.ErrNoSession` when AutoDoc
+  opened the plugin at a protocol before 7, and `plugin.ErrSessionBounds` over a bound, sending
+  nothing. A nil error means it was sent, not that AutoDoc kept it.
+- `Open.Session` is the slot at this start (nil for none).
+- `Peer.CloseReason()`, read inside `Close`, is `plugin.CloseQuit`, `CloseOff`, `CloseUpdate`,
+  `CloseRemove`, `CloseFailure` or `CloseClosed`; `""` before 7.
+- A Handler that is a `plugin.CommandArgser` (`CommandArgs(id string, args []string)`) takes every
+  command in place of `Command`, with its arguments (nil for none).
+
+```go
+func (a *db) Open(p *plugin.Peer, o plugin.Open) {
+	a.peer = p
+	if tok := o.Session["token"]; tok != "" && a.valid(tok) { // signed in before this start
+		a.token = tok
+	}
+}
+func (a *db) signedIn(tok string) { _ = a.peer.SetSession(map[string]string{"token": tok}) }
+func (a *db) Close() {
+	if r := a.peer.CloseReason(); r == plugin.CloseQuit || r == plugin.CloseRemove {
+		a.logout()
+	}
+}
 ```
 
 **Protocol 6** adds `plugin.PointerHandler`. AutoDoc delivers `plugin.pointer` only after the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
@@ -41,10 +42,13 @@ type pluginRun struct {
 	view  *pluginView // nil for a service, which has no surface
 
 	ready, closing bool
-	hidden         bool // Esc hid it (esc = "hide"), or a card's panel closed: the plugin runs, told plugin.hide
-	opened         bool // plugin.open sent: at the dialog's first layout, or a service's start
-	focused        bool // a card that holds the keys (plugin.focus true was sent)
-	focusOnOpen    bool // a card started by its command: it takes the keys at its first layout
+	// endReason is the run's end, sent in its plugin.close (protocol 7): set once, by the first stop
+	// (stopFor, or stopPlugins as AutoDoc quits), never changed by a later one
+	endReason   string
+	hidden      bool // Esc hid it (esc = "hide"), or a card's panel closed: the plugin runs, told plugin.hide
+	opened      bool // plugin.open sent: at the dialog's first layout, or a service's start
+	focused     bool // a card that holds the keys (plugin.focus true was sent)
+	focusOnOpen bool // a card started by its command: it takes the keys at its first layout
 	// early is what was sent before plugin.open: a command or the feed, for a plugin just started.
 	// plugin.open goes first, then these, in order.
 	early []outNote
@@ -158,8 +162,12 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 // handshake's deadline from then.
 func (r *pluginRun) openAt(w, h int) {
 	r.opened = true
-	r.send(plugin.MethodOpen, plugin.OpenParams(plugin.Open{Protocol: r.e.m.Protocol,
-		Width: w, Height: h, Theme: r.pl.pluginTheme()}))
+	o := plugin.Open{Protocol: r.e.m.Protocol, Width: w, Height: h, Theme: r.pl.pluginTheme()}
+	if r.e.m.Protocol >= 7 {
+		// a copy: the slot is the loop's, and the run's link must never hold it
+		o.Session = maps.Clone(r.pl.sessions[r.e.m.Name])
+	}
+	r.send(plugin.MethodOpen, plugin.OpenParams(o))
 	early := r.early
 	r.early = nil
 	for _, n := range early {
@@ -301,6 +309,15 @@ func (r *pluginRun) onNote(method string, params []any) {
 		if t, err := plugin.ReadTitle(params); err == nil && !r.e.m.service() {
 			r.pl.c.Post(func() { r.setTitle(t) })
 		}
+	case plugin.MethodSession:
+		// decoded and bounded here, on the link's goroutine; the slot is written on the loop, by
+		// acceptSession, for this run only if it is still the plugin's live run
+		values, err := plugin.ReadSession(params)
+		if err != nil || r.e.m.Protocol < 7 {
+			r.log.note("host.session refused: " + sessionRefusal(err)) // never a value: a slot holds secrets
+			return
+		}
+		r.pl.c.Post(func() { r.pl.acceptSession(r, values) })
 	case plugin.MethodHostClose:
 		// a card asks its panel to close, as Esc closes it: it hides, and runs on
 		r.pl.c.Post(func() {
@@ -358,12 +375,25 @@ func (r *pluginRun) exitedUnasked() {
 
 // close closes the dialog at once and stops the plugin behind it: plugin.close, then SIGTERM after
 // pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
-// failure: a toast says it, with the last line the plugin wrote to its log.
+// failure (CloseFailure): a toast says it, with the last line the plugin wrote to its log; without
+// one, it is a close as a dialog's (CloseClosed: a modal Esc, its own host.close).
 func (r *pluginRun) close(why string) {
+	reason := plugin.CloseClosed
+	if why != "" {
+		reason = plugin.CloseFailure
+	}
+	r.stopFor(reason, why)
+}
+
+// stopFor is the run's one stop transition, with its reason: the first stop sets closing (so every
+// session write the run sends from now is dropped, acceptSession) and freezes the reason, then
+// starts the shutdown; a later stop does nothing.
+func (r *pluginRun) stopFor(reason, why string) {
 	if r.closing {
 		return
 	}
 	r.closing = true
+	r.endReason = reason
 	if r.focused {
 		r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
 	}
@@ -399,7 +429,11 @@ func (r *pluginRun) close(why string) {
 func (r *pluginRun) shutdown() {
 	r.shutOnce.Do(func() {
 		defer close(r.shutDone)
-		r.out.push(outNote{plugin.MethodClose, plugin.EmptyParams()})
+		params := plugin.EmptyParams()
+		if r.e.m.Protocol >= 7 {
+			params = plugin.CloseParams(r.endReason)
+		}
+		r.out.push(outNote{plugin.MethodClose, params})
 		r.out.close()
 		select {
 		case <-r.exited:
@@ -426,10 +460,40 @@ func (r *pluginRun) shutdown() {
 // deadlines, since they run at once.
 func (pl *plugins) stopPlugins() {
 	for _, r := range pl.running {
+		// the quit's stop transition, as stopFor's: fenced and its reason frozen before the
+		// shutdown, so no session write is accepted after, and the slots can go
+		if !r.closing {
+			r.closing, r.endReason = true, plugin.CloseQuit
+		}
 		go r.shutdown()
 	}
+	pl.sessions = nil
 	for _, r := range pl.running {
 		<-r.shutDone
 	}
 	pl.running = map[string]*pluginRun{}
+}
+
+// acceptSession is a session slot's one writer, on the loop: a write from a run that is stopping, or
+// is no longer the plugin's live run (replaced by an update, removed), is dropped, so an old process
+// cannot overwrite its replacement's slot or bring back a removed plugin's.
+func (pl *plugins) acceptSession(r *pluginRun, values map[string]string) {
+	if r.closing || pl.running[r.e.key()] != r {
+		return
+	}
+	if pl.sessions == nil {
+		pl.sessions = map[string]map[string]string{}
+	}
+	pl.sessions[r.e.m.Name] = values
+}
+
+// sessionRefusal is why a host.session was refused, without any of its values.
+func sessionRefusal(err error) string {
+	switch {
+	case err == nil:
+		return "the plugin's manifest says a protocol before 7"
+	case errors.Is(err, plugin.ErrSessionBounds):
+		return "over the slot's bounds"
+	}
+	return "malformed"
 }

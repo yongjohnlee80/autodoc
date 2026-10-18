@@ -25,8 +25,9 @@ import (
 // Closing the panel hides the card and never stops its plugin: Esc while the panel has the keys,
 // its right-click menu's Close, or the plugin's host.close. The plugin is told plugin.hide and runs
 // on, its tables and its session with it; a command, its Plugins menu entry or its toggle opens the
-// panel again (plugin.show). It stops when the user turns it off (its toggle while the panel is
-// open, its Plugins menu's Turn off, Manage plugins), when it exits, or when AutoDoc quits.
+// panel again (plugin.show); its toggle while the panel is open closes the panel the same way. It
+// stops when the user turns it off (its Plugins menu's Turn off, Manage plugins), when it exits, or
+// when AutoDoc quits.
 
 // cardPanelsMarker is the line of main.qml the card panels are written after.
 const cardPanelsMarker = "    // ---- the card plugins' panels ----\n"

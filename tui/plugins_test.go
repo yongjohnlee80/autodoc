@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -122,8 +123,23 @@ func runTestPlugin(mode string) int {
 					call(1, "lua.mark", "p")
 				case "newbuf": // buffer.new: a draft named q.sql (buffernew_test.go)
 					call(1, "buffer.new", "q.sql", "SELECT 1;\n")
+				case "callwith": // protocol 7's args: a call numbered args[0], to args[1], with the rest
+					if args := plugin.ReadCommandArgs(p); len(args) >= 2 {
+						n, _ := strconv.ParseInt(args[0], 10, 64)
+						call(n, args[1], args[2:]...)
+					}
 				case "ping":
 					fmt.Fprintln(os.Stderr, "said: pong")
+				case "session": // protocol 7's slot, as a plugin that is not the SDK sends it
+					_ = link.Notify(ctx, plugin.MethodSession, []any{map[string]any{"values": map[string]any{"token": "tok-raw"}}})
+				case "bigsession": // a slot over its keys' bound, past the SDK's own check
+					values := map[string]any{"token": "tok-big"}
+					for i := range plugin.MaxSessionKeys {
+						values[fmt.Sprint("k", i)] = "v"
+					}
+					_ = link.Notify(ctx, plugin.MethodSession, []any{map[string]any{"values": values}})
+				case "badsession": // a value that is not a string
+					_ = link.Notify(ctx, plugin.MethodSession, []any{map[string]any{"values": map[string]any{"token": 7}}})
 				}
 			case plugin.MethodResult:
 				res, _ := plugin.ReadResult(p)
@@ -137,6 +153,12 @@ func runTestPlugin(mode string) int {
 		return 0
 	case "table", "tablestall", "tablereuse", "table1000", "kinds", "kindsbad": // protocol 4 and 5: a table of rows, paged (plugintable_test.go, resultspanel_test.go)
 		return runTablePlugin(mode)
+	case "session": // protocol 7: the slot, the close's reason and a command's arguments (pluginsession_test.go)
+		if err := plugin.Serve(context.Background(), sessioned{&echo{mode: mode}}); err != nil {
+			fmt.Fprintln(os.Stderr, "serve:", err)
+			return 1
+		}
+		return 0
 	case "stubborn": // ignores plugin.close and SIGTERM, and starts a child of its own
 		signal.Ignore(syscall.SIGTERM)
 		child := exec.Command("sleep", "60")
@@ -274,6 +296,65 @@ func (e *echo) say(line string) {
 	_ = e.peer.Frame(f)
 }
 
+// sessioned is echo at protocol 7 (mode "session"). It says the slot it was opened with, a command's
+// arguments, and the reason it is closed. Its slot's values are said reversed: a test looks for a
+// value itself in the logs and the notices, where the host must never write one.
+//
+//	login <v>   the slot set to {token = v}
+//	big         a slot over the bounds, which the SDK refuses before sending it
+//	flood       the slot set again and again, until the link is gone
+type sessioned struct{ *echo }
+
+func (s sessioned) Open(p *plugin.Peer, o plugin.Open) {
+	s.echo.Open(p, o)
+	s.say("session " + slotLine(o.Session))
+}
+
+func (s sessioned) CommandArgs(id string, args []string) {
+	switch id {
+	case "login":
+		v := "tok-1"
+		if len(args) > 0 {
+			v = args[0]
+		}
+		s.say(fmt.Sprintf("login %s %v", reverse(v), s.peer.SetSession(map[string]string{"token": v})))
+	case "big":
+		err := s.peer.SetSession(map[string]string{"token": strings.Repeat("x", plugin.MaxSessionValue+1)})
+		s.say(fmt.Sprintf("big %v", errors.Is(err, plugin.ErrSessionBounds)))
+	case "flood":
+		go func() {
+			for i := 0; ; i++ {
+				if s.peer.SetSession(map[string]string{"token": fmt.Sprint("tok-flood-", i)}) != nil {
+					return
+				}
+			}
+		}()
+	default:
+		s.say(fmt.Sprintf("args %s %q", id, args))
+	}
+}
+
+// Close says why it is closed: straight to the log, as a frame may no longer be read.
+func (s sessioned) Close() { fmt.Fprintln(os.Stderr, "said: reason "+s.peer.CloseReason()) }
+
+// slotLine is a slot as sessioned says it: its keys in order, each value reversed; "none" for none.
+func slotLine(values map[string]string) string {
+	if values == nil {
+		return "none"
+	}
+	var out []string
+	for _, k := range slices.Sorted(maps.Keys(values)) {
+		out = append(out, k+"="+reverse(values[k]))
+	}
+	return "{" + strings.Join(out, ",") + "}"
+}
+
+func reverse(s string) string {
+	r := []rune(s)
+	slices.Reverse(r)
+	return string(r)
+}
+
 // ---------------------------------------------------------------- the host's side
 
 // installTestPlugin writes a plugin.toml for the test plugin in mode, in dir/<name>.
@@ -320,6 +401,23 @@ func installPlugin3(t *testing.T, dir, name, kind, mode, extra string) {
 	path := filepath.Join(dir, name, "plugin.toml")
 	b, _ := os.ReadFile(path)
 	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "protocol = 2\n", "protocol = 3\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// installPlugin7 writes a protocol-7 manifest for the test plugin in mode: kind, then extra.
+func installPlugin7(t *testing.T, dir, name, kind, mode, extra string) {
+	t.Helper()
+	installPluginAt(t, dir, name, kind, mode, extra, 7)
+}
+
+// installPluginAt writes a manifest of protocol p for the test plugin in mode: kind, then extra.
+func installPluginAt(t *testing.T, dir, name, kind, mode, extra string, p int) {
+	t.Helper()
+	installPlugin2(t, dir, name, kind, mode, extra)
+	path := filepath.Join(dir, name, "plugin.toml")
+	b, _ := os.ReadFile(path)
+	if err := os.WriteFile(path, []byte(strings.Replace(string(b), "protocol = 2\n", fmt.Sprintf("protocol = %d\n", p), 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -421,7 +519,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 7\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 8\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -438,7 +536,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 7; this AutoDoc speaks 1 to 6",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 8; this AutoDoc speaks 1 to 7",
 		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
@@ -961,11 +1059,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 7\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 8\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 7; this AutoDoc speaks 1 to 6")
+	r.waitNotice(t, "not added: protocol 8; this AutoDoc speaks 1 to 7")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)
@@ -1223,7 +1321,8 @@ func TestTheHostKeepsOnlyTheNewestDocumentWaiting(t *testing.T) {
 // plugin first and sending the command once it has opened, and a card's command focuses it. A letter
 // is unique within its plugin only: alpha and beta both have s, and gamma has h as alpha does. A
 // card's toggle is the host's, and never sent to the plugin: it shows a hidden card, focused; it
-// turns off a shown one, stopping its plugin; and it starts one that is off.
+// hides a shown one, its plugin running on (ADR 1792300990: Turn off stops it); and it starts one
+// that is off.
 func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	dir := t.TempDir()
 	installPlugin2(t, dir, "alpha", "dialog", "echo", "[dialog]\nmodal = false\nwidth = 36\nheight = 8\n"+
@@ -1283,13 +1382,23 @@ func TestPluginCommandsOnTheSpcPCard(t *testing.T) {
 	r.openPlugin("alpha") // its menu entry: shown, the keys left with the editor
 	r.s.WaitFor(t, "the panel open", func(string) bool { return onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
 	r.pluginCardOf(t, "alpha")
-	r.keys(t, key('s')) // toggle, the card shown: turned off
+	r.keys(t, key('s')) // toggle, the card shown: hidden, its plugin running on (ADR 1792300990 §4.1)
+	waitCount(t, logs, "alpha", "hide", 3)
+	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
+	if onLoop(r, func() *pluginRun { return r.h.plugins.running["alpha"] }) != run {
+		t.Fatal("the toggle on a shown card replaced its plugin")
+	}
+	select {
+	case <-run.exited:
+		t.Fatal("the toggle on a shown card stopped its plugin")
+	default:
+	}
+	onLoop(r, func() bool { r.h.plugins.pluginEntry(pluginTarget("alpha", targetClose)); return true }) // Plugins › Turn off
 	select {
 	case <-run.exited:
 	case <-time.After(10 * time.Second):
-		t.Fatal("the toggle on a shown card did not stop its plugin")
+		t.Fatal("Turn off did not stop the plugin")
 	}
-	r.s.WaitFor(t, "the panel closed", func(string) bool { return !onLoop(r, func() bool { return r.h.panelOpen[cardPanelID("alpha")] }) })
 	r.pluginCardOf(t, "alpha")
 	r.keys(t, key('s')) // toggle, the card off: started, focused
 	r.s.WaitFor(t, "started again", func(string) bool {

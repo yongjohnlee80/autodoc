@@ -84,7 +84,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 6
+	Protocol    = 7
 )
 
 // The notifications the host sends.
@@ -123,6 +123,9 @@ const (
 	MethodHostClose = "host.close"
 	// MethodCall asks the host to run a command of its catalog, one the manifest's calls declares.
 	MethodCall = "host.call"
+	// MethodSession replaces the plugin's session slot (protocol 7, session.go): kept by the host
+	// in memory until AutoDoc quits, and handed back in each plugin.open.
+	MethodSession = "host.session"
 	// MethodTable shows a table (protocol 4): its id, title, fields and first rows, and whether
 	// more remain. It replaces the table shown, any plugin's.
 	MethodTable = "host.table"
@@ -168,6 +171,9 @@ type Open struct {
 	Protocol      int
 	Width, Height int
 	Theme         Theme
+	// Session is the slot as this plugin left it in this run of AutoDoc (protocol 7, session.go);
+	// nil when it has none.
+	Session map[string]string
 }
 
 // Position is a place in a note: its line and column, both from 1. A column counts characters as
@@ -245,6 +251,9 @@ func OpenParams(o Open) []any {
 	m := map[string]any{"protocol": o.Protocol, "theme": o.Theme.wire()}
 	if o.Width != 0 || o.Height != 0 {
 		m["width"], m["height"] = o.Width, o.Height
+	}
+	if o.Session != nil {
+		m["session"] = sessionWire(o.Session)
 	}
 	return one(m)
 }
@@ -513,17 +522,21 @@ func ReadOpen(params []any) (Open, error) {
 	if !ok {
 		return Open{}, fmt.Errorf("%w: plugin.open wants protocol", ErrParams)
 	}
+	session, err := readSessionMap(m["session"], false)
+	if err != nil {
+		return Open{}, err
+	}
 	_, hasW := m["width"]
 	_, hasH := m["height"]
 	if !hasW && !hasH {
-		return Open{Protocol: p, Theme: readTheme(m["theme"])}, nil
+		return Open{Protocol: p, Theme: readTheme(m["theme"]), Session: session}, nil
 	}
 	w, ok1 := num(m, "width")
 	h, ok2 := num(m, "height")
 	if !ok1 || !ok2 {
 		return Open{}, fmt.Errorf("%w: plugin.open wants a width and a height, or neither", ErrParams)
 	}
-	return Open{Protocol: p, Width: w, Height: h, Theme: readTheme(m["theme"])}, nil
+	return Open{Protocol: p, Width: w, Height: h, Theme: readTheme(m["theme"]), Session: session}, nil
 }
 
 // ReadFocus reads plugin.focus.

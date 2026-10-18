@@ -257,6 +257,12 @@ type Host struct {
 	luaChangeGen uint64
 	// luaRoots are the running engine's package folders, open while it may require from them
 	luaRoots []*os.Root
+	// userPackages are the user's package names (lua/<name>/), loaded or failed: each reserves its
+	// name against a plugin's package (luapackages.go). pluginPackages are the plugin packages
+	// loaded, by script name ("plugin:<name>") → the plugin's key: autodoc.plugin.run's only
+	// authority on which plugin a caller is. Both are made again with each engine.
+	userPackages   map[string]bool
+	pluginPackages map[string]string
 	// editorSock is the socket the agents reach the page through (editorsocket.go); nil without
 	editorSock     *editorSocket
 	luaMode        string
@@ -415,6 +421,11 @@ func newHost(session *Session, opt Options) *Host {
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.plugins = newPlugins(core{h}, opt.Plugins)
+	h.plugins.scriptsChanged = func() {
+		if err := h.reloadScripts(); err != nil {
+			h.notify("the Lua scripts were not reloaded: " + err.Error())
+		}
+	}
 	return h
 }
 

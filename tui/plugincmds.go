@@ -23,9 +23,9 @@ import (
 // A command starts its plugin when it is not running, and is sent once the plugin has opened. A
 // card's commands open its panel and focus it, but its "toggle", which is the host's own: it starts
 // the card, its panel open and focused; it shows a card whose panel was closed (the plugin ran on);
-// and it turns off a card whose panel is open, stopping its plugin. A focused card takes every key,
-// SPC included, so a toggle that only turned off a focused card could never be reached from the
-// keyboard.
+// and it hides a card whose panel is open, its plugin running on, signed in (ADR 1792300990 §4.1).
+// A focused card takes every key, SPC included, so a toggle that only hid a focused card could never
+// be reached from the keyboard. Plugins › Turn off is what stops a plugin.
 
 // The targets of the Plugins menu's rows and the SPC p cards' letters: "<key>|open",
 // "<key>|close" and "<key>|cmd|<id>".
@@ -199,7 +199,7 @@ func (pl *plugins) pluginEntry(target string) {
 		pl.openPlugin(key)
 	case targetClose:
 		if r := pl.running[key]; r != nil {
-			r.close("")
+			r.stopFor(plugin.CloseOff, "")
 		}
 	case targetCommand:
 		pl.runPluginCommand(key, id)
@@ -208,7 +208,11 @@ func (pl *plugins) pluginEntry(target string) {
 
 // runPluginCommand runs a plugin's command: the plugin started first when it is not running, a
 // card focused, and the command sent once the plugin has opened.
-func (pl *plugins) runPluginCommand(key, id string) {
+func (pl *plugins) runPluginCommand(key, id string) { pl.runPluginCommandArgs(key, id, nil) }
+
+// runPluginCommandArgs is runPluginCommand with the command's arguments (protocol 7: a plugin's Lua
+// package's autodoc.plugin.run); the caller refuses args for an older plugin.
+func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.key() == key })
 	if i < 0 {
 		pl.c.Notify("no plugin " + key)
@@ -221,7 +225,9 @@ func (pl *plugins) runPluginCommand(key, id string) {
 	}
 	r := pl.running[key]
 	if e.m.card() && id == pluginToggle && r != nil && !r.hidden {
-		r.close("")
+		// the toggle hides a shown card, its plugin running on, signed in (ADR 1792300990 §4.1);
+		// Plugins › Turn off is the way to stop it
+		pl.hideCard(r)
 		return
 	}
 	if r == nil {
@@ -242,7 +248,7 @@ func (pl *plugins) runPluginCommand(key, id string) {
 		r.show()
 	}
 	if !(e.m.card() && id == pluginToggle) {
-		r.send(plugin.MethodCommand, pl.commandParams(e, id))
+		r.send(plugin.MethodCommand, plugin.WithArgs(pl.commandParams(e, id), args))
 	}
 }
 
