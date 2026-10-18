@@ -2,7 +2,7 @@
 -- go generate ./rpc (internal/contractsgen). Do not edit; autodoc --contracts prints the same.
 -- autodoc.contract binds them as functions; the plugin and the binary ship from one commit.
 return {
-  protocol = 26,
+  protocol = 27,
   min_protocol = 12,
   verbs = {
     ["doc.outline"] = {
@@ -733,7 +733,7 @@ return {
       },
     },
     ["workspace.scaffold"] = {
-      since = 26, scope = "global", audience = "user",
+      since = 27, scope = "global", audience = "user",
       params = {
         { name = "workspace", type = "string" },
         { name = "files", type = "list" }

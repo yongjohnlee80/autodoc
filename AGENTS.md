@@ -200,7 +200,7 @@ A refusal's code says what to do next; the errors table lists each with the mess
 <!-- autodoc:contracts:start -->
 <!-- generated from the verb contracts by go generate ./rpc; autodoc --contracts --format md prints the same. Do not edit. -->
 
-Verbs at protocol 26; the daemon serves sessions from protocol 12.
+Verbs at protocol 27; the daemon serves sessions from protocol 12.
 
 ### `doc`
 
@@ -342,7 +342,7 @@ Verbs at protocol 26; the daemon serves sessions from protocol 12.
 | `workspace.of` | `path` string (an absolute file path) | `{workspace?, root?}` — The workspace a file belongs to, the owner its refs resolve with: a todo store's file, the store's workspace; any other file, the deepest workspace containing it; none otherwise. Codes: -32060. | 24 | agent | read |
 | `workspace.remove` | `name` string | Stops serving a workspace and deletes its index; its files stay. Logs `workspace.removed`. Codes: -32060, -32065. | 2 | for people's tools | settings |
 | `workspace.rename` | `name` string, `to` string | Logs `workspace.renamed`. Codes: -32060, -32062, -32065. | 2 | for people's tools | settings |
-| `workspace.scaffold` | `workspace` string, `files` list ([{path, content, managed?, immutable?}], at most 64) | `[{path, outcome, error?}]` — Creates a KB type's files under the workspace's root, create-only: a file that exists is kept. The root KB_OPERATIONS.md, marked managed, replaces a copy that declares an older autodoc_version. An immutable folder's descriptor is skipped when that folder holds anything. It writes whether or not the workspace indexes a file; one it indexes reaches the index as any new file does. outcome is created, kept, updated, skipped or refused (with error). Codes: -32060, -32065. | 26 | for people's tools | write |
+| `workspace.scaffold` | `workspace` string, `files` list ([{path, content, managed?, immutable?}], at most 64) | `[{path, outcome, error?}]` — Creates a KB type's files under the workspace's root, create-only: a file that exists is kept. The root KB_OPERATIONS.md, marked managed, replaces a copy that declares an older autodoc_version. An immutable folder's descriptor is skipped when that folder holds anything. It writes whether or not the workspace indexes a file; one it indexes reaches the index as any new file does. outcome is created, kept, updated, skipped or refused (with error). Codes: -32060, -32065. | 27 | for people's tools | write |
 | `workspace.section_size` | `workspace` string, `tokens` int (0 for the default) | Logs `workspace.section_size`. Codes: -32060, -32065. | 5 | for people's tools | settings |
 | `workspace.set_patterns` | `workspace` string, `include` []string (globs; empty matches no files), `exclude` []string (globs) | Replaces the workspace's validated globs and reconciles it. Logs `workspace.patterns`. Codes: -32060, -32065. | 7 | for people's tools | settings |
 | `workspace.set_provider` | `workspace` string, `provider` string (a stored provider; "" for the daemon's) | Gives the workspace a stored embedding provider of its own; it is set up first, and only that workspace re-embeds. Logs `workspace.provider`. Codes: -32060, -32061, -32065, -32068. | 8 | for people's tools | settings |
