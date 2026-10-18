@@ -587,6 +587,7 @@ Window {
         Editor {
             id: luaCardView
             readOnly: true
+            keepPlace: true
             wrap: true
             view: Editor.Rendered
             text: App.luaCardText
