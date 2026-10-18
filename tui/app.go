@@ -295,6 +295,8 @@ type Host struct {
 	// moreFeatures follow the host's own in features(): a test's, whose keys and catalog entries
 	// run in the program as any feature's do
 	moreFeatures []Feature
+	// relationViews are the GUI's GlobeMap and Mindmap (relationviews_gui.go); none in a terminal
+	relationViews []Feature
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -483,7 +485,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		src, _ = os.ReadFile(filepath.Join(opt.Dev, "main.qml"))
 		files := os.DirFS(opt.Dev)
 		// main.qml with the card plugins' panels written in, on every reload (pluginpanels.go)
-		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins}, "main.qml"),
+		opts = append(modulesFrom(files), tuidecl.Layout(cardFS{FS: files, pl: h.plugins, gui: h.gui}, "main.qml"),
 			tuidecl.HotReload(tuidecl.OnReloadError(h.themeReloadError), tuidecl.OnReload(func(decl.Result) { h.reloaded() })))
 	} else {
 		src = opt.Layout
@@ -493,7 +495,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 				src = themeImport.ReplaceAll(src, []byte("import autodoc.theme."+defaultGUITheme+" "+moduleVersion))
 			}
 		}
-		src = h.plugins.withCardPanels(src) // a panel for each card plugin found (pluginpanels.go)
+		src = h.plugins.withCardPanels(withRelationViews(src, h.gui)) // the GUI's relation views (relationmap.go), a panel for each card plugin found (pluginpanels.go)
 		opts = append(modulesFrom(qmlFiles), tuidecl.LayoutSource("main.qml", src))
 		// Names added later require a restart; with no registered user modules and no key file
 		// there is nothing mutable to follow, so the normal built-in-only UI keeps no poller. A key
@@ -526,8 +528,9 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Sources(h.reg.state),
 		tuidecl.Handlers(h.reg.handlers),
 		tuidecl.ErrorSink(h.keep),
-		tuidecl.Types(noteRendererType),     // the note editor's renderer (noterenderer.go)
-		tuidecl.Types(h.plugins.cardType()), // a card plugin's view in its panel (pluginpanels.go)
+		tuidecl.Types(noteRendererType),         // the note editor's renderer (noterenderer.go)
+		tuidecl.Types(h.plugins.cardType()),     // a card plugin's view in its panel (pluginpanels.go)
+		tuidecl.Types(h.relationViewTypes()...), // the GUI's GlobeMap and Mindmap views (relationmap.go)
 		// The file dialogs read the local disk, not the daemon's: same machine, so the daemon adds
 		// nothing to a listing. Off the loop, so a slow mount cannot hold it; os.DirFS, not
 		// vfs/local, whose root refuses an absolute link and lists every link as a file.

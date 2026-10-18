@@ -85,7 +85,7 @@ func (h *Host) switchTheme(name string) {
 			h.failed("theme", err)
 			return
 		}
-		src = h.plugins.withCardPanels(b)
+		src = h.plugins.withCardPanels(withRelationViews(b, h.gui))
 	}
 	if themeOf(src) == "" {
 		h.notify("main.qml imports no theme to switch")

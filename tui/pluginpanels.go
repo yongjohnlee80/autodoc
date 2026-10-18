@@ -309,7 +309,8 @@ func (pl *plugins) cardType() tuidecl.Type {
 // every reload.
 type cardFS struct {
 	fs.FS
-	pl *plugins
+	pl  *plugins
+	gui bool // the program runs as a window: the GUI's relation views are written in too
 }
 
 func (c cardFS) Open(name string) (fs.File, error) {
@@ -326,7 +327,7 @@ func (c cardFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	data := c.pl.withCardPanels(src)
+	data := c.pl.withCardPanels(withRelationViews(src, c.gui))
 	return &memFile{Reader: bytes.NewReader(data), info: memInfo{FileInfo: info, size: int64(len(data))}}, nil
 }
 

@@ -138,6 +138,7 @@ Window {
         Menu {
             title: "Re&lations"
             MenuItem { text: "&Links  (SPC l)"; onTriggered: App.toggleRelations() }
+            // ---- the relation views' menu items (the GUI's) ----
         }
         // Search: the page's find for the Text mode too, where / types a slash, and the workspace's
         Menu {
@@ -567,6 +568,7 @@ Window {
 
     // the card plugins' panels (pluginpanels.go): one per card plugin found when AutoDoc starts,
     // written in here as the program is built; Escape closes one, and its plugin runs on
+    // ---- the relation views' panels (the GUI's) ----
     // ---- the card plugins' panels ----
 
     // the todos (todos.go): one store at a time, chosen in the dropdown along the top, its tasks a
