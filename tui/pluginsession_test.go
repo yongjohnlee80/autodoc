@@ -557,3 +557,44 @@ func TestAPluginOpensAPathAndUpdatesItself(t *testing.T) {
 	}
 	r.waitNotice(t, "opener not updated: it was put in the folder by hand: update it there")
 }
+
+// TestABrokenPluginPackageIsSaidAndNotRecorded: a plugin whose lua/ has no package.toml has no
+// package, silently; one whose package.toml names another plugin, is not TOML, or has no init.lua
+// is said and loads nothing; one whose init fails is said, and its identity is not kept, so
+// autodoc.plugin.run from what it registered before failing is refused.
+func TestABrokenPluginPackageIsSaidAndNotRecorded(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"bare", "misnamed", "badtoml", "noinit", "fails"} {
+		installPlugin7(t, dir, name, "service", "session", sessionCommands)
+	}
+	writeFiles(t, filepath.Join(dir, "bare", "lua"), map[string]string{"init.lua": `error("never run")`})
+	installPackage(t, dir, "misnamed", "", `error("never run")`)
+	writeFiles(t, filepath.Join(dir, "misnamed", "lua"), map[string]string{"package.toml": "name = \"other\"\n"})
+	writeFiles(t, filepath.Join(dir, "badtoml", "lua"), map[string]string{"package.toml": "name = [\n", "init.lua": ""})
+	writeFiles(t, filepath.Join(dir, "noinit", "lua"), map[string]string{"package.toml": "name = \"noinit\"\n"})
+	installPackage(t, dir, "fails", "", runInsert("fails-run", `autodoc.plugin.run("echo", "late")`)+`error("the init failed")`)
+	r, logs := pluginTUI(t, dir)
+	for _, want := range []string{
+		`the plugin misnamed's Lua package: package.toml names "other", but the plugin is misnamed`,
+		"the plugin badtoml's Lua package: package.toml:",
+		"the plugin noinit's Lua package: no init.lua in its lua folder",
+		"the init failed",
+	} {
+		r.waitNotice(t, want)
+	}
+	for _, n := range onLoop(r, func() []notice { return r.h.noticeLog.items }) {
+		if strings.Contains(n.text, "bare") || strings.Contains(n.text, "never run") {
+			t.Fatalf("a lua/ with no package.toml was read: %s", n.text)
+		}
+	}
+	if got := onLoop(r, func() int { return len(r.h.pluginPackages) }); got != 0 {
+		t.Fatalf("%d broken packages recorded", got)
+	}
+	r.page("", 1, 1)
+	if err := r.luaRun("fails-run"); err == nil { // registered before the init failed: refused
+		r.wantText(t, ":fails-run", "false autodoc.plugin.run: not a plugin's package")
+	}
+	if slices.ContainsFunc(said(t, logs, "fails"), func(s string) bool { return strings.Contains(s, "late") }) {
+		t.Fatal("a failed package's command reached its plugin")
+	}
+}
