@@ -69,8 +69,12 @@ func (h *Host) askLuaGrants() {
 		}
 		h.luaAsking = true
 		next := func() { h.luaAsking = false; h.p.Post(h.askLuaGrants) }
+		who := "the Lua script " + a.script
+		if name, ok := strings.CutPrefix(a.script, "plugin:"); ok {
+			who = "the plugin " + name + "'s Lua package"
+		}
 		h.ask(Question{
-			Title: fmt.Sprintf("let the Lua script %s use %s?", a.script, strings.Join(open, ", ")),
+			Title: fmt.Sprintf("let %s use %s?", who, strings.Join(open, ", ")),
 			Text:  luaGrantText(open),
 			Yes:   "&Allow", No: "&Not now",
 			OnYes:    func() { h.grantLua(a.script, open); next() },

@@ -49,6 +49,11 @@ type (
 	DocumentReader interface{ Document(d Document) }
 	// Commander takes the manifest's [[commands]], by id.
 	Commander interface{ Command(id string) }
+	// CommandArgser takes a [[commands]] id with its arguments (protocol 7): `:autodb query …` from
+	// the plugin's Lua package. A Handler that is not one is handed Command(id), the arguments dropped.
+	CommandArgser interface {
+		CommandArgs(id string, args []string)
+	}
 	// Focuser is a non-modal card told it took the keys (true) or gave them back (false).
 	Focuser interface{ Focus(focused bool) }
 	// PointerHandler takes view-local left presses and vertical wheel movement (protocol 6).
@@ -79,6 +84,33 @@ type Peer struct {
 	link     *Link
 	calls    *pendingCalls
 	protocol atomic.Int64 // plugin.open's, once opened
+	// closeReason is plugin.close's reason (protocol 7), set before Close is called
+	closeReason atomic.Value
+}
+
+// ErrNoSession is a slot set on a host that opened the plugin at a protocol before 7.
+var ErrNoSession = errors.New("plugin: the host speaks a protocol before 7, without a session slot")
+
+// SetSession replaces this plugin's session slot (protocol 7). The host keeps it in memory, never on
+// disk, until AutoDoc quits; Open.Session is it at the plugin's next start in this run of AutoDoc. A
+// nil error means it was sent, not that the host kept it: the host drops a slot over the bounds, and
+// one sent after the plugin began to stop, so a plugin sets its slot when it signs in, never in
+// Close.
+func (p *Peer) SetSession(values map[string]string) error {
+	if p.protocol.Load() < 7 {
+		return ErrNoSession
+	}
+	if err := CheckSession(values); err != nil {
+		return err
+	}
+	return p.link.Notify(p.ctx, MethodSession, SessionParams(values))
+}
+
+// CloseReason is why the host is closing the plugin (protocol 7: CloseQuit, CloseOff, …), for Close
+// to read; "" before protocol 7, or when the host closed it without a plugin.close.
+func (p *Peer) CloseReason() string {
+	s, _ := p.closeReason.Load().(string)
+	return s
 }
 
 // The errors of Peer.Call besides the host's own answer (a *CallError).
@@ -379,7 +411,9 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 					r.Document(d)
 				}
 			}
-			if c, ok := h.(Commander); ok {
+			if c, ok := h.(CommandArgser); ok {
+				c.CommandArgs(id, ReadCommandArgs(n.params))
+			} else if c, ok := h.(Commander); ok {
 				c.Command(id)
 			}
 		case MethodFetch:
@@ -395,6 +429,7 @@ func ServeConn(ctx context.Context, conn net.Conn, h Handler) error {
 				}
 			}
 		case MethodClose:
+			peer.closeReason.Store(ReadClose(n.params))
 			return nil
 		}
 	}

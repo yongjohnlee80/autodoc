@@ -2,7 +2,7 @@
 
 While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (ADR 0209, ADR 1791268009, ADR 1791762474, ADR 1792078052, ADR 1792254331; see `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
 
-This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 6**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from the Registry or a Git URL.
+This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 7**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from the Registry or a Git URL.
 
 ---
 
@@ -26,11 +26,11 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 6
+## 15.3 Progression of Protocols 1 Through 7
 
 AutoDoc's plugin contract evolves through six cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
-![Evolution of AutoDoc Plugin Protocols 1 to 6](plugin-protocols.mmd)
+![Evolution of AutoDoc Plugin Protocols 1 to 7](plugin-protocols.mmd)
 
 ### Protocol 1: Modal Dialogs and Styled Cell Frames
 
@@ -74,6 +74,14 @@ In Protocol 4, every cell is a string, making SQL `NULL` indistinguishable from 
 ### Protocol 6: The Pointer in a Card
 
 Protocol 6 adds `plugin.pointer {kind, button, x, y, count}`: a left press (`"press"`, `"left"`) or a vertical wheel step (`"wheel"`, `"up"`/`"down"`) inside the plugin's frame, in frame coordinates from zero. `count` is bounded to 1–16. AutoDoc sends it only to a protocol-6 plugin, only for unmodified input inside the frame, and keeps the right press for the card's own context menu. A Go plugin takes it by implementing `plugin.PointerHandler`; a plugin can ignore it and keep its keyboard controls. AutoDB's card (Chapter 16) selects a connection or a tree row with it, and both UI kits below handle it for you.
+
+### Protocol 7: A Session That Outlives the Process, and a Lua Package
+
+Protocol 7 is for a plugin that signs in to something. AutoDoc keeps a small **session slot** for each plugin in its memory, never on disk, until it quits. The plugin replaces the slot with `host.session {values}` (the SDK's `Peer.SetSession`), and every later `plugin.open` hands it back as `Open.Session`. A plugin that is turned off and on, updated, or restarted after a crash reads its token back, checks it, and does not ask the user to sign in again. A slot is bounded (32 keys, 8 KiB a value, 64 KiB in all), and nothing logs its values.
+
+`plugin.close` now carries a **reason**, which the plugin reads with `Peer.CloseReason()` inside `Close`. On `quit` (AutoDoc is going, and the slot with it) and `remove`, it logs out. On `off` and `update`, it keeps the token for the next start. A card's toggle only hides the card, so the plugin keeps running and stays signed in. Plugins › Turn off is what stops it.
+
+A plugin may also ship a **Lua package** in its folder (`lua/package.toml`, `lua/init.lua`). AutoDoc loads it gated as `plugin:<name>`, and its prompt names the plugin. It can define `:` commands, keys and menu rows. `autodoc.plugin.run(id, args…)` sends one of its own plugin's commands, with arguments (`plugin.command {id, args}`, taken by a `plugin.CommandArgser`), and it reaches no other plugin. AutoDB's `:autodb query select 1` (Chapter 16) works this way. If you write a package of your own with the plugin's name, it replaces the plugin's.
 
 ---
 
@@ -128,7 +136,7 @@ key   = "s"
 
 ## 15.5 Writing a Plugin with the Go SDK
 
-The `github.com/yongjohnlee80/autodoc/plugin` Go package implements Protocols 1–6 with concurrency-safe `Peer` methods and optional handler interfaces (`DocumentReader`, `Commander`, `CommandDocer`, `Focuser`, `TableFetcher`, `Hider`, `PointerHandler`):
+The `github.com/yongjohnlee80/autodoc/plugin` Go package implements Protocols 1–7 with concurrency-safe `Peer` methods and optional handler interfaces (`DocumentReader`, `Commander`, `CommandArgser`, `CommandDocer`, `Focuser`, `TableFetcher`, `Hider`, `PointerHandler`):
 
 ```go
 package main

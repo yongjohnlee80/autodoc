@@ -64,6 +64,13 @@ func (s *scripting) bindHost(eng *script.Engine, host luaHost) {
 	L.SetField(eng.Global(), "ui", ui)
 	s.bindCard(L, ui) // ui.card, ui.charts, app.stats (luacard.go)
 	eng.SetFunction("widgets", s.luaWidgets)
+	// autodoc.plugin: a plugin's package's own plugin. The empty-capability gate asks for no grant;
+	// it makes the gated proxy wrap these functions, which is what sets Engine.Caller (ADR 1792300990
+	// §4.5); an ungated user script has no caller and is refused
+	pt := L.NewTable()
+	L.SetFuncs(pt, map[string]lua.LGFunction{"run": s.luaPluginRun})
+	L.SetField(eng.Global(), "plugin", pt)
+	eng.SetDomainGate("plugin", func(string, *lua.LState) string { return "" })
 	ag := L.NewTable()
 	L.SetFuncs(ag, map[string]lua.LGFunction{"list": s.luaAgentsList, "send": s.luaAgentsSend})
 	L.SetField(eng.Global(), "agents", ag)
@@ -290,4 +297,34 @@ func (s *scripting) luaWidgets(L *lua.LState) int {
 	}
 	L.Push(out)
 	return 1
+}
+
+// pluginRunner runs a plugin package's own plugin's commands (luaHostOf).
+type pluginRunner interface {
+	runOwnPlugin(script, id string, args []string) error
+}
+
+// luaPluginRun is autodoc.plugin.run(id, args…): a [[commands]] id of the calling package's own
+// plugin, with args. ok, err; err "not a plugin's package" for any other caller.
+func (s *scripting) luaPluginRun(L *lua.LState) int {
+	id := L.CheckString(1)
+	var args []string
+	for i := 2; i <= L.GetTop(); i++ {
+		args = append(args, L.CheckString(i))
+	}
+	script, _, ok := s.eng.Caller()
+	pr, has := s.host.(pluginRunner)
+	if !ok || !has {
+		L.Push(lua.LFalse)
+		L.Push(lua.LString("autodoc.plugin.run: not a plugin's package"))
+		return 2
+	}
+	if err := pr.runOwnPlugin(script, id, args); err != nil {
+		L.Push(lua.LFalse)
+		L.Push(lua.LString(err.Error()))
+		return 2
+	}
+	L.Push(lua.LTrue)
+	L.Push(lua.LNil)
+	return 2
 }

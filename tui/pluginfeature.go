@@ -39,6 +39,13 @@ type plugins struct {
 	pluginCards map[string]*pluginCard
 	cardPlugin  string
 	running     map[string]*pluginRun
+	// sessions are the plugins' session slots, by plugin name (protocol 7, ADR 1792300990 §4.3):
+	// memory only, until AutoDoc quits or the plugin is removed. Loop-owned; acceptSession is their
+	// one writer, and a run gets a copy at its open, never the map.
+	sessions map[string]map[string]string
+	// scriptsChanged reloads the Lua scripts (Host.reloadScripts): after the plugins are read again
+	// (an install, an update, a removal), so a plugin's Lua package comes and goes with it
+	scriptsChanged func()
 	// the catalog's plugin entries by id, and their letters as F1 names them (plugincmds.go)
 	pluginCmds    map[string]pluginCommandRef
 	pluginLetters map[string][]string
@@ -149,6 +156,14 @@ func (pl *plugins) Catalog() []Entry {
 	return []Entry{
 		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", pl.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
+		{ID: "plugins.update", Title: "update a plugin", Args: "<name>",
+			Help: "update a plugin by its name, as Manage plugins › Update does: its new commit is asked about first. A plugin may name only itself",
+			Run: func(x Invocation) error {
+				if len(x.Args) != 1 {
+					return errors.New("plugins.update: takes a plugin's name")
+				}
+				return pl.updatePlugin(x.Args[0])
+			}},
 		builtin("plugins.commands", "plugin commands: choose a plugin, then one of its commands", "App.openPluginChooser()", pl.openPluginChooser),
 		// the results panel (plugintable.go), and its rows, each command saying which rows it takes
 		builtin("results.toggle", "results panel", "App.toggleResults()", func() { pl.c.TogglePanel(resultsPanel) }),

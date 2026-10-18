@@ -415,3 +415,35 @@ func TestAWatchLeavesNoHandleBehind(t *testing.T) {
 		t.Fatalf("%d more file descriptors after 20 watches started and ended", grown)
 	}
 }
+
+// TestAFileOutsideEveryWorkspaceFollowsTheDisk (ADR 1792301900 §4.6's verify-first: a remote note's
+// cache file is outside every workspace): clean, it reloads from disk; with unsaved edits, it is
+// badged and keeps them, never reloaded under the user.
+func TestAFileOutsideEveryWorkspaceFollowsTheDisk(t *testing.T) {
+	r, _ := onDisk(t, Options{})
+	out := t.TempDir()
+	abs := filepath.Join(out, "note.sql")
+	if err := os.WriteFile(abs, []byte("SELECT 1;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r.h.p.Post(func() { r.h.openAbsolute(abs) })
+	r.waitOpen(t, "", abs)
+	outside := func() diskState {
+		return onLoop(r, func() diskState {
+			if b := r.h.bufferOf(fileRef{"", abs}); b != nil {
+				return b.file.disk
+			}
+			return diskSame
+		})
+	}
+	rewrite(t, out, "note.sql", "SELECT 2;\n")
+	r.s.WaitFor(t, "the clean buffer reloaded", func(string) bool { return r.editorText() == "SELECT 2;\n" })
+
+	r.typeInEditor(t, "X")
+	r.waitTyped(t)
+	rewrite(t, out, "note.sql", "SELECT 3;\n")
+	r.s.WaitFor(t, "the edited buffer badged", func(string) bool { return outside() == diskChanged })
+	if got := r.editorText(); got == "SELECT 3;\n" || !strings.Contains(got, "X") {
+		t.Fatalf("the edited buffer was reloaded: %q", got) // the X goes where the reload left the cursor
+	}
+}

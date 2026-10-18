@@ -64,6 +64,9 @@ func (r *pluginRun) hostCall(params []any) {
 		refusal = c.ID + " is a plugin's command, never another plugin's to run"
 	case !slices.Contains(r.e.m.Calls, c.ID):
 		refusal = c.ID + " is not in the manifest's calls"
+	case c.ID == "plugins.update" && (len(c.Args) != 1 || c.Args[0] != r.e.m.Name):
+		// one plugin never updates another (ADR 1792301900 §4.10)
+		refusal = "plugins.update: a plugin may update only itself, " + r.e.m.Name
 	}
 	r.pl.c.Post(func() {
 		if refusal != "" {

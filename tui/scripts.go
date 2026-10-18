@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,7 +65,8 @@ func (h *Host) startScripts() []error {
 	if h.luaDir != "" {
 		errs = append(errs, h.scripts.LoadDir(os.DirFS(h.luaDir), ".")...)
 	}
-	return append(errs, h.loadPackages()...) // lua/<name>/: gated (luapackages.go)
+	errs = append(errs, h.loadPackages()...)       // lua/<name>/: gated (luapackages.go)
+	return append(errs, h.loadPluginPackages()...) // a plugin's lua/: gated as plugin:<name>, after the user's reserve their names
 }
 
 // reloadScripts is :lua-reload: every script loaded again, on a new engine, so an edited file is
@@ -185,3 +187,26 @@ func (l luaHostOf) appStats() procstat.Stats         { return procstat.Read() }
 func (l luaHostOf) appVersion() string               { return l.h.aboutInfo.Version }
 func (l luaHostOf) native() bool                     { return l.h.native() }
 func (l luaHostOf) widgets() []widgetTarget          { return l.h.widgets() }
+
+// runOwnPlugin is autodoc.plugin.run's host side: script must be a plugin package this engine
+// loaded (pluginPackages, the host's own record, never a name the script gives), id one of that
+// plugin's [[commands]]; args need protocol 7.
+func (l luaHostOf) runOwnPlugin(script, id string, args []string) error {
+	key, ok := l.h.pluginPackages[script]
+	if !ok || l.h.plugins == nil {
+		return errors.New("autodoc.plugin.run: not a plugin's package")
+	}
+	i := slices.IndexFunc(l.h.plugins.pluginList, func(e pluginEntry) bool { return e.key() == key })
+	if i < 0 {
+		return errors.New("autodoc.plugin.run: its plugin is gone")
+	}
+	e := l.h.plugins.pluginList[i]
+	if !slices.ContainsFunc(e.m.Commands, func(c pluginCommand) bool { return c.ID == id }) {
+		return fmt.Errorf("unknown: %s", id)
+	}
+	if len(args) > 0 && e.m.Protocol < 7 {
+		return fmt.Errorf("autodoc.plugin.run: %s needs protocol 7 for arguments; its manifest says %d", e.m.Name, e.m.Protocol)
+	}
+	l.h.plugins.runPluginCommandArgs(key, id, args)
+	return nil
+}
