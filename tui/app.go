@@ -301,6 +301,7 @@ type Host struct {
 	// moreFeatures follow the host's own in features(): a test's, whose keys and catalog entries
 	// run in the program as any feature's do
 	moreFeatures []Feature
+	backend      tuicore.Backend // Options.Backend: the window's, for the GUI's streams
 	// relationViews are the GUI's GlobeMap and Mindmap (relationviews_gui.go); none in a terminal
 	relationViews []Feature
 
@@ -312,6 +313,9 @@ type Host struct {
 
 // Options are what New needs from the program around it.
 type Options struct {
+	// Backend is the one the App runs on (Launch's): under --gui the window's (golib gui.Backend),
+	// whose streams the GUI's live views draw through (globemap_gui.go). nil in a test of its own.
+	Backend tuicore.Backend
 	// About replaces Help › About's text entirely; "" is AutoDoc's, from AboutInfo.
 	About string
 	// AboutInfo is what Help › About lists: the version and its date, the config and the daemon's
@@ -410,6 +414,7 @@ func newHost(session *Session, opt Options) *Host {
 		jumps:           widget.NewJumpList(0),
 		prefs:           defaultPrefsFor(opt.GUI),
 		gui:             opt.GUI,
+		backend:         opt.Backend,
 		panelOpen:       map[string]bool{},
 		panelGen:        map[string]uint64{},
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),

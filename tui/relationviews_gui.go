@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"image/color"
 
+	"github.com/yongjohnlee80/golib/gui"
+
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/style"
@@ -141,9 +143,18 @@ func (h *Host) relationViewFeatures() []Feature {
 		return nil
 	}
 	if h.relationViews == nil {
-		h.relationViews = []Feature{newGlobeMap(core{h}), newMindmap(core{h})}
+		h.relationViews = []Feature{newGlobeMap(core{h}, h.globePresenter), newMindmap(core{h})}
 	}
 	return h.relationViews
+}
+
+// globePresenter is where the GlobeMap's pictures go: a stream of the window it runs in, or, with
+// no window (a test's host on a terminal backend), its view's own paint.
+func (h *Host) globePresenter() globePublisher {
+	if b, ok := h.backend.(*gui.Backend); ok {
+		return streamPublisher{cs: b.NewCanvasStream()}
+	}
+	return &paintPresenter{}
 }
 
 // relationViewTypes are their views' QML types: each built view joins its feature.

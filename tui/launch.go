@@ -125,6 +125,7 @@ func Launch(ctx context.Context, o LaunchOptions) error {
 		appOpts = append(appOpts, tuicore.WithTrace(traceTo(o.DebugRecorder)))
 	}
 	host, err := New(session, Options{
+		Backend:   backend,
 		GUI:       o.GUI,
 		About:     o.About,
 		AboutInfo: info,
