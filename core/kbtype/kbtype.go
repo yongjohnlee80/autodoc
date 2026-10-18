@@ -254,10 +254,6 @@ func (t *Type) validate() error {
 	return nil
 }
 
-// ValidPath reports whether p is a clean, relative slash path inside its root: what a type's file
-// may be named, and what the daemon's workspace.scaffold accepts.
-func ValidPath(p string) bool { return clean(p) }
-
 // clean reports whether p is a clean, relative slash path inside its root.
 func clean(p string) bool {
 	return p != "" && p != "." && !strings.HasPrefix(p, "/") && !strings.Contains(p, `\`) &&
