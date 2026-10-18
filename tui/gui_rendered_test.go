@@ -12,9 +12,10 @@ import (
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 )
 
-// The window opens in the Rendered view, and the view follows the page's kind: a note renders; a Go file opened after it is Raw and
-// Ctrl+T does nothing there; the draft left by closing it renders; and a note opened from the
-// rendered draft keeps the view, Ctrl+T switching it back. No window opens.
+// The window opens in the Rendered view, and the view drawn follows the page's kind: a note renders;
+// a Go file opened after it is drawn Raw, Rendered kept as the choice, and Ctrl+T does nothing
+// there; the draft left by closing it is drawn Rendered again; and a note opened from the rendered
+// draft keeps the view, Ctrl+T switching it back. No window opens.
 func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{
 		"kb": {"a.md", "# Alpha\n\n## a heading\n", "a.go", goWithAHashLine, "b.md", "# Bravo\n"},
@@ -49,35 +50,40 @@ func TestTheRenderedViewFollowsTheFilesKind(t *testing.T) {
 		t.Fatalf("a note: Ctrl+T gives %v, want Rendered", m)
 	}
 
+	// what the editor draws, apart from the view the user chose (Mode): a document that cannot
+	// render is drawn Raw while Rendered stays the choice
+	shown := func() guiwidget.EditorMode {
+		return onLoop(r, func() guiwidget.EditorMode { return r.h.editor.(*guiwidget.Editor).Shown() })
+	}
 	onLoop(r, func() bool { r.h.openPath("a.go"); return true })
 	r.waitFile(t, "a.go")
-	if m := mode(); m != guiwidget.Raw {
-		t.Fatalf("a Go file opened after a rendered note is %v, want Raw", m)
+	if s, m := shown(), mode(); s != guiwidget.Raw || m != guiwidget.Rendered {
+		t.Fatalf("a Go file opened after a rendered note is drawn %v, the choice %v; want drawn Raw, Rendered kept", s, m)
 	}
 	ctrlT()
-	if m := mode(); m != guiwidget.Raw {
-		t.Fatalf("Ctrl+T on a Go file gives %v, want Raw: its # line must not render as a heading", m)
+	if s := shown(); s != guiwidget.Raw {
+		t.Fatalf("Ctrl+T on a Go file draws %v, want Raw: its # line must not render as a heading", s)
 	}
 
-	// closing the Go file leaves the untitled draft, which is Markdown: Ctrl+T renders it
+	// closing the Go file leaves the untitled draft, which is Markdown: Rendered, the choice kept,
+	// is drawn again
 	onLoop(r, func() bool { r.h.closeFile(); return true })
 	r.s.WaitFor(t, "the draft", func(string) bool { return !r.file().open })
 	onLoop(r, func() bool { r.h.core.SetValue("# Draft heading\nmore\n"); return true })
-	ctrlT()
-	if m := mode(); m != guiwidget.Rendered {
-		t.Fatalf("the draft after a Go file: Ctrl+T gives %v, want Rendered", m)
+	if s := shown(); s != guiwidget.Rendered {
+		t.Fatalf("the draft after a Go file is drawn %v, want Rendered: the choice was kept", s)
 	}
 
 	// a note opened from the rendered draft keeps the view chosen: Markdown to Markdown, the view
 	// is the user's; Ctrl+T switches it back
 	onLoop(r, func() bool { r.h.openPath("b.md"); return true })
 	r.waitFile(t, "b.md")
-	if m := mode(); m != guiwidget.Rendered {
-		t.Fatalf("a note opened from the rendered draft is %v, want Rendered (the view kept)", m)
+	if s := shown(); s != guiwidget.Rendered {
+		t.Fatalf("a note opened from the rendered draft is drawn %v, want Rendered (the view kept)", s)
 	}
 	ctrlT()
-	if m := mode(); m != guiwidget.Raw {
-		t.Fatalf("Ctrl+T on a rendered note gives %v, want Raw", m)
+	if s, m := shown(), mode(); s != guiwidget.Raw || m != guiwidget.Raw {
+		t.Fatalf("Ctrl+T on a rendered note: drawn %v, the choice %v; want Raw both", s, m)
 	}
 }
 
