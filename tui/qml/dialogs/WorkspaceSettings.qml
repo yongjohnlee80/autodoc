@@ -4,7 +4,7 @@
 // its index is kept in. Save sends every change at once, and a refusal changes nothing: the dialog
 // opens again as it was typed, the reason on its help line. Adding a workspace uses it too, with
 // the root typed, browsed to or made (New Folder), and a KB type to scaffold it with (ADR
-// 1792349867). Each tab's frames stack top to bottom. Enter in a field saves, as Save does.
+// 1792349867). Enter in a field saves, as Save does.
 Dialog {
     closeOnQ: true
     standardButtons: Dialog.Save | Dialog.Cancel
@@ -22,7 +22,7 @@ Dialog {
         Tab {
             title: "Edit"
             Flex {
-                direction: Tui.Vertical
+                direction: Tui.Horizontal
                 Frame {
                     title: "workspace"
                     Layout.fillWidth: true
@@ -57,6 +57,7 @@ Dialog {
                         Text { text: App.settingsSchemaState; wrapMode: Tui.WordWrap }
                     }
                 }
+                Text { text: " " }
                 Frame {
                     title: "files"
                     Layout.fillWidth: true
@@ -104,7 +105,7 @@ Dialog {
         Tab {
             title: "Advanced"
             Flex {
-                direction: Tui.Vertical
+                direction: Tui.Horizontal
                 Frame {
                     title: "indexing"
                     Layout.fillWidth: true
@@ -121,6 +122,7 @@ Dialog {
                         Text { text: App.settingsProviderState; wrapMode: Tui.WordWrap }
                     }
                 }
+                Text { text: " "; visible: App.databasesShown }
                 Frame {
                     title: "source database"
                     Layout.fillWidth: true
@@ -138,6 +140,7 @@ Dialog {
                         Text { text: App.settingsSourceState; wrapMode: Tui.WordWrap }
                     }
                 }
+                Text { text: " "; visible: App.databasesShown }
                 Frame {
                     title: "destination"
                     Layout.fillWidth: true
