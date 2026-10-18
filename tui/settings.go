@@ -638,6 +638,9 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	}
 	h.set("App.settingsTitle", title)
 	h.set("App.settingsAdding", base.adding)
+	if !base.adding {
+		h.set("App.kbTypeCustomShown", false) // the custom URL row belongs to the add dialog alone
+	}
 	h.set("App.settingsRootLine", rootLine)
 	h.set("App.databasesShown", base.databases)
 	if help == "" {

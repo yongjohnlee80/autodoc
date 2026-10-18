@@ -45,7 +45,7 @@ Dialog {
                         ComboBox { id: sKBType; visible: App.settingsAdding; model: App.kbTypes; textRole: "label"; currentIndex: App.kbTypeIndex; onActivated: App.kbTypePicked(index) }
                         Flex {
                             direction: Tui.Horizontal
-                            visible: App.settingsAdding && App.kbTypeCustomShown
+                            visible: App.kbTypeCustomShown
                             TextField { id: sKBURL; Layout.fillWidth: true; text: "https://" }
                             Text { text: " " }
                             Button { text: "Stage"; onClicked: App.kbTypeURL(sKBURL.text) }

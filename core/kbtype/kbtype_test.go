@@ -103,7 +103,7 @@ func TestReadRefusesEachRule(t *testing.T) {
 		{"schema not a file", strings.Replace(manifest, `schema = "_schema/frontmatter.yaml"`, `schema = "_schema/none.yaml"`, 1), "is not a file of tree/", files()},
 		{"folder escapes", strings.Replace(manifest, `path = "permanent"`, `path = "../permanent"`, 1), "not a clean relative path", files()},
 		{"folder twice", manifest + "\n[[folder]]\npath = \"raw\"\npurpose = \"again\"\n", "listed twice", files()},
-		{"unknown key", manifest + "\nbuild = [\"make\"]\n", "unknown key build", files()},
+		{"unknown key", strings.Replace(manifest, "format = 1", "format = 1\nbuild = [\"make\"]", 1), "unknown key build", files()},
 		{"another format", strings.Replace(manifest, "format = 1", "format = 2", 1), "format 2", files()},
 		{"bad name", strings.Replace(manifest, `name = "kb-zettelkasten"`, `name = "KB Zettel"`, 1), "lowercase letters", files()},
 		{"bad policy", strings.Replace(manifest, `embedding_policy = "always"`, `embedding_policy = "sometimes"`, 1), "embedding_policy", files()},
