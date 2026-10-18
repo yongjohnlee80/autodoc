@@ -471,6 +471,21 @@ changes when AutoDoc last closed … We kept a copy for you, just in case. Resto
 - **Discard** deletes the copy.
 - **Later** asks again at the next start.
 
+### Your keys
+
+Every key is a command with an id, AutoDoc's (`autodoc.window.save`, `autodoc.leader.openRecent`)
+and golib's widgets' (`tui.list.down`, `tui.editor.vim.normal.undo`). A `keymap.xml` beside
+`config.toml` moves any of them, unbinds them, or gives one several keys; it is followed while
+AutoDoc runs, and a file it can't read is refused whole, with its line, the keys staying as they
+were. F1's help starts with the keys your file moves, and the cards name each by its new keys.
+
+```sh
+autodoc --keymap-reference   # the file's format, and every AutoDoc command with its keys
+autodoc --check-keymap       # check keymap.xml beside config.toml, with no UI or daemon
+```
+
+[docs/keymap.md](docs/keymap.md) is the reference; tutorial chapter 3.9 walks through one.
+
 ### The command line
 
 `:` in the Vim mode's Normal mode opens **VIM Commands** (golib's editor prompt). Tab completes a

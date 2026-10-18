@@ -212,5 +212,37 @@ git log -n 5 --oneline -- "$AUTODOC_CURRENT_DOC" "${AUTODOC_CURRENT_DOC%.md}/"
 
 ---
 
+## 3.9 Moving Your Keys (`keymap.xml`)
+
+Every key AutoDoc binds, and every key its widgets bind, is a command with an id. A `keymap.xml`
+beside `config.toml` moves any of them. The full reference, with every id and its default keys, is
+[`docs/keymap.md`](../keymap.md), or `autodoc --keymap-reference` on an installed binary.
+
+### Walkthrough: moving search to F5 and recent files to a capital R
+
+1. **Write the file.** Create `~/.config/autodoc/keymap.xml`:
+
+   ```xml
+   <mapping>
+     <shortcut id="autodoc.window.openSearch"><key value="F5"/></shortcut>
+     <shortcut id="autodoc.leader.openRecent"><key value="Shift+R"/></shortcut>
+   </mapping>
+   ```
+
+2. **Check it.** `autodoc --check-keymap` reads the file as AutoDoc does and prints
+   `…/keymap.xml: valid (0 warnings)`. A misspelled id is refused with its line.
+3. **Watch it apply.** With AutoDoc open, the save applies on the next frame: F5 opens search,
+   and Ctrl+G no longer does. Press `SPC`: the card lists `Shift+R  recent files`.
+4. **See what you moved.** F1's help opens with **YOUR KEYS**, each moved command with its file and
+   line.
+5. **Break it on purpose.** Change `F5` to `F55` and save: a notice names `keymap.xml, line 2`, and
+   F5 still opens search. A refused file changes nothing.
+
+Unbind a key with `<key value=""/>`. Give a command several keys with several `<key>` elements. A
+menu's underlined letter, a plugin's letters (their own preference) and your Lua keys can't be moved
+here; nor can the key after a prefix, such as the second g of gg.
+
+---
+
 [← Previous: Chapter 02: Quickstart & Workspaces](./02-quickstart-and-workspaces.md) | [Index](./README.md) | [Next: Chapter 04: Rich Authoring, Embeds & Export →](./04-rich-authoring-embeds-and-export.md)
 
