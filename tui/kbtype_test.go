@@ -289,22 +289,22 @@ func TestNewFolderMakesTheRoot(t *testing.T) {
 	base := t.TempDir()
 	fresh := filepath.Join(base, "zk", "notes")
 	r.h.p.Post(func() { r.h.newRootFolder(fresh) })
-	r.s.WaitForText(t, "created "+fresh)
+	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("created " + fresh) })
 	if info, err := os.Stat(fresh); err != nil || !info.IsDir() {
 		t.Fatalf("the folder was not created: %v", err)
 	}
 	r.h.p.Post(func() { r.h.newRootFolder(fresh) })
-	r.s.WaitForText(t, "exists already")
+	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("exists already") })
 	file := filepath.Join(base, "a-file")
 	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	r.h.p.Post(func() { r.h.newRootFolder(file) })
-	r.s.WaitForText(t, "is a file")
+	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("is a file") })
 	r.h.p.Post(func() { r.h.newRootFolder(filepath.Join(file, "under")) })
-	r.s.WaitForText(t, "New Folder: mkdir")
+	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("New Folder: mkdir") })
 	r.h.p.Post(func() { r.h.newRootFolder("relative/path") })
-	r.s.WaitForText(t, "type the folder's full path")
+	r.s.WaitFor(t, "a notice", func(string) bool { return r.noticed("type the folder's full path") })
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	r.h.p.Post(func() { r.h.newRootFolder("~/from-home") })
