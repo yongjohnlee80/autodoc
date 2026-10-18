@@ -216,6 +216,7 @@ func TestScaffoldBounds(t *testing.T) {
 	rs, err := m.Scaffold(ctx, "kb", []rpc.ScaffoldFile{
 		{Path: "../escape.md", Content: []byte("x")},
 		{Path: "notes/../sneaky.md", Content: []byte("x")}, // not clean
+		{Path: "notes/../made-by-a-refusal/leaf.md", Content: []byte("x")}, // not clean, and its cleaned parent is new
 		{Path: "/abs.md", Content: []byte("x")},
 		{Path: "", Content: []byte("x")},
 		{Path: "bin.md", Content: []byte("a\x00b")},
@@ -236,6 +237,9 @@ func TestScaffoldBounds(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "sneaky.md")); err == nil {
 		t.Fatal("a path that was not clean was written")
+	}
+	if _, err := os.Stat(filepath.Join(root, "made-by-a-refusal")); err == nil {
+		t.Fatal("a refused name's cleaned parent was created before the refusal")
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "escape.md")); err == nil {
 		t.Fatal("a file was written outside the root")
