@@ -55,6 +55,9 @@ func (h *Host) builtinEntries() []Entry {
 		builtin("panel.reset_layout", "reset the panel layout", "App.resetPanelLayout()", h.resetPanelLayout),
 		builtin("workspace.switch", "switch workspace", "App.pickWorkspace()", h.pickWorkspace),
 		builtin("workspace.manage", "manage workspaces", "App.manageWorkspaces()", h.manageWorkspaces),
+		{ID: "kbtype.apply", Title: "apply a KB type to this workspace", Args: "<name or git URL>",
+			Help: "create a KB type's folders and files in the open workspace, keeping every file already there: kb-autovim, kb-zettelkasten, kb-para, kb-slipbox, or a type's git URL",
+			Run:  h.kbTypeApply},
 		// View and the editor
 		builtin("view.status_line", "the status line", "App.toggleStatusLine()", h.toggleStatusLine),
 		builtin("view.menu", "show/focus or hide the menu", "App.leaderMenuBar()", h.leaderMenuBar),

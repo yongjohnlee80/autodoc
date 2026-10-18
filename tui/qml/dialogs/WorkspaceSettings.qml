@@ -3,7 +3,8 @@
 // where the edition offers them, the databases: a source its .view files read, and the destination
 // its index is kept in. Save sends every change at once, and a refusal changes nothing: the dialog
 // opens again as it was typed, the reason on its help line. Adding a workspace uses it too, with
-// the root typed or browsed to. Enter in a field saves, as Save does.
+// the root typed, browsed to or made (New Folder), and a KB type to scaffold it with (ADR
+// 1792349867). Each tab's frames stack top to bottom. Enter in a field saves, as Save does.
 Dialog {
     closeOnQ: true
     standardButtons: Dialog.Save | Dialog.Cancel
@@ -21,7 +22,7 @@ Dialog {
         Tab {
             title: "Edit"
             Flex {
-                direction: Tui.Horizontal
+                direction: Tui.Vertical
                 Frame {
                     title: "workspace"
                     Layout.fillWidth: true
@@ -32,14 +33,30 @@ Dialog {
                         Text { text: "" }
                         Text { text: App.settingsRootLine; wrapMode: Tui.WordWrap }
                         TextField { id: sRoot; text: App.settingsRoot; visible: App.settingsAdding }
-                        Button { text: "Browse…"; visible: App.settingsAdding; onClicked: App.browseRoot(sRoot.text) }
+                        Flex {
+                            direction: Tui.Horizontal
+                            visible: App.settingsAdding
+                            Button { text: "Browse…"; onClicked: App.browseRoot(sRoot.text) }
+                            Text { text: " " }
+                            Button { text: "New Folder"; toolTipText: "create the folder the root names"; onClicked: App.newRootFolder(sRoot.text) }
+                        }
+                        Text { text: ""; visible: App.settingsAdding }
+                        Text { text: "KB type: the folders and files to start it with"; visible: App.settingsAdding }
+                        ComboBox { id: sKBType; visible: App.settingsAdding; model: App.kbTypes; textRole: "label"; currentIndex: App.kbTypeIndex; onActivated: App.kbTypePicked(index) }
+                        Flex {
+                            direction: Tui.Horizontal
+                            visible: App.settingsAdding && App.kbTypeCustomShown
+                            TextField { id: sKBURL; Layout.fillWidth: true; text: "https://" }
+                            Text { text: " " }
+                            Button { text: "Stage"; onClicked: App.kbTypeURL(sKBURL.text) }
+                        }
+                        Text { text: App.kbTypeSummary; visible: App.settingsAdding; wrapMode: Tui.WordWrap }
                         Text { text: "" }
                         Text { text: "frontmatter schema (relative to the root, or absolute; blank for none)" }
                         TextField { id: sSchema; text: App.settingsSchema }
                         Text { text: App.settingsSchemaState; wrapMode: Tui.WordWrap }
                     }
                 }
-                Text { text: " " }
                 Frame {
                     title: "files"
                     Layout.fillWidth: true
@@ -71,7 +88,6 @@ Dialog {
                         TextField { id: sInclude; text: App.settingsInclude }
                         Text { text: "exclude globs (semicolon-separated)" }
                         TextField { id: sExclude; text: App.settingsExclude }
-                        Text { text: App.settingsUnreadLine; visible: App.settingsUnreadShown; wrapMode: Tui.WordWrap }
                         Text { text: App.settingsTodoNote; visible: App.settingsTodoNoted; wrapMode: Tui.WordWrap }
                         Button { text: "Index tasks graph-only instead"; visible: App.settingsTodoNoted; onClicked: App.todoGraphOnly(sExclude.text) }
                         Text { text: "graph-only globs (in links and relations, never in search)" }
@@ -88,7 +104,7 @@ Dialog {
         Tab {
             title: "Advanced"
             Flex {
-                direction: Tui.Horizontal
+                direction: Tui.Vertical
                 Frame {
                     title: "indexing"
                     Layout.fillWidth: true
@@ -105,7 +121,6 @@ Dialog {
                         Text { text: App.settingsProviderState; wrapMode: Tui.WordWrap }
                     }
                 }
-                Text { text: " "; visible: App.databasesShown }
                 Frame {
                     title: "source database"
                     Layout.fillWidth: true
@@ -123,7 +138,6 @@ Dialog {
                         Text { text: App.settingsSourceState; wrapMode: Tui.WordWrap }
                     }
                 }
-                Text { text: " "; visible: App.databasesShown }
                 Frame {
                     title: "destination"
                     Layout.fillWidth: true
@@ -144,6 +158,7 @@ Dialog {
             }
         }
     }
+    onRejected: App.settingsCancelled()
     onAccepted: App.saveSettings(sName.text, sRoot.text, sSchema.text, sTexts.text, sInclude.text, sExclude.text,
         sMd.currentIndex, sTxt.currentIndex, sYaml.currentIndex, sSection.text, sPolicy.currentIndex, sProvider.currentIndex,
         sDest.currentIndex, sDestDSN.text, sDestSchema.text, sIndex.currentIndex,

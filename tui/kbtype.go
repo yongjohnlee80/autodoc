@@ -1,0 +1,365 @@
+package tui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/yongjohnlee80/autodoc"
+	"github.com/yongjohnlee80/autodoc/core/kbtype"
+	"github.com/yongjohnlee80/autodoc/rpc"
+)
+
+// KB TYPES — a workspace scaffolded from a KB type's git repo (ADR 1792349867). The add dialog's KB
+// type field stages a type: a shallow clone, read and validated by core/kbtype, never run. Add
+// then writes its plan through the daemon's workspace.scaffold, between workspace.add and
+// workspace.configure. A choice is fenced by a Ticket, so only the latest choice's stage can land.
+
+// kbTypeChoice is one of the KB type field's rows: None has no URL, Custom URL… is asked for.
+type kbTypeChoice struct{ name, title, url string }
+
+// builtinKBTypes are the first-party types, shown until the registry lists them (ADR 1792351195),
+// and kept for offline use after.
+var builtinKBTypes = []kbTypeChoice{
+	{"kb-autovim", "AutoVim coding KB", "https://github.com/yongjohnlee80/kb-autovim"},
+	{"kb-zettelkasten", "Zettelkasten", "https://github.com/yongjohnlee80/kb-zettelkasten"},
+	{"kb-para", "PARA", "https://github.com/yongjohnlee80/kb-para"},
+	{"kb-slipbox", "Slip-box", "https://github.com/yongjohnlee80/kb-slipbox"},
+}
+
+// The KB type field's rows around the types: None first, Custom URL… last.
+const (
+	kbTypeNone   = "None (an existing folder or a coding repo)"
+	kbTypeCustom = "Custom URL…"
+)
+
+// noneNote is what None says, in Johno's words for a coding repo (the dialog task).
+const noneNote = "Nothing is created. If the location is a coding repo, consider turning off embedding in the advanced option."
+
+// kbStageLimit is the most a staged clone may hold, checked before it is read: the limits of
+// core/kbtype bound what is applied, this bounds what a clone may leave on disk.
+const kbStageLimit = 16 << 20
+
+func kbTypeRows() []rowOf {
+	rows := []rowOf{{"key": "", "label": kbTypeNone}}
+	for _, c := range builtinKBTypes {
+		rows = append(rows, rowOf{"key": c.name, "label": c.title})
+	}
+	return append(rows, rowOf{"key": "custom", "label": kbTypeCustom})
+}
+
+// stagedKBType is a type staged for the add dialog: its clone, read and validated.
+type stagedKBType struct {
+	url, stage, commit string // commit in full
+	t                  *kbtype.Type
+	err                error
+}
+
+// stageKBType clones url into a stage of its own and reads it as a KB type. It reuses the plugin
+// installer's git helper (plugininstall.go): no prompts, a timeout, a shallow clone. Nothing in the
+// clone runs. On any failure the stage is removed.
+func stageKBType(ctx context.Context, url string) stagedKBType {
+	s := stagedKBType{url: url}
+	fail := func(err error) stagedKBType {
+		if s.stage != "" {
+			_ = os.RemoveAll(s.stage)
+		}
+		return stagedKBType{url: url, err: err}
+	}
+	// https only: a KB type runs nothing, and git's other transports (ext::, a local path's hooks)
+	// are not ones a type needs
+	if !strings.HasPrefix(url, "https://") {
+		return fail(errors.New("a KB type is cloned over https:// only"))
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return fail(errors.New("a KB type needs git"))
+	}
+	stage, err := os.MkdirTemp("", "autodoc-kbtype-")
+	if err != nil {
+		return fail(err)
+	}
+	s.stage = stage
+	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
+		return fail(err)
+	}
+	if s.commit, err = git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD"); err != nil {
+		return fail(err)
+	}
+	if size, err := dirSize(stage); err != nil {
+		return fail(err)
+	} else if size > kbStageLimit {
+		return fail(fmt.Errorf("the repository holds over %d MiB: not a KB type", kbStageLimit>>20))
+	}
+	if s.t, err = kbtype.Read(stage); err != nil {
+		return fail(err)
+	}
+	return s
+}
+
+func dirSize(dir string) (int64, error) {
+	var n int64
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type().IsRegular() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			n += info.Size()
+		}
+		return nil
+	})
+	return n, err
+}
+
+// stageKB stages url: stageKBType's clone, or a test's stager.
+func (h *Host) stageKB(ctx context.Context, url string) stagedKBType {
+	if h.kbStage != nil {
+		return h.kbStage(ctx, url)
+	}
+	return stageKBType(ctx, url)
+}
+
+// kbTypePicked is the KB type field's choice, row i of kbTypeRows.
+func (h *Host) kbTypePicked(i int) {
+	rows := kbTypeRows()
+	if i < 0 || i >= len(rows) {
+		return
+	}
+	switch key, _ := rows[i]["key"].(string); key {
+	case "":
+		h.pickKBType("")
+	case "custom":
+		h.dropKBType()
+		h.set("App.kbTypeCustomShown", true)
+		h.set("App.kbTypeSummary", "a KB type's git URL, then Stage")
+	default:
+		for _, c := range builtinKBTypes {
+			if c.name == key {
+				h.pickKBType(c.url)
+			}
+		}
+	}
+}
+
+// kbTypeURL stages the custom URL typed.
+func (h *Host) kbTypeURL(url string) {
+	if url = strings.TrimSpace(url); url != "" {
+		h.pickKBType(url)
+	}
+}
+
+// pickKBType stages url for the open add dialog ("" is None). Every pick, and the dialog's opening
+// and closing (dropKBType), bump h.kbTypeSeq, so only the latest pick's stage can land: a stale
+// one is removed unseen (ADR 1792349867 §4.4).
+func (h *Host) pickKBType(url string) {
+	h.dropKBType()
+	h.set("App.kbTypeCustomShown", false)
+	if url == "" {
+		h.set("App.kbTypeSummary", noneNote)
+		return
+	}
+	tk := h.ticket(&h.kbTypeSeq, TicketSession)
+	h.set("App.kbTypeSummary", "staging "+url+"…")
+	do(h, func(ctx context.Context) stagedKBType { return h.stageKB(ctx, url) }, func(s stagedKBType) {
+		if !tk.Current() {
+			if s.stage != "" {
+				_ = os.RemoveAll(s.stage)
+			}
+			return
+		}
+		if s.err != nil {
+			h.set("App.kbTypeSummary", "not a KB type: "+s.err.Error())
+			return
+		}
+		h.kbStaged = &s
+		h.set("App.kbTypeSummary", kbTypeSummary(&s))
+	})
+}
+
+// dropKBType forgets the staged type and removes its stage; a pick still staging is stale from now.
+func (h *Host) dropKBType() {
+	h.kbTypeSeq++
+	if h.kbStaged != nil {
+		_ = os.RemoveAll(h.kbStaged.stage)
+		h.kbStaged = nil
+	}
+}
+
+// kbTypeSummary is what the field shows of a staged type: its folders and purposes, and the
+// settings it proposes.
+func kbTypeSummary(s *stagedKBType) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s at %s\n", s.t.Title, s.commit[:min(7, len(s.commit))])
+	width := 0
+	for _, f := range s.t.Folders {
+		width = max(width, len(f.Path)+1)
+	}
+	for _, f := range s.t.Folders {
+		fmt.Fprintf(&b, "  %-*s  %s\n", width, f.Path+"/", f.Purpose)
+	}
+	w := s.t.Workspace
+	var proposes []string
+	if len(w.Include) > 0 {
+		proposes = append(proposes, "include "+strings.Join(w.Include, "; "))
+	}
+	if w.Schema != "" {
+		proposes = append(proposes, "schema "+w.Schema)
+	}
+	if w.EmbeddingPolicy != "" {
+		proposes = append(proposes, "embedding "+w.EmbeddingPolicy)
+	}
+	if len(proposes) > 0 {
+		fmt.Fprintf(&b, "proposes %s (where you haven't changed the field)", strings.Join(proposes, " · "))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// withKBType is f with t's proposed settings in each field still as the dialog opened it: a field
+// the user changed is theirs.
+func (b settingsBase) withKBType(f settingsForm, t *kbtype.Type) settingsForm {
+	opened := b.form()
+	w := t.Workspace
+	if len(w.Include) > 0 && f.include == opened.include {
+		f.include = strings.Join(w.Include, "; ")
+	}
+	if w.Schema != "" && f.schema == opened.schema {
+		f.schema = w.Schema
+	}
+	if i := slices.Index(policyChoices, w.EmbeddingPolicy); i >= 0 && f.policy == opened.policy {
+		f.policy = i
+	}
+	return f
+}
+
+// kbApply is how far an apply got, file by file, from workspace.scaffold's answers.
+type kbApply struct {
+	created, kept, updated, skipped []string
+	refused                         []string // "path: why"
+}
+
+func (a kbApply) String() string {
+	s := fmt.Sprintf("%d created, %d kept", len(a.created), len(a.kept))
+	if len(a.updated) > 0 {
+		s += fmt.Sprintf(", %d updated", len(a.updated))
+	}
+	if len(a.skipped) > 0 {
+		s += fmt.Sprintf(", %d skipped", len(a.skipped))
+	}
+	if len(a.refused) > 0 {
+		s += fmt.Sprintf(", %d refused (%s)", len(a.refused), a.refused[0])
+	}
+	return s
+}
+
+// errKBRefused is an apply whose every call answered but some file was refused.
+var errKBRefused = errors.New("some files were refused")
+
+// applyKBType sends plan to workspace ws by workspace.scaffold, in batches of rpc.MaxScaffoldFiles:
+// one call each. ctx's end stops between batches. A call's error ends the apply with what landed so
+// far; a refused file is reported, and makes the apply's error errKBRefused once all have been sent.
+func (h *Host) applyKBType(ctx context.Context, ws string, plan []kbtype.Write) (kbApply, error) {
+	var a kbApply
+	for start := 0; start < len(plan); start += rpc.MaxScaffoldFiles {
+		if err := ctx.Err(); err != nil {
+			return a, err
+		}
+		batch := plan[start:min(start+rpc.MaxScaffoldFiles, len(plan))]
+		files := make([]any, len(batch))
+		for i, w := range batch {
+			m := map[string]any{"path": w.Rel, "content": string(w.Text)}
+			if w.Managed {
+				m["managed"] = true
+			}
+			if w.Immutable != "" {
+				m["immutable"] = w.Immutable
+			}
+			files[i] = m
+		}
+		res, err := h.call(ctx, "workspace.scaffold", ws, files)
+		for _, r := range asList(res) {
+			m := asMap(r)
+			p := str(m, "path")
+			switch str(m, "outcome") {
+			case rpc.ScaffoldCreated:
+				a.created = append(a.created, p)
+			case rpc.ScaffoldKept:
+				a.kept = append(a.kept, p)
+			case rpc.ScaffoldUpdated:
+				a.updated = append(a.updated, p)
+			case rpc.ScaffoldSkipped:
+				a.skipped = append(a.skipped, p)
+			default:
+				a.refused = append(a.refused, p+": "+str(m, "error"))
+			}
+		}
+		if err != nil {
+			return a, err
+		}
+	}
+	if len(a.refused) > 0 {
+		return a, errKBRefused
+	}
+	return a, nil
+}
+
+// kbPlan is t's plan for a KB, AutoDoc's own KB_OPERATIONS.md included.
+func (h *Host) kbPlan(s *stagedKBType) []kbtype.Write {
+	return s.t.Plan(kbtype.Vars{Date: time.Now().Format(time.DateOnly), AutoDocVersion: h.aboutInfo.Version,
+		URL: s.url, Commit: s.commit}, autodoc.KBOperations)
+}
+
+// kbTypeApply is kbtype.apply: the KB type named (a built-in's name) or at a git URL, applied to
+// the active workspace. Create-only, so it also finishes an add whose type stopped part way.
+func (h *Host) kbTypeApply(x Invocation) error {
+	if len(x.Args) != 1 {
+		return errors.New("kbtype.apply: takes a KB type's name or git URL")
+	}
+	url := x.Args[0]
+	for _, c := range builtinKBTypes {
+		if c.name == url {
+			url = c.url
+		}
+	}
+	if !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("kbtype.apply: %s is not a built-in KB type's name or an https:// git URL", url)
+	}
+	ws, ok := h.activeWorkspaceInfo()
+	if !ok {
+		return errors.New("kbtype.apply: no workspace is open")
+	}
+	h.notifyOngoing("kbtype", "staging "+url+"…")
+	type answer struct {
+		s   stagedKBType
+		a   kbApply
+		err error
+	}
+	do(h, func(ctx context.Context) answer {
+		s := h.stageKB(ctx, url)
+		if s.err != nil {
+			return answer{s: s, err: s.err}
+		}
+		defer os.RemoveAll(s.stage)
+		a, err := h.applyKBType(ctx, ws.name, h.kbPlan(&s))
+		return answer{s: s, a: a, err: err}
+	}, func(r answer) {
+		switch {
+		case r.s.err != nil:
+			h.notifyDone("kbtype", "not a KB type: "+r.err.Error())
+		case r.err != nil:
+			h.notifyDone("kbtype", ws.name+": "+r.s.t.Title+" stopped part way ("+r.a.String()+"): "+wireMessage(r.err))
+		default:
+			h.notifyDone("kbtype", ws.name+": "+r.s.t.Title+" applied: "+r.a.String())
+		}
+	})
+	return nil
+}

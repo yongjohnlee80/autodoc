@@ -84,7 +84,8 @@ type Host struct {
 	// the models the document binds
 	workspaces, managed *rows[wsInfo] // the daemon's workspaces: the picker's and the manager's
 	wsProviders         *tuidecl.ListModel
-	vectors             *rows[vectorRow] // the workspace's models (vectors.go)
+	kbTypes             *tuidecl.ListModel // the add dialog's KB type field (kbtype.go)
+	vectors             *rows[vectorRow]   // the workspace's models (vectors.go)
 
 	// the pickers (pick.go): the search's, File › Open's and the draft's name (the outline's is
 	// outline.go's); the search's own state, and its words
@@ -161,6 +162,10 @@ type Host struct {
 	// the settings dialog (settings.go): what it was opened on, and the tab it is on
 	settings    settingsBase
 	settingsTab int
+	// kbTypeSeq fences the KB type field's staging, and kbStaged is the type it staged (kbtype.go)
+	kbTypeSeq uint64
+	kbStaged  *stagedKBType
+	kbStage   func(context.Context, string) stagedKBType // a test's stager; nil is stageKBType's clone
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
 	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins
@@ -392,6 +397,7 @@ func newHost(session *Session, opt Options) *Host {
 		watches:         map[string]*diskWatch{},
 		diskFS:          localDisk,
 		wsProviders:     tuidecl.NewListModel("key", "label"),
+		kbTypes:         tuidecl.NewListModel("key", "label"),
 		cellFontModel:   fontModel(),
 		termFontModel:   termFontModel(),
 		proseFontModel:  fontModel(),

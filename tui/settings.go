@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -532,6 +534,12 @@ func (h *Host) startAddWorkspace() {
 		w := wsInfo{name: "untitled", root: homeDir(), include: workspace.DefaultInclude(), exclude: workspace.DefaultExclude(),
 			sectionTokens: store.SectionTokensDefault, embeddingPolicy: store.EmbeddingAlways,
 			db: databasesInfo{destination: store.DestinationLocal}}
+		h.dropKBType() // a fresh dialog: no type staged, and none still staging may land
+		h.kbTypes.Reset(kbTypeRows())
+		h.set("App.kbTypeIndex", -1)
+		h.set("App.kbTypeIndex", 0)
+		h.set("App.kbTypeSummary", noneNote)
+		h.set("App.kbTypeCustomShown", false)
 		h.showSettings(settingsBase{w: w, adding: true, providers: providers, databases: databases, registered: h.kinds.Chunked, derived: h.kinds.Derived}, 0, "")
 	})
 }
@@ -655,14 +663,6 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	h.set("App.settingsTextsNoted", len(dropped) > 0)
 	h.set("App.settingsDocsOffered", len(base.derived) > 0)
 	h.set("App.settingsDocsLabel", "documents: "+strings.Join(base.derived, ", "))
-	var unread []string
-	for _, e := range kind.DerivedExtensions {
-		if !slices.Contains(base.derived, e) {
-			unread = append(unread, e)
-		}
-	}
-	h.set("App.settingsUnreadShown", len(unread) > 0)
-	h.set("App.settingsUnreadLine", "☐ "+strings.Join(unread, ", ")+" · not read here")
 	h.set("App.settingsCodeOffered", len(base.registered) > 0)
 	// short, so the files frame fits: the excludes code brings are written where the user sees
 	// them, in the exclude field
@@ -704,6 +704,35 @@ func (h *Host) browseRoot(root string) {
 
 func (h *Host) rootChosen(folder string) { h.setField("App.settingsRoot", folder) }
 
+// newRootFolder is the add dialog's New Folder: it creates the folder the root field names (a
+// leading ~ is the home directory), and its parents, so a new KB can start in an empty folder.
+// The TUI and the daemon share the disk, as Browse… does.
+func (h *Host) newRootFolder(root string) {
+	root = strings.TrimSpace(root)
+	if rest, ok := strings.CutPrefix(root, "~"); ok && (rest == "" || strings.HasPrefix(rest, "/")) {
+		root = homeDir() + rest
+	}
+	if !filepath.IsAbs(root) {
+		h.notify("New Folder: type the folder's full path in the root field first")
+		return
+	}
+	root = filepath.Clean(root)
+	if info, err := os.Stat(root); err == nil {
+		if info.IsDir() {
+			h.notify(root + " exists already")
+		} else {
+			h.notify(root + " is a file")
+		}
+		return
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		h.notify("New Folder: " + err.Error())
+		return
+	}
+	h.setField("App.settingsRoot", root)
+	h.notify("created " + root)
+}
+
 // saveSettings saves the dialog: a new workspace is added, then given what differs from the
 // defaults; an existing one is configured with what changed.
 func (h *Host) saveSettings(f settingsForm) {
@@ -742,13 +771,21 @@ func (h *Host) saveSettings(f settingsForm) {
 // the workspace exists with the defaults, and the dialog opens again on it to edit.
 func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(error)) {
 	name, root := strings.TrimSpace(f.name), strings.TrimSpace(f.root)
+	// the type as staged when Add is pressed: a later pick doesn't touch this add (ADR 1792349867 §4.4)
+	kb := h.kbStaged
+	if kb != nil {
+		f = base.withKBType(f, kb.t)
+	}
 	if _, err := base.changes(f); err != nil {
 		refuse(err)
 		return
 	}
 	type answer struct {
 		added   bool
+		unread  bool // added, but not read back: no dialog on a zero wsInfo
 		w       wsInfo
+		applied kbApply
+		partial bool // the KB type stopped part way: what landed is in applied
 		changes map[string]any
 		err     error
 	}
@@ -759,12 +796,23 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 		a := answer{added: true}
 		list, err := h.listWorkspaces(ctx)
 		if err != nil {
-			a.err = err
+			a.err, a.unread = err, true
 			return a
 		}
 		for _, w := range list {
 			if w.name == name {
 				a.w = w
+			}
+		}
+		if a.w.name == "" {
+			a.err, a.unread = fmt.Errorf("%s is not in the list read back", name), true
+			return a
+		}
+		// the type's files before the configure, so the schema it names exists (ADR 1792349867 §4.3)
+		if kb != nil {
+			if a.applied, a.err = h.applyKBType(ctx, name, h.kbPlan(kb)); a.err != nil {
+				a.partial = true
+				return a
 			}
 		}
 		made := base
@@ -776,17 +824,36 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 		}
 		return a
 	}, func(a answer) {
+		if a.added {
+			h.dropKBType() // the stage's work is done, whatever the outcome; a resume stages again
+		}
+		made := base
+		made.w, made.adding = a.w, false
 		switch {
 		case !a.added:
 			refuse(a.err)
-		case a.err != nil:
-			h.failed("added workspace "+name+", but its settings were not saved", a.err)
-			made := base
-			made.w, made.adding = a.w, false
+		case a.unread:
+			h.failed("added workspace "+name+", but could not read it back", a.err)
 			h.loadWorkspaces()
-			h.showSettings(made, h.settingsTabNow(), "added with the defaults; not saved: "+wireMessage(a.err), f)
+		case a.partial:
+			h.failed("added workspace "+name+", but its KB type stopped part way ("+a.applied.String()+")", a.err)
+			h.loadWorkspaces()
+			h.showSettings(made, h.settingsTabNow(), "added; the KB type stopped part way: "+a.applied.String()+
+				". Its settings are not saved yet: Save saves them, and kbtype.apply "+kb.url+" finishes the files.", f)
+		case a.err != nil:
+			what := "added with the defaults"
+			if kb != nil {
+				what = "scaffolded (" + a.applied.String() + ")"
+			}
+			h.failed("added workspace "+name+", but its settings were not saved", a.err)
+			h.loadWorkspaces()
+			h.showSettings(made, h.settingsTabNow(), what+"; not saved: "+wireMessage(a.err), f)
 		default:
-			h.notify("added workspace " + name)
+			msg := "added workspace " + name
+			if kb != nil {
+				msg += " as " + kb.t.Title + ": " + a.applied.String()
+			}
+			h.notify(msg)
 			h.loadWorkspaces()
 		}
 	})
