@@ -211,6 +211,7 @@ func TestScaffoldBounds(t *testing.T) {
 	ctx := context.Background()
 	rs, err := m.Scaffold(ctx, "kb", []rpc.ScaffoldFile{
 		{Path: "../escape.md", Content: []byte("x")},
+		{Path: "notes/../sneaky.md", Content: []byte("x")}, // not clean: the daemon refuses what the filesystem would resolve
 		{Path: "/abs.md", Content: []byte("x")},
 		{Path: "", Content: []byte("x")},
 		{Path: "bin.md", Content: []byte("a\x00b")},
@@ -228,6 +229,9 @@ func TestScaffoldBounds(t *testing.T) {
 		if r.Outcome != want || (want == rpc.ScaffoldRefused && r.Err == "") {
 			t.Errorf("%q: %s %q, want %s", r.Path, r.Outcome, r.Err, want)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "sneaky.md")); err == nil {
+		t.Fatal("a path that was not clean was written")
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "escape.md")); err == nil {
 		t.Fatal("a file was written outside the root")
