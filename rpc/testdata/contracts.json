@@ -1,5 +1,5 @@
 {
-  "protocol": 26,
+  "protocol": 27,
   "min_protocol": 12,
   "verbs": [
     {
@@ -1450,7 +1450,7 @@
     },
     {
       "verb": "workspace.scaffold",
-      "since": 26,
+      "since": 27,
       "scope": "global",
       "audience": "user",
       "effect": "write",
