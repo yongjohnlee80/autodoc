@@ -43,13 +43,9 @@ Dialog {
                         Text { text: ""; visible: App.settingsAdding }
                         Text { text: "KB type: the folders and files to start it with"; visible: App.settingsAdding }
                         ComboBox { id: sKBType; visible: App.settingsAdding; model: App.kbTypes; textRole: "label"; currentIndex: App.kbTypeIndex; onActivated: App.kbTypePicked(index) }
-                        Flex {
-                            direction: Tui.Horizontal
-                            visible: App.kbTypeCustomShown
-                            TextField { id: sKBURL; Layout.fillWidth: true; text: "https://" }
-                            Text { text: " " }
-                            Button { text: "Stage"; onClicked: App.kbTypeURL(sKBURL.text) }
-                        }
+                        Text { text: "the KB type's https:// git URL"; visible: App.kbTypeCustomShown }
+                        TextField { id: sKBURL; visible: App.kbTypeCustomShown; text: "https://" }
+                        Button { text: "Stage"; visible: App.kbTypeCustomShown; onClicked: App.kbTypeURL(sKBURL.text) }
                         Text { text: App.kbTypeSummary; visible: App.settingsAdding; wrapMode: Tui.WordWrap }
                         Text { text: "" }
                         Text { text: "frontmatter schema (relative to the root, or absolute; blank for none)" }
