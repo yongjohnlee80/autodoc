@@ -101,6 +101,7 @@ type Engine struct {
 	core    *widget.EditorCore
 	global  *lua.LTable
 	notify  func(string)
+	notices func(Notice) error
 	timeout time.Duration
 	// cur is the core the command running now edits; the editor object's methods reach it
 	cur *widget.EditorCore
@@ -144,6 +145,7 @@ type Option func(*config)
 type config struct {
 	global   string
 	notify   func(string)
+	notices  func(Notice) error
 	timeout  time.Duration
 	clock    func() time.Time
 	location *time.Location
@@ -157,6 +159,19 @@ func WithGlobal(name string) Option { return func(c *config) { c.global = name }
 // WithNotify is where the global table's notify(message) goes: a status line, a toast. Unset,
 // notify does nothing.
 func WithNotify(fn func(string)) Option { return func(c *config) { c.notify = fn } }
+
+// Notice is a notification with an id, as notify(message, {id = …, ongoing = …}) gives it: with
+// Ongoing, a toast updated in place under ID; without, that toast ended.
+type Notice struct {
+	Text    string
+	ID      string
+	Ongoing bool
+}
+
+// WithNotices is where notify(message, opts) goes when opts is given. fn's error is raised in the
+// script, as a bad argument is: the host checks the notice. Unset, the message goes to WithNotify's
+// function and the options are ignored.
+func WithNotices(fn func(Notice) error) Option { return func(c *config) { c.notices = fn } }
 
 // WithTimeout is how long one command's script may run before it is stopped (DefaultTimeout).
 func WithTimeout(d time.Duration) Option { return func(c *config) { c.timeout = d } }
@@ -189,17 +204,12 @@ func New(core *widget.EditorCore, opts ...Option) *Engine {
 		"getfenv", "setfenv", "newproxy", "_printregs"} {
 		L.SetGlobal(name, lua.LNil)
 	}
-	e := &Engine{L: L, core: core, notify: cfg.notify, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location,
+	e := &Engine{L: L, core: core, notify: cfg.notify, notices: cfg.notices, timeout: cfg.timeout, clock: cfg.clock, location: cfg.location,
 		globalName: cfg.global, gates: map[string]Gate{}, domainGates: map[string]Gate{}, envs: map[*lua.LTable]*gatedScript{},
 		shells: map[*lua.LTable]*Shell{}, handlers: map[string][]*lua.LFunction{}}
 	e.global = L.NewTable()
 	L.SetField(e.global, "command", L.NewFunction(e.luaCommand))
-	L.SetField(e.global, "notify", L.NewFunction(func(L *lua.LState) int {
-		if e.notify != nil {
-			e.notify(L.CheckString(1))
-		}
-		return 0
-	}))
+	L.SetField(e.global, "notify", L.NewFunction(e.luaNotify))
 	L.SetGlobal(cfg.global, e.global)
 	e.registerEditorType()
 	e.registerText()
@@ -567,4 +577,36 @@ func literal(t *lua.LTable) string {
 		fields = append(fields[:8], "…")
 	}
 	return "{" + strings.Join(fields, ", ") + "}"
+}
+
+// luaNotify is notify(message [, opts]): opts is a table of id (a string) and ongoing (a boolean),
+// each optional. Without opts, or with no WithNotices, the message goes to WithNotify's function.
+func (e *Engine) luaNotify(L *lua.LState) int {
+	msg := L.CheckString(1)
+	if L.GetTop() < 2 || L.Get(2) == lua.LNil || e.notices == nil {
+		if e.notify != nil {
+			e.notify(msg)
+		}
+		return 0
+	}
+	opts := L.CheckTable(2)
+	n := Notice{Text: msg}
+	switch v := opts.RawGetString("id").(type) {
+	case lua.LString:
+		n.ID = string(v)
+	case *lua.LNilType:
+	default:
+		L.ArgError(2, "id must be a string")
+	}
+	switch v := opts.RawGetString("ongoing").(type) {
+	case lua.LBool:
+		n.Ongoing = bool(v)
+	case *lua.LNilType:
+	default:
+		L.ArgError(2, "ongoing must be a boolean")
+	}
+	if err := e.notices(n); err != nil {
+		L.RaiseError("notify: %s", err.Error())
+	}
+	return 0
 }

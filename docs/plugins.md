@@ -120,7 +120,7 @@ key   = "r"
 
 A manifest AutoDoc cannot run is listed in the Plugins menu disabled, with why. Among the reasons:
 
-- an unknown kind, or a protocol outside 1 to 7;
+- an unknown kind, or a protocol outside 1 to 8;
 - an unknown key, at any level (`dialog.colour`): AutoDoc decodes the manifest strictly;
 - a name taken, no command;
 - a placement, `esc` or height it does not know;
@@ -142,7 +142,7 @@ AutoDoc's commands: file.save", and a table it shows: "shows a table of results 
 
 ## Versions
 
-AutoDoc speaks plugin protocols **1 to 7**, and speaks to each plugin the one its manifest says. A
+AutoDoc speaks plugin protocols **1 to 8**, and speaks to each plugin the one its manifest says. A
 plugin of an earlier protocol runs as it always has, and is sent what it always was.
 
 - **A manifest that declares any protocol-2 key says `protocol = 2`.** Those keys are
@@ -167,10 +167,13 @@ plugin of an earlier protocol runs as it always has, and is sent what it always 
   `protocol = 7`.** AutoDoc hands it its session slot in `plugin.open`, tells it the reason in
   `plugin.close`, and sends `plugin.command` with `args` (below). An older AutoDoc refuses the
   manifest, so a plugin never runs where its sign-in would be asked again at every start.
+- **A plugin that posts notifications says `protocol = 8`.** It may send `host.notify` (below).
+  An older AutoDoc refuses the manifest, so a plugin never reports into a host that would drop its
+  messages without a word.
 - **The protocol rises** when a manifest can declare something an older AutoDoc must not run
   without, when a meaning changes, or when a plugin must handle something new. Everything a
   protocol adds is declared in the manifest, so a plugin is never sent what it did not ask for.
-- The Go SDK speaks 1 to 7, and answers `plugin.open` with the protocol it was opened at.
+- The Go SDK speaks 1 to 8, and answers `plugin.open` with the protocol it was opened at.
 
 ## The run
 
@@ -220,6 +223,7 @@ Each notification carries one map.
 | plugin | `host.rows` | 4 | `{id, rows, more}`: the table's next rows, answering `plugin.table.fetch`; from 5 also `{kinds}` |
 | plugin | `host.table_end` | 4 | `{id, error}`: the table's rows ended before the last; `error`, when set, says why |
 | plugin | `host.session` | 7 | `{values}`: the plugin's session slot replaced, a map of strings (below) |
+| plugin | `host.notify` | 8 | `{message, id, ongoing}`: a notification; with an id, a toast updated in place while `ongoing`, ended by one without it (below) |
 | plugin | `host.close` | 1 | `{}`: asks to close; a card asks its panel to close, and runs on |
 
 - **Keys.** `key` is a printable key's text (`" "` for Space), or one of `Up`, `Down`, `Left`,
@@ -411,6 +415,23 @@ loaded rows sortable. The plugin sends the rows; AutoDoc asks for more as the us
   by the signals without one.
 - **Arguments.** `plugin.command {id, args}` carries a command's arguments, from the plugin's own
   Lua package (`autodoc.plugin.run`, below).
+
+### Notifications (protocol 8)
+
+- **`host.notify {message}`** shows a toast in AutoDoc's corner and keeps it in the notification
+  history (SPC h), as AutoDoc's own notices are.
+- **A long task: `{message, id, ongoing: true}`** shows a toast that stays and is updated in place
+  by each notice with the same id. **`{message, id}`**, without `ongoing`, ends it: it lingers, then
+  goes, and the history keeps that last message. An id posted `ongoing` again after its end starts
+  again, a new toast.
+- **Ids are the plugin's own.** AutoDoc names them for the plugin, so two plugins with the same id,
+  or AutoDoc's own notices, never touch each other's.
+- **A stopped plugin's tasks end.** When a plugin stops (turned off, updated, removed, quitting,
+  crashed), each id it left ongoing is ended with "<Title>: stopped". A card hidden is not stopped:
+  its tasks run on. A notice sent once the plugin began to stop is dropped.
+- **Bounds.** A message is 1 to 1024 bytes of UTF-8; an id at most 64 of letters, digits, `.`, `_`
+  and `-`; `ongoing` needs an id; at most 16 ids ongoing at once. A notice past a bound, or of the
+  wrong types, is refused: nothing shows, and the plugin's log says which rule, never the message.
 
 ### A plugin's Lua package (`lua/`)
 
@@ -666,6 +687,23 @@ func (a *db) Close() {
 	if r := a.peer.CloseReason(); r == plugin.CloseQuit || r == plugin.CloseRemove {
 		a.logout()
 	}
+}
+```
+
+**Protocol 8** adds `Peer.Notify(plugin.Notice{Message, ID, Ongoing})`, which sends `host.notify`.
+It returns `plugin.ErrNoNotify` when AutoDoc opened the plugin at a protocol before 8, and an error
+wrapping `plugin.ErrNotice` for a notice past a bound, sending nothing.
+
+```go
+func (a *db) run(sql string) {
+	id := fmt.Sprintf("run-%d", a.next())
+	_ = a.peer.Notify(plugin.Notice{Message: "running…", ID: id, Ongoing: true})
+	res, err := a.query(sql)
+	if err != nil {
+		_ = a.peer.Notify(plugin.Notice{Message: "failed: " + err.Error(), ID: id})
+		return
+	}
+	_ = a.peer.Notify(plugin.Notice{Message: fmt.Sprintf("%d rows", res.Rows), ID: id})
 }
 ```
 

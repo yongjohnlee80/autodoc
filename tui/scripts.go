@@ -17,6 +17,7 @@ import (
 	"github.com/yongjohnlee80/golib/tui/widget"
 
 	"github.com/yongjohnlee80/autodoc/core/procstat"
+	"github.com/yongjohnlee80/autodoc/plugin"
 	"github.com/yongjohnlee80/autodoc/script"
 )
 
@@ -46,7 +47,7 @@ func (h *Host) loadScripts() {
 // startScripts makes a new engine, binds the program's functions into it and loads AutoDoc's
 // scripts, then the user's: what failed to load.
 func (h *Host) startScripts() []error {
-	h.scripts = script.New(h.core, script.WithGlobal("autodoc"), script.WithNotify(h.notify), script.WithBuffers(luaBuffers{h}))
+	h.scripts = script.New(h.core, script.WithGlobal("autodoc"), script.WithNotify(h.notify), script.WithNotices(h.luaNotice), script.WithBuffers(luaBuffers{h}))
 	if h.cat != nil {
 		h.scripts.SetRegistrar(h.registerLua)
 	}
@@ -208,5 +209,15 @@ func (l luaHostOf) runOwnPlugin(script, id string, args []string) error {
 		return fmt.Errorf("autodoc.plugin.run: %s needs protocol 7 for arguments; its manifest says %d", e.m.Name, e.m.Protocol)
 	}
 	l.h.plugins.runPluginCommandArgs(key, id, args)
+	return nil
+}
+
+// luaNotice is autodoc.notify(message, {id = …, ongoing = …}): checked as a plugin's host.notify is
+// (plugin.CheckNotice), its ids in the lua namespace, shared by every script.
+func (h *Host) luaNotice(n script.Notice) error {
+	if err := plugin.CheckNotice(plugin.Notice{Message: n.Text, ID: n.ID, Ongoing: n.Ongoing}); err != nil {
+		return err
+	}
+	h.notifyAs("lua", noticeReq{id: n.ID, text: n.Text, ongoing: n.Ongoing})
 	return nil
 }

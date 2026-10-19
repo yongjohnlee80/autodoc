@@ -84,7 +84,7 @@ import (
 // or for something a plugin must handle (ADR 1791268009 §1).
 const (
 	MinProtocol = 1
-	Protocol    = 7
+	Protocol    = 8
 )
 
 // The notifications the host sends.
