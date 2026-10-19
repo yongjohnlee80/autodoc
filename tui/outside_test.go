@@ -209,9 +209,9 @@ func TestReopeningTheOpenOutsideFileKeepsThePage(t *testing.T) {
 	r.h.p.Post(func() { r.h.openAbsolute(abs) })
 	r.waitOpen(t, "", abs)
 	gen := r.file().gen
-	// openOutside is where Open file… lands once file.locate answers; a load would number a new
-	// open at once, on the loop
-	if g := onLoop(r, func() uint64 { r.h.openOutside(abs); return r.h.file.gen }); g != gen {
+	// an open outside every workspace is where Open file… lands once file.locate answers; a load
+	// would number a new open at once, on the loop
+	if g := onLoop(r, func() uint64 { r.h.openIn("", abs); return r.h.file.gen }); g != gen {
 		t.Errorf("reopening read the file again (gen %d -> %d)", gen, g)
 	}
 }

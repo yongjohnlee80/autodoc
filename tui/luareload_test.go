@@ -98,7 +98,7 @@ end }`)
 
 	// saving the user's script in AutoDoc reloads it
 	path := filepath.Join(dir, "a.lua")
-	r.h.p.Post(func() { r.h.setDirty(false); r.h.openOutside(path) }) // the draft's edits are the test's, not to keep
+	r.h.p.Post(func() { r.h.setDirty(false); r.h.openIn("", path) }) // the draft's edits are the test's, not to keep
 	r.s.WaitFor(t, "a.lua open", func(string) bool { n := r.file(); return n.open && n.path == path })
 	r.clearNotices()
 	src, _ := os.ReadFile(path)
