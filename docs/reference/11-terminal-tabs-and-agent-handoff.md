@@ -42,7 +42,7 @@ In `tui/agentinstances.go`, AutoDoc strictly separates an agent's human-facing d
 
 ## 2. Operating the Terminal and Agent Drawers
 
-Both the shell terminal drawer (`F12` / `SPC t` / `:terminal`) and the agent drawer (`SPC g`) share a unified tab strip controller (`tui/tabmenus.go` over `widget.TerminalPanel`) while remaining independent dock panels that can be placed on any window edge (`left`, `right`, `top`, `bottom`) or floated freely (`Alt`+drag or `SPC L`).
+Both the shell terminal drawer (`` SPC ` `` / `:terminal`) and the agent drawer (`SPC g`) share a unified tab strip controller (`tui/tabmenus.go` over `widget.TerminalPanel`) while remaining independent dock panels that can be placed on any window edge (`left`, `right`, `top`, `bottom`) or floated freely (`Alt`+drag or `SPC L`).
 
 ### Tab Strip Controls and Lifecycle
 
