@@ -194,7 +194,10 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	r.s.WaitFor(t, "the settings closed", func(sc string) bool { return !strings.Contains(sc, "GlobeMap settings") })
 	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
 	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations") // the relations by default
-	r.s.WaitFor(t, "the settled notice", func(string) bool {    // its progress toast ends saying so, kept
+	// a text screen paints no native view, and a window's paint is what hands the load its view: the
+	// cell hands it one, and the load settles as it does in a window
+	onLoop(r, func() bool { g.sendView(gui.Size{W: 800, H: 600}, true); return true })
+	r.s.WaitFor(t, "the settled notice", func(string) bool { // its progress toast ends saying so, kept
 		return onLoop(r, func() bool {
 			return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return n.text == "GlobeMap: kb settled · 2 documents, 0 links" })
 		})
