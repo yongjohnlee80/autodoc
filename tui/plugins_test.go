@@ -1058,9 +1058,8 @@ func TestAddingAPluginFromAGitURLAsksFirst(t *testing.T) {
 
 	r.keys(t, key('n'))
 	r.waitNotice(t, "echo not added")
-	if got := entries(t, dir); len(got) != 0 {
-		t.Fatalf("No left %v in the folder", got)
-	}
+	// the candidate's end removes its stage on a worker, after the notice: wait for it
+	r.s.WaitFor(t, "No's stage removed", func(string) bool { return len(entries(t, dir)) == 0 })
 
 	r.h.p.Post(func() { r.h.plugins.addPlugin(url) })
 	r.question(t)
@@ -1105,9 +1104,8 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 	r.question(t)
 	r.keys(t, key('y'))
 	r.waitNotice(t, "echo not installed: its build failed (exit status 4): nope")
-	if got := entries(t, dir); len(got) != 0 {
-		t.Fatalf("a refused plugin left %v in the folder", got)
-	}
+	// the candidate's end removes its stage on a worker, after the notice: wait for it
+	r.s.WaitFor(t, "the refused plugin's stage removed", func(string) bool { return len(entries(t, dir)) == 0 })
 	if log, _ := os.ReadFile(filepath.Join(logs, "echo-install.log")); !strings.Contains(string(log), "nope") {
 		t.Errorf("the install log: %q", log)
 	}
