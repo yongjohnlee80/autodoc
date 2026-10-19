@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/yongjohnlee80/golib/search"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/core/registrations"
 	serving "github.com/yongjohnlee80/autodoc/internal/daemon"
@@ -106,7 +107,7 @@ func TestTheEditTabOffersOnlyTheDaemonsTypes(t *testing.T) {
 				o.Registrations = reg
 			}
 			d := startManagedWith(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, o)
-			r := runTUI(t, NewSession(d.sock, nil), Options{Registrations: proTables})
+			r := runTUISized(t, NewSession(d.sock, nil), Options{Registrations: proTables}, 100, 60) // the stacked tab whole
 			r.s.WaitFor(t, "the daemon's kinds and the files", func(string) bool {
 				return onLoop(r, func() bool { return r.h.daemonTables.Chunkers != nil }) && len(r.listed()) > 0
 			})
@@ -133,7 +134,7 @@ func TestTheEditTabOffersTheDaemonsDocuments(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := startManagedWith(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, serving.Options{Registrations: reg})
-	r := runTUI(t, NewSession(d.sock, nil), Options{Registrations: reg.Tables()})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{Registrations: reg.Tables()}, 100, 60) // the stacked tab whole
 	r.s.WaitFor(t, "the daemon's kinds and the files", func(string) bool {
 		return onLoop(r, func() bool { return len(r.h.kinds.Derived) > 0 }) && len(r.listed()) > 0
 	})
@@ -143,4 +144,29 @@ func TestTheEditTabOffersTheDaemonsDocuments(t *testing.T) {
 		return strings.Contains(f, "documents: .docx, .htm, .html") && !strings.Contains(f, "not read here") &&
 			strings.Contains(f, "exclude globs")
 	})
+}
+
+// TestTheSettingsBringTheFocusedFieldIntoView: the Edit tab's frames are stacked in a ScrollView. On
+// a 30-row screen the files frame starts below the fold, and its exclude field, taking focus, is
+// scrolled into view with its label.
+func TestTheSettingsBringTheFocusedFieldIntoView(t *testing.T) {
+	d := startManagedWith(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, serving.Options{})
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitFor(t, "the files", func(string) bool { return len(r.listed()) > 0 })
+	r.openSettings(t, "kb", 0)
+	if strings.Contains(flat(r.s.String()), "exclude globs") {
+		t.Fatalf("the exclude field shows before any scroll, so this screen proves nothing:\n%s", r.s.String())
+	}
+	r.h.p.Post(func() {
+		c, ok := r.h.p.Find("sExclude")
+		if !ok {
+			t.Error("no sExclude in the dialog")
+			return
+		}
+		c.(interface{ Context() *tuicore.Context }).Context().RequestFocus()
+	})
+	r.s.WaitFor(t, "the exclude field in view", func(sc string) bool { return strings.Contains(flat(sc), "exclude globs") })
+	if !r.focused("sExclude") {
+		t.Fatal("the exclude field does not have the keyboard")
+	}
 }
