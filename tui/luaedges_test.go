@@ -77,7 +77,7 @@ autodoc.on("ping", function(ed) ed:insert("second ran") end)`)
 	onLoop(r, func() bool {
 		c := &candidate{kind: "lua", name: "x", repo: "https://example.invalid/x.git", stage: stage, commit: "abc1234",
 			pkg: packageManifest{Name: "x", Version: "1", Requires: []string{"clipboard"}}}
-		if r.h.cands.begin(c, r.h.askPackage) == nil {
+		if r.h.cands.begin(c, r.h.askPackage, r.h.hidePackage) == nil {
 			r.h.cands.show(c)
 		}
 		return true

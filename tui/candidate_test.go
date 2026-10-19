@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -374,5 +375,196 @@ func TestDefaultFirst(t *testing.T) {
 	}
 	if got := code(defaultFirst(es, "x")); !slices.Equal(got, []string{"a", "b", "c"}) {
 		t.Errorf("no default: %v", got)
+	}
+}
+
+// luaPackageRepo is a repository of a Lua package named name.
+func luaPackageRepo(t *testing.T, name string) string {
+	t.Helper()
+	repo := t.TempDir()
+	writeFiles(t, repo, map[string]string{
+		"package.toml": "name = \"" + name + "\"\nversion = \"0.1.0\"\ndescription = \"says hello\"\n",
+		"init.lua":     `autodoc.command{ name = "` + name + `-pkg", run = function(ed) ed:insert("hello") end }`,
+	})
+	runGit(t, repo, "init", "-q")
+	runGit(t, repo, "add", ".")
+	runGit(t, repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", name)
+	return repo
+}
+
+// A Lua package's card replaced by another candidate's waits on its toast, whichever kind replaces
+// it: another package's question takes the card over without cancelling the first, and a plugin's
+// card takes the Lua card down, leaving no second dialog up. Each toast reopens its own card.
+func TestALuaCardReplacedWaitsOnItsToast(t *testing.T) {
+	plugins, lua := t.TempDir(), t.TempDir()
+	r, _ := pluginLuaTUI(t, plugins, nil, lua)
+	r.waitNamespaces(t)
+	alpha, beta := luaPackageRepo(t, "alpha"), luaPackageRepo(t, "beta")
+	type seen struct {
+		live  bool
+		state opState
+		stage string
+	}
+	look := func(key string) seen { // read on the loop, which owns the candidates
+		return onLoop(r, func() seen {
+			if c := r.h.cands.ops[key]; c != nil {
+				return seen{true, c.state, c.stage}
+			}
+			return seen{}
+		})
+	}
+
+	r.mustRun(t, "lua-install "+alpha)
+	r.s.WaitForText(t, "install the Lua package alpha?")
+	r.mustRun(t, "lua-install "+beta)
+	r.s.WaitForText(t, "install the Lua package beta?")
+	r.s.WaitForText(t, "the Lua package alpha waits")
+	if a := look("lua/alpha"); !a.live || a.state != opSuspended || gone(a.stage) {
+		t.Fatalf("Lua alpha, replaced by Lua beta: %+v", a)
+	}
+
+	r.h.p.Post(func() { r.h.plugins.addPlugin("file://" + namedPluginRepo(t, "gamma", "true")) })
+	r.question(t)
+	// taken down, not covered: the generic card's question was closed (a larger card would hide its text)
+	r.s.WaitFor(t, "the Lua card down", func(string) bool { return !onLoop(r, func() bool { return r.h.asker.pending }) })
+	if b := look("lua/beta"); !b.live || b.state != opSuspended || gone(b.stage) {
+		t.Fatalf("Lua beta, replaced by a plugin's card: %+v", b)
+	}
+
+	// beta's toast while gamma's card is up: the pointer can't reach a toast under that modal, so
+	// its callback runs as a Lua clone finishing would show beta's card (plugin to Lua)
+	r.s.WaitForText(t, "the Lua package beta waits")
+	onLoop(r, func() bool { r.h.cands.reopen(r.h.cands.ops["lua/beta"]); return true })
+	r.s.WaitForText(t, "install the Lua package beta?")
+	if onLoop(r, func() bool { return r.h.plugins.pendingPlugin != nil }) {
+		t.Fatal("gamma's card stayed up beside beta's")
+	}
+	if b, g := look("lua/beta"), look("plugin/gamma"); b.state != opConfirming || !g.live || g.state != opSuspended {
+		t.Fatalf("beta's toast: beta %+v, gamma %+v", b, g)
+	}
+	stage := look("lua/beta").stage
+	r.keys(t, esc()) // beta's card answered: Cancel
+	r.s.WaitFor(t, "beta cancelled", func(string) bool { return !look("lua/beta").live && gone(stage) })
+	if a := look("lua/alpha"); !a.live || a.state != opSuspended {
+		t.Fatalf("cancelling beta reached alpha: %+v", a)
+	}
+	// alpha, replaced twice and waiting all along, reopens once beta is answered
+	r.clickText(t, "the Lua package alpha waits")
+	r.s.WaitForText(t, "install the Lua package alpha?")
+	if a := look("lua/alpha"); a.state != opConfirming || gone(a.stage) {
+		t.Fatalf("alpha's toast after beta: %+v", a)
+	}
+}
+
+// handingCore is a scripted Core whose agents take every task handed to them.
+type handingCore struct{ *scriptedCore }
+
+func (handingCore) HandTask(AgentRef, TaskRef, string, func(error)) error { return nil }
+
+// scriptedCandidate is a live plugin candidate over a real, pristine stage, its card shown counted,
+// on a scripted Core whose background answers wait until delivered and whose agents take tasks.
+func scriptedCandidate(t *testing.T) (*scriptedCore, *candidates, *candidate, *int) {
+	t.Helper()
+	s := newScripted("kb")
+	s.deferred = true
+	cs := newCandidates(handingCore{s})
+	repo := pluginRepo(t, "Echo", "true")
+	c := &candidate{kind: "plugin", name: "echo", commit: runGit(t, repo, "rev-parse", "HEAD"), stage: repo, toasted: true}
+	shown := 0
+	if err := cs.begin(c, func(*candidate) { shown++ }, func(*candidate) {}); err != nil {
+		t.Fatal(err)
+	}
+	return s, cs, c, &shown
+}
+
+// Two Lua cards in turn: the second question takes the generic card over, and the first, replaced,
+// waits on its toast, still live; nothing ends it.
+func TestASecondLuaCardKeepsTheFirstCandidate(t *testing.T) {
+	s := newScripted("kb")
+	cs := newCandidates(s)
+	h := &Host{asker: newAsker(s), cands: cs}
+	first := &candidate{kind: "lua", name: "alpha", commit: strings.Repeat("1", 40), stage: t.TempDir(), pkg: packageManifest{Name: "alpha"}}
+	second := &candidate{kind: "lua", name: "beta", commit: first.commit, stage: t.TempDir(), pkg: packageManifest{Name: "beta"}}
+	for _, c := range []*candidate{first, second} {
+		if err := cs.begin(c, h.askPackage, h.hidePackage); err != nil {
+			t.Fatal(err)
+		}
+		cs.show(c)
+	}
+	if first.state != opSuspended || cs.ops[first.key()] != first || gone(first.stage) {
+		t.Fatalf("the replaced Lua candidate: state %d, live %v, stage gone %v", first.state, cs.ops[first.key()] == first, gone(first.stage))
+	}
+}
+
+// While Audit… makes its copy, the candidate is copying: the old toast reopens nothing, Install and
+// Cancel are refused, and another Audit does not start. The copy's answer then hands it over, and
+// the candidate, suspended, reopens from its toast as before.
+func TestAnAuditCopyInFlightCannotBeClaimed(t *testing.T) {
+	s, cs, c, shown := scriptedCandidate(t)
+	defer cs.Stopped()
+	cs.auditing = c
+	cs.auditWith(AgentEntry{Name: "Scribe", Ref: AgentRef{Codename: "scribe"}})
+	cs.reopen(c) // the toast of the audit before
+	if cs.claim(c) || cs.cancel(c, "") || *shown != 0 || c.state != opCopying {
+		t.Fatalf("while copying: claimed or cancelled or reopened (state %d, shown %d)", c.state, *shown)
+	}
+	cs.audit(c)
+	if cs.auditing == c {
+		t.Fatal("another Audit started while the copy was made")
+	}
+	s.deliver(0)
+	if c.state != opSuspended || len(c.auditCopies) != 1 {
+		t.Fatalf("after the copy's answer: state %d, %d copies", c.state, len(c.auditCopies))
+	}
+	cs.reopen(c)
+	if c.state != opConfirming || *shown != 1 {
+		t.Fatalf("a handed-over audit's toast: state %d, shown %d", c.state, *shown)
+	}
+}
+
+// A copy whose candidate ended while it was made is removed when its answer arrives; it never moves
+// the ended candidate.
+func TestAnAuditCopyAnsweredAfterItsCandidateEndedIsRemoved(t *testing.T) {
+	s, cs, c, _ := scriptedCandidate(t)
+	root := t.TempDir()
+	t.Setenv("TMPDIR", root)
+	cs.auditing = c
+	cs.auditWith(AgentEntry{})
+	cs.end(c, "cancelled")
+	s.deliver(0, 1) // the end's removal, then the copy's answer
+	if copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(copies) != 0 || c.state != opEnded {
+		t.Fatalf("copies left %v, state %d", copies, c.state)
+	}
+}
+
+// The session's end removes what candidates' workers made, answered or not: an audit copy whose
+// answer never reached the loop, and a stage or copy a worker makes after the end is removed by that
+// worker itself.
+func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("TMPDIR", root)
+	_, cs, c, _ := scriptedCandidate(t)
+	cs.auditing = c
+	cs.auditWith(AgentEntry{}) // the copy is made; its answer is held, never delivered
+	copies, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*"))
+	if len(copies) != 1 {
+		t.Fatalf("the copy: %v", copies)
+	}
+	cs.Stopped()
+	if !gone(copies[0]) || !gone(c.stage) {
+		t.Fatalf("the session's end left the copy (%v) or the stage (%v)", !gone(copies[0]), !gone(c.stage))
+	}
+
+	// a worker still working when the session ended: what it makes after is its own to remove
+	late := pluginRepo(t, "Echo", "true")
+	if _, _, err := auditCopy(context.Background(), &candidate{name: "late", stage: late, commit: runGit(t, late, "rev-parse", "HEAD")}, cs.allocs); !errors.Is(err, errSessionEnded) {
+		t.Errorf("a copy made after the end: %v", err)
+	}
+	plugins := t.TempDir()
+	if _, _, err := cloneStage(context.Background(), plugins, "file://"+pluginRepo(t, "Echo", "true"), cs.allocs); !errors.Is(err, errSessionEnded) {
+		t.Errorf("a stage made after the end: %v", err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(left) != 0 || len(entries(t, plugins)) != 0 {
+		t.Errorf("a worker after the end left %v and %v", left, entries(t, plugins))
 	}
 }

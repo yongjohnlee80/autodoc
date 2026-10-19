@@ -130,11 +130,11 @@ func (h *Host) installPackage(url string) error {
 	if _, err := exec.LookPath("git"); err != nil {
 		return errors.New("lua-install needs git")
 	}
-	dir := h.luaDir
+	dir, own := h.luaDir, h.cands.allocs
 	h.notify("cloning " + url + "…")
-	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, dir, url)) }, func(r answerOf[*candidate]) {
+	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, dir, url, own)) }, func(r answerOf[*candidate]) {
 		if r.err == nil {
-			r.err = h.cands.begin(r.v, h.askPackage)
+			r.err = h.cands.begin(r.v, h.askPackage, h.hidePackage)
 		}
 		if r.err != nil {
 			h.notify("lua-install: not installed: " + r.err.Error())
@@ -147,12 +147,12 @@ func (h *Host) installPackage(url string) error {
 
 // stagePackage stages url as a Lua package candidate in dir, refused when that package is
 // installed already.
-func stagePackage(ctx context.Context, dir, url string) (*candidate, error) {
-	stage, commit, err := cloneStage(ctx, dir, url)
+func stagePackage(ctx context.Context, dir, url string, own *allocs) (*candidate, error) {
+	stage, commit, err := cloneStage(ctx, dir, url, own)
 	if err != nil {
 		return nil, err
 	}
-	fail := func(err error) (*candidate, error) { _ = os.RemoveAll(stage); return nil, err }
+	fail := func(err error) (*candidate, error) { own.remove(stage); return nil, err }
 	m, err := readPackage(stage)
 	if err != nil {
 		return fail(err)
@@ -195,6 +195,10 @@ func (h *Host) askPackage(c *candidate) {
 		OnCancel: func() { h.cands.cancel(c, "") },
 	})
 }
+
+// hidePackage takes c's card down when another candidate's replaces it: the question is closed, and
+// its OnCancel finds c suspended and ends nothing.
+func (h *Host) hidePackage(*candidate) { h.closeDialog("confirm") }
 
 // installPackageCandidate moves c's pristine stage into the lua folder, then reloads the scripts.
 func (h *Host) installPackageCandidate(c *candidate) {
