@@ -16,3 +16,10 @@ var AgentsGuide string
 //
 //go:embed lua/autodoc/kb/templates/KB_OPERATIONS.md
 var KBOperations []byte
+
+// AuditPrompt is docs/audit-prompt.md: what an agent asked to audit a plugin, Lua package or KB
+// type reads first (ADR 1792351195 §4.4, §4.7). The registry's weekly audit fetches the same file at
+// a pinned tag, so both ask the same questions.
+//
+//go:embed docs/audit-prompt.md
+var AuditPrompt string
