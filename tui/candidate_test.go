@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 )
@@ -566,5 +568,72 @@ func TestTheSessionsEndRemovesWhatWorkersMadeAnsweredOrNot(t *testing.T) {
 	}
 	if left, _ := filepath.Glob(filepath.Join(root, "autodoc-audit-*")); len(left) != 0 || len(entries(t, plugins)) != 0 {
 		t.Errorf("a worker after the end left %v and %v", left, entries(t, plugins))
+	}
+}
+
+// heldGit puts a git on PATH whose clone waits, once it is running, until release is called: a
+// worker caught between holding its directory and finishing its work.
+func heldGit(t *testing.T) (running func() bool, release func()) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin, controls := t.TempDir(), t.TempDir()
+	ready, go_ := filepath.Join(controls, "ready"), filepath.Join(controls, "release")
+	script := "#!/bin/sh\nif [ \"$1\" = clone ]; then\n touch " + shellQuote(ready) + "\n while [ ! -f " + shellQuote(go_) +
+		" ]; do sleep 0.01; done\nfi\nexec " + shellQuote(real) + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	return func() bool { return !gone(ready) }, func() { _ = os.WriteFile(go_, nil, 0o600) }
+}
+
+// The session ends while a worker still writes into the directory it already holds (a clone
+// running): the end removes it, the clone writes it again, and the worker's last word removes it
+// for good and answers that the session ended. A stage and an audit copy alike.
+func TestTheSessionsEndWhileAWorkerStillWrites(t *testing.T) {
+	repo := pluginRepo(t, "Echo", "true")
+	head := runGit(t, repo, "rev-parse", "HEAD")
+	for _, kind := range []string{"a stage", "an audit copy"} {
+		t.Run(kind, func(t *testing.T) {
+			tmp, parent := t.TempDir(), filepath.Join(t.TempDir(), "plugins")
+			t.Setenv("TMPDIR", tmp)
+			running, release := heldGit(t)
+			own := newAllocs()
+			answer := make(chan error, 1)
+			go func() {
+				var err error
+				if kind == "a stage" {
+					_, _, err = cloneStage(context.Background(), parent, "file://"+repo, own)
+				} else {
+					_, _, err = auditCopy(context.Background(), &candidate{name: "echo", stage: repo, commit: head}, own)
+				}
+				answer <- err
+			}()
+			deadline := time.Now().Add(10 * time.Second)
+			for !running() {
+				if time.Now().After(deadline) {
+					t.Fatal("the clone never started")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			own.close() // the session ends while the clone runs
+			release()
+			select {
+			case err := <-answer:
+				if !errors.Is(err, errSessionEnded) {
+					t.Fatalf("the worker answered %v; want the session ended", err)
+				}
+			case <-time.After(20 * time.Second):
+				t.Fatal("the worker never answered")
+			}
+			stages, _ := os.ReadDir(parent)
+			copies, _ := filepath.Glob(filepath.Join(tmp, "autodoc-audit-*"))
+			if len(stages) != 0 || len(copies) != 0 {
+				t.Fatalf("left behind: stages %v, copies %v", stages, copies)
+			}
+		})
 	}
 }

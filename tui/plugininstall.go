@@ -120,6 +120,9 @@ func cloneStage(ctx context.Context, parent, url string, own *allocs) (stage, co
 		own.remove(stage)
 		return "", "", err
 	}
+	if err := own.keep(stage); err != nil { // the session ended while the clone ran
+		return "", "", err
+	}
 	return stage, commit, nil
 }
 
