@@ -305,6 +305,7 @@ type Host struct {
 	backend      tuicore.Backend // Options.Backend: the window's, for the GUI's streams
 	// relationViews are the GUI's GlobeMap and Mindmap (relationviews_gui.go); none in a terminal
 	relationViews []Feature
+	graphUserFile string // graph.toml beside the config: the user's groups and palette (graphconf.go)
 
 	mu   sync.Mutex
 	errs []error // handler errors, returned by Run
@@ -438,6 +439,9 @@ func newHost(session *Session, opt Options) *Host {
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
+	if opt.ConfigPath != "" {
+		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
+	}
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
 	h.plugins = newPlugins(core{h}, opt.Plugins)
 	h.plugins.scriptsChanged = func() {

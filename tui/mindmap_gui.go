@@ -3,12 +3,15 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"image/color"
 
 	"github.com/yongjohnlee80/gio/f32"
 	"github.com/yongjohnlee80/golib/gui"
 	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
+	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 
 	"github.com/yongjohnlee80/autodoc/rpc"
@@ -22,10 +25,11 @@ import (
 // mind is one Mindmap build: everything derived from one graph.map answer, made off the loop and
 // never changed once installed.
 type mind struct {
-	root  fileRef
-	m     relMap
-	laid  *guimermaid.Laid // laid out from mindmapModel(m, root): its ids "n<i>" index m.Nodes
-	width float32          // the width it was laid out for, in logical pixels
+	root   fileRef
+	m      relMap
+	laid   *guimermaid.Laid // laid out from mindmapModel(m, root, …): its ids "n<i>" index m.Nodes
+	groups *relGroups       // the groups it was laid out in; nil: none read yet
+	width  float32          // the width it was laid out for, in logical pixels
 }
 
 // mindmap is the Mindmap feature: its builds, fenced (load), and the view's scroll.
@@ -41,9 +45,19 @@ type mindmap struct {
 	asked  float32 // the width a relayout was last asked for
 	depth  int     // the links out from the root it shows: 1, or 2 (d toggles)
 	noKey  bool    // l hid the legend
+
+	store    *graphStore
+	editor   *groupEditor // the settings' groups
+	groups   *relGroups   // groupsWS's groups (graphstore_gui.go): each document's outline and colour
+	groupsWS string
 }
 
-func newMindmap(c Core) *mindmap { return &mindmap{c: c, depth: 1} }
+func newMindmap(c Core) *mindmap {
+	m := &mindmap{c: c, depth: 1}
+	m.editor = &groupEditor{c: c, view: viewMindmap, name: "mind", shapes: true, changed: m.groupsEdited,
+		ground: func() color.NRGBA { return m.palette().background }}
+	return m
+}
 
 // toggleDepth is d in the Mindmap: two links out, or one again, read afresh at the page shown.
 func (m *mindmap) toggleDepth() {
@@ -57,7 +71,7 @@ func (m *mindmap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71,
 		Edge: func(prefs) string { return "center" },
 		Opened: func(PanelHost) {
-			m.open = true
+			m.open, m.depth = true, m.prefDepth() // it opens at the depth its settings choose
 			m.load()
 		},
 		Closed: func(c PanelHost) {
@@ -67,14 +81,21 @@ func (m *mindmap) Panels() []PanelSpec {
 		}}}
 }
 
-func (m *mindmap) State() map[string]any { return map[string]any{"App.mindmapTitle": "Mindmap"} }
+func (m *mindmap) State() map[string]any {
+	st := m.settingsState()
+	st["App.mindmapTitle"] = "Mindmap"
+	return st
+}
 
 func (m *mindmap) Commands() map[string]Command {
-	return map[string]Command{"App.toggleMindmap": none(m.toggle)}
+	c := m.settingsCommands()
+	c["App.toggleMindmap"] = none(m.toggle)
+	return c
 }
 
 func (m *mindmap) Catalog() []Entry {
-	return []Entry{builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle)}
+	return []Entry{builtin("mindmap.toggle", "the Mindmap", "App.toggleMindmap()", m.toggle),
+		builtin("mindmap.settings", "the Mindmap's settings", "App.openMindmapSettings()", m.openSettings)}
 }
 
 func (m *mindmap) toggle() { m.c.TogglePanel(mindmapPanelID) }
@@ -113,6 +134,10 @@ func (m *mindmap) load() {
 		return
 	}
 	width, th, depth := m.width(), mindTheme(m.palette()), m.depth
+	var gs *relGroups
+	if m.groupsWS == ref.ws {
+		gs = m.groups
+	}
 	m.asked = width
 	m.status = "reading " + ref.path + "…"
 	m.title()
@@ -122,7 +147,20 @@ func (m *mindmap) load() {
 			return err
 		}
 		rm := decodeMap(res)
-		model := mindmapModel(rm, ref.path)
+		model := mindmapModel(rm, ref.path, func(n mapNode) pm.MindShape {
+			if i := gs.ofOr(n); i >= 0 {
+				return gs.list[i].Shape
+			}
+			return pm.MindDefault
+		})
+		th.Tint = func(id string) (color.NRGBA, bool) { // a document's group's colour; else its branch's
+			if i, ok := rm.mindIndex(id); ok {
+				if k := gs.ofOr(rm.Nodes[i]); k >= 0 {
+					return gs.list[k].Colour, true
+				}
+			}
+			return color.NRGBA{}, false
+		}
 		if model == nil {
 			return fmt.Errorf("%s is not in its own map", ref.path)
 		}
@@ -132,7 +170,7 @@ func (m *mindmap) load() {
 		if err != nil {
 			return err
 		}
-		return &mind{root: ref, m: rm, laid: laid, width: width}
+		return &mind{root: ref, m: rm, laid: laid, width: width, groups: gs}
 	}, func(v any) {
 		if !tk.Current() || !m.open {
 			return
@@ -141,6 +179,9 @@ func (m *mindmap) load() {
 		switch v := v.(type) {
 		case *mind:
 			m.cur, m.scroll = v, 0
+			if m.groupsWS != v.root.ws {
+				m.readGroups(v.root.ws, v.m.Types) // laid out again in them once read
+			}
 		case error:
 			if code(v) == rpc.CodeNotFound {
 				m.cur, m.status = nil, ref.path+" is not indexed yet"
@@ -163,11 +204,20 @@ func (m *mindmap) width() float32 {
 	return 900
 }
 
+// palette is the map's colours: the page's theme (the document's colours, as the view's properties
+// bind them), or the theme its settings choose.
 func (m *mindmap) palette() relPalette {
+	page := defaultPalette()
 	if m.view != nil {
-		return m.view.pal
+		page = m.view.pal
 	}
-	return defaultPalette()
+	choice := cmp.Or(m.c.Prefs().Value(prefMindTheme), "page")
+	if ts, ok := m.c.(globeThemeSource); ok && choice != "page" {
+		if v, ok := viewThemeValues(choice, m.c.Prefs(), ts); ok {
+			return paletteOf(v, page)
+		}
+	}
+	return page
 }
 
 // mindTheme is the map's theme from the view's colours: nodes tinted by the accent, lines muted.
@@ -312,20 +362,22 @@ func (v *mindView) HandleEvent(ev tuicore.Event) bool {
 // NativeView draws the build as it is now, taken on the loop.
 func (v *mindView) NativeView() (any, bool) {
 	m := v.m
-	f := mindFrame{cur: m.cur, at: m.origin(v.pixels()), status: m.status, pal: v.pal}
+	f := mindFrame{cur: m.cur, at: m.origin(v.pixels()), status: m.status, pal: m.palette()}
 	if !m.noKey && m.cur != nil {
-		f.legend = mindLegend(mindTheme(v.pal))
+		f.legend = mindLegend(mindTheme(f.pal), m.cur.groups, m.cur.m)
 	}
 	return gui.ViewFunc(f.paint), true
 }
 
-// mindLegend is what the Mindmap's outlines stand for: each type's (mindShape), then any other's.
-func mindLegend(th guimermaid.Theme) []legendRow {
-	var rows []legendRow
-	for _, t := range relationTypes {
-		rows = append(rows, legendRow{legendForm(shapeOf(t), th), globeTypeNames[t]})
-	}
-	return append(rows, legendRow{legendForm(shapeOf(""), th), "any other document"})
+// mindLegend is what the Mindmap's marks stand for: each group the map shows, its outline in its
+// colour (groupLegend), then any other document's box in its branch's tint.
+func mindLegend(th guimermaid.Theme, gs *relGroups, m relMap) []legendRow {
+	rows := groupLegend(gs, m, func(g relGroup) func(gui.Canvas, gui.Rect) {
+		t := th
+		t.NodeFill, t.NodeStroke = mixNRGBA(th.NodeFill, g.Colour, 0.35), mixNRGBA(th.NodeStroke, g.Colour, 0.75)
+		return legendForm(g.Shape, t)
+	})
+	return append(rows, legendRow{legendForm(pm.MindDefault, th), "any other document"})
 }
 
 type mindFrame struct {

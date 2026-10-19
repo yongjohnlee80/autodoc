@@ -258,3 +258,28 @@ func TestIndexDocumentsDiagnosed(t *testing.T) {
 		t.Errorf("diagnosed with paths: %v", g)
 	}
 }
+
+// graph.map at protocol 28 names the schema's document types, its discriminator's enum in its
+// order, and reads each node's type from the discriminator, not a field named type.
+func TestGraphMapTypesAreTheSchemas(t *testing.T) {
+	cli, _ := schemaServer(t, "version: 2\ndiscriminator: kind\ncommon:\n  kind: {type: string, required: true, enum: [note, adr]}\n"+
+		"types:\n  adr: {}\n  note: {}\n")
+	write := func(path, content string) { call(t, cli, "doc.write", "kb", path, []byte(content), "") }
+	write("a.md", "---\nkind: adr\ntype: memo\n---\n# A\n")
+	write("n.md", "---\nkind: note\n---\n# N\n")
+	var m map[string]any
+	eventually(t, "both documents mapped", func() bool {
+		m = call(t, cli, "graph.map", "kb").(map[string]any)
+		ns, _ := m["nodes"].([]any)
+		return len(ns) == 2
+	})
+	if !reflect.DeepEqual(m["types"], []any{"note", "adr"}) {
+		t.Errorf("types %v; want the enum's order, [note adr]", m["types"])
+	}
+	for _, n := range m["nodes"].([]any) {
+		n := n.(map[string]any)
+		if want := map[string]string{"a.md": "adr", "n.md": "note"}[n["path"].(string)]; n["type"] != want {
+			t.Errorf("%v: type %v; want %s, its kind", n["path"], n["type"], want)
+		}
+	}
+}

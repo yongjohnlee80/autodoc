@@ -89,7 +89,8 @@ import (
 // Protocol 27 is ADR 1792349867: workspace.scaffold, a KB type's files created under a workspace's
 // root, which a session below 27 does not have.
 // Protocol 28 is ADR 1792347044 r9: graph.map's nodes carry their tags, for the GlobeMap's colour
-// rules; a session below 28 reads its nodes as before.
+// rules, and its answer the schema's document types, a node's type its discriminator's value, for
+// the Mindmap's shapes; a session below 28 reads its answer as before.
 const Protocol int64 = 28
 
 // MinProtocol is the oldest protocol this build still serves. A session keeps the protocol it

@@ -132,16 +132,9 @@ func (gl *globe) dotRadius(i int, z, fit, scale float32) float32 {
 	return globeDot * scale * (1 + 0.15*float32(math.Log2(1+float64(gl.deg[i])))) * grow
 }
 
-// circle adds a circle round c of radius r to p: four cubic arcs.
+// circle adds the circle round c of radius r to p (gui.Path.Ellipse).
 func circle(p *gui.Path, c graphlayout.Point, r float32) {
-	const k = 0.5523 // a quarter circle's cubic control distance, over r
-	x, y, d := c.X, c.Y, r*k
-	p.MoveTo(gui.Pt(x+r, y)).
-		CubeTo(gui.Pt(x+r, y+d), gui.Pt(x+d, y+r), gui.Pt(x, y+r)).
-		CubeTo(gui.Pt(x-d, y+r), gui.Pt(x-r, y+d), gui.Pt(x-r, y)).
-		CubeTo(gui.Pt(x-r, y-d), gui.Pt(x-d, y-r), gui.Pt(x, y-r)).
-		CubeTo(gui.Pt(x+d, y-r), gui.Pt(x+r, y-d), gui.Pt(x+r, y)).
-		Close()
+	p.Ellipse(gui.Rect{X: c.X - r, Y: c.Y - r, W: 2 * r, H: 2 * r})
 }
 
 // hitGrid is the documents by square cells of the layout: where the pointer is, the few near it.
@@ -195,12 +188,13 @@ func (g hitGrid) nearest(at []graphlayout.Point, p graphlayout.Point, within flo
 	return best
 }
 
-// globeDots are the dots and rings of one frame at one zoom bucket in one look, in layout units:
-// made again only when one of them changes, so a picture stays one fill per colour and one ring
-// stroke.
+// globeDots are the dots and rings of one frame at one zoom bucket in one look and groups, in
+// layout units: made again only when one of them changes, so a picture stays one fill per colour
+// and one ring stroke.
 type globeDots struct {
 	of     *globe
 	look   *globeLook
+	groups *relGroups
 	bucket int
 	fills  []globeFill // one per colour, in the order the documents first wear it
 	rings  *gui.Path   // a ring round each superseded document
@@ -217,18 +211,18 @@ func zoomBucket(z float32) int {
 	return int(math.Round(math.Log(float64(z)) / math.Log(globeZoomStep)))
 }
 
-// dotsAt is gl's dots and rings at zoom z in look l, the map fitted at fit: d itself when it is
-// already for that frame, step and look.
-func dotsAt(d globeDots, gl *globe, l *globeLook, z, fit float32) globeDots {
+// dotsAt is gl's dots and rings at zoom z in look l and groups gs, the map fitted at fit: d itself
+// when it is already for that frame, step, look and groups.
+func dotsAt(d globeDots, gl *globe, l *globeLook, gs *relGroups, z, fit float32) globeDots {
 	b := zoomBucket(z)
-	if d.of == gl && d.look == l && d.bucket == b {
+	if d.of == gl && d.look == l && d.groups == gs && d.bucket == b {
 		return d
 	}
 	bz := float32(math.Pow(globeZoomStep, float64(b))) // the step's zoom: the dots are its size until the next
-	d = globeDots{of: gl, look: l, bucket: b, rings: &gui.Path{}}
+	d = globeDots{of: gl, look: l, groups: gs, bucket: b, rings: &gui.Path{}}
 	fill := map[color.NRGBA]int{}
 	for i, n := range gl.m.Nodes {
-		c := l.colourOf(n)
+		c := l.colourOf(n, gs)
 		k, ok := fill[c]
 		if !ok {
 			k, fill[c] = len(d.fills), len(d.fills)
@@ -253,17 +247,18 @@ func fitView(b graphlayout.Rect, size gui.Size) (float32, gui.Point) {
 // globeViewState is the loop's view as a load's pictures take it: its size, its look, its pan and
 // zoom once the user moved it (until then each frame is fitted), and the document hovered.
 type globeViewState struct {
-	size  gui.Size
-	look  *globeLook // nil: defaultLook
-	moved bool
-	zoom  float32
-	off   gui.Point
-	hover int // the hovered document of the load's map; -1 none
+	size   gui.Size
+	look   *globeLook // nil: defaultLook
+	groups *relGroups // the workspace's, once read; nil: every document other's colour
+	moved  bool
+	zoom   float32
+	off    gui.Point
+	hover  int // the hovered document of the load's map; -1 none
 }
 
 func (a globeViewState) same(b globeViewState) bool {
-	return a.size == b.size && a.look == b.look && a.moved == b.moved && a.zoom == b.zoom && a.off == b.off &&
-		a.hover == b.hover
+	return a.size == b.size && a.look == b.look && a.groups == b.groups && a.moved == b.moved && a.zoom == b.zoom &&
+		a.off == b.off && a.hover == b.hover
 }
 
 // lookOf is the view's look.
@@ -288,7 +283,7 @@ func pictureOf(f *globe, view globeViewState, d globeDots) globePicture {
 		z, off = view.zoom, view.off
 	}
 	l := view.lookOf()
-	return globePicture{gl: f, dots: dotsAt(d, f, l, z, fitZ), zoom: z, off: off, look: l, hover: view.hover}
+	return globePicture{gl: f, dots: dotsAt(d, f, l, view.groups, z, fitZ), zoom: z, off: off, look: l, hover: view.hover}
 }
 
 // globeNameRow is the line names are set in, in logical pixels: the names of a row are one text
@@ -526,11 +521,14 @@ type globeMap struct {
 	filter  int        // globeFilters' index
 	cur     *globe     // the frame on screen: its picture was presented (hit testing, the names)
 	look    *globeLook // how it draws (globesettings_gui.go); nil until first used
-	counts  [2]int     // the load's documents and links, once its map is read
-	status  string     // what a load under way says; "" none
-	stepped int        // the load's simulation steps run, as last posted
-	toast   bool       // the load's progress toast is up
-	noKey   bool       // l hid the legend
+	groups  *relGroups // the workspace's groups (graphstore_gui.go); nil until read
+	store   *graphStore
+	editor  *groupEditor // the settings' groups
+	counts  [2]int       // the load's documents and links, once its map is read
+	status  string       // what a load under way says; "" none
+	stepped int          // the load's simulation steps run, as last posted
+	toast   bool         // the load's progress toast is up
+	noKey   bool         // l hid the legend
 	view    *globeView
 
 	cancel func()              // ends the load under way
@@ -551,7 +549,34 @@ type globeDrag struct {
 }
 
 func newGlobeMap(c Core, present func() globePublisher) *globeMap {
-	return &globeMap{c: c, present: present, hover: -1}
+	g := &globeMap{c: c, present: present, hover: -1}
+	g.editor = &groupEditor{c: c, view: viewGlobeMap, name: "globe", changed: g.groupsEdited,
+		ground: func() color.NRGBA { return g.currentLook().pal.background }}
+	return g
+}
+
+// readGroups takes ws's groups from the store, as its map is read: its graph file's, or its first,
+// made of types and the workspace's folders. The frame on screen draws in them at once.
+func (g *globeMap) readGroups(ws string, types []string) {
+	if g.store == nil {
+		return
+	}
+	g.store.groups(ws, viewGlobeMap, types, g.currentLook().pal.background, func(list []relGroup) {
+		if ws == g.c.Workspace() {
+			g.editor.listed(ws, types, list)
+			g.groupsEdited(list)
+		}
+	})
+}
+
+// groupsEdited draws in list: the dots, and the legend.
+func (g *globeMap) groupsEdited(list []relGroup) {
+	gs := newRelGroups(list)
+	g.groups = &gs
+	if g.view != nil && g.view.ctx != nil {
+		g.sendView(g.view.pixels(), false)
+	}
+	g.dirty()
 }
 
 func (*globeMap) Name() string { return "globemap" }
@@ -622,7 +647,7 @@ func (g *globeMap) stop() {
 
 // viewState is the view as the loop has it now, at size.
 func (g *globeMap) viewState(size gui.Size) globeViewState {
-	st := globeViewState{size: size, look: g.currentLook(), moved: g.moved, hover: g.hover}
+	st := globeViewState{size: size, look: g.currentLook(), groups: g.groups, moved: g.moved, hover: g.hover}
 	if g.moved {
 		st.zoom, st.off = g.zoom, g.off
 	}
@@ -690,6 +715,7 @@ func (g *globeMap) load() {
 			if tk.Current() && g.open && g.views == views {
 				g.counts, g.status = [2]int{len(m.Nodes), len(m.Edges)}, ""
 				g.progress()
+				g.readGroups(ws, m.Types)
 			}
 		})
 		sim, err := graphlayout.NewSimulation(globeForceInput(m), globeLimits)
@@ -1067,25 +1093,16 @@ func (v *globeView) NativeView() (any, bool) {
 	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.status, pal: l.pal, legend: key}.paint), true
 }
 
-// globeTypeNames are the legend's words for the types drawn in colours of their own.
-var globeTypeNames = map[string]string{"adr": "ADR", "review": "review", "convention": "convention",
-	"synthesis": "synthesis", "pr": "PR"}
-
-// legend is what the GlobeMap's marks stand for in look l: each type's colour, the rules', the
-// superseded ring, the links the filter follows, and the dots' size.
+// legend is what the GlobeMap's marks stand for in look l: the colour of each group the map shows
+// (groupLegend), any other document's, the superseded ring, the links the filter follows, and the
+// dots' size.
 func (g *globeMap) legend(l *globeLook) []legendRow {
-	var rows []legendRow
-	for _, t := range relationTypes {
-		rows = append(rows, legendRow{legendDot(l.types[t], 8), globeTypeNames[t]})
+	var m relMap
+	if g.cur != nil {
+		m = g.cur.m
 	}
+	rows := groupLegend(g.groups, m, func(gr relGroup) func(gui.Canvas, gui.Rect) { return legendDot(gr.Colour, 8) })
 	rows = append(rows, legendRow{legendDot(l.other, 8), "any other document"})
-	for _, r := range l.rules {
-		name := "#" + r.tag
-		if r.tag == "" {
-			name = r.folder
-		}
-		rows = append(rows, legendRow{legendDot(r.c, 8), name})
-	}
 	rows = append(rows, legendRow{legendRing(l.other, l.ring), "superseded"})
 	kinds := globeFilters[g.filter].kinds
 	shows := func(cls int) bool {

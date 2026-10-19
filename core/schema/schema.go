@@ -75,6 +75,7 @@ type Schema struct {
 	Discriminator string
 	common        fieldSet            // version 1: every field
 	types         map[string]fieldSet // by discriminator value: common merged with the type's own
+	typeOrder     []string            // types' keys, in the schema's order
 }
 
 // fieldSet is the fields one document is checked against, in the schema's order.
@@ -336,6 +337,18 @@ func (p parser) schemaV2(root *pyaml.Node) (*Schema, error) {
 	return s, nil
 }
 
+// Types are the document types a version 2 schema declares, in its order: its discriminator's
+// enum when it has one (every value a document may take), else its types' names; nil in version 1.
+func (s *Schema) Types() []string {
+	if s == nil || s.Discriminator == "" {
+		return nil
+	}
+	if f, ok := s.common.field(s.Discriminator); ok && len(f.Enum) > 0 {
+		return slices.Clone(f.Enum)
+	}
+	return slices.Clone(s.typeOrder)
+}
+
 // typesV2 reads a version 2 schema's types, each merged over common (set).
 func (p parser) typesV2(s *Schema, types *pyaml.Node, df Field, set fieldSet, declared *int) error {
 	name := s.Discriminator
@@ -378,6 +391,7 @@ func (p parser) typesV2(s *Schema, types *pyaml.Node, df Field, set fieldSet, de
 			return err
 		}
 		s.types[typ] = merged
+		s.typeOrder = append(s.typeOrder, typ)
 	}
 	return nil
 }

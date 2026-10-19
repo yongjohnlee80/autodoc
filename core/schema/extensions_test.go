@@ -2,6 +2,7 @@ package schema
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -170,5 +171,27 @@ func TestValidateMapItems(t *testing.T) {
 		if f.Field == "errors" {
 			t.Errorf("a map item gave a facet: %+v", f)
 		}
+	}
+}
+
+// Types are a version 2 schema's document types in its order: the discriminator's enum when it has
+// one, else the types' names; none in version 1.
+func TestTypesAreTheSchemas(t *testing.T) {
+	enum := mustParse(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, enum: [review, adr, note]}\n"+
+		"types:\n  adr: {}\n  review: {}\n")
+	if got := enum.Types(); !slices.Equal(got, []string{"review", "adr", "note"}) {
+		t.Errorf("with an enum: %v; want its order", got)
+	}
+	names := mustParse(t, "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string}\ntypes:\n  zeta: {}\n  alpha: {}\n")
+	if got := names.Types(); !slices.Equal(got, []string{"zeta", "alpha"}) {
+		t.Errorf("without one: %v; want the types' order", got)
+	}
+	if got := mustParse(t, "version: 1\nfrontmatter:\n  type: {type: string, enum: [a]}\n").Types(); got != nil {
+		t.Errorf("version 1: %v; want none", got)
+	}
+	got := enum.Types()
+	got[0] = "changed"
+	if enum.Types()[0] != "review" {
+		t.Error("a caller's change reached the schema")
 	}
 }

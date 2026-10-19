@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"image/color"
 	"math"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -24,63 +26,41 @@ func rgb(v uint32) color.NRGBA {
 	return color.NRGBA{R: uint8(v >> 16), G: uint8(v >> 8), B: uint8(v), A: 0xff}
 }
 
-// The look is the theme's colours with the user's over them. A dot's colour is the first rule it
-// matches (a folder, a tag or a nested one of it), else its type's, given or the theme's; a field
-// that does not read is the theme's. The links, the ring, the names, the dots and the pace are
-// each their setting's.
+// The look is the theme's colours with the user's over them: a document no group matches, the
+// links and the ring; a field that does not read is the theme's. The names, the dots and the pace
+// are each their setting's. A dot is its first matching group's colour, else no group's.
 func TestTheGlobeLookIsItsSettingsOverTheTheme(t *testing.T) {
 	pal := defaultPalette()
 	def := newGlobeLook(prefs{}, pal)
-	if !def.names || def.dot != 1 || def.steps != 2 || def.ring != pal.superseded || def.types["adr"] != pal.types["adr"] ||
-		def.other != pal.text || def.edges[edgeBody] != mixNRGBA(pal.background, pal.muted, 0.8) {
+	if !def.names || def.dot != 1 || def.steps != 2 || def.ring != pal.superseded || def.other != pal.text ||
+		def.edges[edgeBody] != mixNRGBA(pal.background, pal.muted, 0.8) {
 		t.Fatalf("no settings: %+v; want the theme's colours, names, medium dots, gentle pace", def)
 	}
 	l := newGlobeLook(valuesPrefs(map[string]string{
 		prefGlobeNames: "false", prefGlobeDots: "large", prefGlobeSpeed: "slow",
-		prefGlobeColour + "adr": "#112233", prefGlobeColour + "review": "#12", // the second reads not: the theme's
 		prefGlobeColour + "other": "#445566", prefGlobeColour + "link.body": "#778899",
-		prefGlobeColour + "superseded": "#aabbcc",
-		prefGlobeRules:                 "#Project=#010101; notes/=#020202 ; #area/work=#030303",
+		prefGlobeColour + "link.relation": "#12", // reads not: the theme's
+		prefGlobeColour + "superseded":    "#aabbcc",
 	}), pal)
 	if l.names || l.dot != 1.4 || l.steps != 1 || l.ring != rgb(0xaabbcc) || l.edges[edgeBody] != rgb(0x778899) ||
-		l.edges[edgeRelation] != def.edges[edgeRelation] {
-		t.Fatalf("settings: names %v, dot %v, steps %v, ring %v, edges %v", l.names, l.dot, l.steps, l.ring, l.edges)
+		l.edges[edgeRelation] != def.edges[edgeRelation] || l.other != rgb(0x445566) {
+		t.Fatalf("settings: names %v, dot %v, steps %v, ring %v, edges %v, other %v", l.names, l.dot, l.steps, l.ring, l.edges, l.other)
 	}
+	gs := newRelGroups([]relGroup{{Query: "tag:#project", Colour: rgb(0x010101)}, {Query: "type:adr", Colour: rgb(0x020202)}})
 	for _, c := range []struct {
 		n    mapNode
 		want color.NRGBA
 	}{
-		{mapNode{Path: "a.md", Type: "adr"}, rgb(0x112233)},
-		{mapNode{Path: "a.md", Type: "review"}, pal.types["review"]},
+		{mapNode{Path: "a.md", Type: "adr"}, rgb(0x020202)},
+		{mapNode{Path: "a.md", Type: "adr", Tags: []string{"project"}}, rgb(0x010101)}, // the first group wins
 		{mapNode{Path: "a.md", Type: "memo"}, rgb(0x445566)},
-		{mapNode{Path: "a.md", Type: "adr", Tags: []string{"project"}}, rgb(0x010101)},
-		{mapNode{Path: "a.md", Tags: []string{"#project/alpha"}}, rgb(0x010101)}, // nested: its parent's
-		{mapNode{Path: "a.md", Tags: []string{"projects"}}, rgb(0x445566)},       // not a nested tag
-		{mapNode{Path: "notes/x.md", Type: "adr"}, rgb(0x020202)},
-		{mapNode{Path: "notes/x.md", Tags: []string{"project"}}, rgb(0x010101)}, // the first rule wins
-		{mapNode{Path: "notesy/x.md"}, rgb(0x445566)},
-		{mapNode{Path: "b.md", Tags: []string{"area/work/q4"}}, rgb(0x030303)},
 	} {
-		if got := l.colourOf(c.n); got != c.want {
+		if got := l.colourOf(c.n, &gs); got != c.want {
 			t.Errorf("%+v: %v; want %v", c.n, got, c.want)
 		}
 	}
-	if bad := newGlobeLook(valuesPrefs(map[string]string{prefGlobeRules: "#a=#010101; nope"}), pal); bad.rules != nil {
-		t.Errorf("rules that do not read: %v; want none", bad.rules)
-	}
-}
-
-// A rule is #tag=#rrggbb or folder/=#rrggbb; anything else says so.
-func TestGlobeRulesRead(t *testing.T) {
-	rules, err := parseGlobeRules(" #A=#0a0b0c ;\nkb/notes=#ffffff;; /x/=#000000 ")
-	if err != nil || len(rules) != 3 || rules[0].tag != "a" || rules[1].folder != "kb/notes/" || rules[2].folder != "x/" ||
-		rules[0].c != rgb(0x0a0b0c) {
-		t.Fatalf("rules: %+v, %v", rules, err)
-	}
-	for _, bad := range []string{"#a", "#a=red", "=#000000", "#=#000000", "a=#0000000", "/=#000000"} {
-		if _, err := parseGlobeRules(bad); err == nil {
-			t.Errorf("%q read", bad)
-		}
+	if got := l.colourOf(mapNode{Type: "adr"}, nil); got != l.other {
+		t.Errorf("no groups read yet: %v; want no group's colour", got)
 	}
 }
 
@@ -158,22 +138,24 @@ func TestTheGlobeMapSettlesAtItsSpeed(t *testing.T) {
 	}
 }
 
-// One fill a colour: types given one colour share a fill, and a rule's documents are its fill.
+// One fill a colour: groups of one colour share a fill, and a group every document wears is the one
+// fill.
 func TestTheGlobeMapsDotsAreOneFillAColour(t *testing.T) {
 	m := relMapOf(24)
 	for i := range m.Nodes {
 		m.Nodes[i].Path = "notes/" + m.Nodes[i].Path
 	}
 	gl := settledGlobe(t, m)
-	same := newGlobeLook(valuesPrefs(map[string]string{
-		prefGlobeColour + "adr": "#101010", prefGlobeColour + "review": "#101010",
-	}), defaultPalette())
-	if n := len(dotsAt(globeDots{}, gl, same, 1, 1).fills); n != len(relationTypes) {
-		t.Errorf("ADRs and reviews one colour: %d fills; want %d", n, len(relationTypes))
+	same := newRelGroups([]relGroup{{Query: "type:adr", Colour: rgb(0x101010)}, {Query: "type:review", Colour: rgb(0x101010)}})
+	if n := len(dotsAt(globeDots{}, gl, defaultLook, &same, 1, 1).fills); n != 2 {
+		t.Errorf("ADRs and reviews one colour, the rest no group's: %d fills; want 2", n)
 	}
-	all := newGlobeLook(valuesPrefs(map[string]string{prefGlobeRules: "notes/=#202020"}), defaultPalette())
-	if d := dotsAt(globeDots{}, gl, all, 1, 1); len(d.fills) != 1 || d.fills[0].c != rgb(0x202020) {
-		t.Errorf("one rule for every document: %d fills", len(d.fills))
+	all := newRelGroups([]relGroup{{Query: "path:notes/", Colour: rgb(0x202020)}})
+	if d := dotsAt(globeDots{}, gl, defaultLook, &all, 1, 1); len(d.fills) != 1 || d.fills[0].c != rgb(0x202020) {
+		t.Errorf("one group for every document: %d fills", len(d.fills))
+	}
+	if d := dotsAt(globeDots{}, gl, defaultLook, nil, 1, 1); len(d.fills) != 1 || d.fills[0].c != defaultLook.other {
+		t.Errorf("no groups: %d fills; want one, no group's colour", len(d.fills))
 	}
 }
 
@@ -192,19 +174,19 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	r.s.WaitForText(t, "GlobeMap settings")
 	r.s.WaitForText(t, "settling speed")
 
-	onLoop(r, func() bool { g.setColour("adr", "#12345"); return true })
-	if v, msg := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "adr") }), onLoop(r, func() string {
+	onLoop(r, func() bool { g.setColour("other", "#12345"); return true })
+	if v, msg := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "other") }), onLoop(r, func() string {
 		v, _ := r.h.p.Tree().Source("App.globeSettingsError")
 		return v.Raw
 	}); v != "" || !strings.Contains(msg, "#rrggbb") {
 		t.Fatalf("a colour that does not read: kept %q, said %q", v, msg)
 	}
 	before := onLoop(r, func() *globeLook { return g.currentLook() })
-	onLoop(r, func() bool { g.setColour("adr", " #123456 "); return true })
+	onLoop(r, func() bool { g.setColour("other", " #123456 "); return true })
 	l := onLoop(r, func() *globeLook { return g.currentLook() })
-	if kept := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "adr") }); l == before ||
-		l.types["adr"] != rgb(0x123456) || kept != "#123456" {
-		t.Fatalf("a colour that reads: look %v, kept %q", l.types["adr"], kept)
+	if kept := onLoop(r, func() string { return r.h.prefs.Value(prefGlobeColour + "other") }); l == before ||
+		l.other != rgb(0x123456) || kept != "#123456" {
+		t.Fatalf("a colour that reads: look %v, kept %q", l.other, kept)
 	}
 
 	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
@@ -255,11 +237,13 @@ func TestTheGlobeMapNamesNoneWhenItsSettingsSaySo(t *testing.T) {
 	}
 }
 
-// The GlobeMap's legend names what its marks stand for in its look: each type's colour, every
-// rule's, the superseded ring, only the links its filter follows, and the dots' size. It is drawn
-// on the view's own paint, a text a row, and l hides it.
-func TestTheGlobeMapsLegendIsItsLook(t *testing.T) {
-	l := newGlobeLook(valuesPrefs(map[string]string{prefGlobeRules: "#project=#010101; notes/=#020202"}), defaultPalette())
+// The GlobeMap's legend names what its marks stand for: each group the map's documents wear, in
+// the groups' order, then no group's colour, the superseded ring, only the links its filter
+// follows, and the dots' size. It is drawn on the view's own paint, a text a row, and l hides it.
+func TestTheGlobeMapsLegendIsItsGroups(t *testing.T) {
+	l := defaultLook
+	m := relMap{Nodes: []mapNode{{Path: "a.md", Type: "adr"}, {Path: "notes/b.md"}, {Path: "c.md", Tags: []string{"x"}}}}
+	gs := newRelGroups([]relGroup{{Query: "type:adr"}, {Query: "type:pr"}, {Query: "path:notes/"}, {Query: "#x"}})
 	texts := func(rows []legendRow) []string {
 		var out []string
 		for _, r := range rows {
@@ -267,19 +251,19 @@ func TestTheGlobeMapsLegendIsItsLook(t *testing.T) {
 		}
 		return out
 	}
-	common := []string{"ADR", "review", "convention", "synthesis", "PR", "any other document", "#project", "notes/", "superseded"}
+	common := []string{"adr", "notes/", "#x", "any other document", "superseded"} // type:pr worn by none
 	for filter, links := range map[int][]string{
 		0: {"supersedes", "other relation"},              // relations
 		1: {"body link", "supersedes", "other relation"}, // every link
 		2: {"body link"},                                 // body links
 	} {
-		g := &globeMap{filter: filter}
+		g := &globeMap{filter: filter, groups: &gs, cur: &globe{m: m}}
 		want := append(append(slices.Clone(common), links...), "larger: more links")
 		if got := texts(g.legend(l)); !slices.Equal(got, want) {
 			t.Errorf("%s: legend %q; want %q", globeFilters[filter].name, got, want)
 		}
 	}
-	g := &globeMap{}
+	g := &globeMap{groups: &gs, cur: &globe{m: m}}
 	rows := g.legend(l)
 	rc := gui.NewRecordingCanvas(gui.Size{W: 800, H: 600}, gui.Size{W: 8, H: 16})
 	globeOverlay{pal: l.pal, legend: rows}.paint(rc)
@@ -291,26 +275,48 @@ func TestTheGlobeMapsLegendIsItsLook(t *testing.T) {
 	if n := countOps(small, "DrawText"); n != 0 {
 		t.Errorf("a view too small for the legend drew %d of its texts", n)
 	}
+	// many groups worn: groupLegendRows of them, then how many more; none at all says how to have some
+	var many []relGroup
+	var mm relMap
+	for i := range groupLegendRows + 3 {
+		many = append(many, relGroup{Query: fmt.Sprintf("type:t%d", i)})
+		mm.Nodes = append(mm.Nodes, mapNode{Type: fmt.Sprintf("t%d", i)})
+	}
+	mgs := newRelGroups(many)
+	got := texts(groupLegend(&mgs, mm, func(relGroup) func(gui.Canvas, gui.Rect) { return func(gui.Canvas, gui.Rect) {} }))
+	if len(got) != groupLegendRows+1 || got[groupLegendRows] != "… 3 more groups" {
+		t.Errorf("many groups: %q", got)
+	}
+	if none := texts(groupLegend(nil, mm, nil)); len(none) != 1 || !strings.Contains(none[0], "no groups") {
+		t.Errorf("no groups: %q", none)
+	}
 }
 
-// The Mindmap's outlines tell each type apart: no two legend rows share a shape, and none is
-// MindRounded, which golib draws as MindCloud's (a synthesis's) stadium.
-func TestTheMindmapsLegendTellsEachTypeApart(t *testing.T) {
-	seen := map[string]bool{}
-	for _, typ := range append(slices.Clone(relationTypes), "", "memo") {
-		s := shapeOf(typ)
-		if s == pm.MindRounded && typ != "synthesis" {
-			t.Errorf("%q: MindRounded, drawn as a synthesis's cloud", typ)
-		}
-		key := fmt.Sprint(s)
-		if typ != "memo" && seen[key] { // "" and memo are both any other
-			t.Errorf("%q: shape %v shared", typ, s)
-		}
-		seen[key] = true
+// The Mindmap's legend is its groups the map's documents wear, each its outline in its colour, then
+// any other document's box.
+func TestTheMindmapsLegendIsItsGroups(t *testing.T) {
+	th := mindTheme(defaultPalette())
+	m := relMap{Nodes: []mapNode{{Type: "adr"}, {Type: "review"}}}
+	gs := newRelGroups([]relGroup{{Query: "type:adr", Colour: rgb(0xff0000), Shape: pm.MindDefault},
+		{Query: "type:review", Colour: rgb(0x0000ff), Shape: pm.MindHexagon}, {Query: "type:pr"}})
+	rows := mindLegend(th, &gs, m)
+	var texts []string
+	for _, r := range rows {
+		texts = append(texts, r.text)
 	}
-	rows := mindLegend(mindTheme(defaultPalette()))
-	if len(rows) != len(relationTypes)+1 || rows[len(rows)-1].text != "any other document" {
-		t.Errorf("Mindmap legend: %d rows", len(rows))
+	if !slices.Equal(texts, []string{"adr", "review", "any other document"}) {
+		t.Fatalf("legend %q", texts)
+	}
+	draw := func(i int) *gui.RecordingCanvas {
+		rc := gui.NewRecordingCanvas(gui.Size{W: 40, H: 20}, gui.Size{W: 8, H: 16})
+		rows[i].mark(rc, gui.Rect{W: legendMarkW, H: legendMarkH})
+		return rc
+	}
+	if rc := draw(0); countOps(rc, "FillRRect") != 1 || countOps(rc, "FillPath") != 0 {
+		t.Error("adr's group a box: its legend mark is not one")
+	}
+	if rc := draw(1); countOps(rc, "FillPath") != 1 || countOps(rc, "FillRRect") != 0 {
+		t.Error("review's group a hexagon: its legend mark is not one")
 	}
 }
 
@@ -343,5 +349,72 @@ func TestTheGlobeMapsForceIsSpacedByReach(t *testing.T) {
 	in, out := radii(gl.at[:core]), radii(gl.at[core:])
 	if ratio := out[len(out)/2] / in[len(in)*9/10]; ratio > 2 {
 		t.Errorf("the unlinked documents' median distance is %.2f times the core's r90; want within 2", ratio)
+	}
+}
+
+// A view's groups are the workspace's graph file's: with none, the first view to open writes them,
+// a group each schema type then each folder, each a colour; its settings' edits are written there
+// too, and the other view keeps a list of its own (with outlines) in the same file.
+func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
+	kb := fileDir(t, "schema.yaml", "version: 2\ndiscriminator: type\ncommon:\n  type: {type: string, enum: [note, adr]}\ntypes:\n  note: {}\n  adr: {}\n",
+		"a.md", "---\ntype: adr\n---\n[[b]]\n")
+	if err := os.MkdirAll(filepath.Join(kb, "notes"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for name, text := range map[string]string{"b.md": "---\ntype: memo\n---\nbbb\n", "c.md": "ccc\n"} {
+		if err := os.WriteFile(filepath.Join(kb, "notes", name), []byte(text), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	d := startManaged(t, map[string]string{"kb": kb})
+	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
+	r.s.WaitForText(t, "· kb")
+	r.waitListed(t, 3)
+	if _, err := (core{r.h}).Call(context.Background(), "workspace.set_schema", "kb", "schema.yaml"); err != nil {
+		t.Fatal(err)
+	}
+	var g *globeMap
+	var m *mindmap
+	onLoop(r, func() bool {
+		g, m = r.h.relationViews[0].(*globeMap), r.h.relationViews[1].(*mindmap)
+		core{r.h}.TogglePanel(globeMapPanelID)
+		return true
+	})
+	queries := func(list []relGroup) []string {
+		var out []string
+		for _, x := range list {
+			out = append(out, x.Query)
+		}
+		return out
+	}
+	r.s.WaitFor(t, "the GlobeMap's groups", func(string) bool { return onLoop(r, func() bool { return g.groups != nil }) })
+	if got := onLoop(r, func() []string { return queries(g.groups.list) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
+		t.Fatalf("groups %q; want the schema's types, then the folder", got)
+	}
+	file := func() string { b, _ := os.ReadFile(filepath.Join(kb, ".autodoc", "graph.toml")); return string(b) }
+	r.s.WaitFor(t, "the graph file written", func(string) bool { return strings.Contains(file(), `query = "path:notes/"`) })
+	if f := file(); !strings.Contains(f, "[[globemap.groups]]") || strings.Contains(f, "[[mindmap.groups]]") || !strings.Contains(f, "palette = [") {
+		t.Fatalf("the graph file:\n%s", f)
+	}
+	// an edit in the settings: written, and drawn
+	onLoop(r, func() bool { g.editor.moved(1); g.editor.setColour("#123456"); return true })
+	r.s.WaitFor(t, "the edit written", func(string) bool { return strings.Contains(file(), `colour = "#123456"`) })
+	if c := onLoop(r, func() color.NRGBA { return g.groups.list[1].Colour }); c != rgb(0x123456) {
+		t.Errorf("type:adr's colour in the view: %v", c)
+	}
+	onLoop(r, func() bool { g.editor.setQuery("nope"); return true })
+	if q := onLoop(r, func() string { return g.groups.list[1].Query }); q != "type:adr" {
+		t.Errorf("a query that does not read was kept: %q", q)
+	}
+	// the Mindmap: its own list, with outlines, in the same file
+	r.openByPicker(t, "a.md")
+	r.waitFile(t, "a.md")
+	onLoop(r, func() bool { core{r.h}.TogglePanel(mindmapPanelID); return true })
+	r.s.WaitFor(t, "the Mindmap's groups", func(string) bool { return strings.Contains(file(), "[[mindmap.groups]]") })
+	if f := file(); !strings.Contains(f, `shape = "hexagon"`) {
+		t.Errorf("the Mindmap's groups have no outlines:\n%s", f)
+	}
+	if got := onLoop(r, func() []string { return queries(m.groups.list) }); !slices.Equal(got, []string{"type:note", "type:adr", "path:notes/"}) {
+		t.Errorf("the Mindmap's groups %q", got)
 	}
 }
