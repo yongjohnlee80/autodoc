@@ -120,6 +120,7 @@ func (h *Host) commands() map[string]Command {
 		// the preferences
 		"App.openPrefs":            none(h.openPrefs),
 		"App.openActiveSettings":   none(h.openActiveSettings),
+		"App.openGlobeSettings":    none(h.openGlobeSettings), // Preferences names it in every build
 		"App.setKeymap":            oneString("vim or text", h.setKeymap),
 		"App.toggleKeymap":         none(h.toggleKeymap),
 		"App.useTheme":             oneString("a theme's name", h.useTheme),
