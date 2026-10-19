@@ -17,7 +17,7 @@ AutoDoc natively highlights and parses SQL across four dialect families, whether
 
 ### Statement Splitting at `cursor_byte` (`golib/parse/sql`)
 
-When you trigger **Run statement or selection** (`SPC p a r`), AutoDoc sends `plugin.command {id: "run", document}` (Protocol 4/5) containing the exact buffer snapshot, `cursor_byte`, and `selection_bytes`.
+When you trigger **Run statement or selection** (`SPC p a r`: this chapter writes `a` for the letter you give AutoDB yourself, on **SPC p** with `*` and then a letter; AutoDoc assigns plugins no letter), AutoDoc sends `plugin.command {id: "run", document}` (Protocol 4/5) containing the exact buffer snapshot, `cursor_byte`, and `selection_bytes`.
 
 If a visual selection is active (`selection_bytes` non-empty), `autodoc-autodb` executes that exact slice. Otherwise, `autodoc-autodb` feeds the buffer (or the fenced SQL block surrounding `cursor_byte`) into `golib/parse/sql` using the active connection's dialect. Because `golib/parse/sql` lexes strings, comments (`--` and `/* ... */`), PostgreSQL `$$tag$$` dollar-quoted bodies, quoted identifiers (`"..."`, `` `...` ``, `[...]`), and `BEGIN ... END` blocks, semicolons inside string literals or procedural bodies never prematurely split your query.
 
