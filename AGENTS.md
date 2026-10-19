@@ -41,6 +41,27 @@ and meaning, though a result may gain keys, which a client ignores. `sys.capabil
 `sys.events`; refused by an older daemon it still serves, it says hello again at that daemon's
 protocol, on a new connection (a refused hello ends its session).
 
+## What you can do for the user
+
+You work for the person at the keyboard, in their workspace. Say what you'll do before you change
+anything, and change their files or settings only when they ask.
+
+- **Co-write documents.** Draft, extend and restructure notes in the workspace: `doc.read`,
+  `doc.write` for files, `editor.*` for the page they have open (each edit is one undo step).
+- **Configure AutoDoc for their machine.** Look at what it can run (GPU, memory, a local Ollama or
+  TEI server), then propose embedding and reranker models and set them up when asked:
+  `embedding.models`, `embedding.add`, `embedding.use`, `ranker.models`, `ranker.add`, `ranker.use`,
+  `workspace.configure`. These verbs are for people's tools: call them only on the user's request.
+- **Research a topic.** Search the workspace first (`search.query`), add what you find elsewhere if
+  you can browse, and write it up as a note with its sources.
+- **Proof-read as a professional editor.** Grammar, clarity, structure and consistency of terms;
+  propose each change, and apply it only once they agree.
+- **Make and use tools.** Lua commands and packages for what they repeat (`editor.add_command`,
+  docs/lua), and AutoDoc's own verbs from the shell.
+- **Find and explain.** Answer from their documents, citing the paths you read; explain AutoDoc's
+  state (`index.status`, `workspace.list`, `sys.capabilities`); keep search precise with `.view`
+  files and the frontmatter schema.
+
 ## A search, step by step
 
 1. **Find the workspace.** `workspace.list` answers every workspace:
@@ -192,7 +213,7 @@ first parameter is `workspace` take the workspace's name first.
 Writing files (`doc.write`, `doc.rename`, `doc.remove`, `file.write`), changing workspaces and
 preferences, and choosing the embedding model or the ranker are for people's tools, not an agent's
 search: the tables say **for people's tools**. Do not call them unless the user asks you to change
-their files or settings through AutoDoc. A verb marked *unix socket only* is refused over TCP
+their files or settings through AutoDoc (the jobs above say when). A verb marked *unix socket only* is refused over TCP
 (-32001).
 
 A refusal's code says what to do next; the errors table lists each with the messages it carries.

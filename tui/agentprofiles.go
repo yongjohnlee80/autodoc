@@ -110,24 +110,31 @@ func (h *agents) saveAgent(name, command string) {
 	h.saveAgentProfile(name, command, codename)
 }
 
-// saveAgentProfile is the form's save, including the explicit stable identity.
+// saveAgentProfile is the profile form's Save (App.saveAgentProfile): storeAgentProfile, its
+// answer read by nothing, since a refusal has already reopened the form with its reason.
 func (h *agents) saveAgentProfile(name, command, codename string) {
+	h.storeAgentProfile(name, command, codename)
+}
+
+// storeAgentProfile is the form's save, including the explicit stable identity.
+// It returns the profile it stored and true, or false when it refused: the one save path, the form's
+// and the agent setup's (agentsetup.go), so both share every validation and neither infers success.
+func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile, bool) {
 	name, command = strings.TrimSpace(name), strings.TrimSpace(command)
 	codename = strings.TrimSpace(codename)
 	if codename == "" {
 		codename = agentCodename(name)
 	}
-	refuse := func(why string) {
+	refuse := func(why string) (agentProfile, bool) {
 		h.c.Set("App.agentFormError", "not saved: "+why)
 		h.c.Open("agentEdit")
+		return agentProfile{}, false
 	}
 	if name == "" || command == "" {
-		refuse("a profile is a name and the command that starts the agent")
-		return
+		return refuse("a profile is a name and the command that starts the agent")
 	}
 	if !validAgentCodename(codename) {
-		refuse("codename needs lower-case letters or digits, separated by hyphens")
-		return
+		return refuse("codename needs lower-case letters or digits, separated by hyphens")
 	}
 	agents := h.profiles()
 	at := -1
@@ -135,23 +142,19 @@ func (h *agents) saveAgentProfile(name, command, codename string) {
 		if a.Codename == h.editingAgent {
 			at = i
 		} else if a.Codename == codename {
-			refuse("codename taken by " + a.Name)
-			return
+			return refuse("codename taken by " + a.Name)
 		}
 	}
 	if h.editingAgent != "" && (at < 0 || (h.editingAgentProfile != nil && agents[at] != *h.editingAgentProfile)) {
-		refuse("the agent profile changed; open it again before saving")
-		return
+		return refuse("the agent profile changed; open it again before saving")
 	}
 	if at >= 0 {
 		if instance := h.instances[agents[at].Codename]; instance != nil && codename != agents[at].Codename {
-			refuse("stop the running agent before changing its codename")
-			return
+			return refuse("stop the running agent before changing its codename")
 		}
 	}
 	if instance := h.instances[codename]; instance != nil && (at < 0 || agents[at].Codename != codename) {
-		refuse("codename held by a running agent")
-		return
+		return refuse("codename held by a running agent")
 	}
 	def := h.defaultProfile()
 	if at >= 0 {
@@ -168,6 +171,7 @@ func (h *agents) saveAgentProfile(name, command, codename string) {
 	h.keepAgents(agents, def)
 	h.editingAgent, h.editingAgentProfile = "", nil
 	h.c.Set("App.status", "saved the agent profile "+name)
+	return agentProfile{Name: name, Command: command, Codename: codename}, true
 }
 
 // removeAgent asks about the profile at i. The answer holds that profile, not

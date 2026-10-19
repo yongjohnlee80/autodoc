@@ -229,6 +229,7 @@ Window {
             title: "&System"
             MenuItem { text: "&Search models…"; onTriggered: App.openAIModels() }
             MenuItem { text: "A&gent profiles…"; onTriggered: App.openAgentProfiles() }
+            MenuItem { text: "Set up an &agent…"; onTriggered: App.openAgentSetup() }
             MenuSeparator {}
             MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
         }
@@ -906,6 +907,7 @@ Window {
     Recent { id: recent }
     AgentProfiles { id: agentProfiles }
     AgentEdit { id: agentEdit }
+    AgentSetup { id: agentSetup }
     AgentSwitch { id: agentSwitch }
     RankerWindow { id: rankerWindow }
     Mismatch { id: mismatch }
