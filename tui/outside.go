@@ -183,7 +183,7 @@ func (h *Host) createAbsolute(abs string) {
 	tk := h.ticket(nil, TicketWorkspace)
 	raw := kind.RawText(abs)
 	do(h, func(ctx context.Context) created {
-		return h.writeNew(ctx, "", abs, abs, []byte{})
+		return h.writeNew(ctx, "", abs, "", []byte{}) // any path: File › New file…'s own rules
 	}, func(a created) {
 		if !tk.Current() {
 			return
