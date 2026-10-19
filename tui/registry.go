@@ -47,6 +47,15 @@ type cachedIndex struct {
 type registryList struct {
 	ix   regindex.Index
 	note string
+	err  error // the read panicked (failed, crash.go); usable reads it as the built-ins
+}
+
+// usable is l as a list shows it: a read that failed is the built-in KB types, said as such.
+func (l registryList) usable() registryList {
+	if l.err != nil {
+		return registryFallback(registryCache{}, false, l.err)
+	}
+	return l
 }
 
 // fetchRegistry is the index as a list opens: the cache while it is younger than registryMaxAge;
@@ -203,6 +212,7 @@ func isRegistryName(arg string) bool {
 func resolveRegistry(c Core, kind, name string, loaded func(registryList), then func(repo string, err error)) {
 	name = strings.TrimSpace(name)
 	coreDo(c, func(ctx context.Context) registryList { return fetchRegistry(ctx, time.Now()) }, func(l registryList) {
+		l = l.usable()
 		if loaded != nil {
 			loaded(l)
 		}
@@ -231,6 +241,7 @@ func kindNoun(kind string) string {
 // registryLoaded keeps the list last loaded and shows its KB types in the field, the type chosen
 // kept chosen at its new row. An offline list says so while None is chosen.
 func (h *Host) registryLoaded(l registryList) {
+	l = l.usable()
 	h.registryNow = &l
 	rows := h.kbTypeRows()
 	h.kbTypes.Reset(rows)

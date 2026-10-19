@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -174,6 +175,22 @@ func TestNoRegistryIsTheBuiltinKBTypes(t *testing.T) {
 	}
 	if got := s.requests(); len(got) != 2 || got[0] != "" || got[1] != "" {
 		t.Errorf("the requests' ETags: %q", got)
+	}
+}
+
+// A read that panicked (its answer's err, failed in crash.go) is listed as the built-in KB types,
+// said as such: a list never shows a zero index as the registry.
+func TestAFailedRegistryReadIsTheBuiltins(t *testing.T) {
+	l := registryList{err: errors.New("boom\nstack")}.usable()
+	if l.note != "offline: the built-in KB types only (boom)" || len(l.ix.Entries) != len(builtinKBTypes) {
+		t.Errorf("%q, %d entries", l.note, len(l.ix.Entries))
+	}
+	ok := registryList{note: "x"}
+	if got := ok.usable(); got.note != "x" {
+		t.Errorf("a read that did not fail changed: %+v", got)
+	}
+	if l, ok := failed[registryList](errPanicked{value: "boom"}); !ok || l.err == nil {
+		t.Errorf("a panicked read does not carry its failure: %+v %v", l, ok)
 	}
 }
 
