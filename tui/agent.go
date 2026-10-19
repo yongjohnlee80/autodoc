@@ -31,13 +31,17 @@ type agents struct {
 	editorTokens        map[string]string
 	editingAgent        string
 	editingAgentProfile *agentProfile // exact record shown in the form; stale edits are refused
-	switchingAgent      string
-	agentRows           *tuidecl.ListModel
-	instances           map[string]*agentInstance
-	instanceOrder       []string
-	selectedAgent       string
-	deliveries          map[*agentDelivery]bool
-	stopping            bool
+	// the setup card (agentsetup.go): whether it is the first run's, and the CLIs it lists
+	setupFirst     bool
+	setupFound     []agentCLI
+	setupCLIs      *tuidecl.ListModel
+	switchingAgent string
+	agentRows      *tuidecl.ListModel
+	instances      map[string]*agentInstance
+	instanceOrder  []string
+	selectedAgent  string
+	deliveries     map[*agentDelivery]bool
+	stopping       bool
 }
 
 func newAgents(c agentHost, dir, config string) *agents {
@@ -55,6 +59,8 @@ func (a *agents) BindPanelHost(c PanelHost) error {
 func (*agents) Name() string { return "agents" }
 func (a *agents) State() map[string]any {
 	st := map[string]any{
+		"App.agentSetupCLIs": a.setupList(), "App.agentSetupIndex": 0, "App.agentSetupName": "", "App.agentSetupNone": false,
+		"App.agentSetupSome": false, "App.agentSetupReject": "&No",
 		"App.agentTitle":          "agent",
 		"App.agentShown":          false,
 		"App.agentEdges":          choices(agentEdgeLabels...),
@@ -77,6 +83,7 @@ func (a *agents) Catalog() []Entry {
 	return []Entry{
 		builtin("agent.toggle", "AI agent", "App.toggleAgent()", a.toggleAgent),
 		builtin("prefs.agent_profiles", "agent profiles", "App.openAgentProfiles()", a.openAgentProfiles),
+		builtin("agent.setup", "set up an agent", "App.openAgentSetup()", func() { a.openAgentSetup(false) }),
 	}
 }
 
@@ -86,13 +93,14 @@ func agentPrefRows(a *agents) []PrefSpec {
 	profiles := ValuePref(prefAgentProfiles, "[]", nil)
 	def := ValuePref(prefAgentDefault, "", nil)
 	identity := ValuePref(prefAgentDefaultCodename, "", nil)
+	setup := ValuePref(prefAgentSetup, "", nil) // the setup's answer (agentsetup.go)
 	if a != nil {
 		edge = edge.then(func(prefs) { a.c.DockPanel("agent") })
 		profiles = profiles.then(func(prefs) { a.listAgents() })
 		def = def.then(func(prefs) { a.listAgents() })
 		identity = identity.then(func(prefs) { a.listAgents() })
 	}
-	return []PrefSpec{edge, profiles, def, identity}
+	return []PrefSpec{edge, profiles, def, identity, setup}
 }
 
 func agentPreferenceState(p prefs) map[string]any {
@@ -122,6 +130,10 @@ func (a *agents) Commands() map[string]Command {
 		"App.saveAgentProfile":     threeStrings("a name, command and codename", a.saveAgentProfile),
 		"App.removeAgent":          oneNumber("a row", a.removeAgent),
 		"App.makeAgentDefault":     oneNumber("a row", a.makeAgentDefault),
+		"App.openAgentSetup":       none(func() { a.openAgentSetup(false) }),
+		"App.agentSetupPicked":     numberAndString("a row and the name", a.agentSetupPicked),
+		"App.agentSetupConfirm":    numberAndString("a row and the name", a.agentSetupConfirm),
+		"App.agentSetupDecline":    none(a.agentSetupDecline),
 		"App.useAgent":             oneNumber("a row", a.useAgent),
 		"App.switchAgentConfirmed": none(a.switchAgentConfirmed),
 		"App.agentTabsChanged":     none(a.agentTabsChanged),
@@ -411,11 +423,6 @@ func agentGuide(ws wsInfo, bin, config, wrapper string) string {
 	}
 	b.WriteString(", so it reaches the same store and daemon as the TUI that started you. Call it as `autodoc`, as the ")
 	b.WriteString("examples below do, never another autodoc. Search before you answer, and cite the paths you read.\n\n")
-	b.WriteString("## What to help with\n\n")
-	b.WriteString("- Finding documents and answering from them: `search.query`, then `doc.read`.\n")
-	b.WriteString("- Editing the user's files under the root, when asked. AutoDoc follows the edits, as it follows any editor's.\n")
-	b.WriteString("- Keeping search precise: `.view` files and the frontmatter schema, so a term means one thing and is not diluted across unrelated files.\n")
-	b.WriteString("- Explaining AutoDoc's state: `index.status`, `workspace.list`, `sys.capabilities`.\n\n")
 	b.WriteString(editorGuide)
 	b.WriteString("---\n\n")
 	b.WriteString(autodoc.AgentsGuide)

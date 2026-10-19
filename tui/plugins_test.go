@@ -51,6 +51,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	registryCacheDir = func() (string, error) { return cache, nil }
+	offerAgentSetup = false // the setup cells turn it on (agentsetup_test.go)
 	registryURL = "http://127.0.0.1:1/index.json"
 	code := m.Run()
 	_ = os.RemoveAll(cache)

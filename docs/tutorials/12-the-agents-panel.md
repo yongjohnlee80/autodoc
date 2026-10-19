@@ -2,6 +2,8 @@
 
 AutoDoc runs AI agents' command lines (Claude Code, Codex, OpenCode, and others) in a panel of their own, each told about your workspace.
 
+**On a first run** AutoDoc offers to set one up: it finds Claude Code, Codex, Grok or Antigravity on your PATH, and **Set up** saves the profile, starts the agent and has it say what it can do for you. **System › Set up an agent…** brings that card back.
+
 **Add a profile.** **System › Agent profiles…** (SPC G), then **Add…**: a name, and the command that starts the agent, such as `claude --model opus` or `codex`. `{root}` and `{workspace}` in the command become the workspace's folder and name. The first profile is the default; **Make default** chooses another.
 
 **SPC g** shows the panel, starting the default agent if none is running, and hides it again. A hidden agent keeps running.
