@@ -25,7 +25,7 @@ If a visual selection is active (`selection_bytes` non-empty), `autodoc-autodb` 
 
 ## 16.2 Connecting, Unlocking Sessions, and Browsing Schemas (`SPC p a c`)
 
-`autodoc-autodb` runs as a **Protocol 6 non-modal docked card** (`[dialog] modal = false`, `[feed] document = true`, `[table] title = "Results"`, `calls = ["buffer.new"]`).
+`autodoc-autodb` runs as a **non-modal docked card** (`[dialog] modal = false`, `[feed] document = true`, `[table] title = "Results"`, and `calls` naming `buffer.new` among the host commands it uses), at the plugin protocol its manifest declares.
 
 1. **Opening and Unlocking (`SPC p a c`)**: Pressing `SPC p a c` (or selecting **Plugins › AutoDB › Connect**) opens and focuses the AutoDB card at the right edge of your screen. If the AutoDB daemon's keystore is sealed, the card prompts for your passphrase and unlocks your saved connection profiles.
 2. **Schema Inspection and Draft Generation**: Once connected to a PostgreSQL, MySQL/MariaDB, or SQLite target, the card displays your active connection, transaction/session status, and schema browser. Pressing `Enter` on any table or view invokes `host.call` with `buffer.new` (`calls = ["buffer.new"]`), opening a fresh unsaved tab named `<schema>.<table>.sql` pre-populated with:
