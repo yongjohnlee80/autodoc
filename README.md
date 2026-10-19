@@ -278,7 +278,7 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   workspace and the links among them, placed by force, each document's dot coloured by its type
   and a superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again, `f` cycles
   every link, body links and relations, and a click opens the document. **Mindmap**: the page's
-  document and those within two links of it, as a mind map shaped by type; a click opens that
+  document and those one link from it (`d` shows two), as a mind map shaped by type; a click opens that
   document and the map follows it, the keyboard staying on the map. A terminal has the links alone.
 - **The terminal's and the agents' tabs**: each shell or agent has a tab; `+` adds one, and the
   strip's menu (`≡`, a right click anywhere on the strip or an empty panel, or Enter on the strip)
