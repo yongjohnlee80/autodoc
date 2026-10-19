@@ -207,3 +207,36 @@ func TestAskRunsYesOnceAndOnlyForTheQuestionAsked(t *testing.T) {
 	}
 	Asked{}.Say("no-op") // a zero Asked, as a test's Core returns, says nothing
 }
+
+// A question's third button (Question.Other) shows only when asked for. Chosen, it runs OnOther
+// once and neither OnYes nor OnCancel, and the card's closed notification after it cancels nothing:
+// what was asked lives on (a candidate's Audit…).
+func TestAskOtherRunsOnceAndNeitherYesNorCancel(t *testing.T) {
+	s := newScripted("kb")
+	a := newAsker(s)
+	if st := a.State(); st["App.askOther"] != "" || st["App.askOtherShown"] != false {
+		t.Fatalf("first state %v", st)
+	}
+	yes, cancel, other := 0, 0, 0
+	a.ask(Question{Title: "install?", Other: "&Audit…", OnYes: func() { yes++ }, OnCancel: func() { cancel++ }, OnOther: func() { other++ }})
+	if s.set["App.askOther"] != "&Audit…" || s.set["App.askOtherShown"] != true {
+		t.Fatalf("the third button: %v %v", s.set["App.askOther"], s.set["App.askOtherShown"])
+	}
+	a.Commands()["App.askOtherChosen"].Run(nil)
+	a.Commands()["App.askOtherChosen"].Run(nil)
+	a.closed() // the card's closed notification after the button
+	a.accepted()
+	if other != 1 || yes != 0 || cancel != 0 {
+		t.Fatalf("other %d, yes %d, cancel %d; want 1, 0, 0", other, yes, cancel)
+	}
+
+	a.ask(Question{Title: "remove?", OnCancel: func() { cancel++ }})
+	if s.set["App.askOther"] != "" || s.set["App.askOtherShown"] != false {
+		t.Fatalf("a question without one shows a third button: %v %v", s.set["App.askOther"], s.set["App.askOtherShown"])
+	}
+	a.otherChosen() // a card without one: nothing is chosen, and the question is still asked
+	a.rejected()
+	if cancel != 1 || other != 1 {
+		t.Fatalf("cancel %d, other %d; want 1, 1", cancel, other)
+	}
+}

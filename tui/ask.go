@@ -119,9 +119,10 @@ func (a *asker) accepted() {
 	a.idle()
 }
 
-// otherChosen runs the question's OnOther, once; the card closes without OnCancel.
+// otherChosen runs the question's OnOther, once; the card closes without OnCancel. A question
+// with no third button has nothing to choose, and stays asked.
 func (a *asker) otherChosen() {
-	if !a.pending {
+	if !a.pending || a.other == nil {
 		return
 	}
 	other := a.other
