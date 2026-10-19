@@ -24,11 +24,14 @@ mise use --global github:yongjohnlee80/autodoc@latest
 
 ### Building from Source (`go install`)
 
-If you have Go 1.26.9 or newer installed, you can compile AutoDoc directly from source. Building with the default tags includes both the terminal UI and the native Gio GUI:
+If you have Go 1.26.9 or newer installed, you can compile AutoDoc directly from source. The default build is the terminal UI; the native Gio GUI needs `-tags gui` (and so cgo, a C compiler, and on Linux the window system's development libraries):
 
 ```bash
-# Install with full TUI, GUI, and FTS5 SQLite support
-CGO_ENABLED=1 go install -tags "sqlite_fts5" github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
+# The terminal UI
+go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
+
+# The terminal UI and the GUI
+GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest
 
 # Verify binary version and supported features
 autodoc --version
