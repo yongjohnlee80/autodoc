@@ -64,7 +64,7 @@ func TestPluginAndPackageFolderEdges(t *testing.T) {
 	pl.pluginAudit()
 	clone := t.TempDir()
 	pend := func(c *candidate) {
-		if err := pl.cands.begin(c, func(c *candidate) { pl.pendingPlugin = c }); err != nil {
+		if err := pl.cands.begin(c, func(c *candidate) { pl.pendingPlugin = c }, nil); err != nil {
 			t.Fatal(err)
 		}
 		pl.cands.show(c)

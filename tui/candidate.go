@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 
 	"github.com/yongjohnlee80/autodoc"
 	regindex "github.com/yongjohnlee80/autodoc/core/registry"
@@ -25,6 +26,7 @@ type opState int
 const (
 	opConfirming opState = iota // its card is up, or is about to be
 	opSuspended                 // its card is down, its toast reopens it (an audit handed off)
+	opCopying                   // Audit… is making its copy: nothing else acts on it until the copy's answer
 	opInstalling                // Install began: nothing else acts on it
 	opEnded
 )
@@ -39,6 +41,7 @@ type candidate struct {
 	m                manifest         // a plugin's manifest, as the stage holds it
 	pkg              packageManifest  // a Lua package's
 	card             func(*candidate) // shows its card: the kind's own (askPlugin, askPackage)
+	hide             func(*candidate) // takes its card down when another candidate's replaces it
 
 	state       opState
 	auditCopies []string // one root per Audit handed off: the copy, and its task file beside it
@@ -57,6 +60,7 @@ const auditNote = "Audit asks your agent to read this code. AutoDoc can't stop t
 // candidates are the live candidates, by key, and Audit…'s picker of agents.
 type candidates struct {
 	c      Core
+	allocs *allocs // every stage and audit copy a worker made, until it is removed
 	ops    map[string]*candidate
 	onCard *candidate // the candidate whose card is up
 	pick   *pick[AgentEntry]
@@ -65,7 +69,7 @@ type candidates struct {
 }
 
 func newCandidates(c Core) *candidates {
-	cs := &candidates{c: c, ops: map[string]*candidate{}}
+	cs := &candidates{c: c, ops: map[string]*candidate{}, allocs: newAllocs()}
 	cs.pick = newAgentPick(c, "auditAgentPicker", "auditAgent", cs.auditWith)
 	cs.pick.scope = TicketLocal
 	cs.pick.cancel = cs.auditCancelled
@@ -85,32 +89,87 @@ func (*candidates) Commands() map[string]Command { return nil }
 
 func (cs *candidates) Picks() map[string]picker { return map[string]picker{"auditAgent": cs.pick} }
 
-// Stopped removes every live candidate's stage, audit copies and task files: the session ended.
-// The loop has ended, so nothing is posted.
+// Stopped removes every stage, audit copy and task file a candidate's worker made, the ones whose
+// answers never reached the loop included: the session ended. The loop has ended, so nothing is
+// posted. A worker still making one removes it itself (allocs.hold refuses it).
 func (cs *candidates) Stopped() {
 	for _, c := range cs.ops {
 		c.state = opEnded
-		removeCandidateFiles(c.stage, c.auditCopies)
 	}
 	clear(cs.ops)
+	cs.allocs.close()
 }
 
-// begin makes c live, its card shown by card (the kind's own), unless another candidate holds its
-// target: then c's stage is removed and why is returned.
-func (cs *candidates) begin(c *candidate, card func(*candidate)) error {
+// allocs are the directories candidates' workers made (stages, audit copies with their task files),
+// each held from the moment it exists until its removal ran. They are owned here, not by a job's
+// answer: the session's end (close) removes every one held, whether or not its answer was
+// delivered, and a worker that makes one after the end removes it itself.
+type allocs struct {
+	mu     sync.Mutex
+	held   map[string]bool
+	closed bool
+}
+
+func newAllocs() *allocs { return &allocs{held: map[string]bool{}} }
+
+// hold records dir; false once the session has ended, and the caller removes dir itself.
+func (a *allocs) hold(dir string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.closed {
+		return false
+	}
+	a.held[dir] = true
+	return true
+}
+
+// remove removes each dir and lets it go: a worker's or an ending candidate's cleanup.
+func (a *allocs) remove(dirs ...string) {
+	for _, d := range dirs {
+		if d == "" {
+			continue
+		}
+		_ = os.RemoveAll(d)
+		a.mu.Lock()
+		delete(a.held, d)
+		a.mu.Unlock()
+	}
+}
+
+// close removes every dir held and refuses any held after it.
+func (a *allocs) close() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.closed = true
+	for d := range a.held {
+		_ = os.RemoveAll(d)
+	}
+	clear(a.held)
+}
+
+// begin makes c live, its card shown by card and taken down by hide (the kind's own), unless another
+// candidate holds its target: then c's stage is removed and why is returned.
+func (cs *candidates) begin(c *candidate, card, hide func(*candidate)) error {
 	if cs.ops[c.key()] != nil {
-		removeCandidateFiles(c.stage, nil)
+		cs.allocs.remove(c.stage)
 		return fmt.Errorf("%s is already being installed or audited", c.name)
 	}
-	c.card = card
+	cs.allocs.hold(c.stage) // a stage made outside cloneStage (a test's) is owned from here
+	c.card, c.hide = card, hide
 	cs.ops[c.key()] = c
 	return nil
 }
 
-// show puts c's card up. A card it replaces, still confirming, is suspended to its toast.
+// show puts c's card up. A card it replaces, still confirming, is suspended to its toast first, so
+// its own Cancel (a replaced question's OnCancel) finds it suspended and ends nothing. A card of
+// another kind is then taken down; one of c's kind is the same dialog, which c's card takes over
+// (askPlugin sets PluginConfirm anew, askPackage's question replaces the one asked).
 func (cs *candidates) show(c *candidate) {
 	if o := cs.onCard; o != nil && o != c && o.state == opConfirming {
 		cs.suspend(o, "the "+kindNoun(o.kind)+" "+o.name+" waits: click to install or cancel")
+		if o.kind != c.kind && o.hide != nil {
+			o.hide(o)
+		}
 	}
 	cs.onCard = c
 	c.state = opConfirming
@@ -151,9 +210,10 @@ func (cs *candidates) claim(c *candidate) bool {
 	return true
 }
 
-// cancel is the card's No: c ends, unless it is installing or has ended; false when it did not.
+// cancel is the card's No: c ends while its card is up (confirming); false when it did not. A
+// suspended candidate's card is down, so a Cancel reaching it is a replaced card's, never the user's.
 func (cs *candidates) cancel(c *candidate, outcome string) bool {
-	if c == nil || (c.state != opConfirming && c.state != opSuspended) {
+	if c == nil || c.state != opConfirming {
 		return false
 	}
 	cs.end(c, outcome)
@@ -177,19 +237,10 @@ func (cs *candidates) end(c *candidate, outcome string) {
 	if cs.auditing == c {
 		cs.auditing = nil
 	}
-	stage, copies := c.stage, slices.Clone(c.auditCopies)
-	cs.c.Go(func(context.Context) any { removeCandidateFiles(stage, copies); return nil }, func(any) {})
+	dirs := append([]string{c.stage}, c.auditCopies...)
+	cs.c.Go(func(context.Context) any { cs.allocs.remove(dirs...); return nil }, func(any) {})
 	if c.toasted {
 		cs.c.NotifyDone(c.toastID(), cmp.Or(outcome, c.name+": ended"))
-	}
-}
-
-func removeCandidateFiles(stage string, copies []string) {
-	if stage != "" {
-		_ = os.RemoveAll(stage)
-	}
-	for _, root := range copies {
-		_ = os.RemoveAll(root)
 	}
 }
 
@@ -236,27 +287,35 @@ func (cs *candidates) auditCancelled() {
 // auditWith hands c's audit to agent a: a fresh copy of the pristine stage and its task file, made
 // off the loop; then c is suspended to its toast and the task handed over. A copy an agent may
 // still be reading is never reused or removed before c ends.
+//
+// While the copy is made c is opCopying, which only this sets and only its answer (or c's end)
+// leaves: an old toast, a stale card's Install or Cancel and another Audit all refuse it, and the
+// answer moves c on only if c is still copying, the attempt it was made for.
 func (cs *candidates) auditWith(a AgentEntry) {
 	c := cs.auditing
 	cs.auditing = nil
 	if c == nil || c.state != opConfirming {
 		return
 	}
-	c.state = opSuspended // the card is down while the copy is made: Install can't race it
+	c.state = opCopying
+	if c.toasted {
+		cs.c.NotifyOngoingClick(c.toastID(), "copying "+c.name+" for its audit…", func() { cs.reopen(c) })
+	}
 	type copied struct {
 		root, task string
 		err        error
 	}
 	cs.c.Go(func(ctx context.Context) any {
-		root, task, err := auditCopy(ctx, c)
+		root, task, err := auditCopy(ctx, c, cs.allocs)
 		return copied{root, task, err}
 	}, func(v any) {
 		r := v.(copied)
-		if c.state == opEnded { // ended while it was copied: the copy is its own to remove
-			removeCandidateFiles("", []string{r.root})
+		if c.state != opCopying { // ended while it was copied: the copy is its own to remove
+			cs.allocs.remove(r.root)
 			return
 		}
 		if r.err != nil {
+			c.state = opConfirming
 			cs.c.Notify("audit of " + c.name + " not handed over: " + r.err.Error())
 			cs.show(c)
 			return
@@ -320,8 +379,9 @@ func pristine(ctx context.Context, c *candidate) error {
 }
 
 // auditCopy is a fresh copy of c's pristine stage for one Audit…: a root of its own holding the
-// copy and, beside it (never in it), the task file.
-func auditCopy(ctx context.Context, c *candidate) (root, task string, err error) {
+// copy and, beside it (never in it), the task file. The root is held in own from the moment it
+// exists, so the session's end removes it even if this answer never reaches the loop.
+func auditCopy(ctx context.Context, c *candidate, own *allocs) (root, task string, err error) {
 	if err := pristine(ctx, c); err != nil {
 		return "", "", err
 	}
@@ -329,7 +389,10 @@ func auditCopy(ctx context.Context, c *candidate) (root, task string, err error)
 	if err != nil {
 		return "", "", err
 	}
-	fail := func(err error) (string, string, error) { _ = os.RemoveAll(root); return "", "", err }
+	fail := func(err error) (string, string, error) { own.remove(root); return "", "", err }
+	if !own.hold(root) {
+		return fail(errSessionEnded)
+	}
 	dir := filepath.Join(root, c.name)
 	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--quiet", "--local", "--no-hardlinks", "--", c.stage, dir); err != nil {
 		return fail(err)
@@ -340,6 +403,9 @@ func auditCopy(ctx context.Context, c *candidate) (root, task string, err error)
 	}
 	return root, task, nil
 }
+
+// errSessionEnded is a worker's answer when the session ended while it worked: what it made is gone.
+var errSessionEnded = errors.New("the session ended")
 
 // auditTask is the task file: the prompt every audit reads (docs/audit-prompt.md), then this one's
 // copy, commit and repository, and the advisory sentence.

@@ -82,12 +82,12 @@ func (pl *plugins) addPlugin(url string) {
 	}
 	pl.c.Close("pluginAdd")
 	pl.c.NotifyOngoing(toastPlugin, "cloning "+url+"…")
-	dir := pl.pluginOpt.Dir
+	dir, own := pl.pluginOpt.Dir, pl.cands.allocs
 	coreDo(pl.c, func(ctx context.Context) answerOf[*candidate] {
-		return answered(stagePlugin(ctx, dir, url, nil))
+		return answered(stagePlugin(ctx, dir, url, nil, own))
 	}, func(r answerOf[*candidate]) {
 		if r.err == nil {
-			r.err = pl.cands.begin(r.v, pl.askPlugin)
+			r.err = pl.cands.begin(r.v, pl.askPlugin, pl.hidePlugin)
 		}
 		if r.err != nil {
 			pl.c.NotifyDone(toastPlugin, "not added: "+r.err.Error())
@@ -99,19 +99,25 @@ func (pl *plugins) addPlugin(url string) {
 }
 
 // cloneStage clones url, shallow, into a new stage of parent, and reads the commit it is at, in
-// full: a candidate's stage, a plugin's or a Lua package's alike. A failed clone leaves no stage.
-func cloneStage(ctx context.Context, parent, url string) (stage, commit string, err error) {
+// full: a candidate's stage, a plugin's or a Lua package's alike. The stage is held in own from the
+// moment it exists, so the session's end removes it even if this answer never reaches the loop. A
+// failed clone leaves no stage.
+func cloneStage(ctx context.Context, parent, url string, own *allocs) (stage, commit string, err error) {
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return "", "", err
 	}
 	if stage, err = os.MkdirTemp(parent, stagePrefix); err != nil {
 		return "", "", err
 	}
+	if !own.hold(stage) {
+		own.remove(stage)
+		return "", "", errSessionEnded
+	}
 	if _, err = git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err == nil {
 		commit, err = git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
 	}
 	if err != nil {
-		_ = os.RemoveAll(stage)
+		own.remove(stage)
 		return "", "", err
 	}
 	return stage, commit, nil
@@ -120,15 +126,15 @@ func cloneStage(ctx context.Context, parent, url string) (stage, commit string, 
 // stagePlugin stages url as a plugin candidate: an add (installed nil), refused when that plugin is
 // installed already, or an update of installed, refused when the staged plugin is another. A stage
 // that is not a runnable plugin is thrown away.
-func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry) (*candidate, error) {
+func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry, own *allocs) (*candidate, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return nil, errors.New("adding a plugin needs git")
 	}
-	stage, commit, err := cloneStage(ctx, dir, url)
+	stage, commit, err := cloneStage(ctx, dir, url, own)
 	if err != nil {
 		return nil, err
 	}
-	fail := func(err error) (*candidate, error) { _ = os.RemoveAll(stage); return nil, err }
+	fail := func(err error) (*candidate, error) { own.remove(stage); return nil, err }
 	e := readPlugin(stage)
 	switch {
 	case e == nil:
@@ -155,6 +161,15 @@ func (pl *plugins) askPlugin(c *candidate) {
 	pl.c.Set("App.pluginConfirmTitle", verb+" the plugin "+pluginTitle(c)+"?")
 	pl.c.Set("App.pluginQuestion", pluginQuestion(c, pluginTitle(c)))
 	pl.c.Open("pluginConfirm")
+}
+
+// hidePlugin takes c's PluginConfirm down when another candidate's card replaces it: closed, it
+// answers nothing (pluginDeclined does not run).
+func (pl *plugins) hidePlugin(c *candidate) {
+	if pl.pendingPlugin == c {
+		pl.pendingPlugin = nil
+		pl.c.Close("pluginConfirm")
+	}
 }
 
 func pluginTitle(c *candidate) string { return cmp.Or(c.m.Title, c.m.Name) }
@@ -447,7 +462,7 @@ func (pl *plugins) updatePlugin(name string) error {
 // folder is only read: nothing is fetched into it.
 func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	pl.c.NotifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
-	dir := pl.pluginOpt.Dir
+	dir, own := pl.pluginOpt.Dir, pl.cands.allocs
 	type staged struct {
 		c    *candidate
 		head string
@@ -468,9 +483,9 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 		if err != nil {
 			return staged{err: err}
 		}
-		c, err := stagePlugin(ctx, dir, m.source, &m.e)
+		c, err := stagePlugin(ctx, dir, m.source, &m.e, own)
 		if err == nil && c.commit == head {
-			_ = os.RemoveAll(c.stage)
+			own.remove(c.stage)
 		}
 		return staged{c, head, err}
 	}, func(r staged) {
@@ -480,7 +495,7 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 		case r.c.commit == r.head:
 			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" is up to date at "+regindex.Short(r.head))
 		default:
-			if err := pl.cands.begin(r.c, pl.askPlugin); err != nil {
+			if err := pl.cands.begin(r.c, pl.askPlugin, pl.hidePlugin); err != nil {
 				pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+err.Error())
 				return
 			}
