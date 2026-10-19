@@ -1,6 +1,7 @@
-// GlobeMapSettings.qml — Relations › GlobeMap settings… and Preferences › GlobeMap… (the GUI's): the
-// GlobeMap's own settings (globesettings_gui.go). Each applies at once and the store keeps it; a
-// colour field applies as it is typed, once it is #rrggbb or empty (the theme's colour).
+// GlobeMapSettings.qml — Relations › GlobeMap settings… and Preferences › GlobeMap…: the GlobeMap's own
+// settings (globesettings_gui.go). The GUI's alone: written into main.qml whole (relationviews_gui.go),
+// not an autodoc.dialogs component, which a terminal's document could name. Each applies at once and
+// the store keeps it; a colour field applies as it is typed, once it is #rrggbb or empty (the theme's).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 90

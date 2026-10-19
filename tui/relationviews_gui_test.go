@@ -31,7 +31,7 @@ func TestTheGUIWritesTheRelationViews(t *testing.T) {
 		`MenuItem { text: "&GlobeMap"; onTriggered: App.toggleGlobeMap() }`,
 		`MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }`,
 		`MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }`,
-		"GlobeMapSettings { id: globeMapSettings }",
+		"Dialog {\n        id: globeMapSettings\n", `title: "GlobeMap settings"`,
 		"id: globeMap\n", "GlobeMap {\n            id: globeMapView", `App.panelOpened("globeMap")`,
 		"id: mindmap\n", "Mindmap {\n            id: mindmapView", `App.panelOpened("mindmap")`,
 	} {
