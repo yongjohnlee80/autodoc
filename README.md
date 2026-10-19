@@ -275,9 +275,11 @@ draws them natively, by golib's Mermaid, where golib draws their type. A line em
   file); `SPC b` goes back to the previous document, where you left it (`Ctrl+O` steps back
   one jump at a time, within a document too); the page's right-click menu has both.
 - **The GUI's relation views** (`Relations ›`, `--gui` only). **GlobeMap**: every document of the
-  workspace and the links among them, placed by force, each document's dot coloured by its type
-  and a superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again, `f` cycles
-  every link, body links and relations, and a click opens the document. **Mindmap**: the page's
+  workspace and the links among them, placed by force, each document's dot coloured by its group
+  (groups are seeded from the schema's types and the folders; `l` shows their legend) and a
+  superseded one ringed; drag pans, the wheel and `+` `-` zoom, `0` fits it again, `f` cycles
+  every link, body links and relations, and a click opens the document. **Relations › GlobeMap
+  settings…** and **Mindmap settings…** choose how each draws. **Mindmap**: the page's
   document and those one link from it (`d` shows two), as a mind map shaped by type; a click opens that
   document and the map follows it, the keyboard staying on the map. A terminal has the links alone.
 - **The terminal's and the agents' tabs**: each shell or agent has a tab; `+` adds one, and the
