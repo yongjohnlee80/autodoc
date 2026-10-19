@@ -642,3 +642,32 @@ func TestChartsAndCSVFencesAreDrawn(t *testing.T) {
 		t.Errorf("a fence's data-src was not kept:\n%s", spans)
 	}
 }
+
+// Without a chart drawn, a page is what an export without Chart writes, byte for byte, with no
+// chart sizing in its style: Chart nil, or one that draws nothing. A chart drawn adds the sizing.
+func TestAPageWithoutADrawnChartIsUnchanged(t *testing.T) {
+	doc := embedDoc(t, map[string]string{
+		"docs/plan/sales.chart.json": "{\"mark\": \"bar\"}\n",
+		"docs/plan/flow.mmd":         "flowchart LR\n  A --> B\n",
+		"docs/plan/rows.csv":         "h,v\na,1\n",
+	})
+	source := []byte("# Plan\n\n![flow](flow.mmd)\n\n![rows](rows.csv)\n\n![sales](sales.chart.json)\n\n```vega-lite\n{\"mark\": \"line\"}\n```\n")
+	render := func(chart func([]byte, string) (string, bool)) string {
+		t.Helper()
+		content, err := export.RenderWith(source, export.HTML, "light", export.Options{Document: doc, Chart: chart})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(content)
+	}
+	plain := render(nil)
+	if strings.Contains(plain, "div.chart") {
+		t.Errorf("a page with no chart drawn has the charts' sizing:\n%s", plain)
+	}
+	if failed := render(func([]byte, string) (string, bool) { return "", false }); failed != plain {
+		t.Errorf("a Chart that draws nothing changed the page:\n%s\nwant\n%s", failed, plain)
+	}
+	if drawn := render(func([]byte, string) (string, bool) { return "<svg></svg>", true }); !strings.Contains(drawn, "div.chart svg{max-width:100%;height:auto}") {
+		t.Errorf("a page with a chart drawn lacks the charts' sizing:\n%s", drawn)
+	}
+}

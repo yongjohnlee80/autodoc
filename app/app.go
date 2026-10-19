@@ -158,8 +158,8 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 	format := fs.String("format", "json", "--contracts: json or md")
 	call := fs.String("call", "", `call a daemon verb and print its result as JSON; its parameters, a JSON array, after the flags (AGENTS.md): --call search.query '["kb", "a query"]'`)
 	editor := fs.String("editor", "", `call a verb of the page in the AutoDoc that started this agent ($AUTODOC_EDITOR, as $AUTODOC_AGENT) and print its answer as JSON; its parameters, a JSON array, after the flags: --editor editor.read '[1, 20]'`)
-	exportFormat := fs.String("export", "", "export a Markdown file as html or text")
-	exportOutput := fs.String("output", "", "--export: destination file (required)")
+	exportFormat := fs.String("export", "", "export a Markdown file as html or text, or a docs folder as a site (its site.toml)")
+	exportOutput := fs.String("output", "", "--export: destination file, or a site's folder (required)")
 	exportTheme := fs.String("theme", "light", "--export html: light, dark, sepia, retro or mono")
 	exportBase := fs.String("base", "", "--export html: the directory relative links are read from, written as file: URLs (default the source's directory)")
 	fs.Bool("print-endpoint", false, "print the daemon's endpoint as one line, unix<TAB><socket>: the config's, or the one serving its store")
@@ -269,6 +269,18 @@ func run(ctx context.Context, args []string, o Options, stdout, stderr io.Writer
 			return editorMain(ctx, *editor, params, stdout, stderr)
 		}},
 		{flag: "export", asked: func() bool { return *exportFormat != "" }, arg: true, run: func(src string) int {
+			if *exportFormat == "site" {
+				theme := "" // site.toml's, unless --theme is given
+				fs.Visit(func(f *flag.Flag) {
+					if f.Name == "theme" {
+						theme = *exportTheme
+					}
+				})
+				if err := siteMain(src, *exportOutput, theme, *exportBase); err != nil {
+					return failed(err, 1)
+				}
+				return 0
+			}
 			theme := *exportTheme
 			if *exportFormat == "html" {
 				var err error

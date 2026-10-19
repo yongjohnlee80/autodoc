@@ -1,0 +1,51 @@
+# The documentation site (ADR 1792395460): a pushed v* tag builds docs/ with AutoDoc's own export
+# (autodoc --export=site, the sections docs/site.toml names) and deploys it to GitHub Pages, so
+# the site is the release's. It builds with -tags gui, so the charts are drawn (golib's
+# gui/vegalite on a gui.SVGCanvas); building them needs the window system's libraries, as the
+# release's Linux GUI build does, but no display. The repository's Pages source is "GitHub
+# Actions" (Settings › Pages).
+name: pages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod # the one Go version, go.mod's
+          cache: true
+      - name: the window system's libraries (the GUI build draws the charts)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev libx11-dev libx11-xcb-dev libxkbcommon-x11-dev \
+            libgles2-mesa-dev libegl1-mesa-dev libxcursor-dev libxfixes-dev libvulkan-dev
+      - name: build the site
+        run: go run -tags gui ./cmd/autodoc --export=site --output _site docs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
