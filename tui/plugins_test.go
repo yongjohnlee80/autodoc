@@ -1703,9 +1703,9 @@ func TestThePluginReferenceKeepsUp(t *testing.T) {
 			continue
 		}
 		switch {
-		case e.m.service():
+		case e.m.Service():
 			kinds["service "+e.m.Start] = true
-		case e.m.card():
+		case e.m.Card():
 			kinds["card"] = true
 		default:
 			kinds["dialog"] = true

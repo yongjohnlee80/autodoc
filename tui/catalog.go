@@ -3,10 +3,10 @@ package tui
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
+	"github.com/yongjohnlee80/autodoc/core/manifests"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -88,7 +88,7 @@ type Cataloged interface{ Catalog() []Entry }
 var errUnknownCommand = errors.New("unknown")
 
 // commandID is an id's shape: a lower-case first word, then dotted words.
-var commandID = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[A-Za-z0-9_-]+)+$`)
+var commandID = manifests.CommandID
 
 // takenOver are golib's verbs AutoDoc's own entries replace: find and nohl are the page's find
 // (find.go), so ':' and / share one.

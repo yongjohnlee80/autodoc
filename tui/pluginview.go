@@ -202,7 +202,7 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		return false
 	}
 	if f, ok := ev.(tuicore.FocusEvent); ok {
-		if !f.Terminal && !r.e.m.modal() && f.Gained != r.focused && !r.closing {
+		if !f.Terminal && !r.e.m.Modal() && f.Gained != r.focused && !r.closing {
 			r.focused = f.Gained
 			r.send(plugin.MethodFocus, plugin.FocusParams(f.Gained))
 		}
@@ -213,7 +213,7 @@ func (v *pluginView) HandleEvent(ev tuicore.Event) bool {
 		return false
 	}
 	if e.Code == tuicore.KeyEscape && e.Mods.Chord() == 0 {
-		if !r.e.m.modal() {
+		if !r.e.m.Modal() {
 			return false // the panel's Drawer closes on it: the card hides, its plugin runs on
 		}
 		if r.e.m.Dialog.Esc == "hide" {

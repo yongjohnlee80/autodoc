@@ -59,7 +59,7 @@ func (pl *plugins) refreshPlugins() {
 	rows := make([]tuidecl.Row, 0, len(pl.pluginList))
 	for _, e := range pl.pluginList {
 		key := e.key()
-		simple := e.reason != "" || (len(e.m.Commands) == 0 && !e.m.card() && !e.m.service())
+		simple := e.reason != "" || (len(e.m.Commands) == 0 && !e.m.Card() && !e.m.Service())
 		if simple {
 			rows = append(rows, tuidecl.Row{"key": key, "kind": "item", "label": e.label(),
 				"enabled": e.reason == "", "target": pluginTarget(key, targetOpen)})
@@ -68,9 +68,9 @@ func (pl *plugins) refreshPlugins() {
 		sub := tuidecl.NewListModel("key", "label", "enabled", "target")
 		var items []tuidecl.Row
 		running := pl.running[key] != nil
-		if !e.m.service() {
+		if !e.m.Service() {
 			openLabel := "Open"
-			if e.m.card() {
+			if e.m.Card() {
 				openLabel = "Show card"
 				if running && pl.running[key].hidden {
 					openLabel = "Reopen card"
@@ -88,7 +88,7 @@ func (pl *plugins) refreshPlugins() {
 				"target": pluginTarget(key, targetCommand, c.ID)})
 		}
 		closeLabel := "Close"
-		if e.m.card() { // its panel's Close hides it; this stops its plugin
+		if e.m.Card() { // its panel's Close hides it; this stops its plugin
 			closeLabel = "Turn off"
 		}
 		items = append(items, tuidecl.Row{"key": "close", "label": closeLabel, "enabled": running,
@@ -224,7 +224,7 @@ func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 		return
 	}
 	r := pl.running[key]
-	if e.m.card() && id == pluginToggle && r != nil && !r.hidden {
+	if e.m.Card() && id == pluginToggle && r != nil && !r.hidden {
 		// the toggle hides a shown card, its plugin running on, signed in (ADR 1792300990 §4.1);
 		// Plugins › Turn off is the way to stop it
 		pl.hideCard(r)
@@ -238,16 +238,16 @@ func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 		}
 		pl.running[key] = r
 		pl.refreshPlugins()
-		r.focusOnOpen = e.m.card()
-		if e.m.card() {
+		r.focusOnOpen = e.m.Card()
+		if e.m.Card() {
 			pl.showCard(r, true)
 		}
-	} else if e.m.card() {
+	} else if e.m.Card() {
 		pl.showCard(r, true)
 	} else {
 		r.show()
 	}
-	if !(e.m.card() && id == pluginToggle) {
+	if !(e.m.Card() && id == pluginToggle) {
 		r.send(plugin.MethodCommand, plugin.WithArgs(pl.commandParams(e, id), args))
 	}
 }
@@ -268,7 +268,7 @@ func (pl *plugins) commandParams(e pluginEntry, id string) []any {
 // when the plugins are read anew (one added, say). A running one is left as it is.
 func (pl *plugins) launchServices() {
 	for _, e := range pl.pluginList {
-		if e.reason != "" || !e.m.service() || e.m.Start != "launch" || pl.running[e.key()] != nil {
+		if e.reason != "" || !e.m.Service() || e.m.Start != "launch" || pl.running[e.key()] != nil {
 			continue
 		}
 		r, err := pl.startPlugin(e)
