@@ -475,3 +475,28 @@ func TestTheTerminalsLookInAWindowPutsTheFontBack(t *testing.T) {
 		t.Errorf("a cancel after OK put back %q", got)
 	}
 }
+
+// TestTheAgentsTextSizeIsStored: the Fonts dialog's agents row reads the stored share of the cell
+// size, 90% when none or an unknown one is stored, and stores the one chosen (ADR 1792350322).
+func TestTheAgentsTextSizeIsStored(t *testing.T) {
+	fonts := &fakeFonts{}
+	d, r := runWindowTUI(t, map[string]string{"tui.agent.text.scale": "80"}, fonts)
+	index := func() string {
+		return onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.agentScaleIndex"); return fmt.Sprint(v.Raw) })
+	}
+	r.s.WaitFor(t, "80% read", func(string) bool { return index() == "2" })
+	onLoop(r, func() bool { r.h.openFonts(); return true })
+	r.s.WaitForText(t, "the agents' text size")
+	onLoop(r, func() bool { r.h.setAgentScaleIndex(5); return true })
+	storedPref(t, d, r, "tui.agent.text.scale", "95")
+	if got := onLoop(r, func() int { return agentScaleOf(r.h.prefs) }); got != 95 {
+		t.Errorf("chosen 95%%, the preferences hold %d", got)
+	}
+	for stored, want := range map[string]int{"": 90, "33": 90, "x": 90, "100": 100} {
+		var p prefs
+		readFontPrefs(&p, map[string]any{"tui.agent.text.scale": stored})
+		if got := agentScaleOf(p); got != want {
+			t.Errorf("stored %q reads as %d%%, want %d%%", stored, got, want)
+		}
+	}
+}

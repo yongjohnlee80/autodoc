@@ -217,8 +217,8 @@ var termEdgeLabels = []string{"bottom", "top", "left", "right", "centre"}
 
 // The choices the dialog offers for a size and a length, in percent, every tenth.
 var (
-	termSizes   = percents(10, 90)
-	termLengths = percents(10, 100)
+	termSizes   = percents(10, 90, 10)
+	termLengths = percents(10, 100, 10)
 )
 
 // percentLabels are the choices as the dialog shows them.
@@ -230,9 +230,10 @@ func percentLabels(ps []int) []string {
 	return out
 }
 
-func percents(lo, hi int) []int {
+// percents are lo to hi in steps of step.
+func percents(lo, hi, step int) []int {
 	var out []int
-	for p := lo; p <= hi; p += 10 {
+	for p := lo; p <= hi; p += step {
 		out = append(out, p)
 	}
 	return out

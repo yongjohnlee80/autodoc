@@ -4,6 +4,7 @@ package tui
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,6 +58,12 @@ const agentConfig = "/a config's dir/autodoc.toml"
 // arguments it is called with to calls.
 func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) (d *daemon, r *running, calls string) {
 	t.Helper()
+	return runAgentTUIWith(t, dir, profiles, def, nil, Options{})
+}
+
+// runAgentTUIWith is runAgentTUI with more preferences stored and opt's options too.
+func runAgentTUIWith(t *testing.T, dir string, profiles []agentProfile, def string, more map[string]string, opt Options) (d *daemon, r *running, calls string) {
+	t.Helper()
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("PATH", "/usr/bin:/bin")
 	bins := filepath.Join(t.TempDir(), "a build's dir") // a path the shell must have quoted
@@ -72,8 +79,10 @@ func runAgentTUI(t *testing.T, dir string, profiles []agentProfile, def string) 
 	if def != "" {
 		prefs[prefAgentDefault] = def
 	}
+	maps.Copy(prefs, more)
 	d = startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "a\n"}}, daemonOpts{prefs: prefs})
-	r = runTUI(t, NewSession(d.sock, nil), Options{AgentDir: dir, ConfigPath: agentConfig})
+	opt.AgentDir, opt.ConfigPath = dir, agentConfig
+	r = runTUI(t, NewSession(d.sock, nil), opt)
 	onLoop(r, func() bool { r.h.agents.agentBinPath = bin; return true })
 	r.s.WaitForText(t, "connected — autodoc v-test")
 	r.s.WaitFor(t, "the notes listed", func(string) bool { return len(r.listed()) > 0 })

@@ -20,6 +20,9 @@ Dialog {
         Text { text: "its size" }
         ComboBox { model: App.fontSizes; textRole: "label"; currentIndex: App.fontSizeIndex; onActivated: App.setFontSizeIndex(index) }
         Text { text: "" }
+        Text { text: "the agents' text size: the agent panel's shells, a share of the cell size"; toolTipText: "the agents' text size: the agent panel's shells, a share of the cell size (zoom moves it too)" }
+        ComboBox { toolTipText: "the agents' text size: the agent panel's shells, a share of the cell size (zoom moves it too)"; model: App.agentScales; textRole: "label"; currentIndex: App.agentScaleIndex; onActivated: App.setAgentScaleIndex(index) }
+        Text { text: "" }
         Text { text: "the prose font: the Rendered view (Ctrl+T) and the HTML preview"; toolTipText: "the prose font: the Rendered view (Ctrl+T) and the HTML preview" }
         ComboBox { toolTipText: "the prose font: the Rendered view (Ctrl+T) and the HTML preview"; model: App.proseFonts; textRole: "label"; currentIndex: App.proseFontIndex; onActivated: App.setProseFontIndex(index) }
         Text { text: "" }

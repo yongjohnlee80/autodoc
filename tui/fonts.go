@@ -35,6 +35,8 @@ const (
 	prefFontSize  = "gui.font.size"
 	prefProseFont = "gui.font.prose"
 	prefZoom      = "gui.zoom"
+	// prefAgentScale is the agents panel's text, in percent of the window's (ADR 1792350322)
+	prefAgentScale = "tui.agent.text.scale"
 )
 
 // zoomSteps are the zoom's steps, in percent: Options and the right-click menu offer them, and
@@ -46,6 +48,20 @@ var fontSizes = []int{10, 11, 12, 13, 14, 15, 16, 18, 20, 22, 24}
 
 const defaultFontSize = 14
 
+// agentScales are the agents panel's text sizes the Fonts dialog offers, in percent of the window's
+// text; defaultAgentScale is slightly smaller than the editor's.
+var agentScales = percents(70, 100, 5)
+
+const defaultAgentScale = 90
+
+// agentScaleOf is p's agents text scale, in percent: the default unless set.
+func agentScaleOf(p prefs) int {
+	if p.agentScale == 0 {
+		return defaultAgentScale
+	}
+	return p.agentScale
+}
+
 // readFontPrefs reads the fonts and the zoom; a value out of range is the default's.
 func readFontPrefs(p *prefs, m map[string]any) {
 	str := func(k string) string { s, _ := m[k].(string); return s }
@@ -55,6 +71,9 @@ func readFontPrefs(p *prefs, m map[string]any) {
 	}
 	if n, err := strconv.Atoi(str(prefZoom)); err == nil && slices.Contains(zoomSteps, n) {
 		p.zoom = n
+	}
+	if n, err := strconv.Atoi(str(prefAgentScale)); err == nil && slices.Contains(agentScales, n) {
+		p.agentScale = n
 	}
 }
 
@@ -72,6 +91,7 @@ func fontState(p prefs) map[string]any {
 	}
 	st["App.fontSizeIndex"] = max(slices.Index(fontSizes, size), 0)
 	st["App.zoomIndex"] = max(slices.Index(zoomSteps, zoomOf(p)), 0)
+	st["App.agentScaleIndex"] = max(slices.Index(agentScales, agentScaleOf(p)), 0)
 	return st
 }
 
@@ -89,6 +109,7 @@ func (h *Host) applyFonts(p prefs) {
 	if h.fonts == nil {
 		return
 	}
+	h.agentText.apply(h, agentScaleOf(p)) // the agents panel's text, at its share of the window's
 	want := appliedFonts{cell: p.cellFont, prose: p.proseFont, size: p.fontSize, zoom: zoomOf(p), set: true}
 	if want.cell == "" {
 		want.cell = h.defaultCellFont
@@ -220,6 +241,14 @@ func (h *Host) setProseFontIndex(i int) {
 	if i >= 0 && i < len(h.proseFonts) {
 		f := h.proseFonts[i]
 		h.setPref(prefProseFont, f, func(p *prefs) { p.proseFont = f })
+	}
+}
+
+// setAgentScaleIndex is the Fonts dialog's agents text row: a share of the window's text.
+func (h *Host) setAgentScaleIndex(i int) {
+	if i >= 0 && i < len(agentScales) {
+		n := agentScales[i]
+		h.setPref(prefAgentScale, strconv.Itoa(n), func(p *prefs) { p.agentScale = n })
 	}
 }
 

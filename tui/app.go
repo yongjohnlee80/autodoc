@@ -131,6 +131,7 @@ type Host struct {
 	families                               func(mono bool) []string
 	defaultCellFont                        string
 	fontsApplied                           appliedFonts
+	agentText                              agentText               // the agents panel's text size (agenttext_gui.go)
 	fontGens                               map[uint64]appliedFonts // the fonts set at each generation, for the grid's (fontsFit)
 	cellFonts, proseFonts                  []string                // the Fonts dialog's choices, "" the default first
 	cellFontModel, proseFontModel          *tuidecl.ListModel
