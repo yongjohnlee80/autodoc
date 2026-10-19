@@ -2,7 +2,7 @@
 
 While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (ADR 0209, ADR 1791268009, ADR 1791762474, ADR 1792078052, ADR 1792254331; see `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
 
-This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 8**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from the Registry or a Git URL.
+This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 8**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from a Git URL (a plugin registry is coming; there is none yet).
 
 ---
 
@@ -202,9 +202,9 @@ Each example's test drives its plugin over the protocol, as AutoDoc does: open, 
 
 ---
 
-## 15.7 Installing from the Registry, Security Boundaries, and Debugging
+## 15.7 Installing from a Git URL, Security Boundaries, and Debugging
 
-Open **Plugins › Manage plugins…** to browse the vetted **Plugin Registry** or install from any Git repository URL. Before AutoDoc clones or builds a plugin (`[install] build = [...]`), it presents an explicit capability summary derived from `plugin.toml`—showing the build command, executable argv, surface type (`dialog`, `card`, or `service`), whether it reads the open note (`[feed]`), every `[[commands]]` shortcut on `SPC p`, every host command in `calls`, and whether it publishes to the `[table]` Results panel. You can also override any plugin command's `SPC p` key letter via the preference `tui.plugin.<name>.key.<id>`.
+Add a plugin with **Plugins › Add from a git URL…**; there is no registry yet (one is coming), and **Plugins › Manage plugins…** updates, places and removes the plugins you have. AutoDoc clones the repository and runs nothing; before it builds or starts the plugin (`[install] build = [...]`), it presents an explicit capability summary derived from `plugin.toml`—showing the build command, executable argv, surface type (`dialog`, `card`, or `service`), whether it reads the open note (`[feed]`), every `[[commands]]` shortcut on `SPC p`, every host command in `calls`, and whether it publishes to the `[table]` Results panel. You can also override any plugin command's `SPC p` key letter via the preference `tui.plugin.<name>.key.<id>`.
 
 ### What a Plugin May Not Do
 
