@@ -3,7 +3,8 @@
 # the site is the release's. It builds with -tags gui, so the charts are drawn (golib's
 # gui/vegalite on a gui.SVGCanvas); building them needs the window system's libraries, as the
 # release's Linux GUI build does, but no display. The repository's Pages source is "GitHub
-# Actions" (Settings › Pages).
+# Actions" (Settings › Pages). Its runners are Ubuntu 24.04, as release.yml's are, for the same
+# window-system packages.
 name: pages
 
 on:
@@ -22,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -42,7 +43,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
