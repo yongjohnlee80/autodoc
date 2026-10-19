@@ -56,7 +56,7 @@ Open this folder (`docs/reference/`) as a workspace in `autodoc --gui` and press
 10. **[Chapter 10: The `.todo-list/` Task Engine & Crash-Recoverable Journal](./10-todo-task-engine.md)**
     Managing tasks as canonical Markdown+YAML files backed by AutoDoc's 3-phase SQLite journal (`pending` → `staged` → `committed`), using the interactive Todos Panel (`SPC x`), and portable `$KB_ROOT` / `$PROJECT_ROOT` symbolic paths.
 11. **[Chapter 11: Terminal Tabs & One-Key Agent Task Handoff (`SPC x` → `A`)](./11-terminal-tabs-and-agent-handoff.md)**
-    Configuring embedded CLI coding agent tabs (`[[terminal.tabs]]`) and pressing `A` on any todo task to atomically mark it `in-progress`, assign it to `autodoc:<codename>`, and paste the structured task brief into the agent's live terminal.
+    Setting up CLI coding agent profiles (System › Agent profiles…) and pressing `A` on any todo task to atomically mark it `in-progress`, assign it to `autodoc:<codename>`, and paste the structured task brief into the agent's live terminal.
 12. **[Chapter 12: Wiring External AI Coding Agents (`--call`, `KB_OPERATIONS.md`, & Token Efficiency)](./12-ai-agent-integration-and-cli-rpc.md)**
     Teaching Claude Code, Gemini, and Codex to query AutoDoc via `--call`, follow the adaptive retrieval ladder, and read exact `[line_start, line_end]` spans—cutting context token usage by over 60% and achieving 94%–100% top-3 accuracy.
 13. **[Chapter 13: Optimistic Concurrency, `watch-before-scan` & Safe Multi-Agent Writes](./13-concurrency-and-safe-multi-agent-writes.md)**
