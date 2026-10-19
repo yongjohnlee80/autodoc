@@ -679,7 +679,7 @@ func TestTheSettingsDocumentTypes(t *testing.T) {
 // out of the exclude field, keeps the others, and says so on the help line; nothing is saved.
 func TestTheTodoGraphOnlyButtonEditsTheExcludeField(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")})
-	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r := runTUISized(t, NewSession(d.sock, nil), Options{}, 100, 60) // the stacked Edit tab whole
 	r.s.WaitForText(t, "· kb")
 	before := storedOnly(t, d).Exclude
 	r.openSettings(t, "kb", 0)

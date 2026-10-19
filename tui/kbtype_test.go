@@ -246,9 +246,11 @@ func TestAPartialKBTypeReopensOnTheAddedWorkspace(t *testing.T) {
 	if ws, _ := d.db.Workspaces(context.Background()); len(ws) != 2 {
 		t.Fatalf("the resume added a workspace: %d stored", len(ws))
 	}
-	if onLoop(r, func() bool { return r.h.kbResume != nil }) {
-		t.Error("the resume was kept after it finished")
-	}
+	// the loop drops the resume once the type has finished, just after its last file lands: wait for
+	// it rather than read it once
+	r.s.WaitFor(t, "the resume dropped once it finished", func(string) bool {
+		return onLoop(r, func() bool { return r.h.kbResume == nil })
+	})
 }
 
 // A plan longer than one call is sent in batches, and all of it lands.
