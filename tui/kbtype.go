@@ -47,9 +47,11 @@ const noneNote = "Nothing is created. If the location is a coding repo, consider
 // core/kbtype bound what is applied, this bounds what a clone may leave on disk.
 const kbStageLimit = 16 << 20
 
-func kbTypeRows() []rowOf {
+// kbTypeRows are the KB type field's rows: None, the types (the registry's, else the built-ins),
+// then Custom URL….
+func (h *Host) kbTypeRows() []rowOf {
 	rows := []rowOf{{"key": "", "label": kbTypeNone}}
-	for _, c := range builtinKBTypes {
+	for _, c := range h.kbTypeChoices() {
 		rows = append(rows, rowOf{"key": c.name, "label": c.title})
 	}
 	return append(rows, rowOf{"key": "custom", "label": kbTypeCustom})
@@ -131,11 +133,13 @@ func (h *Host) stageKB(ctx context.Context, url string) stagedKBType {
 
 // kbTypePicked is the KB type field's choice, row i of kbTypeRows.
 func (h *Host) kbTypePicked(i int) {
-	rows := kbTypeRows()
+	rows := h.kbTypeRows()
 	if i < 0 || i >= len(rows) {
 		return
 	}
-	switch key, _ := rows[i]["key"].(string); key {
+	key, _ := rows[i]["key"].(string)
+	h.kbTypeKey = key // kept across the list's reload (registryLoaded)
+	switch key {
 	case "":
 		h.pickKBType("")
 	case "custom":
@@ -143,7 +147,7 @@ func (h *Host) kbTypePicked(i int) {
 		h.set("App.kbTypeCustomShown", true)
 		h.set("App.kbTypeSummary", "a KB type's git URL, then Stage")
 	default:
-		for _, c := range builtinKBTypes {
+		for _, c := range h.kbTypeChoices() {
 			if c.name == key {
 				h.pickKBType(c.url)
 			}
@@ -348,7 +352,7 @@ func (h *Host) kbTypeApply(x Invocation) error {
 		return errors.New("kbtype.apply: takes a KB type's name or git URL")
 	}
 	url := x.Args[0]
-	for _, c := range builtinKBTypes {
+	for _, c := range h.kbTypeChoices() { // the registry's as last loaded, else the built-ins
 		if c.name == url {
 			url = c.url
 		}

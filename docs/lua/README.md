@@ -91,7 +91,7 @@ requires = ["workspace.read"] # what it must be allowed to do
 - **`require("lib")` reads the package's own `lib.lua`** (or `lib/init.lua`), once; a name outside
   the folder is refused.
 - **Your own `lua/*.lua` files are not packages:** they are yours, and are never asked about.
-- **`:lua-install <git-url>`** clones a package whose repository has `package.toml` at its top. It
+- **`:lua-install <name or git-url>`** clones a package whose repository has `package.toml` at its top: a name is the registry's package of that name (Plugins › Browse the registry… lists them). It
   asks before anything goes into `lua/`, naming the package, its version, its source and commit, and
   what it requires; **Install** puts it there and reloads the scripts. To remove one, delete its
   folder and run `:lua-reload`.

@@ -322,6 +322,7 @@ func (h *Host) features() []Feature {
 	h.asker = newAsker(core{h})
 	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
 	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
+	fs = append(fs, newRegistryBrowse(h))        // Plugins › Browse the registry… (registrybrowse.go)
 	fs = append(fs, h.relationViewFeatures()...) // the GUI's GlobeMap and Mindmap (relationmap.go)
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;

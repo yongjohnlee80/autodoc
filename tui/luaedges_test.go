@@ -75,7 +75,7 @@ autodoc.on("ping", function(ed) ed:insert("second ran") end)`)
 		t.Fatal(err)
 	}
 	onLoop(r, func() bool {
-		r.h.askPackage("https://example.invalid/x.git", stage, "abc1234", packageManifest{Name: "x", Version: "1", Requires: []string{"clipboard"}})
+		r.h.askPackage("https://example.invalid/x.git", stage, "abc1234", packageManifest{Name: "x", Version: "1", Requires: []string{"clipboard"}}, nil)
 		return true
 	})
 	r.s.WaitForText(t, "install the Lua package x?")

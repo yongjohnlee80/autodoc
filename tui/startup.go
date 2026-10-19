@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
@@ -90,23 +91,52 @@ func (s *startup) how(r release) string {
 
 // latestRelease asks GitHub for AutoDoc's latest release.
 func latestRelease(ctx context.Context) (release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, latestURL, nil)
+	g, err := httpGet(ctx, latestURL, "application/vnd.github+json", "")
 	if err != nil {
 		return release{}, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "autodoc")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return release{}, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return release{}, fmt.Errorf("tui: the latest release: %s", res.Status)
+	if g.status != http.StatusOK {
+		return release{}, fmt.Errorf("tui: the latest release: %d %s", g.status, http.StatusText(g.status))
 	}
 	var r release
-	err = json.NewDecoder(http.MaxBytesReader(nil, res.Body, 1<<20)).Decode(&r)
+	err = json.Unmarshal(g.body, &r)
 	return r, err
+}
+
+// httpMaxBody is the most a GET of AutoDoc's reads: a release's answer, the registry's index.
+const httpMaxBody = 1 << 20
+
+// got is a GET's answer: its status, body (nil on a 304) and ETag.
+type got struct {
+	status int
+	body   []byte
+	etag   string
+}
+
+// httpGet is AutoDoc's one GET of a small JSON resource (the latest release, the registry's index):
+// its User-Agent, accept, and the body capped at httpMaxBody, a longer one refused. With etag set it
+// is conditional (If-None-Match), and a 304 answers with no body.
+func httpGet(ctx context.Context, url, accept, etag string) (got, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return got{}, err
+	}
+	req.Header.Set("Accept", accept)
+	req.Header.Set("User-Agent", "autodoc")
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return got{}, err
+	}
+	defer res.Body.Close()
+	g := got{status: res.StatusCode, etag: res.Header.Get("ETag")}
+	if res.StatusCode != http.StatusOK {
+		return g, nil
+	}
+	g.body, err = io.ReadAll(http.MaxBytesReader(nil, res.Body, httpMaxBody))
+	return g, err
 }
 
 // releaseVersion is a release's vMAJOR.MINOR.PATCH; false for anything else (dev, a describe of a

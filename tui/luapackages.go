@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	"github.com/yongjohnlee80/autodoc/core/manifests"
+
+	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
 
 // LUA PACKAGES (M8): a package is a folder of the config's lua/, lua/<name>/, holding init.lua and
@@ -102,14 +104,27 @@ func (h *Host) loadPackages() []error {
 	return errs
 }
 
-// installPackage is :lua-install <git-url>: a shallow clone, staged in the lua folder, asked about
+// installPackage is :lua-install <git-url> (or a registry package's name): a shallow clone, staged in the lua folder, asked about
 // (its name, version, source, commit and what it requires); Install moves it into place and reloads
 // the scripts, and anything else throws the clone away.
 func (h *Host) installPackage(url string) error {
 	url = strings.TrimSpace(url)
+	if isRegistryName(url) && h.luaDir != "" { // a name: the registry's package of that name
+		h.notify("looking up " + url + " in the registry…")
+		resolveRegistry(core{h}, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
+			if err != nil {
+				h.notify("lua-install: not installed: " + err.Error())
+				return
+			}
+			if err := h.installPackage(repo); err != nil {
+				h.notify(err.Error())
+			}
+		})
+		return nil
+	}
 	switch {
 	case url == "":
-		return errors.New("lua-install <git-url>")
+		return errors.New("lua-install <name or git-url>")
 	case h.luaDir == "":
 		return errors.New("lua-install: no Lua folder")
 	}
@@ -119,8 +134,9 @@ func (h *Host) installPackage(url string) error {
 	dir := h.luaDir
 	h.notify("cloning " + url + "…")
 	type staged struct {
-		dir, commit string
+		dir, commit string // commit in full
 		m           packageManifest
+		entry       *regindex.IndexEntry // the registry's entry for url, from its cache
 		err         error
 	}
 	do(h, func(ctx context.Context) staged {
@@ -142,29 +158,37 @@ func (h *Host) installPackage(url string) error {
 		if _, err := os.Stat(filepath.Join(dir, m.Name)); err == nil {
 			return fail(fmt.Errorf("%s is installed already: remove lua/%s first", m.Name, m.Name))
 		}
-		commit, err := git(ctx, pluginCloneTimeout, stage, "rev-parse", "--short", "HEAD")
+		commit, err := git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
 		if err != nil {
 			return fail(err)
 		}
-		return staged{dir: stage, commit: commit, m: m}
+		return staged{dir: stage, commit: commit, m: m, entry: cachedEntry(regindex.KindLua, url)}
 	}, func(s staged) {
 		if s.err != nil {
 			h.notify("lua-install: not installed: " + s.err.Error())
 			return
 		}
-		h.askPackage(url, s.dir, s.commit, s.m)
+		h.askPackage(url, s.dir, s.commit, s.m, s.entry)
 	})
 	return nil
 }
 
-// askPackage asks before a staged package goes into the lua folder.
-func (h *Host) askPackage(url, stage, commit string, m packageManifest) {
+// packageRisk is the sentence every package card carries.
+const packageRisk = "A package's Lua runs in AutoDoc, held to what you grant it."
+
+// askPackage asks before a staged package goes into the lua folder; entry is the registry's entry
+// for url (nil for none), whose audit line goes above the risk.
+func (h *Host) askPackage(url, stage, commit string, m packageManifest, entry *regindex.IndexEntry) {
 	requires := "nothing it must ask for"
 	if len(m.Requires) > 0 {
 		requires = strings.Join(slices.Sorted(slices.Values(m.Requires)), ", ") + " (asked again, each, once it loads)"
 	}
-	text := fmt.Sprintf("%s %s: %s\nfrom %s at %s\nrequires %s\n\nA package's Lua runs in AutoDoc, held to what you grant it.",
-		m.Name, m.Version, m.Description, url, commit, requires)
+	audit := ""
+	if line := auditLine(entry, commit); line != "" {
+		audit = line + "\n\n"
+	}
+	text := fmt.Sprintf("%s %s: %s\nfrom %s at %s\nrequires %s\n\n%s%s",
+		m.Name, m.Version, m.Description, url, regindex.Short(commit), requires, audit, packageRisk)
 	h.ask(Question{
 		Title: "install the Lua package " + m.Name + "?",
 		Text:  text,

@@ -165,9 +165,12 @@ type Host struct {
 	settingsTab int
 	// kbTypeSeq fences the KB type field's staging, and kbStaged is the type it staged (kbtype.go)
 	kbTypeSeq uint64
-	kbStaged  *stagedKBType
-	kbStage   func(context.Context, string) stagedKBType // a test's stager; nil is stageKBType's clone
-	kbResume  *kbResume                                  // a partial add's type, kept for its Save to finish (kbtype.go)
+	kbTypeKey string // the KB type field's chosen key, kept as its list reloads
+	// registryNow is the registry's list as last loaded (registry.go); nil before any list opened
+	registryNow *registryList
+	kbStaged    *stagedKBType
+	kbStage     func(context.Context, string) stagedKBType // a test's stager; nil is stageKBType's clone
+	kbResume    *kbResume                                  // a partial add's type, kept for its Save to finish (kbtype.go)
 	// dialogSeq numbers the manager dialogs' opens (withCurrent): only the latest shows
 	dialogSeq uint64
 	// the open file's frontmatter check (frontmatter.go): fmGen numbers the checks, the latest wins

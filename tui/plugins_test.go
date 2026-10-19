@@ -44,7 +44,17 @@ func TestMain(m *testing.M) {
 	if len(os.Args) >= 3 && os.Args[1] == testPluginArg {
 		os.Exit(runTestPlugin(os.Args[2]))
 	}
-	os.Exit(m.Run())
+	// No test reaches the registry, nor reads the user's cache of it, unless it serves its own
+	// (servedRegistry): opening the add dialog fetches it.
+	cache, err := os.MkdirTemp("", "autodoc-registry-")
+	if err != nil {
+		panic(err)
+	}
+	registryCacheDir = func() (string, error) { return cache, nil }
+	registryURL = "http://127.0.0.1:1/index.json"
+	code := m.Run()
+	_ = os.RemoveAll(cache)
+	os.Exit(code)
 }
 
 // runTestPlugin is the test plugin, in one of its modes.

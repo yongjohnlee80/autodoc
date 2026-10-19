@@ -97,7 +97,7 @@ func (s *scripting) Catalog() []Entry {
 				}
 				return s.evalOnce(inv.Line)
 			}},
-		{ID: "scripts.install", Title: "install a Lua package", Verb: "lua-install", Args: "<git-url>",
+		{ID: "scripts.install", Title: "install a Lua package", Verb: "lua-install", Args: "<name or git-url>",
 			Help: "clone a Lua package into the config folder's lua/, once you agree",
 			Run: func(inv Invocation) error {
 				if s.install == nil {

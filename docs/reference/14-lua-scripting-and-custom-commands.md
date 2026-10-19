@@ -209,7 +209,7 @@ A package can also declare requirements in code via `autodoc.requires{"workspace
 - `commands`: Required for `autodoc.run`, `ed:run`, `autodoc.map`, and `autodoc.menu`.
 - `clipboard` and `agents`: Required for `autodoc.clipboard.*` and `autodoc.agents.*`.
 
-When a user installs a package via `:lua-install <git-url>` or drops it into `lua/<name>/`, AutoDoc prompts once to grant the declared capabilities. Any ungranted call returns `nil, "needs <capability>: not granted"` without executing.
+When a user installs a package via `:lua-install <name or git-url>` (a name is the registry's package of that name) or drops it into `lua/<name>/`, AutoDoc prompts once to grant the declared capabilities. Any ungranted call returns `nil, "needs <capability>: not granted"` without executing.
 
 ![Lua API Namespace Reference](lua-api-namespace-reference.csv)
 

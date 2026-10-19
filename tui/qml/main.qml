@@ -221,6 +221,7 @@ Window {
             // every plugin's commands, by plugin: the SPC p card, which says so when there are none
             MenuItem { text: "&Commands…  (SPC p)"; onTriggered: App.openPluginChooser() }
             MenuSeparator {}
+            MenuItem { text: "&Browse the registry…"; onTriggered: App.browseRegistry() }
             MenuItem { text: "&Add from a git URL…"; onTriggered: App.startAddPlugin() }
             MenuItem { text: "&Manage plugins…"; onTriggered: App.managePlugins() }
         }
@@ -877,6 +878,7 @@ Window {
     AgentAssign { id: agentAssignPicker }
     LuaPick { id: luaPicker }
     TodoStatus { id: todoStatusPicker }
+    RegistryBrowse { id: registryPicker }
     TerminalLook { id: terminalLook }
     FileName { id: fileName }
     OpenAnyFile { id: openAnyFile }
