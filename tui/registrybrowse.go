@@ -64,6 +64,7 @@ func (b *registryBrowse) browse() {
 	h := b.h
 	h.notifyOngoing("registry", "reading the registry…")
 	do(h, func(ctx context.Context) registryList { return fetchRegistry(ctx, time.Now()) }, func(l registryList) {
+		l = l.usable()
 		h.registryLoaded(l)
 		var entries []regindex.IndexEntry
 		for _, e := range l.ix.Entries {
