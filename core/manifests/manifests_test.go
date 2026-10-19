@@ -77,17 +77,16 @@ func TestParsePluginDefaultsAndDeclares(t *testing.T) {
 	}
 }
 
-// A manifest that stops decoding part-way keeps what was decoded before it (the decoder walks the
-// keys in no fixed order, so which ones is not fixed), and gets no defaults.
+// A manifest that stops decoding part-way keeps what was decoded before it, and gets no defaults.
+// Its one key is a list whose element is the wrong type: the decoder makes the one-element list
+// before it refuses the element, whatever order it walks keys in.
 func TestAPluginThatStopsDecodingKeepsWhatItDecoded(t *testing.T) {
-	for range 20 {
-		m, err := ParsePlugin([]byte("name = \"half\"\ntitle = \"Half a plugin\"\nprotocol = \"four\"\n"))
-		if err == nil || !strings.HasPrefix(err.Error(), "plugin.toml: ") {
-			t.Fatalf("err = %v", err)
-		}
-		if (m.Name != "" && m.Name != "half") || (m.Title != "" && m.Title != "Half a plugin") || m.Dialog.Width != 0 || m.Start != "" {
-			t.Fatalf("decoded %+v; want only the source's values, and no defaults", m)
-		}
+	m, err := ParsePlugin([]byte("command = [1]\n"))
+	if err == nil || !strings.HasPrefix(err.Error(), "plugin.toml: ") {
+		t.Fatalf("err = %v", err)
+	}
+	if len(m.Command) != 1 || m.Dialog.Width != 0 || m.Start != "" {
+		t.Fatalf("decoded %+v; want its one-element command kept, and no defaults", m)
 	}
 }
 
