@@ -87,9 +87,9 @@ func TestTheSetupCardIsAFirstRunsOnly(t *testing.T) {
 	}
 
 	for name, prefs := range map[string]map[string]string{
-		"a profile":  {prefAboutAt: "true"},
-		"an answer":  {prefAboutAt: "true", prefAgentSetup: "declined"},
-		"set up":     {prefAboutAt: "true", prefAgentSetup: "done"},
+		"a profile": {prefAboutAt: "true"},
+		"an answer": {prefAboutAt: "true", prefAgentSetup: "declined"},
+		"set up":    {prefAboutAt: "true", prefAgentSetup: "done"},
 	} {
 		var profiles []agentProfile
 		if name == "a profile" {
