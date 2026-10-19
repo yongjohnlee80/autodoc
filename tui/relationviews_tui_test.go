@@ -22,4 +22,9 @@ func TestATerminalHasNoRelationViews(t *testing.T) {
 	if f, ty := h.relationViewFeatures(), h.relationViewTypes(); f != nil || ty != nil {
 		t.Fatalf("a terminal's relation views: %v, %v", f, ty)
 	}
+	// Preferences' GlobeMap… names its command here too: it says the settings are a window's
+	h.openGlobeSettings()
+	if len(h.noticeLog.items) != 1 || h.noticeLog.items[0].text != globeSettingsElsewhere {
+		t.Errorf("a terminal's GlobeMap settings said %+v", h.noticeLog.items)
+	}
 }
