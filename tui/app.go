@@ -166,6 +166,8 @@ type Host struct {
 	// kbTypeSeq fences the KB type field's staging, and kbStaged is the type it staged (kbtype.go)
 	kbTypeSeq uint64
 	kbTypeKey string // the KB type field's chosen key, kept as its list reloads
+	// cands are the live installs and updates, each a candidate (candidate.go)
+	cands *candidates
 	// registryNow is the registry's list as last loaded (registry.go); nil before any list opened
 	registryNow *registryList
 	kbStaged    *stagedKBType
@@ -446,7 +448,9 @@ func newHost(session *Session, opt Options) *Host {
 		h.graphUserFile = filepath.Join(filepath.Dir(opt.ConfigPath), "graph.toml")
 	}
 	h.agents.editorPath = h.editorSocketPath // AUTODOC_EDITOR for the agents it starts
+	h.cands = newCandidates(core{h})
 	h.plugins = newPlugins(core{h}, opt.Plugins)
+	h.plugins.cands = h.cands
 	h.plugins.scriptsChanged = func() {
 		if err := h.reloadScripts(); err != nil {
 			h.notify("the Lua scripts were not reloaded: " + err.Error())

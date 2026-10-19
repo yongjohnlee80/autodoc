@@ -51,7 +51,8 @@ type plugins struct {
 	pluginLetters map[string][]string
 	// adding and managing them (plugininstall.go): the change PluginConfirm asks about, and the
 	// installed ones
-	pendingPlugin  *pluginChange
+	pendingPlugin  *candidate // the candidate on PluginConfirm, and it alone (candidate.go)
+	cands          *candidates
 	managedPlugins *rows[managedPlugin]
 	// the results panel's table, a plugin's (plugintable.go), and its export while one runs, in
 	// the format last chosen (plugintable_export.go)
@@ -132,6 +133,7 @@ func (pl *plugins) Commands() map[string]Command {
 		"App.addPlugin":           oneString("a git URL", pl.addPlugin),
 		"App.pluginConfirmed":     none(pl.pluginConfirmed),
 		"App.pluginDeclined":      none(pl.pluginDeclined),
+		"App.pluginAudit":         none(pl.pluginAudit),
 		"App.managePlugins":       none(pl.managePlugins),
 		"App.startUpdatePlugin":   oneNumber("a row", pl.startUpdatePlugin),
 		"App.startRemovePlugin":   oneNumber("a row", pl.startRemovePlugin),
@@ -277,8 +279,6 @@ type pluginHost interface {
 	Theme() string                                        // the theme the screen wears
 	Cursor() (line, col int)                              // the editor's cursor, in its columns
 	Selection() (line, col, endLine, endCol int, ok bool) // the editor's selection, if any
-	NotifyOngoing(id, msg string)
-	NotifyDone(id, msg string)
 	// NotifyAs is a plugin's or Lua's notice, its id under ns (notify.go)
 	NotifyAs(ns, id, msg string, ongoing bool)
 	Keep(err error)
@@ -346,6 +346,9 @@ func (c core) ThemeNames() []string         { return c.h.themeNames() }
 func (c core) ThemeLabels() []string        { return c.h.themeLabels() }
 func (c core) NotifyOngoing(id, msg string) { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)    { c.h.notifyDone(id, msg) }
+func (c core) NotifyOngoingClick(id, msg string, onClick func()) {
+	c.h.post(widget.Toast{ID: id, Text: msg, Ongoing: true, OnClick: onClick})
+}
 func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
 	c.h.notifyAs(ns, noticeReq{id: id, text: msg, ongoing: ongoing})
 }

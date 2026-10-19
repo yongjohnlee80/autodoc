@@ -36,17 +36,25 @@ type todoAssign struct {
 
 // newAssignPick is the picker of AutoDoc's agents that A opens.
 func newAssignPick(t *todos) *pick[AgentEntry] {
-	return &pick[AgentEntry]{c: t.c, dialog: "agentAssignPicker", name: "agentAssign",
+	p := newAgentPick(t.c, "agentAssignPicker", "agentAssign", t.assignTo)
+	p.scope = TicketWorkspace
+	return p
+}
+
+// newAgentPick is a picker of AutoDoc's agents, by name and codename, each previewed with what it
+// runs: A's (todos_assign.go) and Audit…'s (candidate.go). Its sources are App.<name>Rows, Field,
+// Status and Preview*.
+func newAgentPick(c Core, dialog, name string, choose func(AgentEntry)) *pick[AgentEntry] {
+	return &pick[AgentEntry]{c: c, dialog: dialog, name: name,
 		list:   newRows(tuidecl.NewListModel("key", "agent", "state"), agentRowOf),
-		field:  "App.agentAssignField",
-		status: "App.agentAssignStatus", noun: "agents",
+		field:  "App." + name + "Field",
+		status: "App." + name + "Status", noun: "agents",
 		match: func(e AgentEntry) string { return e.Name + " " + e.Ref.Codename },
 		preview: func(e AgentEntry) func(context.Context) answerOf[pane] {
 			pn := agentPane(e)
 			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
 		},
-		scope:  TicketWorkspace,
-		choose: t.assignTo}
+		choose: choose}
 }
 
 func agentRowOf(_ int, e AgentEntry) rowOf {

@@ -1,5 +1,6 @@
 // Confirm.qml — the one yes-or-no question a feature asks (Core.Ask, ask.go) before it does what it
-// cannot undo. No comes first, so Enter alone does nothing; y and n answer by their mnemonics.
+// cannot undo. No comes first, so Enter alone does nothing; y and n answer by their mnemonics. A third
+// button, when the question has one, answers neither (Question.Other).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80
@@ -13,6 +14,7 @@ Dialog {
     Text { wrapMode: Tui.WordWrap; text: App.askText }
     DialogButtonBox {
         Button { text: App.askNo; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: App.askOther; visible: App.askOtherShown; enabled: App.askOtherShown; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.askOtherChosen() }
         Button { text: App.askYes; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
     }
 }

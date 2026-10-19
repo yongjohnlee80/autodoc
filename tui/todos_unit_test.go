@@ -50,6 +50,9 @@ func (*scriptedCore) SendText(AgentRef, string, func(error)) error { return ErrA
 func (s *scriptedCore) Open(id string)                             { s.opened = append(s.opened, id) }
 func (s *scriptedCore) Close(id string)                            { s.closed = append(s.closed, id) }
 func (s *scriptedCore) Notify(msg string)                          { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) NotifyOngoing(_, msg string)                { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) NotifyDone(_, msg string)                   { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) NotifyOngoingClick(_, msg string, _ func()) { s.notes = append(s.notes, msg) }
 
 // Ask records the question and holds it for answer: its OnYes runs when the test says Yes.
 func (s *scriptedCore) Ask(q Question) Asked {

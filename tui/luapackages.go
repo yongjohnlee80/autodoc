@@ -104,9 +104,8 @@ func (h *Host) loadPackages() []error {
 	return errs
 }
 
-// installPackage is :lua-install <git-url> (or a registry package's name): a shallow clone, staged in the lua folder, asked about
-// (its name, version, source, commit and what it requires); Install moves it into place and reloads
-// the scripts, and anything else throws the clone away.
+// installPackage is :lua-install <git-url>, or a registry package's name: a candidate staged in the
+// lua folder, its card asked (askPackage).
 func (h *Host) installPackage(url string) error {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) && h.luaDir != "" { // a name: the registry's package of that name
@@ -133,79 +132,91 @@ func (h *Host) installPackage(url string) error {
 	}
 	dir := h.luaDir
 	h.notify("cloning " + url + "…")
-	type staged struct {
-		dir, commit string // commit in full
-		m           packageManifest
-		entry       *regindex.IndexEntry // the registry's entry for url, from its cache
-		err         error
-	}
-	do(h, func(ctx context.Context) staged {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return staged{err: err}
+	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, dir, url)) }, func(r answerOf[*candidate]) {
+		if r.err == nil {
+			r.err = h.cands.begin(r.v, h.askPackage)
 		}
-		stage, err := os.MkdirTemp(dir, stagePrefix)
-		if err != nil {
-			return staged{err: err}
-		}
-		fail := func(err error) staged { _ = os.RemoveAll(stage); return staged{err: err} }
-		if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
-			return fail(err)
-		}
-		m, err := readPackage(stage)
-		if err != nil {
-			return fail(err)
-		}
-		if _, err := os.Stat(filepath.Join(dir, m.Name)); err == nil {
-			return fail(fmt.Errorf("%s is installed already: remove lua/%s first", m.Name, m.Name))
-		}
-		commit, err := git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
-		if err != nil {
-			return fail(err)
-		}
-		return staged{dir: stage, commit: commit, m: m, entry: cachedEntry(regindex.KindLua, url)}
-	}, func(s staged) {
-		if s.err != nil {
-			h.notify("lua-install: not installed: " + s.err.Error())
+		if r.err != nil {
+			h.notify("lua-install: not installed: " + r.err.Error())
 			return
 		}
-		h.askPackage(url, s.dir, s.commit, s.m, s.entry)
+		h.cands.show(r.v)
 	})
 	return nil
+}
+
+// stagePackage stages url as a Lua package candidate in dir, refused when that package is
+// installed already.
+func stagePackage(ctx context.Context, dir, url string) (*candidate, error) {
+	stage, commit, err := cloneStage(ctx, dir, url)
+	if err != nil {
+		return nil, err
+	}
+	fail := func(err error) (*candidate, error) { _ = os.RemoveAll(stage); return nil, err }
+	m, err := readPackage(stage)
+	if err != nil {
+		return fail(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, m.Name)); err == nil {
+		return fail(fmt.Errorf("%s is installed already: remove lua/%s first", m.Name, m.Name))
+	}
+	return &candidate{kind: regindex.KindLua, name: m.Name, repo: url, commit: commit, stage: stage,
+		entry: cachedEntry(regindex.KindLua, url), pkg: m}, nil
 }
 
 // packageRisk is the sentence every package card carries.
 const packageRisk = "A package's Lua runs in AutoDoc, held to what you grant it."
 
-// askPackage asks before a staged package goes into the lua folder; entry is the registry's entry
-// for url (nil for none), whose audit line goes above the risk.
-func (h *Host) askPackage(url, stage, commit string, m packageManifest, entry *regindex.IndexEntry) {
+// askPackage is a Lua package candidate's card: its name, version, source and commit, what it
+// requires, its audit above the risk, and what Audit… does. Install moves the pristine stage into
+// the lua folder and reloads the scripts; Cancel, or another question in its place, ends it.
+func (h *Host) askPackage(c *candidate) {
+	m := c.pkg
 	requires := "nothing it must ask for"
 	if len(m.Requires) > 0 {
 		requires = strings.Join(slices.Sorted(slices.Values(m.Requires)), ", ") + " (asked again, each, once it loads)"
 	}
 	audit := ""
-	if line := auditLine(entry, commit); line != "" {
+	if line := auditLine(c.entry, c.commit); line != "" {
 		audit = line + "\n\n"
 	}
-	text := fmt.Sprintf("%s %s: %s\nfrom %s at %s\nrequires %s\n\n%s%s",
-		m.Name, m.Version, m.Description, url, regindex.Short(commit), requires, audit, packageRisk)
+	text := fmt.Sprintf("%s %s: %s\nfrom %s at %s\nrequires %s\n\n%s%s\n\n%s",
+		m.Name, m.Version, m.Description, c.repo, regindex.Short(c.commit), requires, audit, packageRisk, auditNote)
 	h.ask(Question{
 		Title: "install the Lua package " + m.Name + "?",
 		Text:  text,
-		Yes:   "&Install", No: "&Cancel",
+		Yes:   "&Install", No: "&Cancel", Other: "&Audit…",
 		OnYes: func() {
-			to := filepath.Join(h.luaDir, m.Name)
-			if err := os.Rename(stage, to); err != nil {
-				_ = os.RemoveAll(stage)
-				h.notify("lua-install: not installed: " + err.Error())
-				return
-			}
-			h.notify("installed the Lua package " + m.Name)
-			if err := h.reloadScripts(); err != nil {
-				h.notify(err.Error())
+			if h.cands.claim(c) {
+				h.installPackageCandidate(c)
 			}
 		},
-		OnCancel: func() { _ = os.RemoveAll(stage) },
+		OnOther:  func() { h.cands.audit(c) },
+		OnCancel: func() { h.cands.cancel(c, "") },
+	})
+}
+
+// installPackageCandidate moves c's pristine stage into the lua folder, then reloads the scripts.
+func (h *Host) installPackageCandidate(c *candidate) {
+	to := filepath.Join(h.luaDir, c.name)
+	do(h, func(ctx context.Context) error {
+		if err := pristine(ctx, c); err != nil {
+			return err
+		}
+		return os.Rename(c.stage, to)
+	}, func(err error) {
+		if err != nil {
+			msg := "lua-install: not installed: " + err.Error()
+			h.notify(msg)
+			h.cands.end(c, msg)
+			return
+		}
+		msg := "installed the Lua package " + c.name
+		h.notify(msg)
+		h.cands.end(c, msg)
+		if err := h.reloadScripts(); err != nil {
+			h.notify(err.Error())
+		}
 	})
 }
 
