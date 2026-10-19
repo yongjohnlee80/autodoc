@@ -183,24 +183,24 @@ func TestATerminalHasNoFonts(t *testing.T) {
 	}
 }
 
-// TestTheTutorialPagesStopAtTheEnds: Help › Tutorial… opens at page 1; Back does nothing there, Next
-// goes on to the last page and stops.
+// TestTheTutorialPagesStopAtTheEnds: Help › Tutorial… opens at page 1, docs/tutorials' first; Back
+// does nothing there, Next goes on to the last page and stops. The index (README.md) is no page.
 func TestTheTutorialPagesStopAtTheEnds(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
 	r := attached(t, d)
 	onLoop(r, func() bool { r.h.openTutorial(); return true })
-	r.s.WaitForText(t, fmt.Sprintf("1 of %d · The page, and its two editor modes", len(tutorialPages)))
+	r.s.WaitForText(t, fmt.Sprintf("1 of %d · Installing AutoDoc", len(tutorialPages)))
 	onLoop(r, func() bool { r.h.tutorialStep(-1); return true })
 	for range len(tutorialPages) + 2 {
 		onLoop(r, func() bool { r.h.tutorialStep(1); return true })
 	}
-	r.s.WaitForText(t, fmt.Sprintf("%d of %d · A worked example: :todo", len(tutorialPages), len(tutorialPages)))
+	r.s.WaitForText(t, fmt.Sprintf("%d of %d · Relations: Links, the Mindmap and the GlobeMap", len(tutorialPages), len(tutorialPages)))
 	if got := onLoop(r, func() int { return r.h.tutorialAt }); got != len(tutorialPages)-1 {
 		t.Errorf("page %d after too many Nexts", got)
 	}
 	for _, p := range tutorialPages {
-		if !strings.HasPrefix(p, "# ") {
-			t.Errorf("a page without its heading: %.40q", p)
+		if !strings.HasPrefix(p, "# ") || strings.HasPrefix(p, "# AutoDoc tutorials") {
+			t.Errorf("a page without its heading, or the index: %.40q", p)
 		}
 	}
 }

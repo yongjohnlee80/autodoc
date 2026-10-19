@@ -13,4 +13,15 @@ Without a model, search is by words. **System › Search models…** (SPC s) add
 1. **Add…** a ranker: its kind, base URL and model; **Check** tries it.
 2. **Use** it. **Window…** sets how many of the top hits it reads.
 
+```mermaid
+flowchart LR
+  Q[Your search] --> W[By words]
+  Q --> M[By meaning]
+  W --> H[The top hits]
+  M --> H
+  H -->|a reranker| O[Ordered again]
+```
+
 The search's checkboxes (Lexical, Semantic, Rerank) choose the stages for each search.
+
+More: [Reference, Chapter 6: Configuring Embeddings and Rerankers](../reference/06-configuring-embeddings-and-rerankers.md).

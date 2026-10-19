@@ -35,6 +35,9 @@ How it is put together, and the convention a new feature follows, is
 
 ## Install
 
+New to AutoDoc? The [tutorials](docs/tutorials/README.md) start here, a few minutes each; the
+[Reference Book](docs/reference/README.md) has the whole story.
+
 | Platform | Install |
 | --- | --- |
 | macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
@@ -502,7 +505,7 @@ autodoc --keymap-reference   # the file's format, and every AutoDoc command with
 autodoc --check-keymap       # check keymap.xml beside config.toml, with no UI or daemon
 ```
 
-[docs/keymap.md](docs/keymap.md) is the reference; tutorial chapter 3.9 walks through one.
+[docs/keymap.md](docs/keymap.md) is the reference; [Reference Book §3.9](docs/reference/03-modal-editor-and-panels.md#39-moving-your-keys-keymapxml) walks through one.
 
 ### The command line
 
@@ -581,8 +584,8 @@ local ok, err = autodoc.run("buffer.new", "q.sql", "SELECT 1;\n") -- a new buffe
 draft that the save picker names. `name` is the draft's suggested name and how it reads (`q.sql` is
 SQL), never a path; nothing is written until Ctrl+S ([docs/plugins.md](docs/plugins.md#buffernew-a-draft-for-the-user-to-edit)).
 
-Help › Tutorial… walks through it all, ending with a worked `:todo` command. Its pages are
-in [`tui/tutorial/`](tui/tutorial/): 07 to 09 are the scripting ones.
+Help › Tutorial… walks through it all. Its pages are the [tutorials](docs/tutorials/README.md):
+09 to 11 are the scripting ones, ending with a worked `:todo` command.
 
 [`docs/lua/`](docs/lua/) has all of it: [Lua in AutoDoc](docs/lua/README.md), where scripts live
 and how they load; a step-by-step [tutorial for your own Vim commands](docs/lua/tutorial-vim-commands.md),

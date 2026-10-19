@@ -566,7 +566,7 @@ The ones a command reaches for most:
 | `autodoc.doc.outline(workspace, path, cb)` | `{version, headings = {{level, text, line, …}, …}}` |
 | `autodoc.graph.backlinks(workspace, path, options?, cb)` | `{{path, raw, kind, …}, …}`: the documents that link to it |
 | `autodoc.workspace.list(cb)` | `{{name, root, state, …}, …}` |
-| `autodoc.todos.add(store, task, cb)` | the task filed, with its `id` (Help › Tutorial…, page 9) |
+| `autodoc.todos.add(store, task, cb)` | the task filed, with its `id` (Help › Tutorial…, page 11) |
 
 ## Packages and capabilities
 
