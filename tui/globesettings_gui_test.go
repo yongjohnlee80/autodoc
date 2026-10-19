@@ -189,6 +189,9 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 		t.Fatalf("a colour that reads: look %v, kept %q", l.other, kept)
 	}
 
+	// the dialog closed, as the user does, so the panel's heading shows
+	onLoop(r, func() bool { core{r.h}.Close("globeMapSettings"); return true })
+	r.s.WaitFor(t, "the settings closed", func(sc string) bool { return !strings.Contains(sc, "GlobeMap settings") })
 	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
 	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations") // the relations by default
 	r.s.WaitFor(t, "the settled notice", func(string) bool {    // its progress toast ends saying so, kept
@@ -369,7 +372,7 @@ func TestTheViewsGroupsAreTheWorkspacesGraphFile(t *testing.T) {
 	d := startManaged(t, map[string]string{"kb": kb})
 	r := runTUI(t, NewSession(d.sock, nil), Options{GUI: true})
 	r.s.WaitForText(t, "· kb")
-	r.waitListed(t, 3)
+	r.waitListed(t, 4) // schema.yaml is listed too: the default patterns admit **/*.yaml
 	if _, err := (core{r.h}).Call(context.Background(), "workspace.set_schema", "kb", "schema.yaml"); err != nil {
 		t.Fatal(err)
 	}
