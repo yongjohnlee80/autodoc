@@ -189,6 +189,31 @@ func TestNoIsRemembered(t *testing.T) {
 	}
 }
 
+// The card opens later from the catalog (agent.setup) and from System › Set up an agent…
+// (App.openAgentSetup), as the menu's card: never the first run's, so its Set up prompts nothing.
+func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
+	fakeClaude(t)
+	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
+	r.s.WaitFor(t, "started", func(string) bool { return onLoop(r, func() bool { return r.h.started }) })
+	if err := onLoop(r, func() error { return r.h.cat.run("agent.setup", nil) }); err != nil {
+		t.Fatalf("agent.setup: %v", err)
+	}
+	r.s.WaitForText(t, "Claude (claude)")
+	if onLoop(r, func() bool { return r.h.agents.setupFirst }) {
+		t.Fatal("the catalog's card is the first run's")
+	}
+	r.keys(t, key('n')) // &No
+	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "Set up an AI agent?") })
+
+	if err := onLoop(r, func() error { return r.h.agents.Commands()["App.openAgentSetup"].Run(nil) }); err != nil {
+		t.Fatalf("App.openAgentSetup: %v", err)
+	}
+	r.s.WaitForText(t, "Set up an AI agent?")
+	if onLoop(r, func() bool { return r.h.agents.setupFirst }) {
+		t.Fatal("the menu's card is the first run's")
+	}
+}
+
 // With no CLI found, the card says which to install and why, and offers only Close, which records
 // nothing: the next start asks again.
 func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
