@@ -77,7 +77,7 @@ You rarely need to launch `autodoc --serve` manually. Whenever you invoke an int
 
 1. **Dial Socket**: The client attempts to connect to the local Unix domain socket.
 2. **Spawn on Miss**: If the socket does not exist or refuses connection, the client spawns `autodoc --serve` as a detached background process and polls with exponential backoff until the socket becomes ready.
-3. **Internal Protocol Handshake (`sys.hello`)**: Upon connecting, the client library automatically sends an internal `sys.hello` frame (`[{"protocol": 26, "name": "cli"}]`). The daemon replies with `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`. If a binary upgrade occurred while an older daemon was still running, the client detects the version/protocol mismatch, issues `sys.shutdown` to the stale daemon, and seamlessly starts a fresh daemon matching the new binary.
+3. **Internal Protocol Handshake (`sys.hello`)**: Upon connecting, the client library automatically sends an internal `sys.hello` frame (`[{"protocol": 28, "name": "cli"}]`). The daemon replies with `{protocol, server_protocol, min_protocol, server, version, instance, pid, addr, store_id, client, events}`. If a binary upgrade occurred while an older daemon was still running, the client detects the version/protocol mismatch, issues `sys.shutdown` to the stale daemon, and seamlessly starts a fresh daemon matching the new binary.
 
 ### Core Daemon Modules
 

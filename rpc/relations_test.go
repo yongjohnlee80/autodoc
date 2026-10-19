@@ -18,7 +18,7 @@ func relationRig(t *testing.T) *rig {
 	for p, c := range map[string]string{
 		"a.md": "---\nsupersedes: [b.md]\n---\n# A\n",
 		"b.md": "# B\n\n[[c]]\n",
-		"c.md": "# C\n",
+		"c.md": "---\ntags: [zeta, alpha]\n---\n# C\n",
 	} {
 		if _, err := r.fsys.WriteFile(context.Background(), p, strings.NewReader(c)); err != nil {
 			t.Fatal(err)
@@ -276,7 +276,7 @@ func TestGraphMap(t *testing.T) {
 	nodes := []any{
 		map[string]any{"path": "a.md", "title": "A", "type": "", "superseded": false},
 		map[string]any{"path": "b.md", "title": "B", "type": "", "superseded": true},
-		map[string]any{"path": "c.md", "title": "C", "type": "", "superseded": false},
+		map[string]any{"path": "c.md", "title": "C", "type": "", "superseded": false, "tags": []any{"alpha", "zeta"}},
 	}
 	edges := []any{
 		map[string]any{"src": "a.md", "dst": "b.md", "kind": "supersedes"},
@@ -304,6 +304,15 @@ func TestGraphMap(t *testing.T) {
 		if res, err := cur.Call(context.Background(), "graph.neighborhood", "kb", p, int64(2)); code(err) != CodeNotFound {
 			t.Errorf("graph.neighborhood of %q: %v, %v; want not found", p, res, err)
 		}
+	}
+	// before protocol 28 the nodes carry no tags
+	at27, _, err := helloAs(r, mapTagsSince-1, "a-27-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m = call(t, at27, "graph.map", "kb").(map[string]any)
+	if c := m["nodes"].([]any)[2].(map[string]any); c["path"] != "c.md" || c["tags"] != nil {
+		t.Errorf("protocol %d: c.md is %v; want no tags", mapTagsSince-1, c)
 	}
 	old, _, err := helloAs(r, mapSince-1, "an-old-client")
 	if err != nil {

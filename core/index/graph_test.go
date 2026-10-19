@@ -313,7 +313,7 @@ func TestMap(t *testing.T) {
 	e.put("a.md", "---\ntitle: A doc\ntype: adr\nsupersedes: [b.md]\n---\nA\n",
 		"b.md", "---\ntitle: B doc\ntype: review\n---\n[[c]]\n",
 		"c.md", "---\ntitle: C doc\ntype: [not, a, string]\nsuperseded_by: [d.md]\n---\nC\n",
-		"d.md", "---\ntitle: D doc\n---\nD\n",
+		"d.md", "---\ntitle: D doc\ntags: [zeta, alpha]\n---\nD\n",
 		"f.md", "---\ntitle: F doc\n---\n[[nothing]]\n",
 		"s.md", "---\ntitle: S doc\nsupersedes: [s.md]\n---\nS\n")
 	ctx := context.Background()
@@ -321,7 +321,7 @@ func TestMap(t *testing.T) {
 		{Path: "a.md", Title: "A doc", Type: "adr"},
 		{Path: "b.md", Title: "B doc", Type: "review", Superseded: true},
 		{Path: "c.md", Title: "C doc", Superseded: true},
-		{Path: "d.md", Title: "D doc"},
+		{Path: "d.md", Title: "D doc", Tags: []string{"alpha", "zeta"}}, // its tags, sorted
 		{Path: "f.md", Title: "F doc"},
 		{Path: "s.md", Title: "S doc"},
 	}

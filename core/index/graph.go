@@ -101,10 +101,11 @@ func (s *Store) Backlinks(ctx context.Context, path string, kinds []string) ([]L
 }
 
 // MapNode is a document of graph.map: its path, its title, its frontmatter "type" ("" when none),
-// and whether another document supersedes it.
+// whether another document supersedes it, and its tags (sorted; nil for none).
 type MapNode struct {
 	Path, Title, Type string
 	Superseded        bool
+	Tags              []string
 }
 
 // Map is graph.map: documents and the resolved links among them, both sorted.
@@ -170,10 +171,14 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 		if err != nil {
 			return err
 		}
+		tags, err := s.tagsByDoc(tx)
+		if err != nil {
+			return err
+		}
 		paths := map[int64]string{}
 		for _, d := range found {
 			paths[d.ID] = d.Path
-			n := MapNode{Path: d.Path, Type: frontmatterType(d.FrontmatterJSON), Superseded: superseded[d.ID]}
+			n := MapNode{Path: d.Path, Type: frontmatterType(d.FrontmatterJSON), Superseded: superseded[d.ID], Tags: tags[d.ID]}
 			if d.Title != nil {
 				n.Title = *d.Title
 			}
@@ -199,6 +204,22 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 		return a.Kind < b.Kind
 	})
 	return m, nil
+}
+
+// tagsByDoc is every document's tags, sorted, by document.
+func (s *Store) tagsByDoc(tx *store.Tx) (map[int64][]string, error) {
+	rows, err := s.tags(tx).Select(DocValueDoc, DocValueValue)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64][]string{}
+	for _, r := range rows {
+		out[r.DocID] = append(out[r.DocID], r.Value)
+	}
+	for _, t := range out {
+		sort.Strings(t)
+	}
+	return out, nil
 }
 
 // superseded is every document another one supersedes, by the resolved supersession links: a

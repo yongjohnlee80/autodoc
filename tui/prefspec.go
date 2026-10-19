@@ -193,6 +193,9 @@ func (h *Host) setRowPref(row PrefSpec, v string) {
 	if changed && row.Changed != nil {
 		row.Changed(p)
 	}
+	if changed {
+		h.reg.prefSet(row.Name)
+	}
 	h.storePref(row.Name, v)
 }
 

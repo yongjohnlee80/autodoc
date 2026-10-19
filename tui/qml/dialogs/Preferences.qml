@@ -180,6 +180,8 @@ Dialog {
     }
     DialogButtonBox {
         Button { text: "&File types…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openActiveSettings() }
+        // the GUI's alone: a terminal draws no GlobeMap (globesettings_gui.go)
+        Button { text: "&GlobeMap…"; visible: App.gui; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openGlobeSettings() }
         Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

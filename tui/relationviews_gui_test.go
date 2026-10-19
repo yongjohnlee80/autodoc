@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/color"
 	"math"
 	"slices"
 	"strings"
@@ -19,7 +20,7 @@ import (
 )
 
 // Run as a window, the GUI writes its relation views into main.qml once each: the Relations menu's
-// two items, and a panel each whose view is its own type. Run in a terminal, the same build writes
+// items, a panel each whose view is its own type, and the GlobeMap's settings dialog. Run in a terminal, the same build writes
 // nothing: the terminal has Links alone.
 func TestTheGUIWritesTheRelationViews(t *testing.T) {
 	if !bytes.Equal(withRelationViews(layout, false), layout) {
@@ -29,6 +30,8 @@ func TestTheGUIWritesTheRelationViews(t *testing.T) {
 	for _, want := range []string{
 		`MenuItem { text: "&GlobeMap"; onTriggered: App.toggleGlobeMap() }`,
 		`MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }`,
+		`MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }`,
+		"GlobeMapSettings { id: globeMapSettings }",
 		"id: globeMap\n", "GlobeMap {\n            id: globeMapView", `App.panelOpened("globeMap")`,
 		"id: mindmap\n", "Mindmap {\n            id: mindmapView", `App.panelOpened("mindmap")`,
 	} {
@@ -76,7 +79,7 @@ func settledGlobe(t *testing.T, m relMap) *globe {
 	return newGlobe("kb", m, degrees(m), at, b, true)
 }
 
-var globeView800 = globeViewState{size: gui.Size{W: 800, H: 600}, pal: defaultPalette(), hover: -1}
+var globeView800 = globeViewState{size: gui.Size{W: 800, H: 600}, hover: -1}
 
 // A picture of the map draws its paths in a constant number of operations whatever its size: the
 // ground, a stroke per edge class, a fill per document type, the rings. Names add one DrawText a
@@ -95,7 +98,7 @@ func TestTheGlobeMapsPictureIsConstantOperations(t *testing.T) {
 			t.Errorf("%d documents: %d path operations; %d for the smaller map", n, got, paths)
 		}
 		if fills := countOps(rc, "FillPath"); fills != len(relationTypes)+1 {
-			t.Errorf("%d documents: %d path fills, want one per type", n, fills)
+			t.Errorf("%d documents: %d path fills, want one per colour (each type its own)", n, fills)
 		}
 		if texts, rows := countOps(rc, "DrawText"), len(p.nameRows(globeView800.size)); texts != rows {
 			t.Errorf("%d documents: %d texts for %d rows of names", n, texts, rows)
@@ -147,24 +150,28 @@ func TestTheGlobeMapsNamesCostOneDrawTextARow(t *testing.T) {
 // barely, so a cluster comes apart. Its paths are made again only when the zoom changes its step.
 func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 	gl := settledGlobe(t, relMapOf(40))
-	d1 := dotsAt(globeDots{}, gl, 1, 1)
-	if again := dotsAt(d1, gl, 1, 1); again.dots[0] != d1.dots[0] {
+	l := defaultLook
+	d1 := dotsAt(globeDots{}, gl, l, 1, 1)
+	if again := dotsAt(d1, gl, l, 1, 1); again.fills[0].path != d1.fills[0].path {
 		t.Fatal("the same frame and zoom made its dots again")
 	}
-	if dotsAt(d1, gl, 1.05, 1).dots[0] != d1.dots[0] {
+	if dotsAt(d1, gl, l, 1.05, 1).fills[0].path != d1.fills[0].path {
 		t.Fatal("a zoom within its step made the dots again")
 	}
-	if dotsAt(d1, gl, 8, 1).dots[0] == d1.dots[0] {
+	if dotsAt(d1, gl, l, 8, 1).fills[0].path == d1.fills[0].path {
 		t.Fatal("a zoom eight times in kept the dots made for the fit")
+	}
+	if dotsAt(d1, gl, newGlobeLook(prefs{}, defaultPalette()), 1, 1).fills[0].path == d1.fills[0].path {
+		t.Fatal("another look kept the dots made for the first")
 	}
 	// the path itself: one document's dot, in layout units, shrinks with the zoom (a little less)
 	one := settledGlobe(t, relMapOf(1))
-	w1 := dotsAt(globeDots{}, one, 1, 1).dots[len(relationTypes)].Bounds().W
-	w8 := dotsAt(globeDots{}, one, 8, 1).dots[len(relationTypes)].Bounds().W
+	w1 := dotsAt(globeDots{}, one, l, 1, 1).fills[0].path.Bounds().W
+	w8 := dotsAt(globeDots{}, one, l, 8, 1).fills[0].path.Bounds().W
 	if ratio := w8 * 8 / w1; ratio < 1 || ratio > 2 {
 		t.Errorf("a dot %v layout units wide at zoom 1, %v at zoom 8: on screen it grew %v times; want 1 to 2", w1, w8, ratio)
 	}
-	r1, r8 := gl.dotRadius(0, 1, 1), gl.dotRadius(0, 8, 1)
+	r1, r8 := gl.dotRadius(0, 1, 1, 1), gl.dotRadius(0, 8, 1, 1)
 	if r8 > 2*r1 || r8 < r1 {
 		t.Errorf("a dot %v px at zoom 1, %v px at zoom 8: want it about the same, a little larger", r1, r8)
 	}
@@ -179,7 +186,7 @@ func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 // none running into the one before it in its row, and following the pan; more in view, none are.
 func TestTheGlobeMapNamesTheDocumentsInView(t *testing.T) {
 	gl := settledGlobe(t, relMapOf(globeLabelCap+50))
-	view := globeViewState{size: gui.Size{W: 800, H: 592}, pal: defaultPalette(), hover: -1}
+	view := globeViewState{size: gui.Size{W: 800, H: 592}, hover: -1}
 	if rows := pictureOf(gl, view, globeDots{}).nameRows(view.size); len(rows) != 0 {
 		t.Fatalf("the whole map in view named %d rows", len(rows))
 	}
@@ -216,7 +223,7 @@ func TestTheGlobeMapNamesTheDocumentsInView(t *testing.T) {
 	m := relMapOf(3)
 	at := []graphlayout.Point{{X: 100, Y: 100}, {X: 110, Y: 100}, {X: 400, Y: 100}}
 	close3 := newGlobe("kb", m, degrees(m), at, graphlayout.Rect{X: 100, Y: 100, W: 300, H: 1}, true)
-	pic := globePicture{gl: close3, zoom: 1, pal: defaultPalette(), hover: -1}
+	pic := globePicture{gl: close3, zoom: 1, hover: -1}
 	var names []string
 	for _, runs := range pic.nameRows(gui.Size{W: 800, H: 600}) {
 		for _, r := range runs {
@@ -355,13 +362,13 @@ func TestTheGlobeMapSettlesAsTheWindowPresents(t *testing.T) {
 	}
 	p2 := next("picture 2")
 	// two view changes while receipt 2 is in hand: they wait for it
-	views <- globeViewState{size: gui.Size{W: 700, H: 500}, pal: defaultPalette(), hover: -1}
+	views <- globeViewState{size: gui.Size{W: 700, H: 500}, hover: -1}
 	time.Sleep(50 * time.Millisecond)
 	select {
 	case <-views: // not yet taken: replace it, as the loop does, with the newest
 	default:
 	}
-	views <- globeViewState{size: gui.Size{W: 640, H: 480}, pal: defaultPalette(), hover: -1}
+	views <- globeViewState{size: gui.Size{W: 640, H: 480}, hover: -1}
 	none("two view changes while receipt 2 is in hand")
 	present(p2, gui.Drawn)
 	if s := from(shown, "picture 2 drawn"); s != p2.shot {
@@ -378,7 +385,7 @@ func TestTheGlobeMapSettlesAsTheWindowPresents(t *testing.T) {
 		t.Fatal("a hidden view was not reported")
 	}
 	none("the view hidden")
-	views <- globeViewState{size: gui.Size{W: 640, H: 480}, pal: defaultPalette(), hover: 3} // drawn again, hovering
+	views <- globeViewState{size: gui.Size{W: 640, H: 480}, hover: 3} // drawn again, hovering
 	p4 := next("the same step again at the view")
 	if !sameFrame(p3.shot.f, p4.shot.f) {
 		t.Fatal("a view change after a hidden view stepped the simulation")
@@ -705,8 +712,9 @@ func TestTheRelationViewsOpenInTheHost(t *testing.T) {
 	}
 }
 
-// A theme switch builds the views again in the theme's colours: the document reloads, the GlobeMap
-// open keeps its map in a new view, and the Mindmap lays its map out again.
+// A theme switch recolours the views: the document reloads, the GlobeMap open keeps its map and
+// takes the theme (it follows the terminals', the page's until another is chosen), and the Mindmap
+// lays its map out again.
 func TestTheRelationViewsFollowATheme(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)
@@ -728,12 +736,12 @@ func TestTheRelationViewsFollowATheme(t *testing.T) {
 		return true
 	})
 	r.s.WaitForText(t, "kb · 2 documents, 1 links")
-	before := onLoop(r, func() *globeView { return g.view })
+	before := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background })
 	builds := onLoop(r, func() uint64 { return m.seq })
 	onLoop(r, func() bool { r.h.useTheme("light"); return true })
-	r.s.WaitFor(t, "the light theme, a new GlobeMap view", func(string) bool {
+	r.s.WaitFor(t, "the light theme, the GlobeMap in it", func(string) bool {
 		return onLoop(r, func() bool {
-			return r.h.theme == "light" && g.view != nil && g.view != before && g.view.pal.background != before.pal.background
+			return r.h.theme == "light" && g.view != nil && g.currentLook().pal.background != before
 		})
 	})
 	if !r.panelIsOpen(globeMapPanelID) || onLoop(r, func() bool { return g.counts[0] != 2 }) {

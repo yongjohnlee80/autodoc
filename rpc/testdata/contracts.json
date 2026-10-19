@@ -1,5 +1,5 @@
 {
-  "protocol": 27,
+  "protocol": 28,
   "min_protocol": 12,
   "verbs": [
     {
@@ -655,7 +655,7 @@
           "doc": "{root, depth, kinds}"
         }
       ],
-      "result": "{nodes: [{path, title, type, superseded}], edges: [{src, dst, kind}]}",
+      "result": "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}]}",
       "errors": [
         -32060,
         -32061

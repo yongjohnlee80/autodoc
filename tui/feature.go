@@ -41,6 +41,10 @@ type (
 	// PreferenceSink projects the preferences currently in effect on the loop.
 	// It also runs when preference dialogs resync; this is not a change-only event.
 	PreferenceSink interface{ PreferencesChanged() }
+	// PrefSetSink hears each preference set through its row alone (Core.SetPref), by name, after
+	// the row's own Changed: a feature that follows another's preference (the GlobeMap, the
+	// terminals' theme). A choice in the Preferences dialog is PreferencesChanged instead.
+	PrefSetSink interface{ PrefSet(name string) }
 	// Enterer hears each workspace entered, the one in use again included.
 	Enterer interface{ Entered(ws string) }
 	// EventSink hears the daemon's events of the kinds it names (sys.events), on the loop.
@@ -215,6 +219,17 @@ func (r *registry) themeChanged() {
 	for _, f := range r.features {
 		if t, ok := f.(ThemeSink); ok {
 			t.ThemeChanged()
+		}
+	}
+}
+
+func (r *registry) prefSet(name string) {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if p, ok := f.(PrefSetSink); ok {
+			p.PrefSet(name)
 		}
 	}
 }

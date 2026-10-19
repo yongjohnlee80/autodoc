@@ -13,11 +13,12 @@ import (
 // 1792347044), and the panels the GUI writes into main.qml for them. The views themselves are the
 // GUI's (globemap_gui.go, mindmap_gui.go); a terminal has Relations › Links alone.
 
-// mapNode is a document of graph.map: its path, title, frontmatter type, and whether another
-// document supersedes it.
+// mapNode is a document of graph.map: its path, title, frontmatter type, whether another document
+// supersedes it, and its tags (protocol 28; none from an older daemon).
 type mapNode struct {
 	Path, Title, Type string
 	Superseded        bool
+	Tags              []string
 }
 
 // mapEdge is a link of graph.map between two of its documents, by their index in relMap.Nodes.
@@ -41,7 +42,13 @@ func decodeMap(res any) relMap {
 		nm := asMap(n)
 		superseded, _ := nm["superseded"].(bool)
 		at[str(nm, "path")] = len(m.Nodes)
-		m.Nodes = append(m.Nodes, mapNode{Path: str(nm, "path"), Title: str(nm, "title"), Type: str(nm, "type"), Superseded: superseded})
+		var tags []string
+		for _, t := range asList(nm["tags"]) {
+			if t, ok := t.(string); ok {
+				tags = append(tags, t)
+			}
+		}
+		m.Nodes = append(m.Nodes, mapNode{Path: str(nm, "path"), Title: str(nm, "title"), Type: str(nm, "type"), Superseded: superseded, Tags: tags})
 	}
 	for _, e := range asList(asMap(res)["edges"]) {
 		em := asMap(e)
