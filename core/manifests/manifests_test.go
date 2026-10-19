@@ -77,6 +77,20 @@ func TestParsePluginDefaultsAndDeclares(t *testing.T) {
 	}
 }
 
+// A manifest that stops decoding part-way keeps what was decoded before it (the decoder walks the
+// keys in no fixed order, so which ones is not fixed), and gets no defaults.
+func TestAPluginThatStopsDecodingKeepsWhatItDecoded(t *testing.T) {
+	for range 20 {
+		m, err := ParsePlugin([]byte("name = \"half\"\ntitle = \"Half a plugin\"\nprotocol = \"four\"\n"))
+		if err == nil || !strings.HasPrefix(err.Error(), "plugin.toml: ") {
+			t.Fatalf("err = %v", err)
+		}
+		if (m.Name != "" && m.Name != "half") || (m.Title != "" && m.Title != "Half a plugin") || m.Dialog.Width != 0 || m.Start != "" {
+			t.Fatalf("decoded %+v; want only the source's values, and no defaults", m)
+		}
+	}
+}
+
 func TestReadPluginFromAFolder(t *testing.T) {
 	if _, err := ReadPlugin(fstest.MapFS{}); err == nil || !strings.HasPrefix(err.Error(), "plugin.toml: ") {
 		t.Fatalf("no plugin.toml: %v", err)
