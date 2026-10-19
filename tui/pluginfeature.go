@@ -208,7 +208,7 @@ func (pl *plugins) Panels() []PanelSpec {
 // resultsPanelSpec is the results panel: at the bottom, 35% of the window tall and its full width
 // until the user sizes it, its size kept as every panel's is (panelsize.go).
 func resultsPanelSpec() PanelSpec {
-	return PanelSpec{ID: resultsPanel, View: resultsView, Priority: 70,
+	return PanelSpec{ID: resultsPanel, View: resultsView, Priority: 70, Icon: "⌗",
 		Edge: func(prefs) string { return "bottom" }, Places: []string{"bottom"},
 		Size: [2]int{10, 90}, Length: [2]int{20, 100}, Default: func(string) (int, int) { return 35, 100 }}
 }

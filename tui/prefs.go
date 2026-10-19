@@ -180,7 +180,7 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 		themeRow,
 		boolPref(prefMenuHide, true, func(p *prefs) *bool { return &p.menuHidden }).
 			chooser("App.menuHiddenIndex", "App.setMenuHiddenIndex").
-			shows(func(p prefs) map[string]any { return map[string]any{"App.menuAutoHide": p.menuHidden} }).
+			shows(func(p prefs) map[string]any { return map[string]any{"App.menuAutoHide": h.menuAutoHide(p)} }).
 			then(func(p prefs) { h.saidMenuBar(p.menuHidden) }),
 		boolPref(prefStatus, false, func(p *prefs) *bool { return &p.statusOn }).
 			chooser("App.statusShownIndex", "App.setStatusShownIndex"),
@@ -358,6 +358,7 @@ func (h *Host) applyPrefs(p prefs) {
 	if !h.started {
 		h.started = true // the first preferences of the run: the program has started
 		h.reg.started()
+		h.refreshDock() // the editor, and whatever opened before the start
 	}
 }
 

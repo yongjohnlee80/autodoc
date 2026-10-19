@@ -98,27 +98,31 @@ func sidePanelSpec(id, view string, priority int, edge func(prefs) string) Panel
 		Keyboard: true, Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault}
 }
 func explorerPanelSpec() PanelSpec {
-	return sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
+	s := sidePanelSpec("explorer", "explorerTree", 10, func(p prefs) string { return p.explorerEdge })
+	s.Icon = "☰"
+	return s
 }
 
 // relationsPanelSpec is the relations drawer. Its id stays "links": the geometry and float
 // preferences it keeps are stored under that id (tui.links.*).
 func relationsPanelSpec() PanelSpec {
-	return sidePanelSpec("links", "relationsList", 20, func(p prefs) string { return p.relationsEdge })
+	s := sidePanelSpec("links", "relationsList", 20, func(p prefs) string { return p.relationsEdge })
+	s.Icon = "⇄"
+	return s
 }
 func terminalPanelSpec() PanelSpec {
-	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30,
+	return PanelSpec{ID: "terminal", View: "terminalView", Priority: 30, Icon: "❯",
 		Edge: func(p prefs) string { return p.termEdge }, Places: slices.Clone(termEdges),
 		Size: [2]int{10, 90}, Length: [2]int{10, 100}, Default: termDefault}
 }
 func agentPanelSpec() PanelSpec {
-	return PanelSpec{ID: "agent", View: "agentView", Priority: 40,
+	return PanelSpec{ID: "agent", View: "agentView", Priority: 40, Icon: "✦",
 		Edge: func(p prefs) string { return p.agentEdge }, Places: slices.Clone(agentEdges),
 		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: agentDefault}
 }
 func legacyPanelSpecs() []PanelSpec {
 	return []PanelSpec{
-		{ID: "htmlPane", View: "htmlView", Priority: 50, Edge: func(prefs) string { return "right" }},
+		{ID: "htmlPane", View: "htmlView", Priority: 50, Icon: "⎙", Edge: func(prefs) string { return "right" }},
 	}
 }
 func defaultPanelSpecs() []PanelSpec {

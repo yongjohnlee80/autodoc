@@ -28,6 +28,8 @@ type PanelHost interface {
 	SetPref(name, value string)
 	KeepPanelGeometry(id, dimension string, percent int)
 	ActiveWorkspace() (wsInfo, bool)
+	// WidgetsChanged: what of the panel runs on with its drawer closed changed (dock.go)
+	WidgetsChanged()
 }
 
 // agentHost adds only the services needed to configure an agent terminal and

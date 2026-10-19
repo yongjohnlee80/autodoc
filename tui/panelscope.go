@@ -29,6 +29,7 @@ type scopedPanelHost struct {
 func (s *scopedPanelHost) Set(name string, v any)          { s.core.Set(name, v) }
 func (s *scopedPanelHost) Open(id string)                  { s.core.Open(id) }
 func (s *scopedPanelHost) Close(id string)                 { s.core.Close(id) }
+func (s *scopedPanelHost) WidgetsChanged()                 { s.core.WidgetsChanged() }
 func (s *scopedPanelHost) Notify(msg string)               { s.core.Notify(msg) }
 func (s *scopedPanelHost) Ask(q Question) Asked            { return s.core.Ask(q) }
 func (s *scopedPanelHost) Prefs() prefs                    { return s.core.Prefs() }

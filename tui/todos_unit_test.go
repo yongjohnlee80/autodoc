@@ -53,6 +53,7 @@ func (s *scriptedCore) Notify(msg string)                          { s.notes = a
 func (s *scriptedCore) NotifyOngoing(_, msg string)                { s.notes = append(s.notes, msg) }
 func (s *scriptedCore) NotifyDone(_, msg string)                   { s.notes = append(s.notes, msg) }
 func (s *scriptedCore) NotifyOngoingClick(_, msg string, _ func()) { s.notes = append(s.notes, msg) }
+func (s *scriptedCore) WidgetsChanged()                            {}
 
 // Ask records the question and holds it for answer: its OnYes runs when the test says Yes.
 func (s *scriptedCore) Ask(q Question) Asked {

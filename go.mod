@@ -5,9 +5,10 @@ go 1.26.9
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/yongjohnlee80/gio v0.1.4
-	github.com/yongjohnlee80/golib v0.7.13
+	github.com/yongjohnlee80/golib v0.7.15
 	github.com/yongjohnlee80/golib/gui v0.2.5
 	github.com/yuin/gopher-lua v1.1.2
+	golang.org/x/text v0.41.0
 )
 
 require (
@@ -29,7 +30,6 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

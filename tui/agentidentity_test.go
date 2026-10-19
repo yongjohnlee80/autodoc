@@ -49,6 +49,7 @@ func (c *identityHost) ConfigureTerminal(_, _, _ string, args ...string) error {
 	return nil
 }
 func (c *identityHost) Notify(msg string)                     { c.notes = append(c.notes, msg) }
+func (c *identityHost) WidgetsChanged()                       {}
 func (c *identityHost) CallView(string, string, ...any) error { return c.stopErr }
 func (c *identityHost) Keep(err error) {
 	if err != nil {
