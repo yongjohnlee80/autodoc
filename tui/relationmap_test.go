@@ -36,6 +36,22 @@ func TestDecodeMap(t *testing.T) {
 	if m.label(0) != "A" || m.label(1) != "b.md" {
 		t.Errorf("labels %q, %q: want the title, else the file's name", m.label(0), m.label(1))
 	}
+	// protocol 28: a node's tags; a tag not a string is left out
+	res := mapAnswer([][4]any{{"a.md", "A", "adr", false}}, nil)
+	res["nodes"].([]any)[0].(map[string]any)["tags"] = []any{"x", 3, "y"}
+	if m := decodeMap(res); !reflect.DeepEqual(m.Nodes[0].Tags, []string{"x", "y"}) {
+		t.Errorf("tags %q; want [x y]", m.Nodes[0].Tags)
+	}
+}
+
+// A feature reads the themes the window can wear through its core: golib's, with no catalog of the
+// user's.
+func TestCoreNamesTheThemes(t *testing.T) {
+	var h Host
+	c := core{&h}
+	if !reflect.DeepEqual(c.ThemeNames(), h.themeNames()) || !reflect.DeepEqual(c.ThemeLabels(), h.themeLabels()) || len(c.ThemeNames()) == 0 {
+		t.Errorf("themes %q, labels %q", c.ThemeNames(), c.ThemeLabels())
+	}
 }
 
 // The mind map places each document once, under the document that reached it first breadth-first
