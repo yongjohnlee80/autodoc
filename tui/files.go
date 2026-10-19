@@ -892,22 +892,10 @@ func (h *Host) createFile(name string) {
 	content := h.editorFor(b).Value() // what is written: an edit after this is newer than the file
 	own, owned := b.ownRecovery()     // the draft's copy, read before the draft becomes the file
 	ws, tk := h.ws, h.bufferTicket(b, false)
-	type answer struct {
-		version string
-		err     error
-	}
-	do(h, func(ctx context.Context) answer {
-		res, err := h.call(ctx, "doc.write", ws, name, []byte(content), "")
-		if err == nil {
-			return answer{version: str(asMap(res), "version")}
-		}
-		if code(err) != rpc.CodeCommitted {
-			return answer{err: err}
-		}
-		// landed: its version for the next save, read back ("" if that fails: the next save conflicts)
-		back, _ := h.readFile(ctx, ws, name, false)
-		return answer{version: str(asMap(back), "version")}
-	}, func(a answer) {
+	abs, raw := h.pathOnDisk(ws, name), kind.RawText(name)
+	do(h, func(ctx context.Context) created {
+		return h.writeNew(ctx, ws, name, abs, []byte(content))
+	}, func(a created) {
 		if !tk.Current() {
 			if a.err == nil {
 				h.notify("saved the draft as " + name) // its buffer was closed meanwhile; the file is on disk
@@ -915,12 +903,7 @@ func (h *Host) createFile(name string) {
 			return
 		}
 		if a.err != nil {
-			reason := wireMessage(a.err)
-			if code(a.err) == rpc.CodeConflict {
-				reason = name + " exists: pick another name, or open it"
-			}
-			h.set("App.fileNameError", reason)
-			h.open("fileName")
+			h.createRefused(name, a.err)
 			return
 		}
 		if h.draft == ds {
@@ -932,7 +915,7 @@ func (h *Host) createFile(name string) {
 			// edited while it was written (typing, a script, an agent): the buffer is the file now,
 			// and keeps the newer text, unsaved, and the copies it came from; what the save guarded
 			// (a close, a quit) would drop that text: ask again, over b
-			h.adopt(b, ws, name, a.version, false, nil)
+			h.adopt(b, a.at.ws, a.at.path, a.version, raw, nil)
 			if ds.then == nil {
 				h.notify("saved the draft as " + name + "; it changed again while it was saved: the newer changes are unsaved")
 				return
@@ -948,33 +931,76 @@ func (h *Host) createFile(name string) {
 		b.draft = ""
 		land := &landing{at: cursorBytesOf(h.editorFor(b))} // the cursor where it was in the draft
 		b.file.dirty = false                                // written: the load below finds it saved
-		h.loadInto(b, ws, name, nil, false, land)
+		h.loadInto(b, a.at.ws, a.at.path, nil, raw, land)
 		if ds.then != nil {
 			ds.then()
 		}
 	})
 }
 
+// created is writeNew's answer: where the new file is (ws "" for outside every workspace, its
+// path then absolute) and its version.
+type created struct {
+	at      located
+	version string
+	err     error
+}
+
+// writeNew writes content to a new file, never over one: name in workspace ws, at abs on this
+// machine's disk ("" until the workspace is listed). A path the daemon says a workspace indexes is
+// that workspace's file (doc.write); any other text file, a .csv, .go or .sql the workspace does not
+// index, is written outside every workspace (file.write), as File › New file writes one. An HTML
+// file is written as its own bytes (raw), which the plain verbs refuse. Off the loop.
+func (h *Host) writeNew(ctx context.Context, ws, name, abs string, content []byte) created {
+	at := located{ws: ws, path: name}
+	if abs != "" {
+		if at = h.locate(ctx, abs); at.err != nil {
+			return created{err: at.err}
+		}
+		if at.ws == "" {
+			at.path = abs
+		}
+	}
+	raw := kind.RawText(name)
+	res, err := h.writeFile(ctx, at.ws, at.path, content, "", raw)
+	if err == nil {
+		return created{at: at, version: str(asMap(res), "version")}
+	}
+	if code(err) != rpc.CodeCommitted {
+		return created{err: err}
+	}
+	// landed: its version for the next save, read back ("" if that fails: the next save conflicts)
+	back, _ := h.readFile(ctx, at.ws, at.path, raw)
+	return created{at: at, version: str(asMap(back), "version")}
+}
+
+// createRefused says why name was not created, as a notification and under the name field, and
+// asks again for a name.
+func (h *Host) createRefused(name string, err error) {
+	reason := wireMessage(err)
+	if code(err) == rpc.CodeConflict {
+		reason = name + " exists: pick another name, or open it"
+	}
+	h.notify("create " + name + ": " + reason)
+	h.set("App.fileNameError", reason)
+	h.open("fileName")
+}
+
 // createEmpty is File › New file: an empty file at name, opened in a buffer of its own.
 func (h *Host) createEmpty(name string) {
 	ws, tk := h.ws, h.ticket(nil, TicketWorkspace)
-	do(h, func(ctx context.Context) error {
-		_, err := h.call(ctx, "doc.write", ws, name, []byte{}, "")
-		return err
-	}, func(err error) {
+	abs, raw := h.pathOnDisk(ws, name), kind.RawText(name)
+	do(h, func(ctx context.Context) created {
+		return h.writeNew(ctx, ws, name, abs, []byte{})
+	}, func(a created) {
 		if !tk.Current() {
 			return
 		}
-		if err != nil && code(err) != rpc.CodeCommitted {
-			reason := wireMessage(err)
-			if code(err) == rpc.CodeConflict {
-				reason = name + " exists: pick another name, or open it"
-			}
-			h.set("App.fileNameError", reason)
-			h.open("fileName")
+		if a.err != nil {
+			h.createRefused(name, a.err)
 			return
 		}
-		h.openIn(ws, name)
+		h.openRefAs(fileRef{a.at.ws, a.at.path}, true, nil, &raw, nil, false)
 		h.listFiles()
 		h.loadWorkspaces() // the explorer lists it
 	})

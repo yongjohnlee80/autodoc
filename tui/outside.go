@@ -7,6 +7,7 @@ import (
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 
+	"github.com/yongjohnlee80/autodoc/core/kind"
 	wsfilter "github.com/yongjohnlee80/autodoc/core/workspace"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
@@ -167,10 +168,6 @@ func (h *Host) sayWhyOutside(abs string) {
 		OnYes: func() { h.openSettings(w.name, 0) }})
 }
 
-// openOutside opens the absolute path abs, a file outside every workspace, asking first over
-// unsaved changes.
-func (h *Host) openOutside(abs string) { h.openRef(fileRef{"", abs}, true, nil) }
-
 // createAbsolute creates an empty file at abs (".md" added when it has no extension), chosen in
 // the save dialog, and opens it: in its workspace when one would index it, else outside every
 // workspace. A path that exists is not touched.
@@ -184,18 +181,10 @@ func (h *Host) createAbsolute(abs string) {
 		abs += ".md"
 	}
 	tk := h.ticket(nil, TicketWorkspace)
-	do(h, func(ctx context.Context) answerOf[located] {
-		at := h.locate(ctx, abs)
-		if at.err != nil {
-			return answerOf[located]{err: at.err}
-		}
-		ws, p := at.ws, at.path
-		if ws == "" {
-			p = abs
-		}
-		_, err := h.writeFile(ctx, ws, p, []byte{}, "", false)
-		return answered(at, err)
-	}, func(a answerOf[located]) {
+	raw := kind.RawText(abs)
+	do(h, func(ctx context.Context) created {
+		return h.writeNew(ctx, "", abs, abs, []byte{})
+	}, func(a created) {
 		if !tk.Current() {
 			return
 		}
@@ -203,16 +192,15 @@ func (h *Host) createAbsolute(abs string) {
 		case code(a.err) == rpc.CodeConflict:
 			h.notify(abs + " exists: File › Open file… opens it")
 			return
-		case a.err != nil && code(a.err) != rpc.CodeCommitted:
+		case a.err != nil:
 			h.failed("create "+abs, a.err)
 			return
 		}
-		if a.v.ws == "" {
-			h.openOutside(abs)
+		h.openRefAs(fileRef{a.at.ws, a.at.path}, true, nil, &raw, nil, false)
+		if a.at.ws == "" {
 			return
 		}
-		h.openIn(a.v.ws, a.v.path)
-		if a.v.ws == h.ws {
+		if a.at.ws == h.ws {
 			h.listFiles()
 		}
 		h.loadWorkspaces() // the explorer lists it
