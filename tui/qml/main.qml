@@ -240,12 +240,14 @@ Window {
             MenuItem { text: "&About"; onTriggered: about.open() }
         }
         // the dock, the bar's corner: one icon per open widget, or one running with its drawer
-        // closed, the editor first; a click goes to it (tui/dock.go)
+        // closed, the editor first; a click shows or hides it (tui/dock.go)
         Flex {
             direction: Tui.Horizontal
             Repeater {
                 model: App.dock
-                Button { text: model.icon; flat: true; toolTipText: model.title; onClicked: App.goDock(model.key) }
+                // a hidden panel's icon is dimmed; a click shows or hides it (tui/dock.go)
+                Button { text: model.icon; flat: true; toolTipText: model.title; onClicked: App.goDock(model.key)
+                         palette.buttonText: model.hidden ? Theme.document.lineNumber : Theme.menu.windowText }
             }
         }
     }

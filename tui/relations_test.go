@@ -64,7 +64,7 @@ var docRelations = []string{
 // TestTheRelationsDrawerGroupsByKindAndDirection: SPC l lists each relation in its section — a
 // relation into the document under its own side's name — the body's links, then what names
 // nothing and the supersession loop; d adds the second ring under its first-ring document; Enter
-// opens a row and closes the drawer, whose rows follow the document opened (§5.8).
+// opens a row and hides the drawer (ADR 1792397302 r3), whose rows follow the document opened (§5.8).
 func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	d := startDaemon(t, relationsKB)
 	r := attached(t, d)
@@ -93,8 +93,8 @@ func TestTheRelationsDrawerGroupsByKindAndDirection(t *testing.T) {
 	r.keys(t, enter()) // the cursor starts on the first document: new.md
 	r.waitFile(t, "new.md")
 	r.waitRelations(t, []string{"supersedes (1)", "  doc.md", "links (1)", "  far.md"}) // new.md's own
-	if onLoop(r, func() bool { return r.h.panelOpen["links"] }) || !r.focusedOn("editor") {
-		t.Error("opening a relation left the drawer open, or the keyboard off the editor")
+	if !r.hidden("links") || !r.focusedOn("editor") {
+		t.Error("opening a relation left the drawer shown, or the keyboard off the editor")
 	}
 }
 

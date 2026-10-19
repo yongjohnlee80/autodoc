@@ -627,9 +627,9 @@ func nodesOf(n int) [][4]any {
 	return out
 }
 
-// The Mindmap is rooted at the page shown, and only by Shown: a click opens the document under it
-// with the keyboard kept on the Mindmap, and reads nothing itself; the page the click shows roots
-// it again.
+// The Mindmap is rooted at the page shown, and only by Shown: a click hides the Mindmap, not closed
+// (ADR 1792397302 r3), and opens the document under it, reading nothing itself; the page the click
+// shows roots it again.
 func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 	c := newScripted("kb")
 	c.answers["graph.map"] = func(p []any) (any, error) {
@@ -651,8 +651,8 @@ func TestTheMindmapRootsAtThePageShown(t *testing.T) {
 		t.Fatal("b.md is nowhere in the drawn map")
 	}
 	m.click(p, gui.Point{})
-	if want := []string{"kb:b.md focus " + mindmapPanelID}; !equalStrings(c.files, want) || len(c.calls) != 1 {
-		t.Fatalf("the click opened %v and read %v; want b.md with the keyboard kept, and no read", c.files, c.calls)
+	if want := []string{"kb:b.md"}; !equalStrings(c.files, want) || !equalStrings(c.hidden, []string{mindmapPanelID}) || len(c.calls) != 1 {
+		t.Fatalf("the click opened %v, hid %v and read %v; want b.md opened, the Mindmap hidden, and no read", c.files, c.hidden, c.calls)
 	}
 	m.Shown(Page{Ref: fileRef{"kb", "b.md"}}) // the page the click opened
 	if m.cur.root.path != "b.md" || len(c.calls) != 2 {

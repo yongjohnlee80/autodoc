@@ -121,13 +121,11 @@ type Host struct {
 	registrationOffered, registrationNoted bool
 	registrationRestart, restartAccepted   bool
 	panelOpen                              map[string]bool
-	panelGen                               map[string]uint64 // each panel's openings, counted (panelOpened): a focus landing's (focusLanded)
-	navSeq                                 uint64            // the navigations begun (openRefWith): a focus landing's
-	panelMax                               map[string]bool   // a panel maximized (its Drawer's changed signal; panelChanged)
-	maximizableOpened                      []string          // the terminal and the agents, the most recently opened first (maximizePanel)
-	lastPanel                              string            // the panel opened last (Arrange panel)
-	tutorialAt                             int               // the tutorial's page shown (tutorial.go)
-	fonts                                  FontControl       // the window's fonts; nil in a terminal (fonts.go)
+	panelMax                               map[string]bool // a panel maximized (its Drawer's changed signal; panelChanged)
+	maximizableOpened                      []string        // the terminal and the agents, the most recently opened first (maximizePanel)
+	lastPanel                              string          // the panel opened last (Arrange panel)
+	tutorialAt                             int             // the tutorial's page shown (tutorial.go)
+	fonts                                  FontControl     // the window's fonts; nil in a terminal (fonts.go)
 	families                               func(mono bool) []string
 	defaultCellFont                        string
 	fontsApplied                           appliedFonts
@@ -245,6 +243,10 @@ type Host struct {
 	// the Go-to picker's rows and its cursor (widgets.go)
 	widgetRows *rows[widgetTarget]
 	dockRows   *rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
+	// minimized are the panels the dock hid (golib's window minimize: hidden, not closed), the decl
+	// program's window collector; dockHidden are those the editor's icon hid, to show again (dock.go)
+	minimized  *widget.MinimizedWindows
+	dockHidden []string
 	widgetAt   int
 	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
@@ -424,7 +426,6 @@ func newHost(session *Session, opt Options) *Host {
 		gui:             opt.GUI,
 		backend:         opt.Backend,
 		panelOpen:       map[string]bool{},
-		panelGen:        map[string]uint64{},
 		workspaces:      newRows(tuidecl.NewListModel("key", "label"), workspaceRowOf),
 		managed:         newRows(tuidecl.NewListModel("key", "name", "state", "root"), managedRowOf),
 	}
@@ -443,6 +444,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.bufferPick = h.newBufferPick()
 	h.widgetRows = newWidgetRows()
 	h.dockRows = h.newDockRows()
+	h.minimized = widget.NewMinimizedWindows()
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)
@@ -465,6 +467,7 @@ func newHost(session *Session, opt Options) *Host {
 // same options), finds the one widget it reaches into, and connects once the program runs.
 func (h *Host) attach(p *tuidecl.Program) error {
 	h.p = p
+	h.minimized.Observe(h.panelsHiddenChanged) // the dock dims a hidden panel (dock.go)
 	var ok bool
 	if h.editor, ok = tuidecl.FindAs[editorWidget](p, "editor"); !ok {
 		return errors.New("main.qml declares no Editor with id: editor")
@@ -553,6 +556,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		tuidecl.Highlighters(h.searchDefinition(), highlight.Definition{Name: "Plain text", Highlighter: highlight.HighlighterFunc(func(string, highlight.State) ([]highlight.Span, highlight.State) { return nil, 0 })}),
 		tuidecl.Sources(h.reg.state),
 		tuidecl.Handlers(h.reg.handlers),
+		tuidecl.AdapterOptions(tuidecl.WithWindowCollector(h.minimized)), // the panels the dock hides (dock.go)
 		tuidecl.ErrorSink(h.keep),
 		tuidecl.Types(noteRendererType),         // the note editor's renderer (noterenderer.go)
 		tuidecl.Types(h.plugins.cardType()),     // a card plugin's view in its panel (pluginpanels.go)

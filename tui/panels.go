@@ -74,10 +74,15 @@ func (h *Host) panelView(id string) string {
 }
 
 // togglePanel opens or closes a panel its own way, or the one way: the drawer, and its view
-// takes the keyboard. Open, it has the keyboard.
+// takes the keyboard. Open, it has the keyboard. Hidden by the dock, it is shown again as it was,
+// as the dock's own click does (ADR 1792397302 r3).
 func (h *Host) togglePanel(name string) {
 	s := h.panelSpec(name)
 	if s == nil {
+		return
+	}
+	if h.panelOpen[name] && h.panelHidden(name) {
+		h.goTo(widgetTarget{panel: name})
 		return
 	}
 	if h.panelOpen[name] {
@@ -124,7 +129,7 @@ func (h *Host) panelOpened(name string) {
 		return
 	}
 	h.panelOpen[name] = true
-	h.panelGen[name]++
+	h.dockHidden = nil // a panel opened since the editor's icon hid the others: its next click hides
 	h.lastPanel = name
 	if slices.Contains(maximizable, name) {
 		// the newest first: F11 and SPC M off the panels reach the newest still open
@@ -143,6 +148,7 @@ func (h *Host) panelClosed(name string) {
 		return
 	}
 	h.panelOpen[name] = false
+	h.dockHidden = nil // a panel closed since the editor's icon hid the others: its next click hides
 	h.showFind()
 	defer h.refreshDock() // a closed panel leaves the dock, unless something of it runs on
 	if s.Closed != nil {

@@ -108,7 +108,9 @@ func (h *Host) goTo(t widgetTarget) {
 	if s == nil {
 		return
 	}
-	if !h.panelOpen[t.panel] {
+	if h.panelOpen[t.panel] && h.panelHidden(t.panel) {
+		h.showPanel(t.panel) // hidden by the dock: shown as it was
+	} else if !h.panelOpen[t.panel] {
 		if s.Open != nil {
 			s.Open(h.panelHost(t.panel)) // the terminal's opens a shell when it has none; the agent's asks
 		} else {

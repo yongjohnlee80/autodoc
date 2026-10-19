@@ -133,3 +133,92 @@ func TestTheDockIconsAreOneNeutralCell(t *testing.T) {
 		}
 	}
 }
+
+// hidden is whether panel id is hidden by the dock: open, its window minimized.
+func (r *running) hidden(id string) bool {
+	return onLoop(r, func() bool { return r.h.panelHidden(id) })
+}
+
+// dockHiddenRow is the dock row of :go name key's "hidden" role.
+func (r *running) dockHiddenRow(key string) bool {
+	return onLoop(r, func() bool {
+		for i, t := range r.h.dockRows.All() {
+			if t.name == key {
+				v, _ := r.h.dockRowOf(i, t)["hidden"].(bool)
+				return v
+			}
+		}
+		return false
+	})
+}
+
+// A shown panel's icon hides it, not closed: it stays open and in the dock, dimmed, its frame gone
+// from the screen and the keyboard back in the editor. Its icon again shows it as it was, the
+// keyboard in it. Closed for real while hidden, it leaves the dock.
+func TestADockIconHidesAndShowsItsPanel(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "# A\n"}})
+	r := attached(t, d)
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); return true })
+	r.s.WaitForText(t, "┌ explorer")
+	r.waitDock(t, "the explorer listed", "editor", "explorer")
+
+	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
+	r.s.WaitFor(t, "the explorer hidden", func(sc string) bool { return !strings.Contains(sc, "┌ explorer") })
+	if !r.panelIsOpen("explorer") || !r.hidden("explorer") {
+		t.Fatalf("hidden: open %v, minimized %v; want open, minimized (hidden, not closed)", r.panelIsOpen("explorer"), r.hidden("explorer"))
+	}
+	r.waitDock(t, "the hidden explorer kept", "editor", "explorer")
+	r.s.WaitFor(t, "its icon dimmed", func(string) bool { return r.dockHiddenRow("explorer") })
+	r.s.WaitFor(t, "the keyboard in the editor", func(string) bool { return r.focused("editor") })
+
+	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
+	r.s.WaitForText(t, "┌ explorer")
+	r.s.WaitFor(t, "the keyboard in the explorer", func(string) bool { return r.focusedOn("explorerTree") })
+	if r.hidden("explorer") || r.dockHiddenRow("explorer") {
+		t.Fatal("the explorer shown again is still marked hidden")
+	}
+
+	onLoop(r, func() bool { r.h.goDock("explorer"); return true }) // hidden again, then closed for real
+	r.s.WaitFor(t, "hidden again", func(string) bool { return r.hidden("explorer") })
+	onLoop(r, func() bool { r.h.closeDrawer("explorer"); return true })
+	r.waitDock(t, "the closed explorer gone", "editor")
+}
+
+// The editor's icon hides every shown panel and remembers them; its next click shows the same ones
+// again. A panel opened, shown or closed in between forgets them: the next click hides.
+func TestTheEditorsIconHidesThePanelsAndShowsThemAgain(t *testing.T) {
+	_, r := runShellTUI(t, nil)
+	onLoop(r, func() bool { r.h.togglePanel("explorer"); r.h.terminals.toggleTerminal(); return true })
+	r.s.WaitFor(t, "a shell running", func(string) bool { return r.shellsRunning() == 1 })
+	r.waitDock(t, "both listed", "editor", "explorer", "terminal")
+
+	onLoop(r, func() bool { r.h.goDock("editor"); return true })
+	r.s.WaitFor(t, "both hidden", func(string) bool { return r.hidden("explorer") && r.hidden("terminal") })
+	r.s.WaitFor(t, "the keyboard in the editor", func(string) bool { return r.focused("editor") })
+	onLoop(r, func() bool { r.h.goDock("editor"); return true })
+	r.s.WaitFor(t, "both shown again", func(string) bool { return !r.hidden("explorer") && !r.hidden("terminal") })
+	if !r.panelIsOpen("explorer") || !r.panelIsOpen("terminal") {
+		t.Fatal("the editor's icon closed a panel it should have shown")
+	}
+
+	// hidden again, the explorer shown by its own icon: the editor's next click hides it, and the
+	// terminal stays hidden rather than coming back
+	onLoop(r, func() bool { r.h.goDock("editor"); return true })
+	r.s.WaitFor(t, "both hidden again", func(string) bool { return r.hidden("explorer") && r.hidden("terminal") })
+	onLoop(r, func() bool { r.h.goDock("explorer"); return true })
+	r.s.WaitFor(t, "the explorer shown", func(string) bool { return !r.hidden("explorer") })
+	onLoop(r, func() bool { r.h.goDock("editor"); return true })
+	r.s.WaitFor(t, "the explorer hidden by the editor's icon", func(string) bool { return r.hidden("explorer") })
+	if !r.hidden("terminal") {
+		t.Fatal("after a panel was shown in between, the editor's icon brought back the terminal it had hidden before")
+	}
+
+	// a panel opened in between: the next click hides it too, and brings back none
+	onLoop(r, func() bool { r.h.togglePanel("links"); return true })
+	r.s.WaitFor(t, "the links open", func(string) bool { return r.panelIsOpen("links") })
+	onLoop(r, func() bool { r.h.goDock("editor"); return true })
+	r.s.WaitFor(t, "the links hidden", func(string) bool { return r.hidden("links") })
+	if !r.hidden("explorer") || !r.hidden("terminal") {
+		t.Fatal("after a panel opened in between, the editor's icon brought back panels it had hidden before")
+	}
+}
