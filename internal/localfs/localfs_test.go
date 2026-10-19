@@ -33,3 +33,32 @@ func TestWriteFileReplacesItWhole(t *testing.T) {
 		t.Error("a write into a directory that is not there succeeded")
 	}
 }
+
+// Resolve is where a path really is: through a symlink, and for a path not there yet, its names
+// under the resolved folder that is, the root at the least.
+func TestResolveFollowsLinks(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(dir, "real")
+	if err := os.Mkdir(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, filepath.Join(dir, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	// nothing of it there but the root
+	absent := filepath.Join(string(filepath.Separator), "autodoc-resolve-absent-"+filepath.Base(dir), "x.html")
+	for in, want := range map[string]string{
+		filepath.Join(dir, "alias"):                  real,
+		filepath.Join(dir, "alias", "new", "x.html"): filepath.Join(real, "new", "x.html"),
+		filepath.Join(dir, "gone", "y"):              filepath.Join(dir, "gone", "y"),
+		absent:                                       absent,
+		string(filepath.Separator):                   string(filepath.Separator),
+	} {
+		if got := localfs.Resolve(in); got != want {
+			t.Errorf("Resolve(%s) = %s, want %s", in, got, want)
+		}
+	}
+}

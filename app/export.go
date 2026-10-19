@@ -41,9 +41,50 @@ func exportMain(sourcePath, format, destination, theme, base string) error {
 	if err != nil {
 		return err
 	}
-	content, err := export.RenderWith(source, export.Format(format), theme, export.Options{Base: base, Document: sourcePath})
+	content, err := export.RenderWith(source, export.Format(format), theme, export.Options{Base: base, Document: sourcePath, Chart: chartSVG})
 	if err != nil {
 		return fmt.Errorf("%s: %w", sourcePath, err)
 	}
 	return localfs.WriteFile(context.Background(), destination, content)
+}
+
+// siteMain builds the site docs/site.toml describes into out (ADR 1792395460): theme, when given,
+// over the site's own. out is a new or empty folder, never inside docs, as its symlinks resolve:
+// a page left from an earlier build would still be published, and a site written into docs would
+// be read as docs.
+func siteMain(docs, out, theme, base string) error {
+	if base != "" {
+		return errors.New("--base does not go with --export=site: a site's links are to its own pages")
+	}
+	if docs == "" || out == "" {
+		return errors.New("--export=site needs a docs folder and an --output folder")
+	}
+	info, err := os.Stat(docs)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("--export=site: %s is not a folder", docs)
+	}
+	absDocs, err := filepath.Abs(docs)
+	if err != nil {
+		return err
+	}
+	absOut, err := filepath.Abs(out)
+	if err != nil {
+		return err
+	}
+	if r, err := filepath.Rel(localfs.Resolve(absDocs), localfs.Resolve(absOut)); err == nil && (r == "." || filepath.IsLocal(r)) {
+		return fmt.Errorf("--output %s is inside the docs folder %s", out, docs)
+	}
+	if entries, err := os.ReadDir(absOut); err == nil && len(entries) > 0 {
+		return fmt.Errorf("--output %s is not empty: a site is built into a new or empty folder", out)
+	}
+	return export.Site(absDocs, export.SiteOptions{Theme: theme, Chart: chartSVG}, func(rel string, page []byte) error {
+		path := filepath.Join(absOut, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return localfs.WriteFile(context.Background(), path, page)
+	})
 }

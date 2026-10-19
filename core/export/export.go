@@ -105,7 +105,7 @@ func DiagramPage(source, theme string) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("export: no theme %q (the themes are %s)", theme, strings.Join(Themes(), ", "))
 	}
-	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true), nil
+	return page(colors, `<pre class="mermaid">`+stdhtml.EscapeString(source)+`</pre>`, true, true, false, nil), nil
 }
 
 // mermaidBlock is a mermaid fence as the renderer writes it: its pre's attributes (data-src, with
@@ -145,6 +145,40 @@ type Options struct {
 	// says how many are not (0: any width, 64 columns at most). For a view narrower than a
 	// browser: the GUI's Rendered view of a note.
 	TableRows, TableWidth int
+	// Links maps a relative link's destination, as written, to the URL the page writes; ok false
+	// keeps it as written. Base, when set, is the file: mapping (fileURL) and wins over Links. For a
+	// site: a link to another page reaches that page (site.go).
+	Links func(dest string) (url string, ok bool)
+	// Chrome is the frame around the body: a site's sidebar and previous/next. nil: a bare page.
+	Chrome *Chrome
+	// Chart draws a Vega-Lite spec as inline SVG in the page's theme; nil, or ok false, keeps the
+	// <pre class="vega-lite"> of its spec. It draws a .chart.json embed and a vega-lite fence. The
+	// GUI build gives one (golib's gui/vegalite); core/export draws none of its own.
+	Chart func(spec []byte, theme string) (svg string, ok bool)
+}
+
+// Chrome is a site page's frame, drawn by the page in its palette: the site's title, the
+// sidebar, and the previous and next pages of its section. Every Href is relative to the page.
+type Chrome struct {
+	Site       string    // the site's title, linking to its root
+	Page       string    // this page's title: the document's <title> is "Page · Site"
+	Root       string    // the path from this page to the site's root: "", "../", "../../"
+	Nav        []NavItem // the sidebar: the sections, their pages, the links out
+	Prev, Next *NavItem  // within the page's section
+}
+
+// NavItem is a sidebar entry: a section with its pages, a page, or a link out.
+type NavItem struct {
+	Title, Href string
+	Current     bool      // this page, or the section it is in
+	Children    []NavItem // a section's pages
+}
+
+// Colors is a theme's page colours, for what is drawn in its palette (a chart): its background,
+// its text, its muted text and its borders, as #rrggbb; dark's for a theme it does not have.
+func Colors(theme string) (background, foreground, muted, border string) {
+	p := palettes[ThemeOf(theme)]
+	return p.background, p.foreground, p.muted, p.border
 }
 
 // Render is RenderWith without options: every link as the source has it.
@@ -176,9 +210,16 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		digest := sha256.Sum256(source)
 		placeholder := fmt.Sprintf("autodoc-link-%x-", digest)
 		var resolved []string
+		charts := false // a chart drawn as SVG, whose sizing the page then carries
+		chart := chartIn(options.Chart, theme, &charts)
 		embedder := newEmbedder(options.Document, tableFit{rows: options.TableRows, width: options.TableWidth})
 		if embedder != nil {
+			embedder.chart = chart
 			defer embedder.close()
+		}
+		mapLink := options.Links
+		if base != "" {
+			mapLink = func(dest string) (string, bool) { return fileURL(base, []byte(dest)) }
 		}
 		drawn := embeds{placeholder: fmt.Sprintf("autodoc-embed-%x-", digest)}
 		diagrams := false
@@ -201,10 +242,10 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 				}
 				node.Kind = markdown.KindEmph
 			case markdown.KindLink:
-				if base == "" {
+				if mapLink == nil {
 					return
 				}
-				if target, ok := fileURL(base, node.Dest); ok {
+				if target, ok := mapLink(string(node.Dest)); ok {
 					id := placeholder + strconv.Itoa(len(resolved)/2)
 					node.Dest = []byte(id)
 					resolved = append(resolved, `href="`+id+`"`, `href="`+stdhtml.EscapeString(target)+`"`)
@@ -229,6 +270,11 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 		})
 		rendered = chartBlock.ReplaceAllStringFunc(rendered, func(block string) string {
 			m := chartBlock.FindStringSubmatch(block)
+			if chart != nil {
+				if svg, ok := chart([]byte(stdhtml.UnescapeString(m[2]))); ok {
+					return `<div class="embed chart"` + m[1] + `>` + svg + `</div>`
+				}
+			}
 			return `<pre class="vega-lite"` + m[1] + `>` + m[2] + `</pre>`
 		})
 		fit := tableFit{rows: options.TableRows, width: options.TableWidth}
@@ -240,7 +286,7 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 			}
 			return `<div class="embed"` + m[1] + `>` + table + `</div>`
 		})
-		return page(colors, rendered, diagrams, false), nil
+		return page(colors, rendered, diagrams, false, charts, options.Chrome), nil
 	case Text:
 		var output bytes.Buffer
 		writeText(&output, document.Root, document.Source)
@@ -250,9 +296,11 @@ func RenderWith(source []byte, format Format, theme string, options Options) ([]
 	}
 }
 
-// page is a whole HTML document of body in colors, with the diagrams' script when it has any; a
-// diagram page has the diagram alone, at its own size.
-func page(colors palette, body string, diagrams, diagramPage bool) []byte {
+// page is a whole HTML document of body in colors, with the diagrams' script when it has any and
+// the charts' sizing when it draws any, so a page with neither is as it always was; a diagram page
+// has the diagram alone, at its own size. A chrome puts a site's sidebar beside the
+// body and its previous and next pages under it, in the same palette and under the same policy.
+func page(colors palette, body string, diagrams, diagramPage, charts bool, chrome *Chrome) []byte {
 	var output bytes.Buffer
 	output.WriteString("<!doctype html>\n<html lang=\"en\"")
 	if diagrams {
@@ -268,6 +316,10 @@ func page(colors palette, body string, diagrams, diagramPage bool) []byte {
 	}
 	output.WriteString("<meta http-equiv=\"Content-Security-Policy\" content=\"" + policy + "\">\n")
 	output.WriteString("<meta name=\"color-scheme\" content=\"" + colors.scheme + "\">\n")
+	if chrome != nil {
+		output.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
+		output.WriteString("<title>" + stdhtml.EscapeString(strings.TrimSuffix(chrome.Page+" · "+chrome.Site, " · ")) + "</title>\n")
+	}
 	fmt.Fprintf(&output, "<style>:root{color-scheme:%s;--background:%s;--foreground:%s;--accent:%s;--muted:%s;--surface:%s;--border:%s}",
 		colors.scheme, colors.background, colors.foreground, colors.accent, colors.muted, colors.surface, colors.border)
 	if diagramPage {
@@ -277,9 +329,18 @@ func page(colors palette, body string, diagrams, diagramPage bool) []byte {
 		output.WriteString("a{color:var(--accent)}pre,code{background:var(--surface)}pre{padding:1rem;overflow:auto;border:1px solid var(--border)}")
 		output.WriteString("blockquote{border-left:.2rem solid var(--accent);padding-left:1rem;color:var(--muted)}table{border-collapse:collapse}th,td{border:1px solid var(--border);padding:.3rem .6rem}")
 		output.WriteString("img{max-width:100%}div.embed{margin:1rem 0;overflow:auto}")
+		if charts {
+			output.WriteString("div.chart svg{max-width:100%;height:auto}")
+		}
+		if chrome != nil {
+			output.WriteString(chromeStyle)
+		}
 	}
 	output.WriteString("pre.mermaid{background:none;border:0;text-align:center;color:var(--foreground)}")
 	output.WriteString("</style></head><body>\n")
+	if chrome != nil && !diagramPage {
+		body = chrome.around(body)
+	}
 	output.WriteString(body)
 	if diagrams {
 		output.WriteString("\n<script>" + mermaid.Script() + "</script>\n<script>" + mermaidStart + "</script>\n")

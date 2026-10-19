@@ -1,0 +1,42 @@
+# The documentation site (ADR 1792395460): what `autodoc --export=site --output _site docs` publishes,
+# where, and in what order. A section is a file (one page) or a folder (its *.md, README.md its
+# index), at a url relative to the site's root ("" the root itself, else a path ending in /). The
+# Pages workflow (.github/workflows/pages.yml) builds and deploys it on a release tag.
+
+title  = "AutoDoc"
+theme  = "dark"
+# where a link to a file under docs/ that the site does not publish goes
+source = "https://github.com/yongjohnlee80/autodoc/blob/main/docs/"
+
+[[section]]
+path  = "README.md"
+url   = ""
+title = "Introduction"
+
+[[section]]
+path  = "tutorials"
+url   = "tutorials/"
+title = "Tutorials"
+
+[[section]]
+path  = "reference"
+url   = "reference/"
+title = "Reference"
+
+[[section]]
+path  = "lua"
+url   = "reference/lua/"
+title = "Lua API"
+
+[[section]]
+path  = "plugins.md"
+url   = "reference/plugins/"
+title = "Writing a plugin"
+
+[[link]]
+title = "Plugins"
+href  = "https://github.com/yongjohnlee80/autodoc-plugin-registry"
+
+[[link]]
+title = "Source"
+href  = "https://github.com/yongjohnlee80/autodoc"

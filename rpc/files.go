@@ -12,6 +12,7 @@ import (
 	"github.com/yongjohnlee80/autodoc/core/docs"
 	"github.com/yongjohnlee80/autodoc/core/kind"
 	"github.com/yongjohnlee80/autodoc/core/module"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 )
 
 // The file.* verbs read and write a local peer's files outside every workspace (ADR 1791430651
@@ -169,14 +170,14 @@ func (s *Server) fileVerbs() []module.Verb {
 // does not read) is in none. abs and the roots are compared with their symlinks resolved: a link
 // into a root names the file in it, as a write through it would reach.
 func (s *Server) located(abs string) (Workspace, string) {
-	real := resolved(abs)
+	real := localfs.Resolve(abs)
 	var best Workspace
 	var bestRoot, bestPath string
 	for _, w := range s.workspaces.List() {
 		if w.Err() != nil || w.Docs() == nil || !filepath.IsAbs(w.Root()) {
 			continue
 		}
-		root := resolved(filepath.Clean(w.Root()))
+		root := localfs.Resolve(filepath.Clean(w.Root()))
 		rel, err := filepath.Rel(root, real)
 		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
@@ -190,20 +191,4 @@ func (s *Server) located(abs string) (Workspace, string) {
 		}
 	}
 	return best, bestPath
-}
-
-// resolved is abs with its symlinks resolved, as far as it exists: a file not there yet (a write
-// that creates it, its folders too) keeps the names of what does not exist under the resolved
-// folder that does.
-func resolved(abs string) string {
-	var missing []string
-	for p := abs; ; p = filepath.Dir(p) {
-		if r, err := filepath.EvalSymlinks(p); err == nil {
-			return filepath.Join(append([]string{r}, missing...)...)
-		}
-		if p == filepath.Dir(p) {
-			return abs
-		}
-		missing = append([]string{filepath.Base(p)}, missing...)
-	}
 }
