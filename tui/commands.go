@@ -52,6 +52,7 @@ func (h *Host) commands() map[string]Command {
 		"App.terminalLookCancelled": none(h.terminalLookCancelled),
 		"App.setProseFontIndex":     oneNumber("a row", h.setProseFontIndex),
 		"App.setFontSizeIndex":      oneNumber("a row", h.setFontSizeIndex),
+		"App.setAgentScaleIndex":    oneNumber("a row", h.setAgentScaleIndex),
 		"App.setZoomIndex":          oneNumber("a row", h.setZoomIndex),
 		"App.setZoom":               oneNumber("a percent", h.setZoom),
 		"App.zoomWindow":            oneString("in or out", h.zoomWindow),

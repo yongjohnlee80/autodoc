@@ -185,6 +185,7 @@ func (h *Host) state() map[string]any {
 		"App.terminalFonts": h.termFontModel,
 		"App.proseFonts":    h.proseFontModel,
 		"App.fontSizes":     choices(fontSizeLabels()...),
+		"App.agentScales":   choices(percentLabels(agentScales)...),
 		"App.zoomSteps":     choices(zoomLabels()...),
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}

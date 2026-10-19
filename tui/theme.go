@@ -163,6 +163,7 @@ func (h *Host) themeReloadError(err error) {
 // as the cards and help name them.
 func (h *Host) reloaded() {
 	h.keysChanged()
+	h.agentText.apply(h, agentScaleOf(h.prefs)) // the rebuilt agents panel gets its views again
 	h.themesReloaded()
 }
 
