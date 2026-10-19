@@ -1,6 +1,6 @@
 // AgentProfiles.qml — System › Agent profiles…: display names, unique codenames and the
-// command that starts it, the default marked ●, the one running ▶. SPC ~ opens the default; Use
-// starts another now, asking first when one is running (agent.go, agentprofiles.go).
+// command that starts it, the default marked ●, a running one ▶. SPC g opens the default; Use
+// starts another in a tab of its own, or goes to its tab while it runs (agent.go, agentprofiles.go).
 Dialog {
     closeOnQ: true
     maxWidthPercent: 90
