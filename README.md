@@ -39,8 +39,8 @@ How it is put together, and the convention a new feature follows, is
 | --- | --- |
 | macOS, Linux | [Homebrew](https://brew.sh): `brew install yongjohnlee80/tap/autodoc` |
 | Linux, macOS | [mise](https://mise.jdx.dev): `mise use -g github:yongjohnlee80/autodoc` |
-| Any, with Go 1.25+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (the TUI) |
-| Linux, macOS, with Go 1.25+, with the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
+| Any, with Go 1.26.9+ | `go install github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` (the TUI) |
+| Linux, macOS, with Go 1.26.9+, with the GUI | `GOBIN=~/.local/bin go install -tags gui github.com/yongjohnlee80/autodoc/cmd/autodoc@latest` |
 | Linux, macOS | A [release archive](https://github.com/yongjohnlee80/autodoc/releases/latest) (`amd64` and `arm64`, with SHA-256 checksums) |
 | Windows | Use [WSL2](https://learn.microsoft.com/windows/wsl/install) and any Linux method. A native Windows build is not published yet. |
 
@@ -1145,7 +1145,7 @@ func main() {
 
 ## Building
 
-Go 1.25. `make build` links no cgo: the daemon and the TUI. `make build-gui` adds the GUI (`--gui`,
+Go 1.26.9. `make build` links no cgo: the daemon and the TUI. `make build-gui` adds the GUI (`--gui`,
 golib's gui on Gio), the one part that needs cgo; on macOS `make build` is `make build-gui`.
 
 ```sh
