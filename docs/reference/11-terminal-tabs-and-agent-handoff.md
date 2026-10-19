@@ -92,7 +92,7 @@ AutoDoc collapses this entire workflow into a single keystroke inside the Todos 
    - In the Todos Panel, `followTask` automatically switches the active tab to **In progress** and places the selection cursor on the moved task.
 5. **PTY Spawn/Focus and Bracketed Paste Delivery (`Core.HandTask`)**:
    - Once `todos.assign` succeeds and the `TicketWorkspace` guard confirms the user has not switched workspaces mid-flight, `handOver` constructs a `TaskRef{Title, Path, ID}` using the **post-move** file path in `in-progress/` and calls `Core.HandTask(AgentRef{Codename}, ref, instruction, done)`.
-   - If the chosen agent is **stopped**, AutoDoc prompts: *"Start <Agent Name> to hand over this task?"* Upon confirmation, `startInstance` opens the `agent` drawer, writes the workspace's agent guide (`writeAgentGuide`), spawns the PTY in the workspace root, and selects its tab.
+   - If the chosen agent is **stopped**, AutoDoc prompts: *"Start <Agent Name> to hand over this task?"* Upon confirmation, `startInstance` opens the `agent` drawer, writes the workspace's agent guide (`writeAgentGuide`: AGENTS.md, CLAUDE.md and `bin/autodoc`), spawns the PTY in AutoDoc's own folder for the workspace (`<state dir>/agent/<workspace>`), not the workspace root, and selects its tab.
    - `HandTask` formats the canonical 4-line payload:
      ```text
      Task: Implement SQLite crash-recoverable todo journal
