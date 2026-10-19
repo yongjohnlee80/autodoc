@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/BurntSushi/toml"
+	"github.com/yongjohnlee80/autodoc/core/manifests"
 )
 
 // LUA PACKAGES (M8): a package is a folder of the config's lua/, lua/<name>/, holding init.lua and
@@ -28,12 +28,7 @@ import (
 // clones a package and asks before it goes into lua/, as Plugins › Add from a git URL… does.
 
 // packageManifest is a package's package.toml.
-type packageManifest struct {
-	Name        string   `toml:"name"`
-	Version     string   `toml:"version"`
-	Description string   `toml:"description"`
-	Requires    []string `toml:"requires"`
-}
+type packageManifest = manifests.Package
 
 // readPackage reads dir's manifest: its name must be the folder's, and its init.lua there.
 func readPackage(dir string) (packageManifest, error) {
@@ -46,33 +41,18 @@ func readPackage(dir string) (packageManifest, error) {
 }
 
 // readPackageIn reads the manifest of the package whose folder is dir, through fsys, its root: a
-// file there that links outside the folder is not the package's (os.Root refuses it).
+// file there that links outside the folder is not the package's (os.Root refuses it). A staged
+// clone's folder is not yet named for its package.
 func readPackageIn(fsys fs.FS, dir string) (packageManifest, error) {
-	var m packageManifest
-	src, err := fs.ReadFile(fsys, "package.toml")
-	if err == nil {
-		_, err = toml.Decode(string(src), &m)
+	folder := filepath.Base(dir)
+	if strings.HasPrefix(folder, stagePrefix) {
+		folder = ""
 	}
-	if err != nil {
-		return m, fmt.Errorf("package.toml: %s", firstLine(err.Error()))
-	}
-	switch {
-	case !validPackageName(m.Name):
-		return m, fmt.Errorf("package.toml: a name of letters, digits, - and _, not %q", m.Name)
-	case m.Name != filepath.Base(dir) && !strings.HasPrefix(filepath.Base(dir), stagePrefix):
-		return m, fmt.Errorf("package.toml names %s, but its folder is %s", m.Name, filepath.Base(dir))
-	}
-	if _, err := fs.Stat(fsys, "init.lua"); err != nil {
-		return m, errors.New("no init.lua in the package's folder")
-	}
-	return m, nil
+	return manifests.ReadPackage(fsys, folder)
 }
 
-func validPackageName(n string) bool {
-	return n != "" && !strings.ContainsFunc(n, func(r rune) bool {
-		return !(r == '-' || r == '_' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z')
-	})
-}
+// validPackageName is a Lua package's name: letters, digits, - and _.
+var validPackageName = manifests.ValidPackageName
 
 // loadPackages loads every package of the lua folder, in name order: a folder that is not one, or
 // fails, is one error and the others still load. A folder starting with "." (an install staged) is
@@ -257,20 +237,4 @@ func (h *Host) loadPluginPackages() []error {
 func pluginScript(name string) string { return "plugin:" + name }
 
 // readPluginPackage reads a plugin's lua/package.toml: its name must be the plugin's.
-func readPluginPackage(fsys fs.FS, plugin string) (packageManifest, error) {
-	var m packageManifest
-	src, err := fs.ReadFile(fsys, "package.toml")
-	if err == nil {
-		_, err = toml.Decode(string(src), &m)
-	}
-	if err != nil {
-		return m, fmt.Errorf("package.toml: %s", firstLine(err.Error()))
-	}
-	if m.Name != plugin {
-		return m, fmt.Errorf("package.toml names %q, but the plugin is %s", m.Name, plugin)
-	}
-	if _, err := fs.Stat(fsys, "init.lua"); err != nil {
-		return m, errors.New("no init.lua in its lua folder")
-	}
-	return m, nil
-}
+var readPluginPackage = manifests.ReadPluginPackage

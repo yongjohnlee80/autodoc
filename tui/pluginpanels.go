@@ -70,7 +70,7 @@ func (pl *plugins) fixCards() []*cardPanel {
 	pl.cardOrder = []*cardPanel{}
 	pl.cards = map[string]*cardPanel{}
 	for _, e := range pl.pluginList {
-		if e.reason != "" || !e.m.card() {
+		if e.reason != "" || !e.m.Card() {
 			continue
 		}
 		c := &cardPanel{name: e.m.Name, entry: e}
@@ -110,7 +110,7 @@ func (pl *plugins) cardSpec(c *cardPanel, priority int) PanelSpec {
 
 // cardEntry is the card plugin name as the folder has it now, else as it was found at the start.
 func (pl *plugins) cardEntry(name string) pluginEntry {
-	if i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.reason == "" && e.m.Name == name }); i >= 0 && pl.pluginList[i].m.card() {
+	if i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.reason == "" && e.m.Name == name }); i >= 0 && pl.pluginList[i].m.Card() {
 		return pl.pluginList[i]
 	}
 	return pl.cards[name].entry
@@ -136,9 +136,9 @@ func (pl *plugins) cardDefault(name, edge string) (size, length int) {
 	}
 	share := func(cells, of int) int { return (cells*100 + of - 1) / of }
 	across := share(m.Dialog.Width+2, pw)
-	down := m.Dialog.Height.pct
+	down := m.Dialog.Height.Pct
 	if down == 0 {
-		down = share(m.Dialog.Height.rows+2, ph)
+		down = share(m.Dialog.Height.Rows+2, ph)
 	}
 	switch edge {
 	case "top", "bottom":

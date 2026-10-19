@@ -57,7 +57,7 @@ func (pl *plugins) openPlugin(key string) {
 	}
 	pl.running[key] = r
 	pl.refreshPlugins()
-	if e.m.card() {
+	if e.m.Card() {
 		pl.showCard(r, false) // a card shown takes no keys: a click or its command focuses it (§2.2)
 	}
 }

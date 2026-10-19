@@ -79,11 +79,11 @@ type pluginRun struct {
 // its first layout, a service's at once.
 func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	host, ok := pl.c.Overlay()
-	if !ok && !e.m.service() {
+	if !ok && !e.m.Service() {
 		return nil, errors.New("the screen is not ready")
 	}
 	var card *pluginView
-	if e.m.card() {
+	if e.m.Card() {
 		pl.fixCards()
 		if c := pl.cards[e.m.Name]; c != nil {
 			card = c.view
@@ -139,7 +139,7 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 	if e.m.Feed.Document {
 		r.sendDocument(pl.document()) // after plugin.open: the note as it stands when it starts
 	}
-	if e.m.service() {
+	if e.m.Service() {
 		r.openAt(0, 0) // no surface to lay out: open it now
 		return r, nil
 	}
@@ -148,11 +148,11 @@ func (pl *plugins) startPlugin(e pluginEntry) (*pluginRun, error) {
 		card.attach(r)
 		return r, nil
 	}
-	r.view = &pluginView{run: r, pl: pl, w: e.m.Dialog.Width, h: e.m.Dialog.Height.rows, fill: e.m.Dialog.Height.pct > 0}
+	r.view = &pluginView{run: r, pl: pl, w: e.m.Dialog.Width, h: e.m.Dialog.Height.Rows, fill: e.m.Dialog.Height.Pct > 0}
 	r.box = widget.NewBox(r.view, widget.WithTitle(r.title(e.label())), widget.WithBorder(style.BorderRounded),
 		widget.WithStyle(style.New().Background(style.TokenPanel).Foreground(style.TokenForeground)))
-	opts := []widget.FloatOption{widget.WithModal(e.m.modal()), widget.WithAnchor(pluginAnchors[pl.placement(e)])}
-	if pct := e.m.Dialog.Height.pct; pct > 0 {
+	opts := []widget.FloatOption{widget.WithModal(e.m.Modal()), widget.WithAnchor(pluginAnchors[pl.placement(e)])}
+	if pct := e.m.Dialog.Height.Pct; pct > 0 {
 		opts = append(opts, widget.WithSizeFraction(0, pct))
 	}
 	r.float = widget.NewFloat(r.box, opts...)
@@ -196,7 +196,7 @@ func (r *pluginRun) title(t string) string {
 // hide is Esc under esc = "hide": the dialog goes, the plugin runs on, told so. A card's panel
 // closes, and its plugin is told so as the panel goes (cardClosed).
 func (r *pluginRun) hide() {
-	if r.e.m.card() {
+	if r.e.m.Card() {
 		r.pl.hideCard(r)
 		return
 	}
@@ -211,7 +211,7 @@ func (r *pluginRun) hide() {
 // show brings the dialog back: its Plugins menu entry, chosen again. A card's panel opens, and its
 // plugin is told so as it does (cardOpened).
 func (r *pluginRun) show() {
-	if r.e.m.card() {
+	if r.e.m.Card() {
 		r.pl.showCard(r, false)
 		return
 	}
@@ -287,7 +287,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 		}
 		r.pl.c.Post(func() { r.readied(p, err) })
 	case plugin.MethodFrame:
-		if !r.readyIn.Load() || r.e.m.service() { // a service has nothing to draw into
+		if !r.readyIn.Load() || r.e.m.Service() { // a service has nothing to draw into
 			return
 		}
 		rows, dropped, err := plugin.ReadFrame(params)
@@ -309,7 +309,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 			})
 		}
 	case plugin.MethodTitle:
-		if t, err := plugin.ReadTitle(params); err == nil && !r.e.m.service() {
+		if t, err := plugin.ReadTitle(params); err == nil && !r.e.m.Service() {
 			r.pl.c.Post(func() { r.setTitle(t) })
 		}
 	case plugin.MethodSession:
@@ -333,7 +333,7 @@ func (r *pluginRun) onNote(method string, params []any) {
 	case plugin.MethodHostClose:
 		// a card asks its panel to close, as Esc closes it: it hides, and runs on
 		r.pl.c.Post(func() {
-			if r.e.m.card() {
+			if r.e.m.Card() {
 				r.hide()
 			} else {
 				r.close("")
@@ -351,7 +351,7 @@ func (r *pluginRun) setTitle(t string) {
 	if r.closing {
 		return
 	}
-	if r.e.m.card() {
+	if r.e.m.Card() {
 		r.pl.c.Set("App."+cardPanelID(r.e.m.Name)+"Title", t)
 		return
 	}
@@ -410,7 +410,7 @@ func (r *pluginRun) stopFor(reason, why string) {
 	if r.focused {
 		r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
 	}
-	if r.e.m.card() && r.view != nil {
+	if r.e.m.Card() && r.view != nil {
 		r.pl.hideCard(r)
 		r.view.detach(r)
 		r.pl.c.Set("App."+cardPanelID(r.e.m.Name)+"Title", r.e.label())

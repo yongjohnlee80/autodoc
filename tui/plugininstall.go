@@ -165,37 +165,7 @@ func pluginQuestion(c pluginChange, title string) string {
 
 // pluginDeclares is what a manifest's protocol-2 and -3 keys say the plugin does, for the install
 // confirmation (ADR 1791268009 §2.1): "" for a 0209 dialog.
-func pluginDeclares(m *manifest) string {
-	var parts []string
-	switch {
-	case m.service() && m.Start == "launch":
-		parts = append(parts, "a service, with no surface · starts with AutoDoc")
-	case m.service():
-		parts = append(parts, "a service, with no surface · starts on first use")
-	case m.card():
-		parts = append(parts, "a card beside the page")
-	}
-	if m.Feed.Document {
-		parts = append(parts, "reads the open note's text (feed)")
-	}
-	if len(m.Commands) > 0 {
-		cmds := make([]string, len(m.Commands))
-		for i, c := range m.Commands {
-			cmds[i] = c.Title
-			if c.Key != "" {
-				cmds[i] += " (" + c.Key + " on its SPC p card)"
-			}
-		}
-		parts = append(parts, "commands: "+strings.Join(cmds, ", "))
-	}
-	if len(m.Calls) > 0 {
-		parts = append(parts, "may run AutoDoc's commands: "+strings.Join(m.Calls, ", "))
-	}
-	if m.Table.Title != "" {
-		parts = append(parts, "shows a table of results ("+m.Table.Title+")")
-	}
-	return strings.Join(parts, " · ")
-}
+func pluginDeclares(m *manifest) string { return strings.Join(m.Declares(), " · ") }
 
 // pluginConfirmed is PluginConfirm's Yes: the build, then the plugin in the folder.
 func (pl *plugins) pluginConfirmed() {
@@ -478,7 +448,7 @@ func (pl *plugins) placePlugin(i int) {
 	next := places[(slices.Index(places, pl.placement(m.e))+1)%len(places)]
 	name := m.e.m.Name
 	pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+name+prefPluginPlace, next))
-	if m.e.m.card() { // its panel goes to the edge, docked: the preference's change sets the edge
+	if m.e.m.Card() { // its panel goes to the edge, docked: the preference's change sets the edge
 		pl.c.DockPanel(cardPanelID(name))
 	} else if r := pl.running[name]; r != nil && r.float != nil {
 		r.float.SetAnchor(pluginAnchors[next])

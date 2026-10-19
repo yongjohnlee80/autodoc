@@ -64,7 +64,7 @@ func (pl *plugins) feedDocuments() {
 		}
 		r := pl.running[e.key()]
 		if r == nil {
-			if !e.m.service() || e.m.Start != "use" {
+			if !e.m.Service() || e.m.Start != "use" {
 				continue // a dialog is sent the document when it opens
 			}
 			var err error
