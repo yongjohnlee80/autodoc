@@ -13,7 +13,7 @@ import (
 
 // THE RELATIONS DRAWER — SPC l (ADR 1791430651 §4.4): what the open document is connected to,
 // grouped by the edge's kind and direction, from its frontmatter's relations and its body's links
-// both ways. Enter opens a row in the editor and the drawer stays; d, in the drawer, shows the
+// both ways. Enter opens a row in the editor and closes the drawer; d, in the drawer, shows the
 // second ring (graph.neighborhood at depth 2) under each first-ring document; the unresolved
 // relations and supersession cycles close the list. SPC j goes to the link under the cursor and
 // SPC b back to the document opened before (golink.go, navigation.go); the editor's right-click
