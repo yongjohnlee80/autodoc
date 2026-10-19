@@ -791,8 +791,9 @@ its manifest names first (AutoDB's: the right), and moves, resizes and keeps its
 panel does (Alt/Option-drag, **Go › Arrange panel**). It takes the keys when clicked or when one of
 its commands runs, and then every key is the plugin's, q included. Esc, or **Close (Esc)** on its
 right-click menu, closes the panel and hands the keys back to the page; the plugin runs on, its
-results and session kept, and a command or its Plugins menu entry opens the panel again. **Turn
-off** on its Plugins menu, or its toggle while the panel is open, stops it.
+results and session kept, and a command or its Plugins menu entry opens the panel again. Its
+toggle hides an open panel the same way, the plugin running on; **Turn off** on its Plugins menu
+stops it.
 
 **Adding one.** **Plugins › Add from a git URL…** takes the plugin's repository, which holds a
 `plugin.toml` at its top. There is no hub: the URL is the source.
