@@ -1,11 +1,8 @@
 Category,Key_or_Binding,Type_or_Scope,Default_or_Format,Description
 Config / Profile,label / name,string,Required,"Human-readable display name shown on the terminal tab strip and in the Agent Assign Picker (may repeat across profiles)"
 Config / Profile,codename,string,"Derived lowercase-hyphen slug","Stable delivery identity persisted on first save; used for autodoc:<codename> assignee routing and tab lookup"
-Config / Profile,command,string,Required (e.g. claude or gemini),"Executable binary or command template launched inside the PTY; supports workspace placeholders"
-Config / Profile,args,list of strings,[],"Command-line arguments passed to the shell or coding agent process on spawn"
-Config / Profile,env,map of string to string,{},"Environment variables injected into the PTY alongside AUTODOC_WORKSPACE and agent guide paths"
-Config / Profile,agent,boolean,false (shell) / true (agent),"Routes the tab into the dedicated Agent Panel (SPC g) and registers it as an assignable target for SPC x -> A"
-Keybinding,F12 / SPC t,Global Window,Toggle Terminal Panel,"Opens or hides the embedded shell TerminalTabs drawer while keeping background PTY processes alive"
+Config / Profile,command,string,Required (e.g. claude --model opus),"The command line that starts the agent, run through /bin/sh -c; {root} and {workspace} become the workspace's folder and name, each shell-quoted"
+Keybinding,SPC ` / :terminal,Global Window,Toggle Terminal Panel,"Opens or hides the embedded shell TerminalTabs drawer while keeping background PTY processes alive"
 Keybinding,SPC g,Global Window,Toggle Agent Panel,"Opens or hides the dedicated AI Agent TerminalTabs drawer; starts the default agent if none is running"
 Keybinding,F11,Terminal / Agent Panel,Maximize / Restore,"Toggles fullscreen dock expansion for the active TerminalTabs or Agent panel (also in strip menu ≡)"
 Keybinding,Ctrl+T,Terminal / Agent PTY,Toggle PTY Normal Mode,"Switches between live PTY input forwarding (where Esc goes to the shell/agent) and Vim scrollback Normal mode (h/j/k/l, /, v, y)"
