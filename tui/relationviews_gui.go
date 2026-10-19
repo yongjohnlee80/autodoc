@@ -3,9 +3,11 @@
 package tui
 
 import (
+	"embed"
 	"fmt"
 	"image/color"
 	"strconv"
+	"strings"
 
 	"github.com/yongjohnlee80/golib/gui"
 
@@ -45,8 +47,39 @@ var relationViewsQML = relationDialogsQML + relationPanelQML(globeMapPanelID, gl
 	relationPanelQML(mindmapPanelID, mindmapViewID, "Mindmap",
 		"the Mindmap (mindmap_gui.go): the page's document and those two links from it, as a mind map", relationColours)
 
-// relationDialogsQML is the views' dialogs: the GlobeMap's settings (globesettings_gui.go).
-const relationDialogsQML = "    GlobeMapSettings { id: globeMapSettings }\n"
+// relationDialogs are the views' dialogs, the GUI's alone: not autodoc.dialogs components, which
+// every build's document may use and so may name only what every build's App has. Each is written
+// into main.qml whole, under its id (relationDialogsQML).
+//
+//go:embed qmlgui/*.qml
+var relationDialogs embed.FS
+
+// relationDialogsQML is the views' dialogs as main.qml holds them: the GlobeMap's settings
+// (globesettings_gui.go).
+var relationDialogsQML = inlineDialog("GlobeMapSettings.qml", "globeMapSettings")
+
+// inlineDialog is the dialog of qmlgui/file, its root given the id: the file's text from its root
+// Dialog on, indented as main.qml's children are.
+func inlineDialog(file, id string) string {
+	b, err := relationDialogs.ReadFile("qmlgui/" + file)
+	if err != nil {
+		panic("tui: embedded " + file + ": " + err.Error())
+	}
+	src := string(b)
+	at := strings.Index(src, "Dialog {")
+	if at < 0 {
+		panic("tui: " + file + " has no root Dialog")
+	}
+	src = "Dialog {\n    id: " + id + src[at+len("Dialog {"):]
+	var out strings.Builder
+	for line := range strings.Lines(src) {
+		if strings.TrimSpace(line) != "" {
+			out.WriteString("    ")
+		}
+		out.WriteString(line)
+	}
+	return out.String()
+}
 
 func relationPanelQML(id, view, typ, what, colours string) string {
 	return fmt.Sprintf(`    // %[4]s
