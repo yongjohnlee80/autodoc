@@ -136,6 +136,21 @@ func (a *allocs) remove(dirs ...string) {
 	}
 }
 
+// keep is a worker's last word on dir, once it has written all it will: nil while the session
+// lives (dir stays held, its candidate's to remove, and an end after this removes it), or
+// errSessionEnded when the session ended while it worked: dir, removed by the end and perhaps
+// written again since (a clone still running), is removed here. Either way no dir outlives the end.
+func (a *allocs) keep(dir string) error {
+	a.mu.Lock()
+	closed := a.closed
+	a.mu.Unlock()
+	if closed {
+		_ = os.RemoveAll(dir)
+		return errSessionEnded
+	}
+	return nil
+}
+
 // close removes every dir held and refuses any held after it.
 func (a *allocs) close() {
 	a.mu.Lock()
@@ -400,6 +415,9 @@ func auditCopy(ctx context.Context, c *candidate, own *allocs) (root, task strin
 	task = filepath.Join(root, "audit-task.md")
 	if err := os.WriteFile(task, []byte(auditTask(c, dir)), 0o600); err != nil {
 		return fail(err)
+	}
+	if err := own.keep(root); err != nil { // the session ended while the copy was made
+		return "", "", err
 	}
 	return root, task, nil
 }
