@@ -9,7 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
+	guimermaid "github.com/yongjohnlee80/golib/gui/mermaid"
+	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -257,4 +260,113 @@ func (h *Host) relationViewTypes() []tuidecl.Type {
 func mixNRGBA(a, b color.NRGBA, t float32) color.NRGBA {
 	l := func(x, y uint8) uint8 { return uint8(float32(x)*(1-t) + float32(y)*t + 0.5) }
 	return color.NRGBA{R: l(a.R, b.R), G: l(a.G, b.G), B: l(a.B, b.B), A: l(a.A, b.A)}
+}
+
+// A VIEW'S LEGEND — what its marks stand for, on a plate in its bottom right corner (l hides it, and
+// shows it again). Each row is a mark, drawn in a box of legendMarkW by legendMarkH, and its words.
+
+const (
+	legendRowH  = 18
+	legendMarkW = 24
+	legendMarkH = 13
+	legendPad   = 8
+)
+
+// legendRow is one row of a legend.
+type legendRow struct {
+	mark func(c gui.Canvas, box gui.Rect)
+	text string
+}
+
+// paintLegend draws rows on a plate in the bottom right of a view of size sz, in pal's colours:
+// nothing when they do not fit.
+func paintLegend(c gui.Canvas, sz gui.Size, pal relPalette, rows []legendRow) {
+	if len(rows) == 0 {
+		return
+	}
+	f := gui.Font{Size: 12}
+	texts := make([]*gui.TextLayout, len(rows))
+	w := float32(0)
+	for i, r := range rows {
+		texts[i] = c.Text().Layout(r.text, f, 240)
+		w = max(w, texts[i].Width)
+	}
+	pw, ph := 2*legendPad+legendMarkW+8+w, 2*legendPad+float32(len(rows))*legendRowH
+	if pw+24 > sz.W || ph+24 > sz.H {
+		return
+	}
+	plate := gui.Rect{X: sz.W - pw - 12, Y: sz.H - ph - 12, W: pw, H: ph}
+	c.FillRRect(plate, 6, gui.Solid(mixNRGBA(pal.background, pal.text, 0.07)))
+	c.StrokeRRect(plate, 6, 1, gui.Solid(mixNRGBA(pal.background, pal.text, 0.25)))
+	for i, r := range rows {
+		y := plate.Y + legendPad + float32(i)*legendRowH
+		r.mark(c, gui.Rect{X: plate.X + legendPad, Y: y + (legendRowH-legendMarkH)/2, W: legendMarkW, H: legendMarkH})
+		c.DrawText(texts[i], gui.Pt(plate.X+legendPad+legendMarkW+8, y+(legendRowH-texts[i].Height)/2), gui.Solid(pal.text))
+	}
+}
+
+// legendDot is a dot of colour col, r across, centred in its box.
+func legendDot(col color.NRGBA, r float32) func(gui.Canvas, gui.Rect) {
+	return func(c gui.Canvas, b gui.Rect) {
+		c.FillEllipse(gui.Rect{X: b.X + b.W/2 - r/2, Y: b.Y + b.H/2 - r/2, W: r, H: r}, gui.Solid(col))
+	}
+}
+
+// legendRing is a ring of colour col round a dot of colour dot.
+func legendRing(dot, col color.NRGBA) func(gui.Canvas, gui.Rect) {
+	return func(c gui.Canvas, b gui.Rect) {
+		legendDot(dot, 7)(c, b)
+		p := &gui.Path{}
+		circle(p, graphlayout.Point{X: b.X + b.W/2, Y: b.Y + b.H/2}, 6)
+		c.StrokePath(p, 1.5, gui.Solid(col))
+	}
+}
+
+// legendLine is a link of colour col across its box.
+func legendLine(col color.NRGBA) func(gui.Canvas, gui.Rect) {
+	return func(c gui.Canvas, b gui.Rect) {
+		c.StrokePath((&gui.Path{}).MoveTo(gui.Pt(b.X, b.Y+b.H/2)).LineTo(gui.Pt(b.X+b.W, b.Y+b.H/2)), 2, gui.Solid(col))
+	}
+}
+
+// legendForm is a Mindmap node's outline by its shape, as golib draws it (gui/mermaid's forms),
+// filled and stroked in th's node colours.
+func legendForm(s pm.MindShape, th guimermaid.Theme) func(gui.Canvas, gui.Rect) {
+	return func(c gui.Canvas, b gui.Rect) {
+		fill, stroke := gui.Solid(th.NodeFill), gui.Solid(th.NodeStroke)
+		poly := func(pts ...gui.Point) {
+			p := (&gui.Path{}).MoveTo(pts[0])
+			for _, q := range pts[1:] {
+				p.LineTo(q)
+			}
+			p.Close()
+			c.FillPath(p, fill)
+			c.StrokePath(p, 1, stroke)
+		}
+		rrect := func(r float32) { c.FillRRect(b, r, fill); c.StrokeRRect(b, r, 1, stroke) }
+		x0, y0, x1, y1, cy := b.X, b.Y, b.X+b.W, b.Y+b.H, b.Y+b.H/2
+		switch s {
+		case pm.MindSquare:
+			rrect(0)
+		case pm.MindRounded, pm.MindCloud:
+			rrect(b.H / 2)
+		case pm.MindCircle, pm.MindBang:
+			d := b.H
+			e := gui.Rect{X: b.X + (b.W-d)/2, Y: b.Y, W: d, H: d}
+			c.FillEllipse(e, fill)
+			p := &gui.Path{}
+			circle(p, graphlayout.Point{X: e.X + d/2, Y: e.Y + d/2}, d/2)
+			c.StrokePath(p, 1, stroke)
+			if s == pm.MindBang {
+				q := &gui.Path{}
+				circle(q, graphlayout.Point{X: e.X + d/2, Y: e.Y + d/2}, d/2-3)
+				c.StrokePath(q, 1, stroke)
+			}
+		case pm.MindHexagon:
+			k := b.H / 4
+			poly(gui.Pt(x0+k, y0), gui.Pt(x1-k, y0), gui.Pt(x1, cy), gui.Pt(x1-k, y1), gui.Pt(x0+k, y1), gui.Pt(x0, cy))
+		default:
+			rrect(min(b.H/4, 8))
+		}
+	}
 }

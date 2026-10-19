@@ -73,7 +73,7 @@ func TestMindmapModel(t *testing.T) {
 	want := []pm.MindNode{
 		{ID: "n0", Label: "Root <b>doc</b>", Shape: pm.MindHexagon, Parent: -1},
 		{ID: "n1", Label: "Same", Shape: pm.MindCircle, Parent: 0},
-		{ID: "n2", Label: "Same", Shape: pm.MindRounded, Parent: 0},
+		{ID: "n2", Label: "Same", Shape: pm.MindDefault, Parent: 0},
 		{ID: "n3", Label: "d.md", Shape: pm.MindCloud, Parent: 1}, // b.md reached it first
 	}
 	if d == nil || !reflect.DeepEqual(d.Nodes, want) {

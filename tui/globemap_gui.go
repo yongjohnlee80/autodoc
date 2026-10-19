@@ -33,6 +33,13 @@ const (
 	globeDot      = 3.5 // a document's dot's radius on screen, in logical pixels, at medium size, before its links add to it
 	globeLabelCap = 300 // the most documents in view whose names are drawn
 	globeZoomStep = 1.15
+	// A node pushes only within globeReach link lengths, and each link is a spring of
+	// globeLinkPull: the unlinked documents settle round the linked ones, not on a far ring, and a
+	// dense part spreads out rather than drawing tight (golib graph/layout's Reach and LinkPull).
+	globeReach    = 8
+	globeLinkPull = 0.5
+	globeSteps    = 300 // the simulation's steps to settle, which its progress counts
+	globeToast    = "globemap"
 )
 
 // globeFilter is a choice of the links the GlobeMap follows.
@@ -41,11 +48,12 @@ type globeFilter struct {
 	kinds     []any  // graph.map's kinds; nil every kind
 }
 
-// globeFilters are the links the GlobeMap follows, f cycling through them.
+// globeFilters are the links the GlobeMap follows, f cycling through them: the relations first (the
+// default), every link one press away.
 var globeFilters = []globeFilter{
+	{"relations", "relations", []any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
 	{"every", "every link", nil},
 	{"body", "body links", []any{"wikilink", "embed", "markdown"}},
-	{"relations", "relations", []any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
 }
 
 // Edge classes, each one path and one colour: body links, supersession, every other relation.
@@ -77,6 +85,15 @@ type globe struct {
 	edges  [edgeClasses]*gui.Path
 	grid   hitGrid
 	final  bool // the simulation has settled
+}
+
+// globeForceInput is the simulation of m: seeded, so one map settles the same way each time.
+func globeForceInput(m relMap) graphlayout.ForceInput {
+	in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1, Steps: globeSteps, Reach: globeReach, LinkPull: globeLinkPull}
+	for _, e := range m.Edges {
+		in.Edges = append(in.Edges, graphlayout.Edge{From: e.Src, To: e.Dst})
+	}
+	return in
 }
 
 // degrees counts each document's links.
@@ -511,6 +528,9 @@ type globeMap struct {
 	look    *globeLook // how it draws (globesettings_gui.go); nil until first used
 	counts  [2]int     // the load's documents and links, once its map is read
 	status  string     // what a load under way says; "" none
+	stepped int        // the load's simulation steps run, as last posted
+	toast   bool       // the load's progress toast is up
+	noKey   bool       // l hid the legend
 	view    *globeView
 
 	cancel func()              // ends the load under way
@@ -546,6 +566,7 @@ func (g *globeMap) Panels() []PanelSpec {
 		Closed: func(c PanelHost) {
 			g.open, g.drag = false, nil // a gesture ends with its panel (its capture is lost as it hides)
 			g.stop()                    // the load under way ends, and what it still hands over is dropped
+			g.told("GlobeMap closed before it settled")
 			c.Keep(c.RestoreKeyboardPane("editor"))
 		}}}
 }
@@ -579,6 +600,7 @@ func (g *globeMap) Entered(string) {
 // Stopped closes the window's stream.
 func (g *globeMap) Stopped() {
 	g.stop()
+	g.toast = false // the window is going: no toast to end
 	if g.pres != nil {
 		g.pres.pub.Close()
 	}
@@ -648,7 +670,8 @@ func (g *globeMap) load() {
 	if g.view != nil && g.view.ctx != nil {
 		g.sendView(g.view.pixels(), true)
 	}
-	g.status = "reading " + ws + "…"
+	g.status, g.stepped = "reading "+ws+"…", 0
+	g.tell("GlobeMap: reading " + ws + "'s map…")
 	g.title()
 	g.c.Go(func(ctx context.Context) any {
 		ctx, done := context.WithCancel(ctx)
@@ -666,19 +689,27 @@ func (g *globeMap) load() {
 		g.c.Post(func() {
 			if tk.Current() && g.open && g.views == views {
 				g.counts, g.status = [2]int{len(m.Nodes), len(m.Edges)}, ""
-				g.title()
+				g.progress()
 			}
 		})
-		in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1}
-		for _, e := range m.Edges {
-			in.Edges = append(in.Edges, graphlayout.Edge{From: e.Src, To: e.Dst})
-		}
-		sim, err := graphlayout.NewSimulation(in, globeLimits)
+		sim, err := graphlayout.NewSimulation(globeForceInput(m), globeLimits)
 		if err != nil {
 			return err
 		}
 		push := func(shot *globeShot, draw func(gui.Canvas)) globeReceipt { return pres.push(gen, shot, draw) }
-		return settle(ctx, sim, ws, m, push, views, func(shot *globeShot) {
+		last := -1
+		stepped := func(done int) { // a twentieth at a time: the toast and the title, not every picture
+			if b := done * 20 / globeSteps; b != last {
+				last = b
+				g.c.Post(func() {
+					if tk.Current() && g.open && g.views == views {
+						g.stepped = done
+						g.progress()
+					}
+				})
+			}
+		}
+		return settle(ctx, sim, ws, m, push, views, stepped, func(shot *globeShot) {
 			pres.presented(gen, shot) // at once, for input: not through the loop
 			g.c.Post(func() {
 				if tk.Current() && g.open && g.views == views {
@@ -696,6 +727,7 @@ func (g *globeMap) load() {
 	}, func(v any) {
 		if err, ok := v.(error); ok && tk.Current() && g.open {
 			g.status = ""
+			g.told("GlobeMap: " + ws + "'s map could not be laid out")
 			g.c.Failed("GlobeMap", err)
 			g.title()
 		}
@@ -709,7 +741,8 @@ func (g *globeMap) load() {
 // into the next push. shown is a picture Drawn, retired one Superseded, hidden a view not drawn.
 func settle(ctx context.Context, sim *graphlayout.Simulation, ws string, m relMap,
 	push func(*globeShot, func(gui.Canvas)) globeReceipt, views <-chan globeViewState,
-	shown, retired func(*globeShot), hidden func()) error {
+	stepped func(done int), shown, retired func(*globeShot), hidden func()) error {
+	done := 0
 	var view globeViewState
 	select {
 	case view = <-views: // the first view: its size and colours
@@ -764,12 +797,15 @@ func settle(ctx context.Context, sim *graphlayout.Simulation, ws string, m relMa
 				continue
 			}
 			if !f.final {
-				if _, err := sim.Step(ctx, view.lookOf().steps); err != nil { // the settings' pace
+				n := view.lookOf().steps // the settings' pace
+				if _, err := sim.Step(ctx, n); err != nil {
 					if ctx.Err() != nil {
 						return nil
 					}
 					return err
 				}
+				done += n
+				stepped(done)
 				if f, err = frame(); err != nil {
 					return err
 				}
@@ -799,6 +835,40 @@ func (g *globeMap) install(f *globe, zoom float32, off gui.Point) {
 	if !g.moved {
 		g.zoom, g.off = zoom, off
 	}
+	if f.final {
+		g.told(fmt.Sprintf("GlobeMap: %s settled · %d documents, %d links", f.ws, len(f.m.Nodes), len(f.m.Edges)))
+	}
+	g.title()
+}
+
+// globeNotifier is the host's ongoing toasts (core's).
+type globeNotifier interface {
+	NotifyOngoing(id, msg string)
+	NotifyDone(id, msg string)
+}
+
+// tell puts msg in the load's progress toast, updated in place until told ends it.
+func (g *globeMap) tell(msg string) {
+	if n, ok := g.c.(globeNotifier); ok {
+		n.NotifyOngoing(globeToast, msg)
+		g.toast = true
+	}
+}
+
+// told ends the load's progress toast with msg, when one is up.
+func (g *globeMap) told(msg string) {
+	if n, ok := g.c.(globeNotifier); ok && g.toast {
+		g.toast = false
+		n.NotifyDone(globeToast, msg)
+	}
+}
+
+// progress shows how far the load has settled: in its toast, as a bar, and in the title.
+func (g *globeMap) progress() {
+	if g.cur == nil || !g.cur.final {
+		g.tell(fmt.Sprintf("GlobeMap: laying out %s · %d documents, %d links %s",
+			g.c.Workspace(), g.counts[0], g.counts[1], bar(int64(min(g.stepped, globeSteps)), globeSteps)))
+	}
 	g.title()
 }
 
@@ -809,9 +879,9 @@ func (g *globeMap) title() {
 	case g.status != "":
 		t += " · " + g.status
 	case g.counts != [2]int{} || g.cur != nil:
-		state := "f filter, + - zoom, 0 fit"
+		state := "f filter, + - zoom, 0 fit, l legend"
 		if g.cur == nil || !g.cur.final {
-			state = "settling…"
+			state = fmt.Sprintf("settling %d%%", min(g.stepped, globeSteps)*100/globeSteps)
 		}
 		t += fmt.Sprintf(" · %s · %d documents, %d links · %s · %s",
 			g.c.Workspace(), g.counts[0], g.counts[1], globeFilters[g.filter].name, state)
@@ -970,6 +1040,9 @@ func (v *globeView) HandleEvent(ev tuicore.Event) bool {
 		case "f":
 			g.filter = (g.filter + 1) % len(globeFilters)
 			g.load()
+		case "l":
+			g.noKey = !g.noKey
+			g.dirty()
 		default:
 			return false
 		}
@@ -986,7 +1059,50 @@ func (v *globeView) NativeView() (any, bool) {
 	view := v.pixels()
 	g.sendView(view, g.resend)
 	g.resend = false
-	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.status, pal: g.currentLook().pal}.paint), true
+	l := g.currentLook()
+	var key []legendRow
+	if !g.noKey {
+		key = g.legend(l)
+	}
+	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.status, pal: l.pal, legend: key}.paint), true
+}
+
+// globeTypeNames are the legend's words for the types drawn in colours of their own.
+var globeTypeNames = map[string]string{"adr": "ADR", "review": "review", "convention": "convention",
+	"synthesis": "synthesis", "pr": "PR"}
+
+// legend is what the GlobeMap's marks stand for in look l: each type's colour, the rules', the
+// superseded ring, the links the filter follows, and the dots' size.
+func (g *globeMap) legend(l *globeLook) []legendRow {
+	var rows []legendRow
+	for _, t := range relationTypes {
+		rows = append(rows, legendRow{legendDot(l.types[t], 8), globeTypeNames[t]})
+	}
+	rows = append(rows, legendRow{legendDot(l.other, 8), "any other document"})
+	for _, r := range l.rules {
+		name := "#" + r.tag
+		if r.tag == "" {
+			name = r.folder
+		}
+		rows = append(rows, legendRow{legendDot(r.c, 8), name})
+	}
+	rows = append(rows, legendRow{legendRing(l.other, l.ring), "superseded"})
+	kinds := globeFilters[g.filter].kinds
+	shows := func(cls int) bool {
+		return kinds == nil || slices.ContainsFunc(kinds, func(k any) bool { s, _ := k.(string); return edgeClass(s) == cls })
+	}
+	for _, e := range []struct {
+		cls  int
+		text string
+	}{{edgeBody, "body link"}, {edgeSupersession, "supersedes"}, {edgeRelation, "other relation"}} {
+		if shows(e.cls) {
+			rows = append(rows, legendRow{legendLine(l.edges[e.cls]), e.text})
+		}
+	}
+	return append(rows, legendRow{func(c gui.Canvas, b gui.Rect) {
+		legendDot(l.other, 5)(c, gui.Rect{X: b.X, Y: b.Y, W: b.W / 2, H: b.H})
+		legendDot(l.other, 10)(c, gui.Rect{X: b.X + b.W/2, Y: b.Y, W: b.W / 2, H: b.H})
+	}, "larger: more links"})
 }
 
 // globeOverlay is the view's own paint over the load's pictures.
@@ -994,6 +1110,7 @@ type globeOverlay struct {
 	pres   *globeStream
 	status string
 	pal    relPalette
+	legend []legendRow // nil: hidden
 }
 
 // paint draws the stream's slot (or the ground before there is a stream), and the status line.
@@ -1008,4 +1125,5 @@ func (o globeOverlay) paint(c gui.Canvas) {
 		t := c.Text().Layout(o.status, gui.Font{Size: 13}, sz.W-24)
 		c.DrawText(t, gui.Pt(12, 10), gui.Solid(o.pal.muted))
 	}
+	paintLegend(c, sz, o.pal, o.legend)
 }

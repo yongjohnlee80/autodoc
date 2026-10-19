@@ -70,7 +70,8 @@ func (m relMap) label(i int) string {
 }
 
 // mindShape is a mind map node's outline by its document's frontmatter type; any other type, and
-// none, is MindRounded. Every node keeps its own ID whatever its shape.
+// none, is MindDefault, a rounded box: golib draws MindRounded as it draws MindCloud (a synthesis),
+// and the legend tells each type's apart. Every node keeps its own ID whatever its shape.
 var mindShape = map[string]pm.MindShape{
 	"adr": pm.MindHexagon, "convention": pm.MindSquare, "review": pm.MindCircle,
 	"synthesis": pm.MindCloud, "pr": pm.MindBang,
@@ -127,7 +128,7 @@ func shapeOf(typ string) pm.MindShape {
 	if s, ok := mindShape[typ]; ok {
 		return s
 	}
-	return pm.MindRounded
+	return pm.MindDefault
 }
 
 // globeSettingsElsewhere is App.openGlobeSettings where there is no GlobeMap: a terminal.
