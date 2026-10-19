@@ -406,10 +406,6 @@ type Core interface {
 	// OpenRef opens a workspace's file in the editor, as the user's open: asking first over unsaved
 	// changes, and recording where they left for Back.
 	OpenRef(ws, path string)
-	// OpenRefFocus is OpenRef whose open, once the document is shown, leaves the keyboard on panel
-	// (an id) when it is still open in the same opening and no navigation began since; otherwise
-	// the keyboard stays where it is.
-	OpenRefFocus(ws, path, panel string)
 	// OpenAbsolute opens the file at an absolute path: as its workspace's file when one indexes it,
 	// else outside every workspace.
 	OpenAbsolute(abs string)
@@ -430,6 +426,9 @@ type Core interface {
 	View(id, method string, args ...any) error
 	// TogglePanel opens or closes a side panel, by its id, its own way (panels.go).
 	TogglePanel(id string)
+	// HidePanel hides an open panel, not closed: it keeps what it holds, its Closed hook does not
+	// run, and the dock shows it again as it was (dock.go).
+	HidePanel(id string)
 	// HasFocus reports whether the view id, or one inside it, has the keyboard: a key bound across
 	// the window that only one pane answers.
 	HasFocus(id string) bool
@@ -491,6 +490,7 @@ func (c core) Open(id string)                { c.h.open(id) }
 func (c core) Close(id string)               { c.h.closeDialog(id) }
 func (c core) Notify(msg string)             { c.h.notify(msg) }
 func (c core) WidgetsChanged()               { c.h.refreshDock() }
+func (c core) HidePanel(id string)           { c.h.hidePanel(id) }
 func (c core) Ask(q Question) Asked          { return c.h.ask(q) }
 func (c core) Workspace() string             { return c.h.ws }
 func (c core) Prefs() prefs                  { return c.h.prefs }
@@ -503,12 +503,9 @@ func (c core) Call(ctx context.Context, verb string, params ...any) (any, error)
 func (c core) Go(fn func(context.Context) any, then func(any)) { do(c.h, fn, then) }
 func (c core) Ticket(seq *uint64, scope TicketScope) Ticket    { return c.h.ticket(seq, scope) }
 func (c core) OpenRef(ws, path string)                         { c.h.openIn(ws, path) }
-func (c core) OpenRefFocus(ws, path, panel string) {
-	c.h.openRefTo(fileRef{ws, path}, true, nil, &landing{at: -1, focus: panel, panelGen: c.h.panelGen[panel]})
-}
-func (c core) OpenAbsolute(abs string) { c.h.openAbsolute(abs) }
-func (c core) Say(msg string)          { c.h.say(msg) }
-func (c core) Files() FileList         { return c.h.files }
+func (c core) OpenAbsolute(abs string)                         { c.h.openAbsolute(abs) }
+func (c core) Say(msg string)                                  { c.h.say(msg) }
+func (c core) Files() FileList                                 { return c.h.files }
 func (c core) Workspaces() []Workspace {
 	list := make([]Workspace, 0, c.h.workspaces.Len())
 	for _, w := range c.h.workspaces.All() {

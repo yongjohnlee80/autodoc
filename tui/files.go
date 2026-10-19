@@ -211,10 +211,6 @@ func (h *Host) openRefTo(ref fileRef, remember bool, proceed func(), land *landi
 // (File › Open in a new buffer). Like land, it goes with this open, through the HTML question, and
 // with nothing else: a question cancelled takes it away with the open.
 func (h *Host) openRefWith(ref fileRef, remember bool, proceed func(), land *landing, newBuffer bool) {
-	h.navSeq++ // a navigation begins: a focus landing of an earlier one no longer applies
-	if land != nil {
-		land.nav = h.navSeq
-	}
 	// an HTML file asks how to open it before anything else: entering its workspace closes the
 	// file open now, which Cancel must leave as it is
 	if kind.RawText(ref.path) && !(h.file.open && h.file.ws == ref.ws && h.file.path == ref.path) {
@@ -271,7 +267,7 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 		h.say("opened " + ref.path)
 		h.land(land, ref, h.core.Value()) // the document is open already: the open lands at once
 		h.askDiskOnEnter(b)
-		h.focusLanded(b, land)
+		h.focusEditor()
 		return
 	}
 	if newBuffer || h.file.open || h.file.dirty || h.core.Value() != "" {
@@ -409,7 +405,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		if ws == "" {
 			h.notify(p + ": " + outsideLimits)
 		}
-		h.focusLanded(b, land)
+		h.focusEditor()
 	})
 }
 

@@ -346,16 +346,14 @@ func (r *related) labels() []string {
 	return out
 }
 
-// open opens the drawer's row i in the editor, closing the drawer first, as the explorer's Enter
-// does.
+// open opens the drawer's row i in the editor, the drawer hidden first, not closed, as the GlobeMap
+// is: the dock shows it again (ADR 1792397302 r3).
 func (r *related) open(i int) {
 	row, ok := r.rows.At(i)
 	if !ok || row.external == "" && row.path == "" {
 		return // a heading, or a relation that names nothing: the drawer stays
 	}
-	if err := r.c.View(relationsPanelSpec().ID, "close"); err != nil {
-		r.c.Failed("links: open", err)
-	}
+	r.c.HidePanel(relationsPanelSpec().ID)
 	switch {
 	case row.external != "":
 		r.c.OpenAbsolute(row.external) // its workspace's file when one indexes it, else outside them all

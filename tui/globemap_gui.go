@@ -962,12 +962,11 @@ func (g *globeMap) zoomBy(f float32, p gui.Point) {
 	g.dirty()
 }
 
-// press opens document i of the picture it was found in, the panel closed first.
+// press opens document i of the picture it was found in, the panel hidden first, not closed: the
+// dock shows it again as it was (ADR 1792397302 r3).
 func (g *globeMap) press(shot *globeShot, i int) {
 	ws, p := shot.f.ws, shot.f.m.Nodes[i].Path
-	if err := g.c.View(globeMapPanelID, "close"); err != nil {
-		g.c.Failed("GlobeMap: open", err)
-	}
+	g.c.HidePanel(globeMapPanelID)
 	g.c.OpenRef(ws, p)
 }
 

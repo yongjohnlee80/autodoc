@@ -13,6 +13,7 @@ Drawer {
     // the key-map scope of the use's keys, which its FocusScope holds: "autodoc.explorer"
     property string paneKeys: ""
     modal: false
+    minimizable: true // the dock hides it, not closed (tui/dock.go)
     movable: true
     windowResize: true
     Frame {
