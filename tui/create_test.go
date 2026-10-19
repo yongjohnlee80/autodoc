@@ -59,7 +59,9 @@ func TestNewFileMakesAnyTextFile(t *testing.T) {
 }
 
 // A create refused says why, as a notification, not only under the name field: a file that exists,
-// left as it was, and a draft that is not text (a NUL in it), which writes nothing.
+// left as it was; a draft that is not text (a NUL in it), which writes nothing; and a name that
+// leaves the workspace, a draft's or New file's, through .. or a linked folder, which writes nothing
+// anywhere.
 func TestARefusedCreateIsSaid(t *testing.T) {
 	r, kb, _, _ := runOutside(t)
 	taken := filepath.Join(kb, "taken.csv")
@@ -90,5 +92,38 @@ func TestARefusedCreateIsSaid(t *testing.T) {
 	r.waitNotice(t, "create bin.csv: not a text file")
 	if _, err := os.Stat(filepath.Join(kb, "bin.csv")); !os.IsNotExist(err) {
 		t.Fatalf("bin.csv was written: %v", err)
+	}
+
+	// names that leave the workspace: through .., and through a link to a folder outside it
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(kb, "link")); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name, said string
+		draft      bool
+	}{
+		{"../escape.csv", "../escape.csv", true},
+		{"a/../../x.csv", "a/../../x.csv", false}, // File › New file
+		{"/sub/../../away.csv", "sub/../../away.csv", false},
+		{"link/linked.csv", "link/linked.csv", true},
+	} {
+		onLoop(r, func() bool {
+			r.h.closeDialog("fileName")
+			r.h.draft = nil
+			if c.draft {
+				r.h.core.SetValue("escaped\n")
+				r.h.nameDraft(nil)
+			}
+			r.h.createFile(c.name)
+			return true
+		})
+		r.waitNotice(t, "create "+c.said+": "+c.said+" is not in this workspace")
+	}
+	for _, out := range []string{filepath.Join(filepath.Dir(kb), "escape.csv"), filepath.Join(filepath.Dir(kb), "x.csv"),
+		filepath.Join(filepath.Dir(kb), "away.csv"), filepath.Join(outside, "linked.csv")} {
+		if _, err := os.Stat(out); !os.IsNotExist(err) {
+			t.Fatalf("%s was written outside the workspace: %v", out, err)
+		}
 	}
 }

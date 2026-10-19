@@ -11,8 +11,10 @@ import (
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	"github.com/yongjohnlee80/golib/tui/widget"
+	"github.com/yongjohnlee80/golib/vfs"
 
 	"github.com/yongjohnlee80/autodoc/core/kind"
+	"github.com/yongjohnlee80/autodoc/internal/localfs"
 	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
@@ -892,9 +894,9 @@ func (h *Host) createFile(name string) {
 	content := h.editorFor(b).Value() // what is written: an edit after this is newer than the file
 	own, owned := b.ownRecovery()     // the draft's copy, read before the draft becomes the file
 	ws, tk := h.ws, h.bufferTicket(b, false)
-	abs, raw := h.pathOnDisk(ws, name), kind.RawText(name)
+	root, raw := h.rootOf(ws), kind.RawText(name)
 	do(h, func(ctx context.Context) created {
-		return h.writeNew(ctx, ws, name, abs, []byte(content))
+		return h.writeNew(ctx, ws, name, root, []byte(content))
 	}, func(a created) {
 		if !tk.Current() {
 			if a.err == nil {
@@ -946,12 +948,24 @@ type created struct {
 	err     error
 }
 
-// writeNew writes content to a new file, never over one: name in workspace ws, at abs on this
-// machine's disk ("" until the workspace is listed). A path the daemon says a workspace indexes is
-// that workspace's file (doc.write); any other text file, a .csv, .go or .sql the workspace does not
-// index, is written outside every workspace (file.write), as File › New file writes one. An HTML
-// file is written as its own bytes (raw), which the plain verbs refuse. Off the loop.
-func (h *Host) writeNew(ctx context.Context, ws, name, abs string, content []byte) created {
+// writeNew writes content to a new file, never over one: name in workspace ws, whose folder on this
+// machine's disk is root ("" until the workspace is listed), or with ws "" the absolute path name. A
+// workspace's name must stay in it (inWorkspace) before anything is written. A path the daemon says
+// a workspace indexes is that workspace's file (doc.write); any other text file, a .csv, .go or .sql
+// the workspace does not index, is written beside it as a file outside every workspace
+// (file.write), as File › New file writes one. An HTML file is written as its own bytes (raw), which
+// the plain verbs refuse. Off the loop.
+func (h *Host) writeNew(ctx context.Context, ws, name, root string, content []byte) created {
+	abs := name
+	if ws != "" {
+		if err := inWorkspace(root, name); err != nil {
+			return created{err: err}
+		}
+		abs = ""
+		if root != "" {
+			abs = filepath.Join(root, filepath.FromSlash(name))
+		}
+	}
 	at := located{ws: ws, path: name}
 	if abs != "" {
 		if at = h.locate(ctx, abs); at.err != nil {
@@ -974,13 +988,37 @@ func (h *Host) writeNew(ctx context.Context, ws, name, abs string, content []byt
 	return created{at: at, version: str(asMap(back), "version")}
 }
 
-// createRefused says why name was not created, as a notification and under the name field, and
-// asks again for a name.
+// inWorkspace refuses a workspace's name that is not a clean path in it (vfs.CheckMutable, as
+// doc.write applies) or that leads out of its folder root through a link (localfs.Resolve, as
+// file.locate compares a path with a root): file.write would write anywhere. root "" (the workspace
+// not listed yet) leaves the write to doc.write, which checks its own root.
+func inWorkspace(root, name string) error {
+	out := fmt.Errorf("%s is not in this workspace: name a file under its folder, or use File › New file… for any path", name)
+	if vfs.CheckMutable("create", name) != nil {
+		return out
+	}
+	if root == "" {
+		return nil
+	}
+	rel, err := filepath.Rel(localfs.Resolve(filepath.Clean(root)), localfs.Resolve(filepath.Join(root, filepath.FromSlash(name))))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return out
+	}
+	return nil
+}
+
+// createRefused says why name was not created (refuseName).
 func (h *Host) createRefused(name string, err error) {
 	reason := wireMessage(err)
 	if code(err) == rpc.CodeConflict {
 		reason = name + " exists: pick another name, or open it"
 	}
+	h.refuseName(name, reason)
+}
+
+// refuseName says why name was not created, as a notification and under the name field, and asks
+// again for a name.
+func (h *Host) refuseName(name, reason string) {
 	h.notify("create " + name + ": " + reason)
 	h.set("App.fileNameError", reason)
 	h.open("fileName")
@@ -989,9 +1027,9 @@ func (h *Host) createRefused(name string, err error) {
 // createEmpty is File › New file: an empty file at name, opened in a buffer of its own.
 func (h *Host) createEmpty(name string) {
 	ws, tk := h.ws, h.ticket(nil, TicketWorkspace)
-	abs, raw := h.pathOnDisk(ws, name), kind.RawText(name)
+	root, raw := h.rootOf(ws), kind.RawText(name)
 	do(h, func(ctx context.Context) created {
-		return h.writeNew(ctx, ws, name, abs, []byte{})
+		return h.writeNew(ctx, ws, name, root, []byte{})
 	}, func(a created) {
 		if !tk.Current() {
 			return
