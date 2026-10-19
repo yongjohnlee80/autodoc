@@ -179,7 +179,9 @@ jobs:
   # system's libraries. The static TUI build is the job above's.
   gui-linux:
     name: Linux GUI (cgo)
-    runs-on: ubuntu-latest
+    # On Ubuntu 24.04, where release.yml builds the GUI, so this job checks that build; the other
+    # Linux jobs stay on ubuntu-latest and would show a new image's change first.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
