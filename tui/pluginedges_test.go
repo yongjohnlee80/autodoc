@@ -4,8 +4,17 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
+
+// noticed is a pluginHost that only records its notices.
+type noticed struct {
+	pluginHost
+	notes []string
+}
+
+func (n *noticed) Notify(msg string) { n.notes = append(n.notes, msg) }
 
 // The plugin and package folders' paths no program test takes: what discovery and loading skip,
 // a confirmation answered with nothing pending, and an install with no build step.
@@ -41,9 +50,25 @@ func TestPluginAndPackageFolderEdges(t *testing.T) {
 		t.Fatalf("a lua folder that is a file: %v; want its one error", errs)
 	}
 
-	pl := &plugins{}
+	if errs := (&Host{}).loadPluginPackages(); errs != nil {
+		t.Fatalf("no plugins: %v", errs)
+	}
+
+	n := &noticed{}
+	pl := &plugins{c: n}
 	pl.pluginConfirmed() // nothing pending: nothing happens
 	pl.pluginDeclined()
+	clone := t.TempDir()
+	pl.pendingPlugin = &pluginChange{dir: clone, m: manifest{Name: "new"}}
+	pl.pluginDeclined() // an add's No throws its clone away
+	if _, err := os.Stat(clone); !os.IsNotExist(err) {
+		t.Errorf("a declined add left its clone: %v", err)
+	}
+	pl.pendingPlugin = &pluginChange{update: true, m: manifest{Name: "old"}}
+	pl.pluginDeclined()
+	if want := []string{"new not added", "old not updated"}; !slices.Equal(n.notes, want) {
+		t.Errorf("notices %q, want %q", n.notes, want)
+	}
 	if err := buildPlugin(context.Background(), t.TempDir(), pluginChange{dir: t.TempDir()}); err != nil {
 		t.Fatalf("no build step: %v", err)
 	}
