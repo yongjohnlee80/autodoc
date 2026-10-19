@@ -40,6 +40,7 @@ type mindmap struct {
 	scroll float32 // how far down the map the view is, in logical pixels
 	asked  float32 // the width a relayout was last asked for
 	depth  int     // the links out from the root it shows: 1, or 2 (d toggles)
+	noKey  bool    // l hid the legend
 }
 
 func newMindmap(c Core) *mindmap { return &mindmap{c: c, depth: 1} }
@@ -189,7 +190,7 @@ func (m *mindmap) title() {
 	case m.status != "":
 		t += " · " + m.status
 	case m.cur != nil:
-		t += fmt.Sprintf(" · %s · %d documents · depth %d · d depth", m.cur.root.path, len(m.cur.m.Nodes), m.depth)
+		t += fmt.Sprintf(" · %s · %d documents · depth %d · d depth, l legend", m.cur.root.path, len(m.cur.m.Nodes), m.depth)
 	}
 	m.c.Set("App.mindmapTitle", t)
 	m.dirty()
@@ -265,12 +266,20 @@ func (v *mindView) pixels() gui.Size {
 
 func (v *mindView) HandleEvent(ev tuicore.Event) bool {
 	m := v.m
-	if k, ok := ev.(tuicore.KeyEvent); ok {
-		if k.Kind != tuicore.KeyPress || k.Text != "d" {
+	if k, ok := ev.(tuicore.KeyEvent); ok && k.Kind == tuicore.KeyPress {
+		switch k.Text {
+		case "d":
+			m.toggleDepth()
+		case "l":
+			m.noKey = !m.noKey
+			m.dirty()
+		default:
 			return false
 		}
-		m.toggleDepth()
 		return true
+	}
+	if _, ok := ev.(tuicore.KeyEvent); ok {
+		return false
 	}
 	e, ok := ev.(tuicore.MouseEvent)
 	if !ok {
@@ -304,7 +313,19 @@ func (v *mindView) HandleEvent(ev tuicore.Event) bool {
 func (v *mindView) NativeView() (any, bool) {
 	m := v.m
 	f := mindFrame{cur: m.cur, at: m.origin(v.pixels()), status: m.status, pal: v.pal}
+	if !m.noKey && m.cur != nil {
+		f.legend = mindLegend(mindTheme(v.pal))
+	}
 	return gui.ViewFunc(f.paint), true
+}
+
+// mindLegend is what the Mindmap's outlines stand for: each type's (mindShape), then any other's.
+func mindLegend(th guimermaid.Theme) []legendRow {
+	var rows []legendRow
+	for _, t := range relationTypes {
+		rows = append(rows, legendRow{legendForm(shapeOf(t), th), globeTypeNames[t]})
+	}
+	return append(rows, legendRow{legendForm(shapeOf(""), th), "any other document"})
 }
 
 type mindFrame struct {
@@ -312,6 +333,7 @@ type mindFrame struct {
 	at     gui.Point
 	status string
 	pal    relPalette
+	legend []legendRow // nil: hidden
 }
 
 func (f mindFrame) paint(c gui.Canvas) {
@@ -326,4 +348,5 @@ func (f mindFrame) paint(c gui.Canvas) {
 		t := c.Text().Layout(f.status, gui.Font{Size: 13}, sz.W-24)
 		c.DrawText(t, gui.Pt(12, 10), gui.Solid(f.pal.muted))
 	}
+	paintLegend(c, sz, f.pal, f.legend)
 }

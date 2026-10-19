@@ -61,10 +61,7 @@ func relMapOf(n int) relMap {
 // settledGlobe is m laid out by the simulation to its end, as the GlobeMap's last frame.
 func settledGlobe(t *testing.T, m relMap) *globe {
 	t.Helper()
-	in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1}
-	for _, e := range m.Edges {
-		in.Edges = append(in.Edges, graphlayout.Edge{From: e.Src, To: e.Dst})
-	}
+	in := globeForceInput(m)
 	sim, err := graphlayout.NewSimulation(in, globeLimits)
 	if err != nil {
 		t.Fatal(err)
@@ -283,10 +280,7 @@ func (p heldPresenter) Push(gui.Size, func(gui.Canvas)) globeReceipt {
 // newest). A hidden view (NotShown) holds the load until the view changes; a closed stream ends it.
 func TestTheGlobeMapSettlesAsTheWindowPresents(t *testing.T) {
 	m := relMapOf(30)
-	in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1}
-	for _, e := range m.Edges {
-		in.Edges = append(in.Edges, graphlayout.Edge{From: e.Src, To: e.Dst})
-	}
+	in := globeForceInput(m)
 	sim, err := graphlayout.NewSimulation(in, globeLimits)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +300,7 @@ func TestTheGlobeMapSettlesAsTheWindowPresents(t *testing.T) {
 	ended := make(chan error, 1)
 	go func() {
 		ended <- settle(context.Background(), sim, "kb", m, push, views,
-			func(s *globeShot) { shown <- s }, func(s *globeShot) { retired <- s }, func() { hid <- struct{}{} })
+			func(int) {}, func(s *globeShot) { shown <- s }, func(s *globeShot) { retired <- s }, func() { hid <- struct{}{} })
 	}()
 	views <- globeView800
 	next := func(what string) pushed {
@@ -416,7 +410,7 @@ func TestTheGlobeMapsLoadEndsWhereverItWaits(t *testing.T) {
 			push := func(shot *globeShot, draw func(gui.Canvas)) globeReceipt {
 				return heldPresenter{pushed: pushed}.Push(shot.size, draw)
 			}
-			ended <- settle(ctx, sim, "kb", m, push, views, func(*globeShot) {}, func(*globeShot) {}, func() {})
+			ended <- settle(ctx, sim, "kb", m, push, views, func(int) {}, func(*globeShot) {}, func(*globeShot) {}, func() {})
 		}()
 		present := func(o gui.Outcome) {
 			select {
@@ -695,7 +689,7 @@ func TestTheRelationViewsOpenInTheHost(t *testing.T) {
 	r.openByPicker(t, "a.md")
 	r.waitFile(t, "a.md")
 	for _, v := range []struct{ panel, view, title string }{
-		{globeMapPanelID, globeMapViewID, "kb · 3 documents, 2 links"},
+		{globeMapPanelID, globeMapViewID, "kb · 3 documents, 0 links · relations"},
 		{mindmapPanelID, mindmapViewID, "a.md · 2 documents · depth 1 · d depth"},
 	} {
 		onLoop(r, func() bool { core{r.h}.TogglePanel(v.panel); return true })
@@ -735,7 +729,7 @@ func TestTheRelationViewsFollowATheme(t *testing.T) {
 		core{r.h}.TogglePanel(globeMapPanelID)
 		return true
 	})
-	r.s.WaitForText(t, "kb · 2 documents, 1 links")
+	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations")
 	before := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background })
 	builds := onLoop(r, func() uint64 { return m.seq })
 	onLoop(r, func() bool { r.h.useTheme("light"); return true })
@@ -812,7 +806,7 @@ func TestTheGlobeMapDragEndsWhereverItIsReleased(t *testing.T) {
 		core{r.h}.TogglePanel(globeMapPanelID)
 		return true
 	})
-	r.s.WaitForText(t, "kb · 2 documents, 1 links")
+	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations")
 	const inX, inY, outX, outY = 50, 15, 0, 29 // the panel's middle; the status line, outside it
 	mouse := func(k tuicore.MouseKind, b tuicore.MouseButton, x, y int) tuicore.Event {
 		return tuicore.MouseEvent{Kind: k, Button: b, X: x, Y: y}

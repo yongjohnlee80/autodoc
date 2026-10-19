@@ -5,12 +5,16 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image/color"
+	"math"
+	"slices"
 	"strings"
 	"testing"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
 	"github.com/yongjohnlee80/golib/gui"
+	pm "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
 // valuesPrefs is preferences of the features' values v alone.
@@ -116,14 +120,11 @@ func TestTheGlobeMapsThemeIsTheTerminalsUnlessChosen(t *testing.T) {
 }
 
 // The pace is the settings': slow takes a picture each step, fast one every eight, so a slow map
-// shows several times the pictures to settle.
+// shows several times the pictures to settle. Either way its progress counts the steps run.
 func TestTheGlobeMapSettlesAtItsSpeed(t *testing.T) {
 	m := relMapOf(30)
 	pictures := func(speed string) int {
-		in := graphlayout.ForceInput{Nodes: len(m.Nodes), Seed: 1}
-		for _, e := range m.Edges {
-			in.Edges = append(in.Edges, graphlayout.Edge{From: e.Src, To: e.Dst})
-		}
+		in := globeForceInput(m)
 		sim, err := graphlayout.NewSimulation(in, globeLimits)
 		if err != nil {
 			t.Fatal(err)
@@ -140,8 +141,14 @@ func TestTheGlobeMapSettlesAtItsSpeed(t *testing.T) {
 			}
 			return doneReceipt(gui.Drawn)
 		}
-		if err := settle(ctx, sim, "kb", m, push, views, func(*globeShot) {}, func(*globeShot) {}, func() {}); err != nil {
+		var progress []int
+		stepped := func(done int) { progress = append(progress, done) }
+		if err := settle(ctx, sim, "kb", m, push, views, stepped, func(*globeShot) {}, func(*globeShot) {}, func() {}); err != nil {
 			t.Fatal(err)
+		}
+		// the progress counts every step run, rising to the whole
+		if len(progress) == 0 || progress[len(progress)-1] < globeSteps || !slices.IsSorted(progress) {
+			t.Errorf("%s: progress %v; want rising to %d", speed, progress, globeSteps)
 		}
 		return n
 	}
@@ -171,8 +178,8 @@ func TestTheGlobeMapsDotsAreOneFillAColour(t *testing.T) {
 }
 
 // The settings, as the user sets them: the dialog opens from Relations, a colour that does not read
-// says so and is not kept, one that does is kept and drawn, and the map opens with the links its
-// settings choose. A terminals' theme set from their own menu recolours the GlobeMap too.
+// says so and is not kept, one that does is kept and drawn, and the map opens with the relations,
+// following the links chosen once another is. A terminals' theme set from their own menu recolours the GlobeMap too.
 func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	r := windowed(t, d)
@@ -200,9 +207,26 @@ func TestTheGlobeMapsSettingsApplyAtOnce(t *testing.T) {
 		t.Fatalf("a colour that reads: look %v, kept %q", l.types["adr"], kept)
 	}
 
-	onLoop(r, func() bool { r.h.choosePrefNamed(prefGlobeFilter, 2); return true })
 	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
-	r.s.WaitForText(t, "· relations ·")
+	r.s.WaitForText(t, "kb · 2 documents, 0 links · relations") // the relations by default
+	r.s.WaitFor(t, "the settled notice", func(string) bool {    // its progress toast ends saying so, kept
+		return onLoop(r, func() bool {
+			return slices.ContainsFunc(r.h.noticeLog.items, func(n notice) bool { return n.text == "GlobeMap: kb settled · 2 documents, 0 links" })
+		})
+	})
+	onLoop(r, func() bool { r.h.choosePrefNamed(prefGlobeFilter, 1); return true })
+	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // the open map follows the choice
+	r.s.WaitFor(t, "the GlobeMap has the keyboard", func(string) bool { return r.focusedOn(globeMapViewID) })
+	r.keys(t, key('l')) // the legend hidden, and shown again
+	r.s.WaitFor(t, "l hid the legend", func(string) bool { return onLoop(r, func() bool { return g.noKey }) })
+	r.keys(t, key('l'))
+	r.s.WaitFor(t, "l showed the legend", func(string) bool { return onLoop(r, func() bool { return !g.noKey }) })
+	r.keys(t, key('f')) // this opening's own: body links
+	r.s.WaitForText(t, "kb · 2 documents, 1 links · body links")
+	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
+	r.s.WaitFor(t, "the GlobeMap closed", func(string) bool { return !r.panelIsOpen(globeMapPanelID) })
+	onLoop(r, func() bool { core{r.h}.TogglePanel(globeMapPanelID); return true })
+	r.s.WaitForText(t, "kb · 2 documents, 1 links · every link") // opened again: the settings' choice
 
 	was := onLoop(r, func() color.NRGBA { return g.currentLook().pal.background })
 	onLoop(r, func() bool { core{r.h}.SetPref(prefTermTheme, "light"); return true })
@@ -228,5 +252,96 @@ func TestTheGlobeMapNamesNoneWhenItsSettingsSaySo(t *testing.T) {
 	p.paint(rc)
 	if n := countOps(rc, "DrawText"); n != 1 {
 		t.Errorf("names off, one hovered: %d texts; want the hovered name alone", n)
+	}
+}
+
+// The GlobeMap's legend names what its marks stand for in its look: each type's colour, every
+// rule's, the superseded ring, only the links its filter follows, and the dots' size. It is drawn
+// on the view's own paint, a text a row, and l hides it.
+func TestTheGlobeMapsLegendIsItsLook(t *testing.T) {
+	l := newGlobeLook(valuesPrefs(map[string]string{prefGlobeRules: "#project=#010101; notes/=#020202"}), defaultPalette())
+	texts := func(rows []legendRow) []string {
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.text)
+		}
+		return out
+	}
+	common := []string{"ADR", "review", "convention", "synthesis", "PR", "any other document", "#project", "notes/", "superseded"}
+	for filter, links := range map[int][]string{
+		0: {"supersedes", "other relation"},              // relations
+		1: {"body link", "supersedes", "other relation"}, // every link
+		2: {"body link"},                                 // body links
+	} {
+		g := &globeMap{filter: filter}
+		want := append(append(slices.Clone(common), links...), "larger: more links")
+		if got := texts(g.legend(l)); !slices.Equal(got, want) {
+			t.Errorf("%s: legend %q; want %q", globeFilters[filter].name, got, want)
+		}
+	}
+	g := &globeMap{}
+	rows := g.legend(l)
+	rc := gui.NewRecordingCanvas(gui.Size{W: 800, H: 600}, gui.Size{W: 8, H: 16})
+	globeOverlay{pal: l.pal, legend: rows}.paint(rc)
+	if n := countOps(rc, "DrawText"); n != len(rows) {
+		t.Errorf("the legend drew %d texts for %d rows", n, len(rows))
+	}
+	small := gui.NewRecordingCanvas(gui.Size{W: 120, H: 90}, gui.Size{W: 8, H: 16})
+	globeOverlay{pal: l.pal, legend: rows}.paint(small)
+	if n := countOps(small, "DrawText"); n != 0 {
+		t.Errorf("a view too small for the legend drew %d of its texts", n)
+	}
+}
+
+// The Mindmap's outlines tell each type apart: no two legend rows share a shape, and none is
+// MindRounded, which golib draws as MindCloud's (a synthesis's) stadium.
+func TestTheMindmapsLegendTellsEachTypeApart(t *testing.T) {
+	seen := map[string]bool{}
+	for _, typ := range append(slices.Clone(relationTypes), "", "memo") {
+		s := shapeOf(typ)
+		if s == pm.MindRounded && typ != "synthesis" {
+			t.Errorf("%q: MindRounded, drawn as a synthesis's cloud", typ)
+		}
+		key := fmt.Sprint(s)
+		if typ != "memo" && seen[key] { // "" and memo are both any other
+			t.Errorf("%q: shape %v shared", typ, s)
+		}
+		seen[key] = true
+	}
+	rows := mindLegend(mindTheme(defaultPalette()))
+	if len(rows) != len(relationTypes)+1 || rows[len(rows)-1].text != "any other document" {
+		t.Errorf("Mindmap legend: %d rows", len(rows))
+	}
+}
+
+// The GlobeMap's simulation keeps its unlinked documents near the linked ones (golib's Reach and
+// LinkPull): their median distance from the core's centre is within twice the core's r90, where
+// pushed by every document they would ring it far out.
+func TestTheGlobeMapsForceIsSpacedByReach(t *testing.T) {
+	const core, loose = 600, 200
+	var m relMap
+	for i := range core + loose {
+		m.Nodes = append(m.Nodes, mapNode{Path: fmt.Sprintf("d%04d.md", i)})
+	}
+	for i := 1; i < core; i++ {
+		m.Edges = append(m.Edges, mapEdge{Src: i, Dst: (i*37 + 11) % i}, mapEdge{Src: i, Dst: i - 1})
+	}
+	gl := settledGlobe(t, m)
+	var cx, cy float64
+	for _, p := range gl.at[:core] {
+		cx, cy = cx+float64(p.X), cy+float64(p.Y)
+	}
+	cx, cy = cx/core, cy/core
+	radii := func(ps []graphlayout.Point) []float64 {
+		var out []float64
+		for _, p := range ps {
+			out = append(out, math.Hypot(float64(p.X)-cx, float64(p.Y)-cy))
+		}
+		slices.Sort(out)
+		return out
+	}
+	in, out := radii(gl.at[:core]), radii(gl.at[core:])
+	if ratio := out[len(out)/2] / in[len(in)*9/10]; ratio > 2 {
+		t.Errorf("the unlinked documents' median distance is %.2f times the core's r90; want within 2", ratio)
 	}
 }
