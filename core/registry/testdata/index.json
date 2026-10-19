@@ -1,0 +1,62 @@
+{
+  "format": 1,
+  "generated": "2026-10-19T00:00:00Z",
+  "entries": [
+    {
+      "kind": "plugin",
+      "name": "doc-stats",
+      "title": "Doc stats",
+      "description": "Counts words.",
+      "repo": "https://github.com/example/doc-stats",
+      "author": "example",
+      "declares": {
+        "commit": "2222222222222222222222222222222222222222",
+        "items": [
+          "a card beside the page"
+        ]
+      },
+      "audits": [
+        {
+          "commit": "2222222222222222222222222222222222222222",
+          "model": "claude-opus-5-5",
+          "date": "2026-10-10",
+          "by": "example",
+          "report": "https://yongjohnlee80.github.io/autodoc-plugin-registry/audits/plugin/doc-stats/2222222222222222222222222222222222222222.md"
+        },
+        {
+          "commit": "1111111111111111111111111111111111111111",
+          "model": "claude-opus-5-5",
+          "date": "2026-10-01",
+          "by": "example",
+          "report": "https://yongjohnlee80.github.io/autodoc-plugin-registry/audits/plugin/doc-stats/1111111111111111111111111111111111111111.md"
+        }
+      ]
+    },
+    {
+      "kind": "lua",
+      "name": "wordcount",
+      "title": "Word count",
+      "description": "A Lua package.",
+      "repo": "https://codeberg.org/example/wordcount.git",
+      "author": "example",
+      "declares": {
+        "commit": "",
+        "items": []
+      },
+      "audits": []
+    },
+    {
+      "kind": "kb-type",
+      "name": "coding",
+      "title": "Coding",
+      "description": "A coding KB.",
+      "repo": "https://github.com/example/kb-coding",
+      "author": "example",
+      "declares": {
+        "commit": "",
+        "items": []
+      },
+      "audits": []
+    }
+  ]
+}

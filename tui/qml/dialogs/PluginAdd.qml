@@ -8,7 +8,7 @@ Dialog {
     dim: true
     Flex {
         direction: Tui.Vertical
-        Text { text: "the plugin's git repository" }
+        Text { text: "the plugin's git repository, or its name in the registry" }
         TextField {
             id: pluginUrl
             text: App.pluginUrl

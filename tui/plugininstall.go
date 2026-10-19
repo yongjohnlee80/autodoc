@@ -16,6 +16,8 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
+
+	regindex "github.com/yongjohnlee80/autodoc/core/registry"
 )
 
 // ADDING AND MANAGING PLUGINS — Plugins › Add from a git URL… clones a repository whose top holds a
@@ -47,7 +49,8 @@ type pluginChange struct {
 	dir    string // add: the staged clone; update: the plugin's own directory
 	m      manifest
 	url    string
-	commit string // the commit it would be at
+	commit string               // the commit it would be at, in full (the card shows its first seven)
+	entry  *regindex.IndexEntry // the registry's entry for url, from its cache; nil for none
 }
 
 // managedPlugin is the manager's row: an installed plugin, and where it came from.
@@ -67,9 +70,22 @@ func (pl *plugins) startAddPlugin() {
 	pl.c.Open("pluginAdd")
 }
 
-// addPlugin clones url into a staged directory and asks PluginConfirm about what it holds.
+// addPlugin clones url into a staged directory and asks PluginConfirm about what it holds. A name in
+// place of a URL is the registry's plugin of that name (plugins.add <name>).
 func (pl *plugins) addPlugin(url string) {
 	url = strings.TrimSpace(url)
+	if isRegistryName(url) {
+		pl.c.Close("pluginAdd")
+		pl.c.NotifyOngoing(toastPlugin, "looking up "+url+" in the registry…")
+		resolveRegistry(pl.c, regindex.KindPlugin, url, nil, func(repo string, err error) {
+			if err != nil {
+				pl.c.NotifyDone(toastPlugin, "not added: "+err.Error())
+				return
+			}
+			pl.addPlugin(repo)
+		})
+		return
+	}
 	if url == "" {
 		pl.c.Notify("add a plugin: no URL")
 		pl.c.Open("pluginAdd")
@@ -90,7 +106,7 @@ func (pl *plugins) addPlugin(url string) {
 			pl.c.NotifyDone(toastPlugin, "not added: "+r.err.Error())
 			return
 		}
-		pl.c.NotifyDone(toastPlugin, "cloned "+r.c.m.Name+" at "+r.c.commit)
+		pl.c.NotifyDone(toastPlugin, "cloned "+r.c.m.Name+" at "+regindex.Short(r.c.commit))
 		pl.askPlugin(r.c)
 	})
 }
@@ -125,11 +141,11 @@ func stageClone(ctx context.Context, dir, url string) (pluginChange, error) {
 	if _, err := os.Stat(filepath.Join(dir, e.m.Name)); err == nil {
 		return fail(fmt.Errorf("%s is installed already: Manage plugins… updates it", e.m.Name))
 	}
-	commit, err := git(ctx, pluginCloneTimeout, stage, "rev-parse", "--short", "HEAD")
+	commit, err := git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
 	if err != nil {
 		return fail(err)
 	}
-	return pluginChange{dir: stage, m: e.m, url: url, commit: commit}, nil
+	return pluginChange{dir: stage, m: e.m, url: url, commit: commit, entry: cachedEntry(regindex.KindPlugin, url)}, nil
 }
 
 // askPlugin puts c to PluginConfirm.
@@ -155,8 +171,12 @@ func pluginQuestion(c pluginChange, title string) string {
 	if len(c.m.Install.Build) > 0 {
 		build = strings.Join(c.m.Install.Build, " ")
 	}
-	q := fmt.Sprintf("%s (%s)\nfrom  %s\nat    %s\n\nIts build runs:  %s\nIt then starts:  %s\n\n%s",
-		title, c.m.Name, c.url, c.commit, build, strings.Join(c.m.Command, " "), pluginRisk)
+	audit := ""
+	if line := auditLine(c.entry, c.commit); line != "" {
+		audit = line + "\n\n" // above the risk, which stays word for word
+	}
+	q := fmt.Sprintf("%s (%s)\nfrom  %s\nat    %s\n\nIts build runs:  %s\nIt then starts:  %s\n\n%s%s",
+		title, c.m.Name, c.url, regindex.Short(c.commit), build, strings.Join(c.m.Command, " "), audit, pluginRisk)
 	if d := pluginDeclares(&c.m); d != "" {
 		q += "\n\nDeclares:  " + d
 	}
@@ -195,7 +215,7 @@ func (pl *plugins) pluginConfirmed() {
 		if c.update {
 			verb = "updated"
 		}
-		pl.c.NotifyDone(toastPlugin, fmt.Sprintf("%s %s at %s: Plugins › %s", verb, c.m.Name, c.commit, c.m.Title))
+		pl.c.NotifyDone(toastPlugin, fmt.Sprintf("%s %s at %s: Plugins › %s", verb, c.m.Name, regindex.Short(c.commit), c.m.Title))
 	})
 }
 
@@ -394,16 +414,16 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 		if err != nil {
 			return fetched{err: err}
 		}
-		head, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "--short", "HEAD")
+		head, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "HEAD") // in full, as the fetched commit is
 		return fetched{c, head, err}
 	}, func(r fetched) {
 		switch {
 		case r.err != nil:
 			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+r.err.Error())
 		case r.c.commit == r.head:
-			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" is up to date at "+r.head)
+			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" is up to date at "+regindex.Short(r.head))
 		default:
-			pl.c.NotifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+r.c.commit)
+			pl.c.NotifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+regindex.Short(r.c.commit))
 			pl.askPlugin(r.c)
 		}
 	})
@@ -415,7 +435,7 @@ func fetchUpdate(ctx context.Context, m managedPlugin) (pluginChange, error) {
 	if _, err := git(ctx, pluginCloneTimeout, m.e.dir, "fetch", "--depth", "1", "origin"); err != nil {
 		return pluginChange{}, err
 	}
-	commit, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "--short", "FETCH_HEAD")
+	commit, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "FETCH_HEAD") // in full: an audit names a full commit
 	if err != nil {
 		return pluginChange{}, err
 	}
@@ -430,7 +450,7 @@ func fetchUpdate(ctx context.Context, m managedPlugin) (pluginChange, error) {
 	if next.Name != m.e.m.Name {
 		return pluginChange{}, fmt.Errorf("the fetched plugin is %q, not %q", next.Name, m.e.m.Name)
 	}
-	return pluginChange{update: true, dir: m.e.dir, m: next, url: m.source, commit: commit}, nil
+	return pluginChange{update: true, dir: m.e.dir, m: next, url: m.source, commit: commit, entry: cachedEntry(regindex.KindPlugin, m.source)}, nil
 }
 
 // placePlugin is the manager's Place: the plugin under the cursor to the next placement its

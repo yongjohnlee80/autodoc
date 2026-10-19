@@ -154,7 +154,7 @@ func (pl *plugins) Commands() map[string]Command {
 // row, follow the folder through pluginHost (syncPluginEntries).
 func (pl *plugins) Catalog() []Entry {
 	return []Entry{
-		builtin("plugins.add", "add a plugin from a git URL", "App.startAddPlugin()", pl.startAddPlugin),
+		builtin("plugins.add", "add a plugin by its registry name or a git URL", "App.startAddPlugin()", pl.startAddPlugin),
 		builtin("plugins.manage", "manage plugins", "App.managePlugins()", pl.managePlugins),
 		{ID: "plugins.update", Title: "update a plugin", Args: "<name>",
 			Help: "update a plugin by its name, as Manage plugins › Update does: its new commit is asked about first. A plugin may name only itself",

@@ -535,7 +535,9 @@ func (h *Host) startAddWorkspace() {
 			sectionTokens: store.SectionTokensDefault, embeddingPolicy: store.EmbeddingAlways,
 			db: databasesInfo{destination: store.DestinationLocal}}
 		h.dropKBType() // a fresh dialog: no type staged, and none still staging may land
-		h.kbTypes.Reset(kbTypeRows())
+		h.kbTypes.Reset(h.kbTypeRows())
+		h.kbTypeKey = ""
+		h.loadKBTypes() // the registry's KB types, once fetched (or the cache, or the built-ins)
 		h.set("App.kbTypeIndex", -1)
 		h.set("App.kbTypeIndex", 0)
 		h.set("App.kbTypeSummary", noneNote)

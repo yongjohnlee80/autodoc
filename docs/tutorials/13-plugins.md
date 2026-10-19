@@ -8,6 +8,8 @@ A **plugin** is a program of its own that AutoDoc runs: it keeps going while you
 2. It shows what it would build and what it would start, and asks: **Yes, at my own risk**, or **No, cancel**. A plugin runs as you, with your files: add only plugins you trust.
 3. Yes builds it, and the plugin appears on the **Plugins** menu.
 
+**Or from the registry.** **Plugins › Browse the registry…** lists the plugins and Lua packages the registry knows, each with its audits. **Install** asks the same question, and says whether the commit it would install was audited. **Add from a git URL…** takes a registry name too.
+
 ```mermaid
 flowchart LR
   U[A git URL] --> C[Cloned, nothing run]

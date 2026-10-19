@@ -23,6 +23,18 @@ numbers and writes JSON with its nulls, numbers and booleans. ADR 0209, ADR
 [`examples/python/echo_plugin.py`](../examples/python/echo_plugin.py) speaks the protocol with no
 AutoDoc code at all.
 
+## Installing, and the registry
+
+Users install a plugin from **Plugins › Browse the registry…**, or from **Add from a git URL…** by its
+URL or by its name in the registry. A Lua package installs the same way with `:lua-install <name or
+git-url>`. The registry ([autodoc-plugin-registry](https://github.com/yongjohnlee80/autodoc-plugin-registry),
+ADR 1792351195) lists plugins, Lua packages and KB types, each with the audits run on its commits.
+
+Every install asks first. The card names the commit it would install, and says whether that exact
+commit was audited ("✓ audited by <model> on <date> at this commit"), or when the entry was last
+audited, or that it never was. The card's warning stays either way: an audit is a reading of one
+commit, not a guarantee. To be listed, add an entry to the registry repo by pull request.
+
 ## The manifest
 
 `plugin.toml`, at the top of the plugin's directory (and of its repository). A dialog, protocol 1:

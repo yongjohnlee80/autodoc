@@ -95,7 +95,7 @@ end }`,
 	if entries, _ := os.ReadDir(dir); len(entries) != 3 {
 		t.Fatalf("a refused install left %d entries", len(entries))
 	}
-	if err := r.luaRun("lua-install"); err == nil || !strings.Contains(err.Error(), "lua-install <git-url>") {
+	if err := r.luaRun("lua-install"); err == nil || !strings.Contains(err.Error(), "lua-install <name or git-url>") {
 		t.Fatalf(":lua-install with no URL: %v", err)
 	}
 }
