@@ -2,7 +2,7 @@
 
 While sandboxed Lua scripts (Chapter 14) handle fast buffer edits and daemon queries inside AutoDoc's process, some workflows require persistent database connections, background HTTP servers, external toolchains, or rich custom panels. AutoDoc's **plugin architecture** (ADR 0209, ADR 1791268009, ADR 1791762474, ADR 1792078052, ADR 1792254331; see `docs/plugins.md`) runs every plugin as a separate OS process in its own process group, communicating over stdin and stdout via asynchronous **msgpack-RPC notifications**.
 
-This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 7**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from the Registry or a Git URL.
+This chapter explains why out-of-process notification framing keeps the editor crash-proof, details the three plugin shapes (`dialog`, docked `card`, and headless `service`), traces the capability progression from **Protocol 1 through Protocol 8**, shows how the two UI kits (`plugin/card` and `plugin/decl`) draw a card for you, and shows how to build and install plugins from the Registry or a Git URL.
 
 ---
 
@@ -26,11 +26,11 @@ Every plugin directory contains a strictly decoded `plugin.toml` manifest at its
 
 ---
 
-## 15.3 Progression of Protocols 1 Through 7
+## 15.3 Progression of Protocols 1 Through 8
 
 AutoDoc's plugin contract evolves through six cumulative protocol versions. A manifest must declare the minimum `protocol` version required for the features it uses, and AutoDoc refuses any manifest that mixes newer keys with an older protocol number—ensuring a plugin never runs half-broken on an older host.
 
-![Evolution of AutoDoc Plugin Protocols 1 to 7](plugin-protocols.mmd)
+![Evolution of AutoDoc Plugin Protocols 1 to 8](plugin-protocols.mmd)
 
 ### Protocol 1: Modal Dialogs and Styled Cell Frames
 
@@ -82,6 +82,10 @@ Protocol 7 is for a plugin that signs in to something. AutoDoc keeps a small **s
 `plugin.close` now carries a **reason**, which the plugin reads with `Peer.CloseReason()` inside `Close`. On `quit` (AutoDoc is going, and the slot with it) and `remove`, it logs out. On `off` and `update`, it keeps the token for the next start. A card's toggle only hides the card, so the plugin keeps running and stays signed in. Plugins › Turn off is what stops it.
 
 A plugin may also ship a **Lua package** in its folder (`lua/package.toml`, `lua/init.lua`). AutoDoc loads it gated as `plugin:<name>`, and its prompt names the plugin. It can define `:` commands, keys and menu rows. `autodoc.plugin.run(id, args…)` sends one of its own plugin's commands, with arguments (`plugin.command {id, args}`, taken by a `plugin.CommandArgser`), and it reaches no other plugin. AutoDB's `:autodb query select 1` (Chapter 16) works this way. If you write a package of your own with the plugin's name, it replaces the plugin's.
+
+### Protocol 8: Notifications
+
+Protocol 8 lets a plugin speak where the user is, whatever panel is open. `host.notify {message}` (the SDK's `Peer.Notify`) shows a toast in AutoDoc's corner, kept in the notification history (SPC h). A long task gives the toast an id and `ongoing`: each notice with that id updates the same toast, and one without `ongoing` ends it, its last message kept in the history. The ids are the plugin's own, so two plugins never touch each other's, and a plugin that stops has its ongoing toasts ended for it. A message is at most 1 KiB; at most 16 toasts of one plugin run at once.
 
 ---
 

@@ -28,7 +28,7 @@ The language is Lua 5.1 (gopher-lua), with the base, table, string and math libr
 |---|---|---|
 | `autodoc.command{name, aliases, args, help, run, complete, id, title}` | Registers a `:` command, an entry of AutoDoc's command catalog ([what it takes](#what-a-command-takes)). Runs as the file loads. | nothing |
 | `autodoc.run(id, …)` | Runs a command of the catalog by its id, AutoDoc's or yours, with the rest as its arguments ([below](#autodocrunid-)). | `true`, or `false` and why |
-| `autodoc.notify(message)` | Shows a notification: a toast in the corner, kept in the history (SPC h). | nothing |
+| `autodoc.notify(message [, opts])` | Shows a notification: a toast in the corner, kept in the history (SPC h). `opts` is `{id = "sync", ongoing = true}`: with `ongoing`, a toast that stays and is updated in place by each notify with that id; without, that toast ended (the history keeps its last message); the id posted ongoing again starts again. An id is at most 64 letters, digits, `.`, `_` or `-`, `ongoing` needs one, and a message is at most 1024 bytes: a bad option raises an error. Every script shares one set of ids. | nothing |
 | `autodoc.call(verb, params, cb)` | Calls any daemon verb by its name, with `params` a list of its params in order (`nil` or `{}` for none). `cb` is optional. | nothing; the answer goes to `cb` |
 | `autodoc.current_workspace()` | The workspace in use. | a string, or `nil` before one is entered |
 | `autodoc.document()` | The page in the editor, the buffer shown ([below](#autodocdocument)). | a table |

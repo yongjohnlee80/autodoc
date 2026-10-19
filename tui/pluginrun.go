@@ -44,10 +44,13 @@ type pluginRun struct {
 	ready, closing bool
 	// endReason is the run's end, sent in its plugin.close (protocol 7): set once, by the first stop
 	// (stopFor, or stopPlugins as AutoDoc quits), never changed by a later one
-	endReason   string
-	hidden      bool // Esc hid it (esc = "hide"), or a card's panel closed: the plugin runs, told plugin.hide
-	opened      bool // plugin.open sent: at the dialog's first layout, or a service's start
-	focused     bool // a card that holds the keys (plugin.focus true was sent)
+	endReason string
+	hidden    bool // Esc hid it (esc = "hide"), or a card's panel closed: the plugin runs, told plugin.hide
+	opened    bool // plugin.open sent: at the dialog's first layout, or a service's start
+	focused   bool // a card that holds the keys (plugin.focus true was sent)
+	// active are the ids of the ongoing notices this run posted and has not ended (protocol 8):
+	// acceptNotice's, on the loop; endNotices ends them when the run stops
+	active      map[string]struct{}
 	focusOnOpen bool // a card started by its command: it takes the keys at its first layout
 	// early is what was sent before plugin.open: a command or the feed, for a plugin just started.
 	// plugin.open goes first, then these, in order.
@@ -318,6 +321,15 @@ func (r *pluginRun) onNote(method string, params []any) {
 			return
 		}
 		r.pl.c.Post(func() { r.pl.acceptSession(r, values) })
+	case plugin.MethodNotify:
+		// decoded and bounded here, on the link's goroutine; posted on the loop by acceptNotice, for
+		// this run only if it is still the plugin's live run
+		n, err := plugin.ReadNotice(params)
+		if err != nil || r.e.m.Protocol < 8 {
+			r.log.note("host.notify refused: " + noticeRefusal(err, r.e.m.Protocol)) // the rule, never the message
+			return
+		}
+		r.pl.c.Post(func() { r.pl.acceptNotice(r, n) })
 	case plugin.MethodHostClose:
 		// a card asks its panel to close, as Esc closes it: it hides, and runs on
 		r.pl.c.Post(func() {
@@ -394,6 +406,7 @@ func (r *pluginRun) stopFor(reason, why string) {
 	}
 	r.closing = true
 	r.endReason = reason
+	r.pl.endNotices(r) // before the run leaves pl.running: a replacement's notices are its own
 	if r.focused {
 		r.pl.c.Keep(r.pl.c.View("editor", "forceActiveFocus"))
 	}
@@ -464,6 +477,7 @@ func (pl *plugins) stopPlugins() {
 		// shutdown, so no session write is accepted after, and the slots can go
 		if !r.closing {
 			r.closing, r.endReason = true, plugin.CloseQuit
+			pl.endNotices(r)
 		}
 		go r.shutdown()
 	}
@@ -485,6 +499,51 @@ func (pl *plugins) acceptSession(r *pluginRun, values map[string]string) {
 		pl.sessions = map[string]map[string]string{}
 	}
 	pl.sessions[r.e.m.Name] = values
+}
+
+// acceptNotice is a run's notices' one writer, on the loop, behind acceptSession's fence: a run
+// stopping, or no longer the plugin's live run, posts nothing, so a notice queued before a stop
+// cannot bring back a toast or touch its replacement's. Only active ids are kept: one ended is
+// forgotten, and an ongoing one past MaxActiveNotices is refused.
+func (pl *plugins) acceptNotice(r *pluginRun, n plugin.Notice) {
+	if r.closing || pl.running[r.e.key()] != r {
+		return
+	}
+	switch {
+	case n.Ongoing:
+		if _, ok := r.active[n.ID]; !ok && len(r.active) >= plugin.MaxActiveNotices {
+			r.log.note(fmt.Sprintf("host.notify refused: more than %d ongoing notices", plugin.MaxActiveNotices))
+			return
+		}
+		if r.active == nil {
+			r.active = map[string]struct{}{}
+		}
+		r.active[n.ID] = struct{}{}
+	case n.ID != "":
+		delete(r.active, n.ID)
+	}
+	pl.c.NotifyAs(pluginNoticeNS(r.e.m.Name), n.ID, n.Message, n.Ongoing)
+}
+
+// endNotices ends each ongoing notice the run left, "<plugin>: stopped", once: it empties active.
+// The stop transitions call it as they set closing (stopFor, stopPlugins), on the loop.
+func (pl *plugins) endNotices(r *pluginRun) {
+	for id := range r.active {
+		pl.c.NotifyAs(pluginNoticeNS(r.e.m.Name), id, r.e.label()+": stopped", false)
+	}
+	r.active = nil
+}
+
+// pluginNoticeNS is a plugin's notices' namespace: a plugin's name has no ':' (pluginmanifest.go),
+// so no plugin's ids reach another's or the host's.
+func pluginNoticeNS(name string) string { return "plugin:" + name }
+
+// noticeRefusal is why a host.notify was refused, without its message.
+func noticeRefusal(err error, protocol int) string {
+	if err != nil {
+		return err.Error()
+	}
+	return fmt.Sprintf("the manifest's protocol %d is before 8", protocol)
 }
 
 // sessionRefusal is why a host.session was refused, without any of its values.

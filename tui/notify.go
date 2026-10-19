@@ -111,6 +111,27 @@ func (h *Host) notifyDone(id, msg string) {
 	h.keepNotice(msg)
 }
 
+// noticeReq is a notification as a plugin or a Lua script asks for it (ADR 1792351123). notice is
+// the history's entry; this is not it.
+type noticeReq struct {
+	id      string // "" for a plain one
+	text    string
+	ongoing bool
+}
+
+// notifyAs posts r under the namespace ns (ns+":"+id): a plain notification, a long task's toast
+// updated in place, or its end, which the history keeps. Loop only.
+func (h *Host) notifyAs(ns string, r noticeReq) {
+	switch {
+	case r.id == "":
+		h.notify(r.text)
+	case r.ongoing:
+		h.notifyOngoing(ns+":"+r.id, r.text)
+	default:
+		h.notifyDone(ns+":"+r.id, r.text)
+	}
+}
+
 // keepNotice adds a notification to the history (notices.go).
 func (h *Host) keepNotice(msg string) { h.noticeLog.keep(msg) }
 

@@ -106,6 +106,20 @@ func (p *Peer) SetSession(values map[string]string) error {
 	return p.link.Notify(p.ctx, MethodSession, SessionParams(values))
 }
 
+// Notify posts n (protocol 8): a toast kept in the history, or with an id one updated in place
+// while Ongoing and ended by a post without it (notify.go). As SetSession, the negotiated protocol
+// is checked first, then n; a nil error means it was sent: the host drops a notice from a run that
+// is stopping, and an ongoing one past MaxActiveNotices.
+func (p *Peer) Notify(n Notice) error {
+	if p.protocol.Load() < 8 {
+		return ErrNoNotify
+	}
+	if err := CheckNotice(n); err != nil {
+		return err
+	}
+	return p.link.Notify(p.ctx, MethodNotify, NotifyParams(n))
+}
+
 // CloseReason is why the host is closing the plugin (protocol 7: CloseQuit, CloseOff, …), for Close
 // to read; "" before protocol 7, or when the host closed it without a plugin.close.
 func (p *Peer) CloseReason() string {

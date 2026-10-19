@@ -279,6 +279,8 @@ type pluginHost interface {
 	Selection() (line, col, endLine, endCol int, ok bool) // the editor's selection, if any
 	NotifyOngoing(id, msg string)
 	NotifyDone(id, msg string)
+	// NotifyAs is a plugin's or Lua's notice, its id under ns (notify.go)
+	NotifyAs(ns, id, msg string, ongoing bool)
 	Keep(err error)
 	// PanelOpen reports whether panel id is open (the results panel opens for a plugin's table)
 	PanelOpen(id string) bool
@@ -321,7 +323,10 @@ func (c core) After(d time.Duration, fn func())        { c.h.after(d, fn) }
 func (c core) Theme() string                           { return c.h.theme }
 func (c core) NotifyOngoing(id, msg string)            { c.h.notifyOngoing(id, msg) }
 func (c core) NotifyDone(id, msg string)               { c.h.notifyDone(id, msg) }
-func (c core) BrowseFolder() string                    { return c.h.browseFolder() }
+func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
+	c.h.notifyAs(ns, noticeReq{id: id, text: msg, ongoing: ongoing})
+}
+func (c core) BrowseFolder() string { return c.h.browseFolder() }
 
 func (c core) PageSize() (w, h int) {
 	ed, ok := c.h.editor.(interface{ Context() *tuicore.Context })

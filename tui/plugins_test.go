@@ -140,6 +140,24 @@ func runTestPlugin(mode string) int {
 					_ = link.Notify(ctx, plugin.MethodSession, []any{map[string]any{"values": values}})
 				case "badsession": // a value that is not a string
 					_ = link.Notify(ctx, plugin.MethodSession, []any{map[string]any{"values": map[string]any{"token": 7}}})
+				case "notifywith": // protocol 8: args are the id ("" for none), ongoing ("1"), then the message
+					if args := plugin.ReadCommandArgs(p); len(args) >= 3 {
+						n := map[string]any{"message": strings.Join(args[2:], " ")}
+						if args[0] != "" {
+							n["id"] = args[0]
+						}
+						if args[1] == "1" {
+							n["ongoing"] = true
+						}
+						_ = link.Notify(ctx, plugin.MethodNotify, []any{n})
+					}
+				case "badnotify": // a message that is not a string; an ongoing notice with no id
+					_ = link.Notify(ctx, plugin.MethodNotify, []any{map[string]any{"message": 7}})
+					_ = link.Notify(ctx, plugin.MethodNotify, []any{map[string]any{"message": "no id", "ongoing": true}})
+				case "manynotify": // one ongoing id past MaxActiveNotices
+					for i := range plugin.MaxActiveNotices + 1 {
+						_ = link.Notify(ctx, plugin.MethodNotify, []any{map[string]any{"message": fmt.Sprint("task ", i), "id": fmt.Sprint("t", i), "ongoing": true}})
+					}
 				}
 			case plugin.MethodResult:
 				res, _ := plugin.ReadResult(p)
@@ -519,7 +537,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	installTestPlugin(t, dir, "echo", "echo", 30, 6)
 	for name, toml := range map[string]string{
 		"broken":   "name = \n",
-		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 8\ncommand = [\"x\"]\n",
+		"future":   "name = \"future\"\nkind = \"dialog\"\nprotocol = 9\ncommand = [\"x\"]\n",
 		"panel":    "name = \"panel\"\nkind = \"panel\"\nprotocol = 1\ncommand = [\"x\"]\n",
 		"nocmd":    "name = \"nocmd\"\nkind = \"dialog\"\nprotocol = 1\n",
 		"Upper":    "name = \"Upper\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n",
@@ -536,7 +554,7 @@ func TestThePluginsMenuListsThePluginsFolder(t *testing.T) {
 	r.keys(t, decltest.Alt('p'))
 	r.s.WaitForText(t, "Echo")
 	sc := r.s.String()
-	for _, want := range []string{"broken — plugin.toml:", "future — protocol 8; this AutoDoc speaks 1 to 7",
+	for _, want := range []string{"broken — plugin.toml:", "future — protocol 9; this AutoDoc speaks 1 to 8",
 		`panel — kind "panel": want dialog or service`, "nocmd — no command",
 		`Upper — name "Upper": want lower-case`, `echo — the name "echo" is echo's already`,
 		`sideways — placement "middle": want center, top`, `escaper — esc "quit": want close or hide`,
@@ -1059,11 +1077,11 @@ func TestWhatIsNotAPluginIsNotAdded(t *testing.T) {
 
 	future := t.TempDir()
 	runGit(t, future, "init", "-q")
-	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 8\ncommand = [\"x\"]\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(future, "plugin.toml"), []byte("name = \"future\"\nkind = \"dialog\"\nprotocol = 9\ncommand = [\"x\"]\n"), 0o644)
 	runGit(t, future, "add", "plugin.toml")
 	runGit(t, future, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
 	add("file://" + future)
-	r.waitNotice(t, "not added: protocol 8; this AutoDoc speaks 1 to 7")
+	r.waitNotice(t, "not added: protocol 9; this AutoDoc speaks 1 to 8")
 
 	failing := pluginRepo(t, "Echo", "echo nope >&2; exit 4")
 	add("file://" + failing)
