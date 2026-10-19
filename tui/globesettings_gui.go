@@ -278,6 +278,18 @@ func (g *globeMap) filterChosen() {
 	}
 }
 
+// openGlobeSettings is App.openGlobeSettings, the host's in every build (Preferences.qml names it):
+// the GlobeMap's settings in a window, and a word of why not elsewhere.
+func (h *Host) openGlobeSettings() {
+	for _, f := range h.relationViewFeatures() {
+		if g, ok := f.(*globeMap); ok {
+			g.openSettings()
+			return
+		}
+	}
+	h.notify(globeSettingsElsewhere)
+}
+
 // openSettings is Relations › GlobeMap settings… and Preferences › GlobeMap….
 func (g *globeMap) openSettings() {
 	g.c.Set("App.globeSettingsError", "")
@@ -338,9 +350,8 @@ func (g *globeMap) settingsState() map[string]any {
 
 func (g *globeMap) settingsCommands() map[string]Command {
 	return map[string]Command{
-		"App.openGlobeSettings": none(g.openSettings),
-		"App.setGlobeTheme":     oneNumber("a row", g.setTheme),
-		"App.setGlobeColour":    twoStrings("a colour's name and #rrggbb", g.setColour),
-		"App.setGlobeRules":     oneString("#tag=#rrggbb; folder/=#rrggbb", g.setRules),
+		"App.setGlobeTheme":  oneNumber("a row", g.setTheme),
+		"App.setGlobeColour": twoStrings("a colour's name and #rrggbb", g.setColour),
+		"App.setGlobeRules":  oneString("#tag=#rrggbb; folder/=#rrggbb", g.setRules),
 	}
 }

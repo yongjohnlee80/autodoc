@@ -763,8 +763,8 @@ func windowed(t *testing.T, d *daemon) *running {
 }
 
 // The GUI build run in a terminal (no --gui) is a terminal: its document names neither view, it
-// has neither feature nor command, and Relations › Links is its only item. Run as a window, the
-// same build has all three.
+// has neither feature nor command, and Relations › Links is its only item; Preferences' GlobeMap…
+// says the settings are a window's. Run as a window, the same build has all three, and the dialog.
 func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
 	d := startDaemon(t, map[string][]string{"kb": {"a.md", "[[b]]\n", "b.md", "bbb\n"}})
 	for _, gui := range []bool{false, true} {
@@ -788,6 +788,14 @@ func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
 			t.Errorf("gui %v: the document has the relation views: %v", gui, views)
 		case gui && (feats != 2 || len(cmds) != 3), !gui && (feats != 0 || len(cmds) != 1):
 			t.Errorf("gui %v: %d relation view features, commands %v", gui, feats, cmds)
+		}
+		// Preferences › GlobeMap… names its command in every build: the dialog in a window, a word
+		// of why not in a terminal
+		onLoop(r, func() bool { r.h.openGlobeSettings(); return true })
+		if gui {
+			r.s.WaitForText(t, "GlobeMap settings")
+		} else if said := onLoop(r, func() string { return r.h.noticeLog.items[0].text }); said != globeSettingsElsewhere {
+			t.Errorf("a terminal's GlobeMap settings: %q", said)
 		}
 	}
 }

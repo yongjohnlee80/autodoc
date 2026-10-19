@@ -9,5 +9,8 @@ import tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 
 const relationMenuQML, relationViewsQML = "", ""
 
-func (h *Host) relationViewFeatures() []Feature   { return nil }
+func (h *Host) relationViewFeatures() []Feature { return nil }
+
+// openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build.
+func (h *Host) openGlobeSettings()                { h.notify(globeSettingsElsewhere) }
 func (h *Host) relationViewTypes() []tuidecl.Type { return nil }

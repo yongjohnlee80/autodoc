@@ -130,6 +130,9 @@ func shapeOf(typ string) pm.MindShape {
 	return pm.MindRounded
 }
 
+// globeSettingsElsewhere is App.openGlobeSettings where there is no GlobeMap: a terminal.
+const globeSettingsElsewhere = "the GlobeMap and its settings are the window's: run autodoc --gui"
+
 // The lines of main.qml the GUI's relation views are written after: their Relations menu items,
 // and their panels.
 const (
