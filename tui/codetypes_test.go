@@ -146,10 +146,10 @@ func TestTheEditTabOffersTheDaemonsDocuments(t *testing.T) {
 	})
 }
 
-// TestTheSettingsBringTheFocusedFieldIntoView: the Edit tab's frames are stacked in a ScrollView. On
-// a 30-row screen the files frame starts below the fold, and its exclude field, taking focus, is
-// scrolled into view with its label.
-func TestTheSettingsBringTheFocusedFieldIntoView(t *testing.T) {
+// TestTheSettingsScrollWithTheWheel: the Edit tab's frames are stacked in a ScrollView. On a 30-row
+// screen the files frame starts below the fold; the wheel over the dialog scrolls it into view, and
+// the workspace frame's top out of it.
+func TestTheSettingsScrollWithTheWheel(t *testing.T) {
 	d := startManagedWith(t, map[string]string{"kb": fileDir(t, "a.md", "# A\n")}, serving.Options{})
 	r := runTUI(t, NewSession(d.sock, nil), Options{})
 	r.s.WaitFor(t, "the files", func(string) bool { return len(r.listed()) > 0 })
@@ -157,16 +157,21 @@ func TestTheSettingsBringTheFocusedFieldIntoView(t *testing.T) {
 	if strings.Contains(flat(r.s.String()), "exclude globs") {
 		t.Fatalf("the exclude field shows before any scroll, so this screen proves nothing:\n%s", r.s.String())
 	}
-	r.h.p.Post(func() {
-		c, ok := r.h.p.Find("sExclude")
-		if !ok {
-			t.Error("no sExclude in the dialog")
-			return
+	row := -1
+	for i, l := range strings.Split(r.s.String(), "\n") {
+		if strings.Contains(l, "│title ") {
+			row = i
 		}
-		c.(interface{ Context() *tuicore.Context }).Context().RequestFocus()
-	})
-	r.s.WaitFor(t, "the exclude field in view", func(sc string) bool { return strings.Contains(flat(sc), "exclude globs") })
-	if !r.focused("sExclude") {
-		t.Fatal("the exclude field does not have the keyboard")
 	}
+	if row < 0 {
+		t.Fatalf("no title row:\n%s", r.s.String())
+	}
+	wheel := tuicore.MouseEvent{Kind: tuicore.MouseWheel, Button: tuicore.WheelDown, X: 20, Y: row}
+	for range 12 {
+		r.s.Keys(t, wheel)
+	}
+	r.s.WaitFor(t, "the files frame scrolled into view", func(sc string) bool {
+		f := flat(sc)
+		return strings.Contains(f, "exclude globs") && !strings.Contains(sc, "│title ")
+	})
 }
