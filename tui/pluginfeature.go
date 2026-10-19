@@ -321,8 +321,12 @@ func (c core) RunEntry(id string, args []string) error { return c.h.cat.run(id, 
 func (c core) Context() context.Context                { return c.h.ctx }
 func (c core) After(d time.Duration, fn func())        { c.h.after(d, fn) }
 func (c core) Theme() string                           { return c.h.theme }
-func (c core) NotifyOngoing(id, msg string)            { c.h.notifyOngoing(id, msg) }
-func (c core) NotifyDone(id, msg string)               { c.h.notifyDone(id, msg) }
+
+// ThemeNames and ThemeLabels are the themes the window can wear: golib's and the user's.
+func (c core) ThemeNames() []string         { return c.h.themeNames() }
+func (c core) ThemeLabels() []string        { return c.h.themeLabels() }
+func (c core) NotifyOngoing(id, msg string) { c.h.notifyOngoing(id, msg) }
+func (c core) NotifyDone(id, msg string)    { c.h.notifyDone(id, msg) }
 func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
 	c.h.notifyAs(ns, noticeReq{id: id, text: msg, ongoing: ongoing})
 }

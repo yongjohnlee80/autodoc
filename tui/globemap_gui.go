@@ -23,26 +23,29 @@ import (
 // settles, as Obsidian's graph view. Drag pans, the wheel and + - zoom, 0 fits it again, f cycles
 // which links it follows; a press on a document closes the panel and opens it. Dots keep their size
 // on screen, so zooming in spreads a cluster out, and the names show once few enough are in view. It
-// is read again when it opens, when another workspace is entered, and when the filter changes.
+// is read again when it opens, when another workspace is entered, and when the filter changes. How it
+// draws (its theme, colours, names, dots and pace) is its settings' (globesettings_gui.go).
 
 // globeLimits bound a build: a knowledge base of twenty thousand documents.
 var globeLimits = graphlayout.Limits{MaxNodes: 20000, MaxEdges: 200000, MaxWork: 2_000_000_000}
 
 const (
-	globeStepsPerFrame = 4   // simulation steps between frames shown
-	globeDot           = 3.5 // a document's dot's radius on screen, in logical pixels, before its links add to it
-	globeLabelCap      = 300 // the most documents in view whose names are drawn
-	globeZoomStep      = 1.15
+	globeDot      = 3.5 // a document's dot's radius on screen, in logical pixels, at medium size, before its links add to it
+	globeLabelCap = 300 // the most documents in view whose names are drawn
+	globeZoomStep = 1.15
 )
 
+// globeFilter is a choice of the links the GlobeMap follows.
+type globeFilter struct {
+	key, name string // the stored name (prefGlobeFilter), and the title's
+	kinds     []any  // graph.map's kinds; nil every kind
+}
+
 // globeFilters are the links the GlobeMap follows, f cycling through them.
-var globeFilters = []struct {
-	name  string
-	kinds []any // graph.map's kinds; nil every kind
-}{
-	{"every link", nil},
-	{"body links", []any{"wikilink", "embed", "markdown"}},
-	{"relations", []any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
+var globeFilters = []globeFilter{
+	{"every", "every link", nil},
+	{"body", "body links", []any{"wikilink", "embed", "markdown"}},
+	{"relations", "relations", []any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
 }
 
 // Edge classes, each one path and one colour: body links, supersession, every other relation.
@@ -105,11 +108,11 @@ func newGlobe(ws string, m relMap, deg []int, at []graphlayout.Point, bounds gra
 	return gl
 }
 
-// dotRadius is document i's dot's radius on screen at zoom z, the map fitted at fit: a little larger
-// with its links and as the map is zoomed in, never in proportion to the zoom.
-func (gl *globe) dotRadius(i int, z, fit float32) float32 {
+// dotRadius is document i's dot's radius on screen at zoom z, the map fitted at fit, the dots at
+// scale: a little larger with its links and as the map is zoomed in, never in proportion to the zoom.
+func (gl *globe) dotRadius(i int, z, fit, scale float32) float32 {
 	grow := float32(math.Pow(float64(min(max(z/max(fit, 1e-6), 1), 16)), 0.25))
-	return globeDot * (1 + 0.15*float32(math.Log2(1+float64(gl.deg[i])))) * grow
+	return globeDot * scale * (1 + 0.15*float32(math.Log2(1+float64(gl.deg[i])))) * grow
 }
 
 // circle adds a circle round c of radius r to p: four cubic arcs.
@@ -175,13 +178,21 @@ func (g hitGrid) nearest(at []graphlayout.Point, p graphlayout.Point, within flo
 	return best
 }
 
-// globeDots are the dots and rings of one frame at one zoom bucket, in layout units: made again only
-// when either changes, so a picture stays one fill per type and one ring stroke.
+// globeDots are the dots and rings of one frame at one zoom bucket in one look, in layout units:
+// made again only when one of them changes, so a picture stays one fill per colour and one ring
+// stroke.
 type globeDots struct {
 	of     *globe
+	look   *globeLook
 	bucket int
-	dots   []*gui.Path // one per relationTypes, then one for every other type
+	fills  []globeFill // one per colour, in the order the documents first wear it
 	rings  *gui.Path   // a ring round each superseded document
+}
+
+// globeFill is the dots of one colour.
+type globeFill struct {
+	c    color.NRGBA
+	path *gui.Path
 }
 
 // zoomBucket is the zoom's step of globeZoomStep: the dots are made again only when it changes.
@@ -189,25 +200,25 @@ func zoomBucket(z float32) int {
 	return int(math.Round(math.Log(float64(z)) / math.Log(globeZoomStep)))
 }
 
-// dotsAt is gl's dots and rings at zoom z, the map fitted at fit: d itself when it is already for
-// that frame and step.
-func dotsAt(d globeDots, gl *globe, z, fit float32) globeDots {
+// dotsAt is gl's dots and rings at zoom z in look l, the map fitted at fit: d itself when it is
+// already for that frame, step and look.
+func dotsAt(d globeDots, gl *globe, l *globeLook, z, fit float32) globeDots {
 	b := zoomBucket(z)
-	if d.of == gl && d.bucket == b {
+	if d.of == gl && d.look == l && d.bucket == b {
 		return d
 	}
 	bz := float32(math.Pow(globeZoomStep, float64(b))) // the step's zoom: the dots are its size until the next
-	d = globeDots{of: gl, bucket: b, dots: make([]*gui.Path, len(relationTypes)+1), rings: &gui.Path{}}
-	for k := range d.dots {
-		d.dots[k] = &gui.Path{}
-	}
+	d = globeDots{of: gl, look: l, bucket: b, rings: &gui.Path{}}
+	fill := map[color.NRGBA]int{}
 	for i, n := range gl.m.Nodes {
-		k := slices.Index(relationTypes, n.Type)
-		if k < 0 {
-			k = len(relationTypes)
+		c := l.colourOf(n)
+		k, ok := fill[c]
+		if !ok {
+			k, fill[c] = len(d.fills), len(d.fills)
+			d.fills = append(d.fills, globeFill{c: c, path: &gui.Path{}})
 		}
-		r := gl.dotRadius(i, bz, fit) / bz // on screen, in layout units
-		circle(d.dots[k], gl.at[i], r)
+		r := gl.dotRadius(i, bz, fit, l.dot) / bz // on screen, in layout units
+		circle(d.fills[k].path, gl.at[i], r)
 		if n.Superseded {
 			circle(d.rings, gl.at[i], r*1.7)
 		}
@@ -222,11 +233,11 @@ func fitView(b graphlayout.Rect, size gui.Size) (float32, gui.Point) {
 	return z, gui.Pt((size.W-b.W*z)/2-b.X*z, (size.H-b.H*z)/2-b.Y*z)
 }
 
-// globeViewState is the loop's view as a load's pictures take it: its size, its colours, its pan and
+// globeViewState is the loop's view as a load's pictures take it: its size, its look, its pan and
 // zoom once the user moved it (until then each frame is fitted), and the document hovered.
 type globeViewState struct {
 	size  gui.Size
-	pal   relPalette
+	look  *globeLook // nil: defaultLook
 	moved bool
 	zoom  float32
 	off   gui.Point
@@ -234,22 +245,12 @@ type globeViewState struct {
 }
 
 func (a globeViewState) same(b globeViewState) bool {
-	return a.size == b.size && a.moved == b.moved && a.zoom == b.zoom && a.off == b.off && a.hover == b.hover &&
-		samePalette(a.pal, b.pal)
+	return a.size == b.size && a.look == b.look && a.moved == b.moved && a.zoom == b.zoom && a.off == b.off &&
+		a.hover == b.hover
 }
 
-func samePalette(a, b relPalette) bool {
-	if a.background != b.background || a.text != b.text || a.muted != b.muted || a.accent != b.accent ||
-		a.superseded != b.superseded || a.relation != b.relation || len(a.types) != len(b.types) {
-		return false
-	}
-	for k, v := range a.types {
-		if b.types[k] != v {
-			return false
-		}
-	}
-	return true
-}
+// lookOf is the view's look.
+func (a globeViewState) lookOf() *globeLook { return cmp.Or(a.look, defaultLook) }
 
 // globePicture is one picture pushed: a frame at a view, drawn on the load's goroutine. The names
 // and the hovered name are part of it, so they are on screen exactly when it is.
@@ -258,7 +259,7 @@ type globePicture struct {
 	dots  globeDots
 	zoom  float32
 	off   gui.Point
-	pal   relPalette
+	look  *globeLook
 	hover int
 }
 
@@ -269,7 +270,8 @@ func pictureOf(f *globe, view globeViewState, d globeDots) globePicture {
 	if view.moved {
 		z, off = view.zoom, view.off
 	}
-	return globePicture{gl: f, dots: dotsAt(d, f, z, fitZ), zoom: z, off: off, pal: view.pal, hover: view.hover}
+	l := view.lookOf()
+	return globePicture{gl: f, dots: dotsAt(d, f, l, z, fitZ), zoom: z, off: off, look: l, hover: view.hover}
 }
 
 // globeNameRow is the line names are set in, in logical pixels: the names of a row are one text
@@ -278,8 +280,11 @@ const globeNameRow = 16
 
 // nameRows are the names of the documents in a view of size sz, when globeLabelCap or fewer are in
 // it: each under its dot, set by rows of globeNameRow, a name that would run into the one before it
-// in its row left out. None when more are in view.
+// in its row left out. None when more are in view, or when the look names none.
 func (p globePicture) nameRows(sz gui.Size) map[int][]gui.TextRun {
+	if !p.lookOf().names {
+		return nil
+	}
 	var in []int
 	for i, a := range p.gl.at {
 		x, y := a.X*p.zoom+p.off.X, a.Y*p.zoom+p.off.Y
@@ -292,7 +297,7 @@ func (p globePicture) nameRows(sz gui.Size) map[int][]gui.TextRun {
 	rows := map[int][]gui.TextRun{}
 	for _, i := range in {
 		a := p.gl.at[i]
-		x, y := a.X*p.zoom+p.off.X, a.Y*p.zoom+p.off.Y+globeDot+2
+		x, y := a.X*p.zoom+p.off.X, a.Y*p.zoom+p.off.Y+globeDot*p.lookOf().dot+2
 		text := p.gl.m.label(i)
 		w := nameWidth(text)
 		row := int(y / globeNameRow)
@@ -314,38 +319,34 @@ func (p globePicture) nameRows(sz gui.Size) map[int][]gui.TextRun {
 // nameWidth is about the width of a name in the names' font: a run's spacing, not its drawing.
 func nameWidth(s string) float32 { return float32(len([]rune(s)))*6.5 + 8 }
 
-// paint draws the map in a number of operations bounded by the view, never by the map: the ground,
-// one stroke per edge class, one fill per document type, one stroke of the superseded rings, one
-// DrawText per row of names, and the hovered name on its plate.
+// lookOf is the picture's look.
+func (p globePicture) lookOf() *globeLook { return cmp.Or(p.look, defaultLook) }
+
+// paint draws the map in a number of operations bounded by the view and the colours, never by the
+// map: the ground, one stroke per edge class, one fill per colour, one stroke of the superseded
+// rings, one DrawText per row of names, and the hovered name on its plate.
 func (p globePicture) paint(c gui.Canvas) {
 	sz := c.Size()
-	c.FillRect(gui.Rect{W: sz.W, H: sz.H}, gui.Solid(p.pal.background))
-	edgeColour := [edgeClasses]color.NRGBA{
-		mixNRGBA(p.pal.background, p.pal.muted, 0.8),
-		mixNRGBA(p.pal.background, p.pal.superseded, 0.7),
-		mixNRGBA(p.pal.background, p.pal.relation, 0.7),
-	}
+	l := p.lookOf()
+	pal := l.pal
+	c.FillRect(gui.Rect{W: sz.W, H: sz.H}, gui.Solid(pal.background))
 	c.PushTransform(f32.Affine2D{}.Scale(f32.Pt(0, 0), f32.Pt(p.zoom, p.zoom)).Offset(f32.Pt(p.off.X, p.off.Y)))
 	for k, path := range p.gl.edges {
 		if path.Segments() > 0 {
-			c.StrokePath(path, 1/p.zoom, gui.Solid(edgeColour[k]))
+			c.StrokePath(path, 1/p.zoom, gui.Solid(l.edges[k]))
 		}
 	}
-	for k, path := range p.dots.dots {
-		col := p.pal.text
-		if k < len(relationTypes) {
-			col = p.pal.types[relationTypes[k]]
-		}
-		if path.Segments() > 0 {
-			c.FillPath(path, gui.Solid(col))
+	for _, fl := range p.dots.fills {
+		if fl.path.Segments() > 0 {
+			c.FillPath(fl.path, gui.Solid(fl.c))
 		}
 	}
 	if p.dots.rings.Segments() > 0 {
-		c.StrokePath(p.dots.rings, 1.5/p.zoom, gui.Solid(p.pal.superseded))
+		c.StrokePath(p.dots.rings, 1.5/p.zoom, gui.Solid(l.ring))
 	}
 	c.Pop()
 	// the names: one DrawText a row, whatever the names in it
-	f, muted := gui.Font{Size: 12}, mixNRGBA(p.pal.background, p.pal.text, 0.75)
+	f, muted := gui.Font{Size: 12}, mixNRGBA(pal.background, pal.text, 0.75)
 	for row, runs := range p.nameRows(sz) {
 		if len(runs) > 0 {
 			c.DrawText(c.Text().LayoutRuns(runs, f), gui.Pt(0, float32(row)*globeNameRow), gui.Solid(muted))
@@ -354,9 +355,9 @@ func (p globePicture) paint(c gui.Canvas) {
 	if h := p.hover; h >= 0 && h < len(p.gl.at) {
 		a := p.gl.at[h]
 		t := c.Text().Layout(p.gl.m.label(h), gui.Font{Size: 13}, 480)
-		x, y := a.X*p.zoom+p.off.X+globeDot*2+6, a.Y*p.zoom+p.off.Y-t.Height/2
-		c.FillRRect(gui.Rect{X: x - 4, Y: y - 2, W: t.Width + 8, H: t.Height + 4}, 4, gui.Solid(mixNRGBA(p.pal.background, p.pal.text, 0.12)))
-		c.DrawText(t, gui.Pt(x, y), gui.Solid(p.pal.text))
+		x, y := a.X*p.zoom+p.off.X+globeDot*l.dot*2+6, a.Y*p.zoom+p.off.Y-t.Height/2
+		c.FillRRect(gui.Rect{X: x - 4, Y: y - 2, W: t.Width + 8, H: t.Height + 4}, 4, gui.Solid(mixNRGBA(pal.background, pal.text, 0.12)))
+		c.DrawText(t, gui.Pt(x, y), gui.Solid(pal.text))
 	}
 }
 
@@ -394,12 +395,14 @@ type globeStream struct {
 	screen atomic.Pointer[globeScreen] // what the window shows, or is about to: read by the pointer, the names
 }
 
-// globeShot is one picture as pushed: its frame, the transform it was drawn at, and the size.
+// globeShot is one picture as pushed: its frame, the transform it was drawn at, the size, and its
+// dots' scale.
 type globeShot struct {
 	f    *globe
 	zoom float32
 	off  gui.Point
 	size gui.Size
+	dot  float32
 }
 
 // globeScreen is what input may act on: the picture last presented, and every picture pushed since
@@ -503,10 +506,11 @@ type globeMap struct {
 	pres    *globeStream
 	seq     uint64
 	open    bool
-	filter  int    // globeFilters' index
-	cur     *globe // the frame on screen: its picture was presented (hit testing, the names)
-	counts  [2]int // the load's documents and links, once its map is read
-	status  string // what a load under way says; "" none
+	filter  int        // globeFilters' index
+	cur     *globe     // the frame on screen: its picture was presented (hit testing, the names)
+	look    *globeLook // how it draws (globesettings_gui.go); nil until first used
+	counts  [2]int     // the load's documents and links, once its map is read
+	status  string     // what a load under way says; "" none
 	view    *globeView
 
 	cancel func()              // ends the load under way
@@ -536,7 +540,7 @@ func (g *globeMap) Panels() []PanelSpec {
 	return []PanelSpec{{ID: globeMapPanelID, View: globeMapViewID, Priority: 70,
 		Edge: func(prefs) string { return "center" },
 		Opened: func(PanelHost) {
-			g.open = true
+			g.open, g.filter = true, g.prefFilter() // it opens following the links its settings choose
 			g.load()
 		},
 		Closed: func(c PanelHost) {
@@ -546,14 +550,21 @@ func (g *globeMap) Panels() []PanelSpec {
 		}}}
 }
 
-func (g *globeMap) State() map[string]any { return map[string]any{"App.globeMapTitle": "GlobeMap"} }
+func (g *globeMap) State() map[string]any {
+	st := g.settingsState()
+	st["App.globeMapTitle"] = "GlobeMap"
+	return st
+}
 
 func (g *globeMap) Commands() map[string]Command {
-	return map[string]Command{"App.toggleGlobeMap": none(g.toggle)}
+	m := g.settingsCommands()
+	m["App.toggleGlobeMap"] = none(g.toggle)
+	return m
 }
 
 func (g *globeMap) Catalog() []Entry {
-	return []Entry{builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle)}
+	return []Entry{builtin("globemap.toggle", "the GlobeMap", "App.toggleGlobeMap()", g.toggle),
+		builtin("globemap.settings", "the GlobeMap's settings", "App.openGlobeSettings()", g.openSettings)}
 }
 
 func (g *globeMap) toggle() { g.c.TogglePanel(globeMapPanelID) }
@@ -589,10 +600,7 @@ func (g *globeMap) stop() {
 
 // viewState is the view as the loop has it now, at size.
 func (g *globeMap) viewState(size gui.Size) globeViewState {
-	st := globeViewState{size: size, moved: g.moved, hover: g.hover}
-	if g.view != nil {
-		st.pal = g.view.pal
-	}
+	st := globeViewState{size: size, look: g.currentLook(), moved: g.moved, hover: g.hover}
 	if g.moved {
 		st.zoom, st.off = g.zoom, g.off
 	}
@@ -727,7 +735,7 @@ func settle(ctx context.Context, sim *graphlayout.Simulation, ws string, m relMa
 		if view.size.W > 0 && view.size.H > 0 {
 			p := pictureOf(f, view, dots)
 			dots = p.dots
-			shot := &globeShot{f: f, zoom: p.zoom, off: p.off, size: view.size}
+			shot := &globeShot{f: f, zoom: p.zoom, off: p.off, size: view.size, dot: p.lookOf().dot}
 			r := push(shot, p.paint)
 			changed := false
 		receipt:
@@ -756,7 +764,7 @@ func settle(ctx context.Context, sim *graphlayout.Simulation, ws string, m relMa
 				continue
 			}
 			if !f.final {
-				if _, err := sim.Step(ctx, globeStepsPerFrame); err != nil {
+				if _, err := sim.Step(ctx, view.lookOf().steps); err != nil { // the settings' pace
 					if ctx.Err() != nil {
 						return nil
 					}
@@ -824,7 +832,7 @@ func (shot *globeShot) at(p gui.Point) int {
 		return -1
 	}
 	q := graphlayout.Point{X: (p.X - shot.off.X) / shot.zoom, Y: (p.Y - shot.off.Y) / shot.zoom}
-	return shot.f.grid.nearest(shot.f.at, q, max(2*globeDot, 8)/shot.zoom)
+	return shot.f.grid.nearest(shot.f.at, q, max(2*globeDot*cmp.Or(shot.dot, 1), 8)/shot.zoom)
 }
 
 // target is the document under the view point p, in the picture it was found in, and whether the
@@ -867,16 +875,16 @@ func (g *globeMap) press(shot *globeShot, i int) {
 	g.c.OpenRef(ws, p)
 }
 
-// globeView is the GlobeMap's native view, in its panel.
+// globeView is the GlobeMap's native view, in its panel. Its colours are its look's, not the
+// document's: the panel takes no colour properties.
 type globeView struct {
 	g     *globeMap
-	pal   relPalette
 	ctx   *tuicore.Context
 	cells tuicore.Size
 }
 
-func (g *globeMap) newView(p relPalette) tuicore.Component {
-	v := &globeView{g: g, pal: p}
+func (g *globeMap) newView(relPalette) tuicore.Component {
+	v := &globeView{g: g}
 	g.view = v
 	return v
 }
@@ -978,7 +986,7 @@ func (v *globeView) NativeView() (any, bool) {
 	view := v.pixels()
 	g.sendView(view, g.resend)
 	g.resend = false
-	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.status, pal: v.pal}.paint), true
+	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.status, pal: g.currentLook().pal}.paint), true
 }
 
 // globeOverlay is the view's own paint over the load's pictures.

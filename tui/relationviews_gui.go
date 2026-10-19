@@ -5,6 +5,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"strconv"
 
 	"github.com/yongjohnlee80/golib/gui"
 
@@ -25,6 +26,7 @@ const (
 
 // relationMenuQML is the views' Relations menu items.
 const relationMenuQML = `            MenuItem { text: "&GlobeMap"; onTriggered: App.toggleGlobeMap() }
+            MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }
             MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }
 `
 
@@ -34,14 +36,19 @@ const relationColours = `background: Theme.document.base; text: Theme.document.t
             adr: Theme.syntax.keyword; review: Theme.syntax.string; convention: Theme.syntax.dataType
             synthesis: Theme.syntax.decVal; pr: Theme.syntax.specialChar`
 
-// relationViewsQML is the views' panels: each a large float in the middle of the window, until the
-// user moves or sizes it.
-var relationViewsQML = relationPanelQML(globeMapPanelID, globeMapViewID, "GlobeMap",
-	"the GlobeMap (globemap_gui.go): the workspace's documents and their links, laid out by force") +
+// relationViewsQML is the views' panels, each a large float in the middle of the window until the
+// user moves or sizes it, and their dialogs.
+// The GlobeMap takes no colours here: it is drawn in the terminals' theme (globemap_gui.go). The
+// Mindmap is drawn in the page's.
+var relationViewsQML = relationDialogsQML + relationPanelQML(globeMapPanelID, globeMapViewID, "GlobeMap",
+	"the GlobeMap (globemap_gui.go): the workspace's documents and their links, laid out by force, in the terminals' theme", "") +
 	relationPanelQML(mindmapPanelID, mindmapViewID, "Mindmap",
-		"the Mindmap (mindmap_gui.go): the page's document and those two links from it, as a mind map")
+		"the Mindmap (mindmap_gui.go): the page's document and those two links from it, as a mind map", relationColours)
 
-func relationPanelQML(id, view, typ, what string) string {
+// relationDialogsQML is the views' dialogs: the GlobeMap's settings (globesettings_gui.go).
+const relationDialogsQML = "    GlobeMapSettings { id: globeMapSettings }\n"
+
+func relationPanelQML(id, view, typ, what, colours string) string {
 	return fmt.Sprintf(`    // %[4]s
     Panel {
         id: %[1]s
@@ -61,7 +68,41 @@ func relationPanelQML(id, view, typ, what string) string {
             %[5]s
         }
     }
-`, id, view, typ, what, relationColours)
+`, id, view, typ, what, colours)
+}
+
+// paletteOf is a view's colours from a theme's values (document.*, syntax.*), each one the theme
+// lacks or gives in a form other than #rrggbb taking def's.
+func paletteOf(v map[string]string, def relPalette) relPalette {
+	c := func(key string, fallback color.NRGBA) color.NRGBA {
+		if c, ok := parseHex(v[key]); ok {
+			return c
+		}
+		return fallback
+	}
+	p := relPalette{
+		background: c("document.base", def.background), text: c("document.text", def.text),
+		muted: c("document.lineNumber", def.muted), accent: c("document.highlight", def.accent),
+		superseded: c("syntax.alert", def.superseded), relation: c("syntax.attribute", def.relation),
+		types: map[string]color.NRGBA{},
+	}
+	for t, key := range map[string]string{"adr": "syntax.keyword", "review": "syntax.string",
+		"convention": "syntax.dataType", "synthesis": "syntax.decVal", "pr": "syntax.specialChar"} {
+		p.types[t] = c(key, def.types[t])
+	}
+	return p
+}
+
+// parseHex reads a colour given as #rrggbb.
+func parseHex(s string) (color.NRGBA, bool) {
+	if len(s) != 7 || s[0] != '#' {
+		return color.NRGBA{}, false
+	}
+	n, err := strconv.ParseUint(s[1:], 16, 32)
+	if err != nil {
+		return color.NRGBA{}, false
+	}
+	return color.NRGBA{R: uint8(n >> 16), G: uint8(n >> 8), B: uint8(n), A: 0xff}, true
 }
 
 // relPalette is a view's colours.

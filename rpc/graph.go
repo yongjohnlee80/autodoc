@@ -65,10 +65,11 @@ type mapJSON struct {
 }
 
 type mapNodeJSON struct {
-	Path       string `json:"path"`
-	Title      string `json:"title"`
-	Type       string `json:"type"`
-	Superseded bool   `json:"superseded"`
+	Path       string   `json:"path"`
+	Title      string   `json:"title"`
+	Type       string   `json:"type"`
+	Superseded bool     `json:"superseded"`
+	Tags       []string `json:"tags,omitempty"` // protocol 28 (mapTagsSince)
 }
 
 type unresolvedJSON struct {
@@ -133,7 +134,7 @@ func (s *Server) graphVerbs() []module.Verb {
 				return out, nil
 			}),
 		module.Handle(module.Contract{Verb: "graph.map", Effect: module.EffectRead, Since: mapSince, Scope: ws, Audience: agent,
-			Result: "{nodes: [{path, title, type, superseded}], edges: [{src, dst, kind}]}",
+			Result: "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}]}",
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
 			Doc:    "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it."},
 			func(ctx context.Context, p graphMap) (*mapJSON, error) {
@@ -146,8 +147,12 @@ func (s *Server) graphVerbs() []module.Verb {
 					return nil, err
 				}
 				out := &mapJSON{Nodes: make([]mapNodeJSON, len(m.Nodes)), Edges: make([]edgeJSON, len(m.Edges))}
+				tags := protocolOf(ctx) >= mapTagsSince
 				for i, n := range m.Nodes {
 					out.Nodes[i] = mapNodeJSON{Path: n.Path, Title: n.Title, Type: n.Type, Superseded: n.Superseded}
+					if tags {
+						out.Nodes[i].Tags = n.Tags
+					}
 				}
 				for i, e := range m.Edges {
 					out.Edges[i] = edgeJSON{Src: e.Src, Dst: e.Dst, Kind: e.Kind}
@@ -195,8 +200,12 @@ const relationsSince = 14
 // for one of todoKinds by name is refused, not answered.
 const todoGraphSince = 23
 
-// mapSince is the protocol graph.map came in (ADR 1792347044).
-const mapSince = 26
+// mapSince is the protocol graph.map came in (ADR 1792347044), and mapTagsSince the one its nodes'
+// tags came in.
+const (
+	mapSince     = 26
+	mapTagsSince = 28
+)
 
 // mapOpts reads graph.map's options: {root, depth, kinds}. Without a root, the whole workspace and
 // depth is unused; with one, depth defaults to 1. kinds is graphKinds'.

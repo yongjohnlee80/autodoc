@@ -122,6 +122,24 @@ func termLook(p prefs, page string) map[string]any {
 	}
 }
 
+// terminalThemeValues are the values of the theme the terminals are drawn in, for preferences p on
+// a page drawn in page: the one chosen, else the page's; one that can't be read falls back to the
+// page's. values reads a theme by name (the host's: golib's or the user's). false when neither reads.
+// The GlobeMap is drawn in it too (globemap_gui.go).
+func terminalThemeValues(p prefs, page string, values func(string) (map[string]string, error)) (map[string]string, bool) {
+	name := p.termTheme
+	if name == "" || name == "page" {
+		name = page
+	}
+	if v, err := values(name); err == nil {
+		return v, true
+	}
+	if v, err := values(page); err == nil {
+		return v, true
+	}
+	return nil, false
+}
+
 // lookState is the terminals' colours now.
 func (t *terminals) lookState() map[string]any {
 	page := ""
@@ -135,15 +153,7 @@ func (t *terminals) lookState() map[string]any {
 	if c, ok := t.c.(interface {
 		ThemeValues(string) (map[string]string, error)
 	}); ok {
-		name := p.termTheme
-		if name == "" || name == "page" {
-			name = page
-		}
-		v, err := c.ThemeValues(name)
-		if err != nil {
-			v, err = c.ThemeValues(page)
-		}
-		if err == nil {
+		if v, ok := terminalThemeValues(p, page, c.ThemeValues); ok {
 			return map[string]any{"App.terminalBase": v["document.base"], "App.terminalText": v["document.text"], "App.terminalCursor": v["document.cursor"]}
 		}
 	}
