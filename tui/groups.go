@@ -61,14 +61,16 @@ func groupQueries(types, files []string) []string {
 }
 
 // initGroups are the groups of queries, each a colour of palette (groupPalette for none) at random,
-// none twice until each is taken, then each a turn further from ground; every colour made legible
-// on ground (onGround). Each group takes the automatic outline of its place (mindAutoShapes, then a
-// box).
+// made legible on ground (onGround), none twice until each is taken, then each a turn further from
+// ground. Legible first, then away: away only adds contrast, and a turn taken before legibility
+// would be pulled back to the very colour of turn 0. A colour another group already wears steps on
+// a turn more, so no two groups share one.
 func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd *rand.Rand) []relGroup {
 	if len(palette) == 0 {
 		palette = groupPalette
 	}
 	out := make([]relGroup, len(queries))
+	worn := map[color.NRGBA]bool{}
 	var deck []color.NRGBA
 	turn := -1
 	for k, q := range queries {
@@ -77,8 +79,14 @@ func initGroups(queries []string, palette []color.NRGBA, ground color.NRGBA, rnd
 			rnd.Shuffle(len(deck), func(i, j int) { deck[i], deck[j] = deck[j], deck[i] })
 			turn++
 		}
-		out[k] = relGroup{Query: q, Colour: onGround(away(deck[0], ground, turn), ground), Shape: pm.MindDefault}
+		base := onGround(deck[0], ground)
 		deck = deck[1:]
+		c := away(base, ground, turn)
+		for t := turn + 1; worn[c] && t <= turn+4; t++ {
+			c = away(base, ground, t)
+		}
+		worn[c] = true
+		out[k] = relGroup{Query: q, Colour: c, Shape: pm.MindDefault}
 		if k < len(mindAutoShapes) {
 			out[k].Shape = mindAutoShapes[k]
 		}

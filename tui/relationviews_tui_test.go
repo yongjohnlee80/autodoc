@@ -23,8 +23,9 @@ func TestATerminalHasNoRelationViews(t *testing.T) {
 		t.Fatalf("a terminal's relation views: %v, %v", f, ty)
 	}
 	// Preferences' GlobeMap… names its command here too: it says the settings are a window's
-	h.openGlobeSettings()
-	if len(h.noticeLog.items) != 1 || h.noticeLog.items[0].text != globeSettingsElsewhere {
-		t.Errorf("a terminal's GlobeMap settings said %+v", h.noticeLog.items)
+	th := newHost(NewSession("unused", nil), Options{}) // a host as the program makes one: its notices kept
+	th.openGlobeSettings()
+	if len(th.noticeLog.items) != 1 || th.noticeLog.items[0].text != globeSettingsElsewhere {
+		t.Errorf("a terminal's GlobeMap settings said %+v", th.noticeLog.items)
 	}
 }
