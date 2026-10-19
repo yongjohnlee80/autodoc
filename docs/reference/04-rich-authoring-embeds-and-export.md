@@ -13,7 +13,7 @@ In AutoDoc, every Markdown document `<note-stem>.md` can have an optional compan
 1. **Beside the Note**: `<note-dir>/<target-path>`
 2. **Inside the Companion Directory**: `<note-dir>/<note-stem>/<target-path>`
 
-For example, for the chapter file `docs/tutorials/04-rich-authoring-embeds-and-export.md`, its companion directory is `docs/tutorials/04-rich-authoring-embeds-and-export/`, holding:
+For example, for the chapter file `docs/reference/04-rich-authoring-embeds-and-export.md`, its companion directory is `docs/reference/04-rich-authoring-embeds-and-export/`, holding:
 
 - `04-rich-authoring-embeds-and-export/embed-resolution-pipeline.mmd`
 - `04-rich-authoring-embeds-and-export/supported-vegalite-marks-gallery.chart.json`
@@ -159,13 +159,13 @@ When you need to share an ADR, technical specification, or review report with co
 
 ```bash
 # Export a single Markdown note (with all companion .mmd, .chart.json, .csv, and images) to HTML
-autodoc --export html --output /tmp/chapter-04.html docs/tutorials/04-rich-authoring-embeds-and-export.md
+autodoc --export html --output /tmp/chapter-04.html docs/reference/04-rich-authoring-embeds-and-export.md
 
 # Export with a specific built-in theme (light, dark, sepia, retro, or mono)
-autodoc --export html --theme dark --output /tmp/chapter-04-dark.html docs/tutorials/04-rich-authoring-embeds-and-export.md
+autodoc --export html --theme dark --output /tmp/chapter-04-dark.html docs/reference/04-rich-authoring-embeds-and-export.md
 
 # Export a Markdown note as plain text
-autodoc --export text --output /tmp/chapter-04.txt docs/tutorials/04-rich-authoring-embeds-and-export.md
+autodoc --export text --output /tmp/chapter-04.txt docs/reference/04-rich-authoring-embeds-and-export.md
 ```
 
 During HTML export (`core/export`), AutoDoc resolves every companion `.mmd` diagram, `.chart.json` chart, `.csv` table, and image, renders diagrams and charts into inline blocks, encodes raster images as `data:<mime>;base64,...` URIs, and bundles print-ready responsive CSS with theme support. The resulting `.html` file has **zero external network requests**, making it safe to archive in compliance artifacts, attach to pull requests, or view inside air-gapped environments.
@@ -182,11 +182,11 @@ Because `autodoc --export html --output <dest> <source.md>` exits with a non-zer
 
 ```bash
 # Export one chapter to verify its HTML output
-autodoc --export html --output /tmp/chapter-04.html docs/tutorials/04-rich-authoring-embeds-and-export.md
+autodoc --export html --output /tmp/chapter-04.html docs/reference/04-rich-authoring-embeds-and-export.md
 
-# Shell loop to export every chapter in docs/tutorials/ into /tmp/book-html/
+# Shell loop to export every chapter in docs/reference/ into /tmp/book-html/
 mkdir -p /tmp/book-html
-for md in docs/tutorials/*.md; do
+for md in docs/reference/*.md; do
   stem="$(basename "$md" .md)"
   autodoc --export html --theme dark --output "/tmp/book-html/${stem}.html" "$md"
 done
@@ -198,7 +198,7 @@ done
 2. **Use Standalone Paragraphs for Block Figures**: Always place `![Caption](asset.ext)` on its own line with a blank line above and below so the parser promotes it to a full-width `<figure>` with a numbered or styled `<figcaption>`.
 3. **Prefer `.csv` Companion Files for Wide Tables**: Any reference matrix with more than 4 columns or 10 rows is easier to diff, sort, and edit as a companion `.csv` file than as an inline Markdown pipe table.
 4. **Keep Vega-Lite Field Names Simple**: Use clean snake_case or camelCase field names (such as `latency_ms`, `rss_mb`, `artifact_type`) without embedded periods so field lookups in `golib/gui/vegalite` remain unambiguous.
-5. **Commit Companion Folders Alongside Notes**: When staging changes in Git, always stage both `<note-stem>.md` and `<note-stem>/` together (`git add docs/tutorials/04-rich-authoring-embeds-and-export.md docs/tutorials/04-rich-authoring-embeds-and-export/`) so every commit remains self-contained and reproducible.
+5. **Commit Companion Folders Alongside Notes**: When staging changes in Git, always stage both `<note-stem>.md` and `<note-stem>/` together (`git add docs/reference/04-rich-authoring-embeds-and-export.md docs/reference/04-rich-authoring-embeds-and-export/`) so every commit remains self-contained and reproducible.
 
 ---
 

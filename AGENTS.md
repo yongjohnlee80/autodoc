@@ -420,7 +420,7 @@ autodoc --contracts 'todos.*'                                       # every todo
 | an agent with a shell | `autodoc --call <verb> '<json params>'`; `autodoc --contracts` says what each verb takes |
 | an agent with only the auto-agents mailbox | its `todos.*` verbs; the KB's `kb.*` search verbs |
 | a program that speaks msgpack-rpc | the socket (`autodoc --print-endpoint`), `sys.hello`, then the verbs |
-| a script inside AutoDoc | Lua: `autodoc.call`, `autodoc.<domain>.<verb>` (Help › Tutorial, pages 7–9) |
+| a script inside AutoDoc | Lua: `autodoc.call`, `autodoc.<domain>.<verb>` (Help › Tutorial, pages 9–11) |
 | a tool with its own UI | a plugin (`docs/plugins.md`) |
 
 Never edit the daemon's store (`autodoc.db`), its lease, or a `.todo-list`'s `.autodoc-owner`.

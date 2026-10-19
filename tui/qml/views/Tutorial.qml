@@ -1,4 +1,4 @@
-// Tutorial.qml — Help › Tutorial…: a page at a time (tutorial.go), Markdown shown Rendered
+// Tutorial.qml — Help › Tutorial…: a page at a time (tutorial.go; docs/tutorials/), Markdown shown Rendered
 // in the GUI's window (a terminal's Editor stays Raw, as the source reads), read-only, with Previous
 // and Next (not B for Back: the page's Editor takes b, a word back). Neither is ever disabled: on the
 // first page Previous does nothing, and on the last Next is Close. At most 80% of the window's
@@ -20,7 +20,7 @@ Dialog {
             view: Editor.Rendered
             text: App.tutorialText
             SyntaxHighlighter { definition: "Markdown" }
-            MarkdownRenderer {}
+            MarkdownRenderer { mermaid: true }  // the tutorials' diagrams, drawn in the GUI
         }
     }
     DialogButtonBox {

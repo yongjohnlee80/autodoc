@@ -4,6 +4,12 @@ The command line runs commands written in Lua: **:** opens it in Vim's Normal mo
 
 **Load order.** At start AutoDoc's scripts load, then yours, in file-name order. A command named like one already loaded replaces it: yours can replace AutoDoc's, and a later file an earlier one's. A file that fails to load is a notification; the others still load. Run **:lua-reload** (or save the file in AutoDoc) to load an edited file.
 
+```mermaid
+flowchart LR
+  A[AutoDoc's scripts] --> Y[Yours, by file name]
+  Y --> C[Commands on the command line]
+```
+
 ```lua
 -- :upper [line] — upper-case a line, the cursor's by default
 autodoc.command{
@@ -25,3 +31,5 @@ autodoc.command{
 **The sandbox.** Scripts get Lua's base, table, string and math libraries: no `os`, no `io`, no files, no `require`. A script that fails, or runs past two seconds, is stopped; its error shows in the prompt, and AutoDoc carries on.
 
 **The full tutorial**, step by step from `:hello` to a `:link` that asks the daemon, is `docs/lua/tutorial-vim-commands.md` in AutoDoc's repository.
+
+More: [Reference, Chapter 14: Lua Scripting & Custom Commands](../reference/14-lua-scripting-and-custom-commands.md).

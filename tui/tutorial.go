@@ -1,27 +1,25 @@
 package tui
 
 import (
-	"embed"
 	"io/fs"
 	"strconv"
 	"strings"
+
+	"github.com/yongjohnlee80/autodoc/docs"
 )
 
-// THE TUTORIAL — Help › Tutorial…: a few pages, each Markdown, embedded in the binary and
-// read in order (tutorial/NN-name.md). The dialog shows one at a time, Rendered under --gui and as
-// text in a terminal, with Previous and Next (views/Tutorial.qml). Neither is ever disabled, so neither
-// disables itself from its own click: Previous on the first page does nothing, and Next on the last
-// is Close.
-
-//go:embed tutorial/*.md
-var tutorialFS embed.FS
+// THE TUTORIAL — Help › Tutorial…: the short tutorials of docs/tutorials/ (docs.Tutorials, the
+// files the docs site publishes), read in order. The dialog shows one at a time, Rendered under
+// --gui, its mermaid diagrams drawn, and as text in a terminal, with Previous and Next
+// (views/Tutorial.qml). Neither is ever disabled, so neither disables itself from its own click:
+// Previous on the first page does nothing, and Next on the last is Close.
 
 // tutorialPages are the pages' texts, in their files' order.
 var tutorialPages = func() []string {
-	names, _ := fs.Glob(tutorialFS, "tutorial/*.md")
+	names, _ := fs.Glob(docs.Tutorials, "tutorials/*.md")
 	pages := make([]string, 0, len(names))
 	for _, n := range names {
-		b, _ := tutorialFS.ReadFile(n)
+		b, _ := docs.Tutorials.ReadFile(n)
 		pages = append(pages, string(b))
 	}
 	return pages

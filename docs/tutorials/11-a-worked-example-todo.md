@@ -26,3 +26,5 @@ autodoc.command{
 - The daemon writes a todo list only once it is **claimed**. Until then the callback's `err` is `"-32077 …"` (`todos.unclaimed`); `autodoc --contracts 'todos.*'` says what claims one.
 
 **When to write a plugin instead.** A Lua command is for the page: it edits, asks the daemon and says what it did, all in a moment. A plugin (the **Plugins** menu; `docs/plugins.md`) is a program of its own: it keeps running, draws its own dialog or card, follows the open note, and reaches files, the network and other tools; its commands go on the Plugins menu and **SPC p**. A script that wants `os` or `io`, or more than two seconds, wants to be a plugin.
+
+More: [Reference, Chapter 10: The Built-In Todo Task Engine](../reference/10-todo-task-engine.md), and [Reference, Chapter 14: Lua Scripting & Custom Commands](../reference/14-lua-scripting-and-custom-commands.md).

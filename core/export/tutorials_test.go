@@ -1,237 +1,80 @@
 package export_test
 
 import (
-	"bytes"
-	"encoding/csv"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/yongjohnlee80/autodoc/core/export"
-	"github.com/yongjohnlee80/autodoc/core/todo"
 	mermaidparse "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
-// TestTutorialsBookEmbedsAndDiagrams verifies that the 18-chapter User Reference Book
-// ( plus README.md ) in docs/tutorials/ resolves every embedded .mmd diagram,
-// .chart.json Vega-Lite chart, and .csv table from its companion <stem>/ folder,
-// parses cleanly under golib's native Mermaid parser and Vega-Lite schema rules,
-// and contains zero manual ASCII box-drawing diagrams.
-func TestTutorialsBookEmbedsAndDiagrams(t *testing.T) {
-	tutorialsDir, err := filepath.Abs("../../docs/tutorials")
+// moreLink is a tutorial's "More:" line's link into the Reference Book.
+var moreLink = regexp.MustCompile(`\]\(\.\./reference/([^)]+)\)`)
+
+// TestTheTutorialsAreShortWithDiagramsThatDraw: docs/tutorials/'s pages (README.md, the index, is
+// none) each keep the rules of both books (checkBookPage), open with their heading, draw each
+// mermaid fence (it parses, and the HTML export draws it), and end with a "More:" line whose links
+// reach Reference Book chapters. The index lists every page.
+func TestTheTutorialsAreShortWithDiagramsThatDraw(t *testing.T) {
+	pages, err := filepath.Glob("../../docs/tutorials/[0-9]*.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	mdFiles, err := filepath.Glob(filepath.Join(tutorialsDir, "*.md"))
+	slices.Sort(pages)
+	if len(pages) < 11 {
+		t.Fatalf("%d tutorials; want at least 11", len(pages))
+	}
+	index, err := os.ReadFile("../../docs/tutorials/README.md")
 	if err != nil {
 		t.Fatal(err)
 	}
-	slices.Sort(mdFiles)
-	if len(mdFiles) < 19 {
-		t.Fatalf("found %d markdown files in %s; want README.md + 18 chapters (19 total)", len(mdFiles), tutorialsDir)
-	}
-	// Place README.md first in reading order, followed by 01..18.
-	ordered := make([]string, 0, len(mdFiles))
-	for _, p := range mdFiles {
-		if filepath.Base(p) == "README.md" {
-			ordered = append(ordered, p)
+	verbs := registeredVerbs(t)
+	for _, p := range pages {
+		base := filepath.Base(p)
+		if want := "](./" + base + ")"; !strings.Contains(string(index), want) {
+			t.Errorf("the index does not list %s", base)
 		}
-	}
-	for _, p := range mdFiles {
-		if filepath.Base(p) != "README.md" {
-			ordered = append(ordered, p)
-		}
-	}
-
-	asciiBoxChars := []rune{'┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼', '╔', '╗', '╚', '╝'}
-	allowedTopKeys := map[string]bool{
-		"$schema": true, "description": true, "name": true,
-		"autosize": true, "padding": true, "background": true, "usermeta": true,
-		"title": true, "config": true, "width": true, "height": true,
-		"data": true, "mark": true, "encoding": true,
-	}
-	allowedChannels := map[string]bool{
-		"x": true, "y": true, "color": true, "fill": true, "tooltip": true,
-	}
-	allowedMarks := map[string]bool{
-		"bar": true, "line": true, "point": true, "circle": true, "area": true,
-	}
-
-	contractsBytes, err := os.ReadFile(filepath.Join(tutorialsDir, "../../rpc/testdata/contracts.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var catalog struct {
-		Verbs []struct {
-			Verb string `json:"verb"`
-		} `json:"verbs"`
-	}
-	if err := json.Unmarshal(contractsBytes, &catalog); err != nil {
-		t.Fatal(err)
-	}
-	registeredVerbs := make(map[string]bool, len(catalog.Verbs)+32)
-	for _, v := range catalog.Verbs {
-		registeredVerbs[v.Verb] = true
-	}
-	for _, v := range (*todo.Manager)(nil).Verbs() {
-		registeredVerbs[v.Verb] = true
-	}
-
-	for idx, mdPath := range ordered {
-		base := filepath.Base(mdPath)
-		stem := strings.TrimSuffix(base, ".md")
 		t.Run(base, func(t *testing.T) {
-			src, err := os.ReadFile(mdPath)
+			src, err := os.ReadFile(p)
 			if err != nil {
 				t.Fatal(err)
 			}
 			text := string(src)
-
-			for _, r := range asciiBoxChars {
-				if strings.ContainsRune(text, r) {
-					t.Errorf("%s contains ASCII box-drawing character %q; use .mmd diagrams instead", base, r)
+			checkBookPage(t, base, text, verbs)
+			if !strings.HasPrefix(text, "# ") {
+				t.Errorf("%s does not open with its heading", base)
+			}
+			fences := strings.Split(text, "```mermaid\n")[1:]
+			for _, f := range fences {
+				diagram, _, ok := strings.Cut(f, "```")
+				if !ok {
+					t.Fatalf("%s: a mermaid fence is not closed", base)
+				}
+				if _, err := mermaidparse.Parse(diagram); err != nil {
+					t.Errorf("%s: a diagram does not parse: %v\n%s", base, err, diagram)
 				}
 			}
-
-			// Verify every concrete `autodoc --call <verb>` invocation names a registered verb.
-			for lineNo, line := range strings.Split(text, "\n") {
-				s := strings.TrimSpace(line)
-				if after, ok := strings.CutPrefix(s, "autodoc --call "); ok {
-					fields := strings.Fields(after)
-					if len(fields) > 0 && !strings.HasPrefix(fields[0], "<") && !registeredVerbs[fields[0]] {
-						t.Errorf("%s:%d: autodoc --call %q is not a registered verb in rpc/testdata/contracts.json", base, lineNo+1, fields[0])
-					}
-				}
-			}
-
-			// Verify bottom Previous / Next navigation links.
-			trimmed := strings.TrimSpace(text)
-			lastLines := trimmed
-			if nl := strings.LastIndex(trimmed, "\n"); nl >= 0 {
-				lastLines = trimmed[nl+1:]
-			}
-			if idx > 0 {
-				prevBase := filepath.Base(ordered[idx-1])
-				wantPrev := "(./" + prevBase + ")"
-				if !strings.Contains(lastLines, "Previous:") || !strings.Contains(lastLines, wantPrev) {
-					t.Errorf("%s: bottom line %q missing Previous link %s", base, lastLines, wantPrev)
-				}
-			}
-			if idx < len(ordered)-1 {
-				nextBase := filepath.Base(ordered[idx+1])
-				wantNext := "(./" + nextBase + ")"
-				if !strings.Contains(lastLines, "Next") || !strings.Contains(lastLines, wantNext) {
-					t.Errorf("%s: bottom line %q missing Next link %s", base, lastLines, wantNext)
-				}
-			}
-
-			lines := export.EmbedLines(src)
-			if len(lines) == 0 {
-				t.Fatalf("%s has no ![caption](file) embeds", base)
-			}
-
-			var mmdCount, chartCount, csvCount int
-			for _, el := range lines {
-				if !el.Alone {
-					t.Errorf("%s:%d: embed (%s) is not alone on its paragraph line and will degrade to italic alt text", base, el.From, el.Dest)
-				}
-				assetPath := filepath.Join(tutorialsDir, stem, el.Dest)
-				assetBytes, err := os.ReadFile(assetPath)
-				if err != nil {
-					t.Fatalf("%s:%d: missing companion asset %s: %v", base, el.From, assetPath, err)
-				}
-
-				switch {
-				case strings.HasSuffix(el.Dest, ".mmd"):
-					mmdCount++
-					if _, err := mermaidparse.Parse(string(assetBytes)); err != nil {
-						t.Errorf("%s: mermaid parse error in %s: %v", base, el.Dest, err)
-					}
-				case strings.HasSuffix(el.Dest, ".chart.json"):
-					chartCount++
-					var raw map[string]json.RawMessage
-					if err := json.Unmarshal(assetBytes, &raw); err != nil {
-						t.Errorf("%s: invalid JSON in %s: %v", base, el.Dest, err)
-						continue
-					}
-					for k := range raw {
-						if !allowedTopKeys[k] {
-							t.Errorf("%s: %s has unsupported top-level Vega-Lite key %q", base, el.Dest, k)
-						}
-					}
-					var spec struct {
-						Mark any `json:"mark"`
-						Data struct {
-							Values []map[string]any `json:"values"`
-						} `json:"data"`
-						Encoding map[string]struct {
-							Field string `json:"field"`
-							Type  string `json:"type"`
-						} `json:"encoding"`
-					}
-					if err := json.Unmarshal(assetBytes, &spec); err != nil {
-						t.Errorf("%s: %s failed structural unmarshal: %v", base, el.Dest, err)
-						continue
-					}
-					var markType string
-					switch m := spec.Mark.(type) {
-					case string:
-						markType = m
-					case map[string]any:
-						if mt, ok := m["type"].(string); ok {
-							markType = mt
-						}
-					}
-					if !allowedMarks[markType] {
-						t.Errorf("%s: %s has unsupported mark %q", base, el.Dest, markType)
-					}
-					if len(spec.Data.Values) == 0 {
-						t.Errorf("%s: %s has empty data.values", base, el.Dest)
-					}
-					for ch, enc := range spec.Encoding {
-						if !allowedChannels[ch] {
-							t.Errorf("%s: %s has unsupported encoding channel %q", base, el.Dest, ch)
-						}
-						if strings.ContainsAny(enc.Field, ".[]\\") {
-							t.Errorf("%s: %s channel %q field %q contains unsupported path characters", base, el.Dest, ch, enc.Field)
-						}
-					}
-				case strings.HasSuffix(el.Dest, ".csv"):
-					csvCount++
-					records, err := csv.NewReader(bytes.NewReader(assetBytes)).ReadAll()
-					if err != nil {
-						t.Errorf("%s: CSV parse error in %s: %v", base, el.Dest, err)
-					} else if len(records) < 2 {
-						t.Errorf("%s: CSV %s has %d rows; want header + at least 1 data row", base, el.Dest, len(records))
-					}
-				default:
-					t.Errorf("%s:%d: unexpected embed extension on %q", base, el.From, el.Dest)
-				}
-			}
-
-			if mmdCount == 0 || chartCount == 0 || csvCount == 0 {
-				t.Errorf("%s embeds: mmd=%d chart=%d csv=%d; want at least 1 of each (.mmd, .chart.json, .csv)", base, mmdCount, chartCount, csvCount)
-			}
-
-			htmlBytes, err := export.RenderWith(src, export.HTML, "dark", export.Options{
-				Document:    mdPath,
-				SourceSpans: true,
-			})
+			html, err := export.RenderWith(src, export.HTML, "dark", export.Options{Document: p})
 			if err != nil {
-				t.Fatalf("%s: export.RenderWith failed: %v", base, err)
+				t.Fatalf("%s: export: %v", base, err)
 			}
-			htmlStr := string(htmlBytes)
-			if got := strings.Count(htmlStr, `<pre class="mermaid">`); got != mmdCount {
-				t.Errorf("%s: rendered %d <pre class=\"mermaid\"> blocks; want %d", base, got, mmdCount)
+			if got := strings.Count(string(html), `<pre class="mermaid">`); got != len(fences) {
+				t.Errorf("%s: the export drew %d diagrams; the page has %d", base, got, len(fences))
 			}
-			if got := strings.Count(htmlStr, `<pre class="vega-lite"`); got != chartCount {
-				t.Errorf("%s: rendered %d <pre class=\"vega-lite\"> blocks; want %d", base, got, chartCount)
+			trimmed := strings.TrimSpace(text)
+			last := trimmed[strings.LastIndex(trimmed, "\n")+1:]
+			links := moreLink.FindAllStringSubmatch(last, -1)
+			if !strings.HasPrefix(last, "More: ") || len(links) == 0 {
+				t.Fatalf("%s: its last line %q is not a More: line into the Reference Book", base, last)
 			}
-			if got := strings.Count(htmlStr, `<table>`); got < csvCount {
-				t.Errorf("%s: rendered %d <table> blocks; want at least %d", base, got, csvCount)
+			for _, l := range links {
+				if _, err := os.Stat(filepath.Join("../../docs/reference", l[1])); err != nil {
+					t.Errorf("%s: More: links to %s, which is not a Reference chapter", base, l[1])
+				}
 			}
 		})
 	}
