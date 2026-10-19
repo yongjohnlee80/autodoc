@@ -129,9 +129,10 @@ func (m *Plugin) Service() bool { return m.Kind == "service" }
 func (m *Plugin) Card() bool { return m.Kind == "dialog" && !m.Modal() }
 
 // ReadPlugin reads fsys's plugin.toml: the manifest, its defaults filled in, and why it cannot run
-// (nil when it can). A manifest that does not parse is the zero Plugin, with the parse's first
-// line; one that parses but cannot run is returned all the same, so it can be listed with its
-// reason.
+// (nil when it can). A manifest that does not parse is what was decoded before the parse failed
+// (the decoder walks its keys in no fixed order), without defaults, so it may still be listed by a
+// title or name it got, with the parse's first line; one that parses but cannot run is returned all the same, so it can be listed with
+// its reason. A missing plugin.toml is the zero Plugin.
 func ReadPlugin(fsys fs.FS) (*Plugin, error) {
 	src, err := fs.ReadFile(fsys, "plugin.toml")
 	if err != nil {
@@ -145,7 +146,7 @@ func ParsePlugin(src []byte) (*Plugin, error) {
 	m := &Plugin{}
 	md, err := toml.Decode(string(src), m)
 	if err != nil {
-		return &Plugin{}, fmt.Errorf("plugin.toml: %s", firstLine(err.Error()))
+		return m, fmt.Errorf("plugin.toml: %s", firstLine(err.Error()))
 	}
 	var reason string
 	switch {
