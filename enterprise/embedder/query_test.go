@@ -71,6 +71,11 @@ func norm(v []float32) float64 {
 // search answers by words with semantic "switching"; once the switch flips, the query is embedded
 // with the new model. The mutant, named here: the switch not published (the query embedded with
 // the new model while the old one is still active).
+//
+// The test waits for the switch as a query sees it, published: the store's target is recorded
+// before (prepare), and the switch's own re-embedding calls the same provider whenever it gets
+// there, so neither the target nor a count of every call marks the query's moment. The query's
+// provider calls are its own, by its text.
 func TestAQueryWhileItsTenantSwitchesIsSwitching(t *testing.T) {
 	st := newStore()
 	st.put("a.md", "alpha")
@@ -80,15 +85,18 @@ func TestAQueryWhileItsTenantSwitchesIsSwitching(t *testing.T) {
 	w := embedder.New(built(p), []embedder.Tenant{{Name: "t", Store: st}})
 	run(t, w)
 	ctx := context.Background()
-	waitFor(t, "the switch begun", func() bool { _, tg, _ := st.Models(ctx); return tg == fingerprint("m") })
-	calls := p.callCount()
 	qctx, cancel := context.WithTimeout(ctx, 2*time.Second) // a query that reached the held provider would wait for good
 	defer cancel()
-	if _, _, err := w.QueryEmbedder("t")(qctx, "q"); !errors.Is(err, search.ErrSwitching) {
-		t.Fatalf("mid-switch: %v, want ErrSwitching", err)
+	var last error
+	waitFor(t, "a query answered switching", func() bool {
+		_, _, last = w.QueryEmbedder("t")(qctx, "q")
+		return errors.Is(last, search.ErrSwitching)
+	})
+	if _, tg, _ := st.Models(ctx); tg != fingerprint("m") {
+		t.Fatalf("a query answered switching (%v), but the target recorded is %q", last, tg)
 	}
-	if p.callCount() != calls {
-		t.Error("a query mid-switch called the provider")
+	if n := p.times("q"); n != 0 {
+		t.Errorf("a query mid-switch called the provider: it embedded the query %d times", n)
 	}
 	close(p.hold)
 	waitFor(t, "the query embedded after the flip", func() bool {
