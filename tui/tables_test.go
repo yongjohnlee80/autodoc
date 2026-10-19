@@ -116,3 +116,44 @@ func TestThePageViewIsKeptWhileATableIsShown(t *testing.T) {
 		t.Fatalf("the document view was switched %v, want on for the table, on for the raw page, off for a note", on)
 	}
 }
+
+// The table's clipboard in the terminal (ADR 1792349021 §4.8): the row numbers show; yy then p
+// duplicates a row; a system paste (a PasteEvent) fills cells from the cursor's; the yank is in
+// the editor's own register, so Raw sees it too.
+func TestTheTableYanksAndPastesInTheTerminal(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n", "c.md", "# Note\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{})
+	r.s.WaitForText(t, "· kb")
+	onLoop(r, func() bool { r.h.openPath("a.csv"); return true })
+	r.waitFile(t, "a.csv")
+	table := func() *widget.TableDocument {
+		return onLoop(r, func() *widget.TableDocument {
+			tb, _ := r.h.editor.(*widget.Editor).DocumentView().(*widget.TableDocument)
+			return tb
+		})
+	}
+	r.s.WaitFor(t, "the table shown", func(string) bool { return table() != nil })
+	tb := table()
+	if !onLoop(r, func() bool { return tb.Core().RowNumbers() }) {
+		t.Fatal("the row numbers are off")
+	}
+	key := func(c rune) tuicore.KeyEvent {
+		return tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: c, Text: string(c)}
+	}
+	r.keys(t, key('y'), key('y'), key('p'))
+	r.s.WaitFor(t, "the row pasted", func(string) bool { return r.editorText() == "h,v\na,1\na,1\nb,2\n" })
+	if text, rows := onLoop(r, func() string { s, _ := r.h.core.Register(); return s }), onLoop(r, func() bool { _, lw := r.h.core.Register(); return lw }); text != "a\t1" || !rows {
+		t.Fatalf("the editor's register holds %q (rows %v), want the row yanked", text, rows)
+	}
+	r.keys(t, tuicore.PasteEvent{Text: "x\ty\n"})
+	r.s.WaitFor(t, "the system paste", func(string) bool { return r.editorText() == "h,v\na,1\nx,y\nb,2\n" })
+	// a field past the table's last is cut off, and the notifications say so
+	r.keys(t, tuicore.PasteEvent{Text: "p\tq\tr\n"})
+	r.s.WaitFor(t, "the paste kept to the table", func(string) bool { return r.editorText() == "h,v\na,1\np,q\nb,2\n" })
+	r.s.WaitFor(t, "the cut-off said", func(string) bool { return r.noticed("the paste was cut off at the table's edge") })
+	// an open edit dropped by another file shown is said too
+	r.keys(t, tuicore.KeyEvent{Kind: tuicore.KeyPress, Code: tuicore.KeyEnter})
+	r.s.WaitFor(t, "the edit open", func(string) bool { return onLoop(r, func() bool { return tb.Core().Editing() != nil }) })
+	onLoop(r, func() bool { r.h.openPath("c.md"); return true })
+	r.s.WaitFor(t, "the dropped edit said", func(string) bool { return r.noticed("the table changed; the edit was dropped") })
+}

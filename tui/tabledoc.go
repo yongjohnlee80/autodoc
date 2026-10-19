@@ -31,7 +31,9 @@ func tableComma(p string) rune {
 func (h *Host) tableOf(b *openBuffer, comma rune) *widget.TableDocument {
 	if b.table == nil {
 		b.table = newTableDocument(h.editor, h.core, comma,
-			widget.TableOnEditDropped(func() { h.notify("the table changed; the edit was dropped") }))
+			widget.TableRowNumbers(true), // each row's number in a gutter
+			widget.TableOnEditDropped(func() { h.notify("the table changed; the edit was dropped") }),
+			widget.TableOnPasteClipped(func() { h.notify("the paste was cut off at the table's edge") }))
 	}
 	return b.table
 }

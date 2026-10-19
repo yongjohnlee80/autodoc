@@ -65,3 +65,27 @@ func TestACSVFileIsATableInTheGUI(t *testing.T) {
 		t.Fatalf("a raw HTML file after the table: the page is the document view %v, a table %v", s.page, s.table != nil)
 	}
 }
+
+// In the GUI the table's paste is the window's: the paste key's PasteEvent reaches the focused
+// table in the editor's document view and fills cells from the cursor's; the row numbers show.
+// (The window turning the platform's paste key into that PasteEvent is golib gui's, window.go.)
+func TestAPasteReachesTheTableInTheGUI(t *testing.T) {
+	d := startManagedIncluding(t, map[string]string{"kb": fileDir(t, "a.csv", "h,v\na,1\nb,2\n")}, tableInclude)
+	r := runTUI(t, NewSession(d.sock, nil), Options{ProgramOptions: []tuidecl.ProgramOption{tuidecl.WithStyle(GUIStyle(&NoteEmbeds{}))}})
+	r.s.WaitForText(t, "· kb")
+	onLoop(r, func() bool { r.h.openPath("a.csv"); return true })
+	r.waitFile(t, "a.csv")
+	table := func() *widget.TableDocument {
+		return onLoop(r, func() *widget.TableDocument {
+			tb, _ := r.h.editor.(*guiwidget.Editor).DocumentComponent().(*widget.TableDocument)
+			return tb
+		})
+	}
+	r.s.WaitFor(t, "the table shown", func(string) bool { return table() != nil })
+	tb := table()
+	if !onLoop(r, func() bool { return tb.Core().RowNumbers() }) {
+		t.Fatal("the row numbers are off")
+	}
+	r.keys(t, tuicore.PasteEvent{Text: "\"two\nlines\"\tz"})
+	r.s.WaitFor(t, "the paste in the table", func(string) bool { return r.editorText() == "h,v\n\"two\nlines\",z\nb,2\n" })
+}

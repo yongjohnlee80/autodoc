@@ -7,7 +7,7 @@ toolchain go1.26.9
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/yongjohnlee80/gio v0.1.4
-	github.com/yongjohnlee80/golib v0.7.8
+	github.com/yongjohnlee80/golib v0.7.11
 	github.com/yongjohnlee80/golib/gui v0.2.1
 	github.com/yuin/gopher-lua v1.1.2
 )
