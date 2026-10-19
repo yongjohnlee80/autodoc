@@ -322,6 +322,25 @@ func (c core) Context() context.Context                { return c.h.ctx }
 func (c core) After(d time.Duration, fn func())        { c.h.after(d, fn) }
 func (c core) Theme() string                           { return c.h.theme }
 
+// ReadAbsolute and WriteAbsolute are a file anywhere on the daemon's disk, by its absolute path:
+// the host's readFile and writeFile (file.read, file.write) for a feature, as {content, version}.
+func (c core) ReadAbsolute(ctx context.Context, path string) ([]byte, string, error) {
+	res, err := c.h.readFile(ctx, "", path, false)
+	if err != nil {
+		return nil, "", err
+	}
+	m := asMap(res)
+	b, _ := m["content"].([]byte)
+	return b, str(m, "version"), nil
+}
+func (c core) WriteAbsolute(ctx context.Context, path string, content []byte, version string) (string, error) {
+	res, err := c.h.writeFile(ctx, "", path, content, version, false)
+	if err != nil {
+		return "", err
+	}
+	return str(asMap(res), "version"), nil
+}
+
 // ThemeNames and ThemeLabels are the themes the window can wear: golib's and the user's.
 func (c core) ThemeNames() []string         { return c.h.themeNames() }
 func (c core) ThemeLabels() []string        { return c.h.themeLabels() }

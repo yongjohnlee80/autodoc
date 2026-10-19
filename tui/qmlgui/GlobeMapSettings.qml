@@ -4,17 +4,18 @@
 // the store keeps it; a colour field applies as it is typed, once it is #rrggbb or empty (the theme's).
 Dialog {
     closeOnQ: true
-    maxWidthPercent: 90
+    maxWidthPercent: 96
     maxHeightPercent: 90
     title: "GlobeMap settings"
-    width: 90
+    width: 140
     dim: false
     helpText: App.globeSettingsError
     Flex {
         direction: Tui.Horizontal
         Frame {
             title: "map"
-            Layout.fillWidth: true
+            // a fixed width: the groups take the rest
+            Layout.preferredWidth: 44
             Flex {
                 direction: Tui.Horizontal
                 Text { text: " " }
@@ -46,16 +47,13 @@ Dialog {
                         Text { text: "settling speed"; Layout.preferredWidth: 18; toolTipText: "how fast the map settles: slow 1, gentle 2, normal 4, fast 8 steps a frame" }
                         ComboBox { model: App.globeSpeeds; textRole: "label"; currentIndex: App.globeSpeedIndex; onActivated: App.setGlobeSpeed(index) }
                     }
-                    Text { text: "" }
-                    Text { text: "colour rules, the first match wins:"; toolTipText: "#tag=#rrggbb colours a tag's documents (its nested tags too); folder/=#rrggbb a folder's. Apart by ;" }
-                    TextField { id: globeRules; text: App.globeRulesText; placeholderText: "#tag=#rrggbb; folder/=#rrggbb"; onTextEdited: App.setGlobeRules(text); onAccepted: App.setGlobeRules(text) }
                 }
                 Text { text: " " }
             }
         }
         Text { text: " " }
         Frame {
-            title: "colours (#rrggbb; empty: the theme's)"
+            title: "groups: the first a document matches is its colour"
             Layout.fillWidth: true
             Flex {
                 direction: Tui.Horizontal
@@ -63,37 +61,42 @@ Dialog {
                 Flex {
                     direction: Tui.Vertical
                     Layout.fillWidth: true
-                    Flex {
-                        direction: Tui.Horizontal
-                        Text { text: "ADRs"; Layout.preferredWidth: 18 }
-                        TextField { text: App.globeAdrColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("adr", text) }
+                    Text { text: App.globeGroupsNote; wrapMode: Tui.WordWrap }
+                    ListView {
+                        id: globeGroups
+                        palette.highlight: Theme.document.highlight
+                        palette.highlightedText: Theme.document.highlightedText
+                        model: App.globeGroupRows
+                        textRole: "label"
+                        currentIndex: App.globeGroupRow
+                        onCurrentIndexChanged: App.globeGroupMoved(index)
+                        Layout.fillHeight: true
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "reviews"; Layout.preferredWidth: 18 }
-                        TextField { text: App.globeReviewColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("review", text) }
+                        Text { text: "query"; Layout.preferredWidth: 10; toolTipText: "type:<type> (the schema's), tag:#<tag> (a nested tag too), path:<folder>/" }
+                        TextField { text: App.globeGroupQuery; onTextEdited: App.globeGroupQuerySet(text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "conventions"; Layout.preferredWidth: 18 }
-                        TextField { text: App.globeConventionColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("convention", text) }
+                        Text { text: "colour"; Layout.preferredWidth: 10 }
+                        TextField { text: App.globeGroupColour; placeholderText: "#rrggbb"; onTextEdited: App.globeGroupColourSet(text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "syntheses"; Layout.preferredWidth: 18 }
-                        TextField { text: App.globeSynthesisColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("synthesis", text) }
-                    }
-                    Flex {
-                        direction: Tui.Horizontal
-                        Text { text: "PRs"; Layout.preferredWidth: 18 }
-                        TextField { text: App.globePrColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("pr", text) }
-                    }
-                    Flex {
-                        direction: Tui.Horizontal
-                        Text { text: "other documents"; Layout.preferredWidth: 18 }
-                        TextField { text: App.globeOtherColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("other", text) }
+                        Button { text: "&Add"; onClicked: App.globeGroupAdd() }
+                        Button { text: "Remove"; onClicked: App.globeGroupRemove() }
+                        Button { text: "Up"; toolTipText: "earlier groups win"; onClicked: App.globeGroupUp() }
+                        Button { text: "Down"; onClicked: App.globeGroupDown() }
+                        Button { text: "Add missing"; toolTipText: "a group for each schema type and folder no group queries"; onClicked: App.globeGroupsAddMissing() }
                     }
                     Text { text: "" }
+                    Text { text: "other colours (#rrggbb; empty: the theme's)" }
+                    Flex {
+                        direction: Tui.Horizontal
+                        Text { text: "no group's"; Layout.preferredWidth: 18 }
+                        TextField { text: App.globeOtherColour; placeholderText: "the theme's"; onTextEdited: App.setGlobeColour("other", text) }
+                    }
                     Flex {
                         direction: Tui.Horizontal
                         Text { text: "body links"; Layout.preferredWidth: 18; toolTipText: "wikilinks, embeds and Markdown links" }

@@ -16,6 +16,7 @@ import (
 	"github.com/yongjohnlee80/golib/vfs/local"
 
 	"github.com/yongjohnlee80/autodoc/core/docs"
+	"github.com/yongjohnlee80/autodoc/rpc"
 )
 
 // outside_test.go: files outside every workspace (ADR 1791430651) — File › Open file… and File ›
@@ -334,5 +335,34 @@ func TestAnExcludedFileSaysWhyAndOffersItsSettings(t *testing.T) {
 	}
 	if a := onLoop(r, func() *openBuffer { return r.h.bufferOf(fileRef{"kb", "a.md"}) }); a == nil || !onLoop(r, func() bool { return a.file.dirty }) {
 		t.Fatal("a.md's buffer lost its unsaved edit")
+	}
+}
+
+// A feature reads and writes a file outside every workspace through core (the host's readFile and
+// writeFile): created from no version, read back with the version it wrote, a stale version a
+// conflict.
+func TestCoreReadsAndWritesAnAbsoluteFile(t *testing.T) {
+	r, _, _, abs := runOutside(t)
+	c := core{r.h}
+	p := filepath.Join(filepath.Dir(abs), ".autodoc", "graph.toml")
+	ctx := context.Background()
+	v1, err := c.WriteAbsolute(ctx, p, []byte("one\n"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, v, err := c.ReadAbsolute(ctx, p)
+	if err != nil || string(b) != "one\n" || v != v1 {
+		t.Fatalf("read back %q, %q, %v; want one, %q", b, v, err, v1)
+	}
+	if _, err := c.WriteAbsolute(ctx, p, []byte("two\n"), "stale"); code(err) != rpc.CodeConflict {
+		t.Errorf("a stale version: %v; want a conflict", err)
+	}
+	if _, _, err := c.ReadAbsolute(ctx, filepath.Join(filepath.Dir(abs), "none.toml")); code(err) != rpc.CodeNotFound {
+		t.Errorf("no file: %v; want not found", err)
+	}
+	// the theme choices a chooser offers: its own first, then every theme the window can wear
+	names, labels := themeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
+	if names[0] != "terminal" || labels[1] != "the page's" || len(names) != len(labels) || len(names) < 3 {
+		t.Errorf("choices %q, %q", names, labels)
 	}
 }

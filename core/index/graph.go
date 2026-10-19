@@ -1,6 +1,7 @@
 package index
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -121,6 +122,9 @@ type MapOpts struct {
 	Root  string
 	Depth int
 	Kinds []string
+	// TypeField is the frontmatter field a node's Type is read from: the schema's discriminator;
+	// "" is "type".
+	TypeField string
 }
 
 // Map gathers graph.map. The workspace's resolved links of the given kinds are read as a
@@ -178,7 +182,7 @@ func (s *Store) graphMap(ctx context.Context, o MapOpts, rooted bool) (Map, erro
 		paths := map[int64]string{}
 		for _, d := range found {
 			paths[d.ID] = d.Path
-			n := MapNode{Path: d.Path, Type: frontmatterType(d.FrontmatterJSON), Superseded: superseded[d.ID], Tags: tags[d.ID]}
+			n := MapNode{Path: d.Path, Type: frontmatterType(d.FrontmatterJSON, cmp.Or(o.TypeField, "type")), Superseded: superseded[d.ID], Tags: tags[d.ID]}
 			if d.Title != nil {
 				n.Title = *d.Title
 			}
@@ -245,7 +249,7 @@ func (s *Store) superseded(tx *store.Tx) (map[int64]bool, error) {
 }
 
 // frontmatterType is a document's frontmatter "type", "" when it has none or it is not a string.
-func frontmatterType(raw *string) string {
+func frontmatterType(raw *string, field string) string {
 	if raw == nil || *raw == "" {
 		return ""
 	}
@@ -253,7 +257,7 @@ func frontmatterType(raw *string) string {
 	if json.Unmarshal([]byte(*raw), &front) != nil {
 		return ""
 	}
-	t, _ := front["type"].(string)
+	t, _ := front[field].(string)
 	return t
 }
 

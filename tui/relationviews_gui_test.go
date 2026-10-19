@@ -32,6 +32,8 @@ func TestTheGUIWritesTheRelationViews(t *testing.T) {
 		`MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }`,
 		`MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }`,
 		"Dialog {\n        id: globeMapSettings\n", `title: "GlobeMap settings"`,
+		"Dialog {\n        id: mindmapSettings\n", `title: "Mindmap settings"`,
+		`MenuItem { text: "Mi&ndmap settings…"; onTriggered: App.openMindmapSettings() }`,
 		"id: globeMap\n", "GlobeMap {\n            id: globeMapView", `App.panelOpened("globeMap")`,
 		"id: mindmap\n", "Mindmap {\n            id: mindmapView", `App.panelOpened("mindmap")`,
 	} {
@@ -94,8 +96,8 @@ func TestTheGlobeMapsPictureIsConstantOperations(t *testing.T) {
 		} else if got != paths {
 			t.Errorf("%d documents: %d path operations; %d for the smaller map", n, got, paths)
 		}
-		if fills := countOps(rc, "FillPath"); fills != len(relationTypes)+1 {
-			t.Errorf("%d documents: %d path fills, want one per colour (each type its own)", n, fills)
+		if fills := countOps(rc, "FillPath"); fills != 1 {
+			t.Errorf("%d documents, no groups: %d path fills, want one (no group's colour)", n, fills)
 		}
 		if texts, rows := countOps(rc, "DrawText"), len(p.nameRows(globeView800.size)); texts != rows {
 			t.Errorf("%d documents: %d texts for %d rows of names", n, texts, rows)
@@ -148,23 +150,23 @@ func TestTheGlobeMapsNamesCostOneDrawTextARow(t *testing.T) {
 func TestTheGlobeMapsDotsKeepTheirSizeOnScreen(t *testing.T) {
 	gl := settledGlobe(t, relMapOf(40))
 	l := defaultLook
-	d1 := dotsAt(globeDots{}, gl, l, 1, 1)
-	if again := dotsAt(d1, gl, l, 1, 1); again.fills[0].path != d1.fills[0].path {
+	d1 := dotsAt(globeDots{}, gl, l, nil, 1, 1)
+	if again := dotsAt(d1, gl, l, nil, 1, 1); again.fills[0].path != d1.fills[0].path {
 		t.Fatal("the same frame and zoom made its dots again")
 	}
-	if dotsAt(d1, gl, l, 1.05, 1).fills[0].path != d1.fills[0].path {
+	if dotsAt(d1, gl, l, nil, 1.05, 1).fills[0].path != d1.fills[0].path {
 		t.Fatal("a zoom within its step made the dots again")
 	}
-	if dotsAt(d1, gl, l, 8, 1).fills[0].path == d1.fills[0].path {
+	if dotsAt(d1, gl, l, nil, 8, 1).fills[0].path == d1.fills[0].path {
 		t.Fatal("a zoom eight times in kept the dots made for the fit")
 	}
-	if dotsAt(d1, gl, newGlobeLook(prefs{}, defaultPalette()), 1, 1).fills[0].path == d1.fills[0].path {
+	if dotsAt(d1, gl, newGlobeLook(prefs{}, defaultPalette()), nil, 1, 1).fills[0].path == d1.fills[0].path {
 		t.Fatal("another look kept the dots made for the first")
 	}
 	// the path itself: one document's dot, in layout units, shrinks with the zoom (a little less)
 	one := settledGlobe(t, relMapOf(1))
-	w1 := dotsAt(globeDots{}, one, l, 1, 1).fills[0].path.Bounds().W
-	w8 := dotsAt(globeDots{}, one, l, 8, 1).fills[0].path.Bounds().W
+	w1 := dotsAt(globeDots{}, one, l, nil, 1, 1).fills[0].path.Bounds().W
+	w8 := dotsAt(globeDots{}, one, l, nil, 8, 1).fills[0].path.Bounds().W
 	if ratio := w8 * 8 / w1; ratio < 1 || ratio > 2 {
 		t.Errorf("a dot %v layout units wide at zoom 1, %v at zoom 8: on screen it grew %v times; want 1 to 2", w1, w8, ratio)
 	}

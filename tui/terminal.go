@@ -86,21 +86,30 @@ func terminalPrefRows(t *terminals) []PrefSpec {
 const prefTermTheme = "tui.terminal.theme"
 
 // termThemes are the choices, "page" first.
-func termThemes() []string { return append([]string{"page"}, themeNames...) }
-
-func termThemeLabels() []string { return append([]string{"the page's"}, themeNames...) }
+func termThemes() []string {
+	names, _ := themeChoices(nil, []string{"page"}, nil)
+	return names
+}
 
 func (t *terminals) themeNames() []string {
-	if c, ok := t.c.(interface{ ThemeNames() []string }); ok {
-		return append([]string{"page"}, c.ThemeNames()...)
-	}
-	return termThemes()
+	names, _ := themeChoices(t.c, []string{"page"}, []string{"the page's"})
+	return names
 }
 func (t *terminals) themeLabels() []string {
-	if c, ok := t.c.(interface{ ThemeLabels() []string }); ok {
-		return append([]string{"the page's"}, c.ThemeLabels()...)
+	_, labels := themeChoices(t.c, []string{"page"}, []string{"the page's"})
+	return labels
+}
+
+// themeChoices are a theme chooser's values and labels: lead's first (the page's, the terminals'),
+// then every theme the window can wear (c's ThemeNames and ThemeLabels), else golib's.
+func themeChoices(c any, lead, leadLabels []string) (names, labels []string) {
+	names, labels = slices.Clone(lead), slices.Clone(leadLabels)
+	n, ok1 := c.(interface{ ThemeNames() []string })
+	l, ok2 := c.(interface{ ThemeLabels() []string })
+	if ok1 && ok2 {
+		return append(names, n.ThemeNames()...), append(labels, l.ThemeLabels()...)
 	}
-	return termThemeLabels()
+	return append(names, themeNames...), append(labels, themeNames...)
 }
 
 // termLook is the theme the terminals are drawn in for p on a page drawn in page: its document's

@@ -359,6 +359,17 @@ func TestMap(t *testing.T) {
 		t.Errorf("body kinds' edges %+v, want %+v", body.Edges, want)
 	}
 
+	// another field names the type: the schema's discriminator
+	e.put("k.md", "---\nkind: note\ntype: adr\n---\nK\n")
+	byKind, err := e.store.Map(ctx, MapOpts{TypeField: "kind"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range byKind.Nodes {
+		if want := map[string]string{"k.md": "note"}[n.Path]; n.Type != want {
+			t.Errorf("by kind, %s: type %q; want %q", n.Path, n.Type, want)
+		}
+	}
 	if _, err := e.store.Map(ctx, MapOpts{Root: "nope.md"}); !errors.Is(err, ErrNoDocument) {
 		t.Errorf("an unknown root: %v", err)
 	}

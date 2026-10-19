@@ -27,10 +27,12 @@ type mapEdge struct {
 	Kind     string
 }
 
-// relMap is one graph.map answer: its documents, sorted by path, and the links among them.
+// relMap is one graph.map answer: its documents, sorted by path, the links among them, and the
+// document types the workspace's schema declares, in its order (protocol 28; none without one).
 type relMap struct {
 	Nodes []mapNode
 	Edges []mapEdge
+	Types []string
 }
 
 // decodeMap reads graph.map's answer. A link naming a document the answer does not hold is
@@ -49,6 +51,11 @@ func decodeMap(res any) relMap {
 			}
 		}
 		m.Nodes = append(m.Nodes, mapNode{Path: str(nm, "path"), Title: str(nm, "title"), Type: str(nm, "type"), Superseded: superseded, Tags: tags})
+	}
+	for _, t := range asList(asMap(res)["types"]) {
+		if t, ok := t.(string); ok && t != "" {
+			m.Types = append(m.Types, t)
+		}
 	}
 	for _, e := range asList(asMap(res)["edges"]) {
 		em := asMap(e)
@@ -69,12 +76,27 @@ func (m relMap) label(i int) string {
 	return path.Base(m.Nodes[i].Path)
 }
 
-// mindShape is a mind map node's outline by its document's frontmatter type; any other type, and
-// none, is MindDefault, a rounded box: golib draws MindRounded as it draws MindCloud (a synthesis),
-// and the legend tells each type's apart. Every node keeps its own ID whatever its shape.
-var mindShape = map[string]pm.MindShape{
-	"adr": pm.MindHexagon, "convention": pm.MindSquare, "review": pm.MindCircle,
-	"synthesis": pm.MindCloud, "pr": pm.MindBang,
+// mindShapes are the outlines a Mindmap node can take, by the names the settings store: six that
+// golib draws apart (it draws MindCloud as MindRounded, so a cloud is not one of them).
+var mindShapes = []struct {
+	name  string
+	shape pm.MindShape
+}{
+	{"box", pm.MindDefault}, {"square", pm.MindSquare}, {"pill", pm.MindRounded},
+	{"circle", pm.MindCircle}, {"double circle", pm.MindBang}, {"hexagon", pm.MindHexagon},
+}
+
+// mindAutoShapes are the outlines a view's first groups take by their place: every later one a box.
+var mindAutoShapes = []pm.MindShape{pm.MindHexagon, pm.MindCircle, pm.MindSquare, pm.MindRounded, pm.MindBang}
+
+// mindShapeName is a shape's stored name; "" for one not of mindShapes.
+func mindShapeName(s pm.MindShape) string {
+	for _, m := range mindShapes {
+		if m.shape == s {
+			return m.name
+		}
+	}
+	return ""
 }
 
 // mindID is the model ID of document i: the click on its node names it back (mindIndex).
@@ -91,8 +113,9 @@ func (m relMap) mindIndex(id string) (int, bool) {
 
 // mindmapModel is m as a mind map rooted at the document root: each document placed once, under
 // the one that reached it first breadth-first from root, neighbours taken in path order, links
-// followed both ways. A document root does not reach is not in it; nil when root is not in m.
-func mindmapModel(m relMap, root string) *pm.MindmapDiagram {
+// followed both ways, each in its outline (shape: its group's). A document root does not reach is
+// not in it; nil when root is not in m.
+func mindmapModel(m relMap, root string, shape func(n mapNode) pm.MindShape) *pm.MindmapDiagram {
 	r := slices.IndexFunc(m.Nodes, func(n mapNode) bool { return n.Path == root })
 	if r < 0 {
 		return nil
@@ -107,7 +130,7 @@ func mindmapModel(m relMap, root string) *pm.MindmapDiagram {
 	at := make([]int, len(m.Nodes)) // a document's index in the model, plus one; 0 not placed
 	d := &pm.MindmapDiagram{}
 	place := func(i, parent int) {
-		d.Nodes = append(d.Nodes, pm.MindNode{ID: mindID(i), Label: m.label(i), Shape: shapeOf(m.Nodes[i].Type), Parent: parent})
+		d.Nodes = append(d.Nodes, pm.MindNode{ID: mindID(i), Label: m.label(i), Shape: shape(m.Nodes[i]), Parent: parent})
 		at[i] = len(d.Nodes)
 	}
 	place(r, -1)
@@ -122,13 +145,6 @@ func mindmapModel(m relMap, root string) *pm.MindmapDiagram {
 		}
 	}
 	return d
-}
-
-func shapeOf(typ string) pm.MindShape {
-	if s, ok := mindShape[typ]; ok {
-		return s
-	}
-	return pm.MindDefault
 }
 
 // globeSettingsElsewhere is App.openGlobeSettings where there is no GlobeMap: a terminal.

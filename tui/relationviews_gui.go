@@ -6,7 +6,6 @@ import (
 	"embed"
 	"fmt"
 	"image/color"
-	"strconv"
 	"strings"
 
 	graphlayout "github.com/yongjohnlee80/golib/graph/layout"
@@ -33,6 +32,7 @@ const (
 const relationMenuQML = `            MenuItem { text: "&GlobeMap"; onTriggered: App.toggleGlobeMap() }
             MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }
             MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }
+            MenuItem { text: "Mi&ndmap settings…"; onTriggered: App.openMindmapSettings() }
 `
 
 // relationColours are the theme's colours a view is drawn in, as its properties bind them.
@@ -57,9 +57,10 @@ var relationViewsQML = relationDialogsQML + relationPanelQML(globeMapPanelID, gl
 //go:embed qmlgui/*.qml
 var relationDialogs embed.FS
 
-// relationDialogsQML is the views' dialogs as main.qml holds them: the GlobeMap's settings
-// (globesettings_gui.go).
-var relationDialogsQML = inlineDialog("GlobeMapSettings.qml", "globeMapSettings")
+// relationDialogsQML is the views' dialogs as main.qml holds them: their settings
+// (globesettings_gui.go, mindsettings_gui.go).
+var relationDialogsQML = inlineDialog("GlobeMapSettings.qml", "globeMapSettings") +
+	inlineDialog("MindmapSettings.qml", "mindmapSettings")
 
 // inlineDialog is the dialog of qmlgui/file, its root given the id: the file's text from its root
 // Dialog on, indented as main.qml's children are.
@@ -127,18 +128,6 @@ func paletteOf(v map[string]string, def relPalette) relPalette {
 		p.types[t] = c(key, def.types[t])
 	}
 	return p
-}
-
-// parseHex reads a colour given as #rrggbb.
-func parseHex(s string) (color.NRGBA, bool) {
-	if len(s) != 7 || s[0] != '#' {
-		return color.NRGBA{}, false
-	}
-	n, err := strconv.ParseUint(s[1:], 16, 32)
-	if err != nil {
-		return color.NRGBA{}, false
-	}
-	return color.NRGBA{R: uint8(n >> 16), G: uint8(n >> 8), B: uint8(n), A: 0xff}, true
 }
 
 // relPalette is a view's colours.
@@ -220,7 +209,10 @@ func (h *Host) relationViewFeatures() []Feature {
 		return nil
 	}
 	if h.relationViews == nil {
-		h.relationViews = []Feature{newGlobeMap(core{h}, h.globePresenter), newMindmap(core{h})}
+		store := newGraphStore(core{h}, core{h}, h.graphUserFile) // the views' groups, one store for both
+		g, m := newGlobeMap(core{h}, h.globePresenter), newMindmap(core{h})
+		g.store, g.editor.store, m.store = store, store, store
+		h.relationViews = []Feature{g, m}
 	}
 	return h.relationViews
 }
@@ -329,44 +321,41 @@ func legendLine(col color.NRGBA) func(gui.Canvas, gui.Rect) {
 	}
 }
 
-// legendForm is a Mindmap node's outline by its shape, as golib draws it (gui/mermaid's forms),
-// filled and stroked in th's node colours.
+// legendForm is a Mindmap node's outline by its shape, in th's node colours: the map's own
+// (gui/mermaid.PaintMindShape).
 func legendForm(s pm.MindShape, th guimermaid.Theme) func(gui.Canvas, gui.Rect) {
 	return func(c gui.Canvas, b gui.Rect) {
-		fill, stroke := gui.Solid(th.NodeFill), gui.Solid(th.NodeStroke)
-		poly := func(pts ...gui.Point) {
-			p := (&gui.Path{}).MoveTo(pts[0])
-			for _, q := range pts[1:] {
-				p.LineTo(q)
-			}
-			p.Close()
-			c.FillPath(p, fill)
-			c.StrokePath(p, 1, stroke)
-		}
-		rrect := func(r float32) { c.FillRRect(b, r, fill); c.StrokeRRect(b, r, 1, stroke) }
-		x0, y0, x1, y1, cy := b.X, b.Y, b.X+b.W, b.Y+b.H, b.Y+b.H/2
-		switch s {
-		case pm.MindSquare:
-			rrect(0)
-		case pm.MindRounded, pm.MindCloud:
-			rrect(b.H / 2)
-		case pm.MindCircle, pm.MindBang:
-			d := b.H
-			e := gui.Rect{X: b.X + (b.W-d)/2, Y: b.Y, W: d, H: d}
-			c.FillEllipse(e, fill)
-			p := &gui.Path{}
-			circle(p, graphlayout.Point{X: e.X + d/2, Y: e.Y + d/2}, d/2)
-			c.StrokePath(p, 1, stroke)
-			if s == pm.MindBang {
-				q := &gui.Path{}
-				circle(q, graphlayout.Point{X: e.X + d/2, Y: e.Y + d/2}, d/2-3)
-				c.StrokePath(q, 1, stroke)
-			}
-		case pm.MindHexagon:
-			k := b.H / 4
-			poly(gui.Pt(x0+k, y0), gui.Pt(x1-k, y0), gui.Pt(x1, cy), gui.Pt(x1-k, y1), gui.Pt(x0+k, y1), gui.Pt(x0, cy))
-		default:
-			rrect(min(b.H/4, 8))
+		guimermaid.PaintMindShape(c, s, b, th.NodeFill, th.NodeStroke, 1, max(th.Font.Size, 8)*0.6)
+	}
+}
+
+// groupLegend are a legend's rows for the groups of gs that documents of m wear, in the groups'
+// order, each its mark; at most groupLegendRows, then a row saying how many more. None at all says
+// how to have some.
+func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, gui.Rect)) []legendRow {
+	none := func(gui.Canvas, gui.Rect) {}
+	if gs == nil || len(gs.list) == 0 {
+		return []legendRow{{none, "no groups: no schema types or folders (settings add them)"}}
+	}
+	worn := make([]bool, len(gs.list))
+	for _, n := range m.Nodes {
+		if i := gs.of(n); i >= 0 {
+			worn[i] = true
 		}
 	}
+	var rows []legendRow
+	more := 0
+	for i, g := range gs.list {
+		switch {
+		case !worn[i]:
+		case len(rows) < groupLegendRows:
+			rows = append(rows, legendRow{mark(g), groupLabel(g.Query)})
+		default:
+			more++
+		}
+	}
+	if more > 0 {
+		rows = append(rows, legendRow{none, fmt.Sprintf("… %d more groups", more)})
+	}
+	return rows
 }

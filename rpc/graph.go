@@ -62,6 +62,7 @@ type edgeJSON struct {
 type mapJSON struct {
 	Nodes []mapNodeJSON `json:"nodes"`
 	Edges []edgeJSON    `json:"edges"`
+	Types []string      `json:"types,omitempty"` // protocol 28: the schema's document types, in its order
 }
 
 type mapNodeJSON struct {
@@ -134,20 +135,28 @@ func (s *Server) graphVerbs() []module.Verb {
 				return out, nil
 			}),
 		module.Handle(module.Contract{Verb: "graph.map", Effect: module.EffectRead, Since: mapSince, Scope: ws, Audience: agent,
-			Result: "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}]}",
+			Result: "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28)}",
 			Errors: []int64{CodeNoSuchWorkspace, CodeNotFound},
-			Doc:    "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it."},
+			Doc: "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. " +
+				"From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), " +
+				"and a node's type is its value of the schema's discriminator field (type without one)."},
 			func(ctx context.Context, p graphMap) (*mapJSON, error) {
 				o, err := mapOpts(ctx, p.Options.raw)
 				if err != nil {
 					return nil, err
 				}
+				tags := protocolOf(ctx) >= mapTagsSince
+				var types []string
+				if tags { // the schema's types, and its discriminator naming each node's
+					if sch, _, ok := workspaceOf(ctx).FrontmatterSchema(); ok && sch != nil && sch.Discriminator != "" {
+						o.TypeField, types = sch.Discriminator, sch.Types()
+					}
+				}
 				m, err := workspaceOf(ctx).Index().Store().Map(ctx, o)
 				if err != nil {
 					return nil, err
 				}
-				out := &mapJSON{Nodes: make([]mapNodeJSON, len(m.Nodes)), Edges: make([]edgeJSON, len(m.Edges))}
-				tags := protocolOf(ctx) >= mapTagsSince
+				out := &mapJSON{Nodes: make([]mapNodeJSON, len(m.Nodes)), Edges: make([]edgeJSON, len(m.Edges)), Types: types}
 				for i, n := range m.Nodes {
 					out.Nodes[i] = mapNodeJSON{Path: n.Path, Title: n.Title, Type: n.Type, Superseded: n.Superseded}
 					if tags {
@@ -201,7 +210,7 @@ const relationsSince = 14
 const todoGraphSince = 23
 
 // mapSince is the protocol graph.map came in (ADR 1792347044), and mapTagsSince the one its nodes'
-// tags came in.
+// tags, the schema's types and the nodes' types by its discriminator came in.
 const (
 	mapSince     = 26
 	mapTagsSince = 28

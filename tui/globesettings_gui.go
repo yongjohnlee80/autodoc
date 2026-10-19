@@ -3,8 +3,9 @@
 package tui
 
 import (
-	"fmt"
+	"cmp"
 	"image/color"
+	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -13,9 +14,10 @@ import (
 // THE GLOBEMAP'S SETTINGS — Relations › GlobeMap settings… and Preferences › GlobeMap…: the
 // GlobeMap's own preferences, kept in the store as tui.globemap.*. Its theme (the terminals', by
 // default; the page's; or one named), whether it names documents, the links it follows when it
-// opens, its dots' size, how fast it settles, and colours of the user's own over the theme's: per
-// document type, per link class, the superseded ring, and rules by tag or folder, the first that
-// matches winning. A colour field takes #rrggbb, or nothing for the theme's.
+// opens, its dots' size, how fast it settles, and colours of the user's own over the theme's: a
+// document no group matches, each link class, and the superseded ring. A colour field takes
+// #rrggbb, or nothing for the theme's. Its groups, which colour the documents, are the workspace's
+// graph file's (groups.go, graphconf.go), edited in the same dialog (groupeditor_gui.go).
 
 const (
 	prefGlobeTheme  = "tui.globemap.theme"
@@ -23,7 +25,6 @@ const (
 	prefGlobeFilter = "tui.globemap.filter"
 	prefGlobeDots   = "tui.globemap.dots"
 	prefGlobeSpeed  = "tui.globemap.speed"
-	prefGlobeRules  = "tui.globemap.rules"
 	prefGlobeColour = "tui.globemap.colour." // and a globeColourFields key
 )
 
@@ -39,13 +40,10 @@ var globeSpeeds = []struct {
 	steps       int
 }{{"slow", "slow", 1}, {"gentle", "gentle", 2}, {"normal", "normal", 4}, {"fast", "fast", 8}}
 
-// globeColourFields are the colours the user may give, each a text field and a preference: per
-// document type (relationTypes, then any other), per link class (edgeClass), and the ring round a
-// superseded document.
+// globeColourFields are the colours the user may give, each a text field and a preference: a
+// document no group matches, per link class (edgeClass), and the ring round a superseded document.
 var globeColourFields = []struct{ key, source string }{
-	{"adr", "App.globeAdrColour"}, {"review", "App.globeReviewColour"},
-	{"convention", "App.globeConventionColour"}, {"synthesis", "App.globeSynthesisColour"},
-	{"pr", "App.globePrColour"}, {"other", "App.globeOtherColour"},
+	{"other", "App.globeOtherColour"},
 	{"link.body", "App.globeBodyLinkColour"}, {"link.supersession", "App.globeSupersessionLinkColour"},
 	{"link.relation", "App.globeRelationLinkColour"}, {"superseded", "App.globeRingColour"},
 }
@@ -54,31 +52,21 @@ var globeColourFields = []struct{ key, source string }{
 // its dots' scale and its pace. Made on the loop, never changed once made: a load's pictures read it.
 type globeLook struct {
 	pal   relPalette
-	types map[string]color.NRGBA // a document's colour by its frontmatter type
-	other color.NRGBA            // a type of no colour of its own
+	other color.NRGBA // a document no group matches
 	edges [edgeClasses]color.NRGBA
 	ring  color.NRGBA
-	rules []globeRule
 	names bool
 	dot   float32 // the dots' scale
 	steps int     // simulation steps between pictures shown
 }
 
-// globeRule colours the documents of a tag, or under a folder.
-type globeRule struct {
-	tag    string // a tag, lower case, without its #; "" for a folder's rule
-	folder string // a path prefix, ending in /
-	c      color.NRGBA
-}
-
 // defaultLook is the look of no preferences in the default palette: a test's view.
 var defaultLook = newGlobeLook(prefs{}, defaultPalette())
 
-// newGlobeLook is the look of preferences p over the theme's palette pal. A colour, a rule or a
-// choice that does not read is the default's.
+// newGlobeLook is the look of preferences p over the theme's palette pal. A colour or a choice
+// that does not read is the default's.
 func newGlobeLook(p prefs, pal relPalette) *globeLook {
-	l := &globeLook{pal: pal, names: p.Value(prefGlobeNames) != "false", dot: 1, steps: 2,
-		types: map[string]color.NRGBA{}}
+	l := &globeLook{pal: pal, names: p.Value(prefGlobeNames) != "false", dot: 1, steps: 2}
 	for _, d := range globeDotSizes {
 		if d.name == p.Value(prefGlobeDots) {
 			l.dot = d.scale
@@ -95,9 +83,6 @@ func newGlobeLook(p prefs, pal relPalette) *globeLook {
 		}
 		return def
 	}
-	for _, t := range relationTypes {
-		l.types[t] = colour(t, pal.types[t])
-	}
 	l.other = colour("other", pal.text)
 	l.edges = [edgeClasses]color.NRGBA{
 		edgeBody:         colour("link.body", mixNRGBA(pal.background, pal.muted, 0.8)),
@@ -105,51 +90,17 @@ func newGlobeLook(p prefs, pal relPalette) *globeLook {
 		edgeRelation:     colour("link.relation", mixNRGBA(pal.background, pal.relation, 0.7)),
 	}
 	l.ring = colour("superseded", pal.superseded)
-	l.rules, _ = parseGlobeRules(p.Value(prefGlobeRules))
 	return l
 }
 
-// colourOf is document n's dot's colour: the first rule it matches, else its type's.
-func (l *globeLook) colourOf(n mapNode) color.NRGBA {
-	for _, r := range l.rules {
-		if r.folder != "" && strings.HasPrefix(n.Path, r.folder) {
-			return r.c
+// colourOf is document n's dot's colour: its group's (the first that matches), else other's.
+func (l *globeLook) colourOf(n mapNode, gs *relGroups) color.NRGBA {
+	if gs != nil {
+		if i := gs.of(n); i >= 0 {
+			return gs.list[i].Colour
 		}
-		if r.tag != "" && slices.ContainsFunc(n.Tags, func(t string) bool {
-			t = strings.ToLower(strings.TrimPrefix(t, "#"))
-			return t == r.tag || strings.HasPrefix(t, r.tag+"/") // a nested tag is its parent's too
-		}) {
-			return r.c
-		}
-	}
-	if c, ok := l.types[n.Type]; ok {
-		return c
 	}
 	return l.other
-}
-
-// parseGlobeRules reads the rules field: "#tag=#rrggbb; folder/=#rrggbb", rules apart by ; or a
-// new line.
-func parseGlobeRules(s string) ([]globeRule, error) {
-	var out []globeRule
-	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == ';' || r == '\n' }) {
-		if part = strings.TrimSpace(part); part == "" {
-			continue
-		}
-		k, v, ok := strings.Cut(part, "=")
-		k = strings.TrimSpace(k)
-		c, isHex := parseHex(strings.TrimSpace(v))
-		name := strings.Trim(strings.TrimPrefix(k, "#"), "/")
-		if !ok || !isHex || name == "" {
-			return nil, fmt.Errorf("%q: a rule is #tag=#rrggbb or folder/=#rrggbb", part)
-		}
-		if strings.HasPrefix(k, "#") {
-			out = append(out, globeRule{tag: strings.ToLower(name), c: c})
-		} else {
-			out = append(out, globeRule{folder: name + "/", c: c})
-		}
-	}
-	return out, nil
 }
 
 // globeThemeSource is the host's themes, as the GlobeMap reads them (core's).
@@ -160,15 +111,21 @@ type globeThemeSource interface {
 	ThemeLabels() []string
 }
 
-// globeThemeValues are the values of the theme the GlobeMap is drawn in for p: the terminals'
-// (terminalThemeValues), the page's, or one named; one that can't be read is the page's.
+// globeThemeValues are the values of the theme the GlobeMap is drawn in for p: the terminals' by
+// default (viewThemeValues).
 func globeThemeValues(p prefs, ts globeThemeSource) (map[string]string, bool) {
+	return viewThemeValues(cmp.Or(p.Value(prefGlobeTheme), "terminal"), p, ts)
+}
+
+// viewThemeValues are the values of the theme a view chose: the terminals' (terminalThemeValues),
+// the page's, or one named; one that can't be read is the page's.
+func viewThemeValues(choice string, p prefs, ts globeThemeSource) (map[string]string, bool) {
 	page := ts.Theme()
-	name := p.Value(prefGlobeTheme)
+	name := choice
 	switch name {
-	case "", "terminal":
+	case "terminal":
 		return terminalThemeValues(p, page, ts.ThemeValues)
-	case "page":
+	case "", "page":
 		name = page
 	}
 	if v, err := ts.ThemeValues(name); err == nil {
@@ -179,12 +136,12 @@ func globeThemeValues(p prefs, ts globeThemeSource) (map[string]string, bool) {
 }
 
 // themeChoices are the theme chooser's values, and its labels.
-func (g *globeMap) themeChoices() (names, labels []string) {
-	names, labels = []string{"terminal", "page"}, []string{"the terminals'", "the page's"}
-	if ts, ok := g.c.(globeThemeSource); ok {
-		return append(names, ts.ThemeNames()...), append(labels, ts.ThemeLabels()...)
-	}
-	return names, labels
+func (g *globeMap) themeChoices() (names, labels []string) { return viewThemeChoices(g.c) }
+
+// viewThemeChoices are a view's theme chooser's values and labels: the terminals', the page's, then
+// every theme the window can wear.
+func viewThemeChoices(c Core) (names, labels []string) {
+	return themeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
 }
 
 // lookNow is the look the preferences and the themes give now.
@@ -255,7 +212,6 @@ func (g *globeMap) Prefs() []PrefSpec {
 			chooser("App.globeDotsIndex", "App.setGlobeDots"),
 		ValuePref(prefGlobeSpeed, "gentle", keys(len(globeSpeeds), func(i int) string { return globeSpeeds[i].name })).
 			chooser("App.globeSpeedIndex", "App.setGlobeSpeed"),
-		ValuePref(prefGlobeRules, "", nil).shows(text("App.globeRulesText", prefGlobeRules)),
 	}
 	for _, f := range globeColourFields {
 		rows = append(rows, ValuePref(prefGlobeColour+f.key, "", nil).shows(text(f.source, prefGlobeColour+f.key)))
@@ -318,16 +274,6 @@ func (g *globeMap) setColour(key, text string) {
 	g.c.SetPref(prefGlobeColour+key, text)
 }
 
-// setRules is the rules field, as it is typed: rules that read apply at once.
-func (g *globeMap) setRules(text string) {
-	if _, err := parseGlobeRules(text); err != nil {
-		g.c.Set("App.globeSettingsError", err.Error())
-		return
-	}
-	g.c.Set("App.globeSettingsError", "")
-	g.c.SetPref(prefGlobeRules, strings.TrimSpace(text))
-}
-
 // settingsState is the dialog's lists.
 func (g *globeMap) settingsState() map[string]any {
 	_, themes := g.themeChoices()
@@ -341,17 +287,18 @@ func (g *globeMap) settingsState() map[string]any {
 	for _, s := range globeSpeeds {
 		speeds = append(speeds, s.label)
 	}
-	return map[string]any{
+	st := g.editor.state()
+	maps.Copy(st, map[string]any{
 		"App.globeThemes": choices(themes...), "App.globeFilters": choices(filters...),
 		"App.globeDotSizes": choices(dots...), "App.globeSpeeds": choices(speeds...),
 		"App.globeSettingsError": "",
-	}
+	})
+	return st
 }
 
 func (g *globeMap) settingsCommands() map[string]Command {
-	return map[string]Command{
-		"App.setGlobeTheme":  oneNumber("a row", g.setTheme),
-		"App.setGlobeColour": twoStrings("a colour's name and #rrggbb", g.setColour),
-		"App.setGlobeRules":  oneString("#tag=#rrggbb; folder/=#rrggbb", g.setRules),
-	}
+	c := g.editor.commands()
+	c["App.setGlobeTheme"] = oneNumber("a row", g.setTheme)
+	c["App.setGlobeColour"] = twoStrings("a colour's name and #rrggbb", g.setColour)
+	return c
 }

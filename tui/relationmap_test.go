@@ -1,7 +1,12 @@
 package tui
 
 import (
+	"fmt"
+	"image/color"
+	"math/rand/v2"
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 
 	pm "github.com/yongjohnlee80/golib/parse/mermaid"
@@ -36,11 +41,129 @@ func TestDecodeMap(t *testing.T) {
 	if m.label(0) != "A" || m.label(1) != "b.md" {
 		t.Errorf("labels %q, %q: want the title, else the file's name", m.label(0), m.label(1))
 	}
-	// protocol 28: a node's tags; a tag not a string is left out
+	// protocol 28: a node's tags, and the schema's types in its order; anything else is left out
 	res := mapAnswer([][4]any{{"a.md", "A", "adr", false}}, nil)
 	res["nodes"].([]any)[0].(map[string]any)["tags"] = []any{"x", 3, "y"}
-	if m := decodeMap(res); !reflect.DeepEqual(m.Nodes[0].Tags, []string{"x", "y"}) {
-		t.Errorf("tags %q; want [x y]", m.Nodes[0].Tags)
+	res["types"] = []any{"adr", "", 7, "review"}
+	if m := decodeMap(res); !reflect.DeepEqual(m.Types, []string{"adr", "review"}) || !reflect.DeepEqual(m.Nodes[0].Tags, []string{"x", "y"}) {
+		t.Errorf("types %q, tags %q; want [adr review] and [x y]", m.Types, m.Nodes[0].Tags)
+	}
+}
+
+// A group's query is type:, tag: (or #) or path:; a document wears the first group it matches, a
+// nested tag its parent's, a folder its files'.
+func TestGroupsMatchFirst(t *testing.T) {
+	for _, bad := range []string{"", "type:", "tag:#", "path:/", "kind:x", "adr"} {
+		if _, err := parseGroupQuery(bad); err == nil {
+			t.Errorf("%q read", bad)
+		}
+	}
+	gs := newRelGroups([]relGroup{{Query: "#Project"}, {Query: "type:adr"}, {Query: "path:/notes/"}, {Query: "nope"}})
+	for _, c := range []struct {
+		n    mapNode
+		want int
+	}{
+		{mapNode{Path: "a.md", Type: "adr"}, 1},
+		{mapNode{Path: "notes/a.md", Type: "adr"}, 1}, // the type's group comes first
+		{mapNode{Path: "notes/a.md"}, 2},
+		{mapNode{Path: "notesy/a.md"}, -1},
+		{mapNode{Path: "x.md", Type: "adr", Tags: []string{"#project/alpha"}}, 0}, // a nested tag
+		{mapNode{Path: "x.md", Tags: []string{"projects"}}, -1},
+	} {
+		if got := gs.of(c.n); got != c.want {
+			t.Errorf("%+v: group %d; want %d", c.n, got, c.want)
+		}
+	}
+	var none *relGroups
+	if none.ofOr(mapNode{Type: "adr"}) != -1 {
+		t.Error("no groups matched a document")
+	}
+	if groupLabel("type:adr") != "adr" || groupLabel("#X") != "#x" || groupLabel("path:notes") != "notes/" {
+		t.Errorf("labels %q %q %q", groupLabel("type:adr"), groupLabel("#X"), groupLabel("path:notes"))
+	}
+}
+
+// A view's first groups: one a schema type, in its order, then one a top-level folder, the fullest
+// first (hidden ones left out); each a colour at random from the palette, made legible on the
+// ground, none twice until each is taken, then a turn further from the ground; the first five
+// outlined in turn, then boxes.
+func TestInitialGroups(t *testing.T) {
+	files := []string{"a.md", "notes/x.md", "notes/y.md", "adrs/z.md", ".autodoc/graph.toml", "b/c/d.md"}
+	if got := groupQueries([]string{"adr", "note"}, files); !slices.Equal(got, []string{"type:adr", "type:note", "path:notes/", "path:adrs/", "path:b/"}) {
+		t.Fatalf("queries %q", got)
+	}
+	if got := groupQueries(nil, nil); got != nil {
+		t.Errorf("no types, no folders: %q", got)
+	}
+	// every colour reads on its ground, a light one as a dark one; no two groups alike while the
+	// palette lasts, and past it a turn further from the ground, still none alike
+	for _, ground := range []color.NRGBA{hexColour(0x1c1c1c), hexColour(0xe8dcc0)} {
+		qs := make([]string, len(groupPalette)+6)
+		for i := range qs {
+			qs[i] = fmt.Sprint("q", i)
+		}
+		got := initGroups(qs, nil, ground, rand.New(rand.NewPCG(1, 2)))
+		seen := map[color.NRGBA]int{}
+		for k, g := range got {
+			if c := contrast(g.Colour, ground); c < 2.95 {
+				t.Errorf("ground %v, group %d: %v, contrast %.2f; want 3", ground, k, g.Colour, c)
+			}
+			if j, dup := seen[g.Colour]; dup {
+				t.Errorf("ground %v: groups %d and %d both %v", ground, j, k, g.Colour)
+			}
+			seen[g.Colour] = k
+		}
+	}
+	pal := []color.NRGBA{hexColour(0xff0000), hexColour(0x00ff00)}
+	gs := initGroups([]string{"a", "b", "c", "d", "e", "f", "g"}, pal, hexColour(0x1c1c1c), rand.New(rand.NewPCG(1, 2)))
+	if !slices.Contains(pal, gs[0].Colour) || !slices.Contains(pal, gs[1].Colour) || slices.Contains(pal, gs[2].Colour) {
+		t.Errorf("a palette of two: %v, %v, then %v; want both, then a turn of one", gs[0].Colour, gs[1].Colour, gs[2].Colour)
+	}
+	for k, want := range []pm.MindShape{pm.MindHexagon, pm.MindCircle, pm.MindSquare, pm.MindRounded, pm.MindBang, pm.MindDefault, pm.MindDefault} {
+		if gs[k].Shape != want {
+			t.Errorf("group %d's outline %v; want %v", k, gs[k].Shape, want)
+		}
+	}
+}
+
+// A graph file keeps each view's groups (the Mindmap's with outlines) and a palette, and reads
+// back what it wrote; a view's first groups are the user's file's first, then those it lacks, in a
+// colour of the workspace's palette, else the user's, made legible on the ground.
+func TestGraphFile(t *testing.T) {
+	var c graphConf
+	c.Palette = []string{"#112233"}
+	c.setGroups(viewGlobeMap, []relGroup{{Query: "type:adr", Colour: hexColour(0x010203), Shape: pm.MindHexagon}})
+	c.setGroups(viewMindmap, []relGroup{{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}})
+	text := c.format()
+	if !strings.HasPrefix(text, "# AutoDoc's graph groups") || strings.Contains(text, `shape = "hexagon"`) {
+		t.Errorf("the file:\n%s", text)
+	}
+	back, err := parseGraphConf([]byte(text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g := back.groups(viewGlobeMap); len(g) != 1 || g[0] != (relGroup{Query: "type:adr", Colour: hexColour(0x010203)}) {
+		t.Errorf("the GlobeMap's back: %+v", g)
+	}
+	if g := back.groups(viewMindmap); len(g) != 1 || g[0] != (relGroup{Query: "path:notes/", Colour: hexColour(0x040506), Shape: pm.MindCircle}) {
+		t.Errorf("the Mindmap's back: %+v", g)
+	}
+	if !slices.Equal(back.palette(), []color.NRGBA{hexColour(0x112233)}) {
+		t.Errorf("palette %v", back.palette())
+	}
+	if _, err := parseGraphConf([]byte("palette = [")); err == nil {
+		t.Error("a file that does not read read")
+	}
+	user := graphConf{Palette: []string{"#f0f0f0"}}
+	user.setGroups(viewGlobeMap, []relGroup{{Query: "#todo", Colour: hexColour(0xabcdef)}})
+	rnd := rand.New(rand.NewPCG(3, 4))
+	got := initialGroups(viewGlobeMap, graphConf{}, user, []string{"#todo", "type:adr"}, hexColour(0x101010), rnd)
+	if len(got) != 2 || got[0].Query != "#todo" || got[0].Colour != hexColour(0xabcdef) || got[1].Query != "type:adr" || got[1].Colour != hexColour(0xf0f0f0) {
+		t.Errorf("first groups %+v; want the user's #todo, then type:adr in the user's palette", got)
+	}
+	ws := graphConf{Palette: []string{"#e0e0e0"}}
+	if got := initialGroups(viewGlobeMap, ws, user, []string{"type:adr"}, hexColour(0x101010), rnd); got[1].Colour != hexColour(0xe0e0e0) {
+		t.Errorf("the workspace's palette: %v; want its colour, over the user's", got[1].Colour)
 	}
 }
 
@@ -56,7 +179,7 @@ func TestCoreNamesTheThemes(t *testing.T) {
 
 // The mind map places each document once, under the document that reached it first breadth-first
 // from the root, neighbours in path order and links followed both ways; its IDs name the documents'
-// indexes, its labels are their titles verbatim, its shapes their types'. A document the root does
+// indexes, its labels are their titles verbatim, its shapes their types' (shape). A document the root does
 // not reach is left out, and a root not in the map is no mind map.
 func TestMindmapModel(t *testing.T) {
 	m := decodeMap(mapAnswer(
@@ -69,20 +192,27 @@ func TestMindmapModel(t *testing.T) {
 		},
 		[][3]string{{"a.md", "b.md", "wikilink"}, {"c.md", "a.md", "related"}, {"b.md", "d/d.md", "wikilink"},
 			{"c.md", "d/d.md", "wikilink"}, {"d/d.md", "d/d.md", "embed"}}))
-	d := mindmapModel(m, "a.md")
+	gs := newRelGroups(initGroups([]string{"type:adr", "type:review", "type:synthesis"}, nil, hexColour(0x101010), rand.New(rand.NewPCG(1, 1))))
+	shape := func(n mapNode) pm.MindShape {
+		if i := gs.of(n); i >= 0 {
+			return gs.list[i].Shape
+		}
+		return pm.MindDefault
+	}
+	d := mindmapModel(m, "a.md", shape)
 	want := []pm.MindNode{
 		{ID: "n0", Label: "Root <b>doc</b>", Shape: pm.MindHexagon, Parent: -1},
 		{ID: "n1", Label: "Same", Shape: pm.MindCircle, Parent: 0},
 		{ID: "n2", Label: "Same", Shape: pm.MindDefault, Parent: 0},
-		{ID: "n3", Label: "d.md", Shape: pm.MindCloud, Parent: 1}, // b.md reached it first
+		{ID: "n3", Label: "d.md", Shape: pm.MindSquare, Parent: 1}, // b.md reached it first
 	}
 	if d == nil || !reflect.DeepEqual(d.Nodes, want) {
 		t.Fatalf("the mind map of a.md\n got %+v\nwant %+v", d, want)
 	}
-	if got := mindmapModel(m, "c.md").Nodes; got[0].ID != "n2" || got[1].ID != "n0" || got[1].Parent != 0 {
+	if got := mindmapModel(m, "c.md", shape).Nodes; got[0].ID != "n2" || got[1].ID != "n0" || got[1].Parent != 0 {
 		t.Errorf("rooted at c.md: %+v", got)
 	}
-	if mindmapModel(m, "nope.md") != nil {
+	if mindmapModel(m, "nope.md", shape) != nil {
 		t.Error("a root not in the map made a mind map")
 	}
 	for _, c := range []struct {

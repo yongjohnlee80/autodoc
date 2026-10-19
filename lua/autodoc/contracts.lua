@@ -226,8 +226,8 @@ return {
         { name = "workspace", type = "string" },
         { name = "options", type = "map", optional = true }
       },
-      result = "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}]}",
-      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it.",
+      result = "{nodes: [{path, title, type, superseded, tags? (protocol 28)}], edges: [{src, dst, kind}], types? (protocol 28)}",
+      doc = "The workspace's documents and the resolved links among them; with opts.root, those within opts.depth (1–2) of it. From protocol 28: types are the document types the workspace's schema declares, in its order (none without one), and a node's type is its value of the schema's discriminator field (type without one).",
     },
     ["graph.neighborhood"] = {
       since = 1, scope = "workspace", audience = "agent",
