@@ -20,43 +20,15 @@ AutoDoc embeds full pseudo-terminal (PTY) multiplexers directly inside both the 
 AutoDoc organizes embedded PTYs into two distinct, dockable `TerminalTabs` drawers contributed to the program's panel registry:
 
 1. **The Shell Terminal Panel (`terminalView`)**: General-purpose interactive shells (`bash`, `zsh`, `fish`) for running builds, tests, and Git commands.
-2. **The Dedicated Agent Panel (`agentView`, `SPC g`)**: Long-lived CLI coding agents (`agent = true`), each identified by a persistent `codename` and scoped to the active workspace.
+2. **The Dedicated Agent Panel (`agentView`, `SPC g`)**: Long-lived CLI coding agents, each started from an agent profile, identified by a persistent `codename` and scoped to the active workspace.
 
-You can declare terminal tabs and agent profiles declaratively in `~/.config/autodoc/config.toml` under `[[terminal.tabs]]` or manage agent profiles interactively via **System › Agent profiles…** (persisted in the daemon's preference store).
+Agent profiles live in AutoDoc's preferences and are managed in **System › Agent profiles…** (`SPC G`); there is no config-file section for them. The dialog lists each profile (`●` marks the default, `▶` a running one) with **Use**, **Add…**, **Edit…**, **Make default** and **Remove**. A profile has three fields:
 
-```toml
-# ~/.config/autodoc/config.toml
+- **name**: the display label, for example `Claude Code`;
+- **codename**: its routing identity, derived from the name when left empty (lower-case letters or digits, separated by hyphens);
+- **command**: the command line that starts the agent, run through `/bin/sh -c`, for example `claude --model opus` or `codex`. `{root}` and `{workspace}` in it become the workspace's root folder and name, each quoted for the shell.
 
-[[terminal.tabs]]
-label = "Workspace Shell"
-codename = "zsh-main"
-command = "zsh"
-args = ["-l"]
-agent = false
-
-[[terminal.tabs]]
-label = "Claude Code"
-codename = "claude"
-command = "claude"
-args = ["--dangerously-skip-permissions"]
-env = { CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1" }
-agent = true
-
-[[terminal.tabs]]
-label = "Gemini Agent"
-codename = "gemini"
-command = "gemini"
-args = ["--model", "gemini-2.5-pro"]
-env = { NO_COLOR = "0" }
-agent = true
-
-[[terminal.tabs]]
-label = "Codex CLI"
-codename = "codex"
-command = "codex"
-args = []
-agent = true
-```
+The first profile added becomes the default, which `SPC g` starts; **Make default** chooses another. The shell terminal's tabs need no profile: `+` starts your login shell.
 
 ### Delivery Identity: Display `label` vs. Immutable `codename`
 
