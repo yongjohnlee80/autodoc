@@ -97,7 +97,7 @@ Pressing `SPC l` in the TUI or GUI (or `:AutodocRelations` / `<leader>ml` in Neo
 
 Inside the Relations drawer:
 
-- Press **`Enter`** on any row to open the target document in the editor while keeping the drawer open.
+- Press **`Enter`** on any row to open the target document in the editor; the drawer closes, as the explorer's Enter does.
 - Press **`d`** to toggle **Depth 2** expansion, which reveals documents *two hops away* nested directly beneath the intermediate neighbor that reaches them.
 - On the editor page itself, press **`SPC j`** to follow the link under the cursor and **`SPC b`** (or `Ctrl+O` in Normal mode, `:AutodocBack` / `<leader>mo` in Neovim) to jump back to the exact line and view you left.
 
