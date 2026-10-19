@@ -323,6 +323,7 @@ func (h *Host) features() []Feature {
 	h.asker.onIdle = func() { h.p.Post(h.askLuaGrants) } // a Lua grant waiting for the card (luagate.go)
 	fs := []Feature{pageFind{h}, legacy{h}, h.terminals, h.agents, h.asker, h.noticeLog, h.recent, h.explorer, h.outline, h.rel, h.ai, h.plugins, newStartup(core{h}, h.aboutInfo.Version), newTodos(core{h}), h.luaFeature()}
 	fs = append(fs, newRegistryBrowse(h))        // Plugins › Browse the registry… (registrybrowse.go)
+	fs = append(fs, h.cands)                     // the installs' candidates, and Audit… (candidate.go)
 	fs = append(fs, h.relationViewFeatures()...) // the GUI's GlobeMap and Mindmap (relationmap.go)
 	fs = append(fs, h.moreFeatures...)
 	// the preferences every feature declares, read over their defaults until the store's arrive;
@@ -374,6 +375,13 @@ type Core interface {
 	Open(id string)
 	Close(id string)
 	Notify(msg string)
+	// NotifyOngoing is a long task's toast, id's, updated in place; NotifyDone ends it with its last
+	// message, which the history keeps (notify.go)
+	NotifyOngoing(id, msg string)
+	NotifyDone(id, msg string)
+	// NotifyOngoingClick is NotifyOngoing whose click runs onClick, on the loop, instead of opening
+	// the history: a candidate's toast reopens its card (candidate.go)
+	NotifyOngoingClick(id, msg string, onClick func())
 	// Ask asks a yes-or-no question (ask.go): OnYes runs on Yes; the Asked rewrites its text.
 	Ask(q Question) Asked
 	// Workspace is the workspace in use; "" before one is entered.

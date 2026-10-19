@@ -21,6 +21,11 @@ type Question struct {
 	// Stopped is a fallback for failures that skip normal teardown; in that case
 	// it runs after the loop on the stopping goroutine and must not post UI work.
 	OnCancel func()
+	// Other, when set, is a third button between No and Yes, its mnemonic marked ("&Audit…"):
+	// OnOther runs once when it is chosen, and neither OnYes nor OnCancel does, so what was asked
+	// lives on (a candidate's Audit…, candidate.go).
+	Other   string
+	OnOther func()
 }
 
 // Asked is a question while it is asked.
@@ -43,6 +48,7 @@ type asker struct {
 	seq           uint64 // the question asked: a newer one, or an answer, moves it
 	yes           func() // the asked question's OnYes; nil once answered
 	cancel        func()
+	other         func() // its OnOther
 	pending       bool
 	answerClosing bool // accepted/rejected already answered; its following closed is notification only
 	stopped       bool
@@ -56,14 +62,16 @@ func newAsker(c Core) *asker { return &asker{c: c} }
 func (*asker) Name() string { return "ask" }
 
 func (*asker) State() map[string]any {
-	return map[string]any{"App.askTitle": "", "App.askText": "", "App.askYes": "&Yes", "App.askNo": "&No"}
+	return map[string]any{"App.askTitle": "", "App.askText": "", "App.askYes": "&Yes", "App.askNo": "&No",
+		"App.askOther": "", "App.askOtherShown": false}
 }
 
 func (a *asker) Commands() map[string]Command {
 	return map[string]Command{
-		"App.askAccepted": none(a.accepted),
-		"App.askRejected": none(a.rejected),
-		"App.askClosed":   none(a.closed),
+		"App.askAccepted":    none(a.accepted),
+		"App.askRejected":    none(a.rejected),
+		"App.askClosed":      none(a.closed),
+		"App.askOtherChosen": none(a.otherChosen),
 	}
 }
 
@@ -81,12 +89,14 @@ func (a *asker) ask(q Question) Asked {
 		}
 		return Asked{}
 	}
-	a.yes = q.OnYes
+	a.yes, a.other = q.OnYes, q.OnOther
 	a.cancel, a.pending = q.OnCancel, true
 	a.c.Set("App.askTitle", q.Title)
 	a.c.Set("App.askText", q.Text)
 	a.c.Set("App.askYes", cmp.Or(q.Yes, "&Yes"))
 	a.c.Set("App.askNo", cmp.Or(q.No, "&No"))
+	a.c.Set("App.askOther", q.Other)
+	a.c.Set("App.askOtherShown", q.Other != "")
 	a.c.Open("confirm")
 	return Asked{say: func(text string) {
 		if tk.Current() {
@@ -105,6 +115,20 @@ func (a *asker) accepted() {
 	a.answered()
 	if yes != nil {
 		yes()
+	}
+	a.idle()
+}
+
+// otherChosen runs the question's OnOther, once; the card closes without OnCancel.
+func (a *asker) otherChosen() {
+	if !a.pending {
+		return
+	}
+	other := a.other
+	a.answerClosing = true
+	a.answered()
+	if other != nil {
+		other()
 	}
 	a.idle()
 }
@@ -155,6 +179,6 @@ func (a *asker) Stopped() { a.Stopping() }
 // answered ends the question: a late Say, or a second accept, does nothing.
 func (a *asker) answered() {
 	a.seq++
-	a.yes = nil
+	a.yes, a.other = nil, nil
 	a.cancel, a.pending = nil, false
 }

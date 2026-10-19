@@ -876,6 +876,7 @@ Window {
     GoPick { id: widgetPick }
     OutlinePicker { id: outlinePicker }
     AgentAssign { id: agentAssignPicker }
+    AuditAgent { id: auditAgentPicker }
     LuaPick { id: luaPicker }
     TodoStatus { id: todoStatusPicker }
     RegistryBrowse { id: registryPicker }

@@ -227,7 +227,7 @@ func TestTheInstallCardsSayTheAuditAboveTheRisk(t *testing.T) {
 		t.Fatalf("the plugin's risk sentence changed:\n%s", pluginRisk)
 	}
 	e := testEntry("plugin", "echo", "https://github.com/example/echo", regC2)
-	c := pluginChange{m: manifest{Name: "echo", Command: []string{"x"}}, url: e.Repo, commit: regC2, entry: &e}
+	c := &candidate{m: manifest{Name: "echo", Command: []string{"x"}}, repo: e.Repo, commit: regC2, entry: &e}
 	q := pluginQuestion(c, "Echo")
 	line := "✓ audited by claude-opus-5-5 on 2026-10-10 at this commit"
 	if !strings.Contains(q, "at    2222222\n") || !strings.Contains(q, line+"\n\n"+pluginRisk) {
@@ -285,7 +285,8 @@ func TestALuaPackageIsInstalledByItsRegistryName(t *testing.T) {
 	r.mustRun(t, "lua-install hello")
 	r.s.WaitForText(t, "install the Lua package hello?")
 	text := onLoop(r, func() string { v, _ := r.h.p.Tree().Source("App.askText"); return v.Raw })
-	if !strings.Contains(text, "from "+url+" at ") || !strings.Contains(text, "never audited\n\n"+packageRisk) {
+	r.s.WaitForText(t, "Audit…") // the card's third button
+	if !strings.Contains(text, "from "+url+" at ") || !strings.Contains(text, "never audited\n\n"+packageRisk+"\n\n"+auditNote) {
 		t.Errorf("the card:\n%s", text)
 	}
 	onLoop(r, func() bool { r.h.asker.rejected(); return true })
@@ -293,9 +294,7 @@ func TestALuaPackageIsInstalledByItsRegistryName(t *testing.T) {
 	r.clearNotices()
 	r.mustRun(t, "lua-install nope")
 	r.waitNotice(t, "lua-install: not installed: no Lua package named nope in the registry")
-	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
-		t.Errorf("lua/ holds %d entries", len(entries))
-	}
+	r.s.WaitFor(t, "the cancelled stage removed, and nothing installed", func(string) bool { return len(entries(t, dir)) == 0 })
 }
 
 // The add dialog's KB type field lists the registry's KB types, and a pick stages the entry's repo.

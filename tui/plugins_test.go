@@ -960,12 +960,18 @@ func pluginRepo(t *testing.T, title, build string) string {
 // commitPlugin commits the test plugin's manifest into repo.
 func commitPlugin(t *testing.T, repo, title, build string) {
 	t.Helper()
+	commitPluginNamed(t, repo, "echo", title, build)
+}
+
+// commitPluginNamed commits the test plugin's manifest, as the plugin name, into repo.
+func commitPluginNamed(t *testing.T, repo, name, title, build string) {
+	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)
 	}
-	toml := fmt.Sprintf("name = \"echo\"\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, \"echo\"]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
-		title, exe, testPluginArg, build)
+	toml := fmt.Sprintf("name = %q\ntitle = %q\nkind = \"dialog\"\nprotocol = 1\ncommand = [%q, %q, \"echo\"]\n[dialog]\nwidth = 30\nheight = 6\n[install]\nbuild = [\"sh\", \"-c\", %q]\n",
+		name, title, exe, testPluginArg, build)
 	if err := os.WriteFile(filepath.Join(repo, "plugin.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1640,10 +1646,10 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 	}
 	card := read("name = \"stats\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n[dialog]\nmodal = false\n[feed]\ndocument = true\n" +
 		"[[commands]]\nid = \"toggle\"\ntitle = \"Show / hide the stats\"\nkey = \"s\"\n[[commands]]\nid = \"copy\"\ntitle = \"Copy\"\n")
-	q := pluginQuestion(pluginChange{m: card, url: "file:///x", commit: "abc"}, "Doc stats")
+	q := pluginQuestion(&candidate{m: card, repo: "file:///x", commit: "abc"}, "Doc stats")
 	want := "Declares:  a card beside the page · reads the open note's text (feed) · commands: Show / hide the stats (s on its SPC p card), Copy"
-	if !strings.HasSuffix(q, want) || strings.Index(q, pluginRisk) > strings.Index(q, "Declares:") {
-		t.Errorf("a card's question:\n%s\nwant it to end, after the risk, with\n%s", q, want)
+	if !strings.HasSuffix(q, want+"\n\n"+auditNote) || strings.Index(q, pluginRisk) > strings.Index(q, "Declares:") {
+		t.Errorf("a card's question:\n%s\nwant it to end, after the risk, with\n%s, then the audit note", q, want)
 	}
 	svc := read("name = \"svc\"\nkind = \"service\"\nprotocol = 2\nstart = \"launch\"\ncommand = [\"x\"]\n")
 	if got := pluginDeclares(&svc); got != "a service, with no surface · starts with AutoDoc" {
@@ -1654,7 +1660,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 		t.Errorf("a service on use: %q", got)
 	}
 	old := read("name = \"tetris\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n")
-	if q := pluginQuestion(pluginChange{m: old}, "Tetris"); strings.Contains(q, "Declares") {
+	if q := pluginQuestion(&candidate{m: old}, "Tetris"); strings.Contains(q, "Declares") {
 		t.Errorf("a 0209 dialog declares something:\n%s", q)
 	}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -12,8 +13,6 @@ import (
 	"time"
 
 	"slices"
-
-	"github.com/BurntSushi/toml"
 
 	"github.com/yongjohnlee80/autodoc/plugin"
 
@@ -43,16 +42,6 @@ var (
 // stagePrefix marks a clone not yet added: discoverPlugins skips a directory starting with ".".
 const stagePrefix = ".adding-"
 
-// pluginChange is the add or update PluginConfirm asks about.
-type pluginChange struct {
-	update bool
-	dir    string // add: the staged clone; update: the plugin's own directory
-	m      manifest
-	url    string
-	commit string               // the commit it would be at, in full (the card shows its first seven)
-	entry  *regindex.IndexEntry // the registry's entry for url, from its cache; nil for none
-}
-
 // managedPlugin is the manager's row: an installed plugin, and where it came from.
 type managedPlugin struct {
 	e      pluginEntry
@@ -70,8 +59,8 @@ func (pl *plugins) startAddPlugin() {
 	pl.c.Open("pluginAdd")
 }
 
-// addPlugin clones url into a staged directory and asks PluginConfirm about what it holds. A name in
-// place of a URL is the registry's plugin of that name (plugins.add <name>).
+// addPlugin stages url as a candidate and asks PluginConfirm about it. A name in place of a URL is
+// the registry's plugin of that name (plugins.add <name>).
 func (pl *plugins) addPlugin(url string) {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) {
@@ -94,79 +83,86 @@ func (pl *plugins) addPlugin(url string) {
 	pl.c.Close("pluginAdd")
 	pl.c.NotifyOngoing(toastPlugin, "cloning "+url+"…")
 	dir := pl.pluginOpt.Dir
-	type cloned struct {
-		c   pluginChange
-		err error
-	}
-	coreDo(pl.c, func(ctx context.Context) cloned {
-		c, err := stageClone(ctx, dir, url)
-		return cloned{c, err}
-	}, func(r cloned) {
+	coreDo(pl.c, func(ctx context.Context) answerOf[*candidate] {
+		return answered(stagePlugin(ctx, dir, url, nil))
+	}, func(r answerOf[*candidate]) {
+		if r.err == nil {
+			r.err = pl.cands.begin(r.v, pl.askPlugin)
+		}
 		if r.err != nil {
 			pl.c.NotifyDone(toastPlugin, "not added: "+r.err.Error())
 			return
 		}
-		pl.c.NotifyDone(toastPlugin, "cloned "+r.c.m.Name+" at "+regindex.Short(r.c.commit))
-		pl.askPlugin(r.c)
+		pl.c.NotifyDone(toastPlugin, "cloned "+r.v.name+" at "+regindex.Short(r.v.commit))
+		pl.cands.show(r.v)
 	})
 }
 
-// stageClone clones url into a staged directory of dir and reads its manifest; a clone that is not
-// a runnable plugin, or names one already installed, is thrown away.
-func stageClone(ctx context.Context, dir, url string) (pluginChange, error) {
-	if _, err := exec.LookPath("git"); err != nil {
-		return pluginChange{}, errors.New("adding a plugin needs git")
+// cloneStage clones url, shallow, into a new stage of parent, and reads the commit it is at, in
+// full: a candidate's stage, a plugin's or a Lua package's alike. A failed clone leaves no stage.
+func cloneStage(ctx context.Context, parent, url string) (stage, commit string, err error) {
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return "", "", err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return pluginChange{}, err
+	if stage, err = os.MkdirTemp(parent, stagePrefix); err != nil {
+		return "", "", err
 	}
-	stage, err := os.MkdirTemp(dir, stagePrefix)
+	if _, err = git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err == nil {
+		commit, err = git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
+	}
 	if err != nil {
-		return pluginChange{}, err
-	}
-	fail := func(err error) (pluginChange, error) {
 		_ = os.RemoveAll(stage)
-		return pluginChange{}, err
+		return "", "", err
 	}
-	if _, err := git(ctx, pluginCloneTimeout, "", "clone", "--depth", "1", "--", url, stage); err != nil {
-		return fail(err)
+	return stage, commit, nil
+}
+
+// stagePlugin stages url as a plugin candidate: an add (installed nil), refused when that plugin is
+// installed already, or an update of installed, refused when the staged plugin is another. A stage
+// that is not a runnable plugin is thrown away.
+func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry) (*candidate, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, errors.New("adding a plugin needs git")
 	}
+	stage, commit, err := cloneStage(ctx, dir, url)
+	if err != nil {
+		return nil, err
+	}
+	fail := func(err error) (*candidate, error) { _ = os.RemoveAll(stage); return nil, err }
 	e := readPlugin(stage)
 	switch {
 	case e == nil:
 		return fail(errors.New("the repository has no plugin.toml at its top"))
 	case e.reason != "":
 		return fail(errors.New(e.reason))
+	case installed != nil && e.m.Name != installed.m.Name:
+		return fail(fmt.Errorf("the fetched plugin is %q, not %q", e.m.Name, installed.m.Name))
 	}
-	if _, err := os.Stat(filepath.Join(dir, e.m.Name)); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, e.m.Name)); installed == nil && err == nil {
 		return fail(fmt.Errorf("%s is installed already: Manage plugins… updates it", e.m.Name))
 	}
-	commit, err := git(ctx, pluginCloneTimeout, stage, "rev-parse", "HEAD") // in full: an audit names a full commit
-	if err != nil {
-		return fail(err)
-	}
-	return pluginChange{dir: stage, m: e.m, url: url, commit: commit, entry: cachedEntry(regindex.KindPlugin, url)}, nil
+	return &candidate{kind: regindex.KindPlugin, name: e.m.Name, repo: url, commit: commit, stage: stage,
+		update: installed != nil, entry: cachedEntry(regindex.KindPlugin, url), m: e.m}, nil
 }
 
-// askPlugin puts c to PluginConfirm.
-func (pl *plugins) askPlugin(c pluginChange) {
-	pl.pendingPlugin = &c
+// askPlugin is a plugin candidate's card: PluginConfirm, about c, which is the card's alone.
+func (pl *plugins) askPlugin(c *candidate) {
+	pl.pendingPlugin = c
 	verb := "add"
 	if c.update {
 		verb = "update"
 	}
-	title := c.m.Title
-	if title == "" {
-		title = c.m.Name
-	}
-	pl.c.Set("App.pluginConfirmTitle", verb+" the plugin "+title+"?")
-	pl.c.Set("App.pluginQuestion", pluginQuestion(c, title))
+	pl.c.Set("App.pluginConfirmTitle", verb+" the plugin "+pluginTitle(c)+"?")
+	pl.c.Set("App.pluginQuestion", pluginQuestion(c, pluginTitle(c)))
 	pl.c.Open("pluginConfirm")
 }
 
+func pluginTitle(c *candidate) string { return cmp.Or(c.m.Title, c.m.Name) }
+
 // pluginQuestion is PluginConfirm's text: what the plugin is, where it came from, what its build
-// runs and what it starts, the risk, and then what its manifest declares it does in AutoDoc.
-func pluginQuestion(c pluginChange, title string) string {
+// runs and what it starts, its audit and the risk, what its manifest declares it does in AutoDoc,
+// and what Audit… does.
+func pluginQuestion(c *candidate, title string) string {
 	build := "nothing: it has no build step"
 	if len(c.m.Install.Build) > 0 {
 		build = strings.Join(c.m.Install.Build, " ")
@@ -176,99 +172,155 @@ func pluginQuestion(c pluginChange, title string) string {
 		audit = line + "\n\n" // above the risk, which stays word for word
 	}
 	q := fmt.Sprintf("%s (%s)\nfrom  %s\nat    %s\n\nIts build runs:  %s\nIt then starts:  %s\n\n%s%s",
-		title, c.m.Name, c.url, regindex.Short(c.commit), build, strings.Join(c.m.Command, " "), audit, pluginRisk)
+		title, c.m.Name, c.repo, regindex.Short(c.commit), build, strings.Join(c.m.Command, " "), audit, pluginRisk)
 	if d := pluginDeclares(&c.m); d != "" {
 		q += "\n\nDeclares:  " + d
 	}
-	return q
+	return q + "\n\n" + auditNote
 }
 
 // pluginDeclares is what a manifest's protocol-2 and -3 keys say the plugin does, for the install
 // confirmation (ADR 1791268009 §2.1): "" for a 0209 dialog.
 func pluginDeclares(m *manifest) string { return strings.Join(m.Declares(), " · ") }
 
-// pluginConfirmed is PluginConfirm's Yes: the build, then the plugin in the folder.
+// pluginConfirmed is PluginConfirm's Yes: the candidate on the card, installed once.
 func (pl *plugins) pluginConfirmed() {
 	c := pl.pendingPlugin
 	pl.pendingPlugin = nil
-	if c == nil {
+	if !pl.cands.claim(c) {
 		return
 	}
-	if c.update {
-		if r := pl.running[c.m.Name]; r != nil {
-			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
-		}
-	}
-	pl.c.NotifyOngoing(toastPlugin, "building "+c.m.Name+"…")
-	dir, logs := pl.pluginOpt.Dir, pl.pluginOpt.LogDir
-	coreDo(pl.c, func(ctx context.Context) error { return installChange(ctx, dir, logs, *c) }, func(err error) {
-		if err != nil {
-			pl.c.NotifyDone(toastPlugin, c.m.Name+" not installed: "+err.Error())
-			return
-		}
-		pl.loadPlugins()
-		pl.loadManaged()
-		if pl.scriptsChanged != nil {
-			pl.scriptsChanged()
-		}
-		verb := "added"
-		if c.update {
-			verb = "updated"
-		}
-		pl.c.NotifyDone(toastPlugin, fmt.Sprintf("%s %s at %s: Plugins › %s", verb, c.m.Name, regindex.Short(c.commit), c.m.Title))
-	})
+	pl.installCandidate(c)
 }
 
-// pluginDeclined is PluginConfirm's No: an add's clone is thrown away; an update is left undone.
+// pluginDeclined is PluginConfirm's No: the candidate ends, its stage with it; nothing installed is
+// touched.
 func (pl *plugins) pluginDeclined() {
 	c := pl.pendingPlugin
 	pl.pendingPlugin = nil
 	if c == nil {
 		return
 	}
-	if !c.update {
-		_ = os.RemoveAll(c.dir)
-		pl.c.Notify(c.m.Name + " not added")
-		return
+	outcome := c.name + " not added"
+	if c.update {
+		outcome = c.name + " not updated"
 	}
-	pl.c.Notify(c.m.Name + " not updated")
+	if pl.cands.cancel(c, outcome) {
+		pl.c.Notify(outcome)
+	}
 }
 
-// installChange builds c and puts it in the folder: an add's clone moves in, an update's directory
-// is moved to its fetched commit first. A failed build leaves an add's clone gone and an update at
-// the commit it built from.
-func installChange(ctx context.Context, dir, logs string, c pluginChange) error {
-	if c.update {
-		if _, err := git(ctx, pluginCloneTimeout, c.dir, "reset", "--hard", "FETCH_HEAD"); err != nil {
+// pluginAudit is PluginConfirm's Audit…: the card's candidate to an agent (candidate.go).
+func (pl *plugins) pluginAudit() {
+	c := pl.pendingPlugin
+	pl.pendingPlugin = nil
+	pl.cands.audit(c)
+}
+
+// installCandidate builds c in its stage, never in the installed tree, the stage pristine first:
+// an add's build moves in; an update's running plugin is stopped only once the build succeeded,
+// and the build swaps in for it (swapIn). A failed build leaves an update's plugin as it was,
+// running.
+func (pl *plugins) installCandidate(c *candidate) {
+	pl.c.NotifyOngoing(toastPlugin, "building "+c.name+"…")
+	dir, logs := pl.pluginOpt.Dir, pl.pluginOpt.LogDir
+	coreDo(pl.c, func(ctx context.Context) error {
+		if err := pristine(ctx, c); err != nil {
 			return err
 		}
-	}
-	if err := buildPlugin(ctx, logs, c); err != nil {
-		if !c.update {
-			_ = os.RemoveAll(c.dir)
+		if err := buildPlugin(ctx, logs, &c.m, c.stage); err != nil {
+			return err
 		}
-		return err
-	}
-	if c.update {
-		return nil
-	}
-	return os.Rename(c.dir, filepath.Join(dir, c.m.Name))
+		if c.update {
+			return nil
+		}
+		return pluginRename(c.stage, filepath.Join(dir, c.name))
+	}, func(err error) {
+		if err != nil || !c.update {
+			pl.installed(c, err)
+			return
+		}
+		if r := pl.running[c.name]; r != nil {
+			r.stopFor(plugin.CloseUpdate, "") // it is replaced under itself otherwise; its slot stays
+		}
+		coreDo(pl.c, func(context.Context) error { return swapIn(dir, c.stage, c.name) }, func(err error) { pl.installed(c, err) })
+	})
 }
 
-// buildPlugin runs c's [install] build in its directory, bounded, its output in the plugin's
-// install log.
-func buildPlugin(ctx context.Context, logs string, c pluginChange) error {
-	if len(c.m.Install.Build) == 0 {
+// installed says how c's install went and ends c. The folder is read again either way: a swap that
+// failed may have left the plugin stopped, or in .previous.
+func (pl *plugins) installed(c *candidate, err error) {
+	if err != nil {
+		msg := c.name + " not installed: " + err.Error()
+		pl.c.NotifyDone(toastPlugin, msg)
+		pl.cands.end(c, msg)
+		if c.update {
+			pl.loadPlugins()
+			pl.loadManaged()
+		}
+		return
+	}
+	pl.loadPlugins()
+	pl.loadManaged()
+	if pl.scriptsChanged != nil {
+		pl.scriptsChanged()
+	}
+	msg := fmt.Sprintf("added %s at %s: Plugins › %s", c.name, regindex.Short(c.commit), c.m.Title)
+	if c.update {
+		msg = fmt.Sprintf("updated %s at %s: Plugins › %s; its previous folder is kept in plugins/%s/%s until the next update",
+			c.name, regindex.Short(c.commit), c.m.Title, previousDir, c.name)
+	}
+	pl.c.NotifyDone(toastPlugin, msg)
+	pl.cands.end(c, msg)
+}
+
+// previousDir is where an update keeps the folder it replaced, in the plugins folder; discovery skips
+// it, as it does every name starting with ".".
+const previousDir = ".previous"
+
+// pluginRename and pluginRemoveAll are swapIn's renames and removal; a test makes each fail in turn.
+var (
+	pluginRename    = os.Rename
+	pluginRemoveAll = os.RemoveAll
+)
+
+// swapIn puts the built stage in place of the installed plugin name, in two renames within dir (one
+// filesystem): the installed folder to .previous/<name>, then the stage to its name. Each failure
+// leaves the plugin as it was, or, when the old folder can't be put back, says where it is.
+func swapIn(dir, stage, name string) error {
+	installed, prev := filepath.Join(dir, name), filepath.Join(dir, previousDir, name)
+	if err := pluginRemoveAll(prev); err != nil {
+		return fmt.Errorf("the plugin was left as it was: the older %s could not be removed: %w", prev, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(prev), 0o755); err != nil {
+		return fmt.Errorf("the plugin was left as it was: %w", err)
+	}
+	if err := pluginRename(installed, prev); err != nil {
+		return fmt.Errorf("the plugin was left as it was: %w", err)
+	}
+	if err := pluginRename(stage, installed); err != nil {
+		if rerr := pluginRename(prev, installed); rerr != nil {
+			return fmt.Errorf("the new build could not replace it (%v), and the old folder could not be put back (%v): "+
+				"the plugin is stopped, and its old folder is %s", err, rerr, prev)
+		}
+		return fmt.Errorf("the plugin was left as it was: %w", err)
+	}
+	return nil
+}
+
+// buildPlugin runs m's [install] build in dir, bounded, its output in the plugin's install log.
+func buildPlugin(ctx context.Context, logs string, m *manifest, dir string) error {
+	if len(m.Install.Build) == 0 {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, pluginBuildTimeout)
 	defer cancel()
-	log := openPluginLog(logs, c.m.Name+"-install")
+	log := openPluginLog(logs, m.Name+"-install")
 	defer log.Close()
-	cmd := exec.CommandContext(ctx, c.m.Install.Build[0], c.m.Install.Build[1:]...)
-	cmd.Dir = c.dir
+	cmd := exec.CommandContext(ctx, m.Install.Build[0], m.Install.Build[1:]...)
+	cmd.Dir = dir
 	cmd.Stdout, cmd.Stderr = log, log
-	cmd.Env = append(os.Environ(), "AUTODOC_PLUGIN_DIR="+c.dir)
+	cmd.Env = append(os.Environ(), "AUTODOC_PLUGIN_DIR="+dir)
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
 			return fmt.Errorf("its build did not finish in %s", pluginBuildTimeout)
@@ -390,67 +442,52 @@ func (pl *plugins) updatePlugin(name string) error {
 	return nil
 }
 
-// fetchAndAsk fetches m's origin and asks about the commit it would move to; m's source, when not
-// known yet, is its clone's origin.
+// fetchAndAsk stages m's source as an update candidate and asks about it, unless the staged commit
+// is the one installed. m's source, when not known yet, is its clone's origin. The installed
+// folder is only read: nothing is fetched into it.
 func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	pl.c.NotifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
-	type fetched struct {
-		c    pluginChange
+	dir := pl.pluginOpt.Dir
+	type staged struct {
+		c    *candidate
 		head string
 		err  error
 	}
-	coreDo(pl.c, func(ctx context.Context) fetched {
+	coreDo(pl.c, func(ctx context.Context) staged {
 		if m.source == "" {
 			if _, err := os.Stat(filepath.Join(m.e.dir, ".git")); err != nil {
-				return fetched{err: errors.New("it was put in the folder by hand: update it there")}
+				return staged{err: errors.New("it was put in the folder by hand: update it there")}
 			}
 			src, err := git(ctx, pluginCloneTimeout, m.e.dir, "remote", "get-url", "origin")
 			if err != nil {
-				return fetched{err: err}
+				return staged{err: err}
 			}
 			m.source = src
 		}
-		c, err := fetchUpdate(ctx, m)
+		head, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "HEAD") // in full, as the staged commit is
 		if err != nil {
-			return fetched{err: err}
+			return staged{err: err}
 		}
-		head, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "HEAD") // in full, as the fetched commit is
-		return fetched{c, head, err}
-	}, func(r fetched) {
+		c, err := stagePlugin(ctx, dir, m.source, &m.e)
+		if err == nil && c.commit == head {
+			_ = os.RemoveAll(c.stage)
+		}
+		return staged{c, head, err}
+	}, func(r staged) {
 		switch {
 		case r.err != nil:
 			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+r.err.Error())
 		case r.c.commit == r.head:
 			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" is up to date at "+regindex.Short(r.head))
 		default:
+			if err := pl.cands.begin(r.c, pl.askPlugin); err != nil {
+				pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+err.Error())
+				return
+			}
 			pl.c.NotifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+regindex.Short(r.c.commit))
-			pl.askPlugin(r.c)
+			pl.cands.show(r.c)
 		}
 	})
-}
-
-// fetchUpdate fetches m's origin and reads the manifest of the commit fetched, which the question
-// shows: the build that would run is the new commit's.
-func fetchUpdate(ctx context.Context, m managedPlugin) (pluginChange, error) {
-	if _, err := git(ctx, pluginCloneTimeout, m.e.dir, "fetch", "--depth", "1", "origin"); err != nil {
-		return pluginChange{}, err
-	}
-	commit, err := git(ctx, pluginCloneTimeout, m.e.dir, "rev-parse", "FETCH_HEAD") // in full: an audit names a full commit
-	if err != nil {
-		return pluginChange{}, err
-	}
-	src, err := git(ctx, pluginCloneTimeout, m.e.dir, "show", "FETCH_HEAD:plugin.toml")
-	if err != nil {
-		return pluginChange{}, errors.New("the fetched commit has no plugin.toml")
-	}
-	var next manifest
-	if _, err := toml.Decode(src, &next); err != nil {
-		return pluginChange{}, errors.New("the fetched plugin.toml: " + firstLine(err.Error()))
-	}
-	if next.Name != m.e.m.Name {
-		return pluginChange{}, fmt.Errorf("the fetched plugin is %q, not %q", next.Name, m.e.m.Name)
-	}
-	return pluginChange{update: true, dir: m.e.dir, m: next, url: m.source, commit: commit, entry: cachedEntry(regindex.KindPlugin, m.source)}, nil
 }
 
 // placePlugin is the manager's Place: the plugin under the cursor to the next placement its
@@ -484,7 +521,7 @@ func (pl *plugins) startRemovePlugin(i int) {
 		return
 	}
 	dir := m.e.dir
-	pl.c.Ask(Question{Title: "remove the plugin?", Text: fmt.Sprintf("Remove %s? Its directory goes, with what its build made:\n%s",
+	pl.c.Ask(Question{Title: "remove the plugin?", Text: fmt.Sprintf("Remove %s? Its directory goes, with what its build made and the folder its last update kept:\n%s",
 		m.e.label(), dir), No: "&No, keep it", Yes: "&Yes, remove it", OnYes: func() { pl.removePluginConfirmed(dir) }})
 }
 
@@ -508,7 +545,17 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 		}
 	}
 	name := filepath.Base(dir)
-	coreDo(pl.c, func(context.Context) error { return os.RemoveAll(dir) }, func(err error) {
+	prev := filepath.Join(filepath.Dir(dir), previousDir, name)
+	coreDo(pl.c, func(context.Context) error {
+		if err := os.RemoveAll(dir); err != nil {
+			return err
+		}
+		if err := os.RemoveAll(prev); err != nil { // the folder its last update replaced
+			return err
+		}
+		_ = os.Remove(filepath.Dir(prev)) // .previous itself, once nothing else is kept there
+		return nil
+	}, func(err error) {
 		if err != nil {
 			pl.c.Failed("not removed", err)
 			return

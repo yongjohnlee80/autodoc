@@ -35,6 +35,16 @@ commit was audited ("✓ audited by <model> on <date> at this commit"), or when 
 audited, or that it never was. The card's warning stays either way: an audit is a reading of one
 commit, not a guarantee. To be listed, add an entry to the registry repo by pull request.
 
+Each install or update stages its own clone, pinned to that commit: the card, **Audit…** and the
+install all use it, and the installed folder is never built in. **Audit…** hands a fresh copy of the
+clone to one of the user's agents, with a task file beside it (`docs/audit-prompt.md` and the
+commit), and leaves a notification whose click brings the card back. The agent only reads; its
+report is advice.
+
+**Keep your plugin's state outside its folder.** An update builds the new commit in its clone, then
+replaces the installed folder with it. The folder it replaced is kept in `plugins/.previous/<name>`
+until the next update or its removal, so files a plugin wrote into its own folder don't carry over.
+
 ## The manifest
 
 `plugin.toml`, at the top of the plugin's directory (and of its repository). A dialog, protocol 1:
