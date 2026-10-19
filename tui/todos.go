@@ -292,6 +292,7 @@ func (t *todos) Catalog() []Entry {
 // the explorer as two drawers do: each opens over the page, the later on top.
 func todosPanelSpec() PanelSpec {
 	s := sidePanelSpec("todos", "todoOpenTable", 60, func(p prefs) string { return p.todosEdge })
+	s.Icon = "✓"
 	s.Default = todosDefault
 	return s
 }

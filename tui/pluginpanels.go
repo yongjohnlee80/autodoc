@@ -97,7 +97,8 @@ func (pl *plugins) cardSpec(c *cardPanel, priority int) PanelSpec {
 		}
 	}
 	name := c.name
-	return PanelSpec{ID: cardPanelID(name), View: cardViewID(name), Priority: priority,
+	return PanelSpec{ID: cardPanelID(name), View: cardViewID(name), Priority: priority, Icon: "⧉",
+		Alive:  func() bool { return pl.running[name] != nil }, // a hidden card's plugin runs on
 		Edge:   func(p prefs) string { return pl.cardEdgeIn(p, name) },
 		Places: places, Size: [2]int{10, 90}, Length: [2]int{20, 100},
 		Default: func(edge string) (int, int) { return pl.cardDefault(name, edge) },

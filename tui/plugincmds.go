@@ -54,6 +54,7 @@ type pluginCard struct {
 // refreshPlugins rebuilds the Plugins menu, the SPC p chooser and the plugins' cards from the
 // plugins found, the user's letters and what is running.
 func (pl *plugins) refreshPlugins() {
+	defer pl.c.WidgetsChanged() // a run started or stopped: a hidden card's dock icon comes or goes
 	pl.bindPluginLetters()
 	bindings := pl.bindPluginKeys()
 	rows := make([]tuidecl.Row, 0, len(pl.pluginList))

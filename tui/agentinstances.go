@@ -171,6 +171,7 @@ func (a *agents) selectInstance(instance *agentInstance) error {
 }
 
 func (a *agents) agentTabsChanged() {
+	defer a.c.WidgetsChanged() // an agent started or gone: the dock lists the agents while one runs
 	panel, err := a.runtime()
 	if err != nil {
 		return

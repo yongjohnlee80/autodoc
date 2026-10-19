@@ -235,10 +235,18 @@ Window {
         }
         Menu {
             title: "&Help"
-            align: Tui.Right
             MenuItem { text: "&Tutorial…"; onTriggered: App.openTutorial() }
             MenuItem { text: "&Keys"; onTriggered: help.open() }
             MenuItem { text: "&About"; onTriggered: about.open() }
+        }
+        // the dock, the bar's corner: one icon per open widget, or one running with its drawer
+        // closed, the editor first; a click goes to it (tui/dock.go)
+        Flex {
+            direction: Tui.Horizontal
+            Repeater {
+                model: App.dock
+                Button { text: model.icon; flat: true; toolTipText: model.title; onClicked: App.goDock(model.key) }
+            }
         }
     }
 
@@ -440,6 +448,7 @@ Window {
         // a tab a shell (terminal.go): + adds one, a tab's menu goes to another, adds or closes one
         TerminalTabs {
             id: terminalView
+            onChanged: App.widgetsChanged() // a shell started or gone: the dock lists the terminal while one runs
             // maximize's keys (F11) reach the Window with the keyboard in a shell: its program never gets them
             hostKeys: App.terminalHostKeys
             emptyText: "No shell running. Press + to start one."

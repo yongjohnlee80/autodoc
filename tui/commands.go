@@ -83,6 +83,8 @@ func (h *Host) commands() map[string]Command {
 		// the widgets (widgets.go)
 		"App.openWidgets":     none(h.openWidgets),
 		"App.cycleWidget":     none(func() { h.cycleWidget(1) }),
+		"App.goDock":          oneString("a widget", h.goDock),
+		"App.widgetsChanged":  none(h.refreshDock),
 		"App.cycleWidgetBack": none(func() { h.cycleWidget(-1) }),
 		"App.widgetNext":      none(func() { h.widgetStep(1) }),
 		"App.widgetPrevious":  none(func() { h.widgetStep(-1) }),

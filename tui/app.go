@@ -244,6 +244,7 @@ type Host struct {
 	bufferPick *pick[string] // the Buffers picker (bufferpick.go)
 	// the Go-to picker's rows and its cursor (widgets.go)
 	widgetRows *rows[widgetTarget]
+	dockRows   *rows[widgetTarget] // App.dock, the menu bar's corner (dock.go)
 	widgetAt   int
 	tabStrip   *widget.TabStrip // the GUI editor's buffer tabs, once wired; nil in the TUI (buffertabs.go)
 	// the folders watched for the open files (diskwatch.go), and the driver a folder is opened with
@@ -441,6 +442,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.searchPick, h.openPick, h.newPick = h.newSearchPick(), h.newOpenPick(), h.newNewPick()
 	h.bufferPick = h.newBufferPick()
 	h.widgetRows = newWidgetRows()
+	h.dockRows = h.newDockRows()
 	h.terminals = newTerminals(unboundPanelHost(core{h}))
 	h.terminals.startLua = h.startLuaShell
 	h.agents = newAgents(unboundPanelHost(core{h}), opt.AgentDir, opt.ConfigPath)

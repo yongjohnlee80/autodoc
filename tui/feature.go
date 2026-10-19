@@ -382,6 +382,9 @@ type Core interface {
 	// NotifyOngoingClick is NotifyOngoing whose click runs onClick, on the loop, instead of opening
 	// the history: a candidate's toast reopens its card (candidate.go)
 	NotifyOngoingClick(id, msg string, onClick func())
+	// WidgetsChanged tells the host that what of a feature is alive changed (a shell, an agent, a
+	// plugin run): the dock lists its widgets again (dock.go)
+	WidgetsChanged()
 	// Ask asks a yes-or-no question (ask.go): OnYes runs on Yes; the Asked rewrites its text.
 	Ask(q Question) Asked
 	// Workspace is the workspace in use; "" before one is entered.
@@ -487,6 +490,7 @@ func (c core) Set(name string, v any)        { c.h.set(name, v) }
 func (c core) Open(id string)                { c.h.open(id) }
 func (c core) Close(id string)               { c.h.closeDialog(id) }
 func (c core) Notify(msg string)             { c.h.notify(msg) }
+func (c core) WidgetsChanged()               { c.h.refreshDock() }
 func (c core) Ask(q Question) Asked          { return c.h.ask(q) }
 func (c core) Workspace() string             { return c.h.ws }
 func (c core) Prefs() prefs                  { return c.h.prefs }

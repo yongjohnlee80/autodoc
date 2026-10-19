@@ -68,7 +68,7 @@ func (m *mindmap) toggleDepth() {
 func (*mindmap) Name() string { return "mindmap" }
 
 func (m *mindmap) Panels() []PanelSpec {
-	return []PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71,
+	return []PanelSpec{{ID: mindmapPanelID, View: mindmapViewID, Priority: 71, Icon: "⎇",
 		Edge: func(prefs) string { return "center" },
 		Opened: func(PanelHost) {
 			m.open, m.depth = true, m.prefDepth() // it opens at the depth its settings choose

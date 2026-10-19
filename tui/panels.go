@@ -36,6 +36,11 @@ type PanelSpec struct {
 	// Opened and Closed follow the drawer, however it was opened or closed (Escape inside one
 	// closes it): what it shows and where the keyboard goes. nil Closed: the editor.
 	Opened, Closed func(PanelHost)
+	// Icon is the panel's dock icon: one cell, East Asian Width neutral (dock.go)
+	Icon string
+	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
+	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
+	Alive func() bool
 }
 
 // panelSpecs are this program's snapshotted Feature contributions.
@@ -129,6 +134,7 @@ func (h *Host) panelOpened(name string) {
 	if s.Opened != nil {
 		s.Opened(h.panelHost(name))
 	}
+	h.refreshDock()
 }
 
 func (h *Host) panelClosed(name string) {
@@ -138,6 +144,7 @@ func (h *Host) panelClosed(name string) {
 	}
 	h.panelOpen[name] = false
 	h.showFind()
+	defer h.refreshDock() // a closed panel leaves the dock, unless something of it runs on
 	if s.Closed != nil {
 		s.Closed(h.panelHost(name))
 		return

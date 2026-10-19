@@ -234,7 +234,7 @@ func (s *scripting) luaAppStats(L *lua.LState) int {
 // Panels is the Lua card's panel: at the right edge, its size kept as every panel's is. Opening it
 // arms the card's chain; closing it ends that opening's chain and keeps the card for the next.
 func (s *scripting) Panels() []PanelSpec {
-	return []PanelSpec{{ID: luaCardPanel, View: luaCardView, Priority: 75,
+	return []PanelSpec{{ID: luaCardPanel, View: luaCardView, Priority: 75, Icon: "☾",
 		Edge: func(prefs) string { return "right" }, Places: []string{"right"},
 		Size: [2]int{sidePanelMin, 90}, Length: [2]int{20, 100}, Default: sideDefault,
 		Opened: func(PanelHost) { s.armCard() },

@@ -219,9 +219,11 @@ func TestThePageIsCentredAtTheRuler(t *testing.T) {
 }
 
 // TestThePanelsAreDrawersOverAStillPage: SPC e and SPC l open the explorer and the links over the
-// page, from the edges their preferences name, and the page's text does not move; SPC e again
-// closes it. A side panel takes the middle 85% of the rows, one at the top or bottom the middle
-// 80% of the columns: the page shows around it.
+// page, from the edges their preferences name, and the page's text moves only by the menu bar's
+// row: the dock lists the drawer, so the auto-hidden bar shows, and pushes the page down one row
+// (Johno's choice, 2026-10-19, ADR 1792397302); SPC e again closes it, and the page is back. A side
+// panel takes the middle 85% of the rows, one at the top or bottom the middle 80% of the columns:
+// the page shows around it.
 func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	d := startDaemonWith(t, "", map[string][]string{"kb": {"a.md", "still text\n", "b.md", "see [[a]]\n"}},
 		daemonOpts{prefs: map[string]string{"tui.status.shown": "true", "tui.explorer.edge": "right", "tui.links.edge": "bottom"}})
@@ -236,6 +238,9 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 		return x, y
 	}
 	x0, y0 := where()
+	if !r.menuAutoHides() {
+		t.Fatal("the bar does not auto-hide with the editor alone")
+	}
 	r.leader(t, 'e')
 	r.s.WaitForText(t, "explorer")
 	rows := strings.Split(r.s.String(), "\n")
@@ -252,11 +257,12 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 	if want := (len(rows) - len(rows)*85/100) / 2; top < want-1 || top > want+1 || top < 1 {
 		t.Fatalf("the explorer starts at row %d of %d, want about %d:\n%s", top, len(rows), want, r.s)
 	}
-	if x, y := where(); x != x0 || y != y0 {
-		t.Fatalf("the page's text moved from %d,%d to %d,%d under the explorer", x0, y0, x, y)
+	if x, y := where(); x != x0 || y != y0+1 {
+		t.Fatalf("the page's text moved from %d,%d to %d,%d under the explorer; want one row down, under the bar", x0, y0, x, y)
 	}
 	r.leader(t, 'e')
 	r.s.WaitFor(t, "the explorer closed", func(sc string) bool { return !strings.Contains(sc, "explorer") })
+	r.s.WaitFor(t, "the bar hidden, the page back", func(string) bool { x, y := where(); return x == x0 && y == y0 })
 
 	r.leader(t, 'l')
 	r.s.WaitForText(t, "links (1) · d depth")
@@ -273,8 +279,8 @@ func TestThePanelsAreDrawersOverAStillPage(t *testing.T) {
 			t.Fatalf("the links start at column %d of %d, want about %d:\n%s", c, w, w/10, r.s)
 		}
 	}
-	if x, y := where(); x != x0 || y != y0 {
-		t.Fatalf("the page's text moved from %d,%d to %d,%d under the links", x0, y0, x, y)
+	if x, y := where(); x != x0 || y != y0+1 {
+		t.Fatalf("the page's text moved from %d,%d to %d,%d under the links; want one row down, under the bar", x0, y0, x, y)
 	}
 	r.keys(t, esc()) // Escape in a panel closes it, and the page has the keyboard
 	r.s.WaitFor(t, "the links closed", func(sc string) bool { return !strings.Contains(sc, "backlinks (") })
