@@ -96,3 +96,25 @@ end }`))
 		t.Fatalf("a.md is %q: the unclassified remove ran", got)
 	}
 }
+
+// A script's grant asks in a sentence per capability, one AutoDoc does not know said as such, and
+// how Not now answers.
+func TestALuaGrantNamesEachCapability(t *testing.T) {
+	got := luaGrantText([]string{"workspace.read", "workspace.write", "settings", "clipboard", "agents", "commands", "rockets"})
+	for _, want := range []string{
+		"workspace.read: read the workspace's documents, search them and follow their links\n",
+		"workspace.write: write, rename and remove documents and tasks\n",
+		"settings: change AutoDoc's settings: workspaces, models, preferences\n",
+		"clipboard: read and write the clipboard\n",
+		"agents: list the agents and type into them\n",
+		"commands: run any of AutoDoc's commands\n",
+		"rockets: a capability AutoDoc does not know\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the grant lacks %q:\n%s", want, got)
+		}
+	}
+	if !strings.HasSuffix(got, "Not now refuses until the next start.") {
+		t.Errorf("the grant does not end with how Not now answers:\n%s", got)
+	}
+}

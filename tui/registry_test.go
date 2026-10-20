@@ -376,3 +376,30 @@ func insteadOf(t *testing.T, repo, url string) {
 	t.Setenv("GIT_CONFIG_KEY_0", "url.file://"+filepath.ToSlash(repo)+".insteadOf")
 	t.Setenv("GIT_CONFIG_VALUE_0", url)
 }
+
+// An entry's preview names its kind, its declares at their commit (HEAD for none) and its audits,
+// the report last so a URL's %2F is never taken for an argument; one never audited says so.
+func TestARegistryEntrysPreviewNamesItsKindAndAudits(t *testing.T) {
+	full := strings.Repeat("a", 40)
+	for _, c := range []struct {
+		kind, by string
+	}{{regindex.KindPlugin, "plugin echo, by jo"}, {regindex.KindLua, "Lua package echo, by jo"}, {regindex.KindKBType, "KB type echo, by jo"}} {
+		e := regindex.IndexEntry{Kind: c.kind, Name: "echo", Title: "Echo", Author: "jo", Repo: "https://example.com/echo",
+			Declares: regindex.Declares{Items: []string{"workspace.read"}}}
+		text := registryPane(inEnglish{}.Trf, e).text
+		for _, want := range []string{c.by + "\nhttps://example.com/echo\n", "### Declares, at HEAD\n\n- workspace.read\n", "### Audits\n\nnever audited\n",
+			"Install asks first, as any install does: the card names the commit it would install, and whether that commit is audited."} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s's preview lacks %q:\n%s", c.kind, want, text)
+			}
+		}
+	}
+	e := regindex.IndexEntry{Kind: regindex.KindPlugin, Name: "echo", Declares: regindex.Declares{Commit: full, Items: []string{"x"}},
+		Audits: []regindex.IndexAudit{{Commit: full, Model: "claude-opus-5-5", Date: "2026-10-10", Report: "https://r.example/a%2Fb"}}}
+	text := registryPane(inEnglish{}.Trf, e).text
+	for _, want := range []string{"### Declares, at " + regindex.Short(full) + "\n", "- audited by claude-opus-5-5, 2026-10-10, at " + regindex.Short(full) + " (https://r.example/a%2Fb)\n"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the audited entry's preview lacks %q:\n%s", want, text)
+		}
+	}
+}

@@ -139,37 +139,19 @@ func (h *Host) searchLive(q string) {
 // searchWaits are what the search's waiting line says, one at a time, while a search has not
 // answered: the provider is embedding the query, or the files, or loading its model. They are the
 // English of searchWait's messages, in its order.
-var searchWaits = []string{
-	"warming up the engine",
-	"prepping the vectors",
-	"crates are being fetched",
-	"asking the GPU nicely",
-	"herding the tokens",
-	"polishing the cosines",
-	"consulting the embeddings",
-	"untangling the meanings",
+var searchWaits = []string{ // their catalog ids
+	"autodoc.text.searchpick.warming_up_the_engine",
+	"autodoc.text.searchpick.prepping_the_vectors",
+	"autodoc.text.searchpick.crates_are_being_fetched",
+	"autodoc.text.searchpick.asking_the_gpu_nicely",
+	"autodoc.text.searchpick.herding_the_tokens",
+	"autodoc.text.searchpick.polishing_the_cosines",
+	"autodoc.text.searchpick.consulting_the_embeddings",
+	"autodoc.text.searchpick.untangling_the_meanings",
 }
 
 // searchWait is searchWaits[i] in the UI's language.
-func (h *Host) searchWait(i int) string {
-	switch i {
-	case 0:
-		return h.tr("autodoc.text.searchpick.warming_up_the_engine")
-	case 1:
-		return h.tr("autodoc.text.searchpick.prepping_the_vectors")
-	case 2:
-		return h.tr("autodoc.text.searchpick.crates_are_being_fetched")
-	case 3:
-		return h.tr("autodoc.text.searchpick.asking_the_gpu_nicely")
-	case 4:
-		return h.tr("autodoc.text.searchpick.herding_the_tokens")
-	case 5:
-		return h.tr("autodoc.text.searchpick.polishing_the_cosines")
-	case 6:
-		return h.tr("autodoc.text.searchpick.consulting_the_embeddings")
-	}
-	return h.tr("autodoc.text.searchpick.untangling_the_meanings")
-}
+func (h *Host) searchWait(i int) string { return h.tr(searchWaits[i]) }
 
 // searchWaitDelay is how long a search may take before its waiting line turns: an answer sooner
 // shows nothing at all.

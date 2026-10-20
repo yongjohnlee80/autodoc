@@ -81,3 +81,24 @@ func TestFrontmatterDiagnosticsFollowTheText(t *testing.T) {
 	})
 	r.s.WaitForText(t, "⚠ frontmatter line 2")
 }
+
+// A schema's standing reads as it did before it had a catalog: each state, each error's line, and
+// whether the last valid schema stays in use, in English's words.
+func TestASchemasStandingIsASentenceEach(t *testing.T) {
+	for _, c := range []struct {
+		s    schemaInfo
+		want string
+	}{
+		{schemaInfo{}, "no schema: files are not checked, and field:value searches as words"},
+		{schemaInfo{path: "s.yml", active: true, fields: 3}, "active: 3 fields"},
+		{schemaInfo{path: "s.yml"}, "not active"},
+		{schemaInfo{path: "s.yml", active: true, fields: 3, err: "bad", line: 4}, "active: 3 fields · line 4: bad (the last valid schema stays in use)"},
+		{schemaInfo{path: "s.yml", err: "bad", line: 4}, "not active · line 4: bad"},
+		{schemaInfo{path: "s.yml", active: true, fields: 3, err: "bad"}, "active: 3 fields · bad (the last valid schema stays in use)"},
+		{schemaInfo{path: "s.yml", err: "bad"}, "not active · bad"},
+	} {
+		if got := c.s.state(inEnglish{}); got != c.want {
+			t.Errorf("%+v reads %q, want %q", c.s, got, c.want)
+		}
+	}
+}

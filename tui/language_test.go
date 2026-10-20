@@ -29,6 +29,8 @@ var (
 	// a literal id, whole: one built with + (a command's, a theme's) is the generator's to hold
 	goTrIDs  = regexp.MustCompile(`\b(?:tr|trf|Tr|Trf)\("(autodoc\.[^"]+)"\s*[,)]`)
 	goMsgIDs = regexp.MustCompile(`\bMsg\("(autodoc\.[^"]+)"\)`)
+	// an id kept in a table (a capability's, a kind's): whole, never a prefix ending in _ or .
+	goTableIDs = regexp.MustCompile(`"(autodoc\.(?:notice|text|question)\.[a-z0-9_]+\.[a-z0-9_]*[a-z0-9])"`)
 )
 
 // usedIDs are the catalog ids AutoDoc's QML and Go name literally, with where.
@@ -65,6 +67,7 @@ func usedIDs(t *testing.T) map[string]string {
 		add(qsTrIDs, p, b) // QML written in Go (relationviews_gui.go)
 		add(goTrIDs, p, b)
 		add(goMsgIDs, p, b)
+		add(goTableIDs, p, b)
 	}
 	return used
 }

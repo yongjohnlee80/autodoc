@@ -26,6 +26,7 @@ import (
 // into it of the kinds in.
 type relSection struct {
 	label   string
+	heading string // its heading's catalog id: %1 is how many rows it heads
 	out, in []string
 }
 
@@ -35,20 +36,20 @@ var body = []string{"wikilink", "embed", "markdown"}
 // relSections are the drawer's headings, in its order. A relation in is the other side's
 // relation out: one that names this document superseded_by makes this its successor.
 var relSections = []relSection{
-	{label: "superseded by", out: []string{"superseded_by"}, in: []string{"supersedes"}},
-	{label: "supersedes", out: []string{"supersedes"}, in: []string{"superseded_by"}},
-	{label: "sources", out: []string{"sources"}},
-	{label: "cited by", in: []string{"sources"}},
-	{label: "amends", out: []string{"amends"}},
-	{label: "amended by", in: []string{"amends"}},
-	{label: "related", out: []string{"related"}, in: []string{"related"}},
-	{label: "adr", out: []string{"adr"}},
-	{label: "review", out: []string{"review"}},
-	{label: "reviews", in: []string{"review"}},
-	{label: "blocked by", out: []string{"blocked"}},
-	{label: "blocks", in: []string{"blocked"}},
-	{label: "links", out: body},
-	{label: "backlinks", in: append(slices.Clone(body), "adr")},
+	{label: "superseded by", heading: "autodoc.text.relations.superseded_by", out: []string{"superseded_by"}, in: []string{"supersedes"}},
+	{label: "supersedes", heading: "autodoc.text.relations.supersedes", out: []string{"supersedes"}, in: []string{"superseded_by"}},
+	{label: "sources", heading: "autodoc.text.relations.sources", out: []string{"sources"}},
+	{label: "cited by", heading: "autodoc.text.relations.cited_by", in: []string{"sources"}},
+	{label: "amends", heading: "autodoc.text.relations.amends", out: []string{"amends"}},
+	{label: "amended by", heading: "autodoc.text.relations.amended_by", in: []string{"amends"}},
+	{label: "related", heading: "autodoc.text.relations.related", out: []string{"related"}, in: []string{"related"}},
+	{label: "adr", heading: "autodoc.text.relations.adr", out: []string{"adr"}},
+	{label: "review", heading: "autodoc.text.relations.review", out: []string{"review"}},
+	{label: "reviews", heading: "autodoc.text.relations.reviews", in: []string{"review"}},
+	{label: "blocked by", heading: "autodoc.text.relations.blocked_by", out: []string{"blocked"}},
+	{label: "blocks", heading: "autodoc.text.relations.blocks", in: []string{"blocked"}},
+	{label: "links", heading: "autodoc.text.relations.links", out: body},
+	{label: "backlinks", heading: "autodoc.text.relations.backlinks", in: append(slices.Clone(body), "adr")},
 }
 
 // relRow is one row of the drawer: a heading or an unresolved link (path ""), a document to open,
@@ -68,41 +69,6 @@ type relations struct {
 	cycles  []string    // the raw values of its supersession relations that go round a loop
 	edges   [][3]string // at depth 2, graph.neighborhood's edges: src, dst, kind
 	err     error
-}
-
-// sectionHeading is section label's heading over its n rows, in the UI's language.
-func sectionHeading(t wording, label string, n int) string {
-	switch label {
-	case "superseded by":
-		return t.Trf("autodoc.text.relations.superseded_by", n)
-	case "supersedes":
-		return t.Trf("autodoc.text.relations.supersedes", n)
-	case "sources":
-		return t.Trf("autodoc.text.relations.sources", n)
-	case "cited by":
-		return t.Trf("autodoc.text.relations.cited_by", n)
-	case "amends":
-		return t.Trf("autodoc.text.relations.amends", n)
-	case "amended by":
-		return t.Trf("autodoc.text.relations.amended_by", n)
-	case "related":
-		return t.Trf("autodoc.text.relations.related", n)
-	case "adr":
-		return t.Trf("autodoc.text.relations.adr", n)
-	case "review":
-		return t.Trf("autodoc.text.relations.review", n)
-	case "reviews":
-		return t.Trf("autodoc.text.relations.reviews", n)
-	case "blocked by":
-		return t.Trf("autodoc.text.relations.blocked_by", n)
-	case "blocks":
-		return t.Trf("autodoc.text.relations.blocks", n)
-	case "links":
-		return t.Trf("autodoc.text.relations.links", n)
-	case "backlinks":
-		return t.Trf("autodoc.text.relations.backlinks", n)
-	}
-	return fmt.Sprintf("%s (%d)", label, n)
 }
 
 // relationRows are the drawer's rows for p's relations rl, and how many neighbours they list.
@@ -148,7 +114,7 @@ func relationRows(t wording, ws, p string, rl relations) ([]relRow, int) {
 		if len(paths)+len(external) == 0 {
 			continue
 		}
-		rows = append(rows, relRow{label: sectionHeading(t, s.label, len(paths)+len(external))})
+		rows = append(rows, relRow{label: t.Trf(s.heading, len(paths)+len(external))})
 		for _, x := range external {
 			rows = append(rows, relRow{label: "  " + t.Trf("autodoc.text.relations.outside_the_workspace", x), external: x, section: s.label})
 		}

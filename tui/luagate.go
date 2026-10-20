@@ -117,27 +117,24 @@ func luaGrantText(caps []string) string { return luaGrantTextIn(inEnglish{}.Trf,
 func luaGrantTextIn(trf func(string, ...any) string, caps []string) string {
 	var b strings.Builder
 	for _, c := range caps {
-		var d string
-		switch c {
-		case "workspace.read":
-			d = trf("autodoc.question.luagate.read_the_workspace_s_documents_search_them_and_f")
-		case "workspace.write":
-			d = trf("autodoc.question.luagate.write_rename_and_remove_documents_and_tasks")
-		case "settings":
-			d = trf("autodoc.question.luagate.change_autodoc_s_settings_workspaces_models_pref")
-		case "clipboard":
-			d = trf("autodoc.question.luagate.read_and_write_the_clipboard")
-		case "agents":
-			d = trf("autodoc.question.luagate.list_the_agents_and_type_into_them")
-		case "commands":
-			d = trf("autodoc.question.luagate.run_any_of_autodoc_s_commands")
-		default:
-			d = trf("autodoc.question.luagate.a_capability_autodoc_does_not_know")
+		id, ok := luaCapabilityText[c]
+		if !ok {
+			id = "autodoc.question.luagate.a_capability_autodoc_does_not_know"
 		}
-		fmt.Fprintf(&b, "%s: %s\n", c, d)
+		fmt.Fprintf(&b, "%s: %s\n", c, trf(id))
 	}
 	b.WriteString(trf("autodoc.question.luagate.not_now_refuses_until_the_next_start"))
 	return b.String()
+}
+
+// luaCapabilityText is what each capability lets a script do, by its catalog id.
+var luaCapabilityText = map[string]string{
+	"workspace.read":  "autodoc.question.luagate.read_the_workspace_s_documents_search_them_and_f",
+	"workspace.write": "autodoc.question.luagate.write_rename_and_remove_documents_and_tasks",
+	"settings":        "autodoc.question.luagate.change_autodoc_s_settings_workspaces_models_pref",
+	"clipboard":       "autodoc.question.luagate.read_and_write_the_clipboard",
+	"agents":          "autodoc.question.luagate.list_the_agents_and_type_into_them",
+	"commands":        "autodoc.question.luagate.run_any_of_autodoc_s_commands",
 }
 
 var _ script.Grants = luaGrants{}

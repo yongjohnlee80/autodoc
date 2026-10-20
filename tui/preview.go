@@ -142,12 +142,11 @@ func (h *Host) mermaidEngineChanged() {
 			h.renderHTMLPane()
 		}
 	}
-	drawn := h.tr("autodoc.notice.preview.drawn_by_mermaid_js")
-	if h.prefs.mermaid == "native" {
-		drawn = h.tr("autodoc.notice.preview.drawn_natively_no_zoom")
-	}
-	h.say(h.trf("autodoc.notice.preview.mermaid_diagrams", drawn))
+	h.say(h.trf("autodoc.notice.preview.mermaid_diagrams", h.tr(mermaidDrawn[h.prefs.mermaid == "native"])))
 }
+
+// mermaidDrawn is how the engine chosen draws, by whether it is golib's own, as a catalog id.
+var mermaidDrawn = map[bool]string{true: "autodoc.notice.preview.drawn_natively_no_zoom", false: "autodoc.notice.preview.drawn_by_mermaid_js"}
 
 // previewing is the image preview open: its dialog, the page it renders, whether that page is as
 // wide as its content (a diagram) and how tall it may be, and its zoom step.

@@ -30,7 +30,11 @@ func TestAnUnansweredSearchSaysWhatItWaitsOn(t *testing.T) {
 	r.h.p.Post(r.h.openSearch)
 	r.searchReady(t)
 	r.keys(t, decltest.Type("zebra")...)
-	waits := regexp.MustCompile(`([-\\|/]) (` + strings.Join(searchWaits, "|") + `)…`)
+	english := make([]string, len(searchWaits))
+	for i, id := range searchWaits {
+		english[i] = englishText(id)
+	}
+	waits := regexp.MustCompile(`([-\\|/]) (` + strings.Join(english, "|") + `)…`)
 	frames := map[string]bool{}
 	r.s.WaitFor(t, "the waiting line turning", func(sc string) bool {
 		if m := waits.FindStringSubmatch(sc); m != nil {

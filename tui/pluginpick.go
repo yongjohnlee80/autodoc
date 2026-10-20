@@ -29,25 +29,28 @@ type pluginRow struct {
 	commands    int
 }
 
-// pluginReserved are the chooser's own letters: what each does, as a refusal says it.
-var pluginReserved = map[string]string{"j": "moves down", "k": "moves up", "q": "closes the chooser"}
+// pluginReserved are the chooser's own letters, each why it is no plugin's by its catalog ids: on the
+// list's row, and again as *'s refusal. A sentence each, as every language says it; %1 is the letter.
+var pluginReserved = map[string][2]string{
+	"j": {"autodoc.text.pluginpick.moves_down", "autodoc.text.pluginpick.moves_down_again_for_another_letter"},
+	"k": {"autodoc.text.pluginpick.moves_up", "autodoc.text.pluginpick.moves_up_again_for_another_letter"},
+	"q": {"autodoc.text.pluginpick.closes_the_chooser", "autodoc.text.pluginpick.closes_the_chooser_again_for_another_letter"},
+}
+
+// reservedLetter is whether k is one of the chooser's own letters.
+func reservedLetter(k string) bool {
+	_, ok := pluginReserved[k]
+	return ok
+}
 
 // reservedWhy is why k, one of the chooser's own letters, is no plugin's: on the list's row, or, again,
-// as *'s refusal. A sentence each, as every language says it.
+// as *'s refusal.
 func (pl *plugins) reservedWhy(k string, again bool) string {
-	switch {
-	case k == "j" && again:
-		return pl.c.Trf("autodoc.text.pluginpick.moves_down_again_for_another_letter", k)
-	case k == "j":
-		return pl.c.Trf("autodoc.text.pluginpick.moves_down", k)
-	case k == "k" && again:
-		return pl.c.Trf("autodoc.text.pluginpick.moves_up_again_for_another_letter", k)
-	case k == "k":
-		return pl.c.Trf("autodoc.text.pluginpick.moves_up", k)
-	case again:
-		return pl.c.Trf("autodoc.text.pluginpick.closes_the_chooser_again_for_another_letter", k)
+	ids := pluginReserved[k]
+	if again {
+		return pl.c.Trf(ids[1], k)
 	}
-	return pl.c.Trf("autodoc.text.pluginpick.closes_the_chooser", k)
+	return pl.c.Trf(ids[0], k)
 }
 
 // bindPluginLetters lists the plugins with commands, by name, each with its letter. Two wanting one
@@ -69,7 +72,7 @@ func (pl *plugins) bindPluginLetters() {
 		case l == "":
 		case !pluginLetter(l):
 			r.why = pl.c.Trf("autodoc.text.pluginpick.letter_want_one_letter_or_digit", strconv.Quote(l))
-		case pluginReserved[l] != "":
+		case reservedLetter(l):
 			r.why = pl.reservedWhy(l, false)
 		case held[l] != "":
 			r.why = pl.c.Trf("autodoc.text.pluginpick.is_s", l, held[l])
@@ -232,7 +235,7 @@ func (pl *plugins) bindPluginLetter(key, k string) string {
 	case k == "Backspace":
 		pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+key+prefPluginLetter, ""))
 		return pl.c.Trf("autodoc.text.pluginpick.has_no_letter", title)
-	case pluginReserved[k] != "":
+	case reservedLetter(k):
 		return pl.reservedWhy(k, true)
 	case !pluginLetter(k):
 		return pl.c.Tr("autodoc.text.pluginpick.a_plugin_s_letter_is_a_letter_or_digit_again_for")

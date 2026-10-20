@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	golibrpc "github.com/yongjohnlee80/golib/server/rpc"
@@ -107,6 +108,27 @@ var (
 	errNoEventLog    = errors.New("tui: the server keeps no event log")
 )
 
+// workspaceChanges are a workspace's events that change only its settings, each one's notice by its
+// catalog id: %1 the workspace, %2 who changed it.
+var workspaceChanges = map[string]string{
+	"workspace.added":            "autodoc.notice.events.workspace_was_added",
+	"workspace.patterns":         "autodoc.notice.events.workspace_its_rules_were_changed_reconciling",
+	"workspace.schema":           "autodoc.notice.events.workspace_its_frontmatter_schema_changed",
+	"workspace.text_extensions":  "autodoc.notice.events.workspace_its_text_types_were_changed",
+	"workspace.section_size":     "autodoc.notice.events.workspace_its_section_size_was_changed",
+	"workspace.embedding_policy": "autodoc.notice.events.workspace_its_embedding_policy_was_changed",
+	"workspace.provider":         "autodoc.notice.events.workspace_its_embedding_provider_was_changed",
+	"workspace.databases":        "autodoc.notice.events.workspace_its_database_settings_was_changed",
+}
+
+// backendChanges are the backend's events, each one's notice by its catalog id: %1 who changed it.
+var backendChanges = map[string]string{
+	"embedding.cancelled": "autodoc.notice.events.the_model_switch_was_cancelled",
+	"embedding.providers": "autodoc.notice.events.the_embedding_providers_were_changed",
+	"ranker.switched":     "autodoc.notice.events.the_ranker_in_use_was_changed",
+	"ranker.providers":    "autodoc.notice.events.the_rankers_were_changed",
+}
+
 // applyEvents refreshes what other clients' changes touched and tells of each, once.
 func (h *Host) applyEvents(events []peerEvent) {
 	self := h.session.Client()
@@ -138,37 +160,20 @@ func (h *Host) applyEvents(events []peerEvent) {
 			}
 			notice = h.trf("autodoc.notice.events.workspace_was_removed", e.workspace, by)
 			relist = true
-		case "workspace.added":
-			notice, relist = h.trf("autodoc.notice.events.workspace_was_added", e.workspace, by), true
-		case "workspace.patterns":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_rules_were_changed_reconciling", e.workspace, by), true
-		case "workspace.schema":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_frontmatter_schema_changed", e.workspace, by), true
-			recheck = recheck || e.workspace == h.ws
-		case "workspace.text_extensions":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_text_types_were_changed", e.workspace, by), true
-		case "workspace.section_size":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_section_size_was_changed", e.workspace, by), true
-		case "workspace.embedding_policy":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_embedding_policy_was_changed", e.workspace, by), true
-		case "workspace.provider":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_embedding_provider_was_changed", e.workspace, by), true
-		case "workspace.databases":
-			notice, relist = h.trf("autodoc.notice.events.workspace_its_database_settings_was_changed", e.workspace, by), true
 		case "models.reclaimed": // the daemon's own: what its start sweep removed (ADR 1791284787)
 			notice = h.trf("autodoc.notice.events.workspace_reclaimed", e.workspace, e.detail)
 		case "store.compacted", "store.compact_skipped":
 			notice = e.detail
 		case "embedding.switched":
 			notice = h.trf("autodoc.notice.events.embedding_model_switched_to_files_are_re_indexin", e.detail, by)
-		case "embedding.cancelled":
-			notice = h.trf("autodoc.notice.events.the_model_switch_was_cancelled", by)
-		case "embedding.providers":
-			notice = h.trf("autodoc.notice.events.the_embedding_providers_were_changed", by)
-		case "ranker.switched":
-			notice, reranked = h.trf("autodoc.notice.events.the_ranker_in_use_was_changed", by), true
-		case "ranker.providers":
-			notice, reranked = h.trf("autodoc.notice.events.the_rankers_were_changed", by), true
+		default:
+			if id, ok := workspaceChanges[e.kind]; ok { // the list is read again
+				notice, relist = h.trf(id, e.workspace, by), true
+				recheck = recheck || (e.kind == "workspace.schema" && e.workspace == h.ws)
+			} else if id, ok := backendChanges[e.kind]; ok {
+				notice = h.trf(id, by)
+				reranked = reranked || strings.HasPrefix(e.kind, "ranker.")
+			}
 		}
 		if notice != "" && !slices.Contains(notices, notice) {
 			notices = append(notices, notice)
