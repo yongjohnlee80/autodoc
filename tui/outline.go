@@ -26,7 +26,7 @@ const crumbSep = " › "
 
 // showTitle titles the page's frame: the file's name, then the breadcrumb a feature put there.
 func (h *Host) showTitle() {
-	title := h.file.titleIn(h.tr)
+	title := h.file.title(h.tr)
 	if len(h.crumbs) > 0 {
 		title += crumbSep + strings.Join(h.crumbs, crumbSep)
 	}

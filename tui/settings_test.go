@@ -67,10 +67,10 @@ func todoInfo() wsInfo {
 func TestATodoStoreExcludedIsSaidAndOffered(t *testing.T) {
 	w := todoInfo()
 	w.exclude, w.todoExcluded = []string{".git/**", ".todo-list/**"}, []string{".todo-list/**"}
-	if n := todoExcludedNote(w); !strings.Contains(n, "exclude .todo-list/**") || !strings.Contains(n, "graph-only") {
+	if n := todoExcludedNote(inEnglish{}, w); !strings.Contains(n, "exclude .todo-list/**") || !strings.Contains(n, "graph-only") {
 		t.Errorf("the note %q", n)
 	}
-	if todoExcludedNote(todoInfo()) != "" {
+	if todoExcludedNote(inEnglish{}, todoInfo()) != "" {
 		t.Error("a note with nothing excluded")
 	}
 	b := baseFor(w)
@@ -527,7 +527,7 @@ func TestTheManagerDetail(t *testing.T) {
 	w.db = databasesInfo{destination: store.DestinationPostgres, vectorIndex: store.IndexHNSW,
 		destConn: &connInfo{engine: "postgres", host: "db:5432", database: "rag", user: "me", hasPassword: true},
 		viewArgs: map[string]any{"LabelGroupID": "7"}}
-	without, with := managerDetail(w, false, nil), managerDetail(w, true, nil)
+	without, with := managerDetail(inEnglish{}, w, false, nil), managerDetail(inEnglish{}, w, true, nil)
 	for _, s := range []string{"source", "view args", "destination"} {
 		if strings.Contains(without, s) {
 			t.Errorf("without the databases, the pane lists %q:\n%s", s, without)
@@ -626,7 +626,7 @@ func TestAStoredHTMLTextTypeDoesNotBlockASave(t *testing.T) {
 	if f.texts != ".log" {
 		t.Fatalf("the text field %q, want .log alone", f.texts)
 	}
-	if n := textsNote([]string{".html"}); !strings.Contains(n, ".html") || !strings.Contains(n, "still included") {
+	if n := textsNote(inEnglish{}, []string{".html"}); !strings.Contains(n, ".html") || !strings.Contains(n, "still included") {
 		t.Fatalf("note %q", n)
 	}
 	f.name = "docs"

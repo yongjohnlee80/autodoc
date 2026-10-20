@@ -178,7 +178,7 @@ func (h *Host) askPackage(c *candidate) {
 		requires = h.trf("autodoc.question.luapackages.asked_again_each_once_it_loads", strings.Join(slices.Sorted(slices.Values(m.Requires)), ", "))
 	}
 	audit := ""
-	if line := auditLineIn(h.trf, c.entry, c.commit); line != "" {
+	if line := auditLine(h.trf, c.entry, c.commit); line != "" {
 		audit = line + "\n\n"
 	}
 	text := fmt.Sprintf("%s %s: %s\n%s\n%s\n\n%s%s\n\n%s",

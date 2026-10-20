@@ -937,7 +937,7 @@ func TestProgressText(t *testing.T) {
 		{progress{ws: "MonstercatKB", docs: 10, spin: 1, emb: embedProgress{on: true, texts: 40, target: qwen, targetPending: 30}}, "switching MonstercatKB to qwen3-embedding:4b \\ ██░░░░░░░░ 10/40"},
 		{progress{ws: "MonstercatKB", docs: 10, emb: embedProgress{on: true, texts: 10, pending: 5, queueState: "waiting", waitingFor: "GlobalKB"}}, "embedding GlobalKB · MonstercatKB waits"},
 	} {
-		if got := progressText(c.p); got != c.want {
+		if got := progressText(inEnglish{}, c.p); got != c.want {
 			t.Errorf("%+v: %q, want %q", c.p, got, c.want)
 		}
 	}

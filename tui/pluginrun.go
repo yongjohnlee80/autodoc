@@ -382,15 +382,16 @@ func (r *pluginRun) exitedUnasked() {
 	why := r.pl.c.Trf("autodoc.notice.pluginrun.exited", r.e.m.Name)
 	var ee *exec.ExitError
 	if errors.As(r.exitErr, &ee) {
-		why = r.pl.c.Trf("autodoc.notice.pluginrun.exited_2", r.e.m.Name, ee.ProcessState)
+		why = r.pl.c.Trf("autodoc.notice.pluginrun.exited_with_its_status", r.e.m.Name, ee.ProcessState)
 	}
 	r.close(why)
 }
 
 // close closes the dialog at once and stops the plugin behind it: plugin.close, then SIGTERM after
 // pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
-// failure (CloseFailure), a sentence naming the plugin in the UI's language: a toast says it, with the last line the plugin wrote to its log; without
-// one, it is a close as a dialog's (CloseClosed: a modal Esc, its own host.close).
+// failure (CloseFailure), a sentence naming the plugin in the UI's language: a toast says it, with
+// the last line the plugin wrote to its log; without one, it is a close as a dialog's (CloseClosed:
+// a modal Esc, its own host.close).
 func (r *pluginRun) close(why string) {
 	reason := plugin.CloseClosed
 	if why != "" {
@@ -434,7 +435,7 @@ func (r *pluginRun) stopFor(reason, why string) {
 	if why != "" {
 		msg := why // the plugin's name and what became of it, a sentence
 		if last := r.log.last(); last != "" {
-			msg = r.pl.c.Trf("autodoc.notice.pluginrun.text", why, last)
+			msg = r.pl.c.Trf("autodoc.notice.pluginrun.reason_and_last_log_line", why, last)
 		}
 		r.pl.c.Notify(msg)
 	}

@@ -94,14 +94,11 @@ func (n openedFile) readAs() string {
 // outside reports whether the open file is outside every workspace.
 func (n openedFile) outside() bool { return n.open && n.ws == "" }
 
-// title is the file's name as the page and the status line show it: a derived document's carries
-// its read-only badge, an outside file's that it is in no workspace. Its badges are English: titleIn
-// gives them in the UI's language.
-func (n openedFile) title() string { return n.titleIn(englishText) }
-
-// titleIn is title with its badges in tr's language (h.tr).
-func (n openedFile) titleIn(tr func(string) string) string {
-	trf := func(id, arg string) string { return strings.ReplaceAll(tr(id), "%1", arg) }
+// title is the file's name as the page and the status line show it, its badges in tr's language
+// (h.tr): a derived document's carries its read-only badge, an outside file's that it is in no
+// workspace.
+func (n openedFile) title(tr func(string) string) string {
+	trf := func(id, arg string) string { return fill(tr(id), arg) }
 	badges := []string{}
 	if n.outside() {
 		badges = append(badges, tr("autodoc.text.files.no_workspace"))
@@ -665,7 +662,7 @@ func (h *Host) setDirty(v bool) {
 		mark = " [+]"
 	}
 	if h.file.open || v {
-		h.set("App.statusCenter", h.file.titleIn(h.tr)+mark)
+		h.set("App.statusCenter", h.file.title(h.tr)+mark)
 	} else {
 		h.set("App.statusCenter", "")
 	}

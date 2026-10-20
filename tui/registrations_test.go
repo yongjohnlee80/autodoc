@@ -234,7 +234,7 @@ func TestAnOlderBackendAnsweringAgainIsNamed(t *testing.T) {
 // TestHeldHitsAreMarked: a hit of a held document says so after its section, and how its file
 // stands.
 func TestHeldHitsAreMarked(t *testing.T) {
-	rows := hitRows([]hit{{path: "a.go", breadcrumb: "a.go > F", hold: "stale"}, {path: "b.go", breadcrumb: "b.go > G", hold: "unchecked"},
+	rows := hitRows(englishText, []hit{{path: "a.go", breadcrumb: "a.go > F", hold: "stale"}, {path: "b.go", breadcrumb: "b.go > G", hold: "unchecked"},
 		{path: "c.go", breadcrumb: "c.go > H", hold: "current"}, {path: "n.md", breadcrumb: "N"}})
 	var got []string
 	for _, r := range rows {

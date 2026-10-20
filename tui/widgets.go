@@ -197,7 +197,7 @@ func (h *Host) withRowText(t widgetTarget) widgetTarget {
 		t.state = h.tr("autodoc.text.widgets.open")
 	}
 	t.label = t.name
-	if t.title != "" && t.title != (inEnglish{}).Trf("autodoc.text.arrange.the", t.name) {
+	if t.title != "" && t.title != thePanel(inEnglish{}.Trf, t.name) { // its title, English (Lua's), says more than its name
 		title := t.title // a tab's: its label and its panel's name
 		switch {
 		case t.panel == "":

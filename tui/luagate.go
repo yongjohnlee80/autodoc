@@ -75,7 +75,7 @@ func (h *Host) askLuaGrants() {
 		}
 		h.ask(Question{
 			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
-			Text:  luaGrantTextIn(h.trf, open),
+			Text:  luaGrantText(h.trf, open),
 			Yes:   h.tr("autodoc.question.luagate.allow"), No: h.tr("autodoc.question.luagate.not_now"),
 			OnYes:    func() { h.grantLua(a.script, open); next() },
 			OnCancel: next,
@@ -109,12 +109,9 @@ func luaGrantsOf(s string) map[string]map[string]bool {
 	return g
 }
 
-// luaGrantText says what each capability lets a script do, in English.
-func luaGrantText(caps []string) string { return luaGrantTextIn(inEnglish{}.Trf, caps) }
-
-// luaGrantTextIn is luaGrantText in the language trf (a Host's trf, or inEnglish{}.Trf) says it in: a
-// line each, the capability's name and what it lets a script do.
-func luaGrantTextIn(trf func(string, ...any) string, caps []string) string {
+// luaGrantText says what each capability lets a script do, a line each, in the language trf (a
+// Host's trf, or inEnglish{}.Trf) says it in.
+func luaGrantText(trf func(string, ...any) string, caps []string) string {
 	var b strings.Builder
 	for _, c := range caps {
 		id, ok := luaCapabilityText[c]

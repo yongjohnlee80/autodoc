@@ -1645,7 +1645,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 	}
 	card := read("name = \"stats\"\nkind = \"dialog\"\nprotocol = 2\ncommand = [\"x\"]\n[dialog]\nmodal = false\n[feed]\ndocument = true\n" +
 		"[[commands]]\nid = \"toggle\"\ntitle = \"Show / hide the stats\"\nkey = \"s\"\n[[commands]]\nid = \"copy\"\ntitle = \"Copy\"\n")
-	q := pluginQuestion(&candidate{m: card, repo: "file:///x", commit: "abc"}, "Doc stats")
+	q := pluginQuestion(inEnglish{}.Trf, &candidate{m: card, repo: "file:///x", commit: "abc"}, "Doc stats")
 	want := "Declares:  a card beside the page · reads the open note's text (feed) · commands: Show / hide the stats (s on its SPC p card), Copy"
 	if !strings.HasSuffix(q, want+"\n\n"+auditNote) || strings.Index(q, pluginRisk) > strings.Index(q, "Declares:") {
 		t.Errorf("a card's question:\n%s\nwant it to end, after the risk, with\n%s, then the audit note", q, want)
@@ -1659,7 +1659,7 @@ func TestTheInstallConfirmationListsWhatIsDeclared(t *testing.T) {
 		t.Errorf("a service on use: %q", got)
 	}
 	old := read("name = \"tetris\"\nkind = \"dialog\"\nprotocol = 1\ncommand = [\"x\"]\n")
-	if q := pluginQuestion(&candidate{m: old}, "Tetris"); strings.Contains(q, "Declares") {
+	if q := pluginQuestion(inEnglish{}.Trf, &candidate{m: old}, "Tetris"); strings.Contains(q, "Declares") {
 		t.Errorf("a 0209 dialog declares something:\n%s", q)
 	}
 }

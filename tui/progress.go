@@ -304,11 +304,8 @@ func bar(done, total int64) string {
 // progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
 // Each names the workspace it is for; while the daemon's one embedding queue serves another
-// workspace, the text names that one, the workspace being processed. It is in English: the toast's
-// is progressTextIn's, in the UI's language.
-func progressText(p progress) string { return progressTextIn(inEnglish{}, p) }
-
-func progressTextIn(t wording, p progress) string {
+// workspace, the text names that one, the workspace being processed. It is in t's language.
+func progressText(t wording, p progress) string {
 	var parts []string
 	if p.pending > 0 {
 		done := bar(p.docs, p.docs+p.pending)
@@ -357,7 +354,7 @@ func progressTextIn(t wording, p progress) string {
 // the work does (showProgress).
 func (h *Host) publishStatus() {
 	if h.prog.busy {
-		if p := progressTextIn(core{h}, h.prog); p != "" {
+		if p := progressText(core{h}, h.prog); p != "" {
 			h.notifyOngoing(toastProgress, p)
 		}
 	}

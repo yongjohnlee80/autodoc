@@ -730,8 +730,10 @@ func (t *todos) selectMonth() {
 	t.c.Set("App.todoMonthIndex", i)
 }
 
-// LanguageChanged composes the panel's status line and its details again, in the UI's language.
+// LanguageChanged composes the panel's variable rows, status line and details again, in the UI's
+// language.
 func (t *todos) LanguageChanged() {
+	t.vars.Reset(t.vars.All()) // the variables' rows: "(unset)", "(set per machine: none here)"
 	t.status()
 	t.showDetail()
 }

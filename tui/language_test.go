@@ -302,6 +302,14 @@ func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 	t.Cleanup(h.cancel)
 	r := &running{h: h, s: s}
 	runs := englishRuns(t)
+	onLoop(r, func() bool { // a row a model composes in Go: a todo variable set per machine, none here
+		for _, f := range h.reg.features {
+			if td, ok := f.(*todos); ok {
+				td.vars.Reset([]map[string]any{{"name": "owner", "machine": true}})
+			}
+		}
+		return true
+	})
 	onLoop(r, func() bool { h.setLanguage("ja_JP"); return true })
 	s.WaitFor(t, "the switch", func(string) bool { return onLoop(r, func() bool { return h.language == "ja_JP" }) })
 	onLoop(r, func() bool { return true }) // F1 is made anew on the loop's next turn (commandsChanged)

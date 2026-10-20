@@ -175,13 +175,9 @@ func cachedEntry(kind, repo string) *regindex.IndexEntry {
 }
 
 // auditLine is an install card's line about audits, for entry e (nil: not from the registry) at
-// commit (in full), in English. Commits are compared in full: a prefix is never a match.
-func auditLine(e *regindex.IndexEntry, commit string) string {
-	return auditLineIn(inEnglish{}.Trf, e, commit)
-}
-
-// auditLineIn is auditLine in the language trf (a Host's trf, or inEnglish{}.Trf) says it in.
-func auditLineIn(trf func(string, ...any) string, e *regindex.IndexEntry, commit string) string {
+// commit (in full), in the language trf (a Host's trf, or inEnglish{}.Trf) says it in. Commits are
+// compared in full: a prefix is never a match.
+func auditLine(trf func(string, ...any) string, e *regindex.IndexEntry, commit string) string {
 	switch {
 	case e == nil:
 		return ""

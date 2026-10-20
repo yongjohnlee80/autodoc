@@ -69,7 +69,7 @@ func TestRegisteredTypesOnTheEditTab(t *testing.T) {
 	if _, err := none.changes(f3); err == nil || !strings.Contains(err.Error(), "it reads none") {
 		t.Fatalf("on a community daemon: %v", err)
 	}
-	if d := managerDetail(on, false, b.registered); !strings.Contains(d, "file types   Markdown, plain text, YAML, .rs") {
+	if d := managerDetail(inEnglish{}, on, false, b.registered); !strings.Contains(d, "file types   Markdown, plain text, YAML, .rs") {
 		t.Fatalf("the manager's pane:\n%s", d)
 	}
 }

@@ -137,9 +137,9 @@ func (h *Host) searchLive(q string) {
 }
 
 // searchWaits are what the search's waiting line says, one at a time, while a search has not
-// answered: the provider is embedding the query, or the files, or loading its model. They are the
-// English of searchWait's messages, in its order.
-var searchWaits = []string{ // their catalog ids
+// answered: the provider is embedding the query, or the files, or loading its model. Each is its
+// message's catalog id, in the order they turn.
+var searchWaits = []string{
 	"autodoc.text.searchpick.warming_up_the_engine",
 	"autodoc.text.searchpick.prepping_the_vectors",
 	"autodoc.text.searchpick.crates_are_being_fetched",
@@ -241,7 +241,7 @@ func (h *Host) refreshSearch() {
 // newSearchPick is the search's picker: its hits are what the daemon found for the words typed.
 func (h *Host) newSearchPick() *pick[hit] {
 	return &pick[hit]{c: core{h}, dialog: "searchPicker", name: "search",
-		list:  newRows(tuidecl.NewListModel("key", "hit", "path", "section"), hitRowOf),
+		list:  newRows(tuidecl.NewListModel("key", "hit", "path", "section"), func(i int, x hit) rowOf { return hitRowOf(h.tr, i, x) }),
 		query: h.searchLive,
 		preview: func(x hit) func(context.Context) answerOf[pane] {
 			return h.readPreview(x.path, x.byteStart, x.hold != "")
@@ -274,19 +274,19 @@ func (h *Host) previewRendered(p string, read bool) {
 	h.set("App.searchPreviewRendered", read && h.resolver().Of(p).Traits().ReadsAs == kind.Markdown)
 }
 
-// hitRows are the hit list's rows.
-func hitRows(hits []hit) []rowOf {
+// hitRows are the hit list's rows, in tr's language.
+func hitRows(tr func(string) string, hits []hit) []rowOf {
 	rows := make([]rowOf, len(hits))
 	for i, x := range hits {
-		rows[i] = hitRowOf(i, x)
+		rows[i] = hitRowOf(tr, i, x)
 	}
 	return rows
 }
 
-// hitRowOf is hit i's row: a held document's hit says so after its section.
-func hitRowOf(i int, x hit) rowOf {
+// hitRowOf is hit i's row, in tr's language: a held document's hit says so after its section.
+func hitRowOf(tr func(string) string, i int, x hit) rowOf {
 	section := x.breadcrumb
-	if l := holdLabel(x.hold); l != "" {
+	if l := holdLabel(tr, x.hold); l != "" {
 		section += " · " + l
 	}
 	return rowOf{"key": fmt.Sprintf("%d\t%s", i, x.path), "hit": relevanceText(x.relevance), "path": x.path, "section": section}

@@ -4001,13 +4001,17 @@ WHAT A KEY NEEDS
         <source>%1 exited</source>
         <translation>%1 exited</translation>
     </message>
-    <message id="autodoc.notice.pluginrun.exited_2">
+    <message id="autodoc.notice.pluginrun.exited_with_its_status">
         <source>%1 exited (%2)</source>
         <translation>%1 exited (%2)</translation>
     </message>
     <message id="autodoc.notice.pluginrun.is_not_reading_what_it_is_sent">
         <source>%1 is not reading what it is sent</source>
         <translation>%1 is not reading what it is sent</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.reason_and_last_log_line">
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
     </message>
     <message id="autodoc.notice.pluginrun.speaks_protocol_its_manifest_says">
         <source>%1 speaks protocol %2; its manifest says %3</source>
@@ -4020,10 +4024,6 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.pluginrun.stopped_answering">
         <source>%1 stopped answering: %2</source>
         <translation>%1 stopped answering: %2</translation>
-    </message>
-    <message id="autodoc.notice.pluginrun.text">
-        <source>%1: %2</source>
-        <translation>%1: %2</translation>
     </message>
     <message id="autodoc.notice.plugins.no_plugin">
         <source>no plugin %1</source>
@@ -5547,6 +5547,10 @@ WHAT A KEY NEEDS
         <source>nothing: it has no build step</source>
         <translation>nothing: it has no build step</translation>
     </message>
+    <message id="autodoc.text.plugininstall.opens_shadowed_by">
+        <source>opens %1: shadowed by %2</source>
+        <translation>opens %1: shadowed by %2</translation>
+    </message>
     <message id="autodoc.text.plugininstall.text">
         <source>%1: %2</source>
         <translation>%1: %2</translation>
@@ -6469,10 +6473,6 @@ The last connect failed:
         <source>%1 is out (this is %2): %3</source>
         <translation>%1 is out (this is %2): %3</translation>
     </message>
-    <message id="autodoc.text.state.arrange_a_panel">
-        <source>arrange a panel</source>
-        <translation>arrange a panel</translation>
-    </message>
     <message id="autodoc.text.state.files">
         <source>files</source>
         <translation>files</translation>
@@ -6484,10 +6484,6 @@ The last connect failed:
     <message id="autodoc.text.state.hits">
         <source>hits</source>
         <translation>hits</translation>
-    </message>
-    <message id="autodoc.text.state.html_preview">
-        <source>HTML preview</source>
-        <translation>HTML preview</translation>
     </message>
     <message id="autodoc.text.state.mermaid_preview">
         <source>Mermaid preview</source>
@@ -6504,10 +6500,6 @@ The last connect failed:
     <message id="autodoc.text.state.vectors">
         <source>vectors</source>
         <translation>vectors</translation>
-    </message>
-    <message id="autodoc.text.state.workspace_settings">
-        <source>workspace settings</source>
-        <translation>workspace settings</translation>
     </message>
     <message id="autodoc.text.terminal.the_page_s">
         <source>the page's</source>

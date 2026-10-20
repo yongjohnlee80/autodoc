@@ -43,9 +43,9 @@ type pluginEntry struct {
 	dir    string
 	m      manifest
 	reason string
-	// shadowed are the claims of its [open] an earlier plugin in the list opens instead (openerOf),
-	// as Manage plugins… says them: "opens .ipynb: shadowed by <name>"
-	shadowed []string
+	// shadowed are the claims of its [open] an earlier plugin in the list opens instead (openerOf):
+	// each extension, and the plugin that opens it. Manage plugins… says them on its row.
+	shadowed []shadowedClaim
 }
 
 func (e pluginEntry) key() string {
@@ -105,12 +105,15 @@ func discoverPlugins(dir string) []pluginEntry {
 		}
 		for _, ext := range out[i].m.Open.Extensions {
 			if j := openerOf(out, ext); j != i && j >= 0 {
-				out[i].shadowed = append(out[i].shadowed, "opens "+ext+": shadowed by "+out[j].m.Name)
+				out[i].shadowed = append(out[i].shadowed, shadowedClaim{ext: ext, by: out[j].m.Name})
 			}
 		}
 	}
 	return out
 }
+
+// shadowedClaim is an extension a plugin's [open] claims and another plugin opens instead: by.
+type shadowedClaim struct{ ext, by string }
 
 // openerOf is the index of the plugin in list whose [open] claims ext (protocol 9, ADR 1792457255):
 // the first that runs; -1 when none does. A later claimant is shadowed.

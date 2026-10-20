@@ -96,5 +96,11 @@ func (h *Host) panelTitleIn(trf func(string, ...any) string, panel string) strin
 			return c.entry.label() // a card plugin's panel: its title
 		}
 	}
-	return trf("autodoc.text.arrange.the", panel)
+	return thePanel(trf, panel)
+}
+
+// thePanel is a panel's plain title, "the <name>", in trf's language: a panel's own when it has no
+// other, and what a widget's row leaves out as saying no more than its name (withRowText).
+func thePanel(trf func(string, ...any) string, name string) string {
+	return trf("autodoc.text.arrange.the", name)
 }

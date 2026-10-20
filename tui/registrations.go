@@ -85,12 +85,9 @@ func (h *Host) restartForRegistrations() {
 }
 
 // holdLabel is how the hit list marks a hit of a document the daemon holds (ADR 0216 §1.4): one a
-// chunker or a format it lacks made, searchable, never reinterpreted. It is English: holdLabelIn
-// says it in the UI's language.
-func holdLabel(hold string) string { return holdLabelIn(englishText, hold) }
-
-// holdLabelIn is holdLabel in tr's language (h.tr, a Core's Tr).
-func holdLabelIn(tr func(string) string, hold string) string {
+// chunker or a format it lacks made, searchable, never reinterpreted. It is in tr's language (h.tr,
+// a Core's Tr).
+func holdLabel(tr func(string) string, hold string) string {
 	switch hold {
 	case "":
 		return ""
