@@ -87,6 +87,43 @@ func TestALabCellDrawsItsOutputsUnderItsFence(t *testing.T) {
 	}
 }
 
+// golib's gui Editor is the editor whose Rendered view view.redraw lays out again.
+var _ relayouter = (*guiwidget.Editor)(nil)
+
+// A run writes a cell's outputs beside the note, its text unchanged, so the editor keeps the cell as
+// it was laid out; once the host has the view laid out again (view.redraw, which the Jupyter plugin
+// runs after it keeps a cell's outputs), the outputs are drawn under the fence. On golib's own
+// editor, painted natively.
+func TestARunsOutputsAreDrawnOnceTheViewIsLaidOutAgain(t *testing.T) {
+	notes := labNote(t, "plan.lab.md", nil)
+	r := &countingRenderer{Renderer: notes.Renderer(nil)(NoteRendererSpec{}), picture: map[int]bool{}}
+	editor, onApp, paint := paintedEditor(t, r, "# Plan\n\n```python\nprint(1)\n```\n")
+	onApp(paint)
+	onApp(func() {
+		if drawn, laid := r.picture[2]; !laid || drawn {
+			t.Fatalf("before the run the cell is laid out %v, drawn as a picture %v; want its fence alone", laid, drawn)
+		}
+	})
+	out := filepath.Join(filepath.Dir(notes.file()), "plan.lab", "out", lab.CellKey("python", "print(1)"))
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "01.txt"), []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	onApp(func() {
+		paint()
+		if r.picture[2] {
+			t.Fatal("the run's outputs were drawn with nothing said: the editor no longer keeps a block's layout")
+		}
+		(&Host{editor: editor}).redrawRendered()
+		paint()
+		if !r.picture[2] {
+			t.Error("laid out again, the cell does not draw the run's outputs")
+		}
+	})
+}
+
 // plainRenderer is the renderer of a plain note with nothing beside it: golib's layout of a fence.
 func plainRenderer(t *testing.T) guiwidget.Renderer {
 	return labNote(t, "plain.md", nil).Renderer(nil)(NoteRendererSpec{})

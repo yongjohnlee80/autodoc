@@ -132,6 +132,8 @@ func runTestPlugin(mode string) int {
 					}
 				case "once":
 					call(1, "lua.mark", "p")
+				case "redraw": // view.redraw, as the Jupyter plugin runs it once it keeps a cell's outputs
+					call(1, "view.redraw")
 				case "newbuf": // buffer.new: a draft named q.sql (buffernew_test.go)
 					call(1, "buffer.new", "q.sql", "SELECT 1;\n")
 				case "callwith": // protocol 7's args: a call numbered args[0], to args[1], with the rest

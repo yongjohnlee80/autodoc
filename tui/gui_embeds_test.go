@@ -279,20 +279,19 @@ func (c *countingRenderer) LayOut(b guiwidget.Block, lines []string, width float
 	return bl
 }
 
-// An edit to the line after an embed lays the embed out again (Lector #174 r1 F4), both ways: text
-// typed on the blank line under it joins it to a paragraph, and it is drawn as its source; that
-// text deleted, it is alone again, and drawn as its file. On golib's own editor, painted natively.
-func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
-	notes, _ := embedNote(t, nil)
-	r := &countingRenderer{Renderer: notes.Renderer(nil)(NoteRendererSpec{}), picture: map[int]bool{}}
-	editor := guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithMode(guiwidget.Rendered))
-	editor.SetValue("# Note\n\n![data](data.csv)\n\nlast\n")
+// paintedEditor is golib's own editor in the Rendered view on r, holding text, run in an app on a
+// terminal that draws native views: onApp runs on its loop, and paint paints its views as a window
+// does, which lays out the blocks it shows.
+func paintedEditor(t *testing.T, r guiwidget.Renderer, text string) (editor *guiwidget.Editor, onApp func(func()), paint func()) {
+	t.Helper()
+	editor = guiwidget.NewEditor(guiwidget.WithRenderer(r), guiwidget.WithMode(guiwidget.Rendered))
+	editor.SetValue(text)
 	backend := &nativeBackend{TestBackend: tuicore.NewTestBackend(100, 50, tuicore.WithTestCapabilities(tuicore.Capabilities{NativeViews: true}))}
 	app := tuicore.NewApp(editor, tuicore.WithBackend(backend))
 	ctx, cancel := context.WithCancel(context.Background())
 	finished := make(chan error, 1)
 	go func() { finished <- app.Run(ctx) }()
-	defer func() { cancel(); <-finished }()
+	t.Cleanup(func() { cancel(); <-finished })
 	deadline := time.Now().Add(3 * time.Second)
 	for backend.Flushes() == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
@@ -300,7 +299,7 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 	if backend.Flushes() == 0 {
 		t.Fatal("no frame")
 	}
-	onApp := func(do func()) {
+	onApp = func(do func()) {
 		t.Helper()
 		done := make(chan struct{})
 		app.Update(func() { do(); close(done) })
@@ -310,7 +309,7 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 			t.Fatal("the loop stalled")
 		}
 	}
-	paint := func() {
+	paint = func() {
 		backend.mu.Lock()
 		ps := append([]tuicore.NativePlacement(nil), backend.placements...)
 		backend.mu.Unlock()
@@ -320,6 +319,16 @@ func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
 			}
 		}
 	}
+	return editor, onApp, paint
+}
+
+// An edit to the line after an embed lays the embed out again (Lector #174 r1 F4), both ways: text
+// typed on the blank line under it joins it to a paragraph, and it is drawn as its source; that
+// text deleted, it is alone again, and drawn as its file. On golib's own editor, painted natively.
+func TestEditingTheLineAfterAnEmbedLaysItOutAgain(t *testing.T) {
+	notes, _ := embedNote(t, nil)
+	r := &countingRenderer{Renderer: notes.Renderer(nil)(NoteRendererSpec{}), picture: map[int]bool{}}
+	editor, onApp, paint := paintedEditor(t, r, "# Note\n\n![data](data.csv)\n\nlast\n")
 	onApp(paint)
 	onApp(func() {
 		if !r.picture[2] {

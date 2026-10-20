@@ -208,6 +208,7 @@ type Host struct {
 	nativeViews func() bool   // whether the backend draws native views (--gui); tests stand in for a GUI
 	docSwitch   func(on bool) // stands in for the editor's SetRenderedDocument in tests; nil: the editor's
 	renderedSet func(on bool) // stands in for the editor's SetRenderedEnabled in tests; nil: the editor's
+	relaid      func()        // stands in for the editor's Relayout in tests; nil: the editor's
 	noteFile    func(string)  // told the open note's file (Options.NoteFile); nil: none
 	// browserOverride stands in for finding a headless browser in tests; nil: golib's HTMLRasterizer
 	browserOverride func() bool

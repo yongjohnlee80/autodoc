@@ -5,8 +5,8 @@ go 1.26.9
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/yongjohnlee80/gio v0.1.4
-	github.com/yongjohnlee80/golib v0.7.18
-	github.com/yongjohnlee80/golib/gui v0.2.6
+	github.com/yongjohnlee80/golib v0.7.19
+	github.com/yongjohnlee80/golib/gui v0.2.8-0.20261020095522-29b307c9f794
 	github.com/yuin/gopher-lua v1.1.2
 	golang.org/x/text v0.41.0
 )

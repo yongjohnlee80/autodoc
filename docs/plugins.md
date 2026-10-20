@@ -560,6 +560,14 @@ do in AutoDoc is there to read before it is installed.
   plugin never updates another. A plugin that finds itself older than the server it serves asks
   this way.
 
+#### `view.redraw`: what the Rendered view draws from changed
+
+`view.redraw` lays the GUI's Rendered view out again, the note's text unchanged. A block that draws
+from a file beside the note is laid out once and kept until the note is edited, so a plugin that
+writes such a file says so: autodoc-jupyter runs it after it keeps a cell's outputs, and the run's
+outputs show under the cell. Without a Rendered view (the terminal) it does nothing. An AutoDoc
+without it answers `unknown`, and the outputs show once the note is drawn again.
+
 #### `buffer.new`: a draft for the user to edit
 
 `buffer.new` opens a new buffer, in a tab of its own, and shows it: an unsaved draft holding the
