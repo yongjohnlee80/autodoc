@@ -3211,7 +3211,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.main.relations">
         <source>Re&amp;lations</source>
-        <translation>관계(&amp;l)</translation>
+        <translation>그래프(&amp;l)</translation>
     </message>
     <message id="autodoc.main.reload_from_disk">
         <source>&amp;Reload from disk</source>
@@ -3295,7 +3295,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.main.todos">
         <source>&amp;Todos</source>
-        <translation>할 일(&amp;t)</translation>
+        <translation>태스크(&amp;t)</translation>
     </message>
     <message id="autodoc.main.todos_a_new_store_the_project_s_folder">
         <source>todos: a new store: the project's folder</source>
