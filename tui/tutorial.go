@@ -16,25 +16,28 @@ import (
 // (views/Tutorial.qml). Neither is ever disabled, so neither disables itself from its own click:
 // Previous on the first page does nothing, and Next on the last is Close.
 
-// tutorialBooks are the pages' texts by language, in their files' order: English's
-// (docs/tutorials/), and each other language's English with its own page (docs/tutorials/<tag>/,
-// the same file name) in place of each it has.
-var tutorialBooks = func() map[string][]string {
-	names, _ := fs.Glob(docs.Tutorials, "tutorials/*.md")
+// tutorialBooks are the pages' texts by language (docs.Tutorials, tutorialBooksOf).
+var tutorialBooks = tutorialBooksOf(docs.Tutorials)
+
+// tutorialBooksOf is fsys's tutorial by language, in its files' order: English's (tutorials/), and
+// each other language's English with its own page (tutorials/<tag>/, the same file name) in place
+// of each it has.
+func tutorialBooksOf(fsys fs.FS) map[string][]string {
+	names, _ := fs.Glob(fsys, "tutorials/*.md")
 	books := make(map[string][]string, len(languages))
 	for _, tag := range languages {
 		pages := make([]string, 0, len(names))
 		for _, n := range names {
-			b, err := docs.Tutorials.ReadFile(path.Join("tutorials", tag, path.Base(n)))
+			b, err := fs.ReadFile(fsys, path.Join("tutorials", tag, path.Base(n)))
 			if err != nil {
-				b, _ = docs.Tutorials.ReadFile(n)
+				b, _ = fs.ReadFile(fsys, n)
 			}
 			pages = append(pages, string(b))
 		}
 		books[tag] = pages
 	}
 	return books
-}()
+}
 
 // tutorialPages are English's pages.
 var tutorialPages = tutorialBooks["en"]

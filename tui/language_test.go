@@ -484,3 +484,22 @@ func TestTheTutorialFollowsTheLanguage(t *testing.T) {
 	onLoop(r, func() bool { h.setLanguage("en"); return true })
 	s.WaitForText(t, heading("en"))
 }
+
+// A page a language lacks is English's, in its place; and a language with no book (none chosen yet)
+// reads English's.
+func TestATutorialPageALanguageLacksIsEnglishs(t *testing.T) {
+	books := tutorialBooksOf(fstest.MapFS{
+		"tutorials/01-a.md":       {Data: []byte("# A\n")},
+		"tutorials/02-b.md":       {Data: []byte("# B\n")},
+		"tutorials/ko_KR/01-a.md": {Data: []byte("# 가\n")},
+	})
+	if got := books["ko_KR"]; !slices.Equal(got, []string{"# 가\n", "# B\n"}) {
+		t.Errorf("ko_KR's book is %q, want its own page 1 and English's page 2", got)
+	}
+	if got := books["ja_JP"]; !slices.Equal(got, []string{"# A\n", "# B\n"}) {
+		t.Errorf("ja_JP's book is %q, want English's", got)
+	}
+	if got := (&Host{}).tutorial(); !slices.Equal(got, tutorialPages) {
+		t.Error("a Host with no language does not read English's tutorial")
+	}
+}
