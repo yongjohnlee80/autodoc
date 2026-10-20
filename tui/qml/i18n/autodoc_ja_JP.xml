@@ -2855,7 +2855,7 @@ WHAT A KEY NEEDS
     </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
-        <translation>メニューを表示・移動・隠す</translation>
+        <translation>メニュー表示/フォーカス/隠す</translation>
     </message>
     <message id="autodoc.key.status_move_the_task">
         <source>status…: move the task</source>
