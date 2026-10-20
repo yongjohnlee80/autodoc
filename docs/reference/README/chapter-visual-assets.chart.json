@@ -14,9 +14,9 @@
       {"part": "Part III: Tasks & Agents", "asset_type": "Mermaid (.mmd)", "count": 4},
       {"part": "Part III: Tasks & Agents", "asset_type": "Vega-Lite (.chart.json)", "count": 4},
       {"part": "Part III: Tasks & Agents", "asset_type": "CSV Table (.csv)", "count": 4},
-      {"part": "Part IV: Plugins & Neovim", "asset_type": "Mermaid (.mmd)", "count": 5},
-      {"part": "Part IV: Plugins & Neovim", "asset_type": "Vega-Lite (.chart.json)", "count": 4},
-      {"part": "Part IV: Plugins & Neovim", "asset_type": "CSV Table (.csv)", "count": 4},
+      {"part": "Part IV: Plugins & Neovim", "asset_type": "Mermaid (.mmd)", "count": 6},
+      {"part": "Part IV: Plugins & Neovim", "asset_type": "Vega-Lite (.chart.json)", "count": 5},
+      {"part": "Part IV: Plugins & Neovim", "asset_type": "CSV Table (.csv)", "count": 5},
       {"part": "Part V: Enterprise RAG", "asset_type": "Mermaid (.mmd)", "count": 1},
       {"part": "Part V: Enterprise RAG", "asset_type": "Vega-Lite (.chart.json)", "count": 1},
       {"part": "Part V: Enterprise RAG", "asset_type": "CSV Table (.csv)", "count": 1}

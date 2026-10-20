@@ -1,4 +1,4 @@
-# Chapter 17: Neovim Integration & KB Migration
+# Chapter 18: Neovim Integration & KB Migration
 
 AutoDoc is designed from the ground up so that its standalone terminal UI (`autodoc --ui`) and its Neovim plugin (`autodoc.nvim`) share the exact same background daemon (`autodoc --serve`), the same SQLite + vector indexes, the same recent-files history, and the same `.todo-list/` task stores. Whether you write code in Neovim and keep a project knowledge base beside it, or switch fluidly between the TUI and Neovim, both clients speak the same msgpack-RPC contract over the daemon's Unix domain socket.
 
@@ -6,7 +6,7 @@ This chapter covers configuring `require("autodoc").setup()`, how generated cont
 
 ---
 
-## 17.1 Zero-Cost Setup and Generated Contract Bindings
+## 18.1 Zero-Cost Setup and Generated Contract Bindings
 
 Calling `require("autodoc").setup(opts)` during Neovim startup performs no synchronous I/O and spawns no subprocesses. The daemon connection is opened lazily on the first command, picker, or `BufWritePost` event that needs it—and if `autodoc --serve` is not yet running, the binary starts it automatically in the background.
 
@@ -34,7 +34,7 @@ Rather than hand-maintaining RPC wrappers that drift out of sync with the Go dae
 
 ---
 
-## 17.2 Interactive Pickers and Live Retrieval Stage Toggles
+## 18.2 Interactive Pickers and Live Retrieval Stage Toggles
 
 When `snacks.picker` is available (with automatic fallback to `vim.ui.input` + `vim.ui.select`), `autodoc.nvim` provides low-latency pickers over your selected knowledge base (`:AutodocSelect` or `<leader>mw`):
 
@@ -48,7 +48,7 @@ When `snacks.picker` is available (with automatic fallback to `vim.ui.input` + `
 
 ---
 
-## 17.3 The Docked Drawer (`:AutodocDrawer`) and 6-Slot Floating Previews
+## 18.3 The Docked Drawer (`:AutodocDrawer`) and 6-Slot Floating Previews
 
 ### The Docked KB Drawer (`:AutodocDrawer` / `<leader>mk`)
 
@@ -64,7 +64,7 @@ Absorbing the workflow of `md-harpoon` (ADR 1791210485), `autodoc.preview` gives
 
 ---
 
-## 17.4 Scripting `autodoc.nvim` from Your Own Neovim Config
+## 18.4 Scripting `autodoc.nvim` from Your Own Neovim Config
 
 Because `autodoc.nvim` exposes every daemon domain through `require("autodoc.verbs")` and `require("autodoc.session")`, you can build custom Neovim statusline components, telescope/snacks actions, or keymaps that query the AutoDoc daemon asynchronously without blocking Neovim's main loop:
 
@@ -97,13 +97,13 @@ end, { desc = "Validate current document against AutoDoc workspace schema" })
 
 ---
 
-## 17.5 Diagnostics with `:checkhealth autodoc` and `:AutodocMaintenance`
+## 18.5 Diagnostics with `:checkhealth autodoc` and `:AutodocMaintenance`
 
 Run `:checkhealth autodoc` at any time to verify the binary path, daemon socket connectivity, protocol version parity between `autodoc.nvim` and `autodoc --serve`, active workspace health, and optional dependencies (`snacks.picker`, `auto-core`). If you upgrade the plugin or build a new binary, `:AutodocMaintenance` (`<leader>mX`) offers three immediate actions: `versions` (compare plugin vs. running daemon), `restart` (gracefully restart the background daemon), and `install` (rebuild/install the Go binary).
 
 ---
 
-## 17.6 Safe, Reversible KB Migrations (`:AutodocKbMigrate`)
+## 18.6 Safe, Reversible KB Migrations (`:AutodocKbMigrate`)
 
 When upgrading an older knowledge base (with `shared/` and `agents/<name>/` trees) to the v2 schema-validated layout (ADR 1791209946 §8: top-level `adrs/`, `conventions/`, `playbooks/`, `reference/`, `synthesis/`, `reviews/<reviewer>/`, `prs/`, `notes/`, `archive/`, `_schema/`, and `_templates/`), `:AutodocKbMigrate` executes a deterministic, checksummed **6-stage pipeline** with full pre-image rollback:
 
@@ -136,5 +136,5 @@ If any file in the KB or linked `.todo-list/` store is modified after `:AutodocK
 
 ---
 
-[← Previous: Chapter 16: AutoDB Live SQL Workbench](./16-autodb-live-sql-workbench.md) | [Index](./README.md) | [Next: Chapter 18: Enterprise PostgreSQL RAG Server →](./18-enterprise-postgres-rag-server.md)
+[← Previous: Chapter 17: Notebooks in Markdown — The Jupyter Plugin](./17-jupyter-notebooks-in-markdown.md) | [Index](./README.md) | [Next: Chapter 19: Enterprise PostgreSQL RAG Server →](./19-enterprise-postgres-rag-server.md)
 

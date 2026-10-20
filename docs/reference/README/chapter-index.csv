@@ -15,5 +15,6 @@ Chapter,Title,Part,Primary Surfaces,Mermaid Diagrams (.mmd),Vega-Lite Charts (.c
 14,Sandboxed Lua Scripting & Custom Commands,Part IV: Programmability,--ui / --gui,lua-sandbox-execution-model.mmd,lua-execution-budget.chart.json,lua-api-namespace-reference.csv
 15,The Out-of-Process Plugin System (Protocols 1–6),Part IV: Programmability,--ui / --gui,plugin-protocols.mmd; plugin-lifecycle-sequence.mmd; ui-kits-render-path.mmd,plugin-frame-latency.chart.json,plugin-notifications-and-capabilities.csv
 16,Live Database Workbenches in Markdown: The AutoDB Plugin,Part IV: Programmability,--ui / --gui / AutoDB,autodb-paged-cursor-flow.mmd,sql-cursor-paging-memory.chart.json,autodb-commands-and-dialects.csv
-17,Neovim Integration (autodoc.nvim) & Reversible KB Migration,Part IV: Programmability,autodoc.nvim,neovim-rpc-and-migration-flow.mmd,kb-migration-step-duration.chart.json,neovim-commands-and-mappings.csv
-18,Multi-Tenant PostgreSQL RAG Server (autodoc --server),Part V: Enterprise RAG,autodoc --server,enterprise-server-architecture.mmd,enterprise-rag-tco-comparison.chart.json,view-file-directive-reference.csv
+17,Notebooks in Markdown: The Jupyter Plugin,Part IV: Programmability,--ui / --gui / Jupyter,jupyter-cell-run-flow.mmd,lab-tutorial-signups.chart.json,jupyter-output-files.csv
+18,Neovim Integration (autodoc.nvim) & Reversible KB Migration,Part IV: Programmability,autodoc.nvim,neovim-rpc-and-migration-flow.mmd,kb-migration-step-duration.chart.json,neovim-commands-and-mappings.csv
+19,Multi-Tenant PostgreSQL RAG Server (autodoc --server),Part V: Enterprise RAG,autodoc --server,enterprise-server-architecture.mmd,enterprise-rag-tco-comparison.chart.json,view-file-directive-reference.csv

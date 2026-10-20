@@ -136,5 +136,5 @@ When querying production or staging databases from inside documentation notes, `
 
 ---
 
-[← Previous: Chapter 15: Plugin Architecture & Registry](./15-plugin-architecture-and-registry.md) | [Index](./README.md) | [Next: Chapter 17: Neovim Integration & KB Migration →](./17-neovim-integration-and-kb-migration.md)
+[← Previous: Chapter 15: Plugin Architecture & Registry](./15-plugin-architecture-and-registry.md) | [Index](./README.md) | [Next: Chapter 17: Notebooks in Markdown — The Jupyter Plugin →](./17-jupyter-notebooks-in-markdown.md)
 

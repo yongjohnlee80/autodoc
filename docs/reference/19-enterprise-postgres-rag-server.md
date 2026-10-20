@@ -1,4 +1,4 @@
-# Chapter 18: Enterprise Postgres RAG Server
+# Chapter 19: Enterprise Postgres RAG Server
 
 Chapters 1 through 17 focused on indexing local Markdown workspaces on an individual engineer's workstation. When your searchable knowledge lives inside **relational database tables**—such as a multi-tenant music or product catalog, customer support tickets, legal contracts, or clinical records—and hundreds of web application users need to search that data by both keywords and semantic meaning under strict row-level authorization, AutoDoc provides **`autodoc --server`** (`docs/enterprise/*`, `core/pgstore`, `enterprise/search`).
 
@@ -6,7 +6,7 @@ Chapters 1 through 17 focused on indexing local Markdown workspaces on an indivi
 
 ---
 
-## 18.1 Architecture Overview (`core/pgstore` & `enterprise/*`)
+## 19.1 Architecture Overview (`core/pgstore` & `enterprise/*`)
 
 Unlike external vector databases that force you to replicate business data across network boundaries and reconcile eventual-consistency drift, `autodoc --server` keeps the search index inside your existing PostgreSQL database in an isolated schema (`autodoc_search` by default) while never writing to your business tables.
 
@@ -21,7 +21,7 @@ The server maintains three specialized PostgreSQL connection pools and four core
 
 ---
 
-## 18.2 Declarative `.view` Contracts and Keyset Cursor Pagination
+## 19.2 Declarative `.view` Contracts and Keyset Cursor Pagination
 
 A `.view` file combines YAML frontmatter with a Go `text/template` Markdown body. To guarantee that incremental passes never skip rows—even when hundreds of rows share the exact same timestamp—every source view must declare `args: [after_ts, after_id, upto_ts]` and order by the composite row tuple `(updated_at, id)`:
 
@@ -63,7 +63,7 @@ by {{.artist}}
 
 ---
 
-## 18.3 Central Embedding and Zero-Downtime Model Switching
+## 19.3 Central Embedding and Zero-Downtime Model Switching
 
 Ingestion never blocks on the embedding provider. As soon as an ingester commits a page, those documents are immediately searchable by lexical keywords (`tsvector` BM25), and the commit wakes the central embedding worker.
 
@@ -72,7 +72,7 @@ Ingestion never blocks on the embedding provider. As soon as an ingester commits
 
 ---
 
-## 18.4 Scoped Search (`POST /v1/search`), Highlighting, and Operations
+## 19.4 Scoped Search (`POST /v1/search`), Highlighting, and Operations
 
 Every `[[source]]` declares mandatory `access` fields (such as `access = ["label_id", "territory"]`). Neither `POST /v1/search` nor the `enterprise/search` Go library permits an unscoped query.
 
@@ -134,7 +134,7 @@ Within each scope field, any listed value matches (`OR`); across distinct scope 
 
 ---
 
-## 18.5 In-Process Go Integration (`enterprise/search`) and Operator Telemetry
+## 19.5 In-Process Go Integration (`enterprise/search`) and Operator Telemetry
 
 If your web application is written in Go, you do not even need to make an HTTP hop to `POST /v1/search`: you can run `autodoc --server` without an `[http]` block for background ingestion and embedding while importing `github.com/yongjohnlee80/autodoc/enterprise/search` directly into your API server:
 
@@ -165,7 +165,7 @@ Operators authenticated via `[[http.operator]]` can query `GET /v1/status` (or `
 
 ---
 
-## 18.6 Self-Hosted TEI Reranking and Illustrative Cost Model
+## 19.6 Self-Hosted TEI Reranking and Illustrative Cost Model
 
 Because `autodoc --server` speaks the standard OpenAI `/v1/embeddings` and HuggingFace Text Embeddings Inference (**TEI**) contracts over HTTP, organizations can run `autodoc --server` alongside self-hosted TEI embedding and cross-encoder reranking containers on fixed-cost instances rather than paying per-query managed cloud ranking API fees.
 
@@ -177,5 +177,5 @@ In the **illustrative deployment scenario** modeled above—assuming a fixed sel
 
 ---
 
-[← Previous: Chapter 17: Neovim Integration & KB Migration](./17-neovim-integration-and-kb-migration.md) | [Index](./README.md)
+[← Previous: Chapter 18: Neovim Integration & KB Migration](./18-neovim-integration-and-kb-migration.md) | [Index](./README.md)
 

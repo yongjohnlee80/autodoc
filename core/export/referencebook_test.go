@@ -15,7 +15,7 @@ import (
 	mermaidparse "github.com/yongjohnlee80/golib/parse/mermaid"
 )
 
-// TestReferenceBookEmbedsAndDiagrams verifies that the 18-chapter Reference Book
+// TestReferenceBookEmbedsAndDiagrams verifies that the 19-chapter Reference Book
 // ( plus README.md ) in docs/reference/ resolves every embedded .mmd diagram,
 // .chart.json Vega-Lite chart, and .csv table from its companion <stem>/ folder,
 // parses cleanly under golib's native Mermaid parser and Vega-Lite schema rules,
@@ -30,10 +30,10 @@ func TestReferenceBookEmbedsAndDiagrams(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.Sort(mdFiles)
-	if len(mdFiles) < 19 {
-		t.Fatalf("found %d markdown files in %s; want README.md + 18 chapters (19 total)", len(mdFiles), tutorialsDir)
+	if len(mdFiles) < 20 {
+		t.Fatalf("found %d markdown files in %s; want README.md + 19 chapters (20 total)", len(mdFiles), tutorialsDir)
 	}
-	// Place README.md first in reading order, followed by 01..18.
+	// Place README.md first in reading order, followed by 01..19.
 	ordered := make([]string, 0, len(mdFiles))
 	for _, p := range mdFiles {
 		if filepath.Base(p) == "README.md" {

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Weekly sign-ups (the tutorial's chart cell keeps it as 01.chart.json)",
+  "width": 420,
+  "height": 220,
+  "data": {
+    "values": [
+      {"week": "W1", "signups": 120},
+      {"week": "W2", "signups": 148},
+      {"week": "W3", "signups": 131},
+      {"week": "W4", "signups": 176},
+      {"week": "W5", "signups": 203},
+      {"week": "W6", "signups": 189}
+    ]
+  },
+  "mark": {"type": "bar", "tooltip": true},
+  "encoding": {
+    "x": {"field": "week", "type": "ordinal", "title": "Week"},
+    "y": {"field": "signups", "type": "quantitative", "title": "Sign-ups"}
+  }
+}

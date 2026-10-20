@@ -1,0 +1,8 @@
+Kernel output,MIME type,Kept as,Drawn by
+stdout / stderr stream (consecutive ones of a stream joined),stream,NN.txt,"HTML export, Rendered View (as text)"
+An error (traceback with its colours stripped),error,NN.txt,"HTML export, Rendered View (as text)"
+A pandas DataFrame (table schema),application/vnd.dataresource+json,"NN.csv, and AutoDoc's table panel","HTML export, Rendered View (as a table)"
+A plot or picture,image/png or image/jpeg,NN.png / NN.jpg,"HTML export, Rendered View (the image)"
+A vector drawing,image/svg+xml,NN.svg,HTML export and preview
+A Vega-Lite chart,application/vnd.vegalite.v5+json (or v4),NN.chart.json,"HTML export, Rendered View (the chart)"
+Anything else,its text/plain,NN.txt,"HTML export, Rendered View (as text)"
