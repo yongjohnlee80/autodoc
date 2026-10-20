@@ -3,10 +3,10 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "help"
+    title: qsTrId("autodoc.view.help.help")
     dim: false
     standardButtons: Dialog.Close
     defaultButton: Dialog.Close
-    helpText: "q, Esc or Enter closes · scrolls"
+    helpText: qsTrId("autodoc.view.help.q_esc_or_enter_closes_scrolls")
     Editor { readOnly: true; wrap: true; text: App.helpText }
 }

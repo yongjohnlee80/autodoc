@@ -96,7 +96,7 @@ func (pl *plugins) showChooser() {
 		if card := pl.pluginCards[pl.cardPlugin]; card != nil {
 			text = card.text
 		}
-		pl.c.Set("App.pluginChooserTitle", "SPC p › "+pl.pluginTitle(pl.cardPlugin))
+		pl.c.Set("App.pluginChooserTitle", pl.c.Trf("autodoc.text.pluginpick.spc_p", pl.pluginTitle(pl.cardPlugin)))
 		pl.c.Set("App.pluginChooserText", text)
 		pl.c.Set("App.pluginChooserHelp", pluginCardHelp)
 		return
@@ -131,7 +131,7 @@ func (pl *plugins) showChooser() {
 	case pl.chooserNote != "":
 		help = pl.chooserNote + " · " + chooserHelp
 	}
-	pl.c.Set("App.pluginChooserTitle", "SPC p — plugins")
+	pl.c.Set("App.pluginChooserTitle", pl.c.Tr("autodoc.text.pluginpick.spc_p_plugins"))
 	pl.c.Set("App.pluginChooserText", text)
 	pl.c.Set("App.pluginChooserHelp", help)
 }

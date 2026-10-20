@@ -22,8 +22,8 @@ Dialog {
     }
     DialogButtonBox {
         // a native drawing has no zoom: its buttons show, disabled
-        Button { text: "Zoom &in"; visible: App.diagramDrawn; enabled: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }
-        Button { text: "Zoom &out"; visible: App.diagramDrawn; enabled: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomOut() }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.diagram.zoom_in"); visible: App.diagramDrawn; enabled: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }
+        Button { text: qsTrId("autodoc.dialog.diagram.zoom_out"); visible: App.diagramDrawn; enabled: App.diagramImageShown; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomOut() }
+        Button { text: qsTrId("autodoc.dialog.diagram.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

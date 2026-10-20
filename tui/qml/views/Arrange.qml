@@ -8,9 +8,9 @@ Dialog {
     keyScope: "autodoc.arrange" // its keys' commands (tui/keys.go: dialogCommands)
     title: App.arrangeTitle
     dim: false
-    helpText: "Enter keeps · q or Esc puts it back"
+    helpText: qsTrId("autodoc.view.arrange.enter_keeps_q_or_esc_puts_it_back")
     onClosed: App.arrangeCancel()
-    Text { text: "h j k l, arrows   move it\nH J K L, Shift+arrows   resize it"; wrapMode: Tui.WordWrap }
+    Text { text: qsTrId("autodoc.view.arrange.h_j_k_l_arrows_move_it_h_j_k_l_shift_arrows_resi"); wrapMode: Tui.WordWrap }
     Shortcut { sequence: keyId("autodoc.arrange.left"); onActivated: App.arrangeStep("left") }
     Shortcut { sequence: keyId("autodoc.arrange.right"); onActivated: App.arrangeStep("right") }
     Shortcut { sequence: keyId("autodoc.arrange.up"); onActivated: App.arrangeStep("up") }

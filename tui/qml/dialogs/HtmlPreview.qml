@@ -15,9 +15,9 @@ Dialog {
         Image { id: htmlImage; scrollable: true; Layout.fillHeight: true }
     }
     DialogButtonBox {
-        Button { text: "Zoom &in"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }
-        Button { text: "Zoom &out"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomOut() }
-        Button { text: "Open in &browser"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openPreviewInBrowser() }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.htmlPreview.zoom_in"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomIn() }
+        Button { text: qsTrId("autodoc.dialog.htmlPreview.zoom_out"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.zoomOut() }
+        Button { text: qsTrId("autodoc.dialog.htmlPreview.open_in_browser"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openPreviewInBrowser() }
+        Button { text: qsTrId("autodoc.dialog.htmlPreview.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

@@ -130,7 +130,7 @@ func (h *Host) syncStages(refresh bool) {
 	h.setBox("App.stageSemantic", b.on.semantic)
 	h.set("App.stageSemanticShown", b.semanticShown)
 	h.setBox("App.stageRerank", b.on.rerank)
-	h.set("App.stageRerankText", "Rerank ("+h.stageRanker+")")
+	h.set("App.stageRerankText", h.trf("autodoc.text.stages.rerank", h.stageRanker))
 	h.set("App.stageRerankShown", b.rerankShown)
 	sent := strings.Join(strs(b.stages()), ",") // "" is auto
 	changed := sent != h.stagesSent
@@ -146,7 +146,7 @@ func (h *Host) toggleSearchStage(stage string) {
 	choice, ok := h.stageBoxes().toggle(h.prefs.searchStages, stage)
 	if !ok {
 		if stage == stageLexical || stage == stageSemantic {
-			h.say("search needs Lexical or Semantic: one stays checked")
+			h.say(h.tr("autodoc.notice.stages.search_needs_lexical_or_semantic_one_stays_check"))
 		}
 		h.syncStages(false) // a clicked box flipped itself: it shows the stages as they are again
 		return

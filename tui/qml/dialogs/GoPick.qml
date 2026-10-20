@@ -7,9 +7,9 @@ Dialog {
     keyScope: "autodoc.goPick" // its keys' commands (tui/keys.go: dialogCommands)
     maxWidthPercent: 60
     maxHeightPercent: 80
-    title: "go to"
+    title: qsTrId("autodoc.dialog.goPick.go_to")
     dim: false
-    helpText: "Enter goes · Tab and Shift+Tab move · :go <name> from the command line"
+    helpText: qsTrId("autodoc.dialog.goPick.enter_goes_tab_and_shift_tab_move_go_name_from_t")
     Shortcut { sequence: keyId("autodoc.goPick.next"); onActivated: App.widgetNext() }
     Shortcut { sequence: keyId("autodoc.goPick.previous"); onActivated: App.widgetPrevious() }
     TableView {
@@ -23,6 +23,6 @@ Dialog {
         TableViewColumn { role: "state"; title: ""; width: 7 }
     }
     DialogButtonBox {
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.goPick.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

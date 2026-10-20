@@ -8,7 +8,7 @@
 Picker {
     name: "search"
     title: App.searchTitle
-    label: "search: words; a * ends a prefix"
+    label: qsTrId("autodoc.dialog.searchPicker.search_words_a_ends_a_prefix")
     fieldText: App.searchText
     model: App.hits
     // blank, or a turning spinner and what an unanswered search is waiting on
@@ -28,9 +28,9 @@ Picker {
     // and Semantic always stays checked
     footer: Flex {
         direction: Tui.Horizontal
-        CheckBox { text: "Lexical"; checked: App.stageLexical; onToggled: App.toggleSearchStage("lexical") }
+        CheckBox { text: qsTrId("autodoc.dialog.searchPicker.lexical"); checked: App.stageLexical; onToggled: App.toggleSearchStage("lexical") }
         Text { text: "  " }
-        CheckBox { text: "Semantic"; checked: App.stageSemantic; visible: App.stageSemanticShown; onToggled: App.toggleSearchStage("semantic") }
+        CheckBox { text: qsTrId("autodoc.dialog.searchPicker.semantic"); checked: App.stageSemantic; visible: App.stageSemanticShown; onToggled: App.toggleSearchStage("semantic") }
         Text { text: "  "; visible: App.stageRerankShown }
         CheckBox { text: App.stageRerankText; checked: App.stageRerank; visible: App.stageRerankShown; onToggled: App.toggleSearchStage("rerank") }
     }

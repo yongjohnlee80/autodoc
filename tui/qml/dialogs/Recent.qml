@@ -4,7 +4,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 90
     maxHeightPercent: 80
-    title: "recent files"
+    title: qsTrId("autodoc.dialog.recent.recent_files")
     width: 90
     dim: false
     Flex {
@@ -22,8 +22,8 @@ Dialog {
         Text { text: App.recentStatus; wrapMode: Tui.WordWrap }
     }
     DialogButtonBox {
-        Button { text: "&Open"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.recentSelect(recentTable.currentIndex) }
-        Button { text: "C&lear list"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.clearRecent() }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.recent.open"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.recentSelect(recentTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.recent.clear_list"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.clearRecent() }
+        Button { text: qsTrId("autodoc.dialog.recent.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

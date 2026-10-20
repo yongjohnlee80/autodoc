@@ -315,6 +315,9 @@ func onCard(card string, keys []Key) []Key {
 type keyset struct {
 	cards []Card
 	keys  []Key
+	// tr is a key's or a card's English in the UI's language (Host.trOr); nil keeps English: the
+	// generated files, and help before the program
+	tr func(id, english string) string
 	// live is the App's key map, which a card and help name keys by (shown): nil, before the
 	// program runs, names every key by its Show.
 	live *keymap.Map
@@ -675,7 +678,7 @@ func (k keyset) cardText(groups [][]string, keys []Key) string {
 	if groups == nil {
 		cols := make([][]string, 2)
 		for i, key := range listed {
-			cols[i%2] = append(cols[i%2], k.shown(key)+"  "+key.Does)
+			cols[i%2] = append(cols[i%2], k.shown(key)+"  "+k.text("autodoc.key.", key.Does))
 		}
 		return sideBySide(cols)
 	}
@@ -689,7 +692,7 @@ func (k keyset) cardText(groups [][]string, keys []Key) string {
 		if !headed[g] {
 			g = groupMore
 		}
-		under[g] = append(under[g], k.shown(key)+"  "+key.Does)
+		under[g] = append(under[g], k.shown(key)+"  "+k.text("autodoc.key.", key.Does))
 	}
 	cols := make([][]string, len(groups))
 	for i, col := range groups {
@@ -703,7 +706,7 @@ func (k keyset) cardText(groups [][]string, keys []Key) string {
 			if len(cols[i]) > 0 {
 				cols[i] = append(cols[i], "")
 			}
-			cols[i] = append(append(cols[i], g), under[g]...)
+			cols[i] = append(append(cols[i], k.text("autodoc.card.group.", g)), under[g]...)
 		}
 	}
 	return sideBySide(cols)
@@ -739,6 +742,17 @@ func sideBySide(cols [][]string) string {
 	return strings.Join(lines, "\n")
 }
 
+// text is s, a key's or a card's English, in the UI's language: by its catalog id, prefix and slugOf(s).
+func (k keyset) text(prefix, s string) string { return k.textID(prefix+slugOf(s), s) }
+
+// textID is s, English, as the catalog's id says it in the UI's language.
+func (k keyset) textID(id, s string) string {
+	if k.tr == nil || s == "" {
+		return s
+	}
+	return k.tr(id, s)
+}
+
 // textSource is the App.* source a card's body is: App.leaderText for SPC's.
 func textSource(card string) string { return "App." + card + "Text" }
 
@@ -755,7 +769,7 @@ func (k keyset) cardState() map[string]any {
 func (k keyset) helpCards() string {
 	var parts []string
 	for _, c := range k.cards {
-		parts = append(parts, c.Help+"\n  "+strings.ReplaceAll(k.cardText(c.Groups, k.on(c.ID)), "\n", "\n  "))
+		parts = append(parts, k.textID("autodoc.card."+c.ID+".help", c.Help)+"\n  "+strings.ReplaceAll(k.cardText(c.Groups, k.on(c.ID)), "\n", "\n  "))
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -832,7 +846,7 @@ Dialog {
     id: ` + c.ID + `
     closeOnQ: true
     keyScope: ` + strconv.Quote("autodoc."+c.ID) + `
-    title: ` + strconv.Quote(c.Title) + `
+    title: qsTrId(` + strconv.Quote("autodoc.card."+c.ID+".title") + `)
     dim: false
     helpText: ` + strconv.Quote(help) + `
     Text { text: ` + textSource(c.ID) + `; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one

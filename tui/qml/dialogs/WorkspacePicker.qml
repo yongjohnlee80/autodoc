@@ -4,9 +4,9 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "workspace"
+    title: qsTrId("autodoc.dialog.workspacePicker.workspace")
     dim: false
-    helpText: "Enter switches · Manage… adds, renames or deletes one"
+    helpText: qsTrId("autodoc.dialog.workspacePicker.enter_switches_manage_adds_renames_or_deletes_on")
     ListView {
         palette.highlight: Theme.document.highlight
         palette.highlightedText: Theme.document.highlightedText
@@ -16,7 +16,7 @@ Dialog {
         onActivated: App.useWorkspace(index)
     }
     DialogButtonBox {
-        Button { text: "&Manage…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.manageWorkspaces() }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.workspacePicker.manage"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.manageWorkspaces() }
+        Button { text: qsTrId("autodoc.dialog.workspacePicker.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

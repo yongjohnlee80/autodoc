@@ -20,7 +20,7 @@ import (
 func (h *Host) writeFromEditor(quit bool) {
 	var then func()
 	if quit {
-		then = func() { h.guardAll("quit", h.p.Quit) } // the other modified buffers are asked about
+		then = func() { h.guardAll(h.askBefore("quit"), h.p.Quit) } // the other modified buffers are asked about
 	}
 	switch {
 	case !h.file.open:
@@ -40,7 +40,7 @@ func (h *Host) quitFromEditor(force bool) {
 		own, ok := h.active.ownRecovery()
 		h.settleRecovery(h.active, own, ok)
 		h.setDirty(false)
-		h.guardAll("quit", h.p.Quit)
+		h.guardAll(h.askBefore("quit"), h.p.Quit)
 		return
 	}
 	h.quit()

@@ -60,12 +60,12 @@ const openerGrace = 2 * time.Second
 // kind: a PDF in its reader, for the diagrams and layout its derived text cannot show.
 func (h *Host) openWithDefaultApp() {
 	if !h.file.open {
-		h.notify("no file is open: open one, then File › Open with Default App opens it")
+		h.notify(h.tr("autodoc.notice.html.no_file_is_open_open_one_then_file_open_with_def"))
 		return
 	}
 	full := h.diskPath()
 	if full == "" {
-		h.notify("the workspace's folder is not known yet: try again once it is listed")
+		h.notify(h.tr("autodoc.notice.html.the_workspace_s_folder_is_not_known_yet_try_agai"))
 		return
 	}
 	do(h, func(ctx context.Context) error { return h.browser(ctx, full) }, func(err error) {
@@ -73,7 +73,7 @@ func (h *Host) openWithDefaultApp() {
 			h.failed("open with the default app", err)
 			return
 		}
-		h.say("opened " + h.file.path + " with its default app")
+		h.say(h.trf("autodoc.notice.html.opened_with_its_default_app", h.file.path))
 	})
 }
 
@@ -99,7 +99,7 @@ func (h *Host) previewHTML() {
 		return
 	}
 	if h.file.open && filepath.Ext(h.file.path) != ".md" {
-		h.notify("HTML preview currently accepts Markdown files")
+		h.notify(h.tr("autodoc.notice.html.html_preview_currently_accepts_markdown_files"))
 		return
 	}
 	source, theme := []byte(h.core.Value()), h.exportTheme()
@@ -110,7 +110,7 @@ func (h *Host) previewHTML() {
 		options.Base, options.Document = filepath.Dir(full), full
 	}
 	image, why := h.imageMode()
-	h.say("opening HTML preview…")
+	h.say(h.tr("autodoc.notice.html.opening_html_preview"))
 	type answer struct {
 		content []byte
 		path    string
@@ -139,6 +139,6 @@ func (h *Host) previewHTML() {
 			return
 		}
 		h.htmlPreviewPath = a.path
-		h.say("HTML preview opened in browser · " + why)
+		h.say(h.trf("autodoc.notice.html.html_preview_opened_in_browser", why))
 	})
 }

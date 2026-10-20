@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -34,15 +34,15 @@ func (h *agents) listAgents() {
 	h.agentRows.Reset(rows)
 	switch {
 	case len(rows) == 0:
-		h.c.Set("App.agentProfilesStatus", "no profiles yet: Add… one, a name and the command that starts the agent")
+		h.c.Set("App.agentProfilesStatus", h.c.Tr("autodoc.text.agentprofiles.no_profiles_yet_add_one_a_name_and_the_command_t"))
 	case def == "":
-		h.c.Set("App.agentProfilesStatus", "Make default marks the one SPC g opens")
+		h.c.Set("App.agentProfilesStatus", h.c.Tr("autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens"))
 	default:
 		label := def
 		if p, ok := h.profile(def); ok {
 			label = p.Name
 		}
-		h.c.Set("App.agentProfilesStatus", "SPC g opens "+label+" · {root} and {workspace} in a command are filled in")
+		h.c.Set("App.agentProfilesStatus", h.c.Trf("autodoc.text.agentprofiles.spc_g_opens_root_and_workspace_in_a_command_are", label))
 	}
 }
 
@@ -126,7 +126,7 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 		codename = agentCodename(name)
 	}
 	refuse := func(why string) (agentProfile, bool) {
-		h.c.Set("App.agentFormError", "not saved: "+why)
+		h.c.Set("App.agentFormError", h.c.Trf("autodoc.text.agentprofiles.not_saved", why))
 		h.c.Open("agentEdit")
 		return agentProfile{}, false
 	}
@@ -170,7 +170,7 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 	}
 	h.keepAgents(agents, def)
 	h.editingAgent, h.editingAgentProfile = "", nil
-	h.c.Set("App.status", "saved the agent profile "+name)
+	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.saved_the_agent_profile", name))
 	return agentProfile{Name: name, Command: command, Codename: codename}, true
 }
 
@@ -182,10 +182,9 @@ func (h *agents) removeAgent(i int) {
 		return
 	}
 	h.c.Ask(Question{
-		Title: "remove the agent profile?",
-		Text: fmt.Sprintf("Remove the saved agent profile %q? It will no longer be available to start. "+
-			"A running agent is not stopped.", a.Name),
-		Yes:   "&Yes, remove it",
+		Title: h.c.Tr("autodoc.question.agentprofiles.remove_the_agent_profile"),
+		Text:  h.c.Trf("autodoc.question.agentprofiles.remove_the_saved_profile", strconv.Quote(a.Name)),
+		Yes:   h.c.Tr("autodoc.question.agentprofiles.yes_remove_it"),
 		OnYes: func() { h.removeAgentConfirmed(a) },
 	})
 }
@@ -196,7 +195,7 @@ func (h *agents) removeAgentConfirmed(a agentProfile) {
 	profiles := h.profiles()
 	i := slices.Index(profiles, a)
 	if i < 0 {
-		h.c.Set("App.status", "the agent profile changed; ask to remove it again")
+		h.c.Set("App.status", h.c.Tr("autodoc.text.agentprofiles.the_agent_profile_changed_ask_to_remove_it_again"))
 		return
 	}
 	agents := append(append([]agentProfile(nil), profiles[:i]...), profiles[i+1:]...)
@@ -205,7 +204,7 @@ func (h *agents) removeAgentConfirmed(a agentProfile) {
 		def = ""
 	}
 	h.keepAgents(agents, def)
-	h.c.Set("App.status", "removed the agent profile "+a.Name)
+	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.removed_the_agent_profile", a.Name))
 }
 
 // makeAgentDefault marks profile i the one SPC g opens.
@@ -215,7 +214,7 @@ func (h *agents) makeAgentDefault(i int) {
 		return
 	}
 	h.keepAgents(h.profiles(), a.Codename)
-	h.c.Set("App.status", "SPC g opens "+a.Name)
+	h.c.Set("App.status", h.c.Trf("autodoc.text.agentprofiles.spc_g_opens", a.Name))
 }
 
 // useAgent starts or selects profile i without stopping other profiles.

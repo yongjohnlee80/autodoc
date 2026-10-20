@@ -240,7 +240,7 @@ func bufferTabRow(id, label string, run func()) widget.MenuItemModel {
 	text, key, at := tuicore.ParseMnemonic(label)
 	row := widget.NewCommand(widget.ItemID(id), text, widget.TabStripMenuAction{ID: tuicore.ActionID(id), Run: func(string) { run() }})
 	row.Hotkey, row.HotkeyIdx = key, at
-	return row
+	return withLabelMessage(row, label)
 }
 
 // saveBuffer is a tab's Save: b shown, then saved as Ctrl+S saves it (a draft is named first).
@@ -260,7 +260,7 @@ func (h *Host) closeOtherBuffers(b *openBuffer) {
 	}
 	h.activate(b)
 	others := slices.DeleteFunc(slices.Clone(h.buffers), func(o *openBuffer) bool { return o == b })
-	h.guardEach(others, "close it", func() {
+	h.guardEach(others, h.askBefore("close"), func() {
 		for _, o := range others {
 			if slices.Contains(h.buffers, o) {
 				h.dropBuffer(o)

@@ -2,7 +2,7 @@
 // dialog with a preview. One inside a workspace's root opens as that workspace's file; any other
 // opens outside every workspace (outside.go). Open document… (SPC o) is the workspace's picker.
 FileDialog {
-    title: "open a file"
+    title: qsTrId("autodoc.dialog.openAnyFile.open_a_file")
     fileMode: Tui.OpenFile
     currentFolder: App.browseFolder
     dim: false

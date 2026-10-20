@@ -14,8 +14,8 @@ Dialog {
         TableViewColumn { role: "text"; title: "NOTIFICATION"; width: 0 }
     }
     DialogButtonBox {
-        Button { text: "C&lear"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.clearNotices() }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.notifications.clear"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.clearNotices() }
+        Button { text: qsTrId("autodoc.dialog.notifications.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onRejected: App.noticesClosed()
 }

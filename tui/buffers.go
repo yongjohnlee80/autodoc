@@ -184,7 +184,7 @@ func (h *Host) bufferEdited(b *openBuffer) {
 // closeBuffer asks about b's unsaved edits, then drops it and shows the most recently active other
 // buffer; closing the last one leaves an empty draft.
 func (h *Host) closeBuffer(b *openBuffer) {
-	h.guard(b, "close it", func() {
+	h.guard(b, h.askBefore("close"), func() {
 		h.dropBuffer(b)
 	})
 }
@@ -221,11 +221,11 @@ func (h *Host) newDraftIfNone() *openBuffer {
 
 // guardAll asks about each modified buffer in turn, each shown as it is asked about; Stay on any
 // ends it, and then never runs. With none modified, then runs at once.
-func (h *Host) guardAll(action string, then func()) {
-	h.guardEach(slices.Clone(h.buffers), action, then)
+func (h *Host) guardAll(ask unsavedAsk, then func()) {
+	h.guardEach(slices.Clone(h.buffers), ask, then)
 }
 
-func (h *Host) guardEach(left []*openBuffer, action string, then func()) {
+func (h *Host) guardEach(left []*openBuffer, ask unsavedAsk, then func()) {
 	for len(left) > 0 && !left[0].file.dirty {
 		left = left[1:]
 	}
@@ -236,7 +236,7 @@ func (h *Host) guardEach(left []*openBuffer, action string, then func()) {
 	b := left[0]
 	// the next question waits for the next turn of the loop: the answer that runs this closes the
 	// dialog, and the same dialog opened again in the same turn does not show
-	h.guard(b, action, func() { h.p.Post(func() { h.guardEach(left[1:], action, then) }) })
+	h.guard(b, ask, func() { h.p.Post(func() { h.guardEach(left[1:], ask, then) }) })
 }
 
 // bufferInfo is b as Lua and the editor socket see it.

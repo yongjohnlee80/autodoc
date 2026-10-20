@@ -103,11 +103,11 @@ func (h *Host) toggleImagePreviews() {
 	h.setPref(prefImages, strconv.FormatBool(v), func(p *prefs) { p.images = v })
 	if v {
 		if ok, why := h.imageMode(); !ok {
-			h.say("image previews on; for now: " + why)
+			h.say(h.trf("autodoc.notice.preview.image_previews_on_for_now", why))
 			return
 		}
 	}
-	h.say("image previews " + map[bool]string{true: "on", false: "off: diagram sources and the browser"}[v])
+	h.say(h.trf("autodoc.notice.preview.image_previews", map[bool]string{true: "on", false: "off: diagram sources and the browser"}[v]))
 }
 
 // mermaidEngines are what can draw a Mermaid diagram in a GUI window (File › Preview option):
@@ -121,7 +121,7 @@ func (h *Host) mermaidNative() bool { return h.native() && h.prefs.mermaid == "n
 // setMermaidEngine is File › Preview option: "native" or "mermaidjs".
 func (h *Host) setMermaidEngine(name string) {
 	if !slices.Contains(mermaidEngines, name) {
-		h.say("no Mermaid engine " + strconv.Quote(name) + " (native or mermaidjs)")
+		h.say(h.trf("autodoc.notice.preview.no_mermaid_engine_native_or_mermaidjs", strconv.Quote(name)))
 		return
 	}
 	if name == h.prefs.mermaid {
@@ -139,7 +139,7 @@ func (h *Host) mermaidEngineChanged() {
 			h.renderHTMLPane()
 		}
 	}
-	h.say("Mermaid diagrams: " + map[bool]string{true: "drawn natively (no zoom)", false: "drawn by mermaid.js"}[h.prefs.mermaid == "native"])
+	h.say(h.trf("autodoc.notice.preview.mermaid_diagrams", map[bool]string{true: "drawn natively (no zoom)", false: "drawn by mermaid.js"}[h.prefs.mermaid == "native"]))
 }
 
 // previewing is the image preview open: its dialog, the page it renders, whether that page is as
@@ -327,12 +327,12 @@ func (h *Host) zoomPreview(step int) {
 	}
 	z := min(max(pv.zoom+step, 0), len(zooms)-1)
 	if z == pv.zoom {
-		h.say(fmt.Sprintf("zoom is at its %s", map[bool]string{true: "largest", false: "smallest"}[step > 0]))
+		h.say(h.tr(map[bool]string{true: "autodoc.notice.preview.zoom_is_at_its_largest", false: "autodoc.notice.preview.zoom_is_at_its_smallest"}[step > 0]))
 		return
 	}
 	pv.zoom = z
-	h.say(fmt.Sprintf("zoom %d%%", int(zooms[z]*100+0.5)))
-	fallback := func(why string) { h.say("zoom: " + why) }
+	h.say(h.trf("autodoc.notice.fonts.zoom", int(zooms[z]*100+0.5)))
+	fallback := func(why string) { h.say(h.trf("autodoc.notice.preview.zoom", why)) }
 	h.renderPreview(false, fallback)
 }
 
@@ -409,14 +409,13 @@ func (h *Host) previewClosed() { h.previewGen++ }
 // file the image was made from.
 func (h *Host) previewHTMLImage(content []byte, path string) {
 	h.htmlPreviewPath = path
-	h.set("App.htmlPreviewTitle", "HTML preview · "+h.file.name())
-	h.set("App.htmlPreviewHelp", "Image · rendered offline by a headless browser in the "+h.exportTheme()+
-		" theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser")
+	h.set("App.htmlPreviewTitle", h.trf("autodoc.text.preview.html_preview", h.file.name()))
+	h.set("App.htmlPreviewHelp", h.trf("autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in", h.exportTheme()))
 	h.open("htmlPreview")
 	h.imagePreview = previewing{dialog: "htmlPreview", page: content, zoom: zoomDefault, background: export.Background(h.exportTheme())}
 	h.renderPreview(true, func(why string) {
 		h.closeDialog("htmlPreview")
-		h.notify("HTML preview: " + why + "; opening it in the browser")
+		h.notify(h.trf("autodoc.notice.preview.html_preview_opening_it_in_the_browser", why))
 		h.openPreviewInBrowser()
 	})
 }
@@ -432,6 +431,6 @@ func (h *Host) openPreviewInBrowser() {
 			h.failed("the browser did not open", err)
 			return
 		}
-		h.say("HTML preview opened in the browser: " + filepath.Base(path))
+		h.say(h.trf("autodoc.notice.preview.html_preview_opened_in_the_browser", filepath.Base(path)))
 	})
 }

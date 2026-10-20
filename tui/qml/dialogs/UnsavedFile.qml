@@ -4,11 +4,11 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "unsaved file"
+    title: qsTrId("autodoc.dialog.unsavedFile.unsaved_file")
     Text { wrapMode: Tui.WordWrap; text: App.unsavedQuestion }
     DialogButtonBox {
-        Button { text: "&Save";    DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; onClicked: App.unsaved("save") }
-        Button { text: "&Discard"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.unsaved("discard") }
-        Button { text: "S&tay";    DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.unsaved("stay") }
+        Button { text: qsTrId("autodoc.dialog.unsavedFile.save");    DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; onClicked: App.unsaved("save") }
+        Button { text: qsTrId("autodoc.dialog.unsavedFile.discard"); DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.unsaved("discard") }
+        Button { text: qsTrId("autodoc.dialog.unsavedFile.stay");    DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.unsaved("stay") }
     }
 }

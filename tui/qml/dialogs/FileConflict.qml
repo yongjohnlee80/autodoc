@@ -5,11 +5,11 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "file changed on disk"
+    title: qsTrId("autodoc.dialog.fileConflict.file_changed_on_disk")
     Text { wrapMode: Tui.WordWrap; text: App.conflictQuestion }
     DialogButtonBox {
-        Button { text: "&Keep";      DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.conflict("keep") }
-        Button { text: "&Reload";    DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.conflict("reload") }
-        Button { text: "&Overwrite"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.conflict("overwrite") }
+        Button { text: qsTrId("autodoc.dialog.fileConflict.keep");      DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.conflict("keep") }
+        Button { text: qsTrId("autodoc.dialog.fileConflict.reload");    DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.conflict("reload") }
+        Button { text: qsTrId("autodoc.dialog.fileConflict.overwrite"); DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.conflict("overwrite") }
     }
 }

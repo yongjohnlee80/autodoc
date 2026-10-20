@@ -27,7 +27,7 @@ Dialog {
         Text { text: App.vectorsRefusals; wrapMode: Tui.WordWrap }
     }
     DialogButtonBox {
-        Button { text: "&Purge…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startPurge(vectorTable.currentIndex) }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.vectors.purge"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startPurge(vectorTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.vectors.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

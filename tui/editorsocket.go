@@ -499,12 +499,12 @@ func (h *Host) editorAddCommand(ctx context.Context, req *golibrpc.Request) (any
 			return false, &golibrpc.Error{Code: codeEditorRefused, Message: "lua/" + name + ".lua exists: it is the user's"}
 		}
 		h.ask(Question{
-			Title: fmt.Sprintf("let the agent %s add the Lua command file %s.lua?", agent, name),
+			Title: h.trf("autodoc.question.editorsocket.let_the_agent_add_the_lua_command_file_lua", agent, name),
 			Text:  src,
-			Yes:   "&Add it", No: "&No",
+			Yes:   h.tr("autodoc.question.editorsocket.add_it"), No: h.tr("autodoc.question.editorsocket.no"),
 			OnYes: func() {
 				if ctx.Err() != nil { // the agent stopped waiting: nothing is written for no one
-					h.notify("not added: the agent " + agent + " stopped waiting")
+					h.notify(h.trf("autodoc.notice.editorsocket.not_added_the_agent_stopped_waiting", agent))
 					answered <- ctx.Err()
 					return
 				}

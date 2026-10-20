@@ -8,7 +8,7 @@ Dialog {
     id: agentsCard
     closeOnQ: true
     keyScope: "autodoc.agentsCard"
-    title: "SPC a — agents"
+    title: qsTrId("autodoc.card.agentsCard.title")
     dim: false
     helpText: "a key runs its command · Backspace goes back · q or Esc closes"
     Text { text: App.agentsCardText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one

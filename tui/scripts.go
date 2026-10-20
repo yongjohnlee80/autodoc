@@ -107,7 +107,7 @@ func (h *Host) reloadScripts() error {
 		}
 		return fmt.Errorf("lua-reload: %d of the scripts did not load", len(errs))
 	}
-	h.notify("reloaded the Lua scripts")
+	h.notify(h.tr("autodoc.notice.scripts.reloaded_the_lua_scripts"))
 	return nil
 }
 

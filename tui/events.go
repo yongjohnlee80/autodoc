@@ -215,6 +215,6 @@ func (h *Host) keepDraftOnLeave() {
 	}
 	h.syncBuffers()
 	if kept {
-		h.notify("the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace")
+		h.notify(h.tr("autodoc.notice.events.the_unsaved_text_is_kept_as_an_untitled_draft_ct"))
 	}
 }

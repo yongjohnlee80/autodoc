@@ -32,8 +32,8 @@ func (h *Host) tableOf(b *openBuffer, comma rune) *widget.TableDocument {
 	if b.table == nil {
 		b.table = newTableDocument(h.editor, h.core, comma,
 			widget.TableRowNumbers(true), // each row's number in a gutter
-			widget.TableOnEditDropped(func() { h.notify("the table changed; the edit was dropped") }),
-			widget.TableOnPasteClipped(func() { h.notify("the paste was cut off at the table's edge") }))
+			widget.TableOnEditDropped(func() { h.notify(h.tr("autodoc.notice.tabledoc.the_table_changed_the_edit_was_dropped")) }),
+			widget.TableOnPasteClipped(func() { h.notify(h.tr("autodoc.notice.tabledoc.the_paste_was_cut_off_at_the_table_s_edge")) }))
 	}
 	return b.table
 }

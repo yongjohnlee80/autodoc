@@ -20,7 +20,7 @@ func tabMenuRow(id, label string, run func(widget.TerminalTabID)) widget.MenuIte
 	text, key, at := tuicore.ParseMnemonic(label)
 	row := widget.NewCommand(widget.ItemID(id), text, widget.TerminalTabsMenuAction{ID: tuicore.ActionID(id), Run: run})
 	row.Hotkey, row.HotkeyIdx = key, at
-	return row
+	return withLabelMessage(row, label)
 }
 
 // panelRows end panel's tab menu: Theme and font…, which opens the terminals' look (nil where the

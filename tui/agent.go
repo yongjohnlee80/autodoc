@@ -248,7 +248,7 @@ func (h *agents) startAgent(p agentProfile) {
 		p.Codename = agentCodename(p.Name)
 	}
 	if _, err := h.startInstance(p); err != nil {
-		h.c.Notify("the agent could not start: " + err.Error())
+		h.c.Notify(h.c.Trf("autodoc.notice.agent.the_agent_could_not_start", err.Error()))
 	}
 }
 

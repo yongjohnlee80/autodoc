@@ -46,7 +46,7 @@ func (h *Host) htmlView() (*widget.HTMLView, bool) {
 // relative links and embeds read from the note's folder.
 func (h *Host) openPaneInBrowser() {
 	if !h.previewable() {
-		h.notify("HTML preview currently accepts Markdown files")
+		h.notify(h.tr("autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files"))
 		return
 	}
 	source, theme := []byte(h.pageNow().Text), h.exportTheme()
@@ -54,7 +54,7 @@ func (h *Host) openPaneInBrowser() {
 	if full := h.diskPath(); full != "" {
 		options.Base, options.Document = filepath.Dir(full), full
 	}
-	h.say("opening the page in the browser…")
+	h.say(h.tr("autodoc.notice.htmlpane.opening_the_page_in_the_browser"))
 	do(h, func(ctx context.Context) answerOf[string] {
 		content, err := export.RenderWith(source, export.HTML, theme, options)
 		if err != nil {
@@ -71,7 +71,7 @@ func (h *Host) openPaneInBrowser() {
 			return
 		}
 		h.htmlPreviewPath = a.v
-		h.say("HTML preview opened in the browser: " + filepath.Base(a.v))
+		h.say(h.trf("autodoc.notice.htmlpane.html_preview_opened_in_the_browser", filepath.Base(a.v)))
 	})
 }
 
@@ -81,7 +81,7 @@ func (h *Host) closeHTMLPane() { h.keep(h.p.Call("htmlPane", "close")) }
 // openHTMLPane shows the open note in the pane beside the editor.
 func (h *Host) openHTMLPane() {
 	if !h.previewable() {
-		h.notify("HTML preview currently accepts Markdown files")
+		h.notify(h.tr("autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files"))
 		return
 	}
 	h.keep(h.p.Call("htmlPane", "open"))
@@ -190,7 +190,7 @@ func (h *Host) htmlLink(href string) {
 	}
 	full := h.diskPath()
 	if full == "" {
-		h.notify("the note is not on disk yet: save it, then its links open")
+		h.notify(h.tr("autodoc.notice.htmlpane.the_note_is_not_on_disk_yet_save_it_then_its_lin"))
 		return
 	}
 	p := filepath.Join(filepath.Dir(full), filepath.FromSlash(u.Path))

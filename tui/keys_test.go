@@ -134,7 +134,7 @@ func TestACardOpensFromAKey(t *testing.T) {
 	qml := cardQML(c, k.on("agentsCard"))
 	for _, want := range []string{
 		"id: agentsCard",
-		`title: "SPC a — agents"`,
+		`title: qsTrId("autodoc.card.agentsCard.title")`, // "SPC a — agents" in English (language_catalog_test.go)
 		"text: App.agentsCardText",
 		`Shortcut { sequence: "Backspace"; onActivated: { agentsCard.close(); leader.open() } }`,
 		`Shortcut { sequence: keyId("autodoc.agentsCard.runCommand.agent.buffer"); onActivated: { agentsCard.close(); App.runCommand("agent.buffer") } }`,
@@ -167,9 +167,9 @@ func TestACardOpensFromAKey(t *testing.T) {
 	if _, err := keyCatalog(nil).withGenerated(keysBegin + keysEnd + cardsBegin + cardsEnd); err == nil {
 		t.Error("a main.qml without its panes' markers was rewritten")
 	}
-	// a title is a QML string, quoted whatever it holds
-	if q := cardQML(Card{ID: "x", View: "X", Title: `say "hi" \ bye`}, nil); !strings.Contains(q, `title: "say \"hi\" \\ bye"`) {
-		t.Errorf("the title is not quoted:\n%s", q)
+	// a title is its catalog message, the card's id quoted in it (language_catalog_test.go holds its text)
+	if q := cardQML(Card{ID: "x", View: "X", Title: `say "hi" \ bye`}, nil); !strings.Contains(q, `title: qsTrId("autodoc.card.x.title")`) {
+		t.Errorf("the title is not its message:\n%s", q)
 	}
 }
 

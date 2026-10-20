@@ -19,7 +19,7 @@ func (a *agents) addRows() []widget.MenuItemModel {
 			if p, ok := a.profile(code); ok {
 				a.useProfile(p)
 			} else {
-				a.c.Notify("the agent profile " + code + " is gone: System › Agent profiles… lists them")
+				a.c.Notify(a.c.Trf("autodoc.notice.agenttabs.the_agent_profile_is_gone_system_agent_profiles", code))
 			}
 		}))
 	}
@@ -101,15 +101,15 @@ func (a *agents) restartAgent(code string) {
 		instance.restart = true
 		if err := a.removeInstance(code); err != nil {
 			instance.restart = false
-			a.c.Notify("the agent could not restart: " + err.Error())
+			a.c.Notify(a.c.Trf("autodoc.notice.agenttabs.the_agent_could_not_restart", err.Error()))
 		}
 	}
 	if !instance.running {
 		again()
 		return
 	}
-	a.c.Ask(Question{Title: "restart the agent?", Text: "Restart " + p.Name + "? Its process is stopped, and the agent starts again in a new tab.",
-		Yes: "&Yes, restart it", OnYes: again})
+	a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agenttabs.restart_the_agent"), Text: a.c.Trf("autodoc.question.agenttabs.restart_its_process_is_stopped_and_the_agent_sta", p.Name),
+		Yes: a.c.Tr("autodoc.question.agenttabs.yes_restart_it"), OnYes: again})
 }
 
 // closeAgent is Close: the agent's tab closed, its process stopped; asked first while it runs.
@@ -124,15 +124,15 @@ func (a *agents) closeAgent(code string) {
 			return
 		}
 		if err := a.removeInstance(code); err != nil {
-			a.c.Notify("the agent's tab could not close: " + err.Error())
+			a.c.Notify(a.c.Trf("autodoc.notice.agenttabs.the_agent_s_tab_could_not_close", err.Error()))
 		}
 	}
 	if !instance.running {
 		closeIt()
 		return
 	}
-	a.c.Ask(Question{Title: "close the agent?", Text: "Close " + instance.profile.Name + "? Its process is stopped.",
-		Yes: "&Yes, close it", OnYes: closeIt})
+	a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agenttabs.close_the_agent"), Text: a.c.Trf("autodoc.question.agenttabs.close_its_process_is_stopped", instance.profile.Name),
+		Yes: a.c.Tr("autodoc.question.agenttabs.yes_close_it"), OnYes: closeIt})
 }
 
 // THE AGENTS' CARD — SPC a: the page to an agent (b, :agent-buffer), the selection or the

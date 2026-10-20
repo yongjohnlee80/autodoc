@@ -340,6 +340,7 @@ func (h *Host) features() []Feature {
 		}
 	}
 	h.keys = keyCatalog(fs)
+	h.keys.tr = h.trOr // the cards and help in the UI's language (language.go)
 	return append(fs, prefChoosers{h})
 }
 
@@ -374,6 +375,10 @@ type Core interface {
 	Set(name string, v any)
 	Open(id string)
 	Close(id string)
+	// Tr is a catalog message's text in the UI's language now, and Trf the same with %1, %2 … filled
+	// (language.go): for a notice, a question or a status a feature composes.
+	Tr(id string) string
+	Trf(id string, args ...any) string
 	Notify(msg string)
 	// NotifyOngoing is a long task's toast, id's, updated in place; NotifyDone ends it with its last
 	// message, which the history keeps (notify.go)
@@ -485,10 +490,14 @@ func (t Ticket) Current() bool { return t.current == nil || t.current() }
 // core is the host as a feature sees it.
 type core struct{ h *Host }
 
-func (c core) Set(name string, v any)        { c.h.set(name, v) }
-func (c core) Open(id string)                { c.h.open(id) }
-func (c core) Close(id string)               { c.h.closeDialog(id) }
-func (c core) Notify(msg string)             { c.h.notify(msg) }
+func (c core) Set(name string, v any) { c.h.set(name, v) }
+func (c core) Open(id string)         { c.h.open(id) }
+func (c core) Close(id string)        { c.h.closeDialog(id) }
+func (c core) Notify(msg string)      { c.h.notify(msg) }
+func (c core) Tr(id string) string    { return c.h.tr(id) }
+func (c core) Trf(id string, args ...any) string {
+	return c.h.trf(id, args...)
+}
 func (c core) WidgetsChanged()               { c.h.refreshDock() }
 func (c core) HidePanel(id string)           { c.h.hidePanel(id) }
 func (c core) Ask(q Question) Asked          { return c.h.ask(q) }

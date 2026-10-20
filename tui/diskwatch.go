@@ -141,7 +141,7 @@ func (h *Host) startWatch(w *diskWatch) {
 	if err != nil {
 		cancel()
 		if w.err == nil { // said once, not at every retry
-			h.say(fmt.Sprintf("files in %s are not watched for changes on disk: %v", dir, err))
+			h.say(h.trf("autodoc.notice.diskwatch.files_in_are_not_watched_for_changes_on_disk", dir, err))
 		}
 		w.mode, w.err = "", err
 		h.restartWatch(w)
@@ -349,9 +349,9 @@ func (h *Host) markDisk(b *openBuffer, st diskState, version string) {
 	h.syncBuffers()
 	switch st {
 	case diskChanged:
-		h.notify(b.file.name() + " changed on disk: your unsaved edits are kept; you are asked when you next open or save it")
+		h.notify(h.trf("autodoc.notice.diskwatch.changed_on_disk_your_unsaved_edits_are_kept_you", b.file.name()))
 	case diskDeleted:
-		h.notify(b.file.name() + " was deleted on disk: its text is kept; saving creates it again")
+		h.notify(h.trf("autodoc.notice.diskwatch.was_deleted_on_disk_its_text_is_kept_saving_crea", b.file.name()))
 	}
 }
 
@@ -362,7 +362,7 @@ func (h *Host) askDiskOnEnter(b *openBuffer) {
 		return
 	}
 	b.file.diskAsked = b.file.diskVersion
-	h.set("App.conflictQuestion", fmt.Sprintf("%s changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?", b.file.name()))
+	h.set("App.conflictQuestion", h.trf("autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee", b.file.name()))
 	h.open("fileConflict")
 }
 

@@ -90,102 +90,102 @@ Window {
         palette.accent: Theme.menu.accent
 
         Menu {
-            title: "&File"
-            MenuItem { text: "&New file…"; onTriggered: App.newFile() }
-            MenuItem { text: "Open &document…"; onTriggered: App.openPicker() }
-            MenuItem { text: "&Open file…"; onTriggered: App.openFileDialog() }
-            MenuItem { text: "Recen&t files…"; onTriggered: App.openRecent() }
+            title: qsTrId("autodoc.main.file")
+            MenuItem { text: qsTrId("autodoc.main.new_file"); onTriggered: App.newFile() }
+            MenuItem { text: qsTrId("autodoc.main.open_document"); onTriggered: App.openPicker() }
+            MenuItem { text: qsTrId("autodoc.main.open_file"); onTriggered: App.openFileDialog() }
+            MenuItem { text: qsTrId("autodoc.main.recent_files"); onTriggered: App.openRecent() }
             MenuSeparator {}
-            MenuItem { text: "&Save"; onTriggered: App.save() }
-            MenuItem { text: "&Reload from disk"; onTriggered: App.reload() }
-            MenuItem { text: "Close &buffer"; onTriggered: App.closeBuffer() }
+            MenuItem { text: qsTrId("autodoc.main.save"); onTriggered: App.save() }
+            MenuItem { text: qsTrId("autodoc.main.reload_from_disk"); onTriggered: App.reload() }
+            MenuItem { text: qsTrId("autodoc.main.close_buffer"); onTriggered: App.closeBuffer() }
             MenuSeparator {}
-            MenuItem { text: "Preview &HTML"; onTriggered: App.previewHTML() }
+            MenuItem { text: qsTrId("autodoc.main.preview_html"); onTriggered: App.previewHTML() }
             // what draws a window's Mermaid diagrams (preview.go); the terminal's are mermaid.js's
             Menu {
-                title: "Preview o&ption"
+                title: qsTrId("autodoc.main.preview_option")
                 visible: App.gui
-                MenuItem { text: "&Native Mermaid engine"; group: "mermaidEngine"; checked: App.mermaidNative; onTriggered: App.setMermaidEngine("native") }
-                MenuItem { text: "Mermaid.&js";            group: "mermaidEngine"; checked: App.mermaidJS;     onTriggered: App.setMermaidEngine("mermaidjs") }
+                MenuItem { text: qsTrId("autodoc.main.native_mermaid_engine"); group: "mermaidEngine"; checked: App.mermaidNative; onTriggered: App.setMermaidEngine("native") }
+                MenuItem { text: qsTrId("autodoc.main.mermaid_js");            group: "mermaidEngine"; checked: App.mermaidJS;     onTriggered: App.setMermaidEngine("mermaidjs") }
             }
-            MenuItem { text: "Preview &Mermaid diagram…"; onTriggered: App.previewDiagram() }
-            MenuItem { text: "Open with Default &App"; onTriggered: App.openWithDefaultApp() }
+            MenuItem { text: qsTrId("autodoc.main.preview_mermaid_diagram"); onTriggered: App.previewDiagram() }
+            MenuItem { text: qsTrId("autodoc.main.open_with_default_app"); onTriggered: App.openWithDefaultApp() }
             MenuSeparator {}
-            MenuItem { text: "E&xit"; onTriggered: App.quit() }
+            MenuItem { text: qsTrId("autodoc.main.exit"); onTriggered: App.quit() }
         }
         Menu {
-            title: "&Go"
-            MenuItem { text: "&Search…"; onTriggered: App.openSearch() }
-            MenuItem { text: "&Outline…"; onTriggered: App.openOutline() }
-            MenuItem { text: "&Buffers…"; onTriggered: App.openBuffers() }
-            MenuItem { text: "W&idget…"; onTriggered: App.openWidgets() }
+            title: qsTrId("autodoc.main.go")
+            MenuItem { text: qsTrId("autodoc.main.search"); onTriggered: App.openSearch() }
+            MenuItem { text: qsTrId("autodoc.main.outline"); onTriggered: App.openOutline() }
+            MenuItem { text: qsTrId("autodoc.main.buffers"); onTriggered: App.openBuffers() }
+            MenuItem { text: qsTrId("autodoc.main.widget"); onTriggered: App.openWidgets() }
             MenuSeparator {}
-            MenuItem { text: "&Explorer"; onTriggered: App.toggleExplorer() }
-            MenuItem { text: "&Notifications…"; onTriggered: App.openNotices() }
+            MenuItem { text: qsTrId("autodoc.main.explorer"); onTriggered: App.toggleExplorer() }
+            MenuItem { text: qsTrId("autodoc.main.notifications"); onTriggered: App.openNotices() }
             MenuSeparator {}
             // the panels that stay open, checked while they show
-            MenuItem { text: "A&gent"; checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
-            MenuItem { text: "&Terminal"; checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
-            MenuItem { text: "Res&ults"; checkable: true; checked: App.resultsShown; onTriggered: App.toggleResults() }
+            MenuItem { text: qsTrId("autodoc.main.agent"); checkable: true; checked: App.agentShown; onTriggered: App.toggleAgent() }
+            MenuItem { text: qsTrId("autodoc.main.terminal"); checkable: true; checked: App.terminalShown; onTriggered: App.toggleTerminal() }
+            MenuItem { text: qsTrId("autodoc.main.results"); checkable: true; checked: App.resultsShown; onTriggered: App.toggleResults() }
             MenuSeparator {}
-            MenuItem { text: "A&rrange panel…"; onTriggered: App.arrangePanel() }
-            MenuItem { text: "Reset panel la&yout"; onTriggered: App.resetPanelLayout() }
+            MenuItem { text: qsTrId("autodoc.main.arrange_panel"); onTriggered: App.arrangePanel() }
+            MenuItem { text: qsTrId("autodoc.main.reset_panel_layout"); onTriggered: App.resetPanelLayout() }
             MenuSeparator {}
-            MenuItem { text: "&Workspace…"; onTriggered: App.pickWorkspace() }
-            MenuItem { text: "&Manage workspaces…"; onTriggered: App.manageWorkspaces() }
+            MenuItem { text: qsTrId("autodoc.main.workspace"); onTriggered: App.pickWorkspace() }
+            MenuItem { text: qsTrId("autodoc.main.manage_workspaces"); onTriggered: App.manageWorkspaces() }
         }
         // the views of the shown document's relations (relations.go)
         Menu {
-            title: "Re&lations"
-            MenuItem { text: "&Links  (SPC l)"; onTriggered: App.toggleRelations() }
+            title: qsTrId("autodoc.main.relations")
+            MenuItem { text: qsTrId("autodoc.main.links_spc_l"); onTriggered: App.toggleRelations() }
             // ---- the relation views' menu items (the GUI's) ----
         }
         // Search: the page's find for the Text mode too, where / types a slash, and the workspace's
         Menu {
-            title: "Sea&rch"
-            MenuItem { text: "&Find in page…"; onTriggered: App.openFindInPage() }
-            MenuItem { text: "Find &next"; onTriggered: App.findAgainNext() }
-            MenuItem { text: "Find &previous"; onTriggered: App.findAgainPrevious() }
-            MenuItem { text: "&Clear find"; onTriggered: App.clearFind() }
+            title: qsTrId("autodoc.main.search_2")
+            MenuItem { text: qsTrId("autodoc.main.find_in_page"); onTriggered: App.openFindInPage() }
+            MenuItem { text: qsTrId("autodoc.main.find_next"); onTriggered: App.findAgainNext() }
+            MenuItem { text: qsTrId("autodoc.main.find_previous"); onTriggered: App.findAgainPrevious() }
+            MenuItem { text: qsTrId("autodoc.main.clear_find"); onTriggered: App.clearFind() }
             MenuSeparator {}
-            MenuItem { text: "&Search files…"; onTriggered: App.openSearch() }
+            MenuItem { text: qsTrId("autodoc.main.search_files"); onTriggered: App.openSearch() }
             MenuSeparator {}
-            MenuItem { text: "C&ommand line…  (Ctrl+;)"; onTriggered: App.openCommandLine() }
+            MenuItem { text: qsTrId("autodoc.main.command_line_ctrl"); onTriggered: App.openCommandLine() }
         }
         Menu {
-            title: "&View"
-            MenuItem { text: "&Status line"; checkable: true; checked: App.statusShown; onTriggered: App.toggleStatusLine() }
-            MenuItem { text: "&Hide the menu bar"; checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
+            title: qsTrId("autodoc.main.view")
+            MenuItem { text: qsTrId("autodoc.main.status_line"); checkable: true; checked: App.statusShown; onTriggered: App.toggleStatusLine() }
+            MenuItem { text: qsTrId("autodoc.main.hide_the_menu_bar"); checkable: true; checked: App.menuAutoHide; onTriggered: App.toggleMenuBar() }
             MenuSeparator {}
-            MenuItem { text: "&Wrap long lines"; checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
-            MenuItem { text: "Line &numbers"; checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
+            MenuItem { text: qsTrId("autodoc.main.wrap_long_lines"); checkable: true; checked: App.editorWrap; onTriggered: App.toggleWrap() }
+            MenuItem { text: qsTrId("autodoc.main.line_numbers"); checkable: true; checked: App.lineNumbers; onTriggered: App.toggleLineNumbers() }
             Menu {
-                title: "Indentation &marks"
-                MenuItem { text: "&1. Off";                  group: "indentMarks"; checked: App.indentMarksOff;        onTriggered: App.setIndentMarks("off") }
-                MenuItem { text: "&2. On the cursor's line"; group: "indentMarks"; checked: App.indentMarksCursorLine; onTriggered: App.setIndentMarks("cursorLine") }
-                MenuItem { text: "&3. On every line";        group: "indentMarks"; checked: App.indentMarksAll;        onTriggered: App.setIndentMarks("all") }
+                title: qsTrId("autodoc.main.indentation_marks")
+                MenuItem { text: qsTrId("autodoc.main.1_off");                  group: "indentMarks"; checked: App.indentMarksOff;        onTriggered: App.setIndentMarks("off") }
+                MenuItem { text: qsTrId("autodoc.main.2_on_the_cursor_s_line"); group: "indentMarks"; checked: App.indentMarksCursorLine; onTriggered: App.setIndentMarks("cursorLine") }
+                MenuItem { text: qsTrId("autodoc.main.3_on_every_line");        group: "indentMarks"; checked: App.indentMarksAll;        onTriggered: App.setIndentMarks("all") }
             }
             MenuSeparator {}
-            MenuItem { text: "&Image previews"; checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
+            MenuItem { text: qsTrId("autodoc.main.image_previews"); checkable: true; checked: App.imagePreviews; onTriggered: App.toggleImagePreviews() }
         }
         // the todo stores, AutoDoc's own view of them (todos.go)
         Menu {
-            title: "&Todos"
-            MenuItem { text: "&Open todos…  (SPC x)"; onTriggered: App.openTodos() }
+            title: qsTrId("autodoc.main.todos")
+            MenuItem { text: qsTrId("autodoc.main.open_todos_spc_x"); onTriggered: App.openTodos() }
             MenuSeparator {}
-            MenuItem { text: "&New store…"; onTriggered: App.todoNew() }
-            MenuItem { text: "&Load store…"; onTriggered: App.todoLoad() }
+            MenuItem { text: qsTrId("autodoc.main.new_store"); onTriggered: App.todoNew() }
+            MenuItem { text: qsTrId("autodoc.main.load_store"); onTriggered: App.todoLoad() }
         }
         Menu {
-            title: "&Options"
+            title: qsTrId("autodoc.main.options")
             Menu {
-                title: "Editor &mode"
+                title: qsTrId("autodoc.main.editor_mode")
                 // a shared group makes these a radio set, as editor-qml's are
-                MenuItem { text: "&1. Vim  (modal)";     group: "keymap"; checked: App.keymapVim;  onTriggered: App.setKeymap("vim") }
-                MenuItem { text: "&2. Text (modeless)";  group: "keymap"; checked: App.keymapText; onTriggered: App.setKeymap("text") }
+                MenuItem { text: qsTrId("autodoc.main.1_vim_modal");     group: "keymap"; checked: App.keymapVim;  onTriggered: App.setKeymap("vim") }
+                MenuItem { text: qsTrId("autodoc.main.2_text_modeless");  group: "keymap"; checked: App.keymapText; onTriggered: App.setKeymap("text") }
             }
             Menu {
-                title: "&Theme"
+                title: qsTrId("autodoc.main.theme")
                 // golib's themes, every one it ships (theme.go: builtinThemeRows), then the user's
                 Instantiator {
                     model: App.builtinThemes
@@ -196,18 +196,28 @@ Window {
                     MenuItem { text: model.label; enabled: model.enabled; group: "theme"; checked: model.checked; onTriggered: App.useTheme(model.key) }
                 }
             }
+            Menu {
+                title: qsTrId("autodoc.main.language")
+                // each in its own script, the same in every language (language.go)
+                MenuItem { text: "&1. English";            group: "language"; checked: App.language_en;    onTriggered: App.setLanguage("en") }
+                MenuItem { text: "&2. 한국어";             group: "language"; checked: App.language_ko_KR; onTriggered: App.setLanguage("ko_KR") }
+                MenuItem { text: "&3. 日本語";             group: "language"; checked: App.language_ja_JP; onTriggered: App.setLanguage("ja_JP") }
+                MenuItem { text: "&4. 中文";               group: "language"; checked: App.language_zh_CN; onTriggered: App.setLanguage("zh_CN") }
+                MenuItem { text: "&5. Español";            group: "language"; checked: App.language_es;    onTriggered: App.setLanguage("es") }
+                MenuItem { text: "&6. Português (Brasil)"; group: "language"; checked: App.language_pt_BR; onTriggered: App.setLanguage("pt_BR") }
+            }
             MenuSeparator {}
-            MenuItem { text: "&Editor preferences…"; onTriggered: App.openPrefs() }
+            MenuItem { text: qsTrId("autodoc.main.editor_preferences"); onTriggered: App.openPrefs() }
             // the window's fonts and zoom (fonts.go): a terminal draws in its own, and hides these
-            MenuItem { text: "&Fonts and zoom…"; visible: App.gui; onTriggered: App.openFonts() }
+            MenuItem { text: qsTrId("autodoc.main.fonts_and_zoom"); visible: App.gui; onTriggered: App.openFonts() }
             // golib draws no separator with nothing after it: in a terminal, where these hide, none
             MenuSeparator {}
-            MenuItem { text: "Zoom &in  (Ctrl+=)"; visible: App.gui; onTriggered: App.zoomWindow("in") }
-            MenuItem { text: "Zoom &out  (Ctrl+-)"; visible: App.gui; onTriggered: App.zoomWindow("out") }
-            MenuItem { text: "&Actual size  (Ctrl+0)"; visible: App.gui; onTriggered: App.setZoom(100) }
+            MenuItem { text: qsTrId("autodoc.main.zoom_in_ctrl"); visible: App.gui; onTriggered: App.zoomWindow("in") }
+            MenuItem { text: qsTrId("autodoc.main.zoom_out_ctrl"); visible: App.gui; onTriggered: App.zoomWindow("out") }
+            MenuItem { text: qsTrId("autodoc.main.actual_size_ctrl_0"); visible: App.gui; onTriggered: App.setZoom(100) }
         }
         Menu {
-            title: "&Plugins"
+            title: qsTrId("autodoc.main.plugins")
             Instantiator {
                 model: App.plugins
                 DelegateChooser {
@@ -219,25 +229,25 @@ Window {
             }
             Instantiator { model: App.luaMenus; MenuItem { text: model.label; onTriggered: App.luaMenu(model.target) } }
             // every plugin's commands, by plugin: the SPC p card, which says so when there are none
-            MenuItem { text: "&Commands…  (SPC p)"; onTriggered: App.openPluginChooser() }
+            MenuItem { text: qsTrId("autodoc.main.commands_spc_p"); onTriggered: App.openPluginChooser() }
             MenuSeparator {}
-            MenuItem { text: "&Browse the registry…"; onTriggered: App.browseRegistry() }
-            MenuItem { text: "&Add from a git URL…"; onTriggered: App.startAddPlugin() }
-            MenuItem { text: "&Manage plugins…"; onTriggered: App.managePlugins() }
+            MenuItem { text: qsTrId("autodoc.main.browse_the_registry"); onTriggered: App.browseRegistry() }
+            MenuItem { text: qsTrId("autodoc.main.add_from_a_git_url"); onTriggered: App.startAddPlugin() }
+            MenuItem { text: qsTrId("autodoc.main.manage_plugins"); onTriggered: App.managePlugins() }
         }
         Menu {
-            title: "&System"
-            MenuItem { text: "&Search models…"; onTriggered: App.openAIModels() }
-            MenuItem { text: "A&gent profiles…"; onTriggered: App.openAgentProfiles() }
-            MenuItem { text: "Set up an &agent…"; onTriggered: App.openAgentSetup() }
+            title: qsTrId("autodoc.main.system")
+            MenuItem { text: qsTrId("autodoc.main.search_models"); onTriggered: App.openAIModels() }
+            MenuItem { text: qsTrId("autodoc.main.agent_profiles"); onTriggered: App.openAgentProfiles() }
+            MenuItem { text: qsTrId("autodoc.main.set_up_an_agent"); onTriggered: App.openAgentSetup() }
             MenuSeparator {}
-            MenuItem { text: "&Restart backend…"; onTriggered: App.startRestart() }
+            MenuItem { text: qsTrId("autodoc.main.restart_backend"); onTriggered: App.startRestart() }
         }
         Menu {
-            title: "&Help"
-            MenuItem { text: "&Tutorial…"; onTriggered: App.openTutorial() }
-            MenuItem { text: "&Keys"; onTriggered: help.open() }
-            MenuItem { text: "&About"; onTriggered: about.open() }
+            title: qsTrId("autodoc.main.help")
+            MenuItem { text: qsTrId("autodoc.main.tutorial"); onTriggered: App.openTutorial() }
+            MenuItem { text: qsTrId("autodoc.main.keys"); onTriggered: help.open() }
+            MenuItem { text: qsTrId("autodoc.main.about"); onTriggered: about.open() }
         }
         // the dock, the bar's corner: one icon per open widget, or one running with its drawer
         // closed, the editor first; a click shows or hides it (tui/dock.go)
@@ -329,7 +339,7 @@ Window {
     // dock style (views/Panel.qml); a panel's own keys are live while the keyboard is in it ----
     Panel {
         id: explorer
-        heading: "explorer"
+        heading: qsTrId("autodoc.main.explorer_2")
         closeOnQ: true
         edge: App.explorerEdge
         size: App.explorerSize
@@ -361,7 +371,7 @@ Window {
     // live as it is edited and following the cursor (htmlpane.go); a terminal never opens it
     Panel {
         id: htmlPane
-        heading: "preview"
+        heading: qsTrId("autodoc.main.preview")
         edge: Tui.Right
         size: 50
         length: 100
@@ -390,9 +400,9 @@ Window {
             Flex {
                 direction: Tui.Horizontal
                 Text { text: " "; Layout.fillWidth: true }
-                Button { text: "Open in &browser"; toolTipText: "the note's page in the browser"; onClicked: App.openPaneInBrowser() }
+                Button { text: qsTrId("autodoc.main.open_in_browser"); toolTipText: "the note's page in the browser"; onClicked: App.openPaneInBrowser() }
                 Text { text: " " }
-                Button { text: "Close (&q)"; toolTipText: "close the preview"; onClicked: App.closeHTMLPane() }
+                Button { text: qsTrId("autodoc.main.close_q"); toolTipText: "close the preview"; onClicked: App.closeHTMLPane() }
                 Text { text: " "; Layout.fillWidth: true }
             }
         }
@@ -433,7 +443,7 @@ Window {
     // names, at that place's size; it keeps running while hidden (terminal.go)
     Panel {
         id: terminal
-        heading: "terminal"
+        heading: qsTrId("autodoc.main.terminal_2")
         surface: Theme.app.window   // the Window's tone, as a terminal's frame has always had
         edge: App.terminalEdge
         size: App.terminalSize
@@ -540,7 +550,7 @@ Window {
                     id: resultsText
                     Layout.fillWidth: true
                     text: App.resultsClauseText
-                    placeholderText: "over the loaded rows: ORDER BY column [ASC|DESC], …; WHERE column > 1 AND …"
+                    placeholderText: qsTrId("autodoc.main.over_the_loaded_rows_order_by_column_asc_desc_wh")
                     onAccepted: App.applyResultsClause(text)
                     onTextEdited: App.resultsClauseTyped(text)
                 }
@@ -567,13 +577,13 @@ Window {
             Flex {
                 direction: Tui.Horizontal
                 Text { text: " "; Layout.fillWidth: true }
-                Button { text: "Copy"; toolTipText: "the selected cells, or the cursor's, as TSV (y in the table; the right-click menu has CSV, JSON and Markdown)"; onClicked: App.copyResults() }
+                Button { text: qsTrId("autodoc.main.copy"); toolTipText: "the selected cells, or the cursor's, as TSV (y in the table; the right-click menu has CSV, JSON and Markdown)"; onClicked: App.copyResults() }
                 Text { text: " " }
-                Button { text: "Export loaded rows…"; toolTipText: "the rows loaded, as shown, into a CSV or JSON file"; onClicked: App.startExportResults() }
+                Button { text: qsTrId("autodoc.main.export_loaded_rows"); toolTipText: "the rows loaded, as shown, into a CSV or JSON file"; onClicked: App.startExportResults() }
                 Text { text: " " }
-                Button { text: "Insert as Markdown"; toolTipText: "the rows loaded now, as shown, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
+                Button { text: qsTrId("autodoc.main.insert_as_markdown"); toolTipText: "the rows loaded now, as shown, as a Markdown table at the page's cursor"; onClicked: App.insertResults() }
                 Text { text: " " }
-                Button { text: "Close (&q)"; toolTipText: "close the results"; onClicked: App.toggleResults() }
+                Button { text: qsTrId("autodoc.main.close_q"); toolTipText: "close the results"; onClicked: App.toggleResults() }
                 Text { text: " "; Layout.fillWidth: true }
             }
         }
@@ -671,7 +681,7 @@ Window {
                     // a font that lacks it), on the right. The words and a store's name do not fit
                     // one row of the panel's 52 columns on an 80-column screen, so each has its own.
                     Frame {
-                        title: "store"
+                        title: qsTrId("autodoc.main.store")
                         Flex {
                             direction: Tui.Vertical
                             ComboBox {
@@ -685,13 +695,13 @@ Window {
                             Flex {
                                 direction: Tui.Horizontal
                                 Text { text: " "; Layout.fillWidth: true }
-                                Button { text: "&New"; toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
+                                Button { text: qsTrId("autodoc.main.new"); toolTipText: "a new todo store, in a project's folder (N)"; onClicked: App.todoNew() }
                                 Text { text: " " }
-                                Button { text: "L&oad"; toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
+                                Button { text: qsTrId("autodoc.main.load"); toolTipText: "load a todo store from a folder (O)"; onClicked: App.todoLoad() }
                                 Text { text: " " }
-                                Button { text: "Edit (&L)"; toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
+                                Button { text: qsTrId("autodoc.main.edit_l"); toolTipText: "rename the store: its label (L)"; enabled: App.todoHasStore; onClicked: App.todoLabel() }
                                 Text { text: " " }
-                                Button { text: "&Refresh"; toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
+                                Button { text: qsTrId("autodoc.main.refresh"); toolTipText: "refresh the store (R)"; enabled: App.todoHasStore; onClicked: App.todoRefresh() }
                                 Text { text: " " }
                                 Button { text: "?"; toolTipText: "the panel's keys (?)"; onClicked: todoKeys.open() }
                             }
@@ -813,7 +823,7 @@ Window {
             // are (the GUI's Editor draws it; a terminal's shows the source): at most half the panel,
             // scrolled, so a long description never pushes the tabs away
             Frame {
-                title: "details"
+                title: qsTrId("autodoc.main.details")
                 visible: App.todoDetailShown
                 Layout.fillHeight: true
                 Editor {
@@ -861,21 +871,21 @@ Window {
                 // ---- end of the todos task buttons' keys ----
                 Flex {
                     direction: Tui.Horizontal
-                    Text { text: "read-only until the cutover"; visible: App.todoReadOnly }
-                    Button { id: todoStatusButton; text: "&Status…"; toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
+                    Text { text: qsTrId("autodoc.main.read_only_until_the_cutover"); visible: App.todoReadOnly }
+                    Button { id: todoStatusButton; text: qsTrId("autodoc.main.status"); toolTipText: "move the task to another status (s)"; visible: App.todoActStatus; enabled: App.todoActStatus; onClicked: App.todoChooseStatus() }
                     Text { text: " "; visible: App.todoActAssign }
-                    Button { text: "&Assign"; toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
+                    Button { text: qsTrId("autodoc.main.assign"); toolTipText: "assign the task to an agent (A)"; visible: App.todoActAssign; enabled: App.todoActAssign; onClicked: App.todoAssign() }
                     Text { text: " "; visible: App.todoActRemove }
-                    Button { text: "Remove (&d)"; toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
+                    Button { text: qsTrId("autodoc.main.remove_d"); toolTipText: "remove the task (d)"; visible: App.todoActRemove; enabled: App.todoActRemove; onClicked: App.todoRemove() }
                     Text { text: " "; visible: App.todoActStatus }
-                    Button { id: todoAddButton; text: "&Add"; toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
-                    Button { text: "S&et"; toolTipText: "set the value, in the KB's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
+                    Button { id: todoAddButton; text: qsTrId("autodoc.main.add"); toolTipText: "add a task (a)"; visible: App.todoActAdd; enabled: App.todoActAdd; onClicked: App.todoAdd() }
+                    Button { text: qsTrId("autodoc.main.set"); toolTipText: "set the value, in the KB's file (e)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarEdit() }
                     Text { text: " "; visible: App.todoActVarSet }
-                    Button { text: "This &machine"; toolTipText: "set the value for this machine only (m)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarMachine() }
+                    Button { text: qsTrId("autodoc.main.this_machine"); toolTipText: "set the value for this machine only (m)"; visible: App.todoActVarSet; enabled: App.todoActVarSet; onClicked: App.todoVarMachine() }
                     Text { text: " "; visible: App.todoActVarClear }
-                    Button { text: "Clear (&d)"; toolTipText: "clear the value set here (d)"; visible: App.todoActVarClear; enabled: App.todoActVarClear; onClicked: App.todoRemove() }
+                    Button { text: qsTrId("autodoc.main.clear_d"); toolTipText: "clear the value set here (d)"; visible: App.todoActVarClear; enabled: App.todoActVarClear; onClicked: App.todoRemove() }
                     Text { text: " "; visible: App.todoActVarAdd }
-                    Button { text: "&Add"; toolTipText: "add a variable, NAME=value (a)"; visible: App.todoActVarAdd; enabled: App.todoActVarAdd; onClicked: App.todoAdd() }
+                    Button { text: qsTrId("autodoc.main.add"); toolTipText: "add a variable, NAME=value (a)"; visible: App.todoActVarAdd; enabled: App.todoActVarAdd; onClicked: App.todoAdd() }
                 }
             }
         }
@@ -940,9 +950,9 @@ Window {
     TodoLabel { id: todoLabel }
     TodoVar { id: todoVar }
     TodoAssign { id: todoAssign }
-    TodoFolder { id: todoFolder; title: "todos: load a store: its project's folder" }
-    TodoFolder { id: todoFolderNew; title: "todos: a new store: the project's folder" }
-    TodoFolder { id: todoFolderMove; title: "todos: move the store: its new folder" }
+    TodoFolder { id: todoFolder; title: qsTrId("autodoc.main.todos_load_a_store_its_project_s_folder") }
+    TodoFolder { id: todoFolderNew; title: qsTrId("autodoc.main.todos_a_new_store_the_project_s_folder") }
+    TodoFolder { id: todoFolderMove; title: qsTrId("autodoc.main.todos_move_the_store_its_new_folder") }
     Notifications { id: notifications }
     Confirm { id: confirm }
 }

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	"io/fs"
 	"os"
 	"path"
@@ -52,9 +53,9 @@ func (h *Host) builtinThemeRows() *tuidecl.ListModel {
 	}
 	rows := make([]rowOf, 0, len(order))
 	for _, n := range order {
-		label, ok := themeMenuLabels[n]
-		if !ok {
-			label = n
+		var label any = n
+		if _, ok := themeMenuLabels[n]; ok {
+			label = tuicore.Msg("autodoc.theme." + n) // in the UI's language (language_catalog_test.go holds it)
 		}
 		rows = append(rows, rowOf{"key": n, "label": label, "checked": n == h.theme})
 	}
@@ -88,7 +89,7 @@ func (h *Host) switchTheme(name string) {
 		src = h.plugins.withCardPanels(withRelationViews(b, h.gui))
 	}
 	if themeOf(src) == "" {
-		h.notify("main.qml imports no theme to switch")
+		h.notify(h.tr("autodoc.notice.theme.main_qml_imports_no_theme_to_switch"))
 		return
 	}
 	next := themeImport.ReplaceAll(src, []byte("import autodoc.theme."+name+" "+moduleVersion))
@@ -103,7 +104,7 @@ func (h *Host) switchTheme(name string) {
 		h.set("App.userThemes", h.userThemeRows())
 		h.set("App.builtinThemes", h.builtinThemeRows())
 		h.reg.themeChanged()
-		h.say("theme: " + name)
+		h.say(h.trf("autodoc.notice.theme.theme", name))
 	})
 }
 

@@ -52,5 +52,7 @@ func modulesFrom(files fs.FS) []tuidecl.ProgramOption {
 		tuidecl.Components(files, "dialogs", "autodoc.dialogs", moduleVersion),
 		tuidecl.Components(files, "views", "autodoc.views", moduleVersion),
 		tuidecl.Types(controls.Types()...),
+		// AutoDoc's own text in six languages (language.go), over golib's
+		tuidecl.Translations(files, "i18n", "autodoc"),
 	}
 }

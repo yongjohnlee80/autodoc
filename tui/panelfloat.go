@@ -110,7 +110,7 @@ func (h *Host) maximizePanel() {
 		}
 	}
 	if target == "" {
-		h.notify("Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)")
+		h.notify(h.tr("autodoc.notice.panelfloat.maximize_is_the_terminal_s_and_the_agents_open_o"))
 		return
 	}
 	if err := h.toggleMaximize(target); err != nil {
@@ -173,7 +173,7 @@ func (h *Host) resetPanelLayout() {
 		}
 	}
 	if docked == 0 {
-		h.notify("every panel is at its edge already")
+		h.notify(h.tr("autodoc.notice.panelfloat.every_panel_is_at_its_edge_already"))
 	}
 }
 

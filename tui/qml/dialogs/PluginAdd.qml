@@ -4,22 +4,22 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 60
-    title: "add a plugin"
+    title: qsTrId("autodoc.dialog.pluginAdd.add_a_plugin")
     dim: true
     Flex {
         direction: Tui.Vertical
-        Text { text: "the plugin's git repository, or its name in the registry" }
+        Text { text: qsTrId("autodoc.dialog.pluginAdd.the_plugin_s_git_repository_or_its_name_in_the_r") }
         TextField {
             id: pluginUrl
             text: App.pluginUrl
-            placeholderText: "https://github.com/yongjohnlee80/autodoc-tetris"
+            placeholderText: qsTrId("autodoc.dialog.pluginAdd.https_github_com_yongjohnlee80_autodoc_tetris")
             onAccepted: App.addPlugin(text)
         }
         Text { wrapMode: Tui.WordWrap; text: App.pluginRisk }
     }
     DialogButtonBox {
-        Button { text: "&Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
-        Button { text: "C&lone"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: qsTrId("autodoc.dialog.pluginAdd.cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.pluginAdd.clone"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
     }
     onAccepted: App.addPlugin(pluginUrl.text)
 }

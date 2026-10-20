@@ -9,7 +9,7 @@ Dialog {
     dim: false
     Flex {
         direction: Tui.Vertical
-        Text { text: "value (a relative path is the store's folder's; empty: clear it)" }
-        TextField { id: todoVarField; text: App.todoVarText; placeholderText: "/abs/path, ../relative, or ~/path"; onAccepted: App.todoVarSet(text) }
+        Text { text: qsTrId("autodoc.dialog.todoVar.value_a_relative_path_is_the_store_s_folder_s_em") }
+        TextField { id: todoVarField; text: App.todoVarText; placeholderText: qsTrId("autodoc.dialog.todoVar.abs_path_relative_or_path"); onAccepted: App.todoVarSet(text) }
     }
 }

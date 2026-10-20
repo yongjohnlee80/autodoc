@@ -202,7 +202,7 @@ func (s *scripting) Connected() {
 		}
 		verbs, ok := v.(map[string]luaVerb)
 		if !ok {
-			s.c.Notify(fmt.Sprintf("Lua's autodoc.<domain> functions: the daemon's contracts: %s", luaErr(v.(error))))
+			s.c.Notify(s.c.Trf("autodoc.notice.scripting.lua_s_autodoc_domain_functions_the_daemon_s_cont", luaErr(v.(error))))
 			return
 		}
 		s.define(verbs)
@@ -478,12 +478,12 @@ func (s *scripting) answer(verb string, cb *lua.LFunction, a luaAnswer) {
 	}
 	if cb == nil {
 		if errv != lua.LNil {
-			s.c.Notify(fmt.Sprintf("autodoc.call(%s): %s", verb, errv))
+			s.c.Notify(s.c.Trf("autodoc.notice.scripting.autodoc_call", verb, errv))
 		}
 		return
 	}
 	if err := s.eng.Callback(verb+"'s callback", cb, res, errv); err != nil && !errors.Is(err, script.ErrStale) {
-		s.c.Notify("a Lua callback failed: " + err.Error())
+		s.c.Notify(s.c.Trf("autodoc.notice.scripting.a_lua_callback_failed", err.Error()))
 	}
 }
 

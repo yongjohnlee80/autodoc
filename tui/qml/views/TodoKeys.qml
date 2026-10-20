@@ -8,7 +8,7 @@ Dialog {
     id: todoKeys
     closeOnQ: true
     keyScope: "autodoc.todoKeys"
-    title: "todos — keys"
+    title: qsTrId("autodoc.card.todoKeys.title")
     dim: false
     helpText: "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"
     Text { text: App.todoKeysText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one

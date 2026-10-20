@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"slices"
 	"strconv"
 
@@ -122,7 +121,7 @@ func (h *Host) applyFonts(p prefs) {
 		for want.zoom > zoomSteps[0] && !h.fontsFit(want.size, want.zoom) {
 			want.zoom = zoomSteps[max(slices.Index(zoomSteps, want.zoom), 1)-1]
 		}
-		h.notify(fmt.Sprintf("zoom %d%% does not fit this window: drawn at %d%%", chosen, want.zoom))
+		h.notify(h.trf("autodoc.notice.fonts.zoom_does_not_fit", chosen, want.zoom))
 	}
 	was := h.fontsApplied
 	// what a grid of each generation is drawn at: every call below starts one, and a frame may
@@ -154,7 +153,7 @@ func (h *Host) applyFonts(p prefs) {
 // openFonts is Options › Fonts and zoom…: the installed families listed, the current ones chosen.
 func (h *Host) openFonts() {
 	if h.fonts == nil {
-		h.notify("fonts and zoom are the window's: in a terminal, its own settings choose them")
+		h.notify(h.tr("autodoc.notice.fonts.fonts_and_zoom_are_the_window_s_in_a_terminal_it"))
 		return
 	}
 	h.listFonts()
@@ -256,7 +255,7 @@ func (h *Host) setFontSizeIndex(i int) {
 	if i >= 0 && i < len(fontSizes) {
 		n := fontSizes[i]
 		if h.fonts != nil && n > h.fontsApplied.size && !h.fontsFit(n, h.fontsApplied.zoom) {
-			h.notify(h.tooLarge(fmt.Sprintf("size %d", n)))
+			h.notify(h.tooLarge(h.trf("autodoc.notice.fonts.size", n)))
 			h.set("App.fontSizeIndex", max(slices.Index(fontSizes, h.fontsApplied.size), 0))
 			return
 		}
@@ -271,7 +270,7 @@ func (h *Host) setZoom(pct int) {
 		return
 	}
 	if pct > h.fontsApplied.zoom && !h.fontsFit(h.fontsApplied.size, pct) {
-		h.notify(h.tooLarge(fmt.Sprintf("zoom %d%%", pct)))
+		h.notify(h.tooLarge(h.trf("autodoc.notice.fonts.zoom", pct)))
 		return
 	}
 	h.setPref(prefZoom, strconv.Itoa(pct), func(p *prefs) { p.zoom = pct })
@@ -312,7 +311,7 @@ func (h *Host) fontsFit(size, pct int) bool {
 // tooLarge says why a size was refused.
 func (h *Host) tooLarge(what string) string {
 	min := h.p.App().MinimumSize()
-	return fmt.Sprintf("%s is too large for this window: it would be smaller than %d × %d; enlarge the window first", what, min.W, min.H)
+	return h.trf("autodoc.notice.fonts.too_large", what, min.W, min.H)
 }
 
 func (h *Host) setZoomIndex(i int) {
@@ -352,6 +351,7 @@ func (h *Host) zoomMenu() widget.MenuItemModel {
 	}
 	zoom := widget.NewSubmenu("autodoc.zoom", "Zoom", rows)
 	zoom.Label, zoom.Hotkey, zoom.HotkeyIdx = tuicore.ParseMnemonic("&Zoom")
+	zoom = withLabelMessage(zoom, "&Zoom")
 	return zoom
 }
 
@@ -378,5 +378,5 @@ func menuCommand(id widget.ItemID, text string, action tuicore.Action) widget.Me
 	label, key, at := tuicore.ParseMnemonic(text)
 	row := widget.NewCommand(id, label, action)
 	row.Hotkey, row.HotkeyIdx = key, at
-	return row
+	return withLabelMessage(row, text)
 }

@@ -156,7 +156,7 @@ func (t *todos) askVar(scope string) {
 		where = "this machine"
 	}
 	t.varEditing = &todoVarEdit{store: s, name: str(v, "name"), scope: scope}
-	t.c.Set("App.todoVarTitle", fmt.Sprintf("$%s, kept in %s", str(v, "name"), where))
+	t.c.Set("App.todoVarTitle", t.c.Trf("autodoc.text.todos_vars.kept_in", str(v, "name"), where))
 	t.c.Set("App.todoVarText", str(v, "value"))
 	t.c.Open("todoVar")
 }
@@ -168,7 +168,7 @@ func (t *todos) varAdd() {
 		return
 	}
 	t.varEditing = &todoVarEdit{store: s, scope: "store"}
-	t.c.Set("App.todoVarTitle", "a variable, kept in the KB's file: NAME=value")
+	t.c.Set("App.todoVarTitle", t.c.Tr("autodoc.text.todos_vars.a_variable_kept_in_the_kb_s_file_name_value"))
 	t.c.Set("App.todoVarText", "")
 	t.c.Open("todoVar")
 }
@@ -192,7 +192,7 @@ func (t *todos) varSet(text string) {
 	if name == "" {
 		n, v, ok := strings.Cut(value, "=")
 		if !ok || strings.TrimSpace(n) == "" {
-			t.c.Notify("todos: a variable is NAME=value")
+			t.c.Notify(t.c.Tr("autodoc.notice.todos_vars.todos_a_variable_is_name_value"))
 			return
 		}
 		name, value = strings.TrimPrefix(strings.TrimSpace(n), "$"), strings.TrimSpace(v)
@@ -214,7 +214,7 @@ func (t *todos) varClear() {
 	if scope == "kb" {
 		scope = "store" // todos.set_var's name for the store's workspace's file, at every protocol
 	}
-	t.c.Ask(Question{Title: "clear the variable?", Text: fmt.Sprintf("Clear $%s's value set in %s?", name, scope),
+	t.c.Ask(Question{Title: t.c.Tr("autodoc.question.todos_vars.clear_the_variable"), Text: t.c.Trf("autodoc.question.todos_vars.clear_s_value_set_in", name, scope),
 		OnYes: func() { t.setVar(s, name, "", scope) }})
 }
 
@@ -226,9 +226,9 @@ func (t *todos) setVar(s *todoStore, name, value, scope string) {
 	}
 	t.call("todos.set_var", []any{name, value, opts}, nil, func(any) {
 		if value == "" {
-			t.c.Notify(fmt.Sprintf("todos: $%s cleared (%s)", name, scope))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos_vars.todos_cleared", name, scope))
 		} else {
-			t.c.Notify(fmt.Sprintf("todos: $%s set (%s)", name, scope))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos_vars.todos_set", name, scope))
 		}
 		if s == t.cur {
 			t.readVars()

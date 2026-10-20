@@ -23,8 +23,8 @@ type vectorRow struct {
 
 // openVectors lists the workspace's models, and opens the list.
 func (h *Host) openVectors() {
-	h.set("App.vectorsTitle", "vectors in "+h.ws)
-	h.set("App.vectorsStatus", "listing…")
+	h.set("App.vectorsTitle", h.trf("autodoc.text.vectors.vectors_in", h.ws))
+	h.set("App.vectorsStatus", h.tr("autodoc.text.vectors.listing"))
 	h.set("App.vectorsRefusals", "")
 	h.loadVectors()
 	h.open("vectorsDialog")
@@ -66,7 +66,7 @@ func (h *Host) loadVectors() {
 			return
 		}
 		if a.err != nil {
-			h.set("App.vectorsStatus", "vectors: "+wireMessage(a.err))
+			h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.vectors", wireMessage(a.err)))
 			return
 		}
 		h.vectors.Reset(a.rows)
@@ -120,13 +120,11 @@ func (h *Host) startPurge(i int) {
 		if r.state != "active" {
 			what = "the switch's target: cancel the switch"
 		}
-		h.set("App.vectorsStatus", fmt.Sprintf("%s is %s", r.name, what))
+		h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.is", r.name, what))
 		return
 	}
 	ws := h.ws
-	h.ask(Question{Title: "purge the model?", Text: fmt.Sprintf("Purge %s's %d vectors (%s) from %s? Switching back to it would embed "+
-		"every section again; the store gives its room back.", r.name, r.vectors,
-		bytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
+	h.ask(Question{Title: h.tr("autodoc.question.vectors.purge_the_model"), Text: h.trf("autodoc.question.vectors.purge_s_vectors_from_switching_back_to_it_would", r.name, r.vectors, bytesText(r.size()), ws), OnYes: func() { h.purgeConfirmed(r, ws) }})
 }
 
 func (h *Host) purgeConfirmed(r vectorRow, ws string) {
@@ -135,10 +133,10 @@ func (h *Host) purgeConfirmed(r vectorRow, ws string) {
 		return err
 	}, func(err error) {
 		if err != nil {
-			h.set("App.vectorsStatus", "not purged: "+wireMessage(err))
+			h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.not_purged", wireMessage(err)))
 			return
 		}
-		h.notify(fmt.Sprintf("purged %s's %d vectors from %s", r.name, r.vectors, ws))
+		h.notify(h.trf("autodoc.notice.vectors.purged_s_vectors_from", r.name, r.vectors, ws))
 		h.loadVectors()
 	})
 }
@@ -160,7 +158,7 @@ func (h *Host) cancelIndexing() {
 				h.failed("cancel the switch", a.err)
 				return
 			}
-			h.notify(fmt.Sprintf("switch cancelled: semantic search with %s again; %s's vectors so far are deleted", a.v, target))
+			h.notify(h.trf("autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve", a.v, target))
 			h.ai.providers.load()
 		})
 	case e.working() > 0:
@@ -172,10 +170,10 @@ func (h *Host) cancelIndexing() {
 				h.failed("stop embedding", err)
 				return
 			}
-			h.notify("embedding stopped, the vectors made kept: Use carries on from them")
+			h.notify(h.tr("autodoc.notice.vectors.embedding_stopped_the_vectors_made_kept_use_carr"))
 			h.ai.providers.load()
 		})
 	default:
-		h.say("nothing is being embedded")
+		h.say(h.tr("autodoc.notice.vectors.nothing_is_being_embedded"))
 	}
 }

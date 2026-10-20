@@ -9,6 +9,9 @@ type PanelHost interface {
 	Set(name string, v any)
 	Open(id string)
 	Close(id string)
+	// Tr and Trf are Core's: catalog text in the UI's language (language.go)
+	Tr(id string) string
+	Trf(id string, args ...any) string
 	Notify(msg string)
 	Ask(q Question) Asked
 	Prefs() prefs

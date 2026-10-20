@@ -3,14 +3,14 @@
 // buffer under the cursor, its text as it is now. Enter shows it.
 Picker {
     name: "buffers"
-    title: "switch buffer"
-    label: "filter: a part of the name or the number"
+    title: qsTrId("autodoc.dialog.bufferPick.switch_buffer")
+    label: qsTrId("autodoc.dialog.bufferPick.filter_a_part_of_the_name_or_the_number")
     fieldText: App.buffersField
     model: App.bufferRows
     listTitle: App.pickerStatus
     previewTitle: App.buffersPreviewTitle
     previewText: App.buffersPreviewText
     previewAt: App.buffersPreviewAt
-    acceptText: "&Show"
+    acceptText: qsTrId("autodoc.dialog.bufferPick.show")
     TableViewColumn { role: "label"; title: "BUFFER"; width: 0; elideMode: Tui.ElidePath }
 }

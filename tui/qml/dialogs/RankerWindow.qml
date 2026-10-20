@@ -4,7 +4,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "the ranker's window"
+    title: qsTrId("autodoc.dialog.rankerWindow.the_ranker_s_window")
     width: 64
     dim: false
     standardButtons: Dialog.Save | Dialog.Cancel
@@ -12,7 +12,7 @@ Dialog {
     helpText: App.rankerWindowError
     Flex {
         direction: Tui.Vertical
-        Text { text: "candidates ranked" }
+        Text { text: qsTrId("autodoc.dialog.rankerWindow.candidates_ranked") }
         TextField { id: rWindow; text: App.rankerWindow }
     }
     onAccepted: App.saveRankerWindow(rWindow.text)

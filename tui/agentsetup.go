@@ -156,10 +156,10 @@ const firstAgentPrompt = "Hello! In a few lines, what can you do for me in AutoD
 func (a *agents) firstPrompt(p agentProfile) {
 	err := a.SendPrompt(AgentRef{Codename: p.Codename}, firstAgentPrompt, func(err error) {
 		if err != nil {
-			a.c.Notify("the first prompt was not sent: " + err.Error())
+			a.c.Notify(a.c.Trf("autodoc.notice.agentsetup.the_first_prompt_was_not_sent", err.Error()))
 		}
 	})
 	if err != nil {
-		a.c.Notify("the first prompt was not sent: " + err.Error())
+		a.c.Notify(a.c.Trf("autodoc.notice.agentsetup.the_first_prompt_was_not_sent", err.Error()))
 	}
 }

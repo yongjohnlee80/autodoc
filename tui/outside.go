@@ -162,9 +162,8 @@ func (h *Host) sayWhyOutside(abs string) {
 	if !ok || pattern == "" {
 		return
 	}
-	h.ask(Question{Title: "in no workspace: open " + w.name + "'s settings?",
-		Text: abs + " is under workspace " + w.name + "'s root, but its exclude pattern " + pattern +
-			" keeps it out: it opens with no relations, links or backlinks.", Yes: "&Open the settings", No: "&Not now",
+	h.ask(Question{Title: h.trf("autodoc.question.outside.in_no_workspace_open_s_settings", w.name),
+		Text: h.trf("autodoc.question.outside.is_under_workspace_s_root_but_its_exclude_patter", abs, w.name, pattern), Yes: h.tr("autodoc.question.outside.open_the_settings"), No: h.tr("autodoc.question.outside.not_now"),
 		OnYes: func() { h.openSettings(w.name, 0) }})
 }
 
@@ -190,7 +189,7 @@ func (h *Host) createAbsolute(abs string) {
 		}
 		switch {
 		case code(a.err) == rpc.CodeConflict:
-			h.notify(abs + " exists: File › Open file… opens it")
+			h.notify(h.trf("autodoc.notice.outside.exists_file_open_file_opens_it", abs))
 			return
 		case a.err != nil:
 			h.failed("create "+abs, a.err)

@@ -6,13 +6,13 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 96
     maxHeightPercent: 90
-    title: "Mindmap settings"
+    title: qsTrId("autodoc.gui.mindmapSettings.mindmap_settings")
     width: 140
     dim: false
     Flex {
         direction: Tui.Horizontal
         Frame {
-            title: "map"
+            title: qsTrId("autodoc.gui.mindmapSettings.map")
             // a fixed width: the groups take the rest
             Layout.preferredWidth: 44
             Flex {
@@ -23,12 +23,12 @@ Dialog {
                     Layout.fillWidth: true
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "theme"; Layout.preferredWidth: 14; toolTipText: "the page's (the default), the terminals', or one of its own" }
+                        Text { text: qsTrId("autodoc.gui.mindmapSettings.theme"); Layout.preferredWidth: 14; toolTipText: "the page's (the default), the terminals', or one of its own" }
                         ComboBox { model: App.mindThemes; textRole: "label"; currentIndex: App.mindThemeIndex; onActivated: App.setMindTheme(index) }
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "opens at"; Layout.preferredWidth: 14; toolTipText: "how far from the page's document it reaches when it opens; d toggles it while it is open" }
+                        Text { text: qsTrId("autodoc.gui.mindmapSettings.opens_at"); Layout.preferredWidth: 14; toolTipText: "how far from the page's document it reaches when it opens; d toggles it while it is open" }
                         ComboBox { model: App.mindDepths; textRole: "label"; currentIndex: App.mindDepthIndex; onActivated: App.setMindDepth(index) }
                     }
                 }
@@ -37,7 +37,7 @@ Dialog {
         }
         Text { text: " " }
         Frame {
-            title: "groups: the first a document matches is its colour and outline"
+            title: qsTrId("autodoc.gui.mindmapSettings.groups_the_first_a_document_matches_is_its_colou")
             Layout.fillWidth: true
             Flex {
                 direction: Tui.Horizontal
@@ -58,26 +58,26 @@ Dialog {
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "query"; Layout.preferredWidth: 10; toolTipText: "type:<type> (the schema's), tag:#<tag> (a nested tag too), path:<folder>/" }
+                        Text { text: qsTrId("autodoc.gui.mindmapSettings.query"); Layout.preferredWidth: 10; toolTipText: "type:<type> (the schema's), tag:#<tag> (a nested tag too), path:<folder>/" }
                         TextField { text: App.mindGroupQuery; onTextEdited: App.mindGroupQuerySet(text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "colour"; Layout.preferredWidth: 10 }
-                        TextField { text: App.mindGroupColour; placeholderText: "#rrggbb"; onTextEdited: App.mindGroupColourSet(text) }
+                        Text { text: qsTrId("autodoc.gui.mindmapSettings.colour"); Layout.preferredWidth: 10 }
+                        TextField { text: App.mindGroupColour; placeholderText: qsTrId("autodoc.gui.mindmapSettings.rrggbb"); onTextEdited: App.mindGroupColourSet(text) }
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Text { text: "outline"; Layout.preferredWidth: 10 }
+                        Text { text: qsTrId("autodoc.gui.mindmapSettings.outline"); Layout.preferredWidth: 10 }
                         ComboBox { model: App.mindShapeChoices; textRole: "label"; currentIndex: App.mindGroupShape; onActivated: App.mindGroupShapeSet(index) }
                     }
                     Flex {
                         direction: Tui.Horizontal
-                        Button { text: "&Add"; onClicked: App.mindGroupAdd() }
-                        Button { text: "Remove"; onClicked: App.mindGroupRemove() }
-                        Button { text: "Up"; toolTipText: "earlier groups win"; onClicked: App.mindGroupUp() }
-                        Button { text: "Down"; onClicked: App.mindGroupDown() }
-                        Button { text: "Add missing"; toolTipText: "a group for each schema type and folder no group queries"; onClicked: App.mindGroupsAddMissing() }
+                        Button { text: qsTrId("autodoc.gui.mindmapSettings.add"); onClicked: App.mindGroupAdd() }
+                        Button { text: qsTrId("autodoc.gui.mindmapSettings.remove"); onClicked: App.mindGroupRemove() }
+                        Button { text: qsTrId("autodoc.gui.mindmapSettings.up"); toolTipText: "earlier groups win"; onClicked: App.mindGroupUp() }
+                        Button { text: qsTrId("autodoc.gui.mindmapSettings.down"); onClicked: App.mindGroupDown() }
+                        Button { text: qsTrId("autodoc.gui.mindmapSettings.add_missing"); toolTipText: "a group for each schema type and folder no group queries"; onClicked: App.mindGroupsAddMissing() }
                     }
                 }
                 Text { text: " " }
@@ -85,6 +85,6 @@ Dialog {
         }
     }
     DialogButtonBox {
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.gui.mindmapSettings.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

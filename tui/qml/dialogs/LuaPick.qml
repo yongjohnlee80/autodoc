@@ -3,13 +3,13 @@
 Picker {
     name: "luaPick"
     title: App.luaPickTitle
-    label: "filter"
+    label: qsTrId("autodoc.dialog.luaPick.filter")
     fieldText: App.luaPickField
     model: App.luaPickRows
     listTitle: App.luaPickStatus
     previewTitle: App.luaPickPreviewTitle
     previewText: App.luaPickPreviewText
     previewAt: App.luaPickPreviewAt
-    acceptText: "&Choose"
+    acceptText: qsTrId("autodoc.dialog.luaPick.choose")
     TableViewColumn { role: "label"; title: "ITEM"; width: 0 }
 }

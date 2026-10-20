@@ -6,9 +6,9 @@
 Dialog {
     id: luaKeys
     closeOnQ: true
-    title: "SPC u — your Lua keys"
+    title: qsTrId("autodoc.view.luaKeys.spc_u_your_lua_keys")
     dim: false
-    helpText: "a key runs its command · q or Esc closes"
+    helpText: qsTrId("autodoc.view.luaKeys.a_key_runs_its_command_q_or_esc_closes")
     Text { text: App.luaKeysText; wrapMode: Tui.WordWrap }
     Shortcut { sequence: "q"; onActivated: luaKeys.close() }
     Shortcut { sequence: "a"; onActivated: App.luaKey("a") }

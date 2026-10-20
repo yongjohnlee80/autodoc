@@ -4,12 +4,12 @@
 Dialog {
     closeOnQ: false
     maxWidthPercent: 80
-    title: "label the store"
+    title: qsTrId("autodoc.dialog.todoLabel.label_the_store")
     width: 64
     dim: false
     Flex {
         direction: Tui.Vertical
-        Text { text: "label (empty: its folder's name)" }
-        TextField { id: todoLabelField; text: App.todoLabelText; placeholderText: "what to call it"; onAccepted: App.todoLabelSet(text) }
+        Text { text: qsTrId("autodoc.dialog.todoLabel.label_empty_its_folder_s_name") }
+        TextField { id: todoLabelField; text: App.todoLabelText; placeholderText: qsTrId("autodoc.dialog.todoLabel.what_to_call_it"); onAccepted: App.todoLabelSet(text) }
     }
 }

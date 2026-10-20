@@ -158,7 +158,7 @@ func (o *outliner) open() {
 		if p.Kind == kind.YAML {
 			what = "its key path, on the page's frame"
 		}
-		o.c.Notify(fmt.Sprintf("%s has no headings to navigate: the breadcrumb shows %s", pageName(p), what))
+		o.c.Notify(o.c.Trf("autodoc.notice.outline.has_no_headings_to_navigate_the_breadcrumb_shows", pageName(p), what))
 		return
 	}
 	o.read(p)

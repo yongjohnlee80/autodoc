@@ -52,7 +52,7 @@ type managedPlugin struct {
 // startAddPlugin is Plugins › Add from a git URL….
 func (pl *plugins) startAddPlugin() {
 	if pl.pluginOpt.Dir == "" {
-		pl.c.Notify("no plugins folder: AutoDoc was started without one")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugininstall.no_plugins_folder_autodoc_was_started_without_on"))
 		return
 	}
 	setField(pl.c, "App.pluginUrl", "")
@@ -65,10 +65,10 @@ func (pl *plugins) addPlugin(url string) {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) {
 		pl.c.Close("pluginAdd")
-		pl.c.NotifyOngoing(toastPlugin, "looking up "+url+" in the registry…")
+		pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.looking_up_in_the_registry", url))
 		resolveRegistry(pl.c, regindex.KindPlugin, url, nil, func(repo string, err error) {
 			if err != nil {
-				pl.c.NotifyDone(toastPlugin, "not added: "+err.Error())
+				pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_added", err.Error()))
 				return
 			}
 			pl.addPlugin(repo)
@@ -76,12 +76,12 @@ func (pl *plugins) addPlugin(url string) {
 		return
 	}
 	if url == "" {
-		pl.c.Notify("add a plugin: no URL")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugininstall.add_a_plugin_no_url"))
 		pl.c.Open("pluginAdd")
 		return
 	}
 	pl.c.Close("pluginAdd")
-	pl.c.NotifyOngoing(toastPlugin, "cloning "+url+"…")
+	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloning", url))
 	dir, own := pl.pluginOpt.Dir, pl.cands.allocs
 	coreDo(pl.c, func(ctx context.Context) answerOf[*candidate] {
 		return answered(stagePlugin(ctx, dir, url, nil, own))
@@ -90,10 +90,10 @@ func (pl *plugins) addPlugin(url string) {
 			r.err = pl.cands.begin(r.v, pl.askPlugin, pl.hidePlugin)
 		}
 		if r.err != nil {
-			pl.c.NotifyDone(toastPlugin, "not added: "+r.err.Error())
+			pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_added", r.err.Error()))
 			return
 		}
-		pl.c.NotifyDone(toastPlugin, "cloned "+r.v.name+" at "+regindex.Short(r.v.commit))
+		pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.cloned_at", r.v.name, regindex.Short(r.v.commit)))
 		pl.cands.show(r.v)
 	})
 }
@@ -157,11 +157,11 @@ func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry, o
 // askPlugin is a plugin candidate's card: PluginConfirm, about c, which is the card's alone.
 func (pl *plugins) askPlugin(c *candidate) {
 	pl.pendingPlugin = c
-	verb := "add"
+	title := "autodoc.text.plugininstall.add_the_plugin" // a sentence each, as every language says it
 	if c.update {
-		verb = "update"
+		title = "autodoc.text.plugininstall.update_the_plugin"
 	}
-	pl.c.Set("App.pluginConfirmTitle", verb+" the plugin "+pluginTitle(c)+"?")
+	pl.c.Set("App.pluginConfirmTitle", pl.c.Trf(title, pluginTitle(c)))
 	pl.c.Set("App.pluginQuestion", pluginQuestion(c, pluginTitle(c)))
 	pl.c.Open("pluginConfirm")
 }
@@ -240,7 +240,7 @@ func (pl *plugins) pluginAudit() {
 // and the build swaps in for it (swapIn). A failed build leaves an update's plugin as it was,
 // running.
 func (pl *plugins) installCandidate(c *candidate) {
-	pl.c.NotifyOngoing(toastPlugin, "building "+c.name+"…")
+	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.building", c.name))
 	dir, logs := pl.pluginOpt.Dir, pl.pluginOpt.LogDir
 	coreDo(pl.c, func(ctx context.Context) error {
 		if err := pristine(ctx, c); err != nil {
@@ -382,7 +382,7 @@ func git(ctx context.Context, timeout time.Duration, dir string, args ...string)
 // managePlugins is Plugins › Manage plugins….
 func (pl *plugins) managePlugins() {
 	if pl.pluginOpt.Dir == "" {
-		pl.c.Notify("no plugins folder: AutoDoc was started without one")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugininstall.no_plugins_folder_autodoc_was_started_without_on"))
 		return
 	}
 	pl.c.Set("App.pluginsHelp", pluginsHelp)
@@ -428,7 +428,7 @@ func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
 func (pl *plugins) managedRow(i int) (managedPlugin, bool) {
 	m, ok := pl.managedPlugins.At(i)
 	if !ok {
-		pl.c.Set("App.pluginsHelp", "no plugin under the cursor · Add… installs one")
+		pl.c.Set("App.pluginsHelp", pl.c.Tr("autodoc.text.plugininstall.no_plugin_under_the_cursor_add_installs_one"))
 	}
 	return m, ok
 }
@@ -443,7 +443,7 @@ func (pl *plugins) startUpdatePlugin(i int) {
 		return
 	}
 	if m.source == "" {
-		pl.c.Notify(m.e.label() + " was put in the folder by hand: update it there")
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugininstall.was_put_in_the_folder_by_hand_update_it_there", m.e.label()))
 		return
 	}
 	pl.fetchAndAsk(m)
@@ -464,7 +464,7 @@ func (pl *plugins) updatePlugin(name string) error {
 // is the one installed. m's source, when not known yet, is its clone's origin. The installed
 // folder is only read: nothing is fetched into it.
 func (pl *plugins) fetchAndAsk(m managedPlugin) {
-	pl.c.NotifyOngoing(toastPlugin, "fetching "+m.e.m.Name+"…")
+	pl.c.NotifyOngoing(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.fetching", m.e.m.Name))
 	dir, own := pl.pluginOpt.Dir, pl.cands.allocs
 	type staged struct {
 		c    *candidate
@@ -494,15 +494,15 @@ func (pl *plugins) fetchAndAsk(m managedPlugin) {
 	}, func(r staged) {
 		switch {
 		case r.err != nil:
-			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+r.err.Error())
+			pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_updated", m.e.m.Name, r.err.Error()))
 		case r.c.commit == r.head:
-			pl.c.NotifyDone(toastPlugin, m.e.m.Name+" is up to date at "+regindex.Short(r.head))
+			pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.is_up_to_date_at", m.e.m.Name, regindex.Short(r.head)))
 		default:
 			if err := pl.cands.begin(r.c, pl.askPlugin, pl.hidePlugin); err != nil {
-				pl.c.NotifyDone(toastPlugin, m.e.m.Name+" not updated: "+err.Error())
+				pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.not_updated", m.e.m.Name, err.Error()))
 				return
 			}
-			pl.c.NotifyDone(toastPlugin, "fetched "+m.e.m.Name+" at "+regindex.Short(r.c.commit))
+			pl.c.NotifyDone(toastPlugin, pl.c.Trf("autodoc.notice.plugininstall.fetched_at", m.e.m.Name, regindex.Short(r.c.commit)))
 			pl.cands.show(r.c)
 		}
 	})
@@ -517,7 +517,7 @@ func (pl *plugins) placePlugin(i int) {
 	}
 	places := m.e.m.Dialog.Placements
 	if len(places) < 2 {
-		pl.c.Set("App.pluginsHelp", fmt.Sprintf("%s is designed for %s only", m.e.label(), strings.Join(places, ", ")))
+		pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.is_designed_for_only", m.e.label(), strings.Join(places, ", ")))
 		return
 	}
 	next := places[(slices.Index(places, pl.placement(m.e))+1)%len(places)]
@@ -528,7 +528,7 @@ func (pl *plugins) placePlugin(i int) {
 	} else if r := pl.running[name]; r != nil && r.float != nil {
 		r.float.SetAnchor(pluginAnchors[next])
 	}
-	pl.c.Set("App.pluginsHelp", fmt.Sprintf("%s: %s", m.e.label(), next))
+	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.text", m.e.label(), next))
 	pl.loadManaged()
 }
 
@@ -539,8 +539,7 @@ func (pl *plugins) startRemovePlugin(i int) {
 		return
 	}
 	dir := m.e.dir
-	pl.c.Ask(Question{Title: "remove the plugin?", Text: fmt.Sprintf("Remove %s? Its directory goes, with what its build made and the folder its last update kept:\n%s",
-		m.e.label(), dir), No: "&No, keep it", Yes: "&Yes, remove it", OnYes: func() { pl.removePluginConfirmed(dir) }})
+	pl.c.Ask(Question{Title: pl.c.Tr("autodoc.question.plugininstall.remove_the_plugin"), Text: pl.c.Trf("autodoc.question.plugininstall.remove_its_directory_goes_with_what_its_build_ma", m.e.label(), dir), No: pl.c.Tr("autodoc.question.plugininstall.no_keep_it"), Yes: pl.c.Tr("autodoc.question.plugininstall.yes_remove_it"), OnYes: func() { pl.removePluginConfirmed(dir) }})
 }
 
 // removePluginConfirmed removes the plugin asked about: closed first when it is open, and only a
@@ -578,7 +577,7 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 			pl.c.Failed("not removed", err)
 			return
 		}
-		pl.c.Notify("removed " + name)
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugininstall.removed", name))
 		pl.loadPlugins()
 		pl.loadManaged()
 		if pl.scriptsChanged != nil {

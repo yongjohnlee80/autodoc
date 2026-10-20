@@ -145,7 +145,7 @@ func (h *Host) kbTypePicked(i int) {
 	case "custom":
 		h.dropKBType()
 		h.set("App.kbTypeCustomShown", true)
-		h.set("App.kbTypeSummary", "a KB type's git URL, then Stage")
+		h.set("App.kbTypeSummary", h.tr("autodoc.text.kbtype.a_kb_type_s_git_url_then_stage"))
 	default:
 		for _, c := range h.kbTypeChoices() {
 			if c.name == key {
@@ -173,7 +173,7 @@ func (h *Host) pickKBType(url string) {
 		return
 	}
 	tk := h.ticket(&h.kbTypeSeq, TicketSession)
-	h.set("App.kbTypeSummary", "staging "+url+"…")
+	h.set("App.kbTypeSummary", h.trf("autodoc.text.kbtype.staging", url))
 	do(h, func(ctx context.Context) stagedKBType { return h.stageKB(ctx, url) }, func(s stagedKBType) {
 		if !tk.Current() {
 			if s.stage != "" {
@@ -182,7 +182,7 @@ func (h *Host) pickKBType(url string) {
 			return
 		}
 		if s.err != nil {
-			h.set("App.kbTypeSummary", "not a KB type: "+s.err.Error())
+			h.set("App.kbTypeSummary", h.trf("autodoc.text.kbtype.not_a_kb_type", s.err.Error()))
 			return
 		}
 		h.kbStaged = &s
@@ -364,7 +364,7 @@ func (h *Host) kbTypeApply(x Invocation) error {
 	if !ok {
 		return errors.New("kbtype.apply: no workspace is open")
 	}
-	h.notifyOngoing("kbtype", "staging "+url+"…")
+	h.notifyOngoing("kbtype", h.trf("autodoc.notice.kbtype.staging", url))
 	type answer struct {
 		s   stagedKBType
 		a   kbApply
@@ -381,11 +381,11 @@ func (h *Host) kbTypeApply(x Invocation) error {
 	}, func(r answer) {
 		switch {
 		case r.s.err != nil:
-			h.notifyDone("kbtype", "not a KB type: "+r.err.Error())
+			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.not_a_kb_type", r.err.Error()))
 		case r.err != nil:
-			h.notifyDone("kbtype", ws.name+": "+r.s.t.Title+" stopped part way ("+r.a.String()+"): "+wireMessage(r.err))
+			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.stopped_part_way", ws.name, r.s.t.Title, r.a.String(), wireMessage(r.err)))
 		default:
-			h.notifyDone("kbtype", ws.name+": "+r.s.t.Title+" applied: "+r.a.String())
+			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.applied", ws.name, r.s.t.Title, r.a.String()))
 		}
 	})
 	return nil

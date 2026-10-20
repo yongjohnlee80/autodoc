@@ -74,9 +74,9 @@ func (h *Host) askLuaGrants() {
 			who = "the plugin " + name + "'s Lua package"
 		}
 		h.ask(Question{
-			Title: fmt.Sprintf("let %s use %s?", who, strings.Join(open, ", ")),
+			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
 			Text:  luaGrantText(open),
-			Yes:   "&Allow", No: "&Not now",
+			Yes:   h.tr("autodoc.question.luagate.allow"), No: h.tr("autodoc.question.luagate.not_now"),
 			OnYes:    func() { h.grantLua(a.script, open); next() },
 			OnCancel: next,
 		})

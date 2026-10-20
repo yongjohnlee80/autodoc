@@ -9,16 +9,16 @@
 Dialog {
     required property string name
     required property var model
-    property string label: "filter"
+    property var label: qsTrId("autodoc.dialog.picker.filter")
     property string fieldText: ""
-    property string placeholder: ""
+    property var placeholder: ""
     property string note: ""
     property bool noteShown: false
-    property string listTitle: ""
-    property string previewTitle: ""
+    property var listTitle: ""
+    property var previewTitle: ""
     property string previewText: ""
     property int previewAt: 0
-    property string acceptText: "&Open"
+    property var acceptText: qsTrId("autodoc.dialog.picker.open")
     // the most of the Window it takes, in percent: a short list (s's statuses) asks for less
     property int widthPercent: 92
     property int heightPercent: 90
@@ -86,7 +86,7 @@ Dialog {
     Shortcut { sequence: keyId("autodoc.picker.preview"); onActivated: preview.forceActiveFocus() }
     DialogButtonBox {
         Button { text: acceptText; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.picker.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.pickAccept(name, list.currentIndex, field.text)
     onRejected: App.pickCancel(name)

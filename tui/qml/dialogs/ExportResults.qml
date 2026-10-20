@@ -5,7 +5,7 @@
 Dialog {
     closeOnQ: true
     maxWidthPercent: 80
-    title: "export the results"
+    title: qsTrId("autodoc.dialog.exportResults.export_the_results")
     width: 72
     dim: false
     Flex {
@@ -13,12 +13,12 @@ Dialog {
         Text { text: App.exportHeading }
         Text { text: App.exportMore; wrapMode: Tui.WordWrap; visible: App.exportMoreShown }
         Text { text: " " }
-        Text { text: "format" }
+        Text { text: qsTrId("autodoc.dialog.exportResults.format") }
         ComboBox { model: App.exportFormats; textRole: "label"; currentIndex: App.exportFormatIndex; onActivated: App.exportFormatChosen(index) }
     }
     DialogButtonBox {
-        Button { text: "&Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
-        Button { text: "Choose the &file…"; enabled: App.exportCanSave; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: qsTrId("autodoc.dialog.exportResults.cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.exportResults.choose_the_file"); enabled: App.exportCanSave; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
     }
     onAccepted: App.chooseExportFile()
 }

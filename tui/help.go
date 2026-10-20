@@ -22,7 +22,7 @@ func helpText(k keyset, cat *catalog, more map[string][]string) string {
 	if moved != "" {
 		moved += "\n\n"
 	}
-	return helpKeys + "\n\n" + moved + k.helpCards() + "\n\n" + cmds + helpRest
+	return k.textID("autodoc.help.keys", helpKeys) + "\n\n" + moved + k.helpCards() + "\n\n" + cmds + k.textID("autodoc.help.rest", helpRest)
 }
 
 // commandsChanged is the catalog changed: F1 is made anew once the loop is free, however many
@@ -38,6 +38,9 @@ func (h *Host) commandsChanged() {
 		h.set("App.helpText", h.helpNow)
 	})
 }
+
+// helpCommandsHead heads F1's COMMANDS.
+const helpCommandsHead = "COMMANDS (each by its id, which Lua's autodoc.run(id) runs; its : names; its keys; what it does)"
 
 // helpGroups are the catalog's sources as F1 heads them, in its order.
 var helpGroups = []struct {
@@ -57,7 +60,7 @@ func (k keyset) helpCommands(cat *catalog, more map[string][]string) string {
 		width = max(width, utf8.RuneCountInString(e.ID))
 	}
 	var b strings.Builder
-	b.WriteString("COMMANDS (each by its id, which Lua's autodoc.run(id) runs; its : names; its keys; what it does)")
+	b.WriteString(k.textID("autodoc.help.commands", helpCommandsHead))
 	for _, g := range helpGroups {
 		var lines []string
 		for _, e := range cat.entries() {
@@ -70,10 +73,10 @@ func (k keyset) helpCommands(cat *catalog, more map[string][]string) string {
 			}
 			keys := append(k.keysOf(e), more[e.ID]...)
 			lines = append(lines, fmt.Sprintf("    %s%s  %s · %s · %s", e.ID, strings.Repeat(" ", width-utf8.RuneCountInString(e.ID)),
-				orDash(strings.Join(names, " ")), orDash(strings.Join(keys, ", ")), e.Title))
+				orDash(strings.Join(names, " ")), orDash(strings.Join(keys, ", ")), k.textID("autodoc.cmd."+e.ID, e.Title)))
 		}
 		if len(lines) > 0 {
-			b.WriteString("\n  " + g.head + "\n" + strings.Join(lines, "\n"))
+			b.WriteString("\n  " + k.text("autodoc.help.group.", g.head) + "\n" + strings.Join(lines, "\n"))
 		}
 	}
 	return b.String()

@@ -166,7 +166,7 @@ func (a *agents) selectInstance(instance *agentInstance) error {
 	if instance.running {
 		a.agentRunning, a.agentRunningLabel = instance.profile.Codename, instance.profile.Name
 	}
-	a.c.Set("App.agentTitle", "agent · "+instance.profile.Name)
+	a.c.Set("App.agentTitle", a.c.Trf("autodoc.text.agentinstances.agent", instance.profile.Name))
 	return nil
 }
 
@@ -185,11 +185,11 @@ func (a *agents) agentTabsChanged() {
 		if instance.running {
 			a.agentRunning, a.agentRunningLabel = instance.profile.Codename, instance.profile.Name
 		}
-		a.c.Set("App.agentTitle", "agent · "+instance.profile.Name)
+		a.c.Set("App.agentTitle", a.c.Trf("autodoc.text.agentinstances.agent", instance.profile.Name))
 		return
 	}
 	a.selectedAgent, a.agentRunning, a.agentRunningLabel = "", "", ""
-	a.c.Set("App.agentTitle", "agent")
+	a.c.Set("App.agentTitle", a.c.Tr("autodoc.text.agentinstances.agent_2"))
 }
 
 func (a *agents) startInstance(p agentProfile) (*agentInstance, error) {
@@ -280,12 +280,12 @@ func (a *agents) instanceExited(instance *agentInstance, code int) {
 		if !anyRunning {
 			a.c.CloseDrawer("agent")
 		}
-		a.c.Notify(fmt.Sprintf("the agent %s exited: SPC g starts the default again", name))
+		a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_exited_spc_g_starts_the_default_again", name))
 	case 127, 126:
 		why := map[int]string{127: "was not found", 126: "could not run"}[code]
-		a.c.Notify(fmt.Sprintf("the agent %s's command %s (%d): check it in System › Agent profiles…", name, why, code))
+		a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_s_command_check_it_in_system_agent_pro", name, why, code))
 	default:
-		a.c.Notify(fmt.Sprintf("the agent %s exited (%d): choose its tab to inspect it or start it again", name, code))
+		a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_exited_choose_its_tab_to_inspect_it_or", name, code))
 	}
 }
 
@@ -323,7 +323,7 @@ func (a *agents) awaitInstanceRetirement(instance *agentInstance, result Termina
 		}
 		if err != nil {
 			instance.cleanupError = err
-			a.c.Notify("the agent did not finish cleanup: " + err.Error())
+			a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_did_not_finish_cleanup", err.Error()))
 			return
 		}
 		delete(a.instances, code)
@@ -517,7 +517,7 @@ func (a *agents) deliver(to AgentRef, check func() error, what string, submit bo
 		to.Instance = instance.token // capture the resolved current incarnation before the next loop turn
 		c.Post(deliver)
 	} else {
-		a.c.Ask(Question{Title: "start the agent?", Text: "Start " + p.Name + " and send " + what + "?", Yes: "&Yes, start and send",
+		a.c.Ask(Question{Title: a.c.Tr("autodoc.question.agentinstances.start_the_agent"), Text: a.c.Trf("autodoc.question.agentinstances.start_and_send", p.Name, what), Yes: a.c.Tr("autodoc.question.agentinstances.yes_start_and_send"),
 			OnYes: deliver, OnCancel: func() {
 				if a.stopping {
 					finish(ErrAgentShuttingDown)

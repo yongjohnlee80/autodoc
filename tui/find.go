@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
@@ -87,7 +88,7 @@ func (h *Host) findTarget() string {
 func (h *Host) openFind() {
 	target := h.findTarget()
 	if target == "" {
-		h.say("find: put the keyboard in " + findPaneList(h.findPanes()) + " first")
+		h.say(h.trf("autodoc.notice.find.find_put_the_keyboard_in_first", findPaneList(h.findPanes())))
 		return
 	}
 	h.askFind(target)
@@ -110,7 +111,7 @@ func (h *Host) openFindInPage() { h.askFind(findPage) }
 
 func (h *Host) askFind(target string) {
 	h.find.pending = target
-	h.set("App.findTitle", "find in the "+target+" — n next, N previous")
+	h.set("App.findTitle", h.trf("autodoc.text.find.find_in_the_n_next_n_previous", target))
 	h.set("App.findError", "")
 	h.open("findDialog")
 }
@@ -118,7 +119,7 @@ func (h *Host) askFind(target string) {
 // startFind is the question's answer: the first row holding it, from the cursor on.
 func (h *Host) startFind(pattern string) {
 	if strings.TrimSpace(pattern) == "" {
-		h.set("App.findError", "type a word to find")
+		h.set("App.findError", h.tr("autodoc.text.find.type_a_word_to_find"))
 		h.p.Post(func() { h.open("findDialog") })
 		return
 	}
@@ -138,7 +139,7 @@ func (h *Host) startFind(pattern string) {
 // before it runs an item, so n's check that the keyboard is in the find's pane holds for the page.
 func (h *Host) findAgain(dir int) {
 	if h.find.query == "" || h.find.target == "" {
-		h.say("nothing to find again: Search › Find in page asks what to find")
+		h.say(h.tr("autodoc.notice.find.nothing_to_find_again_search_find_in_page_asks_w"))
 		return
 	}
 	h.findJump(dir, false)
@@ -152,7 +153,7 @@ func (h *Host) clearFind() {
 	h.core.SetCurrentMatch(widget.TextRange{})
 	h.find.query, h.find.target = "", ""
 	h.showFind()
-	h.say("find cleared")
+	h.say(h.tr("autodoc.notice.find.find_cleared"))
 }
 
 // showFind brings the page's marks and "finding …" up to date with the find: marked and shown while
@@ -227,16 +228,16 @@ func (h *Host) findPrevious() { h.findJump(-1, false) }
 func (h *Host) findJump(dir int, includeCurrent bool) {
 	f := &h.find
 	if f.query == "" || f.target == "" {
-		h.say("nothing to find again: / asks what to find")
+		h.say(h.tr("autodoc.notice.find.nothing_to_find_again_asks_what_to_find"))
 		return
 	}
 	if !includeCurrent && h.findTarget() != f.target {
-		h.say("n and N find again in the " + f.target + ": put the keyboard there, or / for a new find")
+		h.say(h.trf("autodoc.notice.find.n_and_n_find_again_in_the_put_the_keyboard_there", f.target))
 		return
 	}
 	pane, ok := h.findPane(f.target)
 	if !ok {
-		h.say("nothing to find again: / asks what to find")
+		h.say(h.tr("autodoc.notice.find.nothing_to_find_again_asks_what_to_find"))
 		return
 	}
 	if f.target == findPage {
@@ -255,7 +256,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	if len(hits) == 0 {
 		f.at, f.total = 0, 0
 		h.showFind()
-		h.say(fmt.Sprintf("find: no %q in the %s", f.query, f.target))
+		h.say(h.trf("autodoc.notice.find.no_match", strconv.Quote(f.query), f.target))
 		return
 	}
 	selected := 0
@@ -279,7 +280,7 @@ func (h *Host) findJump(dir int, includeCurrent bool) {
 	h.keep(moveTo(row, cols[row]))
 	f.at, f.total = selected+1, len(hits)
 	h.showFind()
-	h.say(fmt.Sprintf("find %q: %d of %d in the %s", f.query, selected+1, len(hits), f.target))
+	h.say(h.trf("autodoc.notice.find.match_of", strconv.Quote(f.query), selected+1, len(hits), f.target))
 }
 
 // pageFind is the page's pane as a feature, the host's own: first among the features, so first in
@@ -347,7 +348,7 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 	if len(all) == 0 {
 		f.at, f.total = 0, 0
 		h.showFind()
-		h.say(fmt.Sprintf("find: no %q in the %s", f.query, f.target))
+		h.say(h.trf("autodoc.notice.find.no_match", strconv.Quote(f.query), f.target))
 		return
 	}
 	ln, col := h.core.Line()
@@ -383,7 +384,7 @@ func (h *Host) pageFindJump(dir int, includeCurrent bool, count int) {
 	h.keep(moveTo(r.From.Line, r.From.Col))
 	f.at, f.total = sel+1, len(all)
 	h.showFind()
-	h.say(fmt.Sprintf("find %q: %d of %d in the %s", f.query, sel+1, len(all), f.target))
+	h.say(h.trf("autodoc.notice.find.match_of", strconv.Quote(f.query), sel+1, len(all), f.target))
 }
 
 // starFind is the editor's * and # (and g* g#): the word becomes the page's find, whole words or
