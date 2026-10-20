@@ -42,7 +42,7 @@ func (pl *plugins) openPlugin(key string) {
 	}
 	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.key() == key })
 	if i < 0 {
-		pl.c.Notify("no plugin " + key)
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugins.no_plugin", key))
 		return
 	}
 	e := pl.pluginList[i]

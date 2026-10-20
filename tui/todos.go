@@ -443,7 +443,7 @@ func rootOf(at any) string {
 // toggle is Todos › Open todos… (SPC x): the panel, open or closed.
 func (t *todos) toggle() {
 	if t.c.Workspace() == "" && len(t.stores) == 0 {
-		t.c.Notify("todos: enter a workspace first, or Load a store")
+		t.c.Notify(t.c.Tr("autodoc.notice.todos.todos_enter_a_workspace_first_or_load_a_store"))
 		return
 	}
 	t.c.TogglePanel(todosPanelSpec().ID)
@@ -994,7 +994,7 @@ func (t *todos) addTitle(title string) {
 	}
 	t.write(s, "todos.add", []any{s.at, map[string]any{"title": strings.TrimSpace(title)}}, func(v any) {
 		task := asMap(v)
-		t.c.Notify("todos: added " + str(task, "id"))
+		t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_added", str(task, "id")))
 		t.followTask(task, cmp.Or(str(task, "status"), "open"))
 	})
 }
@@ -1008,13 +1008,13 @@ func (t *todos) remove() {
 	if x == nil || t.readOnly(s) {
 		return
 	}
-	t.c.Ask(Question{Title: "remove the task?", Text: fmt.Sprintf("Remove %q? Its file is deleted.", str(x, "title")),
+	t.c.Ask(Question{Title: t.c.Tr("autodoc.question.todos.remove_the_task"), Text: t.c.Trf("autodoc.question.todos.remove_its_file", strconv.Quote(str(x, "title"))),
 		OnYes: func() { t.removeConfirmed(s, x) }})
 }
 
 // removeConfirmed removes the task asked about, whatever row the cursor is on by then.
 func (t *todos) removeConfirmed(s *todoStore, x map[string]any) {
-	t.write(s, "todos.remove", []any{s.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify("todos: removed " + str(x, "id")) })
+	t.write(s, "todos.remove", []any{s.at, str(x, "id"), str(x, "rev")}, func(any) { t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_removed", str(x, "id"))) })
 }
 
 // moveTo gives task x of store s its next status, through todos.status so its events fire; the
@@ -1072,9 +1072,9 @@ func (t *todos) labelSet(text string) {
 	text = strings.TrimSpace(text)
 	t.call("preference.set", []any{s.labelKey(), text}, nil, func(any) {
 		if text == "" {
-			t.c.Notify(fmt.Sprintf("todos: %s shows as %s again", tildePath(s.path), s.name))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_shows_as_again", tildePath(s.path), s.name))
 		} else {
-			t.c.Notify(fmt.Sprintf("todos: %s is labelled %s", tildePath(s.path), text))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_labelled", tildePath(s.path), text))
 		}
 		t.list()
 	})
@@ -1093,7 +1093,7 @@ func (t *todos) refresh() {
 	}
 	t.write(s, "todos.refresh", []any{s.at}, func(v any) {
 		r := asMap(v)
-		t.c.Notify(fmt.Sprintf("todos: refreshed: %v moved, %v archived, %v rewritten", r["moved"], r["archived"], r["rewritten"]))
+		t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_refreshed_moved_archived_rewritten", r["moved"], r["archived"], r["rewritten"]))
 	})
 }
 
@@ -1138,11 +1138,11 @@ func (t *todos) folderChosen(dir string) {
 				t.want = "root:" + dir
 				s := &todoStore{id: "root:" + dir, at: at, name: storeName(dir), claimed: asMap(v)["claimed"] == true}
 				if !s.claimed { // the folder is loaded; the store it asked for waits for the cutover
-					t.c.Notify("todos: " + tildePath(dir) + " is loaded, read-only: its new store waits for the cutover")
+					t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_is_loaded_read_only_its_new_store_waits_fo", tildePath(dir)))
 					t.list()
 					return
 				}
-				t.write(s, "todos.scaffold", []any{at}, func(any) { t.c.Notify("todos: a new store in " + dir); t.list() })
+				t.write(s, "todos.scaffold", []any{at}, func(any) { t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_a_new_store_in", dir)); t.list() })
 			})
 		})
 	case "move":
@@ -1151,7 +1151,7 @@ func (t *todos) folderChosen(dir string) {
 			return
 		}
 		t.write(s, "todos.move_store", []any{s.at, filepath.Join(dir, ".todo-list")}, func(any) {
-			t.c.Notify("todos: the store is now in " + dir)
+			t.c.Notify(t.c.Trf("autodoc.notice.todos.todos_the_store_is_now_in", dir))
 			t.list()
 		})
 	}

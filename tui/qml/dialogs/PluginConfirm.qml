@@ -12,8 +12,8 @@ Dialog {
     onRejected: App.pluginDeclined()
     Text { wrapMode: Tui.WordWrap; text: App.pluginQuestion }
     DialogButtonBox {
-        Button { text: "&No, cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
-        Button { text: "&Audit…"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.pluginAudit() }
-        Button { text: "&Yes, at my own risk"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: qsTrId("autodoc.dialog.pluginConfirm.no_cancel"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.pluginConfirm.audit"); DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.pluginAudit() }
+        Button { text: qsTrId("autodoc.dialog.pluginConfirm.yes_at_my_own_risk"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
     }
 }

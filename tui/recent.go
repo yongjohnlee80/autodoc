@@ -2,7 +2,6 @@ package tui
 
 import (
 	"encoding/json"
-	"fmt"
 	"slices"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -123,10 +122,10 @@ func (r *recent) list() {
 	}
 	r.rows.Reset(listed)
 	if len(listed) == 0 {
-		r.c.Set("App.recentStatus", "no recent files: the files you open are listed here")
+		r.c.Set("App.recentStatus", r.c.Tr("autodoc.text.recent.no_recent_files_the_files_you_open_are_listed_he"))
 		return
 	}
-	r.c.Set("App.recentStatus", fmt.Sprintf("%d recent files, the newest first", len(listed)))
+	r.c.Set("App.recentStatus", r.c.Trf("autodoc.text.recent.recent_files_the_newest_first", len(listed)))
 }
 
 func (r *recent) listed(d recentDoc) bool {
@@ -153,7 +152,7 @@ func (r *recent) choose(i int) {
 func (r *recent) clear() {
 	r.c.SetPref(prefRecent, "[]")
 	r.list()
-	r.c.Say("cleared the recent files")
+	r.c.Say(r.c.Tr("autodoc.notice.recent.cleared_the_recent_files"))
 }
 
 // recentRowOf is a recent file as the list shows it.

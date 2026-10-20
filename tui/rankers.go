@@ -115,9 +115,11 @@ func (r *rankers) use(i int) {
 	if !ok || r.supplied != "" {
 		return
 	}
-	r.c.Set("App.rankersStatus", "setting up "+row.name+"…")
-	r.choose(row.name, func(err error) { r.c.Set("App.rankersStatus", row.name+" not used: "+wireMessage(err)) },
-		func() { r.c.Notify("search is re-ranked with " + row.name) })
+	r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.setting_up", row.name))
+	r.choose(row.name, func(err error) {
+		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.not_used", row.name, wireMessage(err)))
+	},
+		func() { r.c.Notify(r.c.Trf("autodoc.notice.rankers.search_is_re_ranked_with", row.name)) })
 }
 
 // stop uses no ranker: the hits stay in recall order.
@@ -125,8 +127,10 @@ func (r *rankers) stop() {
 	if r.supplied != "" {
 		return
 	}
-	r.choose("", func(err error) { r.c.Set("App.rankersStatus", "still re-ranking: "+wireMessage(err)) },
-		func() { r.c.Notify("search is not re-ranked: the hits are in recall order") })
+	r.choose("", func(err error) {
+		r.c.Set("App.rankersStatus", r.c.Trf("autodoc.text.rankers.still_re_ranking", wireMessage(err)))
+	},
+		func() { r.c.Notify(r.c.Tr("autodoc.notice.rankers.search_is_not_re_ranked_the_hits_are_in_recall_o")) })
 }
 
 // startWindow opens the window's field on the one in use.
@@ -134,7 +138,7 @@ func (r *rankers) startWindow() {
 	if r.supplied != "" {
 		return
 	}
-	r.c.Set("App.rankerWindowError", fmt.Sprintf("%d to %d: more ranks deeper and takes longer; a CPU ranker answers 10–20 in a few seconds", rank.MinWindow, rank.MaxWindow))
+	r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.to_more_ranks_deeper_and_takes_longer_a_cpu_rank", rank.MinWindow, rank.MaxWindow))
 	setField(r.c, "App.rankerWindow", "")
 	r.c.Open("rankerWindow")
 	r.c.Go(func(ctx context.Context) any {
@@ -150,7 +154,7 @@ func (r *rankers) startWindow() {
 func (r *rankers) saveWindow(text string) {
 	n, err := strconv.ParseInt(strings.TrimSpace(text), 10, 64)
 	if err != nil || n < rank.MinWindow || n > rank.MaxWindow {
-		r.c.Set("App.rankerWindowError", fmt.Sprintf("not saved: the window is %d to %d candidates, not %q", rank.MinWindow, rank.MaxWindow, strings.TrimSpace(text)))
+		r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.window_not_saved", rank.MinWindow, rank.MaxWindow, strconv.Quote(strings.TrimSpace(text))))
 		r.c.Open("rankerWindow")
 		return
 	}
@@ -159,11 +163,11 @@ func (r *rankers) saveWindow(text string) {
 		return err
 	}, func(v any) {
 		if err, _ := v.(error); err != nil {
-			r.c.Set("App.rankerWindowError", "not saved: "+wireMessage(err))
+			r.c.Set("App.rankerWindowError", r.c.Trf("autodoc.text.rankers.not_saved", wireMessage(err)))
 			r.c.Open("rankerWindow")
 			return
 		}
-		r.c.Notify(fmt.Sprintf("the ranker ranks the top %d candidates", n))
+		r.c.Notify(r.c.Trf("autodoc.notice.rankers.the_ranker_ranks_the_top_candidates", n))
 		r.load()
 		r.c.SearchModelsChanged(true)
 	})
@@ -171,8 +175,7 @@ func (r *rankers) saveWindow(text string) {
 
 // removal asks before removing ranker row.
 func (r *rankers) removal(row endpointRow, remove func()) {
-	r.c.Ask(Question{Title: "remove the ranker?", Text: "Remove the ranker " + row.name + "? Its key, its usage and its log go; " +
-		"if it is in use, search is no longer re-ranked.", OnYes: remove})
+	r.c.Ask(Question{Title: r.c.Tr("autodoc.question.rankers.remove_the_ranker"), Text: r.c.Trf("autodoc.question.rankers.remove_the_ranker_its_key_its_usage_and_its_log", row.name), OnYes: remove})
 }
 
 // kindShown shows the model field for a kind whose model is typed.
@@ -183,11 +186,11 @@ func (r *rankers) kindShown(k endpointKind) { r.c.Set("App.rankerModelShown", k.
 func (r *rankers) checked(models []string, err error) {
 	switch {
 	case err != nil:
-		r.c.Set("App.rankerModelsStatus", "not a ranker: "+wireMessage(err))
+		r.c.Set("App.rankerModelsStatus", r.c.Trf("autodoc.text.rankers.not_a_ranker", wireMessage(err)))
 	case len(models) == 0:
-		r.c.Set("App.rankerModelsStatus", "an endpoint that names no models: type the model it ranks with")
+		r.c.Set("App.rankerModelsStatus", r.c.Tr("autodoc.text.rankers.an_endpoint_that_names_no_models_type_the_model"))
 	default:
-		r.c.Set("App.rankerModelsStatus", "it ranks with "+strings.Join(models, ", "))
+		r.c.Set("App.rankerModelsStatus", r.c.Trf("autodoc.text.rankers.it_ranks_with", strings.Join(models, ", ")))
 	}
 }
 

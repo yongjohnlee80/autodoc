@@ -70,14 +70,14 @@ const restartWait = client.RestartWait
 // startRestart asks first, saying which version runs and which one a restart starts.
 func (h *Host) startRestart() {
 	if !h.session.CanSpawn() {
-		h.notify("restart: this TUI starts no daemon, so nothing would bring one back")
+		h.notify(h.tr("autodoc.notice.restart.restart_this_tui_starts_no_daemon_so_nothing_wou"))
 		return
 	}
 	running := h.session.Version()
 	if old := h.session.Stale(); old != nil && !h.connected {
 		running = old.Version // older than this TUI, refusing its protocol
 	} else if h.session.PID() == 0 || !h.connected {
-		h.notify("restart: not connected to a backend")
+		h.notify(h.tr("autodoc.notice.restart.restart_not_connected_to_a_backend"))
 		return
 	}
 	do(h, func(context.Context) answerOf[string] {
@@ -104,7 +104,7 @@ func (h *Host) startRestart() {
 			q += " as autodoc " + installed + ", the one installed."
 		}
 		q += " Indexing and embedding carry on where they stopped; every client reconnects."
-		h.ask(Question{Title: "restart the backend?", Text: q, OnYes: h.restartConfirmed})
+		h.ask(Question{Title: h.tr("autodoc.question.restart.restart_the_backend"), Text: q, OnYes: h.restartConfirmed})
 	})
 }
 
@@ -120,7 +120,7 @@ func (h *Host) restartConfirmed() {
 		h.failed("restart: the handoff to the other clients was not written", err)
 	}
 	if old := h.session.Stale(); old != nil && !h.connected {
-		h.notify(fmt.Sprintf("asking the older backend (autodoc %s) to stop…", old.Version))
+		h.notify(h.trf("autodoc.notice.restart.asking_the_older_backend_autodoc_to_stop", old.Version))
 		do(h, func(ctx context.Context) error {
 			if err := h.session.StopStale(ctx); err != nil {
 				return err
@@ -134,7 +134,7 @@ func (h *Host) restartConfirmed() {
 				h.session.RemoveHandoff()
 				h.failed("restart", err)
 				if h.mismatchRecovery {
-					h.set("App.mismatchQuestion", "Restart failed: "+err.Error()+". Retry or quit.")
+					h.set("App.mismatchQuestion", h.trf("autodoc.text.restart.restart_failed_retry_or_quit", err.Error()))
 					h.open("mismatch")
 					h.mismatchOpen = true
 				}
@@ -148,7 +148,7 @@ func (h *Host) restartConfirmed() {
 	}
 	pid, from, gen := h.session.PID(), h.session.Version(), h.session.Gen()
 	h.restartPID, h.restartFrom = pid, from
-	h.notify("asking the backend to stop…")
+	h.notify(h.tr("autodoc.notice.restart.asking_the_backend_to_stop"))
 	do(h, func(ctx context.Context) error {
 		_, err := h.call(ctx, "sys.shutdown")
 		return err

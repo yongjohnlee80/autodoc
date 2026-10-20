@@ -238,7 +238,7 @@ func (pl *plugins) cardClosed(name string) {
 		if keys := pl.pluginLetters["plugin."+name+"."+pluginToggle]; len(keys) > 0 {
 			route = keys[0] + " or " + route
 		}
-		pl.c.Notify(pl.pluginTitle(name) + " card hidden: " + route)
+		pl.c.Notify(pl.c.Trf("autodoc.notice.pluginpanels.card_hidden", pl.pluginTitle(name), route))
 	}
 }
 

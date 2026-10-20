@@ -376,7 +376,7 @@ func (pl *plugins) tableEnded(r *pluginRun, id, why string) {
 	res.model.add(nil, nil)
 	pl.showResultsTitle()
 	if why != "" {
-		pl.c.Notify(r.e.m.Name + ": the results ended early: " + why)
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.the_results_ended_early", r.e.m.Name, why))
 	}
 }
 
@@ -726,7 +726,7 @@ func (pl *plugins) resultsFields() []widget.TableField {
 func (pl *plugins) sortResults(how string, args []string) error {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || len(core.Fields()) == 0 {
-		pl.c.Notify("no results to sort")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugintable.no_results_to_sort"))
 		return nil
 	}
 	if how == "off" {
@@ -848,7 +848,7 @@ func (pl *plugins) copyResults(format copyFormat) {
 	}
 	text, err := pl.selectionText(core, format)
 	if errors.Is(err, errPastCopyCap) || err == nil && len(text) > resultsCopyCap {
-		pl.c.Notify(fmt.Sprintf("nothing copied: the selection is more than the %s a copy takes; use Export loaded rows… to write it to a file", sizeOf(resultsCopyCap)))
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.nothing_copied_the_selection_is_more_than_the_a", sizeOf(resultsCopyCap)))
 		return
 	}
 	if err != nil {
@@ -857,23 +857,23 @@ func (pl *plugins) copyResults(format copyFormat) {
 	}
 	pl.c.SetEditorRegister(text)
 	if !pl.c.CopyText(text) {
-		pl.c.Say("results copied to the editor register; no system clipboard")
+		pl.c.Say(pl.c.Tr("autodoc.notice.plugintable.results_copied_to_the_editor_register_no_system"))
 		return
 	}
 	if format == formatTSV {
-		pl.c.Say("results copied")
+		pl.c.Say(pl.c.Tr("autodoc.notice.plugintable.results_copied"))
 		return
 	}
-	pl.c.Say("results copied as " + strings.ToUpper(string(format)))
+	pl.c.Say(pl.c.Trf("autodoc.notice.plugintable.results_copied_as", strings.ToUpper(string(format))))
 }
 
 // nothingIn is why there is nothing to take for what (copy, insert, export): no results, or a
 // filter that keeps no row of those loaded.
-func (pl *plugins) nothingIn(what string) string {
+func (pl *plugins) nothingIn(what string) string { // what: copy, insert or export, a sentence each
 	if _, loaded, on := pl.filtered(); on && loaded > 0 {
-		return "nothing to " + what + ": the WHERE keeps no row of the " + strconv.Itoa(loaded) + " loaded"
+		return pl.c.Trf("autodoc.notice.plugintable.nothing_to_"+what+"_where", loaded)
 	}
-	return "no results to " + what
+	return pl.c.Tr("autodoc.notice.plugintable.no_results_to_" + what)
 }
 
 // sizeOf is n bytes as a reader says it: "16 MiB", "512 KiB", "300 bytes".
@@ -1003,7 +1003,7 @@ func selectedCells(core *widget.TableCore) (cols, rows []int, in func(d, col int
 func (pl *plugins) insertResults() {
 	core := pl.c.TableCore(resultsView)
 	if core == nil || len(core.Fields()) == 0 {
-		pl.c.Notify("no results to insert")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugintable.no_results_to_insert"))
 		return
 	}
 	fields := make([]string, len(core.Fields()))
@@ -1020,10 +1020,10 @@ func (pl *plugins) insertResults() {
 		return
 	}
 	if pl.results.partial() {
-		pl.c.Notify(fmt.Sprintf("%d loaded rows inserted; the result has more: change the query to change what is returned", len(rows)))
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.loaded_rows_inserted_the_result_has_more_change", len(rows)))
 		return
 	}
-	pl.c.Notify(fmt.Sprintf("%d rows inserted", len(rows)))
+	pl.c.Notify(pl.c.Trf("autodoc.notice.plugintable.rows_inserted", len(rows)))
 }
 
 // markdownTable is fields and rows as a Markdown table, its columns padded to their widest cell: a

@@ -79,6 +79,7 @@ type Host struct {
 	layoutSrc    []byte
 	dev          string
 	theme        string
+	language     string // the UI's language, golib's tag (language.go); "" until the preferences apply
 	themeCatalog *usertheme.Catalog
 
 	// the models the document binds
@@ -457,7 +458,7 @@ func newHost(session *Session, opt Options) *Host {
 	h.plugins.cands = h.cands
 	h.plugins.scriptsChanged = func() {
 		if err := h.reloadScripts(); err != nil {
-			h.notify("the Lua scripts were not reloaded: " + err.Error())
+			h.notify(h.trf("autodoc.notice.app.the_lua_scripts_were_not_reloaded", err.Error()))
 		}
 	}
 	return h
@@ -542,6 +543,7 @@ func (h *Host) options(opt Options) []tuidecl.ProgramOption {
 		panic(err) // two features naming one source or command: a build that cannot start
 	}
 	h.cat = h.reg.catalog
+	h.cat.tr = h.trOr // the command line's help in the UI's language (language.go)
 	cmds, err := h.keys.commands()
 	if err != nil {
 		panic(err) // the registry's check refuses it first: a build that cannot start
@@ -614,7 +616,7 @@ func (h *Host) keep(err error) {
 	}
 	h.mu.Unlock()
 	if first && h.p != nil {
-		h.p.Post(func() { h.notify("Something went wrong: " + msg) })
+		h.p.Post(func() { h.notify(h.trf("autodoc.notice.app.something_went_wrong", msg)) })
 	}
 }
 

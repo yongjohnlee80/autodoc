@@ -2,7 +2,7 @@
 // over the settings dialog (Browse…). The folder field follows the listing, and a path typed there
 // lists it; Select puts the folder in the dialog's root.
 FolderDialog {
-    title: "the workspace's root"
+    title: qsTrId("autodoc.dialog.workspaceRoot.the_workspace_s_root")
     currentFolder: App.browseFolder
     dim: false
     onAccepted: App.rootChosen(selectedFolder)

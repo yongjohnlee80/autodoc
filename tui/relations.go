@@ -320,7 +320,7 @@ func (r *related) show(ws, p string, rl relations) {
 	if r.deep {
 		title += " · depth 2"
 	}
-	r.c.Set("App.relationsTitle", title+" · d depth")
+	r.c.Set("App.relationsTitle", r.c.Trf("autodoc.text.relations.d_depth", title))
 }
 
 // moveTo puts the drawer's cursor on row i.

@@ -13,22 +13,22 @@ Dialog {
     helpText: App.rankerFormError
     Flex {
         direction: Tui.Vertical
-        Text { text: "name" }
-        TextField { id: rName; text: App.rankerName; placeholderText: "local, cohere…" }
-        Text { text: "kind" }
+        Text { text: qsTrId("autodoc.dialog.rankerEdit.name") }
+        TextField { id: rName; text: App.rankerName; placeholderText: qsTrId("autodoc.dialog.rankerEdit.local_cohere") }
+        Text { text: qsTrId("autodoc.dialog.rankerEdit.kind") }
         ComboBox { model: App.rankerKinds; textRole: "label"; currentIndex: App.rankerKindIndex; onActivated: App.rankerKindChosen(index, rBase.text) }
-        Text { text: "base URL" }
+        Text { text: qsTrId("autodoc.dialog.rankerEdit.base_url") }
         TextField { id: rBase; text: App.rankerBase }
-        Text { text: "model"; visible: App.rankerModelShown }
-        TextField { id: rModel; text: App.rankerModel; visible: App.rankerModelShown; placeholderText: "a re-ranking model: rerank-v3.5, say" }
+        Text { text: qsTrId("autodoc.dialog.rankerEdit.model"); visible: App.rankerModelShown }
+        TextField { id: rModel; text: App.rankerModel; visible: App.rankerModelShown; placeholderText: qsTrId("autodoc.dialog.rankerEdit.a_re_ranking_model_rerank_v3_5_say") }
         Text { text: App.rankerKeyLabel }
         TextField { id: rKey; text: App.rankerKey; echoMode: TextInput.Password }
         Text { text: App.rankerModelsStatus; wrapMode: Tui.WordWrap }
     }
     DialogButtonBox {
-        Button { text: "C&heck"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.checkRanker(rBase.text, rKey.text) }
-        Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.rankerEdit.check"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.checkRanker(rBase.text, rKey.text) }
+        Button { text: qsTrId("autodoc.dialog.rankerEdit.save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: qsTrId("autodoc.dialog.rankerEdit.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.saveRanker(rName.text, rBase.text, rModel.text, rKey.text)
 }

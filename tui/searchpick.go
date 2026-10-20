@@ -38,19 +38,19 @@ func (h *Host) searchLive(q string) {
 	if q == "" {
 		h.searchWaiting = false
 		if h.searchWaitToast {
-			h.notifyDone(toastSearchWait, "search cleared")
+			h.notifyDone(toastSearchWait, h.tr("autodoc.notice.searchpick.search_cleared"))
 			h.searchWaitToast = false
 		}
 		h.searchPick.show(nil)
-		h.set("App.hitsTitle", "hits")
+		h.set("App.hitsTitle", h.tr("autodoc.text.searchpick.hits"))
 		return
 	}
 	queryCtx, cancel := context.WithCancel(h.ctx)
 	h.searchCancel = cancel
-	h.set("App.hitsTitle", "hits · searching "+ws)
+	h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_searching", ws))
 	h.searchWaitLine(tk, h.searchSeq)
 	if remaining := h.prog.emb.working(); remaining > 0 {
-		h.notifyOngoing(toastSearchWait, fmt.Sprintf("search in %s is waiting: %d texts still embedding", ws, remaining))
+		h.notifyOngoing(toastSearchWait, h.trf("autodoc.notice.searchpick.search_in_is_waiting_texts_still_embedding", ws, remaining))
 		h.searchWaitToast = true
 	}
 	type answer struct {
@@ -93,11 +93,11 @@ func (h *Host) searchLive(q string) {
 		h.set("App.searchStatus", "")
 		if a.err != nil {
 			if h.searchWaitToast {
-				h.notifyDone(toastSearchWait, "search did not complete")
+				h.notifyDone(toastSearchWait, h.tr("autodoc.notice.searchpick.search_did_not_complete"))
 				h.searchWaitToast = false
 			}
 			h.searchPick.show(nil)
-			h.set("App.hitsTitle", "hits · "+wireMessage(a.err))
+			h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_2", wireMessage(a.err)))
 			msg := "search in " + ws + " is unavailable: " + wireMessage(a.err)
 			if msg != h.lastSearchError {
 				h.notify(msg)
@@ -110,7 +110,7 @@ func (h *Host) searchLive(q string) {
 		}
 		if len(a.hits) == 0 && a.semantic == "partial" && h.prog.emb.working() > 0 {
 			if !h.searchWaiting {
-				h.notify(fmt.Sprintf("no hits yet in %s: %d texts still embedding; search will refresh", ws, h.prog.emb.working()))
+				h.notify(h.trf("autodoc.notice.searchpick.no_hits_yet_in_texts_still_embedding_search_will", ws, h.prog.emb.working()))
 				h.searchWaiting = true
 			}
 		} else {
@@ -124,13 +124,13 @@ func (h *Host) searchLive(q string) {
 			}
 		}
 		if len(a.hits) > 0 && h.searchWaitToast {
-			h.notifyDone(toastSearchWait, "search has results in "+ws)
+			h.notifyDone(toastSearchWait, h.trf("autodoc.notice.searchpick.search_has_results_in", ws))
 			h.searchWaitToast = false
 		}
 		// the order first: a narrow pane keeps what is read first
 		h.hitsRanked = a.ranked
 		h.rankedBy(a.rankedBy)
-		h.set("App.hitsTitle", fmt.Sprintf("hits (%d)%s · %s · semantic %s", len(a.hits), a.ranked, a.mode, a.semantic))
+		h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_semantic", len(a.hits), a.ranked, a.mode, a.semantic))
 		h.searchPick.show(a.hits) // the hits, the first previewed
 	})
 }
@@ -209,7 +209,7 @@ func (h *Host) searchClosed() {
 		h.searchCancel = nil
 	}
 	if h.searchWaitToast {
-		h.notifyDone(toastSearchWait, "search closed")
+		h.notifyDone(toastSearchWait, h.tr("autodoc.notice.searchpick.search_closed"))
 		h.searchWaitToast = false
 	}
 }
@@ -222,7 +222,7 @@ func (h *Host) clearSearch(why string) {
 	h.set("App.searchText", "\x00") // moved away first, so an empty field twice still clears it
 	h.set("App.searchText", "")
 	if had {
-		h.notify("search cleared: " + why)
+		h.notify(h.trf("autodoc.notice.searchpick.search_cleared_2", why))
 	}
 }
 
@@ -254,9 +254,9 @@ func (h *Host) openHit(x hit) {
 	h.openRefTo(fileRef{h.ws, x.path}, true, nil, &landing{at: x.byteStart}) // at its section
 	switch x.hold {
 	case "stale":
-		h.notify(x.path + " changed since this backend's build indexed it: the section may have moved")
+		h.notify(h.trf("autodoc.notice.searchpick.changed_since_this_backend_s_build_indexed_it_th", x.path))
 	case "unchecked":
-		h.notify(x.path + " is held, not yet checked against its file: the section may have moved")
+		h.notify(h.trf("autodoc.notice.searchpick.is_held_not_yet_checked_against_its_file_the_sec", x.path))
 	}
 }
 

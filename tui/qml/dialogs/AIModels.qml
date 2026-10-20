@@ -7,7 +7,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 94
     maxHeightPercent: 92
-    title: "Search models"
+    title: qsTrId("autodoc.dialog.aIModels.search_models")
     dim: false
     TabView {
         id: aiTabs
@@ -48,7 +48,7 @@ Dialog {
                     }
                 }
                 Frame {
-                    title: "usage and calls"
+                    title: qsTrId("autodoc.dialog.aIModels.usage_and_calls")
                     Text { text: App.providerDetail; wrapMode: Tui.WordWrap }
                 }
             }
@@ -59,7 +59,7 @@ Dialog {
                 orientation: Tui.Horizontal
                 ratio: 0.6
                 Frame {
-                    title: "rankers"
+                    title: qsTrId("autodoc.dialog.aIModels.rankers")
                     Flex {
                         direction: Tui.Vertical
                         TableView {
@@ -80,22 +80,22 @@ Dialog {
                     }
                 }
                 Frame {
-                    title: "usage and calls"
+                    title: qsTrId("autodoc.dialog.aIModels.usage_and_calls")
                     Text { text: App.rankerDetail; wrapMode: Tui.WordWrap }
                 }
             }
         }
     }
     DialogButtonBox {
-        Button { text: "&Add…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiAdd() }
-        Button { text: "&Edit…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiEdit(providerTable.currentIndex) }
-        Button { text: "&Use"; enabled: App.aiUseEnabled; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiUse(providerTable.currentIndex) }
-        Button { text: "&Words only"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopProvider() }
-        Button { text: "Cancel &indexing"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.cancelIndexing() }
-        Button { text: "&Vectors…"; visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openVectors() }
-        Button { text: "&Don't use"; visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopRanker() }
-        Button { text: "Wi&ndow…"; visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRankerWindow() }
-        Button { text: "&Remove…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiRemove(providerTable.currentIndex) }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.aIModels.add"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiAdd() }
+        Button { text: qsTrId("autodoc.dialog.aIModels.edit"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiEdit(providerTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.aIModels.use"); enabled: App.aiUseEnabled; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiUse(providerTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.aIModels.words_only"); visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopProvider() }
+        Button { text: qsTrId("autodoc.dialog.aIModels.cancel_indexing"); visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.cancelIndexing() }
+        Button { text: qsTrId("autodoc.dialog.aIModels.vectors"); visible: App.aiEmbeddingTab; enabled: App.aiEmbeddingTab; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.openVectors() }
+        Button { text: qsTrId("autodoc.dialog.aIModels.don_t_use"); visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.stopRanker() }
+        Button { text: qsTrId("autodoc.dialog.aIModels.window"); visible: App.aiRankerTab; enabled: App.aiRankerChoice; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRankerWindow() }
+        Button { text: qsTrId("autodoc.dialog.aIModels.remove"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.aiRemove(providerTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.aIModels.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

@@ -24,8 +24,8 @@ Dialog {
         }
     }
     DialogButtonBox {
-        Button { text: "P&revious"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("back") }
+        Button { text: qsTrId("autodoc.view.tutorial.previous"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("back") }
         Button { text: App.tutorialNextText; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.tutorialPage("next") }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.view.tutorial.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

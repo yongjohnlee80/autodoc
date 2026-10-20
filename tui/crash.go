@@ -265,5 +265,5 @@ func backgroundPanicked[T any](h *Host, rec any, stack []byte, then func(T)) {
 		then(v)
 		return
 	}
-	h.notify("a background job failed: " + err.Error())
+	h.notify(h.trf("autodoc.notice.crash.a_background_job_failed", err.Error()))
 }

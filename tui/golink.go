@@ -55,7 +55,7 @@ func (h *Host) followLink() {
 		if h.file.open {
 			name = h.file.path
 		}
-		h.notify("no link under the cursor: SPC l shows what " + name + " links with")
+		h.notify(h.trf("autodoc.notice.golink.no_link_under_the_cursor_spc_l_shows_what_links", name))
 		return
 	}
 	h.goToLink(l)
@@ -84,9 +84,9 @@ func (h *Host) goToLink(l cursorLink) {
 		case path != "":
 			h.openIn(ws, path)
 		case reason == "ambiguous":
-			h.notify(l.raw + " names several documents: rename one, or write its path")
+			h.notify(h.trf("autodoc.notice.golink.names_several_documents_rename_one_or_write_its", l.raw))
 		case reason != "" || l.wiki:
-			h.notify(l.raw + " names no document in this workspace")
+			h.notify(h.trf("autodoc.notice.golink.names_no_document_in_this_workspace", l.raw))
 		default:
 			h.htmlLink(l.dest)
 		}

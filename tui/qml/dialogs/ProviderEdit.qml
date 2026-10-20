@@ -16,24 +16,24 @@ Dialog {
         ratio: 0.6
         Flex {
             direction: Tui.Vertical
-            Text { text: "name" }
-            TextField { id: pName; text: App.providerName; placeholderText: "local, work…" }
-            Text { text: "kind" }
+            Text { text: qsTrId("autodoc.dialog.providerEdit.name") }
+            TextField { id: pName; text: App.providerName; placeholderText: qsTrId("autodoc.dialog.providerEdit.local_work") }
+            Text { text: qsTrId("autodoc.dialog.providerEdit.kind") }
             ComboBox { model: App.providerKinds; textRole: "label"; currentIndex: App.providerKindIndex; onActivated: App.providerKindChosen(index, pBase.text) }
-            Text { text: "base URL" }
+            Text { text: qsTrId("autodoc.dialog.providerEdit.base_url") }
             TextField { id: pBase; text: App.providerBase }
-            Text { text: "model" }
-            TextField { id: pModel; text: App.providerModel; placeholderText: "an embedding model: nomic-embed-text, say" }
-            Text { text: "context window"; visible: App.providerContextShown }
+            Text { text: qsTrId("autodoc.dialog.providerEdit.model") }
+            TextField { id: pModel; text: App.providerModel; placeholderText: qsTrId("autodoc.dialog.providerEdit.an_embedding_model_nomic_embed_text_say") }
+            Text { text: qsTrId("autodoc.dialog.providerEdit.context_window"); visible: App.providerContextShown }
             TextField { id: pContext; text: App.providerContext; visible: App.providerContextShown }
             Text { text: App.providerContextHint; wrapMode: Tui.WordWrap; visible: App.providerContextShown }
-            Text { text: "section size" }
+            Text { text: qsTrId("autodoc.dialog.providerEdit.section_size") }
             Text { text: App.providerSectionHint; wrapMode: Tui.WordWrap }
             Text { text: App.providerKeyLabel; visible: App.providerKeyShown }
             TextField { id: pKey; text: App.providerKey; echoMode: TextInput.Password; visible: App.providerKeyShown }
         }
         Frame {
-            title: "the provider's models"
+            title: qsTrId("autodoc.dialog.providerEdit.the_provider_s_models")
             Flex {
                 direction: Tui.Vertical
                 Text { text: App.providerModelsStatus; wrapMode: Tui.WordWrap }
@@ -50,9 +50,9 @@ Dialog {
         }
     }
     DialogButtonBox {
-        Button { text: "&List models"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.listProviderModels(pBase.text, pKey.text) }
-        Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.providerEdit.list_models"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.listProviderModels(pBase.text, pKey.text) }
+        Button { text: qsTrId("autodoc.dialog.providerEdit.save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: qsTrId("autodoc.dialog.providerEdit.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.saveProvider(pName.text, pBase.text, pModel.text, pKey.text, pContext.text)
 }

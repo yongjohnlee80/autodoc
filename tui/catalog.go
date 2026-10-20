@@ -116,6 +116,8 @@ type catalog struct {
 	cmds   *widget.Commands
 	core   *widget.EditorCore
 	synced map[string][]string // the names each entry is registered under in cmds
+	// tr is an entry's English in the UI's language (Host.trOr); nil keeps English
+	tr func(id, english string) string
 	// changed hears every add and remove: F1 is made from the catalog
 	changed func()
 }
@@ -303,6 +305,18 @@ func (c *catalog) attach(core *widget.EditorCore) {
 // sync re-registers the affected entries in the editor's registry, each under the names it owns,
 // and tells changed. Every old registration goes before any new one is made, so a name moving
 // from one entry to another is never removed with its new owner.
+// syncAll registers every entry again: the command line's help in the UI's language, after a change of it.
+func (c *catalog) syncAll() {
+	if c == nil {
+		return
+	}
+	all := make(map[string]bool, len(c.order))
+	for _, id := range c.order {
+		all[id] = true
+	}
+	c.sync(all)
+}
+
 func (c *catalog) sync(affected map[string]bool) {
 	if c.cmds != nil {
 		for id := range affected {
@@ -316,7 +330,11 @@ func (c *catalog) sync(affected map[string]bool) {
 			}
 			e := c.byID[id]
 			// Set: a Lua command replaces golib's verb of its name, as it always has
-			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: e.Help, Complete: e.Complete,
+			help := e.Help
+			if c.tr != nil && help != "" {
+				help = c.tr("autodoc.cmd."+id+".help", help)
+			}
+			_ = c.cmds.Set(widget.Command{Name: own[0], Aliases: own[1:], Args: e.Args, Help: help, Complete: e.Complete,
 				Run: func(x widget.CommandContext) error {
 					return e.Run(Invocation{Name: x.Name, Args: x.Args, Line: x.Line, Bang: x.Bang, Core: x.Core})
 				}})

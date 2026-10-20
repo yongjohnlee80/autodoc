@@ -5,7 +5,7 @@
 // keyboard is in the panel: the content and its keys go into the FocusScope together, and its keys
 // win there over the Window's (tui/keys.go's scopes generate them).
 Drawer {
-    property string heading: ""
+    property var heading: "" // a string, or a qsTrId message: Frame.title takes either
     // the frame's colour: the page's, as the lists in it are (a frame's own window tone would show
     // as a band beside its border, which the GUI draws as a thin line through the cell)
     property var surface: Theme.document.base

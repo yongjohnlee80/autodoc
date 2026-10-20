@@ -5,11 +5,11 @@ Dialog {
     closeOnQ: false
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "unsaved work kept"
+    title: qsTrId("autodoc.dialog.recovery.unsaved_work_kept")
     Text { wrapMode: Tui.WordWrap; text: App.recoveryQuestion }
     DialogButtonBox {
-        Button { text: "&Restore"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; onClicked: App.recovery("restore") }
-        Button { text: "&Discard"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.recovery("discard") }
-        Button { text: "&Later";   DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.recovery("later") }
+        Button { text: qsTrId("autodoc.dialog.recovery.restore"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; onClicked: App.recovery("restore") }
+        Button { text: qsTrId("autodoc.dialog.recovery.discard"); DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: App.recovery("discard") }
+        Button { text: qsTrId("autodoc.dialog.recovery.later");   DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: App.recovery("later") }
     }
 }

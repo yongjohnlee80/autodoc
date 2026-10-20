@@ -6,22 +6,22 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "about autodoc"
+    title: qsTrId("autodoc.view.about.about_autodoc")
     dim: true
     standardButtons: Dialog.Close
     defaultButton: Dialog.Close
     Flex {
         Text { text: App.aboutCustom ? App.aboutText : App.aboutHeadline; wrapMode: Tui.WordWrap }
         Text { text: "" }
-        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : "CONFIG: "; font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutConfig } }
+        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : qsTrId("autodoc.view.about.config"); font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutConfig } }
         Text { text: App.aboutCustom ? "" : App.aboutLog; font.italic: true }
-        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : "PLUGINS: "; font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutPlugins } }
-        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : "DAEMON SOCKET: "; font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutSocket } }
+        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : qsTrId("autodoc.view.about.plugins"); font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutPlugins } }
+        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : qsTrId("autodoc.view.about.daemon_socket"); font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutSocket } }
         Text { text: "" }
-        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : "AUTHOR: "; font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutAuthor } }
+        Flex { direction: Tui.Horizontal; Text { text: App.aboutCustom ? "" : qsTrId("autodoc.view.about.author"); font.bold: true } Text { text: App.aboutCustom ? "" : App.aboutAuthor } }
         Text { text: App.aboutCustom ? "" : App.aboutLicence }
         Text { text: App.aboutUpdateShown ? " " : "" }
-        Flex { direction: Tui.Horizontal; Text { text: App.aboutUpdateShown ? "UPDATE: " : ""; font.bold: true } Text { text: App.aboutUpdate; wrapMode: Tui.WordWrap } }
+        Flex { direction: Tui.Horizontal; Text { text: App.aboutUpdateShown ? qsTrId("autodoc.view.about.update") : ""; font.bold: true } Text { text: App.aboutUpdate; wrapMode: Tui.WordWrap } }
         Text { text: App.aboutError; wrapMode: Tui.WordWrap; font.italic: true }
     }
 }

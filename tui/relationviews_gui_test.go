@@ -28,12 +28,12 @@ func TestTheGUIWritesTheRelationViews(t *testing.T) {
 	}
 	doc := string(withRelationViews(layout, true))
 	for _, want := range []string{
-		`MenuItem { text: "&GlobeMap"; onTriggered: App.toggleGlobeMap() }`,
-		`MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }`,
-		`MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }`,
-		"Dialog {\n        id: globeMapSettings\n", `title: "GlobeMap settings"`,
-		"Dialog {\n        id: mindmapSettings\n", `title: "Mindmap settings"`,
-		`MenuItem { text: "Mi&ndmap settings…"; onTriggered: App.openMindmapSettings() }`,
+		`MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }`,
+		`MenuItem { text: qsTrId("autodoc.gui.relations.mindmap"); onTriggered: App.toggleMindmap() }`,
+		`MenuItem { text: qsTrId("autodoc.gui.relations.globemap_settings"); onTriggered: App.openGlobeSettings() }`,
+		"Dialog {\n        id: globeMapSettings\n", `title: qsTrId("autodoc.gui.globeMapSettings.globemap_settings")`,
+		"Dialog {\n        id: mindmapSettings\n", `title: qsTrId("autodoc.gui.mindmapSettings.mindmap_settings")`,
+		`MenuItem { text: qsTrId("autodoc.gui.relations.mindmap_settings"); onTriggered: App.openMindmapSettings() }`,
 		"id: globeMap\n", "GlobeMap {\n            id: globeMapView", `App.panelOpened("globeMap")`,
 		"id: mindmap\n", "Mindmap {\n            id: mindmapView", `App.panelOpened("mindmap")`,
 	} {
@@ -776,9 +776,9 @@ func TestTheRelationViewsAreTheWindowsAlone(t *testing.T) {
 				}
 				return out
 			})
-		views := strings.Contains(doc, "&GlobeMap") || strings.Contains(doc, "GlobeMap {") || strings.Contains(doc, "Mindmap {")
+		views := strings.Contains(doc, `qsTrId("autodoc.gui.relations.globemap")`) || strings.Contains(doc, "GlobeMap {") || strings.Contains(doc, "Mindmap {")
 		switch {
-		case !strings.Contains(doc, `MenuItem { text: "&Links  (SPC l)"`):
+		case !strings.Contains(doc, `MenuItem { text: qsTrId("autodoc.main.links_spc_l")`):
 			t.Errorf("gui %v: Relations › Links is gone", gui)
 		case gui != views:
 			t.Errorf("gui %v: the document has the relation views: %v", gui, views)

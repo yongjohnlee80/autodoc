@@ -71,7 +71,7 @@ func (h *Host) missedLanding(land *landing, err error) {
 		return
 	}
 	if h.jumps.Drop(*land.step) {
-		h.notify(refOf(land.step.To.Doc).path + " is gone: it left the jump list (Ctrl+O again goes further back)")
+		h.notify(h.trf("autodoc.notice.navigation.is_gone_it_left_the_jump_list_ctrl_o_again_goes", refOf(land.step.To.Doc).path))
 	}
 }
 
@@ -95,5 +95,5 @@ func (h *Host) goBack() {
 		h.jumpTo(step)
 		return
 	}
-	h.notify("nothing to go back to: SPC b returns to the documents opened before this one")
+	h.notify(h.tr("autodoc.notice.navigation.nothing_to_go_back_to_spc_b_returns_to_the_docum"))
 }

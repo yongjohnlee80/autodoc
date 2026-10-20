@@ -75,7 +75,7 @@ func (h *Host) loadWorkspaces() {
 			h.ws = ""
 			h.resetFiles()
 			h.setWhere("autodoc · no workspace")
-			h.notify("no workspace: Go › Manage workspaces… adds one")
+			h.notify(h.tr("autodoc.notice.workspace.no_workspace_go_manage_workspaces_adds_one"))
 			return
 		}
 		if a.v[pick].name != h.ws || !h.entered {
@@ -140,7 +140,7 @@ func (h *Host) useWorkspace(i int) {
 		return
 	}
 	if w.state != "ready" {
-		h.notify(fmt.Sprintf("%s cannot be served: its root is gone (Go › Manage workspaces…)", w.name))
+		h.notify(h.trf("autodoc.notice.workspace.cannot_be_served_its_root_is_gone_go_manage_work", w.name))
 		return
 	}
 	h.closeDialog("workspacePicker")
@@ -178,7 +178,7 @@ func (h *Host) enter(name string) {
 	}
 	h.searchSeq++
 	h.searchPick.show(nil)
-	h.set("App.hitsTitle", "hits · searching "+name)
+	h.set("App.hitsTitle", h.trf("autodoc.text.workspace.hits_searching", name))
 	h.refreshSearch()
 	h.listFiles()
 	h.poll()
@@ -275,7 +275,7 @@ func (h *Host) withCurrent(name string, extra func(ctx context.Context) (any, er
 		case a.err != nil:
 			h.failed(name, a.err)
 		case !a.found:
-			h.set("App.managerHelp", "the workspace "+name+" is gone")
+			h.set("App.managerHelp", h.trf("autodoc.text.workspace.the_workspace_is_gone", name))
 			h.loadWorkspaces()
 		default:
 			fn(a.w, a.more)
@@ -293,7 +293,7 @@ func (h *Host) withCurrentRow(i int, fn func(w wsInfo)) {
 func (h *Host) managerRow(i int) (wsInfo, bool) {
 	w, ok := h.managed.At(i)
 	if !ok {
-		h.set("App.managerHelp", "no workspace under the cursor · Add… makes one")
+		h.set("App.managerHelp", h.tr("autodoc.text.workspace.no_workspace_under_the_cursor_add_makes_one"))
 	}
 	return w, ok
 }
@@ -318,9 +318,8 @@ func (h *Host) startRemoveWorkspace(i int) {
 	if !ok {
 		return
 	}
-	h.ask(Question{Title: "delete the workspace?", Text: fmt.Sprintf("Delete the workspace %s? Its index goes: the files' search, links and "+
-		"history in autodoc. Its files in %s stay as they are, and adding the directory again indexes them anew.", w.name, w.root),
-		No: "&No, keep it", Yes: "&Yes, delete it", OnYes: func() { h.removeWorkspaceConfirmed(w.name) }})
+	h.ask(Question{Title: h.tr("autodoc.question.workspace.delete_the_workspace"), Text: h.trf("autodoc.question.workspace.delete_the_workspace_its_index_goes_the_files_se", w.name, w.root),
+		No: h.tr("autodoc.question.workspace.no_keep_it"), Yes: h.tr("autodoc.question.workspace.yes_delete_it"), OnYes: func() { h.removeWorkspaceConfirmed(w.name) }})
 }
 
 // removeWorkspaceConfirmed deletes the workspace; when it is the one in use, unsaved changes are
@@ -339,7 +338,7 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 				h.keepDraftOnLeave() // its buffers: each asked about first, so only Stay-free ones are left
 				h.ws, h.entered = "", false
 			}
-			h.notify("deleted workspace " + name + " (its files stay)")
+			h.notify(h.trf("autodoc.notice.workspace.deleted_workspace_its_files_stay", name))
 			h.loadWorkspaces()
 		})
 	}
@@ -350,7 +349,7 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 				its = append(its, b)
 			}
 		}
-		h.guardEach(its, "delete its workspace", remove)
+		h.guardEach(its, h.askBefore("delete_workspace"), remove)
 		return
 	}
 	remove()
@@ -369,7 +368,6 @@ func (h *Host) noteTodoExcluded(list []wsInfo) {
 			h.todoNoted = map[string]bool{}
 		}
 		h.todoNoted[key] = true
-		h.notify(w.name + ": exclude " + strings.Join(w.todoExcluded, "; ") +
-			" keeps its todo tasks out of the index; its settings can index them graph-only")
+		h.notify(h.trf("autodoc.notice.workspace.exclude_keeps_its_todo_tasks_out_of_the_index_it", w.name, strings.Join(w.todoExcluded, "; ")))
 	}
 }

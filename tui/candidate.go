@@ -208,7 +208,7 @@ func (cs *candidates) reopen(c *candidate) {
 	case opSuspended:
 		cs.show(c)
 	case opEnded:
-		cs.c.Notify("that install has ended")
+		cs.c.Notify(cs.c.Tr("autodoc.notice.candidate.that_install_has_ended"))
 	}
 }
 
@@ -255,7 +255,7 @@ func (cs *candidates) end(c *candidate, outcome string) {
 	dirs := append([]string{c.stage}, c.auditCopies...)
 	cs.c.Go(func(context.Context) any { cs.allocs.remove(dirs...); return nil }, func(any) {})
 	if c.toasted {
-		cs.c.NotifyDone(c.toastID(), cmp.Or(outcome, c.name+": ended"))
+		cs.c.NotifyDone(c.toastID(), cmp.Or(outcome, cs.c.Trf("autodoc.notice.candidate.ended", c.name)))
 	}
 }
 
@@ -281,7 +281,7 @@ func (cs *candidates) audit(c *candidate) {
 		agents := defaultFirst(assignable(cs.c.AgentEntries()), cs.c.Prefs().Value(prefAgentDefaultCodename))
 		if len(agents) == 0 {
 			cs.auditing = nil
-			cs.c.Notify("no AutoDoc agent to audit with: add one in System › Agent profiles…")
+			cs.c.Notify(cs.c.Tr("autodoc.notice.candidate.no_autodoc_agent_to_audit_with_add_one_in_system"))
 			cs.show(c)
 			return
 		}
@@ -314,7 +314,7 @@ func (cs *candidates) auditWith(a AgentEntry) {
 	}
 	c.state = opCopying
 	if c.toasted {
-		cs.c.NotifyOngoingClick(c.toastID(), "copying "+c.name+" for its audit…", func() { cs.reopen(c) })
+		cs.c.NotifyOngoingClick(c.toastID(), cs.c.Trf("autodoc.notice.candidate.copying_for_its_audit", c.name), func() { cs.reopen(c) })
 	}
 	type copied struct {
 		root, task string
@@ -331,7 +331,7 @@ func (cs *candidates) auditWith(a AgentEntry) {
 		}
 		if r.err != nil {
 			c.state = opConfirming
-			cs.c.Notify("audit of " + c.name + " not handed over: " + r.err.Error())
+			cs.c.Notify(cs.c.Trf("autodoc.notice.candidate.audit_of_not_handed_over", c.name, r.err.Error()))
 			cs.show(c)
 			return
 		}
@@ -353,7 +353,7 @@ func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
 			why = "you didn't start " + a.Name
 		}
 		c.toasted = false
-		cs.c.NotifyDone(c.toastID(), "audit of "+c.name+" not delivered: "+why)
+		cs.c.NotifyDone(c.toastID(), cs.c.Trf("autodoc.notice.candidate.audit_of_not_delivered", c.name, why))
 		cs.show(c)
 	}
 	ref := TaskRef{Title: "Audit " + c.name + " at " + regindex.Short(c.commit), Path: task}

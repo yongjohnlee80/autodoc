@@ -88,6 +88,7 @@ const (
 // prefs are the preferences as the TUI uses them.
 type prefs struct {
 	theme                       string
+	language                    string // the UI's language (language.go)
 	menuHidden, statusOn        bool
 	explorerEdge, relationsEdge string
 	todosEdge                   string // where the todos panel opens: the left edge unless chosen
@@ -178,6 +179,9 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 	toastSeconds.Choices = seconds
 	return []PrefSpec{
 		themeRow,
+		choicePref(prefLanguage, "en", languages, func(p *prefs) *string { return &p.language }).
+			chooser("App.languageIndex", "App.setLanguageIndex").
+			shows(func(p prefs) map[string]any { return languageChecks(p.language) }),
 		boolPref(prefMenuHide, true, func(p *prefs) *bool { return &p.menuHidden }).
 			chooser("App.menuHiddenIndex", "App.setMenuHiddenIndex").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.menuAutoHide": h.menuAutoHide(p)} }).
@@ -201,7 +205,9 @@ func legacyPrefRows(h *Host, gui bool) []PrefSpec {
 			shows(func(p prefs) map[string]any {
 				return map[string]any{"App.keyset": keysetOf[p.keymap], "App.keymapVim": p.keymap == "vim", "App.keymapText": p.keymap == "text"}
 			}).
-			then(func(p prefs) { h.say("editor mode: " + keymapLabels[indexOf(keymaps, p.keymap)]) }),
+			then(func(p prefs) {
+				h.say(h.trf("autodoc.notice.prefs.editor_mode", keymapLabels[indexOf(keymaps, p.keymap)]))
+			}),
 		boolPref(prefWrap, true, func(p *prefs) *bool { return &p.wrap }).
 			chooser("App.wrapIndex", "App.setWrapIndex").
 			shows(func(p prefs) map[string]any { return map[string]any{"App.editorWrap": p.wrap} }),
@@ -355,6 +361,7 @@ func (h *Host) applyPrefs(p prefs) {
 	if p.theme != h.theme {
 		h.switchTheme(p.theme)
 	}
+	h.useLanguage(p.language) // at the start, and after a choice: nothing when it is the one shown
 	if !h.started {
 		h.started = true // the first preferences of the run: the program has started
 		h.reg.started()
@@ -386,7 +393,7 @@ func (h *Host) setConnected(v bool) {
 		h.set("App.semanticMark", "")
 		h.set("App.semanticLabel", "")
 		h.set("App.semanticDetail", "")
-		h.set("App.searchTitle", "search")
+		h.set("App.searchTitle", h.tr("autodoc.text.prefs.search"))
 	}
 }
 
@@ -473,9 +480,9 @@ func (h *Host) toggleMenuBar() {
 // saidMenuBar says what the menu bar does now.
 func (h *Host) saidMenuBar(hidden bool) {
 	if hidden {
-		h.say("the menu bar hides: F10 or Alt+letter brings it up")
+		h.say(h.tr("autodoc.notice.prefs.the_menu_bar_hides_f10_or_alt_letter_brings_it_u"))
 	} else {
-		h.say("the menu bar shows")
+		h.say(h.tr("autodoc.notice.prefs.the_menu_bar_shows"))
 	}
 }
 
@@ -505,7 +512,7 @@ func (h *Host) toggleLineNumbers() {
 // setIndentMarks is View › Indentation marks: which lines show their indentation, kept.
 func (h *Host) setIndentMarks(name string) {
 	if !slices.Contains(indentMarks, name) {
-		h.say("no indentation marks " + strconv.Quote(name))
+		h.say(h.trf("autodoc.notice.prefs.no_indentation_marks", strconv.Quote(name)))
 		return
 	}
 	h.setPref(prefIndent, name, func(p *prefs) { p.indentMarks = name })
@@ -521,7 +528,7 @@ func (h *Host) toggleStatusLine() {
 func (h *Host) setRuler(text string) {
 	n, err := strconv.Atoi(strings.TrimSpace(text))
 	if err != nil || n < minRuler || n > maxRuler {
-		h.set("App.prefsError", "the page's width is a number of columns, "+strconv.Itoa(minRuler)+" to "+strconv.Itoa(maxRuler))
+		h.set("App.prefsError", h.trf("autodoc.text.prefs.the_page_s_width_is_a_number_of_columns_to", strconv.Itoa(minRuler), strconv.Itoa(maxRuler)))
 		return
 	}
 	h.set("App.prefsError", "")
@@ -548,11 +555,11 @@ func themePref(gui bool) string {
 // setKeymap switches the editor's keymap, and keeps it.
 func (h *Host) setKeymap(name string) {
 	if keysetOf[name] == "" {
-		h.say("no editor mode " + strconv.Quote(name))
+		h.say(h.trf("autodoc.notice.prefs.no_editor_mode", strconv.Quote(name)))
 		return
 	}
 	h.setPref(prefKeymap, name, func(p *prefs) { p.keymap = name })
-	h.say("editor mode: " + keymapLabels[indexOf(keymaps, name)])
+	h.say(h.trf("autodoc.notice.prefs.editor_mode", keymapLabels[indexOf(keymaps, name)]))
 }
 
 // toggleKeymap is SPC k: Vim, or Text.

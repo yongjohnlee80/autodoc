@@ -104,7 +104,7 @@ func (t *todos) assign() {
 	}
 	agents := assignable(t.c.AgentEntries())
 	if len(agents) == 0 {
-		t.c.Notify("todos: no AutoDoc agent to assign to: add one in the agent profiles")
+		t.c.Notify(t.c.Tr("autodoc.notice.todos_assign.todos_no_autodoc_agent_to_assign_to_add_one_in_t"))
 		return
 	}
 	t.assigning = &todoAssign{store: s, task: x, ws: t.c.Ticket(nil, TicketWorkspace)}
@@ -118,7 +118,7 @@ func (t *todos) assignTo(e AgentEntry) {
 		return
 	}
 	t.assigning.agent = e
-	t.c.Set("App.todoAssignTitle", "assign to "+e.Name)
+	t.c.Set("App.todoAssignTitle", t.c.Trf("autodoc.text.todos_assign.assign_to", e.Name))
 	t.c.Set("App.todoAssignText", "\x00") // moved away first, so an empty field twice still empties it
 	t.c.Set("App.todoAssignText", "")
 	t.c.Open("todoAssign")
@@ -142,8 +142,7 @@ func (t *todos) assignSet(text string) {
 	from := str(x, "status")
 	t.write(s, "todos.assign", []any{s.at, str(x, "id"), str(x, "rev"), assignee, instruction}, func(v any) {
 		if !a.ws.Current() { // the assignment stands; another workspace's agent never hears of it
-			t.c.Notify(fmt.Sprintf("todos: assigned to %s, but not delivered (the workspace changed before the assign landed): "+
-				"A on the task in its own workspace delivers it", assignee))
+			t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_the_workspac", assignee))
 			return
 		}
 		task := asMap(v)
@@ -169,13 +168,12 @@ func (t *todos) handOver(a *todoAssign, s *todoStore, task map[string]any, assig
 // handedOver says how the hand-over went. The assignment stands either way.
 func (t *todos) handedOver(name, assignee string, err error) {
 	if err == nil {
-		t.c.Notify("todos: assigned to " + name + ", and handed to its terminal")
+		t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_and_handed_to_its_terminal", name))
 		return
 	}
 	why := err.Error()
 	if errors.Is(err, ErrAgentCancelled) {
 		why = "you didn't start it"
 	}
-	t.c.Notify(fmt.Sprintf("todos: assigned to %s, but not delivered (%s): start the agent, then A on the task to deliver it again",
-		assignee, why))
+	t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_start_the_ag", assignee, why))
 }

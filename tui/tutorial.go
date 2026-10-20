@@ -60,11 +60,11 @@ func (h *Host) showTutorialPage() {
 	page := tutorialPages[h.tutorialAt]
 	heading, body, _ := strings.Cut(page, "\n")
 	title := strings.TrimSpace(strings.TrimPrefix(heading, "# "))
-	h.set("App.tutorialTitle", strconv.Itoa(h.tutorialAt+1)+" of "+strconv.Itoa(len(tutorialPages))+" · "+title)
+	h.set("App.tutorialTitle", h.trf("autodoc.text.tutorial.of", strconv.Itoa(h.tutorialAt+1), strconv.Itoa(len(tutorialPages)), title))
 	h.set("App.tutorialText", strings.TrimLeft(body, "\n"))
-	next := "&Next"
+	next := h.tr("autodoc.text.tutorial.next")
 	if h.tutorialAt == len(tutorialPages)-1 {
-		next = "Close (&n)"
+		next = h.tr("autodoc.text.tutorial.close") // with Next's key: n through the pages ends by closing them
 	}
 	h.set("App.tutorialNextText", next)
 }

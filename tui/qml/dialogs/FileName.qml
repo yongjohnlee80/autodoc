@@ -4,17 +4,17 @@
 // refused path opens it again with the reason under the path (App.fileNameError).
 Picker {
     name: "new"
-    title: "name the draft"
-    label: "path"
+    title: qsTrId("autodoc.dialog.fileName.name_the_draft")
+    label: qsTrId("autodoc.dialog.fileName.path")
     fieldText: App.newFilePath
-    placeholder: "folder/name.md"
+    placeholder: qsTrId("autodoc.dialog.fileName.folder_name_md")
     note: App.fileNameError
     noteShown: true
     model: App.newFiles
-    listTitle: "the files"
+    listTitle: qsTrId("autodoc.dialog.fileName.the_files")
     previewTitle: App.newPreviewTitle
     previewText: App.newPreviewText
     previewAt: App.newPreviewAt
-    acceptText: "C&reate"
+    acceptText: qsTrId("autodoc.dialog.fileName.create")
     TableViewColumn { role: "path"; title: "FILE"; width: 0; elideMode: Tui.ElidePath }
 }

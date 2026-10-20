@@ -9,7 +9,7 @@ Dialog {
     dim: false
     Flex {
         direction: Tui.Vertical
-        Text { text: "Instructions:" }
-        TextField { id: todoAssignField; text: App.todoAssignText; placeholderText: "Task assigned to you."; onAccepted: App.todoAssignSet(text) }
+        Text { text: qsTrId("autodoc.dialog.todoAssign.instructions") }
+        TextField { id: todoAssignField; text: App.todoAssignText; placeholderText: qsTrId("autodoc.dialog.todoAssign.task_assigned_to_you"); onAccepted: App.todoAssignSet(text) }
     }
 }

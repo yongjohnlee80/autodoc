@@ -99,7 +99,7 @@ func (s *scripting) callback(name string, cb *lua.LFunction, res lua.LValue, err
 		res = lua.LNil
 	}
 	if e := s.eng.Callback(name+"'s callback", cb, res, errv); e != nil && !errors.Is(e, script.ErrStale) {
-		s.c.Notify("a Lua callback failed: " + e.Error())
+		s.c.Notify(s.c.Trf("autodoc.notice.luahost.a_lua_callback_failed", e.Error()))
 	}
 }
 

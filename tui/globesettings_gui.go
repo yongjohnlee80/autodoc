@@ -267,7 +267,7 @@ func (g *globeMap) setColour(key, text string) {
 	}
 	text = strings.TrimSpace(text)
 	if _, ok := parseHex(text); text != "" && !ok {
-		g.c.Set("App.globeSettingsError", "a colour is #rrggbb, or nothing for the theme's")
+		g.c.Set("App.globeSettingsError", g.c.Tr("autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s"))
 		return
 	}
 	g.c.Set("App.globeSettingsError", "")

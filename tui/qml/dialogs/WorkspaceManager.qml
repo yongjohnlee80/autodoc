@@ -6,7 +6,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 90
     maxHeightPercent: 85
-    title: "workspaces"
+    title: qsTrId("autodoc.dialog.workspaceManager.workspaces")
     dim: false
     helpText: App.managerHelp
     onClosed: App.managerClosed()
@@ -14,7 +14,7 @@ Dialog {
         orientation: Tui.Horizontal
         ratio: 0.4
         Frame {
-            title: "workspaces"
+            title: qsTrId("autodoc.dialog.workspaceManager.workspaces")
             TableView {
                 id: managerTable
                 palette.highlight: Theme.document.highlight
@@ -27,15 +27,15 @@ Dialog {
             }
         }
         Frame {
-            title: "settings"
+            title: qsTrId("autodoc.dialog.workspaceManager.settings")
             Text { text: App.managerDetail; wrapMode: Tui.WordWrap }
         }
     }
     DialogButtonBox {
-        Button { text: "&Add…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddWorkspace() }
-        Button { text: "&Edit…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEditWorkspace(managerTable.currentIndex) }
-        Button { text: "Ad&vanced…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAdvancedWorkspace(managerTable.currentIndex) }
-        Button { text: "&Delete…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemoveWorkspace(managerTable.currentIndex) }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.workspaceManager.add"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddWorkspace() }
+        Button { text: qsTrId("autodoc.dialog.workspaceManager.edit"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEditWorkspace(managerTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.workspaceManager.advanced"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAdvancedWorkspace(managerTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.workspaceManager.delete"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemoveWorkspace(managerTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.workspaceManager.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

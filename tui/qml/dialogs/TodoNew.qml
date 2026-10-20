@@ -2,12 +2,12 @@
 Dialog {
     closeOnQ: false
     maxWidthPercent: 80
-    title: "new task"
+    title: qsTrId("autodoc.dialog.todoNew.new_task")
     width: 64
     dim: false
     Flex {
         direction: Tui.Vertical
-        Text { text: "title" }
-        TextField { id: todoTitle; text: ""; placeholderText: "what is to be done"; onAccepted: App.todoAddTitle(text) }
+        Text { text: qsTrId("autodoc.dialog.todoNew.title") }
+        TextField { id: todoTitle; text: ""; placeholderText: qsTrId("autodoc.dialog.todoNew.what_is_to_be_done"); onAccepted: App.todoAddTitle(text) }
     }
 }

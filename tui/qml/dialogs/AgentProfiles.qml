@@ -5,7 +5,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 90
     maxHeightPercent: 80
-    title: "agent profiles"
+    title: qsTrId("autodoc.dialog.agentProfiles.agent_profiles")
     width: 90
     dim: false
     Flex {
@@ -25,11 +25,11 @@ Dialog {
         Text { text: App.agentProfilesStatus; wrapMode: Tui.WordWrap }
     }
     DialogButtonBox {
-        Button { text: "&Use"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.useAgent(agentTable.currentIndex) }
-        Button { text: "&Add…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddAgent() }
-        Button { text: "&Edit…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEditAgent(agentTable.currentIndex) }
-        Button { text: "Make &default"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.makeAgentDefault(agentTable.currentIndex) }
-        Button { text: "&Remove"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.removeAgent(agentTable.currentIndex) }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.agentProfiles.use"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.useAgent(agentTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.agentProfiles.add"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddAgent() }
+        Button { text: qsTrId("autodoc.dialog.agentProfiles.edit"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startEditAgent(agentTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.agentProfiles.make_default"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.makeAgentDefault(agentTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.agentProfiles.remove"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.removeAgent(agentTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.agentProfiles.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

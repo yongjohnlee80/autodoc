@@ -153,14 +153,26 @@ func (h *Host) writeFile(ctx context.Context, ws, p string, content []byte, want
 
 // guard runs then, asking first when b has unsaved changes. b is shown first, so the user sees what
 // the question is about, and the answer's Save writes the shown editor's text.
-func (h *Host) guard(b *openBuffer, action string, then func()) {
+// unsavedAsk is the question guard asks about a buffer with unsaved changes, by its name: a whole
+// sentence each action, so every language says it as its own (askBefore).
+type unsavedAsk func(name string) string
+
+// askBefore is the unsaved-changes question before action, one of close, reopen, reload,
+// close_gone (with where the file went), quit and delete_workspace.
+func (h *Host) askBefore(action string, args ...any) unsavedAsk {
+	return func(name string) string {
+		return h.trf("autodoc.text.files.unsaved_"+action, append([]any{name}, args...)...)
+	}
+}
+
+func (h *Host) guard(b *openBuffer, ask unsavedAsk, then func()) {
 	if !b.file.dirty {
 		then()
 		return
 	}
 	h.activate(b)
 	b.file.then = then
-	h.set("App.unsavedQuestion", fmt.Sprintf("%s has unsaved changes. Save them before you %s?", b.file.name(), action))
+	h.set("App.unsavedQuestion", ask(b.file.name()))
 	h.open("unsavedFile")
 }
 
@@ -258,7 +270,7 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 			// an HTML file open one way, asked for the other: its one buffer is read again that way,
 			// which replaces its text, so unsaved changes are asked about first. The new way is set
 			// before it is shown, so its page is never switched on (or off) the old way first.
-			h.guard(b, "reopen it", func() {
+			h.guard(b, h.askBefore("reopen"), func() {
 				b.file.raw = *raw
 				h.activate(b)
 				h.loadInto(b, ref.ws, ref.path, nil, *raw, land)
@@ -266,7 +278,7 @@ func (h *Host) openRefAs(ref fileRef, remember bool, proceed func(), raw *bool, 
 			return
 		}
 		h.activate(b)
-		h.say("opened " + ref.path)
+		h.say(h.trf("autodoc.notice.files.opened", ref.path))
 		h.land(land, ref, h.core.Value()) // the document is open already: the open lands at once
 		h.askDiskOnEnter(b)
 		h.focusEditor()
@@ -283,7 +295,7 @@ func (h *Host) reload() {
 	if !h.file.open {
 		return
 	}
-	h.guard(h.active, "reload it", func() { h.load(h.file.ws, h.file.path, nil) })
+	h.guard(h.active, h.askBefore("reload"), func() { h.load(h.file.ws, h.file.path, nil) })
 }
 
 // load reads p of workspace ws ("" for the absolute path of a file outside every workspace) into
@@ -331,7 +343,7 @@ func (h *Host) askHowToOpen(p string, then func(raw bool)) {
 		return
 	}
 	h.htmlAsk = &htmlOpen{then: then}
-	h.set("App.htmlOpenQuestion", "Open "+filepath.Base(p)+" simplified, its text read-only, or raw, its HTML to edit?")
+	h.set("App.htmlOpenQuestion", h.trf("autodoc.text.files.open_simplified_its_text_read_only_or_raw_its_ht", filepath.Base(p)))
 	h.open("openHTML")
 }
 
@@ -368,7 +380,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		content, version string
 		err              error
 	}
-	h.say("opening " + p + "…")
+	h.say(h.trf("autodoc.notice.files.opening", p))
 	do(h, func(ctx context.Context) answer {
 		res, err := h.readFile(ctx, ws, p, raw)
 		if err != nil {
@@ -382,7 +394,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 			return
 		}
 		if again && b.file.version != read {
-			h.say("kept " + p + " as it was saved while it was read")
+			h.say(h.trf("autodoc.notice.files.kept_as_it_was_saved_while_it_was_read", p))
 			return
 		}
 		if a.err != nil {
@@ -403,7 +415,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		if b == h.active {
 			h.land(land, fileRef{ws, p}, a.content)
 		}
-		h.say("opened " + p)
+		h.say(h.trf("autodoc.notice.files.opened", p))
 		if ws == "" {
 			h.notify(p + ": " + outsideLimits)
 		}
@@ -580,21 +592,21 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 		case code(a.err) == rpc.CodeNotFound, code(a.err) == golibrpc.CodeInvalidParams:
 			if !b.file.dirty {
 				h.dropBuffer(b)
-				h.notify(p + " is gone from " + where + ": closed")
+				h.notify(h.trf("autodoc.notice.files.is_gone_from_closed", p, where))
 				return
 			}
 			b.file.version = "" // gone: a save writes it anew
-			h.guard(b, "close it: it is gone from "+where, func() { h.dropBuffer(b) })
+			h.guard(b, h.askBefore("close_gone", where), func() { h.dropBuffer(b) })
 		case a.err != nil:
 			h.failed("check "+p, a.err)
 		case a.version == b.file.version:
 		case b.file.dirty:
-			h.notify(p + " changed on disk while the backend was away: a save asks before it overwrites it")
+			h.notify(h.trf("autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav", p))
 		default:
 			row, col := h.editorFor(b).Line()
 			h.show(b, ws, p, a.content, a.version, raw)
 			h.editorFor(b).SetLine(row, col)
-			h.notify("read " + p + " again: it changed on disk while the backend was away")
+			h.notify(h.trf("autodoc.notice.files.read_again_it_changed_on_disk_while_the_backend", p))
 		}
 	})
 }
@@ -658,7 +670,7 @@ func (h *Host) save() {
 		return
 	}
 	if h.file.derived != "" {
-		h.notify(h.file.path + " is read-only: its text is derived from the " + h.file.derived + "; File › Open with Default App opens the original")
+		h.notify(h.trf("autodoc.notice.files.is_read_only_its_text_is_derived_from_the_file_o", h.file.path, h.file.derived))
 		return
 	}
 	h.write(h.active, h.core.Value(), h.file.version, nil)
@@ -734,7 +746,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 		readErr error // the read-back after Committed
 		same    bool  // the read-back holds what was written
 	}
-	h.say("saving " + p + "…")
+	h.say(h.trf("autodoc.notice.files.saving", p))
 	do(h, func(ctx context.Context) answer {
 		res, err := h.writeFile(ctx, ws, p, []byte(content), want, raw)
 		if err == nil {
@@ -771,7 +783,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 				b.file.dirty = newer
 			}
 			h.syncBuffers()
-			h.notify("saved " + p)
+			h.notify(h.trf("autodoc.notice.files.saved", p))
 			if !newer {
 				h.reloadOnSave(ws, p) // the user's own script: loaded again at once
 			}
@@ -784,16 +796,16 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 				// what the save guarded (a close, a quit) would drop the newer edit: ask again, over b
 				h.activate(b)
 				b.file.then = after
-				h.set("App.unsavedQuestion", fmt.Sprintf("%s changed again while it was saved. Save the newer changes first?", p))
+				h.set("App.unsavedQuestion", h.trf("autodoc.text.files.changed_again_while_it_was_saved_save_the_newer", p))
 				h.open("unsavedFile")
 			default:
 				after()
 			}
 		case code(a.err) == rpc.CodeCommitted && a.readErr != nil:
-			h.notify("saved " + p + ", but it could not be read back: " + wireMessage(a.readErr) + " — reload before saving again")
+			h.notify(h.trf("autodoc.notice.files.saved_but_it_could_not_be_read_back_reload_befor", p, wireMessage(a.readErr)))
 		case code(a.err) == rpc.CodeConflict, code(a.err) == rpc.CodeCommitted:
 			h.activate(b) // the conflict is b's: its answers act on the buffer shown
-			h.set("App.conflictQuestion", fmt.Sprintf("%s changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?", p))
+			h.set("App.conflictQuestion", h.trf("autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing", p))
 			h.open("fileConflict")
 		case code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again
@@ -814,7 +826,7 @@ func (h *Host) conflict(answer string) {
 	case "overwrite":
 		h.overwrite()
 	default:
-		h.notify("kept your changes; the disk's version is newer")
+		h.notify(h.tr("autodoc.notice.files.kept_your_changes_the_disk_s_version_is_newer"))
 	}
 }
 
@@ -833,7 +845,7 @@ func (h *Host) reloadShown() {
 			h.failed("reload "+snap.path, r.err)
 		default:
 			h.reloadFromDisk(b, r.content, r.version)
-			h.notify("reloaded " + snap.path + " from disk: u brings your text back")
+			h.notify(h.trf("autodoc.notice.files.reloaded_from_disk_u_brings_your_text_back", snap.path))
 		}
 	})
 }
@@ -878,7 +890,7 @@ func (h *Host) createFile(name string) {
 	h.closeDialog("fileName")
 	name = strings.TrimSpace(strings.TrimPrefix(name, "/"))
 	if name == "" {
-		h.set("App.fileNameError", "a name is required")
+		h.set("App.fileNameError", h.tr("autodoc.text.files.a_name_is_required"))
 		h.open("fileName")
 		return
 	}
@@ -900,7 +912,7 @@ func (h *Host) createFile(name string) {
 	}, func(a created) {
 		if !tk.Current() {
 			if a.err == nil {
-				h.notify("saved the draft as " + name) // its buffer was closed meanwhile; the file is on disk
+				h.notify(h.trf("autodoc.notice.files.saved_the_draft_as", name)) // its buffer was closed meanwhile; the file is on disk
 			}
 			return
 		}
@@ -919,12 +931,12 @@ func (h *Host) createFile(name string) {
 			// (a close, a quit) would drop that text: ask again, over b
 			h.adopt(b, a.at.ws, a.at.path, a.version, raw, nil)
 			if ds.then == nil {
-				h.notify("saved the draft as " + name + "; it changed again while it was saved: the newer changes are unsaved")
+				h.notify(h.trf("autodoc.notice.files.saved_the_draft_as_it_changed_again_while_it_was", name))
 				return
 			}
 			h.activate(b)
 			b.file.then = ds.then
-			h.set("App.unsavedQuestion", fmt.Sprintf("%s changed again while it was saved. Save the newer changes first?", name))
+			h.set("App.unsavedQuestion", h.trf("autodoc.text.files.changed_again_while_it_was_saved_save_the_newer", name))
 			h.open("unsavedFile")
 			return
 		}
@@ -1019,7 +1031,7 @@ func (h *Host) createRefused(name string, err error) {
 // refuseName says why name was not created, as a notification and under the name field, and asks
 // again for a name.
 func (h *Host) refuseName(name, reason string) {
-	h.notify("create " + name + ": " + reason)
+	h.notify(h.trf("autodoc.notice.files.create", name, reason))
 	h.set("App.fileNameError", reason)
 	h.open("fileName")
 }
@@ -1047,4 +1059,4 @@ func (h *Host) createEmpty(name string) {
 // quit quits, asking first over unsaved changes: Save (then quit once it is written), Discard, or
 // Stay. Every way out comes here: File › Exit, Ctrl+Q, SPC Q, the command line's q, the too-small
 // screen's Quit and the GUI window's close button (WithQuit).
-func (h *Host) quit() { h.guardAll("quit", h.p.Quit) }
+func (h *Host) quit() { h.guardAll(h.askBefore("quit"), h.p.Quit) }

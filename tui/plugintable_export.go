@@ -76,10 +76,10 @@ type exportStep struct {
 func (pl *plugins) startExportResults(format copyFormat) {
 	switch {
 	case pl.results.id == "" && len(pl.results.model.rows) == 0:
-		pl.c.Notify("no results to export")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugintable_export.no_results_to_export"))
 		return
 	case pl.export != nil:
-		pl.c.Notify("the results are being exported already")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugintable_export.the_results_are_being_exported_already"))
 		return
 	}
 	if format != "" {
@@ -163,9 +163,9 @@ func (pl *plugins) exportResults(path string) {
 		path += "." + string(pl.exportFormat)
 	}
 	if _, err := os.Stat(path); err == nil {
-		pl.c.Ask(Question{Title: "replace " + filepath.Base(path) + "?",
-			Text: path + " exists. Export the results over it? It is replaced only once every row is written.",
-			Yes:  "&Replace", No: "&Cancel", OnYes: func() { pl.beginExport(path) }})
+		pl.c.Ask(Question{Title: pl.c.Trf("autodoc.question.plugintable_export.replace", filepath.Base(path)),
+			Text: pl.c.Trf("autodoc.question.plugintable_export.exists_export_the_results_over_it_it_is_replaced", path),
+			Yes:  pl.c.Tr("autodoc.question.plugintable_export.replace_2"), No: pl.c.Tr("autodoc.question.plugintable_export.cancel"), OnYes: func() { pl.beginExport(path) }})
 		return
 	}
 	pl.beginExport(path)
@@ -200,12 +200,12 @@ func (pl *plugins) viewRows() (rows [][]string, kinds []string) {
 // beginExport takes the view's rows and starts the writer on them.
 func (pl *plugins) beginExport(path string) {
 	if pl.export != nil {
-		pl.c.Notify("the results are being exported already")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugintable_export.the_results_are_being_exported_already"))
 		return
 	}
 	fields := pl.results.model.fields
 	if len(fields) == 0 {
-		pl.c.Notify("no results to export")
+		pl.c.Notify(pl.c.Tr("autodoc.notice.plugintable_export.no_results_to_export"))
 		return
 	}
 	rows, kinds := pl.viewRows()
@@ -256,7 +256,7 @@ func (pl *plugins) exportWrote(x *resultsExport, n int) {
 	}
 	x.writing = false
 	x.written += n
-	pl.c.NotifyOngoing(toastExport, fmt.Sprintf("exporting: %d rows", x.written))
+	pl.c.NotifyOngoing(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.exporting_rows", x.written))
 	pl.showResultsTitle()
 	pl.exportPump()
 }
@@ -271,15 +271,15 @@ func (pl *plugins) exportEnded(x *resultsExport, rows int, err error) {
 	more := "; the result has more: change the query (a LIMIT, a WHERE) to change what is returned"
 	switch {
 	case err != nil:
-		pl.c.NotifyDone(toastExport, "the results were not exported: "+err.Error()+"; "+x.path+" not written")
+		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.the_results_were_not_exported_not_written", err.Error(), x.path))
 	case x.from > 0 && x.partial:
-		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s, as shown (filtered from %d loaded)%s", rows, x.path, x.from, more))
+		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.rows_exported_to_as_shown_filtered_from_loaded", rows, x.path, x.from, more))
 	case x.from > 0:
-		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s, as shown (filtered from %d loaded)", rows, x.path, x.from))
+		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.rows_exported_to_as_shown_filtered_from_loaded_2", rows, x.path, x.from))
 	case x.partial:
-		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d loaded rows exported to %s, as shown%s", rows, x.path, more))
+		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.loaded_rows_exported_to_as_shown", rows, x.path, more))
 	default:
-		pl.c.NotifyDone(toastExport, fmt.Sprintf("%d rows exported to %s", rows, x.path))
+		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.rows_exported_to", rows, x.path))
 	}
 }
 

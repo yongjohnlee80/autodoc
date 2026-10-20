@@ -8,7 +8,7 @@ Dialog {
     id: leader
     closeOnQ: true
     keyScope: "autodoc.leader"
-    title: "SPC — commands"
+    title: qsTrId("autodoc.card.leader.title")
     dim: false
     helpText: "a key runs its command · q or Esc closes"
     Text { text: App.leaderText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one

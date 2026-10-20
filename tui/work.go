@@ -41,7 +41,7 @@ func coreDo[T any](c Core, fn func(context.Context) T, then func(T)) {
 			if t, ok := failed[T](p); ok {
 				then(t)
 			} else {
-				c.Notify("a background job failed: " + p.Error())
+				c.Notify(c.Trf("autodoc.notice.work.a_background_job_failed", p.Error()))
 			}
 			return
 		}

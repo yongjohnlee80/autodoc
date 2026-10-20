@@ -54,7 +54,7 @@ func (b luaBinder) allowed(s *scripting) bool {
 	if b.grants == nil || b.grants.Granted(b.script, "commands") {
 		return true
 	}
-	s.c.Notify(b.script + ": its keys and menu rows need commands: not granted")
+	s.c.Notify(s.c.Trf("autodoc.notice.luakeys.its_keys_and_menu_rows_need_commands_not_granted", b.script))
 	return false
 }
 

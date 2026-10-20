@@ -3,7 +3,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "switch the agent?"
+    title: qsTrId("autodoc.dialog.agentSwitch.switch_the_agent")
     width: 64
     dim: false
     standardButtons: Dialog.Yes | Dialog.No

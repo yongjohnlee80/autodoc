@@ -11,17 +11,17 @@ Dialog {
     helpText: App.agentFormError
     Flex {
         direction: Tui.Vertical
-        Text { text: "name" }
-        TextField { id: aName; text: App.agentName; placeholderText: "claude, codex…" }
-        Text { text: "codename (leave empty to derive from the name)" }
-        TextField { id: aCodename; text: App.agentCodename; placeholderText: "claude-opus" }
-        Text { text: "command" }
-        TextField { id: aCommand; text: App.agentCommand; placeholderText: "claude --model opus, codex, opencode {root}…" }
-        Text { wrapMode: Tui.WordWrap; text: "The agent starts in AutoDoc's own folder for the workspace, told about it in AGENTS.md and CLAUDE.md; $AUTODOC_ROOT and $AUTODOC_WORKSPACE name the workspace." }
+        Text { text: qsTrId("autodoc.dialog.agentEdit.name") }
+        TextField { id: aName; text: App.agentName; placeholderText: qsTrId("autodoc.dialog.agentEdit.claude_codex") }
+        Text { text: qsTrId("autodoc.dialog.agentEdit.codename_leave_empty_to_derive_from_the_name") }
+        TextField { id: aCodename; text: App.agentCodename; placeholderText: qsTrId("autodoc.dialog.agentEdit.claude_opus") }
+        Text { text: qsTrId("autodoc.dialog.agentEdit.command") }
+        TextField { id: aCommand; text: App.agentCommand; placeholderText: qsTrId("autodoc.dialog.agentEdit.claude_model_opus_codex_opencode_root") }
+        Text { wrapMode: Tui.WordWrap; text: qsTrId("autodoc.dialog.agentEdit.the_agent_starts_in_autodoc_s_own_folder_for_the") }
     }
     DialogButtonBox {
-        Button { text: "&Save"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.agentEdit.save"); DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole }
+        Button { text: qsTrId("autodoc.dialog.agentEdit.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
     onAccepted: App.saveAgentProfile(aName.text, aCommand.text, aCodename.text)
 }

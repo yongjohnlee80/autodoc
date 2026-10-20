@@ -171,9 +171,9 @@ func (h *Host) showWarming(reasons []string) {
 	h.prog.warming = reasons
 	switch {
 	case len(reasons) > 0:
-		h.notifyOngoing(toastWarming, "warming up: "+strings.Join(reasons, "; ")+"…")
+		h.notifyOngoing(toastWarming, h.trf("autodoc.notice.progress.warming_up", strings.Join(reasons, "; ")))
 	case was:
-		h.notifyDone(toastWarming, "ready: search and the files are up to date")
+		h.notifyDone(toastWarming, h.tr("autodoc.notice.progress.ready_search_and_the_files_are_up_to_date"))
 		h.listFiles()
 	}
 }
@@ -194,13 +194,13 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on || prev.pending != emb.pending || prev.targetPending != emb.targetPending {
 		switch {
 		case emb.target != "" || emb.semantic == "switching":
-			h.notifyOngoing(toastSemantic, "semantic search is temporarily words-only while the new model fills in "+h.ws)
+			h.notifyOngoing(toastSemantic, h.trf("autodoc.notice.progress.semantic_search_is_temporarily_words_only_while", h.ws))
 		case polled && prev.target != "" && emb.target == "" && emb.on && emb.semantic != "off":
-			h.notifyDone(toastSemantic, "semantic search is available again in "+h.ws+" ("+emb.semantic+")")
+			h.notifyDone(toastSemantic, h.trf("autodoc.notice.progress.semantic_search_is_available_again_in", h.ws, emb.semantic))
 		case polled && prev.target != "" && emb.target == "":
-			h.notifyDone(toastSemantic, "model switch ended; search in "+h.ws+" remains words-only")
+			h.notifyDone(toastSemantic, h.trf("autodoc.notice.progress.model_switch_ended_search_in_remains_words_only", h.ws))
 		case polled && prev.pending > 0 && emb.pending == 0 && emb.semantic == "ready":
-			h.notifyDone(toastSemantic, "semantic search is ready in "+h.ws)
+			h.notifyDone(toastSemantic, h.trf("autodoc.notice.progress.semantic_search_is_ready_in", h.ws))
 		}
 		if !modelChanged {
 			h.refreshSearch()
@@ -208,11 +208,11 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	}
 	h.prog.busy = pending > 0 || emb.working() > 0 || (emb.queueState == "paused" && emb.pending > 0)
 	if h.searchWaitToast && emb.working() == 0 {
-		h.notifyDone(toastSearchWait, "embedding finished; search is refreshing in "+h.ws)
+		h.notifyDone(toastSearchWait, h.trf("autodoc.notice.progress.embedding_finished_search_is_refreshing_in", h.ws))
 		h.searchWaitToast = false
 	}
 	if was && !h.prog.busy {
-		h.notifyDone(toastProgress, fmt.Sprintf("indexed %d files", docs))
+		h.notifyDone(toastProgress, h.trf("autodoc.notice.progress.indexed_files", docs))
 	}
 	if pending == 0 && (was || moved) {
 		// the lists taken while indexing were partial, or the files changed since
@@ -252,7 +252,7 @@ func (h *Host) showSemantic() {
 	h.set("App.semanticDot", dot)
 	h.set("App.semanticLabel", label)
 	h.set("App.semanticDetail", label+why)
-	h.set("App.searchTitle", "search · "+label+why)
+	h.set("App.searchTitle", h.trf("autodoc.text.progress.search", label, why))
 }
 
 // spinWhileEmbedding turns the spinner while the provider has texts to embed, and stops it after.

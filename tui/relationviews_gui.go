@@ -29,10 +29,10 @@ const (
 )
 
 // relationMenuQML is the views' Relations menu items.
-const relationMenuQML = `            MenuItem { text: "&GlobeMap"; onTriggered: App.toggleGlobeMap() }
-            MenuItem { text: "GlobeMap &settings…"; onTriggered: App.openGlobeSettings() }
-            MenuItem { text: "&Mindmap"; onTriggered: App.toggleMindmap() }
-            MenuItem { text: "Mi&ndmap settings…"; onTriggered: App.openMindmapSettings() }
+const relationMenuQML = `            MenuItem { text: qsTrId("autodoc.gui.relations.globemap"); onTriggered: App.toggleGlobeMap() }
+            MenuItem { text: qsTrId("autodoc.gui.relations.globemap_settings"); onTriggered: App.openGlobeSettings() }
+            MenuItem { text: qsTrId("autodoc.gui.relations.mindmap"); onTriggered: App.toggleMindmap() }
+            MenuItem { text: qsTrId("autodoc.gui.relations.mindmap_settings"); onTriggered: App.openMindmapSettings() }
 `
 
 // relationColours are the theme's colours a view is drawn in, as its properties bind them.

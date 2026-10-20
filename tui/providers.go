@@ -103,10 +103,12 @@ func (p *providers) use(i int) {
 	if !ok {
 		return
 	}
-	p.c.Set("App.providersStatus", "setting up "+r.name+"…")
+	p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.setting_up", r.name))
 	p.choose(r.name, func(err error) {
-		p.c.Set("App.providersStatus", r.name+" not used: "+wireMessage(err)+" · "+p.inUseText())
-	}, func() { p.c.Notify("semantic search with " + r.name + ": the files are embedded in the background") })
+		p.c.Set("App.providersStatus", p.c.Trf("autodoc.text.providers.not_used", r.name, wireMessage(err), p.inUseText()))
+	}, func() {
+		p.c.Notify(p.c.Trf("autodoc.notice.providers.semantic_search_with_the_files_are_embedded_in_t", r.name))
+	})
 }
 
 // stop turns semantic search off: search by words alone.
@@ -125,7 +127,7 @@ func (p *providers) removal(r endpointRow, remove func()) {
 			sibling = o.name
 		}
 	}
-	q := Question{Title: "remove the provider?", OnYes: remove}
+	q := Question{Title: p.c.Tr("autodoc.question.providers.remove_the_provider"), OnYes: remove}
 	switch {
 	case p.active != "" && p.active != r.name:
 		q.Text = ask + "Its model's vectors go once no workspace uses them."
@@ -180,9 +182,7 @@ func (p *providers) countRemoved(r endpointRow, asked Asked) {
 		return a
 	}, func(v any) {
 		a := v.(answer)
-		asked.Say(fmt.Sprintf("Remove the provider %s? Its key, its usage and its log go. "+
-			"Semantic search goes off, and %s's %d vectors (%s) in %d workspaces are deleted.",
-			r.name, r.model, a.vectors, bytesText(a.bytes), a.spaces))
+		asked.Say(p.c.Trf("autodoc.notice.providers.remove_the_provider_its_key_its_usage_and_its_lo", r.name, r.model, a.vectors, bytesText(a.bytes), a.spaces))
 	})
 }
 
@@ -198,14 +198,14 @@ func (p *providers) formOpened(r endpointRow) {
 	}
 	setField(p.c, "App.providerContext", strconv.FormatInt(window, 10))
 	p.max = 0
-	p.c.Set("App.providerContextHint", "List models shows max · more uses GPU memory")
+	p.c.Set("App.providerContextHint", p.c.Tr("autodoc.text.providers.list_models_shows_max_more_uses_gpu_memory"))
 	section := int64(store.SectionTokensDefault)
 	for _, w := range p.c.Workspaces() {
 		if w.Name == p.c.Workspace() && w.SectionTokens > 0 {
 			section = w.SectionTokens
 		}
 	}
-	p.c.Set("App.providerSectionHint", fmt.Sprintf("%s: %d tokens · edit in Workspaces…", p.c.Workspace(), section))
+	p.c.Set("App.providerSectionHint", p.c.Trf("autodoc.text.providers.tokens_edit_in_workspaces", p.c.Workspace(), section))
 	p.models.Reset(nil)
 	if r.model != "" {
 		p.checkModelContext(r.base, "", r.model)
@@ -227,7 +227,7 @@ func (p *providers) listModels(base, key string) {
 // checked lists the models the provider has, and asks the maximum of the one in the form.
 func (p *providers) checked(models []string, err error) {
 	if err != nil {
-		p.c.Set("App.providerModelsStatus", "no models: "+wireMessage(err))
+		p.c.Set("App.providerModelsStatus", p.c.Trf("autodoc.text.providers.no_models", wireMessage(err)))
 		return
 	}
 	p.modelList = models
@@ -236,7 +236,7 @@ func (p *providers) checked(models []string, err error) {
 		rows[i] = rowOf{"key": m, "name": m}
 	}
 	p.models.Reset(rows)
-	p.c.Set("App.providerModelsStatus", fmt.Sprintf("%d models: Enter on one writes it above; an embedding model, not a chat model", len(models)))
+	p.c.Set("App.providerModelsStatus", p.c.Trf("autodoc.text.providers.models_enter_on_one_writes_it_above_an_embedding", len(models)))
 	if p.model != "" {
 		p.checkModelContext(p.base, p.key, p.model)
 	}
@@ -278,11 +278,11 @@ func (p *providers) checkModelContext(base, key, model string) {
 		}
 		if a.err != nil || a.v <= 0 {
 			p.max = 0
-			p.c.Set("App.providerContextHint", "max unknown · more uses GPU memory")
+			p.c.Set("App.providerContextHint", p.c.Tr("autodoc.text.providers.max_unknown_more_uses_gpu_memory"))
 			return
 		}
 		p.max = a.v
-		p.c.Set("App.providerContextHint", fmt.Sprintf("model max %d · more uses GPU memory", a.v))
+		p.c.Set("App.providerContextHint", p.c.Trf("autodoc.text.providers.model_max_more_uses_gpu_memory", a.v))
 		if p.editing == "" {
 			setField(p.c, "App.providerContext", fmt.Sprint(min(int64(store.DefaultContext), a.v)))
 		}

@@ -560,7 +560,7 @@ func (h *Host) startSettings(i, tab int) {
 func (h *Host) openActiveSettings() {
 	w, ok := h.activeWorkspaceInfo()
 	if !ok {
-		h.notify("choose a workspace before changing its file types")
+		h.notify(h.tr("autodoc.notice.settings.choose_a_workspace_before_changing_its_file_type"))
 		return
 	}
 	h.openSettings(w.name, 0)
@@ -649,7 +649,7 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 		help = "Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing"
 	}
 	h.set("App.settingsHelp", help)
-	h.set("App.settingsSchemaState", w.schema.state()+" · e.g. "+suggestedSchema)
+	h.set("App.settingsSchemaState", h.trf("autodoc.text.settings.e_g", w.schema.state(), suggestedSchema))
 	rows := []rowOf{{"key": "", "label": daemonsProvider}}
 	for _, n := range base.providers[min(1, len(base.providers)):] {
 		rows = append(rows, rowOf{"key": n, "label": n})
@@ -667,15 +667,15 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	h.set("App.settingsTextsNote", textsNote(dropped))
 	h.set("App.settingsTextsNoted", len(dropped) > 0)
 	h.set("App.settingsDocsOffered", len(base.derived) > 0)
-	h.set("App.settingsDocsLabel", "documents: "+strings.Join(base.derived, ", "))
+	h.set("App.settingsDocsLabel", h.trf("autodoc.text.settings.documents", strings.Join(base.derived, ", ")))
 	h.set("App.settingsCodeOffered", len(base.registered) > 0)
 	// short, so the files frame fits: the excludes code brings are written where the user sees
 	// them, in the exclude field
-	h.set("App.settingsCodeLabel", "code: "+strings.Join(base.registered, ", "))
+	h.set("App.settingsCodeLabel", h.trf("autodoc.text.settings.code", strings.Join(base.registered, ", ")))
 	h.set("App.settingsTodoNote", todoExcludedNote(w))
 	h.set("App.settingsTodoNoted", len(w.todoExcluded) > 0)
-	h.set("App.settingsDestState", "stored: "+w.db.destConn.where()+" · a blank DSN keeps it")
-	h.set("App.settingsSourceState", "stored: "+w.db.source.where()+" · a blank DSN keeps it")
+	h.set("App.settingsDestState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.destConn.where()))
+	h.set("App.settingsSourceState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.source.where()))
 	h.fillSettings(f)
 	// the view says which tab it moves to only once it is on screen: the tab opened on is known here
 	h.settingsTab = tab
@@ -718,24 +718,24 @@ func (h *Host) newRootFolder(root string) {
 		root = homeDir() + rest
 	}
 	if !filepath.IsAbs(root) {
-		h.notify("New Folder: type the folder's full path in the root field first")
+		h.notify(h.tr("autodoc.notice.settings.new_folder_type_the_folder_s_full_path_in_the_ro"))
 		return
 	}
 	root = filepath.Clean(root)
 	if info, err := os.Stat(root); err == nil {
 		if info.IsDir() {
-			h.notify(root + " exists already")
+			h.notify(h.trf("autodoc.notice.settings.exists_already", root))
 		} else {
-			h.notify(root + " is a file")
+			h.notify(h.trf("autodoc.notice.settings.is_a_file", root))
 		}
 		return
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		h.notify("New Folder: " + err.Error())
+		h.notify(h.trf("autodoc.notice.settings.new_folder", err.Error()))
 		return
 	}
 	h.setField("App.settingsRoot", root)
-	h.notify("created " + root)
+	h.notify(h.trf("autodoc.notice.settings.created", root))
 }
 
 // saveSettings saves the dialog: a new workspace is added, then given what differs from the
@@ -760,7 +760,7 @@ func (h *Host) saveSettings(f settingsForm) {
 		resume = nil // a resume belongs to the workspace it added, and to no other
 	}
 	if len(c) == 0 && resume == nil {
-		h.notify(base.w.name + ": nothing changed")
+		h.notify(h.trf("autodoc.notice.settings.nothing_changed", base.w.name))
 		return
 	}
 	do(h, func(ctx context.Context) error {
@@ -911,7 +911,7 @@ func (h *Host) saved(name string, c map[string]any) {
 			}
 		}
 	}
-	h.notify(fmt.Sprintf("%s: saved %s", to, changed(c)))
+	h.notify(h.trf("autodoc.notice.settings.saved", to, changed(c)))
 	h.loadWorkspaces()
 	if _, ok := c["schema"]; ok && to == h.ws {
 		h.validateSoon(validateDelay)
@@ -937,7 +937,7 @@ func (h *Host) todoGraphOnly(exclude string) {
 	}
 	rules = slices.DeleteFunc(rules, func(p string) bool { return slices.Contains(h.settings.w.todoExcluded, p) })
 	h.setField("App.settingsExclude", strings.Join(rules, "; "))
-	h.set("App.settingsHelp", "the todo store's exclude is out of the field: Save indexes its tasks graph-only")
+	h.set("App.settingsHelp", h.tr("autodoc.text.settings.the_todo_store_s_exclude_is_out_of_the_field_sav"))
 }
 
 // settingsArgs reads App.saveSettings' arguments, in the dialog's order: name, root, schema, text
@@ -1032,7 +1032,7 @@ func (h *Host) managerMoved(i int) {
 func (h *Host) showManagerDetail() {
 	w, ok := h.managed.At(h.managerIndex)
 	if !ok {
-		h.set("App.managerDetail", "no workspace · Add… makes one")
+		h.set("App.managerDetail", h.tr("autodoc.text.settings.no_workspace_add_makes_one"))
 		return
 	}
 	h.set("App.managerDetail", managerDetail(w, h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))

@@ -6,7 +6,7 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 90
     maxHeightPercent: 80
-    title: "plugins"
+    title: qsTrId("autodoc.dialog.pluginManager.plugins")
     dim: false
     helpText: App.pluginsHelp
     TableView {
@@ -20,10 +20,10 @@ Dialog {
         TableViewColumn { role: "source"; title: "SOURCE"; width: 0; elideMode: Tui.ElidePath }
     }
     DialogButtonBox {
-        Button { text: "&Add…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddPlugin() }
-        Button { text: "&Place"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.placePlugin(pluginTable.currentIndex) }
-        Button { text: "&Update…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startUpdatePlugin(pluginTable.currentIndex) }
-        Button { text: "&Remove…"; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemovePlugin(pluginTable.currentIndex) }
-        Button { text: "Close (&q)"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.pluginManager.add"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startAddPlugin() }
+        Button { text: qsTrId("autodoc.dialog.pluginManager.place"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.placePlugin(pluginTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.pluginManager.update"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startUpdatePlugin(pluginTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.pluginManager.remove"); DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.startRemovePlugin(pluginTable.currentIndex) }
+        Button { text: qsTrId("autodoc.dialog.pluginManager.close_q"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
     }
 }

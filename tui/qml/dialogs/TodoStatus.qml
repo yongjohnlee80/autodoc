@@ -2,15 +2,15 @@
 // right what choosing one does. Choosing moves the task there (todos_status.go). Small: five rows.
 Picker {
     name: "todoStatus"
-    title: "status…"
-    label: "filter: a part of a status"
+    title: qsTrId("autodoc.dialog.todoStatus.status")
+    label: qsTrId("autodoc.dialog.todoStatus.filter_a_part_of_a_status")
     fieldText: App.todoStatusField
     model: App.todoStatusRows
     listTitle: App.todoStatusList
     previewTitle: App.todoStatusPreviewTitle
     previewText: App.todoStatusPreviewText
     previewAt: App.todoStatusPreviewAt
-    acceptText: "&Choose"
+    acceptText: qsTrId("autodoc.dialog.todoStatus.choose")
     widthPercent: 72
     heightPercent: 60
     TableViewColumn { role: "status"; title: "STATUS"; width: 0 }

@@ -80,7 +80,7 @@ func (h *Host) diagramReader() func(dest string) (string, bool) {
 func (h *Host) previewDiagram() {
 	source, ok := mermaidBlock([]byte(h.core.Value()), h.cursorBytes(), h.diagramReader())
 	if !ok {
-		h.notify("no Mermaid diagram in this file: a mermaid fence, or an embed of a .mmd file")
+		h.notify(h.tr("autodoc.notice.diagram.no_mermaid_diagram_in_this_file_a_mermaid_fence"))
 		return
 	}
 	h.showDiagram(source) // an image where it can be, else its source (preview.go)

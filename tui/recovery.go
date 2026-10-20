@@ -196,9 +196,7 @@ func (h *Host) askRecovery() {
 	if name == "" {
 		name = untitled
 	}
-	h.set("App.recoveryQuestion", fmt.Sprintf(
-		"%s had unsaved changes when AutoDoc last closed (%s). We kept a copy for you, just in case. Restore it?",
-		name, r.Saved.Local().Format("2006-01-02 15:04")))
+	h.set("App.recoveryQuestion", h.trf("autodoc.text.recovery.had_unsaved_changes_when_autodoc_last_closed_we", name, r.Saved.Local().Format("2006-01-02 15:04")))
 	h.open("recoveryDialog")
 }
 
@@ -280,7 +278,7 @@ func (h *Host) restoreOpenFailed(_ *openBuffer, ws, p string) bool {
 		return false
 	}
 	h.pendingRestore = nil
-	h.notify(p + " could not be opened: its kept text is restored as an untitled draft")
+	h.notify(h.trf("autodoc.notice.recovery.could_not_be_opened_its_kept_text_is_restored_as", p))
 	h.restoreAsDraft(*r, "restore the kept text of "+p+" as a draft")
 	return true
 }
@@ -314,5 +312,5 @@ func (h *Host) applyRecovered(b *openBuffer, r recovered) {
 	if name == "" {
 		name = untitled
 	}
-	h.notify("restored the unsaved text of " + name + " — save it to keep it")
+	h.notify(h.trf("autodoc.notice.recovery.restored_the_unsaved_text_of_save_it_to_keep_it", name))
 }

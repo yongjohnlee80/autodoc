@@ -70,7 +70,7 @@ func (n *notices) clear() {
 // notification: the list holds up to maxNotices rows.
 func (n *notices) show() {
 	n.rows.Reset(n.items)
-	n.c.Set("App.noticesTitle", fmt.Sprintf("notifications (%d)", len(n.items)))
+	n.c.Set("App.noticesTitle", n.c.Trf("autodoc.text.notices.notifications", len(n.items)))
 }
 
 // noticeRowOf is a notification as the history's list shows it.

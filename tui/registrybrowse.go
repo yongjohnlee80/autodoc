@@ -62,7 +62,7 @@ func (b *registryBrowse) Picks() map[string]picker { return map[string]picker{"r
 // (at most daily); an offline list says so above it.
 func (b *registryBrowse) browse() {
 	h := b.h
-	h.notifyOngoing("registry", "reading the registry…")
+	h.notifyOngoing("registry", h.tr("autodoc.notice.registrybrowse.reading_the_registry"))
 	do(h, func(ctx context.Context) registryList { return fetchRegistry(ctx, time.Now()) }, func(l registryList) {
 		l = l.usable()
 		h.registryLoaded(l)
@@ -76,7 +76,7 @@ func (b *registryBrowse) browse() {
 		if len(entries) == 0 && note == "" {
 			note = "the registry lists no plugins or packages yet"
 		}
-		h.notifyDone("registry", fmt.Sprintf("the registry: %d plugins and packages", len(entries)))
+		h.notifyDone("registry", h.trf("autodoc.notice.registrybrowse.the_registry_plugins_and_packages", len(entries)))
 		h.set("App.registryNote", note)
 		h.set("App.registryNoteShown", note != "")
 		b.pick.setAll(entries)

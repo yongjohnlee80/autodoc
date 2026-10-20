@@ -5,12 +5,12 @@ Dialog {
     closeOnQ: true
     maxWidthPercent: 80
     maxHeightPercent: 80
-    title: "this build reads more"
+    title: qsTrId("autodoc.dialog.registrations.this_build_reads_more")
     width: 72
     dim: false
     Text { wrapMode: Tui.WordWrap; text: App.registrationQuestion }
     DialogButtonBox {
-        Button { text: "&Not Now"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
-        Button { text: "&Restart Now"; visible: App.canRestartRegistrations; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.restartForRegistrations() }
+        Button { text: qsTrId("autodoc.dialog.registrations.not_now"); DialogButtonBox.buttonRole: DialogButtonBox.RejectRole }
+        Button { text: qsTrId("autodoc.dialog.registrations.restart_now"); visible: App.canRestartRegistrations; DialogButtonBox.buttonRole: DialogButtonBox.ActionRole; onClicked: App.restartForRegistrations() }
     }
 }

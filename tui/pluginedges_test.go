@@ -15,6 +15,10 @@ type noticed struct {
 }
 
 func (n *noticed) Notify(msg string) { n.notes = append(n.notes, msg) }
+func (*noticed) Tr(id string) string { return englishText(id) }
+func (f *noticed) Trf(id string, args ...any) string {
+	return (&Host{}).trf(id, args...)
+}
 
 // Go runs fn at once, then then: a candidate's files go as it ends.
 func (n *noticed) Go(fn func(context.Context) any, then func(any)) { then(fn(context.Background())) }

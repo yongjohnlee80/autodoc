@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -63,19 +62,17 @@ func (h *Host) compareRegistrations() {
 	case theirs.StrictSubsetOf(own) && h.registrationRestart:
 		// a restart this TUI asked for, answered by a daemon that still lacks them: another build
 		// serves this store (a supervisor's, or one started by hand); say which, and ask no more
-		h.notifyOngoing(toastConnection, fmt.Sprintf("the backend that answered after the restart, autodoc %s (pid %d), still lacks %s: another build serves this store",
-			h.session.Version(), h.session.PID(), lacks))
+		h.notifyOngoing(toastConnection, h.trf("autodoc.notice.registrations.the_backend_that_answered_after_the_restart_auto", h.session.Version(), h.session.PID(), lacks))
 	case theirs.StrictSubsetOf(own) && !h.registrationOffered:
 		h.registrationOffered = true
-		h.set("App.registrationQuestion", fmt.Sprintf("This backend, autodoc %s, lacks %s, which this build reads. Restart it as this build? It stops, and this build starts in its place; indexing and embedding carry on where they stopped, and every client reconnects.",
-			h.session.Version(), lacks))
+		h.set("App.registrationQuestion", h.trf("autodoc.text.registrations.this_backend_autodoc_lacks_which_this_build_read", h.session.Version(), lacks))
 		h.set("App.canRestartRegistrations", h.session.CanSpawn())
 		h.open("registrations")
 	case theirs.StrictSubsetOf(own), own.StrictSubsetOf(theirs):
 		// offered once already, or the daemon reads more than this build: its own say
 	case !h.registrationNoted:
 		h.registrationNoted = true
-		h.notify(fmt.Sprintf("this backend reads %s otherwise than this build: it keeps its own; System › Restart backend… restarts it as this build", lacks))
+		h.notify(h.trf("autodoc.notice.registrations.this_backend_reads_otherwise_than_this_build_it", lacks))
 	}
 }
 

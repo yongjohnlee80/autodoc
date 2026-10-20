@@ -271,7 +271,7 @@ func (e *endpoints) removeConfirmed(name string) {
 			e.c.Failed("remove "+name, err)
 			return
 		}
-		e.c.Notify("removed the " + e.spec.noun + " " + name)
+		e.c.Notify(e.c.Trf("autodoc.notice.endpoints.removed_the", e.spec.noun, name))
 		e.load()
 		e.c.SearchModelsChanged(e.spec.ranker)
 	})
@@ -404,7 +404,7 @@ func (e *endpoints) save(name, base, model, key, extra string) {
 			e.refuse("not saved: " + wireMessage(err))
 			return
 		}
-		e.c.Notify("saved the " + e.spec.noun + " " + spec["name"].(string))
+		e.c.Notify(e.c.Trf("autodoc.notice.endpoints.saved_the", e.spec.noun, spec["name"].(string)))
 		e.load()
 		e.c.SearchModelsChanged(e.spec.ranker)
 	})

@@ -30,7 +30,7 @@ var arrangeSteps = map[string]tuicore.Action{
 func (h *Host) arrangePanel() {
 	panel := h.panelWithKeyboard()
 	if panel == "" {
-		h.notify("no panel is open to arrange: open one first (the Go menu)")
+		h.notify(h.tr("autodoc.notice.arrange.no_panel_is_open_to_arrange_open_one_first_the_g"))
 		return
 	}
 	a := &arrangeState{panel: panel}
@@ -38,7 +38,7 @@ func (h *Host) arrangePanel() {
 		a.begin = &r
 	}
 	h.arrange = a
-	h.set("App.arrangeTitle", "arrange "+h.panelTitle(panel))
+	h.set("App.arrangeTitle", h.trf("autodoc.text.arrange.arrange", h.panelTitle(panel)))
 	h.keep(h.p.Call("arrange", "open"))
 }
 

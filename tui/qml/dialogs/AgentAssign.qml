@@ -3,15 +3,15 @@
 // Instructions: line (TodoAssign.qml), then assigns the task (todos_assign.go).
 Picker {
     name: "agentAssign"
-    title: "assign to an agent"
-    label: "filter: a part of an agent's name"
+    title: qsTrId("autodoc.dialog.agentAssign.assign_to_an_agent")
+    label: qsTrId("autodoc.dialog.agentAssign.filter_a_part_of_an_agent_s_name")
     fieldText: App.agentAssignField
     model: App.agentAssignRows
     listTitle: App.agentAssignStatus
     previewTitle: App.agentAssignPreviewTitle
     previewText: App.agentAssignPreviewText
     previewAt: App.agentAssignPreviewAt
-    acceptText: "&Choose"
+    acceptText: qsTrId("autodoc.dialog.agentAssign.choose")
     TableViewColumn { role: "agent"; title: "AGENT"; width: 0 }
     TableViewColumn { role: "state"; title: "STATE"; width: 9 }
 }

@@ -89,18 +89,12 @@ func (h *Host) state() map[string]any {
 		// the leader card
 
 		// the editor's preferences
-		"App.keymaps":           choices(keymapLabels...),
-		"App.themes":            choices(h.themeLabels()...),
-		"App.userThemes":        h.userThemeRows(),
-		"App.builtinThemes":     h.builtinThemeRows(),
-		"App.edges":             choices(edges...),
-		"App.yesNo":             choices("yes", "no"),
-		"App.openAsChoices":     choices(openAsLabels...),
-		"App.diskReloadChoices": choices(diskReloadLabels...),
-		"App.indentMarkModes":   choices(indentMarkLabels...),
-		"App.corners":           choices(cornerLabels...),
-		"App.toastSeconds":      choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
-		"App.prefsError":        "",
+		"App.languages":     choices(languageLabels()...),
+		"App.themes":        choices(h.themeLabels()...),
+		"App.userThemes":    h.userThemeRows(),
+		"App.builtinThemes": h.builtinThemeRows(),
+		"App.toastSeconds":  choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
+		"App.prefsError":    "",
 		// the notifications' history (notify.go), and the Vim keys' card
 		// find in a pane (find.go)
 		"App.findTitle": "find",
@@ -191,6 +185,9 @@ func (h *Host) state() map[string]any {
 		"App.cellFontIndex": 0, "App.proseFontIndex": 0, "App.terminalFontIndex": 0, "App.terminalLookNote": "",
 	}
 	for k, v := range h.keys.cardState() {
+		st[k] = v
+	}
+	for k, v := range h.choiceState() { // in the UI's language (language.go)
 		st[k] = v
 	}
 	for k, v := range h.aboutState() {

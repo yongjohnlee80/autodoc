@@ -93,8 +93,8 @@ func (a *asker) ask(q Question) Asked {
 	a.cancel, a.pending = q.OnCancel, true
 	a.c.Set("App.askTitle", q.Title)
 	a.c.Set("App.askText", q.Text)
-	a.c.Set("App.askYes", cmp.Or(q.Yes, "&Yes"))
-	a.c.Set("App.askNo", cmp.Or(q.No, "&No"))
+	a.c.Set("App.askYes", cmp.Or(q.Yes, a.c.Tr("autodoc.question.yes")))
+	a.c.Set("App.askNo", cmp.Or(q.No, a.c.Tr("autodoc.question.no")))
 	a.c.Set("App.askOther", q.Other)
 	a.c.Set("App.askOtherShown", q.Other != "")
 	a.c.Open("confirm")

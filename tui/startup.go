@@ -71,9 +71,9 @@ func (s *startup) Started() {
 			return
 		}
 		how := s.how(r)
-		s.c.Set("App.aboutUpdate", fmt.Sprintf("%s is out (this is %s): %s", r.Tag, s.version, how))
+		s.c.Set("App.aboutUpdate", s.c.Trf("autodoc.text.startup.is_out_this_is", r.Tag, s.version, how))
 		s.c.Set("App.aboutUpdateShown", true)
-		s.c.Notify(fmt.Sprintf("AutoDoc %s is out (this is %s): %s", r.Tag, s.version, how))
+		s.c.Notify(s.c.Trf("autodoc.notice.startup.autodoc_is_out_this_is", r.Tag, s.version, how))
 	})
 }
 

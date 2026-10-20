@@ -109,10 +109,10 @@ func (h *Host) loadPackages() []error {
 func (h *Host) installPackage(url string) error {
 	url = strings.TrimSpace(url)
 	if isRegistryName(url) && h.luaDir != "" { // a name: the registry's package of that name
-		h.notify("looking up " + url + " in the registry…")
+		h.notify(h.trf("autodoc.notice.luapackages.looking_up_in_the_registry", url))
 		resolveRegistry(core{h}, regindex.KindLua, url, h.registryLoaded, func(repo string, err error) {
 			if err != nil {
-				h.notify("lua-install: not installed: " + err.Error())
+				h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error()))
 				return
 			}
 			if err := h.installPackage(repo); err != nil {
@@ -131,13 +131,13 @@ func (h *Host) installPackage(url string) error {
 		return errors.New("lua-install needs git")
 	}
 	dir, own := h.luaDir, h.cands.allocs
-	h.notify("cloning " + url + "…")
+	h.notify(h.trf("autodoc.notice.luapackages.cloning", url))
 	do(h, func(ctx context.Context) answerOf[*candidate] { return answered(stagePackage(ctx, dir, url, own)) }, func(r answerOf[*candidate]) {
 		if r.err == nil {
 			r.err = h.cands.begin(r.v, h.askPackage, h.hidePackage)
 		}
 		if r.err != nil {
-			h.notify("lua-install: not installed: " + r.err.Error())
+			h.notify(h.trf("autodoc.notice.luapackages.lua_install_not_installed", r.err.Error()))
 			return
 		}
 		h.cands.show(r.v)
@@ -183,9 +183,9 @@ func (h *Host) askPackage(c *candidate) {
 	text := fmt.Sprintf("%s %s: %s\nfrom %s at %s\nrequires %s\n\n%s%s\n\n%s",
 		m.Name, m.Version, m.Description, c.repo, regindex.Short(c.commit), requires, audit, packageRisk, auditNote)
 	h.ask(Question{
-		Title: "install the Lua package " + m.Name + "?",
+		Title: h.trf("autodoc.question.luapackages.install_the_lua_package", m.Name),
 		Text:  text,
-		Yes:   "&Install", No: "&Cancel", Other: "&Audit…",
+		Yes:   h.tr("autodoc.question.luapackages.install"), No: h.tr("autodoc.question.luapackages.cancel"), Other: "&Audit…",
 		OnYes: func() {
 			if h.cands.claim(c) {
 				h.installPackageCandidate(c)
@@ -255,7 +255,7 @@ func (h *Host) loadPluginPackages() []error {
 			continue
 		}
 		if h.userPackages[m.Name] {
-			h.notify("the plugin " + m.Name + "'s Lua package is replaced by yours, lua/" + m.Name)
+			h.notify(h.trf("autodoc.notice.luapackages.the_plugin_s_lua_package_is_replaced_by_yours_lu", m.Name, m.Name))
 			continue
 		}
 		script := pluginScript(m.Name)

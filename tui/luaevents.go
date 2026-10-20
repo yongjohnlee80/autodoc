@@ -29,7 +29,7 @@ func (h *Host) emitLua(event string, info map[string]any) {
 	}
 	for _, err := range h.scripts.Emit(event, info) {
 		if !errors.Is(err, script.ErrStale) {
-			h.notify("a Lua handler failed: " + err.Error())
+			h.notify(h.trf("autodoc.notice.luaevents.a_lua_handler_failed", err.Error()))
 		}
 	}
 }

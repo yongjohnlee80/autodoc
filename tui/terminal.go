@@ -514,7 +514,7 @@ func (t *terminals) closeShell(id widget.TerminalTabID) {
 	}
 	active := panel.Active()
 	if _, err := panel.Remove(id); err != nil {
-		t.c.Notify("the shell's tab could not close: " + err.Error())
+		t.c.Notify(t.c.Trf("autodoc.notice.terminal.the_shell_s_tab_could_not_close", err.Error()))
 		return
 	}
 	t.replaceActive(panel, id, active)
@@ -637,7 +637,7 @@ func (h *Host) paneHasKeyboard(id string) bool {
 // drawer may move the keyboard.
 func (t *terminals) shellExited(id widget.TerminalTabID, code int) {
 	if code != 0 {
-		t.c.Notify("the terminal's shell exited (" + strconv.Itoa(code) + ")")
+		t.c.Notify(t.c.Trf("autodoc.notice.terminal.the_terminal_s_shell_exited", strconv.Itoa(code)))
 	}
 	panel, err := t.panel()
 	if err != nil {

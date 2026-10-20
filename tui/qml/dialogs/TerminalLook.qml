@@ -3,17 +3,17 @@
 // and zoom… set. A choice shows at once; OK keeps it, Esc puts back what was chosen before.
 Dialog {
     closeOnQ: true
-    title: "the terminals' theme and font"
+    title: qsTrId("autodoc.dialog.terminalLook.the_terminals_theme_and_font")
     width: 60
     dim: false
     standardButtons: Dialog.Ok | Dialog.Cancel
     defaultButton: Dialog.Ok
     Flex {
         direction: Tui.Vertical
-        Text { text: "theme: their text, background and cursor"; toolTipText: "The terminal's and the agents' shells. A program's own 16 colours (ls's, a prompt's) stay its own." }
+        Text { text: qsTrId("autodoc.dialog.terminalLook.theme_their_text_background_and_cursor"); toolTipText: "The terminal's and the agents' shells. A program's own 16 colours (ls's, a prompt's) stay its own." }
         ComboBox { model: App.terminalThemes; textRole: "label"; currentIndex: App.terminalThemeIndex; onActivated: App.setTerminalTheme(index) }
         Text { text: "" }
-        Text { text: "font: at the cell size"; visible: App.gui }
+        Text { text: qsTrId("autodoc.dialog.terminalLook.font_at_the_cell_size"); visible: App.gui }
         ComboBox { visible: App.gui; model: App.terminalFonts; textRole: "label"; currentIndex: App.terminalFontIndex; onActivated: App.setTerminalFontIndex(index) }
         Text { text: App.terminalLookNote; wrapMode: Tui.WordWrap }
     }

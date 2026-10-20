@@ -12,7 +12,7 @@ Dialog {
     helpText: App.findError
     Flex {
         direction: Tui.Vertical
-        Text { text: "a word or phrase, case-blind" }
+        Text { text: qsTrId("autodoc.dialog.find.a_word_or_phrase_case_blind") }
         TextField { id: pattern; text: App.lastFind }
     }
     onAccepted: App.find(pattern.text)

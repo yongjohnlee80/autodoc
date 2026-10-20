@@ -216,7 +216,7 @@ func (pl *plugins) runPluginCommand(key, id string) { pl.runPluginCommandArgs(ke
 func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 	i := slices.IndexFunc(pl.pluginList, func(e pluginEntry) bool { return e.key() == key })
 	if i < 0 {
-		pl.c.Notify("no plugin " + key)
+		pl.c.Notify(pl.c.Trf("autodoc.notice.plugincmds.no_plugin", key))
 		return
 	}
 	e := pl.pluginList[i]
