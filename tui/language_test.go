@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"maps"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/yongjohnlee80/autodoc/docs"
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -411,4 +413,74 @@ func TestEveryCardFitsInEveryLanguage(t *testing.T) {
 			}
 		}
 	}
+}
+
+// codeFence is a fenced block: its language and its body.
+var codeFence = regexp.MustCompile("(?ms)^```(\\S*)\\n(.*?)^```")
+
+// tutorialCode is a tutorial page's code, every fence's body but a diagram's: what a translation
+// keeps as English's, so the Lua it shows runs as English's does (TestTheTutorialsLuaRuns).
+func tutorialCode(page string) []string {
+	var code []string
+	for _, m := range codeFence.FindAllStringSubmatch(page, -1) {
+		if m[1] != "mermaid" {
+			code = append(code, m[2])
+		}
+	}
+	return code
+}
+
+// Every language the build offers has the whole tutorial, translated, its code English's; a folder
+// in docs/tutorials/ is such a language's, holding English's pages and no other.
+func TestEveryLanguageHasTheWholeTutorial(t *testing.T) {
+	english, err := fs.Glob(docs.Tutorials, "tutorials/[0-9]*.md")
+	if err != nil || len(english) == 0 {
+		t.Fatalf("no English tutorial: %v", err)
+	}
+	dirs, err := fs.ReadDir(docs.Tutorials, "tutorials")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range dirs {
+		if d.IsDir() && (d.Name() == "en" || !slices.Contains(languages, d.Name())) {
+			t.Errorf("docs/tutorials/%s is no translation the build offers (language.go)", d.Name())
+		}
+	}
+	for _, tag := range languages[1:] {
+		names, _ := fs.Glob(docs.Tutorials, path.Join("tutorials", tag, "*.md"))
+		if len(names) != len(english) {
+			t.Errorf("%s has %d tutorial pages; English has %d", tag, len(names), len(english))
+		}
+		for i, n := range english {
+			b, err := fs.ReadFile(docs.Tutorials, path.Join("tutorials", tag, path.Base(n)))
+			switch {
+			case err != nil:
+				t.Errorf("%s lacks %s", tag, path.Base(n))
+			case string(b) == tutorialPages[i]:
+				t.Errorf("%s's %s is English's", tag, path.Base(n))
+			case !slices.Equal(tutorialCode(string(b)), tutorialCode(tutorialPages[i])):
+				t.Errorf("%s's %s shows code other than English's", tag, path.Base(n))
+			}
+		}
+	}
+}
+
+// The tutorial is in the UI's language, an open one turned to it by a switch, at the same page.
+func TestTheTutorialFollowsTheLanguage(t *testing.T) {
+	d := startDaemon(t, map[string][]string{"kb": {"a.md", "a\n"}})
+	r := attached(t, d) // started: About at start has come and gone, so it covers nothing here
+	h, s := r.h, r.s
+	heading := func(tag string) string {
+		first, _, _ := strings.Cut(tutorialBooks[tag][1], "\n")
+		return strings.TrimPrefix(first, "# ")
+	}
+	onLoop(r, func() bool { h.openTutorial(); h.tutorialStep(1); return true })
+	s.WaitForText(t, heading("en"))
+	onLoop(r, func() bool { h.setLanguage("ja_JP"); return true })
+	s.WaitForText(t, heading("ja_JP"))
+	if got := onLoop(r, func() int { return h.tutorialAt }); got != 1 {
+		t.Errorf("the switch turned the tutorial to page %d, want 2", got+1)
+	}
+	onLoop(r, func() bool { h.setLanguage("en"); return true })
+	s.WaitForText(t, heading("en"))
 }
