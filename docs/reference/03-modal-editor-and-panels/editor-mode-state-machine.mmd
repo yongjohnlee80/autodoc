@@ -4,9 +4,9 @@ stateDiagram-v2
     state "Normal Mode (Navigation & Operators)" as Normal
     state "Insert Mode (Prose & Auto-Pairs)" as Insert
     state "Visual Mode (Char / Line / Block)" as Visual
-    state "Command Mode (:w :q :vsplit)" as Command
+    state "Command Mode (:w :q)" as Command
     state "Fuzzy Picker (SPC f / SPC s / SPC b)" as Picker
-    state "Rendered View (Ctrl+P Native Preview)" as RenderedView
+    state "Rendered View (Ctrl+T, --gui)" as RenderedView
     state "Inline Embed Source Editor" as EmbedEdit
 
     Normal --> Insert: i / a / o / O / cw
@@ -17,7 +17,7 @@ stateDiagram-v2
     Command --> Normal: Enter / Esc
     Normal --> Picker: SPC o / SPC f / SPC SPC
     Picker --> Normal: Enter (Open Target) / Esc
-    Normal --> RenderedView: Ctrl+p (--gui / --ui Preview)
-    RenderedView --> Normal: Ctrl+p / q / Esc
+    Normal --> RenderedView: Ctrl+T (--gui)
+    RenderedView --> Normal: Ctrl+T
     RenderedView --> EmbedEdit: Click Embedded Diagram or Chart
     EmbedEdit --> RenderedView: Ctrl+s / Esc (Auto-Render Updated Asset)
