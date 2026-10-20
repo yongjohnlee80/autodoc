@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/yongjohnlee80/autodoc/core/export"
 	"github.com/yongjohnlee80/autodoc/core/lab"
 )
 
@@ -63,5 +64,53 @@ func TestALabCellsOutputCarriesItsCellsSpan(t *testing.T) {
 	page := renderEmbeds(t, "```python\nx\n```\n", note, true)
 	if !strings.Contains(page, `class="output"`) || strings.Count(page, `data-src="`) < 2 {
 		t.Errorf("want the output, its block carrying a data-src as its cell's does:\n%s", page)
+	}
+}
+
+// An output the page cannot show adds nothing: a text over the embed limit, and a file of a kind no
+// embed draws. The cell's other outputs still follow it.
+func TestALabCellSkipsAnOutputItCannotShow(t *testing.T) {
+	note, _ := labDoc(t, lab.CellKey("python", "x"), map[string]string{
+		"01.txt": strings.Repeat("a", 1<<20+1),
+		"02.bin": "\x00\x01",
+		"03.txt": "shown\n",
+	})
+	page := renderEmbeds(t, "```python\nx\n```\n", note, false)
+	if strings.Count(page, `class="output"`) != 1 || !strings.Contains(page, `<pre class="output">shown`) || strings.Contains(page, "aaaa") {
+		t.Errorf("want the one text that fits, alone:\n%s", page)
+	}
+}
+
+// The Rendered view reads a cell's outputs as the page does (OutputMarkdown, EmbedImage): a text as
+// a text fence, a diagram as EmbedMarkdown's fence, an image as its bytes and never as Markdown. A
+// file missing, out of the note's folder or a URL is not read, and neither is any file without a note.
+func TestTheRenderedViewReadsACellsOutputs(t *testing.T) {
+	key := lab.CellKey("python", "x")
+	png := "\x89PNG\r\n\x1a\nbytes"
+	note, _ := labDoc(t, key, map[string]string{"01.txt": "1 <ok>\n", "02.mmd": "graph TD\n  a --> b\n", "03.png": png})
+	out := lab.OutDir(note) + "/" + key + "/"
+	for _, c := range []struct{ doc, p, want string }{
+		{note, out + "01.txt", "```text\n1 <ok>\n```"},
+		{note, out + "02.mmd", "```mermaid\ngraph TD\n  a --> b\n```"},
+		{note, out + "03.png", ""},
+		{note, out + "09.txt", ""},
+		{note, "../" + out + "01.txt", ""},
+		{note, "https://example.com/01.txt", ""},
+		{"", out + "01.txt", ""},
+	} {
+		if got, ok := export.OutputMarkdown(c.doc, c.p, 0); got != c.want || ok != (c.want != "") {
+			t.Errorf("OutputMarkdown(%q, %q) = %q, %v; want %q", c.doc, c.p, got, ok, c.want)
+		}
+	}
+	for _, c := range []struct{ doc, p, want string }{
+		{note, out + "03.png", png},
+		{note, out + "01.txt", ""},
+		{note, out + "09.png", ""},
+		{note, "https://example.com/03.png", ""},
+		{"", out + "03.png", ""},
+	} {
+		if got, ok := export.EmbedImage(c.doc, c.p); string(got) != c.want || ok != (c.want != "") {
+			t.Errorf("EmbedImage(%q, %q) = %q, %v; want %q", c.doc, c.p, got, ok, c.want)
+		}
 	}
 }
