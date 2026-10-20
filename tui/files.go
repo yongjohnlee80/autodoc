@@ -561,6 +561,19 @@ func (h *Host) setRendered(on bool) {
 	}
 }
 
+// redrawRendered lays the Rendered view out again: what it draws from beside the note changed, which
+// no edit of the note's text says, as a lab note's cell outputs do when a plugin runs a cell (ADR
+// 1792457255). Only an editor with a Rendered view answers (the GUI's); elsewhere it does nothing.
+func (h *Host) redrawRendered() {
+	if h.relaid != nil {
+		h.relaid()
+		return
+	}
+	if r, ok := h.editor.(relayouter); ok {
+		r.Relayout()
+	}
+}
+
 // recheckFile checks every open buffer's file against the disk on a new connection, which may have
 // missed a change (recheckBuffer).
 func (h *Host) recheckFile() {

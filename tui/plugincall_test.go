@@ -287,3 +287,28 @@ func TestAPluginOpensADraftWithBufferNew(t *testing.T) {
 		t.Fatalf("after a declared buffer.new: %+v; want a new draft q.sql, shown and modified", s)
 	}
 }
+
+// TestAPluginRedrawsTheRenderedView: a plugin whose manifest's calls has view.redraw has the editor's
+// Rendered view laid out again, answered ok: what it draws from beside the note changed, as a lab
+// note's cell outputs do after a run (ADR 1792457255).
+func TestAPluginRedrawsTheRenderedView(t *testing.T) {
+	dir := t.TempDir()
+	installPlugin3(t, dir, "lab", "service", "rawcalls", "calls = [\"view.redraw\"]\n[[commands]]\nid = \"ping\"\ntitle = \"Ping\"\n")
+	r, logs := callTUI(t, dir)
+	onLoop(r, func() bool { r.h.plugins.runPluginCommand("lab", "ping"); return true })
+	waitSaid(t, logs, "lab", "pong")
+	r.s.WaitFor(t, "lab ready", func(string) bool { return onLoop(r, func() bool { return r.h.plugins.running["lab"].ready }) })
+	var relaid int
+	onLoop(r, func() bool { r.h.relaid = func() { relaid++ }; return true })
+	onLoop(r, func() bool {
+		r.h.plugins.running["lab"].send(plugin.MethodCommand, plugin.CommandParams("redraw"))
+		return true
+	})
+	waitSaid(t, logs, "lab", "result 1 ")
+	if got := results(t, logs, "lab"); !slices.Equal(got, []string{"result 1 true "}) {
+		t.Fatalf("view.redraw: %q", got)
+	}
+	if n := onLoop(r, func() int { return relaid }); n != 1 {
+		t.Fatalf("the Rendered view was laid out again %d times, want once", n)
+	}
+}

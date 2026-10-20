@@ -41,6 +41,10 @@ func (h *Host) installEditorMenu() {
 // bool, so this package names no gui type.
 type renderedSwitch interface{ SetRenderedEnabled(on bool) }
 
+// relayouter is an editor whose Rendered view the host can have laid out again, its text unchanged:
+// golib's gui Editor.
+type relayouter interface{ Relayout() }
+
 // editorMenu is the editor's right-click menu: the stock rows, then the related documents and back.
 // Its rows act on the core, so every editor widget runs them (installEditorMenu).
 func (h *Host) editorMenu(c *widget.EditorCore) []widget.MenuItemModel {
