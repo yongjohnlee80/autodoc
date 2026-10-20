@@ -28,15 +28,16 @@ flowchart TD
     C14["Ch 14: Sandboxed Lua Scripting"]
     C15["Ch 15: Out-of-Process Plugins (Protocols 1-6) & UI Kits"]
     C16["Ch 16: Live SQL Workbench (AutoDB Plugin)"]
-    C17["Ch 17: Neovim Integration and KB Migration"]
-    C14 --> C15 --> C16 --> C17
+    C17["Ch 17: Notebooks in Markdown (Jupyter Plugin)"]
+    C18["Ch 18: Neovim Integration and KB Migration"]
+    C14 --> C15 --> C16 --> C17 --> C18
   end
 
   subgraph P5["Part V: Enterprise Server"]
-    C18["Ch 18: Multi-Tenant PostgreSQL RAG Server"]
+    C19["Ch 19: Multi-Tenant PostgreSQL RAG Server"]
   end
 
   C04 --> C05
   C08 --> C10
   C04 --> C14
-  C06 --> C18
+  C06 --> C19

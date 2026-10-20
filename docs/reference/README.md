@@ -2,7 +2,7 @@
 
 New to AutoDoc? Start with the short [tutorials](../tutorials/README.md); this book is the reference they point to.
 
-Welcome to the **AutoDoc User Reference Book**—an 18-chapter, hands-on guide and architectural reference covering every surface of AutoDoc: the terminal editor (`autodoc --ui`), the native GPU desktop window (`autodoc --gui`), the Neovim integration (`autodoc.nvim`), the AI agent CLI (`autodoc --call`), the Lua & out-of-process plugin ecosystem (Protocols 1–8, the plugin UI kits, and `autodoc-autodb`), and the headless multi-tenant PostgreSQL RAG server (`autodoc --server`).
+Welcome to the **AutoDoc User Reference Book**—a 19-chapter, hands-on guide and architectural reference covering every surface of AutoDoc: the terminal editor (`autodoc --ui`), the native GPU desktop window (`autodoc --gui`), the Neovim integration (`autodoc.nvim`), the AI agent CLI (`autodoc --call`), the Lua & out-of-process plugin ecosystem (Protocols 1–9, the plugin UI kits, `autodoc-autodb` and `autodoc-jupyter`), and the headless multi-tenant PostgreSQL RAG server (`autodoc --server`).
 
 ---
 
@@ -24,7 +24,7 @@ Open this folder (`docs/reference/`) as a workspace in `autodoc --gui` and press
 
 ## Complete Chapter Index
 
-![Complete 18-Chapter Reference Book Index](chapter-index.csv)
+![Complete 19-Chapter Reference Book Index](chapter-index.csv)
 
 ---
 
@@ -69,11 +69,13 @@ Open this folder (`docs/reference/`) as a workspace in `autodoc --gui` and press
     Building isolated child-process plugins in Go or Python across Protocols 1 to 9: modal dialogs, docked non-modal cards, document feeds with byte offsets, hosted paged tables (`[table]`), typed cell kinds, the pointer, the session slot, a plugin's Lua package, notifications, opening files (`[open]`), and the `plugin/card` and `plugin/decl` UI kits.
 16. **[Chapter 16: Live Database Workbenches in Markdown — The AutoDB Plugin](./16-autodb-live-sql-workbench.md)**
     Running PostgreSQL, MySQL, and SQLite queries directly from `.sql` files and Markdown notes via `autodoc-autodb`, streaming session-pinned paged cursors into AutoDoc's 100k-row sortable Results table, and exporting CSV or Markdown tables.
-17. **[Chapter 17: Neovim Integration (`autodoc.nvim`) & Reversible KB Migration](./17-neovim-integration-and-kb-migration.md)**
+17. **[Chapter 17: Notebooks in Markdown — The Jupyter Plugin](./17-jupyter-notebooks-in-markdown.md)**
+    Running a lab note's (`*.lab.md`) code cells in any Jupyter kernel through `autodoc-jupyter`, keeping their outputs (text, plots, Vega-Lite charts, DataFrames) beside the note for the HTML export and the Rendered View to draw, and opening or exporting `.ipynb` notebooks.
+18. **[Chapter 18: Neovim Integration (`autodoc.nvim`) & Reversible KB Migration](./18-neovim-integration-and-kb-migration.md)**
     Using AutoDoc's generated Neovim pickers, live stage toggles, relations drawer, 6-slot floating previewer, and the 6-step reversible `:AutodocKbMigrate` pipeline.
 
 ### Part V — Enterprise RAG Server (`autodoc --server`)
-18. **[Chapter 18: Multi-Tenant PostgreSQL RAG Server (`autodoc --server` & `.view` Contracts)](./18-enterprise-postgres-rag-server.md)**
+19. **[Chapter 19: Multi-Tenant PostgreSQL RAG Server (`autodoc --server` & `.view` Contracts)](./19-enterprise-postgres-rag-server.md)**
     Ingesting live PostgreSQL tables via declarative `.view` templates with keyset cursors and tenant advisory locks, serving snapshot-enforced `POST /v1/search` over `pgvector`, and evaluating self-hosted versus managed cloud RAG deployment scenarios.
 
 ---

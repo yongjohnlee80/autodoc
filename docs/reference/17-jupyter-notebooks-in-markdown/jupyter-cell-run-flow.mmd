@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant User as User in a lab note (plan.lab.md)
+  participant Card as autodoc-jupyter (Protocol 9 Card)
+  participant Kernel as Jupyter kernel (ipykernel, IRkernel, ...)
+  participant Out as plan.lab/out/KEY/
+  participant View as AutoDoc (HTML export, Rendered View)
+  User->>Card: SPC p j r (plugin.command {id: "run", document})
+  Note over Card: the cell under cursor_byte: a fence in the kernel's language
+  Card->>Kernel: execute_request (ZeroMQ, HMAC-SHA256 signed)
+  Kernel-->>Card: iopub stream, display_data, execute_result, error
+  Card->>Out: 01.txt, 02.png, 03.chart.json, 04.csv (written aside, then swapped in)
+  Card->>View: host.table {DataFrame} to the table panel
+  View->>Out: lab.Outputs(OutDir, CellKey(lang, code))
+  Note over View: draws each output right after its cell, in name order
