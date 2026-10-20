@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"slices"
 	"strconv"
 
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"

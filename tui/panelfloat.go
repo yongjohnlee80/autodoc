@@ -2,8 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
