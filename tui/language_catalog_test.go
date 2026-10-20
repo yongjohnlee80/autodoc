@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
 // language_catalog_test.go: the English catalog's text that AutoDoc keeps in Go tables — the keys
