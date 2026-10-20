@@ -94,11 +94,11 @@ func (pl *plugins) State() map[string]any {
 		"App.pluginChooserText":  "",
 		"App.pluginChooserHelp":  chooserHelp,
 		"App.pluginUrl":          "",
-		"App.pluginRisk":         pluginRisk,
+		"App.pluginRisk":         pl.c.Tr("autodoc.text.plugininstall.a_plugin_is_a_program_that_runs_as_you_with_your"),
 		"App.pluginConfirmTitle": "",
 		"App.pluginQuestion":     "",
 		"App.managedPlugins":     pl.managedPlugins.Model(),
-		"App.pluginsHelp":        pluginsHelp,
+		"App.pluginsHelp":        pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", ""),
 		"App.resultsRows":        pl.results.model,
 		"App.resultsTitle":       "results",
 		"App.resultsClauses":     resultsClausesModel(),
@@ -234,6 +234,20 @@ func (pl *plugins) PreferencesChanged() {
 
 // ThemeChanged tells the running plugins the theme the screen now wears.
 func (pl *plugins) ThemeChanged() { pl.themePlugins() }
+
+// LanguageChanged composes again the plugins' text on screen: the Plugins menu and the SPC p
+// chooser, the results panel's heading, and an open PluginConfirm. A dialog composed as it opens
+// (the registry, the export, the manager) speaks the new language when it opens next.
+func (pl *plugins) LanguageChanged() {
+	pl.refreshPlugins()
+	pl.showChooser()
+	pl.showResultsTitle()
+	pl.c.Set("App.pluginRisk", pl.c.Tr("autodoc.text.plugininstall.a_plugin_is_a_program_that_runs_as_you_with_your"))
+	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", pl.pluginOpt.Dir))
+	if pl.pendingPlugin != nil {
+		pl.showPluginQuestion(pl.pendingPlugin)
+	}
+}
 
 // Stopped stops every running plugin, all at once, each within pluginGrace of being asked to close
 // and pluginTermGrace of SIGTERM before SIGKILL (pluginRun.shutdown, whose waits carry their NOTE:):

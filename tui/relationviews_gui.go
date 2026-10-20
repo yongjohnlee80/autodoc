@@ -204,6 +204,25 @@ func defaultPalette() relPalette {
 
 // relationViewFeatures are the GlobeMap and the Mindmap, made once: only when the program runs as a
 // window. A build with the GUI running in a terminal (no --gui) has Links alone, as any terminal.
+// relationViewChoices are the GlobeMap's and the Mindmap's fixed choosers, by their App.* source
+// (language.go's choiceLabels): each row's key its English, its label in the UI's language.
+func relationViewChoices() map[string][]string {
+	names := func(n int, name func(int) string) []string {
+		out := make([]string, n)
+		for i := range out {
+			out[i] = name(i)
+		}
+		return out
+	}
+	return map[string][]string{
+		"App.globeFilters":     names(len(globeFilters), func(i int) string { return globeFilters[i].name }),
+		"App.globeDotSizes":    names(len(globeDotSizes), func(i int) string { return globeDotSizes[i].name }),
+		"App.globeSpeeds":      names(len(globeSpeeds), func(i int) string { return globeSpeeds[i].label }),
+		"App.mindDepths":       {"one link out", "two links out"},
+		"App.mindShapeChoices": names(len(mindShapes), func(i int) string { return mindShapes[i].name }),
+	}
+}
+
 func (h *Host) relationViewFeatures() []Feature {
 	if !h.gui {
 		return nil
@@ -264,10 +283,29 @@ const (
 	legendPad   = 8
 )
 
-// legendRow is one row of a legend.
+// legendRow is one row of a legend. A text in AutoDoc's words is a catalog message, msg with its
+// %1, %2 … filled by args: English until legendIn puts the rows in the UI's language. A group's
+// query is shown as written.
 type legendRow struct {
 	mark func(c gui.Canvas, box gui.Rect)
 	text string
+	msg  string // text's catalog id; "" text is not one
+	args []any
+}
+
+// legendMsg is a row whose text is the catalog message id, filled with args: its English.
+func legendMsg(mark func(gui.Canvas, gui.Rect), id string, args ...any) legendRow {
+	return legendRow{mark: mark, text: inEnglish{}.Trf(id, args...), msg: id, args: args}
+}
+
+// legendIn is rows in the UI's language, by trf (a Core's Trf): each catalog message's text again.
+func legendIn(rows []legendRow, trf func(id string, args ...any) string) []legendRow {
+	for i, r := range rows {
+		if r.msg != "" {
+			rows[i].text = trf(r.msg, r.args...)
+		}
+	}
+	return rows
 }
 
 // paintLegend draws rows on a plate in the bottom right of a view of size sz, in pal's colours:
@@ -335,7 +373,7 @@ func legendForm(s pm.MindShape, th guimermaid.Theme) func(gui.Canvas, gui.Rect) 
 func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, gui.Rect)) []legendRow {
 	none := func(gui.Canvas, gui.Rect) {}
 	if gs == nil || len(gs.list) == 0 {
-		return []legendRow{{none, "no groups: no schema types or folders (settings add them)"}}
+		return []legendRow{legendMsg(none, "autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad")}
 	}
 	worn := make([]bool, len(gs.list))
 	for _, n := range m.Nodes {
@@ -349,13 +387,13 @@ func groupLegend(gs *relGroups, m relMap, mark func(relGroup) func(gui.Canvas, g
 		switch {
 		case !worn[i]:
 		case len(rows) < groupLegendRows:
-			rows = append(rows, legendRow{mark(g), groupLabel(g.Query)})
+			rows = append(rows, legendRow{mark: mark(g), text: groupLabel(g.Query)})
 		default:
 			more++
 		}
 	}
 	if more > 0 {
-		rows = append(rows, legendRow{none, fmt.Sprintf("… %d more groups", more)})
+		rows = append(rows, legendMsg(none, "autodoc.text.relationviews_gui.more_groups", more))
 	}
 	return rows
 }

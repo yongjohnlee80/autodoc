@@ -34,17 +34,18 @@ type mind struct {
 
 // mindmap is the Mindmap feature: its builds, fenced (load), and the view's scroll.
 type mindmap struct {
-	c      Core
-	seq    uint64
-	open   bool
-	page   Page  // the page shown, as Shown last said
-	cur    *mind // the build shown; nil until one is installed
-	status string
-	view   *mindView
-	scroll float32 // how far down the map the view is, in logical pixels
-	asked  float32 // the width a relayout was last asked for
-	depth  int     // the links out from the root it shows: 1, or 2 (d toggles)
-	noKey  bool    // l hid the legend
+	c         Core
+	seq       uint64
+	open      bool
+	page      Page   // the page shown, as Shown last said
+	cur       *mind  // the build shown; nil until one is installed
+	status    string // what a load says, a catalog id statusArg fills; "" none
+	statusArg string // fills status's %1
+	view      *mindView
+	scroll    float32 // how far down the map the view is, in logical pixels
+	asked     float32 // the width a relayout was last asked for
+	depth     int     // the links out from the root it shows: 1, or 2 (d toggles)
+	noKey     bool    // l hid the legend
 
 	store    *graphStore
 	editor   *groupEditor // the settings' groups
@@ -129,7 +130,7 @@ func (m *mindmap) load() {
 	ref := m.page.Ref
 	tk := m.c.Ticket(&m.seq, TicketFile)
 	if ref.path == "" || ref.ws == "" || m.page.Outside {
-		m.cur, m.status = nil, "open a workspace's document to see its mind map"
+		m.cur, m.status = nil, "autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map"
 		m.title()
 		return
 	}
@@ -139,7 +140,7 @@ func (m *mindmap) load() {
 		gs = m.groups
 	}
 	m.asked = width
-	m.status = "reading " + ref.path + "…"
+	m.status, m.statusArg = "autodoc.text.mindmap_gui.reading", ref.path
 	m.title()
 	m.c.Go(func(ctx context.Context) any {
 		res, err := m.c.Call(ctx, "graph.map", ref.ws, map[string]any{"root": ref.path, "depth": int64(depth)})
@@ -184,7 +185,7 @@ func (m *mindmap) load() {
 			}
 		case error:
 			if code(v) == rpc.CodeNotFound {
-				m.cur, m.status = nil, ref.path+" is not indexed yet"
+				m.cur, m.status, m.statusArg = nil, "autodoc.text.mindmap_gui.is_not_indexed_yet", ref.path
 			} else {
 				m.c.Failed("Mindmap", v)
 			}
@@ -234,16 +235,40 @@ func mindTheme(p relPalette) guimermaid.Theme {
 	}
 }
 
+// title says what the panel shows, in the UI's language, and redraws it.
 func (m *mindmap) title() {
 	t := "Mindmap"
 	switch {
 	case m.status != "":
-		t += " · " + m.status
+		t += " · " + m.statusText()
 	case m.cur != nil:
-		t += fmt.Sprintf(" · %s · %d documents · depth %d · d depth, l legend", m.cur.root.path, len(m.cur.m.Nodes), m.depth)
+		t = m.c.Trf("autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend",
+			m.cur.root.path, len(m.cur.m.Nodes), m.depth)
 	}
 	m.c.Set("App.mindmapTitle", t)
 	m.dirty()
+}
+
+// statusText is what a load says, in the UI's language; "" none.
+func (m *mindmap) statusText() string {
+	if m.status == "" {
+		return ""
+	}
+	return m.c.Trf(m.status, m.statusArg)
+}
+
+// LanguageChanged composes again, in the UI's language, what the Mindmap keeps on screen: its
+// heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
+func (m *mindmap) LanguageChanged() {
+	names, labels := viewThemeChoices(m.c)
+	m.c.Set("App.mindThemes", keyedChoices(names, labels))
+	for _, src := range []string{"App.mindDepths", "App.mindShapeChoices"} {
+		m.c.Set(src, choiceModel(m.c, src))
+	}
+	if m.editor.ws != "" {
+		m.editor.show("")
+	}
+	m.title()
 }
 
 func (m *mindmap) dirty() {
@@ -364,22 +389,23 @@ func (v *mindView) HandleEvent(ev tuicore.Event) bool {
 // NativeView draws the build as it is now, taken on the loop.
 func (v *mindView) NativeView() (any, bool) {
 	m := v.m
-	f := mindFrame{cur: m.cur, at: m.origin(v.pixels()), status: m.status, pal: m.palette()}
+	f := mindFrame{cur: m.cur, at: m.origin(v.pixels()), status: m.statusText(), pal: m.palette()}
 	if !m.noKey && m.cur != nil {
-		f.legend = mindLegend(mindTheme(f.pal), m.cur.groups, m.cur.m)
+		f.legend = legendIn(mindLegend(mindTheme(f.pal), m.cur.groups, m.cur.m), m.c.Trf)
 	}
 	return gui.ViewFunc(f.paint), true
 }
 
 // mindLegend is what the Mindmap's marks stand for: each group the map shows, its outline in its
-// colour (groupLegend), then any other document's box in its branch's tint.
+// colour (groupLegend), then any other document's box in its branch's tint. Its texts are English,
+// until legendIn puts them in the UI's language.
 func mindLegend(th guimermaid.Theme, gs *relGroups, m relMap) []legendRow {
 	rows := groupLegend(gs, m, func(g relGroup) func(gui.Canvas, gui.Rect) {
 		t := th
 		t.NodeFill, t.NodeStroke = mixNRGBA(th.NodeFill, g.Colour, 0.35), mixNRGBA(th.NodeStroke, g.Colour, 0.75)
 		return legendForm(g.Shape, t)
 	})
-	return append(rows, legendRow{legendForm(pm.MindDefault, th), "any other document"})
+	return append(rows, legendMsg(legendForm(pm.MindDefault, th), "autodoc.text.mindmap_gui.any_other_document"))
 }
 
 type mindFrame struct {

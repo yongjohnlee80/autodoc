@@ -9,18 +9,21 @@ import (
 
 func (h *Host) showMismatch(mismatch *MismatchError) {
 	canRestart := mismatch.Server < mismatch.Client && h.session.CanSpawn()
-	message := fmt.Sprintf("This TUI speaks protocol %d; autodoc %s speaks protocol %d.", mismatch.Client, mismatch.Version, mismatch.Server)
+	var message string
 	old := h.session.Stale()
-	if canRestart && h.restartAccepted && old != nil {
+	switch {
+	case canRestart && h.restartAccepted && old != nil:
 		// an older backend answered again after a restart this TUI asked for: something else starts
 		// it (a supervisor's binary, say); offered again, the restart would loop
 		canRestart = false
-		message += fmt.Sprintf(" It answered after the restart this TUI asked for (pid %d): something else starts it. Stop that, then start the installed autodoc.", old.PID)
-	}
-	if canRestart {
-		message += " Restart Now stops the older backend and starts the installed one."
-	} else {
-		message += " This TUI cannot safely restart that backend; quit and start a compatible autodoc."
+		message = h.trf("autodoc.text.restart.this_tui_speaks_protocol_autodoc_speaks_protocol_again",
+			mismatch.Client, mismatch.Version, mismatch.Server, old.PID)
+	case canRestart:
+		message = h.trf("autodoc.text.restart.this_tui_speaks_protocol_autodoc_speaks_protocol_restart",
+			mismatch.Client, mismatch.Version, mismatch.Server)
+	default:
+		message = h.trf("autodoc.text.restart.this_tui_speaks_protocol_autodoc_speaks_protocol_cannot",
+			mismatch.Client, mismatch.Version, mismatch.Server)
 	}
 	h.set("App.mismatchQuestion", message)
 	h.set("App.canRestartMismatch", canRestart)
@@ -94,16 +97,15 @@ func (h *Host) startRestart() {
 		if a.err != nil {
 			installed = "?" // reading it failed (it panicked): not known, as when it errs
 		}
-		q := fmt.Sprintf("Restart the backend (autodoc %s)? It stops, and starts again", running)
+		var q string
 		switch {
 		case installed == "" || installed == "?":
-			q += "."
+			q = h.trf("autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts", running)
 		case installed == running:
-			q += " at the same version, " + installed + ": no newer one is installed."
+			q = h.trf("autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts_same", running, installed)
 		default:
-			q += " as autodoc " + installed + ", the one installed."
+			q = h.trf("autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts_as", running, installed)
 		}
-		q += " Indexing and embedding carry on where they stopped; every client reconnects."
 		h.ask(Question{Title: h.tr("autodoc.question.restart.restart_the_backend"), Text: q, OnYes: h.restartConfirmed})
 	})
 }
@@ -117,7 +119,7 @@ func (h *Host) restartConfirmed() {
 	// until this TUI's daemon answers, another client only dials, so the build that serves next is
 	// this one (handoff.go); a handoff that cannot be written fails open, as before
 	if err := h.session.WriteHandoff(); err != nil {
-		h.failed("restart: the handoff to the other clients was not written", err)
+		h.failed(h.tr("autodoc.notice.restart.restart_the_handoff_to_the_other_clients_was_not"), err)
 	}
 	if old := h.session.Stale(); old != nil && !h.connected {
 		h.notify(h.trf("autodoc.notice.restart.asking_the_older_backend_autodoc_to_stop", old.Version))
@@ -132,7 +134,7 @@ func (h *Host) restartConfirmed() {
 		}, func(err error) {
 			if err != nil {
 				h.session.RemoveHandoff()
-				h.failed("restart", err)
+				h.failed(h.tr("autodoc.notice.restart.restart"), err)
 				if h.mismatchRecovery {
 					h.set("App.mismatchQuestion", h.trf("autodoc.text.restart.restart_failed_retry_or_quit", err.Error()))
 					h.open("mismatch")
@@ -156,7 +158,7 @@ func (h *Host) restartConfirmed() {
 		if err != nil && gen == h.session.Gen() {
 			h.session.RemoveHandoff()
 			h.restartPID, h.restartFrom = 0, ""
-			h.failed("restart refused", err)
+			h.failed(h.tr("autodoc.notice.restart.restart_refused"), err)
 		}
 	})
 }

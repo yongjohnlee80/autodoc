@@ -100,7 +100,7 @@ func (s *graphStore) with(ws string, fn func(*graphWS)) {
 	}, func(v any) {
 		r := v.(readBack)
 		if r.err != nil {
-			s.c.Failed("the graph groups ("+file+")", r.err) // the views go on with what read
+			s.c.Failed(s.c.Trf("autodoc.notice.graphstore_gui.the_graph_groups", file), r.err) // the views go on with what read
 		}
 		g.conf, g.user, g.version, g.read = r.conf, r.user, r.version, true
 		waiting := g.waiting
@@ -192,7 +192,7 @@ func (s *graphStore) write(g *graphWS) {
 		case string:
 			g.version = v
 		case error:
-			s.c.Failed("save the graph groups ("+file+")", v)
+			s.c.Failed(s.c.Trf("autodoc.notice.graphstore_gui.save_the_graph_groups", file), v)
 			if code(v) == rpc.CodeConflict { // changed on disk: read again before another write
 				g.read, g.again = false, false
 				return

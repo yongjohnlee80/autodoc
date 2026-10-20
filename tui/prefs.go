@@ -460,7 +460,7 @@ func (h *Host) writePref() {
 		return err
 	}, func(err error) {
 		if err != nil {
-			h.failed("save the preference", err)
+			h.failed(h.tr("autodoc.notice.prefs.save_the_preference"), err)
 		}
 		h.prefWrites = h.prefWrites[1:]
 		if len(h.prefWrites) > 0 {

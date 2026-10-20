@@ -38,6 +38,9 @@ type (
 	Stopper interface{ Stopped() }
 	// ThemeSink hears that the screen wears another theme; it reads which from its host.
 	ThemeSink interface{ ThemeChanged() }
+	// LanguageSink hears that the UI speaks another language (ADR 1792451618): it composes again the
+	// text it keeps on screen, reading the language from its host (Tr, Trf).
+	LanguageSink interface{ LanguageChanged() }
 	// PreferenceSink projects the preferences currently in effect on the loop.
 	// It also runs when preference dialogs resync; this is not a change-only event.
 	PreferenceSink interface{ PreferencesChanged() }
@@ -219,6 +222,18 @@ func (r *registry) themeChanged() {
 	for _, f := range r.features {
 		if t, ok := f.(ThemeSink); ok {
 			t.ThemeChanged()
+		}
+	}
+}
+
+// languageChanged tells the features that keep text on screen the language the UI now speaks.
+func (r *registry) languageChanged() {
+	if r == nil {
+		return
+	}
+	for _, f := range r.features {
+		if l, ok := f.(LanguageSink); ok {
+			l.LanguageChanged()
 		}
 	}
 }

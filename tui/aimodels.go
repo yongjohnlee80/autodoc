@@ -62,6 +62,9 @@ func (a *aiModels) Catalog() []Entry {
 }
 
 // open opens the AI models: the providers listed, and the rankers when their tab is the one showing.
+// LanguageChanged composes the providers tab's title again; the rest is composed as AI models opens.
+func (a *aiModels) LanguageChanged() { a.providers.languageChanged() }
+
 func (a *aiModels) open() {
 	a.providers.load()
 	if a.tab == rankerTab {

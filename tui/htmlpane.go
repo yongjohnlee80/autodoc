@@ -67,7 +67,7 @@ func (h *Host) openPaneInBrowser() {
 		return answerOf[string]{v: path, err: h.browser(ctx, path)}
 	}, func(a answerOf[string]) {
 		if a.err != nil {
-			h.failed("the browser did not open", a.err)
+			h.failed(h.tr("autodoc.notice.htmlpane.the_browser_did_not_open"), a.err)
 			return
 		}
 		h.htmlPreviewPath = a.v
@@ -131,7 +131,7 @@ func (h *Host) renderHTMLPane() {
 			return // an edit since: its render follows
 		}
 		if a.err != nil {
-			h.failed("HTML preview", a.err)
+			h.failed(h.tr("autodoc.notice.htmlpane.html_preview"), a.err)
 			return
 		}
 		v, ok := h.htmlView()
@@ -180,7 +180,7 @@ func (h *Host) htmlLink(href string) {
 	default:
 		do(h, func(ctx context.Context) error { return h.browser(ctx, href) }, func(err error) {
 			if err != nil {
-				h.failed("open "+href, err)
+				h.failed(h.trf("autodoc.notice.htmlpane.open", href), err)
 			}
 		})
 		return

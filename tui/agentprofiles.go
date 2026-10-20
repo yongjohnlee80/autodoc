@@ -79,7 +79,7 @@ func (h *agents) keepAgents(agents []agentProfile, def string) {
 func (h *agents) startAddAgent() {
 	h.editingAgent = ""
 	h.editingAgentProfile = nil
-	h.fillAgentForm("add an agent profile", agentProfile{})
+	h.fillAgentForm(h.c.Tr("autodoc.text.agentprofiles.add_an_agent_profile"), agentProfile{})
 }
 
 func (h *agents) startEditAgent(i int) {
@@ -89,7 +89,7 @@ func (h *agents) startEditAgent(i int) {
 	}
 	h.editingAgent = a.Codename
 	h.editingAgentProfile = &a
-	h.fillAgentForm("edit "+a.Name, a)
+	h.fillAgentForm(h.c.Trf("autodoc.text.agentprofiles.edit", a.Name), a)
 }
 
 func (h *agents) fillAgentForm(title string, a agentProfile) {
@@ -131,10 +131,10 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 		return agentProfile{}, false
 	}
 	if name == "" || command == "" {
-		return refuse("a profile is a name and the command that starts the agent")
+		return refuse(h.c.Tr("autodoc.text.agentprofiles.a_profile_is_a_name_and_the_command_that_starts"))
 	}
 	if !validAgentCodename(codename) {
-		return refuse("codename needs lower-case letters or digits, separated by hyphens")
+		return refuse(h.c.Tr("autodoc.text.agentprofiles.codename_needs_lower_case_letters_or_digits_sepa"))
 	}
 	agents := h.profiles()
 	at := -1
@@ -142,19 +142,19 @@ func (h *agents) storeAgentProfile(name, command, codename string) (agentProfile
 		if a.Codename == h.editingAgent {
 			at = i
 		} else if a.Codename == codename {
-			return refuse("codename taken by " + a.Name)
+			return refuse(h.c.Trf("autodoc.text.agentprofiles.codename_taken_by", a.Name))
 		}
 	}
 	if h.editingAgent != "" && (at < 0 || (h.editingAgentProfile != nil && agents[at] != *h.editingAgentProfile)) {
-		return refuse("the agent profile changed; open it again before saving")
+		return refuse(h.c.Tr("autodoc.text.agentprofiles.the_agent_profile_changed_open_it_again_before_s"))
 	}
 	if at >= 0 {
 		if instance := h.instances[agents[at].Codename]; instance != nil && codename != agents[at].Codename {
-			return refuse("stop the running agent before changing its codename")
+			return refuse(h.c.Tr("autodoc.text.agentprofiles.stop_the_running_agent_before_changing_its_coden"))
 		}
 	}
 	if instance := h.instances[codename]; instance != nil && (at < 0 || agents[at].Codename != codename) {
-		return refuse("codename held by a running agent")
+		return refuse(h.c.Tr("autodoc.text.agentprofiles.codename_held_by_a_running_agent"))
 	}
 	def := h.defaultProfile()
 	if at >= 0 {

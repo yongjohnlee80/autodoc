@@ -77,7 +77,7 @@ func goToRows(panel TerminalPanel, label func(widget.TerminalTab) string, pick f
 		row.Enabled = !tab.Closing
 		rows = append(rows, row)
 	}
-	sub := widget.NewSubmenu("tabs.goto", "Go to", rows)
+	sub := withLabelMessage(widget.NewSubmenu("tabs.goto", "Go to", rows), "Go to")
 	sub.Enabled = len(rows) > 0
 	return sub
 }

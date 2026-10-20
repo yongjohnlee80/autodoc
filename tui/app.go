@@ -72,8 +72,9 @@ type Host struct {
 	// todoNoted are the workspaces' todo_excluded already said this session, by name and patterns
 	todoNoted map[string]bool
 
-	about     string
-	aboutInfo AboutInfo // what Help › About lists (help.go)
+	about      string
+	aboutInfo  AboutInfo // what Help › About lists (help.go)
+	connectErr error     // the last connect's failure, which About's text names (help.go), as it did when composed
 	// layoutSrc is the layout as last loaded, dev the -dev directory ("" for none), theme the one
 	// the screen wears (theme.go).
 	layoutSrc    []byte

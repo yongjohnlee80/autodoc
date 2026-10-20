@@ -44,7 +44,7 @@ type progress struct {
 func warmingReasons(m map[string]any) []string {
 	var out []string
 	if f := asMap(m["following"]); str(f, "mode") == "starting" {
-		out = append(out, "scanning the workspace's files")
+		out = append(out, scanningFiles)
 	}
 	for _, r := range asList(m["warming"]) {
 		if s, ok := r.(string); ok && s != "" {
@@ -52,6 +52,22 @@ func warmingReasons(m map[string]any) []string {
 		}
 	}
 	return out
+}
+
+// scanningFiles is the reason a follower's first scan gives: AutoDoc's own, said in the UI's
+// language (warmingText); the daemon's reasons are its own words, said as written.
+const scanningFiles = "scanning the workspace's files"
+
+// warmingText is reasons as the toast says them.
+func (h *Host) warmingText(reasons []string) string {
+	out := make([]string, len(reasons))
+	for i, r := range reasons {
+		if r == scanningFiles {
+			r = h.tr("autodoc.notice.progress.scanning_the_workspace_s_files")
+		}
+		out[i] = r
+	}
+	return strings.Join(out, "; ")
 }
 
 // embedProgress is index.status's embeddings: nil there is off.
@@ -171,7 +187,7 @@ func (h *Host) showWarming(reasons []string) {
 	h.prog.warming = reasons
 	switch {
 	case len(reasons) > 0:
-		h.notifyOngoing(toastWarming, h.trf("autodoc.notice.progress.warming_up", strings.Join(reasons, "; ")))
+		h.notifyOngoing(toastWarming, h.trf("autodoc.notice.progress.warming_up", h.warmingText(reasons)))
 	case was:
 		h.notifyDone(toastWarming, h.tr("autodoc.notice.progress.ready_search_and_the_files_are_up_to_date"))
 		h.listFiles()
@@ -189,7 +205,7 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 	// search's hits answers to another model: the search starts afresh rather than refresh them
 	modelChanged := polled && (prev.model != emb.model || prev.target != emb.target || prev.on != emb.on)
 	if modelChanged {
-		h.clearSearch("the embedding model changed")
+		h.clearSearch(h.tr("autodoc.notice.progress.the_embedding_model_changed"))
 	}
 	if !polled || prev.semantic != emb.semantic || prev.model != emb.model || prev.target != emb.target || prev.on != emb.on || prev.pending != emb.pending || prev.targetPending != emb.targetPending {
 		switch {
@@ -229,24 +245,24 @@ func (h *Host) showProgress(docs, pending int64, emb embedProgress, cursor int64
 // and the search's title say why, too.
 func (h *Host) showSemantic() {
 	e := h.prog.emb
-	dot, label, why := "red", "lexical search", ""
+	dot, label, why := "red", h.tr("autodoc.text.progress.lexical_search"), ""
 	switch {
 	case e.online():
-		dot, label = "green", "semantic search"
+		dot, label = "green", h.tr("autodoc.text.progress.semantic_search")
 		if e.model != "" {
-			label += " · " + embed.ModelName(e.model)
+			label = h.trf("autodoc.text.progress.semantic_search_model", embed.ModelName(e.model))
 		}
 		if e.refused > 0 {
-			why = fmt.Sprintf(" · %d refused texts (see Vectors…)", e.refused)
+			why = " · " + h.trf("autodoc.text.progress.refused_texts_see_vectors", e.refused)
 		}
 	case len(h.prog.warming) > 0:
-		why = " · warming up"
+		why = " · " + h.tr("autodoc.text.progress.warming_up")
 	case e.target != "":
-		label += " · switching to " + embed.ModelName(e.target)
+		label = h.trf("autodoc.text.progress.lexical_search_switching_to", embed.ModelName(e.target))
 	case e.queueState == "paused":
-		why = " · embedding paused by workspace setting"
+		why = " · " + h.tr("autodoc.text.progress.embedding_paused_by_workspace_setting")
 	case e.failing:
-		why = " · the provider is not answering"
+		why = " · " + h.tr("autodoc.text.progress.the_provider_is_not_answering")
 	}
 	h.set("App.semanticMark", "●")
 	h.set("App.semanticDot", dot)
@@ -288,39 +304,51 @@ func bar(done, total int64) string {
 // progressText is the right slot's work: indexing as done of done+pending, then embedding (or a
 // switch's fill) as the texts covered of all of them, the spinner turning while the model works.
 // Each names the workspace it is for; while the daemon's one embedding queue serves another
-// workspace, the text names that one, the workspace being processed.
-func progressText(p progress) string {
+// workspace, the text names that one, the workspace being processed. It is in English: the toast's
+// is progressTextIn's, in the UI's language.
+func progressText(p progress) string { return progressTextIn(inEnglish{}, p) }
+
+func progressTextIn(t wording, p progress) string {
 	var parts []string
-	ws := ""
-	if p.ws != "" {
-		ws = " " + p.ws
-	}
 	if p.pending > 0 {
-		parts = append(parts, "indexing"+ws+" "+bar(p.docs, p.docs+p.pending))
+		done := bar(p.docs, p.docs+p.pending)
+		if p.ws != "" {
+			parts = append(parts, t.Trf("autodoc.notice.progress.indexing_workspace", p.ws, done))
+		} else {
+			parts = append(parts, t.Trf("autodoc.notice.progress.indexing", done))
+		}
 	}
 	e := p.emb
 	if e.queueState == "paused" && (e.pending > 0 || e.working() > 0) {
-		parts = append(parts, "embedding paused by workspace setting")
+		parts = append(parts, t.Tr("autodoc.notice.progress.embedding_paused_by_workspace_setting"))
 		return strings.Join(parts, " · ")
 	}
 	if left := e.working(); left > 0 {
 		if e.queueState == "waiting" && e.waitingFor != "" {
-			waits := "embedding waiting for " + e.waitingFor
+			waits := t.Trf("autodoc.notice.progress.embedding_waiting_for", e.waitingFor)
 			if p.ws != "" {
-				waits = "embedding " + e.waitingFor + " · " + p.ws + " waits"
+				waits = t.Trf("autodoc.notice.progress.embedding_waits", e.waitingFor, p.ws)
 			}
 			parts = append(parts, waits)
 			return strings.Join(parts, " · ")
-		}
-		what := "embedding" + ws
-		if e.target != "" {
-			what = "switching" + ws + " to " + embed.ModelName(e.target)
 		}
 		mark := spinFrames[p.spin%len(spinFrames)]
 		if e.failing {
 			mark = "!" // waiting on the provider, not working
 		}
-		parts = append(parts, what+" "+mark+" "+bar(e.texts-left, e.texts))
+		done := bar(e.texts-left, e.texts)
+		var what string
+		switch {
+		case e.target != "" && p.ws != "":
+			what = t.Trf("autodoc.notice.progress.switching_workspace_to", p.ws, embed.ModelName(e.target), mark, done)
+		case e.target != "":
+			what = t.Trf("autodoc.notice.progress.switching_to", embed.ModelName(e.target), mark, done)
+		case p.ws != "":
+			what = t.Trf("autodoc.notice.progress.embedding_workspace", p.ws, mark, done)
+		default:
+			what = t.Trf("autodoc.notice.progress.embedding", mark, done)
+		}
+		parts = append(parts, what)
 	}
 	return strings.Join(parts, " · ")
 }
@@ -329,7 +357,7 @@ func progressText(p progress) string {
 // the work does (showProgress).
 func (h *Host) publishStatus() {
 	if h.prog.busy {
-		if p := progressText(h.prog); p != "" {
+		if p := progressTextIn(core{h}, h.prog); p != "" {
 			h.notifyOngoing(toastProgress, p)
 		}
 	}

@@ -44,6 +44,7 @@ const (
 // luaShell is one Lua shell: a widget.TerminalProcess in this process.
 type luaShell struct {
 	h       *Host
+	banner  string        // its first line, in the UI's language as it starts: run's to put
 	keys    chan []byte   // Write → run, unbuffered: a Write returns once run took its bytes
 	out     *shellOutput  // run → the terminal; Read waits on it
 	inbox   *shellInbox   // the loop → run: prints and results, in the order the loop made them
@@ -120,7 +121,8 @@ type loopItem struct {
 
 func newLuaShell(h *Host, post func(func())) *luaShell {
 	return &luaShell{h: h, post: post, keys: make(chan []byte), out: newShellOutput(), inbox: newShellInbox(),
-		done: make(chan struct{}), runDone: make(chan struct{})}
+		done: make(chan struct{}), runDone: make(chan struct{}),
+		banner: h.tr("autodoc.text.luashell.lua_5_1_autodoc_s_engine_an_expression_shows_its")}
 }
 
 // startLuaShell is a Lua shell tab's TerminalConfig.Start: a new shell each start (a tab started
@@ -184,7 +186,7 @@ func (s *luaShell) run() {
 		return // closed before it began
 	}
 	s.put("\x1b[?2004h") // bracketed paste: a pasted chunk arrives whole
-	s.put("Lua 5.1, AutoDoc's engine: an expression shows its value; ed is the page; Ctrl+D ends.\r\n")
+	s.put(s.banner + "\r\n")
 	s.prompt()
 	for {
 		select {
@@ -414,7 +416,7 @@ func (h *Host) evalShell(s *luaShell, req evalRequest) {
 	}
 	eng := h.scripts
 	if eng == nil {
-		s.inbox.push(loopItem{result: &evalResult{seq: req.seq, kind: resultProblem, lines: []string{"the scripts have not started"}}})
+		s.inbox.push(loopItem{result: &evalResult{seq: req.seq, kind: resultProblem, lines: []string{h.tr("autodoc.text.luashell.the_scripts_have_not_started")}}})
 		return
 	}
 	if s.eng != eng {
@@ -434,7 +436,7 @@ func (h *Host) evalShell(s *luaShell, req evalRequest) {
 // rebind makes s's environment on eng; a shell that had one says the scripts were reloaded.
 func (s *luaShell) rebind(eng *script.Engine) {
 	if s.sh != nil {
-		s.inbox.push(loopItem{text: "the scripts were reloaded: a fresh environment"})
+		s.inbox.push(loopItem{text: s.h.tr("autodoc.text.luashell.the_scripts_were_reloaded_a_fresh_environment")})
 	}
 	s.eng = eng
 	s.sh = eng.NewShell(func(text string) { s.inbox.push(loopItem{text: text}) })

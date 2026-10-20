@@ -134,6 +134,20 @@ func englishText(id string) string {
 	return id
 }
 
+// wording is a catalog's text for a function that composes it: core{h} (or a feature's Core) in the
+// UI's language, or inEnglish.
+type wording interface {
+	Tr(id string) string
+	Trf(id string, args ...any) string
+}
+
+// inEnglish is wording in the English catalog's words, filled as trf fills: for text no screen
+// shows (a test's, a script's, an agent's task).
+type inEnglish struct{}
+
+func (inEnglish) Tr(id string) string               { return englishText(id) }
+func (inEnglish) Trf(id string, args ...any) string { return fill(englishText(id), args...) }
+
 // trOr is id's text in the language now, when the English catalog holds id as english: AutoDoc's own
 // text. Anything else is shown as written: a plugin's or a script's text, which no catalog holds, or
 // AutoDoc's text changed since its catalog was generated (keys_test.go holds them together).
@@ -182,33 +196,58 @@ func slugOf(s string) string {
 
 // choiceLabels are the choosers' rows in AutoDoc's words, by their App.* source: a ComboBox's rows
 // are text, so they are composed in the UI's language (choiceState), their keys English.
-var choiceLabels = map[string][]string{
-	"App.keymaps":           keymapLabels,
-	"App.edges":             edges,
-	"App.yesNo":             {"yes", "no"},
-	"App.openAsChoices":     openAsLabels,
-	"App.diskReloadChoices": diskReloadLabels,
-	"App.indentMarkModes":   indentMarkLabels,
-	"App.corners":           cornerLabels,
-}
+var choiceLabels = func() map[string][]string {
+	m := map[string][]string{
+		"App.keymaps":           keymapLabels,
+		"App.edges":             edges,
+		"App.yesNo":             {"yes", "no"},
+		"App.openAsChoices":     openAsLabels,
+		"App.diskReloadChoices": diskReloadLabels,
+		"App.indentMarkModes":   indentMarkLabels,
+		"App.corners":           cornerLabels,
+		"App.toastSeconds":      {"1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"},
+		"App.policies":          policyChoices,
+		"App.destinations":      destinationLabels,
+		"App.vectorIndexes":     indexLabels,
+		"App.sourceEngines":     sourceLabels,
+	}
+	return m
+}()
+
+// featureChoiceLabels are the choosers a feature owns (the GlobeMap's and the Mindmap's, in the GUI
+// build), by their App.* source: the feature sets them through choiceModel, and sets them again on a
+// switch (LanguageSink); their rows are catalog text as choiceLabels' are.
+var featureChoiceLabels = relationViewChoices()
 
 // choiceState is the choosers' rows in the UI's language.
 func (h *Host) choiceState() map[string]any {
 	m := make(map[string]any, len(choiceLabels))
-	for src, labels := range choiceLabels {
-		model := tuidecl.NewListModel("key", "label")
-		rows := make([]rowOf, len(labels))
-		for i, l := range labels {
-			rows[i] = rowOf{"key": l, "label": h.trOr("autodoc.choice."+slugOf(l), l)}
-		}
-		model.Reset(rows)
-		m[src] = model
+	for src := range choiceLabels {
+		m[src] = choiceModel(core{h}, src)
 	}
 	return m
 }
 
+// choiceModel is the chooser src's rows (choiceLabels) in w's language, for a feature that sets them
+// again: each key its English, each label its catalog text (autodoc.choice.<slug>).
+func choiceModel(w wording, src string) *tuidecl.ListModel {
+	labels, ok := choiceLabels[src]
+	if !ok {
+		labels = featureChoiceLabels[src]
+	}
+	rows := make([]rowOf, len(labels))
+	for i, l := range labels {
+		rows[i] = rowOf{"key": l, "label": w.Tr("autodoc.choice." + slugOf(l))}
+	}
+	model := tuidecl.NewListModel("key", "label")
+	model.Reset(rows)
+	return model
+}
+
 // languageChanged composes again what AutoDoc composes in Go from catalog text and keeps on
-// screen: the cards, the choosers, help and the command line's help.
+// screen: the cards, the choosers, help, the command line's help, the titles and the status line,
+// and each feature's own (LanguageSink). A dialog composed as it opens speaks the new language when
+// it opens next: the language is chosen in a menu or in Preferences, with no other dialog open.
 func (h *Host) languageChanged() {
 	if h.p == nil {
 		return
@@ -221,6 +260,17 @@ func (h *Host) languageChanged() {
 	}
 	h.commandsChanged()
 	h.cat.syncAll()
+	for name, text := range h.languageState() {
+		h.set(name, text)
+	}
+	if h.file != nil { // the page's title and its badges on the status line
+		h.showTitle()
+		h.setDirty(h.file.dirty)
+	}
+	h.showSemantic()
+	h.syncStages(false) // the Rerank box names its ranker
+	h.showDiagnostics(h.fmDiagnostics)
+	h.reg.languageChanged()
 	if len(tutorialPages) > 0 {
 		h.showTutorialPage() // its title and Next, should it be open
 	}

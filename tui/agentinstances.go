@@ -282,8 +282,11 @@ func (a *agents) instanceExited(instance *agentInstance, code int) {
 		}
 		a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_exited_spc_g_starts_the_default_again", name))
 	case 127, 126:
-		why := map[int]string{127: "was not found", 126: "could not run"}[code]
-		a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_s_command_check_it_in_system_agent_pro", name, why, code))
+		if code == 127 {
+			a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_s_command_was_not_found_check_it_in_sy", name, code))
+		} else {
+			a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_s_command_could_not_run_check_it_in_sy", name, code))
+		}
 	default:
 		a.c.Notify(a.c.Trf("autodoc.notice.agentinstances.the_agent_exited_choose_its_tab_to_inspect_it_or", name, code))
 	}
@@ -363,7 +366,7 @@ func (a *agents) HandTask(to AgentRef, task TaskRef, instruction string, done fu
 		return nil
 	}
 	payload := fmt.Sprintf("Task: %s\nFile: %s\nID: %s\nInstruction: %s", task.Title, task.Path, task.ID, instruction)
-	return a.deliver(to, check, "this task", true, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_task"), true, func(panel TerminalPanel, tab widget.TerminalTabID) error {
 		return panel.SendPaste(tab, payload)
 	}, done)
 }
@@ -381,7 +384,7 @@ func (a *agents) SendText(to AgentRef, text string, done func(error)) error {
 		}
 		return nil
 	}
-	return a.deliver(to, check, "this text", false, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+	return a.deliver(to, check, a.c.Tr("autodoc.text.agentinstances.this_text"), false, func(panel TerminalPanel, tab widget.TerminalTabID) error {
 		return panel.SendPaste(tab, text)
 	}, done)
 }

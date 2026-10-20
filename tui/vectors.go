@@ -34,7 +34,7 @@ func (h *Host) loadVectors() {
 	tk, ws := h.ticket(nil, TicketWorkspace), h.ws
 	type answer struct {
 		rows     []vectorRow
-		refusals string
+		refusals []map[string]any // index.status's refused texts
 		err      error
 	}
 	do(h, func(ctx context.Context) answer {
@@ -53,14 +53,11 @@ func (h *Host) loadVectors() {
 			return answer{err: err}
 		}
 		emb := asMap(asMap(st)["embeddings"])
-		var details []string
+		var refusals []map[string]any
 		for _, item := range asList(emb["refused_texts"]) {
-			r := asMap(item)
-			details = append(details, fmt.Sprintf("%s › %s · %s (%d bytes, %d estimated tokens; retry %s)",
-				str(r, "path"), str(r, "breadcrumb"), str(r, "error"), num(r, "bytes"), num(r, "estimated_tokens"),
-				time.Unix(num(r, "retry_at"), 0).Format("15:04")))
+			refusals = append(refusals, asMap(item))
 		}
-		return answer{rows: rows, refusals: strings.Join(details, "\n")}
+		return answer{rows: rows, refusals: refusals}
 	}, func(a answer) {
 		if !tk.Current() {
 			return
@@ -77,12 +74,17 @@ func (h *Host) loadVectors() {
 				unused += r.size()
 			}
 		}
-		status := fmt.Sprintf("%d models, %s in all", len(a.rows), bytesText(total))
+		status := h.trf("autodoc.text.vectors.models_in_all", len(a.rows), bytesText(total))
 		if unused > 0 {
-			status += fmt.Sprintf(" · %s in models no longer used: Purge… removes one", bytesText(unused))
+			status = h.trf("autodoc.text.vectors.models_in_all_purge_removes_one", len(a.rows), bytesText(total), bytesText(unused))
 		}
 		h.set("App.vectorsStatus", status)
-		h.set("App.vectorsRefusals", a.refusals)
+		details := make([]string, len(a.refusals))
+		for i, r := range a.refusals {
+			details[i] = h.trf("autodoc.text.vectors.bytes_estimated_tokens_retry", str(r, "path"), str(r, "breadcrumb"), str(r, "error"),
+				num(r, "bytes"), num(r, "estimated_tokens"), time.Unix(num(r, "retry_at"), 0).Format("15:04"))
+		}
+		h.set("App.vectorsRefusals", strings.Join(details, "\n"))
 	})
 }
 
@@ -116,9 +118,9 @@ func (h *Host) startPurge(i int) {
 		return
 	}
 	if r.state != "unused" {
-		what := "the active model: choose another model, or remove its provider in Search models"
+		what := h.tr("autodoc.text.vectors.the_active_model_choose_another_model_or_remove")
 		if r.state != "active" {
-			what = "the switch's target: cancel the switch"
+			what = h.tr("autodoc.text.vectors.the_switch_s_target_cancel_the_switch")
 		}
 		h.set("App.vectorsStatus", h.trf("autodoc.text.vectors.is", r.name, what))
 		return
@@ -155,7 +157,7 @@ func (h *Host) cancelIndexing() {
 			return
 		}, func(a answerOf[string]) {
 			if a.err != nil {
-				h.failed("cancel the switch", a.err)
+				h.failed(h.tr("autodoc.notice.vectors.cancel_the_switch"), a.err)
 				return
 			}
 			h.notify(h.trf("autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve", a.v, target))
@@ -167,7 +169,7 @@ func (h *Host) cancelIndexing() {
 			return err
 		}, func(err error) {
 			if err != nil {
-				h.failed("stop embedding", err)
+				h.failed(h.tr("autodoc.notice.vectors.stop_embedding"), err)
 				return
 			}
 			h.notify(h.tr("autodoc.notice.vectors.embedding_stopped_the_vectors_made_kept_use_carr"))

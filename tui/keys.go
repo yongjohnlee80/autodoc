@@ -333,10 +333,21 @@ func (k keyset) shown(key Key) string {
 	id := key.commandID()
 	cmd, ok := k.live.Command(id)
 	if !ok || k.live.SourceOf(id).Kind == keymap.FromDefault {
+		if showWords.MatchString(show) {
+			return k.text(showPrefix, show)
+		}
 		return show
 	}
 	return seqNames(k.live.KeysOf(cmd))
 }
+
+// showWords finds a Show that says words ("n and N", "d in the links"), which help shows in the
+// UI's language, by its catalog id, showPrefix and slugOf(Show); one that only names keys
+// ("Ctrl+h/j/k/l") reads alike in every language.
+var showWords = regexp.MustCompile(`\b[a-z]{2,}\b`)
+
+// showPrefix is a worded Show's catalog id prefix.
+const showPrefix = "autodoc.key.show."
 
 // seqNames names keys as a card lists them, "unbound" for none.
 func seqNames(keys []tuikey.Seq) string {
@@ -818,15 +829,11 @@ func scopeMarkers(s keyScope) (begin, end string) {
 		s.Indent + "// ---- end of the " + label + " keys ----\n"
 }
 
-// cardQML is views/<View>.qml for card c and its keys.
-func cardQML(c Card, keys []Key) string {
-	back := ""
-	if c.Back != "" {
-		back = fmt.Sprintf("    Shortcut { sequence: \"Backspace\"; onActivated: { %s.close(); %s.open() } }\n", c.ID, c.Back)
-	}
+// cardKeyHelp is card c's help line, in English: what its keys do, and how it closes. The card's
+// QML names it by its id (autodoc.card.<id>.keyhelp), one sentence in each language.
+func cardKeyHelp(c Card) string {
 	closes := "q or Esc closes"
 	if c.Toggle != "" {
-		back += fmt.Sprintf("    Shortcut { sequence: %q; onActivated: %s.close() }\n", c.Toggle, c.ID)
 		closes = c.Toggle + ", q or Esc closes"
 	}
 	help := "a key runs its command · " + closes
@@ -835,6 +842,18 @@ func cardQML(c Card, keys []Key) string {
 	}
 	if c.Note != "" {
 		help = c.Note + " · " + help
+	}
+	return help
+}
+
+// cardQML is views/<View>.qml for card c and its keys.
+func cardQML(c Card, keys []Key) string {
+	back := ""
+	if c.Back != "" {
+		back = fmt.Sprintf("    Shortcut { sequence: \"Backspace\"; onActivated: { %s.close(); %s.open() } }\n", c.ID, c.Back)
+	}
+	if c.Toggle != "" {
+		back += fmt.Sprintf("    Shortcut { sequence: %q; onActivated: %s.close() }\n", c.Toggle, c.ID)
 	}
 	return `// ` + c.View + `.qml — a card of keys, as AutoDB's: every command here, by key. GENERATED from
 // tui/keys.go (go test ./tui -run TestKeysAreGenerated -update): edit the catalog there, not this
@@ -848,7 +867,7 @@ Dialog {
     keyScope: ` + strconv.Quote("autodoc."+c.ID) + `
     title: qsTrId(` + strconv.Quote("autodoc.card."+c.ID+".title") + `)
     dim: false
-    helpText: ` + strconv.Quote(help) + `
+    helpText: qsTrId(` + strconv.Quote("autodoc.card."+c.ID+".keyhelp") + `)
     Text { text: ` + textSource(c.ID) + `; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
 ` + back + shortcuts(keys, "    ", c.ID) + "}\n"
 }

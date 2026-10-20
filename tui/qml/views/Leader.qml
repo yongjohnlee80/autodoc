@@ -10,7 +10,7 @@ Dialog {
     keyScope: "autodoc.leader"
     title: qsTrId("autodoc.card.leader.title")
     dim: false
-    helpText: "a key runs its command · q or Esc closes"
+    helpText: qsTrId("autodoc.card.leader.keyhelp")
     Text { text: App.leaderText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: keyId("autodoc.leader.openSearch"); onActivated: { leader.close(); App.openSearch() } }
     Shortcut { sequence: keyId("autodoc.leader.openPicker"); onActivated: { leader.close(); App.openPicker() } }

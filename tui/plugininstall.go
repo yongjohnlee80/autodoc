@@ -29,7 +29,8 @@ import (
 // folder; a No throws the clone away. An update asks the same question of the commit it would move
 // to.
 
-// pluginRisk is the warning every add and update carries.
+// pluginRisk is the warning every add and update carries, in English (the card's is in the UI's
+// language).
 const pluginRisk = "A plugin is a program that runs as you, with your files. AutoDoc does " +
 	"not check what a plugin does: add only plugins you trust. Adding one is at your own risk."
 
@@ -56,6 +57,7 @@ func (pl *plugins) startAddPlugin() {
 		return
 	}
 	setField(pl.c, "App.pluginUrl", "")
+	pl.c.Set("App.pluginRisk", pl.c.Tr("autodoc.text.plugininstall.a_plugin_is_a_program_that_runs_as_you_with_your"))
 	pl.c.Open("pluginAdd")
 }
 
@@ -157,13 +159,18 @@ func stagePlugin(ctx context.Context, dir, url string, installed *pluginEntry, o
 // askPlugin is a plugin candidate's card: PluginConfirm, about c, which is the card's alone.
 func (pl *plugins) askPlugin(c *candidate) {
 	pl.pendingPlugin = c
+	pl.showPluginQuestion(c)
+	pl.c.Open("pluginConfirm")
+}
+
+// showPluginQuestion sets PluginConfirm's title and text, about c, in the UI's language.
+func (pl *plugins) showPluginQuestion(c *candidate) {
 	title := "autodoc.text.plugininstall.add_the_plugin" // a sentence each, as every language says it
 	if c.update {
 		title = "autodoc.text.plugininstall.update_the_plugin"
 	}
 	pl.c.Set("App.pluginConfirmTitle", pl.c.Trf(title, pluginTitle(c)))
-	pl.c.Set("App.pluginQuestion", pluginQuestion(c, pluginTitle(c)))
-	pl.c.Open("pluginConfirm")
+	pl.c.Set("App.pluginQuestion", pluginQuestionIn(pl.c.Trf, c, pluginTitle(c)))
 }
 
 // hidePlugin takes c's PluginConfirm down when another candidate's card replaces it: closed, it
@@ -177,24 +184,32 @@ func (pl *plugins) hidePlugin(c *candidate) {
 
 func pluginTitle(c *candidate) string { return cmp.Or(c.m.Title, c.m.Name) }
 
-// pluginQuestion is PluginConfirm's text: what the plugin is, where it came from, what its build
-// runs and what it starts, its audit and the risk, what its manifest declares it does in AutoDoc,
-// and what Audit… does.
+// pluginQuestion is PluginConfirm's text, in English: what the plugin is, where it came from, what
+// its build runs and what it starts, its audit and the risk, what its manifest declares it does in
+// AutoDoc, and what Audit… does.
 func pluginQuestion(c *candidate, title string) string {
-	build := "nothing: it has no build step"
+	return pluginQuestionIn(inEnglish{}.Trf, c, title)
+}
+
+// pluginQuestionIn is pluginQuestion in the language trf (a Core's Trf, or inEnglish{}.Trf) says it
+// in: a line each, its label and its value.
+func pluginQuestionIn(trf func(string, ...any) string, c *candidate, title string) string {
+	build := trf("autodoc.text.plugininstall.nothing_it_has_no_build_step")
 	if len(c.m.Install.Build) > 0 {
 		build = strings.Join(c.m.Install.Build, " ")
 	}
 	audit := ""
-	if line := auditLine(c.entry, c.commit); line != "" {
+	if line := auditLineIn(trf, c.entry, c.commit); line != "" {
 		audit = line + "\n\n" // above the risk, which stays word for word
 	}
-	q := fmt.Sprintf("%s (%s)\nfrom  %s\nat    %s\n\nIts build runs:  %s\nIt then starts:  %s\n\n%s%s",
-		title, c.m.Name, c.repo, regindex.Short(c.commit), build, strings.Join(c.m.Command, " "), audit, pluginRisk)
+	q := fmt.Sprintf("%s (%s)\n%s\n%s\n\n%s\n%s\n\n%s%s",
+		title, c.m.Name, trf("autodoc.text.plugininstall.from", c.repo), trf("autodoc.text.plugininstall.at", regindex.Short(c.commit)),
+		trf("autodoc.text.plugininstall.its_build_runs", build), trf("autodoc.text.plugininstall.it_then_starts", strings.Join(c.m.Command, " ")),
+		audit, trf("autodoc.text.plugininstall.a_plugin_is_a_program_that_runs_as_you_with_your"))
 	if d := pluginDeclares(&c.m); d != "" {
-		q += "\n\nDeclares:  " + d
+		q += "\n\n" + trf("autodoc.text.plugininstall.declares", d)
 	}
-	return q + "\n\n" + auditNote
+	return q + "\n\n" + trf("autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc")
 }
 
 // pluginDeclares is what a manifest's protocol-2 and -3 keys say the plugin does, for the install
@@ -219,9 +234,9 @@ func (pl *plugins) pluginDeclined() {
 	if c == nil {
 		return
 	}
-	outcome := c.name + " not added"
+	outcome := pl.c.Trf("autodoc.notice.plugininstall.not_added_declined", c.name)
 	if c.update {
-		outcome = c.name + " not updated"
+		outcome = pl.c.Trf("autodoc.notice.plugininstall.not_updated_declined", c.name)
 	}
 	if pl.cands.cancel(c, outcome) {
 		pl.c.Notify(outcome)
@@ -269,7 +284,7 @@ func (pl *plugins) installCandidate(c *candidate) {
 // failed may have left the plugin stopped, or in .previous.
 func (pl *plugins) installed(c *candidate, err error) {
 	if err != nil {
-		msg := c.name + " not installed: " + err.Error()
+		msg := pl.c.Trf("autodoc.notice.plugininstall.not_installed", c.name, err.Error())
 		pl.c.NotifyDone(toastPlugin, msg)
 		pl.cands.end(c, msg)
 		if c.update {
@@ -283,9 +298,9 @@ func (pl *plugins) installed(c *candidate, err error) {
 	if pl.scriptsChanged != nil {
 		pl.scriptsChanged()
 	}
-	msg := fmt.Sprintf("added %s at %s: Plugins › %s", c.name, regindex.Short(c.commit), c.m.Title)
+	msg := pl.c.Trf("autodoc.notice.plugininstall.added_at_plugins", c.name, regindex.Short(c.commit), c.m.Title)
 	if c.update {
-		msg = fmt.Sprintf("updated %s at %s: Plugins › %s; its previous folder is kept in plugins/%s/%s until the next update",
+		msg = pl.c.Trf("autodoc.notice.plugininstall.updated_at_plugins_its_previous_folder_is_kept_i",
 			c.name, regindex.Short(c.commit), c.m.Title, previousDir, c.name)
 	}
 	pl.c.NotifyDone(toastPlugin, msg)
@@ -385,16 +400,14 @@ func (pl *plugins) managePlugins() {
 		pl.c.Notify(pl.c.Tr("autodoc.notice.plugininstall.no_plugins_folder_autodoc_was_started_without_on"))
 		return
 	}
-	pl.c.Set("App.pluginsHelp", pluginsHelp)
+	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", ""))
 	pl.c.Open("pluginManager")
 	pl.loadManaged()
 }
 
-const pluginsHelp = "Add… from a git URL · Update… or Remove… the one under the cursor · the folder: "
-
 // loadManaged lists the installed plugins in the manager, each with its source, read off the loop.
 func (pl *plugins) loadManaged() {
-	pl.c.Set("App.pluginsHelp", pluginsHelp+pl.pluginOpt.Dir)
+	pl.c.Set("App.pluginsHelp", pl.c.Trf("autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde", pl.pluginOpt.Dir))
 	entries := discoverPlugins(pl.pluginOpt.Dir)
 	coreDo(pl.c, func(ctx context.Context) answerOf[[]managedPlugin] {
 		out := make([]managedPlugin, len(entries))
@@ -409,7 +422,7 @@ func (pl *plugins) loadManaged() {
 		return answered(out, nil)
 	}, func(a answerOf[[]managedPlugin]) {
 		if a.err != nil {
-			pl.c.Failed("the installed plugins", a.err) // it panicked: an empty list, said
+			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.the_installed_plugins"), a.err) // it panicked: an empty list, said
 		}
 		pl.managedPlugins.Reset(a.v)
 	})
@@ -419,7 +432,7 @@ func (pl *plugins) loadManaged() {
 func (pl *plugins) managedPluginRowOf(_ int, m managedPlugin) rowOf {
 	source := m.source
 	if source == "" {
-		source = "local: put in the folder by hand"
+		source = pl.c.Tr("autodoc.text.plugininstall.local_put_in_the_folder_by_hand")
 	}
 	name := m.e.label()
 	if len(m.e.shadowed) > 0 {
@@ -578,7 +591,7 @@ func (pl *plugins) removePluginConfirmed(dir string) {
 		return nil
 	}, func(err error) {
 		if err != nil {
-			pl.c.Failed("not removed", err)
+			pl.c.Failed(pl.c.Tr("autodoc.notice.plugininstall.not_removed"), err)
 			return
 		}
 		pl.c.Notify(pl.c.Trf("autodoc.notice.plugininstall.removed", name))

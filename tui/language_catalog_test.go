@@ -12,7 +12,10 @@ import (
 
 // language_catalog_test.go: the English catalog's text that AutoDoc keeps in Go tables — the keys
 // and cards (keys.go), the commands (the catalog) and help (help.go) — generated from them, as the
-// cards' QML is (TestKeysAreGenerated): go test ./tui -run TestTheEnglishCatalogHoldsTheGoTables -update
+// cards' QML is (TestKeysAreGenerated): go test -tags gui ./tui -run TestTheEnglishCatalogHoldsTheGoTables -update.
+// The GUI build's tables are the whole of them (a terminal's relation views declare nothing), so
+// only it owns the catalog: it writes it and finds an id no table says; the terminal build checks
+// that the catalog holds its own tables.
 
 const enCatalog = "qml/i18n/autodoc_en.xml"
 
@@ -22,7 +25,7 @@ var generatedPrefixes = []string{"autodoc.key.", "autodoc.card.", "autodoc.cmd."
 // goTableText is every id the Go tables say, with its English.
 func goTableText(t *testing.T) map[string]string {
 	t.Helper()
-	h := newHost(NewSession("unused", nil), Options{})
+	h := newHost(NewSession("unused", nil), Options{GUI: true}) // a window's: the GUI build adds its views (relationViewFeatures)
 	fs := h.features()
 	r, err := newRegistry(fs...)
 	if err != nil {
@@ -41,10 +44,14 @@ func goTableText(t *testing.T) map[string]string {
 	}
 	for _, key := range k.keys {
 		put("autodoc.key."+slugOf(key.Does), key.Does)
+		if showWords.MatchString(key.Show) {
+			put(showPrefix+slugOf(key.Show), key.Show)
+		}
 	}
 	for _, c := range k.cards {
 		put("autodoc.card."+c.ID+".title", c.Title)
 		put("autodoc.card."+c.ID+".help", c.Help)
+		put("autodoc.card."+c.ID+".keyhelp", cardKeyHelp(c))
 		for _, g := range append(slices.Concat(c.Groups...), groupMore) {
 			put("autodoc.card.group."+slugOf(g), g)
 		}
@@ -56,7 +63,7 @@ func goTableText(t *testing.T) map[string]string {
 		put("autodoc.cmd."+e.ID, e.Title)
 		put("autodoc.cmd."+e.ID+".help", e.Help)
 	}
-	for _, labels := range choiceLabels {
+	for _, labels := range slices.Concat(slices.Collect(maps.Values(choiceLabels)), slices.Collect(maps.Values(featureChoiceLabels))) {
 		for _, l := range labels {
 			put("autodoc.choice."+slugOf(l), l)
 		}
@@ -115,6 +122,9 @@ func TestTheEnglishCatalogHoldsTheGoTables(t *testing.T) {
 	want := goTableText(t)
 	have := readEnglish(t)
 	if *updateKeys {
+		if !wholeTables {
+			t.Fatal("generate the catalog in the GUI build, whose tables are all of them: go test -tags gui ./tui -run " + t.Name() + " -update")
+		}
 		maps.DeleteFunc(have, func(id, _ string) bool { return generated(id) })
 		maps.Copy(have, want)
 		writeEnglish(t, have)
@@ -122,12 +132,15 @@ func TestTheEnglishCatalogHoldsTheGoTables(t *testing.T) {
 	}
 	for id, english := range want {
 		if got, ok := have[id]; !ok || got != english {
-			t.Errorf("%s: the catalog says %q, the tables %q (go test ./tui -run %s -update)", id, got, english, t.Name())
+			t.Errorf("%s: the catalog says %q, the tables %q (go test -tags gui ./tui -run %s -update)", id, got, english, t.Name())
 		}
+	}
+	if !wholeTables {
+		return
 	}
 	for id := range have {
 		if generated(id) && want[id] == "" {
-			t.Errorf("%s is in the catalog, and no table says it (go test ./tui -run %s -update)", id, t.Name())
+			t.Errorf("%s is in the catalog, and no table says it (go test -tags gui ./tui -run %s -update)", id, t.Name())
 		}
 	}
 }

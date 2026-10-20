@@ -439,25 +439,25 @@ func (pl *plugins) resultsClosed() {
 // and the sort bar's note.
 func (pl *plugins) showResultsTitle() {
 	res := pl.results
-	title := "results"
+	title := pl.c.Tr("autodoc.text.plugintable.results")
 	if res.title != "" {
-		title += ": " + res.title
+		title = pl.c.Trf("autodoc.text.plugintable.results_named", res.title)
 	}
 	n := len(res.model.rows)
 	if n > 0 || res.id != "" {
 		switch {
 		case res.capped || res.more && res.full():
-			title += fmt.Sprintf(" · the first %d rows shown; the result has more: change the query to change what is returned", n)
+			title += " · " + pl.c.Trf("autodoc.text.plugintable.the_first_rows_shown_the_result_has_more_change", n)
 		case res.more:
-			title += fmt.Sprintf(" · %d rows, more to load", n)
+			title += " · " + pl.c.Trf("autodoc.text.plugintable.rows_more_to_load", n)
 		case res.cut:
-			title += fmt.Sprintf(" · %d rows, ended early", n)
+			title += " · " + pl.c.Trf("autodoc.text.plugintable.rows_ended_early", n)
 		default:
-			title += fmt.Sprintf(" · %d rows", n)
+			title += " · " + pl.c.Trf("autodoc.text.plugintable.rows", n)
 		}
 	}
 	if x := pl.export; x != nil {
-		title += fmt.Sprintf(" · exporting: %d rows", x.written)
+		title += " · " + pl.c.Trf("autodoc.text.plugintable.exporting_rows", x.written)
 	}
 	pl.c.Set("App.resultsTitle", title)
 	pl.resultsNote = pl.viewNote()
@@ -471,10 +471,10 @@ func (pl *plugins) viewNote() string {
 	res := pl.results
 	var parts []string
 	if shown, loaded, on := pl.filtered(); on {
-		parts = append(parts, fmt.Sprintf("%d of %d loaded rows", shown, loaded))
+		parts = append(parts, pl.c.Trf("autodoc.text.plugintable.of_loaded_rows", shown, loaded))
 	}
 	if res.partial() && len(res.model.rows) > 0 {
-		parts = append(parts, "the result has more: change the query to change what is returned")
+		parts = append(parts, pl.c.Tr("autodoc.text.plugintable.the_result_has_more_change_the_query_to_change_w"))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -788,15 +788,16 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 	if onField {
 		field = []string{strconv.Itoa(at.Col + 1)}
 	}
-	name := ""
-	if f := core.Fields(); onField && at.Col < len(f) {
-		name = " by " + f[at.Col].Title
+	asc, desc := "Sort ascending", "Sort descending"
+	if f := core.Fields(); onField && at.Col < len(f) { // a sentence each, the field's name in it
+		asc = pl.c.Trf("autodoc.text.plugintable.sort_ascending_by", f[at.Col].Title)
+		desc = pl.c.Trf("autodoc.text.plugintable.sort_descending_by", f[at.Col].Title)
 	}
 	row := func(id, label, entry string, args []string, enabled bool) widget.MenuItemModel {
 		m := widget.NewCommand(widget.ItemID("results.menu."+id), label, widget.CoreMenuAction{ID: tuicore.ActionID("results.menu." + id),
 			Run: func(*widget.EditorCore) { pl.runResultsEntry(entry, args) }})
 		m.Enabled = enabled
-		return m
+		return withLabelMessage(m, label) // a row with a field's name is composed in the UI's language
 	}
 	return []widget.MenuItemModel{
 		row("copy", "Copy", "results.copy", nil, have),
@@ -806,8 +807,8 @@ func (pl *plugins) resultsMenuRows() []widget.MenuItemModel {
 		widget.NewSeparator("results.menu.selecting"),
 		row("select_all", "Select all", "results.select_all", nil, have),
 		widget.NewSeparator("results.menu.sorting"),
-		row("sort_asc", "Sort ascending"+name, "results.sort_asc", field, onField),
-		row("sort_desc", "Sort descending"+name, "results.sort_desc", field, onField),
+		row("sort_asc", asc, "results.sort_asc", field, onField),
+		row("sort_desc", desc, "results.sort_desc", field, onField),
 		row("unsort", "Unsort", "results.unsort", nil, pl.resultsOrder != ""),
 		widget.NewSeparator("results.menu.leaving"),
 		row("export", "Export loaded rows…", "results.export", nil, have),
@@ -852,7 +853,7 @@ func (pl *plugins) copyResults(format copyFormat) {
 		return
 	}
 	if err != nil {
-		pl.c.Failed("copy the results", err)
+		pl.c.Failed(pl.c.Tr("autodoc.notice.plugintable.copy_the_results"), err)
 		return
 	}
 	pl.c.SetEditorRegister(text)
@@ -1016,7 +1017,7 @@ func (pl *plugins) insertResults() {
 	}
 	rows := core.Rows(0, core.Len())
 	if err := pl.c.InsertBlock(markdownTable(fields, rows)); err != nil {
-		pl.c.Failed("insert the results", err)
+		pl.c.Failed(pl.c.Tr("autodoc.notice.plugintable.insert_the_results"), err)
 		return
 	}
 	if pl.results.partial() {

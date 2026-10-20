@@ -164,7 +164,8 @@ func stagePackage(ctx context.Context, dir, url string, own *allocs) (*candidate
 		entry: cachedEntry(regindex.KindLua, url), pkg: m}, nil
 }
 
-// packageRisk is the sentence every package card carries.
+// packageRisk is the sentence every package card carries, in English (the card's is in the UI's
+// language).
 const packageRisk = "A package's Lua runs in AutoDoc, held to what you grant it."
 
 // askPackage is a Lua package candidate's card: its name, version, source and commit, what it
@@ -172,20 +173,23 @@ const packageRisk = "A package's Lua runs in AutoDoc, held to what you grant it.
 // the lua folder and reloads the scripts; Cancel, or another question in its place, ends it.
 func (h *Host) askPackage(c *candidate) {
 	m := c.pkg
-	requires := "nothing it must ask for"
+	requires := h.tr("autodoc.question.luapackages.nothing_it_must_ask_for")
 	if len(m.Requires) > 0 {
-		requires = strings.Join(slices.Sorted(slices.Values(m.Requires)), ", ") + " (asked again, each, once it loads)"
+		requires = h.trf("autodoc.question.luapackages.asked_again_each_once_it_loads", strings.Join(slices.Sorted(slices.Values(m.Requires)), ", "))
 	}
 	audit := ""
-	if line := auditLine(c.entry, c.commit); line != "" {
+	if line := auditLineIn(h.trf, c.entry, c.commit); line != "" {
 		audit = line + "\n\n"
 	}
-	text := fmt.Sprintf("%s %s: %s\nfrom %s at %s\nrequires %s\n\n%s%s\n\n%s",
-		m.Name, m.Version, m.Description, c.repo, regindex.Short(c.commit), requires, audit, packageRisk, auditNote)
+	text := fmt.Sprintf("%s %s: %s\n%s\n%s\n\n%s%s\n\n%s",
+		m.Name, m.Version, m.Description, h.trf("autodoc.question.luapackages.from_at", c.repo, regindex.Short(c.commit)),
+		h.trf("autodoc.question.luapackages.requires", requires), audit,
+		h.tr("autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you"),
+		h.tr("autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc"))
 	h.ask(Question{
 		Title: h.trf("autodoc.question.luapackages.install_the_lua_package", m.Name),
 		Text:  text,
-		Yes:   h.tr("autodoc.question.luapackages.install"), No: h.tr("autodoc.question.luapackages.cancel"), Other: "&Audit…",
+		Yes:   h.tr("autodoc.question.luapackages.install"), No: h.tr("autodoc.question.luapackages.cancel"), Other: h.tr("autodoc.question.luapackages.audit"),
 		OnYes: func() {
 			if h.cands.claim(c) {
 				h.installPackageCandidate(c)
@@ -210,12 +214,12 @@ func (h *Host) installPackageCandidate(c *candidate) {
 		return os.Rename(c.stage, to)
 	}, func(err error) {
 		if err != nil {
-			msg := "lua-install: not installed: " + err.Error()
+			msg := h.trf("autodoc.notice.luapackages.lua_install_not_installed", err.Error())
 			h.notify(msg)
 			h.cands.end(c, msg)
 			return
 		}
-		msg := "installed the Lua package " + c.name
+		msg := h.trf("autodoc.notice.luapackages.installed_the_lua_package", c.name)
 		h.notify(msg)
 		h.cands.end(c, msg)
 		if err := h.reloadScripts(); err != nil {

@@ -85,7 +85,7 @@ func (h *Host) startEditorSocket(dir string) {
 		err = os.Chmod(path, 0o600)
 	}
 	if err != nil {
-		h.p.Post(func() { h.failed("the editor socket for agents", err) })
+		h.p.Post(func() { h.failed(h.tr("autodoc.notice.editorsocket.the_editor_socket_for_agents"), err) })
 		return
 	}
 	srv := golibrpc.New(msgpackrpc.New(nil), golibrpc.WithListener(ln))

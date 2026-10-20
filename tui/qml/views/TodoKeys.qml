@@ -10,7 +10,7 @@ Dialog {
     keyScope: "autodoc.todoKeys"
     title: qsTrId("autodoc.card.todoKeys.title")
     dim: false
-    helpText: "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"
+    helpText: qsTrId("autodoc.card.todoKeys.keyhelp")
     Text { text: App.todoKeysText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: "?"; onActivated: todoKeys.close() }
     Shortcut { sequence: keyId("autodoc.todoKeys.todoEnter"); onActivated: { todoKeys.close(); App.todoEnter() } }

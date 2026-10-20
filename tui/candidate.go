@@ -53,7 +53,8 @@ func (c *candidate) toastID() string {
 	return "audit:" + c.key() + ":" + c.commit[:min(12, len(c.commit))]
 }
 
-// auditNote is the card's sentence about Audit…, above its buttons (rationale §R3).
+// auditNote is the card's sentence about Audit…, above its buttons (rationale §R3), in English: the
+// audit task file's, as the agent reads it. A card shows it in the UI's language.
 const auditNote = "Audit asks your agent to read this code. AutoDoc can't stop the agent from running " +
 	"code or changing files: pick an agent you trust, and watch its tab."
 
@@ -181,7 +182,7 @@ func (cs *candidates) begin(c *candidate, card, hide func(*candidate)) error {
 // (askPlugin sets PluginConfirm anew, askPackage's question replaces the one asked).
 func (cs *candidates) show(c *candidate) {
 	if o := cs.onCard; o != nil && o != c && o.state == opConfirming {
-		cs.suspend(o, "the "+kindNoun(o.kind)+" "+o.name+" waits: click to install or cancel")
+		cs.suspend(o, cs.waits(o))
 		if o.kind != c.kind && o.hide != nil {
 			o.hide(o)
 		}
@@ -189,6 +190,17 @@ func (cs *candidates) show(c *candidate) {
 	cs.onCard = c
 	c.state = opConfirming
 	c.card(c)
+}
+
+// waits is the toast of c, suspended while another card is up: a sentence for each kind.
+func (cs *candidates) waits(c *candidate) string {
+	switch c.kind {
+	case regindex.KindLua:
+		return cs.c.Trf("autodoc.notice.candidate.the_lua_package_waits_click_to_install_or_cancel", c.name)
+	case regindex.KindKBType:
+		return cs.c.Trf("autodoc.notice.candidate.the_kb_type_waits_click_to_install_or_cancel", c.name)
+	}
+	return cs.c.Trf("autodoc.notice.candidate.the_plugin_waits_click_to_install_or_cancel", c.name)
 }
 
 // suspend takes c's card down and leaves its toast, which reopens the card.
@@ -343,14 +355,14 @@ func (cs *candidates) auditWith(a AgentEntry) {
 // handOver gives the audit task to a. done(nil) means typed and submitted, never that the audit
 // ran: the toast says it was handed over, and no more. A refusal ends the toast and reopens the card.
 func (cs *candidates) handOver(c *candidate, a AgentEntry, task string) {
-	cs.suspend(c, "audit of "+c.name+" handed to "+a.Name+": click to install or cancel")
+	cs.suspend(c, cs.c.Trf("autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel", c.name, a.Name))
 	failed := func(err error) {
 		if c.state != opSuspended {
 			return
 		}
 		why := err.Error()
 		if errors.Is(err, ErrAgentCancelled) {
-			why = "you didn't start " + a.Name
+			why = cs.c.Trf("autodoc.notice.candidate.you_didn_t_start", a.Name)
 		}
 		c.toasted = false
 		cs.c.NotifyDone(c.toastID(), cs.c.Trf("autodoc.notice.candidate.audit_of_not_delivered", c.name, why))

@@ -82,15 +82,19 @@ func (h *Host) arrangeCancel() {
 	h.showFloat(a.panel, a.begin)
 }
 
-// panelTitle is how a panel is named to the user.
-func (h *Host) panelTitle(panel string) string {
+// panelTitle is how a panel is named to the user, in the UI's language.
+func (h *Host) panelTitle(panel string) string { return h.panelTitleIn(h.trf, panel) }
+
+// panelTitleIn is panelTitle in trf's language: h.trf, or inEnglish{}.Trf for a name that is no screen's
+// (a script's autodoc.widgets()).
+func (h *Host) panelTitleIn(trf func(string, ...any) string, panel string) string {
 	if panel == "htmlPane" {
-		return "the preview"
+		return trf("autodoc.text.arrange.the_preview")
 	}
 	for _, c := range h.plugins.cardOrder {
 		if cardPanelID(c.name) == panel {
 			return c.entry.label() // a card plugin's panel: its title
 		}
 	}
-	return "the " + panel
+	return trf("autodoc.text.arrange.the", panel)
 }

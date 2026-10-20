@@ -40,7 +40,7 @@ var ownScripts embed.FS
 // load is said once the program runs; the others still load.
 func (h *Host) loadScripts() {
 	for _, err := range h.startScripts() {
-		h.p.Post(func() { h.failed("a Lua command did not load", err) })
+		h.p.Post(func() { h.failed(h.tr("autodoc.notice.scripts.a_lua_command_did_not_load"), err) })
 	}
 }
 
@@ -103,7 +103,7 @@ func (h *Host) reloadScripts() error {
 	h.luaChangeGen++ // a change timer set for the old engine's handlers emits nothing
 	if len(errs) > 0 {
 		for _, err := range errs {
-			h.failed("a Lua command did not load", err)
+			h.failed(h.tr("autodoc.notice.scripts.a_lua_command_did_not_load"), err)
 		}
 		return fmt.Errorf("lua-reload: %d of the scripts did not load", len(errs))
 	}

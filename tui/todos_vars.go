@@ -18,16 +18,16 @@ import (
 // varsTab is the tab after the statuses' tabs.
 var varsTab = len(todoBuckets)
 
-// varRowOf is a variable as the tab's row.
-func varRowOf(_ int, v map[string]any) rowOf {
+// varRowOf is a variable as the tab's row, in c's language.
+func varRowOf(c Core, v map[string]any) rowOf {
 	value := str(v, "value")
 	switch {
 	case v["conflict"] == true && str(v, "source") == "conflict":
-		value = "(conflict: set it in the KB's file, or machine-only)"
+		value = c.Tr("autodoc.text.todos_vars.conflict_set_it_in_the_kb_s_file_or_machine_only")
 	case value == "" && v["machine"] == true:
-		value = "(set per machine: none here)"
+		value = c.Tr("autodoc.text.todos_vars.set_per_machine_none_here")
 	case value == "":
-		value = "(unset)"
+		value = c.Tr("autodoc.text.todos_vars.unset")
 	}
 	from := str(v, "source")
 	if v["machine"] == true && from == "" {
@@ -36,9 +36,9 @@ func varRowOf(_ int, v map[string]any) rowOf {
 	return rowOf{"key": str(v, "name"), "name": "$" + str(v, "name"), "value": value, "from": from}
 }
 
-// newVarRows is the tab's model.
-func newVarRows() *rows[map[string]any] {
-	return newRows(tuidecl.NewListModel("key", "name", "value", "from"), varRowOf)
+// newVarRows is the tab's model, its rows in c's language.
+func newVarRows(c Core) *rows[map[string]any] {
+	return newRows(tuidecl.NewListModel("key", "name", "value", "from"), func(_ int, v map[string]any) rowOf { return varRowOf(c, v) })
 }
 
 // readVars reads the store shown's variables into the tab.
@@ -92,27 +92,26 @@ func (t *todos) varMoved(i int) {
 	}
 }
 
-// varDetail is the details of the variable under the cursor.
-func varDetail(v map[string]any) string {
+// varDetail is the details of the variable under the cursor, in c's language.
+func varDetail(c Core, v map[string]any) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## $%s\n\n", str(v, "name"))
 	if val := str(v, "value"); val != "" {
-		fmt.Fprintf(&b, "- value: %s\n- from: %s\n", val, str(v, "source"))
+		b.WriteString(c.Trf("autodoc.text.todos_vars.value_from", val, str(v, "source")) + "\n")
 	} else {
-		b.WriteString("- value: none here\n")
+		b.WriteString(c.Tr("autodoc.text.todos_vars.value_none_here") + "\n")
 	}
 	if d := str(v, "derived"); d != "" {
-		fmt.Fprintf(&b, "- derived from the workspace: %s\n", d)
+		b.WriteString(c.Trf("autodoc.text.todos_vars.derived_from_the_workspace", d) + "\n")
 	}
 	if v["builtin"] == true {
-		b.WriteString("- built in: derived per workspace; a value set here overrides it\n")
+		b.WriteString(c.Tr("autodoc.text.todos_vars.built_in_derived_per_workspace_a_value_set_here") + "\n")
 	}
 	if v["machine"] == true {
-		b.WriteString("- machine-only: its value is set on each machine, never in the KB's file\n")
+		b.WriteString(c.Tr("autodoc.text.todos_vars.machine_only_its_value_is_set_on_each_machine_ne") + "\n")
 	}
 	if v["conflict"] == true {
-		b.WriteString("- in conflict: the workspace's stores set it differently; a value in the KB's file (e), " +
-			"or declaring it machine-only, settles it, and a value for this machine (m) only overrides it here\n")
+		b.WriteString(c.Tr("autodoc.text.todos_vars.in_conflict_the_workspace_s_stores_set_it_differ") + "\n")
 	}
 	return b.String()
 }
@@ -151,12 +150,12 @@ func (t *todos) askVar(scope string) {
 	if v["machine"] == true {
 		scope = "machine"
 	}
-	where := "the KB's file"
+	title := "autodoc.text.todos_vars.kept_in_the_kb_s_file" // a sentence each, as every language says them
 	if scope == "machine" {
-		where = "this machine"
+		title = "autodoc.text.todos_vars.kept_in_this_machine"
 	}
 	t.varEditing = &todoVarEdit{store: s, name: str(v, "name"), scope: scope}
-	t.c.Set("App.todoVarTitle", t.c.Trf("autodoc.text.todos_vars.kept_in", str(v, "name"), where))
+	t.c.Set("App.todoVarTitle", t.c.Trf(title, str(v, "name")))
 	t.c.Set("App.todoVarText", str(v, "value"))
 	t.c.Open("todoVar")
 }

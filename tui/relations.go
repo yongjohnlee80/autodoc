@@ -70,8 +70,43 @@ type relations struct {
 	err     error
 }
 
+// sectionHeading is section label's heading over its n rows, in the UI's language.
+func sectionHeading(t wording, label string, n int) string {
+	switch label {
+	case "superseded by":
+		return t.Trf("autodoc.text.relations.superseded_by", n)
+	case "supersedes":
+		return t.Trf("autodoc.text.relations.supersedes", n)
+	case "sources":
+		return t.Trf("autodoc.text.relations.sources", n)
+	case "cited by":
+		return t.Trf("autodoc.text.relations.cited_by", n)
+	case "amends":
+		return t.Trf("autodoc.text.relations.amends", n)
+	case "amended by":
+		return t.Trf("autodoc.text.relations.amended_by", n)
+	case "related":
+		return t.Trf("autodoc.text.relations.related", n)
+	case "adr":
+		return t.Trf("autodoc.text.relations.adr", n)
+	case "review":
+		return t.Trf("autodoc.text.relations.review", n)
+	case "reviews":
+		return t.Trf("autodoc.text.relations.reviews", n)
+	case "blocked by":
+		return t.Trf("autodoc.text.relations.blocked_by", n)
+	case "blocks":
+		return t.Trf("autodoc.text.relations.blocks", n)
+	case "links":
+		return t.Trf("autodoc.text.relations.links", n)
+	case "backlinks":
+		return t.Trf("autodoc.text.relations.backlinks", n)
+	}
+	return fmt.Sprintf("%s (%d)", label, n)
+}
+
 // relationRows are the drawer's rows for p's relations rl, and how many neighbours they list.
-func relationRows(ws, p string, rl relations) ([]relRow, int) {
+func relationRows(t wording, ws, p string, rl relations) ([]relRow, int) {
 	ring := map[string]bool{p: true}
 	for _, e := range append(slices.Clone(rl.out), rl.in...) {
 		if e.resolved {
@@ -113,9 +148,9 @@ func relationRows(ws, p string, rl relations) ([]relRow, int) {
 		if len(paths)+len(external) == 0 {
 			continue
 		}
-		rows = append(rows, relRow{label: fmt.Sprintf("%s (%d)", s.label, len(paths)+len(external))})
+		rows = append(rows, relRow{label: sectionHeading(t, s.label, len(paths)+len(external))})
 		for _, x := range external {
-			rows = append(rows, relRow{label: "  " + x + "  (outside the workspace)", external: x, section: s.label})
+			rows = append(rows, relRow{label: "  " + t.Trf("autodoc.text.relations.outside_the_workspace", x), external: x, section: s.label})
 		}
 		for _, q := range paths {
 			rows = append(rows, relRow{label: "  " + q, ws: ws, path: q, section: s.label})
@@ -134,14 +169,14 @@ func relationRows(ws, p string, rl relations) ([]relRow, int) {
 	var unresolved []string
 	for _, e := range rl.out {
 		if !e.resolved && e.external == "" {
-			unresolved = append(unresolved, e.raw+"  ("+e.kind+", names no document)")
+			unresolved = append(unresolved, t.Trf("autodoc.text.relations.names_no_document", e.raw, e.kind))
 		}
 	}
 	for _, c := range rl.cycles {
-		unresolved = append(unresolved, c+"  (supersession goes round a loop)")
+		unresolved = append(unresolved, t.Trf("autodoc.text.relations.supersession_goes_round_a_loop", c))
 	}
 	if len(unresolved) > 0 {
-		rows = append(rows, relRow{label: fmt.Sprintf("unresolved (%d)", len(unresolved))})
+		rows = append(rows, relRow{label: t.Trf("autodoc.text.relations.unresolved", len(unresolved))})
 		for _, u := range unresolved {
 			rows = append(rows, relRow{label: "  " + u})
 		}
@@ -181,7 +216,7 @@ func (r *related) Panels() []PanelSpec {
 func (r *related) State() map[string]any {
 	return map[string]any{
 		"App.relations":      r.rows.Model(),
-		"App.relationsTitle": "links",
+		"App.relationsTitle": r.c.Tr("autodoc.text.relations.title_links"),
 		"App.relationsIndex": 0,
 	}
 }
@@ -223,14 +258,14 @@ func (r *related) moved(i int) { r.at = i }
 func (r *related) ofPage() {
 	switch ref := r.page.Ref; {
 	case ref.path == "":
-		r.clear("links")
+		r.clear(r.c.Tr("autodoc.text.relations.title_links"))
 	case r.page.Outside:
-		r.clear("links · " + outsideBadge) // it is in no workspace's graph
+		r.clear(r.c.Trf("autodoc.text.relations.title_links_outside", outsideBadge)) // it is in no workspace's graph
 	default:
 		// another document's rows go at once: until this one's are read, the drawer has none
 		// rather than the last document's
 		if r.of != ref {
-			r.clear("links · reading…")
+			r.clear(r.c.Tr("autodoc.text.relations.title_links_reading"))
 		}
 		r.load(ref.ws, ref.path)
 	}
@@ -298,7 +333,7 @@ func (r *related) load(ws, p string) {
 			return
 		}
 		if rl.err != nil {
-			r.c.Failed("links", rl.err)
+			r.c.Failed(r.c.Tr("autodoc.notice.relations.links"), rl.err)
 			return
 		}
 		r.show(ws, p, rl)
@@ -309,19 +344,23 @@ func (r *related) load(ws, p string) {
 // under each document, at depth 2, the ones it links with that are not a neighbour; then the
 // unresolved relations and cycles.
 func (r *related) show(ws, p string, rl relations) {
-	rows, neighbours := relationRows(ws, p, rl)
+	rows, neighbours := relationRows(r.c, ws, p, rl)
 	r.of = fileRef{ws, p}
 	r.rows.Reset(rows)
 	// the cursor on the first document, not a heading: Enter opens it
 	if first := slices.IndexFunc(rows, func(r relRow) bool { return r.path != "" }); first >= 0 {
 		r.moveTo(first)
 	}
-	title := fmt.Sprintf("links (%d)", neighbours)
+	title := r.c.Trf("autodoc.text.relations.title_links_count", neighbours)
 	if r.deep {
-		title += " · depth 2"
+		title = r.c.Trf("autodoc.text.relations.title_links_depth_2", neighbours)
 	}
 	r.c.Set("App.relationsTitle", r.c.Trf("autodoc.text.relations.d_depth", title))
 }
+
+// LanguageChanged composes the drawer again in the UI's language: its title and its rows, read
+// again for the page shown.
+func (r *related) LanguageChanged() { r.ofPage() }
 
 // moveTo puts the drawer's cursor on row i.
 func (r *related) moveTo(i int) {

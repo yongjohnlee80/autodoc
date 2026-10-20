@@ -5,7 +5,6 @@ package tui
 import (
 	"cmp"
 	"context"
-	"fmt"
 	"image/color"
 	"math"
 	"slices"
@@ -45,15 +44,17 @@ const (
 // globeFilter is a choice of the links the GlobeMap follows.
 type globeFilter struct {
 	key, name string // the stored name (prefGlobeFilter), and the title's
+	nameMsg   string // name's catalog id: the title's, in the UI's language
 	kinds     []any  // graph.map's kinds; nil every kind
 }
 
 // globeFilters are the links the GlobeMap follows, f cycling through them: the relations first (the
 // default), every link one press away.
 var globeFilters = []globeFilter{
-	{"relations", "relations", []any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
-	{"every", "every link", nil},
-	{"body", "body links", []any{"wikilink", "embed", "markdown"}},
+	{"relations", "relations", "autodoc.text.globemap_gui.relations",
+		[]any{"supersedes", "superseded_by", "amends", "related", "sources", "adr", "review", "blocked"}},
+	{"every", "every link", "autodoc.text.globemap_gui.every_link", nil},
+	{"body", "body links", "autodoc.text.globemap_gui.body_links", []any{"wikilink", "embed", "markdown"}},
 }
 
 // Edge classes, each one path and one colour: body links, supersession, every other relation.
@@ -513,23 +514,24 @@ var closedChan = func() chan struct{} { c := make(chan struct{}); close(c); retu
 // globeMap is the GlobeMap feature: its loads, fenced and paced by what the window presents (load),
 // and the viewer's pan and zoom.
 type globeMap struct {
-	c       Core
-	present func() globePublisher // the publisher, made when the panel first opens
-	pres    *globeStream
-	seq     uint64
-	open    bool
-	filter  int        // globeFilters' index
-	cur     *globe     // the frame on screen: its picture was presented (hit testing, the names)
-	look    *globeLook // how it draws (globesettings_gui.go); nil until first used
-	groups  *relGroups // the workspace's groups (graphstore_gui.go); nil until read
-	store   *graphStore
-	editor  *groupEditor // the settings' groups
-	counts  [2]int       // the load's documents and links, once its map is read
-	status  string       // what a load under way says; "" none
-	stepped int          // the load's simulation steps run, as last posted
-	toast   bool         // the load's progress toast is up
-	noKey   bool         // l hid the legend
-	view    *globeView
+	c         Core
+	present   func() globePublisher // the publisher, made when the panel first opens
+	pres      *globeStream
+	seq       uint64
+	open      bool
+	filter    int        // globeFilters' index
+	cur       *globe     // the frame on screen: its picture was presented (hit testing, the names)
+	look      *globeLook // how it draws (globesettings_gui.go); nil until first used
+	groups    *relGroups // the workspace's groups (graphstore_gui.go); nil until read
+	store     *graphStore
+	editor    *groupEditor // the settings' groups
+	counts    [2]int       // the load's documents and links, once its map is read
+	status    string       // what a load under way says, a catalog id statusArg fills; "" none
+	statusArg string       // fills status's %1
+	stepped   int          // the load's simulation steps run, as last posted
+	toast     bool         // the load's progress toast is up
+	noKey     bool         // l hid the legend
+	view      *globeView
 
 	cancel func()              // ends the load under way
 	views  chan globeViewState // the load under way's: the view, newest only
@@ -591,7 +593,7 @@ func (g *globeMap) Panels() []PanelSpec {
 		Closed: func(c PanelHost) {
 			g.open, g.drag = false, nil // a gesture ends with its panel (its capture is lost as it hides)
 			g.stop()                    // the load under way ends, and what it still hands over is dropped
-			g.told("GlobeMap closed before it settled")
+			g.told(g.c.Tr("autodoc.notice.globemap_gui.globemap_closed_before_it_settled"))
 			c.Keep(c.RestoreKeyboardPane("editor"))
 		}}}
 }
@@ -680,7 +682,7 @@ func (g *globeMap) load() {
 	ws, filter := g.c.Workspace(), g.filter
 	tk := g.c.Ticket(&g.seq, TicketWorkspace)
 	if ws == "" {
-		g.cur, g.status = nil, "no workspace: enter one to see its map"
+		g.cur, g.status = nil, "autodoc.text.globemap_gui.no_workspace_enter_one_to_see_its_map"
 		g.title()
 		return
 	}
@@ -695,8 +697,8 @@ func (g *globeMap) load() {
 	if g.view != nil && g.view.ctx != nil {
 		g.sendView(g.view.pixels(), true)
 	}
-	g.status, g.stepped = "reading "+ws+"…", 0
-	g.tell("GlobeMap: reading " + ws + "'s map…")
+	g.status, g.statusArg, g.stepped = "autodoc.text.globemap_gui.reading", ws, 0
+	g.tell(g.c.Trf("autodoc.notice.globemap_gui.globemap_reading_s_map", ws))
 	g.title()
 	g.c.Go(func(ctx context.Context) any {
 		ctx, done := context.WithCancel(ctx)
@@ -753,7 +755,7 @@ func (g *globeMap) load() {
 	}, func(v any) {
 		if err, ok := v.(error); ok && tk.Current() && g.open {
 			g.status = ""
-			g.told("GlobeMap: " + ws + "'s map could not be laid out")
+			g.told(g.c.Trf("autodoc.notice.globemap_gui.globemap_s_map_could_not_be_laid_out", ws))
 			g.c.Failed("GlobeMap", err)
 			g.title()
 		}
@@ -862,7 +864,7 @@ func (g *globeMap) install(f *globe, zoom float32, off gui.Point) {
 		g.zoom, g.off = zoom, off
 	}
 	if f.final {
-		g.told(fmt.Sprintf("GlobeMap: %s settled · %d documents, %d links", f.ws, len(f.m.Nodes), len(f.m.Edges)))
+		g.told(g.c.Trf("autodoc.notice.globemap_gui.globemap_settled_documents_links", f.ws, len(f.m.Nodes), len(f.m.Edges)))
 	}
 	g.title()
 }
@@ -892,28 +894,50 @@ func (g *globeMap) told(msg string) {
 // progress shows how far the load has settled: in its toast, as a bar, and in the title.
 func (g *globeMap) progress() {
 	if g.cur == nil || !g.cur.final {
-		g.tell(fmt.Sprintf("GlobeMap: laying out %s · %d documents, %d links %s",
+		g.tell(g.c.Trf("autodoc.notice.globemap_gui.globemap_laying_out_documents_links",
 			g.c.Workspace(), g.counts[0], g.counts[1], bar(int64(min(g.stepped, globeSteps)), globeSteps)))
 	}
 	g.title()
 }
 
-// title says what the panel shows, and redraws it.
+// title says what the panel shows, in the UI's language, and redraws it.
 func (g *globeMap) title() {
 	t := "GlobeMap"
 	switch {
 	case g.status != "":
-		t += " · " + g.status
+		t += " · " + g.statusText()
 	case g.counts != [2]int{} || g.cur != nil:
-		state := "f filter, + - zoom, 0 fit, l legend"
+		state := g.c.Tr("autodoc.text.globemap_gui.f_filter_zoom_0_fit_l_legend")
 		if g.cur == nil || !g.cur.final {
-			state = fmt.Sprintf("settling %d%%", min(g.stepped, globeSteps)*100/globeSteps)
+			state = g.c.Trf("autodoc.text.globemap_gui.settling", min(g.stepped, globeSteps)*100/globeSteps)
 		}
-		t += fmt.Sprintf(" · %s · %d documents, %d links · %s · %s",
-			g.c.Workspace(), g.counts[0], g.counts[1], globeFilters[g.filter].name, state)
+		t = g.c.Trf("autodoc.text.globemap_gui.globemap_documents_links",
+			g.c.Workspace(), g.counts[0], g.counts[1], g.c.Tr(globeFilters[g.filter].nameMsg), state)
 	}
 	g.c.Set("App.globeMapTitle", t)
 	g.dirty()
+}
+
+// statusText is what a load under way says, in the UI's language; "" none.
+func (g *globeMap) statusText() string {
+	if g.status == "" {
+		return ""
+	}
+	return g.c.Trf(g.status, g.statusArg)
+}
+
+// LanguageChanged composes again, in the UI's language, what the GlobeMap keeps on screen: its
+// heading (and the legend, as the view is drawn again), its choosers' rows and its groups' note.
+func (g *globeMap) LanguageChanged() {
+	names, labels := g.themeChoices()
+	g.c.Set("App.globeThemes", keyedChoices(names, labels))
+	for _, src := range []string{"App.globeFilters", "App.globeDotSizes", "App.globeSpeeds"} {
+		g.c.Set(src, choiceModel(g.c, src))
+	}
+	if g.editor.ws != "" {
+		g.editor.show("")
+	}
+	g.title()
 }
 
 func (g *globeMap) dirty() {
@@ -1089,36 +1113,40 @@ func (v *globeView) NativeView() (any, bool) {
 	if !g.noKey {
 		key = g.legend(l)
 	}
-	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.status, pal: l.pal, legend: key}.paint), true
+	return gui.ViewFunc(globeOverlay{pres: g.pres, status: g.statusText(), pal: l.pal, legend: legendIn(key, g.c.Trf)}.paint), true
 }
 
 // legend is what the GlobeMap's marks stand for in look l: the colour of each group the map shows
 // (groupLegend), any other document's, the superseded ring, the links the filter follows, and the
-// dots' size.
+// dots' size. Its texts are English, until legendIn puts them in the UI's language.
 func (g *globeMap) legend(l *globeLook) []legendRow {
 	var m relMap
 	if g.cur != nil {
 		m = g.cur.m
 	}
 	rows := groupLegend(g.groups, m, func(gr relGroup) func(gui.Canvas, gui.Rect) { return legendDot(gr.Colour, 8) })
-	rows = append(rows, legendRow{legendDot(l.other, 8), "any other document"})
-	rows = append(rows, legendRow{legendRing(l.other, l.ring), "superseded"})
+	rows = append(rows, legendMsg(legendDot(l.other, 8), "autodoc.text.globemap_gui.any_other_document"))
+	rows = append(rows, legendMsg(legendRing(l.other, l.ring), "autodoc.text.globemap_gui.superseded"))
 	kinds := globeFilters[g.filter].kinds
 	shows := func(cls int) bool {
 		return kinds == nil || slices.ContainsFunc(kinds, func(k any) bool { s, _ := k.(string); return edgeClass(s) == cls })
 	}
 	for _, e := range []struct {
-		cls  int
-		text string
-	}{{edgeBody, "body link"}, {edgeSupersession, "supersedes"}, {edgeRelation, "other relation"}} {
+		cls int
+		msg string
+	}{
+		{edgeBody, "autodoc.text.globemap_gui.body_link"},
+		{edgeSupersession, "autodoc.text.globemap_gui.supersedes"},
+		{edgeRelation, "autodoc.text.globemap_gui.other_relation"},
+	} {
 		if shows(e.cls) {
-			rows = append(rows, legendRow{legendLine(l.edges[e.cls]), e.text})
+			rows = append(rows, legendMsg(legendLine(l.edges[e.cls]), e.msg))
 		}
 	}
-	return append(rows, legendRow{func(c gui.Canvas, b gui.Rect) {
+	return append(rows, legendMsg(func(c gui.Canvas, b gui.Rect) {
 		legendDot(l.other, 5)(c, gui.Rect{X: b.X, Y: b.Y, W: b.W / 2, H: b.H})
 		legendDot(l.other, 10)(c, gui.Rect{X: b.X + b.W/2, Y: b.Y, W: b.W / 2, H: b.H})
-	}, "larger: more links"})
+	}, "autodoc.text.globemap_gui.larger_more_links"))
 }
 
 // globeOverlay is the view's own paint over the load's pictures.

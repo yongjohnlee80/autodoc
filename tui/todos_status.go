@@ -56,9 +56,9 @@ func (t *todos) statusPane(c todoStatusChoice) pane {
 	}
 	title := str(t.statusing.task, "title")
 	if c.current {
-		return pane{title: title, text: fmt.Sprintf("## %s\n\nits status now:\nchoosing it\nchanges nothing\n", c.status)}
+		return pane{title: title, text: fmt.Sprintf("## %s\n\n%s\n", c.status, t.c.Tr("autodoc.text.todos_status.its_status_now_choosing_it_changes_nothing"))}
 	}
-	return pane{title: title, text: fmt.Sprintf("## %s\n\nfrom %s\nto %s\n", c.status, str(t.statusing.task, "status"), c.status)}
+	return pane{title: title, text: fmt.Sprintf("## %s\n\n%s\n", c.status, t.c.Trf("autodoc.text.todos_status.from_to", str(t.statusing.task, "status"), c.status))}
 }
 
 // chooseStatus is s: the task under the cursor, in a store taking writes here, offered every

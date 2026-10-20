@@ -138,11 +138,14 @@ func TestACardOpensFromAKey(t *testing.T) {
 		"text: App.agentsCardText",
 		`Shortcut { sequence: "Backspace"; onActivated: { agentsCard.close(); leader.open() } }`,
 		`Shortcut { sequence: keyId("autodoc.agentsCard.runCommand.agent.buffer"); onActivated: { agentsCard.close(); App.runCommand("agent.buffer") } }`,
-		"Backspace goes back",
+		`helpText: qsTrId("autodoc.card.agentsCard.keyhelp")`,
 	} {
 		if !strings.Contains(qml, want) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, qml)
 		}
+	}
+	if help := cardKeyHelp(c); !strings.Contains(help, "Backspace goes back") {
+		t.Errorf("the card's help line %q does not say Backspace goes back", help)
 	}
 	lq, _ := k.card(leader)
 	if q := cardQML(lq, k.on(leader)); !strings.Contains(q, `Shortcut { sequence: keyId("autodoc.leader.open.agentsCard"); onActivated: { leader.close(); agentsCard.open() } }`) || !binds(t, k, q, "Shift+Y") {
@@ -490,11 +493,14 @@ func TestTodosQuestionMarkOpensItsCardOfKeys(t *testing.T) {
 		`Shortcut { sequence: keyId("autodoc.todoKeys.todoChooseStatus"); onActivated: { todoKeys.close(); App.todoChooseStatus() } }`,
 		`Shortcut { sequence: keyId("autodoc.todoKeys.todoTabAfter"); onActivated: { todoKeys.close(); App.todoTabAfter() } }`,
 		`Shortcut { sequence: keyId("autodoc.todoKeys.todoToggleDetail"); onActivated: { todoKeys.close(); App.todoToggleDetail() } }`,
-		`helpText: "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"`,
+		`helpText: qsTrId("autodoc.card.todoKeys.keyhelp")`,
 	} {
 		if !strings.Contains(q, want) {
 			t.Errorf("the card's QML lacks %q:\n%s", want, q)
 		}
+	}
+	if help, want := cardKeyHelp(c), "↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes"; help != want {
+		t.Errorf("the card's help line is %q, want %q", help, want)
 	}
 	for _, seq := range []string{"s", "]", "i", "o"} {
 		if !binds(t, k, q, seq) {

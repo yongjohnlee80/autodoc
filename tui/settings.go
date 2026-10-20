@@ -27,9 +27,6 @@ import (
 // kept in. Save sends what changed in one workspace.configure, which saves all of it or none; a
 // refusal opens the dialog again as it was typed, the reason on its help line.
 
-// daemonsProvider is the first provider choice: no provider of its own.
-const daemonsProvider = "the daemon's (System › Search models)"
-
 // The choosers' rows, in the order their indices are read.
 var (
 	policyChoices      = []string{store.EmbeddingAlways, store.EmbeddingWhenOpened, store.EmbeddingNever}
@@ -59,9 +56,9 @@ func readConnInfo(v any) *connInfo {
 
 // where is the connection in one line: the engine, then user@host/database, its schema, and
 // whether a password is kept.
-func (c *connInfo) where() string {
+func (c *connInfo) where(t wording) string {
 	if c == nil {
-		return "none"
+		return t.Tr("autodoc.text.settings.none")
 	}
 	var b strings.Builder
 	b.WriteString(c.engine)
@@ -75,10 +72,10 @@ func (c *connInfo) where() string {
 		b.WriteString(c.host + "/" + c.database)
 	}
 	if c.schema != "" {
-		b.WriteString(" · schema " + c.schema)
+		b.WriteString(" · " + t.Trf("autodoc.text.settings.conn_schema", c.schema))
 	}
 	if c.hasPassword {
-		b.WriteString(" · password kept")
+		b.WriteString(" · " + t.Tr("autodoc.text.settings.password_kept"))
 	}
 	return b.String()
 }
@@ -188,12 +185,15 @@ func asText(stored []string) (text, derived []string) {
 	return text, derived
 }
 
-// textsNote says which stored text types the Edit tab dropped, and why; "" for none.
-func textsNote(derived []string) string {
+// textsNote says which stored text types the Edit tab dropped, and why; "" for none. It is in
+// English: the dialog's is textsNoteIn's, in the UI's language.
+func textsNote(derived []string) string { return textsNoteIn(inEnglish{}, derived) }
+
+func textsNoteIn(t wording, derived []string) string {
 	if len(derived) == 0 {
 		return ""
 	}
-	return strings.Join(derived, ", ") + ": now read as documents, not text; dropped from your text types, still included"
+	return t.Trf("autodoc.text.settings.now_read_as_documents_not_text_dropped_from_your", strings.Join(derived, ", "))
 }
 
 // form is the dialog filled from the base: what Save would send nothing for.
@@ -510,11 +510,14 @@ func anyStrings(list []string) []any {
 }
 
 // changed names what a save changed, for its notice.
-func changed(c map[string]any) string {
-	words := map[string]string{"name": "name", "schema": "schema", "text_extensions": "text types", "include": "rules",
-		"section_tokens": "section size", "embedding_policy": "embedding", "provider": "provider",
-		"destination": "destination", "destination_connection": "destination", "vector_index": "vector index",
-		"source": "source", "view_args": "view args"}
+func changed(t wording, c map[string]any) string {
+	destination := t.Tr("autodoc.notice.settings.destination")
+	words := map[string]string{"name": t.Tr("autodoc.notice.settings.name"), "schema": t.Tr("autodoc.notice.settings.schema"),
+		"text_extensions": t.Tr("autodoc.notice.settings.text_types"), "include": t.Tr("autodoc.notice.settings.rules"),
+		"section_tokens": t.Tr("autodoc.notice.settings.section_size"), "embedding_policy": t.Tr("autodoc.notice.settings.embedding"),
+		"provider": t.Tr("autodoc.notice.settings.provider"), "destination": destination, "destination_connection": destination,
+		"vector_index": t.Tr("autodoc.notice.settings.vector_index"), "source": t.Tr("autodoc.notice.settings.source"),
+		"view_args": t.Tr("autodoc.notice.settings.view_args")}
 	var out []string
 	for k := range c {
 		if w, ok := words[k]; ok && !slices.Contains(out, w) {
@@ -540,7 +543,7 @@ func (h *Host) startAddWorkspace() {
 		h.loadKBTypes() // the registry's KB types, once fetched (or the cache, or the built-ins)
 		h.set("App.kbTypeIndex", -1)
 		h.set("App.kbTypeIndex", 0)
-		h.set("App.kbTypeSummary", noneNote)
+		h.set("App.kbTypeSummary", h.noneNoteText())
 		h.set("App.kbTypeCustomShown", false)
 		h.showSettings(settingsBase{w: w, adding: true, providers: providers, databases: databases, registered: h.kinds.Chunked, derived: h.kinds.Derived}, 0, "")
 	})
@@ -617,7 +620,7 @@ func (h *Host) withSettingsExtras(fn func(providers []string, databases bool)) {
 		switch {
 		case !tk.Current():
 		case a.err != nil:
-			h.failed("workspace settings", a.err)
+			h.failed(h.tr("autodoc.notice.settings.workspace_settings"), a.err)
 		default:
 			fn(a.v.providers, a.v.databases)
 		}
@@ -633,10 +636,10 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 		f = typed[0]
 	}
 	w := base.w
-	title := "workspace settings · " + w.name
-	rootLine := "root: " + w.root + " (a workspace keeps its root: add the other directory as a workspace of its own)"
+	title := h.trf("autodoc.text.settings.workspace_settings", w.name)
+	rootLine := h.trf("autodoc.text.settings.root_a_workspace_keeps_its_root_add_the_other_di", w.root)
 	if base.adding {
-		title, rootLine = "add a workspace", "root: the directory it indexes (Browse… picks one)"
+		title, rootLine = h.tr("autodoc.text.settings.add_a_workspace"), h.tr("autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one")
 	}
 	h.set("App.settingsTitle", title)
 	h.set("App.settingsAdding", base.adding)
@@ -646,25 +649,26 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	h.set("App.settingsRootLine", rootLine)
 	h.set("App.databasesShown", base.databases)
 	if help == "" {
-		help = "Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing"
+		help = h.tr("autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever")
 	}
 	h.set("App.settingsHelp", help)
-	h.set("App.settingsSchemaState", h.trf("autodoc.text.settings.e_g", w.schema.state(), suggestedSchema))
-	rows := []rowOf{{"key": "", "label": daemonsProvider}}
+	h.set("App.settingsSchemaState", h.trf("autodoc.text.settings.e_g", w.schema.state(core{h}), suggestedSchema))
+	// the first provider choice: none of its own, the daemon's
+	rows := []rowOf{{"key": "", "label": h.tr("autodoc.text.settings.the_daemon_s_system_search_models")}}
 	for _, n := range base.providers[min(1, len(base.providers)):] {
 		rows = append(rows, rowOf{"key": n, "label": n})
 	}
 	h.wsProviders.Reset(rows)
-	providerState := "uses the daemon's provider"
+	providerState := h.tr("autodoc.text.settings.uses_the_daemon_s_provider")
 	if w.provider != "" {
-		providerState = "uses its own: " + w.provider
+		providerState = h.trf("autodoc.text.settings.uses_its_own", w.provider)
 		if w.providerErr != "" {
-			providerState += " (not set up: " + w.providerErr + "; searching by words)"
+			providerState = h.trf("autodoc.text.settings.uses_its_own_not_set_up_searching_by_words", w.provider, w.providerErr)
 		}
 	}
 	h.set("App.settingsProviderState", providerState)
 	_, dropped := asText(w.textExtensions)
-	h.set("App.settingsTextsNote", textsNote(dropped))
+	h.set("App.settingsTextsNote", textsNoteIn(core{h}, dropped))
 	h.set("App.settingsTextsNoted", len(dropped) > 0)
 	h.set("App.settingsDocsOffered", len(base.derived) > 0)
 	h.set("App.settingsDocsLabel", h.trf("autodoc.text.settings.documents", strings.Join(base.derived, ", ")))
@@ -672,10 +676,10 @@ func (h *Host) showSettings(base settingsBase, tab int, help string, typed ...se
 	// short, so the files frame fits: the excludes code brings are written where the user sees
 	// them, in the exclude field
 	h.set("App.settingsCodeLabel", h.trf("autodoc.text.settings.code", strings.Join(base.registered, ", ")))
-	h.set("App.settingsTodoNote", todoExcludedNote(w))
+	h.set("App.settingsTodoNote", todoExcludedNoteIn(core{h}, w))
 	h.set("App.settingsTodoNoted", len(w.todoExcluded) > 0)
-	h.set("App.settingsDestState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.destConn.where()))
-	h.set("App.settingsSourceState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.source.where()))
+	h.set("App.settingsDestState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.destConn.where(core{h})))
+	h.set("App.settingsSourceState", h.trf("autodoc.text.settings.stored_a_blank_dsn_keeps_it", w.db.source.where(core{h})))
 	h.fillSettings(f)
 	// the view says which tab it moves to only once it is on screen: the tab opened on is known here
 	h.settingsTab = tab
@@ -743,7 +747,7 @@ func (h *Host) newRootFolder(root string) {
 func (h *Host) saveSettings(f settingsForm) {
 	base := h.settings
 	refuse := func(err error) {
-		h.showSettings(base, h.settingsTabNow(), "not saved: "+wireMessage(err), f)
+		h.showSettings(base, h.settingsTabNow(), h.trf("autodoc.text.settings.not_saved", wireMessage(err)), f)
 	}
 	if base.adding {
 		h.addWithSettings(base, f, refuse)
@@ -856,25 +860,25 @@ func (h *Host) addWithSettings(base settingsBase, f settingsForm, refuse func(er
 		case !a.added:
 			refuse(a.err)
 		case a.unread:
-			h.failed("added workspace "+name+", but could not read it back", a.err)
+			h.failed(h.trf("autodoc.notice.settings.added_workspace_but_could_not_read_it_back", name), a.err)
 			h.loadWorkspaces()
 		case a.partial:
-			h.failed("added workspace "+name+", but its KB type stopped part way ("+a.applied.String()+")", a.err)
+			applied := a.applied.text(core{h})
+			h.failed(h.trf("autodoc.notice.settings.added_workspace_but_its_kb_type_stopped_part_way", name, applied), a.err)
 			h.loadWorkspaces()
-			h.showSettings(made, h.settingsTabNow(), "added; the KB type stopped part way: "+a.applied.String()+
-				". Save finishes its files on "+name+", then saves the settings.", f)
+			h.showSettings(made, h.settingsTabNow(), h.trf("autodoc.text.settings.added_the_kb_type_stopped_part_way_save_finishes", applied, name), f)
 		case a.err != nil:
-			what := "added with the defaults"
+			help := h.trf("autodoc.text.settings.added_with_the_defaults_not_saved", wireMessage(a.err))
 			if kb != nil {
-				what = "scaffolded (" + a.applied.String() + ")"
+				help = h.trf("autodoc.text.settings.scaffolded_not_saved", a.applied.text(core{h}), wireMessage(a.err))
 			}
-			h.failed("added workspace "+name+", but its settings were not saved", a.err)
+			h.failed(h.trf("autodoc.notice.settings.added_workspace_but_its_settings_were_not_saved", name), a.err)
 			h.loadWorkspaces()
-			h.showSettings(made, h.settingsTabNow(), what+"; not saved: "+wireMessage(a.err), f)
+			h.showSettings(made, h.settingsTabNow(), help, f)
 		default:
-			msg := "added workspace " + name
+			msg := h.trf("autodoc.notice.settings.added_workspace", name)
 			if kb != nil {
-				msg += " as " + kb.t.Title + ": " + a.applied.String()
+				msg = h.trf("autodoc.notice.settings.added_workspace_as", name, kb.t.Title, a.applied.text(core{h}))
 			}
 			h.notify(msg)
 			h.loadWorkspaces()
@@ -911,7 +915,7 @@ func (h *Host) saved(name string, c map[string]any) {
 			}
 		}
 	}
-	h.notify(h.trf("autodoc.notice.settings.saved", to, changed(c)))
+	h.notify(h.trf("autodoc.notice.settings.saved", to, changed(core{h}, c)))
 	h.loadWorkspaces()
 	if _, ok := c["schema"]; ok && to == h.ws {
 		h.validateSoon(validateDelay)
@@ -920,12 +924,15 @@ func (h *Host) saved(name string, c map[string]any) {
 
 // todoExcludedNote says which exclude patterns keep a todo store of w out of the index (ADR
 // 1792015212 §2.3): its tasks open in no workspace, without relations; "" for none.
-func todoExcludedNote(w wsInfo) string {
+//
+// It is in English: the dialog's is todoExcludedNoteIn's, in the UI's language.
+func todoExcludedNote(w wsInfo) string { return todoExcludedNoteIn(inEnglish{}, w) }
+
+func todoExcludedNoteIn(t wording, w wsInfo) string {
 	if len(w.todoExcluded) == 0 {
 		return ""
 	}
-	return "exclude " + strings.Join(w.todoExcluded, "; ") + " keeps this workspace's todo tasks out of the index: " +
-		"they open with no relations. Index them graph-only instead: out of search, in the graph."
+	return t.Trf("autodoc.text.settings.exclude_keeps_this_workspace_s_todo_tasks_out_of", strings.Join(w.todoExcluded, "; "))
 }
 
 // todoGraphOnly is the notice's button: the exclude patterns that keep a todo store out are taken
@@ -966,59 +973,69 @@ func settingsArgs(fn func(settingsForm)) Command {
 // ---- the manager's right-hand pane ----
 
 // managerDetail is workspace w's settings as the manager shows them beside the list: its Edit
-// settings, then its Advanced ones; the databases only where the edition offers them.
+// settings, then its Advanced ones; the databases only where the edition offers them. It is in
+// English: the manager's is managerDetailIn's, in the UI's language.
 func managerDetail(w wsInfo, databases bool, registered []string) string {
+	return managerDetailIn(inEnglish{}, w, databases, registered)
+}
+
+func managerDetailIn(t wording, w wsInfo, databases bool, registered []string) string {
 	none := func(s string) string {
 		if s == "" {
-			return "none"
+			return t.Tr("autodoc.text.settings.none")
 		}
 		return s
 	}
 	m := wsfilter.NewMatcher(w.include, w.exclude)
 	var types []string
-	for _, t := range []struct{ label, ext string }{{"Markdown", "md"}, {"plain text", "txt"}, {"YAML", "yaml"}} {
-		if m.Match("sample." + t.ext) {
-			types = append(types, t.label)
+	for _, ty := range []struct{ label, ext string }{{"Markdown", "md"}, {t.Tr("autodoc.text.settings.plain_text"), "txt"}, {"YAML", "yaml"}} {
+		if m.Match("sample." + ty.ext) {
+			types = append(types, ty.label)
 		}
 	}
 	types = append(types, w.textExtensions...)
 	types = append(types, registeredOn(m, registered)...)
-	provider := "the daemon's"
+	provider := t.Tr("autodoc.text.settings.the_daemon_s")
 	if w.provider != "" {
 		provider = w.provider
 		if w.providerErr != "" {
-			provider += " (not set up: " + w.providerErr + ")"
+			provider = t.Trf("autodoc.text.settings.not_set_up", w.provider, w.providerErr)
 		}
 	}
+	todoSearch := t.Tr("autodoc.text.settings.todo_search_off_tasks_are_in_the_graph_only")
+	if w.todoSearch {
+		todoSearch = t.Tr("autodoc.text.settings.todo_search_on_tasks_are_search_hits")
+	}
+	// each setting's line is indented under its tab's heading
 	lines := []string{
 		w.name + " · " + w.state,
 		w.root,
 		"",
-		"EDIT",
-		"  file types   " + none(strings.Join(types, ", ")),
-		"  include      " + none(strings.Join(w.include, "; ")),
-		"  exclude      " + none(strings.Join(w.exclude, "; ")),
-		"  schema       " + none(w.schema.path),
+		t.Tr("autodoc.text.settings.edit"),
+		"  " + t.Trf("autodoc.text.settings.file_types", none(strings.Join(types, ", "))),
+		"  " + t.Trf("autodoc.text.settings.include", none(strings.Join(w.include, "; "))),
+		"  " + t.Trf("autodoc.text.settings.exclude", none(strings.Join(w.exclude, "; "))),
+		"  " + t.Trf("autodoc.text.settings.schema", none(w.schema.path)),
 		"",
-		"ADVANCED",
-		fmt.Sprintf("  section      %d estimated tokens", w.sectionTokens),
-		"  embedding    " + w.embeddingPolicy,
-		"  provider     " + provider,
-		"  graph only   " + none(strings.Join(w.graphOnly, "; ")),
-		"  todo search  " + map[bool]string{true: "on: tasks are search hits", false: "off: tasks are in the graph only"}[w.todoSearch],
+		t.Tr("autodoc.text.settings.advanced"),
+		"  " + t.Trf("autodoc.text.settings.section_estimated_tokens", w.sectionTokens),
+		"  " + t.Trf("autodoc.text.settings.embedding", w.embeddingPolicy),
+		"  " + t.Trf("autodoc.text.settings.provider", provider),
+		"  " + t.Trf("autodoc.text.settings.graph_only", none(strings.Join(w.graphOnly, "; "))),
+		"  " + todoSearch,
 	}
 	if databases {
-		dest := "the local store"
+		dest := t.Tr("autodoc.text.settings.the_local_store")
 		if w.db.destination == store.DestinationPostgres {
-			dest = w.db.destConn.where()
+			dest = w.db.destConn.where(t)
 			if w.db.vectorIndex != "" {
 				dest += " · " + w.db.vectorIndex
 			}
 		}
 		lines = append(lines,
-			"  source       "+w.db.source.where(),
-			"  view args    "+none(viewArgsText(w.db.viewArgs)),
-			"  destination  "+dest)
+			"  "+t.Trf("autodoc.text.settings.source", w.db.source.where(t)),
+			"  "+t.Trf("autodoc.text.settings.view_args", none(viewArgsText(w.db.viewArgs))),
+			"  "+t.Trf("autodoc.text.settings.destination", dest))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -1035,5 +1052,5 @@ func (h *Host) showManagerDetail() {
 		h.set("App.managerDetail", h.tr("autodoc.text.settings.no_workspace_add_makes_one"))
 		return
 	}
-	h.set("App.managerDetail", managerDetail(w, h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
+	h.set("App.managerDetail", managerDetailIn(core{h}, w, h.databases, slices.Concat(h.kinds.Chunked, h.kinds.Derived)))
 }

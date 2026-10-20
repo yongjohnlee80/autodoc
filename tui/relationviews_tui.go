@@ -11,6 +11,9 @@ const relationMenuQML, relationViewsQML = "", ""
 
 func (h *Host) relationViewFeatures() []Feature { return nil }
 
+// relationViewChoices: a terminal has no GlobeMap or Mindmap choosers (language.go's choiceLabels).
+func relationViewChoices() map[string][]string { return nil }
+
 // openGlobeSettings is App.openGlobeSettings, which Preferences.qml names in every build.
-func (h *Host) openGlobeSettings()                { h.notify(globeSettingsElsewhere) }
+func (h *Host) openGlobeSettings()                { h.notify(h.globeSettingsElsewhereNotice()) }
 func (h *Host) relationViewTypes() []tuidecl.Type { return nil }

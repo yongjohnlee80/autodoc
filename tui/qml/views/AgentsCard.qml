@@ -10,7 +10,7 @@ Dialog {
     keyScope: "autodoc.agentsCard"
     title: qsTrId("autodoc.card.agentsCard.title")
     dim: false
-    helpText: "a key runs its command · Backspace goes back · q or Esc closes"
+    helpText: qsTrId("autodoc.card.agentsCard.keyhelp")
     Text { text: App.agentsCardText; wrapMode: Tui.WordWrap } // WordWrap keeps its lines: NoWrap is one
     Shortcut { sequence: "Backspace"; onActivated: { agentsCard.close(); leader.open() } }
     Shortcut { sequence: keyId("autodoc.agentsCard.run.lua.agent-buffer"); onActivated: { agentsCard.close(); App.run("lua.agent-buffer") } }

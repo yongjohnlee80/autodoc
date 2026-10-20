@@ -179,7 +179,7 @@ func (r *pluginRun) openAt(w, h int) {
 	time.AfterFunc(r.handshake, func() {
 		r.pl.c.Post(func() {
 			if !r.ready && !r.closing {
-				r.close(fmt.Sprintf("did not answer in %s", r.handshake))
+				r.close(r.pl.c.Trf("autodoc.notice.pluginrun.did_not_answer_in", r.e.m.Name, r.handshake))
 			}
 		})
 	})
@@ -188,9 +188,9 @@ func (r *pluginRun) openAt(w, h int) {
 // title is a modal dialog's title, saying what Esc does. A card's panel is headed by its title alone.
 func (r *pluginRun) title(t string) string {
 	if r.e.m.Dialog.Esc == "hide" {
-		return t + " · Esc hides"
+		return r.pl.c.Trf("autodoc.text.pluginrun.esc_hides", t)
 	}
-	return t + " · Esc closes"
+	return r.pl.c.Trf("autodoc.text.pluginrun.esc_closes", t)
 }
 
 // hide is Esc under esc = "hide": the dialog goes, the plugin runs on, told so. A card's panel
@@ -246,7 +246,7 @@ func (r *pluginRun) send(method string, params []any) {
 		return
 	}
 	if !r.out.push(outNote{method, params}) {
-		r.close("is not reading what it is sent")
+		r.close(r.pl.c.Trf("autodoc.notice.pluginrun.is_not_reading_what_it_is_sent", r.e.m.Name))
 	}
 }
 
@@ -267,7 +267,9 @@ func (r *pluginRun) sender() {
 		}
 		if err := r.link.Notify(r.ctx, n.method, n.params); err != nil {
 			if r.ctx.Err() == nil {
-				r.pl.c.Post(func() { r.close("stopped answering: " + firstLine(err.Error())) })
+				r.pl.c.Post(func() {
+					r.close(r.pl.c.Trf("autodoc.notice.pluginrun.stopped_answering", r.e.m.Name, firstLine(err.Error())))
+				})
 			}
 			r.out.drop()
 			return
@@ -364,9 +366,9 @@ func (r *pluginRun) readied(p int, err error) {
 	switch {
 	case r.closing || r.ready:
 	case err != nil:
-		r.close("answered wrongly: " + err.Error())
+		r.close(r.pl.c.Trf("autodoc.notice.pluginrun.answered_wrongly", r.e.m.Name, err.Error()))
 	case p != r.e.m.Protocol:
-		r.close(fmt.Sprintf("speaks protocol %d; its manifest says %d", p, r.e.m.Protocol))
+		r.close(r.pl.c.Trf("autodoc.notice.pluginrun.speaks_protocol_its_manifest_says", r.e.m.Name, p, r.e.m.Protocol))
 	default:
 		r.ready = true
 	}
@@ -377,17 +379,17 @@ func (r *pluginRun) exitedUnasked() {
 	if r.closing {
 		return
 	}
-	why := "exited"
+	why := r.pl.c.Trf("autodoc.notice.pluginrun.exited", r.e.m.Name)
 	var ee *exec.ExitError
 	if errors.As(r.exitErr, &ee) {
-		why = fmt.Sprintf("exited (%s)", ee.ProcessState)
+		why = r.pl.c.Trf("autodoc.notice.pluginrun.exited_2", r.e.m.Name, ee.ProcessState)
 	}
 	r.close(why)
 }
 
 // close closes the dialog at once and stops the plugin behind it: plugin.close, then SIGTERM after
 // pluginGrace, then SIGKILL after pluginTermGrace, to its process group. why, when set, is a
-// failure (CloseFailure): a toast says it, with the last line the plugin wrote to its log; without
+// failure (CloseFailure), a sentence naming the plugin in the UI's language: a toast says it, with the last line the plugin wrote to its log; without
 // one, it is a close as a dialog's (CloseClosed: a modal Esc, its own host.close).
 func (r *pluginRun) close(why string) {
 	reason := plugin.CloseClosed
@@ -430,9 +432,9 @@ func (r *pluginRun) stopFor(reason, why string) {
 	r.pl.tableOwnerGone(r)
 	go r.shutdown()
 	if why != "" {
-		msg := r.e.m.Name + " " + why
+		msg := why // the plugin's name and what became of it, a sentence
 		if last := r.log.last(); last != "" {
-			msg += ": " + last
+			msg = r.pl.c.Trf("autodoc.notice.pluginrun.text", why, last)
 		}
 		r.pl.c.Notify(msg)
 	}
@@ -529,7 +531,7 @@ func (pl *plugins) acceptNotice(r *pluginRun, n plugin.Notice) {
 // The stop transitions call it as they set closing (stopFor, stopPlugins), on the loop.
 func (pl *plugins) endNotices(r *pluginRun) {
 	for id := range r.active {
-		pl.c.NotifyAs(pluginNoticeNS(r.e.m.Name), id, r.e.label()+": stopped", false)
+		pl.c.NotifyAs(pluginNoticeNS(r.e.m.Name), id, pl.c.Trf("autodoc.notice.pluginrun.stopped", r.e.label()), false)
 	}
 	r.active = nil
 }

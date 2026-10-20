@@ -175,19 +175,24 @@ func cachedEntry(kind, repo string) *regindex.IndexEntry {
 }
 
 // auditLine is an install card's line about audits, for entry e (nil: not from the registry) at
-// commit (in full). Commits are compared in full: a prefix is never a match.
+// commit (in full), in English. Commits are compared in full: a prefix is never a match.
 func auditLine(e *regindex.IndexEntry, commit string) string {
+	return auditLineIn(inEnglish{}.Trf, e, commit)
+}
+
+// auditLineIn is auditLine in the language trf (a Host's trf, or inEnglish{}.Trf) says it in.
+func auditLineIn(trf func(string, ...any) string, e *regindex.IndexEntry, commit string) string {
 	switch {
 	case e == nil:
 		return ""
 	case e.AuditAt(commit) != nil:
 		a := e.AuditAt(commit)
-		return "✓ audited by " + a.Model + " on " + a.Date + " at this commit"
+		return trf("autodoc.text.registry.audited_by_on_at_this_commit", a.Model, a.Date)
 	case len(e.Audits) > 0:
 		last := e.Audits[0] // newest first
-		return "not audited at this commit (last audited: " + regindex.Short(last.Commit) + ", " + last.Date + ")"
+		return trf("autodoc.text.registry.not_audited_at_this_commit_last_audited", regindex.Short(last.Commit), last.Date)
 	}
-	return "never audited"
+	return trf("autodoc.text.registry.never_audited")
 }
 
 // auditHistory is an entry's newest audit as history, not a claim about any commit installed.

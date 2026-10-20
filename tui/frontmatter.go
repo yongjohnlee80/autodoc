@@ -2,8 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 )
 
@@ -36,27 +34,27 @@ func readSchemaInfo(v any) schemaInfo {
 }
 
 // state is the schema's standing, a sentence for the settings dialog.
-func (s schemaInfo) state() string {
-	var b strings.Builder
+func (s schemaInfo) state(t wording) string {
+	var out string
 	switch {
 	case s.path == "":
-		b.WriteString("no schema: files are not checked, and field:value searches as words")
+		out = t.Tr("autodoc.text.frontmatter.no_schema_files_are_not_checked_and_field_value")
 	case s.active:
-		fmt.Fprintf(&b, "active: %d fields", s.fields)
+		out = t.Trf("autodoc.text.frontmatter.active_fields", s.fields)
 	default:
-		b.WriteString("not active")
+		out = t.Tr("autodoc.text.frontmatter.not_active")
 	}
-	if s.err != "" {
-		b.WriteString(" · ")
-		if s.line > 0 {
-			fmt.Fprintf(&b, "line %d: ", s.line)
-		}
-		b.WriteString(s.err)
-		if s.active {
-			b.WriteString(" (the last valid schema stays in use)")
-		}
+	switch {
+	case s.err == "":
+		return out
+	case s.line > 0 && s.active:
+		return out + " · " + t.Trf("autodoc.text.frontmatter.line_the_last_valid_schema_stays_in_use", s.line, s.err)
+	case s.line > 0:
+		return out + " · " + t.Trf("autodoc.text.frontmatter.line", s.line, s.err)
+	case s.active:
+		return out + " · " + t.Trf("autodoc.text.frontmatter.the_last_valid_schema_stays_in_use", s.err)
 	}
-	return b.String()
+	return out + " · " + s.err
 }
 
 // validateSoon checks the page's text after wait; a later call supersedes it. A typing pause waits
@@ -123,9 +121,9 @@ func (h *Host) showDiagnostics(ds []fmDiagnostic) {
 		h.set("App.diagnosticsLine", "")
 		return
 	}
-	line := fmt.Sprintf("⚠ frontmatter line %d: %s", ds[0].line, ds[0].message)
+	line := h.trf("autodoc.text.frontmatter.frontmatter_line", ds[0].line, ds[0].message)
 	if len(ds) > 1 {
-		line += fmt.Sprintf("  (+%d more)", len(ds)-1)
+		line = h.trf("autodoc.text.frontmatter.frontmatter_line_more", ds[0].line, ds[0].message, len(ds)-1)
 	}
 	h.set("App.diagnosticsLine", line)
 	h.set("App.diagnosticsShown", true)

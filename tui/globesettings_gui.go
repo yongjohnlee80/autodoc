@@ -138,10 +138,11 @@ func viewThemeValues(choice string, p prefs, ts globeThemeSource) (map[string]st
 // themeChoices are the theme chooser's values, and its labels.
 func (g *globeMap) themeChoices() (names, labels []string) { return viewThemeChoices(g.c) }
 
-// viewThemeChoices are a view's theme chooser's values and labels: the terminals', the page's, then
-// every theme the window can wear.
+// viewThemeChoices are a view's theme chooser's values and labels: the terminals', the page's (in
+// the UI's language), then every theme the window can wear.
 func viewThemeChoices(c Core) (names, labels []string) {
-	return themeChoices(c, []string{"terminal", "page"}, []string{"the terminals'", "the page's"})
+	return themeChoices(c, []string{"terminal", "page"}, []string{
+		c.Tr("autodoc.text.globesettings_gui.the_terminals"), c.Tr("autodoc.text.globesettings_gui.the_page_s")})
 }
 
 // lookNow is the look the preferences and the themes give now.
@@ -243,7 +244,7 @@ func (h *Host) openGlobeSettings() {
 			return
 		}
 	}
-	h.notify(globeSettingsElsewhere)
+	h.notify(h.globeSettingsElsewhereNotice())
 }
 
 // openSettings is Relations › GlobeMap settings… and Preferences › GlobeMap….
@@ -276,21 +277,11 @@ func (g *globeMap) setColour(key, text string) {
 
 // settingsState is the dialog's lists.
 func (g *globeMap) settingsState() map[string]any {
-	_, themes := g.themeChoices()
-	var filters, dots, speeds []string
-	for _, f := range globeFilters {
-		filters = append(filters, f.name)
-	}
-	for _, d := range globeDotSizes {
-		dots = append(dots, d.name)
-	}
-	for _, s := range globeSpeeds {
-		speeds = append(speeds, s.label)
-	}
+	names, themes := g.themeChoices()
 	st := g.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.globeThemes": choices(themes...), "App.globeFilters": choices(filters...),
-		"App.globeDotSizes": choices(dots...), "App.globeSpeeds": choices(speeds...),
+		"App.globeThemes": keyedChoices(names, themes), "App.globeFilters": choiceModel(g.c, "App.globeFilters"),
+		"App.globeDotSizes": choiceModel(g.c, "App.globeDotSizes"), "App.globeSpeeds": choiceModel(g.c, "App.globeSpeeds"),
 		"App.globeSettingsError": "",
 	})
 	return st

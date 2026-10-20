@@ -95,20 +95,25 @@ func (n openedFile) readAs() string {
 func (n openedFile) outside() bool { return n.open && n.ws == "" }
 
 // title is the file's name as the page and the status line show it: a derived document's carries
-// its read-only badge, an outside file's that it is in no workspace.
-func (n openedFile) title() string {
+// its read-only badge, an outside file's that it is in no workspace. Its badges are English: titleIn
+// gives them in the UI's language.
+func (n openedFile) title() string { return n.titleIn(englishText) }
+
+// titleIn is title with its badges in tr's language (h.tr).
+func (n openedFile) titleIn(tr func(string) string) string {
+	trf := func(id, arg string) string { return strings.ReplaceAll(tr(id), "%1", arg) }
 	badges := []string{}
 	if n.outside() {
-		badges = append(badges, outsideBadge)
+		badges = append(badges, tr("autodoc.text.files.no_workspace"))
 	}
 	if n.open && n.derived != "" {
-		badges = append(badges, n.derived+" · read-only")
+		badges = append(badges, trf("autodoc.text.files.read_only", n.derived))
 	}
 	switch {
 	case n.open && n.disk == diskChanged:
-		badges = append(badges, "changed on disk")
+		badges = append(badges, tr("autodoc.text.files.changed_on_disk"))
 	case n.open && n.disk == diskDeleted:
-		badges = append(badges, "deleted on disk")
+		badges = append(badges, tr("autodoc.text.files.deleted_on_disk"))
 	}
 	if len(badges) == 0 {
 		return n.name()
@@ -116,11 +121,9 @@ func (n openedFile) title() string {
 	return n.name() + "  [" + strings.Join(badges, " · ") + "]"
 }
 
-// outsideBadge marks a file outside every workspace; outsideLimits says what that costs.
-const (
-	outsideBadge  = "no workspace"
-	outsideLimits = "it is in no workspace: no search, links, backlinks, frontmatter check or embeddings"
-)
+// outsideBadge marks a file outside every workspace (autodoc.text.files.no_workspace in the UI's
+// language).
+const outsideBadge = "no workspace"
 
 // readFile is doc.read of p in workspace ws, or file.read of the absolute p when ws is "".
 // raw reads an HTML file's own bytes (doc.read_raw, file.read_raw) where the plain verbs give its
@@ -158,7 +161,7 @@ func (h *Host) writeFile(ctx context.Context, ws, p string, content []byte, want
 type unsavedAsk func(name string) string
 
 // askBefore is the unsaved-changes question before action, one of close, reopen, reload,
-// close_gone (with where the file went), quit and delete_workspace.
+// close_gone_from_the_workspace, close_gone_from_disk, quit and delete_workspace.
 func (h *Host) askBefore(action string, args ...any) unsavedAsk {
 	return func(name string) string {
 		return h.trf("autodoc.text.files.unsaved_"+action, append([]any{name}, args...)...)
@@ -408,7 +411,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 			return
 		}
 		if a.err != nil {
-			h.failed("open "+p, a.err)
+			h.failed(h.trf("autodoc.notice.files.open", p), a.err)
 			h.missedLanding(land, a.err)
 			if h.restoreOpenFailed(b, ws, p) { // a kept copy's file gone: its text becomes a draft
 				return
@@ -427,7 +430,7 @@ func (h *Host) loadInto(b *openBuffer, ws, p string, prev *widget.JumpPos, raw b
 		}
 		h.say(h.trf("autodoc.notice.files.opened", p))
 		if ws == "" {
-			h.notify(p + ": " + outsideLimits)
+			h.notify(h.trf("autodoc.notice.files.it_is_in_no_workspace_no_search_links_backlinks", p))
 		}
 		h.focusEditor()
 	})
@@ -578,9 +581,10 @@ func (h *Host) recheckFile() {
 // is dropped.
 func (h *Host) recheckBuffer(b *openBuffer) {
 	tk, ws, p, read, raw := h.bufferTicket(b, false), b.file.ws, b.file.path, b.file.version, b.file.raw
-	where := "the workspace"
+	// where it went, a sentence each, as every language says them
+	gone, ask := "autodoc.notice.files.is_gone_from_the_workspace_closed", "close_gone_from_the_workspace"
 	if ws == "" {
-		where = "disk"
+		gone, ask = "autodoc.notice.files.is_gone_from_disk_closed", "close_gone_from_disk"
 	}
 	type answer struct {
 		content, version string
@@ -602,13 +606,13 @@ func (h *Host) recheckBuffer(b *openBuffer) {
 		case code(a.err) == rpc.CodeNotFound, code(a.err) == golibrpc.CodeInvalidParams:
 			if !b.file.dirty {
 				h.dropBuffer(b)
-				h.notify(h.trf("autodoc.notice.files.is_gone_from_closed", p, where))
+				h.notify(h.trf(gone, p))
 				return
 			}
 			b.file.version = "" // gone: a save writes it anew
-			h.guard(b, h.askBefore("close_gone", where), func() { h.dropBuffer(b) })
+			h.guard(b, h.askBefore(ask), func() { h.dropBuffer(b) })
 		case a.err != nil:
-			h.failed("check "+p, a.err)
+			h.failed(h.trf("autodoc.notice.files.check", p), a.err)
 		case a.version == b.file.version:
 		case b.file.dirty:
 			h.notify(h.trf("autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav", p))
@@ -661,7 +665,7 @@ func (h *Host) setDirty(v bool) {
 		mark = " [+]"
 	}
 	if h.file.open || v {
-		h.set("App.statusCenter", h.file.title()+mark)
+		h.set("App.statusCenter", h.file.titleIn(h.tr)+mark)
 	} else {
 		h.set("App.statusCenter", "")
 	}
@@ -690,7 +694,7 @@ func (h *Host) save() {
 // (a guarded open or switch), and is dropped when the picker is closed without one.
 func (h *Host) nameDraft(then func()) {
 	h.draft = &draftSave{then: then, b: h.active}
-	h.set("App.fileNameError", draftHelp)
+	h.set("App.fileNameError", h.tr("autodoc.text.files.save_the_draft_a_path_in_the_workspace_md_is_add"))
 	h.setField("App.newFilePath", h.file.hint) // the name buffer.new suggested, to take or change
 	h.newPick.setAll(h.files.Paths)
 	h.newPick.filter("")
@@ -702,9 +706,6 @@ type draftSave struct {
 	then func()
 	b    *openBuffer
 }
-
-// draftHelp is the new-file picker's line when it names the draft.
-const draftHelp = "save the draft: a path in the workspace; .md is added when it has none · Enter on a file takes its folder"
 
 // cursorBytes is the editor's cursor as a byte offset of its text, for the file the draft becomes.
 func (h *Host) cursorBytes() int { return cursorBytesOf(h.core) }
@@ -820,7 +821,7 @@ func (h *Host) write(b *openBuffer, content, want string, after func()) {
 		case code(a.err) == rpc.CodeNotFound:
 			h.markDisk(b, diskDeleted, "") // the next save creates it again
 		default:
-			h.failed("save "+p, a.err)
+			h.failed(h.trf("autodoc.notice.files.save", p), a.err)
 		}
 	})
 }
@@ -852,7 +853,7 @@ func (h *Host) reloadShown() {
 		case r.missing:
 			h.markDisk(b, diskDeleted, "")
 		case r.err != nil:
-			h.failed("reload "+snap.path, r.err)
+			h.failed(h.trf("autodoc.notice.files.reload", snap.path), r.err)
 		default:
 			h.reloadFromDisk(b, r.content, r.version)
 			h.notify(h.trf("autodoc.notice.files.reloaded_from_disk_u_brings_your_text_back", snap.path))
@@ -885,7 +886,7 @@ func (h *Host) overwrite() {
 		}
 		switch {
 		case a.err != nil:
-			h.failed("overwrite "+p, a.err)
+			h.failed(h.trf("autodoc.notice.files.overwrite", p), a.err)
 		default:
 			// gone: a create ("") writes it back
 			h.write(b, h.editorFor(b).Value(), a.version, nil)
@@ -1033,7 +1034,7 @@ func inWorkspace(root, name string) error {
 func (h *Host) createRefused(name string, err error) {
 	reason := wireMessage(err)
 	if code(err) == rpc.CodeConflict {
-		reason = name + " exists: pick another name, or open it"
+		reason = h.trf("autodoc.notice.files.exists_pick_another_name_or_open_it", name)
 	}
 	h.refuseName(name, reason)
 }

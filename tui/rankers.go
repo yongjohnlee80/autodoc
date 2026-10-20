@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -52,7 +51,7 @@ func newRankers(c Core, listed func()) *rankers {
 		checkHint: "Check asks the ranker what it serves",
 		columns:   []string{"use", "name", "kind", "model", "apiKey"},
 		listed:    r.status,
-		removal:   r.removal, kindShown: r.kindShown, checked: r.checked,
+		removal:   r.removal, formOpened: r.formOpened, kindShown: r.kindShown, checked: r.checked,
 	})
 	return r
 }
@@ -84,28 +83,24 @@ func (r *rankers) Commands() map[string]Command {
 func (r *rankers) status(m map[string]any, active, why string) string {
 	r.supplied = str(m, "supplied")
 	r.listed()
-	return rankersStatus(active, r.supplied, why, num(m, "window"))
+	return rankersStatus(r.c, active, r.supplied, why, num(m, "window"))
 }
 
 // rankersStatus is the line under the list: the ranker in use and its window, or the build's own.
-func rankersStatus(active, supplied, why string, window int64) string {
-	var s string
+func rankersStatus(t wording, active, supplied, why string, window int64) string {
 	switch {
+	case supplied != "" && why != "":
+		return t.Trf("autodoc.text.rankers.re_ranking_supplied_by_the_build_no_probe_answer", supplied, window, why)
 	case supplied != "":
-		s = fmt.Sprintf("re-ranking with %s, supplied by the build, over the top %d: the one in use cannot be changed here", supplied, window)
-		if why != "" {
-			s += " · it did not answer its probe: " + why
-		}
-		return s
+		return t.Trf("autodoc.text.rankers.re_ranking_supplied_by_the_build", supplied, window)
+	case active != "" && why != "":
+		return t.Trf("autodoc.text.rankers.re_ranking_with_the_chosen_ranker_did_not_start", active, window, why)
 	case active != "":
-		s = fmt.Sprintf("re-ranking with %s over the top %d candidates", active, window)
-	default:
-		s = "not re-ranking: Add… a ranker, then Use it"
+		return t.Trf("autodoc.text.rankers.re_ranking_with_over_the_top_candidates", active, window)
+	case why != "":
+		return t.Trf("autodoc.text.rankers.not_re_ranking_the_chosen_ranker_did_not_start", why)
 	}
-	if why != "" {
-		s += " · the chosen ranker did not start: " + why
-	}
-	return s
+	return t.Tr("autodoc.text.rankers.not_re_ranking_add_a_ranker_then_use_it")
 }
 
 // use makes ranker i the one search's second stage uses; one that does not set up is refused, and
@@ -178,8 +173,27 @@ func (r *rankers) removal(row endpointRow, remove func()) {
 	r.c.Ask(Question{Title: r.c.Tr("autodoc.question.rankers.remove_the_ranker"), Text: r.c.Trf("autodoc.question.rankers.remove_the_ranker_its_key_its_usage_and_its_log", row.name), OnYes: remove})
 }
 
-// kindShown shows the model field for a kind whose model is typed.
-func (r *rankers) kindShown(k endpointKind) { r.c.Set("App.rankerModelShown", k.model) }
+// formOpened is the form's title on Add… and what Check does, in the UI's language: the spec's
+// are English, set as the form opens (endpoints.fill).
+func (r *rankers) formOpened(endpointRow) {
+	if r.editing == "" {
+		r.c.Set("App.rankerFormTitle", r.c.Tr("autodoc.text.rankers.add_a_ranker"))
+	}
+	r.spec.checkHint = r.c.Tr("autodoc.text.rankers.check_asks_the_ranker_what_it_serves")
+}
+
+// kindShown shows the model field for a kind whose model is typed, and the key field's label in
+// the UI's language (one sealed is endpoints.showKind's).
+func (r *rankers) kindShown(k endpointKind) {
+	r.c.Set("App.rankerModelShown", k.model)
+	if k.keyLabel != "" && (r.editing == "" || !r.hasKey) {
+		label := r.c.Tr("autodoc.text.rankers.api_key")
+		if k.kind == "tei" {
+			label = r.c.Tr("autodoc.text.rankers.api_key_if_the_server_takes_one")
+		}
+		r.c.Set("App.rankerKeyLabel", label)
+	}
+}
 
 // checked says what the ranker serves: a TEI server names its model; a rerank API names none, its
 // model typed.
@@ -195,12 +209,12 @@ func (r *rankers) checked(models []string, err error) {
 }
 
 // rankedTitle is what the hits' title says of their order: the ranker's, or why it is recall's.
-func rankedTitle(rk map[string]any) string {
+func rankedTitle(t wording, rk map[string]any) string {
 	switch str(rk, "state") {
 	case "ready":
-		return " · re-ranked by " + shortModel(str(rk, "model"))
+		return " · " + t.Trf("autodoc.text.rankers.re_ranked_by", shortModel(str(rk, "model")))
 	case "error":
-		return " · not re-ranked: " + str(rk, "error")
+		return " · " + t.Trf("autodoc.text.rankers.not_re_ranked", str(rk, "error"))
 	}
 	return ""
 }

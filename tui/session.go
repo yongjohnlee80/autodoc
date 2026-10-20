@@ -32,7 +32,8 @@ func (h *Host) start() {
 			default:
 				h.notifyOngoing(toastConnection, h.tr("autodoc.notice.session.connect_failed_help_about"))
 			}
-			h.set("App.aboutText", h.trf("autodoc.text.session.the_last_connect_failed", h.aboutText(), err.Error()))
+			h.connectErr = err
+			h.set("App.aboutText", h.aboutTextNow())
 			h.set("App.aboutError", h.trf("autodoc.text.session.the_last_connect_failed_2", err.Error()))
 			if h.mismatchRecovery && !errors.As(err, &me) {
 				// the older backend stopped, and the installed one did not come up: the recovery stays

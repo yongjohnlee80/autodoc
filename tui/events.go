@@ -119,9 +119,9 @@ func (h *Host) applyEvents(events []peerEvent) {
 		if h.reg.event(e.kind, e.workspace, e.detail) {
 			continue // a feature's own kind: the feature tells of it
 		}
-		by := "by another client"
+		by := h.tr("autodoc.notice.events.by_another_client")
 		if e.client == "" {
-			by = "on disk"
+			by = h.tr("autodoc.notice.events.on_disk")
 		}
 		var notice string
 		switch e.kind {
@@ -130,41 +130,45 @@ func (h *Host) applyEvents(events []peerEvent) {
 				h.ws = e.detail // the same root and index under its new name: nothing to reopen
 				h.setWhere(fmt.Sprintf("autodoc %s · %s", h.session.Version(), h.ws))
 			}
-			notice = fmt.Sprintf("workspace %s was renamed %s %s", e.workspace, e.detail, by)
+			notice = h.trf("autodoc.notice.events.workspace_was_renamed", e.workspace, e.detail, by)
 			relist = true
 		case "workspace.removed":
 			if e.workspace == h.ws {
 				h.keepDraftOnLeave()
 			}
-			notice = fmt.Sprintf("workspace %s was removed %s", e.workspace, by)
+			notice = h.trf("autodoc.notice.events.workspace_was_removed", e.workspace, by)
 			relist = true
 		case "workspace.added":
-			notice, relist = fmt.Sprintf("workspace %s was added %s", e.workspace, by), true
+			notice, relist = h.trf("autodoc.notice.events.workspace_was_added", e.workspace, by), true
 		case "workspace.patterns":
-			notice, relist = fmt.Sprintf("workspace %s: its rules were changed %s; reconciling", e.workspace, by), true
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_rules_were_changed_reconciling", e.workspace, by), true
 		case "workspace.schema":
-			notice, relist = fmt.Sprintf("workspace %s: its frontmatter schema changed %s", e.workspace, by), true
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_frontmatter_schema_changed", e.workspace, by), true
 			recheck = recheck || e.workspace == h.ws
 		case "workspace.text_extensions":
-			notice, relist = fmt.Sprintf("workspace %s: its text types were changed %s", e.workspace, by), true
-		case "workspace.section_size", "workspace.embedding_policy", "workspace.provider", "workspace.databases":
-			what := map[string]string{"workspace.section_size": "section size", "workspace.embedding_policy": "embedding policy",
-				"workspace.provider": "embedding provider", "workspace.databases": "database settings"}[e.kind]
-			notice, relist = fmt.Sprintf("workspace %s: its %s was changed %s", e.workspace, what, by), true
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_text_types_were_changed", e.workspace, by), true
+		case "workspace.section_size":
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_section_size_was_changed", e.workspace, by), true
+		case "workspace.embedding_policy":
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_embedding_policy_was_changed", e.workspace, by), true
+		case "workspace.provider":
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_embedding_provider_was_changed", e.workspace, by), true
+		case "workspace.databases":
+			notice, relist = h.trf("autodoc.notice.events.workspace_its_database_settings_was_changed", e.workspace, by), true
 		case "models.reclaimed": // the daemon's own: what its start sweep removed (ADR 1791284787)
-			notice = fmt.Sprintf("workspace %s: reclaimed %s", e.workspace, e.detail)
+			notice = h.trf("autodoc.notice.events.workspace_reclaimed", e.workspace, e.detail)
 		case "store.compacted", "store.compact_skipped":
 			notice = e.detail
 		case "embedding.switched":
-			notice = fmt.Sprintf("embedding model switched to '%s' %s; files are re-indexing in the background, and search stays available", e.detail, by)
+			notice = h.trf("autodoc.notice.events.embedding_model_switched_to_files_are_re_indexin", e.detail, by)
 		case "embedding.cancelled":
-			notice = "the model switch was cancelled " + by
+			notice = h.trf("autodoc.notice.events.the_model_switch_was_cancelled", by)
 		case "embedding.providers":
-			notice = "the embedding providers were changed " + by
+			notice = h.trf("autodoc.notice.events.the_embedding_providers_were_changed", by)
 		case "ranker.switched":
-			notice, reranked = "the ranker in use was changed "+by, true
+			notice, reranked = h.trf("autodoc.notice.events.the_ranker_in_use_was_changed", by), true
 		case "ranker.providers":
-			notice, reranked = "the rankers were changed "+by, true
+			notice, reranked = h.trf("autodoc.notice.events.the_rankers_were_changed", by), true
 		}
 		if notice != "" && !slices.Contains(notices, notice) {
 			notices = append(notices, notice)

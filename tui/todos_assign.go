@@ -46,38 +46,40 @@ func newAssignPick(t *todos) *pick[AgentEntry] {
 // Status and Preview*.
 func newAgentPick(c Core, dialog, name string, choose func(AgentEntry)) *pick[AgentEntry] {
 	return &pick[AgentEntry]{c: c, dialog: dialog, name: name,
-		list:   newRows(tuidecl.NewListModel("key", "agent", "state"), agentRowOf),
+		list:   newRows(tuidecl.NewListModel("key", "agent", "state"), func(_ int, e AgentEntry) rowOf { return agentRowOf(c, e) }),
 		field:  "App." + name + "Field",
 		status: "App." + name + "Status", noun: "agents",
 		match: func(e AgentEntry) string { return e.Name + " " + e.Ref.Codename },
 		preview: func(e AgentEntry) func(context.Context) answerOf[pane] {
-			pn := agentPane(e)
+			pn := agentPane(c, e)
 			return func(context.Context) answerOf[pane] { return answerOf[pane]{v: pn} }
 		},
 		choose: choose}
 }
 
-func agentRowOf(_ int, e AgentEntry) rowOf {
-	return rowOf{"key": e.Ref.Codename, "agent": e.Name + "  (" + e.Ref.Codename + ")", "state": runState(e)}
+// agentRowOf is an agent's row, in c's language.
+func agentRowOf(c Core, e AgentEntry) rowOf {
+	return rowOf{"key": e.Ref.Codename, "agent": e.Name + "  (" + e.Ref.Codename + ")", "state": runState(c, e)}
 }
 
-func runState(e AgentEntry) string {
+func runState(c Core, e AgentEntry) string {
 	if e.Running {
-		return "running"
+		return c.Tr("autodoc.text.todos_assign.running")
 	}
-	return "stopped"
+	return c.Tr("autodoc.text.todos_assign.stopped")
 }
 
-// agentPane is an agent's preview: who it is, what it runs, and what A does to a stopped one.
-func agentPane(e AgentEntry) pane {
+// agentPane is an agent's preview: who it is, what it runs, and what A does to a stopped one, in c's
+// language.
+func agentPane(c Core, e AgentEntry) pane {
 	var b strings.Builder
-	fmt.Fprintf(&b, "## %s\n\n- codename: %s\n- assignee: %s%s\n- command: `%s`\n- %s\n", e.Name, e.Ref.Codename,
-		assigneePrefix, e.Ref.Codename, e.Command, runState(e))
+	fmt.Fprintf(&b, "## %s\n\n%s\n", e.Name, c.Trf("autodoc.text.todos_assign.codename_assignee_command",
+		e.Ref.Codename, assigneePrefix+e.Ref.Codename, e.Command, runState(c, e)))
 	if !e.Running {
-		b.WriteString("\nNot running: you'll be asked to start it, and the task is handed over once it has.\n")
+		b.WriteString("\n" + c.Tr("autodoc.text.todos_assign.not_running_you_ll_be_asked_to_start_it_and_the") + "\n")
 	}
 	if e.Orphan {
-		b.WriteString("\nIts profile is gone; it takes the task while it runs.\n")
+		b.WriteString("\n" + c.Tr("autodoc.text.todos_assign.its_profile_is_gone_it_takes_the_task_while_it_r") + "\n")
 	}
 	return pane{title: e.Name, text: b.String()}
 }
@@ -173,7 +175,7 @@ func (t *todos) handedOver(name, assignee string, err error) {
 	}
 	why := err.Error()
 	if errors.Is(err, ErrAgentCancelled) {
-		why = "you didn't start it"
+		why = t.c.Tr("autodoc.notice.todos_assign.you_didn_t_start_it")
 	}
 	t.c.Notify(t.c.Trf("autodoc.notice.todos_assign.todos_assigned_to_but_not_delivered_start_the_ag", assignee, why))
 }

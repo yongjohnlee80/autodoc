@@ -147,8 +147,14 @@ func mindmapModel(m relMap, root string, shape func(n mapNode) pm.MindShape) *pm
 	return d
 }
 
-// globeSettingsElsewhere is App.openGlobeSettings where there is no GlobeMap: a terminal.
+// globeSettingsElsewhere is App.openGlobeSettings where there is no GlobeMap: a terminal. It is
+// English: globeSettingsElsewhereNotice says it in the UI's language.
 const globeSettingsElsewhere = "the GlobeMap and its settings are the window's: run autodoc --gui"
+
+// globeSettingsElsewhereNotice is globeSettingsElsewhere in the UI's language, the notice.
+func (h *Host) globeSettingsElsewhereNotice() string {
+	return h.tr("autodoc.notice.relationmap.the_globemap_and_its_settings_are_the_window_s_r")
+}
 
 // The lines of main.qml the GUI's relation views are written after: their Relations menu items,
 // and their panels.

@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"fmt"
+	"html"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -142,19 +145,22 @@ func TestEveryLanguageWalksTheScreen(t *testing.T) {
 }
 
 // koCatalog is a Korean catalog for the switch cell: the About dialog's title, a leader key, a
-// chooser's row and a notice, as the five shipped catalogs will say them.
+// chooser's row, a feature's menu row and the status line's search, as the shipped catalogs say them.
 func koCatalog() fstest.MapFS {
 	return fstest.MapFS{"i18n/autodoc_ko_KR.xml": {Data: []byte(`<?xml version="1.0" encoding="utf-8"?>
 <TS version="2.1" language="ko_KR"><context><name>autodoc</name>
 <message id="autodoc.view.about.about_autodoc"><translation>AutoDoc 정보</translation></message>
 <message id="autodoc.key.open_a_document"><translation>문서 열기</translation></message>
 <message id="autodoc.choice.vim_modal"><translation>Vim (모드)</translation></message>
+<message id="autodoc.text.plugincmds.no_plugins_yet"><translation>아직 플러그인이 없습니다</translation></message>
+<message id="autodoc.text.progress.lexical_search"><translation>어휘 검색</translation></message>
+<message id="autodoc.text.progress.semantic_search"><translation>의미 검색</translation></message>
 </context></TS>`)}}
 }
 
 // A switch relabels the screen in one frame, an open dialog included: a QML label (the About
-// dialog's title), a card AutoDoc composes in Go (the leader's), a chooser's rows, and the menu's
-// check; and back.
+// dialog's title), a card AutoDoc composes in Go (the leader's), a chooser's rows, the status line,
+// a feature's menu rows, and the menu's check; and back.
 func TestALanguageSwitchRelabelsTheScreen(t *testing.T) {
 	sess := NewSession("unused", nil)
 	h := newHost(sess, Options{})
@@ -174,6 +180,12 @@ func TestALanguageSwitchRelabelsTheScreen(t *testing.T) {
 	}
 	if m, ok := source("App.keymaps").Obj.(*tuidecl.ListModel); !ok || m.Data(tuidecl.Index{Row: 0}, "label").Raw != "Vim (모드)" {
 		t.Errorf("the keymap chooser is not in Korean: %+v", source("App.keymaps"))
+	}
+	if l := source("App.semanticLabel").Raw; l != "어휘 검색" && l != "의미 검색" {
+		t.Errorf("the status line's search is not in Korean: %q", l)
+	}
+	if l := onLoop(r, func() string { return h.plugins.pluginRows.Data(tuidecl.Index{Row: 0}, "label").Raw }); l != "아직 플러그인이 없습니다" {
+		t.Errorf("the Plugins menu (a feature's text, LanguageSink) is not in Korean: %q", l)
 	}
 	if source("App.language_ko_KR").Raw != "true" {
 		t.Error("Options › Language's check did not move to 한국어")
@@ -214,5 +226,127 @@ func TestFillIsOnePass(t *testing.T) {
 		if got := fill(c.s, c.args...); got != c.want {
 			t.Errorf("fill(%q, %v) = %q, want %q", c.s, c.args, got, c.want)
 		}
+	}
+}
+
+// pseudoCatalog is ja_JP saying every English message marked, ⟦English⟧ (marks no message holds), each %N and mnemonic kept:
+// text a switch composed again reads marked, and English left on screen reads bare.
+func pseudoCatalog(t *testing.T) fstest.MapFS {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<TS version=\"2.1\" language=\"ja_JP\"><context><name>autodoc</name>\n")
+	for id, english := range readEnglish(t) {
+		b.WriteString(`<message id="` + id + `"><translation>` + html.EscapeString("⟦"+english+"⟧") + "</translation></message>\n")
+	}
+	b.WriteString("</context></TS>\n")
+	return fstest.MapFS{"i18n/autodoc_ja_JP.xml": {Data: []byte(b.String())}}
+}
+
+var (
+	marked     = regexp.MustCompile(`⟦[^⟦⟧]*⟧`)
+	argPattern = regexp.MustCompile(`%[1-9][0-9]?`)
+)
+
+// bareEnglish is the English catalog text in s outside every ⟦…⟧: the words of AutoDoc's own
+// sentences, each run between its %N at least 8 bytes and two words, so a name or a key is none.
+func bareEnglish(s string, english []string) []string {
+	for {
+		t := marked.ReplaceAllString(s, "")
+		if t == s {
+			break
+		}
+		s = t
+	}
+	var found []string
+	for _, e := range english {
+		if strings.Contains(s, e) {
+			found = append(found, e)
+		}
+	}
+	return found
+}
+
+// englishRuns are the English catalog's sentence runs bareEnglish looks for.
+func englishRuns(t *testing.T) []string {
+	t.Helper()
+	seen := map[string]bool{}
+	var runs []string
+	for _, e := range readEnglish(t) {
+		for _, run := range argPattern.Split(strings.ReplaceAll(e, "&", ""), -1) {
+			run = strings.TrimSpace(run)
+			if len(run) >= 8 && strings.Contains(run, " ") && !seen[run] {
+				seen[run] = true
+				runs = append(runs, run)
+			}
+		}
+	}
+	return runs
+}
+
+// notCatalogText are the sources whose words are not the catalog's: the tutorial's page (docs, in
+// each language's own pages) and the dock's titles, which name widgets for Lua and a tooltip (ADR
+// 1792451618 Q3b).
+var notCatalogText = map[string]bool{"App.tutorialText": true, "App.dock": true}
+
+// A switch leaves no English on screen: in a language that says every message marked, no App.*
+// value and no row of a list model the screen shows holds a run of AutoDoc's English unmarked. The
+// text composed in Go is composed again (languageChanged, each feature's LanguageSink), not only the
+// QML labels golib relabels itself.
+func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{GUI: wholeTables})
+	s := decltest.RunWith(t, 120, 40, h.attach, append(h.options(Options{GUI: wholeTables}),
+		tuidecl.Translations(pseudoCatalog(t), "i18n", "autodoc"))...)
+	t.Cleanup(h.cancel)
+	r := &running{h: h, s: s}
+	runs := englishRuns(t)
+	onLoop(r, func() bool { h.setLanguage("ja_JP"); return true })
+	s.WaitFor(t, "the switch", func(string) bool { return onLoop(r, func() bool { return h.language == "ja_JP" }) })
+	onLoop(r, func() bool { return true }) // F1 is made anew on the loop's next turn (commandsChanged)
+	bare := onLoop(r, func() map[string][]string {
+		// a script's or a plugin's command is in its own words, shown as written (trOr): AutoDoc's
+		// bundled scripts' too
+		var own []string
+		for _, e := range h.cat.entries() {
+			if e.Source != SourceBuiltin && e.Source != SourceFeature {
+				own = append(own, e.Title, e.Help)
+			}
+		}
+		out := map[string][]string{}
+		for name := range h.reg.state {
+			if notCatalogText[name] {
+				continue
+			}
+			v, ok := h.p.Tree().Source(name)
+			if !ok {
+				continue
+			}
+			raw := v.Raw
+			for _, words := range own {
+				if words != "" {
+					raw = strings.ReplaceAll(raw, words, "")
+				}
+			}
+			if found := bareEnglish(raw, runs); len(found) > 0 {
+				out[name] = found
+			}
+			m, ok := v.Obj.(*tuidecl.ListModel)
+			if !ok {
+				continue
+			}
+			for i := range m.Len() {
+				for _, role := range m.Roles() {
+					if role == "key" {
+						continue // a row's key is English by design, and never shown
+					}
+					if found := bareEnglish(m.Data(tuidecl.Index{Row: i}, role).Raw, runs); len(found) > 0 {
+						out[fmt.Sprintf("%s[%d].%s", name, i, role)] = found
+					}
+				}
+			}
+		}
+		return out
+	})
+	for _, name := range slices.Sorted(maps.Keys(bare)) {
+		t.Errorf("%s still says, in English: %q", name, bare[name])
 	}
 }

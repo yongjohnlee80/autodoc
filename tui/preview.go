@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -48,16 +47,16 @@ const (
 // imageMode reports whether a preview can be an image, and why not when it cannot.
 func (h *Host) imageMode() (bool, string) {
 	if !h.prefs.images {
-		return false, "image previews are off (View › Image previews)"
+		return false, h.tr("autodoc.text.preview.image_previews_are_off_view_image_previews")
 	}
 	switch h.graphics() {
 	case tuicore.TriNo:
-		return false, "this terminal does not draw images (no kitty graphics)"
+		return false, h.tr("autodoc.text.preview.this_terminal_does_not_draw_images_no_kitty_grap")
 	case tuicore.TriUnknown:
-		return false, "the terminal did not confirm kitty graphics (inside tmux: set -g allow-passthrough on)"
+		return false, h.tr("autodoc.text.preview.the_terminal_did_not_confirm_kitty_graphics_insi")
 	}
 	if !h.browserFound() {
-		return false, "no headless Chromium or Chrome to render with"
+		return false, h.tr("autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with")
 	}
 	return true, ""
 }
@@ -107,7 +106,11 @@ func (h *Host) toggleImagePreviews() {
 			return
 		}
 	}
-	h.say(h.trf("autodoc.notice.preview.image_previews", map[bool]string{true: "on", false: "off: diagram sources and the browser"}[v]))
+	state := h.tr("autodoc.notice.preview.off_diagram_sources_and_the_browser")
+	if v {
+		state = h.tr("autodoc.notice.preview.on")
+	}
+	h.say(h.trf("autodoc.notice.preview.image_previews", state))
 }
 
 // mermaidEngines are what can draw a Mermaid diagram in a GUI window (File › Preview option):
@@ -139,7 +142,11 @@ func (h *Host) mermaidEngineChanged() {
 			h.renderHTMLPane()
 		}
 	}
-	h.say(h.trf("autodoc.notice.preview.mermaid_diagrams", map[bool]string{true: "drawn natively (no zoom)", false: "drawn by mermaid.js"}[h.prefs.mermaid == "native"]))
+	drawn := h.tr("autodoc.notice.preview.drawn_by_mermaid_js")
+	if h.prefs.mermaid == "native" {
+		drawn = h.tr("autodoc.notice.preview.drawn_natively_no_zoom")
+	}
+	h.say(h.trf("autodoc.notice.preview.mermaid_diagrams", drawn))
 }
 
 // previewing is the image preview open: its dialog, the page it renders, whether that page is as
@@ -175,7 +182,7 @@ func (h *Host) showDiagram(source string) {
 			case err == nil:
 				h.showDiagramNative(source, "")
 			default:
-				h.showDiagramImage(source, "not drawn natively ("+err.Error()+")")
+				h.showDiagramImage(source, h.trf("autodoc.text.preview.not_drawn_natively", err.Error()))
 			}
 		})
 		return
@@ -191,7 +198,7 @@ func (h *Host) showDiagram(source string) {
 		case err == nil:
 			h.showDiagramNative(source, why)
 		default:
-			h.showDiagramText(source, "Diagram source · "+why+"; not drawn natively ("+err.Error()+")")
+			h.showDiagramText(source, h.trf("autodoc.text.preview.diagram_source_not_drawn_natively", why, err.Error()))
 		}
 	})
 }
@@ -204,19 +211,19 @@ func (h *Host) showDiagramImage(source, declined string) {
 		why = declined + "; " + why
 	}
 	if !ok {
-		h.showDiagramText(source, "Diagram source · "+why)
+		h.showDiagramText(source, h.trf("autodoc.text.preview.diagram_source", why))
 		return
 	}
 	theme := h.exportTheme()
 	page, err := export.DiagramPage(source, theme)
 	if err != nil {
-		h.showDiagramText(source, "Diagram source · "+err.Error())
+		h.showDiagramText(source, h.trf("autodoc.text.preview.diagram_source", err.Error()))
 		return
 	}
 	h.diagramImage = true
-	h.diagramHelpText = "Image · drawn offline by mermaid " + mermaid.Version + " in the " + theme + " theme · scroll: arrows, j k h l, PgUp/PgDn, wheel"
+	h.diagramHelpText = h.trf("autodoc.text.preview.image_drawn_offline_by_mermaid_in_the_theme_scro", mermaid.Version, theme)
 	if declined != "" {
-		h.diagramHelpText = "Image, " + declined + " · drawn offline by mermaid " + mermaid.Version + " in the " + theme + " theme · scroll: arrows, j k h l, PgUp/PgDn, wheel"
+		h.diagramHelpText = h.trf("autodoc.text.preview.image_declined_drawn_offline_by_mermaid", declined, mermaid.Version, theme)
 	}
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramNativeShown", false)
@@ -230,7 +237,7 @@ func (h *Host) showDiagramImage(source, declined string) {
 		if declined != "" {
 			why = declined + "; " + why
 		}
-		h.showDiagramText(source, "Diagram source · "+why)
+		h.showDiagramText(source, h.trf("autodoc.text.preview.diagram_source", why))
 	})
 }
 
@@ -241,14 +248,14 @@ func (h *Host) showDiagramNative(source, why string) {
 	theme := h.exportTheme()
 	page, err := export.DiagramPage(source, theme)
 	if err != nil {
-		h.showDiagramText(source, "Diagram source · "+err.Error())
+		h.showDiagramText(source, h.trf("autodoc.text.preview.diagram_source", err.Error()))
 		return
 	}
-	drawn := "Drawn natively (File › Preview option), no zoom"
+	help := h.tr("autodoc.text.preview.drawn_natively_file_preview_option_no_zoom_scrol")
 	if why != "" {
-		drawn = "Drawn natively, as mermaid.js is not (" + why + ")"
+		help = h.trf("autodoc.text.preview.drawn_natively_as_mermaid_js_is_not_scroll_arrow", why)
 	}
-	h.diagramImage, h.diagramHelpText = false, drawn+" · scroll: arrows, j k, PgUp/PgDn, wheel"
+	h.diagramImage, h.diagramHelpText = false, help
 	h.set("App.diagramTextShown", false)
 	h.set("App.diagramImageShown", false)
 	h.set("App.diagramNativeShown", true)
@@ -288,7 +295,11 @@ func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 		rasterize := h.rasterizer()
 		// a spinner while the page renders (a headless browser takes a moment), where the Image has
 		// no picture
-		img.SetLoadingText(map[bool]string{true: "drawing the diagram…", false: "rendering the page…"}[pv.dialog == "diagram"])
+		loading := h.tr("autodoc.text.preview.rendering_the_page")
+		if pv.dialog == "diagram" {
+			loading = h.tr("autodoc.text.preview.drawing_the_diagram")
+		}
+		img.SetLoadingText(loading)
 		img.SetLoading(true)
 		// a page taller than a terminal shows an image (widget.MaxImagePixels) is cut into strips
 		// here, off the loop: a long file's page, whole, shows nothing at all
@@ -306,7 +317,7 @@ func (h *Host) renderPreview(fresh bool, fallback func(why string)) {
 			}
 			img.SetLoading(false)
 			if a.err != nil {
-				fallback("the image failed: " + a.err.Error())
+				fallback(h.trf("autodoc.text.preview.the_image_failed", a.err.Error()))
 				return
 			}
 			img.SetStrips(a.v)
@@ -360,9 +371,9 @@ func (h *Host) withImageCells(dialog string, fallback func(why string), fn func(
 		}
 		if time.Now().After(deadline) {
 			if cols > 0 && rows > 0 {
-				fallback(fmt.Sprintf("the screen leaves the image %d×%d cells, too small to read", cols, rows))
+				fallback(h.trf("autodoc.text.preview.the_screen_leaves_the_image_cells_too_small_to_r", cols, rows))
 			} else {
-				fallback("the preview's image area was never laid out")
+				fallback(h.tr("autodoc.text.preview.the_preview_s_image_area_was_never_laid_out"))
 			}
 			return
 		}
@@ -428,7 +439,7 @@ func (h *Host) openPreviewInBrowser() {
 	}
 	do(h, func(ctx context.Context) error { return h.browser(ctx, path) }, func(err error) {
 		if err != nil {
-			h.failed("the browser did not open", err)
+			h.failed(h.tr("autodoc.notice.preview.the_browser_did_not_open"), err)
 			return
 		}
 		h.say(h.trf("autodoc.notice.preview.html_preview_opened_in_the_browser", filepath.Base(path)))

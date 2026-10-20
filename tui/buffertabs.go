@@ -214,7 +214,7 @@ func (h *Host) bufferTabRows(id string) []widget.MenuItemModel {
 		target := o
 		goTo = append(goTo, bufferTabRow("buffer.tabs.goto."+strconv.Itoa(o.n), bufferLabel(o), func() { h.showBuffer(target) }))
 	}
-	sub := widget.NewSubmenu("buffer.tabs.goto", "Go to", goTo)
+	sub := withLabelMessage(widget.NewSubmenu("buffer.tabs.goto", "Go to", goTo), "Go to")
 	sub.Enabled = len(goTo) > 0
 	rows := []widget.MenuItemModel{
 		bufferTabRow("buffer.tabs.new", "&New buffer", h.newEmptyBuffer),

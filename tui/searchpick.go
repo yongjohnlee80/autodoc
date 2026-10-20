@@ -56,8 +56,8 @@ func (h *Host) searchLive(q string) {
 	type answer struct {
 		hits           []hit
 		mode, semantic string
-		ranked         string // the title's note of the hits' order (rankedTitle)
-		rankedBy       string // the model that ordered them, "" when none did
+		rank           map[string]any // the ranker's answer, which the title notes the hits' order by (rankedTitle)
+		rankedBy       string         // the model that ordered them, "" when none did
 		err            error
 	}
 	opts := map[string]any{"limit": int64(100)}
@@ -79,7 +79,7 @@ func (h *Host) searchLive(q string) {
 				hold: str(hm, "hold")})
 		}
 		rk := asMap(m["rank"])
-		a := answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic"), ranked: rankedTitle(rk)}
+		a := answer{hits: out, mode: str(m, "mode_used"), semantic: str(m, "semantic"), rank: rk}
 		if str(rk, "state") == "ready" {
 			a.rankedBy = str(rk, "model")
 		}
@@ -98,7 +98,7 @@ func (h *Host) searchLive(q string) {
 			}
 			h.searchPick.show(nil)
 			h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_2", wireMessage(a.err)))
-			msg := "search in " + ws + " is unavailable: " + wireMessage(a.err)
+			msg := h.trf("autodoc.notice.searchpick.search_in_is_unavailable", ws, wireMessage(a.err))
 			if msg != h.lastSearchError {
 				h.notify(msg)
 				h.lastSearchError = msg
@@ -117,7 +117,7 @@ func (h *Host) searchLive(q string) {
 			h.searchWaiting = false
 		}
 		if a.semantic == "error" {
-			msg := "semantic search could not answer in " + ws + "; results are by words only"
+			msg := h.trf("autodoc.notice.searchpick.semantic_search_could_not_answer_in_results_are", ws)
 			if msg != h.lastSearchError {
 				h.notify(msg)
 				h.lastSearchError = msg
@@ -128,15 +128,17 @@ func (h *Host) searchLive(q string) {
 			h.searchWaitToast = false
 		}
 		// the order first: a narrow pane keeps what is read first
-		h.hitsRanked = a.ranked
+		ranked := rankedTitle(core{h}, a.rank)
+		h.hitsRanked = ranked
 		h.rankedBy(a.rankedBy)
-		h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_semantic", len(a.hits), a.ranked, a.mode, a.semantic))
+		h.set("App.hitsTitle", h.trf("autodoc.text.searchpick.hits_semantic", len(a.hits), ranked, a.mode, a.semantic))
 		h.searchPick.show(a.hits) // the hits, the first previewed
 	})
 }
 
 // searchWaits are what the search's waiting line says, one at a time, while a search has not
-// answered: the provider is embedding the query, or the files, or loading its model.
+// answered: the provider is embedding the query, or the files, or loading its model. They are the
+// English of searchWait's messages, in its order.
 var searchWaits = []string{
 	"warming up the engine",
 	"prepping the vectors",
@@ -146,6 +148,27 @@ var searchWaits = []string{
 	"polishing the cosines",
 	"consulting the embeddings",
 	"untangling the meanings",
+}
+
+// searchWait is searchWaits[i] in the UI's language.
+func (h *Host) searchWait(i int) string {
+	switch i {
+	case 0:
+		return h.tr("autodoc.text.searchpick.warming_up_the_engine")
+	case 1:
+		return h.tr("autodoc.text.searchpick.prepping_the_vectors")
+	case 2:
+		return h.tr("autodoc.text.searchpick.crates_are_being_fetched")
+	case 3:
+		return h.tr("autodoc.text.searchpick.asking_the_gpu_nicely")
+	case 4:
+		return h.tr("autodoc.text.searchpick.herding_the_tokens")
+	case 5:
+		return h.tr("autodoc.text.searchpick.polishing_the_cosines")
+	case 6:
+		return h.tr("autodoc.text.searchpick.consulting_the_embeddings")
+	}
+	return h.tr("autodoc.text.searchpick.untangling_the_meanings")
 }
 
 // searchWaitDelay is how long a search may take before its waiting line turns: an answer sooner
@@ -167,7 +190,7 @@ func (h *Host) searchWaitLine(tk Ticket, n uint64) {
 		if !waiting() {
 			return
 		}
-		msg := searchWaits[(frame/searchWaitFrames)%len(searchWaits)]
+		msg := h.searchWait((frame / searchWaitFrames) % len(searchWaits))
 		h.set("App.searchStatus", spinFrames[frame%len(spinFrames)]+" "+msg+"…")
 		frame++
 		h.after(spinEvery, turn)

@@ -88,7 +88,7 @@ func (pl *plugins) startExportResults(format copyFormat) {
 	heading := pl.exportHeading()
 	more := ""
 	if pl.results.partial() {
-		more = "the result has more rows than are loaded: change the query to change what is returned"
+		more = pl.c.Tr("autodoc.text.plugintable_export.the_result_has_more_rows_than_are_loaded_change")
 	}
 	pl.c.Set("App.exportHeading", heading)
 	pl.c.Set("App.exportMore", more)
@@ -101,16 +101,16 @@ func (pl *plugins) startExportResults(format copyFormat) {
 // exportHeading is the export dialog's heading: the rows it writes, the view's, and what of the
 // loaded rows a WHERE kept.
 func (pl *plugins) exportHeading() string {
-	rows := func(n int, what string) string {
-		if n == 1 {
-			return "1 " + what + "row"
+	if shown, loaded, on := pl.filtered(); on { // a sentence each, as every language says it
+		if shown == 1 {
+			return pl.c.Trf("autodoc.text.plugintable_export.export_1_row_as_shown_filtered_from_loaded", loaded)
 		}
-		return fmt.Sprintf("%d %srows", n, what)
+		return pl.c.Trf("autodoc.text.plugintable_export.export_rows_as_shown_filtered_from_loaded", shown, loaded)
 	}
-	if shown, loaded, on := pl.filtered(); on {
-		return fmt.Sprintf("Export %s, as shown (filtered from %d loaded)", rows(shown, ""), loaded)
+	if n := len(pl.results.model.rows); n != 1 {
+		return pl.c.Trf("autodoc.text.plugintable_export.export_loaded_rows_as_shown", n)
 	}
-	return fmt.Sprintf("Export %s, as shown", rows(len(pl.results.model.rows), "loaded "))
+	return pl.c.Tr("autodoc.text.plugintable_export.export_1_loaded_row_as_shown")
 }
 
 // viewLen is the rows the view shows: the loaded rows a WHERE keeps, all of them without one.
@@ -220,9 +220,9 @@ func (pl *plugins) beginExport(path string) {
 	}
 	pl.export = x
 	go x.write(pl.c.Post, pl.exportWrote, pl.exportEnded)
-	what := fmt.Sprintf("exporting %d rows to %s…", len(rows), path)
+	what := pl.c.Trf("autodoc.notice.plugintable_export.exporting_rows_to", len(rows), path)
 	if x.partial {
-		what = fmt.Sprintf("exporting %d loaded rows, as shown, to %s…", len(rows), path)
+		what = pl.c.Trf("autodoc.notice.plugintable_export.exporting_loaded_rows_as_shown_to", len(rows), path)
 	}
 	pl.c.NotifyOngoing(toastExport, what)
 	pl.exportPump()
@@ -268,7 +268,7 @@ func (pl *plugins) exportEnded(x *resultsExport, rows int, err error) {
 		pl.export = nil
 	}
 	pl.showResultsTitle()
-	more := "; the result has more: change the query (a LIMIT, a WHERE) to change what is returned"
+	more := pl.c.Tr("autodoc.notice.plugintable_export.the_result_has_more_change_the_query_a_limit_a_w")
 	switch {
 	case err != nil:
 		pl.c.NotifyDone(toastExport, pl.c.Trf("autodoc.notice.plugintable_export.the_results_were_not_exported_not_written", err.Error(), x.path))

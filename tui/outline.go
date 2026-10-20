@@ -26,7 +26,7 @@ const crumbSep = " › "
 
 // showTitle titles the page's frame: the file's name, then the breadcrumb a feature put there.
 func (h *Host) showTitle() {
-	title := h.file.title()
+	title := h.file.titleIn(h.tr)
 	if len(h.crumbs) > 0 {
 		title += crumbSep + strings.Join(h.crumbs, crumbSep)
 	}
@@ -154,9 +154,9 @@ func (o *outliner) crumb() {
 func (o *outliner) open() {
 	p := o.c.Page()
 	if p.Kind != kind.Markdown {
-		what := "its title"
+		what := o.c.Tr("autodoc.notice.outline.its_title")
 		if p.Kind == kind.YAML {
-			what = "its key path, on the page's frame"
+			what = o.c.Tr("autodoc.notice.outline.its_key_path_on_the_page_s_frame")
 		}
 		o.c.Notify(o.c.Trf("autodoc.notice.outline.has_no_headings_to_navigate_the_breadcrumb_shows", pageName(p), what))
 		return

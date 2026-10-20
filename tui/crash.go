@@ -80,13 +80,11 @@ func (h *Host) contained(hp tuicore.HandlerPanic) {
 	}
 	name, value := panicSource(hp.Value, where)
 	path, err := h.writeCrash(crashReport{name: name, phase: hp.Phase, value: value, stack: hp.Stack})
-	msg := fmt.Sprintf("%s failed: %s", name, panicText(value))
 	if err != nil {
-		msg += " (the crash log could not be written: " + err.Error() + ")"
+		h.notify(h.trf("autodoc.notice.crash.failed_the_crash_log_could_not_be_written", name, panicText(value), err.Error()))
 	} else {
-		msg += " — details in " + path
+		h.notify(h.trf("autodoc.notice.crash.failed_details_in", name, panicText(value), path))
 	}
-	h.notify(msg)
 }
 
 // crashReport is one crash log's content.
@@ -183,8 +181,8 @@ func (h *Host) sayLastCrash() {
 	if err != nil || os.Remove(note) != nil {
 		return
 	}
-	msg := "AutoDoc stopped after a crash last time; the report is in " + strings.TrimSpace(string(b))
-	h.p.Post(func() { h.notify(msg) })
+	at := strings.TrimSpace(string(b))
+	h.p.Post(func() { h.notify(h.trf("autodoc.notice.crash.autodoc_stopped_after_a_crash_last_time_the_repo", at)) })
 }
 
 // ended is Run's end: unsaved work kept when it ended unasked (a signal, a panic), and offered at

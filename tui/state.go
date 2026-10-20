@@ -28,25 +28,23 @@ func (h *Host) state() map[string]any {
 		"App.semanticDot":    "default",
 		"App.semanticLabel":  "",
 		"App.semanticDetail": "",
-		"App.searchTitle":    "search", // with semantic search's state once a poll answers
-		"App.searchText":     "",       // the search field's words: set to clear them (clearSearch)
-		"App.searchStatus":   "",       // the line under the field: blank, or what a search is waiting on (searchpick.go)
+		"App.searchTitle":    h.tr("autodoc.text.state.search"), // with semantic search's state once a poll answers
+		"App.searchText":     "",                                // the search field's words: set to clear them (clearSearch)
+		"App.searchStatus":   "",                                // the line under the field: blank, or what a search is waiting on (searchpick.go)
 		// the search's stages' boxes (stages.go)
 		"App.stageLexical":       true,
 		"App.stageSemantic":      true,
 		"App.stageSemanticShown": false,
 		"App.stageRerank":        true,
-		"App.stageRerankText":    "Rerank",
+		"App.stageRerankText":    h.tr("autodoc.text.state.rerank"),
 		"App.stageRerankShown":   false,
 
 		// the Plugins menu (plugins.go)
 		"App.fileTitle":          untitled,
-		"App.diagramTitle":       "Mermaid preview",
 		"App.diagramTextShown":   true,
 		"App.diagramImageShown":  false,
 		"App.diagramNativeShown": false,
 		"App.diagramDrawn":       false, // an image or a native drawing: the Zoom buttons show
-		"App.htmlPreviewTitle":   "HTML preview",
 		"App.htmlPreviewHelp":    "",
 		"App.diagramText":        "",
 		"App.diagramHelp":        "",
@@ -58,7 +56,7 @@ func (h *Host) state() map[string]any {
 
 		// the search picker
 		"App.hits":                  h.searchPick.list.Model(),
-		"App.hitsTitle":             "hits",
+		"App.hitsTitle":             h.tr("autodoc.text.state.hits"),
 		"App.searchPreviewTitle":    "",
 		"App.searchPreviewText":     "",
 		"App.searchPreviewRendered": false,
@@ -74,14 +72,13 @@ func (h *Host) state() map[string]any {
 		"App.widgetRows":          h.widgetRows.Model(),
 		"App.dock":                h.dockRows.Model(),
 		"App.widgetIndex":         0,
-		"App.pickerStatus":        "files",
+		"App.pickerStatus":        h.tr("autodoc.text.state.files"),
 		"App.openPreviewTitle":    "",
 		"App.openPreviewText":     "",
 		"App.openPreviewAt":       0,
 		// the new-file picker
 		"App.newFiles":        h.newPick.list.Model(),
 		"App.newFilePath":     "",
-		"App.fileNameError":   draftHelp,
 		"App.newPreviewTitle": "",
 		"App.newPreviewText":  "",
 		"App.newPreviewAt":    0,
@@ -93,23 +90,21 @@ func (h *Host) state() map[string]any {
 		"App.themes":        choices(h.themeLabels()...),
 		"App.userThemes":    h.userThemeRows(),
 		"App.builtinThemes": h.builtinThemeRows(),
-		"App.toastSeconds":  choices("1 s", "2 s", "3 s", "4 s", "5 s", "6 s", "7 s", "8 s", "9 s", "10 s"),
 		"App.prefsError":    "",
 		// the notifications' history (notify.go), and the Vim keys' card
 		// find in a pane (find.go)
-		"App.findTitle": "find",
+		"App.findTitle": h.tr("autodoc.text.state.find"),
 		"App.findError": "",
 		"App.lastFind":  "",
 		// the workspace's models and their vectors (vectors.go)
 		"App.vectors":         h.vectors.Model(),
-		"App.vectorsTitle":    "vectors",
+		"App.vectorsTitle":    h.tr("autodoc.text.state.vectors"),
 		"App.vectorsStatus":   "",
 		"App.vectorsRefusals": "",
 
 		// the workspace settings (settings.go): one dialog, Edit and Advanced, for an edit and an add
 		"App.home":                    homeDir(),
 		"App.browseFolder":            homeDir(),
-		"App.settingsTitle":           "workspace settings",
 		"App.settingsHelp":            "",
 		"App.settingsTab":             0,
 		"App.settingsAdding":          false,
@@ -137,18 +132,14 @@ func (h *Host) state() map[string]any {
 		"App.settingsTxtIndex":        0,
 		"App.settingsYamlIndex":       0,
 		"App.settingsSection":         "",
-		"App.policies":                choices(policyChoices...),
 		"App.settingsPolicyIndex":     0,
 		"App.settingsProviderState":   "",
 		"App.databasesShown":          false,
-		"App.destinations":            choices(destinationLabels...),
 		"App.settingsDestIndex":       0,
 		"App.settingsDestDSN":         "",
 		"App.settingsDestSchema":      "",
 		"App.settingsDestState":       "",
-		"App.vectorIndexes":           choices(indexLabels...),
 		"App.settingsVectorIndex":     0,
-		"App.sourceEngines":           choices(sourceLabels...),
 		"App.settingsSourceIndex":     0,
 		"App.settingsSrcDSN":          "",
 		"App.settingsSrcSchema":       "",
@@ -167,13 +158,11 @@ func (h *Host) state() map[string]any {
 		"App.workspaces":       h.workspaces.Model(),
 
 		"App.managed":        h.managed.Model(),
-		"App.managerHelp":    managerHelp,
 		"App.managerDetail":  "",
 		"App.managerIndex":   0,
 		"App.workspaceIndex": 0,
 
 		"App.helpText":      helpText(h.keys, nil, nil), // the commands follow once attached (commandsChanged)
-		"App.arrangeTitle":  "arrange a panel",
 		"App.tutorialTitle": "", "App.tutorialText": "", "App.tutorialNextText": "&Next",
 		"App.gui":           h.gui,
 		"App.cellFonts":     h.cellFontModel,
@@ -190,6 +179,9 @@ func (h *Host) state() map[string]any {
 	for k, v := range h.choiceState() { // in the UI's language (language.go)
 		st[k] = v
 	}
+	for k, v := range h.languageState() {
+		st[k] = v
+	}
 	for k, v := range h.aboutState() {
 		st[k] = v
 	}
@@ -198,6 +190,22 @@ func (h *Host) state() map[string]any {
 	}
 	st["App.statusShown"] = h.statusShown()
 	return st
+}
+
+// languageState is the text state starts with, in the UI's language, until what it titles opens
+// and says its own: a switch sets it again (languageChanged), so a dialog not yet opened, or one
+// shown before its first answer, speaks the new language.
+func (h *Host) languageState() map[string]any {
+	return map[string]any{
+		"App.diagramTitle":     h.tr("autodoc.text.state.mermaid_preview"),
+		"App.htmlPreviewTitle": h.tr("autodoc.text.state.html_preview"),
+		"App.settingsTitle":    h.tr("autodoc.text.state.workspace_settings"),
+		"App.arrangeTitle":     h.tr("autodoc.text.state.arrange_a_panel"),
+		"App.managerHelp":      h.tr("autodoc.text.workspace.add_a_directory_edit_or_advanced_the_one_under_t"),
+		"App.fileNameError":    h.tr("autodoc.text.files.save_the_draft_a_path_in_the_workspace_md_is_add"),
+		"App.aboutText":        h.aboutTextNow(),
+		"App.aboutLog":         h.trf("autodoc.text.help.log", h.aboutInfo.Log),
+	}
 }
 
 // choices are a chooser's rows: each a label.

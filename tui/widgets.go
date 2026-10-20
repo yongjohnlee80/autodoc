@@ -20,11 +20,13 @@ import (
 // widgetTarget is one place :go, the Go-to picker and F6 reach.
 type widgetTarget struct {
 	name    string               // what :go takes: "editor", "autodb", "terminal/shell 2"
-	title   string               // what the picker shows: "the editor", "AutoDB", "shell 2 (terminal)"
+	title   string               // what the picker shows, in English: "the editor", "AutoDB", "shell 2 (terminal)"
 	panel   string               // the panel's id; "" for the editor
 	tab     widget.TerminalTabID // a tab of the panel's TerminalTabs; "" for the panel itself
 	open    bool                 // the editor always; a panel by panelOpen; a tab by its panel's
 	focused bool
+	// the picker's row in the UI's language (openWidgets)
+	label, state string
 }
 
 // widgetNames are the panel ids whose :go name is not the id.
@@ -32,10 +34,10 @@ var widgetNames = map[string]string{"links": "relations", "htmlPane": "preview",
 
 // widgets are the targets now.
 func (h *Host) widgets() []widgetTarget {
-	out := []widgetTarget{{name: "editor", title: "the editor", open: true, focused: h.within("editor")}}
+	out := []widgetTarget{{name: "editor", title: inEnglish{}.Trf("autodoc.text.widgets.the_editor"), open: true, focused: h.within("editor")}}
 	for _, s := range h.panelSpecs() {
 		name := h.widgetName(s.ID)
-		out = append(out, widgetTarget{name: name, title: h.panelTitle(s.ID), panel: s.ID,
+		out = append(out, widgetTarget{name: name, title: h.panelTitleIn(inEnglish{}.Trf, s.ID), panel: s.ID,
 			open: h.panelOpen[s.ID], focused: h.within(s.View)})
 		if tabs, ok := h.tabsOf(s.View); ok { // the terminal's and the agent's
 			for _, tab := range tabs.Tabs() {
@@ -178,20 +180,34 @@ func (h *Host) widgetEntries() []Entry {
 // Tab and Shift+Tab move the cursor, wrapping, as Down and Up do. Its cursor is App.widgetIndex,
 // which the host moves (widgetStep) and the list reports (widgetMoved).
 
-// widgetRowOf is a target's row: its name and title, and "here", "open" or "closed".
+// widgetRowOf is a target's row: its name and title, and "here", "open" or "closed", as
+// withRowText composed them.
 func widgetRowOf(_ int, t widgetTarget) rowOf {
-	state := "closed"
+	return rowOf{"key": t.name, "label": t.label, "state": t.state}
+}
+
+// withRowText is t with its picker row composed in the UI's language: its name and title, and
+// "here", "open" or "closed".
+func (h *Host) withRowText(t widgetTarget) widgetTarget {
+	t.state = h.tr("autodoc.text.widgets.closed")
 	switch {
 	case t.focused:
-		state = "here"
+		t.state = h.tr("autodoc.text.widgets.here")
 	case t.open:
-		state = "open"
+		t.state = h.tr("autodoc.text.widgets.open")
 	}
-	label := t.name
-	if t.title != "" && t.title != "the "+t.name {
-		label += " — " + t.title
+	t.label = t.name
+	if t.title != "" && t.title != (inEnglish{}).Trf("autodoc.text.arrange.the", t.name) {
+		title := t.title // a tab's: its label and its panel's name
+		switch {
+		case t.panel == "":
+			title = h.tr("autodoc.text.widgets.the_editor")
+		case t.tab == "":
+			title = h.panelTitle(t.panel)
+		}
+		t.label += " — " + title
 	}
-	return rowOf{"key": t.name, "label": label, "state": state}
+	return t
 }
 
 func newWidgetRows() *rows[widgetTarget] {
@@ -201,6 +217,9 @@ func newWidgetRows() *rows[widgetTarget] {
 // openWidgets is SPC Tab and :go alone: the picker over the targets now, its cursor on the focused one.
 func (h *Host) openWidgets() {
 	all := h.widgets()
+	for i := range all {
+		all[i] = h.withRowText(all[i])
+	}
 	h.widgetRows.Reset(all)
 	at := 0
 	for i, t := range all {

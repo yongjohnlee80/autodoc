@@ -40,7 +40,8 @@ type pick[T any] struct {
 
 	// field, when set, is the App source the filter field binds: open empties it
 	field string
-	// status, when set, is the App source of the list's title: "<noun> (shown of all)"
+	// status, when set, is the App source of the list's title: "<noun> (shown of all)", noun in
+	// English, shown in the UI's language (nounText)
 	status, noun string
 	// match is the text of an item the filter looks in, case aside
 	match func(T) string
@@ -106,13 +107,34 @@ func (p *pick[T]) filter(text string) {
 func (p *pick[T]) show(items []T) {
 	p.list.Reset(items)
 	if p.status != "" {
-		p.c.Set(p.status, fmt.Sprintf("%s (%d of %d)", p.noun, len(items), len(p.all)))
+		p.c.Set(p.status, p.c.Trf("autodoc.text.pick.of", p.nounText(), len(items), len(p.all)))
 	}
 	if x, ok := p.list.At(0); ok {
 		p.previewItem(x)
 		return
 	}
 	p.showEmpty()
+}
+
+// nounText is the picker's noun in the UI's language: the pickers' own words; any other as written.
+func (p *pick[T]) nounText() string {
+	switch p.noun {
+	case "buffers":
+		return p.c.Tr("autodoc.text.pick.buffers")
+	case "files":
+		return p.c.Tr("autodoc.text.pick.files")
+	case "headings":
+		return p.c.Tr("autodoc.text.pick.headings")
+	case "items":
+		return p.c.Tr("autodoc.text.pick.items")
+	case "agents":
+		return p.c.Tr("autodoc.text.pick.agents")
+	case "statuses":
+		return p.c.Tr("autodoc.text.pick.statuses")
+	case "plugins and packages":
+		return p.c.Tr("autodoc.text.pick.plugins_and_packages")
+	}
+	return p.noun
 }
 
 // move previews row i: the list's cursor landed on it.
@@ -212,13 +234,14 @@ func (p *pick[T]) dismiss() {
 // indexed, which says so when this one cannot read it.
 func (h *Host) readPreview(p string, at int, held bool) func(context.Context) answerOf[pane] {
 	ws := h.ws
+	heldWhy := h.tr("autodoc.text.pick.held_this_backend_s_build_does_not_read_this_fil") // on the loop
 	return func(ctx context.Context) answerOf[pane] {
 		res, err := h.call(ctx, "doc.read", ws, p)
 		if err != nil {
 			why := wireMessage(err)
 			if held {
 				// a held hit this backend cannot read (a PDF under a community build): say why
-				why = "held: this backend's build does not read this file; it was indexed by another (" + why + ")"
+				why = strings.ReplaceAll(heldWhy, "%1", why)
 			}
 			return answerOf[pane]{v: pane{title: p + " · " + why}, err: err}
 		}

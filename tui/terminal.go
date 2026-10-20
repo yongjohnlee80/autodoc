@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/yongjohnlee80/golib/errs"
+	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 	"github.com/yongjohnlee80/golib/tui/pty"
 	"github.com/yongjohnlee80/golib/tui/widget"
@@ -42,7 +43,7 @@ func (t *terminals) State() map[string]any {
 		"App.terminalEdges":   choices(termEdgeLabels...),
 		"App.terminalSizes":   choices(percentLabels(termSizes)...),
 		"App.terminalLengths": choices(percentLabels(termLengths)...),
-		"App.terminalThemes":  choices(t.themeLabels()...),
+		"App.terminalThemes":  t.themeChooser(),
 	}
 	maps.Copy(st, t.lookState())
 	return st
@@ -92,12 +93,28 @@ func termThemes() []string {
 }
 
 func (t *terminals) themeNames() []string {
-	names, _ := themeChoices(t.c, []string{"page"}, []string{"the page's"})
+	names, _ := themeChoices(t.c, []string{"page"}, nil)
 	return names
 }
-func (t *terminals) themeLabels() []string {
-	_, labels := themeChoices(t.c, []string{"page"}, []string{"the page's"})
-	return labels
+
+// themeChooser is the theme chooser's rows: the page's, in the UI's language, then every theme.
+func (t *terminals) themeChooser() *tuidecl.ListModel {
+	return keyedChoices(themeChoices(t.c, []string{"page"}, []string{t.c.Tr("autodoc.text.terminal.the_page_s")}))
+}
+
+// LanguageChanged composes the theme chooser's rows again, in the UI's language.
+func (t *terminals) LanguageChanged() { t.c.Set("App.terminalThemes", t.themeChooser()) }
+
+// keyedChoices is a chooser's rows: row i keyed keys[i] (a value, never translated), labelled
+// labels[i] (in the UI's language).
+func keyedChoices(keys, labels []string) *tuidecl.ListModel {
+	m := tuidecl.NewListModel("key", "label")
+	rows := make([]rowOf, len(keys))
+	for i, k := range keys {
+		rows[i] = rowOf{"key": k, "label": labels[i]}
+	}
+	m.Reset(rows)
+	return m
 }
 
 // themeChoices are a theme chooser's values and labels: lead's first (the page's, the terminals'),
@@ -407,8 +424,13 @@ func (t *terminals) newLuaShell() {
 		t.before = t.c.KeyboardPane()
 		t.c.Keep(t.c.CallView("terminal", "open"))
 	}
-	t.startTab(luaShellLabel, TerminalConfig{Command: "lua", Start: t.startLua}, "the terminal could not add a Lua shell: ",
-		func(err error) string { return "the Lua shell could not start (" + err.Error() + ")" })
+	t.startTab(luaShellLabel, TerminalConfig{Command: "lua", Start: t.startLua},
+		func(err error) string {
+			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_lua_shell", err.Error())
+		},
+		func(err error) string {
+			return t.c.Trf("autodoc.notice.terminal.the_lua_shell_could_not_start", err.Error())
+		})
 }
 
 // liveShell is a tab of panel neither closing nor failed to start: prefer if it is one, else the
@@ -437,17 +459,20 @@ func (t *terminals) newShell() {
 	if ws, ok := t.c.ActiveWorkspace(); ok {
 		root = ws.root
 	}
-	t.startTab(shellLabel, TerminalConfig{Dir: termDir(root)}, "the terminal could not add a shell: ",
+	t.startTab(shellLabel, TerminalConfig{Dir: termDir(root)},
 		func(err error) string {
-			return "the terminal could not start (" + err.Error() + "): SPC ` or Enter in it tries again"
+			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_add_a_shell", err.Error())
+		},
+		func(err error) string {
+			return t.c.Trf("autodoc.notice.terminal.the_terminal_could_not_start_spc_or_enter_in_it", err.Error())
 		})
 }
 
 // startTab adds a tab named by label running config, starts it and gives it the keyboard (golib's
 // Select gives the tab's terminal the keyboard): a shell's and a Lua shell's. A tab that cannot be
-// added is the notice addFail and the error; one that fails to start says so, in its tab and in the
-// notice startFail makes.
-func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalConfig, addFail string, startFail func(error) string) {
+// added is the notice addFail makes of the error; one that fails to start says so, in its tab and in
+// the notice startFail makes.
+func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalConfig, addFail, startFail func(error) string) {
 	panel, err := t.panel()
 	if err != nil {
 		t.c.Keep(err)
@@ -457,7 +482,7 @@ func (t *terminals) startTab(label func(TerminalPanel) string, config TerminalCo
 	config.Exited = func(code int) { t.shellExited(id, code) }
 	id, err = panel.Add(label(panel), config)
 	if err != nil {
-		t.c.Notify(addFail + err.Error())
+		t.c.Notify(addFail(err))
 		return
 	}
 	if err := panel.Start(id); err != nil {

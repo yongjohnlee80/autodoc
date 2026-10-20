@@ -69,13 +69,13 @@ func (h *Host) askLuaGrants() {
 		}
 		h.luaAsking = true
 		next := func() { h.luaAsking = false; h.p.Post(h.askLuaGrants) }
-		who := "the Lua script " + a.script
+		who := h.trf("autodoc.question.luagate.the_lua_script", a.script)
 		if name, ok := strings.CutPrefix(a.script, "plugin:"); ok {
-			who = "the plugin " + name + "'s Lua package"
+			who = h.trf("autodoc.question.luagate.the_plugin_s_lua_package", name)
 		}
 		h.ask(Question{
 			Title: h.trf("autodoc.question.luagate.let_use", who, strings.Join(open, ", ")),
-			Text:  luaGrantText(open),
+			Text:  luaGrantTextIn(h.trf, open),
 			Yes:   h.tr("autodoc.question.luagate.allow"), No: h.tr("autodoc.question.luagate.not_now"),
 			OnYes:    func() { h.grantLua(a.script, open); next() },
 			OnCancel: next,
@@ -109,25 +109,34 @@ func luaGrantsOf(s string) map[string]map[string]bool {
 	return g
 }
 
-// luaGrantText says what each capability lets a script do.
-func luaGrantText(caps []string) string {
-	what := map[string]string{
-		"workspace.read":  "read the workspace's documents, search them and follow their links",
-		"workspace.write": "write, rename and remove documents and tasks",
-		"settings":        "change AutoDoc's settings: workspaces, models, preferences",
-		"clipboard":       "read and write the clipboard",
-		"agents":          "list the agents and type into them",
-		"commands":        "run any of AutoDoc's commands",
-	}
+// luaGrantText says what each capability lets a script do, in English.
+func luaGrantText(caps []string) string { return luaGrantTextIn(inEnglish{}.Trf, caps) }
+
+// luaGrantTextIn is luaGrantText in the language trf (a Host's trf, or inEnglish{}.Trf) says it in: a
+// line each, the capability's name and what it lets a script do.
+func luaGrantTextIn(trf func(string, ...any) string, caps []string) string {
 	var b strings.Builder
 	for _, c := range caps {
-		d := what[c]
-		if d == "" {
-			d = "a capability AutoDoc does not know"
+		var d string
+		switch c {
+		case "workspace.read":
+			d = trf("autodoc.question.luagate.read_the_workspace_s_documents_search_them_and_f")
+		case "workspace.write":
+			d = trf("autodoc.question.luagate.write_rename_and_remove_documents_and_tasks")
+		case "settings":
+			d = trf("autodoc.question.luagate.change_autodoc_s_settings_workspaces_models_pref")
+		case "clipboard":
+			d = trf("autodoc.question.luagate.read_and_write_the_clipboard")
+		case "agents":
+			d = trf("autodoc.question.luagate.list_the_agents_and_type_into_them")
+		case "commands":
+			d = trf("autodoc.question.luagate.run_any_of_autodoc_s_commands")
+		default:
+			d = trf("autodoc.question.luagate.a_capability_autodoc_does_not_know")
 		}
 		fmt.Fprintf(&b, "%s: %s\n", c, d)
 	}
-	b.WriteString("Not now refuses until the next start.")
+	b.WriteString(trf("autodoc.question.luagate.not_now_refuses_until_the_next_start"))
 	return b.String()
 }
 

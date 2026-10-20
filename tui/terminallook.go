@@ -20,7 +20,7 @@ func (h *Host) openTerminalLook() {
 	if h.fonts != nil {
 		h.listFonts()
 	} else {
-		note = "the font is a window's: a terminal draws in its own"
+		note = h.tr("autodoc.text.terminallook.the_font_is_a_window_s_a_terminal_draws_in_its_o")
 	}
 	h.set("App.terminalLookNote", note)
 	h.open("terminalLook")

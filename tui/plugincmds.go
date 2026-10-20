@@ -2,8 +2,8 @@ package tui
 
 import (
 	"cmp"
-	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
@@ -71,11 +71,11 @@ func (pl *plugins) refreshPlugins() {
 		var items []tuidecl.Row
 		running := pl.running[key] != nil
 		if !e.m.Service() {
-			openLabel := "Open"
+			openLabel := pl.c.Tr("autodoc.text.plugincmds.open")
 			if e.m.Card() {
-				openLabel = "Show card"
+				openLabel = pl.c.Tr("autodoc.text.plugincmds.show_card")
 				if running && pl.running[key].hidden {
-					openLabel = "Reopen card"
+					openLabel = pl.c.Tr("autodoc.text.plugincmds.reopen_card")
 				}
 			}
 			items = append(items, tuidecl.Row{"key": "open", "label": openLabel, "enabled": true,
@@ -89,9 +89,9 @@ func (pl *plugins) refreshPlugins() {
 			items = append(items, tuidecl.Row{"key": "cmd:" + c.ID, "label": label, "enabled": true,
 				"target": pluginTarget(key, targetCommand, c.ID)})
 		}
-		closeLabel := "Close"
+		closeLabel := pl.c.Tr("autodoc.text.plugincmds.close")
 		if e.m.Card() { // its panel's Close hides it; this stops its plugin
-			closeLabel = "Turn off"
+			closeLabel = pl.c.Tr("autodoc.text.plugincmds.turn_off")
 		}
 		items = append(items, tuidecl.Row{"key": "close", "label": closeLabel, "enabled": running,
 			"target": pluginTarget(key, targetClose)})
@@ -99,7 +99,7 @@ func (pl *plugins) refreshPlugins() {
 		rows = append(rows, tuidecl.Row{"key": key, "kind": "submenu", "label": e.label(), "rows": sub})
 	}
 	if len(rows) == 0 {
-		rows = []tuidecl.Row{{"key": "", "kind": "item", "label": "no plugins yet", "enabled": false, "target": ""}}
+		rows = []tuidecl.Row{{"key": "", "kind": "item", "label": pl.c.Tr("autodoc.text.plugincmds.no_plugins_yet"), "enabled": false, "target": ""}}
 	}
 	pl.pluginRows.Reset(rows)
 }
@@ -154,7 +154,7 @@ func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 		if card == nil {
 			card = &pluginCard{targets: map[string]string{}}
 			pl.pluginCards[ref.key] = card
-			taken[ref.key] = map[string]string{"q": "closing the card"}
+			taken[ref.key] = map[string]string{"q": pl.c.Tr("autodoc.text.plugincmds.closing_the_card")}
 		}
 		letter, chosen := pl.c.Prefs().pluginKeys[ref.plugin+"."+ref.id]
 		if !chosen {
@@ -163,13 +163,13 @@ func (pl *plugins) bindPluginKeys() map[string]pluginBinding {
 		var b pluginBinding
 		switch {
 		case letter == "" && chosen:
-			b.why = "unbound in the preferences"
+			b.why = pl.c.Tr("autodoc.text.plugincmds.unbound_in_the_preferences")
 		case letter == "":
-			b.why = "no key"
+			b.why = pl.c.Tr("autodoc.text.plugincmds.no_key")
 		case !pluginLetter(letter):
-			b.why = fmt.Sprintf("key %q: want one letter or digit", letter)
+			b.why = pl.c.Trf("autodoc.text.plugincmds.key_want_one_letter_or_digit", strconv.Quote(letter))
 		case taken[ref.key][letter] != "":
-			b.why = fmt.Sprintf("%s is taken by %s", letter, taken[ref.key][letter])
+			b.why = pl.c.Trf("autodoc.text.plugincmds.is_taken_by", letter, taken[ref.key][letter])
 		default:
 			b.letter = letter
 			taken[ref.key][letter] = e.Help
@@ -243,7 +243,7 @@ func (pl *plugins) runPluginCommandArgs(key, id string, args []string) {
 	if r == nil {
 		var err error
 		if r, err = pl.startPlugin(e); err != nil {
-			pl.c.Failed(e.m.Name+" did not start", err)
+			pl.c.Failed(pl.c.Trf("autodoc.notice.plugincmds.did_not_start", e.m.Name), err)
 			return
 		}
 		pl.running[key] = r
@@ -283,7 +283,7 @@ func (pl *plugins) launchServices() {
 		}
 		r, err := pl.startPlugin(e)
 		if err != nil {
-			pl.c.Failed(e.m.Name+" did not start", err)
+			pl.c.Failed(pl.c.Trf("autodoc.notice.plugincmds.did_not_start", e.m.Name), err)
 			continue
 		}
 		pl.running[e.key()] = r

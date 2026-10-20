@@ -372,17 +372,26 @@ func (h *Host) aboutHeadline() string {
 	return s
 }
 
-// aboutText is About as plain text: the program's replacement (Options.About), or AutoDoc's lines.
+// aboutText is About as plain text: the program's replacement (Options.About), or AutoDoc's lines,
+// labelled as About.qml labels them (each label ends in its space).
 func (h *Host) aboutText() string {
 	if h.about != "" {
 		return h.about
 	}
 	a := h.aboutInfo
 	return h.aboutHeadline() + "\n\n" +
-		"CONFIG: " + a.Config + "\n(log: " + a.Log + ")\n" +
-		"PLUGINS: " + a.Plugins + "\n" +
-		"DAEMON SOCKET: " + h.session.Address() + "\n\n" +
-		"AUTHOR: " + author + "\n" + licence
+		h.tr("autodoc.view.about.config") + a.Config + "\n" + h.trf("autodoc.text.help.log", a.Log) + "\n" +
+		h.tr("autodoc.view.about.plugins") + a.Plugins + "\n" +
+		h.tr("autodoc.view.about.daemon_socket") + h.session.Address() + "\n\n" +
+		h.tr("autodoc.view.about.author") + author + "\n" + licence
+}
+
+// aboutTextNow is About's plain text, with the last connect's failure when there is one.
+func (h *Host) aboutTextNow() string {
+	if h.connectErr != nil {
+		return h.trf("autodoc.text.session.the_last_connect_failed", h.aboutText(), h.connectErr.Error())
+	}
+	return h.aboutText()
 }
 
 // aboutState is About's sources, line by line, for About.qml's labels: the plain text too, which a
@@ -390,11 +399,11 @@ func (h *Host) aboutText() string {
 func (h *Host) aboutState() map[string]any {
 	a := h.aboutInfo
 	return map[string]any{
-		"App.aboutText":     h.aboutText(),
+		"App.aboutText":     h.aboutTextNow(),
 		"App.aboutCustom":   h.about != "",
 		"App.aboutHeadline": h.aboutHeadline(),
 		"App.aboutConfig":   a.Config,
-		"App.aboutLog":      "(log: " + a.Log + ")",
+		"App.aboutLog":      h.trf("autodoc.text.help.log", a.Log),
 		"App.aboutPlugins":  a.Plugins,
 		"App.aboutSocket":   h.session.Address(),
 		"App.aboutAuthor":   author,

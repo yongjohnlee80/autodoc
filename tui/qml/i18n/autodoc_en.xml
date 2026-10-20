@@ -7,6 +7,10 @@
         <source>THE AGENTS CARD (SPC a)</source>
         <translation>THE AGENTS CARD (SPC a)</translation>
     </message>
+    <message id="autodoc.card.agentsCard.keyhelp">
+        <source>a key runs its command · Backspace goes back · q or Esc closes</source>
+        <translation>a key runs its command · Backspace goes back · q or Esc closes</translation>
+    </message>
     <message id="autodoc.card.agentsCard.title">
         <source>SPC a — agents</source>
         <translation>SPC a — agents</translation>
@@ -71,6 +75,10 @@
         <source>THE LEADER CARD (Space in Normal mode, Ctrl+Space in every mode)</source>
         <translation>THE LEADER CARD (Space in Normal mode, Ctrl+Space in every mode)</translation>
     </message>
+    <message id="autodoc.card.leader.keyhelp">
+        <source>a key runs its command · q or Esc closes</source>
+        <translation>a key runs its command · q or Esc closes</translation>
+    </message>
     <message id="autodoc.card.leader.title">
         <source>SPC — commands</source>
         <translation>SPC — commands</translation>
@@ -79,9 +87,57 @@
         <source>THE TODOS PANEL'S KEYS (? in the todos panel)</source>
         <translation>THE TODOS PANEL'S KEYS (? in the todos panel)</translation>
     </message>
+    <message id="autodoc.card.todoKeys.keyhelp">
+        <source>↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes</source>
+        <translation>↑ ↓ or j k move · q closes the panel · a key runs its command · ?, q or Esc closes</translation>
+    </message>
     <message id="autodoc.card.todoKeys.title">
         <source>todos — keys</source>
         <translation>todos — keys</translation>
+    </message>
+    <message id="autodoc.choice.10_s">
+        <source>10 s</source>
+        <translation>10 s</translation>
+    </message>
+    <message id="autodoc.choice.1_s">
+        <source>1 s</source>
+        <translation>1 s</translation>
+    </message>
+    <message id="autodoc.choice.2_s">
+        <source>2 s</source>
+        <translation>2 s</translation>
+    </message>
+    <message id="autodoc.choice.3_s">
+        <source>3 s</source>
+        <translation>3 s</translation>
+    </message>
+    <message id="autodoc.choice.4_s">
+        <source>4 s</source>
+        <translation>4 s</translation>
+    </message>
+    <message id="autodoc.choice.5_s">
+        <source>5 s</source>
+        <translation>5 s</translation>
+    </message>
+    <message id="autodoc.choice.6_s">
+        <source>6 s</source>
+        <translation>6 s</translation>
+    </message>
+    <message id="autodoc.choice.7_s">
+        <source>7 s</source>
+        <translation>7 s</translation>
+    </message>
+    <message id="autodoc.choice.8_s">
+        <source>8 s</source>
+        <translation>8 s</translation>
+    </message>
+    <message id="autodoc.choice.9_s">
+        <source>9 s</source>
+        <translation>9 s</translation>
+    </message>
+    <message id="autodoc.choice.always">
+        <source>always</source>
+        <translation>always</translation>
     </message>
     <message id="autodoc.choice.ask_each_time">
         <source>ask each time</source>
@@ -90,6 +146,10 @@
     <message id="autodoc.choice.ask_first">
         <source>ask first</source>
         <translation>ask first</translation>
+    </message>
+    <message id="autodoc.choice.body_links">
+        <source>body links</source>
+        <translation>body links</translation>
     </message>
     <message id="autodoc.choice.bottom">
         <source>bottom</source>
@@ -103,13 +163,69 @@
         <source>bottom right</source>
         <translation>bottom right</translation>
     </message>
+    <message id="autodoc.choice.box">
+        <source>box</source>
+        <translation>box</translation>
+    </message>
+    <message id="autodoc.choice.circle">
+        <source>circle</source>
+        <translation>circle</translation>
+    </message>
+    <message id="autodoc.choice.double_circle">
+        <source>double circle</source>
+        <translation>double circle</translation>
+    </message>
+    <message id="autodoc.choice.every_link">
+        <source>every link</source>
+        <translation>every link</translation>
+    </message>
+    <message id="autodoc.choice.fast">
+        <source>fast</source>
+        <translation>fast</translation>
+    </message>
+    <message id="autodoc.choice.gentle">
+        <source>gentle</source>
+        <translation>gentle</translation>
+    </message>
+    <message id="autodoc.choice.hexagon">
+        <source>hexagon</source>
+        <translation>hexagon</translation>
+    </message>
+    <message id="autodoc.choice.hnsw">
+        <source>hnsw</source>
+        <translation>hnsw</translation>
+    </message>
+    <message id="autodoc.choice.ivfflat">
+        <source>ivfflat</source>
+        <translation>ivfflat</translation>
+    </message>
+    <message id="autodoc.choice.large">
+        <source>large</source>
+        <translation>large</translation>
+    </message>
     <message id="autodoc.choice.left">
         <source>left</source>
         <translation>left</translation>
     </message>
+    <message id="autodoc.choice.medium">
+        <source>medium</source>
+        <translation>medium</translation>
+    </message>
+    <message id="autodoc.choice.never">
+        <source>never</source>
+        <translation>never</translation>
+    </message>
     <message id="autodoc.choice.no">
         <source>no</source>
         <translation>no</translation>
+    </message>
+    <message id="autodoc.choice.none">
+        <source>none</source>
+        <translation>none</translation>
+    </message>
+    <message id="autodoc.choice.normal">
+        <source>normal</source>
+        <translation>normal</translation>
     </message>
     <message id="autodoc.choice.off">
         <source>off</source>
@@ -123,9 +239,29 @@
         <source>on the cursor's line</source>
         <translation>on the cursor's line</translation>
     </message>
+    <message id="autodoc.choice.one_link_out">
+        <source>one link out</source>
+        <translation>one link out</translation>
+    </message>
+    <message id="autodoc.choice.pill">
+        <source>pill</source>
+        <translation>pill</translation>
+    </message>
+    <message id="autodoc.choice.postgres">
+        <source>postgres</source>
+        <translation>postgres</translation>
+    </message>
+    <message id="autodoc.choice.postgres_with_pgvector">
+        <source>postgres, with pgvector</source>
+        <translation>postgres, with pgvector</translation>
+    </message>
     <message id="autodoc.choice.raw">
         <source>raw</source>
         <translation>raw</translation>
+    </message>
+    <message id="autodoc.choice.relations">
+        <source>relations</source>
+        <translation>relations</translation>
     </message>
     <message id="autodoc.choice.reload_them">
         <source>reload them</source>
@@ -139,9 +275,33 @@
         <source>simplified</source>
         <translation>simplified</translation>
     </message>
+    <message id="autodoc.choice.slow">
+        <source>slow</source>
+        <translation>slow</translation>
+    </message>
+    <message id="autodoc.choice.small">
+        <source>small</source>
+        <translation>small</translation>
+    </message>
+    <message id="autodoc.choice.sqlite">
+        <source>sqlite</source>
+        <translation>sqlite</translation>
+    </message>
+    <message id="autodoc.choice.square">
+        <source>square</source>
+        <translation>square</translation>
+    </message>
     <message id="autodoc.choice.text_modeless">
         <source>Text (modeless)</source>
         <translation>Text (modeless)</translation>
+    </message>
+    <message id="autodoc.choice.the_default_hnsw">
+        <source>the default (hnsw)</source>
+        <translation>the default (hnsw)</translation>
+    </message>
+    <message id="autodoc.choice.the_local_store">
+        <source>the local store</source>
+        <translation>the local store</translation>
     </message>
     <message id="autodoc.choice.top">
         <source>top</source>
@@ -155,9 +315,17 @@
         <source>top right</source>
         <translation>top right</translation>
     </message>
+    <message id="autodoc.choice.two_links_out">
+        <source>two links out</source>
+        <translation>two links out</translation>
+    </message>
     <message id="autodoc.choice.vim_modal">
         <source>Vim (modal)</source>
         <translation>Vim (modal)</translation>
+    </message>
+    <message id="autodoc.choice.when_opened">
+        <source>when opened</source>
+        <translation>when opened</translation>
     </message>
     <message id="autodoc.choice.yes">
         <source>yes</source>
@@ -419,6 +587,22 @@
         <source>find term in the page; n and N go to the next and previous</source>
         <translation>find term in the page; n and N go to the next and previous</translation>
     </message>
+    <message id="autodoc.cmd.globemap.settings">
+        <source>the GlobeMap's settings</source>
+        <translation>the GlobeMap's settings</translation>
+    </message>
+    <message id="autodoc.cmd.globemap.settings.help">
+        <source>the GlobeMap's settings</source>
+        <translation>the GlobeMap's settings</translation>
+    </message>
+    <message id="autodoc.cmd.globemap.toggle">
+        <source>the GlobeMap</source>
+        <translation>the GlobeMap</translation>
+    </message>
+    <message id="autodoc.cmd.globemap.toggle.help">
+        <source>the GlobeMap</source>
+        <translation>the GlobeMap</translation>
+    </message>
     <message id="autodoc.cmd.help.about">
         <source>about</source>
         <translation>about</translation>
@@ -458,6 +642,22 @@
     <message id="autodoc.cmd.links.toggle.help">
         <source>the links</source>
         <translation>the links</translation>
+    </message>
+    <message id="autodoc.cmd.mindmap.settings">
+        <source>the Mindmap's settings</source>
+        <translation>the Mindmap's settings</translation>
+    </message>
+    <message id="autodoc.cmd.mindmap.settings.help">
+        <source>the Mindmap's settings</source>
+        <translation>the Mindmap's settings</translation>
+    </message>
+    <message id="autodoc.cmd.mindmap.toggle">
+        <source>the Mindmap</source>
+        <translation>the Mindmap</translation>
+    </message>
+    <message id="autodoc.cmd.mindmap.toggle.help">
+        <source>the Mindmap</source>
+        <translation>the Mindmap</translation>
     </message>
     <message id="autodoc.cmd.notices.open">
         <source>notifications</source>
@@ -1843,6 +2043,30 @@
         <source>Close &amp;others</source>
         <translation>Close &amp;others</translation>
     </message>
+    <message id="autodoc.gomenu.copy">
+        <source>Copy</source>
+        <translation>Copy</translation>
+    </message>
+    <message id="autodoc.gomenu.copy_as_csv">
+        <source>Copy as CSV</source>
+        <translation>Copy as CSV</translation>
+    </message>
+    <message id="autodoc.gomenu.copy_as_json">
+        <source>Copy as JSON</source>
+        <translation>Copy as JSON</translation>
+    </message>
+    <message id="autodoc.gomenu.copy_as_markdown">
+        <source>Copy as Markdown</source>
+        <translation>Copy as Markdown</translation>
+    </message>
+    <message id="autodoc.gomenu.export_loaded_rows">
+        <source>Export loaded rows…</source>
+        <translation>Export loaded rows…</translation>
+    </message>
+    <message id="autodoc.gomenu.go_to">
+        <source>Go to</source>
+        <translation>Go to</translation>
+    </message>
     <message id="autodoc.gomenu.go_to_link_g">
         <source>&amp;Go to link</source>
         <translation>&amp;Go to link</translation>
@@ -1850,6 +2074,10 @@
     <message id="autodoc.gomenu.hi_de_d">
         <source>Hi&amp;de</source>
         <translation>Hi&amp;de</translation>
+    </message>
+    <message id="autodoc.gomenu.insert_as_markdown">
+        <source>Insert as Markdown</source>
+        <translation>Insert as Markdown</translation>
     </message>
     <message id="autodoc.gomenu.maximize_m">
         <source>&amp;Maximize</source>
@@ -1887,9 +2115,25 @@
         <source>&amp;Save</source>
         <translation>&amp;Save</translation>
     </message>
+    <message id="autodoc.gomenu.select_all">
+        <source>Select all</source>
+        <translation>Select all</translation>
+    </message>
+    <message id="autodoc.gomenu.sort_ascending">
+        <source>Sort ascending</source>
+        <translation>Sort ascending</translation>
+    </message>
+    <message id="autodoc.gomenu.sort_descending">
+        <source>Sort descending</source>
+        <translation>Sort descending</translation>
+    </message>
     <message id="autodoc.gomenu.theme_and_font_t">
         <source>&amp;Theme and font…</source>
         <translation>&amp;Theme and font…</translation>
+    </message>
+    <message id="autodoc.gomenu.unsort">
+        <source>Unsort</source>
+        <translation>Unsort</translation>
     </message>
     <message id="autodoc.gomenu.view_diagram_d">
         <source>View &amp;diagram</source>
@@ -2589,6 +2833,26 @@ WHAT A KEY NEEDS
         <source>set for this machine only</source>
         <translation>set for this machine only</translation>
     </message>
+    <message id="autodoc.key.show.b_in_the_html_preview">
+        <source>b in the HTML preview</source>
+        <translation>b in the HTML preview</translation>
+    </message>
+    <message id="autodoc.key.show.d_in_the_links">
+        <source>d in the links</source>
+        <translation>d in the links</translation>
+    </message>
+    <message id="autodoc.key.show.f6_and_shift_f6">
+        <source>F6 and Shift+F6</source>
+        <translation>F6 and Shift+F6</translation>
+    </message>
+    <message id="autodoc.key.show.n_and_n">
+        <source>n and N</source>
+        <translation>n and N</translation>
+    </message>
+    <message id="autodoc.key.show.q_in_the_html_preview">
+        <source>q in the HTML preview</source>
+        <translation>q in the HTML preview</translation>
+    </message>
     <message id="autodoc.key.show_focus_or_hide_the_menu">
         <source>show/focus or hide the menu</source>
         <translation>show/focus or hide the menu</translation>
@@ -3089,9 +3353,13 @@ WHAT A KEY NEEDS
         <source>the agent %1 exited: SPC g starts the default again</source>
         <translation>the agent %1 exited: SPC g starts the default again</translation>
     </message>
-    <message id="autodoc.notice.agentinstances.the_agent_s_command_check_it_in_system_agent_pro">
-        <source>the agent %1's command %2 (%3): check it in System › Agent profiles…</source>
-        <translation>the agent %1's command %2 (%3): check it in System › Agent profiles…</translation>
+    <message id="autodoc.notice.agentinstances.the_agent_s_command_could_not_run_check_it_in_sy">
+        <source>the agent %1's command could not run (%2): check it in System › Agent profiles…</source>
+        <translation>the agent %1's command could not run (%2): check it in System › Agent profiles…</translation>
+    </message>
+    <message id="autodoc.notice.agentinstances.the_agent_s_command_was_not_found_check_it_in_sy">
+        <source>the agent %1's command was not found (%2): check it in System › Agent profiles…</source>
+        <translation>the agent %1's command was not found (%2): check it in System › Agent profiles…</translation>
     </message>
     <message id="autodoc.notice.agentsetup.the_first_prompt_was_not_sent">
         <source>the first prompt was not sent: %1</source>
@@ -3121,6 +3389,10 @@ WHAT A KEY NEEDS
         <source>no panel is open to arrange: open one first (the Go menu)</source>
         <translation>no panel is open to arrange: open one first (the Go menu)</translation>
     </message>
+    <message id="autodoc.notice.candidate.audit_of_handed_to_click_to_install_or_cancel">
+        <source>audit of %1 handed to %2: click to install or cancel</source>
+        <translation>audit of %1 handed to %2: click to install or cancel</translation>
+    </message>
     <message id="autodoc.notice.candidate.audit_of_not_delivered">
         <source>audit of %1 not delivered: %2</source>
         <translation>audit of %1 not delivered: %2</translation>
@@ -3145,6 +3417,22 @@ WHAT A KEY NEEDS
         <source>that install has ended</source>
         <translation>that install has ended</translation>
     </message>
+    <message id="autodoc.notice.candidate.the_kb_type_waits_click_to_install_or_cancel">
+        <source>the KB type %1 waits: click to install or cancel</source>
+        <translation>the KB type %1 waits: click to install or cancel</translation>
+    </message>
+    <message id="autodoc.notice.candidate.the_lua_package_waits_click_to_install_or_cancel">
+        <source>the Lua package %1 waits: click to install or cancel</source>
+        <translation>the Lua package %1 waits: click to install or cancel</translation>
+    </message>
+    <message id="autodoc.notice.candidate.the_plugin_waits_click_to_install_or_cancel">
+        <source>the plugin %1 waits: click to install or cancel</source>
+        <translation>the plugin %1 waits: click to install or cancel</translation>
+    </message>
+    <message id="autodoc.notice.candidate.you_didn_t_start">
+        <source>you didn't start %1</source>
+        <translation>you didn't start %1</translation>
+    </message>
     <message id="autodoc.notice.contextmenu.the_right_click_menu_opens_where_the_cursor_is_o">
         <source>the right-click menu opens where the cursor is on the screen: scroll it into view</source>
         <translation>the right-click menu opens where the cursor is on the screen: scroll it into view</translation>
@@ -3152,6 +3440,18 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.crash.a_background_job_failed">
         <source>a background job failed: %1</source>
         <translation>a background job failed: %1</translation>
+    </message>
+    <message id="autodoc.notice.crash.autodoc_stopped_after_a_crash_last_time_the_repo">
+        <source>AutoDoc stopped after a crash last time; the report is in %1</source>
+        <translation>AutoDoc stopped after a crash last time; the report is in %1</translation>
+    </message>
+    <message id="autodoc.notice.crash.failed_details_in">
+        <source>%1 failed: %2 — details in %3</source>
+        <translation>%1 failed: %2 — details in %3</translation>
+    </message>
+    <message id="autodoc.notice.crash.failed_the_crash_log_could_not_be_written">
+        <source>%1 failed: %2 (the crash log could not be written: %3)</source>
+        <translation>%1 failed: %2 (the crash log could not be written: %3)</translation>
     </message>
     <message id="autodoc.notice.diagram.no_mermaid_diagram_in_this_file_a_mermaid_fence">
         <source>no Mermaid diagram in this file: a mermaid fence, or an embed of a .mmd file</source>
@@ -3173,6 +3473,10 @@ WHAT A KEY NEEDS
         <source>not added: the agent %1 stopped waiting</source>
         <translation>not added: the agent %1 stopped waiting</translation>
     </message>
+    <message id="autodoc.notice.editorsocket.the_editor_socket_for_agents">
+        <source>the editor socket for agents</source>
+        <translation>the editor socket for agents</translation>
+    </message>
     <message id="autodoc.notice.endpoints.removed_the">
         <source>removed the %1 %2</source>
         <translation>removed the %1 %2</translation>
@@ -3181,25 +3485,113 @@ WHAT A KEY NEEDS
         <source>saved the %1 %2</source>
         <translation>saved the %1 %2</translation>
     </message>
+    <message id="autodoc.notice.events.by_another_client">
+        <source>by another client</source>
+        <translation>by another client</translation>
+    </message>
+    <message id="autodoc.notice.events.embedding_model_switched_to_files_are_re_indexin">
+        <source>embedding model switched to '%1' %2; files are re-indexing in the background, and search stays available</source>
+        <translation>embedding model switched to '%1' %2; files are re-indexing in the background, and search stays available</translation>
+    </message>
+    <message id="autodoc.notice.events.on_disk">
+        <source>on disk</source>
+        <translation>on disk</translation>
+    </message>
+    <message id="autodoc.notice.events.the_embedding_providers_were_changed">
+        <source>the embedding providers were changed %1</source>
+        <translation>the embedding providers were changed %1</translation>
+    </message>
+    <message id="autodoc.notice.events.the_model_switch_was_cancelled">
+        <source>the model switch was cancelled %1</source>
+        <translation>the model switch was cancelled %1</translation>
+    </message>
+    <message id="autodoc.notice.events.the_ranker_in_use_was_changed">
+        <source>the ranker in use was changed %1</source>
+        <translation>the ranker in use was changed %1</translation>
+    </message>
+    <message id="autodoc.notice.events.the_rankers_were_changed">
+        <source>the rankers were changed %1</source>
+        <translation>the rankers were changed %1</translation>
+    </message>
     <message id="autodoc.notice.events.the_unsaved_text_is_kept_as_an_untitled_draft_ct">
         <source>the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace</source>
         <translation>the unsaved text is kept as an untitled draft: Ctrl+S names it in a workspace</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_database_settings_was_changed">
+        <source>workspace %1: its database settings was changed %2</source>
+        <translation>workspace %1: its database settings was changed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_embedding_policy_was_changed">
+        <source>workspace %1: its embedding policy was changed %2</source>
+        <translation>workspace %1: its embedding policy was changed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_embedding_provider_was_changed">
+        <source>workspace %1: its embedding provider was changed %2</source>
+        <translation>workspace %1: its embedding provider was changed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_frontmatter_schema_changed">
+        <source>workspace %1: its frontmatter schema changed %2</source>
+        <translation>workspace %1: its frontmatter schema changed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_rules_were_changed_reconciling">
+        <source>workspace %1: its rules were changed %2; reconciling</source>
+        <translation>workspace %1: its rules were changed %2; reconciling</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_section_size_was_changed">
+        <source>workspace %1: its section size was changed %2</source>
+        <translation>workspace %1: its section size was changed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_its_text_types_were_changed">
+        <source>workspace %1: its text types were changed %2</source>
+        <translation>workspace %1: its text types were changed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_reclaimed">
+        <source>workspace %1: reclaimed %2</source>
+        <translation>workspace %1: reclaimed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_was_added">
+        <source>workspace %1 was added %2</source>
+        <translation>workspace %1 was added %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_was_removed">
+        <source>workspace %1 was removed %2</source>
+        <translation>workspace %1 was removed %2</translation>
+    </message>
+    <message id="autodoc.notice.events.workspace_was_renamed">
+        <source>workspace %1 was renamed %2 %3</source>
+        <translation>workspace %1 was renamed %2 %3</translation>
     </message>
     <message id="autodoc.notice.files.changed_on_disk_while_the_backend_was_away_a_sav">
         <source>%1 changed on disk while the backend was away: a save asks before it overwrites it</source>
         <translation>%1 changed on disk while the backend was away: a save asks before it overwrites it</translation>
     </message>
+    <message id="autodoc.notice.files.check">
+        <source>check %1</source>
+        <translation>check %1</translation>
+    </message>
     <message id="autodoc.notice.files.create">
         <source>create %1: %2</source>
         <translation>create %1: %2</translation>
     </message>
-    <message id="autodoc.notice.files.is_gone_from_closed">
-        <source>%1 is gone from %2: closed</source>
-        <translation>%1 is gone from %2: closed</translation>
+    <message id="autodoc.notice.files.exists_pick_another_name_or_open_it">
+        <source>%1 exists: pick another name, or open it</source>
+        <translation>%1 exists: pick another name, or open it</translation>
+    </message>
+    <message id="autodoc.notice.files.is_gone_from_disk_closed">
+        <source>%1 is gone from disk: closed</source>
+        <translation>%1 is gone from disk: closed</translation>
+    </message>
+    <message id="autodoc.notice.files.is_gone_from_the_workspace_closed">
+        <source>%1 is gone from the workspace: closed</source>
+        <translation>%1 is gone from the workspace: closed</translation>
     </message>
     <message id="autodoc.notice.files.is_read_only_its_text_is_derived_from_the_file_o">
         <source>%1 is read-only: its text is derived from the %2; File › Open with Default App opens the original</source>
         <translation>%1 is read-only: its text is derived from the %2; File › Open with Default App opens the original</translation>
+    </message>
+    <message id="autodoc.notice.files.it_is_in_no_workspace_no_search_links_backlinks">
+        <source>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</source>
+        <translation>%1: it is in no workspace: no search, links, backlinks, frontmatter check or embeddings</translation>
     </message>
     <message id="autodoc.notice.files.kept_as_it_was_saved_while_it_was_read">
         <source>kept %1 as it was saved while it was read</source>
@@ -3209,6 +3601,10 @@ WHAT A KEY NEEDS
         <source>kept your changes; the disk's version is newer</source>
         <translation>kept your changes; the disk's version is newer</translation>
     </message>
+    <message id="autodoc.notice.files.open">
+        <source>open %1</source>
+        <translation>open %1</translation>
+    </message>
     <message id="autodoc.notice.files.opened">
         <source>opened %1</source>
         <translation>opened %1</translation>
@@ -3217,13 +3613,25 @@ WHAT A KEY NEEDS
         <source>opening %1…</source>
         <translation>opening %1…</translation>
     </message>
+    <message id="autodoc.notice.files.overwrite">
+        <source>overwrite %1</source>
+        <translation>overwrite %1</translation>
+    </message>
     <message id="autodoc.notice.files.read_again_it_changed_on_disk_while_the_backend">
         <source>read %1 again: it changed on disk while the backend was away</source>
         <translation>read %1 again: it changed on disk while the backend was away</translation>
     </message>
+    <message id="autodoc.notice.files.reload">
+        <source>reload %1</source>
+        <translation>reload %1</translation>
+    </message>
     <message id="autodoc.notice.files.reloaded_from_disk_u_brings_your_text_back">
         <source>reloaded %1 from disk: u brings your text back</source>
         <translation>reloaded %1 from disk: u brings your text back</translation>
+    </message>
+    <message id="autodoc.notice.files.save">
+        <source>save %1</source>
+        <translation>save %1</translation>
     </message>
     <message id="autodoc.notice.files.saved">
         <source>saved %1</source>
@@ -3293,6 +3701,26 @@ WHAT A KEY NEEDS
         <source>zoom %1% does not fit this window: drawn at %2%</source>
         <translation>zoom %1% does not fit this window: drawn at %2%</translation>
     </message>
+    <message id="autodoc.notice.globemap_gui.globemap_closed_before_it_settled">
+        <source>GlobeMap closed before it settled</source>
+        <translation>GlobeMap closed before it settled</translation>
+    </message>
+    <message id="autodoc.notice.globemap_gui.globemap_laying_out_documents_links">
+        <source>GlobeMap: laying out %1 · %2 documents, %3 links %4</source>
+        <translation>GlobeMap: laying out %1 · %2 documents, %3 links %4</translation>
+    </message>
+    <message id="autodoc.notice.globemap_gui.globemap_reading_s_map">
+        <source>GlobeMap: reading %1's map…</source>
+        <translation>GlobeMap: reading %1's map…</translation>
+    </message>
+    <message id="autodoc.notice.globemap_gui.globemap_s_map_could_not_be_laid_out">
+        <source>GlobeMap: %1's map could not be laid out</source>
+        <translation>GlobeMap: %1's map could not be laid out</translation>
+    </message>
+    <message id="autodoc.notice.globemap_gui.globemap_settled_documents_links">
+        <source>GlobeMap: %1 settled · %2 documents, %3 links</source>
+        <translation>GlobeMap: %1 settled · %2 documents, %3 links</translation>
+    </message>
     <message id="autodoc.notice.golink.names_no_document_in_this_workspace">
         <source>%1 names no document in this workspace</source>
         <translation>%1 names no document in this workspace</translation>
@@ -3304,6 +3732,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.golink.no_link_under_the_cursor_spc_l_shows_what_links">
         <source>no link under the cursor: SPC l shows what %1 links with</source>
         <translation>no link under the cursor: SPC l shows what %1 links with</translation>
+    </message>
+    <message id="autodoc.notice.graphstore_gui.save_the_graph_groups">
+        <source>save the graph groups (%1)</source>
+        <translation>save the graph groups (%1)</translation>
+    </message>
+    <message id="autodoc.notice.graphstore_gui.the_graph_groups">
+        <source>the graph groups (%1)</source>
+        <translation>the graph groups (%1)</translation>
     </message>
     <message id="autodoc.notice.html.html_preview_currently_accepts_markdown_files">
         <source>HTML preview currently accepts Markdown files</source>
@@ -3329,6 +3765,30 @@ WHAT A KEY NEEDS
         <source>the workspace's folder is not known yet: try again once it is listed</source>
         <translation>the workspace's folder is not known yet: try again once it is listed</translation>
     </message>
+    <message id="autodoc.notice.htmldoc.a_resource_the_page_names_is_not_loaded">
+        <source>a resource the page names is not loaded: %1</source>
+        <translation>a resource the page names is not loaded: %1</translation>
+    </message>
+    <message id="autodoc.notice.htmldoc.absolute_paths_in_a_page_are_not_loaded">
+        <source>absolute paths in a page are not loaded (%1)</source>
+        <translation>absolute paths in a page are not loaded (%1)</translation>
+    </message>
+    <message id="autodoc.notice.htmldoc.resources_outside_the_workspace_are_not_loaded">
+        <source>resources outside the workspace %1 are not loaded (%2)</source>
+        <translation>resources outside the workspace %1 are not loaded (%2)</translation>
+    </message>
+    <message id="autodoc.notice.htmldoc.resources_outside_this_file_s_folder_are_not_loa">
+        <source>resources outside this file's folder are not loaded (%1): add the folder as a workspace</source>
+        <translation>resources outside this file's folder are not loaded (%1): add the folder as a workspace</translation>
+    </message>
+    <message id="autodoc.notice.htmldoc.web_and_file_addresses_in_a_page_are_not_loaded">
+        <source>web and file: addresses in a page are not loaded (%1)</source>
+        <translation>web and file: addresses in a page are not loaded (%1)</translation>
+    </message>
+    <message id="autodoc.notice.htmlpane.html_preview">
+        <source>HTML preview</source>
+        <translation>HTML preview</translation>
+    </message>
     <message id="autodoc.notice.htmlpane.html_preview_currently_accepts_markdown_files">
         <source>HTML preview currently accepts Markdown files</source>
         <translation>HTML preview currently accepts Markdown files</translation>
@@ -3337,9 +3797,17 @@ WHAT A KEY NEEDS
         <source>HTML preview opened in the browser: %1</source>
         <translation>HTML preview opened in the browser: %1</translation>
     </message>
+    <message id="autodoc.notice.htmlpane.open">
+        <source>open %1</source>
+        <translation>open %1</translation>
+    </message>
     <message id="autodoc.notice.htmlpane.opening_the_page_in_the_browser">
         <source>opening the page in the browser…</source>
         <translation>opening the page in the browser…</translation>
+    </message>
+    <message id="autodoc.notice.htmlpane.the_browser_did_not_open">
+        <source>the browser did not open</source>
+        <translation>the browser did not open</translation>
     </message>
     <message id="autodoc.notice.htmlpane.the_note_is_not_on_disk_yet_save_it_then_its_lin">
         <source>the note is not on disk yet: save it, then its links open</source>
@@ -3381,6 +3849,10 @@ WHAT A KEY NEEDS
         <source>cloning %1…</source>
         <translation>cloning %1…</translation>
     </message>
+    <message id="autodoc.notice.luapackages.installed_the_lua_package">
+        <source>installed the Lua package %1</source>
+        <translation>installed the Lua package %1</translation>
+    </message>
     <message id="autodoc.notice.luapackages.looking_up_in_the_registry">
         <source>looking up %1 in the registry…</source>
         <translation>looking up %1 in the registry…</translation>
@@ -3405,6 +3877,14 @@ WHAT A KEY NEEDS
         <source>%1 has no headings to navigate: the breadcrumb shows %2</source>
         <translation>%1 has no headings to navigate: the breadcrumb shows %2</translation>
     </message>
+    <message id="autodoc.notice.outline.its_key_path_on_the_page_s_frame">
+        <source>its key path, on the page's frame</source>
+        <translation>its key path, on the page's frame</translation>
+    </message>
+    <message id="autodoc.notice.outline.its_title">
+        <source>its title</source>
+        <translation>its title</translation>
+    </message>
     <message id="autodoc.notice.outside.exists_file_open_file_opens_it">
         <source>%1 exists: File › Open file… opens it</source>
         <translation>%1 exists: File › Open file… opens it</translation>
@@ -3417,6 +3897,10 @@ WHAT A KEY NEEDS
         <source>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</source>
         <translation>Maximize is the terminal's and the agents': open one first (SPC ` or SPC g)</translation>
     </message>
+    <message id="autodoc.notice.plugincmds.did_not_start">
+        <source>%1 did not start</source>
+        <translation>%1 did not start</translation>
+    </message>
     <message id="autodoc.notice.plugincmds.no_plugin">
         <source>no plugin %1</source>
         <translation>no plugin %1</translation>
@@ -3424,6 +3908,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.plugininstall.add_a_plugin_no_url">
         <source>add a plugin: no URL</source>
         <translation>add a plugin: no URL</translation>
+    </message>
+    <message id="autodoc.notice.plugininstall.added_at_plugins">
+        <source>added %1 at %2: Plugins › %3</source>
+        <translation>added %1 at %2: Plugins › %3</translation>
     </message>
     <message id="autodoc.notice.plugininstall.building">
         <source>building %1…</source>
@@ -3461,13 +3949,37 @@ WHAT A KEY NEEDS
         <source>not added: %1</source>
         <translation>not added: %1</translation>
     </message>
+    <message id="autodoc.notice.plugininstall.not_added_declined">
+        <source>%1 not added</source>
+        <translation>%1 not added</translation>
+    </message>
+    <message id="autodoc.notice.plugininstall.not_installed">
+        <source>%1 not installed: %2</source>
+        <translation>%1 not installed: %2</translation>
+    </message>
+    <message id="autodoc.notice.plugininstall.not_removed">
+        <source>not removed</source>
+        <translation>not removed</translation>
+    </message>
     <message id="autodoc.notice.plugininstall.not_updated">
         <source>%1 not updated: %2</source>
         <translation>%1 not updated: %2</translation>
     </message>
+    <message id="autodoc.notice.plugininstall.not_updated_declined">
+        <source>%1 not updated</source>
+        <translation>%1 not updated</translation>
+    </message>
     <message id="autodoc.notice.plugininstall.removed">
         <source>removed %1</source>
         <translation>removed %1</translation>
+    </message>
+    <message id="autodoc.notice.plugininstall.the_installed_plugins">
+        <source>the installed plugins</source>
+        <translation>the installed plugins</translation>
+    </message>
+    <message id="autodoc.notice.plugininstall.updated_at_plugins_its_previous_folder_is_kept_i">
+        <source>updated %1 at %2: Plugins › %3; its previous folder is kept in plugins/%4/%5 until the next update</source>
+        <translation>updated %1 at %2: Plugins › %3; its previous folder is kept in plugins/%4/%5 until the next update</translation>
     </message>
     <message id="autodoc.notice.plugininstall.was_put_in_the_folder_by_hand_update_it_there">
         <source>%1 was put in the folder by hand: update it there</source>
@@ -3477,9 +3989,53 @@ WHAT A KEY NEEDS
         <source>%1 card hidden: %2</source>
         <translation>%1 card hidden: %2</translation>
     </message>
+    <message id="autodoc.notice.pluginrun.answered_wrongly">
+        <source>%1 answered wrongly: %2</source>
+        <translation>%1 answered wrongly: %2</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.did_not_answer_in">
+        <source>%1 did not answer in %2</source>
+        <translation>%1 did not answer in %2</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.exited">
+        <source>%1 exited</source>
+        <translation>%1 exited</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.exited_2">
+        <source>%1 exited (%2)</source>
+        <translation>%1 exited (%2)</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.is_not_reading_what_it_is_sent">
+        <source>%1 is not reading what it is sent</source>
+        <translation>%1 is not reading what it is sent</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.speaks_protocol_its_manifest_says">
+        <source>%1 speaks protocol %2; its manifest says %3</source>
+        <translation>%1 speaks protocol %2; its manifest says %3</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.stopped">
+        <source>%1: stopped</source>
+        <translation>%1: stopped</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.stopped_answering">
+        <source>%1 stopped answering: %2</source>
+        <translation>%1 stopped answering: %2</translation>
+    </message>
+    <message id="autodoc.notice.pluginrun.text">
+        <source>%1: %2</source>
+        <translation>%1: %2</translation>
+    </message>
     <message id="autodoc.notice.plugins.no_plugin">
         <source>no plugin %1</source>
         <translation>no plugin %1</translation>
+    </message>
+    <message id="autodoc.notice.plugintable.copy_the_results">
+        <source>copy the results</source>
+        <translation>copy the results</translation>
+    </message>
+    <message id="autodoc.notice.plugintable.insert_the_results">
+        <source>insert the results</source>
+        <translation>insert the results</translation>
     </message>
     <message id="autodoc.notice.plugintable.loaded_rows_inserted_the_result_has_more_change">
         <source>%1 loaded rows inserted; the result has more: change the query to change what is returned</source>
@@ -3537,9 +4093,17 @@ WHAT A KEY NEEDS
         <source>%1: the results ended early: %2</source>
         <translation>%1: the results ended early: %2</translation>
     </message>
+    <message id="autodoc.notice.plugintable_export.exporting_loaded_rows_as_shown_to">
+        <source>exporting %1 loaded rows, as shown, to %2…</source>
+        <translation>exporting %1 loaded rows, as shown, to %2…</translation>
+    </message>
     <message id="autodoc.notice.plugintable_export.exporting_rows">
         <source>exporting: %1 rows</source>
         <translation>exporting: %1 rows</translation>
+    </message>
+    <message id="autodoc.notice.plugintable_export.exporting_rows_to">
+        <source>exporting %1 rows to %2…</source>
+        <translation>exporting %1 rows to %2…</translation>
     </message>
     <message id="autodoc.notice.plugintable_export.loaded_rows_exported_to_as_shown">
         <source>%1 loaded rows exported to %2, as shown%3</source>
@@ -3561,6 +4125,10 @@ WHAT A KEY NEEDS
         <source>%1 rows exported to %2, as shown (filtered from %3 loaded)</source>
         <translation>%1 rows exported to %2, as shown (filtered from %3 loaded)</translation>
     </message>
+    <message id="autodoc.notice.plugintable_export.the_result_has_more_change_the_query_a_limit_a_w">
+        <source>; the result has more: change the query (a LIMIT, a WHERE) to change what is returned</source>
+        <translation>; the result has more: change the query (a LIMIT, a WHERE) to change what is returned</translation>
+    </message>
     <message id="autodoc.notice.plugintable_export.the_results_are_being_exported_already">
         <source>the results are being exported already</source>
         <translation>the results are being exported already</translation>
@@ -3581,6 +4149,10 @@ WHAT A KEY NEEDS
         <source>no indentation marks %1</source>
         <translation>no indentation marks %1</translation>
     </message>
+    <message id="autodoc.notice.prefs.save_the_preference">
+        <source>save the preference</source>
+        <translation>save the preference</translation>
+    </message>
     <message id="autodoc.notice.prefs.the_menu_bar_hides_f10_or_alt_letter_brings_it_u">
         <source>the menu bar hides: F10 or Alt+letter brings it up</source>
         <translation>the menu bar hides: F10 or Alt+letter brings it up</translation>
@@ -3588,6 +4160,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.prefs.the_menu_bar_shows">
         <source>the menu bar shows</source>
         <translation>the menu bar shows</translation>
+    </message>
+    <message id="autodoc.notice.preview.drawn_by_mermaid_js">
+        <source>drawn by mermaid.js</source>
+        <translation>drawn by mermaid.js</translation>
+    </message>
+    <message id="autodoc.notice.preview.drawn_natively_no_zoom">
+        <source>drawn natively (no zoom)</source>
+        <translation>drawn natively (no zoom)</translation>
     </message>
     <message id="autodoc.notice.preview.html_preview_opened_in_the_browser">
         <source>HTML preview opened in the browser: %1</source>
@@ -3613,6 +4193,18 @@ WHAT A KEY NEEDS
         <source>no Mermaid engine %1 (native or mermaidjs)</source>
         <translation>no Mermaid engine %1 (native or mermaidjs)</translation>
     </message>
+    <message id="autodoc.notice.preview.off_diagram_sources_and_the_browser">
+        <source>off: diagram sources and the browser</source>
+        <translation>off: diagram sources and the browser</translation>
+    </message>
+    <message id="autodoc.notice.preview.on">
+        <source>on</source>
+        <translation>on</translation>
+    </message>
+    <message id="autodoc.notice.preview.the_browser_did_not_open">
+        <source>the browser did not open</source>
+        <translation>the browser did not open</translation>
+    </message>
     <message id="autodoc.notice.preview.zoom">
         <source>zoom: %1</source>
         <translation>zoom: %1</translation>
@@ -3625,13 +4217,41 @@ WHAT A KEY NEEDS
         <source>zoom is at its smallest</source>
         <translation>zoom is at its smallest</translation>
     </message>
+    <message id="autodoc.notice.progress.embedding">
+        <source>embedding %1 %2</source>
+        <translation>embedding %1 %2</translation>
+    </message>
     <message id="autodoc.notice.progress.embedding_finished_search_is_refreshing_in">
         <source>embedding finished; search is refreshing in %1</source>
         <translation>embedding finished; search is refreshing in %1</translation>
     </message>
+    <message id="autodoc.notice.progress.embedding_paused_by_workspace_setting">
+        <source>embedding paused by workspace setting</source>
+        <translation>embedding paused by workspace setting</translation>
+    </message>
+    <message id="autodoc.notice.progress.embedding_waiting_for">
+        <source>embedding waiting for %1</source>
+        <translation>embedding waiting for %1</translation>
+    </message>
+    <message id="autodoc.notice.progress.embedding_waits">
+        <source>embedding %1 · %2 waits</source>
+        <translation>embedding %1 · %2 waits</translation>
+    </message>
+    <message id="autodoc.notice.progress.embedding_workspace">
+        <source>embedding %1 %2 %3</source>
+        <translation>embedding %1 %2 %3</translation>
+    </message>
     <message id="autodoc.notice.progress.indexed_files">
         <source>indexed %1 files</source>
         <translation>indexed %1 files</translation>
+    </message>
+    <message id="autodoc.notice.progress.indexing">
+        <source>indexing %1</source>
+        <translation>indexing %1</translation>
+    </message>
+    <message id="autodoc.notice.progress.indexing_workspace">
+        <source>indexing %1 %2</source>
+        <translation>indexing %1 %2</translation>
     </message>
     <message id="autodoc.notice.progress.model_switch_ended_search_in_remains_words_only">
         <source>model switch ended; search in %1 remains words-only</source>
@@ -3640,6 +4260,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.progress.ready_search_and_the_files_are_up_to_date">
         <source>ready: search and the files are up to date</source>
         <translation>ready: search and the files are up to date</translation>
+    </message>
+    <message id="autodoc.notice.progress.scanning_the_workspace_s_files">
+        <source>scanning the workspace's files</source>
+        <translation>scanning the workspace's files</translation>
     </message>
     <message id="autodoc.notice.progress.semantic_search_is_available_again_in">
         <source>semantic search is available again in %1 (%2)</source>
@@ -3653,6 +4277,18 @@ WHAT A KEY NEEDS
         <source>semantic search is temporarily words-only while the new model fills in %1</source>
         <translation>semantic search is temporarily words-only while the new model fills in %1</translation>
     </message>
+    <message id="autodoc.notice.progress.switching_to">
+        <source>switching to %1 %2 %3</source>
+        <translation>switching to %1 %2 %3</translation>
+    </message>
+    <message id="autodoc.notice.progress.switching_workspace_to">
+        <source>switching %1 to %2 %3 %4</source>
+        <translation>switching %1 to %2 %3 %4</translation>
+    </message>
+    <message id="autodoc.notice.progress.the_embedding_model_changed">
+        <source>the embedding model changed</source>
+        <translation>the embedding model changed</translation>
+    </message>
     <message id="autodoc.notice.progress.warming_up">
         <source>warming up: %1…</source>
         <translation>warming up: %1…</translation>
@@ -3664,6 +4300,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.providers.semantic_search_with_the_files_are_embedded_in_t">
         <source>semantic search with %1: the files are embedded in the background</source>
         <translation>semantic search with %1: the files are embedded in the background</translation>
+    </message>
+    <message id="autodoc.notice.providers.turn_semantic_search_off">
+        <source>turn semantic search off</source>
+        <translation>turn semantic search off</translation>
     </message>
     <message id="autodoc.notice.rankers.search_is_not_re_ranked_the_hits_are_in_recall_o">
         <source>search is not re-ranked: the hits are in recall order</source>
@@ -3689,6 +4329,10 @@ WHAT A KEY NEEDS
         <source>restored the unsaved text of %1 — save it to keep it</source>
         <translation>restored the unsaved text of %1 — save it to keep it</translation>
     </message>
+    <message id="autodoc.notice.registrations.the_backend_s_registrations">
+        <source>the backend's registrations</source>
+        <translation>the backend's registrations</translation>
+    </message>
     <message id="autodoc.notice.registrations.the_backend_that_answered_after_the_restart_auto">
         <source>the backend that answered after the restart, autodoc %1 (pid %2), still lacks %3: another build serves this store</source>
         <translation>the backend that answered after the restart, autodoc %1 (pid %2), still lacks %3: another build serves this store</translation>
@@ -3705,6 +4349,14 @@ WHAT A KEY NEEDS
         <source>the registry: %1 plugins and packages</source>
         <translation>the registry: %1 plugins and packages</translation>
     </message>
+    <message id="autodoc.notice.relationmap.the_globemap_and_its_settings_are_the_window_s_r">
+        <source>the GlobeMap and its settings are the window's: run autodoc --gui</source>
+        <translation>the GlobeMap and its settings are the window's: run autodoc --gui</translation>
+    </message>
+    <message id="autodoc.notice.relations.links">
+        <source>links</source>
+        <translation>links</translation>
+    </message>
     <message id="autodoc.notice.restart.asking_the_backend_to_stop">
         <source>asking the backend to stop…</source>
         <translation>asking the backend to stop…</translation>
@@ -3713,9 +4365,21 @@ WHAT A KEY NEEDS
         <source>asking the older backend (autodoc %1) to stop…</source>
         <translation>asking the older backend (autodoc %1) to stop…</translation>
     </message>
+    <message id="autodoc.notice.restart.restart">
+        <source>restart</source>
+        <translation>restart</translation>
+    </message>
     <message id="autodoc.notice.restart.restart_not_connected_to_a_backend">
         <source>restart: not connected to a backend</source>
         <translation>restart: not connected to a backend</translation>
+    </message>
+    <message id="autodoc.notice.restart.restart_refused">
+        <source>restart refused</source>
+        <translation>restart refused</translation>
+    </message>
+    <message id="autodoc.notice.restart.restart_the_handoff_to_the_other_clients_was_not">
+        <source>restart: the handoff to the other clients was not written</source>
+        <translation>restart: the handoff to the other clients was not written</translation>
     </message>
     <message id="autodoc.notice.restart.restart_this_tui_starts_no_daemon_so_nothing_wou">
         <source>restart: this TUI starts no daemon, so nothing would bring one back</source>
@@ -3732,6 +4396,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.scripting.lua_s_autodoc_domain_functions_the_daemon_s_cont">
         <source>Lua's autodoc.&lt;domain&gt; functions: the daemon's contracts: %1</source>
         <translation>Lua's autodoc.&lt;domain&gt; functions: the daemon's contracts: %1</translation>
+    </message>
+    <message id="autodoc.notice.scripts.a_lua_command_did_not_load">
+        <source>a Lua command did not load</source>
+        <translation>a Lua command did not load</translation>
     </message>
     <message id="autodoc.notice.scripts.reloaded_the_lua_scripts">
         <source>reloaded the Lua scripts</source>
@@ -3769,9 +4437,17 @@ WHAT A KEY NEEDS
         <source>search has results in %1</source>
         <translation>search has results in %1</translation>
     </message>
+    <message id="autodoc.notice.searchpick.search_in_is_unavailable">
+        <source>search in %1 is unavailable: %2</source>
+        <translation>search in %1 is unavailable: %2</translation>
+    </message>
     <message id="autodoc.notice.searchpick.search_in_is_waiting_texts_still_embedding">
         <source>search in %1 is waiting: %2 texts still embedding</source>
         <translation>search in %1 is waiting: %2 texts still embedding</translation>
+    </message>
+    <message id="autodoc.notice.searchpick.semantic_search_could_not_answer_in_results_are">
+        <source>semantic search could not answer in %1; results are by words only</source>
+        <translation>semantic search could not answer in %1; results are by words only</translation>
     </message>
     <message id="autodoc.notice.session.backend_restarted_autodoc">
         <source>backend restarted: autodoc %1 → %2</source>
@@ -3817,6 +4493,26 @@ WHAT A KEY NEEDS
         <source>this TUI (protocol %1) is older than the backend, autodoc %2 (%3): quit and start the installed autodoc</source>
         <translation>this TUI (protocol %1) is older than the backend, autodoc %2 (%3): quit and start the installed autodoc</translation>
     </message>
+    <message id="autodoc.notice.settings.added_workspace">
+        <source>added workspace %1</source>
+        <translation>added workspace %1</translation>
+    </message>
+    <message id="autodoc.notice.settings.added_workspace_as">
+        <source>added workspace %1 as %2: %3</source>
+        <translation>added workspace %1 as %2: %3</translation>
+    </message>
+    <message id="autodoc.notice.settings.added_workspace_but_could_not_read_it_back">
+        <source>added workspace %1, but could not read it back</source>
+        <translation>added workspace %1, but could not read it back</translation>
+    </message>
+    <message id="autodoc.notice.settings.added_workspace_but_its_kb_type_stopped_part_way">
+        <source>added workspace %1, but its KB type stopped part way (%2)</source>
+        <translation>added workspace %1, but its KB type stopped part way (%2)</translation>
+    </message>
+    <message id="autodoc.notice.settings.added_workspace_but_its_settings_were_not_saved">
+        <source>added workspace %1, but its settings were not saved</source>
+        <translation>added workspace %1, but its settings were not saved</translation>
+    </message>
     <message id="autodoc.notice.settings.choose_a_workspace_before_changing_its_file_type">
         <source>choose a workspace before changing its file types</source>
         <translation>choose a workspace before changing its file types</translation>
@@ -3825,6 +4521,14 @@ WHAT A KEY NEEDS
         <source>created %1</source>
         <translation>created %1</translation>
     </message>
+    <message id="autodoc.notice.settings.destination">
+        <source>destination</source>
+        <translation>destination</translation>
+    </message>
+    <message id="autodoc.notice.settings.embedding">
+        <source>embedding</source>
+        <translation>embedding</translation>
+    </message>
     <message id="autodoc.notice.settings.exists_already">
         <source>%1 exists already</source>
         <translation>%1 exists already</translation>
@@ -3832,6 +4536,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.settings.is_a_file">
         <source>%1 is a file</source>
         <translation>%1 is a file</translation>
+    </message>
+    <message id="autodoc.notice.settings.name">
+        <source>name</source>
+        <translation>name</translation>
     </message>
     <message id="autodoc.notice.settings.new_folder">
         <source>New Folder: %1</source>
@@ -3845,9 +4553,45 @@ WHAT A KEY NEEDS
         <source>%1: nothing changed</source>
         <translation>%1: nothing changed</translation>
     </message>
+    <message id="autodoc.notice.settings.provider">
+        <source>provider</source>
+        <translation>provider</translation>
+    </message>
+    <message id="autodoc.notice.settings.rules">
+        <source>rules</source>
+        <translation>rules</translation>
+    </message>
     <message id="autodoc.notice.settings.saved">
         <source>%1: saved %2</source>
         <translation>%1: saved %2</translation>
+    </message>
+    <message id="autodoc.notice.settings.schema">
+        <source>schema</source>
+        <translation>schema</translation>
+    </message>
+    <message id="autodoc.notice.settings.section_size">
+        <source>section size</source>
+        <translation>section size</translation>
+    </message>
+    <message id="autodoc.notice.settings.source">
+        <source>source</source>
+        <translation>source</translation>
+    </message>
+    <message id="autodoc.notice.settings.text_types">
+        <source>text types</source>
+        <translation>text types</translation>
+    </message>
+    <message id="autodoc.notice.settings.vector_index">
+        <source>vector index</source>
+        <translation>vector index</translation>
+    </message>
+    <message id="autodoc.notice.settings.view_args">
+        <source>view args</source>
+        <translation>view args</translation>
+    </message>
+    <message id="autodoc.notice.settings.workspace_settings">
+        <source>workspace settings</source>
+        <translation>workspace settings</translation>
     </message>
     <message id="autodoc.notice.stages.search_needs_lexical_or_semantic_one_stays_check">
         <source>search needs Lexical or Semantic: one stays checked</source>
@@ -3865,9 +4609,25 @@ WHAT A KEY NEEDS
         <source>the table changed; the edit was dropped</source>
         <translation>the table changed; the edit was dropped</translation>
     </message>
+    <message id="autodoc.notice.terminal.the_lua_shell_could_not_start">
+        <source>the Lua shell could not start (%1)</source>
+        <translation>the Lua shell could not start (%1)</translation>
+    </message>
     <message id="autodoc.notice.terminal.the_shell_s_tab_could_not_close">
         <source>the shell's tab could not close: %1</source>
         <translation>the shell's tab could not close: %1</translation>
+    </message>
+    <message id="autodoc.notice.terminal.the_terminal_could_not_add_a_lua_shell">
+        <source>the terminal could not add a Lua shell: %1</source>
+        <translation>the terminal could not add a Lua shell: %1</translation>
+    </message>
+    <message id="autodoc.notice.terminal.the_terminal_could_not_add_a_shell">
+        <source>the terminal could not add a shell: %1</source>
+        <translation>the terminal could not add a shell: %1</translation>
+    </message>
+    <message id="autodoc.notice.terminal.the_terminal_could_not_start_spc_or_enter_in_it">
+        <source>the terminal could not start (%1): SPC ` or Enter in it tries again</source>
+        <translation>the terminal could not start (%1): SPC ` or Enter in it tries again</translation>
     </message>
     <message id="autodoc.notice.terminal.the_terminal_s_shell_exited">
         <source>the terminal's shell exited (%1)</source>
@@ -3933,6 +4693,10 @@ WHAT A KEY NEEDS
         <source>todos: no AutoDoc agent to assign to: add one in the agent profiles</source>
         <translation>todos: no AutoDoc agent to assign to: add one in the agent profiles</translation>
     </message>
+    <message id="autodoc.notice.todos_assign.you_didn_t_start_it">
+        <source>you didn't start it</source>
+        <translation>you didn't start it</translation>
+    </message>
     <message id="autodoc.notice.todos_vars.todos_a_variable_is_name_value">
         <source>todos: a variable is NAME=value</source>
         <translation>todos: a variable is NAME=value</translation>
@@ -3944,6 +4708,10 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.todos_vars.todos_set">
         <source>todos: $%1 set (%2)</source>
         <translation>todos: $%1 set (%2)</translation>
+    </message>
+    <message id="autodoc.notice.vectors.cancel_the_switch">
+        <source>cancel the switch</source>
+        <translation>cancel the switch</translation>
     </message>
     <message id="autodoc.notice.vectors.embedding_stopped_the_vectors_made_kept_use_carr">
         <source>embedding stopped, the vectors made kept: Use carries on from them</source>
@@ -3957,6 +4725,10 @@ WHAT A KEY NEEDS
         <source>purged %1's %2 vectors from %3</source>
         <translation>purged %1's %2 vectors from %3</translation>
     </message>
+    <message id="autodoc.notice.vectors.stop_embedding">
+        <source>stop embedding</source>
+        <translation>stop embedding</translation>
+    </message>
     <message id="autodoc.notice.vectors.switch_cancelled_semantic_search_with_again_s_ve">
         <source>switch cancelled: semantic search with %1 again; %2's vectors so far are deleted</source>
         <translation>switch cancelled: semantic search with %1 again; %2's vectors so far are deleted</translation>
@@ -3969,6 +4741,10 @@ WHAT A KEY NEEDS
         <source>%1 cannot be served: its root is gone (Go › Manage workspaces…)</source>
         <translation>%1 cannot be served: its root is gone (Go › Manage workspaces…)</translation>
     </message>
+    <message id="autodoc.notice.workspace.delete">
+        <source>delete %1</source>
+        <translation>delete %1</translation>
+    </message>
     <message id="autodoc.notice.workspace.deleted_workspace_its_files_stay">
         <source>deleted workspace %1 (its files stay)</source>
         <translation>deleted workspace %1 (its files stay)</translation>
@@ -3980,6 +4756,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.notice.workspace.no_workspace_go_manage_workspaces_adds_one">
         <source>no workspace: Go › Manage workspaces… adds one</source>
         <translation>no workspace: Go › Manage workspaces… adds one</translation>
+    </message>
+    <message id="autodoc.notice.workspace.the_backend_s_capabilities">
+        <source>the backend's capabilities</source>
+        <translation>the backend's capabilities</translation>
+    </message>
+    <message id="autodoc.notice.workspace.workspaces">
+        <source>workspaces</source>
+        <translation>workspaces</translation>
     </message>
     <message id="autodoc.question.agentinstances.start_and_send">
         <source>Start %1 and send %2?</source>
@@ -4041,21 +4825,77 @@ WHAT A KEY NEEDS
         <source>&amp;No</source>
         <translation>&amp;No</translation>
     </message>
+    <message id="autodoc.question.luagate.a_capability_autodoc_does_not_know">
+        <source>a capability AutoDoc does not know</source>
+        <translation>a capability AutoDoc does not know</translation>
+    </message>
     <message id="autodoc.question.luagate.allow">
         <source>&amp;Allow</source>
         <translation>&amp;Allow</translation>
+    </message>
+    <message id="autodoc.question.luagate.change_autodoc_s_settings_workspaces_models_pref">
+        <source>change AutoDoc's settings: workspaces, models, preferences</source>
+        <translation>change AutoDoc's settings: workspaces, models, preferences</translation>
     </message>
     <message id="autodoc.question.luagate.let_use">
         <source>let %1 use %2?</source>
         <translation>let %1 use %2?</translation>
     </message>
+    <message id="autodoc.question.luagate.list_the_agents_and_type_into_them">
+        <source>list the agents and type into them</source>
+        <translation>list the agents and type into them</translation>
+    </message>
     <message id="autodoc.question.luagate.not_now">
         <source>&amp;Not now</source>
         <translation>&amp;Not now</translation>
     </message>
+    <message id="autodoc.question.luagate.not_now_refuses_until_the_next_start">
+        <source>Not now refuses until the next start.</source>
+        <translation>Not now refuses until the next start.</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_and_write_the_clipboard">
+        <source>read and write the clipboard</source>
+        <translation>read and write the clipboard</translation>
+    </message>
+    <message id="autodoc.question.luagate.read_the_workspace_s_documents_search_them_and_f">
+        <source>read the workspace's documents, search them and follow their links</source>
+        <translation>read the workspace's documents, search them and follow their links</translation>
+    </message>
+    <message id="autodoc.question.luagate.run_any_of_autodoc_s_commands">
+        <source>run any of AutoDoc's commands</source>
+        <translation>run any of AutoDoc's commands</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_lua_script">
+        <source>the Lua script %1</source>
+        <translation>the Lua script %1</translation>
+    </message>
+    <message id="autodoc.question.luagate.the_plugin_s_lua_package">
+        <source>the plugin %1's Lua package</source>
+        <translation>the plugin %1's Lua package</translation>
+    </message>
+    <message id="autodoc.question.luagate.write_rename_and_remove_documents_and_tasks">
+        <source>write, rename and remove documents and tasks</source>
+        <translation>write, rename and remove documents and tasks</translation>
+    </message>
+    <message id="autodoc.question.luapackages.a_package_s_lua_runs_in_autodoc_held_to_what_you">
+        <source>A package's Lua runs in AutoDoc, held to what you grant it.</source>
+        <translation>A package's Lua runs in AutoDoc, held to what you grant it.</translation>
+    </message>
+    <message id="autodoc.question.luapackages.asked_again_each_once_it_loads">
+        <source>%1 (asked again, each, once it loads)</source>
+        <translation>%1 (asked again, each, once it loads)</translation>
+    </message>
+    <message id="autodoc.question.luapackages.audit">
+        <source>&amp;Audit…</source>
+        <translation>&amp;Audit…</translation>
+    </message>
     <message id="autodoc.question.luapackages.cancel">
         <source>&amp;Cancel</source>
         <translation>&amp;Cancel</translation>
+    </message>
+    <message id="autodoc.question.luapackages.from_at">
+        <source>from %1 at %2</source>
+        <translation>from %1 at %2</translation>
     </message>
     <message id="autodoc.question.luapackages.install">
         <source>&amp;Install</source>
@@ -4064,6 +4904,14 @@ WHAT A KEY NEEDS
     <message id="autodoc.question.luapackages.install_the_lua_package">
         <source>install the Lua package %1?</source>
         <translation>install the Lua package %1?</translation>
+    </message>
+    <message id="autodoc.question.luapackages.nothing_it_must_ask_for">
+        <source>nothing it must ask for</source>
+        <translation>nothing it must ask for</translation>
+    </message>
+    <message id="autodoc.question.luapackages.requires">
+        <source>requires %1</source>
+        <translation>requires %1</translation>
     </message>
     <message id="autodoc.question.no">
         <source>&amp;No</source>
@@ -4187,6 +5035,38 @@ WHAT A KEY NEEDS
         <source>agent</source>
         <translation>agent</translation>
     </message>
+    <message id="autodoc.text.agentinstances.this_task">
+        <source>this task</source>
+        <translation>this task</translation>
+    </message>
+    <message id="autodoc.text.agentinstances.this_text">
+        <source>this text</source>
+        <translation>this text</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.a_profile_is_a_name_and_the_command_that_starts">
+        <source>a profile is a name and the command that starts the agent</source>
+        <translation>a profile is a name and the command that starts the agent</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.add_an_agent_profile">
+        <source>add an agent profile</source>
+        <translation>add an agent profile</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.codename_held_by_a_running_agent">
+        <source>codename held by a running agent</source>
+        <translation>codename held by a running agent</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.codename_needs_lower_case_letters_or_digits_sepa">
+        <source>codename needs lower-case letters or digits, separated by hyphens</source>
+        <translation>codename needs lower-case letters or digits, separated by hyphens</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.codename_taken_by">
+        <source>codename taken by %1</source>
+        <translation>codename taken by %1</translation>
+    </message>
+    <message id="autodoc.text.agentprofiles.edit">
+        <source>edit %1</source>
+        <translation>edit %1</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.make_default_marks_the_one_spc_g_opens">
         <source>Make default marks the one SPC g opens</source>
         <translation>Make default marks the one SPC g opens</translation>
@@ -4215,13 +5095,45 @@ WHAT A KEY NEEDS
         <source>SPC g opens %1 · {root} and {workspace} in a command are filled in</source>
         <translation>SPC g opens %1 · {root} and {workspace} in a command are filled in</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.stop_the_running_agent_before_changing_its_coden">
+        <source>stop the running agent before changing its codename</source>
+        <translation>stop the running agent before changing its codename</translation>
+    </message>
     <message id="autodoc.text.agentprofiles.the_agent_profile_changed_ask_to_remove_it_again">
         <source>the agent profile changed; ask to remove it again</source>
         <translation>the agent profile changed; ask to remove it again</translation>
     </message>
+    <message id="autodoc.text.agentprofiles.the_agent_profile_changed_open_it_again_before_s">
+        <source>the agent profile changed; open it again before saving</source>
+        <translation>the agent profile changed; open it again before saving</translation>
+    </message>
+    <message id="autodoc.text.agentsetup.close">
+        <source>&amp;Close</source>
+        <translation>&amp;Close</translation>
+    </message>
+    <message id="autodoc.text.agentsetup.no">
+        <source>&amp;No</source>
+        <translation>&amp;No</translation>
+    </message>
+    <message id="autodoc.text.agentsetup.this_prompt">
+        <source>this prompt</source>
+        <translation>this prompt</translation>
+    </message>
     <message id="autodoc.text.arrange.arrange">
         <source>arrange %1</source>
         <translation>arrange %1</translation>
+    </message>
+    <message id="autodoc.text.arrange.the">
+        <source>the %1</source>
+        <translation>the %1</translation>
+    </message>
+    <message id="autodoc.text.arrange.the_preview">
+        <source>the preview</source>
+        <translation>the preview</translation>
+    </message>
+    <message id="autodoc.text.candidate.audit_asks_your_agent_to_read_this_code_autodoc">
+        <source>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</source>
+        <translation>Audit asks your agent to read this code. AutoDoc can't stop the agent from running code or changing files: pick an agent you trust, and watch its tab.</translation>
     </message>
     <message id="autodoc.text.diskwatch.changed_on_disk_while_it_had_unsaved_changes_kee">
         <source>%1 changed on disk while it had unsaved changes. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
@@ -4235,21 +5147,45 @@ WHAT A KEY NEEDS
         <source>%1 changed again while it was saved. Save the newer changes first?</source>
         <translation>%1 changed again while it was saved. Save the newer changes first?</translation>
     </message>
+    <message id="autodoc.text.files.changed_on_disk">
+        <source>changed on disk</source>
+        <translation>changed on disk</translation>
+    </message>
     <message id="autodoc.text.files.changed_on_disk_since_you_opened_it_keep_editing">
         <source>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</source>
         <translation>%1 changed on disk since you opened it. Keep editing, reload the disk's version (u brings your text back), or overwrite it with yours?</translation>
+    </message>
+    <message id="autodoc.text.files.deleted_on_disk">
+        <source>deleted on disk</source>
+        <translation>deleted on disk</translation>
+    </message>
+    <message id="autodoc.text.files.no_workspace">
+        <source>no workspace</source>
+        <translation>no workspace</translation>
     </message>
     <message id="autodoc.text.files.open_simplified_its_text_read_only_or_raw_its_ht">
         <source>Open %1 simplified, its text read-only, or raw, its HTML to edit?</source>
         <translation>Open %1 simplified, its text read-only, or raw, its HTML to edit?</translation>
     </message>
+    <message id="autodoc.text.files.read_only">
+        <source>%1 · read-only</source>
+        <translation>%1 · read-only</translation>
+    </message>
+    <message id="autodoc.text.files.save_the_draft_a_path_in_the_workspace_md_is_add">
+        <source>save the draft: a path in the workspace; .md is added when it has none · Enter on a file takes its folder</source>
+        <translation>save the draft: a path in the workspace; .md is added when it has none · Enter on a file takes its folder</translation>
+    </message>
     <message id="autodoc.text.files.unsaved_close">
         <source>%1 has unsaved changes. Save them before you close it?</source>
         <translation>%1 has unsaved changes. Save them before you close it?</translation>
     </message>
-    <message id="autodoc.text.files.unsaved_close_gone">
-        <source>%1 has unsaved changes. Save them before you close it: it is gone from %2?</source>
-        <translation>%1 has unsaved changes. Save them before you close it: it is gone from %2?</translation>
+    <message id="autodoc.text.files.unsaved_close_gone_from_disk">
+        <source>%1 has unsaved changes. Save them before you close it: it is gone from disk?</source>
+        <translation>%1 has unsaved changes. Save them before you close it: it is gone from disk?</translation>
+    </message>
+    <message id="autodoc.text.files.unsaved_close_gone_from_the_workspace">
+        <source>%1 has unsaved changes. Save them before you close it: it is gone from the workspace?</source>
+        <translation>%1 has unsaved changes. Save them before you close it: it is gone from the workspace?</translation>
     </message>
     <message id="autodoc.text.files.unsaved_delete_workspace">
         <source>%1 has unsaved changes. Save them before you delete its workspace?</source>
@@ -4275,37 +5211,341 @@ WHAT A KEY NEEDS
         <source>type a word to find</source>
         <translation>type a word to find</translation>
     </message>
+    <message id="autodoc.text.frontmatter.active_fields">
+        <source>active: %1 fields</source>
+        <translation>active: %1 fields</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.frontmatter_line">
+        <source>⚠ frontmatter line %1: %2</source>
+        <translation>⚠ frontmatter line %1: %2</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.frontmatter_line_more">
+        <source>⚠ frontmatter line %1: %2  (+%3 more)</source>
+        <translation>⚠ frontmatter line %1: %2  (+%3 more)</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.line">
+        <source>line %1: %2</source>
+        <translation>line %1: %2</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.line_the_last_valid_schema_stays_in_use">
+        <source>line %1: %2 (the last valid schema stays in use)</source>
+        <translation>line %1: %2 (the last valid schema stays in use)</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.no_schema_files_are_not_checked_and_field_value">
+        <source>no schema: files are not checked, and field:value searches as words</source>
+        <translation>no schema: files are not checked, and field:value searches as words</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.not_active">
+        <source>not active</source>
+        <translation>not active</translation>
+    </message>
+    <message id="autodoc.text.frontmatter.the_last_valid_schema_stays_in_use">
+        <source>%1 (the last valid schema stays in use)</source>
+        <translation>%1 (the last valid schema stays in use)</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.any_other_document">
+        <source>any other document</source>
+        <translation>any other document</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.body_link">
+        <source>body link</source>
+        <translation>body link</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.body_links">
+        <source>body links</source>
+        <translation>body links</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.every_link">
+        <source>every link</source>
+        <translation>every link</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.f_filter_zoom_0_fit_l_legend">
+        <source>f filter, + - zoom, 0 fit, l legend</source>
+        <translation>f filter, + - zoom, 0 fit, l legend</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.globemap_documents_links">
+        <source>GlobeMap · %1 · %2 documents, %3 links · %4 · %5</source>
+        <translation>GlobeMap · %1 · %2 documents, %3 links · %4 · %5</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.larger_more_links">
+        <source>larger: more links</source>
+        <translation>larger: more links</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.no_workspace_enter_one_to_see_its_map">
+        <source>no workspace: enter one to see its map</source>
+        <translation>no workspace: enter one to see its map</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.other_relation">
+        <source>other relation</source>
+        <translation>other relation</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.reading">
+        <source>reading %1…</source>
+        <translation>reading %1…</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.relations">
+        <source>relations</source>
+        <translation>relations</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.settling">
+        <source>settling %1%</source>
+        <translation>settling %1%</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.superseded">
+        <source>superseded</source>
+        <translation>superseded</translation>
+    </message>
+    <message id="autodoc.text.globemap_gui.supersedes">
+        <source>supersedes</source>
+        <translation>supersedes</translation>
+    </message>
     <message id="autodoc.text.globesettings_gui.a_colour_is_rrggbb_or_nothing_for_the_theme_s">
         <source>a colour is #rrggbb, or nothing for the theme's</source>
         <translation>a colour is #rrggbb, or nothing for the theme's</translation>
+    </message>
+    <message id="autodoc.text.globesettings_gui.the_page_s">
+        <source>the page's</source>
+        <translation>the page's</translation>
+    </message>
+    <message id="autodoc.text.globesettings_gui.the_terminals">
+        <source>the terminals'</source>
+        <translation>the terminals'</translation>
+    </message>
+    <message id="autodoc.text.groupeditor_gui.a_document_wears_the_first_group_its_query_match">
+        <source>a document wears the first group its query matches: type:&lt;type&gt;, tag:#&lt;tag&gt;, path:&lt;folder&gt;/ — kept in %1's .autodoc/graph.toml</source>
+        <translation>a document wears the first group its query matches: type:&lt;type&gt;, tag:#&lt;tag&gt;, path:&lt;folder&gt;/ — kept in %1's .autodoc/graph.toml</translation>
+    </message>
+    <message id="autodoc.text.groupeditor_gui.a_group_s_colour_is_rrggbb">
+        <source>a group's colour is #rrggbb</source>
+        <translation>a group's colour is #rrggbb</translation>
+    </message>
+    <message id="autodoc.text.help.log">
+        <source>(log: %1)</source>
+        <translation>(log: %1)</translation>
     </message>
     <message id="autodoc.text.kbtype.a_kb_type_s_git_url_then_stage">
         <source>a KB type's git URL, then Stage</source>
         <translation>a KB type's git URL, then Stage</translation>
     </message>
+    <message id="autodoc.text.kbtype.at">
+        <source>%1 at %2</source>
+        <translation>%1 at %2</translation>
+    </message>
+    <message id="autodoc.text.kbtype.created_kept">
+        <source>%1 created, %2 kept</source>
+        <translation>%1 created, %2 kept</translation>
+    </message>
+    <message id="autodoc.text.kbtype.custom_url">
+        <source>Custom URL…</source>
+        <translation>Custom URL…</translation>
+    </message>
+    <message id="autodoc.text.kbtype.embedding">
+        <source>embedding %1</source>
+        <translation>embedding %1</translation>
+    </message>
+    <message id="autodoc.text.kbtype.include">
+        <source>include %1</source>
+        <translation>include %1</translation>
+    </message>
+    <message id="autodoc.text.kbtype.none_an_existing_folder_or_a_coding_repo">
+        <source>None (an existing folder or a coding repo)</source>
+        <translation>None (an existing folder or a coding repo)</translation>
+    </message>
     <message id="autodoc.text.kbtype.not_a_kb_type">
         <source>not a KB type: %1</source>
         <translation>not a KB type: %1</translation>
+    </message>
+    <message id="autodoc.text.kbtype.nothing_is_created_if_the_location_is_a_coding_r">
+        <source>Nothing is created. If the location is a coding repo, consider turning off embedding in the advanced option.</source>
+        <translation>Nothing is created. If the location is a coding repo, consider turning off embedding in the advanced option.</translation>
+    </message>
+    <message id="autodoc.text.kbtype.proposes_where_you_haven_t_changed_the_field">
+        <source>proposes %1 (where you haven't changed the field)</source>
+        <translation>proposes %1 (where you haven't changed the field)</translation>
+    </message>
+    <message id="autodoc.text.kbtype.refused">
+        <source>%1 refused (%2)</source>
+        <translation>%1 refused (%2)</translation>
+    </message>
+    <message id="autodoc.text.kbtype.schema">
+        <source>schema %1</source>
+        <translation>schema %1</translation>
+    </message>
+    <message id="autodoc.text.kbtype.skipped">
+        <source>%1 skipped</source>
+        <translation>%1 skipped</translation>
     </message>
     <message id="autodoc.text.kbtype.staging">
         <source>staging %1…</source>
         <translation>staging %1…</translation>
     </message>
+    <message id="autodoc.text.kbtype.updated">
+        <source>%1 updated</source>
+        <translation>%1 updated</translation>
+    </message>
+    <message id="autodoc.text.luashell.lua_5_1_autodoc_s_engine_an_expression_shows_its">
+        <source>Lua 5.1, AutoDoc's engine: an expression shows its value; ed is the page; Ctrl+D ends.</source>
+        <translation>Lua 5.1, AutoDoc's engine: an expression shows its value; ed is the page; Ctrl+D ends.</translation>
+    </message>
+    <message id="autodoc.text.luashell.the_scripts_have_not_started">
+        <source>the scripts have not started</source>
+        <translation>the scripts have not started</translation>
+    </message>
+    <message id="autodoc.text.luashell.the_scripts_were_reloaded_a_fresh_environment">
+        <source>the scripts were reloaded: a fresh environment</source>
+        <translation>the scripts were reloaded: a fresh environment</translation>
+    </message>
+    <message id="autodoc.text.mindmap_gui.any_other_document">
+        <source>any other document</source>
+        <translation>any other document</translation>
+    </message>
+    <message id="autodoc.text.mindmap_gui.is_not_indexed_yet">
+        <source>%1 is not indexed yet</source>
+        <translation>%1 is not indexed yet</translation>
+    </message>
+    <message id="autodoc.text.mindmap_gui.mindmap_documents_depth_d_depth_l_legend">
+        <source>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</source>
+        <translation>Mindmap · %1 · %2 documents · depth %3 · d depth, l legend</translation>
+    </message>
+    <message id="autodoc.text.mindmap_gui.open_a_workspace_s_document_to_see_its_mind_map">
+        <source>open a workspace's document to see its mind map</source>
+        <translation>open a workspace's document to see its mind map</translation>
+    </message>
+    <message id="autodoc.text.mindmap_gui.reading">
+        <source>reading %1…</source>
+        <translation>reading %1…</translation>
+    </message>
     <message id="autodoc.text.notices.notifications">
         <source>notifications (%1)</source>
         <translation>notifications (%1)</translation>
+    </message>
+    <message id="autodoc.text.pick.agents">
+        <source>agents</source>
+        <translation>agents</translation>
+    </message>
+    <message id="autodoc.text.pick.buffers">
+        <source>buffers</source>
+        <translation>buffers</translation>
+    </message>
+    <message id="autodoc.text.pick.files">
+        <source>files</source>
+        <translation>files</translation>
+    </message>
+    <message id="autodoc.text.pick.headings">
+        <source>headings</source>
+        <translation>headings</translation>
+    </message>
+    <message id="autodoc.text.pick.held_this_backend_s_build_does_not_read_this_fil">
+        <source>held: this backend's build does not read this file; it was indexed by another (%1)</source>
+        <translation>held: this backend's build does not read this file; it was indexed by another (%1)</translation>
+    </message>
+    <message id="autodoc.text.pick.items">
+        <source>items</source>
+        <translation>items</translation>
+    </message>
+    <message id="autodoc.text.pick.of">
+        <source>%1 (%2 of %3)</source>
+        <translation>%1 (%2 of %3)</translation>
+    </message>
+    <message id="autodoc.text.pick.plugins_and_packages">
+        <source>plugins and packages</source>
+        <translation>plugins and packages</translation>
+    </message>
+    <message id="autodoc.text.pick.statuses">
+        <source>statuses</source>
+        <translation>statuses</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.close">
+        <source>Close</source>
+        <translation>Close</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.closing_the_card">
+        <source>closing the card</source>
+        <translation>closing the card</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.is_taken_by">
+        <source>%1 is taken by %2</source>
+        <translation>%1 is taken by %2</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.key_want_one_letter_or_digit">
+        <source>key %1: want one letter or digit</source>
+        <translation>key %1: want one letter or digit</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.no_key">
+        <source>no key</source>
+        <translation>no key</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.no_plugins_yet">
+        <source>no plugins yet</source>
+        <translation>no plugins yet</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.open">
+        <source>Open</source>
+        <translation>Open</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.reopen_card">
+        <source>Reopen card</source>
+        <translation>Reopen card</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.show_card">
+        <source>Show card</source>
+        <translation>Show card</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.turn_off">
+        <source>Turn off</source>
+        <translation>Turn off</translation>
+    </message>
+    <message id="autodoc.text.plugincmds.unbound_in_the_preferences">
+        <source>unbound in the preferences</source>
+        <translation>unbound in the preferences</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.a_plugin_is_a_program_that_runs_as_you_with_your">
+        <source>A plugin is a program that runs as you, with your files. AutoDoc does not check what a plugin does: add only plugins you trust. Adding one is at your own risk.</source>
+        <translation>A plugin is a program that runs as you, with your files. AutoDoc does not check what a plugin does: add only plugins you trust. Adding one is at your own risk.</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.add_from_a_git_url_update_or_remove_the_one_unde">
+        <source>Add… from a git URL · Update… or Remove… the one under the cursor · the folder: %1</source>
+        <translation>Add… from a git URL · Update… or Remove… the one under the cursor · the folder: %1</translation>
     </message>
     <message id="autodoc.text.plugininstall.add_the_plugin">
         <source>add the plugin %1?</source>
         <translation>add the plugin %1?</translation>
     </message>
+    <message id="autodoc.text.plugininstall.at">
+        <source>at    %1</source>
+        <translation>at    %1</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.declares">
+        <source>Declares:  %1</source>
+        <translation>Declares:  %1</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.from">
+        <source>from  %1</source>
+        <translation>from  %1</translation>
+    </message>
     <message id="autodoc.text.plugininstall.is_designed_for_only">
         <source>%1 is designed for %2 only</source>
         <translation>%1 is designed for %2 only</translation>
     </message>
+    <message id="autodoc.text.plugininstall.it_then_starts">
+        <source>It then starts:  %1</source>
+        <translation>It then starts:  %1</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.its_build_runs">
+        <source>Its build runs:  %1</source>
+        <translation>Its build runs:  %1</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.local_put_in_the_folder_by_hand">
+        <source>local: put in the folder by hand</source>
+        <translation>local: put in the folder by hand</translation>
+    </message>
     <message id="autodoc.text.plugininstall.no_plugin_under_the_cursor_add_installs_one">
         <source>no plugin under the cursor · Add… installs one</source>
         <translation>no plugin under the cursor · Add… installs one</translation>
+    </message>
+    <message id="autodoc.text.plugininstall.nothing_it_has_no_build_step">
+        <source>nothing: it has no build step</source>
+        <translation>nothing: it has no build step</translation>
     </message>
     <message id="autodoc.text.plugininstall.text">
         <source>%1: %2</source>
@@ -4315,6 +5555,82 @@ WHAT A KEY NEEDS
         <source>update the plugin %1?</source>
         <translation>update the plugin %1?</translation>
     </message>
+    <message id="autodoc.text.pluginpick.1_command">
+        <source>1 command</source>
+        <translation>1 command</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.a_key_runs_its_command_backspace_goes_back_q_or">
+        <source>a key runs its command · Backspace goes back · q or Esc closes</source>
+        <translation>a key runs its command · Backspace goes back · q or Esc closes</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.a_letter_or_digit_for_not_j_k_or_q_backspace_rem">
+        <source>a letter or digit for %1 (not j, k or q) · Backspace removes its letter · Esc closes</source>
+        <translation>a letter or digit for %1 (not j, k or q) · Backspace removes its letter · Esc closes</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.a_plugin_s_letter_is_a_letter_or_digit_again_for">
+        <source>a plugin's letter is a letter or digit: * again for another</source>
+        <translation>a plugin's letter is a letter or digit: * again for another</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.a_plugin_s_letter_or_enter_shows_its_commands_j">
+        <source>a plugin's letter, or Enter, shows its commands · j/k move · * gives the plugin under › a letter · q or Esc closes</source>
+        <translation>a plugin's letter, or Enter, shows its commands · j/k move · * gives the plugin under › a letter · q or Esc closes</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.closes_the_chooser">
+        <source>%1 closes the chooser</source>
+        <translation>%1 closes the chooser</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.closes_the_chooser_again_for_another_letter">
+        <source>%1 closes the chooser: * again for another letter</source>
+        <translation>%1 closes the chooser: * again for another letter</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.commands">
+        <source>%1 commands</source>
+        <translation>%1 commands</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.has_no_letter">
+        <source>%1 has no letter</source>
+        <translation>%1 has no letter</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.is_s">
+        <source>%1 is %2's</source>
+        <translation>%1 is %2's</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.is_s_it_was_s">
+        <source>%1 is %2's (it was %3's)</source>
+        <translation>%1 is %2's (it was %3's)</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.letter_want_one_letter_or_digit">
+        <source>letter %1: want one letter or digit</source>
+        <translation>letter %1: want one letter or digit</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.moves_down">
+        <source>%1 moves down</source>
+        <translation>%1 moves down</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.moves_down_again_for_another_letter">
+        <source>%1 moves down: * again for another letter</source>
+        <translation>%1 moves down: * again for another letter</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.moves_up">
+        <source>%1 moves up</source>
+        <translation>%1 moves up</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.moves_up_again_for_another_letter">
+        <source>%1 moves up: * again for another letter</source>
+        <translation>%1 moves up: * again for another letter</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.no_commands_the_plugin_is_gone_or_cannot_run">
+        <source>no commands: the plugin is gone, or cannot run</source>
+        <translation>no commands: the plugin is gone, or cannot run</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.no_plugin_has_commands_yet_plugins_add_from_a_gi">
+        <source>no plugin has commands yet: Plugins › Add from a git URL… adds one</source>
+        <translation>no plugin has commands yet: Plugins › Add from a git URL… adds one</translation>
+    </message>
+    <message id="autodoc.text.pluginpick.s_and">
+        <source>'s and </source>
+        <translation>'s and </translation>
+    </message>
     <message id="autodoc.text.pluginpick.spc_p">
         <source>SPC p › %1</source>
         <translation>SPC p › %1</translation>
@@ -4322,6 +5638,78 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.pluginpick.spc_p_plugins">
         <source>SPC p — plugins</source>
         <translation>SPC p — plugins</translation>
+    </message>
+    <message id="autodoc.text.pluginrun.esc_closes">
+        <source>%1 · Esc closes</source>
+        <translation>%1 · Esc closes</translation>
+    </message>
+    <message id="autodoc.text.pluginrun.esc_hides">
+        <source>%1 · Esc hides</source>
+        <translation>%1 · Esc hides</translation>
+    </message>
+    <message id="autodoc.text.plugintable.exporting_rows">
+        <source>exporting: %1 rows</source>
+        <translation>exporting: %1 rows</translation>
+    </message>
+    <message id="autodoc.text.plugintable.of_loaded_rows">
+        <source>%1 of %2 loaded rows</source>
+        <translation>%1 of %2 loaded rows</translation>
+    </message>
+    <message id="autodoc.text.plugintable.results">
+        <source>results</source>
+        <translation>results</translation>
+    </message>
+    <message id="autodoc.text.plugintable.results_named">
+        <source>results: %1</source>
+        <translation>results: %1</translation>
+    </message>
+    <message id="autodoc.text.plugintable.rows">
+        <source>%1 rows</source>
+        <translation>%1 rows</translation>
+    </message>
+    <message id="autodoc.text.plugintable.rows_ended_early">
+        <source>%1 rows, ended early</source>
+        <translation>%1 rows, ended early</translation>
+    </message>
+    <message id="autodoc.text.plugintable.rows_more_to_load">
+        <source>%1 rows, more to load</source>
+        <translation>%1 rows, more to load</translation>
+    </message>
+    <message id="autodoc.text.plugintable.sort_ascending_by">
+        <source>Sort ascending by %1</source>
+        <translation>Sort ascending by %1</translation>
+    </message>
+    <message id="autodoc.text.plugintable.sort_descending_by">
+        <source>Sort descending by %1</source>
+        <translation>Sort descending by %1</translation>
+    </message>
+    <message id="autodoc.text.plugintable.the_first_rows_shown_the_result_has_more_change">
+        <source>the first %1 rows shown; the result has more: change the query to change what is returned</source>
+        <translation>the first %1 rows shown; the result has more: change the query to change what is returned</translation>
+    </message>
+    <message id="autodoc.text.plugintable.the_result_has_more_change_the_query_to_change_w">
+        <source>the result has more: change the query to change what is returned</source>
+        <translation>the result has more: change the query to change what is returned</translation>
+    </message>
+    <message id="autodoc.text.plugintable_export.export_1_loaded_row_as_shown">
+        <source>Export 1 loaded row, as shown</source>
+        <translation>Export 1 loaded row, as shown</translation>
+    </message>
+    <message id="autodoc.text.plugintable_export.export_1_row_as_shown_filtered_from_loaded">
+        <source>Export 1 row, as shown (filtered from %1 loaded)</source>
+        <translation>Export 1 row, as shown (filtered from %1 loaded)</translation>
+    </message>
+    <message id="autodoc.text.plugintable_export.export_loaded_rows_as_shown">
+        <source>Export %1 loaded rows, as shown</source>
+        <translation>Export %1 loaded rows, as shown</translation>
+    </message>
+    <message id="autodoc.text.plugintable_export.export_rows_as_shown_filtered_from_loaded">
+        <source>Export %1 rows, as shown (filtered from %2 loaded)</source>
+        <translation>Export %1 rows, as shown (filtered from %2 loaded)</translation>
+    </message>
+    <message id="autodoc.text.plugintable_export.the_result_has_more_rows_than_are_loaded_change">
+        <source>the result has more rows than are loaded: change the query to change what is returned</source>
+        <translation>the result has more rows than are loaded: change the query to change what is returned</translation>
     </message>
     <message id="autodoc.text.prefs.search">
         <source>search</source>
@@ -4331,17 +5719,133 @@ WHAT A KEY NEEDS
         <source>the page's width is a number of columns, %1 to %2</source>
         <translation>the page's width is a number of columns, %1 to %2</translation>
     </message>
+    <message id="autodoc.text.preview.diagram_source">
+        <source>Diagram source · %1</source>
+        <translation>Diagram source · %1</translation>
+    </message>
+    <message id="autodoc.text.preview.diagram_source_not_drawn_natively">
+        <source>Diagram source · %1; not drawn natively (%2)</source>
+        <translation>Diagram source · %1; not drawn natively (%2)</translation>
+    </message>
+    <message id="autodoc.text.preview.drawing_the_diagram">
+        <source>drawing the diagram…</source>
+        <translation>drawing the diagram…</translation>
+    </message>
+    <message id="autodoc.text.preview.drawn_natively_as_mermaid_js_is_not_scroll_arrow">
+        <source>Drawn natively, as mermaid.js is not (%1) · scroll: arrows, j k, PgUp/PgDn, wheel</source>
+        <translation>Drawn natively, as mermaid.js is not (%1) · scroll: arrows, j k, PgUp/PgDn, wheel</translation>
+    </message>
+    <message id="autodoc.text.preview.drawn_natively_file_preview_option_no_zoom_scrol">
+        <source>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</source>
+        <translation>Drawn natively (File › Preview option), no zoom · scroll: arrows, j k, PgUp/PgDn, wheel</translation>
+    </message>
     <message id="autodoc.text.preview.html_preview">
         <source>HTML preview · %1</source>
         <translation>HTML preview · %1</translation>
+    </message>
+    <message id="autodoc.text.preview.image_declined_drawn_offline_by_mermaid">
+        <source>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
+        <translation>Image, %1 · drawn offline by mermaid %2 in the %3 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</translation>
+    </message>
+    <message id="autodoc.text.preview.image_drawn_offline_by_mermaid_in_the_theme_scro">
+        <source>Image · drawn offline by mermaid %1 in the %2 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</source>
+        <translation>Image · drawn offline by mermaid %1 in the %2 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel</translation>
+    </message>
+    <message id="autodoc.text.preview.image_previews_are_off_view_image_previews">
+        <source>image previews are off (View › Image previews)</source>
+        <translation>image previews are off (View › Image previews)</translation>
     </message>
     <message id="autodoc.text.preview.image_rendered_offline_by_a_headless_browser_in">
         <source>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</source>
         <translation>Image · rendered offline by a headless browser in the %1 theme · scroll: arrows, j k h l, PgUp/PgDn, wheel · links and selection: Open in browser</translation>
     </message>
+    <message id="autodoc.text.preview.no_headless_chromium_or_chrome_to_render_with">
+        <source>no headless Chromium or Chrome to render with</source>
+        <translation>no headless Chromium or Chrome to render with</translation>
+    </message>
+    <message id="autodoc.text.preview.not_drawn_natively">
+        <source>not drawn natively (%1)</source>
+        <translation>not drawn natively (%1)</translation>
+    </message>
+    <message id="autodoc.text.preview.rendering_the_page">
+        <source>rendering the page…</source>
+        <translation>rendering the page…</translation>
+    </message>
+    <message id="autodoc.text.preview.the_image_failed">
+        <source>the image failed: %1</source>
+        <translation>the image failed: %1</translation>
+    </message>
+    <message id="autodoc.text.preview.the_preview_s_image_area_was_never_laid_out">
+        <source>the preview's image area was never laid out</source>
+        <translation>the preview's image area was never laid out</translation>
+    </message>
+    <message id="autodoc.text.preview.the_screen_leaves_the_image_cells_too_small_to_r">
+        <source>the screen leaves the image %1×%2 cells, too small to read</source>
+        <translation>the screen leaves the image %1×%2 cells, too small to read</translation>
+    </message>
+    <message id="autodoc.text.preview.the_terminal_did_not_confirm_kitty_graphics_insi">
+        <source>the terminal did not confirm kitty graphics (inside tmux: set -g allow-passthrough on)</source>
+        <translation>the terminal did not confirm kitty graphics (inside tmux: set -g allow-passthrough on)</translation>
+    </message>
+    <message id="autodoc.text.preview.this_terminal_does_not_draw_images_no_kitty_grap">
+        <source>this terminal does not draw images (no kitty graphics)</source>
+        <translation>this terminal does not draw images (no kitty graphics)</translation>
+    </message>
+    <message id="autodoc.text.progress.embedding_paused_by_workspace_setting">
+        <source>embedding paused by workspace setting</source>
+        <translation>embedding paused by workspace setting</translation>
+    </message>
+    <message id="autodoc.text.progress.lexical_search">
+        <source>lexical search</source>
+        <translation>lexical search</translation>
+    </message>
+    <message id="autodoc.text.progress.lexical_search_switching_to">
+        <source>lexical search · switching to %1</source>
+        <translation>lexical search · switching to %1</translation>
+    </message>
+    <message id="autodoc.text.progress.refused_texts_see_vectors">
+        <source>%1 refused texts (see Vectors…)</source>
+        <translation>%1 refused texts (see Vectors…)</translation>
+    </message>
     <message id="autodoc.text.progress.search">
         <source>search · %1%2</source>
         <translation>search · %1%2</translation>
+    </message>
+    <message id="autodoc.text.progress.semantic_search">
+        <source>semantic search</source>
+        <translation>semantic search</translation>
+    </message>
+    <message id="autodoc.text.progress.semantic_search_model">
+        <source>semantic search · %1</source>
+        <translation>semantic search · %1</translation>
+    </message>
+    <message id="autodoc.text.progress.the_provider_is_not_answering">
+        <source>the provider is not answering</source>
+        <translation>the provider is not answering</translation>
+    </message>
+    <message id="autodoc.text.progress.warming_up">
+        <source>warming up</source>
+        <translation>warming up</translation>
+    </message>
+    <message id="autodoc.text.providers.add_an_embedding_provider">
+        <source>add an embedding provider</source>
+        <translation>add an embedding provider</translation>
+    </message>
+    <message id="autodoc.text.providers.api_key_if_the_endpoint_takes_one">
+        <source>API key (if the endpoint takes one)</source>
+        <translation>API key (if the endpoint takes one)</translation>
+    </message>
+    <message id="autodoc.text.providers.api_key_required">
+        <source>API key (required)</source>
+        <translation>API key (required)</translation>
+    </message>
+    <message id="autodoc.text.providers.embedding_providers">
+        <source>embedding providers</source>
+        <translation>embedding providers</translation>
+    </message>
+    <message id="autodoc.text.providers.list_models_asks_the_provider_what_it_has">
+        <source>List models asks the provider what it has</source>
+        <translation>List models asks the provider what it has</translation>
     </message>
     <message id="autodoc.text.providers.list_models_shows_max_more_uses_gpu_memory">
         <source>List models shows max · more uses GPU memory</source>
@@ -4363,9 +5867,49 @@ WHAT A KEY NEEDS
         <source>no models: %1</source>
         <translation>no models: %1</translation>
     </message>
+    <message id="autodoc.text.providers.not_saved_context_window_exceeds_this_model_s_ma">
+        <source>not saved: context window exceeds this model's maximum of %1 tokens</source>
+        <translation>not saved: context window exceeds this model's maximum of %1 tokens</translation>
+    </message>
+    <message id="autodoc.text.providers.not_saved_the_context_window_is_a_number_of_toke">
+        <source>not saved: the context window is a number of tokens (%1 to %2), not %3</source>
+        <translation>not saved: the context window is a number of tokens (%1 to %2), not %3</translation>
+    </message>
     <message id="autodoc.text.providers.not_used">
         <source>%1 not used: %2 · %3</source>
         <translation>%1 not used: %2 · %3</translation>
+    </message>
+    <message id="autodoc.text.providers.remove_the_provider_another_serves_its_model">
+        <source>Remove the provider %1? Its key, its usage and its log go. %2 keeps its vectors: %3 serves it too.</source>
+        <translation>Remove the provider %1? Its key, its usage and its log go. %2 keeps its vectors: %3 serves it too.</translation>
+    </message>
+    <message id="autodoc.text.providers.remove_the_provider_its_vectors_are_deleted">
+        <source>Remove the provider %1? Its key, its usage and its log go. Semantic search goes off, and %2's vectors are deleted: counting them…</source>
+        <translation>Remove the provider %1? Its key, its usage and its log go. Semantic search goes off, and %2's vectors are deleted: counting them…</translation>
+    </message>
+    <message id="autodoc.text.providers.remove_the_provider_its_vectors_go_once_unused">
+        <source>Remove the provider %1? Its key, its usage and its log go. Its model's vectors go once no workspace uses them.</source>
+        <translation>Remove the provider %1? Its key, its usage and its log go. Its model's vectors go once no workspace uses them.</translation>
+    </message>
+    <message id="autodoc.text.providers.semantic_search_off">
+        <source>semantic search off</source>
+        <translation>semantic search off</translation>
+    </message>
+    <message id="autodoc.text.providers.semantic_search_off_add_a_provider_then_use_it">
+        <source>semantic search off: Add… a provider, then Use it</source>
+        <translation>semantic search off: Add… a provider, then Use it</translation>
+    </message>
+    <message id="autodoc.text.providers.semantic_search_off_the_last_choice_was_refused">
+        <source>semantic search off: Add… a provider, then Use it · the last choice was refused: %1</source>
+        <translation>semantic search off: Add… a provider, then Use it · the last choice was refused: %1</translation>
+    </message>
+    <message id="autodoc.text.providers.semantic_search_with">
+        <source>semantic search with %1</source>
+        <translation>semantic search with %1</translation>
+    </message>
+    <message id="autodoc.text.providers.semantic_search_with_the_last_choice_was_refused">
+        <source>semantic search with %1 · the last choice was refused: %2</source>
+        <translation>semantic search with %1 · the last choice was refused: %2</translation>
     </message>
     <message id="autodoc.text.providers.setting_up">
         <source>setting up %1…</source>
@@ -4375,9 +5919,25 @@ WHAT A KEY NEEDS
         <source>%1: %2 tokens · edit in Workspaces…</source>
         <translation>%1: %2 tokens · edit in Workspaces…</translation>
     </message>
+    <message id="autodoc.text.rankers.add_a_ranker">
+        <source>add a ranker</source>
+        <translation>add a ranker</translation>
+    </message>
     <message id="autodoc.text.rankers.an_endpoint_that_names_no_models_type_the_model">
         <source>an endpoint that names no models: type the model it ranks with</source>
         <translation>an endpoint that names no models: type the model it ranks with</translation>
+    </message>
+    <message id="autodoc.text.rankers.api_key">
+        <source>API key</source>
+        <translation>API key</translation>
+    </message>
+    <message id="autodoc.text.rankers.api_key_if_the_server_takes_one">
+        <source>API key (if the server takes one)</source>
+        <translation>API key (if the server takes one)</translation>
+    </message>
+    <message id="autodoc.text.rankers.check_asks_the_ranker_what_it_serves">
+        <source>Check asks the ranker what it serves</source>
+        <translation>Check asks the ranker what it serves</translation>
     </message>
     <message id="autodoc.text.rankers.it_ranks_with">
         <source>it ranks with %1</source>
@@ -4387,6 +5947,18 @@ WHAT A KEY NEEDS
         <source>not a ranker: %1</source>
         <translation>not a ranker: %1</translation>
     </message>
+    <message id="autodoc.text.rankers.not_re_ranked">
+        <source>not re-ranked: %1</source>
+        <translation>not re-ranked: %1</translation>
+    </message>
+    <message id="autodoc.text.rankers.not_re_ranking_add_a_ranker_then_use_it">
+        <source>not re-ranking: Add… a ranker, then Use it</source>
+        <translation>not re-ranking: Add… a ranker, then Use it</translation>
+    </message>
+    <message id="autodoc.text.rankers.not_re_ranking_the_chosen_ranker_did_not_start">
+        <source>not re-ranking: Add… a ranker, then Use it · the chosen ranker did not start: %1</source>
+        <translation>not re-ranking: Add… a ranker, then Use it · the chosen ranker did not start: %1</translation>
+    </message>
     <message id="autodoc.text.rankers.not_saved">
         <source>not saved: %1</source>
         <translation>not saved: %1</translation>
@@ -4394,6 +5966,26 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.rankers.not_used">
         <source>%1 not used: %2</source>
         <translation>%1 not used: %2</translation>
+    </message>
+    <message id="autodoc.text.rankers.re_ranked_by">
+        <source>re-ranked by %1</source>
+        <translation>re-ranked by %1</translation>
+    </message>
+    <message id="autodoc.text.rankers.re_ranking_supplied_by_the_build">
+        <source>re-ranking with %1, supplied by the build, over the top %2: the one in use cannot be changed here</source>
+        <translation>re-ranking with %1, supplied by the build, over the top %2: the one in use cannot be changed here</translation>
+    </message>
+    <message id="autodoc.text.rankers.re_ranking_supplied_by_the_build_no_probe_answer">
+        <source>re-ranking with %1, supplied by the build, over the top %2: the one in use cannot be changed here · it did not answer its probe: %3</source>
+        <translation>re-ranking with %1, supplied by the build, over the top %2: the one in use cannot be changed here · it did not answer its probe: %3</translation>
+    </message>
+    <message id="autodoc.text.rankers.re_ranking_with_over_the_top_candidates">
+        <source>re-ranking with %1 over the top %2 candidates</source>
+        <translation>re-ranking with %1 over the top %2 candidates</translation>
+    </message>
+    <message id="autodoc.text.rankers.re_ranking_with_the_chosen_ranker_did_not_start">
+        <source>re-ranking with %1 over the top %2 candidates · the chosen ranker did not start: %3</source>
+        <translation>re-ranking with %1 over the top %2 candidates · the chosen ranker did not start: %3</translation>
     </message>
     <message id="autodoc.text.rankers.setting_up">
         <source>setting up %1…</source>
@@ -4415,6 +6007,10 @@ WHAT A KEY NEEDS
         <source>no recent files: the files you open are listed here</source>
         <translation>no recent files: the files you open are listed here</translation>
     </message>
+    <message id="autodoc.text.recent.no_workspace">
+        <source>(no workspace)</source>
+        <translation>(no workspace)</translation>
+    </message>
     <message id="autodoc.text.recent.recent_files_the_newest_first">
         <source>%1 recent files, the newest first</source>
         <translation>%1 recent files, the newest first</translation>
@@ -4423,17 +6019,225 @@ WHAT A KEY NEEDS
         <source>%1 had unsaved changes when AutoDoc last closed (%2). We kept a copy for you, just in case. Restore it?</source>
         <translation>%1 had unsaved changes when AutoDoc last closed (%2). We kept a copy for you, just in case. Restore it?</translation>
     </message>
+    <message id="autodoc.text.registrations.held">
+        <source>held</source>
+        <translation>held</translation>
+    </message>
+    <message id="autodoc.text.registrations.held_changed_on_disk">
+        <source>held · changed on disk</source>
+        <translation>held · changed on disk</translation>
+    </message>
+    <message id="autodoc.text.registrations.held_not_yet_checked">
+        <source>held · not yet checked</source>
+        <translation>held · not yet checked</translation>
+    </message>
     <message id="autodoc.text.registrations.this_backend_autodoc_lacks_which_this_build_read">
         <source>This backend, autodoc %1, lacks %2, which this build reads. Restart it as this build? It stops, and this build starts in its place; indexing and embedding carry on where they stopped, and every client reconnects.</source>
         <translation>This backend, autodoc %1, lacks %2, which this build reads. Restart it as this build? It stops, and this build starts in its place; indexing and embedding carry on where they stopped, and every client reconnects.</translation>
+    </message>
+    <message id="autodoc.text.registry.audited_by_on_at_this_commit">
+        <source>✓ audited by %1 on %2 at this commit</source>
+        <translation>✓ audited by %1 on %2 at this commit</translation>
+    </message>
+    <message id="autodoc.text.registry.never_audited">
+        <source>never audited</source>
+        <translation>never audited</translation>
+    </message>
+    <message id="autodoc.text.registry.not_audited_at_this_commit_last_audited">
+        <source>not audited at this commit (last audited: %1, %2)</source>
+        <translation>not audited at this commit (last audited: %1, %2)</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.audited_by_at">
+        <source>audited by %4, %3, at %2 (%1)</source>
+        <translation>audited by %4, %3, at %2 (%1)</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.audits">
+        <source>Audits</source>
+        <translation>Audits</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.declares_at">
+        <source>Declares, at %1</source>
+        <translation>Declares, at %1</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.install_asks_first_as_any_install_does_the_card">
+        <source>Install asks first, as any install does: the card names the commit it would install, and whether that commit is audited.</source>
+        <translation>Install asks first, as any install does: the card names the commit it would install, and whether that commit is audited.</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.kb_type_by">
+        <source>KB type %1, by %2</source>
+        <translation>KB type %1, by %2</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.lua">
+        <source>lua    %1 — %2</source>
+        <translation>lua    %1 — %2</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.lua_package_by">
+        <source>Lua package %1, by %2</source>
+        <translation>Lua package %1, by %2</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.never_audited">
+        <source>never audited</source>
+        <translation>never audited</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.plugin">
+        <source>plugin %1 — %2</source>
+        <translation>plugin %1 — %2</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.plugin_by">
+        <source>plugin %1, by %2</source>
+        <translation>plugin %1, by %2</translation>
+    </message>
+    <message id="autodoc.text.registrybrowse.the_registry_lists_no_plugins_or_packages_yet">
+        <source>the registry lists no plugins or packages yet</source>
+        <translation>the registry lists no plugins or packages yet</translation>
+    </message>
+    <message id="autodoc.text.relations.adr">
+        <source>adr (%1)</source>
+        <translation>adr (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.amended_by">
+        <source>amended by (%1)</source>
+        <translation>amended by (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.amends">
+        <source>amends (%1)</source>
+        <translation>amends (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.backlinks">
+        <source>backlinks (%1)</source>
+        <translation>backlinks (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.blocked_by">
+        <source>blocked by (%1)</source>
+        <translation>blocked by (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.blocks">
+        <source>blocks (%1)</source>
+        <translation>blocks (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.cited_by">
+        <source>cited by (%1)</source>
+        <translation>cited by (%1)</translation>
     </message>
     <message id="autodoc.text.relations.d_depth">
         <source>%1 · d depth</source>
         <translation>%1 · d depth</translation>
     </message>
+    <message id="autodoc.text.relations.links">
+        <source>links (%1)</source>
+        <translation>links (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.names_no_document">
+        <source>%1  (%2, names no document)</source>
+        <translation>%1  (%2, names no document)</translation>
+    </message>
+    <message id="autodoc.text.relations.outside_the_workspace">
+        <source>%1  (outside the workspace)</source>
+        <translation>%1  (outside the workspace)</translation>
+    </message>
+    <message id="autodoc.text.relations.related">
+        <source>related (%1)</source>
+        <translation>related (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.review">
+        <source>review (%1)</source>
+        <translation>review (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.reviews">
+        <source>reviews (%1)</source>
+        <translation>reviews (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.sources">
+        <source>sources (%1)</source>
+        <translation>sources (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.superseded_by">
+        <source>superseded by (%1)</source>
+        <translation>superseded by (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.supersedes">
+        <source>supersedes (%1)</source>
+        <translation>supersedes (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.supersession_goes_round_a_loop">
+        <source>%1  (supersession goes round a loop)</source>
+        <translation>%1  (supersession goes round a loop)</translation>
+    </message>
+    <message id="autodoc.text.relations.title_links">
+        <source>links</source>
+        <translation>links</translation>
+    </message>
+    <message id="autodoc.text.relations.title_links_count">
+        <source>links (%1)</source>
+        <translation>links (%1)</translation>
+    </message>
+    <message id="autodoc.text.relations.title_links_depth_2">
+        <source>links (%1) · depth 2</source>
+        <translation>links (%1) · depth 2</translation>
+    </message>
+    <message id="autodoc.text.relations.title_links_outside">
+        <source>links · %1</source>
+        <translation>links · %1</translation>
+    </message>
+    <message id="autodoc.text.relations.title_links_reading">
+        <source>links · reading…</source>
+        <translation>links · reading…</translation>
+    </message>
+    <message id="autodoc.text.relations.unresolved">
+        <source>unresolved (%1)</source>
+        <translation>unresolved (%1)</translation>
+    </message>
+    <message id="autodoc.text.relationviews_gui.more_groups">
+        <source>… %1 more groups</source>
+        <translation>… %1 more groups</translation>
+    </message>
+    <message id="autodoc.text.relationviews_gui.no_groups_no_schema_types_or_folders_settings_ad">
+        <source>no groups: no schema types or folders (settings add them)</source>
+        <translation>no groups: no schema types or folders (settings add them)</translation>
+    </message>
     <message id="autodoc.text.restart.restart_failed_retry_or_quit">
         <source>Restart failed: %1. Retry or quit.</source>
         <translation>Restart failed: %1. Retry or quit.</translation>
+    </message>
+    <message id="autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts">
+        <source>Restart the backend (autodoc %1)? It stops, and starts again. Indexing and embedding carry on where they stopped; every client reconnects.</source>
+        <translation>Restart the backend (autodoc %1)? It stops, and starts again. Indexing and embedding carry on where they stopped; every client reconnects.</translation>
+    </message>
+    <message id="autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts_as">
+        <source>Restart the backend (autodoc %1)? It stops, and starts again as autodoc %2, the one installed. Indexing and embedding carry on where they stopped; every client reconnects.</source>
+        <translation>Restart the backend (autodoc %1)? It stops, and starts again as autodoc %2, the one installed. Indexing and embedding carry on where they stopped; every client reconnects.</translation>
+    </message>
+    <message id="autodoc.text.restart.restart_the_backend_autodoc_it_stops_and_starts_same">
+        <source>Restart the backend (autodoc %1)? It stops, and starts again at the same version, %2: no newer one is installed. Indexing and embedding carry on where they stopped; every client reconnects.</source>
+        <translation>Restart the backend (autodoc %1)? It stops, and starts again at the same version, %2: no newer one is installed. Indexing and embedding carry on where they stopped; every client reconnects.</translation>
+    </message>
+    <message id="autodoc.text.restart.this_tui_speaks_protocol_autodoc_speaks_protocol_again">
+        <source>This TUI speaks protocol %1; autodoc %2 speaks protocol %3. It answered after the restart this TUI asked for (pid %4): something else starts it. Stop that, then start the installed autodoc. This TUI cannot safely restart that backend; quit and start a compatible autodoc.</source>
+        <translation>This TUI speaks protocol %1; autodoc %2 speaks protocol %3. It answered after the restart this TUI asked for (pid %4): something else starts it. Stop that, then start the installed autodoc. This TUI cannot safely restart that backend; quit and start a compatible autodoc.</translation>
+    </message>
+    <message id="autodoc.text.restart.this_tui_speaks_protocol_autodoc_speaks_protocol_cannot">
+        <source>This TUI speaks protocol %1; autodoc %2 speaks protocol %3. This TUI cannot safely restart that backend; quit and start a compatible autodoc.</source>
+        <translation>This TUI speaks protocol %1; autodoc %2 speaks protocol %3. This TUI cannot safely restart that backend; quit and start a compatible autodoc.</translation>
+    </message>
+    <message id="autodoc.text.restart.this_tui_speaks_protocol_autodoc_speaks_protocol_restart">
+        <source>This TUI speaks protocol %1; autodoc %2 speaks protocol %3. Restart Now stops the older backend and starts the installed one.</source>
+        <translation>This TUI speaks protocol %1; autodoc %2 speaks protocol %3. Restart Now stops the older backend and starts the installed one.</translation>
+    </message>
+    <message id="autodoc.text.searchpick.asking_the_gpu_nicely">
+        <source>asking the GPU nicely</source>
+        <translation>asking the GPU nicely</translation>
+    </message>
+    <message id="autodoc.text.searchpick.consulting_the_embeddings">
+        <source>consulting the embeddings</source>
+        <translation>consulting the embeddings</translation>
+    </message>
+    <message id="autodoc.text.searchpick.crates_are_being_fetched">
+        <source>crates are being fetched</source>
+        <translation>crates are being fetched</translation>
+    </message>
+    <message id="autodoc.text.searchpick.herding_the_tokens">
+        <source>herding the tokens</source>
+        <translation>herding the tokens</translation>
     </message>
     <message id="autodoc.text.searchpick.hits">
         <source>hits</source>
@@ -4450,6 +6254,22 @@ WHAT A KEY NEEDS
     <message id="autodoc.text.searchpick.hits_semantic">
         <source>hits (%1)%2 · %3 · semantic %4</source>
         <translation>hits (%1)%2 · %3 · semantic %4</translation>
+    </message>
+    <message id="autodoc.text.searchpick.polishing_the_cosines">
+        <source>polishing the cosines</source>
+        <translation>polishing the cosines</translation>
+    </message>
+    <message id="autodoc.text.searchpick.prepping_the_vectors">
+        <source>prepping the vectors</source>
+        <translation>prepping the vectors</translation>
+    </message>
+    <message id="autodoc.text.searchpick.untangling_the_meanings">
+        <source>untangling the meanings</source>
+        <translation>untangling the meanings</translation>
+    </message>
+    <message id="autodoc.text.searchpick.warming_up_the_engine">
+        <source>warming up the engine</source>
+        <translation>warming up the engine</translation>
     </message>
     <message id="autodoc.text.session.the_installed_backend_did_not_start_restart_now">
         <source>The installed backend did not start: %1. Restart Now tries again; Help › About names the daemon's log.</source>
@@ -4469,9 +6289,37 @@ The last connect failed:
         <source>The last connect failed: %1</source>
         <translation>The last connect failed: %1</translation>
     </message>
+    <message id="autodoc.text.settings.add_a_workspace">
+        <source>add a workspace</source>
+        <translation>add a workspace</translation>
+    </message>
+    <message id="autodoc.text.settings.added_the_kb_type_stopped_part_way_save_finishes">
+        <source>added; the KB type stopped part way: %1. Save finishes its files on %2, then saves the settings.</source>
+        <translation>added; the KB type stopped part way: %1. Save finishes its files on %2, then saves the settings.</translation>
+    </message>
+    <message id="autodoc.text.settings.added_with_the_defaults_not_saved">
+        <source>added with the defaults; not saved: %1</source>
+        <translation>added with the defaults; not saved: %1</translation>
+    </message>
+    <message id="autodoc.text.settings.advanced">
+        <source>ADVANCED</source>
+        <translation>ADVANCED</translation>
+    </message>
     <message id="autodoc.text.settings.code">
         <source>code: %1</source>
         <translation>code: %1</translation>
+    </message>
+    <message id="autodoc.text.settings.conn_schema">
+        <source>schema %1</source>
+        <translation>schema %1</translation>
+    </message>
+    <message id="autodoc.text.settings.ctrl_pageup_pagedown_switch_tabs_save_sends_ever">
+        <source>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</source>
+        <translation>Ctrl+PageUp/PageDown switch tabs · Save sends every change at once; a refusal changes nothing</translation>
+    </message>
+    <message id="autodoc.text.settings.destination">
+        <source>destination  %1</source>
+        <translation>destination  %1</translation>
     </message>
     <message id="autodoc.text.settings.documents">
         <source>documents: %1</source>
@@ -4481,17 +6329,137 @@ The last connect failed:
         <source>%1 · e.g. %2</source>
         <translation>%1 · e.g. %2</translation>
     </message>
+    <message id="autodoc.text.settings.edit">
+        <source>EDIT</source>
+        <translation>EDIT</translation>
+    </message>
+    <message id="autodoc.text.settings.embedding">
+        <source>embedding    %1</source>
+        <translation>embedding    %1</translation>
+    </message>
+    <message id="autodoc.text.settings.exclude">
+        <source>exclude      %1</source>
+        <translation>exclude      %1</translation>
+    </message>
+    <message id="autodoc.text.settings.exclude_keeps_this_workspace_s_todo_tasks_out_of">
+        <source>exclude %1 keeps this workspace's todo tasks out of the index: they open with no relations. Index them graph-only instead: out of search, in the graph.</source>
+        <translation>exclude %1 keeps this workspace's todo tasks out of the index: they open with no relations. Index them graph-only instead: out of search, in the graph.</translation>
+    </message>
+    <message id="autodoc.text.settings.file_types">
+        <source>file types   %1</source>
+        <translation>file types   %1</translation>
+    </message>
+    <message id="autodoc.text.settings.graph_only">
+        <source>graph only   %1</source>
+        <translation>graph only   %1</translation>
+    </message>
+    <message id="autodoc.text.settings.include">
+        <source>include      %1</source>
+        <translation>include      %1</translation>
+    </message>
     <message id="autodoc.text.settings.no_workspace_add_makes_one">
         <source>no workspace · Add… makes one</source>
         <translation>no workspace · Add… makes one</translation>
+    </message>
+    <message id="autodoc.text.settings.none">
+        <source>none</source>
+        <translation>none</translation>
+    </message>
+    <message id="autodoc.text.settings.not_saved">
+        <source>not saved: %1</source>
+        <translation>not saved: %1</translation>
+    </message>
+    <message id="autodoc.text.settings.not_set_up">
+        <source>%1 (not set up: %2)</source>
+        <translation>%1 (not set up: %2)</translation>
+    </message>
+    <message id="autodoc.text.settings.now_read_as_documents_not_text_dropped_from_your">
+        <source>%1: now read as documents, not text; dropped from your text types, still included</source>
+        <translation>%1: now read as documents, not text; dropped from your text types, still included</translation>
+    </message>
+    <message id="autodoc.text.settings.password_kept">
+        <source>password kept</source>
+        <translation>password kept</translation>
+    </message>
+    <message id="autodoc.text.settings.plain_text">
+        <source>plain text</source>
+        <translation>plain text</translation>
+    </message>
+    <message id="autodoc.text.settings.provider">
+        <source>provider     %1</source>
+        <translation>provider     %1</translation>
+    </message>
+    <message id="autodoc.text.settings.root_a_workspace_keeps_its_root_add_the_other_di">
+        <source>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</source>
+        <translation>root: %1 (a workspace keeps its root: add the other directory as a workspace of its own)</translation>
+    </message>
+    <message id="autodoc.text.settings.root_the_directory_it_indexes_browse_picks_one">
+        <source>root: the directory it indexes (Browse… picks one)</source>
+        <translation>root: the directory it indexes (Browse… picks one)</translation>
+    </message>
+    <message id="autodoc.text.settings.scaffolded_not_saved">
+        <source>scaffolded (%1); not saved: %2</source>
+        <translation>scaffolded (%1); not saved: %2</translation>
+    </message>
+    <message id="autodoc.text.settings.schema">
+        <source>schema       %1</source>
+        <translation>schema       %1</translation>
+    </message>
+    <message id="autodoc.text.settings.section_estimated_tokens">
+        <source>section      %1 estimated tokens</source>
+        <translation>section      %1 estimated tokens</translation>
+    </message>
+    <message id="autodoc.text.settings.source">
+        <source>source       %1</source>
+        <translation>source       %1</translation>
     </message>
     <message id="autodoc.text.settings.stored_a_blank_dsn_keeps_it">
         <source>stored: %1 · a blank DSN keeps it</source>
         <translation>stored: %1 · a blank DSN keeps it</translation>
     </message>
+    <message id="autodoc.text.settings.the_daemon_s">
+        <source>the daemon's</source>
+        <translation>the daemon's</translation>
+    </message>
+    <message id="autodoc.text.settings.the_daemon_s_system_search_models">
+        <source>the daemon's (System › Search models)</source>
+        <translation>the daemon's (System › Search models)</translation>
+    </message>
+    <message id="autodoc.text.settings.the_local_store">
+        <source>the local store</source>
+        <translation>the local store</translation>
+    </message>
     <message id="autodoc.text.settings.the_todo_store_s_exclude_is_out_of_the_field_sav">
         <source>the todo store's exclude is out of the field: Save indexes its tasks graph-only</source>
         <translation>the todo store's exclude is out of the field: Save indexes its tasks graph-only</translation>
+    </message>
+    <message id="autodoc.text.settings.todo_search_off_tasks_are_in_the_graph_only">
+        <source>todo search  off: tasks are in the graph only</source>
+        <translation>todo search  off: tasks are in the graph only</translation>
+    </message>
+    <message id="autodoc.text.settings.todo_search_on_tasks_are_search_hits">
+        <source>todo search  on: tasks are search hits</source>
+        <translation>todo search  on: tasks are search hits</translation>
+    </message>
+    <message id="autodoc.text.settings.uses_its_own">
+        <source>uses its own: %1</source>
+        <translation>uses its own: %1</translation>
+    </message>
+    <message id="autodoc.text.settings.uses_its_own_not_set_up_searching_by_words">
+        <source>uses its own: %1 (not set up: %2; searching by words)</source>
+        <translation>uses its own: %1 (not set up: %2; searching by words)</translation>
+    </message>
+    <message id="autodoc.text.settings.uses_the_daemon_s_provider">
+        <source>uses the daemon's provider</source>
+        <translation>uses the daemon's provider</translation>
+    </message>
+    <message id="autodoc.text.settings.view_args">
+        <source>view args    %1</source>
+        <translation>view args    %1</translation>
+    </message>
+    <message id="autodoc.text.settings.workspace_settings">
+        <source>workspace settings · %1</source>
+        <translation>workspace settings · %1</translation>
     </message>
     <message id="autodoc.text.stages.rerank">
         <source>Rerank (%1)</source>
@@ -4501,17 +6469,179 @@ The last connect failed:
         <source>%1 is out (this is %2): %3</source>
         <translation>%1 is out (this is %2): %3</translation>
     </message>
+    <message id="autodoc.text.state.arrange_a_panel">
+        <source>arrange a panel</source>
+        <translation>arrange a panel</translation>
+    </message>
+    <message id="autodoc.text.state.files">
+        <source>files</source>
+        <translation>files</translation>
+    </message>
+    <message id="autodoc.text.state.find">
+        <source>find</source>
+        <translation>find</translation>
+    </message>
+    <message id="autodoc.text.state.hits">
+        <source>hits</source>
+        <translation>hits</translation>
+    </message>
+    <message id="autodoc.text.state.html_preview">
+        <source>HTML preview</source>
+        <translation>HTML preview</translation>
+    </message>
+    <message id="autodoc.text.state.mermaid_preview">
+        <source>Mermaid preview</source>
+        <translation>Mermaid preview</translation>
+    </message>
+    <message id="autodoc.text.state.rerank">
+        <source>Rerank</source>
+        <translation>Rerank</translation>
+    </message>
+    <message id="autodoc.text.state.search">
+        <source>search</source>
+        <translation>search</translation>
+    </message>
+    <message id="autodoc.text.state.vectors">
+        <source>vectors</source>
+        <translation>vectors</translation>
+    </message>
+    <message id="autodoc.text.state.workspace_settings">
+        <source>workspace settings</source>
+        <translation>workspace settings</translation>
+    </message>
+    <message id="autodoc.text.terminal.the_page_s">
+        <source>the page's</source>
+        <translation>the page's</translation>
+    </message>
+    <message id="autodoc.text.terminallook.the_font_is_a_window_s_a_terminal_draws_in_its_o">
+        <source>the font is a window's: a terminal draws in its own</source>
+        <translation>the font is a window's: a terminal draws in its own</translation>
+    </message>
+    <message id="autodoc.text.todos.archived">
+        <source>Archived</source>
+        <translation>Archived</translation>
+    </message>
+    <message id="autodoc.text.todos.archived_month">
+        <source>Archived %1</source>
+        <translation>Archived %1</translation>
+    </message>
+    <message id="autodoc.text.todos.completed">
+        <source>Completed</source>
+        <translation>Completed</translation>
+    </message>
+    <message id="autodoc.text.todos.deferred">
+        <source>Deferred</source>
+        <translation>Deferred</translation>
+    </message>
+    <message id="autodoc.text.todos.in">
+        <source>%1 in %2</source>
+        <translation>%1 in %2</translation>
+    </message>
+    <message id="autodoc.text.todos.in_progress">
+        <source>In progress</source>
+        <translation>In progress</translation>
+    </message>
+    <message id="autodoc.text.todos.malformed_files_not_listed">
+        <source>⚠ %1 malformed files not listed: %2</source>
+        <translation>⚠ %1 malformed files not listed: %2</translation>
+    </message>
+    <message id="autodoc.text.todos.open">
+        <source>Open</source>
+        <translation>Open</translation>
+    </message>
     <message id="autodoc.text.todos_assign.assign_to">
         <source>assign to %1</source>
         <translation>assign to %1</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.codename_assignee_command">
+        <source>- codename: %1
+- assignee: %2
+- command: `%3`
+- %4</source>
+        <translation>- codename: %1
+- assignee: %2
+- command: `%3`
+- %4</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.its_profile_is_gone_it_takes_the_task_while_it_r">
+        <source>Its profile is gone; it takes the task while it runs.</source>
+        <translation>Its profile is gone; it takes the task while it runs.</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.not_running_you_ll_be_asked_to_start_it_and_the">
+        <source>Not running: you'll be asked to start it, and the task is handed over once it has.</source>
+        <translation>Not running: you'll be asked to start it, and the task is handed over once it has.</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.running">
+        <source>running</source>
+        <translation>running</translation>
+    </message>
+    <message id="autodoc.text.todos_assign.stopped">
+        <source>stopped</source>
+        <translation>stopped</translation>
+    </message>
+    <message id="autodoc.text.todos_status.from_to">
+        <source>from %1
+to %2</source>
+        <translation>from %1
+to %2</translation>
+    </message>
+    <message id="autodoc.text.todos_status.its_status_now_choosing_it_changes_nothing">
+        <source>its status now:
+choosing it
+changes nothing</source>
+        <translation>its status now:
+choosing it
+changes nothing</translation>
     </message>
     <message id="autodoc.text.todos_vars.a_variable_kept_in_the_kb_s_file_name_value">
         <source>a variable, kept in the KB's file: NAME=value</source>
         <translation>a variable, kept in the KB's file: NAME=value</translation>
     </message>
-    <message id="autodoc.text.todos_vars.kept_in">
-        <source>$%1, kept in %2</source>
-        <translation>$%1, kept in %2</translation>
+    <message id="autodoc.text.todos_vars.built_in_derived_per_workspace_a_value_set_here">
+        <source>- built in: derived per workspace; a value set here overrides it</source>
+        <translation>- built in: derived per workspace; a value set here overrides it</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.conflict_set_it_in_the_kb_s_file_or_machine_only">
+        <source>(conflict: set it in the KB's file, or machine-only)</source>
+        <translation>(conflict: set it in the KB's file, or machine-only)</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.derived_from_the_workspace">
+        <source>- derived from the workspace: %1</source>
+        <translation>- derived from the workspace: %1</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.in_conflict_the_workspace_s_stores_set_it_differ">
+        <source>- in conflict: the workspace's stores set it differently; a value in the KB's file (e), or declaring it machine-only, settles it, and a value for this machine (m) only overrides it here</source>
+        <translation>- in conflict: the workspace's stores set it differently; a value in the KB's file (e), or declaring it machine-only, settles it, and a value for this machine (m) only overrides it here</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.kept_in_the_kb_s_file">
+        <source>$%1, kept in the KB's file</source>
+        <translation>$%1, kept in the KB's file</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.kept_in_this_machine">
+        <source>$%1, kept in this machine</source>
+        <translation>$%1, kept in this machine</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.machine_only_its_value_is_set_on_each_machine_ne">
+        <source>- machine-only: its value is set on each machine, never in the KB's file</source>
+        <translation>- machine-only: its value is set on each machine, never in the KB's file</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.set_per_machine_none_here">
+        <source>(set per machine: none here)</source>
+        <translation>(set per machine: none here)</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.unset">
+        <source>(unset)</source>
+        <translation>(unset)</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.value_from">
+        <source>- value: %1
+- from: %2</source>
+        <translation>- value: %1
+- from: %2</translation>
+    </message>
+    <message id="autodoc.text.todos_vars.value_none_here">
+        <source>- value: none here</source>
+        <translation>- value: none here</translation>
     </message>
     <message id="autodoc.text.tutorial.close">
         <source>Close (&amp;n)</source>
@@ -4525,6 +6655,10 @@ The last connect failed:
         <source>%1 of %2 · %3</source>
         <translation>%1 of %2 · %3</translation>
     </message>
+    <message id="autodoc.text.vectors.bytes_estimated_tokens_retry">
+        <source>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</source>
+        <translation>%1 › %2 · %3 (%4 bytes, %5 estimated tokens; retry %6)</translation>
+    </message>
     <message id="autodoc.text.vectors.is">
         <source>%1 is %2</source>
         <translation>%1 is %2</translation>
@@ -4533,9 +6667,25 @@ The last connect failed:
         <source>listing…</source>
         <translation>listing…</translation>
     </message>
+    <message id="autodoc.text.vectors.models_in_all">
+        <source>%1 models, %2 in all</source>
+        <translation>%1 models, %2 in all</translation>
+    </message>
+    <message id="autodoc.text.vectors.models_in_all_purge_removes_one">
+        <source>%1 models, %2 in all · %3 in models no longer used: Purge… removes one</source>
+        <translation>%1 models, %2 in all · %3 in models no longer used: Purge… removes one</translation>
+    </message>
     <message id="autodoc.text.vectors.not_purged">
         <source>not purged: %1</source>
         <translation>not purged: %1</translation>
+    </message>
+    <message id="autodoc.text.vectors.the_active_model_choose_another_model_or_remove">
+        <source>the active model: choose another model, or remove its provider in Search models</source>
+        <translation>the active model: choose another model, or remove its provider in Search models</translation>
+    </message>
+    <message id="autodoc.text.vectors.the_switch_s_target_cancel_the_switch">
+        <source>the switch's target: cancel the switch</source>
+        <translation>the switch's target: cancel the switch</translation>
     </message>
     <message id="autodoc.text.vectors.vectors">
         <source>vectors: %1</source>
@@ -4544,6 +6694,30 @@ The last connect failed:
     <message id="autodoc.text.vectors.vectors_in">
         <source>vectors in %1</source>
         <translation>vectors in %1</translation>
+    </message>
+    <message id="autodoc.text.widgets.closed">
+        <source>closed</source>
+        <translation>closed</translation>
+    </message>
+    <message id="autodoc.text.widgets.here">
+        <source>here</source>
+        <translation>here</translation>
+    </message>
+    <message id="autodoc.text.widgets.open">
+        <source>open</source>
+        <translation>open</translation>
+    </message>
+    <message id="autodoc.text.widgets.the_editor">
+        <source>the editor</source>
+        <translation>the editor</translation>
+    </message>
+    <message id="autodoc.text.workspace.add_a_directory_edit_or_advanced_the_one_under_t">
+        <source>Add… a directory · Edit… or Advanced… the one under the cursor · Delete… keeps its files</source>
+        <translation>Add… a directory · Edit… or Advanced… the one under the cursor · Delete… keeps its files</translation>
+    </message>
+    <message id="autodoc.text.workspace.autodoc_no_workspace">
+        <source>autodoc · no workspace</source>
+        <translation>autodoc · no workspace</translation>
     </message>
     <message id="autodoc.text.workspace.hits_searching">
         <source>hits · searching %1</source>

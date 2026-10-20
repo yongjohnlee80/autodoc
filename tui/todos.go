@@ -185,7 +185,7 @@ func newTodos(c Core) *todos {
 		t.tasks[i] = newRows(tuidecl.NewListModel("key", "n", "title"), taskRowOf)
 		t.cursors[i] = -1
 	}
-	t.vars, t.varCursor = newVarRows(), -1
+	t.vars, t.varCursor = newVarRows(c), -1
 	t.assignPick = newAssignPick(t)
 	t.statusPick = newStatusPick(t)
 	return t
@@ -730,6 +730,12 @@ func (t *todos) selectMonth() {
 	t.c.Set("App.todoMonthIndex", i)
 }
 
+// LanguageChanged composes the panel's status line and its details again, in the UI's language.
+func (t *todos) LanguageChanged() {
+	t.status()
+	t.showDetail()
+}
+
 // status is the panel's status line: the one thing it says is a file a tab could not list, which
 // needs fixing by hand; nothing else, so it is hidden while none is.
 func (t *todos) status() {
@@ -737,17 +743,38 @@ func (t *todos) status() {
 	n := 0
 	for name, bad := range t.malformed {
 		if bad > 0 {
-			where = append(where, fmt.Sprintf("%d in %s", bad, name))
+			where = append(where, t.c.Trf("autodoc.text.todos.in", bad, t.listName(name)))
 			n += bad
 		}
 	}
 	slices.Sort(where)
 	msg := ""
 	if n > 0 {
-		msg = fmt.Sprintf("⚠ %d malformed files not listed: %s", n, strings.Join(where, ", "))
+		msg = t.c.Trf("autodoc.text.todos.malformed_files_not_listed", n, strings.Join(where, ", "))
 	}
 	t.c.Set("App.todosStatus", msg)
 	t.c.Set("App.todosStatusShown", msg != "")
+}
+
+// listName is a read list's name (a tab's title, or "Archived <month>", malformed's keys) in the UI's
+// language.
+func (t *todos) listName(name string) string {
+	if month, ok := strings.CutPrefix(name, "Archived "); ok {
+		return t.c.Trf("autodoc.text.todos.archived_month", month)
+	}
+	switch name {
+	case "Open":
+		return t.c.Tr("autodoc.text.todos.open")
+	case "In progress":
+		return t.c.Tr("autodoc.text.todos.in_progress")
+	case "Deferred":
+		return t.c.Tr("autodoc.text.todos.deferred")
+	case "Completed":
+		return t.c.Tr("autodoc.text.todos.completed")
+	case "Archived":
+		return t.c.Tr("autodoc.text.todos.archived")
+	}
+	return name
 }
 
 // showTab is a tab shown (a click on its title, 1–6, [ ]): read when its rows are outdated (the
@@ -842,7 +869,7 @@ func (t *todos) showDetail() {
 	}
 	t.c.Set("App.todosTitle", heading)
 	if v := t.varAt(t.varCursor); t.tab == varsTab && v != nil {
-		t.c.Set("App.todoDetail", varDetail(v))
+		t.c.Set("App.todoDetail", varDetail(t.c, v))
 	} else if x != nil {
 		t.c.Set("App.todoDetail", todoDetail(x))
 	} else {

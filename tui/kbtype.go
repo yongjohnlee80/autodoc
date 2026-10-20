@@ -34,27 +34,27 @@ var builtinKBTypes = []kbTypeChoice{
 	{"slipbox.kb", "Slip-box", "https://github.com/yongjohnlee80/slipbox.kb"},
 }
 
-// The KB type field's rows around the types: None first, Custom URL… last.
-const (
-	kbTypeNone   = "None (an existing folder or a coding repo)"
-	kbTypeCustom = "Custom URL…"
-)
-
-// noneNote is what None says, in Johno's words for a coding repo (the dialog task).
+// noneNote is what None says, in Johno's words for a coding repo (the dialog task): the English of
+// noneNoteText, which says it in the UI's language.
 const noneNote = "Nothing is created. If the location is a coding repo, consider turning off embedding in the advanced option."
+
+func (h *Host) noneNoteText() string {
+	return h.tr("autodoc.text.kbtype.nothing_is_created_if_the_location_is_a_coding_r")
+}
 
 // kbStageLimit is the most a staged clone may hold, checked before it is read: the limits of
 // core/kbtype bound what is applied, this bounds what a clone may leave on disk.
 const kbStageLimit = 16 << 20
 
 // kbTypeRows are the KB type field's rows: None, the types (the registry's, else the built-ins),
-// then Custom URL….
+// then Custom URL…. None's and Custom URL…'s labels are in the UI's language, their keys "" and
+// "custom".
 func (h *Host) kbTypeRows() []rowOf {
-	rows := []rowOf{{"key": "", "label": kbTypeNone}}
+	rows := []rowOf{{"key": "", "label": h.tr("autodoc.text.kbtype.none_an_existing_folder_or_a_coding_repo")}}
 	for _, c := range h.kbTypeChoices() {
 		rows = append(rows, rowOf{"key": c.name, "label": c.title})
 	}
-	return append(rows, rowOf{"key": "custom", "label": kbTypeCustom})
+	return append(rows, rowOf{"key": "custom", "label": h.tr("autodoc.text.kbtype.custom_url")})
 }
 
 // stagedKBType is a type staged for the add dialog: its clone, read and validated.
@@ -169,7 +169,7 @@ func (h *Host) pickKBType(url string) {
 	h.dropKBType()
 	h.set("App.kbTypeCustomShown", false)
 	if url == "" {
-		h.set("App.kbTypeSummary", noneNote)
+		h.set("App.kbTypeSummary", h.noneNoteText())
 		return
 	}
 	tk := h.ticket(&h.kbTypeSeq, TicketSession)
@@ -186,7 +186,7 @@ func (h *Host) pickKBType(url string) {
 			return
 		}
 		h.kbStaged = &s
-		h.set("App.kbTypeSummary", kbTypeSummary(&s))
+		h.set("App.kbTypeSummary", kbTypeSummary(core{h}, &s))
 	})
 }
 
@@ -224,9 +224,9 @@ func (h *Host) keepForResume(ws string, s *stagedKBType) {
 
 // kbTypeSummary is what the field shows of a staged type: its folders and purposes, and the
 // settings it proposes.
-func kbTypeSummary(s *stagedKBType) string {
+func kbTypeSummary(t wording, s *stagedKBType) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s at %s\n", s.t.Title, s.commit[:min(7, len(s.commit))])
+	b.WriteString(t.Trf("autodoc.text.kbtype.at", s.t.Title, s.commit[:min(7, len(s.commit))]) + "\n")
 	width := 0
 	for _, f := range s.t.Folders {
 		width = max(width, len(f.Path)+1)
@@ -237,16 +237,16 @@ func kbTypeSummary(s *stagedKBType) string {
 	w := s.t.Workspace
 	var proposes []string
 	if len(w.Include) > 0 {
-		proposes = append(proposes, "include "+strings.Join(w.Include, "; "))
+		proposes = append(proposes, t.Trf("autodoc.text.kbtype.include", strings.Join(w.Include, "; ")))
 	}
 	if w.Schema != "" {
-		proposes = append(proposes, "schema "+w.Schema)
+		proposes = append(proposes, t.Trf("autodoc.text.kbtype.schema", w.Schema))
 	}
 	if w.EmbeddingPolicy != "" {
-		proposes = append(proposes, "embedding "+w.EmbeddingPolicy)
+		proposes = append(proposes, t.Trf("autodoc.text.kbtype.embedding", w.EmbeddingPolicy))
 	}
 	if len(proposes) > 0 {
-		fmt.Fprintf(&b, "proposes %s (where you haven't changed the field)", strings.Join(proposes, " · "))
+		b.WriteString(t.Trf("autodoc.text.kbtype.proposes_where_you_haven_t_changed_the_field", strings.Join(proposes, " · ")))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -274,16 +274,19 @@ type kbApply struct {
 	refused                         []string // "path: why"
 }
 
-func (a kbApply) String() string {
-	s := fmt.Sprintf("%d created, %d kept", len(a.created), len(a.kept))
+// String is how far the apply got, in English; text says it in the UI's language.
+func (a kbApply) String() string { return a.text(inEnglish{}) }
+
+func (a kbApply) text(t wording) string {
+	s := t.Trf("autodoc.text.kbtype.created_kept", len(a.created), len(a.kept))
 	if len(a.updated) > 0 {
-		s += fmt.Sprintf(", %d updated", len(a.updated))
+		s += ", " + t.Trf("autodoc.text.kbtype.updated", len(a.updated))
 	}
 	if len(a.skipped) > 0 {
-		s += fmt.Sprintf(", %d skipped", len(a.skipped))
+		s += ", " + t.Trf("autodoc.text.kbtype.skipped", len(a.skipped))
 	}
 	if len(a.refused) > 0 {
-		s += fmt.Sprintf(", %d refused (%s)", len(a.refused), a.refused[0])
+		s += ", " + t.Trf("autodoc.text.kbtype.refused", len(a.refused), a.refused[0])
 	}
 	return s
 }
@@ -383,9 +386,9 @@ func (h *Host) kbTypeApply(x Invocation) error {
 		case r.s.err != nil:
 			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.not_a_kb_type", r.err.Error()))
 		case r.err != nil:
-			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.stopped_part_way", ws.name, r.s.t.Title, r.a.String(), wireMessage(r.err)))
+			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.stopped_part_way", ws.name, r.s.t.Title, r.a.text(core{h}), wireMessage(r.err)))
 		default:
-			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.applied", ws.name, r.s.t.Title, r.a.String()))
+			h.notifyDone("kbtype", h.trf("autodoc.notice.kbtype.applied", ws.name, r.s.t.Title, r.a.text(core{h})))
 		}
 	})
 	return nil

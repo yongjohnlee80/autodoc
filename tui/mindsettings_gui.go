@@ -89,15 +89,11 @@ func (m *mindmap) setTheme(i int) {
 
 // settingsState is the dialog's lists.
 func (m *mindmap) settingsState() map[string]any {
-	_, themes := viewThemeChoices(m.c)
-	var shapes []string
-	for _, s := range mindShapes {
-		shapes = append(shapes, s.name)
-	}
+	names, themes := viewThemeChoices(m.c)
 	st := m.editor.state()
 	maps.Copy(st, map[string]any{
-		"App.mindThemes": choices(themes...), "App.mindDepths": choices("one link out", "two links out"),
-		"App.mindShapeChoices": choices(shapes...),
+		"App.mindThemes": keyedChoices(names, themes), "App.mindDepths": choiceModel(m.c, "App.mindDepths"),
+		"App.mindShapeChoices": choiceModel(m.c, "App.mindShapeChoices"),
 	})
 	return st
 }

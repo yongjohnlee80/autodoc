@@ -60,7 +60,8 @@ type recent struct {
 }
 
 func newRecent(c Core) *recent {
-	return &recent{c: c, rows: newRows(tuidecl.NewListModel("key", "workspace", "path"), recentRowOf)}
+	return &recent{c: c, rows: newRows(tuidecl.NewListModel("key", "workspace", "path"),
+		func(_ int, d recentDoc) rowOf { return recentRowOf(c, d) })}
 }
 
 func (*recent) Name() string { return "recent" }
@@ -111,6 +112,9 @@ func (r *recent) open() {
 	r.c.Open("recent")
 }
 
+// LanguageChanged lists the recent files again, in the UI's language.
+func (r *recent) LanguageChanged() { r.list() }
+
 // list shows the recent files still there: their workspace known, and, in the workspace in use,
 // still among its files.
 func (r *recent) list() {
@@ -155,11 +159,11 @@ func (r *recent) clear() {
 	r.c.Say(r.c.Tr("autodoc.notice.recent.cleared_the_recent_files"))
 }
 
-// recentRowOf is a recent file as the list shows it.
-func recentRowOf(_ int, d recentDoc) rowOf {
+// recentRowOf is a recent file as the list shows it, in c's language.
+func recentRowOf(c Core, d recentDoc) rowOf {
 	label := d.Workspace
 	if label == "" {
-		label = "(" + outsideBadge + ")"
+		label = c.Tr("autodoc.text.recent.no_workspace")
 	}
 	return rowOf{"key": d.Workspace + "\x00" + d.Path, "workspace": label, "path": d.Path}
 }

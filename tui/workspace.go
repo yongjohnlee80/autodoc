@@ -57,7 +57,7 @@ func (h *Host) loadWorkspaces() {
 			return
 		}
 		if a.err != nil {
-			h.failed("workspaces", a.err)
+			h.failed(h.tr("autodoc.notice.workspace.workspaces"), a.err)
 			return
 		}
 		pick := -1
@@ -74,7 +74,7 @@ func (h *Host) loadWorkspaces() {
 		if pick < 0 {
 			h.ws = ""
 			h.resetFiles()
-			h.setWhere("autodoc · no workspace")
+			h.setWhere(h.tr("autodoc.text.workspace.autodoc_no_workspace"))
 			h.notify(h.tr("autodoc.notice.workspace.no_workspace_go_manage_workspaces_adds_one"))
 			return
 		}
@@ -190,7 +190,7 @@ func (h *Host) enter(name string) {
 // settings is asked once a connection, for the right-hand pane.
 func (h *Host) manageWorkspaces() {
 	h.closeDialog("workspacePicker")
-	h.set("App.managerHelp", managerHelp)
+	h.set("App.managerHelp", h.tr("autodoc.text.workspace.add_a_directory_edit_or_advanced_the_one_under_t"))
 	h.managerIndex = 0
 	h.set("App.managerIndex", -1)
 	h.set("App.managerIndex", 0)
@@ -202,7 +202,7 @@ func (h *Host) manageWorkspaces() {
 		return answered(err == nil && on, nil)
 	}, func(a answerOf[bool]) {
 		if a.err != nil {
-			h.failed("the backend's capabilities", a.err) // it panicked: no databases, said
+			h.failed(h.tr("autodoc.notice.workspace.the_backend_s_capabilities"), a.err) // it panicked: no databases, said
 		}
 		if tk.Current() {
 			h.databases = a.v
@@ -211,8 +211,6 @@ func (h *Host) manageWorkspaces() {
 	})
 	h.loadWorkspaces()
 }
-
-const managerHelp = "Add… a directory · Edit… or Advanced… the one under the cursor · Delete… keeps its files"
 
 // managerRow is the manager's row i: the one under its cursor when a button was pressed, read
 // from the table then, since a move of the cursor may not have reached the host yet.
@@ -331,7 +329,7 @@ func (h *Host) removeWorkspaceConfirmed(name string) {
 			return err
 		}, func(err error) {
 			if err != nil {
-				h.failed("delete "+name, err)
+				h.failed(h.trf("autodoc.notice.workspace.delete", name), err)
 				return
 			}
 			if h.ws == name {

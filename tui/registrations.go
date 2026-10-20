@@ -37,7 +37,7 @@ func (h *Host) checkRegistrations() {
 		}
 		if a.err != nil {
 			h.daemonTables, h.kinds = registrations.Tables{}, kind.Registrations{}
-			h.failed("the backend's registrations", a.err)
+			h.failed(h.tr("autodoc.notice.registrations.the_backend_s_registrations"), a.err)
 		} else {
 			h.daemonTables = a.v
 			h.kinds = kind.Registrations{Chunked: slices.Sorted(maps.Keys(a.v.Chunkers)), Derived: slices.Sorted(maps.Keys(a.v.Formats))}
@@ -85,15 +85,19 @@ func (h *Host) restartForRegistrations() {
 }
 
 // holdLabel is how the hit list marks a hit of a document the daemon holds (ADR 0216 §1.4): one a
-// chunker or a format it lacks made, searchable, never reinterpreted.
-func holdLabel(hold string) string {
+// chunker or a format it lacks made, searchable, never reinterpreted. It is English: holdLabelIn
+// says it in the UI's language.
+func holdLabel(hold string) string { return holdLabelIn(englishText, hold) }
+
+// holdLabelIn is holdLabel in tr's language (h.tr, a Core's Tr).
+func holdLabelIn(tr func(string) string, hold string) string {
 	switch hold {
 	case "":
 		return ""
 	case "stale":
-		return "held · changed on disk"
+		return tr("autodoc.text.registrations.held_changed_on_disk")
 	case "unchecked":
-		return "held · not yet checked"
+		return tr("autodoc.text.registrations.held_not_yet_checked")
 	}
-	return "held"
+	return tr("autodoc.text.registrations.held")
 }

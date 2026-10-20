@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -31,6 +32,24 @@ type pluginRow struct {
 // pluginReserved are the chooser's own letters: what each does, as a refusal says it.
 var pluginReserved = map[string]string{"j": "moves down", "k": "moves up", "q": "closes the chooser"}
 
+// reservedWhy is why k, one of the chooser's own letters, is no plugin's: on the list's row, or, again,
+// as *'s refusal. A sentence each, as every language says it.
+func (pl *plugins) reservedWhy(k string, again bool) string {
+	switch {
+	case k == "j" && again:
+		return pl.c.Trf("autodoc.text.pluginpick.moves_down_again_for_another_letter", k)
+	case k == "j":
+		return pl.c.Trf("autodoc.text.pluginpick.moves_down", k)
+	case k == "k" && again:
+		return pl.c.Trf("autodoc.text.pluginpick.moves_up_again_for_another_letter", k)
+	case k == "k":
+		return pl.c.Trf("autodoc.text.pluginpick.moves_up", k)
+	case again:
+		return pl.c.Trf("autodoc.text.pluginpick.closes_the_chooser_again_for_another_letter", k)
+	}
+	return pl.c.Trf("autodoc.text.pluginpick.closes_the_chooser", k)
+}
+
 // bindPluginLetters lists the plugins with commands, by name, each with its letter. Two wanting one
 // (a preference edited by hand): the first by name keeps it, and the other says why it has none.
 func (pl *plugins) bindPluginLetters() {
@@ -49,11 +68,11 @@ func (pl *plugins) bindPluginLetters() {
 		switch {
 		case l == "":
 		case !pluginLetter(l):
-			r.why = fmt.Sprintf("letter %q: want one letter or digit", l)
+			r.why = pl.c.Trf("autodoc.text.pluginpick.letter_want_one_letter_or_digit", strconv.Quote(l))
 		case pluginReserved[l] != "":
-			r.why = fmt.Sprintf("%s %s", l, pluginReserved[l])
+			r.why = pl.reservedWhy(l, false)
 		case held[l] != "":
-			r.why = fmt.Sprintf("%s is %s's", l, held[l])
+			r.why = pl.c.Trf("autodoc.text.pluginpick.is_s", l, held[l])
 		default:
 			r.letter, held[l] = l, r.title
 		}
@@ -71,7 +90,7 @@ func (pl *plugins) cardKeys(key string) string {
 	if i := slices.IndexFunc(pl.chooser, func(r pluginRow) bool { return r.key == key }); i >= 0 && pl.chooser[i].letter != "" {
 		return "SPC p " + pl.chooser[i].letter
 	}
-	return "SPC p › " + pl.pluginTitle(key)
+	return pl.c.Trf("autodoc.text.pluginpick.spc_p", pl.pluginTitle(key))
 }
 
 // pluginTitle is a plugin's title, or its key when it has none (or is gone).
@@ -82,26 +101,23 @@ func (pl *plugins) pluginTitle(key string) string {
 	return key
 }
 
-// The chooser's help: as it waits for a plugin, as * waits for a letter, and on a plugin's card.
-const (
-	chooserHelp     = "a plugin's letter, or Enter, shows its commands · j/k move · * gives the plugin under › a letter · q or Esc closes"
-	chooserBindHelp = "a letter or digit for %s (not j, k or q) · Backspace removes its letter · Esc closes"
-	pluginCardHelp  = "a key runs its command · Backspace goes back · q or Esc closes"
-)
+// chooserHelp is the chooser's help as it waits for a plugin, in English, before the program; then
+// showChooser's, in the UI's language, as it is for * waiting for a letter and on a plugin's card.
+const chooserHelp = "a plugin's letter, or Enter, shows its commands · j/k move · * gives the plugin under › a letter · q or Esc closes"
 
 // showChooser sets the dialog: the chosen plugin's card, or the list.
 func (pl *plugins) showChooser() {
 	if pl.cardPlugin != "" {
-		text := "no commands: the plugin is gone, or cannot run"
+		text := pl.c.Tr("autodoc.text.pluginpick.no_commands_the_plugin_is_gone_or_cannot_run")
 		if card := pl.pluginCards[pl.cardPlugin]; card != nil {
 			text = card.text
 		}
 		pl.c.Set("App.pluginChooserTitle", pl.c.Trf("autodoc.text.pluginpick.spc_p", pl.pluginTitle(pl.cardPlugin)))
 		pl.c.Set("App.pluginChooserText", text)
-		pl.c.Set("App.pluginChooserHelp", pluginCardHelp)
+		pl.c.Set("App.pluginChooserHelp", pl.c.Tr("autodoc.text.pluginpick.a_key_runs_its_command_backspace_goes_back_q_or"))
 		return
 	}
-	text := "no plugin has commands yet: Plugins › Add from a git URL… adds one"
+	text := pl.c.Tr("autodoc.text.pluginpick.no_plugin_has_commands_yet_plugins_add_from_a_gi")
 	if len(pl.chooser) > 0 {
 		width := 0
 		for _, r := range pl.chooser {
@@ -113,9 +129,9 @@ func (pl *plugins) showChooser() {
 			if i == pl.chooserAt {
 				mark = "› "
 			}
-			n := fmt.Sprintf("%d commands", r.commands)
+			n := pl.c.Trf("autodoc.text.pluginpick.commands", r.commands)
 			if r.commands == 1 {
-				n = "1 command"
+				n = pl.c.Tr("autodoc.text.pluginpick.1_command")
 			}
 			lines[i] = fmt.Sprintf("%s%s  %-*s  %s", mark, letter, width, r.title, n)
 			if r.why != "" {
@@ -124,12 +140,12 @@ func (pl *plugins) showChooser() {
 		}
 		text = strings.Join(lines, "\n")
 	}
-	help := chooserHelp
+	help := pl.c.Tr("autodoc.text.pluginpick.a_plugin_s_letter_or_enter_shows_its_commands_j")
 	switch {
 	case pl.chooserBind != "":
-		help = fmt.Sprintf(chooserBindHelp, pl.pluginTitle(pl.chooserBind))
+		help = pl.c.Trf("autodoc.text.pluginpick.a_letter_or_digit_for_not_j_k_or_q_backspace_rem", pl.pluginTitle(pl.chooserBind))
 	case pl.chooserNote != "":
-		help = pl.chooserNote + " · " + chooserHelp
+		help = pl.chooserNote + " · " + help
 	}
 	pl.c.Set("App.pluginChooserTitle", pl.c.Tr("autodoc.text.pluginpick.spc_p_plugins"))
 	pl.c.Set("App.pluginChooserText", text)
@@ -215,11 +231,11 @@ func (pl *plugins) bindPluginLetter(key, k string) string {
 	switch {
 	case k == "Backspace":
 		pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+key+prefPluginLetter, ""))
-		return title + " has no letter"
+		return pl.c.Trf("autodoc.text.pluginpick.has_no_letter", title)
 	case pluginReserved[k] != "":
-		return fmt.Sprintf("%s %s: * again for another letter", k, pluginReserved[k])
+		return pl.reservedWhy(k, true)
 	case !pluginLetter(k):
-		return "a plugin's letter is a letter or digit: * again for another"
+		return pl.c.Tr("autodoc.text.pluginpick.a_plugin_s_letter_is_a_letter_or_digit_again_for")
 	}
 	var was []string
 	for _, name := range slices.Sorted(maps.Keys(pl.c.Prefs().pluginLetter)) {
@@ -229,9 +245,8 @@ func (pl *plugins) bindPluginLetter(key, k string) string {
 		}
 	}
 	pl.c.Keep(pl.c.SetPluginPref(prefPluginPrefix+key+prefPluginLetter, k))
-	note := fmt.Sprintf("%s is %s's", k, title)
 	if len(was) > 0 {
-		note += fmt.Sprintf(" (it was %s's)", strings.Join(was, "'s and "))
+		return pl.c.Trf("autodoc.text.pluginpick.is_s_it_was_s", k, title, strings.Join(was, pl.c.Tr("autodoc.text.pluginpick.s_and")))
 	}
-	return note
+	return pl.c.Trf("autodoc.text.pluginpick.is_s", k, title)
 }

@@ -77,9 +77,9 @@ func (a *agents) openAgentSetup(first bool) {
 	a.c.Set("App.agentSetupName", name)
 	a.c.Set("App.agentSetupNone", len(found) == 0)
 	a.c.Set("App.agentSetupSome", len(found) > 0)
-	reject := "&No"
+	reject := a.c.Tr("autodoc.text.agentsetup.no")
 	if len(found) == 0 {
-		reject = "&Close"
+		reject = a.c.Tr("autodoc.text.agentsetup.close")
 	}
 	a.c.Set("App.agentSetupReject", reject)
 	a.c.Open("agentSetup")
@@ -142,7 +142,7 @@ func (a *agents) SendPrompt(to AgentRef, line string, done func(error)) error {
 		}
 		return nil
 	}
-	return a.deliver(to, check, "this prompt", true, func(panel TerminalPanel, tab widget.TerminalTabID) error {
+	return a.deliver(to, check, a.c.Tr("autodoc.text.agentsetup.this_prompt"), true, func(panel TerminalPanel, tab widget.TerminalTabID) error {
 		return panel.SendPaste(tab, line)
 	}, done)
 }

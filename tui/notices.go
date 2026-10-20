@@ -26,7 +26,7 @@ func newNotices(c Core) *notices {
 func (*notices) Name() string { return "notices" }
 
 func (n *notices) State() map[string]any {
-	return map[string]any{"App.notices": n.rows.Model(), "App.noticesTitle": "notifications (0)"}
+	return map[string]any{"App.notices": n.rows.Model(), "App.noticesTitle": n.c.Trf("autodoc.text.notices.notifications", 0)}
 }
 
 func (n *notices) Commands() map[string]Command {
@@ -64,6 +64,11 @@ func (n *notices) open() {
 func (n *notices) clear() {
 	n.items = nil
 	n.show()
+}
+
+// LanguageChanged titles the history again in the UI's language.
+func (n *notices) LanguageChanged() {
+	n.c.Set("App.noticesTitle", n.c.Trf("autodoc.text.notices.notifications", len(n.items)))
 }
 
 // show puts the history in the dialog's list. It runs while the dialog shows, not on every

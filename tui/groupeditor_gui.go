@@ -59,7 +59,7 @@ func (e *groupEditor) show(note string) {
 		}
 	}
 	if note == "" {
-		note = "a document wears the first group its query matches: type:<type>, tag:#<tag>, path:<folder>/ — kept in " + e.ws + "'s .autodoc/graph.toml"
+		note = e.c.Trf("autodoc.text.groupeditor_gui.a_document_wears_the_first_group_its_query_match", e.ws)
 	}
 	e.c.Set(e.source("GroupRows"), choices(rows...))
 	e.c.Set(e.source("GroupRow"), e.row)
@@ -109,7 +109,7 @@ func (e *groupEditor) setColour(text string) {
 	}
 	c, ok := parseHex(strings.TrimSpace(text))
 	if !ok {
-		e.c.Set(e.source("GroupsNote"), "a group's colour is #rrggbb")
+		e.c.Set(e.source("GroupsNote"), e.c.Tr("autodoc.text.groupeditor_gui.a_group_s_colour_is_rrggbb"))
 		return
 	}
 	list := slices.Clone(e.list)

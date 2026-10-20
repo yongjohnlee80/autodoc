@@ -109,26 +109,30 @@ func (h *Host) resourceRefused(src string) {
 		return
 	}
 	h.refusedNoted = true
-	h.notify(refusalNotice(src, h.file.ws))
+	h.notify(refusalNoticeIn(h.trf, src, h.file.ws))
 }
 
 // refusalNotice says why a page's src was not loaded: a web or file: address, an absolute path, a
 // path out of the workspace (ws), or out of a file's own folder outside every workspace, which is
-// the one adding the folder as a workspace answers.
-func refusalNotice(src, ws string) string {
+// the one adding the folder as a workspace answers. It is English: refusalNoticeIn says it in the
+// UI's language.
+func refusalNotice(src, ws string) string { return refusalNoticeIn(inEnglish{}.Trf, src, ws) }
+
+// refusalNoticeIn is refusalNotice in trf's language (h.trf).
+func refusalNoticeIn(trf func(string, ...any) string, src, ws string) string {
 	src = strings.TrimSpace(src)
 	u, err := url.Parse(src)
 	switch {
 	case err != nil:
-		return "a resource the page names is not loaded: " + src
+		return trf("autodoc.notice.htmldoc.a_resource_the_page_names_is_not_loaded", src)
 	case u.Scheme != "" || u.Host != "" || strings.HasPrefix(src, "//"):
-		return "web and file: addresses in a page are not loaded (" + src + ")"
+		return trf("autodoc.notice.htmldoc.web_and_file_addresses_in_a_page_are_not_loaded", src)
 	case strings.HasPrefix(u.Path, "/"):
-		return "absolute paths in a page are not loaded (" + src + ")"
+		return trf("autodoc.notice.htmldoc.absolute_paths_in_a_page_are_not_loaded", src)
 	case ws != "":
-		return "resources outside the workspace " + ws + " are not loaded (" + src + ")"
+		return trf("autodoc.notice.htmldoc.resources_outside_the_workspace_are_not_loaded", ws, src)
 	}
-	return "resources outside this file's folder are not loaded (" + src + "): add the folder as a workspace"
+	return trf("autodoc.notice.htmldoc.resources_outside_this_file_s_folder_are_not_loa", src)
 }
 
 // linkPage gives the page its links, once the editor is built: they open as the preview pane's do,

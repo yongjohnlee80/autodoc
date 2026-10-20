@@ -45,7 +45,7 @@ func newProviders(c Core) *providers {
 		addTitle:  "add an embedding provider",
 		checkHint: "List models asks the provider what it has",
 		columns:   []string{"use", "name", "kind", "model", "context", "apiKey"},
-		listed:    providersStatus,
+		listed:    p.status,
 		removal:   p.removal, formOpened: p.formOpened, kindShown: p.kindShown, checked: p.checked, saveSpec: p.saveSpec,
 	})
 	return p
@@ -53,7 +53,7 @@ func newProviders(c Core) *providers {
 
 func (p *providers) State() map[string]any {
 	s := p.endpoints.State()
-	s["App.providersTitle"] = "embedding providers"
+	s["App.providersTitle"] = p.c.Tr("autodoc.text.providers.embedding_providers")
 	s["App.providerKeyShown"], s["App.providerContextShown"] = false, false
 	s["App.providerContext"], s["App.providerContextHint"], s["App.providerSectionHint"] = "", "", ""
 	s["App.providerModels"] = p.models
@@ -75,25 +75,31 @@ func (p *providers) Commands() map[string]Command {
 	}
 }
 
-// providersStatus is the line under the list: the provider in use, and why the one chosen was
-// refused.
-func providersStatus(_ map[string]any, active, why string) string {
-	status := "semantic search off: Add… a provider, then Use it"
-	if active != "" {
-		status = "semantic search with " + active
+// status is the line under the list: the provider in use, and why the one chosen was refused.
+func (p *providers) status(_ map[string]any, active, why string) string {
+	switch {
+	case active != "" && why != "":
+		return p.c.Trf("autodoc.text.providers.semantic_search_with_the_last_choice_was_refused", active, why)
+	case active != "":
+		return p.c.Trf("autodoc.text.providers.semantic_search_with", active)
+	case why != "":
+		return p.c.Trf("autodoc.text.providers.semantic_search_off_the_last_choice_was_refused", why)
 	}
-	if why != "" {
-		status += " · the last choice was refused: " + why
-	}
-	return status
+	return p.c.Tr("autodoc.text.providers.semantic_search_off_add_a_provider_then_use_it")
+}
+
+// languageChanged composes the tab's title again, in the UI's language: State set it once. The
+// status under the list is composed each time AI models opens (aiModels.open).
+func (p *providers) languageChanged() {
+	p.c.Set("App.providersTitle", p.c.Tr("autodoc.text.providers.embedding_providers"))
 }
 
 // inUseText says which provider semantic search uses, for the status under the list.
 func (p *providers) inUseText() string {
 	if p.active == "" {
-		return "semantic search off"
+		return p.c.Tr("autodoc.text.providers.semantic_search_off")
 	}
-	return "semantic search with " + p.active
+	return p.c.Trf("autodoc.text.providers.semantic_search_with", p.active)
 }
 
 // use makes provider i the one semantic search uses; one that does not set up is refused, and the
@@ -113,14 +119,13 @@ func (p *providers) use(i int) {
 
 // stop turns semantic search off: search by words alone.
 func (p *providers) stop() {
-	p.choose("", func(err error) { p.c.Failed("turn semantic search off", err) }, func() {})
+	p.choose("", func(err error) { p.c.Failed(p.c.Tr("autodoc.notice.providers.turn_semantic_search_off"), err) }, func() {})
 }
 
 // removal asks before removing provider r, and says what its removal deletes (ADR 1791284787 §2.3,
 // item 4): the provider in use, or with none in use, takes its model's vectors in every workspace
 // with it, unless another provider serves the same model.
 func (p *providers) removal(r endpointRow, remove func()) {
-	ask := "Remove the provider " + r.name + "? Its key, its usage and its log go. "
 	var sibling string
 	for _, o := range p.rows.All() {
 		if o.name != r.name && providerFamily(o.kind) == providerFamily(r.kind) && o.model == r.model {
@@ -130,11 +135,11 @@ func (p *providers) removal(r endpointRow, remove func()) {
 	q := Question{Title: p.c.Tr("autodoc.question.providers.remove_the_provider"), OnYes: remove}
 	switch {
 	case p.active != "" && p.active != r.name:
-		q.Text = ask + "Its model's vectors go once no workspace uses them."
+		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_go_once_unused", r.name)
 	case sibling != "":
-		q.Text = ask + fmt.Sprintf("%s keeps its vectors: %s serves it too.", r.model, sibling)
+		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_another_serves_its_model", r.name, r.model, sibling)
 	default:
-		q.Text = ask + "Semantic search goes off, and " + r.model + "'s vectors are deleted: counting them…"
+		q.Text = p.c.Trf("autodoc.text.providers.remove_the_provider_its_vectors_are_deleted", r.name, r.model)
 		p.countRemoved(r, p.c.Ask(q))
 		return
 	}
@@ -189,8 +194,13 @@ func (p *providers) countRemoved(r endpointRow, asked Asked) {
 // The form's own fields.
 
 // formOpened fills the context window (the default when r has none), its hints, and asks the
-// model's maximum when r names a model.
+// model's maximum when r names a model. The form's title on Add… and what List models does are
+// said in the UI's language: the spec's are English, set as the form opens (endpoints.fill).
 func (p *providers) formOpened(r endpointRow) {
+	if p.editing == "" {
+		p.c.Set("App.providerFormTitle", p.c.Tr("autodoc.text.providers.add_an_embedding_provider"))
+	}
+	p.spec.checkHint = p.c.Tr("autodoc.text.providers.list_models_asks_the_provider_what_it_has")
 	p.base, p.model = r.base, r.model
 	window := r.context
 	if window <= 0 {
@@ -212,10 +222,18 @@ func (p *providers) formOpened(r endpointRow) {
 	}
 }
 
-// kindShown shows the key field for a kind that takes one, and the window for a kind sent one.
+// kindShown shows the key field for a kind that takes one, its label in the UI's language (one
+// sealed is endpoints.showKind's), and the window for a kind sent one.
 func (p *providers) kindShown(k endpointKind) {
 	p.c.Set("App.providerContextShown", k.window)
 	p.c.Set("App.providerKeyShown", k.keyLabel != "")
+	if k.keyLabel != "" && (p.editing == "" || !p.hasKey) {
+		label := p.c.Tr("autodoc.text.providers.api_key_if_the_endpoint_takes_one")
+		if k.kind == store.KindOllamaCloud {
+			label = p.c.Tr("autodoc.text.providers.api_key_required")
+		}
+		p.c.Set("App.providerKeyLabel", label)
+	}
 }
 
 // listModels asks the provider the form describes what models it has.
@@ -298,11 +316,11 @@ func (p *providers) saveSpec(spec map[string]any, k endpointKind, window string)
 	}
 	n, err := strconv.ParseInt(w, 10, 64)
 	if err != nil {
-		return fmt.Sprintf("not saved: the context window is a number of tokens (%d to %d), not %q", store.MinContext, store.MaxContext, w)
+		return p.c.Trf("autodoc.text.providers.not_saved_the_context_window_is_a_number_of_toke", store.MinContext, store.MaxContext, strconv.Quote(w))
 	}
 	spec["context"] = n
 	if p.max > 0 && n > p.max {
-		return fmt.Sprintf("not saved: context window exceeds this model's maximum of %d tokens", p.max)
+		return p.c.Trf("autodoc.text.providers.not_saved_context_window_exceeds_this_model_s_ma", p.max)
 	}
 	return ""
 }
