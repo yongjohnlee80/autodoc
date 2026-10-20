@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	tuikey "github.com/yongjohnlee80/golib/tui/key"
 	"github.com/yongjohnlee80/golib/tui/keymap"
@@ -732,7 +732,7 @@ func sideBySide(cols [][]string) string {
 	for i, c := range cols {
 		rows = max(rows, len(c))
 		for _, line := range c {
-			widths[i] = max(widths[i], utf8.RuneCountInString(line))
+			widths[i] = max(widths[i], tuicore.StringWidth(line)) // cells: a CJK character is two
 		}
 	}
 	lines := make([]string, rows)
@@ -745,7 +745,7 @@ func sideBySide(cols [][]string) string {
 			}
 			b.WriteString(cell)
 			if i < len(cols)-1 {
-				b.WriteString(strings.Repeat(" ", widths[i]+2-utf8.RuneCountInString(cell)))
+				b.WriteString(strings.Repeat(" ", widths[i]+2-tuicore.StringWidth(cell)))
 			}
 		}
 		lines[r] = strings.TrimRight(b.String(), " ")
