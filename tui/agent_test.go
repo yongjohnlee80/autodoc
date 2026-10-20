@@ -471,18 +471,18 @@ func TestUsingAnotherAgentKeepsBothInstancesRunning(t *testing.T) {
 	}
 }
 
-// The agent's panel is kept where its grip leaves it, for the place it opens from: the top until
+// The agent's panel is kept where its grip leaves it, for the place it opens from: the bottom until
 // the user chooses another.
 func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
 	onLoop(r, func() bool { r.h.panelResized("agent", 60, 70); return true })
 	r.s.WaitFor(t, "kept", func(string) bool {
 		got, _ := d.db.Preferences(context.Background())
-		return got["tui.agent.top.size"] == "60" && got["tui.agent.top.length"] == "70"
+		return got["tui.agent.bottom.size"] == "60" && got["tui.agent.bottom.length"] == "70"
 	})
 	again := attached(t, d)
 	if g := onLoop(again, func() [2]int {
-		s, l := again.h.prefs.panelGeometry("agent", "top")
+		s, l := again.h.prefs.panelGeometry("agent", "bottom")
 		return [2]int{s, l}
 	}); g != [2]int{60, 70} {
 		t.Errorf("a new TUI sizes the agent %v, want the kept 60 by 70", g)
@@ -498,12 +498,12 @@ func TestTheAgentsPanelSizeIsKept(t *testing.T) {
 	}
 }
 
-// The agent opens at the top by default; Preferences moves it, the choice is kept, and a size set
+// The agent opens at the bottom by default; Preferences moves it, the choice is kept, and a size set
 // at one place does not follow it to another.
 func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	d, r, _ := runAgentTUI(t, t.TempDir(), nil, "")
-	if e := onLoop(r, func() string { return r.h.prefs.agentEdge }); e != "top" {
-		t.Fatalf("the agent opens at %q by default, want top", e)
+	if e := onLoop(r, func() string { return r.h.prefs.agentEdge }); e != "bottom" {
+		t.Fatalf("the agent opens at %q by default, want bottom", e)
 	}
 	onLoop(r, func() bool { r.h.agents.setAgentSize(nearest(termSizes, 70)); return true })
 	onLoop(r, func() bool { r.h.agents.setAgentLength(nearest(termLengths, 60)); return true })
@@ -516,7 +516,7 @@ func TestTheAgentOpensWherePreferencesSay(t *testing.T) {
 	}) // out of range: ignored
 	r.s.WaitFor(t, "kept", func(string) bool {
 		got, _ := d.db.Preferences(context.Background())
-		return got["tui.agent.edge"] == "center" && got["tui.agent.top.size"] == "70" && got["tui.agent.top.length"] == "60"
+		return got["tui.agent.edge"] == "center" && got["tui.agent.bottom.size"] == "70" && got["tui.agent.bottom.length"] == "60"
 	})
 	src := func(name string) string { v, _ := r.h.p.Tree().Source(name); return v.Raw }
 	got := onLoop(r, func() [3]string {
