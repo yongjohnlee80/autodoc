@@ -320,6 +320,8 @@ type pluginHost interface {
 	InsertBlock(text string) error
 	// BrowseFolder is where a file dialog starts: the open file's folder, the workspace's, or home
 	BrowseFolder() string
+	// RootOf is workspace ws's folder, absolute; "" until it is listed (a document's Root)
+	RootOf(ws string) string
 }
 
 // The scoped services' refusals.
@@ -372,6 +374,7 @@ func (c core) NotifyAs(ns, id, msg string, ongoing bool) {
 func (c core) BrowseFolder() string { return c.h.browseFolder() }
 
 func (c core) PanelShown(id string) bool { return c.h.panelOpen[id] && !c.h.panelHidden(id) }
+func (c core) RootOf(ws string) string   { return c.h.rootOf(ws) }
 
 func (c core) PageSize() (w, h int) {
 	ed, ok := c.h.editor.(interface{ Context() *tuicore.Context })

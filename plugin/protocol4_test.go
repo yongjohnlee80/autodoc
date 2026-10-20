@@ -3,6 +3,7 @@ package plugin
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -317,5 +318,39 @@ func TestATableFetcherServesItsRows(t *testing.T) {
 	if got := old.rec.all(); !reflect.DeepEqual(got, []string{"open 0x0  ", "table " + ErrNoTables.Error(), "fetch c1 1"}) {
 		// the fetch reaches the Handler whatever the protocol: a host speaking 3 never sends one
 		t.Errorf("a protocol-3 plugin's calls: %q", got)
+	}
+}
+
+// A document carries its workspace's root (ADR 1792457255): in plugin.document at any protocol, in a
+// command's document, and in a document too large to send. File is the note on disk: Root joined
+// with Path, Path itself outside every workspace, and "" for a draft or a root not sent.
+func TestADocumentCarriesItsRoot(t *testing.T) {
+	wire := func(params []any) []any { return one(widen(params[0].(map[string]any)).(map[string]any)) }
+	d := Document{Path: "lab/plan.lab.md", Workspace: "kb", Root: "/home/u/kb", Version: 3, Text: "x"}
+	for _, p := range []int{2, 4, 9} {
+		if got, err := ReadDocument(wire(DocumentParamsAt(p, d))); err != nil || got.Root != d.Root {
+			t.Errorf("protocol %d: root %q (%v)", p, got.Root, err)
+		}
+	}
+	if cmd, ok := ReadCommandDocument(wire(CommandDocParams("run", d))); !ok || cmd.Root != d.Root {
+		t.Errorf("a command's document: root %q (%v)", cmd.Root, ok)
+	}
+	large := d
+	large.TooLarge, large.Text = true, ""
+	if got, err := ReadDocument(wire(DocumentParams(large))); err != nil || got.Root != d.Root || !got.TooLarge {
+		t.Errorf("a too-large document: %+v (%v)", got, err)
+	}
+	for _, c := range []struct {
+		d    Document
+		want string
+	}{
+		{d, filepath.Join("/home/u/kb", "lab", "plan.lab.md")},
+		{Document{Path: "/elsewhere/x.lab.md"}, "/elsewhere/x.lab.md"},
+		{Document{Path: "lab/plan.lab.md", Workspace: "kb"}, ""},
+		{Document{}, ""},
+	} {
+		if got := c.d.File(); got != c.want {
+			t.Errorf("File() of %+v = %q, want %q", c.d, got, c.want)
+		}
 	}
 }

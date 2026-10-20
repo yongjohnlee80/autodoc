@@ -89,6 +89,9 @@ func (pl *plugins) document() plugin.Document {
 	d := plugin.Document{Workspace: pl.c.Workspace(), Version: p.Version, Text: string(p.Text)}
 	if p.Ref.path != "" {
 		d.Workspace, d.Path = p.Ref.ws, p.Ref.path // "" and absolute for a file outside every workspace
+		if d.Workspace != "" {
+			d.Root = pl.c.RootOf(d.Workspace) // so a plugin finds the note on disk (Document.File)
+		}
 	}
 	row, col := pl.c.Cursor()
 	d.Cursor = plugin.Position{Line: row + 1, Col: col + 1}

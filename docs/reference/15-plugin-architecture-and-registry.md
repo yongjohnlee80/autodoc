@@ -40,7 +40,7 @@ Protocol 1 establishes the handshake (`plugin.open {protocol, width, height, the
 
 Protocol 2 introduces `[dialog] modal = false` (docked cards), `kind = "service"`, the live document feed (`[feed] document = true`), and user commands (`[[commands]]`).
 
-- **Debounced Document Feed (`plugin.document`)**: Sent once on startup and **300 ms** after typing, cursor movement, selection changes, or buffer switching pauses. Carries `{path, workspace, text, cursor, selection, version, too_large}`. `version` increments only on content edits or buffer switches (never on cursor movement), allowing plugins to discard stale work. If the encoded notification exceeds 1 MiB, AutoDoc sends `{path, workspace, version, too_large: true}` without `text`.
+- **Debounced Document Feed (`plugin.document`)**: Sent once on startup and **300 ms** after typing, cursor movement, selection changes, or buffer switching pauses. Carries `{path, workspace, text, cursor, selection, version, too_large}`, and `root`, the workspace's absolute folder, for a workspace's note (`plugin.Document.File()` joins it with `path`). `version` increments only on content edits or buffer switches (never on cursor movement), allowing plugins to discard stale work. If the encoded notification exceeds 1 MiB, AutoDoc sends `{path, workspace, version, too_large: true}` without `text`.
 - **The `SPC p` Plugin Command Card (`[[commands]]`)**: Each declared command (`id`, `title`, optional single-character `key`) appears under the Plugins menu and on the dedicated `SPC p` card.
 
 ### Protocol 3: Whitelisted Host Command Calls (`calls`)

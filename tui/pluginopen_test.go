@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/yongjohnlee80/autodoc/plugin"
 )
 
 // openerManifest is a protocol-9 plugin whose [open] claims .ipynb for its import command.
@@ -57,5 +59,22 @@ func TestAFileAPluginOpensGoesToItsCommand(t *testing.T) {
 	})
 	if names["zz"] != "Zz — opens .ipynb: shadowed by nb" || names["nb"] != "Nb" {
 		t.Errorf("the manager's rows: %q; want zz's claim shadowed by nb, nb's plain", names)
+	}
+}
+
+// A plugin's document names its workspace's root, so the plugin finds the note on disk
+// (plugin.Document.File; ADR 1792457255): the Jupyter plugin starts a kernel in the note's folder
+// and keeps its outputs beside it.
+func TestAPluginsDocumentNamesItsWorkspacesRoot(t *testing.T) {
+	r, _ := pluginTUI(t, t.TempDir())
+	r.h.p.Post(func() { r.h.openRef(fileRef{"kb", "a.md"}, false, nil) })
+	r.waitOpen(t, "kb", "a.md")
+	root := onLoop(r, func() string { return r.h.rootOf("kb") })
+	if root == "" {
+		t.Fatal("the workspace's root is not listed")
+	}
+	d := onLoop(r, func() plugin.Document { return r.h.plugins.document() })
+	if d.Workspace != "kb" || d.Path != "a.md" || d.Root != root || d.File() != filepath.Join(root, "a.md") {
+		t.Errorf("the document %+v (File %q); want kb's a.md under %s", d, d.File(), root)
 	}
 }

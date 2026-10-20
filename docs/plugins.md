@@ -237,7 +237,7 @@ Each notification carries one map.
 | AutoDoc | `plugin.theme` | 1 | `{theme}`: the theme switched |
 | AutoDoc | `plugin.hide`, `plugin.show` | 1 | `{}`: under `esc = "hide"`, Esc hid the dialog, and its menu entry showed it again; a card's panel closed, and opened again |
 | AutoDoc | `plugin.focus` | 2 | `{focused}`: a card took the keys, or gave them back |
-| AutoDoc | `plugin.document` | 2 | `{path, workspace, text, cursor, selection, version, too_large}`: the open note, under `[feed] document = true`; from 4 also `{cursor_byte, selection_bytes}` |
+| AutoDoc | `plugin.document` | 2 | `{path, workspace, text, cursor, selection, version, too_large}`: the open note, under `[feed] document = true`; from 4 also `{cursor_byte, selection_bytes}`; `root` (the workspace's absolute folder) whenever the note is a workspace's |
 | AutoDoc | `plugin.command` | 2 | `{id}`: one of the manifest's `[[commands]]`, chosen; from 4, under the feed, `{id, document}`; from 7, `{args}` too when it has arguments |
 | AutoDoc | `plugin.result` | 3 | `{call, ok, error}`: the answer to the `host.call` numbered `call` |
 | AutoDoc | `plugin.table.fetch` | 4 | `{id, n}`: up to `n` more rows of the table `id` |
@@ -681,6 +681,10 @@ AutoDoc's answer.
 - A command that carries its note is handed to the `DocumentReader` first, in the same step, and
   then to `Command`: nothing sent later runs between the two, so `Command` reads the note it was
   chosen on. `plugin.Document` has `CursorByte` and `SelectionBytes` for slicing its `Text`.
+- A document's `Path` is the note's path in its workspace, a slash path; `Root` is that workspace's
+  folder on this machine, absolute. `d.File()` joins them: the note on disk, for a plugin that reads
+  or writes beside it. A file outside every workspace has an absolute `Path` and no `Root`; a draft
+  has neither, and `File()` is "".
 - `plugin.FitCommand(id, d)` and `plugin.DocumentParamsAt(protocol, d)` are the forms AutoDoc sends,
   for a host or a test of your own.
 
