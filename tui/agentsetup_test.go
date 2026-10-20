@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/yongjohnlee80/autodoc"
-	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
 // offeringSetup turns the first-run card on for one test (TestMain turns it off for the rest).
@@ -103,9 +102,9 @@ func TestTheSetupCardIsAFirstRunsOnly(t *testing.T) {
 	}
 }
 
-// Set up saves Claude as an ordinary profile, the default, records the answer, starts it and
-// submits the first prompt once, with its Enter. The menu's Set up later submits nothing.
-func TestSetUpSavesStartsAndPromptsOnce(t *testing.T) {
+// Set up saves Claude as an ordinary profile, the default, records the answer and starts it, typing
+// nothing into it; the menu's Set up later does the same.
+func TestSetUpSavesAndStartsTypingNothing(t *testing.T) {
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
@@ -114,9 +113,10 @@ func TestSetUpSavesStartsAndPromptsOnce(t *testing.T) {
 	r.s.WaitForText(t, "Claude (claude)")
 	r.keys(t, key('s')) // &Set up
 	storedPref(t, d, r, prefAgentSetup, "done")
-	r.s.WaitFor(t, "the first prompt heard", func(string) bool { return len(heardLines(heard)) >= 1 })
-	if got := heardLines(heard); got[0] != firstAgentPrompt {
-		t.Fatalf("the agent heard %q; want the first prompt", got)
+	r.s.WaitFor(t, "the agent started", func(string) bool { return r.agentRunningNow() })
+	time.Sleep(300 * time.Millisecond) // a line would be typed within agentSubmitDelay of the start
+	if got := heardLines(heard); len(got) != 0 {
+		t.Fatalf("the setup typed into the agent: %q", got)
 	}
 	p := onLoop(r, func() []agentProfile { return r.h.agents.profiles() })
 	if len(p) != 1 || p[0].Name != "Claude" || p[0].Command != "claude" || p[0].Codename == "" ||
@@ -125,27 +125,27 @@ func TestSetUpSavesStartsAndPromptsOnce(t *testing.T) {
 	}
 
 	// the menu's card, set up again under another name: a second profile, and no prompt
-	onLoop(r, func() bool { r.h.agents.openAgentSetup(false); return true })
+	onLoop(r, func() bool { r.h.agents.openAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
 	onLoop(r, func() bool { r.h.agents.agentSetupConfirm(0, "Claude two"); return true })
 	r.s.WaitFor(t, "the second profile", func(string) bool {
 		return onLoop(r, func() bool { return len(r.h.agents.profiles()) == 2 })
 	})
-	time.Sleep(300 * time.Millisecond) // a prompt would be typed within agentSubmitDelay of the start
-	if got := heardLines(heard); len(got) != 1 {
-		t.Fatalf("the menu's Set up submitted a prompt: %q", got)
+	time.Sleep(300 * time.Millisecond)
+	if got := heardLines(heard); len(got) != 0 {
+		t.Fatalf("the menu's Set up typed into the agent: %q", got)
 	}
 }
 
 // A taken codename is refused by storeAgentProfile with its reason: nothing is recorded, the old
-// profile with that codename is not started, and no prompt is sent.
+// profile with that codename is not started, and nothing is typed.
 func TestASetupWithATakenCodenameIsRefused(t *testing.T) {
 	offeringSetup(t)
 	heard, onPath := fakeClaude(t)
 	old := agentProfile{Name: "Old", Command: "claude", Codename: "claude"}
 	d, r, _ := runAgentTUIWith(t, t.TempDir(), []agentProfile{old}, "", nil, Options{})
 	onPath()
-	onLoop(r, func() bool { r.h.agents.openAgentSetup(true); return true })
+	onLoop(r, func() bool { r.h.agents.openAgentSetup(); return true })
 	r.s.WaitForText(t, "Set up an AI agent?")
 	onLoop(r, func() bool { r.h.agents.agentSetupConfirm(0, "Claude"); return true })
 	r.s.WaitFor(t, "the form's refusal", func(string) bool { // its state: a panel may cover the form
@@ -190,7 +190,7 @@ func TestNoIsRemembered(t *testing.T) {
 }
 
 // The card opens later from the catalog (agent.setup) and from System › Set up an agent…
-// (App.openAgentSetup), as the menu's card: never the first run's, so its Set up prompts nothing.
+// (App.openAgentSetup).
 func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 	fakeClaude(t)
 	_, r, _ := runAgentTUIWith(t, t.TempDir(), nil, "", nil, Options{})
@@ -199,9 +199,6 @@ func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 		t.Fatalf("agent.setup: %v", err)
 	}
 	r.s.WaitForText(t, "Claude (claude)")
-	if onLoop(r, func() bool { return r.h.agents.setupFirst }) {
-		t.Fatal("the catalog's card is the first run's")
-	}
 	r.keys(t, key('n')) // &No
 	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "Set up an AI agent?") })
 
@@ -209,9 +206,6 @@ func TestTheSetupOpensFromTheCatalogAndTheMenu(t *testing.T) {
 		t.Fatalf("App.openAgentSetup: %v", err)
 	}
 	r.s.WaitForText(t, "Set up an AI agent?")
-	if onLoop(r, func() bool { return r.h.agents.setupFirst }) {
-		t.Fatal("the menu's card is the first run's")
-	}
 }
 
 // With no CLI found, the card says which to install and why, and offers only Close, which records
@@ -230,17 +224,6 @@ func TestNoneFoundSaysWhichAndRecordsNothing(t *testing.T) {
 	r.s.WaitFor(t, "the card closed", func(sc string) bool { return !strings.Contains(sc, "No agent CLI was found") })
 	if m, _ := d.db.Preferences(t.Context()); m[prefAgentSetup] != "" {
 		t.Fatalf("Close recorded %q", m[prefAgentSetup])
-	}
-}
-
-// SendPrompt refuses an empty line, a line with CR or LF, and a line over the terminal's limit.
-func TestSendPromptRefusesWhatCannotBeOneLine(t *testing.T) {
-	_, r, _ := runAgentTUI(t, t.TempDir(), []agentProfile{{Name: "A", Command: "true", Codename: "a"}}, "")
-	for _, line := range []string{"", "two\nlines", "a\rb", strings.Repeat("x", widget.TerminalInputLimit+1)} {
-		err := onLoop(r, func() error { return r.h.agents.SendPrompt(AgentRef{Codename: "a"}, line, nil) })
-		if !errors.Is(err, ErrAgentText) {
-			t.Errorf("%.12q: %v, want ErrAgentText", line, err)
-		}
 	}
 }
 
