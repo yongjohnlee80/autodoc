@@ -72,7 +72,7 @@ To ensure 100% deterministic parsing and layout across both `autodoc --gui` and 
   - Valid: `A["Markdown Files (.md)"] --> B["SQLite Index (WAL)"]`
   - Invalid: `A[Markdown Files (.md)] --> B[SQLite Index: WAL]`
 - **No HTML Tags in Labels**: Never use `<br/>`, `<b>`, or `<i>` inside node or edge labels; use concise phrases or split concepts into sequential nodes instead.
-- **Clean State IDs in `stateDiagram-v2`**: Define human-readable state names using `state "Rendered View (Ctrl+P)" as RenderedView` and reference the clean identifier (`Normal --> RenderedView: Ctrl+p`) in transitions.
+- **Clean State IDs in `stateDiagram-v2`**: Define human-readable state names using `state "Rendered View (Ctrl+T)" as RenderedView` and reference the clean identifier (`Normal --> RenderedView: Ctrl+T`) in transitions.
 
 ---
 
@@ -143,9 +143,9 @@ To guarantee fast rendering and prevent malicious content injection, `resolveIma
 
 ---
 
-## 4.7 Interactive Rendered View (`Ctrl+p`) and Click-to-Edit in `--gui`
+## 4.7 Interactive Rendered View (`Ctrl+T`) and Click-to-Edit in `--gui`
 
-While authoring in `autodoc --gui`, pressing **`Ctrl+p`** toggles the active editor pane into **Rendered View** (or opens Rendered View in a side-by-side split if you run `:vsplit` first).
+While authoring in `autodoc --gui`, pressing **`Ctrl+T`** toggles the editor between the Markdown source and **Rendered View**.
 
 Rendered View in `--gui` is not an embedded webview: every heading, code block, callout box, `.mmd` diagram, `.chart.json` chart, and `.csv` table is drawn directly onto Gio's GPU vector canvas. Furthermore, Rendered View is **bidirectionally interactive**:
 

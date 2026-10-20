@@ -39,7 +39,7 @@ When Modeless Mode is active, typing inserts text directly without mode transiti
 
 - `Ctrl+S`: Save current buffer
 - `Ctrl+F`: Find in buffer / `Ctrl+Shift+F`: Hybrid workspace search
-- `Ctrl+P`: Toggle Rendered View (`--gui` and `--ui` preview)
+- `Ctrl+T`: Toggle Rendered View (`--gui` only: the terminal's `--ui` has no Rendered View)
 - `Ctrl+Z` / `Ctrl+Y`: Undo and Redo
 - `Ctrl+B` / `Ctrl+I`: Toggle `**bold**` or `*italic*` around selection
 
@@ -107,11 +107,11 @@ Surrounding the central 120-column editor stage are three collapsible dock slots
 
 ### Right Dock: `Relations`, `Preview`, and `Plugin Cards`
 
-1. **`Relations` (`SPC r`)**: Displays real-time graph context for the active document, divided into three collapsible sections:
+1. **`Relations` (`SPC l`)**: Displays real-time graph context for the active document, divided into three collapsible sections:
    - **Incoming Backlinks**: Every document in the workspace that links to the current file, including the surrounding sentence snippet where the `[[wikilink]]` appears.
    - **Outgoing Links**: All resolved and unresolved (`broken`) links originating from the current document.
    - **Frontmatter & Todo Links**: Tasks in `.todo-list/` whose `adr:` or `review:` field references the active document.
-2. **`Preview` (`Ctrl+p`)**: Can either replace the central editor viewport (full-page Rendered View) or dock in the Right slot for live side-by-side authoring.
+2. **`Preview` (`SPC H`)**: An HTML file's page (File › Preview HTML). The note editor's own Rendered View is `Ctrl+T`, in `--gui`.
 3. **`Plugin Cards`**: Renders custom contextual widgets registered by Lua plugins—such as schema validation diagnostics from `doc.validate`, Git blame summaries, or related semantic chunks.
 
 ### Bottom Dock: `Todos`, `Results`, and `TerminalTabs`
@@ -147,16 +147,16 @@ show_breadcrumbs = true
 show_tabbar = true
 ```
 
-### Walkthrough: Conducting a Side-by-Side Architecture Review
+### Walkthrough: Reviewing an Architecture Decision
 
-To see how modal editing, splits, folding, and docked panels work together in practice, consider reviewing a proposed ADR (`adrs/0048-hybrid-rrf-fusion.md`) while verifying its linked benchmark tasks:
+To see how the editor and the docked panels work together in practice, consider reviewing a proposed ADR (`adrs/0048-hybrid-rrf-fusion.md`) and its linked benchmark task:
 
-1. **Locate the Document (`SPC f`)**: Press `SPC f`, type `0048 rrf`, and press `Enter` to load `adrs/0048-hybrid-rrf-fusion.md` into the 120-column center page.
-2. **Survey Structure via Folding (`zM` & `SPC o`)**: Press `zM` to collapse all sections to their top-level headings, or press `SPC o` to inspect the heading hierarchy in the left **Outline** panel. Move to `## 3. Reciprocal Rank Fusion Formula` and press `za` to unfold only that section.
-3. **Inspect Incoming References (`SPC r`)**: Press `SPC r` to focus the right **Relations** panel. You immediately see three synthesis notes and two review documents linking to `[[0048-hybrid-rrf-fusion]]`, plus an open task in `.todo-list/open/`.
-4. **Open a Comparison Split (`Ctrl+w v`)**: Press `Ctrl+w v` to split the editor vertically, then move to a `[[wikilink]]` in the right split and press `gd` (or `Enter`) to open the referenced benchmark report beside the ADR.
-5. **Verify Live Diagrams (`Ctrl+p`)**: In `autodoc --gui`, press `Ctrl+p` on the right split to switch that pane into **Rendered View**, allowing you to edit the Markdown prose on the left while watching diagrams, Vega-Lite charts, and CSV tables update live on the right.
-6. **Update Linked Task (`SPC t l`)**: Press `SPC t l` to open the bottom **Todos** panel, highlight the associated review task, and press `s` to transition its status via the daemon's `todos.status` verb.
+1. **Open the Document (`SPC o`)**: Press `SPC o`, type `0048 rrf`, and press `Enter` to open `adrs/0048-hybrid-rrf-fusion.md` in the center page.
+2. **Survey Its Structure (`SPC O`)**: Press `SPC O` (Go › Outline…) to list the file's headings, choose `## 3. Reciprocal Rank Fusion Formula`, and press `Enter` to jump there.
+3. **Inspect What Links Here (`SPC l`)**: Press `SPC l` to open the **Relations** panel: the ADR's links and its backlinks, such as the synthesis notes and reviews that link to `[[0048-hybrid-rrf-fusion]]`, and a task whose `adr:` names it.
+4. **Follow a Link (`SPC j`)**: Move the cursor onto the `[[wikilink]]` naming the benchmark report and press `SPC j` to open it. `SPC b` goes back to the ADR, where you left it.
+5. **Check the Diagrams (`Ctrl+T`)**: In `autodoc --gui`, press `Ctrl+T` to switch the page into **Rendered View**, its diagrams, Vega-Lite charts, and CSV tables drawn in place. `Ctrl+T` again shows the source.
+6. **Update the Linked Task (`SPC x`)**: Press `SPC x` to open the **Todos** panel, select the review task, and press `s` to choose its new status (the daemon's `todos.status` verb).
 
 ---
 

@@ -24,5 +24,5 @@ Leader Chords,SPC r,Normal,Relations Inspector,Focus or toggle the Backlinks and
 Leader Chords,SPC t,Normal,Todo Board,Focus or toggle the .todo-list task panel
 Leader Chords,SPC e,Normal,Files Explorer,Focus or toggle the left workspace Files tree panel
 Leader Chords,SPC `,Normal,Terminal Tabs,Toggle bottom embedded PTY TerminalTabs drawer
-Rendered View,Ctrl+p,Normal / Insert,Toggle Rendered View,Switch between Markdown source and native Rendered View (Mermaid / Vega-Lite / CSV)
+Rendered View,Ctrl+T,Normal / Insert,Toggle Rendered View,Switch between Markdown source and the native Rendered View in --gui (Mermaid / Vega-Lite / CSV)
 Rendered View,w (in Preview),Rendered View,Export HTML,Export current document and all companion embeds to self-contained offline HTML
