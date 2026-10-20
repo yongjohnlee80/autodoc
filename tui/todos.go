@@ -734,6 +734,7 @@ func (t *todos) selectMonth() {
 // language.
 func (t *todos) LanguageChanged() {
 	t.vars.Reset(t.vars.All()) // the variables' rows: "(unset)", "(set per machine: none here)"
+	t.pointVarsAt(t.varCursor) // where the cursor was: a panel stays open through a switch
 	t.status()
 	t.showDetail()
 }

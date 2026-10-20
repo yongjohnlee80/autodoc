@@ -14,6 +14,7 @@ import (
 	"testing/fstest"
 
 	"github.com/yongjohnlee80/golib/parse/qml"
+	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/decltest"
 	"github.com/yongjohnlee80/golib/tui/i18n"
@@ -141,10 +142,11 @@ func TestEveryShippedLanguageCoversEveryID(t *testing.T) {
 }
 
 // golib's walk of the screen in every language: no translation of an id English lacks, no wrong
-// mnemonic letter, no two rows of one menu on one key.
+// mnemonic letter, no two rows of one menu on one key. The GUI build walks a window's screen, its
+// own menus (the GlobeMap's, the Mindmap's) with it.
 func TestEveryLanguageWalksTheScreen(t *testing.T) {
-	h := newHost(NewSession("unused", nil), Options{})
-	decltest.CheckLanguages(t, h.options(Options{})...)
+	h := newHost(NewSession("unused", nil), Options{GUI: wholeTables})
+	decltest.CheckLanguages(t, h.options(Options{GUI: wholeTables})...)
 }
 
 // koCatalog is a Korean catalog for the switch cell: the About dialog's title, a leader key, a
@@ -359,5 +361,54 @@ func TestASwitchLeavesNoEnglishOnScreen(t *testing.T) {
 	})
 	for _, name := range slices.Sorted(maps.Keys(bare)) {
 		t.Errorf("%s still says, in English: %q", name, bare[name])
+	}
+}
+
+// sideBySide lines its columns up in cells, as the screen draws them: a CJK character is two cells,
+// so a column after a CJK one starts at the same cell on every row.
+func TestCardColumnsLineUpInCells(t *testing.T) {
+	left := []string{"f  파일", "g  줄로 이동", "s  保存する", "x  打开"}
+	right := []string{"a  one", "b  two", "c  three", "d  four"}
+	text := sideBySide([][]string{left, right})
+	want := 0
+	for _, l := range left {
+		want = max(want, tuicore.StringWidth(l))
+	}
+	want += 2
+	for i, line := range strings.Split(text, "\n") {
+		at := strings.Index(line, right[i])
+		if at < 0 {
+			t.Fatalf("row %d lacks its second column %q: %q", i, right[i], line)
+		}
+		if got := tuicore.StringWidth(line[:at]); got != want {
+			t.Errorf("row %d's second column starts at cell %d, want %d:\n%s", i, got, want, text)
+		}
+	}
+}
+
+// Every card, in every shipped language, fits the smallest screen's card (80 × 20 less its frame):
+// its lines measured in cells.
+func TestEveryCardFitsInEveryLanguage(t *testing.T) {
+	h := newHost(NewSession("unused", nil), Options{GUI: wholeTables})
+	k := keyCatalog(h.features())
+	s := &i18n.Set{}
+	if err := s.LoadDir(qmlFiles, "i18n", "autodoc"); err != nil {
+		t.Fatal(err)
+	}
+	for _, lang := range s.Languages() {
+		k.tr = func(id, english string) string {
+			if t, ok := s.Lookup(lang, id); ok {
+				return t
+			}
+			return english
+		}
+		for _, c := range k.cards {
+			text := k.cardText(c.Groups, k.on(c.ID))
+			for _, line := range strings.Split(text, "\n") {
+				if n := tuicore.StringWidth(line); n > 76 {
+					t.Errorf("%s: %s's card has a line of %d cells, wider than the 80 × 20 screen's card:\n%s", lang, c.ID, n, line)
+				}
+			}
+		}
 	}
 }

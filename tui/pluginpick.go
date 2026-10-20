@@ -2,11 +2,12 @@ package tui
 
 import (
 	"cmp"
-	"fmt"
 	"maps"
 	"slices"
 	"strconv"
 	"strings"
+
+	tuicore "github.com/yongjohnlee80/golib/tui"
 )
 
 // THE SPC p CHOOSER (ADR 1792132889) — SPC p lists the plugins whose commands can run, each with the
@@ -124,7 +125,7 @@ func (pl *plugins) showChooser() {
 	if len(pl.chooser) > 0 {
 		width := 0
 		for _, r := range pl.chooser {
-			width = max(width, len([]rune(r.title)))
+			width = max(width, tuicore.StringWidth(r.title)) // cells: a CJK title's character is two
 		}
 		lines := make([]string, len(pl.chooser))
 		for i, r := range pl.chooser {
@@ -136,7 +137,7 @@ func (pl *plugins) showChooser() {
 			if r.commands == 1 {
 				n = pl.c.Tr("autodoc.text.pluginpick.1_command")
 			}
-			lines[i] = fmt.Sprintf("%s%s  %-*s  %s", mark, letter, width, r.title, n)
+			lines[i] = mark + letter + "  " + r.title + strings.Repeat(" ", width-tuicore.StringWidth(r.title)) + "  " + n
 			if r.why != "" {
 				lines[i] += " — " + r.why
 			}

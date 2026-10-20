@@ -1965,7 +1965,7 @@
     </message>
     <message id="autodoc.dialog.workspaceSettings.plain_text_txt">
         <source>Plain text (.txt)   </source>
-        <translation>テキスト (.txt)   </translation>
+        <translation>テキスト (.txt)     </translation>
     </message>
     <message id="autodoc.dialog.workspaceSettings.postgres_dsn">
         <source>postgres DSN</source>

@@ -41,6 +41,13 @@ func newVarRows(c Core) *rows[map[string]any] {
 	return newRows(tuidecl.NewListModel("key", "name", "value", "from"), func(_ int, v map[string]any) rowOf { return varRowOf(c, v) })
 }
 
+// pointVarsAt moves the Variables tab's list to row at: away first, so the same row twice still
+// moves it, as a reset of the rows puts it back at the top.
+func (t *todos) pointVarsAt(at int) {
+	t.c.Set("App.todoVarsIndex", -1)
+	t.c.Set("App.todoVarsIndex", at)
+}
+
 // readVars reads the store shown's variables into the tab.
 func (t *todos) readVars() {
 	s, gen := t.cur, t.gen
@@ -67,8 +74,7 @@ func (t *todos) readVars() {
 			at = min(max(t.varCursor, 0), len(vars)-1)
 		}
 		t.varCursor = at
-		t.c.Set("App.todoVarsIndex", -1)
-		t.c.Set("App.todoVarsIndex", at)
+		t.pointVarsAt(at)
 		if t.tab == varsTab {
 			t.showDetail()
 		}
