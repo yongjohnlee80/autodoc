@@ -30,34 +30,17 @@ func themeOf(src []byte) string {
 	return ""
 }
 
-// themeMenuLabels are Options › Theme's words for golib's themes, each with its access key; a theme
-// golib ships that is not here shows as its name, without one.
-var themeMenuLabels = map[string]string{
-	"dark": "&Dark", "light": "&Light", "mono": "&Mono", "retro": "&Retro", "sepia": "&Sepia",
-	"catppuccin_frappe": "&Catppuccin Frappé", "kanagawa": "&Kanagawa", "nord": "&Nord",
-	"shades_of_purple": "Shades of &Purple", "tokyo_night": "&Tokyo Night",
-}
-
-// themeMenuFirst are the themes Options › Theme lists first, in this order; golib's others follow
-// in its order.
-var themeMenuFirst = []string{"dark", "light", "mono", "retro", "sepia"}
-
 // builtinThemeRows are Options › Theme's rows for the themes golib ships, the one on screen checked.
 func (h *Host) builtinThemeRows() *tuidecl.ListModel {
 	m := tuidecl.NewListModel("key", "label", "checked")
-	order := slices.DeleteFunc(slices.Clone(themeMenuFirst), func(n string) bool { return !slices.Contains(themeNames, n) })
-	for _, n := range themeNames {
-		if !slices.Contains(order, n) {
-			order = append(order, n)
+	labels := themes.MenuLabels() // golib's order, its five first, and its words with their access keys
+	rows := make([]rowOf, 0, len(labels))
+	for _, l := range labels {
+		var label any = l.Name
+		if l.Text != l.Name { // golib has words for it: in the UI's language (language_catalog_test.go holds it)
+			label = tuicore.Msg("autodoc.theme." + l.Name)
 		}
-	}
-	rows := make([]rowOf, 0, len(order))
-	for _, n := range order {
-		var label any = n
-		if _, ok := themeMenuLabels[n]; ok {
-			label = tuicore.Msg("autodoc.theme." + n) // in the UI's language (language_catalog_test.go holds it)
-		}
-		rows = append(rows, rowOf{"key": n, "label": label, "checked": n == h.theme})
+		rows = append(rows, rowOf{"key": l.Name, "label": label, "checked": l.Name == h.theme})
 	}
 	m.Reset(rows)
 	return m

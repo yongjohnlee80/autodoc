@@ -14,6 +14,7 @@ import autodoc 1.0                // App: this program's state and commands
 import autodoc.theme.dark 1.0     // the Theme singleton; View › Theme switches it
 import autodoc.dialogs 1.0        // the pickers, the file, workspace, preference and quit dialogs
 import autodoc.views 1.0          // Help, About, the leader card
+import tui.panels 1.0              // Panel, the docked panels (golib, ADR 1792459145)
 
 Window {
     // below this, the screen asks to be enlarged, with Quit: a terminal's classic width, and a

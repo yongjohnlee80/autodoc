@@ -3,6 +3,7 @@ package tui
 import (
 	"slices"
 
+	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 	"github.com/yongjohnlee80/golib/tui/widget"
 )
 
@@ -41,6 +42,12 @@ type PanelSpec struct {
 	// Alive reports that the panel lives on with its drawer closed (a plugin card's running
 	// plugin); nil: only a TerminalTabs view's running tab keeps a closed panel in the dock
 	Alive func() bool
+}
+
+// geometry is s as golib's panel geometry check reads it: its id, the places it opens from and its
+// bounds (tui/panelgeometry, ADR 1792459145 §4.1).
+func (s PanelSpec) geometry() panelgeometry.Spec {
+	return panelgeometry.Spec{ID: s.ID, Edges: s.Places, Size: s.Size, Length: s.Length}
 }
 
 // panelSpecs are this program's snapshotted Feature contributions.

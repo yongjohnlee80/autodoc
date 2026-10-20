@@ -7,6 +7,7 @@ import (
 
 	"github.com/yongjohnlee80/golib/parse/qml"
 	tuicore "github.com/yongjohnlee80/golib/tui"
+	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
 // panelAt is where a panel's frame starts, its title's "┌ title": row and column, -1 when not shown.
@@ -58,7 +59,7 @@ func TestADraggedPanelFloatsWhereItIsLeft(t *testing.T) {
 	altDrag(t, r, tuicore.MouseRight, 20, 10, 10, 0)
 	r.s.WaitFor(t, "the explorer floating 40% wide", func(string) bool {
 		m, _ := d.db.Preferences(context.Background())
-		f, ok := parseFloat(m["tui.explorer.float"])
+		f, ok := panelgeometry.ParseFloat(m["tui.explorer.float"])
 		return ok && f[0] == 0 && f[2] == 40
 	})
 

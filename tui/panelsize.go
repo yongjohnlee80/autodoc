@@ -3,6 +3,8 @@ package tui
 import (
 	"slices"
 	"strconv"
+
+	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
 func (p prefs) geometrySpecs() []PanelSpec {
@@ -22,9 +24,6 @@ func (p prefs) geometrySpecs() []PanelSpec {
 // trees stay readable.
 const sidePanelMin = 15
 
-// panelPref is a panel's size or length preference at a place.
-func panelPref(panel, edge, what string) string { return "tui." + panel + "." + edge + "." + what }
-
 // sideDefault is the explorer's and the relations' size and length before the user drags them: a
 // third across, and 85% along a side or 80% along the top or bottom.
 func sideDefault(edge string) (size, length int) { return 30, panelLength(edge) }
@@ -36,10 +35,10 @@ func (p prefs) panelGeometry(id, edge string) (size, length int) {
 		return 0, 0
 	}
 	size, length = s.Default(edge)
-	if v, ok := p.panelGeo[panelPref(id, edge, "size")]; ok {
+	if v, ok := p.panelGeo[panelgeometry.SizeKey(id, edge)]; ok {
 		size = v
 	}
-	if v, ok := p.panelGeo[panelPref(id, edge, "length")]; ok {
+	if v, ok := p.panelGeo[panelgeometry.LengthKey(id, edge)]; ok {
 		length = v
 	}
 	return size, length
@@ -53,11 +52,11 @@ func readPanelPrefs(p *prefs, m map[string]any) {
 			continue
 		}
 		for _, edge := range s.Places {
-			if n, ok := pct(m[panelPref(s.ID, edge, "size")], s.Size[0], s.Size[1]); ok {
-				p.panelGeo = withEntry(p.panelGeo, panelPref(s.ID, edge, "size"), n)
+			if n, ok := panelgeometry.Percent(m[panelgeometry.SizeKey(s.ID, edge)], s.Size[0], s.Size[1]); ok {
+				p.panelGeo = withEntry(p.panelGeo, panelgeometry.SizeKey(s.ID, edge), n)
 			}
-			if n, ok := pct(m[panelPref(s.ID, edge, "length")], s.Length[0], s.Length[1]); ok {
-				p.panelGeo = withEntry(p.panelGeo, panelPref(s.ID, edge, "length"), n)
+			if n, ok := panelgeometry.Percent(m[panelgeometry.LengthKey(s.ID, edge)], s.Length[0], s.Length[1]); ok {
+				p.panelGeo = withEntry(p.panelGeo, panelgeometry.LengthKey(s.ID, edge), n)
 			}
 		}
 	}
@@ -72,24 +71,22 @@ func (h *Host) keepPanelGeo(panel, what string, n int) {
 	if s == nil || len(s.Places) == 0 {
 		return
 	}
-	var bounds [2]int
+	edge := s.Edge(h.prefs)
+	var k string
 	switch what {
 	case "size":
-		bounds = s.Size
+		k = panelgeometry.SizeKey(panel, edge)
 	case "length":
-		bounds = s.Length
+		k = panelgeometry.LengthKey(panel, edge)
 	default:
 		return
 	}
-	if !inPercentRange(n, bounds) {
+	v := strconv.Itoa(n)
+	// golib's one check: the panel's places and its bounds (ADR 1792459145 §4.1)
+	if panelgeometry.Validate([]panelgeometry.Spec{s.geometry()}, k, v) != nil {
 		return
 	}
-	edge := s.Edge(h.prefs)
-	if !slices.Contains(s.Places, edge) {
-		return
-	}
-	k := panelPref(panel, edge, what)
-	h.setPref(k, strconv.Itoa(n), func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
+	h.setPref(k, v, func(p *prefs) { p.panelGeo = withEntry(p.panelGeo, k, n) })
 }
 
 // panelState is what the document reads of the side panels' sizes, at the edges they open from.

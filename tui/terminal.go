@@ -288,13 +288,6 @@ func termDefault(edge string) (size, length int) {
 	return 30, 100
 }
 
-// pct is a stored percentage in [lo, hi].
-func pct(v any, lo, hi int) (int, bool) {
-	s, _ := v.(string)
-	n, err := strconv.Atoi(s)
-	return n, err == nil && n >= lo && n <= hi
-}
-
 // termState is what the document reads of the terminal's preferences.
 func termState(p prefs) map[string]any {
 	size, length := p.panelGeometry("terminal", p.termEdge)

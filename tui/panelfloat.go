@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 )
 
 // FLOATING PANELS — the five drawers move and resize anywhere over the page: Alt/Option-left drag
@@ -12,44 +14,16 @@ import (
 // there from then on; its edge preference only says where it first appears. Go › Reset panel
 // layout, or a new edge in Preferences, docks it at its edge again (ADR 1791500773).
 
-func floatPref(panel string) string { return "tui." + panel + ".float" }
-
 // readPanelFloats reads each panel's floating rectangle: four percentages (to a hundredth, as the
 // drawer reports them), the size at least 5.
 func readPanelFloats(p *prefs, m map[string]any) {
 	for _, spec := range p.geometrySpecs() {
 		panel := spec.ID
-		s, _ := m[floatPref(panel)].(string)
-		if r, ok := parseFloat(s); ok {
+		s, _ := m[panelgeometry.FloatKey(panel)].(string)
+		if r, ok := panelgeometry.ParseFloat(s); ok {
 			p.panelFloat = withFloat(p.panelFloat, panel, &r)
 		}
 	}
-}
-
-// parseFloat reads "x,y,w,h".
-func parseFloat(s string) ([4]float64, bool) {
-	var r [4]float64
-	parts := strings.Split(s, ",")
-	if len(parts) != 4 {
-		return r, false
-	}
-	for i, part := range parts {
-		n, err := strconv.ParseFloat(strings.TrimSpace(part), 64)
-		if err != nil || !(n >= 0 && n <= 100) {
-			return r, false
-		}
-		r[i] = n
-	}
-	return r, r[2] >= 5 && r[3] >= 5
-}
-
-// formatFloat is r as stored: each percentage as short as it reads ("50", "0.4").
-func formatFloat(r [4]float64) string {
-	parts := make([]string, 4)
-	for i, v := range r {
-		parts[i] = strconv.FormatFloat(v, 'f', -1, 64)
-	}
-	return strings.Join(parts, ",")
 }
 
 // withFloat is m with panel's rectangle r, or without it when r is nil: a new map, as the prefs
@@ -142,7 +116,7 @@ func (h *Host) panelPlaced(panel string, x, y, w, ht float64) {
 		h.showFloat(panel, &r)
 		return
 	}
-	h.setPref(floatPref(panel), formatFloat(r), func(p *prefs) { p.panelFloat = withFloat(p.panelFloat, panel, &r) })
+	h.setPref(panelgeometry.FloatKey(panel), panelgeometry.FormatFloat(r), func(p *prefs) { p.panelFloat = withFloat(p.panelFloat, panel, &r) })
 }
 
 // showFloat sets what the document reads of panel's placement, with nothing stored.
@@ -160,7 +134,7 @@ func (h *Host) dockPanel(panel string) {
 	if _, ok := h.prefs.panelFloat[panel]; !ok {
 		return
 	}
-	h.setPref(floatPref(panel), "", func(p *prefs) { p.panelFloat = withFloat(p.panelFloat, panel, nil) })
+	h.setPref(panelgeometry.FloatKey(panel), "", func(p *prefs) { p.panelFloat = withFloat(p.panelFloat, panel, nil) })
 }
 
 // resetPanelLayout is Go › Reset panel layout: every panel docks at its edge again.

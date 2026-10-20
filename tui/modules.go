@@ -6,6 +6,7 @@ import (
 
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
 	"github.com/yongjohnlee80/golib/tui/decl/controls"
+	"github.com/yongjohnlee80/golib/tui/decl/panels"
 	"github.com/yongjohnlee80/golib/tui/decl/themes"
 )
 
@@ -15,6 +16,7 @@ import (
 //	import autodoc.theme.dark 1.0    a Theme singleton          (offered: golib's five)
 //	import autodoc.dialogs 1.0       the dialogs, one per file  (offered)
 //	import autodoc.views 1.0         Help, About                (offered)
+//	import tui.panels 1.0            Panel                      (golib's, panels.Offer)
 
 //go:embed qml
 var qmlEmbed embed.FS
@@ -51,6 +53,7 @@ func modulesFrom(files fs.FS) []tuidecl.ProgramOption {
 		tuidecl.Themes(themes.FS(), ".", "autodoc.theme", moduleVersion),
 		tuidecl.Components(files, "dialogs", "autodoc.dialogs", moduleVersion),
 		tuidecl.Components(files, "views", "autodoc.views", moduleVersion),
+		panels.Offer(), // tui.panels: Panel, golib's docked panel (ADR 1792459145)
 		tuidecl.Types(controls.Types()...),
 		// AutoDoc's own text in six languages (language.go), over golib's
 		tuidecl.Translations(files, "i18n", "autodoc"),

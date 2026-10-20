@@ -14,6 +14,7 @@ import (
 
 	tuicore "github.com/yongjohnlee80/golib/tui"
 	tuidecl "github.com/yongjohnlee80/golib/tui/decl"
+	"github.com/yongjohnlee80/golib/tui/panelgeometry"
 	"github.com/yongjohnlee80/golib/tui/style"
 )
 
@@ -390,7 +391,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 	})
 	r.s.WaitFor(t, "the move kept", func(string) bool {
 		m, _ := d.db.Preferences(context.Background())
-		_, ok := parseFloat(m["tui."+cardPanelID("card")+".float"])
+		_, ok := panelgeometry.ParseFloat(m["tui."+cardPanelID("card")+".float"])
 		return ok
 	})
 
@@ -406,7 +407,7 @@ func TestACardPanelMovesAndResizesAndKeepsThem(t *testing.T) {
 	r.s.WaitFor(t, "the resize kept", func(string) bool {
 		m, _ := d.db.Preferences(context.Background())
 		kept = m["tui."+cardPanelID("card")+".float"]
-		_, ok := parseFloat(kept)
+		_, ok := panelgeometry.ParseFloat(kept)
 		return ok && kept != moved
 	})
 	r.s.WaitFor(t, "resized on the screen", func(sc string) bool {
@@ -507,7 +508,7 @@ func TestArrangingACardPanelNamesItAndMovesIt(t *testing.T) {
 	})
 	r.s.WaitFor(t, "kept once", func(string) bool {
 		m, _ := d.db.Preferences(context.Background())
-		_, ok := parseFloat(m["tui."+cardPanelID("card")+".float"])
+		_, ok := panelgeometry.ParseFloat(m["tui."+cardPanelID("card")+".float"])
 		return ok
 	})
 }
