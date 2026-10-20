@@ -122,6 +122,12 @@ func TestTodosAssignHandsTheTaskToAnAutoDocAgent(t *testing.T) {
 		t.Fatalf("the path handed over is not the task's file: %v", err)
 	}
 	r.s.WaitFor(t, "the delivery told", func(string) bool { return r.noticed("assigned to Scribe, and handed to its terminal") })
+	// the agent's panel opened as Scribe started; on this small screen it covers the todos' detail:
+	// SPC g's toggle hides it, Scribe running on
+	agentShown := func() bool { return onLoop(r, func() bool { return r.h.panelOpen["agent"] }) }
+	r.s.WaitFor(t, "the agent's panel open", func(string) bool { return agentShown() })
+	onLoop(r, func() bool { r.h.agents.toggleAgent(); return true })
+	r.s.WaitFor(t, "the agent's panel hidden", func(string) bool { return !agentShown() })
 	r.s.WaitForText(t, "status: in-progress") // the cursor followed the task
 
 	// Critic is stopped, and declining to start it leaves the task assigned, not delivered.

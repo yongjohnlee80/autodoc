@@ -120,8 +120,9 @@ end }`)
 	if err := r.luaRun("agent-forward"); err != nil {
 		t.Fatal(err)
 	}
-	r.s.WaitForText(t, "selected-part")
-	if strings.Contains(r.s.String(), "ignored selected-part") {
+	// typed after the page at the agent's prompt; the page shows the whole line, wherever the agent docks
+	r.s.WaitForText(t, "page-text-for-the-agentselected-part")
+	if sc := r.s.String(); strings.Contains(sc, "agentignored") || strings.Contains(sc, "agentselected-part ignored") {
 		t.Error("more than the selection was sent")
 	}
 }
